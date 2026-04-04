@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -151,6 +152,7 @@
 </div>
 
 <script>
+const PROXY = 'https://gestion-nube-proxy.vercel.app/api/proxy';
 const API_BASE = 'https://www.gestionnube.com/api/v1';
 const TODAY = new Date('2026-04-04');
 let rankChart = null, cChart = null, sChart = null;
@@ -162,8 +164,12 @@ function setStatus(msg, type) {
 }
 
 async function apiFetch(path, apiKey) {
-  const res = await fetch(API_BASE + '/' + path, {
-    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' }
+  const res = await fetch(PROXY + '?path=' + encodeURIComponent(path), {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey,
+      'x-api-base': API_BASE
+    }
   });
   const text = await res.text();
   let data;
