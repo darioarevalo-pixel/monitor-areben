@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -183,15 +182,25 @@ async function connectAPI() {
   if (!key) { setStatus('Ingresá tu API Key.', 'error'); return; }
   setStatus('Conectando con Gestión Nube...');
   try {
-    const [prodData, ventasData, invData] = await Promise.all([
-      apiFetch('productos/obtener', key),
-      apiFetch('ventas/obtener?fecha_desde=2025-01-01', key),
-      apiFetch('inventario/obtener', key)
+    const [prodData, invData] = await Promise.all([
+      apiFetch('productos/obtener?per_page=200', key),
+      apiFetch('inventario/obtener?per_page=200', key)
     ]);
-    const productos = prodData.data || prodData.productos || (Array.isArray(prodData) ? prodData : []);
-    const ventas = ventasData.data || ventasData.ventas || (Array.isArray(ventasData) ? ventasData : []);
-    const inventario = invData.data || invData.inventario || (Array.isArray(invData) ? invData : []);
-    setStatus('Procesando ' + productos.length + ' productos...');
+    const productos = prodData.data || (Array.isArray(prodData) ? prodData : []);
+    const inventario = invData.data || (Array.isArray(invData) ? invData : []);
+    setStatus('Cargando ventas desde enero 2025...');
+    let ventas = [];
+    let page = 1;
+    const maxPages = 10;
+    while (page <= maxPages) {
+      const vData = await apiFetch(`ventas/obtener?from=2025-01-01&to=2026-04-04&include_details=1&per_page=200&page=${page}`, key);
+      const items = vData.data || [];
+      ventas = ventas.concat(items);
+      setStatus(`Cargando ventas... ${ventas.length} de ${vData.meta?.total || '?'}`);
+      if (!vData.meta?.has_more_pages || items.length === 0) break;
+      page++;
+    }
+    setStatus('Procesando ' + productos.length + ' productos y ' + ventas.length + ' ventas...');
     const processed = processData(productos, ventas, inventario);
     renderDashboard(processed);
     setStatus('Datos cargados correctamente.', 'ok');
@@ -224,16 +233,17 @@ function getPhase(salesPrev, salesCurr, dsl) {
 
 function processData(productos, ventas, inventario) {
   const invMap = {};
-  (inventario || []).forEach(i => { invMap[String(i.product_id || i.producto_id || i.id)] = i.stock || i.quantity || i.cantidad || 0; });
+  (inventario || []).forEach(i => { invMap[String(i.product_id || i.id)] = i.stock || i.quantity || i.cantidad || 0; });
   const vp = {};
   (ventas || []).forEach(v => {
-    const items = v.items || v.productos || v.detalle || [];
-    const fechaFull = (v.fecha || v.date || v.created_at || '').substring(0, 10);
+    const items = v.detalles || v.items || v.detalle || [];
+    const fechaFull = (v.date_sale || v.fecha || v.created_at || '').substring(0, 10);
     const fechaMes = fechaFull.substring(0, 7);
     items.forEach(item => {
-      const pid = String(item.product_id || item.producto_id || item.id || '');
-      const qty = item.quantity || item.cantidad || item.qty || 1;
-      if (!vp[pid]) vp[pid] = { total: 0, byMonth: {}, last: null };
+      const pid = String(item.product_id || '');
+      const qty = item.quantity || 1;
+      if (!pid) return;
+      if (!vp[pid]) vp[pid] = { total: 0, byMonth: {}, last: null, name: item.product_name || '', size: item.size || '' };
       vp[pid].total += qty;
       vp[pid].byMonth[fechaMes] = (vp[pid].byMonth[fechaMes] || 0) + qty;
       if (!vp[pid].last || fechaFull > vp[pid].last) vp[pid].last = fechaFull;
@@ -243,16 +253,16 @@ function processData(productos, ventas, inventario) {
   for (let m = 0; m <= TODAY.getMonth(); m++) months.push('2025-' + String(m + 1).padStart(2, '0'));
   const cutoff30 = new Date(TODAY); cutoff30.setDate(cutoff30.getDate() - 30);
   const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
-  return (productos || []).slice(0, 60).map(p => {
-    const pid = String(p.id || p.producto_id || '');
+  return (productos || []).slice(0, 100).map(p => {
+    const pid = String(p.id || '');
     const data = vp[pid] || { total: 0, byMonth: {}, last: null };
-    const lastDate = data.last || '2025-01-01';
-    const dsl = daysSince(lastDate);
+    const lastDate = data.last || null;
+    const dsl = lastDate ? daysSince(lastDate) : 999;
     const s30 = Object.entries(data.byMonth).filter(([m]) => new Date(m+'-01') >= cutoff30).reduce((a,[,v])=>a+v,0);
     const s60 = Object.entries(data.byMonth).filter(([m]) => { const d = new Date(m+'-01'); return d >= cutoff60 && d < cutoff30; }).reduce((a,[,v])=>a+v,0);
     const stock = invMap[pid] || p.stock || 0;
-    const variants = (p.variants || p.variantes || []).map(v => v.name || v.nombre || v.color || v.talle || '').filter(Boolean).join(', ') || 'única';
-    return { id: pid, name: p.name || p.nombre || 'Producto ' + pid, variant: variants, lastSale: lastDate, daysSinceLast: dsl, sales30: s30, sales60: s60, totalSales: data.total, monthlySales: months.map(m => data.byMonth[m] || 0), stock, phase: getPhase(s60, s30, dsl) };
+    const variants = (p.variants || p.variantes || p.sizes || []).map(v => v.name || v.nombre || v.size || v.talle || '').filter(Boolean).join(', ') || 'única';
+    return { id: pid, name: p.name || p.nombre || 'Producto ' + pid, variant: variants, lastSale: lastDate || 'Sin ventas', daysSinceLast: dsl, sales30: s30, sales60: s60, totalSales: data.total, monthlySales: months.map(m => data.byMonth[m] || 0), stock, phase: getPhase(s60, s30, dsl) };
   });
 }
 
