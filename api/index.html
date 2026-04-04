@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor de vida útil — Gestión Nube</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; font-size: 14px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+
+    .connect-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .connect-row input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none; }
+    .connect-row input:focus { border-color: #378ADD; }
+    button { padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; transition: background 0.15s; }
+    button:hover { background: #f5f5f3; }
+    .btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    .btn-primary:hover { background: #333; }
+    .btn-demo { font-size: 12px; padding: 5px 12px; color: #888; }
+    #status { font-size: 12px; color: #888; margin-top: 6px; min-height: 18px; }
+    #status.error { color: #e24b4a; }
+    #status.ok { color: #1d9e75; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat { background: #f5f5f3; border-radius: 8px; padding: 14px; }
+    .stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .stat-value { font-size: 24px; font-weight: 600; }
+    .stat-value.danger { color: #e24b4a; }
+    .stat-value.warning { color: #ba7517; }
+    .stat-value.success { color: #1d9e75; }
+
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab { padding: 6px 14px; border-radius: 8px; border: 1px solid #e5e5e5; font-size: 13px; cursor: pointer; background: #fff; color: #666; }
+    .tab.active { background: #e6f1fb; color: #185fa5; border-color: #b5d4f4; font-weight: 500; }
+
+    .section { display: none; }
+    .section.visible { display: block; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { font-size: 11px; color: #888; font-weight: 500; text-align: left; padding: 8px 10px; background: #f5f5f3; border-bottom: 1px solid #e5e5e5; }
+    td { padding: 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+    .badge-danger { background: #fcebeb; color: #a32d2d; }
+    .badge-warning { background: #faeeda; color: #854f0b; }
+    .badge-success { background: #eaf3de; color: #3b6d11; }
+    .badge-info { background: #e6f1fb; color: #185fa5; }
+
+    .mini-bar { height: 4px; border-radius: 2px; background: #e5e5e5; margin-top: 4px; overflow: hidden; width: 60px; }
+    .mini-bar-fill { height: 100%; border-radius: 2px; }
+
+    .chart-wrap { position: relative; width: 100%; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; color: #666; }
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+    #dashboard { display: none; }
+
+    @media (max-width: 600px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      th:nth-child(3), td:nth-child(3),
+      th:nth-child(4), td:nth-child(4) { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Monitor de vida útil</h1>
+  <p class="subtitle">Análisis de productos y variantes desde enero 2025</p>
+
+  <div class="card">
+    <div class="connect-row">
+      <input type="password" id="api-key" placeholder="Tu API Key de Gestión Nube" />
+      <button class="btn-primary" onclick="connectAPI()">Conectar y analizar</button>
+      <button class="btn-demo" onclick="loadDemo()">Ver demo</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <div id="dashboard">
+
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Productos analizados</div><div class="stat-value" id="stat-total">—</div></div>
+      <div class="stat"><div class="stat-label">Sin ventas +30 días</div><div class="stat-value danger" id="stat-stale">—</div></div>
+      <div class="stat"><div class="stat-label">En declive</div><div class="stat-value warning" id="stat-decline">—</div></div>
+      <div class="stat"><div class="stat-label">Creciendo</div><div class="stat-value success" id="stat-growth">—</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('tabla', this)">Tabla de productos</button>
+      <button class="tab" onclick="switchTab('ranking', this)">Ranking velocidad</button>
+      <button class="tab" onclick="switchTab('curva', this)">Curva de vida</button>
+      <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
+    </div>
+
+    <div id="tab-tabla" class="section visible">
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <table>
+          <thead>
+            <tr>
+              <th>Producto / variante</th>
+              <th>Última venta</th>
+              <th>Ventas 30d</th>
+              <th>Vida útil est.</th>
+              <th>Stock</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-ranking" class="section">
+      <div class="card">
+        <div class="legend">
+          <span><span class="legend-dot" style="background:#1D9E75"></span>Crecimiento</span>
+          <span><span class="legend-dot" style="background:#378ADD"></span>Estable</span>
+          <span><span class="legend-dot" style="background:#EF9F27"></span>Declive</span>
+        </div>
+        <div class="chart-wrap" id="ranking-wrap"><canvas id="rankingChart"></canvas></div>
+      </div>
+    </div>
+
+    <div id="tab-curva" class="section">
+      <div class="card">
+        <div class="legend" id="curva-legend"></div>
+        <div class="chart-wrap" style="height: 300px;"><canvas id="curvaChart"></canvas></div>
+      </div>
+    </div>
+
+    <div id="tab-stock" class="section">
+      <div class="card">
+        <div class="legend">
+          <span><span class="legend-dot" style="background:#85B7EB"></span>Stock actual</span>
+          <span><span class="legend-dot" style="background:#1D9E75"></span>Demanda 30d</span>
+        </div>
+        <div class="chart-wrap" style="height: 320px;"><canvas id="stockChart"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://www.gestionnube.com/api/v1';
+const TODAY = new Date('2026-04-04');
+let rankChart = null, cChart = null, sChart = null;
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+async function apiFetch(path, apiKey) {
+  const res = await fetch(API_BASE + '/' + path, {
+    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' }
+  });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch(e) { throw new Error('Respuesta inesperada del servidor'); }
+  if (!res.ok) throw new Error(data.message || data.error || 'Error ' + res.status);
+  return data;
+}
+
+async function connectAPI() {
+  const key = document.getElementById('api-key').value.trim();
+  if (!key) { setStatus('Ingresá tu API Key.', 'error'); return; }
+  setStatus('Conectando con Gestión Nube...');
+  try {
+    const [prodData, ventasData, invData] = await Promise.all([
+      apiFetch('productos/obtener', key),
+      apiFetch('ventas/obtener?fecha_desde=2025-01-01', key),
+      apiFetch('inventario/obtener', key)
+    ]);
+    const productos = prodData.data || prodData.productos || (Array.isArray(prodData) ? prodData : []);
+    const ventas = ventasData.data || ventasData.ventas || (Array.isArray(ventasData) ? ventasData : []);
+    const inventario = invData.data || invData.inventario || (Array.isArray(invData) ? invData : []);
+    setStatus('Procesando ' + productos.length + ' productos...');
+    const processed = processData(productos, ventas, inventario);
+    renderDashboard(processed);
+    setStatus('Datos cargados correctamente.', 'ok');
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return 999;
+  return Math.round((TODAY - new Date(dateStr)) / 86400000);
+}
+
+function lifespanEstimate(stock, sales30) {
+  if (!sales30 || sales30 <= 0) return stock > 0 ? 'Sin movimiento' : '—';
+  const days = Math.round((stock / sales30) * 30);
+  if (days > 365) return '+1 año';
+  if (days > 60) return Math.round(days / 30) + ' meses';
+  return days + ' días';
+}
+
+function getPhase(salesPrev, salesCurr, dsl) {
+  if (dsl > 60) return { label: 'obsoleto', cls: 'badge-danger' };
+  if (dsl > 30) return { label: 'dormido', cls: 'badge-warning' };
+  const ratio = salesPrev > 0 ? salesCurr / salesPrev : salesCurr > 0 ? 2 : 0;
+  if (ratio > 1.3) return { label: 'crecimiento', cls: 'badge-success' };
+  if (ratio >= 0.7) return { label: 'madurez', cls: 'badge-info' };
+  return { label: 'declive', cls: 'badge-warning' };
+}
+
+function processData(productos, ventas, inventario) {
+  const invMap = {};
+  (inventario || []).forEach(i => { invMap[String(i.product_id || i.producto_id || i.id)] = i.stock || i.quantity || i.cantidad || 0; });
+  const vp = {};
+  (ventas || []).forEach(v => {
+    const items = v.items || v.productos || v.detalle || [];
+    const fechaFull = (v.fecha || v.date || v.created_at || '').substring(0, 10);
+    const fechaMes = fechaFull.substring(0, 7);
+    items.forEach(item => {
+      const pid = String(item.product_id || item.producto_id || item.id || '');
+      const qty = item.quantity || item.cantidad || item.qty || 1;
+      if (!vp[pid]) vp[pid] = { total: 0, byMonth: {}, last: null };
+      vp[pid].total += qty;
+      vp[pid].byMonth[fechaMes] = (vp[pid].byMonth[fechaMes] || 0) + qty;
+      if (!vp[pid].last || fechaFull > vp[pid].last) vp[pid].last = fechaFull;
+    });
+  });
+  const months = [];
+  for (let m = 0; m <= TODAY.getMonth(); m++) months.push('2025-' + String(m + 1).padStart(2, '0'));
+  const cutoff30 = new Date(TODAY); cutoff30.setDate(cutoff30.getDate() - 30);
+  const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
+  return (productos || []).slice(0, 60).map(p => {
+    const pid = String(p.id || p.producto_id || '');
+    const data = vp[pid] || { total: 0, byMonth: {}, last: null };
+    const lastDate = data.last || '2025-01-01';
+    const dsl = daysSince(lastDate);
+    const s30 = Object.entries(data.byMonth).filter(([m]) => new Date(m+'-01') >= cutoff30).reduce((a,[,v])=>a+v,0);
+    const s60 = Object.entries(data.byMonth).filter(([m]) => { const d = new Date(m+'-01'); return d >= cutoff60 && d < cutoff30; }).reduce((a,[,v])=>a+v,0);
+    const stock = invMap[pid] || p.stock || 0;
+    const variants = (p.variants || p.variantes || []).map(v => v.name || v.nombre || v.color || v.talle || '').filter(Boolean).join(', ') || 'única';
+    return { id: pid, name: p.name || p.nombre || 'Producto ' + pid, variant: variants, lastSale: lastDate, daysSinceLast: dsl, sales30: s30, sales60: s60, totalSales: data.total, monthlySales: months.map(m => data.byMonth[m] || 0), stock, phase: getPhase(s60, s30, dsl) };
+  });
+}
+
+function renderDashboard(products) {
+  document.getElementById('stat-total').textContent = products.length;
+  document.getElementById('stat-stale').textContent = products.filter(p => p.daysSinceLast > 30).length;
+  document.getElementById('stat-decline').textContent = products.filter(p => p.phase.label === 'declive').length;
+  document.getElementById('stat-growth').textContent = products.filter(p => p.phase.label === 'crecimiento').length;
+  document.getElementById('dashboard').style.display = 'block';
+  renderTabla(products);
+  renderRanking(products);
+  renderCurva(products);
+  renderStock(products);
+}
+
+function renderTabla(products) {
+  document.getElementById('tabla-body').innerHTML = [...products].sort((a,b) => b.daysSinceLast - a.daysSinceLast).map(p => `
+    <tr>
+      <td><div style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</div><div style="font-size:11px;color:#aaa;">${p.variant}</div></td>
+      <td>${p.lastSale}<div style="font-size:11px;color:#aaa;">${p.daysSinceLast}d atrás</div></td>
+      <td style="font-weight:500;">${p.sales30}</td>
+      <td style="color:#666;">${lifespanEstimate(p.stock, p.sales30)}</td>
+      <td>${p.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,p.stock/2)}%;background:${p.stock<10?'#e24b4a':'#1d9e75'};"></div></div></td>
+      <td><span class="badge ${p.phase.cls}">${p.phase.label}</span></td>
+    </tr>`).join('');
+}
+
+function renderRanking(products) {
+  const top = [...products].sort((a,b) => b.sales30 - a.sales30).slice(0,12);
+  const wrap = document.getElementById('ranking-wrap');
+  wrap.style.height = Math.max(300, top.length * 42 + 60) + 'px';
+  if (rankChart) rankChart.destroy();
+  rankChart = new Chart(document.getElementById('rankingChart'), {
+    type: 'bar',
+    data: { labels: top.map(p => p.name.length>24?p.name.slice(0,24)+'…':p.name), datasets: [{ data: top.map(p=>p.sales30), backgroundColor: top.map(p=>p.phase.label==='crecimiento'?'#1D9E75':p.phase.label==='declive'?'#EF9F27':'#378ADD'), borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }, y: { ticks: { color: '#444', font: { size: 12 } }, grid: { display: false } } } }
+  });
+}
+
+function renderCurva(products) {
+  const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].slice(0,TODAY.getMonth()+1);
+  const top5 = [...products].sort((a,b)=>b.totalSales-a.totalSales).slice(0,5);
+  const colors = ['#378ADD','#1D9E75','#D85A30','#7F77DD','#BA7517'];
+  document.getElementById('curva-legend').innerHTML = top5.map((p,i) => `<span><span class="legend-dot" style="background:${colors[i]};"></span>${p.name}</span>`).join('');
+  if (cChart) cChart.destroy();
+  cChart = new Chart(document.getElementById('curvaChart'), {
+    type: 'line',
+    data: { labels, datasets: top5.map((p,i) => ({ label: p.name, data: p.monthlySales, borderColor: colors[i], backgroundColor: 'transparent', tension: 0.35, pointRadius: 3, borderWidth: 2 })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }, y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } } } }
+  });
+}
+
+function renderStock(products) {
+  const sorted = [...products].sort((a,b)=>b.stock-a.stock).slice(0,12);
+  if (sChart) sChart.destroy();
+  sChart = new Chart(document.getElementById('stockChart'), {
+    type: 'bar',
+    data: { labels: sorted.map(p=>p.name.length>18?p.name.slice(0,18)+'…':p.name), datasets: [{ label: 'Stock actual', data: sorted.map(p=>p.stock), backgroundColor: '#85B7EB', borderRadius: 3 },{ label: 'Demanda 30d', data: sorted.map(p=>p.sales30), backgroundColor: '#1D9E75', borderRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 }, maxRotation: 40, autoSkip: false }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } } } }
+  });
+}
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
+  document.getElementById('tab-' + id).classList.add('visible');
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function loadDemo() {
+  const names = ['Remera básica blanca','Pantalón chino','Buzo con capucha','Vestido floral','Camisa oxford','Short deportivo','Campera de abrigo','Zapatillas urbanas','Medias pack x3','Cinturón cuero'];
+  const variants = ['Talle S','Talle M','Talle L','Color azul','Color negro','Única','38','40','42'];
+  const months = [];
+  for (let m = 0; m <= TODAY.getMonth(); m++) months.push('2025-' + String(m+1).padStart(2,'0'));
+  const products = names.map((name, i) => {
+    const peak = 2 + Math.floor(Math.random()*6);
+    const monthlySales = months.map((_,mi) => Math.round((5+Math.random()*40)*Math.exp(-Math.pow(mi-peak,2)/8)));
+    const s30 = monthlySales[monthlySales.length-1]||0, s60 = monthlySales[monthlySales.length-2]||0;
+    const daysAgo = i<2?3+Math.floor(Math.random()*10):i<6?10+Math.floor(Math.random()*25):35+Math.floor(Math.random()*60);
+    const lastDate = new Date(TODAY); lastDate.setDate(lastDate.getDate()-daysAgo);
+    return { id: i+1, name, variant: variants[i%variants.length], lastSale: lastDate.toISOString().substring(0,10), daysSinceLast: daysAgo, sales30: s30, sales60: s60, totalSales: monthlySales.reduce((a,b)=>a+b,0), monthlySales, stock: Math.floor(Math.random()*80)+2, phase: getPhase(s60,s30,daysAgo) };
+  });
+  renderDashboard(products);
+  setStatus('Modo demo — datos de ejemplo.', 'ok');
+}
+</script>
+</body>
+</html>
