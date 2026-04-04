@@ -182,17 +182,23 @@ async function connectAPI() {
   if (!key) { setStatus('Ingresá tu API Key.', 'error'); return; }
   setStatus('Conectando con Gestión Nube...');
   try {
-    const [prodData, invData] = await Promise.all([
-      apiFetch('productos/obtener?per_page=200', key),
-      apiFetch('inventario/obtener?per_page=200', key)
-    ]);
+    const prodData = await apiFetch('productos/obtener?per_page=200', key);
     const productos = prodData.data || (Array.isArray(prodData) ? prodData : []);
-    const inventario = invData.data || (Array.isArray(invData) ? invData : []);
+    setStatus('Cargando inventario...');
+    let inventario = [];
+    let invPage = 1;
+    while (invPage <= 20) {
+      const invData = await apiFetch(`inventario/obtener?per_page=200&page=${invPage}`, key);
+      const items = invData.data || [];
+      inventario = inventario.concat(items);
+      setStatus(`Cargando inventario... ${inventario.length} de ${invData.meta?.total || '?'}`);
+      if (!invData.meta?.has_more_pages || items.length === 0) break;
+      invPage++;
+    }
     setStatus('Cargando ventas desde enero 2025...');
     let ventas = [];
     let page = 1;
-    const maxPages = 10;
-    while (page <= maxPages) {
+    while (page <= 10) {
       const vData = await apiFetch(`ventas/obtener?from=2025-01-01&to=2026-04-04&include_details=1&per_page=200&page=${page}`, key);
       const items = vData.data || [];
       ventas = ventas.concat(items);
@@ -200,7 +206,7 @@ async function connectAPI() {
       if (!vData.meta?.has_more_pages || items.length === 0) break;
       page++;
     }
-    setStatus('Procesando ' + productos.length + ' productos y ' + ventas.length + ' ventas...');
+    setStatus('Procesando datos...');
     const processed = processData(productos, ventas, inventario);
     renderDashboard(processed);
     setStatus('Datos cargados correctamente.', 'ok');
@@ -233,7 +239,11 @@ function getPhase(salesPrev, salesCurr, dsl) {
 
 function processData(productos, ventas, inventario) {
   const invMap = {};
-  (inventario || []).forEach(i => { invMap[String(i.product_id || i.id)] = i.stock || i.quantity || i.cantidad || 0; });
+  (inventario || []).forEach(i => {
+    const pid = String(i.product_id || i.id);
+    const qty = i.available_quantity || i.stock || i.quantity || 0;
+    invMap[pid] = (invMap[pid] || 0) + qty;
+  });
   const vp = {};
   (ventas || []).forEach(v => {
     const items = v.detalles || v.items || v.detalle || [];
