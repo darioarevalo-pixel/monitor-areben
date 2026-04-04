@@ -11,14 +11,13 @@ export default async function handler(req, res) {
   if (!path) return res.status(400).json({ error: 'Falta el parámetro path' });
 
   const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.replace('Bearer ', '').trim();
 
   try {
     const url = `https://www.gestionnube.com/api/v1/${path}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': authHeader,
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
