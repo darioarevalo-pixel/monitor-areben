@@ -15,7 +15,7 @@ async function gnFetch(path, token) {
   });
   const text = await res.text();
   let data;
-  try { data = JSON.parse(text); } catch { throw new Error('Respuesta inesperada de Gestión Nube'); }
+  try { data = JSON.parse(text); } catch { throw new Error(`Respuesta inesperada de Gestión Nube [${res.status}]: ${text.substring(0, 300)}`); }
   if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
   return data;
 }
