@@ -145,6 +145,7 @@
       <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
       <button class="tab" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
       <button class="tab" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
+      <button class="tab" id="tab-btn-proveedores" style="display:none;" onclick="switchTab('proveedores', this)">Proveedores</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -307,6 +308,36 @@
         </table>
       </div>
     </div>
+
+    <div id="tab-proveedores" class="section">
+      <div class="toolbar">
+        <select id="prov-selector" onchange="renderProveedores()" style="min-width:180px;"></select>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+        <div class="stat"><div class="stat-label">Stock total (unid.)</div><div class="stat-value info" id="prov-stat-stock">—</div></div>
+        <div class="stat"><div class="stat-label">Unidades vendidas</div><div class="stat-value" id="prov-stat-sold">—</div></div>
+        <div class="stat"><div class="stat-label">Rentabilidad prom.</div><div class="stat-value success" id="prov-stat-margin">—</div></div>
+        <div class="stat"><div class="stat-label">Compra estimada</div><div class="stat-value" id="prov-stat-purchase">—</div></div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#888;margin-bottom:8px;">Unidades vendidas por mes</div>
+        <div class="chart-wrap" style="height:240px;"><canvas id="provChart"></canvas></div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:12px 16px 4px;font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Productos más vendidos</div>
+        <table>
+          <thead><tr>
+            <th style="width:32px;">#</th>
+            <th>Producto</th>
+            <th>Vendidas</th>
+            <th>Stock</th>
+            <th>Rentab.</th>
+            <th>Compra est.</th>
+          </tr></thead>
+          <tbody id="prov-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -367,8 +398,8 @@ let allProductos = [], allVariantes = [];
 let sortState = { productos: { col: 'sales30', dir: -1 }, variantes: { col: 'sales30', dir: -1 } };
 let pageState = { productos: 1, variantes: 1 };
 const PAGE_SIZE = 50;
-let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = null;
-let allMonthlyStats = [], allMonths = [], allFundasStats = {};
+let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = null, provChart = null;
+let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -412,7 +443,7 @@ async function cargarTodo() {
   try {
     setProgress(5);
     setStatus('Cargando productos...');
-    const productos = await fetchAll('productos', 'select=id,name,category&order=id', 'productos');
+    const productos = await fetchAll('productos', 'select=id,name,category,proveedor,retailer_price,unit_cost&order=id', 'productos');
     setProgress(15);
 
     setStatus('Cargando inventario...');
@@ -624,6 +655,25 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   allMonthlyStats = allMonths.map(m => ({ mes: m, ...(mStats[m] || { items: 0, ventasCount: 0, byCategory: {}, byChannel: {} }) }));
   allFundasStats = fStats;
 
+  // Datos de proveedores (para pestaña Zattia)
+  const provData = {};
+  (productos || []).forEach(p => {
+    if (!p.proveedor) return;
+    const pid = String(p.id);
+    const stock = invByProduct[pid] || 0;
+    const sales = vprod[pid] || { total: 0, byMonth: {} };
+    const rp = parseFloat(p.retailer_price) || 0;
+    const uc = parseFloat(p.unit_cost) || 0;
+    const margin = rp > 0 ? (rp - uc) / rp * 100 : null;
+    if (!provData[p.proveedor]) provData[p.proveedor] = { products: [] };
+    provData[p.proveedor].products.push({
+      id: pid, name: p.name,
+      retailer_price: rp, unit_cost: uc,
+      stock, soldTotal: sales.total, soldByMonth: sales.byMonth, margin,
+    });
+  });
+  allProveedoresData = provData;
+
   document.getElementById('dashboard').style.display = 'block';
   setProgress(0);
   renderProductos();
@@ -634,6 +684,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   renderVentasMensuales();
   initFundasSelectors();
   renderFundasPorModelo();
+  updateProveedoresTab();
 }
 
 function filtrarLista(lista, searchId, filterId) {
@@ -992,6 +1043,92 @@ function renderFundasPorModelo() {
     total.toLocaleString('es-AR') + ' fundas · ' + sorted.length + ' modelos' + prodSuffix + ' · ' + rangeLabel;
 }
 
+function updateProveedoresTab() {
+  const isZattia = currentCuenta === CUENTAS.zattia;
+  document.getElementById('tab-btn-proveedores').style.display = isZattia ? '' : 'none';
+  if (isZattia) {
+    initProveedorSelector();
+    renderProveedores();
+  }
+}
+
+function initProveedorSelector() {
+  const proveedores = Object.keys(allProveedoresData).sort();
+  const sel = document.getElementById('prov-selector');
+  const current = sel.value;
+  sel.innerHTML = proveedores.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if (current && proveedores.includes(current)) sel.value = current;
+}
+
+function renderProveedores() {
+  const prov = document.getElementById('prov-selector')?.value;
+  if (!prov || !allProveedoresData[prov]) return;
+
+  const { products } = allProveedoresData[prov];
+
+  // Totales KPI
+  const totalStock = products.reduce((s, p) => s + p.stock, 0);
+  const totalSold  = products.reduce((s, p) => s + p.soldTotal, 0);
+  const validMargins = products.filter(p => p.margin !== null);
+  const avgMargin = validMargins.length
+    ? validMargins.reduce((s, p) => s + p.margin, 0) / validMargins.length : null;
+  const estimatedPurchase = products.reduce((s, p) => s + (p.soldTotal + p.stock) * p.unit_cost, 0);
+
+  document.getElementById('prov-stat-stock').textContent    = totalStock.toLocaleString('es-AR');
+  document.getElementById('prov-stat-sold').textContent     = totalSold.toLocaleString('es-AR');
+  document.getElementById('prov-stat-margin').textContent   = avgMargin !== null ? avgMargin.toFixed(1) + '%' : '—';
+  document.getElementById('prov-stat-purchase').textContent = estimatedPurchase > 0
+    ? '$' + Math.round(estimatedPurchase).toLocaleString('es-AR') : '—';
+
+  // Gráfico: últimos 12 meses
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const chartMonths = allMonths.slice(-12);
+  const labels = chartMonths.map(m => {
+    const [y, mo] = m.split('-');
+    return MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2);
+  });
+  const chartData = chartMonths.map(m =>
+    products.reduce((s, p) => s + (p.soldByMonth[m] || 0), 0)
+  );
+
+  if (provChart) provChart.destroy();
+  provChart = new Chart(document.getElementById('provChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: chartData, backgroundColor: '#1D9E75', borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: prov, color: '#888', font: { size: 11 } }
+      },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }
+      }
+    }
+  });
+
+  // Tabla ranking
+  const sorted = [...products].sort((a, b) => b.soldTotal - a.soldTotal);
+  document.getElementById('prov-tbody').innerHTML = sorted.map((p, i) => {
+    const marginStr = p.margin !== null ? p.margin.toFixed(1) + '%' : '—';
+    const marginColor = p.margin > 40 ? '#1d9e75' : p.margin > 20 ? '#ba7517' : '#e24b4a';
+    const compra = (p.soldTotal + p.stock) * p.unit_cost;
+    const compraStr = compra > 0 ? '$' + Math.round(compra).toLocaleString('es-AR') : '—';
+    return `<tr>
+      <td style="color:#888;font-size:11px;">${i + 1}</td>
+      <td style="font-weight:500;">${esc(p.name)}</td>
+      <td style="font-weight:600;">${p.soldTotal.toLocaleString('es-AR')}</td>
+      <td>${p.stock.toLocaleString('es-AR')}</td>
+      <td style="color:${p.margin !== null ? marginColor : '#aaa'};">${marginStr}</td>
+      <td style="color:#666;">${compraStr}</td>
+    </tr>`;
+  }).join('');
+}
+
 function switchTab(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
   document.getElementById('tab-' + id).classList.add('visible');
@@ -1028,6 +1165,7 @@ function renderUserInfo() {
 
 function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
+  updateProveedoresTab();
   cargarTodo();
 }
 
