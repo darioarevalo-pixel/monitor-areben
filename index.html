@@ -412,7 +412,7 @@ async function cargarTodo() {
   try {
     setProgress(5);
     setStatus('Cargando productos...');
-    const productos = await sbFetch('productos', 'select=id,name,category&order=id&limit=1000');
+    const productos = await fetchAll('productos', 'select=id,name,category&order=id', 'productos');
     setProgress(15);
 
     setStatus('Cargando inventario...');
