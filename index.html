@@ -97,6 +97,7 @@
       <button class="tab" onclick="switchTab('ranking', this)">Ranking</button>
       <button class="tab" onclick="switchTab('curva', this)">Curva de vida</button>
       <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
+      <button class="tab" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -184,6 +185,18 @@
         <div class="chart-wrap" style="height:340px;"><canvas id="stockChart"></canvas></div>
       </div>
     </div>
+
+    <div id="tab-ventas-mensuales" class="section">
+      <div class="card">
+        <div class="chart-wrap" style="height:280px;"><canvas id="vmChart"></canvas></div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;overflow-x:auto;">
+        <table>
+          <thead id="vm-thead"></thead>
+          <tbody id="vm-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -195,7 +208,8 @@ let allProductos = [], allVariantes = [];
 let sortState = { productos: { col: 'sales30', dir: -1 }, variantes: { col: 'sales30', dir: -1 } };
 let pageState = { productos: 1, variantes: 1 };
 const PAGE_SIZE = 50;
-let rankChart = null, cChart = null, sChart = null;
+let rankChart = null, cChart = null, sChart = null, vmChart = null;
+let allMonthlyStats = [], allMonths = [];
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -239,7 +253,7 @@ async function cargarTodo() {
   try {
     setProgress(5);
     setStatus('Cargando productos...');
-    const productos = await sbFetch('productos', 'select=id,name&order=id&limit=1000');
+    const productos = await sbFetch('productos', 'select=id,name,category&order=id&limit=1000');
     setProgress(15);
 
     setStatus('Cargando inventario...');
@@ -306,8 +320,12 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
     invByVariant[vid] = (invByVariant[vid] || 0) + qty;
   });
 
+  const categoryByPid = {};
+  (productos || []).forEach(p => { categoryByPid[String(p.id)] = p.category || 'Sin categoría'; });
+
   const vprod = {};
   const vvar = {};
+  const mStats = {}; // { 'YYYY-MM': { items, ventasCount, byCategory: { cat: qty } } }
   const cutoff30 = new Date(TODAY); cutoff30.setDate(cutoff30.getDate() - 30);
   const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
   const cutoff90 = new Date(TODAY); cutoff90.setDate(cutoff90.getDate() - 90);
@@ -324,6 +342,10 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
     const fecha = (v.date_sale || '').substring(0, 10);
     const fechaMes = fecha.substring(0, 7);
     const fechaObj = new Date(fecha);
+    if (fechaMes && months.includes(fechaMes)) {
+      if (!mStats[fechaMes]) mStats[fechaMes] = { items: 0, ventasCount: 0, byCategory: {} };
+      mStats[fechaMes].ventasCount++;
+    }
     (v.venta_detalles || []).forEach(item => {
       const pid = String(item.product_id || '');
       const sid = String(item.size_id || '');
@@ -332,6 +354,11 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
       const name = item.product_name || '';
       const size = item.size || '';
 
+      if (fechaMes && months.includes(fechaMes) && mStats[fechaMes]) {
+        mStats[fechaMes].items += qty;
+        const cat = categoryByPid[pid] || 'Sin categoría';
+        mStats[fechaMes].byCategory[cat] = (mStats[fechaMes].byCategory[cat] || 0) + qty;
+      }
       if (!vprod[pid]) vprod[pid] = { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, name };
       vprod[pid].total += qty;
       vprod[pid].byMonth[fechaMes] = (vprod[pid].byMonth[fechaMes] || 0) + qty;
@@ -402,6 +429,9 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
       ' — ' + ventas.length + ' ventas cargadas';
   }
 
+  allMonths = months;
+  allMonthlyStats = months.map(m => ({ mes: m, ...(mStats[m] || { items: 0, ventasCount: 0, byCategory: {} }) }));
+
   document.getElementById('dashboard').style.display = 'block';
   setProgress(0);
   renderProductos();
@@ -409,6 +439,7 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
   renderRanking();
   renderCurva(months);
   renderStock();
+  renderVentasMensuales();
 }
 
 function filtrarLista(lista, searchId, filterId) {
@@ -527,6 +558,57 @@ function renderStock() {
     data: { labels: sorted.map(p=>p.name.length>20?p.name.slice(0,20)+'…':p.name), datasets: [{ label: 'Stock actual', data: sorted.map(p=>p.stock), backgroundColor: '#85B7EB', borderRadius: 3 },{ label: 'Demanda 30d', data: sorted.map(p=>p.sales30), backgroundColor: '#1D9E75', borderRadius: 3 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 }, maxRotation: 40, autoSkip: false }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } } } }
   });
+}
+
+function renderVentasMensuales() {
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels = allMonths.map(m => {
+    const [y, mo] = m.split('-');
+    return MONTH_NAMES[parseInt(mo)-1] + ' ' + y.slice(2);
+  });
+
+  // Gráfico de barras
+  if (vmChart) vmChart.destroy();
+  vmChart = new Chart(document.getElementById('vmChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: allMonthlyStats.map(s => s.items), backgroundColor: '#378ADD', borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }
+      }
+    }
+  });
+
+  // Categorías únicas ordenadas por total
+  const catTotals = {};
+  allMonthlyStats.forEach(s => {
+    Object.entries(s.byCategory).forEach(([cat, qty]) => {
+      catTotals[cat] = (catTotals[cat] || 0) + qty;
+    });
+  });
+  const cats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+
+  // Tabla
+  const thead = document.getElementById('vm-thead');
+  const tbody = document.getElementById('vm-tbody');
+  thead.innerHTML = '<tr><th>Mes</th><th>Total items</th><th>Prom. items/venta</th>' +
+    cats.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  tbody.innerHTML = allMonthlyStats.map(s => {
+    const avg = s.ventasCount > 0 ? (s.items / s.ventasCount).toFixed(1) : '—';
+    const catCells = cats.map(c => `<td style="color:#666;">${s.byCategory[c] || '—'}</td>`).join('');
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap;">${labels[allMonths.indexOf(s.mes)]}</td>
+      <td style="font-weight:600;">${s.items.toLocaleString('es-AR')}</td>
+      <td style="color:#666;">${avg}</td>
+      ${catCells}
+    </tr>`;
+  }).join('');
 }
 
 function switchTab(id, btn) {
