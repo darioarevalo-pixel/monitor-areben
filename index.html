@@ -187,13 +187,29 @@
     </div>
 
     <div id="tab-ventas-mensuales" class="section">
+      <div class="toolbar">
+        <select id="vm-periodo" onchange="renderVentasMensuales()">
+          <option value="3">Últimos 3 meses</option>
+          <option value="6">Últimos 6 meses</option>
+          <option value="12" selected>Últimos 12 meses</option>
+          <option value="0">Todos</option>
+        </select>
+      </div>
       <div class="card">
         <div class="chart-wrap" style="height:280px;"><canvas id="vmChart"></canvas></div>
       </div>
       <div class="card" style="padding:0;overflow:hidden;overflow-x:auto;">
+        <div style="padding:12px 16px 4px;font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Por categoría</div>
         <table>
           <thead id="vm-thead"></thead>
           <tbody id="vm-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;overflow-x:auto;margin-top:0;">
+        <div style="padding:12px 16px 4px;font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Por canal de venta</div>
+        <table>
+          <thead id="vm-ch-thead"></thead>
+          <tbody id="vm-ch-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -267,7 +283,7 @@ async function cargarTodo() {
     setStatus('Cargando ventas...');
     const ventas = await fetchAll(
       'ventas',
-      'select=id,date_sale,venta_detalles(product_id,product_name,size_id,size,quantity)&date_sale=gte.2025-01-01&order=id',
+      'select=id,date_sale,channel,venta_detalles(product_id,product_name,size_id,size,quantity)&date_sale=gte.2025-01-01&order=id',
       'ventas'
     );
     setProgress(95);
@@ -320,12 +336,18 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
     invByVariant[vid] = (invByVariant[vid] || 0) + qty;
   });
 
+  function normalizeCat(cat) {
+    if (!cat) return 'SIN CATEGORÍA';
+    const u = cat.toUpperCase().trim();
+    if (u === 'MAYORISTA' || u === 'MINORISTA') return 'FUNDAS';
+    return u;
+  }
   const categoryByPid = {};
-  (productos || []).forEach(p => { categoryByPid[String(p.id)] = p.category || 'Sin categoría'; });
+  (productos || []).forEach(p => { categoryByPid[String(p.id)] = normalizeCat(p.category); });
 
   const vprod = {};
   const vvar = {};
-  const mStats = {}; // { 'YYYY-MM': { items, ventasCount, byCategory: { cat: qty } } }
+  const mStats = {}; // { 'YYYY-MM': { items, ventasCount, byCategory: { cat: qty }, byChannel: { ch: count } } }
   const cutoff30 = new Date(TODAY); cutoff30.setDate(cutoff30.getDate() - 30);
   const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
   const cutoff90 = new Date(TODAY); cutoff90.setDate(cutoff90.getDate() - 90);
@@ -343,8 +365,10 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
     const fechaMes = fecha.substring(0, 7);
     const fechaObj = new Date(fecha);
     if (fechaMes && months.includes(fechaMes)) {
-      if (!mStats[fechaMes]) mStats[fechaMes] = { items: 0, ventasCount: 0, byCategory: {} };
+      if (!mStats[fechaMes]) mStats[fechaMes] = { items: 0, ventasCount: 0, byCategory: {}, byChannel: {} };
       mStats[fechaMes].ventasCount++;
+      const ch = (v.channel || 'Sin canal').trim();
+      mStats[fechaMes].byChannel[ch] = (mStats[fechaMes].byChannel[ch] || 0) + 1;
     }
     (v.venta_detalles || []).forEach(item => {
       const pid = String(item.product_id || '');
@@ -356,7 +380,7 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
 
       if (fechaMes && months.includes(fechaMes) && mStats[fechaMes]) {
         mStats[fechaMes].items += qty;
-        const cat = categoryByPid[pid] || 'Sin categoría';
+        const cat = categoryByPid[pid] || 'SIN CATEGORÍA';
         mStats[fechaMes].byCategory[cat] = (mStats[fechaMes].byCategory[cat] || 0) + qty;
       }
       if (!vprod[pid]) vprod[pid] = { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, name };
@@ -562,18 +586,24 @@ function renderStock() {
 
 function renderVentasMensuales() {
   const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const labels = allMonths.map(m => {
+  function monthLabel(m) {
     const [y, mo] = m.split('-');
     return MONTH_NAMES[parseInt(mo)-1] + ' ' + y.slice(2);
-  });
+  }
 
-  // Gráfico de barras
+  // Aplicar filtro de período (selector)
+  const periodo = parseInt(document.getElementById('vm-periodo')?.value || '0');
+  const stats = [...allMonthlyStats].reverse(); // más reciente primero
+  const filtered = periodo > 0 ? stats.slice(0, periodo) : stats;
+
+  // Gráfico (orden cronológico: reversed back for chart)
+  const chartStats = [...filtered].reverse();
   if (vmChart) vmChart.destroy();
   vmChart = new Chart(document.getElementById('vmChart'), {
     type: 'bar',
     data: {
-      labels,
-      datasets: [{ data: allMonthlyStats.map(s => s.items), backgroundColor: '#378ADD', borderRadius: 4 }]
+      labels: chartStats.map(s => monthLabel(s.mes)),
+      datasets: [{ data: chartStats.map(s => s.items), backgroundColor: '#378ADD', borderRadius: 4 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -585,28 +615,46 @@ function renderVentasMensuales() {
     }
   });
 
-  // Categorías únicas ordenadas por total
-  const catTotals = {};
-  allMonthlyStats.forEach(s => {
-    Object.entries(s.byCategory).forEach(([cat, qty]) => {
-      catTotals[cat] = (catTotals[cat] || 0) + qty;
-    });
+  // Categorías únicas ordenadas por total (sobre el período filtrado)
+  const catTotals = {}, chTotals = {};
+  filtered.forEach(s => {
+    Object.entries(s.byCategory).forEach(([cat, qty]) => { catTotals[cat] = (catTotals[cat] || 0) + qty; });
+    Object.entries(s.byChannel || {}).forEach(([ch, cnt]) => { chTotals[ch] = (chTotals[ch] || 0) + cnt; });
   });
   const cats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  const channels = Object.entries(chTotals).sort((a, b) => b[1] - a[1]).map(([c]) => c);
 
-  // Tabla
+  // Tabla por categoría
   const thead = document.getElementById('vm-thead');
   const tbody = document.getElementById('vm-tbody');
-  thead.innerHTML = '<tr><th>Mes</th><th>Total items</th><th>Prom. items/venta</th>' +
+  thead.innerHTML = '<tr><th>Mes</th><th>Total items</th><th>Prom./venta</th>' +
     cats.map(c => `<th>${c}</th>`).join('') + '</tr>';
-  tbody.innerHTML = allMonthlyStats.map(s => {
+  tbody.innerHTML = filtered.map(s => {
     const avg = s.ventasCount > 0 ? (s.items / s.ventasCount).toFixed(1) : '—';
-    const catCells = cats.map(c => `<td style="color:#666;">${s.byCategory[c] || '—'}</td>`).join('');
+    const catCells = cats.map(c => `<td style="color:#666;">${s.byCategory[c] ? s.byCategory[c].toLocaleString('es-AR') : '—'}</td>`).join('');
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap;">${labels[allMonths.indexOf(s.mes)]}</td>
+      <td style="font-weight:500;white-space:nowrap;">${monthLabel(s.mes)}</td>
       <td style="font-weight:600;">${s.items.toLocaleString('es-AR')}</td>
       <td style="color:#666;">${avg}</td>
       ${catCells}
+    </tr>`;
+  }).join('');
+
+  // Tabla por canal
+  const chThead = document.getElementById('vm-ch-thead');
+  const chTbody = document.getElementById('vm-ch-tbody');
+  chThead.innerHTML = '<tr><th>Mes</th><th>Total ventas</th>' +
+    channels.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  chTbody.innerHTML = filtered.map(s => {
+    const chCells = channels.map(c => {
+      const cnt = (s.byChannel || {})[c] || 0;
+      const pct = s.ventasCount > 0 ? Math.round(cnt / s.ventasCount * 100) : 0;
+      return `<td style="color:#666;">${cnt ? cnt + ' <span style="font-size:10px;color:#aaa;">(' + pct + '%)</span>' : '—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap;">${monthLabel(s.mes)}</td>
+      <td style="font-weight:600;">${s.ventasCount.toLocaleString('es-AR')}</td>
+      ${chCells}
     </tr>`;
   }).join('');
 }
