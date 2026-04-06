@@ -260,16 +260,26 @@
         <select id="fm-desde" onchange="renderFundasPorModelo()"></select>
         <label style="font-size:12px;color:#666;">Hasta</label>
         <select id="fm-hasta" onchange="renderFundasPorModelo()"></select>
-        <button class="btn-sm" onclick="toggleModelosPanel()">Filtrar modelos ▾</button>
-        <button class="btn-sm" onclick="toggleAllModels(true)">Todos</button>
+        <button class="btn-sm" onclick="toggleModelosPanel()">Modelos ▾</button>
+        <button class="btn-sm" onclick="toggleProdsPanel()">Fundas ▾</button>
       </div>
       <div id="fm-modelos-panel" class="fm-models-panel" style="display:none;">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="text" id="fm-model-search" placeholder="Buscar modelo..." oninput="filterModelCheckboxes()" style="flex:1;min-width:140px;padding:5px 10px;font-size:12px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+          <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Modelos de iPhone</strong>
+          <input type="text" id="fm-model-search" placeholder="Buscar..." oninput="filterModelCheckboxes()" style="flex:1;min-width:120px;padding:4px 8px;font-size:12px;">
           <button class="btn-sm" onclick="toggleAllModels(true)">Todos</button>
           <button class="btn-sm" onclick="toggleAllModels(false)">Ninguno</button>
         </div>
         <div id="fm-model-checkboxes" class="fm-models-grid"></div>
+      </div>
+      <div id="fm-prods-panel" class="fm-models-panel" style="display:none;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+          <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Nombre de funda</strong>
+          <input type="text" id="fm-prod-search" placeholder="Buscar..." oninput="filterProdCheckboxes()" style="flex:1;min-width:120px;padding:4px 8px;font-size:12px;">
+          <button class="btn-sm" onclick="toggleAllProds(true)">Todos</button>
+          <button class="btn-sm" onclick="toggleAllProds(false)">Ninguno</button>
+        </div>
+        <div id="fm-prod-checkboxes" class="fm-models-grid"></div>
       </div>
       <div class="card">
         <div class="chart-wrap" id="fm-chart-wrap"><canvas id="fmChart"></canvas></div>
@@ -502,7 +512,8 @@ function procesarYRenderizar(productos, ventas, inventario, lastSync) {
           const model = normalizeIphoneModel(item.size);
           if (model) {
             if (!fStats[fechaMes]) fStats[fechaMes] = {};
-            fStats[fechaMes][model] = (fStats[fechaMes][model] || 0) + qty;
+            const fKey = model + '|||' + (item.product_name || 'Sin nombre');
+            fStats[fechaMes][fKey] = (fStats[fechaMes][fKey] || 0) + qty;
           }
         }
       }
@@ -791,33 +802,56 @@ function fmMonthLabel(m) {
   return FM_MONTH_NAMES[parseInt(mo)-1] + ' ' + y.slice(2);
 }
 
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 function initFundasSelectors() {
   const meses = [...allMonths].reverse().filter(m => allFundasStats[m]);
   const opts = meses.map(m => `<option value="${m}">${fmMonthLabel(m)}</option>`).join('');
   document.getElementById('fm-desde').innerHTML = opts;
   document.getElementById('fm-hasta').innerHTML = opts;
-  // Default: últimos 3 meses
   if (meses.length > 0) {
     document.getElementById('fm-hasta').value = meses[0];
     document.getElementById('fm-desde').value = meses[Math.min(2, meses.length - 1)];
   }
 
-  // Poblar checkboxes de modelos (ordenados por total histórico)
-  const modelTotals = {};
+  // Calcular totales históricos de modelos y productos a partir de claves compuestas
+  const modelTotals = {}, prodTotals = {};
   Object.values(allFundasStats).forEach(d => {
-    Object.entries(d).forEach(([model, qty]) => { modelTotals[model] = (modelTotals[model] || 0) + qty; });
+    Object.entries(d).forEach(([key, qty]) => {
+      const sep = key.indexOf('|||');
+      const model = key.slice(0, sep);
+      const prod  = key.slice(sep + 3);
+      modelTotals[model] = (modelTotals[model] || 0) + qty;
+      prodTotals[prod]   = (prodTotals[prod]   || 0) + qty;
+    });
   });
+
   const models = Object.entries(modelTotals).sort((a, b) => b[1] - a[1]).map(([m]) => m);
+  const prods  = Object.entries(prodTotals).sort((a, b) => b[1] - a[1]).map(([p]) => p);
+
   document.getElementById('fm-model-checkboxes').innerHTML = models.map(m => `
     <label class="fm-model-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
-      <input type="checkbox" class="fm-model-cb" value="${m}" checked onchange="renderFundasPorModelo()">
-      ${m}
+      <input type="checkbox" class="fm-model-cb" value="${esc(m)}" checked onchange="renderFundasPorModelo()">
+      ${esc(m)}
+    </label>`).join('');
+
+  document.getElementById('fm-prod-checkboxes').innerHTML = prods.map(p => `
+    <label class="fm-prod-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
+      <input type="checkbox" class="fm-prod-cb" value="${esc(p)}" checked onchange="renderFundasPorModelo()">
+      ${esc(p)}
     </label>`).join('');
 }
 
 function toggleModelosPanel() {
   const p = document.getElementById('fm-modelos-panel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  if (p.style.display === 'block') document.getElementById('fm-prods-panel').style.display = 'none';
+}
+
+function toggleProdsPanel() {
+  const p = document.getElementById('fm-prods-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  if (p.style.display === 'block') document.getElementById('fm-modelos-panel').style.display = 'none';
 }
 
 function toggleAllModels(checked) {
@@ -825,9 +859,21 @@ function toggleAllModels(checked) {
   renderFundasPorModelo();
 }
 
+function toggleAllProds(checked) {
+  document.querySelectorAll('.fm-prod-cb').forEach(cb => cb.checked = checked);
+  renderFundasPorModelo();
+}
+
 function filterModelCheckboxes() {
   const q = document.getElementById('fm-model-search').value.toLowerCase();
   document.querySelectorAll('.fm-model-label').forEach(lbl => {
+    lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterProdCheckboxes() {
+  const q = document.getElementById('fm-prod-search').value.toLowerCase();
+  document.querySelectorAll('.fm-prod-label').forEach(lbl => {
     lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
@@ -841,17 +887,26 @@ function renderFundasPorModelo() {
   const [rangeStart, rangeEnd] = [desde, hasta].sort();
   const rangeMonths = allMonths.filter(m => m >= rangeStart && m <= rangeEnd);
 
-  // Modelos seleccionados (si todos checked = sin filtro)
-  const allCbs = [...document.querySelectorAll('.fm-model-cb')];
-  const checkedModels = new Set(allCbs.filter(cb => cb.checked).map(cb => cb.value));
-  const filterActive = checkedModels.size < allCbs.length;
+  // Modelos seleccionados
+  const modelCbs = [...document.querySelectorAll('.fm-model-cb')];
+  const checkedModels = new Set(modelCbs.filter(cb => cb.checked).map(cb => cb.value));
+  const modelFilterActive = checkedModels.size < modelCbs.length;
 
-  // Agregar datos del rango
+  // Productos seleccionados
+  const prodCbs = [...document.querySelectorAll('.fm-prod-cb')];
+  const checkedProds = new Set(prodCbs.filter(cb => cb.checked).map(cb => cb.value));
+  const prodFilterActive = checkedProds.size < prodCbs.length;
+
+  // Agregar datos del rango, filtrando por modelo y producto
   const data = {};
   rangeMonths.forEach(m => {
     if (!allFundasStats[m]) return;
-    Object.entries(allFundasStats[m]).forEach(([model, qty]) => {
-      if (filterActive && !checkedModels.has(model)) return;
+    Object.entries(allFundasStats[m]).forEach(([key, qty]) => {
+      const sep = key.indexOf('|||');
+      const model = key.slice(0, sep);
+      const prod  = key.slice(sep + 3);
+      if (modelFilterActive && !checkedModels.has(model)) return;
+      if (prodFilterActive && !checkedProds.has(prod)) return;
       data[model] = (data[model] || 0) + qty;
     });
   });
@@ -899,8 +954,9 @@ function renderFundasPorModelo() {
     </tr>`;
   }).join('');
 
+  const prodSuffix = prodFilterActive ? ` · ${checkedProds.size} fundas` : '';
   document.getElementById('fm-total').textContent =
-    total.toLocaleString('es-AR') + ' fundas · ' + sorted.length + ' modelos · ' + rangeLabel;
+    total.toLocaleString('es-AR') + ' fundas · ' + sorted.length + ' modelos' + prodSuffix + ' · ' + rangeLabel;
 }
 
 function switchTab(id, btn) {
