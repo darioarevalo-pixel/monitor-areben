@@ -147,6 +147,7 @@
       <button class="tab" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
       <button class="tab" id="tab-btn-proveedores" style="display:none;" onclick="switchTab('proveedores', this)">Proveedores</button>
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
+      <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -360,6 +361,37 @@
       </div>
     </div>
 
+    <div id="tab-talles" class="section">
+      <div class="toolbar">
+        <label style="font-size:12px;color:#666;">Categoría</label>
+        <select id="talles-categoria" onchange="renderTalles()" style="min-width:180px;"></select>
+        <select id="talles-periodo" onchange="renderTalles()">
+          <option value="3">Últimos 3 meses</option>
+          <option value="6">Últimos 6 meses</option>
+          <option value="12" selected>Últimos 12 meses</option>
+          <option value="0">Todos</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="chart-wrap" style="height:300px;"><canvas id="tallesChart"></canvas></div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:12px 16px 6px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Por talle</span>
+          <span id="talles-total" style="font-size:11px;color:#aaa;"></span>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:32px;">#</th>
+            <th>Talle</th>
+            <th>Unidades vendidas</th>
+            <th>% del total</th>
+          </tr></thead>
+          <tbody id="talles-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="tab-colores" class="section">
       <div class="toolbar">
         <input type="text" id="col-search" placeholder="Buscar producto (ej: TOP)..." oninput="reloadColoresPanel()" style="width:200px;">
@@ -458,9 +490,10 @@ let allProductos = [], allVariantes = [];
 let sortState = { productos: { col: 'sales30', dir: -1 }, variantes: { col: 'sales30', dir: -1 } };
 let pageState = { productos: 1, variantes: 1 };
 const PAGE_SIZE = 50;
-let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null;
+let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null, tallesChart = null;
 let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 let allColoresSales = [], colorManualMap = {};
+let allTallesData = [], allTallesCategories = [];
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -504,7 +537,7 @@ async function cargarTodo() {
   try {
     setProgress(5);
     setStatus('Cargando productos...');
-    const productos = await fetchAll('productos', 'select=id,name,category,proveedor,retailer_price,unit_cost,created_at&order=id', 'productos');
+    const productos = await fetchAll('productos', 'select=id,name,category,proveedor,retailer_price,unit_cost,created_at,active&order=id', 'productos');
     setProgress(15);
 
     setStatus('Cargando inventario...');
@@ -790,6 +823,34 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   });
   allColoresSales = coloresSales;
 
+  // Datos de talles (para pestaña Talles — Zattia)
+  const productInfoMap = {};
+  (productos || []).forEach(p => {
+    productInfoMap[String(p.id)] = { category: (p.category || '').trim(), active: p.active };
+  });
+
+  allTallesCategories = [...new Set(
+    (productos || [])
+      .filter(p => p.active !== false)
+      .map(p => (p.category || '').trim())
+      .filter(Boolean)
+  )].sort();
+
+  const tallesData = [];
+  (detalles || []).forEach(item => {
+    const fecha = (ventasMap[String(item.sale_id)] || '').substring(0, 10);
+    if (!fecha) return;
+    const mes = fecha.substring(0, 7);
+    const qty = item.quantity || 1;
+    const pid = String(item.product_id || '');
+    const info = productInfoMap[pid];
+    if (!info || info.active === false) return;
+    const size = (item.size || '').trim();
+    if (!size) return;
+    tallesData.push({ category: info.category, size, qty, mes });
+  });
+  allTallesData = tallesData;
+
   document.getElementById('dashboard').style.display = 'block';
   setProgress(0);
   renderProductos();
@@ -802,6 +863,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   renderFundasPorModelo();
   updateProveedoresTab();
   updateColoresTab();
+  updateTallesTab();
 }
 
 function filtrarLista(lista, searchId, filterId) {
@@ -1441,6 +1503,100 @@ function filterColCheckboxes() {
   });
 }
 
+// ── Pestaña Talles ────────────────────────────────────────────────────────────
+
+function updateTallesTab() {
+  const isZattia = currentCuenta === CUENTAS.zattia;
+  document.getElementById('tab-btn-talles').style.display = isZattia ? '' : 'none';
+  if (isZattia) {
+    initTallesSelectors();
+    renderTalles();
+  }
+}
+
+function initTallesSelectors() {
+  const sel = document.getElementById('talles-categoria');
+  const current = sel.value;
+  sel.innerHTML = allTallesCategories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // Preferir el valor previo, luego "JEANS", luego el primero disponible
+  if (current && allTallesCategories.includes(current)) {
+    sel.value = current;
+  } else if (allTallesCategories.includes('JEANS')) {
+    sel.value = 'JEANS';
+  }
+}
+
+function renderTalles() {
+  const categoria = document.getElementById('talles-categoria')?.value || '';
+  const periodo   = parseInt(document.getElementById('talles-periodo')?.value || '12');
+  const cutoff    = periodo > 0 && allMonths.length >= periodo ? allMonths[allMonths.length - periodo] : '';
+
+  const filtered = allTallesData.filter(r => {
+    if (r.category !== categoria) return false;
+    if (cutoff && r.mes < cutoff) return false;
+    return true;
+  });
+
+  const bySize = {};
+  filtered.forEach(r => { bySize[r.size] = (bySize[r.size] || 0) + r.qty; });
+
+  // Ordenar: primero numéricos de menor a mayor, luego el resto alfabético
+  const sorted = Object.entries(bySize).sort(([a], [b]) => {
+    const na = parseFloat(a), nb = parseFloat(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    if (!isNaN(na)) return -1;
+    if (!isNaN(nb)) return 1;
+    return a.localeCompare(b);
+  });
+
+  const total = sorted.reduce((s, [, q]) => s + q, 0);
+
+  // Gráfico de barras vertical
+  if (tallesChart) tallesChart.destroy();
+  tallesChart = new Chart(document.getElementById('tallesChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(([s]) => s),
+      datasets: [{
+        data: sorted.map(([, q]) => q),
+        backgroundColor: '#7F77DD',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: { display: !!categoria, text: categoria, color: '#888', font: { size: 11 } }
+      },
+      scales: {
+        x: { ticks: { color: '#444', font: { size: 13, weight: '500' } }, grid: { display: false } },
+        y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }
+      }
+    }
+  });
+
+  // Tabla
+  document.getElementById('talles-tbody').innerHTML = sorted.length
+    ? sorted.map(([size, qty], i) => {
+        const pct = total > 0 ? (qty / total * 100).toFixed(1) : '0.0';
+        return `<tr>
+          <td style="color:#888;font-size:11px;width:32px;">${i + 1}</td>
+          <td style="font-weight:600;font-size:15px;">${esc(size)}</td>
+          <td style="font-weight:600;">${qty.toLocaleString('es-AR')}</td>
+          <td style="color:#666;">${pct}%
+            <div style="display:inline-block;width:80px;height:4px;background:#e5e5e5;border-radius:2px;margin-left:6px;vertical-align:middle;">
+              <div style="width:${Math.min(100, pct)}%;height:100%;background:#7F77DD;border-radius:2px;"></div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="4" style="color:#aaa;text-align:center;padding:20px;">Sin datos para esta categoría y período</td></tr>';
+
+  document.getElementById('talles-total').textContent =
+    total.toLocaleString('es-AR') + ' unidades · ' + sorted.length + ' talles';
+}
+
 function switchTab(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
   document.getElementById('tab-' + id).classList.add('visible');
@@ -1479,6 +1635,7 @@ function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
   updateProveedoresTab();
   updateColoresTab();
+  updateTallesTab();
   cargarTodo();
 }
 
