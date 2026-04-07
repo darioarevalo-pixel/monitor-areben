@@ -365,12 +365,16 @@
       <div class="toolbar">
         <label style="font-size:12px;color:#666;">Categoría</label>
         <select id="talles-categoria" onchange="renderTalles()" style="min-width:180px;"></select>
-        <select id="talles-periodo" onchange="renderTalles()">
+        <select id="talles-periodo" onchange="applyTallesPeriodo()">
           <option value="3">Últimos 3 meses</option>
           <option value="6">Últimos 6 meses</option>
           <option value="12" selected>Últimos 12 meses</option>
           <option value="0">Todos</option>
         </select>
+        <label style="font-size:12px;color:#666;">Desde</label>
+        <select id="talles-desde" onchange="renderTalles()"></select>
+        <label style="font-size:12px;color:#666;">Hasta</label>
+        <select id="talles-hasta" onchange="renderTalles()"></select>
       </div>
       <div class="card">
         <div class="chart-wrap" style="height:300px;"><canvas id="tallesChart"></canvas></div>
@@ -1518,22 +1522,45 @@ function initTallesSelectors() {
   const sel = document.getElementById('talles-categoria');
   const current = sel.value;
   sel.innerHTML = allTallesCategories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  // Preferir el valor previo, luego "JEANS", luego el primero disponible
   if (current && allTallesCategories.includes(current)) {
     sel.value = current;
   } else if (allTallesCategories.includes('JEANS')) {
     sel.value = 'JEANS';
   }
+
+  // Poblar selectores de mes
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const opts = allMonths.map(m => {
+    const [y, mo] = m.split('-');
+    const label = MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2);
+    return `<option value="${m}">${label}</option>`;
+  }).join('');
+  document.getElementById('talles-desde').innerHTML = opts;
+  document.getElementById('talles-hasta').innerHTML = opts;
+
+  applyTallesPeriodo();
+}
+
+function applyTallesPeriodo() {
+  const periodo = parseInt(document.getElementById('talles-periodo')?.value || '12');
+  const meses = allMonths;
+  if (!meses.length) return;
+  const hasta = meses[meses.length - 1];
+  const desde = periodo === 0 ? meses[0] : meses[Math.max(0, meses.length - periodo)];
+  document.getElementById('talles-desde').value = desde;
+  document.getElementById('talles-hasta').value = hasta;
+  renderTalles();
 }
 
 function renderTalles() {
   const categoria = document.getElementById('talles-categoria')?.value || '';
-  const periodo   = parseInt(document.getElementById('talles-periodo')?.value || '12');
-  const cutoff    = periodo > 0 && allMonths.length >= periodo ? allMonths[allMonths.length - periodo] : '';
+  const desde     = document.getElementById('talles-desde')?.value || '';
+  const hasta     = document.getElementById('talles-hasta')?.value || '';
 
   const filtered = allTallesData.filter(r => {
     if (r.category !== categoria) return false;
-    if (cutoff && r.mes < cutoff) return false;
+    if (desde && r.mes < desde) return false;
+    if (hasta && r.mes > hasta) return false;
     return true;
   });
 
