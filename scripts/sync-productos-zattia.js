@@ -90,6 +90,7 @@ async function main() {
     name:             p.name,
     sku:              p.sku || p.code || null,
     category:         p.category || null,
+    proveedor:        p.provider || null,
     retailer_price:   p.retailer_price ?? null,
     wholesaler_price: p.wholesaler_price ?? null,
     unit_cost:        p.unit_cost ?? null,

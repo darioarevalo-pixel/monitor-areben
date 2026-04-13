@@ -164,7 +164,12 @@
         <select id="filter-prod-prov" onchange="renderProductos()">
           <option value="">Todos los proveedores</option>
         </select>
+        <select id="lifespan-method" onchange="lifespanMethod=this.value;renderProductos()">
+          <option value="30d">Vida útil: últimos 30d</option>
+          <option value="firstSale">Vida útil: desde 1ª venta</option>
+        </select>
       </div>
+      <div id="ingreso-pills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;min-height:0;"></div>
       <div class="card" style="padding:0;overflow:hidden;">
         <table>
           <thead><tr>
@@ -502,6 +507,7 @@ let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresDat
 let allColoresSales = [], colorManualMap = {};
 let allTallesData = [], allTallesCategories = [];
 let allVvar = {}, expandedProductPid = null;
+let selectedIngresoPills = new Set(), lifespanMethod = '30d';
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -711,17 +717,23 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
 
   allProductos = (productos || []).map(p => {
     const pid = String(p.id);
-    const d = vprod[pid] || { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null };
+    const d = vprod[pid] || { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null };
     const dsl = d.last ? daysSince(d.last) : 999;
     const stock = invByProduct[pid] || 0;
     const ls = lifespanDays(stock, d.s30);
+    const lsFirst = lifespanDaysFromFirst(stock, d.total, d.first);
+    const ingresoMes = p.created_at ? p.created_at.substring(0, 7) : null;
     return {
       id: pid, name: p.name || 'Producto ' + pid,
       sku: p.sku || null, proveedor: p.proveedor || null,
+      ingresoMes,
+      firstSale: d.first || null,
       lastSale: d.last || null, daysSinceLast: dsl,
       sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
       monthlySales: months.map(m => d.byMonth[m] || 0),
-      stock, lifespan: ls === null ? 99999 : ls,
+      stock,
+      lifespan:      ls      === null ? 99999 : ls,
+      lifespanFirst: lsFirst === null ? 99999 : lsFirst,
       phase: getPhase(d.s60, d.s30, dsl)
     };
   });
@@ -735,6 +747,8 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       proveedoresList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
     if (prevProv && proveedoresList.includes(prevProv)) provSel.value = prevProv;
   }
+  selectedIngresoPills.clear();
+  buildIngresoPills();
 
   const variantesMap = {};
   (inventario || []).forEach(i => {
@@ -928,18 +942,73 @@ function goPage(type, page) {
   else renderVariantes();
 }
 
+function lifespanDaysFromFirst(stock, total, firstSale) {
+  if (!firstSale || !total || total <= 0) return null;
+  const days = daysSince(firstSale);
+  if (days <= 0) return null;
+  return Math.round((stock / total) * days);
+}
+
+function lifespanStrFromFirst(stock, total, firstSale) {
+  const d = lifespanDaysFromFirst(stock, total, firstSale);
+  if (d === null) return stock > 0 ? 'Sin ventas' : '—';
+  if (d > 365) return '+1 año';
+  if (d > 60) return Math.round(d / 30) + ' meses';
+  return d + ' días';
+}
+
+function buildIngresoPills() {
+  const el = document.getElementById('ingreso-pills');
+  if (!el) return;
+  const meses = {};
+  allProductos.forEach(p => { if (p.ingresoMes) meses[p.ingresoMes] = (meses[p.ingresoMes] || 0) + 1; });
+  const sorted = Object.entries(meses).sort(([a], [b]) => b.localeCompare(a)); // más reciente primero
+  if (!sorted.length) { el.style.display = 'none'; return; }
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  el.style.display = 'flex';
+  el.innerHTML =
+    `<span style="font-size:11px;color:#aaa;white-space:nowrap;">Cohorte de ingreso:</span>` +
+    sorted.map(([m, cnt]) => {
+      const [y, mo] = m.split('-');
+      const label = MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2);
+      const active = selectedIngresoPills.has(m);
+      return `<button onclick="toggleIngresoPill('${m}')" style="padding:4px 10px;font-size:12px;border-radius:99px;border:1px solid ${active ? '#378ADD' : '#e5e5e5'};background:${active ? '#e6f1fb' : '#fff'};color:${active ? '#185fa5' : '#666'};cursor:pointer;white-space:nowrap;">${label} <span style="font-size:10px;opacity:.7;">${cnt}</span></button>`;
+    }).join('') +
+    (selectedIngresoPills.size
+      ? `<button onclick="clearIngresoPills()" style="font-size:11px;color:#e24b4a;border:none;background:none;cursor:pointer;padding:0 4px;">✕ Limpiar</button>`
+      : '');
+}
+
+function toggleIngresoPill(mes) {
+  if (selectedIngresoPills.has(mes)) selectedIngresoPills.delete(mes);
+  else selectedIngresoPills.add(mes);
+  buildIngresoPills();
+  renderProductos();
+}
+
+function clearIngresoPills() {
+  selectedIngresoPills.clear();
+  buildIngresoPills();
+  renderProductos();
+}
+
 function renderProductos() {
   const { col, dir } = sortState.productos;
   let lista = filtrarLista(allProductos, 'search-prod', 'filter-prod');
   const provFiltro = document.getElementById('filter-prod-prov')?.value || '';
   if (provFiltro) lista = lista.filter(p => p.proveedor === provFiltro);
+  if (selectedIngresoPills.size) lista = lista.filter(p => selectedIngresoPills.has(p.ingresoMes));
   lista = sortList(lista, col, dir);
   const page = pageState.productos;
   const slice = lista.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   renderPagination(lista.length, page, 'productos');
+  const useFirst = lifespanMethod === 'firstSale';
   document.getElementById('tbody-productos').innerHTML = slice.map(p => {
     const isExpanded = expandedProductPid === p.id;
     const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ');
+    const lsStr = useFirst
+      ? lifespanStrFromFirst(p.stock, p.totalSales, p.firstSale)
+      : lifespanStr(p.stock, p.sales30);
     const detailRow = isExpanded
       ? `<tr><td colspan="7" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
       : '';
@@ -952,7 +1021,7 @@ function renderProductos() {
       <td style="color:#666;">${p.lastSale || '<span style="color:#aaa;">Sin ventas</span>'}<br><span style="font-size:11px;color:#aaa;">${p.daysSinceLast < 999 ? p.daysSinceLast+'d atrás' : ''}</span></td>
       <td style="font-weight:500;">${p.sales30}</td>
       <td>${p.sales90}</td>
-      <td style="color:#666;font-size:12px;">${lifespanStr(p.stock, p.sales30)}</td>
+      <td style="color:#666;font-size:12px;">${lsStr}</td>
       <td>${p.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,p.stock/2)}%;background:${p.stock<5?'#e24b4a':p.stock<20?'#ef9f27':'#1d9e75'};"></div></div></td>
       <td><span class="badge ${p.phase.cls}">${p.phase.label}</span></td>
     </tr>${detailRow}`;
