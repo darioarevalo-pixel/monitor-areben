@@ -161,6 +161,9 @@
           <option value="dormido">Dormido</option>
           <option value="obsoleto">Obsoleto</option>
         </select>
+        <select id="filter-prod-prov" onchange="renderProductos()">
+          <option value="">Todos los proveedores</option>
+        </select>
       </div>
       <div class="card" style="padding:0;overflow:hidden;">
         <table>
@@ -498,6 +501,7 @@ let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = nu
 let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 let allColoresSales = [], colorManualMap = {};
 let allTallesData = [], allTallesCategories = [];
+let allVvar = {}, expandedProductPid = null;
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -541,7 +545,7 @@ async function cargarTodo() {
   try {
     setProgress(5);
     setStatus('Cargando productos...');
-    const productos = await fetchAll('productos', 'select=id,name,category,proveedor,retailer_price,unit_cost,created_at,active&order=id', 'productos');
+    const productos = await fetchAll('productos', 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&order=id', 'productos');
     setProgress(15);
 
     setStatus('Cargando inventario...');
@@ -680,6 +684,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     else if (fechaObj >= cutoff60) vvar[vid].s60 += qty;
     if (!vvar[vid].last || fecha > vvar[vid].last) vvar[vid].last = fecha;
   });
+  allVvar = vvar;
 
   // Estadísticas mensuales desde vistas materializadas
   const mStats = {};
@@ -712,6 +717,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     const ls = lifespanDays(stock, d.s30);
     return {
       id: pid, name: p.name || 'Producto ' + pid,
+      sku: p.sku || null, proveedor: p.proveedor || null,
       lastSale: d.last || null, daysSinceLast: dsl,
       sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
       monthlySales: months.map(m => d.byMonth[m] || 0),
@@ -719,6 +725,16 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       phase: getPhase(d.s60, d.s30, dsl)
     };
   });
+
+  // Poblar filtro de proveedores
+  const proveedoresList = [...new Set(allProductos.map(p => p.proveedor).filter(Boolean))].sort();
+  const provSel = document.getElementById('filter-prod-prov');
+  if (provSel) {
+    const prevProv = provSel.value;
+    provSel.innerHTML = '<option value="">Todos los proveedores</option>' +
+      proveedoresList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    if (prevProv && proveedoresList.includes(prevProv)) provSel.value = prevProv;
+  }
 
   const variantesMap = {};
   (inventario || []).forEach(i => {
@@ -915,20 +931,87 @@ function goPage(type, page) {
 function renderProductos() {
   const { col, dir } = sortState.productos;
   let lista = filtrarLista(allProductos, 'search-prod', 'filter-prod');
+  const provFiltro = document.getElementById('filter-prod-prov')?.value || '';
+  if (provFiltro) lista = lista.filter(p => p.proveedor === provFiltro);
   lista = sortList(lista, col, dir);
   const page = pageState.productos;
   const slice = lista.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   renderPagination(lista.length, page, 'productos');
-  document.getElementById('tbody-productos').innerHTML = slice.map(p => `
-    <tr>
-      <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</td>
+  document.getElementById('tbody-productos').innerHTML = slice.map(p => {
+    const isExpanded = expandedProductPid === p.id;
+    const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ');
+    const detailRow = isExpanded
+      ? `<tr><td colspan="7" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
+      : '';
+    return `
+    <tr onclick="toggleProductoDetalle('${p.id}')" style="cursor:pointer;${isExpanded ? 'background:#eef2ff;' : ''}">
+      <td style="font-weight:500;max-width:200px;">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</div>
+        ${meta ? `<div style="font-size:11px;color:#aaa;margin-top:1px;">${esc(meta)}</div>` : ''}
+      </td>
       <td style="color:#666;">${p.lastSale || '<span style="color:#aaa;">Sin ventas</span>'}<br><span style="font-size:11px;color:#aaa;">${p.daysSinceLast < 999 ? p.daysSinceLast+'d atrás' : ''}</span></td>
       <td style="font-weight:500;">${p.sales30}</td>
       <td>${p.sales90}</td>
       <td style="color:#666;font-size:12px;">${lifespanStr(p.stock, p.sales30)}</td>
       <td>${p.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,p.stock/2)}%;background:${p.stock<5?'#e24b4a':p.stock<20?'#ef9f27':'#1d9e75'};"></div></div></td>
       <td><span class="badge ${p.phase.cls}">${p.phase.label}</span></td>
-    </tr>`).join('');
+    </tr>${detailRow}`;
+  }).join('');
+}
+
+function toggleProductoDetalle(pid) {
+  expandedProductPid = expandedProductPid === pid ? null : pid;
+  renderProductos();
+}
+
+function buildProductoDetalle(pid) {
+  // Variantes con ventas
+  const varSales = Object.values(allVvar)
+    .filter(v => v.pid === pid)
+    .sort((a, b) => b.total - a.total);
+
+  // Stock por variant id
+  const stockByVid = {};
+  allVariantes.filter(v => v.pid === pid).forEach(v => { stockByVid[v.id] = v.stock; });
+
+  // Agregar variantes con stock pero sin ventas
+  const seen = new Set(varSales.map(v => v.pid + '_' + v.sid));
+  const stockOnly = allVariantes.filter(v => v.pid === pid && !seen.has(v.id));
+
+  const allItems = [
+    ...varSales.map(v => ({ size: v.size, total: v.total, s30: v.s30, stock: stockByVid[pid + '_' + v.sid] || 0 })),
+    ...stockOnly.map(v => ({ size: v.size, total: 0, s30: 0, stock: v.stock })),
+  ];
+
+  if (!allItems.length) {
+    return '<div style="padding:12px 20px;color:#aaa;font-size:12px;">Sin variantes registradas</div>';
+  }
+
+  const totalVendido = allItems.reduce((s, v) => s + v.total, 0);
+  const rows = allItems.map(v => {
+    const pct = totalVendido > 0 ? (v.total / totalVendido * 100).toFixed(0) : 0;
+    return `<tr>
+      <td style="padding:5px 16px 5px 0;font-size:13px;color:#333;font-weight:500;">${esc(v.size || '—')}</td>
+      <td style="padding:5px 16px 5px 0;font-size:13px;font-weight:600;">${v.total.toLocaleString('es-AR')}
+        ${totalVendido > 0 ? `<span style="font-size:10px;color:#aaa;margin-left:4px;">${pct}%</span>` : ''}
+      </td>
+      <td style="padding:5px 16px 5px 0;font-size:13px;color:#666;">${v.s30.toLocaleString('es-AR')}</td>
+      <td style="padding:5px 0;font-size:13px;color:${v.stock < 3 ? '#e24b4a' : v.stock < 10 ? '#ba7517' : '#666'};">${v.stock.toLocaleString('es-AR')}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="padding:10px 20px 14px;">
+    <div style="font-size:11px;font-weight:600;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">▾ Desglose por variante</div>
+    <table style="width:auto;">
+      <thead><tr>
+        <th style="font-size:11px;color:#888;font-weight:500;text-align:left;padding:0 16px 6px 0;">Variante</th>
+        <th style="font-size:11px;color:#888;font-weight:500;text-align:left;padding:0 16px 6px 0;">Total vendido</th>
+        <th style="font-size:11px;color:#888;font-weight:500;text-align:left;padding:0 16px 6px 0;">Últimos 30d</th>
+        <th style="font-size:11px;color:#888;font-weight:500;text-align:left;padding:0 0 6px 0;">Stock</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
 }
 
 function renderVariantes() {
