@@ -420,6 +420,11 @@
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
           <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Nombre de funda</strong>
           <input type="text" id="fm-prod-search" placeholder="Buscar..." oninput="filterProdCheckboxes()" style="flex:1;min-width:120px;padding:4px 8px;font-size:12px;">
+          <select id="fm-prod-sort" onchange="rebuildFundaProds()" style="font-size:12px;padding:3px 6px;">
+            <option value="qty">Más vendidas</option>
+            <option value="alpha">Alfabético</option>
+            <option value="date">Fecha de ingreso</option>
+          </select>
           <button class="btn-sm" onclick="toggleAllProds(true)">Todos</button>
           <button class="btn-sm" onclick="toggleAllProds(false)">Ninguno</button>
         </div>
@@ -1483,7 +1488,7 @@ function initFundasSelectors() {
   });
 
   const models = Object.entries(modelTotals).sort((a, b) => b[1] - a[1]).map(([m]) => m);
-  const prods  = Object.entries(prodTotals).sort((a, b) => b[1] - a[1]).map(([p]) => p);
+  window._fmProdTotals = prodTotals;
 
   document.getElementById('fm-model-checkboxes').innerHTML = models.map(m => `
     <label class="fm-model-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
@@ -1491,11 +1496,45 @@ function initFundasSelectors() {
       ${esc(m)}
     </label>`).join('');
 
-  document.getElementById('fm-prod-checkboxes').innerHTML = prods.map(p => `
-    <label class="fm-prod-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
-      <input type="checkbox" class="fm-prod-cb" value="${esc(p)}" checked onchange="renderFundasPorModelo()">
+  rebuildFundaProds(true);
+}
+
+function rebuildFundaProds(init = false) {
+  const prodTotals = window._fmProdTotals || {};
+  const sort = document.getElementById('fm-prod-sort')?.value || 'qty';
+
+  // Guardar selección actual (salvo en la inicialización donde todo está checked)
+  const prevChecked = init ? null : new Set(
+    [...document.querySelectorAll('.fm-prod-cb')].filter(cb => cb.checked).map(cb => cb.value)
+  );
+
+  let entries = Object.entries(prodTotals);
+  if (sort === 'alpha') {
+    entries.sort((a, b) => a[0].localeCompare(b[0], 'es', { sensitivity: 'base' }));
+  } else if (sort === 'date') {
+    // Buscar created_at en allProductos por nombre
+    const dateByName = {};
+    (allProductos || []).forEach(p => { if (p.name) dateByName[p.name] = p.ingresoMes || ''; });
+    entries.sort((a, b) => {
+      const da = dateByName[a[0]] || '';
+      const db = dateByName[b[0]] || '';
+      if (da === db) return a[0].localeCompare(b[0], 'es', { sensitivity: 'base' });
+      return db.localeCompare(da); // más reciente primero
+    });
+  } else {
+    entries.sort((a, b) => b[1] - a[1]);
+  }
+
+  const prods = entries.map(([p]) => p);
+  document.getElementById('fm-prod-checkboxes').innerHTML = prods.map(p => {
+    const checked = init || prevChecked === null || prevChecked.has(p);
+    return `<label class="fm-prod-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
+      <input type="checkbox" class="fm-prod-cb" value="${esc(p)}" ${checked ? 'checked' : ''} onchange="renderFundasPorModelo()">
       ${esc(p)}
-    </label>`).join('');
+    </label>`;
+  }).join('');
+
+  if (!init) filterProdCheckboxes();
 }
 
 function toggleModelosPanel() {
