@@ -169,33 +169,45 @@ async function syncVentas(fromDate) {
   console.log(`\n[ventas] Descargando desde ${fromDate} hasta ${today}...`);
   const rows = await fetchAllPages(basePath);
 
-  const ventas = rows.map(v => ({
-    id:             v.id,
-    number:         v.number || null,
-    date_sale:      v.date_sale || null,
-    total_price:    v.total_price ?? null,
-    channel:        v.channel || null,
-    sale_state:     v.sale_state || null,
-    payment_method: v.payment_method || null,
-    store:          v.store || null,
-    client_name:    v.client_name || null,
-  }));
+  const ventasMap = new Map();
+  rows.forEach(v => {
+    if (!ventasMap.has(v.id)) {
+      ventasMap.set(v.id, {
+        id:             v.id,
+        number:         v.number || null,
+        date_sale:      v.date_sale || null,
+        total_price:    v.total_price ?? null,
+        channel:        v.channel || null,
+        sale_state:     v.sale_state || null,
+        payment_method: v.payment_method || null,
+        store:          v.store || null,
+        client_name:    v.client_name || null,
+      });
+    }
+  });
+  const ventas = [...ventasMap.values()];
 
-  const detalles = rows.flatMap(v =>
-    (v.detalles || []).map(d => ({
-      id:           d.id,
-      sale_id:      v.id,
-      product_id:   d.product_id || null,
-      product_name: d.product_name || null,
-      size_id:      d.size_id || null,
-      size:         d.size || null,
-      quantity:     d.quantity ?? null,
-      unit_price:   d.unit_price ?? null,
-      total:        d.total ?? null,
-    }))
+  const detallesMap = new Map();
+  rows.forEach(v =>
+    (v.detalles || []).forEach(d => {
+      if (!detallesMap.has(d.id)) {
+        detallesMap.set(d.id, {
+          id:           d.id,
+          sale_id:      v.id,
+          product_id:   d.product_id || null,
+          product_name: d.product_name || null,
+          size_id:      d.size_id || null,
+          size:         d.size || null,
+          quantity:     d.quantity ?? null,
+          unit_price:   d.unit_price ?? null,
+          total:        d.total ?? null,
+        });
+      }
+    })
   );
+  const detalles = [...detallesMap.values()];
 
-  console.log(`[ventas] ${ventas.length} ventas, ${detalles.length} detalles. Guardando en Supabase...`);
+  console.log(`[ventas] ${ventas.length} ventas (de ${rows.length} raw), ${detalles.length} detalles. Guardando en Supabase...`);
 
   if (ventas.length) {
     const { error } = await supabase.from('ventas').upsert(ventas, { onConflict: 'id' });
