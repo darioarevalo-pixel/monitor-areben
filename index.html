@@ -437,7 +437,10 @@
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:12px 16px 6px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Ranking por modelo</span>
-          <span id="fm-total" style="font-size:11px;color:#aaa;"></span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="fm-total" style="font-size:11px;color:#aaa;"></span>
+            <button class="btn-sm" onclick="fmImportarRanking()" style="font-size:11px;">↓ Importar a simulación</button>
+          </div>
         </div>
         <table>
           <thead><tr>
@@ -448,6 +451,40 @@
           </tr></thead>
           <tbody id="fm-tbody"></tbody>
         </table>
+      </div>
+
+      <!-- Simulación de pedido -->
+      <div class="card" id="fm-sim-card" style="margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Simulación de pedido</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;color:#666;">Total a pedir:</label>
+            <input type="number" id="fm-sim-total" min="1" value="100" oninput="fmSimRecalc()"
+              style="width:90px;padding:5px 8px;font-size:13px;font-weight:600;border:1px solid #D1D5DB;border-radius:8px;text-align:center;">
+            <span style="font-size:12px;color:#9CA3AF;">unidades</span>
+          </div>
+        </div>
+
+        <table id="fm-sim-table" style="width:100%;">
+          <thead><tr>
+            <th>Modelo</th>
+            <th style="width:110px;text-align:center;">% del pedido</th>
+            <th style="width:110px;text-align:center;">Cantidad</th>
+            <th style="width:40px;"></th>
+          </tr></thead>
+          <tbody id="fm-sim-tbody"></tbody>
+          <tfoot>
+            <tr style="background:#F9FAFB;">
+              <td style="font-weight:600;font-size:12px;padding:8px 12px;">
+                <button onclick="fmSimAgregarFila()" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo</button>
+              </td>
+              <td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-pct-total">0%</td>
+              <td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-qty-total">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">Los porcentajes y modelos son editables. La cantidad se calcula automáticamente.</div>
       </div>
     </div>
 
@@ -1663,6 +1700,66 @@ function toggleProdsPanel() {
   const p = document.getElementById('fm-prods-panel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
   if (p.style.display === 'block') document.getElementById('fm-modelos-panel').style.display = 'none';
+}
+
+// ── Simulación de pedido ──────────────────────────────────────────────────────
+let fmSimRows = [];
+
+function fmImportarRanking() {
+  const rows = [...document.querySelectorAll('#fm-tbody tr')];
+  if (!rows.length) return;
+  fmSimRows = rows.map(tr => {
+    const cells = tr.querySelectorAll('td');
+    const model = cells[1]?.textContent?.trim() || '';
+    const pct   = parseFloat(cells[3]?.textContent?.replace('%','')) || 0;
+    return { model, pct };
+  }).filter(r => r.model);
+  fmSimRender();
+  document.getElementById('fm-sim-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmSimRender() {
+  document.getElementById('fm-sim-tbody').innerHTML = fmSimRows.map((r, i) => `
+    <tr>
+      <td>
+        <input value="${esc(r.model)}" onchange="fmSimRows[${i}].model=this.value"
+          style="width:100%;border:none;background:transparent;font-size:13px;padding:4px 0;">
+      </td>
+      <td style="text-align:center;">
+        <input type="number" value="${r.pct.toFixed(1)}" min="0" max="100" step="0.1"
+          oninput="fmSimRows[${i}].pct=parseFloat(this.value)||0;fmSimRecalc()"
+          style="width:75px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;">
+      </td>
+      <td style="text-align:center;font-weight:600;font-size:13px;" id="fm-sim-qty-${i}">—</td>
+      <td style="text-align:center;">
+        <button onclick="fmSimEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
+      </td>
+    </tr>`).join('');
+  fmSimRecalc();
+}
+
+function fmSimRecalc() {
+  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
+  let sumPct = 0, sumQty = 0;
+  fmSimRows.forEach((r, i) => {
+    const qty = Math.round(total * r.pct / 100);
+    const el = document.getElementById(`fm-sim-qty-${i}`);
+    if (el) el.textContent = qty;
+    sumPct += r.pct;
+    sumQty += qty;
+  });
+  document.getElementById('fm-sim-pct-total').textContent = sumPct.toFixed(1) + '%';
+  document.getElementById('fm-sim-qty-total').textContent = sumQty;
+}
+
+function fmSimAgregarFila() {
+  fmSimRows.push({ model: '', pct: 0 });
+  fmSimRender();
+}
+
+function fmSimEliminar(i) {
+  fmSimRows.splice(i, 1);
+  fmSimRender();
 }
 
 function toggleAllModels(checked) {
