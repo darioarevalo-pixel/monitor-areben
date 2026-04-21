@@ -778,18 +778,37 @@ async function sbFetch(table, params) {
   return res.json();
 }
 
-async function fetchAll(table, baseParams, label, silent = false) {
-  const results = [];
-  let offset = 0;
-  const batchSize = 1000;
-  while (true) {
-    const data = await sbFetch(table, `${baseParams}&limit=${batchSize}&offset=${offset}`);
-    results.push(...data);
-    if (!silent) setStatus(`Cargando ${label}... ${results.length}`);
-    if (data.length < batchSize) break;
-    offset += batchSize;
+async function sbFetchWithCount(table, params) {
+  const res = await fetch(`${currentCuenta.url}/rest/v1/${table}?${params}`, {
+    headers: {
+      'apikey': currentCuenta.key,
+      'Authorization': 'Bearer ' + currentCuenta.key,
+      'Prefer': 'count=exact',
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Error ${res.status} en ${table}: ${text.substring(0, 150)}`);
   }
-  return results;
+  const range = res.headers.get('Content-Range') || '';
+  const total = parseInt((range.split('/')[1] || '0'), 10);
+  const data  = await res.json();
+  return { data, total };
+}
+
+async function fetchAll(table, baseParams, label, silent = false) {
+  const batchSize = 1000;
+  const { data: first, total } = await sbFetchWithCount(table, `${baseParams}&limit=${batchSize}&offset=0`);
+  if (!silent) setStatus(`Cargando ${label}...`);
+  if (first.length >= total || first.length < batchSize) return first;
+
+  const offsets = [];
+  for (let off = batchSize; off < total; off += batchSize) offsets.push(off);
+
+  const pages = await Promise.all(
+    offsets.map(off => sbFetch(table, `${baseParams}&limit=${batchSize}&offset=${off}`))
+  );
+  return first.concat(...pages);
 }
 
 function getCacheKey() {
