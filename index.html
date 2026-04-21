@@ -1567,19 +1567,22 @@ function initFundasSelectors() {
   }
 
   // Calcular totales históricos de modelos y productos a partir de claves compuestas
-  const modelTotals = {}, prodTotals = {};
-  Object.values(allFundasStats).forEach(d => {
+  const modelTotals = {}, prodTotals = {}, prodFirstMes = {};
+  Object.entries(allFundasStats).forEach(([mes, d]) => {
     Object.entries(d).forEach(([key, qty]) => {
       const sep = key.indexOf('|||');
       const model = key.slice(0, sep);
       const prod  = key.slice(sep + 3);
       modelTotals[model] = (modelTotals[model] || 0) + qty;
       prodTotals[prod]   = (prodTotals[prod]   || 0) + qty;
+      // primer mes en que aparece el producto en ventas de fundas
+      if (!prodFirstMes[prod] || mes < prodFirstMes[prod]) prodFirstMes[prod] = mes;
     });
   });
 
   const models = Object.entries(modelTotals).sort((a, b) => b[1] - a[1]).map(([m]) => m);
-  window._fmProdTotals = prodTotals;
+  window._fmProdTotals   = prodTotals;
+  window._fmProdFirstMes = prodFirstMes;
 
   document.getElementById('fm-model-checkboxes').innerHTML = models.map(m => `
     <label class="fm-model-label" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 5px;border-radius:4px;">
@@ -1603,12 +1606,12 @@ function rebuildFundaProds(init = false) {
   if (sort === 'alpha') {
     entries.sort((a, b) => a[0].localeCompare(b[0], 'es', { sensitivity: 'base' }));
   } else if (sort === 'date') {
-    const dateByName = window._fmProdCreatedAt || {};
+    const firstMes = window._fmProdFirstMes || {};
     entries.sort((a, b) => {
-      const da = dateByName[a[0]] || '';
-      const db = dateByName[b[0]] || '';
+      const da = firstMes[a[0]] || '';
+      const db = firstMes[b[0]] || '';
       if (da === db) return a[0].localeCompare(b[0], 'es', { sensitivity: 'base' });
-      return db.localeCompare(da);
+      return db.localeCompare(da); // más reciente primero
     });
   } else {
     entries.sort((a, b) => b[1] - a[1]);
