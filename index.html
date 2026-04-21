@@ -274,6 +274,7 @@
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
       <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
       <button class="tab" id="tab-btn-catalogo" style="display:none;" onclick="switchTab('catalogo', this)">Catálogo Admin</button>
+      <button class="tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">Tienda Online</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -635,6 +636,51 @@
         </div>
       </div>
       <div class="cat-toast" id="cat-toast"></div>
+    </div>
+
+    <div id="tab-tienda" class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">Auditoría Tienda Online — BDI</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Productos en Tiendanube y su estado de fotos y descripción</div>
+        </div>
+        <button class="btn-primary" onclick="tiendaCargar()">Actualizar</button>
+      </div>
+
+      <div id="tienda-loading" style="text-align:center;padding:40px;color:#9CA3AF;font-size:13px;display:none;">Cargando productos de Tiendanube...</div>
+
+      <div id="tienda-panel" style="display:none;">
+        <!-- Stats -->
+        <div class="stats-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:16px;" id="tienda-stats"></div>
+
+        <!-- Filtros -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;" id="tienda-filters">
+          <button class="btn-sm tienda-filter-btn active" data-filter="all" onclick="tiendaSetFilter('all',this)">Todos</button>
+          <button class="btn-sm tienda-filter-btn" data-filter="no_img" onclick="tiendaSetFilter('no_img',this)" style="color:#DC2626;">Sin fotos</button>
+          <button class="btn-sm tienda-filter-btn" data-filter="one_img" onclick="tiendaSetFilter('one_img',this)" style="color:#D97706;">1 foto</button>
+          <button class="btn-sm tienda-filter-btn" data-filter="ok_img" onclick="tiendaSetFilter('ok_img',this)" style="color:#16A34A;">2+ fotos</button>
+          <button class="btn-sm tienda-filter-btn" data-filter="no_desc" onclick="tiendaSetFilter('no_desc',this)" style="color:#DC2626;">Sin descripción</button>
+          <button class="btn-sm tienda-filter-btn" data-filter="no_img_no_desc" onclick="tiendaSetFilter('no_img_no_desc',this)" style="color:#7C3AED;">Sin fotos y sin desc.</button>
+          <input type="text" id="tienda-search" placeholder="Buscar producto..." oninput="tiendaRender()" style="margin-left:auto;width:220px;font-size:12px;padding:5px 10px;">
+        </div>
+
+        <!-- Tabla -->
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="width:90px;">SKU</th>
+                <th style="width:110px;text-align:center;">Fotos</th>
+                <th style="width:110px;text-align:center;">Descripción</th>
+                <th style="width:90px;text-align:center;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tienda-tbody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:8px;" id="tienda-count"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -2103,6 +2149,89 @@ function cambiarEmpresa(empresaKey) {
 function updateCatalogoTab() {
   const isBDI = currentCuenta === CUENTAS.bdi;
   document.getElementById('tab-btn-catalogo').style.display = isBDI ? '' : 'none';
+  document.getElementById('tab-btn-tienda').style.display   = isBDI ? '' : 'none';
+}
+
+// ── Tienda Online ─────────────────────────────────────────────────────────────
+let tiendaAllProducts = [];
+let tiendaFilter = 'all';
+
+async function tiendaCargar() {
+  document.getElementById('tienda-loading').style.display = '';
+  document.getElementById('tienda-panel').style.display   = 'none';
+  try {
+    const r = await fetch('https://bdi-catalogo.vercel.app/api/tiendanube-audit');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    tiendaAllProducts = data.products || [];
+    tiendaFilter = 'all';
+    document.querySelectorAll('.tienda-filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.tienda-filter-btn[data-filter="all"]').classList.add('active');
+    document.getElementById('tienda-search').value = '';
+    tiendaRenderStats();
+    tiendaRender();
+    document.getElementById('tienda-panel').style.display   = '';
+  } catch (e) {
+    alert('Error cargando Tiendanube: ' + e.message);
+  } finally {
+    document.getElementById('tienda-loading').style.display = 'none';
+  }
+}
+
+function tiendaRenderStats() {
+  const ps = tiendaAllProducts;
+  const total      = ps.length;
+  const noImg      = ps.filter(p => p.image_count === 0).length;
+  const oneImg     = ps.filter(p => p.image_count === 1).length;
+  const okImg      = ps.filter(p => p.image_count >= 2).length;
+  const noDesc     = ps.filter(p => !p.has_desc).length;
+  const noImgDesc  = ps.filter(p => p.image_count === 0 && !p.has_desc).length;
+  document.getElementById('tienda-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-number">${total}</div><div class="stat-label">Total productos</div></div>
+    <div class="stat-card" style="border-top:3px solid #DC2626;"><div class="stat-number" style="color:#DC2626;">${noImg}</div><div class="stat-label">Sin fotos</div></div>
+    <div class="stat-card" style="border-top:3px solid #D97706;"><div class="stat-number" style="color:#D97706;">${oneImg}</div><div class="stat-label">1 foto</div></div>
+    <div class="stat-card" style="border-top:3px solid #16A34A;"><div class="stat-number" style="color:#16A34A;">${okImg}</div><div class="stat-label">2+ fotos</div></div>
+    <div class="stat-card" style="border-top:3px solid #DC2626;"><div class="stat-number" style="color:#DC2626;">${noDesc}</div><div class="stat-label">Sin descripción</div></div>
+    <div class="stat-card" style="border-top:3px solid #7C3AED;"><div class="stat-number" style="color:#7C3AED;">${noImgDesc}</div><div class="stat-label">Sin fotos y desc.</div></div>`;
+}
+
+function tiendaSetFilter(f, btn) {
+  tiendaFilter = f;
+  document.querySelectorAll('.tienda-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  tiendaRender();
+}
+
+function tiendaRender() {
+  const search = (document.getElementById('tienda-search').value || '').toLowerCase();
+  let ps = tiendaAllProducts;
+
+  if (tiendaFilter === 'no_img')       ps = ps.filter(p => p.image_count === 0);
+  else if (tiendaFilter === 'one_img') ps = ps.filter(p => p.image_count === 1);
+  else if (tiendaFilter === 'ok_img')  ps = ps.filter(p => p.image_count >= 2);
+  else if (tiendaFilter === 'no_desc') ps = ps.filter(p => !p.has_desc);
+  else if (tiendaFilter === 'no_img_no_desc') ps = ps.filter(p => p.image_count === 0 && !p.has_desc);
+
+  if (search) ps = ps.filter(p => (p.name || '').toLowerCase().includes(search) || (p.sku || '').toLowerCase().includes(search));
+
+  const imgBadge = count => {
+    if (count === 0) return `<span style="background:#FEE2E2;color:#DC2626;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;">Sin fotos</span>`;
+    if (count === 1) return `<span style="background:#FEF3C7;color:#D97706;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;">1 foto</span>`;
+    return `<span style="background:#DCFCE7;color:#16A34A;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;">${count} fotos</span>`;
+  };
+  const descBadge = has => has
+    ? `<span style="background:#DCFCE7;color:#16A34A;padding:2px 7px;border-radius:10px;font-size:11px;">OK</span>`
+    : `<span style="background:#FEE2E2;color:#DC2626;padding:2px 7px;border-radius:10px;font-size:11px;">Sin desc.</span>`;
+
+  document.getElementById('tienda-tbody').innerHTML = ps.map(p => `
+    <tr>
+      <td style="font-weight:500;max-width:320px;">${p.name}</td>
+      <td style="color:#6B7280;font-size:12px;">${p.sku || '—'}</td>
+      <td>${imgBadge(p.image_count)}</td>
+      <td>${descBadge(p.has_desc)}</td>
+      <td style="color:#6B7280;font-size:11px;">${p.published ? 'Publicado' : '<span style="color:#9CA3AF;">Oculto</span>'}</td>
+    </tr>`).join('');
+  document.getElementById('tienda-count').textContent = `Mostrando ${ps.length} de ${tiendaAllProducts.length} productos`;
 }
 
 function doLogout() {
