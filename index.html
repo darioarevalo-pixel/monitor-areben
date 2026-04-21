@@ -795,13 +795,15 @@ function getCacheKey() {
   return 'monitor_v1_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
 }
 
-function loadCache() {
+function loadCache(ignoreExpiry = false) {
   try {
     const raw = localStorage.getItem(getCacheKey());
     if (!raw) return null;
     const cached = JSON.parse(raw);
-    const age = Date.now() - cached.timestamp;
-    if (age > 6 * 60 * 60 * 1000) return null; // expirado >6h
+    if (!ignoreExpiry) {
+      const age = Date.now() - cached.timestamp;
+      if (age > 6 * 60 * 60 * 1000) return null;
+    }
     return cached;
   } catch { return null; }
 }
@@ -809,44 +811,67 @@ function loadCache() {
 function saveCache(data, timestamp) {
   try {
     const payload = JSON.stringify({ timestamp, data });
-    if (payload.length < 8 * 1024 * 1024) { // máx 8MB
+    if (payload.length < 8 * 1024 * 1024) {
       localStorage.setItem(getCacheKey(), payload);
     }
   } catch { /* localStorage lleno, ignorar */ }
 }
 
+function renderFromCache(cached, stale = false) {
+  const ageMin = Math.round((Date.now() - cached.timestamp) / 60000);
+  colorManualMap = {};
+  (cached.data.colorManual || []).forEach(r => { colorManualMap[r.product_name] = r.color; });
+  procesarYRenderizar(
+    cached.data.productos, cached.data.ventas, cached.data.detalles,
+    cached.data.inventario, cached.data.vmMes, cached.data.vmCat,
+    cached.data.vmFundas, new Date(cached.timestamp).toISOString()
+  );
+  document.getElementById('dashboard').style.display = 'block';
+  if (stale) {
+    setStatus(`Datos de hace ${ageMin} min — actualizando en segundo plano...`);
+  } else {
+    setStatus(`Caché de hace ${ageMin} min — `, 'ok');
+    document.getElementById('status').innerHTML +=
+      `<a href="#" onclick="cargarTodo(true);return false;" style="color:#378ADD;font-size:12px;">Actualizar ahora</a>`;
+  }
+}
+
 async function cargarTodo(forceRefresh = false) {
   // ── Intentar desde caché ──────────────────────────────────────────────────
   if (!forceRefresh) {
-    const cached = loadCache();
-    if (cached) {
-      const ageMin = Math.round((Date.now() - cached.timestamp) / 60000);
-      setStatus(`Cargando desde caché...`);
-      colorManualMap = {};
-      (cached.data.colorManual || []).forEach(r => { colorManualMap[r.product_name] = r.color; });
-      procesarYRenderizar(
-        cached.data.productos, cached.data.ventas, cached.data.detalles,
-        cached.data.inventario, cached.data.vmMes, cached.data.vmCat,
-        cached.data.vmFundas, new Date(cached.timestamp).toISOString()
-      );
-      document.getElementById('dashboard').style.display = 'block';
-      setStatus(`Caché de hace ${ageMin} min — `, 'ok');
-      document.getElementById('status').innerHTML +=
-        `<a href="#" onclick="cargarTodo(true);return false;" style="color:#378ADD;font-size:12px;">Actualizar ahora</a>`;
+    const fresh = loadCache(false);
+    if (fresh) {
+      renderFromCache(fresh, false);
+      return;
+    }
+    // Caché expirada: mostrar igual mientras se refresca en segundo plano
+    const stale = loadCache(true);
+    if (stale) {
+      renderFromCache(stale, true);
+      fetchFresh().then(ok => {
+        if (ok) setStatus('Datos actualizados.', 'ok');
+      });
       return;
     }
   }
 
-  // ── Fetch en paralelo ─────────────────────────────────────────────────────
+  // Sin caché en absoluto: fetch completo mostrando progreso
+  setProgress(10);
+  setStatus('Descargando datos...');
+  const ok = await fetchFresh();
+  if (!ok) return;
+  setProgress(100);
+  setStatus('Datos actualizados.', 'ok');
+}
+
+async function fetchFresh() {
   try {
     setProgress(10);
-    setStatus('Descargando datos...');
 
     const colorManualPromise = currentCuenta === CUENTAS.zattia
       ? sbFetch('variante_color_manual', 'select=product_name,color').catch(() => [])
       : Promise.resolve([]);
 
-    // Fetch productos + ventas primero (rápido) para calcular minSaleId
     const [productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas] = await Promise.all([
       fetchAll('productos',
         (currentCuenta === CUENTAS.zattia
@@ -863,7 +888,6 @@ async function cargarTodo(forceRefresh = false) {
 
     setProgress(60);
 
-    // Detalles filtrados por el rango de ventas que ya tenemos (evita histórico completo)
     const minSaleId = ventas.length ? Math.min(...ventas.map(v => v.id)) : 0;
     const detalles = await fetchAll(
       'venta_detalles',
@@ -879,11 +903,12 @@ async function cargarTodo(forceRefresh = false) {
 
     setProgress(95);
     procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, new Date(timestamp).toISOString());
-    setProgress(100);
-    setStatus('Datos actualizados.', 'ok');
+    document.getElementById('dashboard').style.display = 'block';
+    return true;
   } catch(e) {
     setProgress(0);
     setStatus('Error: ' + e.message, 'error');
+    return false;
   }
 }
 
