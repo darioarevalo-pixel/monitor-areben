@@ -124,6 +124,21 @@
     .fm-models-panel { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
     .fm-models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
 
+    /* Agotamiento */
+    .agot-card { background:#fff; border:1px solid #E5E7EB; border-radius:10px; padding:16px; margin-bottom:10px; }
+    .agot-prod-name { font-size:13px; font-weight:600; margin-bottom:2px; }
+    .agot-prov { font-size:11px; color:#9CA3AF; margin-bottom:10px; }
+    .agot-color-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+    .agot-color-name { width:130px; font-size:12px; color:#374151; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .agot-bar-wrap { flex:1; height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden; }
+    .agot-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
+    .agot-pct { width:40px; text-align:right; font-size:12px; font-weight:600; color:#111827; flex-shrink:0; }
+    .agot-units { width:72px; text-align:right; font-size:11px; color:#9CA3AF; flex-shrink:0; }
+    .agot-footer { margin-top:10px; padding-top:8px; border-top:1px solid #F3F4F6; font-size:11px; color:#9CA3AF; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+    .agot-badge-agotado { background:#FEF2F2; color:#DC2626; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
+    .agot-badge-curso { background:#F0FDF4; color:#16A34A; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
+    .agot-empty { text-align:center; padding:3rem; color:#9CA3AF; font-size:13px; }
+
     /* Header */
     .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
     .user-info { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 6px; }
@@ -583,41 +598,66 @@
     </div>
 
     <div id="tab-colores" class="section">
-      <div class="toolbar">
-        <input type="text" id="col-search" placeholder="Buscar producto (ej: TOP)..." oninput="reloadColoresPanel()" style="width:200px;">
-        <select id="col-periodo" onchange="reloadColoresPanel()">
-          <option value="3">Últimos 3 meses</option>
-          <option value="6">Últimos 6 meses</option>
-          <option value="12" selected>Últimos 12 meses</option>
-          <option value="0">Todos</option>
-        </select>
+      <div class="tabs" style="margin-bottom:16px;">
+        <button class="tab active" id="col-sub-btn-ventas" onclick="switchColSubtab('ventas',this)">Ventas por color</button>
+        <button class="tab" id="col-sub-btn-agotamiento" onclick="switchColSubtab('agotamiento',this)">Análisis de agotamiento</button>
       </div>
-      <div class="card" style="margin-bottom:16px;">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-          <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Colores</strong>
-          <input type="text" id="col-color-search" placeholder="Buscar color..." oninput="filterColCheckboxes()" style="flex:1;min-width:120px;padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;">
-          <button class="btn-sm" onclick="toggleAllColores(true)">Todos</button>
-          <button class="btn-sm" onclick="toggleAllColores(false)">Ninguno</button>
+
+      <div id="col-panel-ventas">
+        <div class="toolbar">
+          <input type="text" id="col-search" placeholder="Buscar producto (ej: TOP)..." oninput="reloadColoresPanel()" style="width:200px;">
+          <select id="col-periodo" onchange="reloadColoresPanel()">
+            <option value="3">Últimos 3 meses</option>
+            <option value="6">Últimos 6 meses</option>
+            <option value="12" selected>Últimos 12 meses</option>
+            <option value="0">Todos</option>
+          </select>
         </div>
-        <div id="col-checkboxes" class="fm-models-grid"></div>
-      </div>
-      <div class="card">
-        <div class="chart-wrap" id="col-chart-wrap"><canvas id="colChart"></canvas></div>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div style="padding:12px 16px 6px;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Por color</span>
-          <span id="col-total" style="font-size:11px;color:#aaa;"></span>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+            <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Colores</strong>
+            <input type="text" id="col-color-search" placeholder="Buscar color..." oninput="filterColCheckboxes()" style="flex:1;min-width:120px;padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;">
+            <button class="btn-sm" onclick="toggleAllColores(true)">Todos</button>
+            <button class="btn-sm" onclick="toggleAllColores(false)">Ninguno</button>
+          </div>
+          <div id="col-checkboxes" class="fm-models-grid"></div>
         </div>
-        <table>
-          <thead><tr>
-            <th style="width:32px;">#</th>
-            <th>Color</th>
-            <th>Vendidas</th>
-            <th>% del total</th>
-          </tr></thead>
-          <tbody id="col-tbody"></tbody>
-        </table>
+        <div class="card">
+          <div class="chart-wrap" id="col-chart-wrap"><canvas id="colChart"></canvas></div>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:12px 16px 6px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Por color</span>
+            <span id="col-total" style="font-size:11px;color:#aaa;"></span>
+          </div>
+          <table>
+            <thead><tr>
+              <th style="width:32px;">#</th>
+              <th>Color</th>
+              <th>Vendidas</th>
+              <th>% del total</th>
+            </tr></thead>
+            <tbody id="col-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="col-panel-agotamiento" style="display:none;">
+        <div class="toolbar" style="margin-bottom:16px;">
+          <input type="text" id="agot-search" placeholder="Buscar producto..." oninput="renderAgotamiento()" style="width:220px;">
+          <select id="agot-prov" onchange="renderAgotamiento()">
+            <option value="">Todos los proveedores</option>
+          </select>
+          <select id="agot-estado" onchange="renderAgotamiento()">
+            <option value="">Todos</option>
+            <option value="agotado">Con agotamiento</option>
+            <option value="en_curso">En curso</option>
+          </select>
+        </div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;line-height:1.6;">
+          El porcentaje de cada color se congela en el momento en que se agota la primera variante, evitando el sesgo que genera continuar acumulando ventas del color sobreviviente.
+        </div>
+        <div id="agot-list"></div>
       </div>
     </div>
 
@@ -796,6 +836,7 @@ let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = nu
 let tabsRendered = {};
 let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 let allColoresSales = [], colorManualMap = {};
+let allAgotamientoData = [];
 let allTallesData = [], allTallesCategories = [];
 let allVvar = {}, expandedProductPid = null;
 let selectedIngresoPills = new Set(), lifespanMethod = '30d';
@@ -1246,6 +1287,75 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     coloresSales.push({ product_name: item.product_name || '', color, qty, mes });
   });
   allColoresSales = coloresSales;
+
+  // Datos de agotamiento por color
+  const invByProdColor = {};
+  (inventario || []).forEach(i => {
+    const c = extractColor(i.size_name);
+    if (!c || c === '__UNICA__') return;
+    const key = `${i.product_id}|${c}`;
+    invByProdColor[key] = (invByProdColor[key] || 0) + (i.available_quantity || 0);
+  });
+
+  const salesByProdColorDate = {};
+  (detalles || []).forEach(item => {
+    const fecha = (ventasMap[String(item.sale_id)] || '').substring(0, 10);
+    if (!fecha) return;
+    const c = extractColor(item.size);
+    if (!c || c === '__UNICA__') return;
+    const key = `${item.product_id}|${c}`;
+    if (!salesByProdColorDate[key]) salesByProdColorDate[key] = {};
+    salesByProdColorDate[key][fecha] = (salesByProdColorDate[key][fecha] || 0) + (item.quantity || 1);
+  });
+
+  const agotamientoArr = [];
+  (productos || []).filter(p => p.active !== false).forEach(prod => {
+    const pid = String(prod.id);
+    const colorSet = new Set();
+    Object.keys(invByProdColor).filter(k => k.startsWith(pid + '|')).forEach(k => colorSet.add(k.slice(pid.length + 1)));
+    Object.keys(salesByProdColorDate).filter(k => k.startsWith(pid + '|')).forEach(k => colorSet.add(k.slice(pid.length + 1)));
+    if (colorSet.size < 2) return;
+
+    const colors = {};
+    colorSet.forEach(color => {
+      const salesMap = salesByProdColorDate[`${pid}|${color}`] || {};
+      const totalSold = Object.values(salesMap).reduce((s, q) => s + q, 0);
+      const currentStock = invByProdColor[`${pid}|${color}`] || 0;
+      const initialStock = totalSold + currentStock;
+      if (initialStock === 0) return;
+      const sortedDates = Object.keys(salesMap).sort();
+      let cum = 0;
+      const cumByDate = sortedDates.map(date => ({ date, cum: cum += salesMap[date] }));
+      const selloutEntry = cumByDate.find(d => d.cum >= initialStock);
+      colors[color] = { initialStock, totalSold, currentStock, selloutDate: selloutEntry?.date || null, cumByDate };
+    });
+    if (Object.keys(colors).length < 2) return;
+
+    const selloutDates = Object.values(colors).filter(c => c.selloutDate).map(c => c.selloutDate).sort();
+    const firstSelloutDate = selloutDates[0] || null;
+    const refDate = firstSelloutDate || new Date().toISOString().substring(0, 10);
+
+    const ratioAtRef = {};
+    let totalAtRef = 0;
+    Object.entries(colors).forEach(([color, data]) => {
+      const lastEntry = [...data.cumByDate].filter(d => d.date <= refDate).pop();
+      const soldAtRef = lastEntry?.cum || 0;
+      ratioAtRef[color] = { sold: soldAtRef };
+      totalAtRef += soldAtRef;
+    });
+    if (totalAtRef > 0) {
+      Object.keys(ratioAtRef).forEach(color => {
+        ratioAtRef[color].pct = ratioAtRef[color].sold / totalAtRef * 100;
+      });
+    }
+
+    const soldOutColors = Object.entries(colors).filter(([, c]) => c.selloutDate === firstSelloutDate).map(([c]) => c);
+    agotamientoArr.push({
+      product_name: prod.name, product_id: pid, proveedor: prod.proveedor || null,
+      firstSelloutDate, soldOutColors, colors, ratioAtRef
+    });
+  });
+  allAgotamientoData = agotamientoArr;
 
   // Datos de talles (para pestaña Talles — Zattia)
   const productInfoMap = {};
@@ -2112,7 +2222,17 @@ function renderProveedores() {
 function updateColoresTab() {
   const isZattia = currentCuenta === CUENTAS.zattia;
   document.getElementById('tab-btn-colores').style.display = isZattia ? '' : 'none';
-  if (isZattia) reloadColoresPanel();
+  if (!isZattia) return;
+  reloadColoresPanel();
+  // Poblar selector de proveedores del panel agotamiento
+  const provSel = document.getElementById('agot-prov');
+  if (provSel) {
+    const provs = [...new Set(allAgotamientoData.map(p => p.proveedor).filter(Boolean))].sort();
+    const prev = provSel.value;
+    provSel.innerHTML = '<option value="">Todos los proveedores</option>' +
+      provs.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    if (prev && provs.includes(prev)) provSel.value = prev;
+  }
 }
 
 function reloadColoresPanel() {
@@ -2211,6 +2331,92 @@ function filterColCheckboxes() {
   document.querySelectorAll('.col-color-label').forEach(lbl => {
     lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
+}
+
+function switchColSubtab(name, btn) {
+  document.querySelectorAll('[id^="col-sub-btn-"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('col-panel-ventas').style.display = name === 'ventas' ? '' : 'none';
+  document.getElementById('col-panel-agotamiento').style.display = name === 'agotamiento' ? '' : 'none';
+  if (name === 'agotamiento') renderAgotamiento();
+}
+
+const AGOT_PALETTE = ['#2563EB','#D97706','#16A34A','#DC2626','#7C3AED','#0891B2','#DB2777','#65A30D','#EA580C','#0D9488','#92400E','#1D4ED8'];
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function renderAgotamiento() {
+  const search  = (document.getElementById('agot-search')?.value || '').trim().toUpperCase();
+  const provFil = document.getElementById('agot-prov')?.value || '';
+  const estado  = document.getElementById('agot-estado')?.value || '';
+
+  let lista = allAgotamientoData.filter(p => {
+    if (search && !p.product_name.toUpperCase().includes(search)) return false;
+    if (provFil && p.proveedor !== provFil) return false;
+    if (estado === 'agotado' && !p.firstSelloutDate) return false;
+    if (estado === 'en_curso' && p.firstSelloutDate) return false;
+    return true;
+  });
+
+  // Ordenar: primero los que tuvieron agotamiento (por fecha desc), luego los en curso
+  lista.sort((a, b) => {
+    if (a.firstSelloutDate && !b.firstSelloutDate) return -1;
+    if (!a.firstSelloutDate && b.firstSelloutDate) return 1;
+    if (a.firstSelloutDate && b.firstSelloutDate) return b.firstSelloutDate.localeCompare(a.firstSelloutDate);
+    return a.product_name.localeCompare(b.product_name);
+  });
+
+  const container = document.getElementById('agot-list');
+  if (!lista.length) {
+    container.innerHTML = '<div class="agot-empty">No hay productos con múltiples colores para analizar.</div>';
+    return;
+  }
+
+  container.innerHTML = lista.map(prod => {
+    // Ordenar colores por % desc
+    const coloresSorted = Object.entries(prod.ratioAtRef)
+      .sort((a, b) => b[1].pct - a[1].pct);
+
+    const colorRows = coloresSorted.map(([color, data], i) => {
+      const palette = AGOT_PALETTE[i % AGOT_PALETTE.length];
+      const isSoldOut = prod.colors[color]?.selloutDate === prod.firstSelloutDate && prod.firstSelloutDate;
+      const namePart = isSoldOut
+        ? `<span class="agot-color-name" style="color:#DC2626;font-weight:600;" title="${esc(color)}">${esc(color)} ✗</span>`
+        : `<span class="agot-color-name" title="${esc(color)}">${esc(color)}</span>`;
+      const initialStock = prod.colors[color]?.initialStock || 0;
+      return `<div class="agot-color-row">
+        ${namePart}
+        <div class="agot-bar-wrap"><div class="agot-bar-fill" style="width:${Math.min(100,data.pct).toFixed(1)}%;background:${palette};"></div></div>
+        <span class="agot-pct">${data.pct.toFixed(1)}%</span>
+        <span class="agot-units">${data.sold} / ${initialStock} u</span>
+      </div>`;
+    }).join('');
+
+    const badge = prod.firstSelloutDate
+      ? `<span class="agot-badge-agotado">Agotamiento ${fmtDate(prod.firstSelloutDate)}</span>`
+      : `<span class="agot-badge-curso">En curso</span>`;
+
+    const soldOutInfo = prod.firstSelloutDate && prod.soldOutColors.length
+      ? `<span>Primer agotado: <strong>${prod.soldOutColors.map(c => esc(c)).join(', ')}</strong></span>`
+      : '';
+
+    const refLabel = prod.firstSelloutDate ? 'Ratio al momento del agotamiento' : 'Ratio acumulado actual';
+
+    return `<div class="agot-card">
+      <div class="agot-prod-name">${esc(prod.product_name)}</div>
+      <div class="agot-prov">${prod.proveedor ? esc(prod.proveedor) : 'Sin proveedor'}</div>
+      <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">${refLabel}</div>
+      ${colorRows}
+      <div class="agot-footer">
+        ${badge}
+        ${soldOutInfo}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Pestaña Talles ────────────────────────────────────────────────────────────
