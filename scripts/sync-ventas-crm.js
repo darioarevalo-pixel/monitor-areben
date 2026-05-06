@@ -37,12 +37,24 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function gnFetch(path, retries = 3) {
+async function gnFetch(path, retries = 5) {
   for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(`${GN_BASE}/${path}`, {
-      headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-    });
-    const text = await res.text();
+    let res, text;
+    try {
+      res = await fetch(`${GN_BASE}/${path}`, {
+        headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
+      });
+      text = await res.text();
+    } catch (e) {
+      // Error de red (ECONNRESET, fetch failed, timeout, etc)
+      if (attempt < retries) {
+        const wait = 2000 * attempt;
+        console.warn(`  ⚠️  red ${e.message} en ${path}, reintentando en ${wait}ms (${attempt}/${retries})...`);
+        await sleep(wait);
+        continue;
+      }
+      throw e;
+    }
     let data;
     try { data = JSON.parse(text); }
     catch {
@@ -65,21 +77,35 @@ async function gnFetch(path, retries = 3) {
   }
 }
 
-async function fetchAllPages(basePath) {
-  const results = [];
+// Itera páginas e invoca onBatch(rows, page) cada FLUSH_EVERY páginas
+// (o al final si hay un resto). Permite guardado incremental.
+const FLUSH_EVERY = 50;
+
+async function fetchAllPagesStreaming(basePath, onBatch) {
+  let buffer = [];
   let page = 1;
+  let totalAcumulado = 0;
   while (true) {
     const sep = basePath.includes('?') ? '&' : '?';
     process.stdout.write(`  página ${page}...`);
     const data = await gnFetch(`${basePath}${sep}page=${page}`);
     const items = data.data || [];
-    results.push(...items);
+    buffer.push(...items);
     process.stdout.write(` ${items.length} registros\n`);
-    if (!data.meta?.has_more_pages || items.length === 0) break;
+    const noMore = !data.meta?.has_more_pages || items.length === 0;
+
+    if (buffer.length && (page % FLUSH_EVERY === 0 || noMore)) {
+      console.log(`  → flush parcial (página ${page}, ${buffer.length} ventas)...`);
+      await onBatch(buffer, page);
+      totalAcumulado += buffer.length;
+      buffer = [];
+    }
+
+    if (noMore) break;
     page++;
     await sleep(1100);
   }
-  return results;
+  return { totalPaginas: page, totalAcumulado };
 }
 
 function mapVentaRow(v) {
@@ -130,19 +156,10 @@ function extraerClientes(rows) {
   return [...map.values()].map(({ _ts, ...rest }) => rest);
 }
 
-async function main() {
-  const today = new Date().toISOString().substring(0, 10);
-  console.log(`=== Sync CRM (ventas + clientes) ===`);
-  console.log(`Rango: ${FROM_DATE} → ${today}`);
-  console.log(`Supabase: ${SUPABASE_URL}\n`);
-
-  const basePath = `ventas/obtener?from=${FROM_DATE}&to=${today}&include_details=1&per_page=50`;
-  console.log(`[ventas] Descargando...`);
-  const rows = await fetchAllPages(basePath);
-
-  const ventas = rows.map(mapVentaRow);
-  const clientes = extraerClientes(rows);
-  const detalles = rows.flatMap(v =>
+async function flushBatch(rawRows) {
+  const ventas = rawRows.map(mapVentaRow);
+  const clientes = extraerClientes(rawRows);
+  const detalles = rawRows.flatMap(v =>
     (v.detalles || []).map(d => ({
       id:           d.id,
       sale_id:      v.id,
@@ -156,53 +173,43 @@ async function main() {
     }))
   );
 
-  console.log(`\n[ventas] ${ventas.length} ventas, ${detalles.length} detalles, ${clientes.length} clientes únicos.`);
-
-  // Upsert ventas (en lotes para no romper la URL)
-  console.log(`[ventas] Guardando en Supabase...`);
   if (ventas.length) {
-    const BATCH_V = 1000;
-    for (let i = 0; i < ventas.length; i += BATCH_V) {
-      const lote = ventas.slice(i, i + BATCH_V);
+    for (let i = 0; i < ventas.length; i += 1000) {
+      const lote = ventas.slice(i, i + 1000);
       const { error } = await supabase.from('ventas').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando ventas (lote ${i}): ${error.message}`);
+      if (error) throw new Error(`Error guardando ventas: ${error.message}`);
     }
   }
-
-  // Upsert clientes
-  console.log(`[clientes] Guardando en Supabase...`);
   if (clientes.length) {
-    const BATCH_C = 500;
-    for (let i = 0; i < clientes.length; i += BATCH_C) {
-      const lote = clientes.slice(i, i + BATCH_C);
+    for (let i = 0; i < clientes.length; i += 500) {
+      const lote = clientes.slice(i, i + 500);
       const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando clientes (lote ${i}): ${error.message}`);
+      if (error) throw new Error(`Error guardando clientes: ${error.message}`);
     }
   }
-
-  // Upsert detalles
   if (detalles.length) {
-    console.log(`[detalles] Guardando en Supabase...`);
-    const BATCH = 2000;
-    for (let i = 0; i < detalles.length; i += BATCH) {
-      const lote = detalles.slice(i, i + BATCH);
-      process.stdout.write(`  detalles ${i + lote.length}/${detalles.length}\r`);
+    for (let i = 0; i < detalles.length; i += 2000) {
+      const lote = detalles.slice(i, i + 2000);
       const { error } = await supabase.from('venta_detalles').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando detalles (lote ${i}): ${error.message}`);
+      if (error) throw new Error(`Error guardando detalles: ${error.message}`);
     }
-    process.stdout.write('\n');
   }
 
-  // Resumen mayorista
-  const mayoristas = ventas.filter(v => v.channel_id === 10);
-  const idsMay = new Set(mayoristas.map(v => v.client_id).filter(Boolean));
+  console.log(`    ✓ ventas: ${ventas.length}, clientes: ${clientes.length}, detalles: ${detalles.length}`);
+}
 
-  console.log('\n=== Resultado ===');
-  console.log(`Ventas guardadas:        ${ventas.length}`);
-  console.log(`Detalles guardados:      ${detalles.length}`);
-  console.log(`Clientes guardados:      ${clientes.length}`);
-  console.log(`Ventas canal Mayorista:  ${mayoristas.length}`);
-  console.log(`Clientes mayoristas:     ${idsMay.size}`);
+async function main() {
+  const today = new Date().toISOString().substring(0, 10);
+  console.log(`=== Sync CRM (ventas + clientes) ===`);
+  console.log(`Rango: ${FROM_DATE} → ${today}`);
+  console.log(`Supabase: ${SUPABASE_URL}`);
+  console.log(`Flush cada ${FLUSH_EVERY} páginas\n`);
+
+  const basePath = `ventas/obtener?from=${FROM_DATE}&to=${today}&include_details=1&per_page=50`;
+  console.log(`[ventas] Descargando...`);
+
+  await fetchAllPagesStreaming(basePath, flushBatch);
+
   console.log('\nSync completado ✓');
 }
 
