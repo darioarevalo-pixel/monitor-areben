@@ -54,20 +54,47 @@ function daysBetween(isoA, isoB) {
   return Math.abs(new Date(isoA) - new Date(isoB)) / 86400000;
 }
 
-async function gnFetch(path) {
-  const res = await fetch(`${GN_BASE}/${path}`, {
-    headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-  });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch {
-    throw new Error(`Respuesta no-JSON de Gestión Nube [${res.status}] en ${path}: ${text.substring(0, 200)}`);
-  }
-  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-  return data;
-}
-
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Reintentos: errores de red (fetch failed, ECONNRESET, timeouts) y HTTP 5xx
+async function gnFetch(path, retries = 5) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    let res, text;
+    try {
+      res = await fetch(`${GN_BASE}/${path}`, {
+        headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
+      });
+      text = await res.text();
+    } catch (e) {
+      if (attempt < retries) {
+        const wait = 2000 * attempt;
+        console.warn(`  ⚠️  red ${e.message} en ${path}, reintentando en ${wait}ms (${attempt}/${retries})...`);
+        await sleep(wait);
+        continue;
+      }
+      throw e;
+    }
+    let data;
+    try { data = JSON.parse(text); }
+    catch {
+      if (res.status >= 500 && attempt < retries) {
+        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
+        await sleep(2000 * attempt);
+        continue;
+      }
+      throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 200)}`);
+    }
+    if (!res.ok) {
+      if (res.status >= 500 && attempt < retries) {
+        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
+        await sleep(2000 * attempt);
+        continue;
+      }
+      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
+    }
+    return data;
+  }
+}
 
 async function fetchAllPages(basePath) {
   const results = [];
@@ -84,6 +111,31 @@ async function fetchAllPages(basePath) {
     await sleep(1100);
   }
   return results;
+}
+
+// Igual que fetchAllPages, pero invoca onBatch(rows, page) cada FLUSH_EVERY páginas.
+// Si el job se cae a mitad, lo que ya bajó queda persistido (re-correr es idempotente).
+const FLUSH_EVERY = 50;
+async function fetchAllPagesStreaming(basePath, onBatch) {
+  let buffer = [];
+  let page = 1;
+  while (true) {
+    const sep = basePath.includes('?') ? '&' : '?';
+    process.stdout.write(`  página ${page}...`);
+    const data = await gnFetch(`${basePath}${sep}page=${page}`);
+    const items = data.data || [];
+    buffer.push(...items);
+    process.stdout.write(` ${items.length} registros\n`);
+    const noMore = !data.meta?.has_more_pages || items.length === 0;
+    if (buffer.length && (page % FLUSH_EVERY === 0 || noMore)) {
+      console.log(`  → flush parcial (página ${page}, ${buffer.length} registros)...`);
+      await onBatch(buffer, page);
+      buffer = [];
+    }
+    if (noMore) break;
+    page++;
+    await sleep(1100);
+  }
 }
 
 // ── Sync functions ────────────────────────────────────────────────────────────
@@ -183,15 +235,10 @@ function extraerClientesDeVentas(rows) {
   return [...map.values()].map(({ _ts, ...rest }) => rest);
 }
 
-async function syncVentas(fromDate) {
-  const today = new Date().toISOString().substring(0, 10);
-  const basePath = `ventas/obtener?from=${fromDate}&to=${today}&include_details=1&per_page=50`;
-  console.log(`\n[ventas] Descargando desde ${fromDate} hasta ${today}...`);
-  const rows = await fetchAllPages(basePath);
-
-  const ventas = rows.map(mapVentaRow);
-
-  const detalles = rows.flatMap(v =>
+async function flushVentasBatch(rawRows) {
+  const ventas = rawRows.map(mapVentaRow);
+  const clientes = extraerClientesDeVentas(rawRows);
+  const detalles = rawRows.flatMap(v =>
     (v.detalles || []).map(d => ({
       id:           d.id,
       sale_id:      v.id,
@@ -205,37 +252,47 @@ async function syncVentas(fromDate) {
     }))
   );
 
-  const clientes = extraerClientesDeVentas(rows);
-
-  console.log(`[ventas] ${ventas.length} ventas, ${detalles.length} detalles, ${clientes.length} clientes. Guardando en Supabase...`);
-
   if (ventas.length) {
-    const { error } = await supabase.from('ventas').upsert(ventas, { onConflict: 'id' });
-    if (error) throw new Error(`Error guardando ventas: ${error.message}`);
+    for (let i = 0; i < ventas.length; i += 1000) {
+      const lote = ventas.slice(i, i + 1000);
+      const { error } = await supabase.from('ventas').upsert(lote, { onConflict: 'id' });
+      if (error) throw new Error(`Error guardando ventas: ${error.message}`);
+    }
   }
-
   if (clientes.length) {
-    const BATCH_C = 500;
-    for (let i = 0; i < clientes.length; i += BATCH_C) {
-      const lote = clientes.slice(i, i + BATCH_C);
+    for (let i = 0; i < clientes.length; i += 500) {
+      const lote = clientes.slice(i, i + 500);
       const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando clientes (lote ${i}): ${error.message}`);
+      if (error) throw new Error(`Error guardando clientes: ${error.message}`);
     }
   }
-
   if (detalles.length) {
-    const BATCH = 2000;
-    for (let i = 0; i < detalles.length; i += BATCH) {
-      const lote = detalles.slice(i, i + BATCH);
-      process.stdout.write(`  detalles ${i + lote.length}/${detalles.length}...\r`);
+    for (let i = 0; i < detalles.length; i += 2000) {
+      const lote = detalles.slice(i, i + 2000);
       const { error } = await supabase.from('venta_detalles').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando detalles (lote ${i}): ${error.message}`);
+      if (error) throw new Error(`Error guardando detalles: ${error.message}`);
     }
-    process.stdout.write('\n');
   }
 
-  console.log(`[ventas] OK`);
+  console.log(`    ✓ ventas: ${ventas.length}, clientes: ${clientes.length}, detalles: ${detalles.length}`);
   return { ventas: ventas.length, detalles: detalles.length, clientes: clientes.length };
+}
+
+async function syncVentas(fromDate) {
+  const today = new Date().toISOString().substring(0, 10);
+  const basePath = `ventas/obtener?from=${fromDate}&to=${today}&include_details=1&per_page=50`;
+  console.log(`\n[ventas] Descargando desde ${fromDate} hasta ${today}...`);
+
+  const totales = { ventas: 0, detalles: 0, clientes: 0 };
+  await fetchAllPagesStreaming(basePath, async (rows) => {
+    const r = await flushVentasBatch(rows);
+    totales.ventas   += r.ventas;
+    totales.detalles += r.detalles;
+    totales.clientes += r.clientes;
+  });
+
+  console.log(`[ventas] OK — total acumulado: ${totales.ventas} ventas, ${totales.detalles} detalles, ${totales.clientes} clientes`);
+  return totales;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
