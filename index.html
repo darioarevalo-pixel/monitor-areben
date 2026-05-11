@@ -318,6 +318,7 @@
           <thead><tr>
             <th onclick="sortTable('productos','name')">Producto ↕</th>
             <th onclick="sortTable('productos','lastSale')">Última venta ↕</th>
+            <th onclick="sortTable('productos','sales7')">Ventas 7d ↕</th>
             <th onclick="sortTable('productos','sales30')">Ventas 30d ↕</th>
             <th onclick="sortTable('productos','sales90')">Ventas 90d ↕</th>
             <th onclick="sortTable('productos','lifespan')">Vida útil est. ↕</th>
@@ -348,6 +349,7 @@
             <th onclick="sortTable('variantes','name')">Producto ↕</th>
             <th onclick="sortTable('variantes','size')">Variante ↕</th>
             <th onclick="sortTable('variantes','lastSale')">Última venta ↕</th>
+            <th onclick="sortTable('variantes','sales7')">Ventas 7d ↕</th>
             <th onclick="sortTable('variantes','sales30')">Ventas 30d ↕</th>
             <th onclick="sortTable('variantes','lifespan')">Vida útil est. ↕</th>
             <th onclick="sortTable('variantes','stock')">Stock ↕</th>
@@ -1143,6 +1145,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
 
   const vprod = {};
   const vvar = {};
+  const cutoff7  = new Date(TODAY); cutoff7.setDate(cutoff7.getDate() - 7);
   const cutoff30 = new Date(TODAY); cutoff30.setDate(cutoff30.getDate() - 30);
   const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
   const cutoff90 = new Date(TODAY); cutoff90.setDate(cutoff90.getDate() - 90);
@@ -1171,18 +1174,20 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     const name = item.product_name || '';
     const size = item.size || '';
 
-    if (!vprod[pid]) vprod[pid] = { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null, name };
+    if (!vprod[pid]) vprod[pid] = { total: 0, s7: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null, name };
     vprod[pid].total += qty;
     vprod[pid].byMonth[fechaMes] = (vprod[pid].byMonth[fechaMes] || 0) + qty;
+    if (fechaObj >= cutoff7)  vprod[pid].s7  += qty;
     if (fechaObj >= cutoff30) vprod[pid].s30 += qty;
     else if (fechaObj >= cutoff60) vprod[pid].s60 += qty;
     if (fechaObj >= cutoff90) vprod[pid].s90 += qty;
     if (!vprod[pid].last  || fecha > vprod[pid].last)  vprod[pid].last  = fecha;
     if (!vprod[pid].first || fecha < vprod[pid].first) vprod[pid].first = fecha;
 
-    if (!vvar[vid]) vvar[vid] = { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, name, size, pid, sid };
+    if (!vvar[vid]) vvar[vid] = { total: 0, s7: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, name, size, pid, sid };
     vvar[vid].total += qty;
     vvar[vid].byMonth[fechaMes] = (vvar[vid].byMonth[fechaMes] || 0) + qty;
+    if (fechaObj >= cutoff7)  vvar[vid].s7  += qty;
     if (fechaObj >= cutoff30) vvar[vid].s30 += qty;
     else if (fechaObj >= cutoff60) vvar[vid].s60 += qty;
     if (!vvar[vid].last || fecha > vvar[vid].last) vvar[vid].last = fecha;
@@ -1219,7 +1224,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
 
   allProductos = (productos || []).map(p => {
     const pid = String(p.id);
-    const d = vprod[pid] || { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null };
+    const d = vprod[pid] || { total: 0, s7: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null };
     const dsl = d.last ? daysSince(d.last) : 999;
     const stock = invByProduct[pid] || 0;
     const ls = lifespanDays(stock, d.s30);
@@ -1231,7 +1236,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       ingresoMes,
       firstSale: d.first || null,
       lastSale: d.last || null, daysSinceLast: dsl,
-      sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
+      sales7: d.s7, sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
       monthlySales: months.map(m => d.byMonth[m] || 0),
       stock,
       lifespan:      ls      === null ? 99999 : ls,
@@ -1266,12 +1271,12 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   const activeProductIds = new Set(allProductos.map(p => p.id));
 
   allVariantes = Object.values(variantesMap).filter(v => activeProductIds.has(v.pid)).map(v => {
-    const d = vvar[v.id] || { total: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null };
+    const d = vvar[v.id] || { total: 0, s7: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null };
     const dsl = d.last ? daysSince(d.last) : 999;
     const ls = lifespanDays(v.stock, d.s30);
     return {
       ...v, lastSale: d.last || null, daysSinceLast: dsl,
-      sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
+      sales7: d.s7, sales30: d.s30, sales60: d.s60, sales90: d.s90, totalSales: d.total,
       lifespan: ls === null ? 99999 : ls,
       phase: getPhase(d.s60, d.s30, dsl)
     };
@@ -1574,7 +1579,7 @@ function renderProductos() {
       ? lifespanStrFromFirst(p.stock, p.totalSales, p.firstSale)
       : lifespanStr(p.stock, p.sales30);
     const detailRow = isExpanded
-      ? `<tr><td colspan="7" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
+      ? `<tr><td colspan="8" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
       : '';
     return `
     <tr onclick="toggleProductoDetalle('${p.id}')" style="cursor:pointer;${isExpanded ? 'background:#eef2ff;' : ''}">
@@ -1583,6 +1588,7 @@ function renderProductos() {
         ${meta ? `<div style="font-size:11px;color:#aaa;margin-top:1px;">${esc(meta)}</div>` : ''}
       </td>
       <td style="color:#666;">${p.lastSale || '<span style="color:#aaa;">Sin ventas</span>'}<br><span style="font-size:11px;color:#aaa;">${p.daysSinceLast < 999 ? p.daysSinceLast+'d atrás' : ''}</span></td>
+      <td style="font-weight:600;color:#1D9E75;">${p.sales7}</td>
       <td style="font-weight:500;">${p.sales30}</td>
       <td>${p.sales90}</td>
       <td style="color:#666;font-size:12px;">${lsStr}</td>
@@ -1659,6 +1665,7 @@ function renderVariantes() {
       <td style="font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.name}</td>
       <td style="color:#666;font-size:12px;">${v.size}</td>
       <td style="color:#666;">${v.lastSale || '<span style="color:#aaa;">Sin ventas</span>'}<br><span style="font-size:11px;color:#aaa;">${v.daysSinceLast < 999 ? v.daysSinceLast+'d atrás' : ''}</span></td>
+      <td style="font-weight:600;color:#1D9E75;">${v.sales7}</td>
       <td style="font-weight:500;">${v.sales30}</td>
       <td style="color:#666;font-size:12px;">${lifespanStr(v.stock, v.sales30)}</td>
       <td>${v.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,v.stock/2)}%;background:${v.stock<5?'#e24b4a':v.stock<20?'#ef9f27':'#1d9e75'};"></div></div></td>
