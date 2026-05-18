@@ -284,7 +284,7 @@
       <button class="tab" onclick="switchTab('curva', this)">Curva de vida</button>
       <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
       <button class="tab" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
-      <button class="tab" id="tab-btn-fundas-modelo" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
+      <button class="tab" id="tab-btn-fundas-modelo" style="display:none;" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
       <button class="tab" id="tab-btn-proveedores" style="display:none;" onclick="switchTab('proveedores', this)">Proveedores</button>
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
       <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
@@ -2164,8 +2164,6 @@ function renderFundasPorModelo() {
 
 function updateProveedoresTab() {
   const isZattia = currentCuenta === CUENTAS.zattia;
-  document.getElementById('tab-btn-proveedores').style.display = isZattia ? '' : 'none';
-  document.getElementById('tab-btn-fundas-modelo').style.display = isZattia ? 'none' : '';
   if (isZattia) {
     renderProveedoresComparativa();
     initProveedorSelector();
@@ -2342,7 +2340,6 @@ function renderProveedores() {
 
 function updateColoresTab() {
   const isZattia = currentCuenta === CUENTAS.zattia;
-  document.getElementById('tab-btn-colores').style.display = isZattia ? '' : 'none';
   if (!isZattia) return;
   reloadColoresPanel();
   // Poblar selector de proveedores del panel agotamiento
@@ -2544,7 +2541,6 @@ function renderAgotamiento() {
 
 function updateTallesTab() {
   const isZattia = currentCuenta === CUENTAS.zattia;
-  document.getElementById('tab-btn-talles').style.display = isZattia ? '' : 'none';
   if (isZattia) {
     initTallesSelectors();
     renderTalles();
@@ -2705,8 +2701,27 @@ function renderUserInfo() {
     `${currentUser} <button onclick="doLogout()">Salir</button>`;
 }
 
+// Configuración única de qué tabs aparecen en cada cuenta.
+// Las tabs siempre presentes (productos, variantes, ranking, curva, stock,
+// ventas-mensuales) no se listan acá porque son comunes a todas las cuentas.
+const TABS_POR_CUENTA = {
+  zattia: ['proveedores', 'colores', 'talles'],
+  bdi:    ['fundas-modelo', 'clientes', 'catalogo', 'tienda'],
+};
+
+function aplicarVisibilidadTabs() {
+  const key = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+  const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','catalogo','tienda'];
+  const visibles = new Set(TABS_POR_CUENTA[key] || []);
+  todasOcultables.forEach(t => {
+    const btn = document.getElementById('tab-btn-' + t);
+    if (btn) btn.style.display = visibles.has(t) ? '' : 'none';
+  });
+}
+
 function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
+  aplicarVisibilidadTabs();
   updateProveedoresTab();
   updateColoresTab();
   updateTallesTab();
@@ -2715,10 +2730,8 @@ function cambiarEmpresa(empresaKey) {
 }
 
 function updateCatalogoTab() {
-  const isBDI = currentCuenta === CUENTAS.bdi;
-  document.getElementById('tab-btn-catalogo').style.display = isBDI ? '' : 'none';
-  document.getElementById('tab-btn-tienda').style.display   = isBDI ? '' : 'none';
-  document.getElementById('tab-btn-clientes').style.display = isBDI ? '' : 'none';
+  // La visibilidad ahora se aplica en aplicarVisibilidadTabs() de forma centralizada.
+  // Esta función queda para mantener el contrato pero sin lógica de visibilidad.
 }
 
 // ── Tienda Online ─────────────────────────────────────────────────────────────
