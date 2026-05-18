@@ -280,8 +280,6 @@
     <div class="tabs">
       <button class="tab active" onclick="switchTab('productos', this)">Por producto</button>
       <button class="tab" onclick="switchTab('variantes', this)">Por variante</button>
-      <button class="tab" onclick="switchTab('ranking', this)">Ranking</button>
-      <button class="tab" onclick="switchTab('curva', this)">Curva de vida</button>
       <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
       <button class="tab" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
       <button class="tab" id="tab-btn-fundas-modelo" style="display:none;" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
@@ -361,24 +359,6 @@
         </table>
       </div>
       <div class="pagination" id="pag-variantes"></div>
-    </div>
-
-    <div id="tab-ranking" class="section">
-      <div class="card">
-        <div class="legend">
-          <span><span class="legend-dot" style="background:#1D9E75"></span>Crecimiento</span>
-          <span><span class="legend-dot" style="background:#378ADD"></span>Estable</span>
-          <span><span class="legend-dot" style="background:#EF9F27"></span>Declive</span>
-        </div>
-        <div class="chart-wrap" id="ranking-wrap"><canvas id="rankingChart"></canvas></div>
-      </div>
-    </div>
-
-    <div id="tab-curva" class="section">
-      <div class="card">
-        <div class="legend" id="curva-legend"></div>
-        <div class="chart-wrap" style="height:300px;"><canvas id="curvaChart"></canvas></div>
-      </div>
     </div>
 
     <div id="tab-stock" class="section">
@@ -910,7 +890,7 @@ let sortState = { productos: { col: 'sales30', dir: -1 }, variantes: { col: 'sal
 let pageState = { productos: 1, variantes: 1 };
 let detalleVarSort = { col: 'total', dir: -1 };
 const PAGE_SIZE = 50;
-let rankChart = null, cChart = null, sChart = null, vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null, tallesChart = null;
+let sChart = null, vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null, tallesChart = null;
 let tabsRendered = {};
 let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 let allColoresSales = [], colorManualMap = {};
@@ -1166,7 +1146,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   const cutoff60 = new Date(TODAY); cutoff60.setDate(cutoff60.getDate() - 60);
   const cutoff90 = new Date(TODAY); cutoff90.setDate(cutoff90.getDate() - 90);
 
-  // Últimos 16 meses para análisis de producto y curva de vida
+  // Últimos 16 meses para análisis mensual de producto
   const months = [];
   const cursorMonth = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
   for (let i = 15; i >= 0; i--) {
@@ -1712,34 +1692,6 @@ function renderVariantes() {
       <td>${v.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,v.stock/2)}%;background:${v.stock<5?'#e24b4a':v.stock<20?'#ef9f27':'#1d9e75'};"></div></div></td>
       <td><span class="badge ${v.phase.cls}">${v.phase.label}</span></td>
     </tr>`).join('');
-}
-
-function renderRanking() {
-  const top = [...allProductos].sort((a,b) => b.sales30 - a.sales30).slice(0,15);
-  const wrap = document.getElementById('ranking-wrap');
-  wrap.style.height = Math.max(300, top.length * 40 + 60) + 'px';
-  if (rankChart) rankChart.destroy();
-  rankChart = new Chart(document.getElementById('rankingChart'), {
-    type: 'bar',
-    data: { labels: top.map(p => p.name.length>26?p.name.slice(0,26)+'…':p.name), datasets: [{ data: top.map(p=>p.sales30), backgroundColor: top.map(p=>p.phase.label==='crecimiento'?'#1D9E75':p.phase.label==='declive'?'#EF9F27':p.phase.label==='obsoleto'||p.phase.label==='dormido'?'#E24B4A':'#378ADD'), borderRadius: 4 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }, y: { ticks: { color: '#444', font: { size: 12 } }, grid: { display: false } } } }
-  });
-}
-
-function renderCurva(months) {
-  const labels = (months || []).map(m => {
-    const [y, mo] = m.split('-');
-    return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(mo)-1];
-  });
-  const top5 = [...allProductos].sort((a,b)=>b.totalSales-a.totalSales).slice(0,5);
-  const colors = ['#378ADD','#1D9E75','#D85A30','#7F77DD','#BA7517'];
-  document.getElementById('curva-legend').innerHTML = top5.map((p,i) => `<span><span class="legend-dot" style="background:${colors[i]};"></span>${p.name}</span>`).join('');
-  if (cChart) cChart.destroy();
-  cChart = new Chart(document.getElementById('curvaChart'), {
-    type: 'line',
-    data: { labels, datasets: top5.map((p,i) => ({ label: p.name, data: p.monthlySales, borderColor: colors[i], backgroundColor: 'transparent', tension: 0.35, pointRadius: 2, borderWidth: 2 })) },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } }, y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } } } }
-  });
 }
 
 function renderStock() {
@@ -2661,8 +2613,6 @@ function switchTab(id, btn) {
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
-    else if (id === 'ranking')    renderRanking();
-    else if (id === 'curva')      { const ms=[]; const c=new Date(TODAY.getFullYear(),TODAY.getMonth(),1); for(let i=15;i>=0;i--){const d=new Date(c.getFullYear(),c.getMonth()-i,1);ms.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));} renderCurva(ms); }
     else if (id === 'stock')      renderStock();
     else if (id === 'ventas-mensuales') renderVentasMensuales();
     else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); }
@@ -2685,7 +2635,7 @@ function doLogin() {
     currentCuenta = CUENTAS[empresa];
     document.getElementById('login-screen').classList.add('hidden');
     renderUserInfo();
-    updateCatalogoTab();
+    aplicarVisibilidadTabs();
     cargarTodo();
   } else {
     document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos.';
@@ -2702,8 +2652,8 @@ function renderUserInfo() {
 }
 
 // Configuración única de qué tabs aparecen en cada cuenta.
-// Las tabs siempre presentes (productos, variantes, ranking, curva, stock,
-// ventas-mensuales) no se listan acá porque son comunes a todas las cuentas.
+// Las tabs siempre presentes (productos, variantes, stock, ventas-mensuales)
+// no se listan acá porque son comunes a todas las cuentas.
 const TABS_POR_CUENTA = {
   zattia: ['proveedores', 'colores', 'talles'],
   bdi:    ['fundas-modelo', 'clientes', 'catalogo', 'tienda'],
@@ -2725,13 +2675,7 @@ function cambiarEmpresa(empresaKey) {
   updateProveedoresTab();
   updateColoresTab();
   updateTallesTab();
-  updateCatalogoTab();
   cargarTodo();
-}
-
-function updateCatalogoTab() {
-  // La visibilidad ahora se aplica en aplicarVisibilidadTabs() de forma centralizada.
-  // Esta función queda para mantener el contrato pero sin lógica de visibilidad.
 }
 
 // ── Tienda Online ─────────────────────────────────────────────────────────────
