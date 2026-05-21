@@ -147,6 +147,24 @@
     .user-info select { font-size: 12px; padding: 4px 8px; border-radius: 8px; border-color: #E5E7EB; color: #6B7280; }
     .user-info button { font-size: 11px; padding: 4px 10px; color: #9CA3AF; border-radius: 8px; }
 
+    /* Botón de info en headers de tabla */
+    .info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
+    .info-btn:hover { color: #378ADD; }
+
+    /* Modal genérico de info */
+    .info-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+    .info-modal-overlay.show { display: flex; }
+    .info-modal { background: #fff; border-radius: 16px; max-width: 540px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+    .info-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid #E5E7EB; }
+    .info-modal-header h3 { font-size: 16px; font-weight: 700; margin: 0; }
+    .info-modal-close { background: none; border: none; font-size: 24px; color: #9CA3AF; cursor: pointer; padding: 0; line-height: 1; }
+    .info-modal-body { padding: 18px 24px 24px; }
+    .estado-row { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid #F3F4F6; }
+    .estado-row:last-child { border-bottom: none; }
+    .estado-dot { width: 14px; height: 14px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+    .estado-info .nombre { font-size: 14px; font-weight: 700; color: #1F2937; margin-bottom: 2px; }
+    .estado-info .regla { font-size: 12px; color: #6B7280; line-height: 1.5; }
+    .estado-info .accion { font-size: 11px; color: #9CA3AF; margin-top: 3px; font-style: italic; }
   </style>
 </head>
 <body>
@@ -251,7 +269,7 @@
             <th onclick="sortTable('productos','sales90')">Ventas 90d ↕</th>
             <th onclick="sortTable('productos','lifespan')">Vida útil est. ↕</th>
             <th onclick="sortTable('productos','stock')">Stock ↕</th>
-            <th>Estado</th>
+            <th>Estado <button class="info-btn" onclick="openEstadoInfo()" title="¿Qué significa cada estado?">ⓘ</button></th>
           </tr></thead>
           <tbody id="tbody-productos"></tbody>
         </table>
@@ -281,7 +299,7 @@
             <th onclick="sortTable('variantes','sales30')">Ventas 30d ↕</th>
             <th onclick="sortTable('variantes','lifespan')">Vida útil est. ↕</th>
             <th onclick="sortTable('variantes','stock')">Stock ↕</th>
-            <th>Estado</th>
+            <th>Estado <button class="info-btn" onclick="openEstadoInfo()" title="¿Qué significa cada estado?">ⓘ</button></th>
           </tr></thead>
           <tbody id="tbody-variantes"></tbody>
         </table>
@@ -3039,7 +3057,76 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'cliente-modal') cerrarClienteModal();
+  if (e.target.id === 'estado-info-modal') closeEstadoInfo();
 });
+
+function openEstadoInfo() {
+  document.getElementById('estado-info-modal').classList.add('show');
+}
+function closeEstadoInfo() {
+  document.getElementById('estado-info-modal').classList.remove('show');
+}
 </script>
+
+<!-- Modal: explicación de estados de producto -->
+<div class="info-modal-overlay" id="estado-info-modal">
+  <div class="info-modal">
+    <div class="info-modal-header">
+      <h3>¿Qué significa cada estado?</h3>
+      <button class="info-modal-close" onclick="closeEstadoInfo()">×</button>
+    </div>
+    <div class="info-modal-body">
+      <p style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.5;">
+        El estado se calcula automáticamente mirando los <strong>días desde la última venta</strong>
+        y la <strong>tendencia</strong> (ventas últimos 30 días vs ventas 30-60 días atrás).
+      </p>
+
+      <div class="estado-row">
+        <div class="estado-dot" style="background:#1D9E75;"></div>
+        <div class="estado-info">
+          <div class="nombre">Crecimiento</div>
+          <div class="regla">Vende más del 30% que el mes anterior. Tendencia positiva fuerte.</div>
+          <div class="accion">Sugerencia: asegurate de no quedarte sin stock, considerá pedir más al proveedor.</div>
+        </div>
+      </div>
+
+      <div class="estado-row">
+        <div class="estado-dot" style="background:#378ADD;"></div>
+        <div class="estado-info">
+          <div class="nombre">Madurez</div>
+          <div class="regla">Ventas estables (±30% respecto al mes anterior). Producto sólido y predecible.</div>
+          <div class="accion">Sugerencia: reposición planificada, es la base del negocio.</div>
+        </div>
+      </div>
+
+      <div class="estado-row">
+        <div class="estado-dot" style="background:#EF9F27;"></div>
+        <div class="estado-info">
+          <div class="nombre">Declive</div>
+          <div class="regla">Sigue vendiendo pero menos del 70% que el mes anterior. Tendencia a la baja.</div>
+          <div class="accion">Sugerencia: investigar por qué baja (competencia, estación, precio) y considerar promoción.</div>
+        </div>
+      </div>
+
+      <div class="estado-row">
+        <div class="estado-dot" style="background:#EF9F27;opacity:.6;"></div>
+        <div class="estado-info">
+          <div class="nombre">Dormido</div>
+          <div class="regla">Más de 30 días sin vender una unidad.</div>
+          <div class="accion">Sugerencia: monitorear, evaluar promoción suave antes de que pase a obsoleto.</div>
+        </div>
+      </div>
+
+      <div class="estado-row">
+        <div class="estado-dot" style="background:#E24B4A;"></div>
+        <div class="estado-info">
+          <div class="nombre">Obsoleto</div>
+          <div class="regla">Más de 60 días sin vender una unidad. Producto casi inactivo.</div>
+          <div class="accion">Sugerencia: revisar si conviene retirarlo del catálogo, oferta o liquidación.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
