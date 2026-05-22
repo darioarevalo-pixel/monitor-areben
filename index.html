@@ -629,7 +629,7 @@
     <div id="tab-tienda" class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:16px;font-weight:700;">Auditoría Tienda Online — BDI</div>
+          <div style="font-size:16px;font-weight:700;" id="tienda-titulo">Auditoría Tienda Online</div>
           <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Productos en Tiendanube y su estado de fotos y descripción</div>
           <div style="font-size:11px;color:#9CA3AF;margin-top:2px;" id="tienda-cache-info"></div>
         </div>
@@ -2582,7 +2582,7 @@ function renderUserInfo() {
 // Las tabs siempre presentes (productos, variantes, stock, ventas-mensuales)
 // no se listan acá porque son comunes a todas las cuentas.
 const TABS_POR_CUENTA = {
-  zattia: ['proveedores', 'colores', 'talles'],
+  zattia: ['proveedores', 'colores', 'talles', 'tienda'],
   bdi:    ['fundas-modelo', 'clientes', 'tienda'],
 };
 
@@ -2754,6 +2754,12 @@ function cambiarEmpresa(empresaKey) {
   updateProveedoresTab();
   updateColoresTab();
   updateTallesTab();
+  // Limpiar panel de Tienda Online (se rellena al hacer click en "Cargar" de la nueva cuenta)
+  tiendaAllProducts = [];
+  const tiendaPanel = document.getElementById('tienda-panel');
+  if (tiendaPanel) tiendaPanel.style.display = 'none';
+  const tiendaCache = document.getElementById('tienda-cache-info');
+  if (tiendaCache) tiendaCache.textContent = '';
   // Prefetch imágenes de TN (BDI o Zattia) — no bloquea, re-renderiza al terminar
   if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
   cargarTodo();
@@ -2765,13 +2771,18 @@ let tiendaFilter = 'all';
 
 async function tiendaCargar(forceRefresh = false) {
   const loadingEl = document.getElementById('tienda-loading');
+  const cuentaKey = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+  const cuentaLabel = currentCuenta === CUENTAS.zattia ? 'Zattia' : 'BDI';
+  document.getElementById('tienda-titulo').textContent = `Auditoría Tienda Online — ${cuentaLabel}`;
   loadingEl.textContent = forceRefresh
-    ? 'Actualizando desde Tiendanube... (puede tardar ~30s)'
-    : 'Cargando productos de Tiendanube...';
+    ? `Actualizando desde Tiendanube (${cuentaLabel})... (puede tardar ~30s)`
+    : `Cargando productos de Tiendanube (${cuentaLabel})...`;
   loadingEl.style.display = '';
   document.getElementById('tienda-panel').style.display = 'none';
   try {
-    const url = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit' + (forceRefresh ? '?refresh=1' : '');
+    const params = new URLSearchParams({ store: cuentaKey });
+    if (forceRefresh) params.set('refresh', '1');
+    const url = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit?' + params;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
