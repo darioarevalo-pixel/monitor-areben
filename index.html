@@ -158,12 +158,30 @@
     .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
     .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
 
-    /* Lightbox para ver imagen ampliada */
-    .lightbox-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out; }
+    /* Lightbox para ver galería ampliada */
+    .lightbox-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 2000; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out; }
     .lightbox-overlay.show { display: flex; }
-    .lightbox-img { max-width: 90vw; max-height: 90vh; object-fit: contain; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 4px; }
-    .lightbox-close { position: absolute; top: 20px; right: 24px; background: transparent; border: none; color: #fff; font-size: 36px; cursor: pointer; line-height: 1; padding: 0; }
-    .lightbox-info { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; max-width: 90vw; text-align: center; }
+    .lightbox-img { max-width: 90vw; max-height: 78vh; object-fit: contain; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 4px; }
+    .lightbox-close { position: absolute; top: 16px; right: 20px; background: rgba(0,0,0,0.4); border: none; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; padding: 4px 12px; border-radius: 999px; }
+    .lightbox-close:hover { background: rgba(0,0,0,0.7); }
+    .lightbox-info { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; max-width: 90vw; text-align: center; }
+    .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; border: none; cursor: pointer; font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; z-index: 5; transition: background .2s; }
+    .lightbox-nav:hover { background: rgba(0,0,0,0.75); }
+    .lightbox-nav:disabled { opacity: 0.25; cursor: default; }
+    .lightbox-nav.prev { left: 18px; }
+    .lightbox-nav.next { right: 18px; }
+    .lightbox-counter { position: absolute; top: 20px; left: 24px; color: #fff; font-size: 13px; background: rgba(0,0,0,0.45); padding: 5px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+    .lightbox-thumbs { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px 10px; background: rgba(0,0,0,0.4); border-radius: 8px; max-width: 90vw; overflow-x: auto; }
+    .lightbox-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: 0.55; border: 2px solid transparent; transition: opacity .15s, border-color .15s; flex-shrink: 0; }
+    .lightbox-thumb:hover { opacity: 0.85; }
+    .lightbox-thumb.active { opacity: 1; border-color: #fff; }
+    @media (max-width: 600px) {
+      .lightbox-nav { width: 40px; height: 40px; font-size: 22px; }
+      .lightbox-nav.prev { left: 6px; }
+      .lightbox-nav.next { right: 6px; }
+      .lightbox-thumbs { display: none; }
+      .lightbox-info { bottom: 16px; font-size: 12px; }
+    }
 
     /* Modal genérico de info */
     .info-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
@@ -1489,7 +1507,7 @@ function renderProductos() {
     const fotoUrl = tnEnabled ? tnImageForProducto(p) : null;
     const fotoCell = `<td class="foto-col" onclick="event.stopPropagation()">${
       fotoUrl
-        ? `<img class="foto-thumb" src="${esc(fotoUrl)}" loading="lazy" onclick="openLightbox('${esc(fotoUrl)}','${esc(p.name).replace(/'/g, "\\'")}')" alt="${esc(p.name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'foto-thumb-placeholder', textContent:'Sin foto'}))">`
+        ? `<img class="foto-thumb" src="${esc(fotoUrl)}" loading="lazy" onclick="openLightboxProducto('${p.id}')" alt="${esc(p.name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'foto-thumb-placeholder', textContent:'Sin foto'}))">`
         : `<div class="foto-thumb-placeholder">Sin foto</div>`
     }</td>`;
     return `
@@ -2586,7 +2604,7 @@ function aplicarVisibilidadTabs() {
 // ════════════════════════════════════════════════════════════════
 // Imágenes de Tienda Nube (BDI + Zattia)
 // ════════════════════════════════════════════════════════════════
-const tnImageMaps = { bdi: null, zattia: null }; // { bySku, byName } por cuenta
+const tnImageMaps = { bdi: null, zattia: null }; // { bySku, byName } por cuenta — cada valor es { images: [...] }
 const tnLoadingPromises = { bdi: null, zattia: null };
 
 function _cuentaKey() {
@@ -2604,13 +2622,13 @@ async function cargarImagenesTN(cuentaKey) {
       const data = await r.json();
       const map = { bySku: {}, byName: {} };
       for (const p of data.products || []) {
-        const img = (p.images && p.images[0]) || null;
-        if (!img) continue;
-        if (p.sku) map.bySku[p.sku.toLowerCase().trim()] = img;
-        if (p.name) map.byName[p.name.toLowerCase().trim()] = img;
+        const imgs = (p.images || []).filter(Boolean);
+        if (!imgs.length) continue;
+        const entry = { images: imgs };
+        if (p.sku) map.bySku[p.sku.toLowerCase().trim()] = entry;
+        if (p.name) map.byName[p.name.toLowerCase().trim()] = entry;
       }
       tnImageMaps[key] = map;
-      // Re-renderizar productos si seguimos en la misma cuenta
       if (_cuentaKey() === key) renderProductos();
       return map;
     } catch (e) {
@@ -2624,7 +2642,8 @@ async function cargarImagenesTN(cuentaKey) {
   return tnLoadingPromises[key];
 }
 
-function tnImageForProducto(p) {
+// Devuelve el entry TN matcheado para un producto: { images: [...] } o null
+function tnEntryForProducto(p) {
   const map = tnImageMaps[_cuentaKey()];
   if (!map) return null;
   if (p.sku) {
@@ -2644,21 +2663,89 @@ function tnImageForProducto(p) {
   return null;
 }
 
-function openLightbox(url, nombre) {
+// Para el thumbnail de la tabla: la primera foto
+function tnImageForProducto(p) {
+  const entry = tnEntryForProducto(p);
+  return entry?.images?.[0] || null;
+}
+
+// Para el lightbox: todas las fotos del producto
+function tnImagesForProducto(p) {
+  const entry = tnEntryForProducto(p);
+  return entry?.images || [];
+}
+
+// Estado del lightbox: array de imágenes + índice actual
+let lightboxImages = [];
+let lightboxIndex = 0;
+let lightboxNombre = '';
+
+function openLightboxProducto(pid) {
+  // Buscar producto en la lista actual (allProductos viene de procesarYRenderizar)
+  const p = (allProductos || []).find(x => String(x.id) === String(pid));
+  if (!p) return;
+  const imgs = tnImagesForProducto(p);
+  if (!imgs.length) return;
+  lightboxImages = imgs;
+  lightboxIndex = 0;
+  lightboxNombre = p.name;
+  lightboxRender();
   const box = document.getElementById('lightbox');
-  document.getElementById('lightbox-img').src = url;
-  document.getElementById('lightbox-info').textContent = nombre || '';
   box.classList.add('show');
   document.body.style.overflow = 'hidden';
 }
+
+function lightboxRender() {
+  const img = document.getElementById('lightbox-img');
+  const info = document.getElementById('lightbox-info');
+  const counter = document.getElementById('lightbox-counter');
+  const prev = document.getElementById('lightbox-prev');
+  const next = document.getElementById('lightbox-next');
+  const thumbs = document.getElementById('lightbox-thumbs');
+  const total = lightboxImages.length;
+  img.src = lightboxImages[lightboxIndex] || '';
+  info.textContent = lightboxNombre || '';
+  counter.textContent = total > 1 ? `${lightboxIndex + 1} / ${total}` : '';
+  counter.style.display = total > 1 ? '' : 'none';
+  prev.style.display = total > 1 ? '' : 'none';
+  next.style.display = total > 1 ? '' : 'none';
+  if (total > 1) {
+    thumbs.style.display = '';
+    thumbs.innerHTML = lightboxImages.map((src, i) =>
+      `<img class="lightbox-thumb${i === lightboxIndex ? ' active' : ''}" src="${src}" loading="lazy" onclick="lightboxGoto(${i}, event)">`
+    ).join('');
+  } else {
+    thumbs.style.display = 'none';
+    thumbs.innerHTML = '';
+  }
+}
+
+function lightboxNav(delta, ev) {
+  ev?.stopPropagation();
+  const total = lightboxImages.length;
+  if (!total) return;
+  lightboxIndex = (lightboxIndex + delta + total) % total;
+  lightboxRender();
+}
+
+function lightboxGoto(idx, ev) {
+  ev?.stopPropagation();
+  if (idx < 0 || idx >= lightboxImages.length) return;
+  lightboxIndex = idx;
+  lightboxRender();
+}
+
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('show');
   document.body.style.overflow = '';
 }
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('lightbox')?.classList.contains('show')) {
-    closeLightbox();
-  }
+  const open = document.getElementById('lightbox')?.classList.contains('show');
+  if (!open) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') lightboxNav(-1);
+  else if (e.key === 'ArrowRight') lightboxNav(1);
 });
 
 function cambiarEmpresa(empresaKey) {
@@ -3175,11 +3262,15 @@ function closeEstadoInfo() {
 }
 </script>
 
-<!-- Lightbox para imagen ampliada de producto -->
+<!-- Lightbox para galería de producto -->
 <div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()" title="Cerrar">×</button>
+  <button class="lightbox-close" onclick="closeLightbox()" title="Cerrar (Esc)">×</button>
+  <div class="lightbox-counter" id="lightbox-counter"></div>
+  <button class="lightbox-nav prev" id="lightbox-prev" onclick="lightboxNav(-1, event)" title="Anterior (←)">‹</button>
   <img class="lightbox-img" id="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+  <button class="lightbox-nav next" id="lightbox-next" onclick="lightboxNav(1, event)" title="Siguiente (→)">›</button>
   <div class="lightbox-info" id="lightbox-info"></div>
+  <div class="lightbox-thumbs" id="lightbox-thumbs" onclick="event.stopPropagation()"></div>
 </div>
 
 <!-- Modal: explicación de estados de producto -->
