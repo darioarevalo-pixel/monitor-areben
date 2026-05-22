@@ -161,6 +161,14 @@
     /* Columna foto (visible cuando body tiene .tn-habilitada) */
     .foto-col { display: none; }
     body.tn-habilitada .foto-col { display: table-cell; }
+
+    /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
+    body.rol-marketing #stats-overview,
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-tienda"]),
+    body.rol-marketing #refresh-card,
+    body.rol-marketing .tab:where([onclick*="'productos'"], [onclick*="'variantes'"], [onclick*="'stock'"], [onclick*="'ventas-mensuales'"]) {
+      display: none !important;
+    }
     .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
     .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
     .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
@@ -241,7 +249,7 @@
     <div class="user-info" id="user-info"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="refresh-card">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn-primary" onclick="cargarTodo(true)">Actualizar datos</button>
       <div id="quick-admin-links" style="display:none;gap:6px;margin-left:auto;flex-wrap:wrap;">
@@ -255,7 +263,7 @@
   </div>
 
   <div id="dashboard">
-    <div class="stats-grid">
+    <div class="stats-grid" id="stats-overview">
       <div class="stat"><div class="stat-label">Productos</div><div class="stat-value" id="stat-total">—</div></div>
       <div class="stat"><div class="stat-label">Sin ventas +30d</div><div class="stat-value danger" id="stat-stale">—</div></div>
       <div class="stat"><div class="stat-label">En declive</div><div class="stat-value warning" id="stat-decline">—</div></div>
@@ -2909,7 +2917,13 @@ function _mesLabel(yyyymm) {
   return MONTH[parseInt(mo)-1] + ' ' + y.slice(2);
 }
 
-const USERS = { 'Bruno Arevalo': 'BDI123456', 'Dario Arevalo': 'BDI123456' };
+// Usuarios: cada uno tiene contraseña y rol. El rol controla qué tabs y cuentas ve.
+const USERS = {
+  'Bruno Arevalo': { pass: 'BDI123456', role: 'admin' },
+  'Dario Arevalo': { pass: 'BDI123456', role: 'admin' },
+  'local':         { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
+};
+function _userRole() { return (USERS[currentUser]?.role) || 'admin'; }
 const SESSION_KEY = 'monitor-areben-session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
 let currentUser = null;
@@ -2955,9 +2969,12 @@ function doLogin() {
   const user    = document.getElementById('login-user').value.trim();
   const pass    = document.getElementById('login-pass').value;
   const empresa = document.getElementById('login-empresa').value;
-  if (USERS[user] && USERS[user] === pass) {
+  const u = USERS[user];
+  if (u && u.pass === pass) {
     currentUser   = user;
-    currentCuenta = CUENTAS[empresa];
+    // Si el rol tiene cuenta fija (ej. marketing → zattia), forzar; sino usar la elegida
+    const empresaFinal = u.cuenta || empresa;
+    currentCuenta = CUENTAS[empresaFinal];
     saveSession();
     _activarSesion();
   } else {
@@ -2969,14 +2986,24 @@ function intentarAutoLogin() {
   const s = loadSession();
   if (!s) return false;
   currentUser = s.user;
-  currentCuenta = CUENTAS[s.empresa] || CUENTAS.bdi;
-  // Renovar timestamp (sliding expiration: cada uso resetea el contador)
+  // Si el rol tiene cuenta fija, respetarla
+  const u = USERS[s.user];
+  const empresaKey = u?.cuenta || s.empresa;
+  currentCuenta = CUENTAS[empresaKey] || CUENTAS.bdi;
   saveSession();
   _activarSesion();
   return true;
 }
 
 function renderUserInfo() {
+  const isMkt = _userRole() === 'marketing';
+  if (isMkt) {
+    // Marketing: vista simplificada — solo nombre de cuenta + botón salir discreto
+    document.getElementById('user-info').innerHTML =
+      `<span style="color:#666;font-weight:500;">${currentCuenta?.nombre || ''}</span> · ` +
+      `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
+    return;
+  }
   const opts = Object.entries(CUENTAS)
     .map(([k, v]) => `<option value="${k}"${currentCuenta === v ? ' selected' : ''}>${v.nombre}</option>`)
     .join('');
@@ -2995,17 +3022,40 @@ const TABS_POR_CUENTA = {
 
 function aplicarVisibilidadTabs() {
   const key = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+  const role = _userRole();
+  const isMkt = role === 'marketing';
+
+  // Para rol marketing: SOLO ve Marketing + Tienda Nube. Oculto todo lo demás.
+  // El resto de tabs (por defecto siempre visibles) las ocultamos vía CSS class.
+  document.body.classList.toggle('rol-marketing', isMkt);
+
+  // Tabs específicas por cuenta — para marketing, todas se ocultan menos tienda
   const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','tienda'];
   const visibles = new Set(TABS_POR_CUENTA[key] || []);
   todasOcultables.forEach(t => {
     const btn = document.getElementById('tab-btn-' + t);
-    if (btn) btn.style.display = visibles.has(t) ? '' : 'none';
+    if (!btn) return;
+    if (isMkt) {
+      btn.style.display = t === 'tienda' ? '' : 'none';
+    } else {
+      btn.style.display = visibles.has(t) ? '' : 'none';
+    }
   });
-  // Botones de acceso rápido a admins externos (solo BDI)
+
+  // Botones de acceso rápido a admins externos (solo BDI y NO marketing)
   const quickLinks = document.getElementById('quick-admin-links');
-  if (quickLinks) quickLinks.style.display = key === 'bdi' ? 'flex' : 'none';
-  // Flag en body para mostrar/ocultar la columna Foto (BDI y Zattia tienen TN)
+  if (quickLinks) quickLinks.style.display = (key === 'bdi' && !isMkt) ? 'flex' : 'none';
+
+  // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
+
+  // Marketing: pestaña activa por defecto al loguearse
+  if (isMkt) {
+    setTimeout(() => {
+      const mktBtn = document.getElementById('tab-btn-marketing');
+      if (mktBtn && !document.querySelector('.tab.active.tab-btn-marketing')) mktBtn.click();
+    }, 100);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
