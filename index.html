@@ -273,6 +273,7 @@
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
       <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
       <button class="tab" id="tab-btn-clientes" style="display:none;" onclick="switchTab('clientes', this)">Clientes</button>
+      <button class="tab" id="tab-btn-marketing" onclick="switchTab('marketing', this)" style="background:linear-gradient(135deg,#FF6B6B,#FFA07A);color:#fff;">📸 Marketing</button>
       <button class="tab tn-tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">
         <svg class="tn-logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.5 7.5 0 0 0-6.93 4.62A5.5 5.5 0 0 0 6.5 19.5h12a4.5 4.5 0 0 0 .85-8.96z" fill="currentColor"/>
@@ -637,6 +638,67 @@
       </div>
     </div>
 
+
+    <div id="tab-marketing" class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">📸 Catálogo Marketing</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Auditoría de fotos y descripciones cruzada con stock y ventas</div>
+        </div>
+        <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="stats-grid" id="mkt-stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px;"></div>
+
+      <!-- Filtros -->
+      <div class="card" style="padding:12px 14px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
+          <input type="text" id="mkt-search" placeholder="🔍 Buscar producto..." oninput="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;outline:none;">
+          <select id="mkt-cohorte" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">
+            <option value="">Todos los meses de ingreso</option>
+          </select>
+          <select id="mkt-cat-tn" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">
+            <option value="">Todas las categorías TN</option>
+          </select>
+          <select id="mkt-canal" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">
+            <option value="">Todos los canales</option>
+            <option value="Tienda Nube">Tienda Nube</option>
+            <option value="Local">Local</option>
+          </select>
+          <select id="mkt-calidad" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">
+            <option value="">Todos los estados</option>
+            <option value="sin-foto">Sin foto en TN</option>
+            <option value="pocas-fotos">Pocas fotos (1-2)</option>
+            <option value="sin-desc">Sin descripción</option>
+            <option value="no-publicado">No publicado en TN</option>
+            <option value="not-in-tn">No está en TN</option>
+            <option value="top-low-stock">⚠ Top ventas con stock bajo</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tabla -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table style="font-size:13px;">
+          <thead>
+            <tr>
+              <th style="width:72px;">Foto</th>
+              <th onclick="mktSort('name')" style="cursor:pointer;">Producto ↕</th>
+              <th onclick="mktSort('cat_tn')" style="cursor:pointer;width:160px;">Cat. TN ↕</th>
+              <th style="width:120px;text-align:center;">Calidad TN</th>
+              <th onclick="mktSort('stock')" style="cursor:pointer;width:80px;text-align:right;">Stock ↕</th>
+              <th onclick="mktSort('sales30')" style="cursor:pointer;width:90px;text-align:right;">Ventas 30d ↕</th>
+              <th style="width:120px;">Canales</th>
+              <th style="width:100px;text-align:center;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="mkt-tbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div id="mkt-count" style="font-size:12px;color:#9CA3AF;margin-top:8px;text-align:right;"></div>
+    </div>
 
     <div id="tab-tienda" class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -1048,6 +1110,11 @@ function getPhase(salesPrev, salesCurr, dsl) {
 }
 
 function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync) {
+  // Hacer accesibles globalmente para módulos que los necesiten (ej. Marketing tab)
+  window.allVentas = ventas || [];
+  window.allDetalles = detalles || [];
+  // Invalidar cache del mapa de canales (se reconstruye en próximo acceso)
+  window._mktChannelMap = null;
   const invByProduct = {};
   const invByVariant = {};
   (inventario || []).forEach(i => {
@@ -2558,7 +2625,288 @@ function switchTab(id, btn) {
     else if (id === 'colores')          updateColoresTab();
     else if (id === 'talles')           updateTallesTab();
     else if (id === 'clientes')         cargarCRM();
+    else if (id === 'marketing')        cargarMarketingTab();
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Catálogo Marketing — cruza TN (fotos, desc, cat) con GN (stock, ventas)
+// ════════════════════════════════════════════════════════════════
+let mktDataReady = false;
+let mktSortState = { col: 'sales30', dir: -1 };
+
+async function cargarMarketingTab() {
+  document.getElementById('mkt-tbody').innerHTML =
+    '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando datos de TiendaNube y cruzando con stock/ventas…</td></tr>';
+  // Asegurar que tnImageMaps esté cargado (lo tira por dentro datos completos: cats + imágenes)
+  const key = _cuentaKey();
+  try {
+    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${key}`);
+    const data = await r.json();
+    // Guardar payload completo en variable global para uso en filtros
+    window._mktTNData = data.products || [];
+    window._mktTNCats = data.categories || {};
+    // Cache info
+    if (data.cached_at) {
+      const d = new Date(data.cached_at);
+      document.getElementById('mkt-cache-info').textContent =
+        'TN actualizado: ' + d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+    }
+    mktDataReady = true;
+    mktPopulateCohortes();
+    mktPopulateCategorias();
+    mktRenderStats();
+    mktRender();
+  } catch (e) {
+    document.getElementById('mkt-tbody').innerHTML =
+      `<tr><td colspan="8" style="text-align:center;padding:30px;color:#DC2626;">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// Crear índice rápido TN producto matchado por SKU/nombre
+function _mktIndexTN() {
+  const idx = { bySku: {}, byName: {} };
+  for (const p of (window._mktTNData || [])) {
+    if (p.sku) idx.bySku[p.sku.toLowerCase().trim()] = p;
+    if (p.name) idx.byName[p.name.toLowerCase().trim()] = p;
+  }
+  return idx;
+}
+
+function _mktFindTN(gn, idx) {
+  if (gn.sku) {
+    const h = idx.bySku[gn.sku.toLowerCase().trim()];
+    if (h) return h;
+  }
+  if (gn.name) {
+    const nameLower = gn.name.toLowerCase().trim();
+    if (idx.byName[nameLower]) return idx.byName[nameLower];
+    const palabras = nameLower.split(/\s+/).filter(w => w.length >= 3);
+    if (palabras.length) {
+      for (const tnName of Object.keys(idx.byName)) {
+        if (palabras.every(w => tnName.includes(w))) return idx.byName[tnName];
+      }
+    }
+  }
+  return null;
+}
+
+// Compone lista enriquecida: para cada producto GN, le pega data TN
+function _mktBuildLista() {
+  const idx = _mktIndexTN();
+  return (allProductos || []).map(gn => {
+    const tn = _mktFindTN(gn, idx);
+    const stockReal = gn.stock || 0;
+    const canalesProd = _mktCanalesDelProducto(gn.id);
+    let calidad = 'ok';
+    if (!tn) calidad = 'not-in-tn';
+    else if (!tn.published) calidad = 'no-publicado';
+    else if (tn.image_count === 0) calidad = 'sin-foto';
+    else if (!tn.has_desc) calidad = 'sin-desc';
+    else if (tn.image_count <= 2) calidad = 'pocas-fotos';
+    // Top sales with low stock
+    const topLowStock = gn.sales30 >= 5 && stockReal <= 5;
+    return {
+      gn,
+      tn,
+      stock: stockReal,
+      sales30: gn.sales30 || 0,
+      canales: canalesProd,
+      canalesStr: canalesProd.length ? canalesProd.join(', ') : '—',
+      categoriasTN: tn?.categories || [],
+      categoriasTNStr: (tn?.categories || []).join(', '),
+      calidad,
+      topLowStock,
+      ingresoMes: gn.ingresoMes || (tn?.created_at ? tn.created_at.substring(0,7) : null),
+    };
+  });
+}
+
+// Devuelve canales únicos en los que se vendió este producto en los últimos 30 días
+function _mktCanalesDelProducto(productId) {
+  if (!window._mktChannelMap) {
+    const map = {};
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const ventasMap = {};
+    (window.allVentas || []).forEach(v => { ventasMap[v.id] = v; });
+    (window.allDetalles || []).forEach(d => {
+      const v = ventasMap[d.sale_id];
+      if (!v || !v.channel) return;
+      if (new Date(v.date_sale) < cutoff) return;
+      if (!map[d.product_id]) map[d.product_id] = new Set();
+      map[d.product_id].add(v.channel);
+    });
+    window._mktChannelMap = map;
+  }
+  const set = window._mktChannelMap[productId];
+  return set ? Array.from(set) : [];
+}
+
+function mktPopulateCohortes() {
+  const sel = document.getElementById('mkt-cohorte');
+  if (sel.options.length > 1) return;
+  const meses = new Set();
+  (allProductos || []).forEach(p => { if (p.ingresoMes) meses.add(p.ingresoMes); });
+  const MONTH = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  [...meses].sort().reverse().forEach(m => {
+    const [y, mo] = m.split('-');
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = MONTH[parseInt(mo)-1] + ' ' + y;
+    sel.appendChild(opt);
+  });
+}
+
+function mktPopulateCategorias() {
+  const sel = document.getElementById('mkt-cat-tn');
+  if (sel.options.length > 1) return;
+  const cats = new Set();
+  for (const p of (window._mktTNData || [])) {
+    (p.categories || []).forEach(c => cats.add(c));
+  }
+  [...cats].sort().forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function mktRenderStats() {
+  const lista = _mktBuildLista();
+  const total = lista.length;
+  const sinFoto = lista.filter(x => x.tn && x.tn.image_count === 0).length;
+  const sinDesc = lista.filter(x => x.tn && !x.tn.has_desc).length;
+  const notInTN = lista.filter(x => !x.tn).length;
+  const topLow = lista.filter(x => x.topLowStock).length;
+  document.getElementById('mkt-stats').innerHTML = `
+    <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','sin-foto')">
+      <div class="stat-label">Sin foto en TN</div>
+      <div class="stat-value danger">${sinFoto}</div>
+    </div>
+    <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','sin-desc')">
+      <div class="stat-label">Sin descripción</div>
+      <div class="stat-value warning">${sinDesc}</div>
+    </div>
+    <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','not-in-tn')">
+      <div class="stat-label">No están en TN</div>
+      <div class="stat-value warning">${notInTN}</div>
+    </div>
+    <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','top-low-stock')">
+      <div class="stat-label">⚠ Top ventas con stock bajo</div>
+      <div class="stat-value danger">${topLow}</div>
+    </div>
+  `;
+}
+
+function mktSetFiltro(field, value) {
+  const id = field === 'calidad' ? 'mkt-calidad' : null;
+  if (id) document.getElementById(id).value = value;
+  mktRender();
+}
+
+function mktSort(col) {
+  if (mktSortState.col === col) mktSortState.dir *= -1;
+  else { mktSortState.col = col; mktSortState.dir = -1; }
+  mktRender();
+}
+
+function mktRender() {
+  if (!mktDataReady) return;
+  let lista = _mktBuildLista();
+  // Filtros
+  const q = (document.getElementById('mkt-search').value || '').toLowerCase().trim();
+  const cohorte = document.getElementById('mkt-cohorte').value;
+  const catTn = document.getElementById('mkt-cat-tn').value;
+  const canal = document.getElementById('mkt-canal').value;
+  const calidad = document.getElementById('mkt-calidad').value;
+
+  if (q) lista = lista.filter(x => x.gn.name.toLowerCase().includes(q) || (x.gn.sku || '').toLowerCase().includes(q));
+  if (cohorte) lista = lista.filter(x => x.ingresoMes === cohorte);
+  if (catTn) lista = lista.filter(x => x.categoriasTN.includes(catTn));
+  if (canal) lista = lista.filter(x => x.canales.includes(canal));
+  if (calidad === 'sin-foto')      lista = lista.filter(x => x.tn && x.tn.image_count === 0);
+  if (calidad === 'pocas-fotos')   lista = lista.filter(x => x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2);
+  if (calidad === 'sin-desc')      lista = lista.filter(x => x.tn && !x.tn.has_desc);
+  if (calidad === 'no-publicado')  lista = lista.filter(x => x.tn && !x.tn.published);
+  if (calidad === 'not-in-tn')     lista = lista.filter(x => !x.tn);
+  if (calidad === 'top-low-stock') lista = lista.filter(x => x.topLowStock);
+
+  // Sort
+  const { col, dir } = mktSortState;
+  lista.sort((a, b) => {
+    let va, vb;
+    if (col === 'name')    { va = a.gn.name || ''; vb = b.gn.name || ''; return dir * va.localeCompare(vb); }
+    if (col === 'cat_tn')  { va = a.categoriasTNStr || ''; vb = b.categoriasTNStr || ''; return dir * va.localeCompare(vb); }
+    va = a[col] || 0; vb = b[col] || 0;
+    return dir * (va - vb);
+  });
+
+  // URL pública según cuenta
+  const tiendaBaseUrl = currentCuenta === CUENTAS.zattia ? 'https://zattia.com.ar' : 'https://bdiaccesorios.com.ar';
+  const adminBaseUrl = currentCuenta === CUENTAS.zattia
+    ? 'https://zattiaco.mitiendanube.com/admin/products'
+    : 'https://bdiaccesorios.mitiendanube.com/admin/products';
+
+  const tbody = document.getElementById('mkt-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Sin resultados con los filtros actuales</td></tr>';
+    document.getElementById('mkt-count').textContent = '';
+    return;
+  }
+  tbody.innerHTML = lista.slice(0, 300).map(x => {
+    const fotoUrl = x.tn?.images?.[0] || null;
+    const fotoCell = fotoUrl
+      ? `<img class="foto-thumb" src="${esc(fotoUrl)}" loading="lazy" onclick="openLightboxProducto('${x.gn.id}')" alt="${esc(x.gn.name)}">`
+      : '<div class="foto-thumb-placeholder">Sin foto</div>';
+
+    // Badges de calidad
+    const badges = [];
+    if (!x.tn) badges.push('<span style="background:#FEE2E2;color:#DC2626;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;">⚠ NO EN TN</span>');
+    else {
+      const photoIcon = x.tn.image_count === 0 ? '<span title="Sin foto" style="color:#DC2626;">📷 0</span>'
+        : x.tn.image_count <= 2 ? `<span title="Pocas fotos" style="color:#D97706;">📷 ${x.tn.image_count}</span>`
+        : `<span title="OK" style="color:#16A34A;">📷 ${x.tn.image_count}</span>`;
+      const descIcon = !x.tn.has_desc ? '<span title="Sin descripción" style="color:#DC2626;">📝 ✗</span>' : '<span title="OK" style="color:#16A34A;">📝 ✓</span>';
+      const pubBadge = !x.tn.published ? '<span title="Oculto" style="color:#DC2626;">●</span>' : '';
+      badges.push(`<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px;">${photoIcon} ${descIcon} ${pubBadge}</span>`);
+    }
+
+    const cohorteLabel = x.ingresoMes ? _mesLabel(x.ingresoMes) : '';
+    const meta = [x.gn.category, cohorteLabel].filter(Boolean).join(' · ');
+    const stockColor = x.stock === 0 ? '#DC2626' : x.stock <= 5 ? '#D97706' : x.topLowStock ? '#DC2626' : '#111';
+    const stockTxt = x.topLowStock ? `<strong style="color:#DC2626;">⚠ ${x.stock}</strong>` : `<span style="color:${stockColor};">${x.stock}</span>`;
+
+    const handle = x.tn?.handle || '';
+    const tnId = x.tn?.id || '';
+    const verTienda = handle ? `<a href="${tiendaBaseUrl}/productos/${handle}" target="_blank" title="Ver en tienda" style="color:#378ADD;text-decoration:none;">🌐</a>` : '';
+    const editarTN = tnId ? `<a href="${adminBaseUrl}/${tnId}" target="_blank" title="Editar en TN admin" style="color:#6366F1;text-decoration:none;">✏️</a>` : '';
+
+    return `<tr>
+      <td>${fotoCell}</td>
+      <td>
+        <div style="font-weight:500;">${esc(x.gn.name)}</div>
+        ${meta ? `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${esc(meta)}</div>` : ''}
+      </td>
+      <td style="font-size:12px;color:#666;">${esc(x.categoriasTNStr || '—')}</td>
+      <td style="text-align:center;">${badges.join('')}</td>
+      <td style="text-align:right;font-weight:500;">${stockTxt}</td>
+      <td style="text-align:right;font-weight:500;">${x.sales30}</td>
+      <td style="font-size:11px;color:#666;">${esc(x.canalesStr)}</td>
+      <td style="text-align:center;font-size:18px;">${verTienda} ${editarTN}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mkt-count').textContent =
+    `Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` +
+    (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
+}
+
+function _mesLabel(yyyymm) {
+  const MONTH = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const [y, mo] = yyyymm.split('-');
+  return MONTH[parseInt(mo)-1] + ' ' + y.slice(2);
 }
 
 const USERS = { 'Bruno Arevalo': 'BDI123456', 'Dario Arevalo': 'BDI123456' };
