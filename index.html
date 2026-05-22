@@ -2562,7 +2562,46 @@ function switchTab(id, btn) {
 }
 
 const USERS = { 'Bruno Arevalo': 'BDI123456', 'Dario Arevalo': 'BDI123456' };
+const SESSION_KEY = 'monitor-areben-session';
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
 let currentUser = null;
+
+function saveSession() {
+  try {
+    const empresaKey = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      user: currentUser,
+      empresa: empresaKey,
+      ts: Date.now(),
+    }));
+  } catch (e) { /* localStorage lleno, ignorar */ }
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || !s.user || !USERS[s.user]) return null;
+    if (Date.now() - (s.ts || 0) > SESSION_TTL_MS) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return s;
+  } catch { return null; }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
+}
+
+function _activarSesion() {
+  document.getElementById('login-screen').classList.add('hidden');
+  renderUserInfo();
+  aplicarVisibilidadTabs();
+  if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
+  cargarTodo();
+}
 
 function doLogin() {
   const user    = document.getElementById('login-user').value.trim();
@@ -2571,14 +2610,22 @@ function doLogin() {
   if (USERS[user] && USERS[user] === pass) {
     currentUser   = user;
     currentCuenta = CUENTAS[empresa];
-    document.getElementById('login-screen').classList.add('hidden');
-    renderUserInfo();
-    aplicarVisibilidadTabs();
-    if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
-    cargarTodo();
+    saveSession();
+    _activarSesion();
   } else {
     document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos.';
   }
+}
+
+function intentarAutoLogin() {
+  const s = loadSession();
+  if (!s) return false;
+  currentUser = s.user;
+  currentCuenta = CUENTAS[s.empresa] || CUENTAS.bdi;
+  // Renovar timestamp (sliding expiration: cada uso resetea el contador)
+  saveSession();
+  _activarSesion();
+  return true;
 }
 
 function renderUserInfo() {
@@ -2762,6 +2809,7 @@ document.addEventListener('keydown', e => {
 
 function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
+  saveSession();
   aplicarVisibilidadTabs();
   updateProveedoresTab();
   updateColoresTab();
@@ -2957,6 +3005,7 @@ function tiendaOpenDesc(idx) {
 }
 
 function doLogout() {
+  clearSession();
   currentUser   = null;
   currentCuenta = null;
   document.getElementById('login-screen').classList.remove('hidden');
@@ -2966,7 +3015,11 @@ function doLogout() {
   document.getElementById('user-info').innerHTML = '';
 }
 
-window.onload = () => document.getElementById('login-user').focus();
+window.onload = () => {
+  // Si hay sesión guardada (no expirada), entrar directo
+  if (intentarAutoLogin()) return;
+  document.getElementById('login-user').focus();
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CRM Mayorista — Tab Clientes
