@@ -24,7 +24,7 @@ function loadEnv() {
 loadEnv();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN;
 const GN_BASE      = 'https://www.gestionnube.com/api/v1';
 const FROM_DATE    = process.env.SYNC_FROM_DATE || '2025-01-01';

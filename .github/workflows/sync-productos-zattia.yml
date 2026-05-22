@@ -20,5 +20,6 @@ jobs:
         env:
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_KEY: ${{ secrets.ZATTIA_SUPABASE_KEY }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
         run: node scripts/sync-productos-zattia.js

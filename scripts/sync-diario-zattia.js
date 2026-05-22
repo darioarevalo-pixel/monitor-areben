@@ -20,7 +20,7 @@ function loadEnv() {
 loadEnv();
 
 const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
-const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_KEY;
+const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN_ZATTIA;
 const GN_BASE      = 'https://www.gestionnube.com/api/v1';
 const LAST_SYNC_FILE = resolve(process.cwd(), '.last-sync-zattia');

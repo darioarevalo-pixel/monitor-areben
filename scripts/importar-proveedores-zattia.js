@@ -24,7 +24,7 @@ function loadEnv() {
 loadEnv();
 
 const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
-const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_KEY;
+const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY');

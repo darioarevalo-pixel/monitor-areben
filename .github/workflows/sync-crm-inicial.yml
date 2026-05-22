@@ -27,6 +27,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GN_TOKEN:     ${{ secrets.GN_TOKEN }}
           SYNC_FROM_DATE: ${{ github.event.inputs.from_date }}
         run: node scripts/sync-ventas-crm.js
