@@ -151,6 +151,20 @@
     .info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
     .info-btn:hover { color: #378ADD; }
 
+    /* Columna foto (solo visible cuando body tiene .cuenta-bdi) */
+    .foto-col { display: none; }
+    body.cuenta-bdi .foto-col { display: table-cell; }
+    .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
+    .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
+    .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
+
+    /* Lightbox para ver imagen ampliada */
+    .lightbox-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out; }
+    .lightbox-overlay.show { display: flex; }
+    .lightbox-img { max-width: 90vw; max-height: 90vh; object-fit: contain; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 4px; }
+    .lightbox-close { position: absolute; top: 20px; right: 24px; background: transparent; border: none; color: #fff; font-size: 36px; cursor: pointer; line-height: 1; padding: 0; }
+    .lightbox-info { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; max-width: 90vw; text-align: center; }
+
     /* Modal genérico de info */
     .info-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
     .info-modal-overlay.show { display: flex; }
@@ -262,6 +276,7 @@
       <div class="card" style="padding:0;overflow:hidden;">
         <table>
           <thead><tr>
+            <th class="foto-col" style="width:72px;">Foto</th>
             <th onclick="sortTable('productos','name')">Producto ↕</th>
             <th onclick="sortTable('productos','lastSale')">Última venta ↕</th>
             <th onclick="sortTable('productos','sales7')">Ventas 7d ↕</th>
@@ -1461,16 +1476,25 @@ function renderProductos() {
   const page = pageState.productos;
   const slice = lista.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   renderPagination(lista.length, page, 'productos');
+  const isBDI = currentCuenta === CUENTAS.bdi;
+  const colspanDetalle = isBDI ? 9 : 8;
   document.getElementById('tbody-productos').innerHTML = slice.map(p => {
     const isExpanded = expandedProductPid === p.id;
     const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ');
     const lsDays = lifespanDaysByMode(p, lifespanMethod);
     const lsStr = formatLifespan(lsDays, p.stock);
     const detailRow = isExpanded
-      ? `<tr><td colspan="8" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
+      ? `<tr><td colspan="${colspanDetalle}" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
       : '';
+    const fotoUrl = isBDI ? tnImageForProducto(p) : null;
+    const fotoCell = `<td class="foto-col" onclick="event.stopPropagation()">${
+      fotoUrl
+        ? `<img class="foto-thumb" src="${esc(fotoUrl)}" loading="lazy" onclick="openLightbox('${esc(fotoUrl)}','${esc(p.name).replace(/'/g, "\\'")}')" alt="${esc(p.name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'foto-thumb-placeholder', textContent:'Sin foto'}))">`
+        : `<div class="foto-thumb-placeholder">Sin foto</div>`
+    }</td>`;
     return `
     <tr onclick="toggleProductoDetalle('${p.id}')" style="cursor:pointer;${isExpanded ? 'background:#eef2ff;' : ''}">
+      ${fotoCell}
       <td style="font-weight:500;max-width:200px;">
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</div>
         ${meta ? `<div style="font-size:11px;color:#aaa;margin-top:1px;">${esc(meta)}</div>` : ''}
@@ -2520,6 +2544,7 @@ function doLogin() {
     document.getElementById('login-screen').classList.add('hidden');
     renderUserInfo();
     aplicarVisibilidadTabs();
+    if (currentCuenta === CUENTAS.bdi) cargarImagenesTNBDI();
     cargarTodo();
   } else {
     document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos.';
@@ -2554,7 +2579,84 @@ function aplicarVisibilidadTabs() {
   // Botones de acceso rápido a admins externos (solo BDI)
   const quickLinks = document.getElementById('quick-admin-links');
   if (quickLinks) quickLinks.style.display = key === 'bdi' ? 'flex' : 'none';
+  // Flag en body para mostrar/ocultar la columna Foto de la tabla productos
+  document.body.classList.toggle('cuenta-bdi', key === 'bdi');
 }
+
+// ════════════════════════════════════════════════════════════════
+// Imágenes de Tienda Nube (solo BDI por ahora)
+// ════════════════════════════════════════════════════════════════
+let tnImageMapBDI = null; // { skuLower: imageUrl, nameLower: imageUrl }
+let tnLoadingPromise = null;
+
+async function cargarImagenesTNBDI() {
+  if (tnImageMapBDI) return tnImageMapBDI;
+  if (tnLoadingPromise) return tnLoadingPromise;
+  tnLoadingPromise = (async () => {
+    try {
+      const r = await fetch('https://bdi-catalogo.vercel.app/api/tiendanube-audit');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      const map = { bySku: {}, byName: {} };
+      for (const p of data.products || []) {
+        const img = (p.images && p.images[0]) || null;
+        if (!img) continue;
+        if (p.sku) map.bySku[p.sku.toLowerCase().trim()] = img;
+        if (p.name) map.byName[p.name.toLowerCase().trim()] = img;
+      }
+      tnImageMapBDI = map;
+      // Re-renderizar productos para que aparezcan las fotos
+      if (currentCuenta === CUENTAS.bdi) renderProductos();
+      return map;
+    } catch (e) {
+      console.warn('Error cargando imágenes TN:', e);
+      tnImageMapBDI = { bySku: {}, byName: {} };
+      return tnImageMapBDI;
+    } finally {
+      tnLoadingPromise = null;
+    }
+  })();
+  return tnLoadingPromise;
+}
+
+function tnImageForProducto(p) {
+  if (!tnImageMapBDI) return null;
+  // 1. Match por SKU
+  if (p.sku) {
+    const hit = tnImageMapBDI.bySku[p.sku.toLowerCase().trim()];
+    if (hit) return hit;
+  }
+  // 2. Match por nombre exacto
+  if (p.name) {
+    const nameLower = p.name.toLowerCase().trim();
+    if (tnImageMapBDI.byName[nameLower]) return tnImageMapBDI.byName[nameLower];
+    // 3. Match parcial: TN name que tenga TODAS las palabras del producto GN
+    const palabras = nameLower.split(/\s+/).filter(w => w.length >= 3);
+    if (palabras.length) {
+      for (const tnName of Object.keys(tnImageMapBDI.byName)) {
+        if (palabras.every(w => tnName.includes(w))) return tnImageMapBDI.byName[tnName];
+      }
+    }
+  }
+  return null;
+}
+
+function openLightbox(url, nombre) {
+  const box = document.getElementById('lightbox');
+  document.getElementById('lightbox-img').src = url;
+  document.getElementById('lightbox-info').textContent = nombre || '';
+  box.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('lightbox')?.classList.contains('show')) {
+    closeLightbox();
+  }
+});
 
 function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
@@ -2562,6 +2664,8 @@ function cambiarEmpresa(empresaKey) {
   updateProveedoresTab();
   updateColoresTab();
   updateTallesTab();
+  // Prefetch imágenes de TN si entramos a BDI (no bloquea — se renderiza cuando termina)
+  if (currentCuenta === CUENTAS.bdi) cargarImagenesTNBDI();
   cargarTodo();
 }
 
@@ -3067,6 +3171,13 @@ function closeEstadoInfo() {
   document.getElementById('estado-info-modal').classList.remove('show');
 }
 </script>
+
+<!-- Lightbox para imagen ampliada de producto -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()" title="Cerrar">×</button>
+  <img class="lightbox-img" id="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+  <div class="lightbox-info" id="lightbox-info"></div>
+</div>
 
 <!-- Modal: explicación de estados de producto -->
 <div class="info-modal-overlay" id="estado-info-modal">
