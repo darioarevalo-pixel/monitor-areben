@@ -151,6 +151,13 @@
     .info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
     .info-btn:hover { color: #378ADD; }
 
+    /* Tab Tiendanube — con logo de nube en color de marca */
+    .tab.tn-tab { display: inline-flex; align-items: center; gap: 6px; color: #1ABDF1; font-weight: 600; }
+    .tab.tn-tab:hover { background: #E0F4FE; color: #0B7FB0; }
+    .tab.tn-tab.active { background: #1ABDF1; color: #fff; }
+    .tab.tn-tab.active:hover { background: #0B98D1; color: #fff; }
+    .tab.tn-tab .tn-logo-svg { width: 18px; height: 18px; flex-shrink: 0; }
+
     /* Columna foto (visible cuando body tiene .tn-habilitada) */
     .foto-col { display: none; }
     body.tn-habilitada .foto-col { display: table-cell; }
@@ -266,7 +273,12 @@
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
       <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
       <button class="tab" id="tab-btn-clientes" style="display:none;" onclick="switchTab('clientes', this)">Clientes</button>
-      <button class="tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">Tienda Online</button>
+      <button class="tab tn-tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">
+        <svg class="tn-logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.5 7.5 0 0 0-6.93 4.62A5.5 5.5 0 0 0 6.5 19.5h12a4.5 4.5 0 0 0 .85-8.96z" fill="currentColor"/>
+        </svg>
+        <span>Tiendanube</span>
+      </button>
     </div>
 
     <div id="tab-productos" class="section visible">
