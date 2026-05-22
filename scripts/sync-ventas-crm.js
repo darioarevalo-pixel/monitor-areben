@@ -156,21 +156,33 @@ function extraerClientes(rows) {
   return [...map.values()].map(({ _ts, ...rest }) => rest);
 }
 
+function dedupById(arr) {
+  const map = new Map();
+  for (const x of arr) {
+    if (x && x.id != null) map.set(String(x.id), x);
+  }
+  return [...map.values()];
+}
+
 async function flushBatch(rawRows) {
-  const ventas = rawRows.map(mapVentaRow);
-  const clientes = extraerClientes(rawRows);
-  const detalles = rawRows.flatMap(v =>
-    (v.detalles || []).map(d => ({
-      id:           d.id,
-      sale_id:      v.id,
-      product_id:   d.product_id || null,
-      product_name: d.product_name || null,
-      size_id:      d.size_id || null,
-      size:         d.size || null,
-      quantity:     d.quantity ?? null,
-      unit_price:   d.unit_price ?? null,
-      total:        d.total ?? null,
-    }))
+  // Dedup rawRows por id de venta antes de mapear
+  const rawDedup = dedupById(rawRows);
+  const ventas = dedupById(rawDedup.map(mapVentaRow));
+  const clientes = dedupById(extraerClientes(rawDedup));
+  const detalles = dedupById(
+    rawDedup.flatMap(v =>
+      (v.detalles || []).map(d => ({
+        id:           d.id,
+        sale_id:      v.id,
+        product_id:   d.product_id || null,
+        product_name: d.product_name || null,
+        size_id:      d.size_id || null,
+        size:         d.size || null,
+        quantity:     d.quantity ?? null,
+        unit_price:   d.unit_price ?? null,
+        total:        d.total ?? null,
+      }))
+    )
   );
 
   if (ventas.length) {
