@@ -151,9 +151,9 @@
     .info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
     .info-btn:hover { color: #378ADD; }
 
-    /* Columna foto (solo visible cuando body tiene .cuenta-bdi) */
+    /* Columna foto (visible cuando body tiene .tn-habilitada) */
     .foto-col { display: none; }
-    body.cuenta-bdi .foto-col { display: table-cell; }
+    body.tn-habilitada .foto-col { display: table-cell; }
     .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
     .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
     .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
@@ -1476,8 +1476,8 @@ function renderProductos() {
   const page = pageState.productos;
   const slice = lista.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   renderPagination(lista.length, page, 'productos');
-  const isBDI = currentCuenta === CUENTAS.bdi;
-  const colspanDetalle = isBDI ? 9 : 8;
+  const tnEnabled = currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia;
+  const colspanDetalle = tnEnabled ? 9 : 8;
   document.getElementById('tbody-productos').innerHTML = slice.map(p => {
     const isExpanded = expandedProductPid === p.id;
     const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ');
@@ -1486,7 +1486,7 @@ function renderProductos() {
     const detailRow = isExpanded
       ? `<tr><td colspan="${colspanDetalle}" style="padding:0;background:#f8f9ff;border-bottom:2px solid #d0dbf5;">${buildProductoDetalle(p.id)}</td></tr>`
       : '';
-    const fotoUrl = isBDI ? tnImageForProducto(p) : null;
+    const fotoUrl = tnEnabled ? tnImageForProducto(p) : null;
     const fotoCell = `<td class="foto-col" onclick="event.stopPropagation()">${
       fotoUrl
         ? `<img class="foto-thumb" src="${esc(fotoUrl)}" loading="lazy" onclick="openLightbox('${esc(fotoUrl)}','${esc(p.name).replace(/'/g, "\\'")}')" alt="${esc(p.name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'foto-thumb-placeholder', textContent:'Sin foto'}))">`
@@ -2544,7 +2544,7 @@ function doLogin() {
     document.getElementById('login-screen').classList.add('hidden');
     renderUserInfo();
     aplicarVisibilidadTabs();
-    if (currentCuenta === CUENTAS.bdi) cargarImagenesTNBDI();
+    if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
     cargarTodo();
   } else {
     document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos.';
@@ -2579,22 +2579,27 @@ function aplicarVisibilidadTabs() {
   // Botones de acceso rápido a admins externos (solo BDI)
   const quickLinks = document.getElementById('quick-admin-links');
   if (quickLinks) quickLinks.style.display = key === 'bdi' ? 'flex' : 'none';
-  // Flag en body para mostrar/ocultar la columna Foto de la tabla productos
-  document.body.classList.toggle('cuenta-bdi', key === 'bdi');
+  // Flag en body para mostrar/ocultar la columna Foto (BDI y Zattia tienen TN)
+  document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
 }
 
 // ════════════════════════════════════════════════════════════════
-// Imágenes de Tienda Nube (solo BDI por ahora)
+// Imágenes de Tienda Nube (BDI + Zattia)
 // ════════════════════════════════════════════════════════════════
-let tnImageMapBDI = null; // { skuLower: imageUrl, nameLower: imageUrl }
-let tnLoadingPromise = null;
+const tnImageMaps = { bdi: null, zattia: null }; // { bySku, byName } por cuenta
+const tnLoadingPromises = { bdi: null, zattia: null };
 
-async function cargarImagenesTNBDI() {
-  if (tnImageMapBDI) return tnImageMapBDI;
-  if (tnLoadingPromise) return tnLoadingPromise;
-  tnLoadingPromise = (async () => {
+function _cuentaKey() {
+  return currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+}
+
+async function cargarImagenesTN(cuentaKey) {
+  const key = cuentaKey || _cuentaKey();
+  if (tnImageMaps[key]) return tnImageMaps[key];
+  if (tnLoadingPromises[key]) return tnLoadingPromises[key];
+  tnLoadingPromises[key] = (async () => {
     try {
-      const r = await fetch('https://bdi-catalogo.vercel.app/api/tiendanube-audit');
+      const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${key}`);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
       const map = { bySku: {}, byName: {} };
@@ -2604,37 +2609,35 @@ async function cargarImagenesTNBDI() {
         if (p.sku) map.bySku[p.sku.toLowerCase().trim()] = img;
         if (p.name) map.byName[p.name.toLowerCase().trim()] = img;
       }
-      tnImageMapBDI = map;
-      // Re-renderizar productos para que aparezcan las fotos
-      if (currentCuenta === CUENTAS.bdi) renderProductos();
+      tnImageMaps[key] = map;
+      // Re-renderizar productos si seguimos en la misma cuenta
+      if (_cuentaKey() === key) renderProductos();
       return map;
     } catch (e) {
-      console.warn('Error cargando imágenes TN:', e);
-      tnImageMapBDI = { bySku: {}, byName: {} };
-      return tnImageMapBDI;
+      console.warn(`Error cargando imágenes TN ${key}:`, e);
+      tnImageMaps[key] = { bySku: {}, byName: {} };
+      return tnImageMaps[key];
     } finally {
-      tnLoadingPromise = null;
+      tnLoadingPromises[key] = null;
     }
   })();
-  return tnLoadingPromise;
+  return tnLoadingPromises[key];
 }
 
 function tnImageForProducto(p) {
-  if (!tnImageMapBDI) return null;
-  // 1. Match por SKU
+  const map = tnImageMaps[_cuentaKey()];
+  if (!map) return null;
   if (p.sku) {
-    const hit = tnImageMapBDI.bySku[p.sku.toLowerCase().trim()];
+    const hit = map.bySku[p.sku.toLowerCase().trim()];
     if (hit) return hit;
   }
-  // 2. Match por nombre exacto
   if (p.name) {
     const nameLower = p.name.toLowerCase().trim();
-    if (tnImageMapBDI.byName[nameLower]) return tnImageMapBDI.byName[nameLower];
-    // 3. Match parcial: TN name que tenga TODAS las palabras del producto GN
+    if (map.byName[nameLower]) return map.byName[nameLower];
     const palabras = nameLower.split(/\s+/).filter(w => w.length >= 3);
     if (palabras.length) {
-      for (const tnName of Object.keys(tnImageMapBDI.byName)) {
-        if (palabras.every(w => tnName.includes(w))) return tnImageMapBDI.byName[tnName];
+      for (const tnName of Object.keys(map.byName)) {
+        if (palabras.every(w => tnName.includes(w))) return map.byName[tnName];
       }
     }
   }
@@ -2664,8 +2667,8 @@ function cambiarEmpresa(empresaKey) {
   updateProveedoresTab();
   updateColoresTab();
   updateTallesTab();
-  // Prefetch imágenes de TN si entramos a BDI (no bloquea — se renderiza cuando termina)
-  if (currentCuenta === CUENTAS.bdi) cargarImagenesTNBDI();
+  // Prefetch imágenes de TN (BDI o Zattia) — no bloquea, re-renderiza al terminar
+  if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
   cargarTodo();
 }
 
