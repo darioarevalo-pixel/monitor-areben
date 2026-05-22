@@ -143,9 +143,16 @@
 
     /* Header */
     .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .user-info { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 6px; }
-    .user-info select { font-size: 12px; padding: 4px 8px; border-radius: 8px; border-color: #E5E7EB; color: #6B7280; }
+    .user-info { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 10px; }
     .user-info button { font-size: 11px; padding: 4px 10px; color: #9CA3AF; border-radius: 8px; }
+    .empresa-switcher { position: relative; }
+    .empresa-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #fff; color: #111827; font-size: 13px; cursor: pointer; transition: all .15s; }
+    .empresa-btn:hover { border-color: #1F4E78; background: #F9FAFB; }
+    .empresa-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 6px; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.10); min-width: 180px; z-index: 50; }
+    .empresa-menu.open { display: block; }
+    .empresa-opt { display: block; width: 100%; padding: 8px 10px; background: transparent; border: none; border-radius: 8px; text-align: left; font-size: 13px; color: #1F2937; cursor: pointer; transition: background .12s; }
+    .empresa-opt:hover { background: #F3F4F6; }
+    .empresa-opt.active { background: #1F4E78; color: #fff; font-weight: 600; }
 
     /* Botón de info en headers de tabla */
     .info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
@@ -164,9 +171,8 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-tienda"]),
-    body.rol-marketing #refresh-card,
-    body.rol-marketing .tab:where([onclick*="'productos'"], [onclick*="'variantes'"], [onclick*="'stock'"], [onclick*="'ventas-mensuales'"]) {
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]),
+    body.rol-marketing #refresh-card {
       display: none !important;
     }
     .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
@@ -220,13 +226,6 @@
   <div class="login-card">
     <div class="login-brand">AREBEN <span>SRL</span></div>
     <div class="login-sub">Panel de análisis de ventas</div>
-    <div class="login-field">
-      <label>Empresa</label>
-      <select id="login-empresa" style="width:100%;padding:9px 12px;">
-        <option value="bdi">BDI Accesorios</option>
-        <option value="zattia">Zattia</option>
-      </select>
-    </div>
     <div class="login-field">
       <label>Usuario</label>
       <input type="text" id="login-user" placeholder="Nombre completo" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
@@ -2966,15 +2965,13 @@ function _activarSesion() {
 }
 
 function doLogin() {
-  const user    = document.getElementById('login-user').value.trim();
-  const pass    = document.getElementById('login-pass').value;
-  const empresa = document.getElementById('login-empresa').value;
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
   const u = USERS[user];
   if (u && u.pass === pass) {
     currentUser   = user;
-    // Si el rol tiene cuenta fija (ej. marketing → zattia), forzar; sino usar la elegida
-    const empresaFinal = u.cuenta || empresa;
-    currentCuenta = CUENTAS[empresaFinal];
+    // Cuenta inicial: la fija del rol (marketing→zattia), o Zattia como default
+    currentCuenta = CUENTAS[u.cuenta || 'zattia'];
     saveSession();
     _activarSesion();
   } else {
@@ -3004,12 +3001,25 @@ function renderUserInfo() {
       `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
     return;
   }
-  const opts = Object.entries(CUENTAS)
-    .map(([k, v]) => `<option value="${k}"${currentCuenta === v ? ' selected' : ''}>${v.nombre}</option>`)
-    .join('');
-  document.getElementById('user-info').innerHTML =
-    `<select onchange="cambiarEmpresa(this.value)" style="font-size:12px;padding:3px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#444;margin-right:8px;">${opts}</select>` +
-    `${currentUser} <button onclick="doLogout()">Salir</button>`;
+  // Admin: dropdown destacado para cambiar empresa + nombre + salir
+  const empresaActual = currentCuenta?.nombre || '';
+  const opciones = Object.entries(CUENTAS).map(([k, v]) =>
+    `<button class="empresa-opt${currentCuenta === v ? ' active' : ''}" onclick="cambiarEmpresa('${k}')">${v.nombre}</button>`
+  ).join('');
+  document.getElementById('user-info').innerHTML = `
+    <div class="empresa-switcher" onclick="event.stopPropagation()">
+      <button class="empresa-btn" onclick="document.getElementById('empresa-menu').classList.toggle('open')">
+        <span style="font-weight:600;">${empresaActual}</span>
+        <span style="opacity:.6;">▾</span>
+      </button>
+      <div class="empresa-menu" id="empresa-menu">
+        <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px 6px;">Cambiar empresa</div>
+        ${opciones}
+      </div>
+    </div>
+    <span style="color:#9CA3AF;font-size:12px;">${currentUser}</span>
+    <button onclick="doLogout()" style="font-size:11px;">Salir</button>
+  `;
 }
 
 // Configuración única de qué tabs aparecen en cada cuenta.
@@ -3025,18 +3035,17 @@ function aplicarVisibilidadTabs() {
   const role = _userRole();
   const isMkt = role === 'marketing';
 
-  // Para rol marketing: SOLO ve Marketing + Tienda Nube. Oculto todo lo demás.
-  // El resto de tabs (por defecto siempre visibles) las ocultamos vía CSS class.
+  // Para rol marketing: SOLO ve Marketing. Oculto todo lo demás (incluyendo Tiendanube).
   document.body.classList.toggle('rol-marketing', isMkt);
 
-  // Tabs específicas por cuenta — para marketing, todas se ocultan menos tienda
+  // Tabs específicas por cuenta — para marketing, todas ocultas (solo queda Marketing visible)
   const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','tienda'];
   const visibles = new Set(TABS_POR_CUENTA[key] || []);
   todasOcultables.forEach(t => {
     const btn = document.getElementById('tab-btn-' + t);
     if (!btn) return;
     if (isMkt) {
-      btn.style.display = t === 'tienda' ? '' : 'none';
+      btn.style.display = 'none';
     } else {
       btn.style.display = visibles.has(t) ? '' : 'none';
     }
@@ -3733,6 +3742,11 @@ document.addEventListener('keydown', e => {
 document.addEventListener('click', e => {
   if (e.target.id === 'cliente-modal') cerrarClienteModal();
   if (e.target.id === 'estado-info-modal') closeEstadoInfo();
+  // Cerrar dropdown de empresa si se clickea afuera
+  const empMenu = document.getElementById('empresa-menu');
+  if (empMenu && empMenu.classList.contains('open') && !e.target.closest('.empresa-switcher')) {
+    empMenu.classList.remove('open');
+  }
 });
 
 function openEstadoInfo() {
