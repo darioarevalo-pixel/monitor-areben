@@ -2865,10 +2865,14 @@ function tiendaRender() {
     ? `<span style="background:#DCFCE7;color:#16A34A;padding:2px 7px;border-radius:10px;font-size:11px;">OK</span>`
     : `<span style="background:#FEE2E2;color:#DC2626;padding:2px 7px;border-radius:10px;font-size:11px;">Sin desc.</span>`;
 
+  // URL pública de la tienda según cuenta actual
+  const tiendaBaseUrl = currentCuenta === CUENTAS.zattia
+    ? 'https://zattiaco.mitiendanube.com'
+    : 'https://bdiaccesorios.com.ar';
   document.getElementById('tienda-tbody').innerHTML = ps.map((p, i) => {
     const idx = tiendaAllProducts.indexOf(p);
     const storeLink = p.handle
-      ? `<a href="https://bdiaccesorios.com.ar/productos/${p.handle}" target="_blank" style="font-size:11px;color:#378ADD;text-decoration:none;">Ver tienda ↗</a>`
+      ? `<a href="${tiendaBaseUrl}/productos/${p.handle}" target="_blank" style="font-size:11px;color:#378ADD;text-decoration:none;">Ver tienda ↗</a>`
       : '';
     const photosBtn = p.image_count > 0
       ? `<button onclick="tiendaOpenPhotos(${idx})" style="font-size:11px;background:none;border:none;color:#378ADD;cursor:pointer;padding:0;">Ver fotos</button>`
