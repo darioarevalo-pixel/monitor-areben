@@ -1138,14 +1138,41 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   window._mktChannelMap = null;
   const invByProduct = {};
   const invByVariant = {};
+  const _MODELS_LONGEST_FIRST = [
+    'iPhone 17 Pro Max','iPhone 16 Pro Max','iPhone 15 Pro Max','iPhone 14 Pro Max',
+    'iPhone 13 Pro Max','iPhone 12 Pro Max','iPhone 11 Pro Max',
+    'iPhone 17 Pro','iPhone 17 Air','iPhone 16 Plus','iPhone 16 Pro','iPhone 15 Plus',
+    'iPhone 15 Pro','iPhone 14 Plus','iPhone 14 Pro','iPhone 13 Mini','iPhone 13 Pro',
+    'iPhone 12 Mini','iPhone 12 Pro','iPhone 11 Pro',
+    'iPhone XS Max','iPhone 8 Plus','iPhone 7 Plus','iPhone 6s Plus','iPhone 6 Plus',
+    'iPhone SE 3','iPhone SE 2','iPhone SE',
+    'iPhone 17','iPhone 16e','iPhone 16','iPhone 15','iPhone 14','iPhone 13',
+    'iPhone 12','iPhone 11','iPhone XR','iPhone XS','iPhone X',
+    'iPhone 8','iPhone 7','iPhone 6s','iPhone 6',
+  ];
+  function _matchModelo(sizeName) {
+    if (!sizeName) return null;
+    const u = sizeName.toUpperCase();
+    for (const m of _MODELS_LONGEST_FIRST) {
+      if (u.includes(m.toUpperCase())) return m;
+    }
+    return null;
+  }
+  const invByProdModelo = {};
   (inventario || []).forEach(i => {
     const pid = String(i.product_id);
     const vid = pid + '_' + String(i.size_id);
     const qty = i.available_quantity || 0;
     invByProduct[pid] = (invByProduct[pid] || 0) + qty;
     invByVariant[vid] = (invByVariant[vid] || 0) + qty;
+    const modelo = _matchModelo(i.size_name);
+    if (modelo) {
+      const key = pid + '|||' + modelo;
+      invByProdModelo[key] = (invByProdModelo[key] || 0) + qty;
+    }
   });
   window._invByProduct = invByProduct;
+  window._invByProdModelo = invByProdModelo;
 
   function normalizeCat(cat) {
     if (!cat) return 'SIN CATEGORÍA';
@@ -2120,8 +2147,22 @@ function renderFundasPorModelo() {
   const corteEnabled = document.getElementById('fm-corte-enabled')?.checked;
   if (corteEnabled && rangeMonths.length > 1) {
     const corteN = parseInt(document.getElementById('fm-corte-n')?.value) || 3;
-    const lastRangeMonth = rangeMonths[rangeMonths.length - 1];
-    // Último mes con ventas por modelo dentro del rango
+    const keyPids = window._fmKeyPids || {};
+    const invPM = window._invByProdModelo || {};
+    // Stock actual por modelo (a nivel variante, no producto)
+    const modelStock = {};
+    checkedModels.forEach(model => {
+      let stock = 0;
+      Object.entries(keyPids).forEach(([key, pids]) => {
+        const sep = key.indexOf('|||');
+        if (key.slice(0, sep) !== model) return;
+        const kp = key.slice(sep + 3);
+        if (prodFilterActive && !checkedProds.has(kp)) return;
+        pids.forEach(pid => { stock += invPM[pid + '|||' + model] || 0; });
+      });
+      modelStock[model] = stock;
+    });
+    // Último mes con ventas por modelo (para saber cuándo se agotó)
     const modelLastMonth = {};
     rangeMonths.forEach(m => {
       if (!allFundasStats[m]) return;
@@ -2134,9 +2175,9 @@ function renderFundasPorModelo() {
         if (!modelLastMonth[model] || m > modelLastMonth[model]) modelLastMonth[model] = m;
       });
     });
-    // Un modelo está agotado si dejó de vender antes del último mes del rango
+    // Agotado = stock actual 0 + tuvo ventas en el rango
     const agotados = [...checkedModels]
-      .filter(m => modelLastMonth[m] && modelLastMonth[m] < lastRangeMonth)
+      .filter(m => modelStock[m] === 0 && modelLastMonth[m])
       .sort((a, b) => (modelLastMonth[a] || '').localeCompare(modelLastMonth[b] || ''));
     if (agotados.length >= corteN) {
       const cutoffMonth = modelLastMonth[agotados[corteN - 1]];
