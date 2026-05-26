@@ -2118,20 +2118,10 @@ function renderFundasPorModelo() {
   // ── Corte por agotamiento ──
   const corteEl = document.getElementById('fm-corte-info');
   const corteEnabled = document.getElementById('fm-corte-enabled')?.checked;
-  if (corteEnabled) {
+  if (corteEnabled && rangeMonths.length > 1) {
     const corteN = parseInt(document.getElementById('fm-corte-n')?.value) || 3;
-    const keyPids = window._fmKeyPids || {};
-    const inv = window._invByProduct || {};
-    const modelStock = {};
-    checkedModels.forEach(m => { modelStock[m] = 0; });
-    Object.entries(keyPids).forEach(([key, pids]) => {
-      const sep = key.indexOf('|||');
-      const km = key.slice(0, sep);
-      const kp = key.slice(sep + 3);
-      if (!checkedModels.has(km)) return;
-      if (prodFilterActive && !checkedProds.has(kp)) return;
-      pids.forEach(pid => { modelStock[km] += inv[pid] || 0; });
-    });
+    const lastRangeMonth = rangeMonths[rangeMonths.length - 1];
+    // Último mes con ventas por modelo dentro del rango
     const modelLastMonth = {};
     rangeMonths.forEach(m => {
       if (!allFundasStats[m]) return;
@@ -2144,8 +2134,9 @@ function renderFundasPorModelo() {
         if (!modelLastMonth[model] || m > modelLastMonth[model]) modelLastMonth[model] = m;
       });
     });
+    // Un modelo está agotado si dejó de vender antes del último mes del rango
     const agotados = [...checkedModels]
-      .filter(m => modelStock[m] === 0 && modelLastMonth[m])
+      .filter(m => modelLastMonth[m] && modelLastMonth[m] < lastRangeMonth)
       .sort((a, b) => (modelLastMonth[a] || '').localeCompare(modelLastMonth[b] || ''));
     if (agotados.length >= corteN) {
       const cutoffMonth = modelLastMonth[agotados[corteN - 1]];
