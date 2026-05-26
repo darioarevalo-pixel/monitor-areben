@@ -506,6 +506,7 @@
           <div style="display:flex;gap:6px;">
             <button class="btn-sm" onclick="fmSimCopiar('ambos')" title="Copia modelo y cantidad separados por tabulación">⎘ Modelo + Cantidad</button>
             <button class="btn-sm" onclick="fmSimCopiar('cantidad')" title="Copia solo las cantidades">⎘ Solo cantidad</button>
+            <button class="btn-sm" id="btn-sim-img" onclick="fmSimCopiarImagen()" title="Copia la tabla como imagen para pegar en WhatsApp" style="background:#25D366;color:#fff;">📷 Imagen</button>
           </div>
         </div>
       </div>
@@ -2039,6 +2040,90 @@ function fmSimCopiar(modo) {
     const btns = document.querySelectorAll('#fm-sim-card .btn-sm');
     btns.forEach(b => { if (b.textContent.includes(modo === 'ambos' ? 'Modelo' : 'Solo')) { const orig = b.textContent; b.textContent = '✓ Copiado'; setTimeout(() => b.textContent = orig, 1500); } });
   });
+}
+
+function fmSimCopiarImagen() {
+  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
+  const rows = fmSimRows.filter(r => r.model).map(r => ({
+    model: r.model,
+    qty: Math.round(total * r.pct / 100),
+  }));
+  if (!rows.length) return;
+
+  const scale = 2;
+  const font = size => `${size * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  const pad = 16 * scale, rowH = 32 * scale, headerH = 36 * scale;
+  const colModel = 220 * scale, colQty = 80 * scale;
+  const w = colModel + colQty + pad * 2;
+  const h = headerH + rows.length * rowH + pad * 2 + 24 * scale;
+
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+
+  // Fondo
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  const r = 12 * scale;
+  ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.quadraticCurveTo(w, 0, w, r);
+  ctx.lineTo(w, h - r); ctx.quadraticCurveTo(w, h, w - r, h);
+  ctx.lineTo(r, h); ctx.quadraticCurveTo(0, h, 0, h - r);
+  ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.fill();
+
+  // Título
+  let y = pad;
+  ctx.fillStyle = '#888';
+  ctx.font = font(10);
+  ctx.fillText(`PEDIDO — ${total} unidades`, pad, y + 10 * scale);
+  y += 24 * scale;
+
+  // Header
+  ctx.fillStyle = '#F3F4F6';
+  ctx.fillRect(pad, y, w - pad * 2, headerH);
+  ctx.fillStyle = '#666';
+  ctx.font = `bold ${font(11)}`;
+  ctx.font = `bold ${11 * scale}px -apple-system, sans-serif`;
+  ctx.fillText('Modelo', pad + 10 * scale, y + headerH / 2 + 4 * scale);
+  ctx.fillText('Cant.', pad + colModel + 10 * scale, y + headerH / 2 + 4 * scale);
+  y += headerH;
+
+  // Filas
+  rows.forEach((row, i) => {
+    if (i % 2 === 1) {
+      ctx.fillStyle = '#F9FAFB';
+      ctx.fillRect(pad, y, w - pad * 2, rowH);
+    }
+    ctx.fillStyle = '#111';
+    ctx.font = font(12);
+    ctx.fillText(row.model, pad + 10 * scale, y + rowH / 2 + 5 * scale);
+    ctx.fillStyle = '#1F4E78';
+    ctx.font = `bold ${12 * scale}px -apple-system, sans-serif`;
+    ctx.fillText(String(row.qty), pad + colModel + 10 * scale, y + rowH / 2 + 5 * scale);
+    y += rowH;
+  });
+
+  // Línea total
+  y += 4 * scale;
+  ctx.fillStyle = '#888';
+  ctx.font = font(10);
+  const sumQty = rows.reduce((s, r) => s + r.qty, 0);
+  ctx.fillText(`Total: ${sumQty} unidades`, pad + 10 * scale, y + 10 * scale);
+
+  c.toBlob(blob => {
+    if (!blob) return;
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+      const btn = document.getElementById('btn-sim-img');
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copiado';
+      setTimeout(() => btn.textContent = orig, 1500);
+    }).catch(() => {
+      const link = document.createElement('a');
+      link.download = 'pedido.png';
+      link.href = c.toDataURL('image/png');
+      link.click();
+    });
+  }, 'image/png');
 }
 
 function fmRankRenderTabla() {
