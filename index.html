@@ -1138,24 +1138,24 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   window._mktChannelMap = null;
   const invByProduct = {};
   const invByVariant = {};
-  const _MODELS_LONGEST_FIRST = [
-    'iPhone 17 Pro Max','iPhone 16 Pro Max','iPhone 15 Pro Max','iPhone 14 Pro Max',
-    'iPhone 13 Pro Max','iPhone 12 Pro Max','iPhone 11 Pro Max',
-    'iPhone 17 Pro','iPhone 17 Air','iPhone 16 Plus','iPhone 16 Pro','iPhone 15 Plus',
-    'iPhone 15 Pro','iPhone 14 Plus','iPhone 14 Pro','iPhone 13 Mini','iPhone 13 Pro',
-    'iPhone 12 Mini','iPhone 12 Pro','iPhone 11 Pro',
-    'iPhone XS Max','iPhone 8 Plus','iPhone 7 Plus','iPhone 6s Plus','iPhone 6 Plus',
-    'iPhone SE 3','iPhone SE 2','iPhone SE',
-    'iPhone 17','iPhone 16e','iPhone 16','iPhone 15','iPhone 14','iPhone 13',
-    'iPhone 12','iPhone 11','iPhone XR','iPhone XS','iPhone X',
-    'iPhone 8','iPhone 7','iPhone 6s','iPhone 6',
-  ];
   function _matchModelo(sizeName) {
     if (!sizeName) return null;
-    const u = sizeName.toUpperCase();
-    for (const m of _MODELS_LONGEST_FIRST) {
-      if (u.includes(m.toUpperCase())) return m;
-    }
+    let s = sizeName.trim().replace(/^i?phone\s*/i, '');
+    s = s.split(' - ')[0].split('/')[0].trim().toLowerCase();
+    const RULES = [
+      [/^17 pro max/,'iPhone 17 Pro Max'],[/^17 air/,'iPhone 17 Air'],[/^17 pro/,'iPhone 17 Pro'],[/^17/,'iPhone 17'],
+      [/^16 pro max/,'iPhone 16 Pro Max'],[/^16 plus/,'iPhone 16 Plus'],[/^16 pro/,'iPhone 16 Pro'],[/^16e/,'iPhone 16e'],[/^16/,'iPhone 16'],
+      [/^15 pro max/,'iPhone 15 Pro Max'],[/^15 plus/,'iPhone 15 Plus'],[/^15 pro/,'iPhone 15 Pro'],[/^15/,'iPhone 15'],
+      [/^14 pro max/,'iPhone 14 Pro Max'],[/^14 plus/,'iPhone 14 Plus'],[/^14 pro/,'iPhone 14 Pro'],[/^14/,'iPhone 14'],
+      [/^13 pro max/,'iPhone 13 Pro Max'],[/^13 mini/,'iPhone 13 Mini'],[/^13 pro/,'iPhone 13 Pro'],[/^13/,'iPhone 13'],
+      [/^12 pro max/,'iPhone 12 Pro Max'],[/^12 mini/,'iPhone 12 Mini'],[/^12 pro/,'iPhone 12 Pro'],[/^12/,'iPhone 12'],
+      [/^11 pro max/,'iPhone 11 Pro Max'],[/^11 pro/,'iPhone 11 Pro'],[/^11/,'iPhone 11'],
+      [/^xs max/,'iPhone XS Max'],[/^xs/,'iPhone XS'],[/^xr/,'iPhone XR'],[/^x(\s|$)/,'iPhone X'],
+      [/^se 3/,'iPhone SE 3'],[/^se 2/,'iPhone SE 2'],[/^se/,'iPhone SE'],
+      [/^8 plus/,'iPhone 8 Plus'],[/^8/,'iPhone 8'],[/^7 plus/,'iPhone 7 Plus'],[/^7/,'iPhone 7'],
+      [/^6s plus/,'iPhone 6s Plus'],[/^6s/,'iPhone 6s'],[/^6 plus/,'iPhone 6 Plus'],[/^6/,'iPhone 6'],
+    ];
+    for (const [re, name] of RULES) { if (re.test(s)) return name; }
     return null;
   }
   const invByProdModelo = {};
