@@ -2150,7 +2150,12 @@ function renderFundasPorModelo() {
     corteDisEl.innerHTML = [...checkedProds].sort((a, b) => a.localeCompare(b, 'es')).map(p =>
       `<option value="${esc(p)}">${esc(p)}</option>`
     ).join('');
-    if (prev && checkedProds.has(prev)) corteDisEl.value = prev;
+    if (prev && checkedProds.has(prev)) {
+      corteDisEl.value = prev;
+    } else {
+      const wc = [...checkedProds].find(p => p.toLowerCase().includes('wave case'));
+      if (wc) corteDisEl.value = wc;
+    }
   }
 
   // ── Corte por agotamiento (por diseño) ──
