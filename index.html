@@ -406,7 +406,21 @@
         <select id="fm-hasta" onchange="renderFundasPorModelo()"></select>
         <button class="btn-sm" onclick="toggleModelosPanel()">Modelos ▾</button>
         <button class="btn-sm" onclick="toggleProdsPanel()">Fundas ▾</button>
+        <span style="border-left:1.5px solid #E5E7EB;height:20px;margin:0 2px;"></span>
+        <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" id="fm-corte-enabled" onchange="renderFundasPorModelo()">
+          Cortar al agotarse
+        </label>
+        <select id="fm-corte-n" onchange="if(document.getElementById('fm-corte-enabled').checked)renderFundasPorModelo()" style="width:48px;">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+        </select>
+        <span style="font-size:12px;color:#666;">modelos</span>
       </div>
+      <div id="fm-corte-info" style="font-size:11px;color:#888;padding:2px 0 4px;display:none;"></div>
       <div id="fm-modelos-panel" class="fm-models-panel" style="display:none;">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
           <strong style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;">Modelos de iPhone</strong>
@@ -1131,6 +1145,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     invByProduct[pid] = (invByProduct[pid] || 0) + qty;
     invByVariant[vid] = (invByVariant[vid] || 0) + qty;
   });
+  window._invByProduct = invByProduct;
 
   function normalizeCat(cat) {
     if (!cat) return 'SIN CATEGORÍA';
@@ -1212,15 +1227,19 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   // Fundas por modelo desde vista materializada (clave compuesta modelo|||product_name)
   const fStats = {};
   const fProdCreatedAt = {};
+  const fKeyPids = {};
   (vmFundas || []).forEach(row => {
     if (!row.modelo) return;
     if (!fStats[row.mes]) fStats[row.mes] = {};
     const key = row.modelo + '|||' + (row.product_name || 'Sin nombre');
     fStats[row.mes][key] = (fStats[row.mes][key] || 0) + (Number(row.total_items) || 0);
+    if (!fKeyPids[key]) fKeyPids[key] = new Set();
+    fKeyPids[key].add(String(row.product_id));
     if (row.product_created_at && row.product_name && !fProdCreatedAt[row.product_name]) {
       fProdCreatedAt[row.product_name] = row.product_created_at.substring(0, 10);
     }
   });
+  window._fmKeyPids = fKeyPids;
   window._fmProdCreatedAt = fProdCreatedAt;
 
   allProductos = (productos || []).map(p => {
@@ -1858,6 +1877,31 @@ function initFundasSelectors() {
     </label>`).join('');
 
   rebuildFundaProds(true);
+
+  // Defaults: Wave Case + modelos principales + corte activado
+  const defaultModels = new Set([
+    'iPhone 13', 'iPhone 14', 'iPhone 15',
+    'iPhone 16', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
+  ]);
+  document.querySelectorAll('.fm-model-cb').forEach(cb => {
+    cb.checked = defaultModels.has(cb.value);
+  });
+  const wcFirst = Object.entries(prodFirstMes)
+    .filter(([n]) => n.toLowerCase().includes('wave case'))
+    .map(([, m]) => m).sort()[0];
+  if (wcFirst) {
+    document.querySelectorAll('.fm-prod-cb').forEach(cb => {
+      const mes = prodFirstMes[cb.value];
+      cb.checked = mes && mes >= wcFirst;
+    });
+  }
+  if (wcFirst) {
+    const desdeEl = document.getElementById('fm-desde');
+    if ([...desdeEl.options].some(o => o.value === wcFirst)) desdeEl.value = wcFirst;
+  }
+  const corteCheck = document.getElementById('fm-corte-enabled');
+  if (corteCheck) corteCheck.checked = true;
 }
 
 function rebuildFundaProds(init = false) {
@@ -2059,7 +2103,7 @@ function renderFundasPorModelo() {
 
   // Rango en orden cronológico
   const [rangeStart, rangeEnd] = [desde, hasta].sort();
-  const rangeMonths = allMonths.filter(m => m >= rangeStart && m <= rangeEnd);
+  let rangeMonths = allMonths.filter(m => m >= rangeStart && m <= rangeEnd);
 
   // Modelos seleccionados
   const modelCbs = [...document.querySelectorAll('.fm-model-cb')];
@@ -2070,6 +2114,54 @@ function renderFundasPorModelo() {
   const prodCbs = [...document.querySelectorAll('.fm-prod-cb')];
   const checkedProds = new Set(prodCbs.filter(cb => cb.checked).map(cb => cb.value));
   const prodFilterActive = checkedProds.size < prodCbs.length;
+
+  // ── Corte por agotamiento ──
+  const corteEl = document.getElementById('fm-corte-info');
+  const corteEnabled = document.getElementById('fm-corte-enabled')?.checked;
+  if (corteEnabled) {
+    const corteN = parseInt(document.getElementById('fm-corte-n')?.value) || 3;
+    const keyPids = window._fmKeyPids || {};
+    const inv = window._invByProduct || {};
+    const modelStock = {};
+    checkedModels.forEach(m => { modelStock[m] = 0; });
+    Object.entries(keyPids).forEach(([key, pids]) => {
+      const sep = key.indexOf('|||');
+      const km = key.slice(0, sep);
+      const kp = key.slice(sep + 3);
+      if (!checkedModels.has(km)) return;
+      if (prodFilterActive && !checkedProds.has(kp)) return;
+      pids.forEach(pid => { modelStock[km] += inv[pid] || 0; });
+    });
+    const modelLastMonth = {};
+    rangeMonths.forEach(m => {
+      if (!allFundasStats[m]) return;
+      Object.entries(allFundasStats[m]).forEach(([key, qty]) => {
+        const sep = key.indexOf('|||');
+        const model = key.slice(0, sep);
+        const prod = key.slice(sep + 3);
+        if (!checkedModels.has(model)) return;
+        if (prodFilterActive && !checkedProds.has(prod)) return;
+        if (!modelLastMonth[model] || m > modelLastMonth[model]) modelLastMonth[model] = m;
+      });
+    });
+    const agotados = [...checkedModels]
+      .filter(m => modelStock[m] === 0 && modelLastMonth[m])
+      .sort((a, b) => (modelLastMonth[a] || '').localeCompare(modelLastMonth[b] || ''));
+    if (agotados.length >= corteN) {
+      const cutoffMonth = modelLastMonth[agotados[corteN - 1]];
+      rangeMonths = rangeMonths.filter(m => m <= cutoffMonth);
+      const nombres = agotados.slice(0, corteN).join(', ');
+      corteEl.innerHTML = `✂ Corte en <b>${fmMonthLabel(cutoffMonth)}</b> — ${corteN} modelos agotados: ${nombres}`;
+      corteEl.style.display = '';
+    } else {
+      corteEl.textContent = agotados.length === 0
+        ? 'Ningún modelo agotado en la selección — sin corte'
+        : `Solo ${agotados.length} modelo${agotados.length > 1 ? 's' : ''} agotado${agotados.length > 1 ? 's' : ''} de ${corteN} — sin corte`;
+      corteEl.style.display = '';
+    }
+  } else if (corteEl) {
+    corteEl.style.display = 'none';
+  }
 
   // Agregar datos del rango, filtrando por modelo y producto
   const data = {};
@@ -2089,9 +2181,11 @@ function renderFundasPorModelo() {
   const total = sorted.reduce((s, [, q]) => s + q, 0);
   const top = sorted.slice(0, 20);
 
-  const rangeLabel = rangeStart === rangeEnd
-    ? fmMonthLabel(rangeStart)
-    : `${fmMonthLabel(rangeStart)} – ${fmMonthLabel(rangeEnd)}`;
+  const effStart = rangeMonths.length ? rangeMonths[0] : rangeStart;
+  const effEnd = rangeMonths.length ? rangeMonths[rangeMonths.length - 1] : rangeEnd;
+  const rangeLabel = effStart === effEnd
+    ? fmMonthLabel(effStart)
+    : `${fmMonthLabel(effStart)} – ${fmMonthLabel(effEnd)}`;
 
   // Gráfico
   const wrap = document.getElementById('fm-chart-wrap');
@@ -3217,6 +3311,7 @@ document.addEventListener('keydown', e => {
 function cambiarEmpresa(empresaKey) {
   currentCuenta = CUENTAS[empresaKey];
   saveSession();
+  renderUserInfo();
   aplicarVisibilidadTabs();
   updateProveedoresTab();
   updateColoresTab();
