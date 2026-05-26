@@ -418,7 +418,8 @@
           <option value="5">5</option>
           <option value="10">10</option>
         </select>
-        <span style="font-size:12px;color:#666;">modelos</span>
+        <span style="font-size:12px;color:#666;">modelos de</span>
+        <select id="fm-corte-diseno" onchange="if(document.getElementById('fm-corte-enabled').checked)renderFundasPorModelo()" style="max-width:200px;font-size:12px;"></select>
       </div>
       <div id="fm-corte-info" style="font-size:11px;color:#888;padding:2px 0 4px;display:none;"></div>
       <div id="fm-modelos-panel" class="fm-models-panel" style="display:none;">
@@ -2142,27 +2143,33 @@ function renderFundasPorModelo() {
   const checkedProds = new Set(prodCbs.filter(cb => cb.checked).map(cb => cb.value));
   const prodFilterActive = checkedProds.size < prodCbs.length;
 
-  // ── Corte por agotamiento ──
+  // ── Poblar dropdown de diseño para corte ──
+  const corteDisEl = document.getElementById('fm-corte-diseno');
+  if (corteDisEl) {
+    const prev = corteDisEl.value;
+    corteDisEl.innerHTML = [...checkedProds].sort((a, b) => a.localeCompare(b, 'es')).map(p =>
+      `<option value="${esc(p)}">${esc(p)}</option>`
+    ).join('');
+    if (prev && checkedProds.has(prev)) corteDisEl.value = prev;
+  }
+
+  // ── Corte por agotamiento (por diseño) ──
   const corteEl = document.getElementById('fm-corte-info');
   const corteEnabled = document.getElementById('fm-corte-enabled')?.checked;
-  if (corteEnabled && rangeMonths.length > 1) {
+  const corteDiseno = corteDisEl?.value;
+  if (corteEnabled && corteDiseno && rangeMonths.length > 1) {
     const corteN = parseInt(document.getElementById('fm-corte-n')?.value) || 3;
     const keyPids = window._fmKeyPids || {};
     const invPM = window._invByProdModelo || {};
-    // Stock actual por modelo (a nivel variante, no producto)
+    // Stock actual por modelo SOLO para el diseño elegido
     const modelStock = {};
     checkedModels.forEach(model => {
       let stock = 0;
-      Object.entries(keyPids).forEach(([key, pids]) => {
-        const sep = key.indexOf('|||');
-        if (key.slice(0, sep) !== model) return;
-        const kp = key.slice(sep + 3);
-        if (prodFilterActive && !checkedProds.has(kp)) return;
-        pids.forEach(pid => { stock += invPM[pid + '|||' + model] || 0; });
-      });
+      const pids = keyPids[model + '|||' + corteDiseno];
+      if (pids) pids.forEach(pid => { stock += invPM[pid + '|||' + model] || 0; });
       modelStock[model] = stock;
     });
-    // Último mes con ventas por modelo (para saber cuándo se agotó)
+    // Último mes con ventas por modelo para ese diseño
     const modelLastMonth = {};
     rangeMonths.forEach(m => {
       if (!allFundasStats[m]) return;
@@ -2170,12 +2177,12 @@ function renderFundasPorModelo() {
         const sep = key.indexOf('|||');
         const model = key.slice(0, sep);
         const prod = key.slice(sep + 3);
+        if (prod !== corteDiseno) return;
         if (!checkedModels.has(model)) return;
-        if (prodFilterActive && !checkedProds.has(prod)) return;
         if (!modelLastMonth[model] || m > modelLastMonth[model]) modelLastMonth[model] = m;
       });
     });
-    // Agotado = stock actual 0 + tuvo ventas en el rango
+    // Agotado = stock 0 de ese diseño + tuvo ventas en el rango
     const agotados = [...checkedModels]
       .filter(m => modelStock[m] === 0 && modelLastMonth[m])
       .sort((a, b) => (modelLastMonth[a] || '').localeCompare(modelLastMonth[b] || ''));
@@ -2183,12 +2190,12 @@ function renderFundasPorModelo() {
       const cutoffMonth = modelLastMonth[agotados[corteN - 1]];
       rangeMonths = rangeMonths.filter(m => m <= cutoffMonth);
       const nombres = agotados.slice(0, corteN).join(', ');
-      corteEl.innerHTML = `✂ Corte en <b>${fmMonthLabel(cutoffMonth)}</b> — ${corteN} modelos agotados: ${nombres}`;
+      corteEl.innerHTML = `✂ Corte en <b>${fmMonthLabel(cutoffMonth)}</b> — ${corteN} modelos de <b>${esc(corteDiseno)}</b> agotados: ${nombres}`;
       corteEl.style.display = '';
     } else {
       corteEl.textContent = agotados.length === 0
-        ? 'Ningún modelo agotado en la selección — sin corte'
-        : `Solo ${agotados.length} modelo${agotados.length > 1 ? 's' : ''} agotado${agotados.length > 1 ? 's' : ''} de ${corteN} — sin corte`;
+        ? `Ningún modelo agotado de ${corteDiseno} — sin corte`
+        : `Solo ${agotados.length} modelo${agotados.length > 1 ? 's' : ''} agotado${agotados.length > 1 ? 's' : ''} de ${corteDiseno} (de ${corteN} requeridos) — sin corte`;
       corteEl.style.display = '';
     }
   } else if (corteEl) {
