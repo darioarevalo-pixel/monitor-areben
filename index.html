@@ -483,8 +483,12 @@
         <div id="fm-dem-split" style="font-size:12px;color:#444;margin-bottom:12px;"></div>
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap;font-size:12px;color:#666;">
           <span>Método:</span>
-          <label style="cursor:pointer;"><input type="radio" name="fm-dem-metric" value="vol" checked onchange="fmDemandaRender()"> Volumen <span style="color:#9CA3AF;">(recomendado)</span></label>
-          <label style="cursor:pointer;"><input type="radio" name="fm-dem-metric" value="vel" onchange="fmDemandaRender()"> Velocidad <span style="color:#9CA3AF;">(ojo: se infla con stock chico)</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="fm-dem-metric" value="aj" checked onchange="fmDemandaRender()"> Ajustado por agotamiento <span style="color:#9CA3AF;">(recomendado)</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="fm-dem-metric" value="vol" onchange="fmDemandaRender()"> Volumen <span style="color:#9CA3AF;">(crudo)</span></label>
+          <span id="fm-dem-cap-row" style="display:flex;align-items:center;gap:6px;">
+            <span style="color:#9CA3AF;">·</span> Tope del empujón ×
+            <input type="number" id="fm-dem-cap" value="2.5" min="1" max="5" step="0.5" onchange="fmDemandaRender()" style="width:54px;text-align:center;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;">
+          </span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
           <span style="font-size:12px;color:#666;">Peso de cada canal en la combinada:</span>
@@ -501,7 +505,7 @@
           <tbody id="fm-dem-tbody"></tbody>
         </table>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:11px;color:#9CA3AF;max-width:58%;"><b>Volumen</b>: unidades vendidas (lo que se movió de verdad). <b>Velocidad</b>: ritmo mientras hubo stock — corrige agotamientos pero se infla con stock chico. Solo diseños lanzados desde la fecha elegida; la combinada pondera los canales según el peso de arriba.</div>
+          <div style="font-size:11px;color:#9CA3AF;max-width:58%;"><b>Ajustado</b>: volumen vendido + un empujón a los modelos que se agotaron (porque habrían vendido más), capado por el tope para que el stock chico no se dispare. <b>Volumen</b>: unidades crudas. Solo diseños lanzados desde la fecha elegida; la combinada pondera los canales según el peso de arriba.</div>
           <button class="btn-sm" onclick="fmDemandaUsar()" style="background:#378ADD;color:#fff;">↓ Usar la combinada en la simulación</button>
         </div>
       </div>
@@ -2160,7 +2164,8 @@ let _fmDemandaCache = null; // último cálculo (para "usar en simulación")
 
 // Proporción por modelo separada por canal, usando velocidad (unidades ÷ días con stock),
 // solo sobre diseños de funda lanzados desde 'cutoff'.
-function fmDemandaPorModelo(cutoff) {
+function fmDemandaPorModelo(cutoff, K) {
+  K = K > 1 ? K : 2.5; // tope del empujón a los modelos agotados
   const ventas   = window.allVentas || [];
   const detalles = window.allDetalles || [];
   const invPM    = window._invByProdModelo || {};
@@ -2201,40 +2206,40 @@ function fmDemandaPorModelo(cutoff) {
     if (!acc[k].last || si.fecha > acc[k].last) acc[k].last = si.fecha;
   });
 
-  // Velocidad acumulada (pooled) por modelo: unidades ÷ días con stock
+  // Por (diseño, modelo): unidades crudas + "empujón por agotamiento" capado.
+  // empujón = cuánto más habría vendido si seguía en stock todo el período (capado a K).
   const perModel = {};
   Object.values(acc).forEach(a => {
-    const created = prodOk[a.pid];
+    const cr = new Date(prodOk[a.pid]);
     const stock = invPM[a.pid + '|||' + a.model] || 0;
-    const end = stock > 0 ? hoy : new Date(a.last);
-    let days = (end - new Date(created)) / 86400000;
-    days = Math.max(7, days || 0); // piso de 1 semana (evita ritmos disparados por agotarse el día 1)
-    if (!perModel[a.model]) perModel[a.model] = { umin: 0, umay: 0, days: 0 };
-    perModel[a.model].umin += a.umin;
-    perModel[a.model].umay += a.umay;
-    perModel[a.model].days += days;
+    const end = stock > 0 ? hoy : new Date(a.last);     // si hay stock, tuvo toda la oportunidad
+    const dStock = Math.max(7, (end - cr) / 86400000 || 0);
+    const dTot   = Math.max(dStock, (hoy - cr) / 86400000 || 0);
+    const up = Math.min(K, Math.max(1, dTot / dStock)); // 1 si no se agotó; >1 si se agotó antes (capado)
+    if (!perModel[a.model]) perModel[a.model] = { umin: 0, umay: 0, ajmin: 0, ajmay: 0 };
+    perModel[a.model].umin  += a.umin;
+    perModel[a.model].umay  += a.umay;
+    perModel[a.model].ajmin += a.umin * up;
+    perModel[a.model].ajmay += a.umay * up;
   });
 
   const models = Object.keys(perModel);
-  let sumVelMin = 0, sumVelMay = 0, totMin = 0, totMay = 0;
-  const velMin = {}, velMay = {};
+  let totMin = 0, totMay = 0, totAjMin = 0, totAjMay = 0;
   models.forEach(m => {
-    velMin[m] = perModel[m].umin / perModel[m].days;
-    velMay[m] = perModel[m].umay / perModel[m].days;
-    sumVelMin += velMin[m]; sumVelMay += velMay[m];
     totMin += perModel[m].umin; totMay += perModel[m].umay;
+    totAjMin += perModel[m].ajmin; totAjMay += perModel[m].ajmay;
   });
 
   const rows = models.map(m => ({
     model: m,
     umin: perModel[m].umin,
     umay: perModel[m].umay,
-    // proporción por VOLUMEN (unidades vendidas) — recomendada para comprar
+    // proporción por VOLUMEN (unidades vendidas tal cual)
     volMin: totMin > 0 ? perModel[m].umin / totMin * 100 : 0,
     volMay: totMay > 0 ? perModel[m].umay / totMay * 100 : 0,
-    // proporción por VELOCIDAD (ritmo mientras hubo stock) — lente secundaria
-    velMin: sumVelMin > 0 ? velMin[m] / sumVelMin * 100 : 0,
-    velMay: sumVelMay > 0 ? velMay[m] / sumVelMay * 100 : 0,
+    // proporción AJUSTADA por agotamiento (volumen + empujón capado) — recomendada
+    ajMin: totAjMin > 0 ? perModel[m].ajmin / totAjMin * 100 : 0,
+    ajMay: totAjMay > 0 ? perModel[m].ajmay / totAjMay * 100 : 0,
   }));
 
   const totalU = totMin + totMay;
@@ -2246,7 +2251,8 @@ function fmDemandaRender() {
   const card = document.getElementById('fm-demanda-card');
   if (!card) return;
   const cutoff = document.getElementById('fm-dem-cutoff')?.value || '2026-01-01';
-  const calc = fmDemandaPorModelo(cutoff);
+  const K = parseFloat(document.getElementById('fm-dem-cap')?.value) || 2.5;
+  const calc = fmDemandaPorModelo(cutoff, K);
 
   // Peso del minorista en la combinada: si el usuario no lo tocó, usar el real
   const slider = document.getElementById('fm-dem-wmin');
@@ -2255,9 +2261,11 @@ function fmDemandaRender() {
   const wl = document.getElementById('fm-dem-wlabel');
   if (wl) wl.textContent = `Minorista ${Math.round(wMin * 100)}% · Mayorista ${Math.round((1 - wMin) * 100)}%`;
 
-  // Métrica elegida: volumen (recomendada) o velocidad (lente secundaria)
-  const metric = (document.querySelector('input[name="fm-dem-metric"]:checked') || {}).value || 'vol';
-  const pick = r => metric === 'vel' ? { min: r.velMin, may: r.velMay } : { min: r.volMin, may: r.volMay };
+  // Método: ajustado por agotamiento (recomendado) o volumen crudo
+  const metric = (document.querySelector('input[name="fm-dem-metric"]:checked') || {}).value || 'aj';
+  const pick = r => metric === 'vol' ? { min: r.volMin, may: r.volMay } : { min: r.ajMin, may: r.ajMay };
+  const capRow = document.getElementById('fm-dem-cap-row');
+  if (capRow) capRow.style.display = metric === 'aj' ? '' : 'none';
 
   const rows = calc.rows
     .map(r => { const p = pick(r); return { model: r.model, pMin: p.min, pMay: p.may, pComb: wMin * p.min + (1 - wMin) * p.may }; })
