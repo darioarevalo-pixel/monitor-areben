@@ -482,6 +482,22 @@
           </div>
         </div>
 
+        <!-- Separar por variantes (color o diseño) -->
+        <div style="margin-bottom:14px;padding:10px 12px;background:#F9FAFB;border:1px solid #EEF0F2;border-radius:10px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#444;cursor:pointer;">
+            <input type="checkbox" id="fm-sim-var-toggle" onchange="fmSimToggleVar()">
+            Separar cada modelo por variantes (color o diseño)
+          </label>
+          <div id="fm-sim-var-editor" style="display:none;margin-top:10px;">
+            <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;">Definí las variantes (ej: <b>Negro</b> / <b>Blanco</b>, o <b>Serpiente</b> / <b>Flores</b>) y qué % del pedido va a cada una. Tienen que sumar 100%.</div>
+            <div id="fm-sim-var-rows" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:8px;">
+              <button onclick="fmSimVarAgregar()" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar variante</button>
+              <span id="fm-sim-var-sum" style="font-size:12px;font-weight:600;"></span>
+            </div>
+          </div>
+        </div>
+
         <table id="fm-sim-table" style="width:100%;">
           <thead><tr>
             <th>Modelo</th>
@@ -2060,31 +2076,78 @@ function toggleProdsPanel() {
 
 // ── Simulación de pedido ──────────────────────────────────────────────────────
 let fmSimRows = [];
+let fmSimVars = [];        // [{ name, pct }] — variantes (color o diseño) definidas a mano
+let fmSimVarOn = false;    // si está activo el desglose por variantes
 
+// ¿Está activo el modo variantes y hay al menos una variante definida?
+function fmSimVarActivo() {
+  return fmSimVarOn && fmSimVars.length > 0;
+}
 
+// Reparte 'total' en enteros según 'pcts' (que suman ~100), sin perder ni inventar
+// unidades: usa el método del resto mayor para que la suma dé exactamente 'total'.
+function fmSimRepartir(total, pcts) {
+  const crudos = pcts.map(p => total * p / 100);
+  const base = crudos.map(Math.floor);
+  let resto = total - base.reduce((a, b) => a + b, 0);
+  const orden = crudos.map((v, i) => ({ i, frac: v - Math.floor(v) }))
+                      .sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < resto && k < orden.length; k++) base[orden[k].i]++;
+  return base;
+}
 
 function fmSimRender() {
-  document.getElementById('fm-sim-tbody').innerHTML = fmSimRows.map((r, i) => `
-    <tr>
-      <td>
-        <input value="${esc(r.model)}" onchange="fmSimRows[${i}].model=this.value"
-          style="width:100%;border:none;background:transparent;font-size:13px;padding:4px 0;">
-      </td>
-      <td style="text-align:center;">
-        <input type="number" value="${r.pct.toFixed(1)}" min="0" max="100" step="0.1"
-          oninput="fmSimRows[${i}].pct=parseFloat(this.value)||0;fmSimRecalc()"
-          style="width:75px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;">
-      </td>
-      <td style="text-align:center;font-weight:600;font-size:13px;" id="fm-sim-qty-${i}">—</td>
-      <td style="text-align:center;">
-        <button onclick="fmSimEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
-      </td>
-    </tr>`).join('');
+  const table = document.getElementById('fm-sim-table');
+  if (!table) return;
+  const varOn = fmSimVarActivo();
+  const vars = fmSimVars;
+
+  // ── Encabezado ──
+  let thead;
+  if (varOn) {
+    const varTh = vars.map((v, j) => `<th style="text-align:center;min-width:62px;">${esc(v.name || ('Var ' + (j + 1)))}</th>`).join('');
+    thead = `<tr><th>Modelo</th><th style="width:88px;text-align:center;">% pedido</th><th style="width:64px;text-align:center;">Cant.</th>${varTh}<th style="width:36px;"></th></tr>`;
+  } else {
+    thead = `<tr><th>Modelo</th><th style="width:110px;text-align:center;">% del pedido</th><th style="width:110px;text-align:center;">Cantidad</th><th style="width:40px;"></th></tr>`;
+  }
+
+  // ── Filas ──
+  const body = fmSimRows.map((r, i) => {
+    const modelInput = `<input value="${esc(r.model)}" onchange="fmSimRows[${i}].model=this.value"
+        style="width:100%;border:none;background:transparent;font-size:13px;padding:4px 0;">`;
+    const pctInput = `<input type="number" value="${r.pct.toFixed(1)}" min="0" max="100" step="0.1"
+        oninput="fmSimRows[${i}].pct=parseFloat(this.value)||0;fmSimRecalc()"
+        style="width:75px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;">`;
+    const del = `<button onclick="fmSimEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>`;
+    const qtyCell = `<td style="text-align:center;font-weight:600;font-size:13px;" id="fm-sim-qty-${i}">—</td>`;
+    if (varOn) {
+      const varCells = vars.map((v, j) => `<td style="text-align:center;font-size:13px;color:#1F4E78;" id="fm-sim-qty-${i}-${j}">—</td>`).join('');
+      return `<tr><td>${modelInput}</td><td style="text-align:center;">${pctInput}</td>${qtyCell}${varCells}<td style="text-align:center;">${del}</td></tr>`;
+    }
+    return `<tr><td>${modelInput}</td><td style="text-align:center;">${pctInput}</td>${qtyCell}<td style="text-align:center;">${del}</td></tr>`;
+  }).join('');
+
+  // ── Pie con totales ──
+  const addBtn = `<button onclick="fmSimAgregarFila()" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo</button>`;
+  let foot;
+  if (varOn) {
+    const varTot = vars.map((v, j) => `<td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-vtot-${j}">0</td>`).join('');
+    foot = `<tr style="background:#F9FAFB;"><td style="font-weight:600;font-size:12px;padding:8px 12px;">${addBtn}</td><td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-pct-total">0%</td><td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-qty-total">0</td>${varTot}<td></td></tr>`;
+  } else {
+    foot = `<tr style="background:#F9FAFB;"><td style="font-weight:600;font-size:12px;padding:8px 12px;">${addBtn}</td><td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-pct-total">0%</td><td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-qty-total">0</td><td></td></tr>`;
+  }
+
+  table.innerHTML = `<thead>${thead}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot>`;
   fmSimRecalc();
 }
 
 function fmSimRecalc() {
   const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
+  const varOn = fmSimVarActivo();
+  const vpcts = fmSimVars.map(v => v.pct);
+  const vExact = Math.abs(vpcts.reduce((a, b) => a + b, 0) - 100) < 0.05;
+  const vcolTot = fmSimVars.map(() => 0);
+
   let sumPct = 0, sumQty = 0;
   fmSimRows.forEach((r, i) => {
     const qty = Math.round(total * r.pct / 100);
@@ -2092,9 +2155,21 @@ function fmSimRecalc() {
     if (el) el.textContent = qty;
     sumPct += r.pct;
     sumQty += qty;
+    if (varOn) {
+      const parts = vExact ? fmSimRepartir(qty, vpcts) : vpcts.map(p => Math.round(qty * p / 100));
+      parts.forEach((q, j) => {
+        const c = document.getElementById(`fm-sim-qty-${i}-${j}`);
+        if (c) c.textContent = q;
+        vcolTot[j] += q;
+      });
+    }
   });
   document.getElementById('fm-sim-pct-total').textContent = sumPct.toFixed(1) + '%';
   document.getElementById('fm-sim-qty-total').textContent = sumQty;
+  if (varOn) vcolTot.forEach((t, j) => {
+    const el = document.getElementById(`fm-sim-vtot-${j}`);
+    if (el) el.textContent = t;
+  });
 }
 
 function fmSimAgregarFila() {
@@ -2107,13 +2182,90 @@ function fmSimEliminar(i) {
   fmSimRender();
 }
 
-function fmSimCopiar(modo) {
+// ── Variantes (color o diseño) ──────────────────────────────────────────────
+
+function fmSimToggleVar() {
+  fmSimVarOn = document.getElementById('fm-sim-var-toggle').checked;
+  document.getElementById('fm-sim-var-editor').style.display = fmSimVarOn ? '' : 'none';
+  if (fmSimVarOn && fmSimVars.length === 0) {
+    fmSimVars = [{ name: '', pct: 0 }, { name: '', pct: 0 }];
+    fmSimVarRender();
+  }
+  fmSimRender();
+}
+
+function fmSimVarAgregar() {
+  fmSimVars.push({ name: '', pct: 0 });
+  fmSimVarRender();
+  fmSimRender();
+}
+
+function fmSimVarEliminar(i) {
+  fmSimVars.splice(i, 1);
+  fmSimVarRender();
+  fmSimRender();
+}
+
+// Solo actualiza el indicador de suma (no re-dibuja las filas, así no pierde el foco al tipear)
+function fmSimVarSum() {
+  const el = document.getElementById('fm-sim-var-sum');
+  if (!el) return;
+  const sum = fmSimVars.reduce((a, v) => a + (v.pct || 0), 0);
+  const ok = Math.abs(sum - 100) < 0.05;
+  let txt = `Σ ${sum.toFixed(1)}%`;
+  if (ok) txt += ' ✓';
+  else if (sum < 100) txt += ` — falta ${(100 - sum).toFixed(1)}%`;
+  else txt += ` — sobra ${(sum - 100).toFixed(1)}%`;
+  el.textContent = txt;
+  el.style.color = ok ? '#16A34A' : '#DC2626';
+}
+
+function fmSimVarRender() {
+  const cont = document.getElementById('fm-sim-var-rows');
+  if (!cont) return;
+  cont.innerHTML = fmSimVars.map((v, i) => `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input value="${esc(v.name)}" placeholder="Variante ${i + 1} (ej: Negro, Serpiente...)"
+        onchange="fmSimVars[${i}].name=this.value;fmSimRender()"
+        style="flex:1;max-width:260px;padding:5px 8px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;">
+      <input type="number" min="0" max="100" step="0.1" value="${v.pct}"
+        oninput="fmSimVars[${i}].pct=parseFloat(this.value)||0;fmSimVarSum();fmSimRecalc()"
+        style="width:70px;text-align:center;padding:5px 6px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;">
+      <span style="font-size:12px;color:#888;">%</span>
+      <button onclick="fmSimVarEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
+    </div>`).join('');
+  fmSimVarSum();
+}
+
+// Devuelve las filas calculadas (con desglose por variante si está activo)
+function fmSimComputed() {
   const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
-  const lines = fmSimRows.map(r => {
+  const varOn = fmSimVarActivo();
+  const vpcts = fmSimVars.map(v => v.pct);
+  const vExact = Math.abs(vpcts.reduce((a, b) => a + b, 0) - 100) < 0.05;
+  return fmSimRows.filter(r => r.model).map(r => {
     const qty = Math.round(total * r.pct / 100);
-    return modo === 'ambos' ? `${r.model}\t${qty}` : `${qty}`;
+    const parts = varOn ? (vExact ? fmSimRepartir(qty, vpcts) : vpcts.map(p => Math.round(qty * p / 100))) : null;
+    return { model: r.model, qty, parts };
   });
-  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+}
+
+function fmSimCopiar(modo) {
+  const varOn = fmSimVarActivo();
+  const rows = fmSimComputed();
+  let text;
+  if (varOn) {
+    const names = fmSimVars.map((v, j) => v.name || ('Var ' + (j + 1)));
+    if (modo === 'ambos') {
+      const header = ['Modelo', ...names].join('\t');
+      text = [header, ...rows.map(r => [r.model, ...r.parts].join('\t'))].join('\n');
+    } else {
+      text = rows.map(r => r.parts.join('\t')).join('\n');
+    }
+  } else {
+    text = rows.map(r => modo === 'ambos' ? `${r.model}\t${r.qty}` : `${r.qty}`).join('\n');
+  }
+  navigator.clipboard.writeText(text).then(() => {
     const btns = document.querySelectorAll('#fm-sim-card .btn-sm');
     btns.forEach(b => { if (b.textContent.includes(modo === 'ambos' ? 'Modelo' : 'Solo')) { const orig = b.textContent; b.textContent = '✓ Copiado'; setTimeout(() => b.textContent = orig, 1500); } });
   });
@@ -2121,18 +2273,28 @@ function fmSimCopiar(modo) {
 
 function fmSimCopiarImagen() {
   const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
-  const rows = fmSimRows.filter(r => r.model).map(r => ({
-    model: r.model,
-    qty: Math.round(total * r.pct / 100),
-  }));
-  if (!rows.length) return;
+  const varOn = fmSimVarActivo();
+  const data = fmSimComputed();
+  if (!data.length) return;
+
+  // Columnas numéricas: una por variante + "Total", o una sola "Cant."
+  const numCols = varOn
+    ? [...fmSimVars.map((v, j) => v.name || ('Var ' + (j + 1))), 'Total']
+    : ['Cant.'];
+  const cellVal = (row, k) => {
+    if (!varOn) return row.qty;
+    return k < row.parts.length ? row.parts[k] : row.qty; // última col = Total
+  };
+  const colTotals = numCols.map((_, k) => data.reduce((s, row) => s + cellVal(row, k), 0));
 
   const scale = 2;
-  const font = size => `${size * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  const font  = size => `${size * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  const fontB = size => `bold ${size * scale}px -apple-system, sans-serif`;
   const pad = 16 * scale, rowH = 32 * scale, headerH = 36 * scale;
-  const colModel = 220 * scale, colQty = 80 * scale;
-  const w = colModel + colQty + pad * 2;
-  const h = headerH + rows.length * rowH + pad * 2 + 24 * scale;
+  const colModel = 180 * scale, colNum = 72 * scale;
+  const w = pad * 2 + colModel + numCols.length * colNum;
+  const h = headerH + (data.length + 1) * rowH + pad * 2 + 24 * scale;
+  const numX = k => pad + colModel + k * colNum + colNum / 2;
 
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -2152,6 +2314,7 @@ function fmSimCopiarImagen() {
   let y = pad;
   ctx.fillStyle = '#888';
   ctx.font = font(10);
+  ctx.textAlign = 'left';
   ctx.fillText(`PEDIDO — ${total} unidades`, pad, y + 10 * scale);
   y += 24 * scale;
 
@@ -2159,33 +2322,38 @@ function fmSimCopiarImagen() {
   ctx.fillStyle = '#F3F4F6';
   ctx.fillRect(pad, y, w - pad * 2, headerH);
   ctx.fillStyle = '#666';
-  ctx.font = `bold ${font(11)}`;
-  ctx.font = `bold ${11 * scale}px -apple-system, sans-serif`;
+  ctx.font = fontB(11);
   ctx.fillText('Modelo', pad + 10 * scale, y + headerH / 2 + 4 * scale);
-  ctx.fillText('Cant.', pad + colModel + 10 * scale, y + headerH / 2 + 4 * scale);
+  ctx.textAlign = 'center';
+  numCols.forEach((label, k) => ctx.fillText(label, numX(k), y + headerH / 2 + 4 * scale));
   y += headerH;
 
   // Filas
-  rows.forEach((row, i) => {
-    if (i % 2 === 1) {
-      ctx.fillStyle = '#F9FAFB';
-      ctx.fillRect(pad, y, w - pad * 2, rowH);
-    }
+  data.forEach((row, i) => {
+    if (i % 2 === 1) { ctx.fillStyle = '#F9FAFB'; ctx.fillRect(pad, y, w - pad * 2, rowH); }
     ctx.fillStyle = '#111';
     ctx.font = font(12);
+    ctx.textAlign = 'left';
     ctx.fillText(row.model, pad + 10 * scale, y + rowH / 2 + 5 * scale);
-    ctx.fillStyle = '#1F4E78';
-    ctx.font = `bold ${12 * scale}px -apple-system, sans-serif`;
-    ctx.fillText(String(row.qty), pad + colModel + 10 * scale, y + rowH / 2 + 5 * scale);
+    ctx.textAlign = 'center';
+    numCols.forEach((_, k) => {
+      const isTotal = varOn && k === numCols.length - 1;
+      ctx.fillStyle = isTotal ? '#111' : '#1F4E78';
+      ctx.font = fontB(12);
+      ctx.fillText(String(cellVal(row, k)), numX(k), y + rowH / 2 + 5 * scale);
+    });
     y += rowH;
   });
 
-  // Línea total
-  y += 4 * scale;
-  ctx.fillStyle = '#888';
-  ctx.font = font(10);
-  const sumQty = rows.reduce((s, r) => s + r.qty, 0);
-  ctx.fillText(`Total: ${sumQty} unidades`, pad + 10 * scale, y + 10 * scale);
+  // Fila de totales
+  ctx.fillStyle = '#EEF2FF';
+  ctx.fillRect(pad, y, w - pad * 2, rowH);
+  ctx.fillStyle = '#444';
+  ctx.font = fontB(12);
+  ctx.textAlign = 'left';
+  ctx.fillText('TOTAL', pad + 10 * scale, y + rowH / 2 + 5 * scale);
+  ctx.textAlign = 'center';
+  colTotals.forEach((t, k) => ctx.fillText(String(t), numX(k), y + rowH / 2 + 5 * scale));
 
   c.toBlob(blob => {
     if (!blob) return;
