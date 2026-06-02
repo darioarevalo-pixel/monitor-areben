@@ -531,7 +531,7 @@
           </tfoot>
         </table>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:11px;color:#9CA3AF;">Los porcentajes y modelos son editables. La cantidad se calcula automáticamente.</div>
+          <div style="font-size:11px;color:#9CA3AF;">Los porcentajes y modelos son editables. <b>Tip:</b> tocá <b>⎘</b> en una columna (o en una fila, con variantes) para copiar esa línea lista para tipear en la tienda.</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn-sm" onclick="fmGuardarPedido()" title="Guarda este pedido en la lista de abajo" style="background:#378ADD;color:#fff;">💾 Guardar pedido</button>
             <button class="btn-sm" onclick="fmNuevoPedido()" title="Vacía el editor para armar otro pedido">➕ Nuevo</button>
@@ -2156,16 +2156,19 @@ function fmSimRender() {
   const varOn = fmSimVarActivo();
   const vars = fmSimVars;
 
+  // Ícono para copiar una columna (modelos y cantidades) — listo para tipear en la tienda
+  const copyCol = (arg, titulo) => `<span onclick="fmCopiarColumna(${typeof arg === 'number' ? arg : `'${arg}'`}, this)" title="${titulo}" style="cursor:pointer;color:#9CA3AF;font-weight:400;font-size:11px;">⎘</span>`;
+
   // ── Encabezado ──
   let thead;
   if (varOn) {
     const varTh = vars.map((v, j) => {
       const thumb = v.img ? `<img src="${v.img}" style="width:30px;height:30px;object-fit:cover;border-radius:4px;display:block;margin:0 auto 3px;">` : '';
-      return `<th style="text-align:center;min-width:62px;">${thumb}${esc(v.name || ('Var ' + (j + 1)))}</th>`;
+      return `<th style="text-align:center;min-width:62px;">${thumb}${esc(v.name || ('Var ' + (j + 1)))}<br>${copyCol(j, 'Copiar esta variante: modelos y cantidades')}</th>`;
     }).join('');
-    thead = `<tr><th>Modelo</th><th style="width:88px;text-align:center;">% pedido</th><th style="width:64px;text-align:center;">Cant.</th>${varTh}<th style="width:36px;"></th></tr>`;
+    thead = `<tr><th>Modelo</th><th style="width:88px;text-align:center;">% pedido</th><th style="width:64px;text-align:center;">Cant. ${copyCol('total', 'Copiar todos los modelos con su cantidad total')}</th>${varTh}<th style="width:36px;"></th></tr>`;
   } else {
-    thead = `<tr><th>Modelo</th><th style="width:110px;text-align:center;">% del pedido</th><th style="width:110px;text-align:center;">Cantidad</th><th style="width:40px;"></th></tr>`;
+    thead = `<tr><th>Modelo</th><th style="width:110px;text-align:center;">% del pedido</th><th style="width:110px;text-align:center;">Cantidad ${copyCol('cant', 'Copiar todos los modelos con su cantidad')}</th><th style="width:40px;"></th></tr>`;
   }
 
   // ── Filas ──
@@ -2175,11 +2178,13 @@ function fmSimRender() {
     const pctInput = `<input type="number" value="${r.pct.toFixed(1)}" min="0" max="100" step="0.1"
         oninput="fmSimRows[${i}].pct=parseFloat(this.value)||0;fmSimRecalc()"
         style="width:75px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;">`;
-    const del = `<button onclick="fmSimEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>`;
+    const del = `<button onclick="fmSimEliminar(${i})" title="Eliminar fila" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>`;
     const qtyCell = `<td style="text-align:center;font-weight:600;font-size:13px;" id="fm-sim-qty-${i}">—</td>`;
+    // En modo variantes, ícono para copiar la línea de ese modelo (sus variantes y cantidades)
+    const copyFila = varOn ? `<button onclick="fmCopiarFila(${i}, this)" title="Copiar este modelo con sus variantes" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:13px;margin-right:4px;">⎘</button>` : '';
     if (varOn) {
       const varCells = vars.map((v, j) => `<td style="text-align:center;font-size:13px;color:#1F4E78;" id="fm-sim-qty-${i}-${j}">—</td>`).join('');
-      return `<tr><td>${modelInput}</td><td style="text-align:center;">${pctInput}</td>${qtyCell}${varCells}<td style="text-align:center;">${del}</td></tr>`;
+      return `<tr><td>${modelInput}</td><td style="text-align:center;">${pctInput}</td>${qtyCell}${varCells}<td style="text-align:center;white-space:nowrap;">${copyFila}${del}</td></tr>`;
     }
     return `<tr><td>${modelInput}</td><td style="text-align:center;">${pctInput}</td>${qtyCell}<td style="text-align:center;">${del}</td></tr>`;
   }).join('');
@@ -2238,6 +2243,52 @@ function fmSimAgregarFila() {
 function fmSimEliminar(i) {
   fmSimRows.splice(i, 1);
   fmSimRender();
+}
+
+// ── Copiar "líneas" listas para tipear en la tienda del proveedor ───────────────
+
+function fmCopiarTexto(texto, btn) {
+  navigator.clipboard.writeText(texto).then(() => {
+    if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = o, 1200); }
+  }).catch(() => alert('Copiá esto manualmente:\n\n' + texto));
+}
+
+// Copia la línea de un MODELO (fila): "iPhone 11: Negro 60u / Blanco 40u"
+function fmCopiarFila(i, btn) {
+  const r = fmSimRows[i];
+  if (!r || !r.model) return;
+  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
+  const qty = Math.round(total * r.pct / 100);
+  let texto;
+  if (fmSimVarActivo()) {
+    const vpcts = fmSimVars.map(v => v.pct);
+    const vExact = Math.abs(vpcts.reduce((a, b) => a + b, 0) - 100) < 0.05;
+    const parts = vExact ? fmSimRepartir(qty, vpcts) : vpcts.map(p => Math.round(qty * p / 100));
+    const items = fmSimVars.map((v, j) => `${v.name || ('Var ' + (j + 1))} ${parts[j]}u`);
+    texto = `${r.model}: ${items.join(' / ')}`;
+  } else {
+    texto = `${r.model}: ${qty}u`;
+  }
+  fmCopiarTexto(texto, btn);
+}
+
+// Copia la línea de una COLUMNA: "Serpiente: iPhone 11 10u / iPhone 12 10u"
+// arg: índice de variante (número), 'total' (col Cant. con variantes) o 'cant' (col única sin variantes)
+function fmCopiarColumna(arg, btn) {
+  const data = fmSimComputed();
+  if (!data.length) return;
+  let prefijo = '', items;
+  if (typeof arg === 'number') {
+    prefijo = (fmSimVars[arg] && fmSimVars[arg].name ? fmSimVars[arg].name : ('Var ' + (arg + 1))) + ': ';
+    items = data.map(r => `${r.model} ${(r.parts && r.parts[arg]) || 0}u`);
+  } else if (arg === 'total') {
+    prefijo = 'Total: ';
+    items = data.map(r => `${r.model} ${r.qty}u`);
+  } else {
+    prefijo = ''; // columna única (sin variantes): solo los modelos
+    items = data.map(r => `${r.model} ${r.qty}u`);
+  }
+  fmCopiarTexto(prefijo + items.join(' / '), btn);
 }
 
 // ── Variantes (color o diseño) ──────────────────────────────────────────────
