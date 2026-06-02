@@ -490,6 +490,12 @@
             <input type="number" id="fm-dem-cap" value="2.5" min="1" max="5" step="0.5" onchange="fmDemandaRender()" style="width:54px;text-align:center;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;">
           </span>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;color:#666;">
+          <label style="cursor:pointer;"><input type="checkbox" id="fm-dem-corte" checked onchange="fmDemandaRender()"> Cortar la ventana de cada diseño</label>
+          <span style="color:#9CA3AF;">— mido hasta lo que pase primero:</span>
+          al mes <input type="number" id="fm-dem-corte-dias" value="30" min="7" max="180" step="1" onchange="fmDemandaRender()" style="width:54px;text-align:center;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;"> días,
+          o al agotarse <input type="number" id="fm-dem-corte-mod" value="5" min="1" max="20" step="1" onchange="fmDemandaRender()" style="width:48px;text-align:center;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;"> modelos
+        </div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
           <span style="font-size:12px;color:#666;">Peso de cada canal en la combinada:</span>
           <input type="range" id="fm-dem-wmin" min="0" max="100" value="20" oninput="fmDemSliderInput()" style="width:160px;">
@@ -505,7 +511,7 @@
           <tbody id="fm-dem-tbody"></tbody>
         </table>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:11px;color:#9CA3AF;max-width:58%;"><b>Ajustado</b>: volumen vendido + un empujón a los modelos que se agotaron (porque habrían vendido más), capado por el tope para que el stock chico no se dispare. <b>Volumen</b>: unidades crudas. Solo diseños lanzados desde la fecha elegida; la combinada pondera los canales según el peso de arriba.</div>
+          <div style="font-size:11px;color:#9CA3AF;max-width:58%;"><b>Ajustado</b>: volumen + empujón a los modelos agotados (capado por el tope). <b>Volumen</b>: unidades crudas. <b>Corte</b>: mide cada diseño en su ventana pareja (1 mes o hasta agotarse N modelos), para que los diseños viejos no acumulen ventaja por tener más tiempo. Agotamiento = Deposito Minorista en 0. Solo diseños lanzados desde la fecha elegida.</div>
           <button class="btn-sm" onclick="fmDemandaUsar()" style="background:#378ADD;color:#fff;">↓ Usar la combinada en la simulación</button>
         </div>
       </div>
@@ -2168,15 +2174,17 @@ function _esMayorista(v) {
 
 let _fmDemandaCache = null; // último cálculo (para "usar en simulación")
 
-// Proporción por modelo separada por canal, usando velocidad (unidades ÷ días con stock),
-// solo sobre diseños de funda lanzados desde 'cutoff'.
-function fmDemandaPorModelo(cutoff, K) {
+// Proporción por modelo separada por canal (volumen + empujón por agotamiento capado),
+// solo sobre diseños de funda lanzados desde 'cutoff'. Con corte de ventana opcional.
+function fmDemandaPorModelo(cutoff, K, corte) {
   K = K > 1 ? K : 2.5; // tope del empujón a los modelos agotados
+  corte = corte || { on: false, dias: 30, modelos: 5 };
+  const DAY = 86400000;
   const ventas   = window.allVentas || [];
   const detalles = window.allDetalles || [];
   const invPM    = window._invDepoMin || {}; // stock del Deposito Minorista (agotamiento real)
   const meta     = window._prodMeta || {};
-  const hoy = new Date();
+  const hoyMs = Date.now();
 
   // Set de productos que son funda (los que la vista de fundas reconoce); fallback por categoría
   const fundaPids = new Set();
@@ -2196,32 +2204,61 @@ function fmDemandaPorModelo(cutoff, K) {
   const saleInfo = {};
   ventas.forEach(v => { saleInfo[String(v.id)] = { fecha: (v.date_sale || '').substring(0, 10), mayor: _esMayorista(v) }; });
 
-  // Acumular unidades por (producto, modelo) y canal
-  const acc = {};
+  // Paso 1: por (diseño,modelo) la última venta (para estimar la fecha de agotamiento)
+  const lastByKey = {};
   detalles.forEach(it => {
-    const pid = String(it.product_id || '');
-    if (!prodOk[pid]) return;
-    const model = normalizeIphoneModel(it.size || '');
-    if (!model) return;
-    const si = saleInfo[String(it.sale_id)];
-    if (!si || !si.fecha || si.fecha < cutoff) return;
+    const pid = String(it.product_id || ''); if (!prodOk[pid]) return;
+    const model = normalizeIphoneModel(it.size || ''); if (!model) return;
+    const si = saleInfo[String(it.sale_id)]; if (!si || !si.fecha || si.fecha < cutoff) return;
     const k = pid + '|||' + model;
-    if (!acc[k]) acc[k] = { pid, model, umin: 0, umay: 0, last: null };
-    const q = it.quantity || 1;
-    if (si.mayor) acc[k].umay += q; else acc[k].umin += q;
-    if (!acc[k].last || si.fecha > acc[k].last) acc[k].last = si.fecha;
+    if (!lastByKey[k] || si.fecha > lastByKey[k]) lastByKey[k] = si.fecha;
+  });
+  // fecha de agotamiento estimada: si el Deposito Minorista quedó en 0 → última venta
+  const stockoutMs = {};
+  Object.keys(lastByKey).forEach(k => {
+    stockoutMs[k] = ((invPM[k] || 0) <= 0 && lastByKey[k]) ? Date.parse(lastByKey[k]) : null;
   });
 
-  // Por (diseño, modelo): unidades crudas + "empujón por agotamiento" capado.
-  // empujón = cuánto más habría vendido si seguía en stock todo el período (capado a K).
+  // Fin de ventana por diseño: lanzamiento → lo que pase primero (1 mes / N modelos agotados)
+  const winEnd = {};
+  Object.keys(prodOk).forEach(pid => {
+    const launchMs = Date.parse(prodOk[pid]);
+    let weMs = hoyMs;
+    if (corte.on) {
+      weMs = launchMs + corte.dias * DAY;
+      const fechas = Object.keys(stockoutMs)
+        .filter(k => k.indexOf(pid + '|||') === 0 && stockoutMs[k])
+        .map(k => stockoutMs[k]).sort((a, b) => a - b);
+      if (fechas.length >= corte.modelos) weMs = Math.min(weMs, fechas[corte.modelos - 1]);
+      weMs = Math.min(weMs, hoyMs);
+      weMs = Math.max(weMs, launchMs + 7 * DAY); // ventana mínima de 1 semana
+    }
+    winEnd[pid] = weMs;
+  });
+
+  // Paso 2: acumular unidades DENTRO de la ventana, por canal
+  const acc = {};
+  detalles.forEach(it => {
+    const pid = String(it.product_id || ''); if (!prodOk[pid]) return;
+    const model = normalizeIphoneModel(it.size || ''); if (!model) return;
+    const si = saleInfo[String(it.sale_id)]; if (!si || !si.fecha || si.fecha < cutoff) return;
+    if (Date.parse(si.fecha) > winEnd[pid]) return; // fuera de la ventana del diseño
+    const k = pid + '|||' + model;
+    if (!acc[k]) acc[k] = { pid, model, umin: 0, umay: 0 };
+    const q = it.quantity || 1;
+    if (si.mayor) acc[k].umay += q; else acc[k].umin += q;
+  });
+
+  // Empujón por agotamiento dentro de la ventana, capado a K
   const perModel = {};
   Object.values(acc).forEach(a => {
-    const cr = new Date(prodOk[a.pid]);
-    const stock = invPM[a.pid + '|||' + a.model] || 0;
-    const end = stock > 0 ? hoy : new Date(a.last);     // si hay stock, tuvo toda la oportunidad
-    const dStock = Math.max(7, (end - cr) / 86400000 || 0);
-    const dTot   = Math.max(dStock, (hoy - cr) / 86400000 || 0);
-    const up = Math.min(K, Math.max(1, dTot / dStock)); // 1 si no se agotó; >1 si se agotó antes (capado)
+    const k = a.pid + '|||' + a.model;
+    const launchMs = Date.parse(prodOk[a.pid]);
+    const weMs = winEnd[a.pid];
+    const dWindow = Math.max(7, (weMs - launchMs) / DAY);
+    const soMs = (stockoutMs[k] && stockoutMs[k] <= weMs) ? stockoutMs[k] : null; // ¿se agotó dentro de la ventana?
+    const dStock = soMs ? Math.max(1, (soMs - launchMs) / DAY) : dWindow;
+    const up = Math.min(K, Math.max(1, dWindow / dStock));
     if (!perModel[a.model]) perModel[a.model] = { umin: 0, umay: 0, ajmin: 0, ajmay: 0 };
     perModel[a.model].umin  += a.umin;
     perModel[a.model].umay  += a.umay;
@@ -2258,7 +2295,12 @@ function fmDemandaRender() {
   if (!card) return;
   const cutoff = document.getElementById('fm-dem-cutoff')?.value || '2026-01-01';
   const K = parseFloat(document.getElementById('fm-dem-cap')?.value) || 2.5;
-  const calc = fmDemandaPorModelo(cutoff, K);
+  const corte = {
+    on: document.getElementById('fm-dem-corte') ? document.getElementById('fm-dem-corte').checked : true,
+    dias: parseInt(document.getElementById('fm-dem-corte-dias')?.value) || 30,
+    modelos: parseInt(document.getElementById('fm-dem-corte-mod')?.value) || 5,
+  };
+  const calc = fmDemandaPorModelo(cutoff, K, corte);
 
   // Peso del minorista en la combinada: si el usuario no lo tocó, usar el real
   const slider = document.getElementById('fm-dem-wmin');
