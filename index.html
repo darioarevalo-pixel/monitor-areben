@@ -1855,7 +1855,7 @@ function toggleProductoDetalle(pid) {
 
 function sortDetalleVar(col) {
   if (detalleVarSort.col === col) detalleVarSort.dir *= -1;
-  else { detalleVarSort.col = col; detalleVarSort.dir = -1; }
+  else { detalleVarSort.col = col; detalleVarSort.dir = col === 'size' ? 1 : -1; } // alfabético arranca A→Z
   renderProductos();
 }
 
@@ -1883,7 +1883,7 @@ function buildProductoDetalle(pid) {
   const { col: sCol, dir: sDir } = detalleVarSort;
   allItems.sort((a, b) => {
     const va = a[sCol], vb = b[sCol];
-    if (typeof va === 'string') return sDir * (va || '').localeCompare(vb || '');
+    if (typeof va === 'string') return sDir * (va || '').localeCompare(vb || '', 'es', { numeric: true });
     return sDir * ((va || 0) - (vb || 0));
   });
 
@@ -1909,7 +1909,7 @@ function buildProductoDetalle(pid) {
     <div style="font-size:11px;font-weight:600;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">▾ Desglose por variante</div>
     <table style="width:auto;">
       <thead><tr>
-        <th style="${thBase}">Variante</th>
+        <th style="${thClick}" onclick="event.stopPropagation();sortDetalleVar('size')">Variante ↕</th>
         <th style="${thClick}" onclick="event.stopPropagation();sortDetalleVar('total')">Total vendido ↕</th>
         <th style="${thClick}" onclick="event.stopPropagation();sortDetalleVar('s7')">Últimos 7d ↕</th>
         <th style="${thClick}" onclick="event.stopPropagation();sortDetalleVar('s30')">Últimos 30d ↕</th>
