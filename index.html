@@ -2412,6 +2412,7 @@ function fmDemandaUsar() {
 }
 
 let fmSimRows = [];
+let fmSimSort = { col: null, dir: 1 }; // orden de la tabla de simulación (modelo / %)
 let fmSimVars = [];        // [{ name, pct, img }] — variantes (color o diseño) definidas a mano
 let fmSimVarOn = false;    // si está activo el desglose por variantes
 let fmSimImg = null;       // foto general del pedido (opcional, sobre todo para el modo sin variantes)
@@ -2467,15 +2468,18 @@ function fmSimRender() {
   const copyCol = (arg, titulo) => `<span onclick="fmCopiarColumna(${typeof arg === 'number' ? arg : `'${arg}'`}, this)" title="${titulo}" style="cursor:pointer;color:#9CA3AF;font-weight:400;font-size:11px;">⎘</span>`;
 
   // ── Encabezado ──
+  // Flechita de orden + encabezados clickeables (ordenar por modelo o por %)
+  const arrow = c => fmSimSort.col === c ? (fmSimSort.dir < 0 ? ' ▼' : ' ▲') : '';
+  const thModelo = `<th onclick="fmSimOrdenar('model')" style="cursor:pointer;" title="Ordenar por modelo">Modelo${arrow('model')}</th>`;
   let thead;
   if (varOn) {
     const varTh = vars.map((v, j) => {
       const thumb = v.img ? `<img src="${v.img}" style="width:30px;height:30px;object-fit:cover;border-radius:4px;display:block;margin:0 auto 3px;">` : '';
       return `<th style="text-align:center;min-width:62px;">${thumb}${esc(v.name || ('Var ' + (j + 1)))}<br>${copyCol(j, 'Copiar esta variante: modelos y cantidades')}</th>`;
     }).join('');
-    thead = `<tr><th>Modelo</th><th style="width:88px;text-align:center;">% pedido</th><th style="width:64px;text-align:center;">Cant. ${copyCol('total', 'Copiar todos los modelos con su cantidad total')}</th>${varTh}<th style="width:36px;"></th></tr>`;
+    thead = `<tr>${thModelo}<th onclick="fmSimOrdenar('pct')" style="width:88px;text-align:center;cursor:pointer;" title="Ordenar por %">% pedido${arrow('pct')}</th><th style="width:64px;text-align:center;">Cant. ${copyCol('total', 'Copiar todos los modelos con su cantidad total')}</th>${varTh}<th style="width:36px;"></th></tr>`;
   } else {
-    thead = `<tr><th>Modelo</th><th style="width:110px;text-align:center;">% del pedido</th><th style="width:110px;text-align:center;">Cantidad ${copyCol('cant', 'Copiar todos los modelos con su cantidad')}</th><th style="width:40px;"></th></tr>`;
+    thead = `<tr>${thModelo}<th onclick="fmSimOrdenar('pct')" style="width:110px;text-align:center;cursor:pointer;" title="Ordenar por %">% del pedido${arrow('pct')}</th><th style="width:110px;text-align:center;">Cantidad ${copyCol('cant', 'Copiar todos los modelos con su cantidad')}</th><th style="width:40px;"></th></tr>`;
   }
 
   // ── Filas ──
@@ -2549,6 +2553,16 @@ function fmSimAgregarFila() {
 
 function fmSimEliminar(i) {
   fmSimRows.splice(i, 1);
+  fmSimRender();
+}
+
+// Ordena la tabla de simulación por modelo (orden natural de iPhone) o por % del pedido
+function fmSimOrdenar(col) {
+  if (fmSimSort.col === col) fmSimSort.dir = -fmSimSort.dir;
+  else fmSimSort = { col, dir: col === 'model' ? 1 : -1 };
+  fmSimRows.sort((a, b) => col === 'model'
+    ? iphoneModelSort(a.model || '', b.model || '') * fmSimSort.dir
+    : ((a.pct - b.pct) * fmSimSort.dir));
   fmSimRender();
 }
 
