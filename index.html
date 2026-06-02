@@ -520,6 +520,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:11px;color:#9CA3AF;">Los porcentajes y modelos son editables. La cantidad se calcula automáticamente.</div>
           <div style="display:flex;gap:6px;">
+            <button class="btn-sm" onclick="fmSimVaciar()" title="Borra todo y empieza de cero" style="color:#DC2626;">🗑 Vaciar</button>
             <button class="btn-sm" onclick="fmSimCopiar('ambos')" title="Copia modelo y cantidad separados por tabulación">⎘ Modelo + Cantidad</button>
             <button class="btn-sm" onclick="fmSimCopiar('cantidad')" title="Copia solo las cantidades">⎘ Solo cantidad</button>
             <button class="btn-sm" id="btn-sim-img" onclick="fmSimCopiarImagen()" title="Copia la tabla como imagen para pegar en WhatsApp" style="background:#25D366;color:#fff;">📷 Imagen</button>
@@ -2170,6 +2171,7 @@ function fmSimRecalc() {
     const el = document.getElementById(`fm-sim-vtot-${j}`);
     if (el) el.textContent = t;
   });
+  fmSimSave();
 }
 
 function fmSimAgregarFila() {
@@ -2248,6 +2250,55 @@ function fmSimComputed() {
     const parts = varOn ? (vExact ? fmSimRepartir(qty, vpcts) : vpcts.map(p => Math.round(qty * p / 100))) : null;
     return { model: r.model, qty, parts };
   });
+}
+
+// ── Persistencia: la simulación se guarda sola y vuelve al recargar/cerrar ──────
+
+function fmSimKey() {
+  return 'monitor_sim_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
+}
+
+function fmSimSave() {
+  try {
+    const total = document.getElementById('fm-sim-total')?.value || '100';
+    localStorage.setItem(fmSimKey(), JSON.stringify({
+      rows: fmSimRows, vars: fmSimVars, varOn: fmSimVarOn, total,
+    }));
+  } catch { /* localStorage no disponible o lleno */ }
+}
+
+function fmSimRestore() {
+  try {
+    const raw = localStorage.getItem(fmSimKey());
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    fmSimRows  = Array.isArray(s.rows) ? s.rows : [];
+    fmSimVars  = Array.isArray(s.vars) ? s.vars : [];
+    fmSimVarOn = !!s.varOn;
+    const totalEl = document.getElementById('fm-sim-total');
+    if (totalEl && s.total) totalEl.value = s.total;
+    const tog = document.getElementById('fm-sim-var-toggle');
+    if (tog) tog.checked = fmSimVarOn;
+    const editor = document.getElementById('fm-sim-var-editor');
+    if (editor) editor.style.display = fmSimVarOn ? '' : 'none';
+  } catch { /* dato corrupto, ignorar */ }
+  fmSimVarRender();
+  fmSimRender();
+}
+
+// Vaciar la simulación a propósito (con confirmación)
+function fmSimVaciar() {
+  if (fmSimRows.length === 0 && fmSimVars.length === 0) return;
+  if (!confirm('¿Vaciar la simulación? Se borran todos los modelos y variantes cargados.')) return;
+  fmSimRows = [];
+  fmSimVars = [];
+  fmSimVarOn = false;
+  const tog = document.getElementById('fm-sim-var-toggle');
+  if (tog) tog.checked = false;
+  const editor = document.getElementById('fm-sim-var-editor');
+  if (editor) editor.style.display = 'none';
+  fmSimVarRender();
+  fmSimRender();
 }
 
 function fmSimCopiar(modo) {
@@ -3100,7 +3151,7 @@ function switchTab(id, btn) {
     if (id === 'variantes')       renderVariantes();
     else if (id === 'stock')      renderStock();
     else if (id === 'ventas-mensuales') renderVentasMensuales();
-    else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); }
+    else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); fmSimRestore(); }
     else if (id === 'proveedores')      updateProveedoresTab();
     else if (id === 'colores')          updateColoresTab();
     else if (id === 'talles')           updateTallesTab();
