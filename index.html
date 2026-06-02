@@ -1060,7 +1060,7 @@ async function fetchAll(table, baseParams, label, silent = false) {
 }
 
 function getCacheKey() {
-  return 'monitor_v2_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
+  return 'monitor_v3_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
 }
 
 function loadCache(ignoreExpiry = false) {
@@ -1148,7 +1148,7 @@ async function fetchFresh() {
           ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
           : 'select=id,name,category,sku,retailer_price,unit_cost,created_at,active&active=eq.1') + '&order=id',
         'productos', true),
-      fetchAll('inventario',              'select=product_id,product_name,size_id,size_name,available_quantity&order=product_id',       'inventario', true),
+      fetchAll('inventario',              'select=product_id,product_name,size_id,size_name,available_quantity,store_name&order=product_id', 'inventario', true),
       fetchAll('ventas_por_mes',          'select=mes,channel,cantidad_ventas,total_items,promedio_items_por_venta&order=mes',          'vmMes', true),
       fetchAll('ventas_por_categoria_mes','select=mes,categoria,total_items&order=mes',                                                 'vmCat', true),
       currentCuenta === CUENTAS.zattia
@@ -1323,6 +1323,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     return null;
   }
   const invByProdModelo = {};
+  const invDepoMin = {}; // stock SOLO del Deposito Minorista (para detectar agotamiento real)
   (inventario || []).forEach(i => {
     const pid = String(i.product_id);
     const vid = pid + '_' + String(i.size_id);
@@ -1333,10 +1334,15 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     if (modelo) {
       const key = pid + '|||' + modelo;
       invByProdModelo[key] = (invByProdModelo[key] || 0) + qty;
+      // Solo el Deposito Minorista cuenta para "agotado" (Local = vidriera, Mayorista = inactivo)
+      if (/minorista/i.test(i.store_name || '')) {
+        invDepoMin[key] = (invDepoMin[key] || 0) + qty;
+      }
     }
   });
   window._invByProduct = invByProduct;
   window._invByProdModelo = invByProdModelo;
+  window._invDepoMin = invDepoMin;
 
   // Metadata de productos para el cálculo de demanda por modelo (fecha de lanzamiento + categoría)
   window._prodMeta = {};
@@ -2168,7 +2174,7 @@ function fmDemandaPorModelo(cutoff, K) {
   K = K > 1 ? K : 2.5; // tope del empujón a los modelos agotados
   const ventas   = window.allVentas || [];
   const detalles = window.allDetalles || [];
-  const invPM    = window._invByProdModelo || {};
+  const invPM    = window._invDepoMin || {}; // stock del Deposito Minorista (agotamiento real)
   const meta     = window._prodMeta || {};
   const hoy = new Date();
 
