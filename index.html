@@ -2413,6 +2413,11 @@ function fmRankSort(col) {
 function fmImportarRanking() {
   const data = window._fmRankData || [];
   if (!data.length) return;
+  // Evitar pisar trabajo ya cargado sin avisar
+  if (fmSimRows.length > 0) {
+    const ok = confirm('Ya tenés una simulación armada.\n\n¿Querés reiniciarla con el ranking actual? Se van a perder los modelos y porcentajes que cargaste.\n\n(Las variantes que definiste se mantienen.)');
+    if (!ok) return;
+  }
   const col = window._fmRankSortCol || 'pos';
   const asc = window._fmRankSortAsc !== false;
   const display = [...data].sort((a, b) => {
