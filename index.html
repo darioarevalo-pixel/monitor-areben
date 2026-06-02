@@ -503,16 +503,20 @@
         </div>
         <table style="width:100%;">
           <thead><tr>
-            <th>Modelo</th>
-            <th style="width:90px;text-align:center;">Minorista</th>
-            <th style="width:90px;text-align:center;">Mayorista</th>
-            <th style="width:140px;text-align:center;">Combinada</th>
+            <th style="width:30px;text-align:center;"><input type="checkbox" id="fm-dem-all" checked onchange="fmDemSelAll(this.checked)" title="Elegir todos / ninguno"></th>
+            <th onclick="fmDemSort('model')" style="cursor:pointer;" title="Ordenar por modelo">Modelo<span id="fm-dem-sort-model"></span></th>
+            <th onclick="fmDemSort('pMin')" style="width:90px;text-align:center;cursor:pointer;" title="Ordenar por minorista">Minorista<span id="fm-dem-sort-pMin"></span></th>
+            <th onclick="fmDemSort('pMay')" style="width:90px;text-align:center;cursor:pointer;" title="Ordenar por mayorista">Mayorista<span id="fm-dem-sort-pMay"></span></th>
+            <th onclick="fmDemSort('pComb')" style="width:140px;text-align:center;cursor:pointer;" title="Ordenar por combinada">Combinada<span id="fm-dem-sort-pComb"></span></th>
           </tr></thead>
           <tbody id="fm-dem-tbody"></tbody>
         </table>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:11px;color:#9CA3AF;max-width:58%;"><b>Ajustado</b>: volumen + empujón a los modelos agotados (capado por el tope). <b>Volumen</b>: unidades crudas. <b>Corte</b>: mide cada diseño en su ventana pareja (1 mes o hasta agotarse N modelos), para que los diseños viejos no acumulen ventaja por tener más tiempo. Agotamiento = Deposito Minorista en 0. Solo diseños lanzados desde la fecha elegida.</div>
-          <button class="btn-sm" onclick="fmDemandaUsar()" style="background:#378ADD;color:#fff;">↓ Usar la combinada en la simulación</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="fm-dem-selcount" style="font-size:11px;color:#6B7280;"></span>
+            <button class="btn-sm" onclick="fmDemandaUsar()" style="background:#378ADD;color:#fff;">↓ Usar los elegidos en la simulación</button>
+          </div>
         </div>
       </div>
 
@@ -2290,6 +2294,9 @@ function fmDemandaPorModelo(cutoff, K, corte) {
   return { rows, totMin, totMay, wMinDefault, cutoff };
 }
 
+let _fmDemSort = { col: 'pComb', dir: -1 }; // orden de la tabla
+let _fmDemExcl = new Set();                 // modelos destildados (no van a la simulación)
+
 function fmDemandaRender() {
   const card = document.getElementById('fm-demanda-card');
   if (!card) return;
@@ -2317,9 +2324,8 @@ function fmDemandaRender() {
 
   const rows = calc.rows
     .map(r => { const p = pick(r); return { model: r.model, pMin: p.min, pMay: p.may, pComb: wMin * p.min + (1 - wMin) * p.may }; })
-    .sort((a, b) => b.pComb - a.pComb);
-  calc.combinada = rows.filter(r => r.pComb > 0.05).map(r => ({ model: r.model, pct: +r.pComb.toFixed(1) }));
-  _fmDemandaCache = calc;
+    .filter(r => r.pComb > 0.05 || r.pMin > 0 || r.pMay > 0);
+  _fmDemandaCache = { rows, totMin: calc.totMin, totMay: calc.totMay, cutoff };
 
   const totalU = calc.totMin + calc.totMay;
   const splitEl = document.getElementById('fm-dem-split');
@@ -2329,18 +2335,61 @@ function fmDemandaRender() {
       : 'No hay ventas de fundas en el período elegido.';
   }
 
+  fmDemandaPaint();
+}
+
+// Ordena y dibuja la tabla (sin recalcular). Lo llaman ordenar y tildar/destildar.
+function fmDemandaPaint() {
+  const c = _fmDemandaCache;
   const tb = document.getElementById('fm-dem-tbody');
-  if (tb) {
-    tb.innerHTML = rows.length ? rows.map(r => `
-      <tr>
-        <td style="font-weight:500;">${esc(r.model)}</td>
-        <td style="text-align:center;color:#888;">${r.pMin.toFixed(1)}%</td>
-        <td style="text-align:center;color:#888;">${r.pMay.toFixed(1)}%</td>
-        <td style="text-align:center;font-weight:700;">${r.pComb.toFixed(1)}%
-          <div style="display:inline-block;width:48px;height:4px;background:#eee;border-radius:2px;margin-left:6px;vertical-align:middle;"><div style="width:${Math.min(100, r.pComb)}%;height:100%;background:#7F77DD;border-radius:2px;"></div></div>
-        </td>
-      </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:#9CA3AF;padding:16px;">Sin datos de fundas en el período.</td></tr>`;
-  }
+  if (!c || !tb) return;
+  const { col, dir } = _fmDemSort;
+  const rows = [...c.rows].sort((a, b) =>
+    col === 'model' ? iphoneModelSort(a.model, b.model) * dir : (a[col] - b[col]) * dir);
+
+  ['model', 'pMin', 'pMay', 'pComb'].forEach(k => {
+    const el = document.getElementById('fm-dem-sort-' + k);
+    if (el) el.textContent = col === k ? (dir < 0 ? ' ▼' : ' ▲') : '';
+  });
+
+  tb.innerHTML = rows.length ? rows.map(r => {
+    const sel = !_fmDemExcl.has(r.model);
+    const mEsc = r.model.replace(/'/g, "\\'");
+    return `<tr style="${sel ? '' : 'opacity:.4;'}">
+      <td style="text-align:center;"><input type="checkbox" ${sel ? 'checked' : ''} onchange="fmDemToggle('${mEsc}', this.checked)"></td>
+      <td style="font-weight:500;">${esc(r.model)}</td>
+      <td style="text-align:center;color:#888;">${r.pMin.toFixed(1)}%</td>
+      <td style="text-align:center;color:#888;">${r.pMay.toFixed(1)}%</td>
+      <td style="text-align:center;font-weight:700;">${r.pComb.toFixed(1)}%
+        <div style="display:inline-block;width:48px;height:4px;background:#eee;border-radius:2px;margin-left:6px;vertical-align:middle;"><div style="width:${Math.min(100, r.pComb)}%;height:100%;background:#7F77DD;border-radius:2px;"></div></div>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" style="text-align:center;color:#9CA3AF;padding:16px;">Sin datos de fundas en el período.</td></tr>`;
+
+  const selCount = rows.filter(r => !_fmDemExcl.has(r.model)).length;
+  const allCb = document.getElementById('fm-dem-all');
+  if (allCb) allCb.checked = rows.length > 0 && selCount === rows.length;
+  const cnt = document.getElementById('fm-dem-selcount');
+  if (cnt) cnt.textContent = `${selCount} de ${rows.length} modelos`;
+}
+
+function fmDemSort(col) {
+  if (_fmDemSort.col === col) _fmDemSort.dir = -_fmDemSort.dir;
+  else _fmDemSort = { col, dir: col === 'model' ? 1 : -1 };
+  fmDemandaPaint();
+}
+
+function fmDemToggle(model, checked) {
+  if (checked) _fmDemExcl.delete(model); else _fmDemExcl.add(model);
+  fmDemandaPaint();
+}
+
+function fmDemSelAll(on) {
+  const c = _fmDemandaCache;
+  if (!c) return;
+  if (on) _fmDemExcl.clear();
+  else c.rows.forEach(r => _fmDemExcl.add(r.model));
+  fmDemandaPaint();
 }
 
 function fmDemSliderInput() {
@@ -2351,9 +2400,13 @@ function fmDemSliderInput() {
 
 function fmDemandaUsar() {
   const c = _fmDemandaCache;
-  if (!c || !c.combinada || !c.combinada.length) { alert('No hay datos de demanda para usar todavía.'); return; }
-  if (fmSimRows.length > 0 && !confirm('Esto reemplaza los modelos y porcentajes de la simulación actual con la demanda combinada.\n\n¿Seguir?')) return;
-  fmSimRows = c.combinada.map(r => ({ model: r.model, pct: r.pct }));
+  if (!c || !c.rows || !c.rows.length) { alert('No hay datos de demanda para usar todavía.'); return; }
+  const sel = c.rows.filter(r => !_fmDemExcl.has(r.model) && r.pComb > 0);
+  if (!sel.length) { alert('Elegí al menos un modelo (con la tilde) para llevar a la simulación.'); return; }
+  if (fmSimRows.length > 0 && !confirm('Esto reemplaza los modelos y porcentajes de la simulación actual con los modelos elegidos.\n\n¿Seguir?')) return;
+  // Renormalizar los elegidos a 100% (porque el proveedor puede no tener todos)
+  const suma = sel.reduce((s, r) => s + r.pComb, 0);
+  fmSimRows = sel.map(r => ({ model: r.model, pct: +(r.pComb / suma * 100).toFixed(1) }));
   fmSimRender();
   document.getElementById('fm-sim-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
