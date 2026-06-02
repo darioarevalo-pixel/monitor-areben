@@ -885,16 +885,21 @@ function normalizeIphoneModel(size) {
   return null;
 }
 
+// Repo de GitHub donde corren los workflows de sync (para mostrar la última actualización)
+const GH_REPO = 'darioarevalo-pixel/monitor-areben';
+
 const CUENTAS = {
   bdi: {
     nombre: 'BDI Accesorios',
     url:    'https://srqzzffmiiescffabtlc.supabase.co',
     key:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNycXp6ZmZtaWllc2NmZmFidGxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNzg1NDksImV4cCI6MjA5MDk1NDU0OX0.UJGWTPCXhhxv2Q-4twUBvOivPLUk0SSQvyvtEkDmWLg',
+    syncWorkflow: 'sync-diario.yml',
   },
   zattia: {
     nombre: 'Zattia',
     url:    'https://avmdktmyseonacxycimz.supabase.co',
     key:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2bWRrdG15c2VvbmFjeHljaW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTUzNDcsImV4cCI6MjA5MTA3MTM0N30.mqm1dhY2HUHlSUHyTfNjA7MphjicbKJqFo6jc_guTRo',
+    syncWorkflow: 'sync-diario-zattia.yml',
   },
 };
 let currentCuenta = null;
@@ -1003,7 +1008,7 @@ function renderFromCache(cached, stale = false) {
   procesarYRenderizar(
     cached.data.productos, cached.data.ventas, cached.data.detalles,
     cached.data.inventario, cached.data.vmMes, cached.data.vmCat,
-    cached.data.vmFundas, new Date(cached.timestamp).toISOString()
+    cached.data.vmFundas, new Date(cached.timestamp).toISOString(), cached.data.syncMeta
   );
   document.getElementById('dashboard').style.display = 'block';
   if (stale) {
@@ -1051,7 +1056,9 @@ async function fetchFresh() {
       ? sbFetch('variante_color_manual', 'select=product_name,color').catch(() => [])
       : Promise.resolve([]);
 
-    const [productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas] = await Promise.all([
+    const syncMetaPromise = fetchUltimoSync(currentCuenta.syncWorkflow);
+
+    const [productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, syncMeta] = await Promise.all([
       fetchAll('productos',
         (currentCuenta === CUENTAS.zattia
           ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
@@ -1065,6 +1072,7 @@ async function fetchFresh() {
         : fetchAll('fundas_por_modelo_mes', 'select=mes,modelo,product_id,product_name,product_created_at,total_items&order=mes', 'vmFundas', true),
       colorManualPromise,
       fetchAll('ventas',                  'select=id,date_sale&date_sale=gte.2025-01-01&order=id',                                      'ventas', true),
+      syncMetaPromise,
     ]);
 
     setProgress(60);
@@ -1080,10 +1088,10 @@ async function fetchFresh() {
     (colorManual || []).forEach(r => { colorManualMap[r.product_name] = r.color; });
 
     const timestamp = Date.now();
-    saveCache({ productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, detalles }, timestamp);
+    saveCache({ productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, detalles, syncMeta }, timestamp);
 
     setProgress(95);
-    procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, new Date(timestamp).toISOString());
+    procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, new Date(timestamp).toISOString(), syncMeta);
     document.getElementById('dashboard').style.display = 'block';
     return true;
   } catch(e) {
@@ -1132,7 +1140,77 @@ function getPhase(salesPrev, salesCurr, dsl) {
   return { label: 'declive', cls: 'badge-warning' };
 }
 
-function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync) {
+// "hace 3 h", "hace 2 días", etc.
+function fmtHace(ms) {
+  const min = ms / 60000;
+  if (min < 60) return 'hace ' + Math.max(1, Math.round(min)) + ' min';
+  const h = min / 60;
+  if (h < 24) return 'hace ' + Math.round(h) + ' h';
+  const d = Math.floor(h / 24);
+  return 'hace ' + d + (d === 1 ? ' día' : ' días');
+}
+
+// Le pregunta a GitHub cuándo corrió por última vez el workflow de sync.
+// Devuelve { last_run, latest_status, latest_conclusion } o null si no se puede leer.
+async function fetchUltimoSync(workflowFile) {
+  if (!workflowFile) return null;
+  try {
+    const url = `https://api.github.com/repos/${GH_REPO}/actions/workflows/${workflowFile}/runs?per_page=10`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const runs = j.workflow_runs || [];
+    if (!runs.length) return null;
+    const latest      = runs[0];
+    const lastSuccess = runs.find(r => r.conclusion === 'success');
+    return {
+      last_run:          lastSuccess ? (lastSuccess.run_started_at || lastSuccess.created_at) : null,
+      latest_status:     latest.status,       // 'completed' | 'in_progress' | 'queued'
+      latest_conclusion: latest.conclusion,   // 'success' | 'failure' | null (en curso)
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Muestra cuándo corrió el último sync (con semáforo) y hasta qué fecha hay ventas.
+function renderSyncInfo(syncMeta, maxVentaDate, lineasVenta) {
+  const el = document.getElementById('sync-info');
+  if (!el) return;
+  const parts = [];
+
+  if (syncMeta && syncMeta.last_run) {
+    const run = new Date(syncMeta.last_run);
+    const ageMs = Date.now() - run.getTime();
+    const ageH = ageMs / 3600000;
+    let dot = '🟢', nota = '';
+    if (ageH >= 52)      { dot = '🔴'; nota = ' — ¡revisar! no se actualiza hace más de 2 días'; }
+    else if (ageH >= 28) { dot = '🟡'; nota = ' — atención: pasó más de un día sin actualizar'; }
+    // Avisos según el estado de la última corrida (aunque haya un éxito previo)
+    if (syncMeta.latest_conclusion === 'failure') {
+      dot = '🔴'; nota = ' — ⚠️ la última corrida del sync FALLÓ (mostrando la última exitosa)';
+    } else if (syncMeta.latest_status && syncMeta.latest_status !== 'completed') {
+      nota += ' — 🔄 sync en curso ahora…';
+    }
+    const fecha = run.toLocaleDateString('es-AR') + ' ' +
+      run.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    parts.push(`${dot} Última sincronización: <strong>${fecha}</strong> (${fmtHace(ageMs)})${nota}`);
+  } else if (syncMeta && syncMeta.latest_conclusion === 'failure') {
+    parts.push('🔴 ⚠️ El sync está fallando — no hay ninguna corrida exitosa reciente');
+  } else {
+    parts.push('⚪ No pude leer el estado del sync');
+  }
+
+  if (maxVentaDate) {
+    const [y, m, d] = maxVentaDate.split('-');
+    parts.push(`Venta más reciente cargada: <strong>${d}/${m}/${y}</strong>`);
+  }
+  parts.push(`${lineasVenta} líneas de venta`);
+
+  el.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+}
+
+function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta) {
   // Hacer accesibles globalmente para módulos que los necesiten (ej. Marketing tab)
   window.allVentas = ventas || [];
   window.allDetalles = detalles || [];
@@ -1337,13 +1415,12 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   document.getElementById('stat-growth').textContent = allProductos.filter(p => p.phase.label === 'crecimiento').length;
   document.getElementById('stat-variants').textContent = allVariantes.length;
 
-  if (lastSync) {
-    const d = new Date(lastSync);
-    document.getElementById('sync-info').textContent =
-      'Última actualización: ' + d.toLocaleDateString('es-AR') + ' ' +
-      d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) +
-      ' — ' + detalles.length + ' líneas de venta cargadas';
+  // Fecha de la venta más reciente cargada (date_sale es 'YYYY-MM-DD', compara como string)
+  let maxVentaDate = null;
+  for (const v of ventas) {
+    if (v.date_sale && (!maxVentaDate || v.date_sale > maxVentaDate)) maxVentaDate = v.date_sale;
   }
+  renderSyncInfo(syncMeta, maxVentaDate, detalles.length);
 
   // allMonths: unión de meses de vistas y últimos 16 meses, ordenados
   const viewMeses = new Set([...Object.keys(mStats), ...Object.keys(fStats)]);
