@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #F3F4F6; color: #111827; font-size: 14px; }
@@ -519,13 +520,28 @@
         </table>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:11px;color:#9CA3AF;">Los porcentajes y modelos son editables. La cantidad se calcula automáticamente.</div>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-sm" onclick="fmGuardarPedido()" title="Guarda este pedido en la lista de abajo" style="background:#378ADD;color:#fff;">💾 Guardar pedido</button>
+            <button class="btn-sm" onclick="fmNuevoPedido()" title="Vacía el editor para armar otro pedido">➕ Nuevo</button>
             <button class="btn-sm" onclick="fmSimVaciar()" title="Borra todo y empieza de cero" style="color:#DC2626;">🗑 Vaciar</button>
             <button class="btn-sm" onclick="fmSimCopiar('ambos')" title="Copia modelo y cantidad separados por tabulación">⎘ Modelo + Cantidad</button>
             <button class="btn-sm" onclick="fmSimCopiar('cantidad')" title="Copia solo las cantidades">⎘ Solo cantidad</button>
             <button class="btn-sm" id="btn-sim-img" onclick="fmSimCopiarImagen()" title="Copia la tabla como imagen para pegar en WhatsApp" style="background:#25D366;color:#fff;">📷 Imagen</button>
           </div>
         </div>
+      </div>
+
+      <!-- Pedidos guardados para el proveedor -->
+      <div class="card" id="fm-bloques-card" style="margin-top:4px;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">Pedidos del proveedor <span id="fm-bloques-count" style="color:#378ADD;"></span></span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-sm" id="btn-todo-img" onclick="fmGenerarImagenTodo()" title="Una imagen con todos los pedidos juntos" style="background:#25D366;color:#fff;">📷 Imagen de todo</button>
+            <button class="btn-sm" id="btn-todo-pdf" onclick="fmGenerarPDF()" title="Un PDF con todos los pedidos" style="background:#DC2626;color:#fff;">📄 PDF de todo</button>
+          </div>
+        </div>
+        <div id="fm-bloques-list"></div>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Armá un pedido arriba y tocá <b>💾 Guardar pedido</b>. Repetí con cada funda/diseño. Después generá la <b>imagen</b> o el <b>PDF</b> con todos juntos para pasarle al proveedor.</div>
       </div>
     </div>
 
@@ -2077,8 +2093,10 @@ function toggleProdsPanel() {
 
 // ── Simulación de pedido ──────────────────────────────────────────────────────
 let fmSimRows = [];
-let fmSimVars = [];        // [{ name, pct }] — variantes (color o diseño) definidas a mano
+let fmSimVars = [];        // [{ name, pct, img }] — variantes (color o diseño) definidas a mano
 let fmSimVarOn = false;    // si está activo el desglose por variantes
+let fmSimBloques = [];     // pedidos guardados para el mismo proveedor
+let fmBloqueEditando = null; // id del pedido que se está editando (o null = nuevo)
 
 // ¿Está activo el modo variantes y hay al menos una variante definida?
 function fmSimVarActivo() {
@@ -2281,17 +2299,21 @@ function fmSimVarRender() {
   fmSimVarSum();
 }
 
-// Devuelve las filas calculadas (con desglose por variante si está activo)
-function fmSimComputed() {
-  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
-  const varOn = fmSimVarActivo();
-  const vpcts = fmSimVars.map(v => v.pct);
+// Cálculo puro de las filas a partir de datos sueltos (sirve para el editor y para bloques guardados)
+function fmComputeFrom(total, rows, vars, varOn) {
+  const vpcts = (vars || []).map(v => v.pct);
   const vExact = Math.abs(vpcts.reduce((a, b) => a + b, 0) - 100) < 0.05;
-  return fmSimRows.filter(r => r.model).map(r => {
+  return (rows || []).filter(r => r.model).map(r => {
     const qty = Math.round(total * r.pct / 100);
     const parts = varOn ? (vExact ? fmSimRepartir(qty, vpcts) : vpcts.map(p => Math.round(qty * p / 100))) : null;
     return { model: r.model, qty, parts };
   });
+}
+
+// Filas calculadas del editor actual
+function fmSimComputed() {
+  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
+  return fmComputeFrom(total, fmSimRows, fmSimVars, fmSimVarActivo());
 }
 
 // ── Persistencia: la simulación se guarda sola y vuelve al recargar/cerrar ──────
@@ -2304,7 +2326,7 @@ function fmSimSave() {
   try {
     const total = document.getElementById('fm-sim-total')?.value || '100';
     localStorage.setItem(fmSimKey(), JSON.stringify({
-      rows: fmSimRows, vars: fmSimVars, varOn: fmSimVarOn, total,
+      rows: fmSimRows, vars: fmSimVars, varOn: fmSimVarOn, total, editando: fmBloqueEditando,
     }));
   } catch { /* localStorage no disponible o lleno */ }
 }
@@ -2317,6 +2339,7 @@ function fmSimRestore() {
     fmSimRows  = Array.isArray(s.rows) ? s.rows : [];
     fmSimVars  = Array.isArray(s.vars) ? s.vars : [];
     fmSimVarOn = !!s.varOn;
+    fmBloqueEditando = s.editando || null;
     const totalEl = document.getElementById('fm-sim-total');
     if (totalEl && s.total) totalEl.value = s.total;
     const tog = document.getElementById('fm-sim-var-toggle');
@@ -2343,6 +2366,202 @@ function fmSimVaciar() {
   fmSimRender();
 }
 
+// ── Pedidos guardados (varios para el mismo proveedor) ──────────────────────────
+
+function fmBloquesKey() {
+  return 'monitor_pedidos_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
+}
+function fmBloquesSave() {
+  try { localStorage.setItem(fmBloquesKey(), JSON.stringify(fmSimBloques)); } catch { /* lleno */ }
+}
+function fmBloquesRestore() {
+  try {
+    const raw = localStorage.getItem(fmBloquesKey());
+    fmSimBloques = raw ? (JSON.parse(raw) || []) : [];
+  } catch { fmSimBloques = []; }
+  fmBloquesRender();
+}
+
+// Guarda el pedido del editor en la lista (nuevo, o actualiza el que se está editando)
+function fmGuardarPedido() {
+  if (!fmSimComputed().length) { alert('Cargá al menos un modelo antes de guardar el pedido.'); return; }
+  const idx = fmBloqueEditando ? fmSimBloques.findIndex(b => b.id === fmBloqueEditando) : -1;
+  if (idx >= 0) {
+    const snap = fmSimSnapshot(fmSimBloques[idx].nombre);
+    snap.id = fmSimBloques[idx].id;
+    fmSimBloques[idx] = snap;
+  } else {
+    const nombre = (prompt('Nombre del pedido (ej: Funda IMD):', 'Pedido ' + (fmSimBloques.length + 1)) || '').trim();
+    if (nombre === '') return; // canceló
+    const snap = fmSimSnapshot(nombre);
+    fmSimBloques.push(snap);
+    fmBloqueEditando = snap.id;
+  }
+  fmSimSave();
+  fmBloquesSave();
+  fmBloquesRender();
+}
+
+function fmBloqueEditar(id) {
+  const b = fmSimBloques.find(x => x.id === id);
+  if (!b) return;
+  fmSimRows  = JSON.parse(JSON.stringify(b.rows || []));
+  fmSimVars  = JSON.parse(JSON.stringify(b.vars || []));
+  fmSimVarOn = !!b.varOn;
+  fmBloqueEditando = id;
+  const totalEl = document.getElementById('fm-sim-total');
+  if (totalEl) totalEl.value = b.total;
+  const tog = document.getElementById('fm-sim-var-toggle');
+  if (tog) tog.checked = fmSimVarOn;
+  const editor = document.getElementById('fm-sim-var-editor');
+  if (editor) editor.style.display = fmSimVarOn ? '' : 'none';
+  fmSimVarRender();
+  fmSimRender();
+  fmBloquesRender();
+  document.getElementById('fm-sim-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmBloqueDuplicar(id) {
+  const b = fmSimBloques.find(x => x.id === id);
+  if (!b) return;
+  const copia = JSON.parse(JSON.stringify(b));
+  copia.id = 'p' + Date.now() + Math.round(Math.random() * 1000);
+  copia.nombre = (b.nombre || 'Pedido') + ' (copia)';
+  const idx = fmSimBloques.findIndex(x => x.id === id);
+  fmSimBloques.splice(idx + 1, 0, copia);
+  fmBloquesSave();
+  fmBloquesRender();
+}
+
+function fmBloqueEliminar(id) {
+  const b = fmSimBloques.find(x => x.id === id);
+  if (!b) return;
+  if (!confirm(`¿Eliminar el pedido "${b.nombre || 'sin nombre'}"?`)) return;
+  fmSimBloques = fmSimBloques.filter(x => x.id !== id);
+  if (fmBloqueEditando === id) fmBloqueEditando = null;
+  fmBloquesSave();
+  fmBloquesRender();
+}
+
+function fmBloqueNombre(id, val) {
+  const b = fmSimBloques.find(x => x.id === id);
+  if (b) { b.nombre = val; fmBloquesSave(); }
+}
+
+// Vaciar el editor para empezar un pedido nuevo (sin tocar los guardados)
+function fmNuevoPedido() {
+  fmBloqueEditando = null;
+  fmSimRows = [];
+  fmSimVars = [];
+  fmSimVarOn = false;
+  const totalEl = document.getElementById('fm-sim-total');
+  if (totalEl) totalEl.value = '100';
+  const tog = document.getElementById('fm-sim-var-toggle');
+  if (tog) tog.checked = false;
+  const editor = document.getElementById('fm-sim-var-editor');
+  if (editor) editor.style.display = 'none';
+  fmSimVarRender();
+  fmSimRender();
+  fmBloquesRender();
+}
+
+function fmBloquesRender() {
+  const card = document.getElementById('fm-bloques-card');
+  const list = document.getElementById('fm-bloques-list');
+  if (!card || !list) return;
+  card.style.display = fmSimBloques.length ? '' : 'none';
+  const countEl = document.getElementById('fm-bloques-count');
+  if (countEl) countEl.textContent = fmSimBloques.length ? `(${fmSimBloques.length})` : '';
+
+  list.innerHTML = fmSimBloques.map(b => {
+    const varOn = !!b.varOn && (b.vars || []).length > 0;
+    const filas = fmComputeFrom(b.total, b.rows, b.vars, varOn);
+    const totalU = filas.reduce((s, r) => s + r.qty, 0);
+    const nModelos = filas.length;
+    const variantes = varOn ? b.vars.map(v => v.name || 'var').join(' / ') : 'sin variantes';
+    const editando = b.id === fmBloqueEditando;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${editando ? '#378ADD' : '#EEF0F2'};border-radius:8px;margin-bottom:6px;background:${editando ? '#F0F7FF' : '#fff'};flex-wrap:wrap;">
+        <input value="${esc(b.nombre)}" onchange="fmBloqueNombre('${b.id}', this.value)"
+          style="font-weight:600;font-size:13px;border:1px solid transparent;background:transparent;width:170px;padding:3px 5px;border-radius:6px;"
+          onfocus="this.style.borderColor='#E5E7EB'" onblur="this.style.borderColor='transparent'">
+        <span style="font-size:12px;color:#6B7280;flex:1;min-width:140px;">${totalU} u · ${nModelos} modelo${nModelos === 1 ? '' : 's'} · ${esc(variantes)}</span>
+        ${editando ? `<span style="font-size:11px;color:#378ADD;font-weight:600;">● editando</span>` : ''}
+        <button class="btn-sm" onclick="fmBloqueEditar('${b.id}')">Editar</button>
+        <button class="btn-sm" onclick="fmBloqueDuplicar('${b.id}')" title="Duplicar">⧉</button>
+        <button class="btn-sm" onclick="fmBloqueEliminar('${b.id}')" title="Eliminar" style="color:#DC2626;">🗑</button>
+      </div>`;
+  }).join('');
+}
+
+// Exportar TODOS los pedidos guardados en una sola imagen apilada
+async function fmGenerarImagenTodo() {
+  if (!fmSimBloques.length) { alert('No hay pedidos guardados.'); return; }
+  const btn = document.getElementById('btn-todo-img');
+  const orig = btn ? btn.textContent : '';
+  if (btn) btn.textContent = 'Generando...';
+  try {
+    const canvases = [];
+    for (const b of fmSimBloques) canvases.push(await fmBloqueToCanvas(b));
+    const gap = 24 * 3;
+    const w = Math.max(...canvases.map(c => c.width));
+    const h = canvases.reduce((s, c) => s + c.height, 0) + gap * (canvases.length - 1);
+    const big = document.createElement('canvas');
+    big.width = w; big.height = h;
+    const ctx = big.getContext('2d');
+    ctx.fillStyle = '#F3F4F6'; ctx.fillRect(0, 0, w, h);
+    let y = 0;
+    for (const c of canvases) { ctx.drawImage(c, 0, y); y += c.height + gap; }
+    big.toBlob(blob => {
+      if (!blob) { if (btn) btn.textContent = orig; return; }
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+        if (btn) { btn.textContent = '✓ Copiado'; setTimeout(() => btn.textContent = orig, 1500); }
+      }).catch(() => {
+        const link = document.createElement('a');
+        link.download = 'pedidos-proveedor.png';
+        link.href = big.toDataURL('image/png');
+        link.click();
+        if (btn) btn.textContent = orig;
+      });
+    }, 'image/png');
+  } catch (e) {
+    if (btn) btn.textContent = orig;
+    alert('No se pudo generar la imagen: ' + e.message);
+  }
+}
+
+// Exportar TODOS los pedidos en un PDF (cada pedido como una sección)
+async function fmGenerarPDF() {
+  if (!fmSimBloques.length) { alert('No hay pedidos guardados.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Todavía se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const btn = document.getElementById('btn-todo-pdf');
+  const orig = btn ? btn.textContent : '';
+  if (btn) btn.textContent = 'Generando...';
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 28;
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - margin * 2;
+    let cursorY = margin;
+    for (let i = 0; i < fmSimBloques.length; i++) {
+      const c = await fmBloqueToCanvas(fmSimBloques[i]);
+      let drawW = maxW, drawH = c.height * maxW / c.width;
+      if (drawH > maxH) { drawH = maxH; drawW = c.width * maxH / c.height; }
+      if (i > 0 && cursorY + drawH > pageH - margin) { pdf.addPage(); cursorY = margin; }
+      pdf.addImage(c.toDataURL('image/png'), 'PNG', margin, cursorY, drawW, drawH);
+      cursorY += drawH + 18;
+    }
+    pdf.save('pedido-proveedor.pdf');
+    if (btn) { btn.textContent = '✓ Listo'; setTimeout(() => btn.textContent = orig, 1500); }
+  } catch (e) {
+    if (btn) btn.textContent = orig;
+    alert('No se pudo generar el PDF: ' + e.message);
+  }
+}
+
 function fmSimCopiar(modo) {
   const varOn = fmSimVarActivo();
   const rows = fmSimComputed();
@@ -2364,15 +2583,15 @@ function fmSimCopiar(modo) {
   });
 }
 
-async function fmSimCopiarImagen() {
-  const total = parseFloat(document.getElementById('fm-sim-total').value) || 0;
-  const varOn = fmSimVarActivo();
-  const data = fmSimComputed();
-  if (!data.length) return;
+// Dibuja UN pedido (bloque) en un canvas y lo devuelve. b = { nombre, total, rows, vars, varOn }
+async function fmBloqueToCanvas(b) {
+  const total = b.total || 0;
+  const vars  = b.vars || [];
+  const varOn = !!b.varOn && vars.length > 0;
+  const data  = fmComputeFrom(total, b.rows || [], vars, varOn);
 
-  // Columnas numéricas: una por variante + "Total", o una sola "Cant."
   const numCols = varOn
-    ? [...fmSimVars.map((v, j) => v.name || ('Var ' + (j + 1))), 'Total']
+    ? [...vars.map((v, j) => v.name || ('Var ' + (j + 1))), 'Total']
     : ['Cant.'];
   const cellVal = (row, k) => {
     if (!varOn) return row.qty;
@@ -2383,7 +2602,7 @@ async function fmSimCopiarImagen() {
   // Precargar las miniaturas de las variantes (son data URLs locales)
   const imgs = {};
   if (varOn) {
-    await Promise.all(fmSimVars.map((v, j) => new Promise(res => {
+    await Promise.all(vars.map((v, j) => new Promise(res => {
       if (!v.img) return res();
       const im = new Image();
       im.onload = () => { imgs[j] = im; res(); };
@@ -2421,9 +2640,10 @@ async function fmSimCopiarImagen() {
   // Título
   let y = pad;
   ctx.fillStyle = '#888';
-  ctx.font = font(10);
+  ctx.font = fontB(11);
   ctx.textAlign = 'left';
-  ctx.fillText(`PEDIDO — ${total} unidades`, pad, y + 10 * scale);
+  const titulo = (b.nombre ? b.nombre + ' — ' : 'PEDIDO — ') + total + ' unidades';
+  ctx.fillText(titulo, pad, y + 11 * scale);
   y += 24 * scale;
 
   // Header (con miniaturas arriba del nombre, si hay fotos)
@@ -2476,6 +2696,24 @@ async function fmSimCopiarImagen() {
   ctx.textAlign = 'center';
   colTotals.forEach((t, k) => ctx.fillText(String(t), numX(k), y + rowH / 2 + 5 * scale));
 
+  return c;
+}
+
+// Construye un snapshot del pedido que está en el editor ahora mismo
+function fmSimSnapshot(nombre) {
+  return {
+    id:    'p' + Date.now() + Math.round(Math.random() * 1000),
+    nombre: nombre || '',
+    total:  parseFloat(document.getElementById('fm-sim-total').value) || 0,
+    rows:   JSON.parse(JSON.stringify(fmSimRows)),
+    vars:   JSON.parse(JSON.stringify(fmSimVars)),
+    varOn:  fmSimVarOn,
+  };
+}
+
+async function fmSimCopiarImagen() {
+  if (!fmSimComputed().length) return;
+  const c = await fmBloqueToCanvas(fmSimSnapshot(''));
   c.toBlob(blob => {
     if (!blob) return;
     navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
@@ -3221,7 +3459,7 @@ function switchTab(id, btn) {
     if (id === 'variantes')       renderVariantes();
     else if (id === 'stock')      renderStock();
     else if (id === 'ventas-mensuales') renderVentasMensuales();
-    else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); fmSimRestore(); }
+    else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); fmSimRestore(); fmBloquesRestore(); }
     else if (id === 'proveedores')      updateProveedoresTab();
     else if (id === 'colores')          updateColoresTab();
     else if (id === 'talles')           updateTallesTab();
