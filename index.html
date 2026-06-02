@@ -2219,7 +2219,7 @@ function fmSimVarImg(i, input) {
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
-      const max = 128;
+      const max = 256;
       const k = Math.min(1, max / Math.max(img.width, img.height));
       const w = Math.max(1, Math.round(img.width * k));
       const h = Math.max(1, Math.round(img.height * k));
@@ -2393,12 +2393,12 @@ async function fmSimCopiarImagen() {
   }
   const hasImgs = Object.keys(imgs).length > 0;
 
-  const scale = 2;
+  const scale = 3;
   const font  = size => `${size * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   const fontB = size => `bold ${size * scale}px -apple-system, sans-serif`;
-  const thumb = 42 * scale;
+  const thumb = 64 * scale;
   const pad = 16 * scale, rowH = 32 * scale;
-  const headerH = (hasImgs ? 84 : 36) * scale;
+  const headerH = (hasImgs ? 112 : 36) * scale;
   const colModel = 180 * scale, colNum = 72 * scale;
   const w = pad * 2 + colModel + numCols.length * colNum;
   const h = headerH + (data.length + 1) * rowH + pad * 2 + 24 * scale;
