@@ -176,12 +176,19 @@ async function syncInventario() {
       size_name:          r.size_name || null,
       store_name:         r.store_name || r.store || '',
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
+      sku:                r.sku || null,
+      barcode:            r.barcode || null,
     });
   }
   const inventario = Array.from(seen.values());
   console.log(`[inventario] ${inventario.length} registros (${rows.length - inventario.length} duplicados ignorados). Guardando en Supabase...`);
   if (!inventario.length) return 0;
-  const { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
+  let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
+  if (error && /sku|barcode|column/i.test(error.message)) {
+    console.warn(`  ⚠️  columnas sku/barcode no existen aún, guardando sin ellas (${error.message})`);
+    const reducido = inventario.map(({ sku, barcode, ...rest }) => rest);
+    ({ error } = await supabase.from('inventario').upsert(reducido, { onConflict: 'product_id,size_id,store_name' }));
+  }
   if (error) throw new Error(`Error guardando inventario: ${error.message}`);
   console.log(`[inventario] OK`);
   return inventario.length;

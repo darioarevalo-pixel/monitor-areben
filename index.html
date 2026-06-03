@@ -1128,7 +1128,7 @@ async function fetchAll(table, baseParams, label, silent = false) {
 }
 
 function getCacheKey() {
-  return 'monitor_v3_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
+  return 'monitor_v4_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi');
 }
 
 function loadCache(ignoreExpiry = false) {
@@ -1216,7 +1216,8 @@ async function fetchFresh() {
           ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
           : 'select=id,name,category,sku,retailer_price,unit_cost,created_at,active&active=eq.1') + '&order=id',
         'productos', true),
-      fetchAll('inventario',              'select=product_id,product_name,size_id,size_name,available_quantity,store_name&order=product_id', 'inventario', true),
+      fetchAll('inventario',              'select=product_id,product_name,size_id,size_name,available_quantity,store_name,sku,barcode&order=product_id', 'inventario', true)
+        .catch(() => fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,available_quantity,store_name&order=product_id', 'inventario', true)),
       fetchAll('ventas_por_mes',          'select=mes,channel,cantidad_ventas,total_items,promedio_items_por_venta&order=mes',          'vmMes', true),
       fetchAll('ventas_por_categoria_mes','select=mes,categoria,total_items&order=mes',                                                 'vmCat', true),
       currentCuenta === CUENTAS.zattia
@@ -1559,9 +1560,11 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     const sid = String(i.size_id);
     const vid = pid + '_' + sid;
     if (!variantesMap[vid]) {
-      variantesMap[vid] = { id: vid, pid, sid, name: i.product_name || '', size: i.size_name || '', stock: 0 };
+      variantesMap[vid] = { id: vid, pid, sid, name: i.product_name || '', size: i.size_name || '', stock: 0, sku: i.sku || '', barcode: i.barcode || '' };
     }
     variantesMap[vid].stock += (i.available_quantity || 0);
+    if (!variantesMap[vid].sku && i.sku) variantesMap[vid].sku = i.sku;
+    if (!variantesMap[vid].barcode && i.barcode) variantesMap[vid].barcode = i.barcode;
   });
 
   const activeProductIds = new Set(allProductos.map(p => p.id));
@@ -4327,10 +4330,12 @@ function mktGenerarReporteFotos() {
   const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id))); // respeta la preselección
   const items = [];
   lista.forEach(x => {
-    const vars = [...new Set((allVariantes || [])
-      .filter(v => String(v.pid) === String(x.gn.id) && (v.stock || 0) > 0)
-      .map(v => v.size || '—'))]
-      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    const seen = new Map();
+    (allVariantes || []).filter(v => String(v.pid) === String(x.gn.id) && (v.stock || 0) > 0).forEach(v => {
+      const sz = v.size || '—';
+      if (!seen.has(sz)) seen.set(sz, { size: sz, sku: v.sku || '' });
+    });
+    const vars = [...seen.values()].sort((a, b) => a.size.localeCompare(b.size, 'es', { numeric: true }));
     if (!vars.length) return; // sin stock disponible → no se fotografía
     items.push({ nombre: x.gn.name || '—', cat: x.categoriasTNStr || '', variantes: vars });
   });
@@ -4352,21 +4357,8 @@ function mktGenerarReporteFotos() {
   y += 10; pdf.setDrawColor(210); pdf.line(M, y, W - M, y); y += 16;
   pdf.setTextColor(0);
 
-  const maxW = W - M * 2 - 18;
   items.forEach((it, idx) => {
-    // Pre-calcular las líneas de variantes para saber el alto del bloque (y pintar el fondo)
-    pdf.setFontSize(10);
-    const lineas = [];
-    let linea = '';
-    it.variantes.forEach(v => {
-      const chip = '[ ] ' + v;
-      const test = linea ? linea + '      ' + chip : chip;
-      if (linea && pdf.getTextWidth(test) > maxW) { lineas.push(linea); linea = chip; }
-      else linea = test;
-    });
-    if (linea) lineas.push(linea);
-    const blockH = 16 + lineas.length * 15 + 8;
-
+    const blockH = 16 + it.variantes.length * 15 + 8;
     if (y + blockH > H - M) { pdf.addPage(); y = M; }
     // Zebra: fondo gris en los pares
     if (idx % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M - 6, y - 12, W - 2 * M + 12, blockH, 'F'); }
@@ -4376,9 +4368,15 @@ function mktGenerarReporteFotos() {
     pdf.text('[ ]  ' + it.nombre, M, y);
     if (it.cat) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120); pdf.text(it.cat, W - M, y, { align: 'right' }); pdf.setTextColor(0); }
     y += 16;
-    // Variantes
+    // Una línea por variante, con su SKU
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
-    lineas.forEach(l => { pdf.text(l, M + 18, y); y += 15; });
+    it.variantes.forEach(v => {
+      pdf.setTextColor(0);
+      pdf.text('[ ] ' + v.size, M + 18, y);
+      if (v.sku) { pdf.setTextColor(110); pdf.text('SKU: ' + v.sku, M + 230, y); }
+      y += 15;
+    });
+    pdf.setTextColor(0);
     y += 8;
   });
 
@@ -4392,11 +4390,13 @@ function mktGenerarEtiquetasZebra() {
   const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id)));
   const labels = [];
   lista.forEach(x => {
-    const vars = [...new Set((allVariantes || [])
-      .filter(v => String(v.pid) === String(x.gn.id) && (v.stock || 0) > 0)
-      .map(v => v.size || '—'))]
-      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
-    vars.forEach(v => labels.push({ nombre: (x.gn.name || '—').toUpperCase(), variante: v }));
+    const seen = new Map();
+    (allVariantes || []).filter(v => String(v.pid) === String(x.gn.id) && (v.stock || 0) > 0).forEach(v => {
+      const sz = v.size || '—';
+      if (!seen.has(sz)) seen.set(sz, { size: sz, sku: v.sku || '', barcode: v.barcode || '' });
+    });
+    [...seen.values()].sort((a, b) => a.size.localeCompare(b.size, 'es', { numeric: true }))
+      .forEach(v => labels.push({ nombre: (x.gn.name || '—').toUpperCase(), variante: v.size, sku: v.sku, barcode: v.barcode }));
   });
   if (!labels.length) { alert('No hay variantes disponibles (con stock) seleccionadas para etiquetar.'); return; }
 
@@ -4412,9 +4412,12 @@ function mktGenerarEtiquetasZebra() {
     pdf.text(nom, W / 2, y, { align: 'center' });
     y += nom.length * 6 + 6;
     pdf.setDrawColor(170); pdf.line(M, y, W - M, y); y += 12;
-    pdf.setFontSize(22);
+    pdf.setFontSize(20);
     const va = pdf.splitTextToSize(lab.variante, W - M * 2);
     pdf.text(va, W / 2, y, { align: 'center' });
+    y += va.length * 8 + 10;
+    if (lab.sku) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(12); pdf.setTextColor(0); pdf.text('SKU: ' + lab.sku, W / 2, y, { align: 'center' }); y += 8; }
+    if (lab.barcode) { pdf.setFontSize(10); pdf.setTextColor(90); pdf.text(lab.barcode, W / 2, y, { align: 'center' }); pdf.setTextColor(0); }
   });
   pdf.save('etiquetas-zebra.pdf');
 }
