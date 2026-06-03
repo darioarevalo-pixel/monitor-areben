@@ -105,6 +105,11 @@
     .mkt-i { cursor: pointer; width: 15px; height: 15px; border: 1px solid #CBD5E1; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-style: italic; font-family: Georgia, "Times New Roman", serif; color: #94A3B8; font-weight: 700; line-height: 1; flex: none; }
     .mkt-i:hover { background: #EEF2FF; color: #6366F1; border-color: #A5B4FC; }
     .mkt-info { display: none; font-size: 11px; color: #475569; margin-top: 5px; background: #F1F5F9; padding: 6px 8px; border-radius: 6px; line-height: 1.45; }
+    .mkt-multi { position: relative; }
+    .mkt-multi-btn { width: 100%; text-align: left; padding: 7px 10px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 13px; background: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 6px; box-sizing: border-box; }
+    .mkt-multi-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1px solid #D1D5DB; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; max-height: 240px; overflow: auto; min-width: 190px; }
+    .mkt-multi-panel label { display: flex; align-items: center; gap: 7px; padding: 5px 7px; font-size: 13px; border-radius: 6px; cursor: pointer; }
+    .mkt-multi-panel label:hover { background: #F3F4F6; }
     .pagination { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 13px; color: #6B7280; }
     .pagination button { padding: 4px 10px; font-size: 12px; }
 
@@ -787,10 +792,11 @@
 
           <div class="mkt-filtro" style="display:flex;flex-direction:column;">
             <div class="mkt-filtro-lbl">Mes de ingreso <span class="mkt-i" onclick="mktToggleInfo(this)" title="¿Qué hace?">i</span></div>
-            <select id="mkt-cohorte" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
-              <option value="">Todos los meses</option>
-            </select>
-            <div class="mkt-info">Muestra solo los productos que <b>entraron al catálogo</b> en el mes elegido. Dejalo en "Todos" para ver todo.</div>
+            <div class="mkt-multi">
+              <button type="button" class="mkt-multi-btn" onclick="mktMultiToggle('cohorte')"><span id="mkt-cohorte-lbl">Todos los meses</span><span style="opacity:.5;">▾</span></button>
+              <div class="mkt-multi-panel" id="mkt-cohorte-panel" style="display:none;"></div>
+            </div>
+            <div class="mkt-info">Muestra los productos que <b>entraron al catálogo</b> en los meses tildados. Podés elegir <b>varios</b>. Sin nada tildado = todos.</div>
           </div>
 
           <div class="mkt-filtro" style="display:flex;flex-direction:column;">
@@ -828,16 +834,18 @@
 
           <div class="mkt-filtro" style="display:flex;flex-direction:column;">
             <div class="mkt-filtro-lbl">Estado de la ficha <span class="mkt-i" onclick="mktToggleInfo(this)" title="¿Qué hace?">i</span></div>
-            <select id="mkt-calidad" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
-              <option value="">Todos los estados</option>
-              <option value="sin-foto">Sin foto en TN</option>
-              <option value="pocas-fotos">Pocas fotos (1-2)</option>
-              <option value="sin-desc">Sin descripción</option>
-              <option value="no-publicado">No publicado en TN</option>
-              <option value="not-in-tn">No está en TN</option>
-              <option value="top-low-stock">⚠ Top ventas con stock bajo</option>
-            </select>
-            <div class="mkt-info">Filtra por el <b>estado de la publicación</b>: sin foto, pocas fotos, sin descripción, no publicado, o que no está en Tienda Nube. Ideal para encontrar lo que falta completar.</div>
+            <div class="mkt-multi">
+              <button type="button" class="mkt-multi-btn" onclick="mktMultiToggle('calidad')"><span id="mkt-calidad-lbl">Todos los estados</span><span style="opacity:.5;">▾</span></button>
+              <div class="mkt-multi-panel" id="mkt-calidad-panel" style="display:none;">
+                <label><input type="checkbox" value="sin-foto" onchange="mktMultiChange('calidad',this)"> Sin foto en TN</label>
+                <label><input type="checkbox" value="pocas-fotos" onchange="mktMultiChange('calidad',this)"> Pocas fotos (1-2)</label>
+                <label><input type="checkbox" value="sin-desc" onchange="mktMultiChange('calidad',this)"> Sin descripción</label>
+                <label><input type="checkbox" value="no-publicado" onchange="mktMultiChange('calidad',this)"> No publicado en TN</label>
+                <label><input type="checkbox" value="not-in-tn" onchange="mktMultiChange('calidad',this)"> No está en TN</label>
+                <label><input type="checkbox" value="top-low-stock" onchange="mktMultiChange('calidad',this)"> ⚠ Top ventas con stock bajo</label>
+              </div>
+            </div>
+            <div class="mkt-info">Filtra por el <b>estado de la publicación</b>. Podés elegir <b>varios</b> a la vez (ej. "sin foto" + "sin descripción" = los que les falta foto O descripción). Ideal para encontrar lo que hay que completar.</div>
           </div>
 
         </div>
@@ -4183,19 +4191,67 @@ function _mktCanalesDelProducto(productId) {
   return set ? Array.from(set) : [];
 }
 
+// ── Filtros multi-selección (estado y mes de ingreso) ──────────────────────────
+const mktSel = { calidad: new Set(), cohorte: new Set() };
+const mktSelDefaultLabel = { calidad: 'Todos los estados', cohorte: 'Todos los meses' };
+
+function mktMultiToggle(key) {
+  const panel = document.getElementById('mkt-' + key + '-panel');
+  if (!panel) return;
+  const abrir = panel.style.display === 'none' || !panel.style.display;
+  document.querySelectorAll('#tab-marketing .mkt-multi-panel').forEach(p => { p.style.display = 'none'; });
+  panel.style.display = abrir ? 'block' : 'none';
+}
+
+function mktMultiChange(key, cb) {
+  if (cb.checked) mktSel[key].add(cb.value); else mktSel[key].delete(cb.value);
+  mktMultiUpdateLabel(key);
+  mktRender();
+}
+
+function mktSelTextos(key) {
+  return [...mktSel[key]].map(v => {
+    const cb = document.querySelector(`#mkt-${key}-panel input[value="${CSS.escape(v)}"]`);
+    return cb && cb.parentNode ? cb.parentNode.textContent.trim() : v;
+  });
+}
+
+function mktMultiUpdateLabel(key) {
+  const lbl = document.getElementById('mkt-' + key + '-lbl');
+  if (!lbl) return;
+  const s = mktSel[key];
+  if (!s.size) { lbl.textContent = mktSelDefaultLabel[key]; lbl.style.color = ''; lbl.style.fontWeight = ''; return; }
+  lbl.textContent = s.size === 1 ? mktSelTextos(key)[0] : (s.size + ' seleccionados');
+  lbl.style.color = '#185fa5'; lbl.style.fontWeight = '600';
+}
+
+function mktMatchCalidad(x, c) {
+  if (c === 'sin-foto')      return x.tn && x.tn.image_count === 0;
+  if (c === 'pocas-fotos')   return x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2;
+  if (c === 'sin-desc')      return x.tn && !x.tn.has_desc;
+  if (c === 'no-publicado')  return x.tn && !x.tn.published;
+  if (c === 'not-in-tn')     return !x.tn;
+  if (c === 'top-low-stock') return x.topLowStock;
+  return true;
+}
+
+// Cerrar los paneles multi al hacer click afuera
+document.addEventListener('click', e => {
+  if (!e.target.closest('.mkt-multi')) {
+    document.querySelectorAll('#tab-marketing .mkt-multi-panel').forEach(p => { p.style.display = 'none'; });
+  }
+});
+
 function mktPopulateCohortes() {
-  const sel = document.getElementById('mkt-cohorte');
-  if (sel.options.length > 1) return;
+  const panel = document.getElementById('mkt-cohorte-panel');
+  if (!panel || panel.children.length) return;
   const meses = new Set();
   (allProductos || []).forEach(p => { if (p.ingresoMes) meses.add(p.ingresoMes); });
   const MONTH = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  [...meses].sort().reverse().forEach(m => {
+  panel.innerHTML = [...meses].sort().reverse().map(m => {
     const [y, mo] = m.split('-');
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.textContent = MONTH[parseInt(mo)-1] + ' ' + y;
-    sel.appendChild(opt);
-  });
+    return `<label><input type="checkbox" value="${m}" onchange="mktMultiChange('cohorte',this)"> ${MONTH[parseInt(mo) - 1]} ${y}</label>`;
+  }).join('') || '<div style="font-size:12px;color:#9CA3AF;padding:6px;">Sin meses</div>';
 }
 
 function mktPopulateCategorias() {
@@ -4241,8 +4297,11 @@ function mktRenderStats() {
 }
 
 function mktSetFiltro(field, value) {
-  const id = field === 'calidad' ? 'mkt-calidad' : null;
-  if (id) document.getElementById(id).value = value;
+  if (field === 'calidad') {
+    mktSel.calidad = new Set([value]);
+    document.querySelectorAll('#mkt-calidad-panel input').forEach(cb => { cb.checked = cb.value === value; });
+    mktMultiUpdateLabel('calidad');
+  }
   mktRender();
 }
 
@@ -4252,11 +4311,11 @@ function mktResumenFiltros() {
   const q = (document.getElementById('mkt-search')?.value || '').trim();
   const sel = id => { const e = document.getElementById(id); return e && e.value ? e.options[e.selectedIndex].text : ''; };
   if (q) partes.push('Buscar: ' + q);
-  if (sel('mkt-cohorte')) partes.push(sel('mkt-cohorte'));
+  if (mktSel.cohorte.size) partes.push('Meses: ' + mktSelTextos('cohorte').join(', '));
   if (sel('mkt-cat-tn')) partes.push('Cat: ' + sel('mkt-cat-tn'));
   if (sel('mkt-canal')) partes.push('Canal: ' + sel('mkt-canal'));
   if (sel('mkt-stock')) partes.push('Stock: ' + sel('mkt-stock'));
-  if (sel('mkt-calidad')) partes.push(sel('mkt-calidad'));
+  if (mktSel.calidad.size) partes.push('Estado: ' + mktSelTextos('calidad').join(', '));
   return partes.length ? partes.join('  ·  ') : 'Sin filtros (todo el catálogo)';
 }
 
@@ -4335,12 +4394,10 @@ function mktSort(col) {
 function _mktListaFiltrada() {
   let lista = _mktBuildLista();
   const q = (document.getElementById('mkt-search').value || '').toLowerCase().trim();
-  const cohorte = document.getElementById('mkt-cohorte').value;
   const catTn = document.getElementById('mkt-cat-tn').value;
   const canal = document.getElementById('mkt-canal').value;
-  const calidad = document.getElementById('mkt-calidad').value;
   if (q) lista = lista.filter(x => x.gn.name.toLowerCase().includes(q) || (x.gn.sku || '').toLowerCase().includes(q));
-  if (cohorte) lista = lista.filter(x => x.ingresoMes === cohorte);
+  if (mktSel.cohorte.size) lista = lista.filter(x => mktSel.cohorte.has(x.ingresoMes));
   if (catTn) lista = lista.filter(x => x.categoriasTN.includes(catTn));
   if (canal) lista = lista.filter(x => x.canales.includes(canal));
   const stockF = document.getElementById('mkt-stock')?.value || '';
@@ -4352,12 +4409,7 @@ function _mktListaFiltrada() {
     if (!isNaN(mn)) lista = lista.filter(x => (x.stock || 0) >= mn);
     if (!isNaN(mx)) lista = lista.filter(x => (x.stock || 0) <= mx);
   }
-  if (calidad === 'sin-foto')      lista = lista.filter(x => x.tn && x.tn.image_count === 0);
-  if (calidad === 'pocas-fotos')   lista = lista.filter(x => x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2);
-  if (calidad === 'sin-desc')      lista = lista.filter(x => x.tn && !x.tn.has_desc);
-  if (calidad === 'no-publicado')  lista = lista.filter(x => x.tn && !x.tn.published);
-  if (calidad === 'not-in-tn')     lista = lista.filter(x => !x.tn);
-  if (calidad === 'top-low-stock') lista = lista.filter(x => x.topLowStock);
+  if (mktSel.calidad.size) lista = lista.filter(x => [...mktSel.calidad].some(c => mktMatchCalidad(x, c)));
   const { col, dir } = mktSortState;
   lista.sort((a, b) => {
     if (col === 'name')   return dir * (a.gn.name || '').localeCompare(b.gn.name || '');
