@@ -841,6 +841,7 @@
                 <label><input type="checkbox" value="sin-foto" onchange="mktMultiChange('calidad',this)"> Sin foto en TN</label>
                 <label><input type="checkbox" value="pocas-fotos" onchange="mktMultiChange('calidad',this)"> Pocas fotos (1-2)</label>
                 <label><input type="checkbox" value="sin-desc" onchange="mktMultiChange('calidad',this)"> Sin descripción</label>
+                <label><input type="checkbox" value="sin-foto-desc" onchange="mktMultiChange('calidad',this)"> ⭐ Sin foto NI descripción</label>
                 <label><input type="checkbox" value="no-publicado" onchange="mktMultiChange('calidad',this)"> No publicado en TN</label>
                 <label><input type="checkbox" value="not-in-tn" onchange="mktMultiChange('calidad',this)"> No está en TN</label>
                 <label><input type="checkbox" value="top-low-stock" onchange="mktMultiChange('calidad',this)"> ⚠ Top ventas con stock bajo</label>
@@ -4233,6 +4234,7 @@ function mktMatchCalidad(x, c) {
   if (c === 'sin-foto')      return x.tn && x.tn.image_count === 0;
   if (c === 'pocas-fotos')   return x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2;
   if (c === 'sin-desc')      return x.tn && !x.tn.has_desc;
+  if (c === 'sin-foto-desc') return x.tn && x.tn.image_count === 0 && !x.tn.has_desc;
   if (c === 'no-publicado')  return x.tn && !x.tn.published;
   if (c === 'not-in-tn')     return !x.tn;
   if (c === 'top-low-stock') return x.topLowStock;
