@@ -848,6 +848,7 @@
         <table style="font-size:13px;">
           <thead>
             <tr>
+              <th style="width:34px;text-align:center;"><input type="checkbox" id="mkt-sel-all" checked onchange="mktSelAll(this.checked)" title="Incluir todos / ninguno en el reporte"></th>
               <th style="width:72px;">Foto</th>
               <th onclick="mktSort('name')" style="cursor:pointer;">Producto ↕</th>
               <th onclick="mktSort('cat_tn')" style="cursor:pointer;width:160px;">Cat. TN ↕</th>
@@ -858,7 +859,7 @@
               <th style="width:100px;text-align:center;">Acciones</th>
             </tr>
           </thead>
-          <tbody id="mkt-tbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando…</td></tr></tbody>
+          <tbody id="mkt-tbody"><tr><td colspan="9" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando…</td></tr></tbody>
         </table>
       </div>
 
@@ -3976,6 +3977,27 @@ function switchTab(id, btn) {
 let mktDataReady = false;
 let mktSortState = { col: 'sales30', dir: -1 };
 let mktExpanded = null; // id de producto con el detalle abierto
+let mktExcl = new Set(); // productos destildados (no van al reporte de fotos)
+
+function mktToggleSel(pid, checked, el) {
+  if (checked) mktExcl.delete(String(pid)); else mktExcl.add(String(pid));
+  const tr = el && el.closest('tr');
+  if (tr) tr.style.opacity = checked ? '' : '.4';
+  // actualizar contador sin re-render completo
+  const lista = _mktListaFiltrada();
+  const selCount = lista.filter(x => !mktExcl.has(String(x.gn.id))).length;
+  const cnt = document.getElementById('mkt-count');
+  if (cnt) cnt.innerHTML = `<b>${selCount}</b> seleccionados para el reporte · Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` + (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
+  const selAll = document.getElementById('mkt-sel-all');
+  if (selAll) selAll.checked = lista.length > 0 && selCount === lista.length;
+}
+
+function mktSelAll(checked) {
+  const lista = _mktListaFiltrada();
+  if (checked) lista.forEach(x => mktExcl.delete(String(x.gn.id)));
+  else lista.forEach(x => mktExcl.add(String(x.gn.id)));
+  mktRender();
+}
 
 // Muestra/oculta los inputs de rango del filtro de stock
 function mktStockChange() {
@@ -4046,7 +4068,7 @@ function mktDetalleRow(x) {
       <div>🌐 <b>Tienda online:</b> ${c.online} u</div>
       <div style="color:#9CA3AF;font-size:11px;margin-top:4px;">ventas de los últimos 30 días</div>
     </div>`;
-  return `<tr><td colspan="8" style="background:#F9FAFB;padding:14px 22px;border-bottom:1px solid #E5E7EB;">
+  return `<tr><td colspan="9" style="background:#F9FAFB;padding:14px 22px;border-bottom:1px solid #E5E7EB;">
       <div style="display:flex;gap:48px;flex-wrap:wrap;">
         <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Stock completo</div>${stockTabla}</div>
         <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Ventas por canal</div>${ventasBox}</div>
@@ -4055,7 +4077,7 @@ function mktDetalleRow(x) {
 
 async function cargarMarketingTab() {
   document.getElementById('mkt-tbody').innerHTML =
-    '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando datos de TiendaNube y cruzando con stock/ventas…</td></tr>';
+    '<tr><td colspan="9" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando datos de TiendaNube y cruzando con stock/ventas…</td></tr>';
   // Asegurar que tnImageMaps esté cargado (lo tira por dentro datos completos: cats + imágenes)
   const key = _cuentaKey();
   try {
@@ -4077,7 +4099,7 @@ async function cargarMarketingTab() {
     mktRender();
   } catch (e) {
     document.getElementById('mkt-tbody').innerHTML =
-      `<tr><td colspan="8" style="text-align:center;padding:30px;color:#DC2626;">Error: ${e.message}</td></tr>`;
+      `<tr><td colspan="9" style="text-align:center;padding:30px;color:#DC2626;">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -4238,11 +4260,11 @@ function mktResumenFiltros() {
   return partes.length ? partes.join('  ·  ') : 'Sin filtros (todo el catálogo)';
 }
 
-// Genera un PDF para separar productos y sacarles fotos: por cada producto filtrado,
-// solo las variantes CON stock, con nombre, SKU (del producto) y categoría TN.
+// Genera un PDF para separar productos y sacarles fotos: por cada producto seleccionado,
+// solo las variantes CON stock, con nombre, variantes y categoría TN.
 function mktGenerarReporteFotos() {
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
-  const lista = _mktListaFiltrada();
+  const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id))); // respeta la preselección
   const items = [];
   lista.forEach(x => {
     const vars = [...new Set((allVariantes || [])
@@ -4250,9 +4272,9 @@ function mktGenerarReporteFotos() {
       .map(v => v.size || '—'))]
       .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
     if (!vars.length) return; // sin stock disponible → no se fotografía
-    items.push({ nombre: x.gn.name || '—', sku: x.gn.sku || '', cat: x.categoriasTNStr || '', variantes: vars });
+    items.push({ nombre: x.gn.name || '—', cat: x.categoriasTNStr || '', variantes: vars });
   });
-  if (!items.length) { alert('Con los filtros actuales no hay productos con variantes disponibles (con stock) para fotografiar.'); return; }
+  if (!items.length) { alert('No hay productos seleccionados con variantes disponibles (con stock) para fotografiar.'); return; }
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -4267,31 +4289,37 @@ function mktGenerarReporteFotos() {
   y += 16;
   pdf.setFontSize(8); pdf.setTextColor(150);
   pdf.text('Filtros: ' + mktResumenFiltros(), M, y);
-  y += 10; pdf.setDrawColor(210); pdf.line(M, y, W - M, y); y += 18;
+  y += 10; pdf.setDrawColor(210); pdf.line(M, y, W - M, y); y += 16;
   pdf.setTextColor(0);
 
-  items.forEach(it => {
-    if (y > H - M - 38) { pdf.addPage(); y = M; }
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
-    pdf.text('[ ]  ' + it.nombre, M, y);
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120);
-    pdf.text('SKU: ' + (it.sku || '—') + (it.cat ? '   ·   ' + it.cat : ''), W - M, y, { align: 'right' });
-    pdf.setTextColor(0);
-    y += 16;
+  const maxW = W - M * 2 - 18;
+  items.forEach((it, idx) => {
+    // Pre-calcular las líneas de variantes para saber el alto del bloque (y pintar el fondo)
     pdf.setFontSize(10);
-    const maxW = W - M * 2 - 18;
+    const lineas = [];
     let linea = '';
     it.variantes.forEach(v => {
       const chip = '[ ] ' + v;
       const test = linea ? linea + '      ' + chip : chip;
-      if (linea && pdf.getTextWidth(test) > maxW) {
-        pdf.text(linea, M + 18, y); y += 15;
-        if (y > H - M) { pdf.addPage(); y = M; }
-        linea = chip;
-      } else linea = test;
+      if (linea && pdf.getTextWidth(test) > maxW) { lineas.push(linea); linea = chip; }
+      else linea = test;
     });
-    if (linea) { pdf.text(linea, M + 18, y); y += 15; }
-    y += 9;
+    if (linea) lineas.push(linea);
+    const blockH = 16 + lineas.length * 15 + 8;
+
+    if (y + blockH > H - M) { pdf.addPage(); y = M; }
+    // Zebra: fondo gris en los pares
+    if (idx % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M - 6, y - 12, W - 2 * M + 12, blockH, 'F'); }
+
+    // Producto + categoría
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(0);
+    pdf.text('[ ]  ' + it.nombre, M, y);
+    if (it.cat) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120); pdf.text(it.cat, W - M, y, { align: 'right' }); pdf.setTextColor(0); }
+    y += 16;
+    // Variantes
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
+    lineas.forEach(l => { pdf.text(l, M + 18, y); y += 15; });
+    y += 8;
   });
 
   pdf.save('lista-fotos.pdf');
@@ -4351,7 +4379,7 @@ function mktRender() {
 
   const tbody = document.getElementById('mkt-tbody');
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Sin resultados con los filtros actuales</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#9CA3AF;">Sin resultados con los filtros actuales</td></tr>';
     document.getElementById('mkt-count').textContent = '';
     return;
   }
@@ -4384,7 +4412,9 @@ function mktRender() {
     const editarTN = tnId ? `<a href="${adminBaseUrl}/${tnId}" target="_blank" title="Editar en TN admin" style="color:#6366F1;text-decoration:none;">✏️</a>` : '';
 
     const abierto = String(mktExpanded) === String(x.gn.id);
-    const fila = `<tr>
+    const incluido = !mktExcl.has(String(x.gn.id));
+    const fila = `<tr style="${incluido ? '' : 'opacity:.4;'}">
+      <td style="text-align:center;"><input type="checkbox" ${incluido ? 'checked' : ''} onchange="mktToggleSel('${x.gn.id}', this.checked, this)" title="Incluir en el reporte de fotos"></td>
       <td>${fotoCell}</td>
       <td onclick="mktToggleDetalle('${x.gn.id}')" style="cursor:pointer;" title="Ver stock completo y ventas por canal">
         <div style="font-weight:500;">${abierto ? '▾' : '▸'} ${esc(x.gn.name)}</div>
@@ -4400,9 +4430,12 @@ function mktRender() {
     return fila + (abierto ? mktDetalleRow(x) : '');
   }).join('');
 
-  document.getElementById('mkt-count').textContent =
-    `Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` +
+  const selCount = lista.filter(x => !mktExcl.has(String(x.gn.id))).length;
+  document.getElementById('mkt-count').innerHTML =
+    `<b>${selCount}</b> seleccionados para el reporte · Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` +
     (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
+  const selAll = document.getElementById('mkt-sel-all');
+  if (selAll) selAll.checked = lista.length > 0 && selCount === lista.length;
 }
 
 function _mesLabel(yyyymm) {
