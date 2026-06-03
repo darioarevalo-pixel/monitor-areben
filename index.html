@@ -809,6 +809,21 @@
           </div>
 
           <div class="mkt-filtro" style="display:flex;flex-direction:column;">
+            <div class="mkt-filtro-lbl">Stock <span class="mkt-i" onclick="mktToggleInfo(this)" title="¿Qué hace?">i</span></div>
+            <select id="mkt-stock" onchange="mktStockChange()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
+              <option value="">Todos</option>
+              <option value="con">Con stock (&gt; 0)</option>
+              <option value="sin">Sin stock (= 0)</option>
+              <option value="rango">Entre un rango…</option>
+            </select>
+            <div id="mkt-stock-rango" style="display:none;gap:6px;margin-top:6px;">
+              <input type="number" id="mkt-stock-min" min="0" placeholder="mín" oninput="mktRender()" style="width:50%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box;">
+              <input type="number" id="mkt-stock-max" min="0" placeholder="máx" oninput="mktRender()" style="width:50%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box;">
+            </div>
+            <div class="mkt-info">Filtra por stock disponible: <b>con stock</b>, <b>sin stock</b>, o un <b>rango</b> (ej. entre 1 y 5 para ver lo que está por agotarse). Independiente de los demás filtros.</div>
+          </div>
+
+          <div class="mkt-filtro" style="display:flex;flex-direction:column;">
             <div class="mkt-filtro-lbl">Estado de la ficha <span class="mkt-i" onclick="mktToggleInfo(this)" title="¿Qué hace?">i</span></div>
             <select id="mkt-calidad" onchange="mktRender()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
               <option value="">Todos los estados</option>
@@ -3959,6 +3974,14 @@ let mktDataReady = false;
 let mktSortState = { col: 'sales30', dir: -1 };
 let mktExpanded = null; // id de producto con el detalle abierto
 
+// Muestra/oculta los inputs de rango del filtro de stock
+function mktStockChange() {
+  const v = document.getElementById('mkt-stock').value;
+  const r = document.getElementById('mkt-stock-rango');
+  if (r) r.style.display = v === 'rango' ? 'flex' : 'none';
+  mktRender();
+}
+
 // Muestra/oculta la explicación (i) de un filtro de marketing
 function mktToggleInfo(el) {
   const cont = el.closest('.mkt-filtro');
@@ -4218,6 +4241,15 @@ function mktRender() {
   if (cohorte) lista = lista.filter(x => x.ingresoMes === cohorte);
   if (catTn) lista = lista.filter(x => x.categoriasTN.includes(catTn));
   if (canal) lista = lista.filter(x => x.canales.includes(canal));
+  const stockF = document.getElementById('mkt-stock')?.value || '';
+  if (stockF === 'con') lista = lista.filter(x => (x.stock || 0) > 0);
+  else if (stockF === 'sin') lista = lista.filter(x => (x.stock || 0) <= 0);
+  else if (stockF === 'rango') {
+    const mn = parseInt(document.getElementById('mkt-stock-min')?.value);
+    const mx = parseInt(document.getElementById('mkt-stock-max')?.value);
+    if (!isNaN(mn)) lista = lista.filter(x => (x.stock || 0) >= mn);
+    if (!isNaN(mx)) lista = lista.filter(x => (x.stock || 0) <= mx);
+  }
   if (calidad === 'sin-foto')      lista = lista.filter(x => x.tn && x.tn.image_count === 0);
   if (calidad === 'pocas-fotos')   lista = lista.filter(x => x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2);
   if (calidad === 'sin-desc')      lista = lista.filter(x => x.tn && !x.tn.has_desc);
