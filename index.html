@@ -1310,6 +1310,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   window.allDetalles = detalles || [];
   // Invalidar cache del mapa de canales (se reconstruye en próximo acceso)
   window._mktChannelMap = null;
+  window._mktSaleCh = null;
   const invByProduct = {};
   const invByVariant = {};
   function _matchModelo(sizeName) {
@@ -3919,6 +3920,65 @@ function switchTab(id, btn) {
 // ════════════════════════════════════════════════════════════════
 let mktDataReady = false;
 let mktSortState = { col: 'sales30', dir: -1 };
+let mktExpanded = null; // id de producto con el detalle abierto
+
+function mktToggleDetalle(pid) {
+  mktExpanded = String(mktExpanded) === String(pid) ? null : String(pid);
+  mktRender();
+}
+
+// sale_id → { fecha, online } (online = Tienda Nube)
+function _mktVentaCanal() {
+  if (!window._mktSaleCh) {
+    const m = {};
+    (window.allVentas || []).forEach(v => {
+      m[String(v.id)] = { f: (v.date_sale || '').substring(0, 10), online: /tienda *nube|online/i.test(v.channel || '') };
+    });
+    window._mktSaleCh = m;
+  }
+  return window._mktSaleCh;
+}
+
+// Unidades vendidas de un producto en los últimos 'dias', separadas Local vs Tienda online
+function _mktVentasPorCanal(pid, dias) {
+  const sc = _mktVentaCanal();
+  const cut = new Date(TODAY); cut.setDate(cut.getDate() - dias);
+  const cutStr = cut.toISOString().substring(0, 10);
+  let local = 0, online = 0;
+  (window.allDetalles || []).forEach(it => {
+    if (String(it.product_id) !== String(pid)) return;
+    const s = sc[String(it.sale_id)]; if (!s) return;
+    if (dias && s.f && s.f < cutStr) return;
+    const q = it.quantity || 1;
+    if (s.online) online += q; else local += q;
+  });
+  return { local, online };
+}
+
+// Fila de detalle de un producto: stock completo por variante + ventas por canal
+function mktDetalleRow(x) {
+  const pid = x.gn.id;
+  const vars = (allVariantes || []).filter(v => String(v.pid) === String(pid))
+    .map(v => ({ size: v.size, stock: v.stock || 0 }))
+    .sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
+  const totalStock = vars.reduce((s, v) => s + v.stock, 0);
+  const stockTabla = vars.length
+    ? `<table style="width:auto;font-size:12px;border-collapse:collapse;">${vars.map(v =>
+        `<tr><td style="padding:2px 18px 2px 0;color:#555;">${esc(v.size || '—')}</td><td style="padding:2px 0;text-align:right;font-weight:600;color:${v.stock <= 0 ? '#DC2626' : v.stock <= 5 ? '#D97706' : '#111'};">${v.stock}</td></tr>`).join('')}
+        <tr style="border-top:1px solid #E5E7EB;"><td style="padding:5px 18px 2px 0;font-weight:700;">Total</td><td style="padding:5px 0;text-align:right;font-weight:700;">${totalStock}</td></tr></table>`
+    : '<span style="color:#9CA3AF;font-size:12px;">Sin variantes con stock</span>';
+  const c = _mktVentasPorCanal(pid, 30);
+  const ventasBox = `<div style="font-size:13px;line-height:1.7;">
+      <div>🏠 <b>Local:</b> ${c.local} u</div>
+      <div>🌐 <b>Tienda online:</b> ${c.online} u</div>
+      <div style="color:#9CA3AF;font-size:11px;margin-top:4px;">ventas de los últimos 30 días</div>
+    </div>`;
+  return `<tr><td colspan="8" style="background:#F9FAFB;padding:14px 22px;border-bottom:1px solid #E5E7EB;">
+      <div style="display:flex;gap:48px;flex-wrap:wrap;">
+        <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Stock completo</div>${stockTabla}</div>
+        <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Ventas por canal</div>${ventasBox}</div>
+      </div></td></tr>`;
+}
 
 async function cargarMarketingTab() {
   document.getElementById('mkt-tbody').innerHTML =
@@ -4168,19 +4228,21 @@ function mktRender() {
     const verTienda = handle ? `<a href="${tiendaBaseUrl}/productos/${handle}" target="_blank" title="Ver en tienda" style="color:#378ADD;text-decoration:none;">🌐</a>` : '';
     const editarTN = tnId ? `<a href="${adminBaseUrl}/${tnId}" target="_blank" title="Editar en TN admin" style="color:#6366F1;text-decoration:none;">✏️</a>` : '';
 
-    return `<tr>
+    const abierto = String(mktExpanded) === String(x.gn.id);
+    const fila = `<tr>
       <td>${fotoCell}</td>
-      <td>
-        <div style="font-weight:500;">${esc(x.gn.name)}</div>
+      <td onclick="mktToggleDetalle('${x.gn.id}')" style="cursor:pointer;" title="Ver stock completo y ventas por canal">
+        <div style="font-weight:500;">${abierto ? '▾' : '▸'} ${esc(x.gn.name)}</div>
         ${meta ? `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${esc(meta)}</div>` : ''}
       </td>
       <td style="font-size:12px;color:#666;">${esc(x.categoriasTNStr || '—')}</td>
       <td style="text-align:center;">${badges.join('')}</td>
       <td style="text-align:right;font-weight:500;">${stockTxt}</td>
-      <td style="text-align:right;font-weight:500;">${x.sales30}</td>
+      <td onclick="mktToggleDetalle('${x.gn.id}')" style="text-align:right;font-weight:500;cursor:pointer;color:#378ADD;" title="Ver Local vs Tienda online">${x.sales30}</td>
       <td style="font-size:11px;color:#666;">${esc(x.canalesStr)}</td>
       <td style="text-align:center;font-size:18px;">${verTienda} ${editarTN}</td>
     </tr>`;
+    return fila + (abierto ? mktDetalleRow(x) : '');
   }).join('');
 
   document.getElementById('mkt-count').textContent =
