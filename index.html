@@ -774,7 +774,7 @@
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
           <button class="btn-sm" onclick="mktGenerarReporteFotos()" title="PDF para separar y fotografiar lo que está filtrado" style="background:#DC2626;color:#fff;">📄 Lista para fotos (PDF)</button>
-          <button class="btn-sm" onclick="mktGenerarEtiquetasZebra()" title="Etiquetas 5×25 cm, 1 por variante, para impresora Zebra" style="background:#1F2937;color:#fff;">🏷️ Etiquetas Zebra</button>
+          <button class="btn-sm" onclick="mktGenerarEtiquetasZebra()" title="Etiquetas 5×2,5 cm, 1 por variante, para impresora Zebra" style="background:#1F2937;color:#fff;">🏷️ Etiquetas Zebra</button>
         </div>
       </div>
 
@@ -4401,23 +4401,25 @@ function mktGenerarEtiquetasZebra() {
   if (!labels.length) { alert('No hay variantes disponibles (con stock) seleccionadas para etiquetar.'); return; }
 
   const { jsPDF } = window.jspdf;
-  const W = 50, Hh = 250; // mm — 5 cm × 25 cm
-  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'portrait' });
-  const M = 4;
+  const W = 50, Hh = 25; // mm — 5 cm × 2,5 cm
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' });
+  const M = 2.5, CX = W / 2;
   labels.forEach((lab, i) => {
-    if (i > 0) pdf.addPage([W, Hh], 'portrait');
-    let y = 18;
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
-    const nom = pdf.splitTextToSize(lab.nombre, W - M * 2);
-    pdf.text(nom, W / 2, y, { align: 'center' });
-    y += nom.length * 6 + 6;
-    pdf.setDrawColor(170); pdf.line(M, y, W - M, y); y += 12;
-    pdf.setFontSize(20);
-    const va = pdf.splitTextToSize(lab.variante, W - M * 2);
-    pdf.text(va, W / 2, y, { align: 'center' });
-    y += va.length * 8 + 10;
-    if (lab.sku) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(12); pdf.setTextColor(0); pdf.text('SKU: ' + lab.sku, W / 2, y, { align: 'center' }); y += 8; }
-    if (lab.barcode) { pdf.setFontSize(10); pdf.setTextColor(90); pdf.text(lab.barcode, W / 2, y, { align: 'center' }); pdf.setTextColor(0); }
+    if (i > 0) pdf.addPage([W, Hh], 'landscape');
+    let y = 4.2;
+    // Nombre del producto (chico, hasta 2 líneas)
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); pdf.setTextColor(0);
+    const nom = pdf.splitTextToSize(lab.nombre, W - M * 2).slice(0, 2);
+    pdf.text(nom, CX, y, { align: 'center' });
+    y += nom.length * 3.0 + 1.4;
+    // Variante (lo más grande)
+    pdf.setFontSize(11);
+    pdf.text(pdf.splitTextToSize(lab.variante, W - M * 2).slice(0, 1), CX, y, { align: 'center' });
+    y += 4.4;
+    // SKU y barcode (chiquitos)
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
+    if (lab.sku) { pdf.text('SKU: ' + lab.sku, CX, y, { align: 'center' }); y += 3.4; }
+    if (lab.barcode) { pdf.setFontSize(6); pdf.setTextColor(95); pdf.text(String(lab.barcode), CX, y, { align: 'center' }); pdf.setTextColor(0); }
   });
   pdf.save('etiquetas-zebra.pdf');
 }
