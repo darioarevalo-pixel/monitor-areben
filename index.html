@@ -4380,6 +4380,35 @@ function mktGenerarReporteFotos() {
     y += 8;
   });
 
+  // ── Última hoja: procedimiento + N° de venta de baja ──
+  pdf.addPage();
+  let py = M;
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.setTextColor(0);
+  pdf.text('Procedimiento — separación para fotos', M, py); py += 22;
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.setTextColor(60);
+  const intro = pdf.splitTextToSize('En estas hojas se comparten los productos que hay que separar para la sesión de fotos. Se necesitan TODOS los productos, salvo los productos con el talle resaltado.', W - M * 2);
+  pdf.text(intro, M, py); py += intro.length * 15 + 14;
+  pdf.setTextColor(0);
+  const pasos = [
+    'A medida que vas encontrando cada producto, tildá su casillero.',
+    'Una vez separada la ropa, sacá las alarmas.',
+    'Cortá los cartones.',
+    'Pegá etiquetas provisorias en los productos, en lugares donde no las tome la cámara y tengan menos roce.',
+    'Procesá en el sistema como "Fotografía" (descuento 100%).',
+    'Separá los productos por parte de arriba y parte de abajo (para mayor facilidad al armar el estudio).',
+  ];
+  pdf.setFontSize(12);
+  pasos.forEach((p, idx) => {
+    const line = pdf.splitTextToSize((idx + 1) + '.   ' + p, W - M * 2 - 4);
+    pdf.text(line, M, py); py += line.length * 16 + 7;
+  });
+  py += 18;
+  pdf.setDrawColor(170); pdf.setFillColor(248, 250, 252);
+  pdf.roundedRect(M, py, W - M * 2, 50, 4, 4, 'FD');
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(0);
+  pdf.text('N° de venta donde se dieron de baja estos productos:', M + 14, py + 20);
+  pdf.setDrawColor(120); pdf.line(M + 14, py + 38, W - M - 14, py + 38);
+
   pdf.save('lista-fotos.pdf');
 }
 
