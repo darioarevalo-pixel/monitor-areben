@@ -4435,22 +4435,22 @@ function mktGenerarEtiquetasZebra() {
   const M = 2.5, CX = W / 2;
   labels.forEach((lab, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
+    pdf.setTextColor(0); // todo negro pleno
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9);
     const nom = pdf.splitTextToSize(lab.nombre, W - M * 2).slice(0, 2);
     const va = pdf.splitTextToSize(lab.variante, W - M * 2).slice(0, 1);
     const hasSku = !!lab.sku, hasBc = !!lab.barcode;
     // Alto del contenido para centrarlo verticalmente
-    const contentH = nom.length * 3.0 + 1.8 + 4.6 + (hasSku ? 3.4 : 0) + (hasBc ? 2.8 : 0);
-    let y = Math.max(4, (Hh - contentH) / 2 + 2.6);
-    pdf.setTextColor(0);
+    const contentH = nom.length * 3.6 + 2.0 + 5.8 + (hasSku ? 3.9 : 0) + (hasBc ? 3.4 : 0);
+    let y = Math.max(4.5, (Hh - contentH) / 2 + 3);
     pdf.text(nom, CX, y, { align: 'center' });
-    y += nom.length * 3.0 + 1.8;
-    pdf.setFontSize(11);
+    y += nom.length * 3.6 + 2.0;
+    pdf.setFontSize(15);
     pdf.text(va, CX, y, { align: 'center' });
-    y += 4.6;
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
-    if (hasSku) { pdf.text('SKU: ' + lab.sku, CX, y, { align: 'center' }); y += 3.4; }
-    if (hasBc) { pdf.setFontSize(6); pdf.setTextColor(95); pdf.text(String(lab.barcode), CX, y, { align: 'center' }); pdf.setTextColor(0); }
+    y += 5.8;
+    pdf.setFont('helvetica', 'normal');
+    if (hasSku) { pdf.setFontSize(9.5); pdf.text('SKU: ' + lab.sku, CX, y, { align: 'center' }); y += 3.9; }
+    if (hasBc) { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.text(String(lab.barcode), CX, y, { align: 'center' }); }
   });
   pdf.save('etiquetas-zebra.pdf');
 }
