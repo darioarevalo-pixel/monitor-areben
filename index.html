@@ -4406,20 +4406,22 @@ function mktGenerarEtiquetasZebra() {
   const M = 2.5, CX = W / 2;
   labels.forEach((lab, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
-    let y = 4.2;
-    // Nombre del producto (chico, hasta 2 líneas)
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); pdf.setTextColor(0);
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
     const nom = pdf.splitTextToSize(lab.nombre, W - M * 2).slice(0, 2);
+    const va = pdf.splitTextToSize(lab.variante, W - M * 2).slice(0, 1);
+    const hasSku = !!lab.sku, hasBc = !!lab.barcode;
+    // Alto del contenido para centrarlo verticalmente
+    const contentH = nom.length * 3.0 + 1.8 + 4.6 + (hasSku ? 3.4 : 0) + (hasBc ? 2.8 : 0);
+    let y = Math.max(4, (Hh - contentH) / 2 + 2.6);
+    pdf.setTextColor(0);
     pdf.text(nom, CX, y, { align: 'center' });
-    y += nom.length * 3.0 + 1.4;
-    // Variante (lo más grande)
+    y += nom.length * 3.0 + 1.8;
     pdf.setFontSize(11);
-    pdf.text(pdf.splitTextToSize(lab.variante, W - M * 2).slice(0, 1), CX, y, { align: 'center' });
-    y += 4.4;
-    // SKU y barcode (chiquitos)
+    pdf.text(va, CX, y, { align: 'center' });
+    y += 4.6;
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
-    if (lab.sku) { pdf.text('SKU: ' + lab.sku, CX, y, { align: 'center' }); y += 3.4; }
-    if (lab.barcode) { pdf.setFontSize(6); pdf.setTextColor(95); pdf.text(String(lab.barcode), CX, y, { align: 'center' }); pdf.setTextColor(0); }
+    if (hasSku) { pdf.text('SKU: ' + lab.sku, CX, y, { align: 'center' }); y += 3.4; }
+    if (hasBc) { pdf.setFontSize(6); pdf.setTextColor(95); pdf.text(String(lab.barcode), CX, y, { align: 'center' }); pdf.setTextColor(0); }
   });
   pdf.save('etiquetas-zebra.pdf');
 }
