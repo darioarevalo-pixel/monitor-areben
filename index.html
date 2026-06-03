@@ -766,7 +766,10 @@
           <div style="font-size:16px;font-weight:700;">📸 Catálogo Marketing</div>
           <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Auditoría de fotos y descripciones cruzada con stock y ventas</div>
         </div>
-        <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
+          <button class="btn-sm" onclick="mktGenerarReporteFotos()" title="PDF para separar y fotografiar lo que está filtrado" style="background:#DC2626;color:#fff;">📄 Lista para fotos (PDF)</button>
+        </div>
       </div>
 
       <!-- KPIs -->
@@ -4221,22 +4224,93 @@ function mktSetFiltro(field, value) {
   mktRender();
 }
 
+// Resumen de filtros activos (para el encabezado del reporte)
+function mktResumenFiltros() {
+  const partes = [];
+  const q = (document.getElementById('mkt-search')?.value || '').trim();
+  const sel = id => { const e = document.getElementById(id); return e && e.value ? e.options[e.selectedIndex].text : ''; };
+  if (q) partes.push('Buscar: ' + q);
+  if (sel('mkt-cohorte')) partes.push(sel('mkt-cohorte'));
+  if (sel('mkt-cat-tn')) partes.push('Cat: ' + sel('mkt-cat-tn'));
+  if (sel('mkt-canal')) partes.push('Canal: ' + sel('mkt-canal'));
+  if (sel('mkt-stock')) partes.push('Stock: ' + sel('mkt-stock'));
+  if (sel('mkt-calidad')) partes.push(sel('mkt-calidad'));
+  return partes.length ? partes.join('  ·  ') : 'Sin filtros (todo el catálogo)';
+}
+
+// Genera un PDF para separar productos y sacarles fotos: por cada producto filtrado,
+// solo las variantes CON stock, con nombre, SKU (del producto) y categoría TN.
+function mktGenerarReporteFotos() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const lista = _mktListaFiltrada();
+  const items = [];
+  lista.forEach(x => {
+    const vars = [...new Set((allVariantes || [])
+      .filter(v => String(v.pid) === String(x.gn.id) && (v.stock || 0) > 0)
+      .map(v => v.size || '—'))]
+      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    if (!vars.length) return; // sin stock disponible → no se fotografía
+    items.push({ nombre: x.gn.name || '—', sku: x.gn.sku || '', cat: x.categoriasTNStr || '', variantes: vars });
+  });
+  if (!items.length) { alert('Con los filtros actuales no hay productos con variantes disponibles (con stock) para fotografiar.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
+  const M = 40; let y = M;
+  const totVar = items.reduce((s, i) => s + i.variantes.length, 0);
+
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.setTextColor(0);
+  pdf.text('Lista para fotos', M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
+  pdf.text(new Date().toLocaleDateString('es-AR') + '  ·  ' + items.length + ' productos · ' + totVar + ' variantes', W - M, y, { align: 'right' });
+  y += 16;
+  pdf.setFontSize(8); pdf.setTextColor(150);
+  pdf.text('Filtros: ' + mktResumenFiltros(), M, y);
+  y += 10; pdf.setDrawColor(210); pdf.line(M, y, W - M, y); y += 18;
+  pdf.setTextColor(0);
+
+  items.forEach(it => {
+    if (y > H - M - 38) { pdf.addPage(); y = M; }
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
+    pdf.text('[ ]  ' + it.nombre, M, y);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120);
+    pdf.text('SKU: ' + (it.sku || '—') + (it.cat ? '   ·   ' + it.cat : ''), W - M, y, { align: 'right' });
+    pdf.setTextColor(0);
+    y += 16;
+    pdf.setFontSize(10);
+    const maxW = W - M * 2 - 18;
+    let linea = '';
+    it.variantes.forEach(v => {
+      const chip = '[ ] ' + v;
+      const test = linea ? linea + '      ' + chip : chip;
+      if (linea && pdf.getTextWidth(test) > maxW) {
+        pdf.text(linea, M + 18, y); y += 15;
+        if (y > H - M) { pdf.addPage(); y = M; }
+        linea = chip;
+      } else linea = test;
+    });
+    if (linea) { pdf.text(linea, M + 18, y); y += 15; }
+    y += 9;
+  });
+
+  pdf.save('lista-fotos.pdf');
+}
+
 function mktSort(col) {
   if (mktSortState.col === col) mktSortState.dir *= -1;
   else { mktSortState.col = col; mktSortState.dir = -1; }
   mktRender();
 }
 
-function mktRender() {
-  if (!mktDataReady) return;
+// Lista de productos tras aplicar todos los filtros + orden (compartida por la tabla y el reporte de fotos)
+function _mktListaFiltrada() {
   let lista = _mktBuildLista();
-  // Filtros
   const q = (document.getElementById('mkt-search').value || '').toLowerCase().trim();
   const cohorte = document.getElementById('mkt-cohorte').value;
   const catTn = document.getElementById('mkt-cat-tn').value;
   const canal = document.getElementById('mkt-canal').value;
   const calidad = document.getElementById('mkt-calidad').value;
-
   if (q) lista = lista.filter(x => x.gn.name.toLowerCase().includes(q) || (x.gn.sku || '').toLowerCase().includes(q));
   if (cohorte) lista = lista.filter(x => x.ingresoMes === cohorte);
   if (catTn) lista = lista.filter(x => x.categoriasTN.includes(catTn));
@@ -4256,16 +4330,18 @@ function mktRender() {
   if (calidad === 'no-publicado')  lista = lista.filter(x => x.tn && !x.tn.published);
   if (calidad === 'not-in-tn')     lista = lista.filter(x => !x.tn);
   if (calidad === 'top-low-stock') lista = lista.filter(x => x.topLowStock);
-
-  // Sort
   const { col, dir } = mktSortState;
   lista.sort((a, b) => {
-    let va, vb;
-    if (col === 'name')    { va = a.gn.name || ''; vb = b.gn.name || ''; return dir * va.localeCompare(vb); }
-    if (col === 'cat_tn')  { va = a.categoriasTNStr || ''; vb = b.categoriasTNStr || ''; return dir * va.localeCompare(vb); }
-    va = a[col] || 0; vb = b[col] || 0;
-    return dir * (va - vb);
+    if (col === 'name')   return dir * (a.gn.name || '').localeCompare(b.gn.name || '');
+    if (col === 'cat_tn') return dir * (a.categoriasTNStr || '').localeCompare(b.categoriasTNStr || '');
+    return dir * ((a[col] || 0) - (b[col] || 0));
   });
+  return lista;
+}
+
+function mktRender() {
+  if (!mktDataReady) return;
+  const lista = _mktListaFiltrada();
 
   // URL pública según cuenta
   const tiendaBaseUrl = currentCuenta === CUENTAS.zattia ? 'https://zattia.com.ar' : 'https://bdiaccesorios.com.ar';
