@@ -1174,7 +1174,7 @@ async function fetchFresh() {
     const minSaleId = ventas.length ? Math.min(...ventas.map(v => v.id)) : 0;
     const detalles = await fetchAll(
       'venta_detalles',
-      `select=sale_id,product_id,size_id,product_name,size,quantity&sale_id=gte.${minSaleId}&order=sale_id`,
+      `select=sale_id,product_id,size_id,size,quantity&sale_id=gte.${minSaleId}&order=sale_id`,
       'detalles', true
     );
 
@@ -1371,7 +1371,8 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     return u;
   }
   const categoryByPid = {};
-  (productos || []).forEach(p => { categoryByPid[String(p.id)] = normalizeCat(p.category); });
+  const nameByPid = {};
+  (productos || []).forEach(p => { categoryByPid[String(p.id)] = normalizeCat(p.category); nameByPid[String(p.id)] = p.name || ''; });
 
   const vprod = {};
   const vvar = {};
@@ -1402,7 +1403,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     const sid  = String(item.size_id || '');
     const vid  = pid + '_' + sid;
     const qty  = item.quantity || 1;
-    const name = item.product_name || '';
+    const name = nameByPid[pid] || '';
     const size = item.size || '';
 
     if (!vprod[pid]) vprod[pid] = { total: 0, s7: 0, s15: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null, name };
@@ -1589,16 +1590,17 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     if (!fecha) return;
     const mes = fecha.substring(0, 7);
     const qty = item.quantity || 1;
+    const pnombre = nameByPid[String(item.product_id || '')] || '';
     const extracted = extractColor(item.size);
     if (!extracted) return;
     let color;
     if (extracted === '__UNICA__') {
-      color = colorManualMap[item.product_name] || null;
+      color = colorManualMap[pnombre] || null;
       if (!color) return;
     } else {
       color = extracted;
     }
-    coloresSales.push({ product_name: item.product_name || '', color, qty, mes });
+    coloresSales.push({ product_name: pnombre, color, qty, mes });
   });
   allColoresSales = coloresSales;
 
