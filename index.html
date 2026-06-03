@@ -1165,7 +1165,7 @@ async function fetchFresh() {
         ? Promise.resolve([])
         : fetchAll('fundas_por_modelo_mes', 'select=mes,modelo,product_id,product_name,product_created_at,total_items&order=mes', 'vmFundas', true),
       colorManualPromise,
-      fetchAll('ventas',                  (currentCuenta === CUENTAS.zattia ? 'select=id,date_sale,channel' : 'select=id,date_sale,channel,channel_id') + '&date_sale=gte.' + (_userRole() === 'marketing' ? new Date(TODAY.getTime() - 70 * 86400000).toISOString().slice(0, 10) : '2025-01-01') + '&order=id', 'ventas', true),
+      fetchAll('ventas',                  (currentCuenta === CUENTAS.zattia ? 'select=id,date_sale,channel' : 'select=id,date_sale,channel,channel_id') + '&date_sale=gte.' + (_userRole() === 'marketing' ? new Date(TODAY.getTime() - 35 * 86400000).toISOString().slice(0, 10) : '2025-01-01') + '&order=id', 'ventas', true),
       syncMetaPromise,
     ]);
 
