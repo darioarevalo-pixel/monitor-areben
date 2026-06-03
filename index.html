@@ -851,6 +851,9 @@
           </div>
 
         </div>
+        <div style="text-align:right;margin-top:10px;">
+          <button class="btn-sm" onclick="mktLimpiarFiltros()" title="Resetear todos los filtros">✕ Limpiar filtros</button>
+        </div>
       </div>
 
       <!-- Tabla -->
@@ -4013,6 +4016,17 @@ function mktSelAll(checked) {
 }
 
 // Muestra/oculta los inputs de rango del filtro de stock
+function mktLimpiarFiltros() {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+  set('mkt-search', ''); set('mkt-cat-tn', ''); set('mkt-canal', ''); set('mkt-stock', '');
+  set('mkt-stock-min', ''); set('mkt-stock-max', '');
+  const rg = document.getElementById('mkt-stock-rango'); if (rg) rg.style.display = 'none';
+  mktSel.cohorte.clear(); mktSel.calidad.clear();
+  document.querySelectorAll('#mkt-cohorte-panel input, #mkt-calidad-panel input').forEach(cb => { cb.checked = false; });
+  mktMultiUpdateLabel('cohorte'); mktMultiUpdateLabel('calidad');
+  mktRender();
+}
+
 function mktStockChange() {
   const v = document.getElementById('mkt-stock').value;
   const r = document.getElementById('mkt-stock-rango');
