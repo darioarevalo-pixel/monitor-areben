@@ -1704,7 +1704,12 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   document.getElementById('dashboard').style.display = 'block';
   setProgress(0);
   tabsRendered = {};
-  renderProductos(); // solo la pestaña inicial
+  renderProductos(); // pestaña base
+  // Si quedó activa otra pestaña (ej. marketing entró directo antes de cargar los datos),
+  // re-disparar su render ahora que ya hay datos.
+  const activeBtn = document.querySelector('.tab.active');
+  const m = activeBtn && (activeBtn.getAttribute('onclick') || '').match(/switchTab\('([^']+)'/);
+  if (m && m[1] !== 'productos') activeBtn.click();
 }
 
 function filtrarLista(lista, searchId, filterId) {
