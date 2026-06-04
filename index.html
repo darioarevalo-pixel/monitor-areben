@@ -843,6 +843,7 @@
                 <label><input type="checkbox" value="sin-desc" onchange="mktMultiChange('calidad',this)"> Sin descripción</label>
                 <label><input type="checkbox" value="sin-foto-desc" onchange="mktMultiChange('calidad',this)"> ❌ Sin foto NI descripción</label>
                 <label><input type="checkbox" value="no-publicado" onchange="mktMultiChange('calidad',this)"> Oculto en TN</label>
+                <label><input type="checkbox" value="var-sin-foto" onchange="mktMultiChange('calidad',this)"> 🎨 Variantes sin foto propia</label>
                 <label><input type="checkbox" value="top-low-stock" onchange="mktMultiChange('calidad',this)"> ⚠ Top ventas con stock bajo</label>
               </div>
             </div>
@@ -4094,10 +4095,25 @@ function mktDetalleRow(x) {
       <div>🌐 <b>Tienda online:</b> ${c.online} u</div>
       <div style="color:#9CA3AF;font-size:11px;margin-top:4px;">ventas de los últimos 30 días</div>
     </div>`;
+  // Fotos por variante (TN): cuáles no tienen foto propia vinculada
+  const tn = x.tn || {};
+  const sinFotoVar = tn.variantes_sin_foto || [];
+  let fotosBox;
+  if ((tn.image_count || 0) > 0 && (tn.variantes_total || 0) > 1) {
+    fotosBox = `<div style="font-size:13px;line-height:1.6;">
+        <div><b>${tn.variantes_con_foto || 0}</b> de ${tn.variantes_total} variantes con foto propia</div>
+        ${sinFotoVar.length
+          ? `<div style="color:#DC2626;margin-top:3px;">Sin foto propia (usan la principal):<br><b>${sinFotoVar.map(esc).join(' · ')}</b></div>`
+          : '<div style="color:#16A34A;margin-top:3px;">✓ Todas las variantes tienen foto propia</div>'}
+      </div>`;
+  } else {
+    fotosBox = '<div style="color:#9CA3AF;font-size:12px;">Una sola variante o sin fotos en TN.</div>';
+  }
   return `<tr><td colspan="9" style="background:#F9FAFB;padding:14px 22px;border-bottom:1px solid #E5E7EB;">
       <div style="display:flex;gap:48px;flex-wrap:wrap;">
         <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Stock completo</div>${stockTabla}</div>
         <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Ventas por canal</div>${ventasBox}</div>
+        <div><div style="font-size:11px;font-weight:700;color:#7F77DD;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Fotos por variante (TN)</div>${fotosBox}</div>
       </div></td></tr>`;
 }
 
@@ -4249,6 +4265,7 @@ function mktMatchCalidad(x, c) {
   if (c === 'sin-desc')      return x.tn && !x.tn.has_desc;
   if (c === 'sin-foto-desc') return x.tn && x.tn.image_count === 0 && !x.tn.has_desc;
   if (c === 'no-publicado')  return x.tn && !x.tn.published;
+  if (c === 'var-sin-foto')  return x.tn && x.tn.image_count > 0 && (x.tn.variantes_total || 0) > 1 && (x.tn.variantes_sin_foto || []).length > 0;
   if (c === 'not-in-tn')     return !x.tn;
   if (c === 'top-low-stock') return x.topLowStock;
   return true;
