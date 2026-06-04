@@ -4180,8 +4180,8 @@ function comCalcular(costoNeto, pvp, forma, canal) {
   const ivaPagar = aplicaImp ? (pvpEf - precioNeto) - (costoNeto * iva) : 0;
   const comisionM = pvpEf * (cel.comision / 100);
   const finanM = pvpEf * (cel.finan / 100);
-  const iibbM = aplicaImp ? precioNeto * (comCfg.imp.iibb / 100) : 0;
-  const dreiM = aplicaImp ? precioNeto * (comCfg.imp.drei / 100) : 0;
+  const iibbM = aplicaImp ? precioNeto * (comCfg.imp.iibb / 100) : 0; // IIBB sobre el precio SIN IVA
+  const dreiM = aplicaImp ? pvpEf * (comCfg.imp.drei / 100) : 0;       // DREI sobre el precio CON IVA
   const canalM = cc.tipo === '%' ? pvpEf * (cc.valor / 100) : (cc.valor || 0);
   let contrib = precioNeto - costoNeto - comisionM - finanM - iibbM - dreiM - canalM;
   if (aplicaImp && !comCfg.saldoIva) contrib -= ivaPagar;
@@ -4243,7 +4243,7 @@ function comPisoPvp(costoNeto, m, forma, canal) {
   // contrib = A * precioEfectivo + C
   let A, C;
   if (aplicaImp) {
-    A = 1 / (1 + iva) - cel.comision / 100 - cel.finan / 100 - (comCfg.imp.iibb / 100) / (1 + iva) - (comCfg.imp.drei / 100) / (1 + iva);
+    A = 1 / (1 + iva) - cel.comision / 100 - cel.finan / 100 - (comCfg.imp.iibb / 100) / (1 + iva) - (comCfg.imp.drei / 100); // IIBB sobre neto, DREI sobre precio con IVA
     C = -costoNeto;
     if (!comCfg.saldoIva) { A -= iva / (1 + iva); C += costoNeto * iva; }
   } else {
