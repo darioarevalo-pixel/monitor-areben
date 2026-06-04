@@ -291,6 +291,7 @@
       <button class="tab" id="tab-btn-talles" style="display:none;" onclick="switchTab('talles', this)">Talles</button>
       <button class="tab" id="tab-btn-clientes" style="display:none;" onclick="switchTab('clientes', this)">Clientes</button>
       <button class="tab" id="tab-btn-marketing" onclick="switchTab('marketing', this)" style="background:linear-gradient(135deg,#FF6B6B,#FFA07A);color:#fff;">📸 Marketing</button>
+      <button class="tab" id="tab-btn-comisiones" onclick="switchTab('comisiones', this)">💵 Comisiones y margen</button>
       <button class="tab tn-tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">
         <svg class="tn-logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.5 7.5 0 0 0-6.93 4.62A5.5 5.5 0 0 0 6.5 19.5h12a4.5 4.5 0 0 0 .85-8.96z" fill="currentColor"/>
@@ -877,6 +878,67 @@
       </div>
 
       <div id="mkt-count" style="font-size:12px;color:#9CA3AF;margin-top:8px;text-align:right;"></div>
+    </div>
+
+    <div id="tab-comisiones" class="section">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:16px;font-weight:700;">💵 Comisiones y margen por forma de pago y canal</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Margen neto real contemplando comisiones, costo financiero, IIBB, DREI, Ganancias e IVA. Configuración propia (se guarda en este navegador).</div>
+      </div>
+
+      <!-- PARTE 1: CONFIGURACIÓN -->
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">1 · Configuración</div>
+        <!-- Impuestos globales + saldo IVA -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+          <label style="font-size:12px;color:#666;">IVA %<br><input type="number" id="com-iva" step="0.1" onchange="comCfgChange()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">IIBB %<br><input type="number" id="com-iibb" step="0.1" onchange="comCfgChange()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">DREI %<br><input type="number" id="com-drei" step="0.1" onchange="comCfgChange()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">Ganancias %<br><input type="number" id="com-gan" step="0.1" onchange="comCfgChange()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#444;display:flex;align-items:center;gap:7px;padding:7px 10px;background:#F3F4F6;border-radius:8px;cursor:pointer;">
+            <input type="checkbox" id="com-saldo" onchange="comCfgChange()"> Saldo IVA a favor <b id="com-saldo-lbl">ACTIVO</b>
+          </label>
+        </div>
+        <!-- Canal + costo de canal -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;border-top:1px solid #EEF0F2;padding-top:12px;">
+          <label style="font-size:12px;color:#666;">Canal<br><select id="com-canal-sel" onchange="comOnCanalChange()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;min-width:130px;"></select></label>
+          <label style="font-size:12px;color:#666;">Costo de canal por venta<br>
+            <input type="number" id="com-canalcosto-val" step="0.01" onchange="comCfgChange()" style="width:90px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;">
+            <select id="com-canalcosto-tipo" onchange="comCfgChange()" style="padding:6px;border:1px solid #D1D5DB;border-radius:8px;"><option value="$">$</option><option value="%">% del PVP</option></select>
+          </label>
+        </div>
+        <table style="width:100%;">
+          <thead><tr>
+            <th>Forma de pago</th>
+            <th style="width:120px;text-align:center;">Comisión %</th>
+            <th style="width:130px;text-align:center;">Costo financiero %</th>
+            <th style="width:120px;text-align:center;">Días acred.</th>
+            <th style="width:40px;"></th>
+          </tr></thead>
+          <tbody id="com-cfg-tbody"></tbody>
+        </table>
+        <button class="btn-sm" onclick="comAgregarForma()" style="margin-top:8px;">+ Agregar forma de pago</button>
+      </div>
+
+      <!-- PARTE 2: SIMULADOR -->
+      <div class="card" style="margin-top:4px;">
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">2 · Simulador de margen por producto</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+          <label style="font-size:12px;color:#666;">Costo neto (sin IVA) $<br><input type="number" id="com-costo" step="0.01" oninput="comRenderSim()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">PVP (IVA incluido) $<br><input type="number" id="com-pvp" step="0.01" oninput="comRenderSim()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">Marca (opcional)<br><input type="text" id="com-marca" style="width:140px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+        </div>
+        <div id="com-sim-matriz" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- EXTRA: PISO DE PRECIO -->
+      <div class="card" style="margin-top:4px;">
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
+        <div style="margin-bottom:12px;font-size:12px;color:#666;">Usa el <b>Costo neto</b> de arriba. Margen objetivo %
+          <input type="number" id="com-piso-obj" value="40" step="1" oninput="comRenderPiso()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;margin-left:6px;">
+        </div>
+        <div id="com-piso-matriz" style="overflow-x:auto;"></div>
+      </div>
     </div>
 
     <div id="tab-tienda" class="section">
@@ -3968,11 +4030,210 @@ function renderTalles() {
     total.toLocaleString('es-AR') + ' unidades · ' + sorted.length + ' talles';
 }
 
+// ════════════════════════════════════════════════════════════════
+// Comisiones y margen por forma de pago y canal (solo admin)
+// ════════════════════════════════════════════════════════════════
+const COM_KEY = 'monitor_comisiones_v1';
+const COM_CANALES = ['Local', 'Online', 'Mayorista'];
+const COM_FORMAS_DEF = ['Efectivo', 'Transferencia', 'Débito', 'Crédito 1 pago', 'Crédito 3 cuotas', 'Mercado Pago/QR'];
+let comCfg = null;
+
+function comDefault() {
+  const matriz = {}, costoCanal = {};
+  COM_CANALES.forEach(c => {
+    matriz[c] = {};
+    COM_FORMAS_DEF.forEach(f => { matriz[c][f] = { comision: 0, finan: 0, dias: 0 }; });
+    costoCanal[c] = { valor: 0, tipo: '$' };
+  });
+  return { formas: [...COM_FORMAS_DEF], matriz, costoCanal, imp: { iva: 21, iibb: 3, drei: 0, ganancias: 35 }, saldoIva: true };
+}
+
+function comLoad() {
+  try { const raw = localStorage.getItem(COM_KEY); comCfg = raw ? JSON.parse(raw) : comDefault(); }
+  catch { comCfg = comDefault(); }
+  if (!Array.isArray(comCfg.formas) || !comCfg.formas.length) comCfg.formas = [...COM_FORMAS_DEF];
+  if (!comCfg.imp) comCfg.imp = { iva: 21, iibb: 3, drei: 0, ganancias: 35 };
+  if (typeof comCfg.saldoIva !== 'boolean') comCfg.saldoIva = true;
+  comCfg.matriz = comCfg.matriz || {};
+  comCfg.costoCanal = comCfg.costoCanal || {};
+  COM_CANALES.forEach(c => {
+    comCfg.matriz[c] = comCfg.matriz[c] || {};
+    comCfg.costoCanal[c] = comCfg.costoCanal[c] || { valor: 0, tipo: '$' };
+    comCfg.formas.forEach(f => { comCfg.matriz[c][f] = comCfg.matriz[c][f] || { comision: 0, finan: 0, dias: 0 }; });
+  });
+}
+
+function comSave() { try { localStorage.setItem(COM_KEY, JSON.stringify(comCfg)); } catch { /* lleno */ } }
+function comCanalActual() { return document.getElementById('com-canal-sel')?.value || COM_CANALES[0]; }
+
+function comInit() {
+  comLoad();
+  const sel = document.getElementById('com-canal-sel');
+  if (sel && !sel.options.length) sel.innerHTML = COM_CANALES.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('com-iva').value = comCfg.imp.iva;
+  document.getElementById('com-iibb').value = comCfg.imp.iibb;
+  document.getElementById('com-drei').value = comCfg.imp.drei;
+  document.getElementById('com-gan').value = comCfg.imp.ganancias;
+  document.getElementById('com-saldo').checked = comCfg.saldoIva;
+  document.getElementById('com-saldo-lbl').textContent = comCfg.saldoIva ? 'ACTIVO' : 'AGOTADO';
+  comOnCanalChange();
+  comRenderSim(); comRenderPiso();
+}
+
+function comOnCanalChange() {
+  const c = comCanalActual();
+  document.getElementById('com-canalcosto-val').value = comCfg.costoCanal[c].valor;
+  document.getElementById('com-canalcosto-tipo').value = comCfg.costoCanal[c].tipo;
+  comRenderCfgTabla();
+}
+
+function comCfgChange() {
+  const num = id => parseFloat(document.getElementById(id).value) || 0;
+  comCfg.imp = { iva: num('com-iva'), iibb: num('com-iibb'), drei: num('com-drei'), ganancias: num('com-gan') };
+  comCfg.saldoIva = document.getElementById('com-saldo').checked;
+  document.getElementById('com-saldo-lbl').textContent = comCfg.saldoIva ? 'ACTIVO' : 'AGOTADO';
+  const c = comCanalActual();
+  comCfg.costoCanal[c] = { valor: num('com-canalcosto-val'), tipo: document.getElementById('com-canalcosto-tipo').value };
+  comSave(); comRenderSim(); comRenderPiso();
+}
+
+function comCeldaChange(forma, campo, val) {
+  const c = comCanalActual();
+  comCfg.matriz[c][forma] = comCfg.matriz[c][forma] || { comision: 0, finan: 0, dias: 0 };
+  comCfg.matriz[c][forma][campo] = parseFloat(val) || 0;
+  comSave(); comRenderSim(); comRenderPiso();
+}
+
+function comRenderCfgTabla() {
+  const c = comCanalActual();
+  const tb = document.getElementById('com-cfg-tbody');
+  if (!tb) return;
+  tb.innerHTML = comCfg.formas.map(f => {
+    const m = comCfg.matriz[c][f] || { comision: 0, finan: 0, dias: 0 };
+    const fEsc = f.replace(/'/g, "\\'");
+    const inp = (campo, v) => `<input type="number" step="0.01" value="${v}" onchange="comCeldaChange('${fEsc}','${campo}',this.value)" style="width:90px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;">`;
+    return `<tr>
+      <td style="font-weight:500;">${esc(f)}</td>
+      <td style="text-align:center;">${inp('comision', m.comision)}</td>
+      <td style="text-align:center;">${inp('finan', m.finan)}</td>
+      <td style="text-align:center;">${inp('dias', m.dias)}</td>
+      <td style="text-align:center;"><button onclick="comQuitarForma('${fEsc}')" title="Quitar" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:15px;">×</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function comAgregarForma() {
+  const nombre = (prompt('Nombre de la forma de pago:') || '').trim();
+  if (!nombre) return;
+  if (comCfg.formas.includes(nombre)) { alert('Ya existe esa forma de pago.'); return; }
+  comCfg.formas.push(nombre);
+  COM_CANALES.forEach(c => { comCfg.matriz[c][nombre] = { comision: 0, finan: 0, dias: 0 }; });
+  comSave(); comRenderCfgTabla(); comRenderSim(); comRenderPiso();
+}
+
+function comQuitarForma(forma) {
+  if (!confirm(`¿Quitar la forma de pago "${forma}"?`)) return;
+  comCfg.formas = comCfg.formas.filter(f => f !== forma);
+  COM_CANALES.forEach(c => { delete comCfg.matriz[c][forma]; });
+  comSave(); comRenderCfgTabla(); comRenderSim(); comRenderPiso();
+}
+
+// Cascada: margen neto final por forma × canal
+function comCalcular(costoNeto, pvp, forma, canal) {
+  const iva = comCfg.imp.iva / 100;
+  const cel = (comCfg.matriz[canal] || {})[forma] || { comision: 0, finan: 0, dias: 0 };
+  const cc = comCfg.costoCanal[canal] || { valor: 0, tipo: '$' };
+  const precioNeto = pvp / (1 + iva);
+  const ivaPagar = (pvp - precioNeto) - (costoNeto * iva);
+  const comisionM = pvp * (cel.comision / 100);
+  const finanM = pvp * (cel.finan / 100);
+  const iibbM = precioNeto * (comCfg.imp.iibb / 100);
+  const dreiM = precioNeto * (comCfg.imp.drei / 100);
+  const canalM = cc.tipo === '%' ? pvp * (cc.valor / 100) : (cc.valor || 0);
+  let contrib = precioNeto - costoNeto - comisionM - finanM - iibbM - dreiM - canalM;
+  if (!comCfg.saldoIva) contrib -= ivaPagar;
+  const ganancias = Math.max(0, contrib) * (comCfg.imp.ganancias / 100);
+  const margen = contrib - ganancias;
+  return { margen, margenPct: pvp ? margen / pvp * 100 : 0, dias: cel.dias || 0, ivaRecuperado: comCfg.saldoIva ? ivaPagar : 0 };
+}
+
+function _comFmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-AR'); }
+
+function comRenderSim() {
+  const cont = document.getElementById('com-sim-matriz');
+  if (!cont || !comCfg) return;
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const pvp = parseFloat(document.getElementById('com-pvp').value);
+  if (!(costo >= 0) || !(pvp > 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto y el PVP para ver el margen.</div>'; return; }
+  let best = null, worst = null;
+  comCfg.formas.forEach(f => COM_CANALES.forEach(c => {
+    const m = comCalcular(costo, pvp, f, c).margen;
+    if (!best || m > best.m) best = { f, c, m };
+    if (!worst || m < worst.m) worst = { f, c, m };
+  }));
+  const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
+  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + COM_CANALES.map(thc).join('') + '</tr></thead><tbody>';
+  comCfg.formas.forEach(f => {
+    html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
+    COM_CANALES.forEach(c => {
+      const r = comCalcular(costo, pvp, f, c);
+      const bg = (best && best.f === f && best.c === c) ? 'background:#DCFCE7;' : (worst && worst.f === f && worst.c === c) ? 'background:#FEE2E2;' : '';
+      const col = r.margen < 0 ? '#DC2626' : '#111';
+      html += `<td style="text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;${bg}">
+        <div style="font-weight:700;color:${col};">${_comFmt(r.margen)}</div>
+        <div style="font-size:11px;color:#666;">${r.margenPct.toFixed(1)}% · ${r.dias}d</div>
+        ${comCfg.saldoIva ? `<div style="font-size:10px;color:#2563EB;">IVA recup. ${_comFmt(r.ivaRecuperado)}</div>` : ''}
+      </td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  html += `<div style="font-size:11px;color:#9CA3AF;margin-top:8px;">🟩 mejor · 🟥 peor · margen $ y % sobre PVP · "d" = días de acreditación${comCfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>`;
+  cont.innerHTML = html;
+}
+
+// Piso de precio: PVP mínimo para un margen objetivo (% sobre PVP). La contribución es lineal en PVP.
+function comPisoPvp(costoNeto, m, forma, canal) {
+  const iva = comCfg.imp.iva / 100;
+  const cel = (comCfg.matriz[canal] || {})[forma] || { comision: 0, finan: 0, dias: 0 };
+  const cc = comCfg.costoCanal[canal] || { valor: 0, tipo: '$' };
+  const g = comCfg.imp.ganancias / 100;
+  let A = 1 / (1 + iva) - cel.comision / 100 - cel.finan / 100 - (comCfg.imp.iibb / 100) / (1 + iva) - (comCfg.imp.drei / 100) / (1 + iva);
+  if (cc.tipo === '%') A -= cc.valor / 100;
+  let C = -costoNeto - (cc.tipo === '$' ? (cc.valor || 0) : 0);
+  if (!comCfg.saldoIva) { A -= iva / (1 + iva); C += costoNeto * iva; }
+  const den = A * (1 - g) - m;
+  if (den <= 0) return null; // margen objetivo inalcanzable
+  return (-C * (1 - g)) / den;
+}
+
+function comRenderPiso() {
+  const cont = document.getElementById('com-piso-matriz');
+  if (!cont || !comCfg) return;
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const obj = (parseFloat(document.getElementById('com-piso-obj').value) || 0) / 100;
+  if (!(costo >= 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto (en el simulador de arriba).</div>'; return; }
+  const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
+  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + COM_CANALES.map(thc).join('') + '</tr></thead><tbody>';
+  comCfg.formas.forEach(f => {
+    html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
+    COM_CANALES.forEach(c => {
+      const p = comPisoPvp(costo, obj, f, c);
+      html += `<td style="text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;font-weight:600;">${p == null ? '<span style="color:#9CA3AF;">—</span>' : _comFmt(p)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table><div style="font-size:11px;color:#9CA3AF;margin-top:8px;">PVP mínimo (IVA incluido) para ese margen objetivo. "—" = inalcanzable con esa configuración.</div>';
+  cont.innerHTML = html;
+}
+
 function switchTab(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
   document.getElementById('tab-' + id).classList.add('visible');
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  // Comisiones no depende de los datos de ventas (es config), se inicializa aparte
+  if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
