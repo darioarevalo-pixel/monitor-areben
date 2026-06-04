@@ -931,6 +931,7 @@
           <label style="font-size:12px;color:#666;">Marca (opcional)<br><input type="text" id="com-marca" style="width:140px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
         </div>
         <div id="com-sim-matriz" style="overflow-x:auto;"></div>
+        <div id="com-sim-detalle" style="margin-top:12px;"></div>
       </div>
 
       <!-- EXTRA: PISO DE PRECIO -->
@@ -4187,7 +4188,13 @@ function comCalcular(costoNeto, pvp, forma, canal) {
   if (aplicaImp && !comCfg.saldoIva) contrib -= ivaPagar;
   const ganancias = Math.max(0, contrib) * (comCfg.imp.ganancias / 100);
   const margen = contrib - ganancias;
-  return { margen, margenPct: pvpEf ? margen / pvpEf * 100 : 0, dias: cel.dias || 0, ivaRecuperado: (aplicaImp && comCfg.saldoIva) ? ivaPagar : 0, pvpEf, desc: cel.descuento || 0 };
+  return {
+    margen, margenPct: pvpEf ? margen / pvpEf * 100 : 0, dias: cel.dias || 0,
+    ivaRecuperado: (aplicaImp && comCfg.saldoIva) ? ivaPagar : 0,
+    pvp, pvpEf, desc: cel.descuento || 0, aplicaImp, costoNeto,
+    precioNeto, comisionM, finanM, iibbM, dreiM, canalM, ivaPagar, contrib, ganancias,
+    com: cel.comision || 0, fin: cel.finan || 0,
+  };
 }
 
 function _comFmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-AR'); }
@@ -4207,6 +4214,7 @@ function comRenderSim() {
   const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
   let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + comCanales().map(thc).join('') + '</tr></thead><tbody>';
   comCfg.formas.forEach(f => {
+    const fEsc = f.replace(/'/g, "\\'");
     html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
     comCanales().forEach(c => {
       const r = comCalcular(costo, pvp, f, c);
@@ -4216,7 +4224,7 @@ function comRenderSim() {
       const tags = [];
       if (r.desc > 0) tags.push(`−${r.desc}%`);
       if (cel.aplicaImp === false) tags.push('s/imp');
-      html += `<td style="text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;${bg}">
+      html += `<td onclick="comDetalle('${fEsc}','${c}')" title="Ver detalle" style="text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;cursor:pointer;${bg}">
         <div style="font-weight:700;color:${col};">${_comFmt(r.margen)}</div>
         <div style="font-size:11px;color:#666;">${r.margenPct.toFixed(1)}% · ${r.dias}d</div>
         ${tags.length ? `<div style="font-size:10px;color:#9333EA;">${tags.join(' · ')}</div>` : ''}
@@ -4226,8 +4234,53 @@ function comRenderSim() {
     html += '</tr>';
   });
   html += '</tbody></table>';
-  html += `<div style="font-size:11px;color:#9CA3AF;margin-top:8px;">🟩 mejor · 🟥 peor · margen $ y % sobre PVP · "d" = días de acreditación${comCfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>`;
+  html += `<div style="font-size:11px;color:#9CA3AF;margin-top:8px;">🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · "d" = días de acreditación${comCfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>`;
   cont.innerHTML = html;
+}
+
+// Pestañita con el discriminado completo de una celda (forma × canal)
+function comDetalle(forma, canal) {
+  const cont = document.getElementById('com-sim-detalle');
+  if (!cont || !comCfg) return;
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const pvp = parseFloat(document.getElementById('com-pvp').value);
+  if (!(costo >= 0) || !(pvp > 0)) return;
+  const r = comCalcular(costo, pvp, forma, canal);
+  const fmt = _comFmt;
+  const fila = (lbl, val, o = {}) => {
+    const monto = o.signo ? '−' + fmt(Math.abs(val)) : fmt(val);
+    const c = o.col || (o.signo ? '#DC2626' : (val < 0 ? '#DC2626' : '#111'));
+    return `<tr style="${o.tot ? 'border-top:1px solid #D1D5DB;' : ''}"><td style="padding:3px 0;${o.tot ? 'font-weight:700;' : ''}color:#444;">${lbl}</td><td style="padding:3px 0;text-align:right;font-weight:${o.tot ? '700' : '500'};color:${c};">${monto}</td></tr>`;
+  };
+  let rows = '';
+  rows += fila('Precio de lista (PVP)', r.pvp);
+  if (r.desc > 0) rows += fila(`Descuento (${r.desc}%)`, r.pvp - r.pvpEf, { signo: true, col: '#9333EA' });
+  rows += fila('Precio que cobrás', r.pvpEf, { tot: true });
+  rows += fila(r.aplicaImp ? 'Precio neto (sin IVA)' : 'Precio (sin impuestos)', r.precioNeto);
+  rows += fila('Costo del producto', r.costoNeto, { signo: true });
+  rows += fila(`Comisión (${r.com}%)`, r.comisionM, { signo: true });
+  if (r.finanM > 0) rows += fila(`Costo financiero (${r.fin}%)`, r.finanM, { signo: true });
+  if (r.aplicaImp) {
+    rows += fila(`IIBB (${comCfg.imp.iibb}% s/neto)`, r.iibbM, { signo: true });
+    rows += fila(`DREI (${comCfg.imp.drei}% c/IVA)`, r.dreiM, { signo: true });
+  }
+  if (r.canalM > 0) rows += fila('Costo de canal', r.canalM, { signo: true });
+  if (r.aplicaImp && !comCfg.saldoIva) rows += fila('IVA a pagar', r.ivaPagar, { signo: true });
+  rows += fila('= Contribución', r.contrib, { tot: true });
+  rows += fila(`Impuesto a las Ganancias (${comCfg.imp.ganancias}%)`, r.ganancias, { signo: true });
+  rows += fila('= MARGEN NETO FINAL', r.margen, { tot: true, col: r.margen < 0 ? '#DC2626' : '#16A34A' });
+  let extra = `<div style="font-size:12px;color:#666;margin-top:8px;">Margen <b>${r.margenPct.toFixed(1)}%</b> · acreditación <b>${r.dias} días</b>`;
+  if (r.aplicaImp && comCfg.saldoIva) extra += ` · IVA recuperado (saldo a favor, no es costo): <b>${fmt(r.ivaPagar)}</b>`;
+  if (!r.aplicaImp) extra += ` · sin IVA/IIBB/DREI`;
+  extra += '</div>';
+  cont.innerHTML = `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;background:#FAFAFA;max-width:480px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:14px;">Detalle — ${esc(forma)} · ${esc(canal)}</div>
+      <button onclick="document.getElementById('com-sim-detalle').innerHTML=''" title="Cerrar" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;line-height:1;">×</button>
+    </div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">${rows}</table>${extra}
+  </div>`;
+  cont.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // Piso de precio: PVP mínimo (de lista) para un margen objetivo (% sobre el precio efectivo).
