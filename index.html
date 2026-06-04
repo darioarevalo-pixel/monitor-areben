@@ -4033,14 +4033,15 @@ function renderTalles() {
 // ════════════════════════════════════════════════════════════════
 // Comisiones y margen por forma de pago y canal (solo admin)
 // ════════════════════════════════════════════════════════════════
-const COM_KEY = 'monitor_comisiones_v1';
-const COM_CANALES = ['Local', 'Online', 'Mayorista'];
 const COM_FORMAS_DEF = ['Efectivo', 'Transferencia', 'Débito', 'Crédito 1 pago', 'Crédito 3 cuotas', 'Mercado Pago/QR'];
 let comCfg = null;
+// Config por cuenta (se guarda separada). Zattia no usa el canal Mayorista.
+function comCfgKey() { return 'monitor_comisiones_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function comCanales() { return currentCuenta === CUENTAS.zattia ? ['Local', 'Online'] : ['Local', 'Online', 'Mayorista']; }
 
 function comDefault() {
   const matriz = {}, costoCanal = {};
-  COM_CANALES.forEach(c => {
+  comCanales().forEach(c => {
     matriz[c] = {};
     COM_FORMAS_DEF.forEach(f => { matriz[c][f] = { comision: 0, finan: 0, dias: 0 }; });
     costoCanal[c] = { valor: 0, tipo: '$' };
@@ -4049,27 +4050,27 @@ function comDefault() {
 }
 
 function comLoad() {
-  try { const raw = localStorage.getItem(COM_KEY); comCfg = raw ? JSON.parse(raw) : comDefault(); }
+  try { const raw = localStorage.getItem(comCfgKey()); comCfg = raw ? JSON.parse(raw) : comDefault(); }
   catch { comCfg = comDefault(); }
   if (!Array.isArray(comCfg.formas) || !comCfg.formas.length) comCfg.formas = [...COM_FORMAS_DEF];
   if (!comCfg.imp) comCfg.imp = { iva: 21, iibb: 3, drei: 0, ganancias: 35 };
   if (typeof comCfg.saldoIva !== 'boolean') comCfg.saldoIva = true;
   comCfg.matriz = comCfg.matriz || {};
   comCfg.costoCanal = comCfg.costoCanal || {};
-  COM_CANALES.forEach(c => {
+  comCanales().forEach(c => {
     comCfg.matriz[c] = comCfg.matriz[c] || {};
     comCfg.costoCanal[c] = comCfg.costoCanal[c] || { valor: 0, tipo: '$' };
     comCfg.formas.forEach(f => { comCfg.matriz[c][f] = comCfg.matriz[c][f] || { comision: 0, finan: 0, dias: 0 }; });
   });
 }
 
-function comSave() { try { localStorage.setItem(COM_KEY, JSON.stringify(comCfg)); } catch { /* lleno */ } }
-function comCanalActual() { return document.getElementById('com-canal-sel')?.value || COM_CANALES[0]; }
+function comSave() { try { localStorage.setItem(comCfgKey(), JSON.stringify(comCfg)); } catch { /* lleno */ } }
+function comCanalActual() { return document.getElementById('com-canal-sel')?.value || comCanales()[0]; }
 
 function comInit() {
   comLoad();
   const sel = document.getElementById('com-canal-sel');
-  if (sel && !sel.options.length) sel.innerHTML = COM_CANALES.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (sel) sel.innerHTML = comCanales().map(c => `<option value="${c}">${c}</option>`).join(''); // reconstruir según la cuenta activa
   document.getElementById('com-iva').value = comCfg.imp.iva;
   document.getElementById('com-iibb').value = comCfg.imp.iibb;
   document.getElementById('com-drei').value = comCfg.imp.drei;
@@ -4127,14 +4128,14 @@ function comAgregarForma() {
   if (!nombre) return;
   if (comCfg.formas.includes(nombre)) { alert('Ya existe esa forma de pago.'); return; }
   comCfg.formas.push(nombre);
-  COM_CANALES.forEach(c => { comCfg.matriz[c][nombre] = { comision: 0, finan: 0, dias: 0 }; });
+  comCanales().forEach(c => { comCfg.matriz[c][nombre] = { comision: 0, finan: 0, dias: 0 }; });
   comSave(); comRenderCfgTabla(); comRenderSim(); comRenderPiso();
 }
 
 function comQuitarForma(forma) {
   if (!confirm(`¿Quitar la forma de pago "${forma}"?`)) return;
   comCfg.formas = comCfg.formas.filter(f => f !== forma);
-  COM_CANALES.forEach(c => { delete comCfg.matriz[c][forma]; });
+  comCanales().forEach(c => { delete comCfg.matriz[c][forma]; });
   comSave(); comRenderCfgTabla(); comRenderSim(); comRenderPiso();
 }
 
@@ -4166,16 +4167,16 @@ function comRenderSim() {
   const pvp = parseFloat(document.getElementById('com-pvp').value);
   if (!(costo >= 0) || !(pvp > 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto y el PVP para ver el margen.</div>'; return; }
   let best = null, worst = null;
-  comCfg.formas.forEach(f => COM_CANALES.forEach(c => {
+  comCfg.formas.forEach(f => comCanales().forEach(c => {
     const m = comCalcular(costo, pvp, f, c).margen;
     if (!best || m > best.m) best = { f, c, m };
     if (!worst || m < worst.m) worst = { f, c, m };
   }));
   const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
-  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + COM_CANALES.map(thc).join('') + '</tr></thead><tbody>';
+  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + comCanales().map(thc).join('') + '</tr></thead><tbody>';
   comCfg.formas.forEach(f => {
     html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
-    COM_CANALES.forEach(c => {
+    comCanales().forEach(c => {
       const r = comCalcular(costo, pvp, f, c);
       const bg = (best && best.f === f && best.c === c) ? 'background:#DCFCE7;' : (worst && worst.f === f && worst.c === c) ? 'background:#FEE2E2;' : '';
       const col = r.margen < 0 ? '#DC2626' : '#111';
@@ -4214,10 +4215,10 @@ function comRenderPiso() {
   const obj = (parseFloat(document.getElementById('com-piso-obj').value) || 0) / 100;
   if (!(costo >= 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto (en el simulador de arriba).</div>'; return; }
   const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
-  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + COM_CANALES.map(thc).join('') + '</tr></thead><tbody>';
+  let html = '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + comCanales().map(thc).join('') + '</tr></thead><tbody>';
   comCfg.formas.forEach(f => {
     html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
-    COM_CANALES.forEach(c => {
+    comCanales().forEach(c => {
       const p = comPisoPvp(costo, obj, f, c);
       html += `<td style="text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;font-weight:600;">${p == null ? '<span style="color:#9CA3AF;">—</span>' : _comFmt(p)}</td>`;
     });
