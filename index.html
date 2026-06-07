@@ -1947,7 +1947,7 @@ function buildIngresoPills() {
   const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   el.style.display = 'flex';
   el.innerHTML =
-    `<span style="font-size:11px;color:#aaa;white-space:nowrap;">Cohorte de ingreso:</span>` +
+    `<span style="font-size:11px;color:#aaa;white-space:nowrap;">Mes de ingreso:</span>` +
     sorted.map(([m, cnt]) => {
       const [y, mo] = m.split('-');
       const label = MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2);
