@@ -950,13 +950,17 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
           <div>
             <div style="font-size:16px;font-weight:700;">📊 Margen por producto</div>
-            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Solo productos <b>disponibles</b> (con stock). Margen = (precio − costo) / precio.</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Solo productos <b>disponibles</b> (con stock). <b>Markup</b> = recargo sobre el costo (objetivo actual <b>130%</b>). Se calcula con el precio efectivo (promo si hay, si no minorista).</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="mg-search" placeholder="Buscar producto…" oninput="renderMargenesGrid()" style="width:180px;">
+            <label style="font-size:12px;color:#6B7280;">Objetivo %
+              <input type="number" id="mg-objetivo" value="130" step="5" oninput="renderMargenesGrid()" style="width:64px;margin-left:4px;">
+            </label>
+            <input type="text" id="mg-search" placeholder="Buscar producto…" oninput="renderMargenesGrid()" style="width:160px;">
             <select id="mg-sort" onchange="renderMargenesGrid()">
-              <option value="margin-asc">Margen: menor a mayor</option>
-              <option value="margin-desc">Margen: mayor a menor</option>
+              <option value="markup-desc">Markup: mayor a menor (más desfasados primero)</option>
+              <option value="markup-asc">Markup: menor a mayor</option>
+              <option value="desfase-desc">Desfase vs objetivo: mayor primero</option>
               <option value="name">Nombre (A-Z)</option>
               <option value="pvp-desc">Precio: mayor a menor</option>
               <option value="stock-desc">Stock: mayor a menor</option>
@@ -4409,6 +4413,7 @@ function renderMargenesGrid() {
   const idx = _mktIndexTN();
   const q = (document.getElementById('mg-search').value || '').toLowerCase().trim();
   const sort = document.getElementById('mg-sort').value;
+  const objetivo = parseFloat(document.getElementById('mg-objetivo').value) || 130;
 
   // Solo productos disponibles (con stock) y con costo + precio cargados
   let lista = (allProductos || [])
@@ -4418,27 +4423,31 @@ function renderMargenesGrid() {
       // Precio efectivo: promocional de TN si está cargado; si no, minorista de GN
       const promo = tn && tn.promo_price > 0 ? tn.promo_price : null;
       const precio = promo || p.retailer_price;
-      const margin = (precio - p.unit_cost) / precio * 100;
-      return { p, foto: (tn && tn.images && tn.images[0]) || null, precio, esPromo: !!promo, margin };
+      const markup = (precio / p.unit_cost - 1) * 100;  // recargo sobre el costo
+      const margin = (precio - p.unit_cost) / precio * 100; // margen sobre la venta
+      const desfase = markup - objetivo;                // + = más caro que el objetivo
+      return { p, foto: (tn && tn.images && tn.images[0]) || null, precio, esPromo: !!promo, markup, margin, desfase };
     });
 
   if (q) lista = lista.filter(x => x.p.name.toLowerCase().includes(q) || (x.p.sku || '').toLowerCase().includes(q));
 
   const cmp = {
-    'margin-asc':  (a, b) => a.margin - b.margin,
-    'margin-desc': (a, b) => b.margin - a.margin,
-    'name':        (a, b) => a.p.name.localeCompare(b.p.name),
-    'pvp-desc':    (a, b) => b.precio - a.precio,
-    'stock-desc':  (a, b) => b.p.stock - a.p.stock,
-  }[sort] || ((a, b) => a.margin - b.margin);
+    'markup-desc':  (a, b) => b.markup - a.markup,
+    'markup-asc':   (a, b) => a.markup - b.markup,
+    'desfase-desc': (a, b) => Math.abs(b.desfase) - Math.abs(a.desfase),
+    'name':         (a, b) => a.p.name.localeCompare(b.p.name),
+    'pvp-desc':     (a, b) => b.precio - a.precio,
+    'stock-desc':   (a, b) => b.p.stock - a.p.stock,
+  }[sort] || ((a, b) => b.markup - a.markup);
   lista.sort(cmp);
 
   const resumen = document.getElementById('mg-resumen');
   if (lista.length) {
-    const margenes = lista.map(x => x.margin).sort((a, b) => a - b);
-    const prom = margenes.reduce((s, m) => s + m, 0) / margenes.length;
-    const med = margenes[Math.floor(margenes.length / 2)];
-    resumen.innerHTML = `<b>${lista.length}</b> productos disponibles · margen promedio <b>${prom.toFixed(0)}%</b> · mediana <b>${med.toFixed(0)}%</b>`;
+    const mks = lista.map(x => x.markup).sort((a, b) => a - b);
+    const prom = mks.reduce((s, m) => s + m, 0) / mks.length;
+    const med = mks[Math.floor(mks.length / 2)];
+    const desfasados = lista.filter(x => x.desfase > 15).length;
+    resumen.innerHTML = `<b>${lista.length}</b> disponibles · markup promedio <b>${prom.toFixed(0)}%</b> · mediana <b>${med.toFixed(0)}%</b> · <b style="color:#DC2626;">${desfasados}</b> por encima del objetivo (+15pts)`;
   } else {
     resumen.textContent = '';
   }
@@ -4449,11 +4458,16 @@ function renderMargenesGrid() {
   }
 
   const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
-  grid.innerHTML = lista.map(({ p, foto, precio, esPromo, margin }) => {
-    const m = margin;
-    // Color del margen: rojo bajo, ámbar medio, verde alto
-    const color = m < 40 ? '#DC2626' : m < 55 ? '#D97706' : '#16A34A';
-    const bg    = m < 40 ? '#FEF2F2' : m < 55 ? '#FFFBEB' : '#F0FDF4';
+  grid.innerHTML = lista.map(({ p, foto, precio, esPromo, markup, margin, desfase }) => {
+    // Color según el desfase vs el objetivo: verde en objetivo, ámbar/rojo por encima, azul por debajo
+    let color, bg;
+    if (desfase > 50)       { color = '#DC2626'; bg = '#FEF2F2'; }  // muy por encima
+    else if (desfase > 15)  { color = '#D97706'; bg = '#FFFBEB'; }  // por encima
+    else if (desfase < -15) { color = '#2563EB'; bg = '#EFF6FF'; }  // por debajo del objetivo
+    else                    { color = '#16A34A'; bg = '#F0FDF4'; }  // en objetivo
+    // Etiqueta de desfase
+    const desfaseTxt = Math.abs(desfase) <= 15 ? 'en objetivo'
+      : (desfase > 0 ? '+' : '−') + Math.abs(desfase).toFixed(0) + ' pts vs obj.';
     const fotoHtml = foto
       ? `<img src="${esc(foto)}" loading="lazy" style="width:100%;height:150px;object-fit:cover;background:#F3F4F6;">`
       : `<div style="width:100%;height:150px;background:#F3F4F6;display:flex;align-items:center;justify-content:center;color:#CBD5E1;font-size:11px;">sin foto</div>`;
@@ -4465,7 +4479,13 @@ function renderMargenesGrid() {
       ${fotoHtml}
       <div style="padding:10px 11px;">
         <div style="font-weight:600;font-size:12px;line-height:1.3;margin-bottom:6px;min-height:31px;" title="${esc(p.name)}">${esc(p.name)}</div>
-        <div style="display:inline-block;background:${bg};color:${color};font-weight:700;font-size:15px;padding:2px 9px;border-radius:7px;margin-bottom:7px;">${m.toFixed(0)}% margen</div>
+        <div style="background:${bg};border-radius:8px;padding:6px 9px;margin-bottom:7px;">
+          <div style="color:${color};font-weight:800;font-size:20px;line-height:1;">${markup.toFixed(0)}% <span style="font-size:11px;font-weight:600;">markup</span></div>
+          <div style="color:${color};font-size:11px;font-weight:600;margin-top:2px;">${desfaseTxt}</div>
+        </div>
+        <div style="font-size:11px;color:#6B7280;display:flex;justify-content:space-between;">
+          <span>Margen s/ venta</span><span style="color:#374151;font-weight:500;">${margin.toFixed(0)}%</span>
+        </div>
         <div style="font-size:11px;color:#6B7280;display:flex;justify-content:space-between;">
           <span>Costo</span><span style="color:#374151;font-weight:500;">${fmt(p.unit_cost)}</span>
         </div>
