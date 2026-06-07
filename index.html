@@ -189,7 +189,7 @@
     }
     /* Vista restringida para rol Operación (Administracion): solo Marketing y Etiquetas */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]),
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]),
     body.rol-operacion #refresh-card {
       display: none !important;
     }
@@ -971,6 +971,7 @@
       <div class="tabs" style="margin-bottom:16px;">
         <button class="tab active" id="eti-sub-btn-dep" onclick="etiSwitchSub('dep', this)">🏬 Etiquetas Depósito</button>
         <button class="tab" id="eti-sub-btn-loc" onclick="etiSwitchSub('loc', this)">🏪 Etiquetas Local</button>
+        <button class="tab" id="eti-sub-btn-sku" onclick="etiSwitchSub('sku', this)">🔢 Etiquetas SKU</button>
       </div>
 
       <!-- DEPÓSITO -->
@@ -1014,6 +1015,25 @@
             <span id="eti-total-loc" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
           <div id="eti-tabla-loc" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- SKU (solo el código SKU) -->
+      <div id="eti-sub-sku" style="display:none;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-size:16px;font-weight:700;">🔢 Etiquetas SKU</div>
+              <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Etiquetas 5 × 2,5 cm con <b>solo el SKU</b> (grande y centrado). Sin nombre, ni código de barras, ni precio.</div>
+            </div>
+            <input type="text" id="eti-search-sku" placeholder="Buscar producto, SKU o código…" oninput="etiRenderTabla('sku')" style="width:240px;">
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn-sm" id="eti-btn-imprimir-sku" onclick="etiImprimir('sku')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
+            <button class="btn-sm" onclick="etiLimpiar('sku')">Limpiar cantidades</button>
+            <span id="eti-total-sku" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
+          </div>
+          <div id="eti-tabla-sku" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
         </div>
       </div>
     </div>
@@ -4489,14 +4509,14 @@ function switchTab(id, btn) {
 // ════════════════════════════════════════════════════════════════
 // Impresión de etiquetas (BDI) — tabla con cantidades + PDF Code 128
 // ════════════════════════════════════════════════════════════════
-// Dos modos: 'dep' (depósito, sin precio) y 'loc' (local, con precio).
-let etiCant = { dep: {}, loc: {} };
+// Modos: 'dep' (depósito), 'loc' (local con precio), 'sku' (solo el SKU).
+let etiCant = { dep: {}, loc: {}, sku: {} };
 let _etiPrecioMap = {}; // pid -> precio (el más barato entre minorista GN y promo TN)
 
 // Persistencia por cuenta y por modo (sobrevive a refrescos/cierres)
 function etiKey(modo) { return 'monitor_etiquetas_' + modo + '_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
 function etiLoad() {
-  ['dep', 'loc'].forEach(m => {
+  ['dep', 'loc', 'sku'].forEach(m => {
     try { const raw = localStorage.getItem(etiKey(m)); etiCant[m] = raw ? JSON.parse(raw) : {}; }
     catch { etiCant[m] = {}; }
   });
@@ -4507,6 +4527,7 @@ async function renderEtiquetas() {
   etiLoad();
   etiRenderTabla('dep');
   etiRenderTabla('loc');
+  etiRenderTabla('sku');
   // Para las etiquetas de local necesitamos el precio promocional de TN
   if (!window._mktTNData) {
     try {
@@ -4523,6 +4544,7 @@ async function renderEtiquetas() {
 function etiSwitchSub(name, btn) {
   document.getElementById('eti-sub-dep').style.display = name === 'dep' ? '' : 'none';
   document.getElementById('eti-sub-loc').style.display = name === 'loc' ? '' : 'none';
+  document.getElementById('eti-sub-sku').style.display = name === 'sku' ? '' : 'none';
   document.querySelectorAll('#tab-etiquetas > .tabs .tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (name === 'loc') setTimeout(() => { const i = document.getElementById('eti-scan-input'); if (i) i.focus(); }, 50);
@@ -4613,8 +4635,8 @@ function etiLimpiar(modo) {
   etiRenderTabla(modo);
 }
 
-// Construye el PDF de etiquetas (5×2,5 cm). conPrecio = agrega el precio (etiqueta de local).
-function _etiBuildPdf(labels, conPrecio) {
+// Construye el PDF de etiquetas (5×2,5 cm) según el modo: 'dep', 'loc' (con precio) o 'sku' (solo SKU).
+function _etiBuildPdf(labels, modo) {
   const { jsPDF } = window.jspdf;
   const W = 50, Hh = 25, M = 2, CX = W / 2;
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' });
@@ -4622,8 +4644,6 @@ function _etiBuildPdf(labels, conPrecio) {
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
     pdf.setTextColor(0);
-    const precio = conPrecio ? _etiPrecio(v) : 0;
-    const hasPrecio = conPrecio && precio > 0;
     const margin = 1.3;
     // Dibuja el código de barras en (y) con altura h
     const barras = (y, h) => {
@@ -4636,6 +4656,19 @@ function _etiBuildPdf(labels, conPrecio) {
       }
     };
 
+    if (modo === 'sku') {
+      // ── ETIQUETA SOLO SKU ── el SKU grande y centrado (se achica si es muy largo)
+      const txt = v.sku || '';
+      pdf.setFont('helvetica', 'bold');
+      let fs = 28; pdf.setFontSize(fs);
+      while (fs > 8 && pdf.getTextWidth(txt) > (W - M * 2)) { fs -= 1; pdf.setFontSize(fs); }
+      pdf.text(txt, CX, Hh / 2, { align: 'center', baseline: 'middle' });
+      return;
+    }
+
+    const conPrecio = modo === 'loc';
+    const precio = conPrecio ? _etiPrecio(v) : 0;
+    const hasPrecio = conPrecio && precio > 0;
     if (hasPrecio) {
       // ── ETIQUETA DE LOCAL ── Precio arriba (héroe). Nombre y variante debajo, sin negrita.
       const priceFS = 14, nameFS = 8, varFS = 7.5, skuFS = 7.5;
@@ -4710,10 +4743,12 @@ function etiImprimir(modo) {
   const labels = [];
   Object.entries(etiCant[modo]).forEach(([id, cant]) => {
     const v = vmap[id];
-    if (v) for (let k = 0; k < cant; k++) labels.push(v);
+    if (!v) return;
+    if (modo === 'sku' && !v.sku) return; // en modo SKU, salteamos las variantes sin SKU
+    for (let k = 0; k < cant; k++) labels.push(v);
   });
-  if (!labels.length) { alert('Cargá al menos una cantidad.'); return; }
-  _etiPrint(_etiBuildPdf(labels, modo === 'loc'));
+  if (!labels.length) { alert(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.'); return; }
+  _etiPrint(_etiBuildPdf(labels, modo));
   // Tras imprimir, ofrecer limpiar las cantidades (para no arrastrar las viejas)
   setTimeout(() => {
     if (confirm('Etiquetas enviadas a imprimir. ¿Borro las cantidades cargadas?')) {
@@ -4739,7 +4774,7 @@ function etiScan() {
     || vars.find(x => (x.sku || '').toLowerCase() === code.toLowerCase());
   if (!v) { fb.innerHTML = `<span style="color:#DC2626;">✗ No se encontró ningún producto con el código <b>${esc(code)}</b>.</span>`; inp.focus(); return; }
   if (!window.jspdf || !window.jspdf.jsPDF || typeof JsBarcode === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el generador… escaneá de nuevo en unos segundos.</span>'; return; }
-  _etiPrint(_etiBuildPdf([v], true));
+  _etiPrint(_etiBuildPdf([v], 'loc'));
   const p = _etiPrecio(v);
   fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${p ? ' · $' + Math.round(p).toLocaleString('es-AR') : ''}</span>`;
   inp.focus();
