@@ -4519,7 +4519,15 @@ function switchTab(id, btn) {
 // ════════════════════════════════════════════════════════════════
 let etiCant = {}; // { variantId: cantidad }
 
-function renderEtiquetas() { etiRenderTabla(); }
+// Persistencia por cuenta (sobrevive a refrescos/cierres)
+function etiCantKey() { return 'monitor_etiquetas_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function etiCantLoad() {
+  try { const raw = localStorage.getItem(etiCantKey()); etiCant = raw ? JSON.parse(raw) : {}; }
+  catch { etiCant = {}; }
+}
+function etiCantSave() { _lsGuardar(etiCantKey(), JSON.stringify(etiCant)); }
+
+function renderEtiquetas() { etiCantLoad(); etiRenderTabla(); }
 
 // Variantes etiquetables: las que tienen código de barras, ordenadas por producto y variante
 function _etiVariantes() {
@@ -4565,6 +4573,7 @@ function etiRenderTabla() {
 function etiCantChange(id, val) {
   const n = parseInt(val, 10);
   if (n > 0) etiCant[id] = n; else delete etiCant[id];
+  etiCantSave();
   etiActualizarTotal();
 }
 
@@ -4581,6 +4590,7 @@ function etiLimpiar() {
   if (!Object.keys(etiCant).length) return;
   if (!confirm('¿Borrar todas las cantidades cargadas?')) return;
   etiCant = {};
+  etiCantSave();
   etiRenderTabla();
 }
 
@@ -4646,6 +4656,14 @@ function etiGenerarPDF() {
     pdf.save('etiquetas-bdi.pdf');
     alert('El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para este sitio y volvé a intentar. Por ahora se descargó el PDF como respaldo.');
   }
+  // Tras enviar a imprimir, ofrecer limpiar las cantidades (para no arrastrar las viejas)
+  setTimeout(() => {
+    if (confirm('Etiquetas enviadas a imprimir. ¿Borro las cantidades cargadas?')) {
+      etiCant = {};
+      etiCantSave();
+      etiRenderTabla();
+    }
+  }, 600);
 }
 
 // ════════════════════════════════════════════════════════════════
