@@ -302,6 +302,7 @@
       <button class="tab" id="tab-btn-comisiones" onclick="switchTab('comisiones', this)">💵 Comisiones y margen</button>
       <button class="tab" id="tab-btn-margenes" onclick="switchTab('margenes', this)">📊 Margen por producto</button>
       <button class="tab" id="tab-btn-etiquetas" style="display:none;" onclick="switchTab('etiquetas', this)">🏷️ Etiquetas</button>
+      <button class="tab" id="tab-btn-gen-talles" onclick="switchTab('gen-talles', this)">📏 Tabla de talles</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -1077,6 +1078,38 @@
             <button class="btn-sm" onclick="libreImprimir()" style="background:#1F2937;color:#fff;">🖨️ Imprimir</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Generador de tabla de talles (autónomo, no usa Supabase) ─────────── -->
+    <div id="tab-gen-talles" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">📏 Generador de tabla de talles</div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 14px;">Armá una tabla de talles prolija y estandarizada, y copiala para pegar en la descripción del producto en Tienda Nube.</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+          <label style="font-size:12px;color:#666;">Tipo de prenda<br>
+            <select id="gt-tipo" onchange="genTallesTipoChange()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;min-width:160px;"></select>
+          </label>
+          <label style="font-size:12px;color:#666;">Talles (separados por coma)<br>
+            <input type="text" id="gt-talles" oninput="genTallesBuildGrid()" style="width:260px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+          </label>
+        </div>
+        <label style="font-size:12px;color:#666;display:block;margin-bottom:14px;">URL del diagrama (foto con flechas A/B/C — opcional)<br>
+          <input type="text" id="gt-diagrama" oninput="genTallesRenderPreview()" placeholder="https://… (la imagen la subís vos aparte)" style="width:100%;max-width:520px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </label>
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Cargá las medidas</div>
+        <div id="gt-grid" style="overflow-x:auto;"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:14px;font-weight:700;">Vista previa <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(así se va a ver en Tienda Nube)</span></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="gt-copy-msg" style="font-size:12px;color:#16A34A;"></span>
+            <button class="btn-sm" onclick="genTallesCopiar()" style="background:#1F2937;color:#fff;">📋 Copiar HTML para TN</button>
+          </div>
+        </div>
+        <div id="gt-preview" style="border:1px dashed #E5E7EB;border-radius:10px;padding:16px;background:#fff;"></div>
       </div>
     </div>
 
@@ -4532,6 +4565,7 @@ function switchTab(id, btn) {
   btn.classList.add('active');
   // Comisiones no depende de los datos de ventas (es config), se inicializa aparte
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
+  if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -4918,6 +4952,125 @@ function librePreview() {
   if (!pdf) return;
   const url = pdf.output('bloburl');
   if (!window.open(url, 'etiquetas_print')) pdf.save('etiqueta.pdf');
+}
+
+// ════════════════════════════════════════════════════════════════
+// Generador de tabla de talles (autónomo) — genera HTML para pegar en TN
+// ════════════════════════════════════════════════════════════════
+// Plantillas por tipo de prenda. Editar acá para sumar/cambiar prendas, medidas o talles.
+const GEN_TALLES_PLANTILLAS = {
+  top:      { nombre: 'Top',      unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'}], diagramaUrl: '' },
+  remera:   { nombre: 'Remera',   unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
+  body:     { nombre: 'Body',     unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo total'},{letra:'C',nombre:'Ancho de hombros'}], diagramaUrl: '' },
+  vestido:  { nombre: 'Vestido',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Cintura'},{letra:'C',nombre:'Cadera'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
+  jean:     { nombre: 'Jean',     unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
+  pantalon: { nombre: 'Pantalón', unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
+  short:    { nombre: 'Short',    unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
+  bermuda:  { nombre: 'Bermuda',  unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
+  pollera:  { nombre: 'Pollera',  unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Largo'}], diagramaUrl: '' },
+  falda:    { nombre: 'Falda',    unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Largo'}], diagramaUrl: '' },
+  buzo:     { nombre: 'Buzo',     unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
+  sweater:  { nombre: 'Sweater',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
+  campera:  { nombre: 'Campera',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
+};
+
+let gtData = {}; // { 'talle|letra': valor }
+
+function genTallesInit() {
+  const sel = document.getElementById('gt-tipo');
+  sel.innerHTML = Object.entries(GEN_TALLES_PLANTILLAS).map(([k, p]) => `<option value="${k}">${esc(p.nombre)}</option>`).join('');
+  genTallesTipoChange();
+}
+
+function _gtTipo() { return GEN_TALLES_PLANTILLAS[document.getElementById('gt-tipo').value]; }
+function _gtTalles() { return (document.getElementById('gt-talles').value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean); }
+
+function genTallesTipoChange() {
+  const p = _gtTipo();
+  if (!p) return;
+  document.getElementById('gt-talles').value = p.talles.join(', ');
+  document.getElementById('gt-diagrama').value = p.diagramaUrl || '';
+  gtData = {};
+  genTallesBuildGrid();
+}
+
+function genTallesBuildGrid() {
+  const p = _gtTipo();
+  const cont = document.getElementById('gt-grid');
+  if (!p || !cont) return;
+  const talles = _gtTalles();
+  // Limpiar valores de claves que ya no existen
+  const validas = new Set();
+  talles.forEach(t => p.medidas.forEach(m => validas.add(t + '|' + m.letra)));
+  Object.keys(gtData).forEach(k => { if (!validas.has(k)) delete gtData[k]; });
+
+  const th = t => `<th style="padding:6px 8px;border:1px solid #E5E7EB;background:#F3F4F6;font-size:12px;white-space:nowrap;">${t}</th>`;
+  let html = '<table style="border-collapse:collapse;"><thead><tr>' + th('Talle') +
+    p.medidas.map(m => th(esc(m.nombre) + ' (' + m.letra + ')')).join('') + '</tr></thead><tbody>';
+  talles.forEach(t => {
+    const tEsc = esc(t).replace(/'/g, "\\'");
+    html += '<tr><td style="padding:6px 8px;border:1px solid #E5E7EB;font-weight:600;text-align:center;background:#FAFAFA;">' + esc(t) + '</td>';
+    p.medidas.forEach(m => {
+      const k = t + '|' + m.letra;
+      html += `<td style="padding:3px;border:1px solid #E5E7EB;"><input type="text" value="${esc(gtData[k] || '')}" oninput="genTallesCell('${tEsc}','${m.letra}',this.value)" style="width:62px;text-align:center;padding:5px 4px;border:1px solid #E5E7EB;border-radius:6px;"></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+  genTallesRenderPreview();
+}
+
+function genTallesCell(talle, letra, val) {
+  gtData[talle + '|' + letra] = val;
+  genTallesRenderPreview();
+}
+
+// HTML autónomo (estilos inline) — lo usa la vista previa y el botón Copiar
+function genTallesHTML() {
+  const p = _gtTipo();
+  if (!p) return '';
+  const talles = _gtTalles();
+  const diag = (document.getElementById('gt-diagrama').value || '').trim();
+  const cell = 'border:1px solid #ddd;padding:8px;text-align:center;';
+  let h = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#222;">';
+  h += `<h3 style="text-align:center;font-size:16px;margin:0 0 10px;">Tabla de talles — ${esc(p.nombre)}</h3>`;
+  if (diag) h += `<img src="${esc(diag)}" alt="Cómo medir" style="display:block;max-width:100%;margin:0 auto 12px;">`;
+  h += '<table style="border-collapse:collapse;width:100%;font-size:14px;">';
+  h += `<thead><tr style="background:#111;color:#fff;"><th style="${cell}">Talle</th>` +
+    p.medidas.map(m => `<th style="${cell}">${esc(m.nombre)} (${m.letra})</th>`).join('') + '</tr></thead><tbody>';
+  talles.forEach((t, i) => {
+    const bg = i % 2 ? 'background:#f7f7f7;' : '';
+    h += `<tr style="${bg}"><td style="${cell}font-weight:bold;">${esc(t)}</td>` +
+      p.medidas.map(m => `<td style="${cell}">${esc(gtData[t + '|' + m.letra] || '-')}</td>`).join('') + '</tr>';
+  });
+  h += '</tbody></table>';
+  const ref = p.medidas.map(m => m.letra + ' = ' + m.nombre).join(' · ');
+  const u = esc(p.unidad || 'cm');
+  h += `<p style="font-size:12px;color:#666;margin-top:8px;">Medidas en ${u}. ${esc(ref)}. Pueden variar ±1 ${u}.</p>`;
+  h += '</div>';
+  return h;
+}
+
+function genTallesRenderPreview() {
+  const prev = document.getElementById('gt-preview');
+  if (prev) prev.innerHTML = genTallesHTML();
+}
+
+function genTallesCopiar() {
+  const html = genTallesHTML();
+  const msg = document.getElementById('gt-copy-msg');
+  const ok = () => { if (msg) { msg.textContent = '✓ Copiado — pegalo en la descripción del producto'; setTimeout(() => { msg.textContent = ''; }, 4000); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(html).then(ok).catch(() => _gtCopyFallback(html, ok));
+  } else { _gtCopyFallback(html, ok); }
+}
+function _gtCopyFallback(text, ok) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); ok(); } catch (e) { alert('No se pudo copiar automáticamente.'); }
+  document.body.removeChild(ta);
 }
 
 // ════════════════════════════════════════════════════════════════
