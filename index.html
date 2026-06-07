@@ -4602,23 +4602,23 @@ function etiGenerarPDF() {
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
     pdf.setTextColor(0);
-    let y = 3;
-    // Nombre del producto (hasta 2 líneas)
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
+    let y = 3.5;
+    // Nombre del producto — negrita, grande, dominante (hasta 2 líneas)
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5);
     const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
     pdf.text(nom, CX, y, { align: 'center' });
-    y += nom.length * 2.7 + 0.6;
-    // Variante
-    pdf.setFontSize(9);
+    y += nom.length * 3.4 + 0.8;
+    // Variante — letra normal (no negrita)
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
     const va = pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1);
     pdf.text(va, CX, y, { align: 'center' });
-    y += 3.4;
-    // Grupo inferior: código de barras (solo barras, sin número) + SKU debajo.
+    y += 3.3;
+    // Grupo inferior: código de barras (solo barras) + SKU en negrita debajo (sin "SKU:").
     // Se centra verticalmente en el espacio que queda bajo la variante.
-    const barH = 8, skuGap = 1.3, skuH = v.sku ? 3 : 0;
+    const barH = 7.5, skuGap = 1.2, skuH = v.sku ? 3.3 : 0;
     const grupoH = barH + (v.sku ? skuGap + skuH : 0);
-    const desde = y + 1;          // arranque, justo debajo de la variante
-    const hasta = Hh - 1.5;       // margen inferior
+    const desde = y + 0.8;        // arranque, justo debajo de la variante
+    const hasta = Hh - 1;         // margen inferior
     let gy = desde + Math.max(0, ((hasta - desde) - grupoH) / 2);
     if (gy + grupoH > hasta) gy = Math.max(desde, hasta - grupoH); // que no se pase del borde
     const bw = 44;
@@ -4630,8 +4630,8 @@ function etiGenerarPDF() {
       pdf.setFontSize(8); pdf.text(String(v.barcode), CX, gy + barH / 2, { align: 'center' });
     }
     if (v.sku) {
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
-      pdf.text('SKU: ' + v.sku, CX, gy + barH + skuGap + 2.4, { align: 'center' });
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5);
+      pdf.text(v.sku, CX, gy + barH + skuGap + 2.6, { align: 'center' });
     }
   });
   // Imprimir directo (sin guardar el PDF en el disco): abre el diálogo de impresión.
