@@ -4415,9 +4415,11 @@ function renderMargenesGrid() {
   const sort = document.getElementById('mg-sort').value;
   const objetivo = parseFloat(document.getElementById('mg-objetivo').value) || 130;
 
-  // Solo productos disponibles (con stock) y con costo + precio cargados
+  // Solo productos disponibles (con stock) y con costo + precio cargados.
+  // Se excluyen los SKU que empiezan con "stu" (productos Stunned, otra marca cargada en el GN de Zattia).
   let lista = (allProductos || [])
     .filter(p => (p.stock || 0) > 0 && p.unit_cost > 0 && p.retailer_price > 0)
+    .filter(p => !(p.sku && /^stu/i.test(p.sku)))
     .map(p => {
       const tn = _mktFindTN(p, idx);
       // Precio efectivo: promocional de TN si está cargado; si no, minorista de GN
