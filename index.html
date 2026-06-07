@@ -4957,21 +4957,35 @@ function librePreview() {
 // ════════════════════════════════════════════════════════════════
 // Generador de tabla de talles (autónomo) — genera HTML para pegar en TN
 // ════════════════════════════════════════════════════════════════
-// Plantillas por tipo de prenda. Editar acá para sumar/cambiar prendas, medidas o talles.
+// Textos de "cómo medir" reutilizables (se pueden sobreescribir por medida con comoMedir)
+const GT_M = {
+  cintura:  { nombre: 'Contorno cintura', comoMedir: 'Medir alrededor de toda la cintura.' },
+  cadera:   { nombre: 'Contorno cadera',  comoMedir: 'Medir alrededor de toda la cadera.' },
+  tiro:     { nombre: 'Tiro',             comoMedir: 'Medir desde el borde superior delantero hasta la costura de unión de las piernas.' },
+  largoPant:{ nombre: 'Largo',            comoMedir: 'Medir desde el extremo de la cintura hacia abajo.' },
+  largoTop: { nombre: 'Largo',            comoMedir: 'Medir desde el hombro hasta el ruedo.' },
+  largoTotal:{ nombre: 'Largo total',     comoMedir: 'Medir desde el hombro hasta la entrepierna.' },
+  busto:    { nombre: 'Contorno busto',   comoMedir: 'Medir alrededor de la parte más ancha del busto.' },
+  hombros:  { nombre: 'Ancho de hombros', comoMedir: 'Medir de un hombro al otro por la parte superior.' },
+  manga:    { nombre: 'Largo de manga',   comoMedir: 'Medir desde el hombro hasta el puño.' },
+};
+const _gtMed = (letra, base) => ({ letra, nombre: base.nombre, comoMedir: base.comoMedir });
+
+// Plantillas por tipo de prenda. Editar acá para sumar/cambiar prendas, medidas, talles o textos.
 const GEN_TALLES_PLANTILLAS = {
-  top:      { nombre: 'Top',      unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'}], diagramaUrl: '' },
-  remera:   { nombre: 'Remera',   unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
-  body:     { nombre: 'Body',     unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo total'},{letra:'C',nombre:'Ancho de hombros'}], diagramaUrl: '' },
-  vestido:  { nombre: 'Vestido',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Cintura'},{letra:'C',nombre:'Cadera'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
-  jean:     { nombre: 'Jean',     unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
-  pantalon: { nombre: 'Pantalón', unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
-  short:    { nombre: 'Short',    unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
-  bermuda:  { nombre: 'Bermuda',  unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Tiro'},{letra:'D',nombre:'Largo'}], diagramaUrl: '' },
-  pollera:  { nombre: 'Pollera',  unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Largo'}], diagramaUrl: '' },
-  falda:    { nombre: 'Falda',    unidad: 'cm', talles: ['34','36','38','40','42','44'],    medidas: [{letra:'A',nombre:'Cintura'},{letra:'B',nombre:'Cadera'},{letra:'C',nombre:'Largo'}], diagramaUrl: '' },
-  buzo:     { nombre: 'Buzo',     unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
-  sweater:  { nombre: 'Sweater',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
-  campera:  { nombre: 'Campera',  unidad: 'cm', talles: ['S','M','L','XL'],                 medidas: [{letra:'A',nombre:'Busto'},{letra:'B',nombre:'Largo'},{letra:'C',nombre:'Ancho de hombros'},{letra:'D',nombre:'Largo de manga'}], diagramaUrl: '' },
+  top:      { nombre: 'Top',      unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTop),_gtMed('C',GT_M.hombros)], diagramaUrl: '' },
+  remera:   { nombre: 'Remera',   unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTop),_gtMed('C',GT_M.hombros),_gtMed('D',GT_M.manga)], diagramaUrl: '' },
+  body:     { nombre: 'Body',     unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTotal),_gtMed('C',GT_M.hombros)], diagramaUrl: '' },
+  vestido:  { nombre: 'Vestido',  unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.cintura),_gtMed('C',GT_M.cadera),_gtMed('D',GT_M.largoTop)], diagramaUrl: '' },
+  jean:     { nombre: 'Jean',     unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura),_gtMed('D',GT_M.tiro)], diagramaUrl: '' },
+  pantalon: { nombre: 'Pantalón', unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura),_gtMed('D',GT_M.tiro)], diagramaUrl: '' },
+  short:    { nombre: 'Short',    unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura),_gtMed('D',GT_M.tiro)], diagramaUrl: '' },
+  bermuda:  { nombre: 'Bermuda',  unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura),_gtMed('D',GT_M.tiro)], diagramaUrl: '' },
+  pollera:  { nombre: 'Pollera',  unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura)], diagramaUrl: '' },
+  falda:    { nombre: 'Falda',    unidad: 'cm', talles: ['34','36','38','40','42','44'], medidas: [_gtMed('A',GT_M.largoPant),_gtMed('B',GT_M.cadera),_gtMed('C',GT_M.cintura)], diagramaUrl: '' },
+  buzo:     { nombre: 'Buzo',     unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTop),_gtMed('C',GT_M.hombros),_gtMed('D',GT_M.manga)], diagramaUrl: '' },
+  sweater:  { nombre: 'Sweater',  unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTop),_gtMed('C',GT_M.hombros),_gtMed('D',GT_M.manga)], diagramaUrl: '' },
+  campera:  { nombre: 'Campera',  unidad: 'cm', talles: ['S','M','L','XL'],              medidas: [_gtMed('A',GT_M.busto),_gtMed('B',GT_M.largoTop),_gtMed('C',GT_M.hombros),_gtMed('D',GT_M.manga)], diagramaUrl: '' },
 };
 
 let gtData = {}; // { 'talle|letra': valor }
@@ -5027,27 +5041,43 @@ function genTallesCell(talle, letra, val) {
 }
 
 // HTML autónomo (estilos inline) — lo usa la vista previa y el botón Copiar
+// Tabla transpuesta (medidas en filas, talles en columnas) + diagrama + info + cómo se mide
 function genTallesHTML() {
   const p = _gtTipo();
   if (!p) return '';
   const talles = _gtTalles();
   const diag = (document.getElementById('gt-diagrama').value || '').trim();
-  const cell = 'border:1px solid #ddd;padding:8px;text-align:center;';
-  let h = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#222;">';
-  h += `<h3 style="text-align:center;font-size:16px;margin:0 0 10px;">Tabla de talles — ${esc(p.nombre)}</h3>`;
-  if (diag) h += `<img src="${esc(diag)}" alt="Cómo medir" style="display:block;max-width:100%;margin:0 auto 12px;">`;
-  h += '<table style="border-collapse:collapse;width:100%;font-size:14px;">';
-  h += `<thead><tr style="background:#111;color:#fff;"><th style="${cell}">Talle</th>` +
-    p.medidas.map(m => `<th style="${cell}">${esc(m.nombre)} (${m.letra})</th>`).join('') + '</tr></thead><tbody>';
-  talles.forEach((t, i) => {
-    const bg = i % 2 ? 'background:#f7f7f7;' : '';
-    h += `<tr style="${bg}"><td style="${cell}font-weight:bold;">${esc(t)}</td>` +
-      p.medidas.map(m => `<td style="${cell}">${esc(gtData[t + '|' + m.letra] || '-')}</td>`).join('') + '</tr>';
-  });
-  h += '</tbody></table>';
-  const ref = p.medidas.map(m => m.letra + ' = ' + m.nombre).join(' · ');
   const u = esc(p.unidad || 'cm');
-  h += `<p style="font-size:12px;color:#666;margin-top:8px;">Medidas en ${u}. ${esc(ref)}. Pueden variar ±1 ${u}.</p>`;
+  const cel = 'border:1px solid #ddd;padding:8px;text-align:center;';
+  const lab = m => esc(m.letra.toLowerCase()) + '. ' + esc(m.nombre);
+
+  // Tabla: filas = medidas, columnas = talles
+  let tabla = '<table style="border-collapse:collapse;width:100%;font-size:14px;">';
+  tabla += `<thead><tr style="background:#111;color:#fff;"><th style="${cel}text-align:left;">Talle</th>` +
+    talles.map(t => `<th style="${cel}">${esc(t)}</th>`).join('') + '</tr></thead><tbody>';
+  p.medidas.forEach((m, i) => {
+    const bg = i % 2 ? 'background:#f7f7f7;' : '';
+    tabla += `<tr style="${bg}"><td style="${cel}text-align:left;font-weight:bold;">${lab(m)}</td>` +
+      talles.map(t => `<td style="${cel}">${esc(gtData[t + '|' + m.letra] || '-')}</td>`).join('') + '</tr>';
+  });
+  tabla += '</tbody></table>';
+
+  let h = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#222;">';
+  h += `<h3 style="text-align:center;font-size:16px;margin:0 0 14px;">Tabla de talles — ${esc(p.nombre)}</h3>`;
+  // Tabla + diagrama lado a lado (se apila en pantallas chicas)
+  h += '<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">';
+  h += `<div style="flex:1;min-width:280px;">${tabla}</div>`;
+  if (diag) h += `<div style="flex:0 0 auto;text-align:center;margin:0 auto;"><img src="${esc(diag)}" alt="Cómo medir" style="max-width:210px;width:100%;"></div>`;
+  h += '</div>';
+  // INFO
+  h += '<div style="font-size:12px;color:#666;margin-top:16px;"><b>Info</b>' +
+    `<ul style="margin:4px 0 0;padding-left:18px;"><li>Las medidas están expresadas en ${u}.</li>` +
+    '<li>Puede haber una mínima variación.</li>' +
+    '<li>Las medidas son tomadas sobre superficies planas, sin estirar.</li></ul></div>';
+  // CÓMO SE MIDE
+  h += '<div style="font-size:12px;color:#444;margin-top:14px;line-height:1.5;"><b style="color:#222;">Cómo se mide</b><div style="margin-top:4px;">' +
+    p.medidas.map(m => `<div style="margin-bottom:5px;"><b>${lab(m)}:</b> ${esc(m.comoMedir || '')}</div>`).join('') +
+    '</div></div>';
   h += '</div>';
   return h;
 }
