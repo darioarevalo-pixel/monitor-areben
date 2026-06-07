@@ -183,13 +183,13 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]),
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]),
     body.rol-marketing #refresh-card {
       display: none !important;
     }
-    /* Vista restringida para rol Operación (Administracion): solo Marketing y Etiquetas */
+    /* Vista restringida para rol Operación (Administracion): Marketing, Etiquetas y Tabla de talles */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-operacion #refresh-card {
       display: none !important;
     }
