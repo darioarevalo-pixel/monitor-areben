@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #F3F4F6; color: #111827; font-size: 14px; }
@@ -294,6 +295,7 @@
       <button class="tab" id="tab-btn-marketing" onclick="switchTab('marketing', this)" style="background:linear-gradient(135deg,#FF6B6B,#FFA07A);color:#fff;">📸 Marketing</button>
       <button class="tab" id="tab-btn-comisiones" onclick="switchTab('comisiones', this)">💵 Comisiones y margen</button>
       <button class="tab" id="tab-btn-margenes" onclick="switchTab('margenes', this)">📊 Margen por producto</button>
+      <button class="tab" id="tab-btn-etiquetas" style="display:none;" onclick="switchTab('etiquetas', this)">🏷️ Etiquetas</button>
       <button class="tab tn-tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">
         <svg class="tn-logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.5 7.5 0 0 0-6.93 4.62A5.5 5.5 0 0 0 6.5 19.5h12a4.5 4.5 0 0 0 .85-8.96z" fill="currentColor"/>
@@ -973,6 +975,24 @@
         </div>
         <div id="mg-resumen" style="font-size:12px;color:#6B7280;margin-bottom:12px;"></div>
         <div id="mg-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;"></div>
+      </div>
+    </div>
+
+    <div id="tab-etiquetas" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🏷️ Impresión de etiquetas</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Etiquetas 5 × 2,5 cm para Zebra. Cargá la cantidad por variante y generá el PDF. Cada etiqueta lleva nombre, variante, SKU y código de barras (Code 128).</div>
+          </div>
+          <input type="text" id="eti-search" placeholder="Buscar producto, SKU o código…" oninput="etiRenderTabla()" style="width:240px;">
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn-sm" id="eti-btn-imprimir" onclick="etiGenerarPDF()" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas (PDF)</button>
+          <button class="btn-sm" onclick="etiLimpiar()">Limpiar cantidades</button>
+          <span id="eti-total" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
+        </div>
+        <div id="eti-tabla" style="overflow-x:auto;max-height:600px;overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -4490,7 +4510,122 @@ function switchTab(id, btn) {
     else if (id === 'clientes')         cargarCRM();
     else if (id === 'marketing')        cargarMarketingTab();
     else if (id === 'margenes')          renderMargenes();
+    else if (id === 'etiquetas')         renderEtiquetas();
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Impresión de etiquetas (BDI) — tabla con cantidades + PDF Code 128
+// ════════════════════════════════════════════════════════════════
+let etiCant = {}; // { variantId: cantidad }
+
+function renderEtiquetas() { etiRenderTabla(); }
+
+// Variantes etiquetables: las que tienen código de barras, ordenadas por producto y variante
+function _etiVariantes() {
+  return (allVariantes || [])
+    .filter(v => v.barcode)
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
+}
+
+function etiRenderTabla() {
+  const cont = document.getElementById('eti-tabla');
+  if (!cont) return;
+  const q = (document.getElementById('eti-search').value || '').toLowerCase().trim();
+  let lista = _etiVariantes();
+  if (q) lista = lista.filter(v => (v.name || '').toLowerCase().includes(q) || (v.sku || '').toLowerCase().includes(q) || (v.barcode || '').includes(q));
+  const CAP = 500;
+  const shown = lista.slice(0, CAP);
+  if (!shown.length) {
+    cont.innerHTML = '<div style="color:#9CA3AF;padding:24px;text-align:center;">No hay variantes con código de barras que coincidan.</div>';
+    etiActualizarTotal();
+    return;
+  }
+  const th = (t, extra) => `<th style="text-align:${extra || 'left'};padding:6px 10px;position:sticky;top:0;background:#F3F4F6;">${t}</th>`;
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>' +
+    th('Producto') + th('Variante') + th('SKU') + th('Código') + th('Stock', 'center') + th('Etiquetas', 'center') + '</tr></thead><tbody>';
+  shown.forEach(v => {
+    const cant = etiCant[v.id] || '';
+    html += `<tr style="border-top:1px solid #EEF0F2;">
+      <td style="padding:5px 10px;">${esc(v.name || '—')}</td>
+      <td style="padding:5px 10px;">${esc(v.size || '—')}</td>
+      <td style="padding:5px 10px;color:#666;">${esc(v.sku || '—')}</td>
+      <td style="padding:5px 10px;color:#666;font-family:monospace;font-size:12px;">${esc(v.barcode)}</td>
+      <td style="padding:5px 10px;text-align:center;color:#9CA3AF;">${v.stock || 0}</td>
+      <td style="padding:5px 10px;text-align:center;"><input type="number" min="0" value="${cant}" oninput="etiCantChange('${v.id}', this.value)" style="width:64px;text-align:center;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;"></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  if (lista.length > CAP) html += `<div style="font-size:11px;color:#9CA3AF;padding:8px;">Mostrando ${CAP} de ${lista.length}. Refiná la búsqueda para ver el resto.</div>`;
+  cont.innerHTML = html;
+  etiActualizarTotal();
+}
+
+function etiCantChange(id, val) {
+  const n = parseInt(val, 10);
+  if (n > 0) etiCant[id] = n; else delete etiCant[id];
+  etiActualizarTotal();
+}
+
+function etiActualizarTotal() {
+  const total = Object.values(etiCant).reduce((a, b) => a + b, 0);
+  const filas = Object.keys(etiCant).length;
+  const el = document.getElementById('eti-total');
+  if (el) el.textContent = total ? `${total} etiquetas en ${filas} variantes` : 'Cargá cantidades para imprimir';
+  const btn = document.getElementById('eti-btn-imprimir');
+  if (btn) btn.disabled = !total;
+}
+
+function etiLimpiar() {
+  if (!Object.keys(etiCant).length) return;
+  if (!confirm('¿Borrar todas las cantidades cargadas?')) return;
+  etiCant = {};
+  etiRenderTabla();
+}
+
+function etiGenerarPDF() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  if (typeof JsBarcode === 'undefined') { alert('Se está cargando el generador de códigos de barra. Probá de nuevo en unos segundos.'); return; }
+  const vmap = {}; _etiVariantes().forEach(v => { vmap[v.id] = v; });
+  const labels = [];
+  Object.entries(etiCant).forEach(([id, cant]) => {
+    const v = vmap[id];
+    if (v) for (let k = 0; k < cant; k++) labels.push(v);
+  });
+  if (!labels.length) { alert('Cargá al menos una cantidad.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const W = 50, Hh = 25; // mm — 5 × 2,5 cm
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' });
+  const M = 2, CX = W / 2;
+  labels.forEach((v, i) => {
+    if (i > 0) pdf.addPage([W, Hh], 'landscape');
+    pdf.setTextColor(0);
+    let y = 3;
+    // Nombre del producto (hasta 2 líneas)
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
+    const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
+    pdf.text(nom, CX, y, { align: 'center' });
+    y += nom.length * 2.7 + 0.6;
+    // Variante
+    pdf.setFontSize(9);
+    const va = pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1);
+    pdf.text(va, CX, y, { align: 'center' });
+    y += 3.4;
+    // SKU (si existe)
+    if (v.sku) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.text('SKU: ' + v.sku, CX, y, { align: 'center' }); y += 2.7; }
+    // Código de barras Code 128 (con el número debajo)
+    try {
+      const canvas = document.createElement('canvas');
+      JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: true, fontSize: 30, textMargin: 1, width: 2, height: 60, margin: 0 });
+      const bw = 44, bh = Math.min(9, Hh - y - 1);
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, y, bw, bh);
+    } catch (e) {
+      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, y + 3, { align: 'center' });
+    }
+  });
+  pdf.save('etiquetas-bdi.pdf');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -5331,7 +5466,7 @@ function renderUserInfo() {
 // no se listan acá porque son comunes a todas las cuentas.
 const TABS_POR_CUENTA = {
   zattia: ['proveedores', 'colores', 'talles', 'tienda'],
-  bdi:    ['fundas-modelo', 'clientes', 'tienda'],
+  bdi:    ['fundas-modelo', 'clientes', 'tienda', 'etiquetas'],
 };
 
 function aplicarVisibilidadTabs() {
@@ -5343,7 +5478,7 @@ function aplicarVisibilidadTabs() {
   document.body.classList.toggle('rol-marketing', isMkt);
 
   // Tabs específicas por cuenta — para marketing, todas ocultas (solo queda Marketing visible)
-  const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','tienda'];
+  const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','tienda','etiquetas'];
   const visibles = new Set(TABS_POR_CUENTA[key] || []);
   todasOcultables.forEach(t => {
     const btn = document.getElementById('tab-btn-' + t);
