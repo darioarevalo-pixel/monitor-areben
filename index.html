@@ -927,11 +927,14 @@
       <div class="card" style="margin-top:4px;">
         <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">2 · Simulador de margen por producto</div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
-          <label style="font-size:12px;color:#666;">Costo neto (sin IVA) $<br><input type="number" id="com-costo" step="0.01" oninput="comRenderSim()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
-          <label style="font-size:12px;color:#666;">PVP (IVA incluido) $<br><input type="number" id="com-pvp" step="0.01" oninput="comRenderSim()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">Costo neto (sin IVA) $<br><input type="number" id="com-costo" step="0.01" oninput="comOnCostoInput()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">Markup % (s/ costo)<br><input type="number" id="com-markup" step="1" oninput="comOnMarkupInput()" placeholder="ej. 130" style="width:110px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
+          <label style="font-size:12px;color:#666;">PVP (IVA incluido) $<br><input type="number" id="com-pvp" step="0.01" oninput="comOnPvpInput()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
           <label style="font-size:12px;color:#666;">Marca (opcional)<br><input type="text" id="com-marca" style="width:140px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
         </div>
+        <div style="font-size:11px;color:#9CA3AF;margin:-4px 0 12px;">Cargá <b>costo</b> y luego el <b>markup</b> (se calcula el PVP) o el <b>PVP</b> (se calcula el markup). Son intercambiables.</div>
         <div id="com-sim-matriz" style="overflow-x:auto;"></div>
+        <div id="com-sim-breakeven" style="margin-top:14px;"></div>
         <div id="com-sim-detalle" style="margin-top:12px;"></div>
       </div>
 
@@ -4233,12 +4236,106 @@ function comCalcular(costoNeto, pvp, forma, canal) {
 
 function _comFmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-AR'); }
 
+// ── Inputs vinculados: costo + (markup ⇄ PVP) ───────────────────────────────
+// Markup y PVP son intercambiables: PVP = costo × (1 + markup/100).
+function comOnMarkupInput() {
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const mk = parseFloat(document.getElementById('com-markup').value);
+  if (costo > 0 && mk >= 0) document.getElementById('com-pvp').value = Math.round(costo * (1 + mk / 100));
+  comRenderSim();
+}
+function comOnPvpInput() {
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const pvp = parseFloat(document.getElementById('com-pvp').value);
+  if (costo > 0 && pvp > 0) document.getElementById('com-markup').value = ((pvp / costo - 1) * 100).toFixed(1);
+  comRenderSim();
+}
+function comOnCostoInput() {
+  const costo = parseFloat(document.getElementById('com-costo').value);
+  const mkEl = document.getElementById('com-markup');
+  const mk = parseFloat(mkEl.value);
+  // Si hay markup cargado, lo mantenemos y recalculamos el PVP; si no, recalculamos el markup desde el PVP.
+  if (mkEl.value !== '' && costo > 0 && mk >= 0) {
+    document.getElementById('com-pvp').value = Math.round(costo * (1 + mk / 100));
+  } else {
+    const pvp = parseFloat(document.getElementById('com-pvp').value);
+    if (costo > 0 && pvp > 0) mkEl.value = ((pvp / costo - 1) * 100).toFixed(1);
+  }
+  comRenderSim();
+}
+
+// Coeficientes lineales de la contribución: contrib = A·precioEfectivo + C. (de = factor de descuento)
+function comAC(costoNeto, forma, canal) {
+  const iva = comCfg.imp.iva / 100;
+  const cel = (comCfg.matriz[canal] || {})[forma] || { comision: 0, finan: 0, dias: 0, descuento: 0, aplicaImp: true };
+  const cc = comCfg.costoCanal[canal] || { valor: 0, tipo: '$' };
+  const aplicaImp = cel.aplicaImp !== false;
+  const de = 1 - (cel.descuento || 0) / 100;
+  let A, C;
+  if (aplicaImp) {
+    A = 1 / (1 + iva) - cel.comision / 100 - cel.finan / 100 - (comCfg.imp.iibb / 100) / (1 + iva) - (comCfg.imp.drei / 100);
+    C = -costoNeto;
+    if (!comCfg.saldoIva) { A -= iva / (1 + iva); C += costoNeto * iva; }
+  } else {
+    A = 1 - cel.comision / 100 - cel.finan / 100;
+    C = -costoNeto;
+  }
+  if (cc.tipo === '%') A -= cc.valor / 100; else C -= (cc.valor || 0);
+  return { A, C, de };
+}
+
+// Markup de equilibrio: % sobre el costo en el que el margen neto = 0 (contrib = 0).
+// Por debajo de este markup, esa venta da pérdida.
+function comBreakevenMarkup(costoNeto, forma, canal) {
+  if (!(costoNeto > 0)) return null;
+  const { A, C, de } = comAC(costoNeto, forma, canal);
+  if (de <= 0 || A <= 0) return null;
+  const pvpEf = -C / A;            // precio efectivo con contribución = 0
+  if (!(pvpEf > 0)) return null;
+  const pvp = pvpEf / de;          // PVP de lista
+  return (pvp / costoNeto - 1) * 100;
+}
+
+function comRenderBreakeven(costo) {
+  const cont = document.getElementById('com-sim-breakeven');
+  if (!cont) return;
+  if (!(costo > 0)) { cont.innerHTML = ''; return; }
+  const mkActual = parseFloat(document.getElementById('com-markup').value);
+  const hayMk = document.getElementById('com-markup').value !== '' && mkActual >= 0;
+  const thc = c => `<th style="text-align:center;padding:6px 10px;font-size:12px;">${c}</th>`;
+  let peor = null; // el breakeven más alto (el más exigente)
+  let html = '<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#FAFAFA;">';
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">⚖️ Markup de equilibrio (breakeven)</div>';
+  html += '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">Markup mínimo sobre el costo para no perder. Por <b>debajo</b> de este %, esa venta da pérdida.' + (hayMk ? ' 🟢 = tu markup zafa · 🔴 = estás por debajo (pérdida).' : '') + '</div>';
+  html += '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;">Forma de pago</th>' + comCanales().map(thc).join('') + '</tr></thead><tbody>';
+  comCfg.formas.forEach(f => {
+    html += '<tr><td style="padding:6px 10px;font-weight:500;border-top:1px solid #EEF0F2;">' + esc(f) + '</td>';
+    comCanales().forEach(c => {
+      const be = comBreakevenMarkup(costo, f, c);
+      if (be != null && (!peor || be > peor.be)) peor = { f, c, be };
+      let cellStyle = 'text-align:center;padding:6px 10px;border-top:1px solid #EEF0F2;font-weight:600;';
+      let txt = be == null ? '<span style="color:#9CA3AF;">—</span>' : be.toFixed(0) + '%';
+      if (be != null && hayMk) {
+        const ok = mkActual >= be;
+        cellStyle += ok ? 'background:#DCFCE7;color:#16A34A;' : 'background:#FEE2E2;color:#DC2626;';
+      }
+      html += `<td style="${cellStyle}">${txt}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  if (peor) html += `<div style="font-size:12px;color:#444;margin-top:8px;">Para estar a salvo en <b>todas</b> las formas/canales, el markup tiene que superar <b>${peor.be.toFixed(0)}%</b> (lo exige <b>${esc(peor.f)} · ${esc(peor.c)}</b>).</div>`;
+  html += '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">⚠️ Este equilibrio cubre impuestos y comisiones, <b>no</b> los gastos fijos de estructura (alquiler, sueldos, tiempo de venta). El piso real es más alto: sumale esa estructura por unidad.</div>';
+  html += '</div>';
+  cont.innerHTML = html;
+}
+
 function comRenderSim() {
   const cont = document.getElementById('com-sim-matriz');
   if (!cont || !comCfg) return;
   const costo = parseFloat(document.getElementById('com-costo').value);
   const pvp = parseFloat(document.getElementById('com-pvp').value);
-  if (!(costo >= 0) || !(pvp > 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto y el PVP para ver el margen.</div>'; return; }
+  if (!(costo >= 0) || !(pvp > 0)) { cont.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:10px;">Cargá el costo neto y el markup (o el PVP) para ver el margen.</div>'; comRenderBreakeven(costo); return; }
   let best = null, worst = null;
   comCfg.formas.forEach(f => comCanales().forEach(c => {
     const m = comCalcular(costo, pvp, f, c).margen;
@@ -4270,6 +4367,7 @@ function comRenderSim() {
   html += '</tbody></table>';
   html += `<div style="font-size:11px;color:#9CA3AF;margin-top:8px;">🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · "d" = días de acreditación${comCfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>`;
   cont.innerHTML = html;
+  comRenderBreakeven(costo);
 }
 
 // Pestañita con el discriminado completo de una celda (forma × canal)
@@ -4320,24 +4418,9 @@ function comDetalle(forma, canal) {
 // Piso de precio: PVP mínimo (de lista) para un margen objetivo (% sobre el precio efectivo).
 // La contribución es lineal en el precio efectivo; el descuento lo lleva al PVP de lista.
 function comPisoPvp(costoNeto, m, forma, canal) {
-  const iva = comCfg.imp.iva / 100;
-  const cel = (comCfg.matriz[canal] || {})[forma] || { comision: 0, finan: 0, dias: 0, descuento: 0, aplicaImp: true };
-  const cc = comCfg.costoCanal[canal] || { valor: 0, tipo: '$' };
   const g = comCfg.imp.ganancias / 100;
-  const aplicaImp = cel.aplicaImp !== false;
-  const de = 1 - (cel.descuento || 0) / 100; // factor de descuento
+  const { A, C, de } = comAC(costoNeto, forma, canal);
   if (de <= 0) return null;
-  // contrib = A * precioEfectivo + C
-  let A, C;
-  if (aplicaImp) {
-    A = 1 / (1 + iva) - cel.comision / 100 - cel.finan / 100 - (comCfg.imp.iibb / 100) / (1 + iva) - (comCfg.imp.drei / 100); // IIBB sobre neto, DREI sobre precio con IVA
-    C = -costoNeto;
-    if (!comCfg.saldoIva) { A -= iva / (1 + iva); C += costoNeto * iva; }
-  } else {
-    A = 1 - cel.comision / 100 - cel.finan / 100;
-    C = -costoNeto;
-  }
-  if (cc.tipo === '%') A -= cc.valor / 100; else C -= (cc.valor || 0);
   // (A*pvpEf + C)*(1-g) = m*pvpEf  →  pvpEf = -C*(1-g)/(A*(1-g) - m); pvp = pvpEf/de
   const den = A * (1 - g) - m;
   if (den <= 0) return null; // margen objetivo inalcanzable
