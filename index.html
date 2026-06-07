@@ -4684,21 +4684,27 @@ function _etiBuildPdf(labels, conPrecio) {
     pdf.setTextColor(0);
     const precio = conPrecio ? _etiPrecio(v) : 0;
     const hasPrecio = conPrecio && precio > 0;
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5);
+    // En la etiqueta de local (con precio) achicamos un poco las tipografías para que entre todo
+    const nameFS = hasPrecio ? 9 : 9.5, varFS = hasPrecio ? 8 : 8.5, skuFS = hasPrecio ? 8.5 : 9, priceFS = 11.5;
+    const nameLineH = hasPrecio ? 3.2 : 3.6, varLineH = hasPrecio ? 2.9 : 3.2, skuLineH = hasPrecio ? 3.1 : 3.4, priceLineH = 4.0;
+    const gapNameVar = hasPrecio ? 0.5 : 0.7, gapVarBar = hasPrecio ? 1.3 : 1.8, gapBarSku = hasPrecio ? 0.9 : 1.2, gapPrecio = 0.6;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(nameFS);
     const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
-    const nameLineH = 3.6, varLineH = 3.2, skuLineH = 3.4, priceLineH = 4.2;
-    const barH = hasPrecio ? 6 : 7;
-    const gapNameVar = 0.7, gapVarBar = 1.8, gapBarSku = 1.2, gapPrecio = 0.8;
     const nameH = nom.length * nameLineH;
     const skuBlock = v.sku ? (gapBarSku + skuLineH) : 0;
     const precioBlock = hasPrecio ? (gapPrecio + priceLineH) : 0;
-    const totalH = nameH + gapNameVar + varLineH + gapVarBar + barH + skuBlock + precioBlock;
-    let y = Math.max(1.2, (Hh - totalH) / 2);
+    const nonBar = nameH + gapNameVar + varLineH + gapVarBar + skuBlock + precioBlock;
+    // Alto del código de barras: el deseado, pero se achica si no entra todo (mínimo escaneable 4,5 mm)
+    const margin = 1.3;
+    let barH = hasPrecio ? 6 : 7;
+    if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
+    const totalH = nonBar + barH;
+    let y = Math.max(margin, (Hh - totalH) / 2);
     // Nombre
     pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
     y += nameH + gapNameVar;
     // Variante (normal)
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(varFS);
     const va = pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1);
     pdf.text(va, CX, y, { align: 'center', baseline: 'top' });
     y += varLineH + gapVarBar;
@@ -4715,14 +4721,14 @@ function _etiBuildPdf(labels, conPrecio) {
     // SKU (negrita)
     if (v.sku) {
       y += gapBarSku;
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(skuFS);
       pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' });
       y += skuLineH;
     }
     // Precio (negrita, grande) — solo etiqueta de local
     if (hasPrecio) {
       y += gapPrecio;
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(priceFS);
       pdf.text('$ ' + Math.round(precio).toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' });
     }
   });
