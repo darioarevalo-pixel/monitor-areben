@@ -5535,9 +5535,13 @@ function _mesLabel(yyyymm) {
 
 // Usuarios: cada uno tiene contraseña y rol. El rol controla qué tabs y cuentas ve.
 const USERS = {
-  'Bruno Arevalo': { pass: 'BDI123456', role: 'admin' },
-  'Dario Arevalo': { pass: 'BDI123456', role: 'admin' },
-  'local':         { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
+  'Bruno Arevalo':  { pass: 'BDI123456', role: 'admin' },
+  'Dario Arevalo':  { pass: 'BDI123456', role: 'admin' },
+  // Acceso total (ambas marcas, todas las secciones, incl. Marketing y Etiquetas)
+  'Administracion': { pass: 'Areben2026', role: 'admin' },
+  // Solo Marketing, pero en las 2 marcas (sin cuenta fija → puede cambiar de marca)
+  'Marketing':      { pass: 'Areben2026', role: 'marketing' },
+  'local':          { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
 };
 function _userRole() { return (USERS[currentUser]?.role) || 'admin'; }
 const SESSION_KEY = 'monitor-areben-session';
@@ -5612,10 +5616,30 @@ function intentarAutoLogin() {
 function renderUserInfo() {
   const isMkt = _userRole() === 'marketing';
   if (isMkt) {
-    // Marketing: vista simplificada — solo nombre de cuenta + botón salir discreto
-    document.getElementById('user-info').innerHTML =
-      `<span style="color:#666;font-weight:500;">${currentCuenta?.nombre || ''}</span> · ` +
-      `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
+    const locked = !!USERS[currentUser]?.cuenta; // si tiene cuenta fija, no puede cambiar de marca
+    if (locked) {
+      // Marketing de una sola marca: vista simple (nombre de cuenta + salir)
+      document.getElementById('user-info').innerHTML =
+        `<span style="color:#666;font-weight:500;">${currentCuenta?.nombre || ''}</span> · ` +
+        `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
+    } else {
+      // Marketing multimarca: puede cambiar de marca, pero sigue viendo solo la pestaña Marketing
+      const opciones = Object.entries(CUENTAS).map(([k, v]) =>
+        `<button class="empresa-opt${currentCuenta === v ? ' active' : ''}" onclick="cambiarEmpresa('${k}')">${v.nombre}</button>`
+      ).join('');
+      document.getElementById('user-info').innerHTML = `
+        <div class="empresa-switcher" onclick="event.stopPropagation()">
+          <button class="empresa-btn" onclick="document.getElementById('empresa-menu').classList.toggle('open')">
+            <span style="font-weight:600;">${currentCuenta?.nombre || ''}</span><span style="opacity:.6;">▾</span>
+          </button>
+          <div class="empresa-menu" id="empresa-menu">
+            <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px 6px;">Cambiar marca</div>
+            ${opciones}
+          </div>
+        </div>
+        <span style="color:#9CA3AF;font-size:12px;">${currentUser}</span>
+        <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:11px;">Salir</button>`;
+    }
     return;
   }
   // Admin: dropdown destacado para cambiar empresa + nombre + salir
@@ -5643,8 +5667,8 @@ function renderUserInfo() {
 // Las tabs siempre presentes (productos, variantes, stock, ventas-mensuales)
 // no se listan acá porque son comunes a todas las cuentas.
 const TABS_POR_CUENTA = {
-  zattia: ['proveedores', 'colores', 'talles', 'tienda', 'etiquetas'],
-  bdi:    ['fundas-modelo', 'clientes', 'tienda', 'etiquetas'],
+  zattia: ['proveedores', 'colores', 'talles', 'etiquetas'],
+  bdi:    ['fundas-modelo', 'clientes', 'etiquetas'],
 };
 
 function aplicarVisibilidadTabs() {
