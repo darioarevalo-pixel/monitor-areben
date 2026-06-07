@@ -4679,55 +4679,73 @@ function _etiBuildPdf(labels, conPrecio) {
   const { jsPDF } = window.jspdf;
   const W = 50, Hh = 25, M = 2, CX = W / 2;
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' });
+  const bw = 44;
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
     pdf.setTextColor(0);
     const precio = conPrecio ? _etiPrecio(v) : 0;
     const hasPrecio = conPrecio && precio > 0;
-    // En la etiqueta de local (con precio) achicamos un poco las tipografías para que entre todo
-    const nameFS = hasPrecio ? 9 : 9.5, varFS = hasPrecio ? 8 : 8.5, skuFS = hasPrecio ? 8.5 : 9, priceFS = 11;
-    const nameLineH = hasPrecio ? 3.2 : 3.6, varLineH = hasPrecio ? 2.9 : 3.2, skuLineH = hasPrecio ? 3.1 : 3.4, priceLineH = 3.9;
-    const gNameVar = hasPrecio ? 0.5 : 0.7, gVarNext = hasPrecio ? 1.1 : 1.8, gPriceBar = 1.1, gBarSku = hasPrecio ? 1.0 : 1.2;
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(nameFS);
-    const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
-    const nameH = nom.length * nameLineH;
-    const priceBlock = hasPrecio ? (priceLineH + gPriceBar) : 0;
-    const skuBlock = v.sku ? (gBarSku + skuLineH) : 0;
-    const nonBar = nameH + gNameVar + varLineH + gVarNext + priceBlock + skuBlock;
-    // Alto del código de barras: el deseado, pero se achica si no entra todo (mínimo escaneable 4,5 mm)
     const margin = 1.3;
-    let barH = hasPrecio ? 6 : 7;
-    if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
-    const totalH = nonBar + barH;
-    let y = Math.max(margin, (Hh - totalH) / 2);
-    // 1) Nombre
-    pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
-    y += nameH + gNameVar;
-    // 2) Variante (normal)
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(varFS);
-    pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' });
-    y += varLineH + gVarNext;
-    // 3) Precio (después de la variante) — solo etiqueta de local
+    // Dibuja el código de barras en (y) con altura h
+    const barras = (y, h) => {
+      try {
+        const canvas = document.createElement('canvas');
+        JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, y, bw, h);
+      } catch (e) {
+        pdf.setFontSize(8); pdf.text(String(v.barcode), CX, y + h / 2, { align: 'center', baseline: 'middle' });
+      }
+    };
+
     if (hasPrecio) {
+      // ── ETIQUETA DE LOCAL ── Precio arriba (héroe). Nombre y variante debajo, sin negrita.
+      const priceFS = 14, nameFS = 9, varFS = 8.5, skuFS = 8.5;
+      const priceLineH = 4.6, nameLineH = 3.2, varLineH = 3.0, skuLineH = 3.1;
+      const gPriceName = 0.8, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0;
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(nameFS);
+      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
+      const nameH = nom.length * nameLineH;
+      const skuBlock = v.sku ? (gBarSku + skuLineH) : 0;
+      const nonBar = priceLineH + gPriceName + nameH + gNameVar + varLineH + gVarBar + skuBlock;
+      let barH = 6;
+      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
+      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2);
+      // 1) Precio — negrita, grande (héroe)
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(priceFS);
       pdf.text('$ ' + Math.round(precio).toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' });
-      y += priceLineH + gPriceBar;
-    }
-    // 4) Código de barras (solo barras)
-    const bw = 44;
-    try {
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 });
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, y, bw, barH);
-    } catch (e) {
-      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, y + barH / 2, { align: 'center', baseline: 'middle' });
-    }
-    y += barH;
-    // 5) SKU (al final, negrita)
-    if (v.sku) {
-      y += gBarSku;
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(skuFS);
-      pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' });
+      y += priceLineH + gPriceName;
+      // 2) Nombre — sin negrita
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(nameFS);
+      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
+      y += nameH + gNameVar;
+      // 3) Variante — sin negrita
+      pdf.setFontSize(varFS);
+      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' });
+      y += varLineH + gVarBar;
+      // 4) Código de barras
+      barras(y, barH); y += barH;
+      // 5) SKU — negrita, abajo
+      if (v.sku) { y += gBarSku; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(skuFS); pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' }); }
+    } else {
+      // ── ETIQUETA DE DEPÓSITO ── Nombre (negrita), variante, código, SKU.
+      const nameFS = 9.5, varFS = 8.5, skuFS = 9;
+      const nameLineH = 3.6, varLineH = 3.2, skuLineH = 3.4;
+      const gNameVar = 0.7, gVarBar = 1.8, gBarSku = 1.2;
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(nameFS);
+      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
+      const nameH = nom.length * nameLineH;
+      const skuBlock = v.sku ? (gBarSku + skuLineH) : 0;
+      const nonBar = nameH + gNameVar + varLineH + gVarBar + skuBlock;
+      let barH = 7;
+      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
+      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2);
+      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
+      y += nameH + gNameVar;
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(varFS);
+      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' });
+      y += varLineH + gVarBar;
+      barras(y, barH); y += barH;
+      if (v.sku) { y += gBarSku; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(skuFS); pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' }); }
     }
   });
   return pdf;
