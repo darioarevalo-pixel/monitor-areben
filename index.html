@@ -189,7 +189,7 @@
     }
     /* Vista restringida para rol Operación (Administracion): solo Marketing y Etiquetas */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]),
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-operacion #refresh-card {
       display: none !important;
     }
@@ -972,6 +972,7 @@
         <button class="tab active" id="eti-sub-btn-dep" onclick="etiSwitchSub('dep', this)">🏬 Etiquetas Depósito</button>
         <button class="tab" id="eti-sub-btn-loc" onclick="etiSwitchSub('loc', this)">🏪 Etiquetas Local</button>
         <button class="tab" id="eti-sub-btn-sku" onclick="etiSwitchSub('sku', this)">🔢 Etiquetas SKU</button>
+        <button class="tab" id="eti-sub-btn-libre" onclick="etiSwitchSub('libre', this)">✏️ Etiqueta libre</button>
       </div>
 
       <!-- DEPÓSITO -->
@@ -998,8 +999,8 @@
         <div class="card" style="border:1px solid #BFDBFE;background:#F0F7FF;">
           <div style="font-size:15px;font-weight:700;margin-bottom:2px;">⚡ Impresión rápida (escáner)</div>
           <div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Hacé clic en el campo y escaneá el código de barras de un producto: imprime su etiqueta de <b>local</b> (con precio) al instante.</div>
-          <input type="text" id="eti-scan-input" onkeydown="etiScanKey(event)" placeholder="🔫 Escaneá acá el código de barras…" style="width:320px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;">
-          <div id="eti-scan-feedback" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+          <input type="text" id="eti-scan-input-loc" onkeydown="etiScanKey(event, 'loc')" placeholder="🔫 Escaneá acá el código de barras…" style="width:320px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;">
+          <div id="eti-scan-feedback-loc" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
         </div>
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
@@ -1020,6 +1021,12 @@
 
       <!-- SKU (solo el código SKU) -->
       <div id="eti-sub-sku" style="display:none;">
+        <div class="card" style="border:1px solid #BFDBFE;background:#F0F7FF;">
+          <div style="font-size:15px;font-weight:700;margin-bottom:2px;">⚡ Impresión rápida (escáner)</div>
+          <div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Escaneá el código de barras de un producto: imprime su etiqueta con <b>solo el SKU</b> al instante.</div>
+          <input type="text" id="eti-scan-input-sku" onkeydown="etiScanKey(event, 'sku')" placeholder="🔫 Escaneá acá el código de barras…" style="width:320px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;">
+          <div id="eti-scan-feedback-sku" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+        </div>
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
             <div>
@@ -1034,6 +1041,41 @@
             <span id="eti-total-sku" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
           <div id="eti-tabla-sku" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- LIBRE (editor) -->
+      <div id="eti-sub-libre" style="display:none;">
+        <div class="card">
+          <div style="font-size:16px;font-weight:700;margin-bottom:2px;">✏️ Etiqueta libre (editor)</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">Armá una etiqueta a medida con texto, código de barras y/o precio. Ideal para cajas, bolsas y rótulos de envío.</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+            <label style="font-size:12px;color:#666;">Tamaño<br>
+              <select id="libre-size" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;min-width:150px;">
+                <option value="chica">5 × 2,5 cm (chica)</option>
+                <option value="grande">10 × 15 cm (caja / rótulo)</option>
+              </select>
+            </label>
+            <label style="font-size:12px;color:#666;">Copias<br>
+              <input type="number" id="libre-copias" value="1" min="1" style="width:80px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+            </label>
+          </div>
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Líneas de texto</div>
+          <div id="libre-lineas"></div>
+          <button class="btn-sm" onclick="libreAddLinea()" style="margin-top:4px;">+ Agregar línea</button>
+          <div style="border-top:1px solid #EEF0F2;margin:16px 0 12px;"></div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+            <label style="font-size:12px;color:#666;">Código de barras (opcional)<br>
+              <input type="text" id="libre-barcode" placeholder="número o texto a codificar" style="width:240px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+            </label>
+            <label style="font-size:12px;color:#666;">Precio (opcional)<br>
+              <input type="number" id="libre-precio" placeholder="ej. 12990" style="width:140px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+            <button class="btn-sm" onclick="librePreview()">👁️ Vista previa</button>
+            <button class="btn-sm" onclick="libreImprimir()" style="background:#1F2937;color:#fff;">🖨️ Imprimir</button>
+          </div>
         </div>
       </div>
     </div>
@@ -4528,6 +4570,7 @@ async function renderEtiquetas() {
   etiRenderTabla('dep');
   etiRenderTabla('loc');
   etiRenderTabla('sku');
+  libreRenderLineas();
   // Para las etiquetas de local necesitamos el precio promocional de TN
   if (!window._mktTNData) {
     try {
@@ -4545,9 +4588,11 @@ function etiSwitchSub(name, btn) {
   document.getElementById('eti-sub-dep').style.display = name === 'dep' ? '' : 'none';
   document.getElementById('eti-sub-loc').style.display = name === 'loc' ? '' : 'none';
   document.getElementById('eti-sub-sku').style.display = name === 'sku' ? '' : 'none';
+  document.getElementById('eti-sub-libre').style.display = name === 'libre' ? '' : 'none';
   document.querySelectorAll('#tab-etiquetas > .tabs .tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (name === 'loc') setTimeout(() => { const i = document.getElementById('eti-scan-input'); if (i) i.focus(); }, 50);
+  if (name === 'loc' || name === 'sku') setTimeout(() => { const i = document.getElementById('eti-scan-input-' + name); if (i) i.focus(); }, 50);
+  if (name === 'libre') libreRenderLineas();
 }
 
 // Precio de cada producto = el más barato entre minorista (GN) y promocional (TN)
@@ -4759,11 +4804,11 @@ function etiImprimir(modo) {
   }, 600);
 }
 
-// ── Impresión rápida por escáner (etiqueta de local) ────────────────────────────
-function etiScanKey(e) { if (e.key === 'Enter') { e.preventDefault(); etiScan(); } }
-function etiScan() {
-  const inp = document.getElementById('eti-scan-input');
-  const fb = document.getElementById('eti-scan-feedback');
+// ── Impresión rápida por escáner (modo 'loc' o 'sku') ────────────────────────────
+function etiScanKey(e, modo) { if (e.key === 'Enter') { e.preventDefault(); etiScan(modo); } }
+function etiScan(modo) {
+  const inp = document.getElementById('eti-scan-input-' + modo);
+  const fb = document.getElementById('eti-scan-feedback-' + modo);
   const code = (inp.value || '').trim();
   inp.value = '';
   if (!code) { inp.focus(); return; }
@@ -4773,11 +4818,95 @@ function etiScan() {
     || vars.find(x => norm(x.barcode) === norm(code))
     || vars.find(x => (x.sku || '').toLowerCase() === code.toLowerCase());
   if (!v) { fb.innerHTML = `<span style="color:#DC2626;">✗ No se encontró ningún producto con el código <b>${esc(code)}</b>.</span>`; inp.focus(); return; }
+  if (modo === 'sku' && !v.sku) { fb.innerHTML = `<span style="color:#DC2626;">✗ <b>${esc(v.name || '')}</b> no tiene SKU cargado.</span>`; inp.focus(); return; }
   if (!window.jspdf || !window.jspdf.jsPDF || typeof JsBarcode === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el generador… escaneá de nuevo en unos segundos.</span>'; return; }
-  _etiPrint(_etiBuildPdf([v], 'loc'));
+  _etiPrint(_etiBuildPdf([v], modo));
   const p = _etiPrecio(v);
-  fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${p ? ' · $' + Math.round(p).toLocaleString('es-AR') : ''}</span>`;
+  const extra = modo === 'sku' ? (' · SKU ' + esc(v.sku)) : (p ? ' · $' + Math.round(p).toLocaleString('es-AR') : '');
+  fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${extra}</span>`;
   inp.focus();
+}
+
+// ── Editor de etiqueta libre (texto + código + precio; 5×2,5 cm o 10×15 cm) ───────
+let libreLineas = [{ texto: '', tam: 'titulo', bold: true }];
+const LIBRE_TAM_OPTS = [['titulo', 'Título'], ['subtitulo', 'Subtítulo'], ['normal', 'Normal'], ['chico', 'Chico']];
+
+function libreRenderLineas() {
+  const cont = document.getElementById('libre-lineas');
+  if (!cont) return;
+  cont.innerHTML = libreLineas.map((l, i) => `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <input type="text" value="${esc(l.texto)}" placeholder="Texto de la línea ${i + 1}" oninput="libreSetLinea(${i},'texto',this.value)" style="flex:1;min-width:160px;padding:6px 9px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;">
+      <select onchange="libreSetLinea(${i},'tam',this.value)" style="padding:6px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;">
+        ${LIBRE_TAM_OPTS.map(([v, t]) => `<option value="${v}" ${l.tam === v ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:3px;"><input type="checkbox" ${l.bold ? 'checked' : ''} onchange="libreSetLinea(${i},'bold',this.checked)"> Negrita</label>
+      <button onclick="libreDelLinea(${i})" title="Quitar línea" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
+    </div>`).join('');
+}
+function libreSetLinea(i, campo, val) { if (libreLineas[i]) libreLineas[i][campo] = val; }
+function libreAddLinea() { libreLineas.push({ texto: '', tam: 'normal', bold: false }); libreRenderLineas(); }
+function libreDelLinea(i) {
+  libreLineas.splice(i, 1);
+  if (!libreLineas.length) libreLineas.push({ texto: '', tam: 'normal', bold: false });
+  libreRenderLineas();
+}
+
+function _libreBuildPdf() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return null; }
+  const { jsPDF } = window.jspdf;
+  const grande = document.getElementById('libre-size').value === 'grande';
+  const W = grande ? 100 : 50, Hh = grande ? 150 : 25;
+  const M = grande ? 7 : 2.5, CX = W / 2;
+  const FS = grande
+    ? { titulo: 26, subtitulo: 19, normal: 14, chico: 11, precio: 44 }
+    : { titulo: 12, subtitulo: 10, normal: 8.5, chico: 7, precio: 15 };
+  const barH = grande ? 20 : 7, barW = grande ? 80 : 44;
+  const copias = Math.max(1, parseInt(document.getElementById('libre-copias').value) || 1);
+  const barcode = (document.getElementById('libre-barcode').value || '').trim();
+  const precioRaw = document.getElementById('libre-precio').value;
+  const precio = precioRaw !== '' ? Math.round(parseFloat(precioRaw)) : null;
+  const lineas = libreLineas.filter(l => (l.texto || '').trim());
+  if (!lineas.length && !barcode && precio == null) { alert('Cargá al menos una línea de texto, un código de barras o un precio.'); return null; }
+
+  const orient = grande ? 'portrait' : 'landscape';
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: orient });
+  for (let c = 0; c < copias; c++) {
+    if (c > 0) pdf.addPage([W, Hh], orient);
+    pdf.setTextColor(0);
+    let y = M;
+    lineas.forEach(l => {
+      pdf.setFont('helvetica', l.bold ? 'bold' : 'normal');
+      const fs = FS[l.tam] || FS.normal;
+      pdf.setFontSize(fs);
+      const wrapped = pdf.splitTextToSize(l.texto, W - M * 2);
+      pdf.text(wrapped, CX, y, { align: 'center', baseline: 'top' });
+      y += wrapped.length * (fs * 0.42) + (grande ? 2 : 0.8);
+    });
+    if (barcode) {
+      y += grande ? 4 : 1.2;
+      try {
+        const canvas = document.createElement('canvas');
+        JsBarcode(canvas, barcode, { format: 'CODE128', displayValue: true, fontSize: 26, width: 2, height: 60, margin: 0 });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - barW / 2, y, barW, barH);
+        y += barH;
+      } catch (e) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(FS.normal); pdf.text(barcode, CX, y, { align: 'center', baseline: 'top' }); y += 5; }
+    }
+    if (precio != null && !isNaN(precio)) {
+      y += grande ? 5 : 1.0;
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(FS.precio);
+      pdf.text('$ ' + precio.toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' });
+    }
+  }
+  return pdf;
+}
+
+function libreImprimir() { const pdf = _libreBuildPdf(); if (pdf) _etiPrint(pdf); }
+function librePreview() {
+  const pdf = _libreBuildPdf();
+  if (!pdf) return;
+  const url = pdf.output('bloburl');
+  if (!window.open(url, 'etiquetas_print')) pdf.save('etiqueta.pdf');
 }
 
 // ════════════════════════════════════════════════════════════════
