@@ -4602,36 +4602,39 @@ function etiGenerarPDF() {
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
     pdf.setTextColor(0);
-    let y = 3.5;
-    // Nombre del producto — negrita, grande, dominante (hasta 2 líneas)
+    // Medir el nombre (hasta 2 líneas) para calcular la altura total del bloque
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5);
     const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
-    pdf.text(nom, CX, y, { align: 'center' });
-    y += nom.length * 3.4 + 0.8;
+    // Alturas de cada bloque (mm) y separaciones
+    const nameLineH = 3.6, varLineH = 3.2, skuLineH = 3.6, barH = 7;
+    const gapNameVar = 0.8, gapVarBar = 2.2, gapBarSku = 1.4;
+    const nameH = nom.length * nameLineH;
+    const skuBlock = v.sku ? (gapBarSku + skuLineH) : 0;
+    const totalH = nameH + gapNameVar + varLineH + gapVarBar + barH + skuBlock;
+    // Centrar todo el bloque verticalmente (márgenes parejos arriba y abajo)
+    let y = Math.max(1.8, (Hh - totalH) / 2);
+    // Nombre — negrita, grande
+    pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
+    y += nameH + gapNameVar;
     // Variante — letra normal (no negrita)
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
     const va = pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1);
-    pdf.text(va, CX, y, { align: 'center' });
-    y += 3.3;
-    // Grupo inferior: código de barras (solo barras) + SKU en negrita debajo (sin "SKU:").
-    // Se centra verticalmente en el espacio que queda bajo la variante.
-    const barH = 7.5, skuGap = 1.2, skuH = v.sku ? 3.3 : 0;
-    const grupoH = barH + (v.sku ? skuGap + skuH : 0);
-    const desde = y + 0.8;        // arranque, justo debajo de la variante
-    const hasta = Hh - 1;         // margen inferior
-    let gy = desde + Math.max(0, ((hasta - desde) - grupoH) / 2);
-    if (gy + grupoH > hasta) gy = Math.max(desde, hasta - grupoH); // que no se pase del borde
+    pdf.text(va, CX, y, { align: 'center', baseline: 'top' });
+    y += varLineH + gapVarBar;
+    // Código de barras (solo barras, sin número)
     const bw = 44;
     try {
       const canvas = document.createElement('canvas');
       JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 });
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, gy, bw, barH);
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, y, bw, barH);
     } catch (e) {
-      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, gy + barH / 2, { align: 'center' });
+      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, y + barH / 2, { align: 'center', baseline: 'middle' });
     }
+    y += barH + gapBarSku;
+    // SKU — negrita, sin "SKU:"
     if (v.sku) {
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5);
-      pdf.text(v.sku, CX, gy + barH + skuGap + 2.6, { align: 'center' });
+      pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' });
     }
   });
   // Imprimir directo (sin guardar el PDF en el disco): abre el diálogo de impresión.
