@@ -4699,15 +4699,15 @@ function _etiBuildPdf(labels, conPrecio) {
 
     if (hasPrecio) {
       // ── ETIQUETA DE LOCAL ── Precio arriba (héroe). Nombre y variante debajo, sin negrita.
-      const priceFS = 14, nameFS = 8, varFS = 7.5, skuFS = 8.5;
-      const priceLineH = 4.6, nameLineH = 2.9, varLineH = 2.7, skuLineH = 3.1;
-      const gPriceName = 0.8, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0;
+      const priceFS = 14, nameFS = 8, varFS = 7.5, skuFS = 7.5;
+      const priceLineH = 4.6, nameLineH = 2.9, varLineH = 2.7, skuLineH = 2.8;
+      const gPriceName = 2.0, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0;
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(nameFS);
       const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
       const nameH = nom.length * nameLineH;
       const skuBlock = v.sku ? (gBarSku + skuLineH) : 0;
       const nonBar = priceLineH + gPriceName + nameH + gNameVar + varLineH + gVarBar + skuBlock;
-      let barH = 6;
+      let barH = 5.5;
       if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
       let y = Math.max(margin, (Hh - (nonBar + barH)) / 2);
       // 1) Precio — negrita, grande (héroe)
