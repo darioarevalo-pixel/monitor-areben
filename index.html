@@ -64,6 +64,7 @@
 
     /* Sections */
     .section { display: none; }
+    .fm-drop-hover { outline: 2px dashed #378ADD; outline-offset: 3px; border-radius: 8px; background: #EFF6FF; }
     .section.visible { display: block; animation: fadeUp .2s ease; }
     @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -550,7 +551,7 @@
           </label>
           <div style="display:flex;flex-direction:column;gap:1px;">
             <span style="font-size:12px;color:#666;">Foto del pedido <span style="color:#9CA3AF;">(opcional)</span></span>
-            <span style="font-size:11px;color:#9CA3AF;">Aparece arriba en la imagen y el PDF. Ideal si todo el pedido es del mismo diseño.</span>
+            <span style="font-size:11px;color:#9CA3AF;">Aparece arriba en la imagen y el PDF. Ideal si todo el pedido es del mismo diseño. <b>Tocá el 📷 o arrastrá la imagen acá.</b></span>
           </div>
           <button id="fm-sim-img-quitar" onclick="fmSimImgQuitar()" style="display:none;background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:11px;">quitar</button>
         </div>
@@ -2827,6 +2828,21 @@ function fmSimVarQuitarImg(i) {
   fmSimRender();
 }
 
+// Permite arrastrar y soltar (drag & drop) un archivo de imagen sobre un elemento.
+// onFile recibe la miniatura ya procesada (igual que al elegir por el explorador).
+function _fmDropZone(el, onFile) {
+  if (!el || el._dropWired) return;
+  el._dropWired = true;
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('fm-drop-hover'); });
+  el.addEventListener('dragleave', () => el.classList.remove('fm-drop-hover'));
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    el.classList.remove('fm-drop-hover');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file && /^image\//.test(file.type)) _imgAThumb(file, onFile);
+  });
+}
+
 // ── Foto general del pedido (sirve también en el modo sin variantes) ────────────
 
 function fmSimImgRender() {
@@ -2837,6 +2853,8 @@ function fmSimImgRender() {
     : `<span style="display:flex;width:46px;height:46px;align-items:center;justify-content:center;border:1px dashed #CBD5E1;border-radius:8px;color:#9CA3AF;font-size:18px;">📷</span>`;
   const quitar = document.getElementById('fm-sim-img-quitar');
   if (quitar) quitar.style.display = fmSimImg ? '' : 'none';
+  // Permitir soltar la imagen sobre toda la fila
+  _fmDropZone(document.getElementById('fm-sim-img-row'), url => { fmSimImg = url; fmSimImgRender(); fmSimSave(); });
 }
 
 function fmSimImgCargar(input) {
@@ -2873,7 +2891,7 @@ function fmSimVarRender() {
   if (!cont) return;
   cont.innerHTML = fmSimVars.map((v, i) => `
     <div style="display:flex;align-items:center;gap:8px;">
-      <label title="Agregar o cambiar foto (opcional)" style="cursor:pointer;flex:none;">
+      <label class="fm-var-drop" data-idx="${i}" title="Agregar, cambiar o arrastrar una foto (opcional)" style="cursor:pointer;flex:none;">
         <input type="file" accept="image/*" onchange="fmSimVarImg(${i}, this)" style="display:none;">
         ${v.img
           ? `<img src="${v.img}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid #E5E7EB;display:block;">`
@@ -2889,6 +2907,11 @@ function fmSimVarRender() {
       <span style="font-size:12px;color:#888;">%</span>
       <button onclick="fmSimVarEliminar(${i})" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
     </div>`).join('');
+  // Cablear drag & drop en cada foto de variante (los labels se recrean en cada render)
+  cont.querySelectorAll('.fm-var-drop').forEach(lbl => {
+    const i = parseInt(lbl.dataset.idx, 10);
+    _fmDropZone(lbl, url => { fmSimVars[i].img = url; fmSimVarRender(); fmSimRender(); });
+  });
   fmSimVarSum();
 }
 
