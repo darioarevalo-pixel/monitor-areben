@@ -4871,32 +4871,43 @@ function _libreBuildPdf() {
 
   const orient = grande ? 'portrait' : 'landscape';
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: orient });
+
+  // 1) Medir: armar la lista de elementos con su alto y separación, para centrar vertical
+  const textGap = grande ? 2 : 0.8;
+  const ops = [];
+  lineas.forEach(l => {
+    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal');
+    const fs = FS[l.tam] || FS.normal;
+    pdf.setFontSize(fs);
+    const wrapped = pdf.splitTextToSize(l.texto, W - M * 2);
+    ops.push({ type: 'text', wrapped, fs, bold: l.bold, h: wrapped.length * (fs * 0.42), gap: ops.length ? textGap : 0 });
+  });
+  if (barcode) ops.push({ type: 'barcode', h: barH, gap: ops.length ? (grande ? 4 : 1.2) : 0 });
+  if (precio != null && !isNaN(precio)) ops.push({ type: 'precio', h: FS.precio * 0.42, gap: ops.length ? (grande ? 5 : 1.0) : 0 });
+  const totalH = ops.reduce((s, o) => s + o.gap + o.h, 0);
+
+  // 2) Dibujar cada copia, centrado vertical y horizontal
   for (let c = 0; c < copias; c++) {
     if (c > 0) pdf.addPage([W, Hh], orient);
     pdf.setTextColor(0);
-    let y = M;
-    lineas.forEach(l => {
-      pdf.setFont('helvetica', l.bold ? 'bold' : 'normal');
-      const fs = FS[l.tam] || FS.normal;
-      pdf.setFontSize(fs);
-      const wrapped = pdf.splitTextToSize(l.texto, W - M * 2);
-      pdf.text(wrapped, CX, y, { align: 'center', baseline: 'top' });
-      y += wrapped.length * (fs * 0.42) + (grande ? 2 : 0.8);
+    let y = Math.max(M, (Hh - totalH) / 2);
+    ops.forEach(o => {
+      y += o.gap;
+      if (o.type === 'text') {
+        pdf.setFont('helvetica', o.bold ? 'bold' : 'normal'); pdf.setFontSize(o.fs);
+        pdf.text(o.wrapped, CX, y, { align: 'center', baseline: 'top' });
+      } else if (o.type === 'barcode') {
+        try {
+          const canvas = document.createElement('canvas');
+          JsBarcode(canvas, barcode, { format: 'CODE128', displayValue: true, fontSize: 26, width: 2, height: 60, margin: 0 });
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - barW / 2, y, barW, barH);
+        } catch (e) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(FS.normal); pdf.text(barcode, CX, y, { align: 'center', baseline: 'top' }); }
+      } else if (o.type === 'precio') {
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(FS.precio);
+        pdf.text('$ ' + precio.toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' });
+      }
+      y += o.h;
     });
-    if (barcode) {
-      y += grande ? 4 : 1.2;
-      try {
-        const canvas = document.createElement('canvas');
-        JsBarcode(canvas, barcode, { format: 'CODE128', displayValue: true, fontSize: 26, width: 2, height: 60, margin: 0 });
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - barW / 2, y, barW, barH);
-        y += barH;
-      } catch (e) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(FS.normal); pdf.text(barcode, CX, y, { align: 'center', baseline: 'top' }); y += 5; }
-    }
-    if (precio != null && !isNaN(precio)) {
-      y += grande ? 5 : 1.0;
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(FS.precio);
-      pdf.text('$ ' + precio.toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' });
-    }
   }
   return pdf;
 }
