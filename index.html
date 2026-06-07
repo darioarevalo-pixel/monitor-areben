@@ -292,6 +292,7 @@
       <button class="tab" id="tab-btn-clientes" style="display:none;" onclick="switchTab('clientes', this)">Clientes</button>
       <button class="tab" id="tab-btn-marketing" onclick="switchTab('marketing', this)" style="background:linear-gradient(135deg,#FF6B6B,#FFA07A);color:#fff;">📸 Marketing</button>
       <button class="tab" id="tab-btn-comisiones" onclick="switchTab('comisiones', this)">💵 Comisiones y margen</button>
+      <button class="tab" id="tab-btn-margenes" onclick="switchTab('margenes', this)">📊 Margen por producto</button>
       <button class="tab tn-tab" id="tab-btn-tienda" style="display:none;" onclick="switchTab('tienda', this)">
         <svg class="tn-logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.5 7.5 0 0 0-6.93 4.62A5.5 5.5 0 0 0 6.5 19.5h12a4.5 4.5 0 0 0 .85-8.96z" fill="currentColor"/>
@@ -941,6 +942,29 @@
           <input type="number" id="com-piso-obj" value="40" step="1" oninput="comRenderPiso()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;margin-left:6px;">
         </div>
         <div id="com-piso-matriz" style="overflow-x:auto;"></div>
+      </div>
+    </div>
+
+    <div id="tab-margenes" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">📊 Margen por producto</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Solo productos <b>disponibles</b> (con stock). Margen = (precio − costo) / precio.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="mg-search" placeholder="Buscar producto…" oninput="renderMargenesGrid()" style="width:180px;">
+            <select id="mg-sort" onchange="renderMargenesGrid()">
+              <option value="margin-asc">Margen: menor a mayor</option>
+              <option value="margin-desc">Margen: mayor a menor</option>
+              <option value="name">Nombre (A-Z)</option>
+              <option value="pvp-desc">Precio: mayor a menor</option>
+              <option value="stock-desc">Stock: mayor a menor</option>
+            </select>
+          </div>
+        </div>
+        <div id="mg-resumen" style="font-size:12px;color:#6B7280;margin-bottom:12px;"></div>
+        <div id="mg-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;"></div>
       </div>
     </div>
 
@@ -1596,9 +1620,15 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     const ls = lifespanDays(stock, d.s30);
     const lsFirst = lifespanDaysFromFirst(stock, d.total, d.first);
     const ingresoMes = p.created_at ? p.created_at.substring(0, 7) : null;
+    const rp = parseFloat(p.retailer_price) || 0;
+    const uc = parseFloat(p.unit_cost) || 0;
     return {
       id: pid, name: p.name || 'Producto ' + pid,
       sku: p.sku || null, proveedor: p.proveedor || null,
+      category: p.category || null,
+      retailer_price: rp, unit_cost: uc,
+      margin: rp > 0 ? (rp - uc) / rp * 100 : null,   // margen sobre PVP
+      markup: uc > 0 ? (rp / uc - 1) * 100 : null,     // recargo sobre costo
       ingresoMes,
       firstSale: d.first || null,
       lastSale: d.last || null, daysSinceLast: dsl,
@@ -4349,7 +4379,97 @@ function switchTab(id, btn) {
     else if (id === 'talles')           updateTallesTab();
     else if (id === 'clientes')         cargarCRM();
     else if (id === 'marketing')        cargarMarketingTab();
+    else if (id === 'margenes')          renderMargenes();
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Margen por producto — grilla con foto (TN), margen y solo disponibles
+// ════════════════════════════════════════════════════════════════
+async function renderMargenes() {
+  const grid = document.getElementById('mg-grid');
+  // Asegurar que tengamos las fotos de TiendaNube (mismo payload que usa Marketing)
+  if (!window._mktTNData) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:#9CA3AF;">Cargando fotos desde TiendaNube…</div>';
+    try {
+      const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`);
+      const data = await r.json();
+      window._mktTNData = data.products || [];
+      window._mktTNCats = data.categories || {};
+    } catch (e) {
+      window._mktTNData = []; // seguimos sin fotos si TN falla
+    }
+  }
+  renderMargenesGrid();
+}
+
+function renderMargenesGrid() {
+  const grid = document.getElementById('mg-grid');
+  if (!grid) return;
+  const idx = _mktIndexTN();
+  const q = (document.getElementById('mg-search').value || '').toLowerCase().trim();
+  const sort = document.getElementById('mg-sort').value;
+
+  // Solo productos disponibles (con stock) y con costo + precio cargados
+  let lista = (allProductos || [])
+    .filter(p => (p.stock || 0) > 0 && p.unit_cost > 0 && p.retailer_price > 0)
+    .map(p => {
+      const tn = _mktFindTN(p, idx);
+      return { p, foto: (tn && tn.images && tn.images[0]) || null };
+    });
+
+  if (q) lista = lista.filter(x => x.p.name.toLowerCase().includes(q) || (x.p.sku || '').toLowerCase().includes(q));
+
+  const cmp = {
+    'margin-asc':  (a, b) => a.p.margin - b.p.margin,
+    'margin-desc': (a, b) => b.p.margin - a.p.margin,
+    'name':        (a, b) => a.p.name.localeCompare(b.p.name),
+    'pvp-desc':    (a, b) => b.p.retailer_price - a.p.retailer_price,
+    'stock-desc':  (a, b) => b.p.stock - a.p.stock,
+  }[sort] || ((a, b) => a.p.margin - b.p.margin);
+  lista.sort(cmp);
+
+  const resumen = document.getElementById('mg-resumen');
+  if (lista.length) {
+    const margenes = lista.map(x => x.p.margin).sort((a, b) => a - b);
+    const prom = margenes.reduce((s, m) => s + m, 0) / margenes.length;
+    const med = margenes[Math.floor(margenes.length / 2)];
+    resumen.innerHTML = `<b>${lista.length}</b> productos disponibles · margen promedio <b>${prom.toFixed(0)}%</b> · mediana <b>${med.toFixed(0)}%</b>`;
+  } else {
+    resumen.textContent = '';
+  }
+
+  if (!lista.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:#9CA3AF;">No hay productos disponibles que coincidan.</div>';
+    return;
+  }
+
+  const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+  grid.innerHTML = lista.map(({ p, foto }) => {
+    const m = p.margin;
+    // Color del margen: rojo bajo, ámbar medio, verde alto
+    const color = m < 40 ? '#DC2626' : m < 55 ? '#D97706' : '#16A34A';
+    const bg    = m < 40 ? '#FEF2F2' : m < 55 ? '#FFFBEB' : '#F0FDF4';
+    const fotoHtml = foto
+      ? `<img src="${esc(foto)}" loading="lazy" style="width:100%;height:150px;object-fit:cover;background:#F3F4F6;">`
+      : `<div style="width:100%;height:150px;background:#F3F4F6;display:flex;align-items:center;justify-content:center;color:#CBD5E1;font-size:11px;">sin foto</div>`;
+    return `<div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;background:#fff;">
+      ${fotoHtml}
+      <div style="padding:10px 11px;">
+        <div style="font-weight:600;font-size:12px;line-height:1.3;margin-bottom:6px;min-height:31px;" title="${esc(p.name)}">${esc(p.name)}</div>
+        <div style="display:inline-block;background:${bg};color:${color};font-weight:700;font-size:15px;padding:2px 9px;border-radius:7px;margin-bottom:7px;">${m.toFixed(0)}% margen</div>
+        <div style="font-size:11px;color:#6B7280;display:flex;justify-content:space-between;">
+          <span>Costo</span><span style="color:#374151;font-weight:500;">${fmt(p.unit_cost)}</span>
+        </div>
+        <div style="font-size:11px;color:#6B7280;display:flex;justify-content:space-between;">
+          <span>Precio</span><span style="color:#374151;font-weight:500;">${fmt(p.retailer_price)}</span>
+        </div>
+        <div style="font-size:11px;color:#6B7280;display:flex;justify-content:space-between;margin-top:3px;border-top:1px solid #F3F4F6;padding-top:4px;">
+          <span>Stock</span><span style="color:#374151;font-weight:500;">${p.stock}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
