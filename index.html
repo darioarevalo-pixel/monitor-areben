@@ -187,6 +187,12 @@
     body.rol-marketing #refresh-card {
       display: none !important;
     }
+    /* Vista restringida para rol Operación (Administracion): solo Marketing y Etiquetas */
+    body.rol-operacion #stats-overview,
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]),
+    body.rol-operacion #refresh-card {
+      display: none !important;
+    }
     .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
     .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
     .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
@@ -5537,8 +5543,8 @@ function _mesLabel(yyyymm) {
 const USERS = {
   'Bruno Arevalo':  { pass: 'BDI123456', role: 'admin' },
   'Dario Arevalo':  { pass: 'BDI123456', role: 'admin' },
-  // Acceso total (ambas marcas, todas las secciones, incl. Marketing y Etiquetas)
-  'Administracion': { pass: 'Areben2026', role: 'admin' },
+  // Solo Marketing y Etiquetas, en las 2 marcas (sin cuenta fija → puede cambiar de marca)
+  'Administracion': { pass: 'Areben2026', role: 'operacion' },
   // Solo Marketing, pero en las 2 marcas (sin cuenta fija → puede cambiar de marca)
   'Marketing':      { pass: 'Areben2026', role: 'marketing' },
   'local':          { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
@@ -5675,11 +5681,13 @@ function aplicarVisibilidadTabs() {
   const key = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
   const role = _userRole();
   const isMkt = role === 'marketing';
+  const isOper = role === 'operacion'; // Administracion: solo Marketing + Etiquetas (ambas marcas)
 
-  // Para rol marketing: SOLO ve Marketing. Oculto todo lo demás (incluyendo Tiendanube).
+  // Vistas restringidas (clases que ocultan tabs/secciones por CSS)
   document.body.classList.toggle('rol-marketing', isMkt);
+  document.body.classList.toggle('rol-operacion', isOper);
 
-  // Tabs específicas por cuenta — para marketing, todas ocultas (solo queda Marketing visible)
+  // Tabs específicas por cuenta. Marketing: todas ocultas. Operación: solo Etiquetas (Marketing es fija).
   const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','tienda','etiquetas'];
   const visibles = new Set(TABS_POR_CUENTA[key] || []);
   todasOcultables.forEach(t => {
@@ -5687,20 +5695,22 @@ function aplicarVisibilidadTabs() {
     if (!btn) return;
     if (isMkt) {
       btn.style.display = 'none';
+    } else if (isOper) {
+      btn.style.display = (t === 'etiquetas') ? '' : 'none';
     } else {
       btn.style.display = visibles.has(t) ? '' : 'none';
     }
   });
 
-  // Botones de acceso rápido a admins externos (solo BDI y NO marketing)
+  // Botones de acceso rápido a admins externos (solo BDI y admin completo)
   const quickLinks = document.getElementById('quick-admin-links');
-  if (quickLinks) quickLinks.style.display = (key === 'bdi' && !isMkt) ? 'flex' : 'none';
+  if (quickLinks) quickLinks.style.display = (key === 'bdi' && !isMkt && !isOper) ? 'flex' : 'none';
 
   // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
 
-  // Marketing: pestaña activa por defecto al loguearse
-  if (isMkt) {
+  // Marketing y Operación: arrancan en la pestaña Marketing por defecto
+  if (isMkt || isOper) {
     setTimeout(() => {
       const mktBtn = document.getElementById('tab-btn-marketing');
       if (mktBtn && !document.querySelector('.tab.active.tab-btn-marketing')) mktBtn.click();
