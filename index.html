@@ -4613,16 +4613,25 @@ function etiGenerarPDF() {
     const va = pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1);
     pdf.text(va, CX, y, { align: 'center' });
     y += 3.4;
-    // SKU (si existe)
-    if (v.sku) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.text('SKU: ' + v.sku, CX, y, { align: 'center' }); y += 2.7; }
-    // Código de barras Code 128 (con el número debajo)
+    // Grupo inferior: código de barras (solo barras, sin número) + SKU debajo.
+    // Se centra verticalmente en el espacio que queda bajo la variante.
+    const barH = 8, skuGap = 1.3, skuH = v.sku ? 3 : 0;
+    const grupoH = barH + (v.sku ? skuGap + skuH : 0);
+    const desde = y + 1;          // arranque, justo debajo de la variante
+    const hasta = Hh - 1.5;       // margen inferior
+    let gy = desde + Math.max(0, ((hasta - desde) - grupoH) / 2);
+    if (gy + grupoH > hasta) gy = Math.max(desde, hasta - grupoH); // que no se pase del borde
+    const bw = 44;
     try {
       const canvas = document.createElement('canvas');
-      JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: true, fontSize: 30, textMargin: 1, width: 2, height: 60, margin: 0 });
-      const bw = 44, bh = Math.min(9, Hh - y - 1);
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, y, bw, bh);
+      JsBarcode(canvas, String(v.barcode), { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - bw / 2, gy, bw, barH);
     } catch (e) {
-      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, y + 3, { align: 'center' });
+      pdf.setFontSize(8); pdf.text(String(v.barcode), CX, gy + barH / 2, { align: 'center' });
+    }
+    if (v.sku) {
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
+      pdf.text('SKU: ' + v.sku, CX, gy + barH + skuGap + 2.4, { align: 'center' });
     }
   });
   pdf.save('etiquetas-bdi.pdf');
