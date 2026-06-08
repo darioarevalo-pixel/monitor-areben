@@ -1209,9 +1209,14 @@
       <div class="card">
         <div style="font-size:16px;font-weight:700;">📷 Carga de imágenes</div>
         <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.</div>
+        <label id="tnimg-auto" ondragover="event.preventDefault();this.style.background='#E0EDFB';" ondragleave="this.style.background='#EFF6FF';" ondrop="event.preventDefault();this.style.background='#EFF6FF';tnImgAutoCargar(event.dataTransfer.files);"
+          style="display:block;border:2px dashed #378ADD;border-radius:10px;padding:20px;text-align:center;background:#EFF6FF;cursor:pointer;margin-bottom:12px;color:#185fa5;font-size:13px;font-weight:600;">
+          📂 Soltá acá TODAS las fotos (o tocá para elegir) — se asignan solas por el <b>nombre del archivo</b>
+          <input type="file" id="tnimg-autofile" multiple accept="image/*" onchange="tnImgAutoCargar(this.files);this.value='';" style="display:none;">
+        </label>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-          <button class="btn-sm" onclick="tnImgAgregarGrupo()" style="background:#378ADD;color:#fff;">+ Agregar producto</button>
           <button class="btn-sm" id="tnimg-subir" onclick="tnImgSubirTodo()" disabled style="background:#16A34A;color:#fff;">⬆️ Subir todo a TN</button>
+          <button class="btn-sm" onclick="tnImgAgregarGrupo()">+ Agregar producto a mano</button>
           <span id="tnimg-info" style="font-size:12px;color:#9CA3AF;"></span>
         </div>
         <div id="tnimg-grupos"></div>
@@ -5573,7 +5578,43 @@ async function tnImgInit() {
     } catch (e) {}
   }
   if (!window._tnImgPasteWired) { window._tnImgPasteWired = true; document.addEventListener('paste', tnImgPaste); }
-  if (!tnImgGrupos.length) tnImgAgregarGrupo();
+  tnImgRender();
+}
+
+// Limpia el nombre de archivo para matchear el producto (saca extensión, numeración, sufijos)
+function _tnImgLimpiarNombre(name) {
+  return String(name || '').replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[\s_\-]*\(?\d+\)?$/, '')
+    .replace(/[\s_\-]*(copia|copy|final|editad[ao]s?|foto)$/i, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function _tnImgMatchByFilename(name) {
+  const low = _tnImgLimpiarNombre(name).toLowerCase();
+  if (!low) return null;
+  let p = tnImgProductos.find(x => x.name.toLowerCase() === low);
+  if (p) return p;
+  const c = tnImgProductos.filter(x => { const xn = x.name.toLowerCase(); return low.startsWith(xn) || xn.startsWith(low); });
+  return c.length === 1 ? c[0] : null;
+}
+// Carga masiva con auto-asignación por nombre de archivo
+function tnImgAutoCargar(files) {
+  [...files].forEach(f => {
+    if (!/^image\//.test(f.type)) return;
+    const prod = _tnImgMatchByFilename(f.name);
+    let color = '';
+    if (prod && prod.colores && prod.colores.length) { const fl = f.name.toLowerCase(); color = prod.colores.find(c => fl.includes(c.toLowerCase())) || ''; }
+    let g = prod ? tnImgGrupos.find(x => x.productId === prod.id && x.color === color) : null;
+    if (!g) { g = { id: ++tnImgSeq, productId: prod ? prod.id : null, color, fotos: [] }; tnImgGrupos.push(g); }
+    const id = ++tnImgSeq;
+    g.fotos.push({ id, file: f, url: null, subida: false, fn: f.name });
+    const reader = new FileReader();
+    reader.onload = e => { const ft = g.fotos.find(x => x.id === id); if (ft) { ft.url = e.target.result; tnImgRender(); } };
+    reader.readAsDataURL(f);
+  });
+  tnImgGrupos = tnImgGrupos.filter(g => g.fotos.length || g.productId);
+  const sinAsignar = tnImgGrupos.find(g => !g.productId);
+  tnImgActiveGrupo = (sinAsignar || tnImgGrupos[tnImgGrupos.length - 1] || {}).id || null;
+  tnImgRender();
 }
 function tnImgActivar(gid) { tnImgActiveGrupo = gid; tnImgRender(); }
 function tnImgPaste(e) {
@@ -5647,7 +5688,11 @@ function tnImgRender() {
   const subibles = tnImgGrupos.reduce((s, g) => s + (g.productId ? g.fotos.filter(f => f.url && !f.subida).length : 0), 0);
   document.getElementById('tnimg-subir').disabled = subibles === 0;
   const totalFotos = tnImgGrupos.reduce((s, g) => s + g.fotos.length, 0);
-  document.getElementById('tnimg-info').textContent = totalFotos ? `${tnImgGrupos.filter(g => g.productId).length} productos · ${totalFotos} fotos` : '';
+  const sinAsig = tnImgGrupos.filter(g => !g.productId).reduce((s, g) => s + g.fotos.length, 0);
+  const info = document.getElementById('tnimg-info');
+  if (info) info.innerHTML = totalFotos
+    ? `${tnImgGrupos.filter(g => g.productId).length} productos · ${totalFotos} fotos` + (sinAsig ? ` · <b style="color:#D97706;">${sinAsig} sin reconocer (asignalas a mano)</b>` : ' · <span style="color:#16A34A;">todas reconocidas ✓</span>')
+    : '';
 }
 
 async function tnImgSubirTodo() {
