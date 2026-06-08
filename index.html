@@ -1204,6 +1204,21 @@
         <div id="tncat-resumen" style="font-size:13px;color:#374151;margin:10px 0;">Cargando…</div>
         <div id="tncat-detalle" style="max-height:560px;overflow-y:auto;"></div>
       </div>
+
+      <!-- Carga de imágenes a TN -->
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">📷 Carga de imágenes</div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Seleccioná las fotos editadas, asigná cada una a su producto (y color si tiene), y subilas todas juntas. Reemplaza el "entrar producto por producto".</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <label class="btn-sm" style="background:#378ADD;color:#fff;cursor:pointer;">📁 Elegir fotos
+            <input type="file" id="tnimg-file" accept="image/*" multiple onchange="tnImgAgregar(this.files)" style="display:none;">
+          </label>
+          <button class="btn-sm" id="tnimg-subir" onclick="tnImgSubirTodo()" disabled style="background:#16A34A;color:#fff;">⬆️ Subir todo a TN</button>
+          <span id="tnimg-info" style="font-size:12px;color:#9CA3AF;"></span>
+        </div>
+        <div id="tnimg-lista" style="max-height:520px;overflow-y:auto;"></div>
+        <datalist id="tnimg-prods"></datalist>
+      </div>
     </div>
 
     <!-- ── Clientes (CRM Mayorista) ───────────────────────────────────────── -->
@@ -4660,7 +4675,7 @@ function switchTab(id, btn) {
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
-  if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatCargar(); } return; }
+  if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatCargar(); tnImgInit(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -5540,6 +5555,77 @@ async function tncatAplicar() {
       setTimeout(tncatCargar, 1500);
     }
   } catch (e) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(e.message)}</span>`; }
+}
+
+// ── Carga de imágenes a TN (seleccionar fotos → asignar a producto/color → subir) ──
+const TNIMG_URL = 'https://bdi-catalogo.vercel.app/api/tn-subir-imagen?store=';
+let tnImgProductos = [];   // [{id, name, sku, colores}]
+let tnImgItems = [];       // [{id, file, url, productId, color, subida}]
+let tnImgSeq = 0;
+
+async function tnImgInit() {
+  if (tnImgProductos.length) return;
+  try {
+    const r = await fetch(TNIMG_URL + _cuentaKey() + '&productos=1');
+    const j = await r.json();
+    tnImgProductos = j.productos || [];
+    const dl = document.getElementById('tnimg-prods');
+    if (dl) dl.innerHTML = tnImgProductos.map(p => `<option value="${esc(p.name)}${p.sku ? ' (' + esc(p.sku) + ')' : ''}"></option>`).join('');
+  } catch (e) {}
+}
+function _tnImgFindProd(txt) {
+  const t = (txt || '').toLowerCase().trim();
+  const base = t.replace(/\s*\(.*\)\s*$/, '').trim();
+  return tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
+}
+function tnImgAgregar(files) {
+  [...files].forEach(f => {
+    const id = ++tnImgSeq;
+    tnImgItems.push({ id, file: f, url: null, productId: null, color: '', subida: false });
+    const reader = new FileReader();
+    reader.onload = e => { const it = tnImgItems.find(x => x.id === id); if (it) { it.url = e.target.result; tnImgRender(); } };
+    reader.readAsDataURL(f);
+  });
+  document.getElementById('tnimg-file').value = '';
+}
+function tnImgSetProd(id, txt) { const it = tnImgItems.find(x => x.id === id); if (!it) return; const p = _tnImgFindProd(txt); it.productId = p ? p.id : null; it.color = ''; tnImgRender(); }
+function tnImgSetColor(id, c) { const it = tnImgItems.find(x => x.id === id); if (it) it.color = c; }
+function tnImgQuitar(id) { tnImgItems = tnImgItems.filter(x => x.id !== id); tnImgRender(); }
+function tnImgRender() {
+  const cont = document.getElementById('tnimg-lista');
+  if (!cont) return;
+  cont.innerHTML = tnImgItems.map(it => {
+    const prod = it.productId ? tnImgProductos.find(p => p.id === it.productId) : null;
+    const colorSel = (prod && prod.colores && prod.colores.length)
+      ? `<select onchange="tnImgSetColor(${it.id}, this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;"><option value="">(elegí color)</option>${prod.colores.map(c => `<option ${it.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+      : '';
+    return `<div style="display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #F3F4F6;">
+      <img src="${it.url || ''}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;background:#F3F4F6;flex:none;">
+      <input list="tnimg-prods" placeholder="Buscar producto…" value="${prod ? esc(prod.name) : ''}" onchange="tnImgSetProd(${it.id}, this.value)" style="flex:1;min-width:160px;padding:6px 9px;border:1px solid ${prod ? '#16A34A' : '#D1D5DB'};border-radius:7px;font-size:13px;">
+      ${colorSel}
+      <span id="tnimg-st-${it.id}" style="font-size:11px;min-width:60px;">${it.subida ? '<span style=\"color:#16A34A;\">✓</span>' : ''}</span>
+      <button onclick="tnImgQuitar(${it.id})" title="Quitar" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;">×</button>
+    </div>`;
+  }).join('');
+  const asignadas = tnImgItems.filter(it => it.productId).length;
+  document.getElementById('tnimg-subir').disabled = asignadas === 0;
+  document.getElementById('tnimg-info').textContent = tnImgItems.length ? `${tnImgItems.length} fotos · ${asignadas} asignadas` : '';
+}
+async function tnImgSubirTodo() {
+  const pend = tnImgItems.filter(it => it.productId && it.url && !it.subida);
+  if (!pend.length) { alert('Asigná al menos una foto a un producto.'); return; }
+  document.getElementById('tnimg-subir').disabled = true;
+  for (const it of pend) {
+    const st = document.getElementById('tnimg-st-' + it.id);
+    if (st) st.innerHTML = '<span style="color:#9CA3AF;">subiendo…</span>';
+    try {
+      const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: it.productId, image: it.url, filename: it.file.name, color: it.color || undefined }) });
+      const j = await r.json();
+      if (j.ok) { it.subida = true; if (st) st.innerHTML = '<span style="color:#16A34A;">✓ subida' + (j.variantesAsignadas ? ' (' + j.variantesAsignadas + ')' : '') + '</span>'; }
+      else if (st) st.innerHTML = `<span style="color:#DC2626;" title="${esc(JSON.stringify(j).slice(0,120))}">error</span>`;
+    } catch (e) { if (st) st.innerHTML = '<span style="color:#DC2626;">error</span>'; }
+  }
+  document.getElementById('tnimg-subir').disabled = false;
 }
 
 // ════════════════════════════════════════════════════════════════
