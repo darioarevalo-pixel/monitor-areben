@@ -184,7 +184,7 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]),
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-marketing #refresh-card {
       display: none !important;
     }
@@ -6318,7 +6318,8 @@ function aplicarVisibilidadTabs() {
     const btn = document.getElementById('tab-btn-' + t);
     if (!btn) return;
     if (isMkt) {
-      btn.style.display = 'none';
+      // Marketing: solo el usuario "local" (en Zattia) ve además la pestaña de Etiquetas
+      btn.style.display = (t === 'etiquetas' && currentUser === 'local' && key === 'zattia') ? '' : 'none';
     } else if (isOper) {
       btn.style.display = (t === 'etiquetas') ? '' : 'none';
     } else {
