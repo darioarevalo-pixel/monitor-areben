@@ -4950,7 +4950,8 @@ function etiScan(modo) {
   if (!v) { fb.innerHTML = `<span style="color:#DC2626;">✗ No se encontró ningún producto con el código <b>${esc(code)}</b>.</span>`; inp.focus(); return; }
   if (modo === 'sku' && !v.sku) { fb.innerHTML = `<span style="color:#DC2626;">✗ <b>${esc(v.name || '')}</b> no tiene SKU cargado.</span>`; inp.focus(); return; }
   if (!window.jspdf || !window.jspdf.jsPDF || typeof JsBarcode === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el generador… escaneá de nuevo en unos segundos.</span>'; return; }
-  _etiPrint(_etiBuildPdf([v], modo));
+  const conFP = modo === 'loc' && document.getElementById('eti-fp-incluir') && document.getElementById('eti-fp-incluir').checked;
+  _etiPrint(_etiBuildPdf(conFP ? [v, { __fp: true }] : [v], modo));
   const p = _etiPrecio(v);
   const extra = modo === 'sku' ? (' · SKU ' + esc(v.sku)) : (p ? ' · $' + Math.round(p).toLocaleString('es-AR') : '');
   fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${extra}</span>`;
