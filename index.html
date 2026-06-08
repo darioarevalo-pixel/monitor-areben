@@ -4862,16 +4862,24 @@ function _etiBuildPdf(labels, modo) {
   return pdf;
 }
 
-// Manda el PDF a imprimir (sin guardarlo): reusa siempre la misma ventana para no acumular pestañas.
+// Manda el PDF a imprimir SIN abrir pestaña nueva: lo carga en un iframe oculto y dispara
+// el diálogo de impresión sobre la misma vista del monitor (gracias a autoPrint del PDF).
 function _etiPrint(pdf) {
   pdf.autoPrint();
   const url = pdf.output('bloburl');
-  const w = window.open(url, 'etiquetas_print');
-  if (!w) {
-    pdf.save('etiquetas.pdf');
-    alert('El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para este sitio (por ahora se descargó el PDF como respaldo).');
-    return false;
+  let f = document.getElementById('eti-print-frame');
+  if (!f) {
+    f = document.createElement('iframe');
+    f.id = 'eti-print-frame';
+    f.style.position = 'fixed';
+    f.style.right = '0';
+    f.style.bottom = '0';
+    f.style.width = '0';
+    f.style.height = '0';
+    f.style.border = '0';
+    document.body.appendChild(f);
   }
+  f.src = url;
   return true;
 }
 
