@@ -190,7 +190,7 @@
     }
     /* Vista restringida para rol Operación (Administracion): Marketing, Etiquetas, Tabla de talles y Exhibición */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-operacion #refresh-card {
       display: none !important;
     }
@@ -305,6 +305,7 @@
       <button class="tab" id="tab-btn-etiquetas" style="display:none;" onclick="switchTab('etiquetas', this)">🏷️ Etiquetas</button>
       <button class="tab" id="tab-btn-gen-talles" onclick="switchTab('gen-talles', this)">📏 Tabla de talles</button>
       <button class="tab" id="tab-btn-exhib" style="display:none;" onclick="switchTab('exhib', this)">👕 Chequeo de exhibición</button>
+      <button class="tab" id="tab-btn-tncat" style="display:none;" onclick="switchTab('tncat', this)">🛍️ Tienda Nube</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -1184,6 +1185,24 @@
           <button class="btn-sm" onclick="exhibVolverScan()">← Volver a escanear</button>
           <button class="btn-sm" onclick="exhibReiniciar()">Reiniciar chequeo</button>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Tienda Nube: categorías por modelo según stock (BDI) ─────────────── -->
+    <div id="tab-tncat" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:6px;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🛍️ Tienda Nube — Categorías por modelo</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Mantiene cada producto en las categorías de los modelos que <b>tienen stock</b>, y saca las de los modelos <b>sin stock</b>. Así el cliente ve solo lo disponible para su celular.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-sm" onclick="tncatCargar()">🔄 Recalcular</button>
+            <button class="btn-sm" id="tncat-btn-aplicar" onclick="tncatAplicar()" style="background:#16A34A;color:#fff;">✅ Aplicar cambios ahora</button>
+          </div>
+        </div>
+        <div id="tncat-resumen" style="font-size:13px;color:#374151;margin:10px 0;">Cargando…</div>
+        <div id="tncat-detalle" style="max-height:560px;overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -4641,6 +4660,7 @@ function switchTab(id, btn) {
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
+  if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatCargar(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -5468,6 +5488,58 @@ function exhibGenerarPDF() {
   seccion('No exhibido — solucionado', grupos['solucionado'], [37, 99, 235]);
   if (grupos['sin-marcar'].length) seccion('Sin revisar (no escaneados ni marcados)', grupos['sin-marcar'], [107, 114, 128]);
   pdf.save('chequeo-exhibicion-zattia-' + fecha.toISOString().slice(0, 10) + '.pdf');
+}
+
+// ════════════════════════════════════════════════════════════════
+// Tienda Nube — categorías por modelo según stock (BDI). Usa el ayudante de bdi-catalogo.
+// ════════════════════════════════════════════════════════════════
+const TNCAT_URL = 'https://bdi-catalogo.vercel.app/api/tn-categorias?store=bdi';
+let tncatData = null;
+
+async function tncatCargar() {
+  const res = document.getElementById('tncat-resumen');
+  const det = document.getElementById('tncat-detalle');
+  if (res) res.textContent = 'Calculando cambios… (puede tardar unos segundos)';
+  if (det) det.innerHTML = '';
+  try {
+    const r = await fetch(TNCAT_URL);
+    const j = await r.json();
+    if (j.error) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(j.error)}</span>`; return; }
+    tncatData = j;
+    tncatRender(j);
+  } catch (e) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(e.message)}</span>`; }
+}
+
+function tncatRender(j) {
+  const res = document.getElementById('tncat-resumen');
+  res.innerHTML = `<b>${j.total_con_cambios}</b> productos con cambios · <span style="color:#16A34A;">+${j.total_agregados} categorías</span> · <span style="color:#DC2626;">−${j.total_quitados} categorías</span> <span style="color:#9CA3AF;">· ${j.total_productos} productos revisados · datos en vivo</span>`;
+  const det = document.getElementById('tncat-detalle');
+  if (!j.detalle || !j.detalle.length) { det.innerHTML = '<div style="color:#16A34A;padding:14px;text-align:center;">Todo al día ✅ No hay cambios para hacer.</div>'; return; }
+  det.innerHTML = j.detalle.map(d => `<div style="padding:8px 4px;border-bottom:1px solid #F3F4F6;">
+    <div style="font-weight:600;font-size:13px;">${esc(d.nombre)}</div>
+    ${d.agregar.length ? `<div style="font-size:12px;color:#16A34A;">➕ ${d.agregar.map(esc).join(', ')}</div>` : ''}
+    ${d.quitar.length ? `<div style="font-size:12px;color:#DC2626;">➖ ${d.quitar.map(esc).join(', ')}</div>` : ''}
+  </div>`).join('');
+}
+
+async function tncatAplicar() {
+  if (!tncatData || !tncatData.total_con_cambios) { alert('No hay cambios para aplicar (recalculá primero).'); return; }
+  if (!confirm(`¿Aplicar los cambios en TiendaNube?\n\n+${tncatData.total_agregados} categorías y −${tncatData.total_quitados} categorías en ${tncatData.total_con_cambios} productos.\n\nEsto modifica tu tienda EN VIVO.`)) return;
+  const res = document.getElementById('tncat-resumen');
+  res.textContent = 'Aplicando cambios en TiendaNube… (no cierres esta pestaña)';
+  try {
+    const r = await fetch(TNCAT_URL, { method: 'POST' });
+    const j = await r.json();
+    if (j.error) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(j.error)}</span>`; return; }
+    if (j.errores && j.errores.length) {
+      const faltaWrite = /write_products|Forbidden|403/.test(JSON.stringify(j.errores));
+      res.innerHTML = `<span style="color:#D97706;">Aplicados: ${j.aplicados}. Con ${j.errores.length} errores.</span>` +
+        (faltaWrite ? '<br><b style="color:#DC2626;">⚠️ Falta activar el token de escritura en Vercel (TIENDANUBE_TOKEN). Avisame y lo vemos.</b>' : '');
+    } else {
+      res.innerHTML = `<span style="color:#16A34A;">✅ Listo: ${j.aplicados} productos actualizados en TiendaNube.</span>`;
+      setTimeout(tncatCargar, 1500);
+    }
+  } catch (e) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(e.message)}</span>`; }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -6340,6 +6412,9 @@ function aplicarVisibilidadTabs() {
   // Chequeo de exhibición: solo Zattia (para cualquier rol que tenga acceso)
   const exhibBtn = document.getElementById('tab-btn-exhib');
   if (exhibBtn) exhibBtn.style.display = (key === 'zattia') ? '' : 'none';
+  // Tienda Nube (categorías por modelo): solo BDI (admin y operación)
+  const tncatBtn = document.getElementById('tab-btn-tncat');
+  if (tncatBtn) tncatBtn.style.display = (key === 'bdi' && !isMkt) ? '' : 'none';
 
   // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
