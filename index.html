@@ -4961,13 +4961,13 @@ function etiScan(modo) {
 let etiFP = [
   { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
   { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
-  { texto: '10% OFF Transferencia', tam: 'normal', bold: true },
-  { texto: '15% OFF Efectivo', tam: 'normal', bold: true },
+  { texto: '10% OFF Transferencia', tam: 'normal', bold: false },
+  { texto: '15% OFF Efectivo', tam: 'normal', bold: false },
 ];
 const ETI_FP_TAM = [['titulo', 'Título'], ['subtitulo', 'Subtítulo'], ['normal', 'Normal'], ['chico', 'Chico']];
 const ETI_FP_FS = { titulo: 11, subtitulo: 9, normal: 8, chico: 6.5 };
 
-function etiFPKey() { return 'monitor_eti_fp_v2_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function etiFPKey() { return 'monitor_eti_fp_v3_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
 function etiFPLoad() { try { const r = localStorage.getItem(etiFPKey()); if (r) etiFP = JSON.parse(r); } catch (e) {} }
 function etiFPSave() { _lsGuardar(etiFPKey(), JSON.stringify(etiFP)); etiFPPreview(); }
 function etiFPInit() { etiFPLoad(); etiFPRenderLineas(); etiFPPreview(); }
