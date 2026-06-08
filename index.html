@@ -5560,6 +5560,7 @@ const TNIMG_URL = 'https://bdi-catalogo.vercel.app/api/tn-subir-imagen?store=';
 let tnImgProductos = [];   // [{id, name, sku, colores}]
 let tnImgGrupos = [];      // [{id, productId, color, fotos:[{id,file,url,subida}]}]
 let tnImgSeq = 0;
+let tnImgActiveGrupo = null; // bloque donde se pega (Cmd+V)
 
 async function tnImgInit() {
   if (!tnImgProductos.length) {
@@ -5571,14 +5572,26 @@ async function tnImgInit() {
       if (dl) dl.innerHTML = tnImgProductos.map(p => `<option value="${esc(p.name)}${p.sku ? ' (' + esc(p.sku) + ')' : ''}"></option>`).join('');
     } catch (e) {}
   }
+  if (!window._tnImgPasteWired) { window._tnImgPasteWired = true; document.addEventListener('paste', tnImgPaste); }
   if (!tnImgGrupos.length) tnImgAgregarGrupo();
+}
+function tnImgActivar(gid) { tnImgActiveGrupo = gid; tnImgRender(); }
+function tnImgPaste(e) {
+  // Solo si estamos en la pestaña Tienda Nube y hay un bloque activo
+  const tab = document.getElementById('tab-tncat');
+  if (!tab || !tab.classList.contains('visible') || !tnImgActiveGrupo) return;
+  const dt = e.clipboardData; if (!dt) return;
+  const files = [];
+  for (const it of (dt.items || [])) { if (it.kind === 'file') { const f = it.getAsFile(); if (f && /^image\//.test(f.type)) files.push(f); } }
+  if (!files.length && dt.files) for (const f of dt.files) if (/^image\//.test(f.type)) files.push(f);
+  if (files.length) { e.preventDefault(); tnImgGrupoFotos(tnImgActiveGrupo, files); }
 }
 function _tnImgFindProd(txt) {
   const t = (txt || '').toLowerCase().trim();
   const base = t.replace(/\s*\(.*\)\s*$/, '').trim();
   return tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
 }
-function tnImgAgregarGrupo() { tnImgGrupos.push({ id: ++tnImgSeq, productId: null, color: '', fotos: [] }); tnImgRender(); }
+function tnImgAgregarGrupo() { const id = ++tnImgSeq; tnImgGrupos.push({ id, productId: null, color: '', fotos: [] }); tnImgActiveGrupo = id; tnImgRender(); }
 function tnImgQuitarGrupo(gid) { tnImgGrupos = tnImgGrupos.filter(g => g.id !== gid); tnImgRender(); }
 function tnImgGrupoSetProd(gid, txt) { const g = tnImgGrupos.find(x => x.id === gid); if (!g) return; const p = _tnImgFindProd(txt); g.productId = p ? p.id : null; g.color = ''; tnImgRender(); }
 function tnImgGrupoSetColor(gid, c) { const g = tnImgGrupos.find(x => x.id === gid); if (g) g.color = c; }
@@ -5602,6 +5615,7 @@ function tnImgRender() {
   if (!cont) return;
   cont.innerHTML = tnImgGrupos.map(g => {
     const prod = g.productId ? tnImgProductos.find(p => p.id === g.productId) : null;
+    const activo = g.id === tnImgActiveGrupo;
     const colorSel = (prod && prod.colores && prod.colores.length)
       ? `<select onchange="tnImgGrupoSetColor(${g.id}, this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;"><option value="">(color — opcional)</option>${prod.colores.map(c => `<option ${g.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
       : '';
@@ -5615,13 +5629,13 @@ function tnImgRender() {
         ${colorSel}
         <button onclick="tnImgQuitarGrupo(${g.id})" title="Quitar este producto" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;">×</button>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px dashed #CBD5E1;border-radius:8px;padding:10px;background:#FAFAFA;"
-           ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='#FAFAFA';" ondrop="tnImgDrop(event, ${g.id})">
+      <div onclick="tnImgActivar(${g.id})" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1.5px ${activo ? 'solid #378ADD' : 'dashed #CBD5E1'};border-radius:8px;padding:10px;background:${activo ? '#EFF6FF' : '#FAFAFA'};cursor:pointer;"
+           ondragover="event.preventDefault();this.style.background='#E0EDFB';" ondragleave="this.style.background='${activo ? '#EFF6FF' : '#FAFAFA'}';" ondrop="tnImgDrop(event, ${g.id})">
         ${fotos}
-        <label style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;width:60px;height:60px;border:1px solid #CBD5E1;border-radius:7px;color:#6B7280;font-size:11px;background:#fff;">+ fotos
+        <label onclick="event.stopPropagation();" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;width:60px;height:60px;border:1px solid #CBD5E1;border-radius:7px;color:#6B7280;font-size:11px;background:#fff;">+ fotos
           <input type="file" accept="image/*" multiple onchange="tnImgGrupoFotos(${g.id}, this.files);this.value='';" style="display:none;">
         </label>
-        ${g.fotos.length ? '' : '<span style="font-size:12px;color:#9CA3AF;">Arrastrá las fotos acá o tocá "+ fotos"</span>'}
+        <span style="font-size:12px;color:${activo ? '#378ADD' : '#9CA3AF'};">${activo ? '📋 Pegá acá (Cmd/Ctrl+V), arrastrá o tocá "+ fotos"' : (g.fotos.length ? '' : 'Tocá acá para pegar/arrastrar fotos')}</span>
       </div>
     </div>`;
   }).join('');
