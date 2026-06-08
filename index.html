@@ -5589,12 +5589,7 @@ function _tnImgLimpiarNombre(name) {
     .replace(/\s+/g, ' ').trim();
 }
 function _tnImgMatchByFilename(name) {
-  const low = _tnImgLimpiarNombre(name).toLowerCase();
-  if (!low) return null;
-  let p = tnImgProductos.find(x => x.name.toLowerCase() === low);
-  if (p) return p;
-  const c = tnImgProductos.filter(x => { const xn = x.name.toLowerCase(); return low.startsWith(xn) || xn.startsWith(low); });
-  return c.length === 1 ? c[0] : null;
+  return _tnImgBuscarProd(_norm(_tnImgLimpiarNombre(name)));
 }
 // Carga masiva con auto-asignación por nombre de archivo
 function tnImgAutoCargar(files) {
@@ -5602,7 +5597,7 @@ function tnImgAutoCargar(files) {
     if (!/^image\//.test(f.type)) return;
     const prod = _tnImgMatchByFilename(f.name);
     let color = '';
-    if (prod && prod.colores && prod.colores.length) { const fl = f.name.toLowerCase(); color = prod.colores.find(c => fl.includes(c.toLowerCase())) || ''; }
+    if (prod && prod.colores && prod.colores.length) { const fl = _norm(f.name); color = prod.colores.find(c => fl.includes(_norm(c))) || ''; }
     let g = prod ? tnImgGrupos.find(x => x.productId === prod.id && x.color === color) : null;
     if (!g) { g = { id: ++tnImgSeq, productId: prod ? prod.id : null, color, fotos: [] }; tnImgGrupos.push(g); }
     const id = ++tnImgSeq;
@@ -5627,15 +5622,38 @@ function tnImgPaste(e) {
   if (!files.length && dt.files) for (const f of dt.files) if (/^image\//.test(f.type)) files.push(f);
   if (files.length) { e.preventDefault(); tnImgGrupoFotos(tnImgActiveGrupo, files); }
 }
+// Normaliza para comparar: minúsculas, sin acentos/tildes, espacios colapsados
+function _norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+// Distancia de edición (Levenshtein) para tolerar typos chicos
+function _lev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+// Busca el producto que mejor matchea un texto (exacto → empieza con → typo único)
+function _tnImgBuscarProd(low) {
+  if (!low) return null;
+  let p = tnImgProductos.find(x => _norm(x.name) === low);
+  if (p) return p;
+  const pref = tnImgProductos.filter(x => { const xn = _norm(x.name); return low.startsWith(xn) || xn.startsWith(low); });
+  if (pref.length === 1) return pref[0];
+  // Tolerancia a typos: solo si hay un único producto "cerca" y el nombre es razonablemente largo
+  if (low.length >= 5) {
+    const cerca = tnImgProductos.map(x => ({ x, d: _lev(_norm(x.name), low) })).filter(o => o.d <= 2).sort((a, b) => a.d - b.d);
+    if (cerca.length === 1 || (cerca.length > 1 && cerca[0].d < cerca[1].d)) return cerca[0].x;
+  }
+  return null;
+}
 function _tnImgFindProd(txt) {
-  const t = (txt || '').toLowerCase().trim();
+  const t = _norm(txt);
   if (!t) return null;
   const base = t.replace(/\s*\(.*\)\s*$/, '').trim();
-  let p = tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
-  if (p) return p;
-  // Tolerante: si el texto identifica un único producto, lo toma igual
-  const cands = tnImgProductos.filter(p => p.name.toLowerCase().startsWith(base) || (p.sku && p.sku.toLowerCase() === base));
-  return cands.length === 1 ? cands[0] : null;
+  // primero por "nombre (sku)" exacto, luego la búsqueda general por nombre
+  return tnImgProductos.find(p => _norm(p.name + (p.sku ? ' (' + p.sku + ')' : '')) === t) || _tnImgBuscarProd(base);
 }
 function tnImgAgregarGrupo() { const id = ++tnImgSeq; tnImgGrupos.push({ id, productId: null, color: '', fotos: [] }); tnImgActiveGrupo = id; tnImgRender(); }
 function tnImgQuitarGrupo(gid) { tnImgGrupos = tnImgGrupos.filter(g => g.id !== gid); tnImgRender(); }
