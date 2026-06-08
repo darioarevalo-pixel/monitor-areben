@@ -4798,7 +4798,12 @@ function _etiBuildPdf(labels, modo) {
   const bw = 44;
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
-    if (!v) return; // etiqueta en blanco (separador entre variantes)
+    if (!v) {
+      // Separador entre variantes: casi en blanco, con un puntito para que la Zebra no la omita
+      pdf.setFillColor(90, 90, 90);
+      pdf.circle(CX, Hh / 2, 0.4, 'F');
+      return;
+    }
     pdf.setTextColor(0);
     if (v.__fp) { _etiDrawFP(pdf, W, Hh, M, CX); return; } // etiqueta de formas de pago
     const margin = 1.3;
