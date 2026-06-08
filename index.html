@@ -5566,6 +5566,7 @@ let tnImgProductos = [];   // [{id, name, sku, colores}]
 let tnImgGrupos = [];      // [{id, productId, color, fotos:[{id,file,url,subida}]}]
 let tnImgSeq = 0;
 let tnImgActiveGrupo = null; // bloque donde se pega (Cmd+V)
+let tnImgDrag = null;        // {gid, fid} mientras se arrastra una miniatura para ordenar
 
 async function tnImgInit() {
   if (!tnImgProductos.length) {
@@ -5659,6 +5660,32 @@ function tnImgAgregarGrupo() { const id = ++tnImgSeq; tnImgGrupos.push({ id, pro
 function tnImgQuitarGrupo(gid) { tnImgGrupos = tnImgGrupos.filter(g => g.id !== gid); tnImgRender(); }
 function tnImgGrupoSetProd(gid, txt) { const g = tnImgGrupos.find(x => x.id === gid); if (!g) return; const p = _tnImgFindProd(txt); g.productId = p ? p.id : null; tnImgRender(); }
 function tnImgFotoColor(gid, fid, c) { const g = tnImgGrupos.find(x => x.id === gid); const ft = g && g.fotos.find(f => f.id === fid); if (ft) ft.color = c; }
+function tnImgSetPortada(gid, fid) { const g = tnImgGrupos.find(x => x.id === gid); if (g) { g.portadaId = fid; tnImgRender(); } }
+function tnImgDragStart(gid, fid) { tnImgDrag = { gid, fid }; }
+function tnImgDragDrop(e, gid, fid) {
+  e.preventDefault(); e.stopPropagation();
+  if (!tnImgDrag || tnImgDrag.gid !== gid) { tnImgDrag = null; return; }
+  const g = tnImgGrupos.find(x => x.id === gid); if (!g) return;
+  const from = g.fotos.findIndex(f => f.id === tnImgDrag.fid);
+  const to = g.fotos.findIndex(f => f.id === fid);
+  tnImgDrag = null;
+  if (from < 0 || to < 0 || from === to) return;
+  const [m] = g.fotos.splice(from, 1); g.fotos.splice(to, 0, m);
+  tnImgRender();
+}
+function tnImgPreview(gid, fid) {
+  const g = tnImgGrupos.find(x => x.id === gid); const ft = g && g.fotos.find(f => f.id === fid);
+  if (!ft || !ft.url) return;
+  let ov = document.getElementById('tnimg-preview-ov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'tnimg-preview-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:2000;cursor:zoom-out;';
+    ov.onclick = () => { ov.style.display = 'none'; };
+    ov.innerHTML = '<img style="max-width:92%;max-height:92%;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.5);">';
+    document.body.appendChild(ov);
+  }
+  ov.querySelector('img').src = ft.url; ov.style.display = 'flex';
+}
 function tnImgGrupoFotos(gid, files) {
   const g = tnImgGrupos.find(x => x.id === gid); if (!g) return;
   const prod = g.productId ? tnImgProductos.find(p => p.id === g.productId) : null;
@@ -5675,7 +5702,7 @@ function tnImgGrupoFotos(gid, files) {
   tnImgRender();
 }
 function tnImgQuitarFoto(gid, fid) { const g = tnImgGrupos.find(x => x.id === gid); if (g) { g.fotos = g.fotos.filter(f => f.id !== fid); tnImgRender(); } }
-function tnImgDrop(e, gid) { e.preventDefault(); e.currentTarget.style.background = ''; if (e.dataTransfer && e.dataTransfer.files) tnImgGrupoFotos(gid, e.dataTransfer.files); }
+function tnImgDrop(e, gid) { e.preventDefault(); e.currentTarget.style.background = ''; if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) tnImgGrupoFotos(gid, e.dataTransfer.files); }
 
 function tnImgRender() {
   const cont = document.getElementById('tnimg-grupos');
@@ -5684,14 +5711,17 @@ function tnImgRender() {
     const prod = g.productId ? tnImgProductos.find(p => p.id === g.productId) : null;
     const activo = g.id === tnImgActiveGrupo;
     const tieneColores = prod && prod.colores && prod.colores.length;
+    if (g.fotos.length && !g.fotos.some(f => f.id === g.portadaId)) g.portadaId = g.fotos[0].id;
     const fotos = g.fotos.map(ft => {
+      const esPortada = ft.id === g.portadaId;
       const csel = tieneColores
         ? `<select onchange="tnImgFotoColor(${g.id},${ft.id},this.value)" title="Color de esta foto" style="margin-top:3px;width:68px;padding:3px;border:1px solid ${ft.color ? '#378ADD' : '#D1D5DB'};border-radius:6px;font-size:11px;"><option value="">galería</option>${prod.colores.map(c => `<option ${ft.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
         : '';
-      return `<div style="display:flex;flex-direction:column;align-items:center;flex:none;">
+      return `<div draggable="true" ondragstart="tnImgDragStart(${g.id},${ft.id})" ondragover="event.preventDefault();" ondrop="tnImgDragDrop(event,${g.id},${ft.id})" style="display:flex;flex-direction:column;align-items:center;flex:none;">
         <div style="position:relative;">
-          <img src="${ft.url || ''}" style="width:60px;height:60px;object-fit:cover;border-radius:7px;background:#F3F4F6;border:2px solid ${ft.subida ? '#16A34A' : '#E5E7EB'};">
-          ${ft.subida ? '<span style="position:absolute;top:-6px;right:-6px;background:#16A34A;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;">✓</span>' : `<button onclick="tnImgQuitarFoto(${g.id},${ft.id})" style="position:absolute;top:-6px;right:-6px;background:#DC2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;min-width:0;padding:0;font-size:12px;cursor:pointer;line-height:18px;text-align:center;display:flex;align-items:center;justify-content:center;">×</button>`}
+          <img src="${ft.url || ''}" onclick="event.stopPropagation();tnImgPreview(${g.id},${ft.id});" title="Tocá para verla grande · arrastrá para ordenar" style="width:60px;height:60px;object-fit:cover;border-radius:7px;background:#F3F4F6;border:2px solid ${esPortada ? '#F59E0B' : (ft.subida ? '#16A34A' : '#E5E7EB')};cursor:zoom-in;">
+          <button onclick="event.stopPropagation();tnImgSetPortada(${g.id},${ft.id});" title="${esPortada ? 'Es la portada' : 'Marcar como portada'}" style="position:absolute;top:-7px;left:-7px;background:${esPortada ? '#F59E0B' : '#fff'};color:${esPortada ? '#fff' : '#CBD5E1'};border:1px solid ${esPortada ? '#F59E0B' : '#D1D5DB'};border-radius:50%;width:18px;height:18px;min-width:0;padding:0;font-size:11px;cursor:pointer;line-height:16px;text-align:center;">★</button>
+          ${ft.subida ? '<span style="position:absolute;top:-6px;right:-6px;background:#16A34A;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;">✓</span>' : `<button onclick="event.stopPropagation();tnImgQuitarFoto(${g.id},${ft.id});" style="position:absolute;top:-6px;right:-6px;background:#DC2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;min-width:0;padding:0;font-size:12px;cursor:pointer;line-height:18px;text-align:center;display:flex;align-items:center;justify-content:center;">×</button>`}
         </div>
         ${csel}
       </div>`;
@@ -5737,7 +5767,9 @@ async function tnImgSubirTodo() {
   let ok = 0, err = 0; const errMsgs = [];
   for (const g of grupos) {
     const colorUsado = new Set(); // la 1ª foto de cada color asigna la variante; el resto va a galería
-    for (const ft of g.fotos.filter(f => f.url && !f.subida)) {
+    // La portada va primera (queda como imagen principal del producto en TN)
+    const orden = g.fotos.filter(f => f.url && !f.subida).sort((a, b) => (b.id === g.portadaId ? 1 : 0) - (a.id === g.portadaId ? 1 : 0));
+    for (const ft of orden) {
       if (info) info.textContent = `Subiendo ${ok + err + 1} de ${total}…`;
       try {
         const body = { product_id: g.productId, image: ft.url, filename: ft.file.name };
