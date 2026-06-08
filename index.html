@@ -1208,15 +1208,13 @@
       <!-- Carga de imágenes a TN -->
       <div class="card">
         <div style="font-size:16px;font-weight:700;">📷 Carga de imágenes</div>
-        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Seleccioná las fotos editadas, asigná cada una a su producto (y color si tiene), y subilas todas juntas. Reemplaza el "entrar producto por producto".</div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.</div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-          <label class="btn-sm" style="background:#378ADD;color:#fff;cursor:pointer;">📁 Elegir fotos
-            <input type="file" id="tnimg-file" accept="image/*" multiple onchange="tnImgAgregar(this.files)" style="display:none;">
-          </label>
+          <button class="btn-sm" onclick="tnImgAgregarGrupo()" style="background:#378ADD;color:#fff;">+ Agregar producto</button>
           <button class="btn-sm" id="tnimg-subir" onclick="tnImgSubirTodo()" disabled style="background:#16A34A;color:#fff;">⬆️ Subir todo a TN</button>
           <span id="tnimg-info" style="font-size:12px;color:#9CA3AF;"></span>
         </div>
-        <div id="tnimg-lista" style="max-height:520px;overflow-y:auto;"></div>
+        <div id="tnimg-grupos"></div>
         <datalist id="tnimg-prods"></datalist>
       </div>
     </div>
@@ -5557,73 +5555,99 @@ async function tncatAplicar() {
   } catch (e) { res.innerHTML = `<span style="color:#DC2626;">Error: ${esc(e.message)}</span>`; }
 }
 
-// ── Carga de imágenes a TN (seleccionar fotos → asignar a producto/color → subir) ──
+// ── Carga de imágenes a TN — un bloque por producto, con varias fotos cada uno ──
 const TNIMG_URL = 'https://bdi-catalogo.vercel.app/api/tn-subir-imagen?store=';
 let tnImgProductos = [];   // [{id, name, sku, colores}]
-let tnImgItems = [];       // [{id, file, url, productId, color, subida}]
+let tnImgGrupos = [];      // [{id, productId, color, fotos:[{id,file,url,subida}]}]
 let tnImgSeq = 0;
 
 async function tnImgInit() {
-  if (tnImgProductos.length) return;
-  try {
-    const r = await fetch(TNIMG_URL + _cuentaKey() + '&productos=1');
-    const j = await r.json();
-    tnImgProductos = j.productos || [];
-    const dl = document.getElementById('tnimg-prods');
-    if (dl) dl.innerHTML = tnImgProductos.map(p => `<option value="${esc(p.name)}${p.sku ? ' (' + esc(p.sku) + ')' : ''}"></option>`).join('');
-  } catch (e) {}
+  if (!tnImgProductos.length) {
+    try {
+      const r = await fetch(TNIMG_URL + _cuentaKey() + '&productos=1');
+      const j = await r.json();
+      tnImgProductos = j.productos || [];
+      const dl = document.getElementById('tnimg-prods');
+      if (dl) dl.innerHTML = tnImgProductos.map(p => `<option value="${esc(p.name)}${p.sku ? ' (' + esc(p.sku) + ')' : ''}"></option>`).join('');
+    } catch (e) {}
+  }
+  if (!tnImgGrupos.length) tnImgAgregarGrupo();
 }
 function _tnImgFindProd(txt) {
   const t = (txt || '').toLowerCase().trim();
   const base = t.replace(/\s*\(.*\)\s*$/, '').trim();
   return tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
 }
-function tnImgAgregar(files) {
+function tnImgAgregarGrupo() { tnImgGrupos.push({ id: ++tnImgSeq, productId: null, color: '', fotos: [] }); tnImgRender(); }
+function tnImgQuitarGrupo(gid) { tnImgGrupos = tnImgGrupos.filter(g => g.id !== gid); tnImgRender(); }
+function tnImgGrupoSetProd(gid, txt) { const g = tnImgGrupos.find(x => x.id === gid); if (!g) return; const p = _tnImgFindProd(txt); g.productId = p ? p.id : null; g.color = ''; tnImgRender(); }
+function tnImgGrupoSetColor(gid, c) { const g = tnImgGrupos.find(x => x.id === gid); if (g) g.color = c; }
+function tnImgGrupoFotos(gid, files) {
+  const g = tnImgGrupos.find(x => x.id === gid); if (!g) return;
   [...files].forEach(f => {
+    if (!/^image\//.test(f.type)) return;
     const id = ++tnImgSeq;
-    tnImgItems.push({ id, file: f, url: null, productId: null, color: '', subida: false });
+    g.fotos.push({ id, file: f, url: null, subida: false });
     const reader = new FileReader();
-    reader.onload = e => { const it = tnImgItems.find(x => x.id === id); if (it) { it.url = e.target.result; tnImgRender(); } };
+    reader.onload = e => { const ft = g.fotos.find(x => x.id === id); if (ft) { ft.url = e.target.result; tnImgRender(); } };
     reader.readAsDataURL(f);
   });
-  document.getElementById('tnimg-file').value = '';
+  tnImgRender();
 }
-function tnImgSetProd(id, txt) { const it = tnImgItems.find(x => x.id === id); if (!it) return; const p = _tnImgFindProd(txt); it.productId = p ? p.id : null; it.color = ''; tnImgRender(); }
-function tnImgSetColor(id, c) { const it = tnImgItems.find(x => x.id === id); if (it) it.color = c; }
-function tnImgQuitar(id) { tnImgItems = tnImgItems.filter(x => x.id !== id); tnImgRender(); }
+function tnImgQuitarFoto(gid, fid) { const g = tnImgGrupos.find(x => x.id === gid); if (g) { g.fotos = g.fotos.filter(f => f.id !== fid); tnImgRender(); } }
+function tnImgDrop(e, gid) { e.preventDefault(); e.currentTarget.style.background = ''; if (e.dataTransfer && e.dataTransfer.files) tnImgGrupoFotos(gid, e.dataTransfer.files); }
+
 function tnImgRender() {
-  const cont = document.getElementById('tnimg-lista');
+  const cont = document.getElementById('tnimg-grupos');
   if (!cont) return;
-  cont.innerHTML = tnImgItems.map(it => {
-    const prod = it.productId ? tnImgProductos.find(p => p.id === it.productId) : null;
+  cont.innerHTML = tnImgGrupos.map(g => {
+    const prod = g.productId ? tnImgProductos.find(p => p.id === g.productId) : null;
     const colorSel = (prod && prod.colores && prod.colores.length)
-      ? `<select onchange="tnImgSetColor(${it.id}, this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;"><option value="">(elegí color)</option>${prod.colores.map(c => `<option ${it.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+      ? `<select onchange="tnImgGrupoSetColor(${g.id}, this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;"><option value="">(color — opcional)</option>${prod.colores.map(c => `<option ${g.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
       : '';
-    return `<div style="display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #F3F4F6;">
-      <img src="${it.url || ''}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;background:#F3F4F6;flex:none;">
-      <input list="tnimg-prods" placeholder="Buscar producto…" value="${prod ? esc(prod.name) : ''}" onchange="tnImgSetProd(${it.id}, this.value)" style="flex:1;min-width:160px;padding:6px 9px;border:1px solid ${prod ? '#16A34A' : '#D1D5DB'};border-radius:7px;font-size:13px;">
-      ${colorSel}
-      <span id="tnimg-st-${it.id}" style="font-size:11px;min-width:60px;">${it.subida ? '<span style=\"color:#16A34A;\">✓</span>' : ''}</span>
-      <button onclick="tnImgQuitar(${it.id})" title="Quitar" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;">×</button>
+    const fotos = g.fotos.map(ft => `<div style="position:relative;flex:none;">
+        <img src="${ft.url || ''}" style="width:60px;height:60px;object-fit:cover;border-radius:7px;background:#F3F4F6;border:2px solid ${ft.subida ? '#16A34A' : '#E5E7EB'};">
+        ${ft.subida ? '<span style="position:absolute;top:-6px;right:-6px;background:#16A34A;color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;display:flex;align-items:center;justify-content:center;">✓</span>' : `<button onclick="tnImgQuitarFoto(${g.id},${ft.id})" style="position:absolute;top:-6px;right:-6px;background:#DC2626;color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:11px;cursor:pointer;line-height:1;">×</button>`}
+      </div>`).join('');
+    return `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <input list="tnimg-prods" placeholder="Buscar producto…" value="${prod ? esc(prod.name) : ''}" onchange="tnImgGrupoSetProd(${g.id}, this.value)" style="flex:1;min-width:200px;padding:7px 10px;border:1px solid ${prod ? '#16A34A' : '#D1D5DB'};border-radius:8px;font-size:13px;font-weight:600;">
+        ${colorSel}
+        <button onclick="tnImgQuitarGrupo(${g.id})" title="Quitar este producto" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;">×</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px dashed #CBD5E1;border-radius:8px;padding:10px;background:#FAFAFA;"
+           ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='#FAFAFA';" ondrop="tnImgDrop(event, ${g.id})">
+        ${fotos}
+        <label style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;width:60px;height:60px;border:1px solid #CBD5E1;border-radius:7px;color:#6B7280;font-size:11px;background:#fff;">+ fotos
+          <input type="file" accept="image/*" multiple onchange="tnImgGrupoFotos(${g.id}, this.files);this.value='';" style="display:none;">
+        </label>
+        ${g.fotos.length ? '' : '<span style="font-size:12px;color:#9CA3AF;">Arrastrá las fotos acá o tocá "+ fotos"</span>'}
+      </div>
     </div>`;
   }).join('');
-  const asignadas = tnImgItems.filter(it => it.productId).length;
-  document.getElementById('tnimg-subir').disabled = asignadas === 0;
-  document.getElementById('tnimg-info').textContent = tnImgItems.length ? `${tnImgItems.length} fotos · ${asignadas} asignadas` : '';
+  const subibles = tnImgGrupos.reduce((s, g) => s + (g.productId ? g.fotos.filter(f => f.url && !f.subida).length : 0), 0);
+  document.getElementById('tnimg-subir').disabled = subibles === 0;
+  const totalFotos = tnImgGrupos.reduce((s, g) => s + g.fotos.length, 0);
+  document.getElementById('tnimg-info').textContent = totalFotos ? `${tnImgGrupos.filter(g => g.productId).length} productos · ${totalFotos} fotos` : '';
 }
+
 async function tnImgSubirTodo() {
-  const pend = tnImgItems.filter(it => it.productId && it.url && !it.subida);
-  if (!pend.length) { alert('Asigná al menos una foto a un producto.'); return; }
+  const grupos = tnImgGrupos.filter(g => g.productId && g.fotos.some(f => f.url && !f.subida));
+  if (!grupos.length) { alert('Agregá al menos un producto con fotos.'); return; }
   document.getElementById('tnimg-subir').disabled = true;
-  for (const it of pend) {
-    const st = document.getElementById('tnimg-st-' + it.id);
-    if (st) st.innerHTML = '<span style="color:#9CA3AF;">subiendo…</span>';
-    try {
-      const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: it.productId, image: it.url, filename: it.file.name, color: it.color || undefined }) });
-      const j = await r.json();
-      if (j.ok) { it.subida = true; if (st) st.innerHTML = '<span style="color:#16A34A;">✓ subida' + (j.variantesAsignadas ? ' (' + j.variantesAsignadas + ')' : '') + '</span>'; }
-      else if (st) st.innerHTML = `<span style="color:#DC2626;" title="${esc(JSON.stringify(j).slice(0,120))}">error</span>`;
-    } catch (e) { if (st) st.innerHTML = '<span style="color:#DC2626;">error</span>'; }
+  for (const g of grupos) {
+    let primera = true;
+    for (const ft of g.fotos.filter(f => f.url && !f.subida)) {
+      try {
+        // El color (asignación a la variante) se manda solo en la 1ª foto del grupo; el resto va a la galería
+        const body = { product_id: g.productId, image: ft.url, filename: ft.file.name };
+        if (primera && g.color) body.color = g.color;
+        const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (j.ok) { ft.subida = true; primera = false; }
+        tnImgRender();
+      } catch (e) {}
+    }
   }
   document.getElementById('tnimg-subir').disabled = false;
 }
