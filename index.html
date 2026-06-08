@@ -9,6 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #F3F4F6; color: #111827; font-size: 14px; }
@@ -183,13 +184,13 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]),
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]),
     body.rol-marketing #refresh-card {
       display: none !important;
     }
-    /* Vista restringida para rol Operación (Administracion): Marketing, Etiquetas y Tabla de talles */
+    /* Vista restringida para rol Operación (Administracion): Marketing, Etiquetas, Tabla de talles y Exhibición */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-operacion #refresh-card {
       display: none !important;
     }
@@ -303,6 +304,7 @@
       <button class="tab" id="tab-btn-margenes" onclick="switchTab('margenes', this)">📊 Margen por producto</button>
       <button class="tab" id="tab-btn-etiquetas" style="display:none;" onclick="switchTab('etiquetas', this)">🏷️ Etiquetas</button>
       <button class="tab" id="tab-btn-gen-talles" onclick="switchTab('gen-talles', this)">📏 Tabla de talles</button>
+      <button class="tab" id="tab-btn-exhib" style="display:none;" onclick="switchTab('exhib', this)">👕 Chequeo de exhibición</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -1110,6 +1112,59 @@
           </div>
         </div>
         <div id="gt-preview" style="border:1px dashed #E5E7EB;border-radius:10px;padding:16px;background:#fff;"></div>
+      </div>
+    </div>
+
+    <!-- ── Chequeo de exhibición (Local Zattia) ─────────────────────────────── -->
+    <div id="tab-exhib" class="section">
+      <!-- Config -->
+      <div class="card" id="exhib-config">
+        <div style="font-size:16px;font-weight:700;">👕 Chequeo de exhibición</div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Verificá que todo lo que tiene stock en el <b>Local</b> esté colgado. Escaneás los códigos con la cámara del celular y al final el sistema te dice qué falta.</div>
+        <div id="exhib-sync" style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:14px;">Cargando inventario…</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+          <label style="font-size:12px;color:#666;">¿Quién hace el chequeo?<br>
+            <input type="text" id="exhib-persona" style="width:200px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+          </label>
+          <label style="font-size:12px;color:#666;">Categoría a recorrer<br>
+            <select id="exhib-cat" onchange="exhibResumenConfig()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;min-width:200px;"></select>
+          </label>
+        </div>
+        <div id="exhib-resumen-config" style="font-size:13px;color:#374151;margin-bottom:12px;"></div>
+        <button class="btn-sm" onclick="exhibIniciar()" style="background:#378ADD;color:#fff;">▶️ Iniciar recorrido</button>
+        <div id="exhib-reanudar" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Recorrido (escaneo) -->
+      <div class="card" id="exhib-scan" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <div style="font-size:15px;font-weight:700;" id="exhib-contador">—</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-sm" onclick="exhibTerminar()" style="background:#16A34A;color:#fff;">✓ Terminar recorrido</button>
+            <button class="btn-sm" onclick="exhibCancelar()">Cancelar</button>
+          </div>
+        </div>
+        <video id="exhib-video" playsinline muted style="width:100%;max-width:360px;display:block;margin:0 auto 8px;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover;"></video>
+        <div id="exhib-scan-fb" style="text-align:center;font-size:14px;min-height:22px;margin-bottom:10px;font-weight:600;"></div>
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:14px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:#9CA3AF;">¿No lee? Cargá el código a mano:</span>
+          <input type="text" id="exhib-manual" onkeydown="if(event.key==='Enter')exhibManual()" placeholder="código de barras" style="width:180px;padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;">
+          <button class="btn-sm" onclick="exhibManual()">Marcar</button>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Pendientes de escanear (<span id="exhib-pend-count">0</span>)</div>
+        <div id="exhib-pendientes" style="max-height:340px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- Triage / resultado -->
+      <div class="card" id="exhib-triage" style="display:none;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:2px;">Faltantes — marcá qué pasó con cada uno</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;">Para cada producto que no escaneaste: si lo encontraste en depósito y lo colgaste → <b>Solucionado</b>. Si es de los que se cuelga una sola variante → <b>Una sola unidad</b>. Si no aparece → <b>No se encuentra</b> (va al reporte para administración).</div>
+        <div id="exhib-triage-list" style="max-height:460px;overflow-y:auto;margin-bottom:14px;"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn-sm" onclick="exhibGenerarPDF()" style="background:#DC2626;color:#fff;">📄 Generar reporte PDF</button>
+          <button class="btn-sm" onclick="exhibVolverScan()">← Volver a escanear</button>
+          <button class="btn-sm" onclick="exhibReiniciar()">Reiniciar chequeo</button>
+        </div>
       </div>
     </div>
 
@@ -4566,6 +4621,7 @@ function switchTab(id, btn) {
   // Comisiones no depende de los datos de ventas (es config), se inicializa aparte
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
+  if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -5101,6 +5157,198 @@ function _gtCopyFallback(text, ok) {
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); ok(); } catch (e) { alert('No se pudo copiar automáticamente.'); }
   document.body.removeChild(ta);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Chequeo de exhibición (Local Zattia) — escaneo por cámara + reporte PDF
+// ════════════════════════════════════════════════════════════════
+let exhibItems = [];   // [{barcode, sku, productId, name, size, qty, img, cats}]
+let exhibState = {};   // { itemId: 'exhibido'|'solucionado'|'una-unidad'|'no-encuentra' }
+let exhibReader = null;
+let exhibLast = { code: '', t: 0 };
+
+function _exhibId(it) { return it.barcode || (it.productId + '|' + it.size); }
+function exhibKey() { return 'monitor_exhib_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function exhibSave() { _lsGuardar(exhibKey(), JSON.stringify(exhibState)); }
+function exhibLoad() { try { const r = localStorage.getItem(exhibKey()); exhibState = r ? JSON.parse(r) : {}; } catch { exhibState = {}; } }
+
+async function exhibInit() {
+  exhibStopCam();
+  exhibLoad();
+  const pe = document.getElementById('exhib-persona');
+  if (pe && !pe.value) pe.value = (currentUser && currentUser !== 'local') ? currentUser : '';
+  document.getElementById('exhib-config').style.display = '';
+  document.getElementById('exhib-scan').style.display = 'none';
+  document.getElementById('exhib-triage').style.display = 'none';
+  await exhibCargarDatos();
+}
+
+async function exhibCargarDatos() {
+  const syncEl = document.getElementById('exhib-sync');
+  try {
+    const inv = await sbFetch('inventario', 'select=product_id,product_name,size_name,sku,barcode,available_quantity&store_name=eq.Local&available_quantity=gt.0&limit=20000');
+    if (!window._mktTNData) {
+      try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; window._mktTNCats = d.categories || {}; } catch (e) { window._mktTNData = []; }
+    }
+    const idx = _mktIndexTN();
+    const prodMap = {};
+    (allProductos || []).forEach(p => { const tn = _mktFindTN(p, idx); prodMap[String(p.id)] = { img: (tn && tn.images && tn.images[0]) || null, cats: (tn && tn.categories) || [] }; });
+    exhibItems = inv.map(r => {
+      const pm = prodMap[String(r.product_id)] || { img: null, cats: [] };
+      return { barcode: r.barcode ? String(r.barcode) : '', sku: r.sku || '', productId: String(r.product_id), name: r.product_name || '—', size: r.size_name || '', qty: r.available_quantity || 0, img: pm.img, cats: pm.cats };
+    });
+    const cats = new Set();
+    exhibItems.forEach(it => it.cats.forEach(c => cats.add(c)));
+    const sel = document.getElementById('exhib-cat');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Todas las categorías</option>' + [...cats].sort((a, b) => a.localeCompare(b, 'es')).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if (prev) sel.value = prev;
+    if (syncEl) syncEl.innerHTML = `📅 <b>${exhibItems.length}</b> variantes con stock en Local. Datos del último sync diario (pueden tener unas horas) — conviene chequear en momentos de baja venta.`;
+    exhibResumenConfig();
+    exhibReanudarBanner();
+  } catch (e) {
+    if (syncEl) syncEl.innerHTML = `<span style="color:#DC2626;">Error cargando inventario: ${esc(e.message)}</span>`;
+  }
+}
+
+function _exhibFiltrados() {
+  const cat = document.getElementById('exhib-cat').value;
+  return cat ? exhibItems.filter(it => it.cats.includes(cat)) : exhibItems;
+}
+
+function exhibResumenConfig() {
+  const lista = _exhibFiltrados();
+  const el = document.getElementById('exhib-resumen-config');
+  if (el) el.innerHTML = `Vas a chequear <b>${lista.length}</b> variantes${document.getElementById('exhib-cat').value ? ' de esta categoría' : ''}. Cada una debería estar colgada en el local.`;
+}
+
+function exhibReanudarBanner() {
+  const cont = document.getElementById('exhib-reanudar');
+  const n = Object.keys(exhibState).length;
+  if (cont) cont.innerHTML = n ? `<span style="font-size:12px;color:#6B7280;">Hay un chequeo en curso con <b>${n}</b> ítems marcados. <button class="btn-sm" onclick="exhibIniciar()" style="margin-left:6px;">Retomar</button></span>` : '';
+}
+
+function exhibIniciar() {
+  document.getElementById('exhib-config').style.display = 'none';
+  document.getElementById('exhib-triage').style.display = 'none';
+  document.getElementById('exhib-scan').style.display = '';
+  exhibRenderScan();
+  exhibStartCam();
+}
+
+async function exhibStartCam() {
+  const fb = document.getElementById('exhib-scan-fb');
+  if (typeof ZXing === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el lector de cámara… probá de nuevo en unos segundos.</span>'; return; }
+  try {
+    exhibReader = new ZXing.BrowserMultiFormatReader();
+    const video = document.getElementById('exhib-video');
+    await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText()); });
+  } catch (e) {
+    fb.innerHTML = `<span style="color:#DC2626;">No se pudo abrir la cámara (${esc(e.message)}). Usá la carga manual de abajo.</span>`;
+  }
+}
+function exhibStopCam() { if (exhibReader) { try { exhibReader.reset(); } catch (e) {} exhibReader = null; } }
+
+function exhibOnScan(code) {
+  code = String(code || '').trim();
+  const now = Date.now();
+  if (code === exhibLast.code && now - exhibLast.t < 1800) return;
+  exhibLast = { code, t: now };
+  exhibMarcarPorCodigo(code, true);
+}
+function exhibManual() {
+  const inp = document.getElementById('exhib-manual');
+  const code = (inp.value || '').trim();
+  inp.value = '';
+  if (code) exhibMarcarPorCodigo(code, false);
+  inp.focus();
+}
+function exhibMarcarPorCodigo(code, fromCam) {
+  const fb = document.getElementById('exhib-scan-fb');
+  const norm = s => String(s || '').replace(/^0+/, '');
+  const lista = _exhibFiltrados();
+  const it = lista.find(x => x.barcode === code) || lista.find(x => x.barcode && norm(x.barcode) === norm(code)) || lista.find(x => x.sku && x.sku.toLowerCase() === code.toLowerCase());
+  if (!it) { fb.innerHTML = `<span style="color:#DC2626;">✗ Ese código no está en la lista (${esc(code)})</span>`; return; }
+  exhibState[_exhibId(it)] = 'exhibido';
+  exhibSave();
+  fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(it.name)} · ${esc(it.size)}</span>`;
+  if (fromCam && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
+  exhibRenderScan();
+}
+
+function _exhibRow(it, triage) {
+  const foto = it.img ? `<img src="${esc(it.img)}" loading="lazy" style="width:42px;height:42px;object-fit:cover;border-radius:6px;background:#F3F4F6;flex:none;">` : `<div style="width:42px;height:42px;border-radius:6px;background:#F3F4F6;flex:none;"></div>`;
+  const info = `<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.name)} · ${esc(it.size)}</div><div style="font-size:11px;color:#6B7280;">SKU: ${esc(it.sku || '—')} · Local: ${it.qty}</div></div>`;
+  let acciones = '';
+  if (triage) {
+    const id = _exhibId(it).replace(/'/g, "\\'"); const cur = exhibState[_exhibId(it)] || '';
+    const b = (estado, txt, col) => `<button onclick="exhibSetEstado('${id}','${estado}')" style="font-size:11px;padding:4px 7px;border-radius:6px;border:1px solid ${cur === estado ? col : '#D1D5DB'};background:${cur === estado ? col : '#fff'};color:${cur === estado ? '#fff' : '#374151'};cursor:pointer;">${txt}</button>`;
+    acciones = `<div style="display:flex;gap:5px;flex-wrap:wrap;flex:none;">${b('solucionado', 'Solucionado', '#2563EB')}${b('una-unidad', 'Una sola unidad', '#D97706')}${b('no-encuentra', 'No se encuentra', '#DC2626')}</div>`;
+  }
+  return `<div style="display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #F3F4F6;">${foto}${info}${acciones}</div>`;
+}
+
+function exhibRenderScan() {
+  const lista = _exhibFiltrados();
+  const hechos = lista.filter(it => exhibState[_exhibId(it)] === 'exhibido').length;
+  document.getElementById('exhib-contador').textContent = `${hechos} / ${lista.length} escaneados`;
+  const pend = lista.filter(it => exhibState[_exhibId(it)] !== 'exhibido');
+  document.getElementById('exhib-pend-count').textContent = pend.length;
+  document.getElementById('exhib-pendientes').innerHTML = pend.length ? pend.map(it => _exhibRow(it, false)).join('') : '<div style="color:#16A34A;padding:14px;text-align:center;">¡Todo escaneado! 🎉 Tocá "Terminar recorrido".</div>';
+}
+
+function exhibTerminar() {
+  exhibStopCam();
+  document.getElementById('exhib-scan').style.display = 'none';
+  document.getElementById('exhib-triage').style.display = '';
+  exhibRenderTriage();
+}
+function exhibRenderTriage() {
+  const faltantes = _exhibFiltrados().filter(it => exhibState[_exhibId(it)] !== 'exhibido');
+  const cont = document.getElementById('exhib-triage-list');
+  cont.innerHTML = faltantes.length ? faltantes.map(it => _exhibRow(it, true)).join('') : '<div style="color:#16A34A;padding:14px;text-align:center;">No quedaron faltantes: todo escaneado/exhibido ✅</div>';
+}
+function exhibSetEstado(id, estado) { exhibState[id] = estado; exhibSave(); exhibRenderTriage(); }
+function exhibVolverScan() { document.getElementById('exhib-triage').style.display = 'none'; document.getElementById('exhib-scan').style.display = ''; exhibRenderScan(); exhibStartCam(); }
+function exhibCancelar() { exhibStopCam(); exhibInit(); }
+function exhibReiniciar() {
+  if (Object.keys(exhibState).length && !confirm('¿Borrar el chequeo en curso y empezar de cero?')) return;
+  exhibStopCam(); exhibState = {}; exhibSave(); exhibInit();
+}
+
+function exhibGenerarPDF() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const lista = _exhibFiltrados();
+  const persona = (document.getElementById('exhib-persona').value || '').trim() || '(sin nombre)';
+  const cat = document.getElementById('exhib-cat').value || 'Todas las categorías';
+  const fecha = new Date();
+  const fStr = fecha.toLocaleDateString('es-AR') + ' ' + fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const grupos = { 'no-encuentra': [], 'solucionado': [], 'una-unidad': [], 'exhibido': [], 'sin-marcar': [] };
+  lista.forEach(it => { const e = exhibState[_exhibId(it)] || 'sin-marcar'; (grupos[e] || (grupos[e] = [])).push(it); });
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 14; let y = 16;
+  const line = (txt, opt = {}) => {
+    pdf.setFont('helvetica', opt.bold ? 'bold' : 'normal'); pdf.setFontSize(opt.fs || 10);
+    const c = opt.color || [34, 34, 34]; pdf.setTextColor(c[0], c[1], c[2]);
+    pdf.splitTextToSize(txt, W - M * 2 - (opt.x ? opt.x - M : 0)).forEach(w => { if (y > 285) { pdf.addPage(); y = 16; } pdf.text(w, opt.x || M, y); y += (opt.fs || 10) * 0.45 + 1.4; });
+  };
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.setTextColor(0, 0, 0); pdf.text('Chequeo de exhibición — Zattia', M, y); y += 8;
+  line('Fecha: ' + fStr); line('Realizado por: ' + persona); line('Categoría: ' + cat); line('Total chequeado: ' + lista.length + ' variantes');
+  y += 2;
+  line(`Exhibido: ${grupos.exhibido.length}  ·  Solucionado: ${grupos.solucionado.length}  ·  Una sola unidad: ${grupos['una-unidad'].length}  ·  No se encuentra: ${grupos['no-encuentra'].length}` + (grupos['sin-marcar'].length ? `  ·  Sin revisar: ${grupos['sin-marcar'].length}` : ''), { bold: true });
+  const seccion = (titulo, items, color) => {
+    if (!items.length) return;
+    if (y > 268) { pdf.addPage(); y = 16; }
+    y += 4; line(titulo + ' (' + items.length + ')', { bold: true, fs: 11, color });
+    items.forEach(it => line('•  ' + it.name + ' · ' + it.size + ' · SKU: ' + (it.sku || '—'), { fs: 9, x: M + 3 }));
+  };
+  seccion('NO SE ENCUENTRA — revisar / conteo urgente', grupos['no-encuentra'], [220, 38, 38]);
+  seccion('Exhibición una sola unidad', grupos['una-unidad'], [217, 119, 6]);
+  seccion('No exhibido — solucionado', grupos['solucionado'], [37, 99, 235]);
+  if (grupos['sin-marcar'].length) seccion('Sin revisar (no escaneados ni marcados)', grupos['sin-marcar'], [107, 114, 128]);
+  pdf.save('chequeo-exhibicion-zattia-' + fecha.toISOString().slice(0, 10) + '.pdf');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -5968,6 +6216,10 @@ function aplicarVisibilidadTabs() {
   // Botones de acceso rápido a admins externos (solo BDI y admin completo)
   const quickLinks = document.getElementById('quick-admin-links');
   if (quickLinks) quickLinks.style.display = (key === 'bdi' && !isMkt && !isOper) ? 'flex' : 'none';
+
+  // Chequeo de exhibición: solo Zattia (para cualquier rol que tenga acceso)
+  const exhibBtn = document.getElementById('tab-btn-exhib');
+  if (exhibBtn) exhibBtn.style.display = (key === 'zattia') ? '' : 'none';
 
   // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
