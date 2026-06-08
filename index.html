@@ -5588,8 +5588,13 @@ function tnImgPaste(e) {
 }
 function _tnImgFindProd(txt) {
   const t = (txt || '').toLowerCase().trim();
+  if (!t) return null;
   const base = t.replace(/\s*\(.*\)\s*$/, '').trim();
-  return tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
+  let p = tnImgProductos.find(p => (p.name + (p.sku ? ' (' + p.sku + ')' : '')).toLowerCase() === t) || tnImgProductos.find(p => p.name.toLowerCase() === base);
+  if (p) return p;
+  // Tolerante: si el texto identifica un único producto, lo toma igual
+  const cands = tnImgProductos.filter(p => p.name.toLowerCase().startsWith(base) || (p.sku && p.sku.toLowerCase() === base));
+  return cands.length === 1 ? cands[0] : null;
 }
 function tnImgAgregarGrupo() { const id = ++tnImgSeq; tnImgGrupos.push({ id, productId: null, color: '', fotos: [] }); tnImgActiveGrupo = id; tnImgRender(); }
 function tnImgQuitarGrupo(gid) { tnImgGrupos = tnImgGrupos.filter(g => g.id !== gid); tnImgRender(); }
@@ -5647,23 +5652,34 @@ function tnImgRender() {
 
 async function tnImgSubirTodo() {
   const grupos = tnImgGrupos.filter(g => g.productId && g.fotos.some(f => f.url && !f.subida));
-  if (!grupos.length) { alert('Agregá al menos un producto con fotos.'); return; }
-  document.getElementById('tnimg-subir').disabled = true;
+  if (!grupos.length) {
+    const hayFotosSinProd = tnImgGrupos.some(g => !g.productId && g.fotos.length);
+    alert(hayFotosSinProd
+      ? 'Falta elegir el PRODUCTO en cada bloque: el buscador tiene que quedar en VERDE. Escribí y tocá el producto de la lista.'
+      : 'Agregá un producto y al menos una foto.');
+    return;
+  }
+  const btn = document.getElementById('tnimg-subir'); btn.disabled = true;
+  const info = document.getElementById('tnimg-info');
+  const total = grupos.reduce((s, g) => s + g.fotos.filter(f => f.url && !f.subida).length, 0);
+  let ok = 0, err = 0; const errMsgs = [];
   for (const g of grupos) {
     let primera = true;
     for (const ft of g.fotos.filter(f => f.url && !f.subida)) {
+      if (info) info.textContent = `Subiendo ${ok + err + 1} de ${total}…`;
       try {
-        // El color (asignación a la variante) se manda solo en la 1ª foto del grupo; el resto va a la galería
         const body = { product_id: g.productId, image: ft.url, filename: ft.file.name };
-        if (primera && g.color) body.color = g.color;
+        if (primera && g.color) body.color = g.color; // color solo en la 1ª foto (asigna la variante)
         const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const j = await r.json();
-        if (j.ok) { ft.subida = true; primera = false; }
-        tnImgRender();
-      } catch (e) {}
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) { ft.subida = true; primera = false; ok++; }
+        else { err++; errMsgs.push(j.error || ('HTTP ' + r.status)); }
+      } catch (e) { err++; errMsgs.push(e.message); }
     }
   }
-  document.getElementById('tnimg-subir').disabled = false;
+  tnImgRender();
+  btn.disabled = false;
+  if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${ok} subidas</span>` + (err ? ` · <span style="color:#DC2626;">${err} con error: ${esc([...new Set(errMsgs)].slice(0, 2).join(' / '))}</span>` : '');
 }
 
 // ════════════════════════════════════════════════════════════════
