@@ -1021,7 +1021,23 @@
             <button class="btn-sm" onclick="etiLimpiar('loc')">Limpiar cantidades</button>
             <span id="eti-total-loc" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
+            <input type="checkbox" id="eti-fp-incluir"> Imprimir también la etiqueta de <b>formas de pago</b> (1 después de cada precio)
+          </label>
           <div id="eti-tabla-loc" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
+        </div>
+
+        <!-- Editor de la etiqueta de formas de pago (se guarda) -->
+        <div class="card">
+          <div style="font-size:14px;font-weight:700;">💳 Etiqueta de formas de pago</div>
+          <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Diseñala una vez (queda guardada). Se imprime junto a las etiquetas de precio cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
+          <div id="eti-fp-lineas"></div>
+          <button class="btn-sm" onclick="etiFPAdd()" style="margin-top:4px;">+ Agregar línea</button>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;">
+            <div style="font-size:12px;color:#888;">Vista previa:</div>
+            <div id="eti-fp-preview" style="width:200px;height:100px;border:1px solid #E5E7EB;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px;background:#fff;"></div>
+            <button class="btn-sm" onclick="etiFPImprimirSolo()">🖨️ Imprimir solo formas de pago…</button>
+          </div>
         </div>
       </div>
 
@@ -4664,6 +4680,7 @@ async function renderEtiquetas() {
   etiRenderTabla('loc');
   etiRenderTabla('sku');
   libreRenderLineas();
+  etiFPInit();
   // Para las etiquetas de local necesitamos el precio promocional de TN
   if (!window._mktTNData) {
     try {
@@ -4783,6 +4800,7 @@ function _etiBuildPdf(labels, modo) {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
     if (!v) return; // etiqueta en blanco (separador entre variantes)
     pdf.setTextColor(0);
+    if (v.__fp) { _etiDrawFP(pdf, W, Hh, M, CX); return; } // etiqueta de formas de pago
     const margin = 1.3;
     // Dibuja el código de barras en (y) con altura h
     const barras = (y, h) => {
@@ -4898,10 +4916,12 @@ function etiImprimir(modo) {
   if (!grupos.length) { alert(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.'); return; }
   // Depósito: opción de dejar una etiqueta en blanco al cambiar de variante (para separar)
   const sep = modo === 'dep' && document.getElementById('eti-sep-dep') && document.getElementById('eti-sep-dep').checked;
+  // Local: opción de imprimir la etiqueta de formas de pago después de cada precio
+  const conFP = modo === 'loc' && document.getElementById('eti-fp-incluir') && document.getElementById('eti-fp-incluir').checked;
   const labels = [];
   grupos.forEach((g, gi) => {
     if (sep && gi > 0) labels.push(null); // separador en blanco entre variantes
-    for (let k = 0; k < g.cant; k++) labels.push(g.v);
+    for (let k = 0; k < g.cant; k++) { labels.push(g.v); if (conFP) labels.push({ __fp: true }); }
   });
   _etiPrint(_etiBuildPdf(labels, modo));
   // Tras imprimir, ofrecer limpiar las cantidades (para no arrastrar las viejas)
@@ -4935,6 +4955,78 @@ function etiScan(modo) {
   const extra = modo === 'sku' ? (' · SKU ' + esc(v.sku)) : (p ? ' · $' + Math.round(p).toLocaleString('es-AR') : '');
   fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${extra}</span>`;
   inp.focus();
+}
+
+// ── Etiqueta de formas de pago (editable, se guarda; se imprime junto al precio) ──
+let etiFP = [
+  { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
+  { texto: 'Efectivo · Débito · Crédito', tam: 'normal', bold: false },
+  { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
+];
+const ETI_FP_TAM = [['titulo', 'Título'], ['subtitulo', 'Subtítulo'], ['normal', 'Normal'], ['chico', 'Chico']];
+const ETI_FP_FS = { titulo: 11, subtitulo: 9, normal: 8, chico: 6.5 };
+
+function etiFPKey() { return 'monitor_eti_fp_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function etiFPLoad() { try { const r = localStorage.getItem(etiFPKey()); if (r) etiFP = JSON.parse(r); } catch (e) {} }
+function etiFPSave() { _lsGuardar(etiFPKey(), JSON.stringify(etiFP)); etiFPPreview(); }
+function etiFPInit() { etiFPLoad(); etiFPRenderLineas(); etiFPPreview(); }
+
+function etiFPRenderLineas() {
+  const cont = document.getElementById('eti-fp-lineas');
+  if (!cont) return;
+  cont.innerHTML = etiFP.map((l, i) => `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <input type="text" value="${esc(l.texto)}" placeholder="Texto" oninput="etiFPSet(${i},'texto',this.value)" style="flex:1;min-width:160px;padding:6px 9px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;">
+      <select onchange="etiFPSet(${i},'tam',this.value)" style="padding:6px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;">
+        ${ETI_FP_TAM.map(([v, t]) => `<option value="${v}" ${l.tam === v ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:3px;"><input type="checkbox" ${l.bold ? 'checked' : ''} onchange="etiFPSet(${i},'bold',this.checked)"> Negrita</label>
+      <button onclick="etiFPDel(${i})" title="Quitar" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;">×</button>
+    </div>`).join('');
+}
+function etiFPSet(i, campo, val) { if (etiFP[i]) { etiFP[i][campo] = val; etiFPSave(); } }
+function etiFPAdd() { etiFP.push({ texto: '', tam: 'normal', bold: false }); etiFPRenderLineas(); etiFPSave(); }
+function etiFPDel(i) { etiFP.splice(i, 1); if (!etiFP.length) etiFP.push({ texto: '', tam: 'normal', bold: false }); etiFPRenderLineas(); etiFPSave(); }
+function etiFPPreview() {
+  const box = document.getElementById('eti-fp-preview');
+  if (!box) return;
+  box.innerHTML = etiFP.filter(l => (l.texto || '').trim()).map(l => {
+    const fs = l.tam === 'titulo' ? 13 : l.tam === 'subtitulo' ? 11 : l.tam === 'chico' ? 8 : 10;
+    return `<div style="font-size:${fs}px;font-weight:${l.bold ? '700' : '400'};line-height:1.25;">${esc(l.texto)}</div>`;
+  }).join('') || '<span style="color:#CBD5E1;font-size:11px;">(vacía)</span>';
+}
+
+// Dibuja la etiqueta de formas de pago centrada en la página actual del PDF
+function _etiDrawFP(pdf, W, Hh, M, CX) {
+  const lines = etiFP.filter(l => (l.texto || '').trim());
+  if (!lines.length) return;
+  const gap = 0.8;
+  const ops = lines.map((l, idx) => {
+    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal');
+    const fs = ETI_FP_FS[l.tam] || ETI_FP_FS.normal;
+    pdf.setFontSize(fs);
+    const w = pdf.splitTextToSize(l.texto, W - M * 2);
+    return { w, fs, bold: l.bold, h: w.length * (fs * 0.42), gap: idx ? gap : 0 };
+  });
+  const total = ops.reduce((s, o) => s + o.gap + o.h, 0);
+  let y = Math.max(1.2, (Hh - total) / 2);
+  ops.forEach(o => {
+    y += o.gap;
+    pdf.setFont('helvetica', o.bold ? 'bold' : 'normal'); pdf.setFontSize(o.fs);
+    pdf.text(o.w, CX, y, { align: 'center', baseline: 'top' });
+    y += o.h;
+  });
+}
+
+// Imprimir solo etiquetas de formas de pago (cantidad a elegir)
+function etiFPImprimirSolo() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  if (!etiFP.filter(l => (l.texto || '').trim()).length) { alert('La etiqueta de formas de pago está vacía.'); return; }
+  const n = parseInt(prompt('¿Cuántas etiquetas de formas de pago querés imprimir?', '10'), 10);
+  if (!n || n < 1) return;
+  const labels = [];
+  for (let k = 0; k < n; k++) labels.push({ __fp: true });
+  _etiPrint(_etiBuildPdf(labels, 'loc'));
 }
 
 // ── Editor de etiqueta libre (texto + código + precio; 5×2,5 cm o 10×15 cm) ───────
