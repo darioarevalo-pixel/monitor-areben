@@ -993,6 +993,9 @@
             <button class="btn-sm" onclick="etiLimpiar('dep')">Limpiar cantidades</button>
             <span id="eti-total-dep" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
+            <input type="checkbox" id="eti-sep-dep"> Dejar una etiqueta en blanco al cambiar de variante (para separar más fácil)
+          </label>
           <div id="eti-tabla-dep" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
         </div>
       </div>
@@ -4778,6 +4781,7 @@ function _etiBuildPdf(labels, modo) {
   const bw = 44;
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape');
+    if (!v) return; // etiqueta en blanco (separador entre variantes)
     pdf.setTextColor(0);
     const margin = 1.3;
     // Dibuja el código de barras en (y) con altura h
@@ -4875,14 +4879,22 @@ function etiImprimir(modo) {
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
   if (typeof JsBarcode === 'undefined') { alert('Se está cargando el generador de códigos de barra. Probá de nuevo en unos segundos.'); return; }
   const vmap = {}; _etiVariantes().forEach(v => { vmap[v.id] = v; });
-  const labels = [];
+  // Agrupar por variante (cada grupo = una variante con sus copias)
+  const grupos = [];
   Object.entries(etiCant[modo]).forEach(([id, cant]) => {
     const v = vmap[id];
     if (!v) return;
     if (modo === 'sku' && !v.sku) return; // en modo SKU, salteamos las variantes sin SKU
-    for (let k = 0; k < cant; k++) labels.push(v);
+    grupos.push({ v, cant });
   });
-  if (!labels.length) { alert(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.'); return; }
+  if (!grupos.length) { alert(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.'); return; }
+  // Depósito: opción de dejar una etiqueta en blanco al cambiar de variante (para separar)
+  const sep = modo === 'dep' && document.getElementById('eti-sep-dep') && document.getElementById('eti-sep-dep').checked;
+  const labels = [];
+  grupos.forEach((g, gi) => {
+    if (sep && gi > 0) labels.push(null); // separador en blanco entre variantes
+    for (let k = 0; k < g.cant; k++) labels.push(g.v);
+  });
   _etiPrint(_etiBuildPdf(labels, modo));
   // Tras imprimir, ofrecer limpiar las cantidades (para no arrastrar las viejas)
   setTimeout(() => {
