@@ -6906,6 +6906,9 @@ function aplicarVisibilidadTabs() {
   // bdilocal: dentro de Etiquetas, solo Depósito y Local (sin SKU ni Etiqueta libre)
   const soloDepLoc = currentUser === 'bdilocal';
   ['sku', 'libre'].forEach(s => { const b = document.getElementById('eti-sub-btn-' + s); if (b) b.style.display = soloDepLoc ? 'none' : ''; });
+  // bdilocal: tampoco Tabla de talles (solo Marketing + Etiquetas)
+  const gtBtn = document.getElementById('tab-btn-gen-talles');
+  if (gtBtn) gtBtn.style.display = (currentUser === 'bdilocal') ? 'none' : '';
 
   // Botones de acceso rápido a admins externos (solo BDI y admin completo)
   const quickLinks = document.getElementById('quick-admin-links');
@@ -6919,7 +6922,7 @@ function aplicarVisibilidadTabs() {
   if (tncatBtn) {
     let verTab;
     if (role === 'admin') verTab = true;                          // ve ambas cards
-    else if (isMkt) verTab = (currentUser !== 'local');           // marketing (no "local"): solo imágenes
+    else if (isMkt) verTab = (currentUser !== 'local' && currentUser !== 'bdilocal'); // marketing (no locales): solo imágenes
     else if (isOper) verTab = (key === 'bdi');                    // operación: solo categorías (BDI)
     else verTab = false;
     tncatBtn.style.display = verTab ? '' : 'none';
