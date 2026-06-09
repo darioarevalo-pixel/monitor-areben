@@ -306,6 +306,7 @@
       <button class="tab" id="tab-btn-gen-talles" onclick="switchTab('gen-talles', this)">📏 Tabla de talles</button>
       <button class="tab" id="tab-btn-exhib" style="display:none;" onclick="switchTab('exhib', this)">👕 Chequeo de exhibición</button>
       <button class="tab" id="tab-btn-tncat" style="display:none;" onclick="switchTab('tncat', this)">🛍️ Tienda Nube</button>
+      <button class="tab" id="tab-btn-disenos" onclick="switchTab('disenos', this)">🗳️ Diseños</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -1221,6 +1222,27 @@
         </div>
         <div id="tnimg-grupos"></div>
         <datalist id="tnimg-prods"></datalist>
+      </div>
+    </div>
+
+    <!-- ── Selección de diseños (tablero local) ───────────────────────────── -->
+    <div id="tab-disenos" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🗳️ Selección de diseños</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:560px;">Cargá todas las opciones de diseño, opiná en equipo (👍/👎 y notas) y clasificalas en <b>Confirmados</b>, <b>En duda</b> o <b>Rechazados</b>. Después generás el reporte. Todo se guarda en esta compu.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="document.getElementById('db-file').click()" style="background:#378ADD;color:#fff;">📁 Cargar imágenes</button>
+            <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
+            <button onclick="dbLimpiar()" style="background:#fff;color:#DC2626;border:1px solid #FCA5A5;">Vaciar</button>
+            <input type="file" id="db-file" accept="image/*" multiple style="display:none;" onchange="dbCargar(this.files)">
+          </div>
+        </div>
+        <div id="db-drop" ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='';" ondrop="event.preventDefault();this.style.background='';dbCargar(event.dataTransfer.files);" style="margin-top:12px;border:2px dashed #CBD5E1;border-radius:10px;padding:14px;text-align:center;color:#9CA3AF;font-size:13px;cursor:pointer;" onclick="document.getElementById('db-file').click()">Arrastrá acá todas las imágenes de los diseños, o tocá para elegirlas 📥</div>
+        <div id="db-resumen" style="font-size:13px;color:#374151;margin:12px 0 4px;"></div>
+        <div id="db-board" style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;padding-bottom:6px;"></div>
       </div>
     </div>
 
@@ -2813,6 +2835,144 @@ function _imgAThumb(file, cb, max = 256) {
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// ════════ Selección de diseños — tablero local de decisión ════════════════════
+let dbDisenos = [];          // [{id, name, url, nota, up, down, estado}]
+let dbSeq = 0, _dbSaveT = null;
+const DB_KEY = 'monitor_designboard_v1';
+const DB_ESTADOS = [
+  { k: 'revisar',    lbl: 'Por revisar', ico: '🕓', color: '#6B7280', bg: '#F9FAFB', rgb: [107, 114, 128] },
+  { k: 'confirmado', lbl: 'Confirmados', ico: '✅', color: '#16A34A', bg: '#F0FDF4', rgb: [22, 163, 74] },
+  { k: 'duda',       lbl: 'En duda',     ico: '🤔', color: '#D97706', bg: '#FFFBEB', rgb: [217, 119, 6] },
+  { k: 'rechazado',  lbl: 'Rechazados',  ico: '❌', color: '#DC2626', bg: '#FEF2F2', rgb: [220, 38, 38] },
+];
+function dbNewId() { return 'd' + Date.now() + '_' + (dbSeq++); }
+function dbLoad() { try { const r = localStorage.getItem(DB_KEY); dbDisenos = r ? JSON.parse(r) : []; } catch { dbDisenos = []; } }
+function dbSave() { if (!_lsGuardar(DB_KEY, JSON.stringify(dbDisenos))) alert('No se pudo guardar: el navegador llegó al límite de almacenamiento. Generá el reporte y vaciá diseños ya decididos para liberar espacio.'); }
+function dbInit() { dbLoad(); dbRender(); }
+
+function dbCargar(files) {
+  const arr = [...(files || [])].filter(f => /^image\//.test(f.type));
+  if (!arr.length) return;
+  arr.forEach(f => {
+    _imgAThumb(f, url => {
+      dbDisenos.push({ id: dbNewId(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url, nota: '', up: 0, down: 0, estado: 'revisar' });
+      dbSave(); dbRender();
+    }, 600);
+  });
+  const inp = document.getElementById('db-file'); if (inp) inp.value = '';
+}
+
+// Texto (nombre/nota): guarda con debounce y SIN re-render, para no perder el foco al tipear
+function dbSetCampo(id, campo, val) {
+  const d = dbDisenos.find(x => x.id === id); if (!d) return;
+  d[campo] = val;
+  clearTimeout(_dbSaveT); _dbSaveT = setTimeout(dbSave, 400);
+}
+function dbVoto(id, tipo) { const d = dbDisenos.find(x => x.id === id); if (!d) return; if (tipo === 'up') d.up++; else d.down++; dbSave(); dbRender(); }
+function dbSetEstado(id, est) { const d = dbDisenos.find(x => x.id === id); if (!d) return; d.estado = est; dbSave(); dbRender(); }
+function dbQuitar(id) { if (!confirm('¿Quitar este diseño del tablero?')) return; dbDisenos = dbDisenos.filter(x => x.id !== id); dbSave(); dbRender(); }
+function dbLimpiar() { if (!dbDisenos.length) return; if (!confirm('Esto vacía TODO el tablero (todos los diseños y votos). ¿Seguro?')) return; dbDisenos = []; dbSave(); dbRender(); }
+
+function dbCard(d) {
+  const estadoBtns = DB_ESTADOS.map(e =>
+    `<button onclick="dbSetEstado('${d.id}','${e.k}')" title="Mover a ${e.lbl}" style="flex:1;min-width:0;padding:3px 0;font-size:13px;border:1px solid ${d.estado === e.k ? e.color : '#E5E7EB'};background:${d.estado === e.k ? e.color : '#fff'};border-radius:6px;cursor:pointer;">${e.ico}</button>`
+  ).join('');
+  return `<div style="background:#fff;border:1px solid #E5E7EB;border-radius:9px;padding:8px;margin-bottom:9px;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+    <img src="${d.url}" onclick="dbPreview('${d.id}')" title="Tocá para verla grande" style="width:100%;height:130px;object-fit:cover;border-radius:6px;cursor:zoom-in;background:#F3F4F6;">
+    <input value="${esc(d.name)}" onchange="dbSetCampo('${d.id}','name',this.value)" placeholder="Nombre del diseño" style="width:100%;font-size:12px;font-weight:600;border:none;border-bottom:1px solid #F1F5F9;margin:6px 0 4px;padding:2px 0;box-sizing:border-box;">
+    <textarea oninput="dbSetCampo('${d.id}','nota',this.value)" placeholder="Pros / contras / notas…" style="width:100%;font-size:11px;color:#374151;border:1px solid #E5E7EB;border-radius:6px;padding:5px;min-height:42px;resize:vertical;box-sizing:border-box;">${esc(d.nota)}</textarea>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+      <button onclick="dbVoto('${d.id}','up')" style="flex:1;min-width:0;padding:4px 0;font-size:12px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:6px;cursor:pointer;">👍 ${d.up}</button>
+      <button onclick="dbVoto('${d.id}','down')" style="flex:1;min-width:0;padding:4px 0;font-size:12px;border:1px solid #FECACA;background:#FEF2F2;border-radius:6px;cursor:pointer;">👎 ${d.down}</button>
+      <button onclick="dbQuitar('${d.id}')" title="Quitar" style="min-width:0;padding:4px 7px;font-size:12px;border:1px solid #E5E7EB;background:#fff;border-radius:6px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-top:6px;">${estadoBtns}</div>
+  </div>`;
+}
+
+function dbRender() {
+  const board = document.getElementById('db-board');
+  if (!board) return;
+  board.innerHTML = DB_ESTADOS.map(e => {
+    const items = dbDisenos.filter(d => d.estado === e.k);
+    return `<div style="flex:1 1 0;min-width:210px;background:${e.bg};border:1px solid #E5E7EB;border-radius:11px;padding:9px;">
+      <div style="font-weight:700;font-size:13px;color:${e.color};margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;"><span>${e.ico} ${e.lbl}</span><span style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:0 7px;font-size:11px;color:#374151;">${items.length}</span></div>
+      ${items.map(dbCard).join('') || '<div style="font-size:11px;color:#CBD5E1;text-align:center;padding:14px 0;">—</div>'}
+    </div>`;
+  }).join('');
+  const r = document.getElementById('db-resumen');
+  if (r) {
+    const c = k => dbDisenos.filter(d => d.estado === k).length;
+    r.innerHTML = dbDisenos.length
+      ? `<b>${dbDisenos.length}</b> diseños · ✅ ${c('confirmado')} confirmados · 🤔 ${c('duda')} en duda · ❌ ${c('rechazado')} rechazados · 🕓 ${c('revisar')} por revisar`
+      : 'Todavía no cargaste diseños. Soltá las imágenes arriba para empezar. 👆';
+  }
+}
+
+// Lightbox para ver el diseño en grande
+function dbPreview(id) {
+  const d = dbDisenos.find(x => x.id === id); if (!d) return;
+  let ov = document.getElementById('db-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'db-lightbox';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:3000;padding:20px;cursor:zoom-out;';
+    ov.onclick = () => { ov.style.display = 'none'; };
+    ov.innerHTML = '<img style="max-width:95%;max-height:95%;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);">';
+    document.body.appendChild(ov);
+  }
+  ov.querySelector('img').src = d.url;
+  ov.style.display = 'flex';
+}
+
+// Reporte PDF de las decisiones del tablero
+function dbReporte() {
+  if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 14;
+  let y = 18;
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.setFontSize(16); pdf.setFont(undefined, 'bold');
+  pdf.text('Selección de diseños', M, y);
+  pdf.setFontSize(10); pdf.setFont(undefined, 'normal'); pdf.setTextColor(120);
+  y += 6; pdf.text(`${fecha}  ·  ${dbDisenos.length} diseños evaluados`, M, y);
+  pdf.setTextColor(0); y += 8;
+
+  // Orden del reporte: confirmados → en duda → rechazados → por revisar
+  const orden = ['confirmado', 'duda', 'rechazado', 'revisar'].map(k => DB_ESTADOS.find(e => e.k === k));
+  const IMG = 30, ROW = 34;
+  orden.forEach(e => {
+    const items = dbDisenos.filter(d => d.estado === e.k);
+    if (!items.length) return;
+    if (y > 268) { pdf.addPage(); y = 18; }
+    pdf.setFillColor(e.rgb[0], e.rgb[1], e.rgb[2]); pdf.rect(M, y - 4, W - 2 * M, 7, 'F');
+    pdf.setTextColor(255); pdf.setFontSize(11); pdf.setFont(undefined, 'bold');
+    pdf.text(`${e.lbl.toUpperCase()}  (${items.length})`, M + 2, y + 1.2);
+    pdf.setTextColor(0); pdf.setFont(undefined, 'normal'); y += 9;
+    items.forEach(d => {
+      if (y + ROW > 286) { pdf.addPage(); y = 18; }
+      try { pdf.addImage(d.url, 'JPEG', M, y, IMG, IMG); } catch {}
+      const tx = M + IMG + 5;
+      pdf.setFontSize(11); pdf.setFont(undefined, 'bold');
+      pdf.text(String(d.name || '(sin nombre)').slice(0, 60), tx, y + 5);
+      pdf.setFontSize(9); pdf.setFont(undefined, 'normal'); pdf.setTextColor(90);
+      pdf.text(`A favor: ${d.up}     En contra: ${d.down}`, tx, y + 11);
+      if (d.nota) {
+        pdf.setTextColor(60);
+        const lines = pdf.splitTextToSize(d.nota, W - M - tx - 2);
+        pdf.text(lines.slice(0, 3), tx, y + 17);
+      }
+      pdf.setTextColor(0);
+      pdf.setDrawColor(228); pdf.line(M, y + ROW - 3, W - M, y + ROW - 3);
+      y += ROW;
+    });
+    y += 3;
+  });
+  pdf.save(`seleccion-disenos-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ¿Está activo el modo variantes y hay al menos una variante definida?
@@ -4679,6 +4839,7 @@ function switchTab(id, btn) {
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
+  if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
