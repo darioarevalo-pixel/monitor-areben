@@ -5519,7 +5519,7 @@ function tncatAbrir() {
   const esBdi = _cuentaKey() === 'bdi';
   const role = _userRole();
   const verCat = esBdi && (role === 'admin' || role === 'operacion');
-  const verImg = (role === 'admin' || role === 'marketing');
+  const verImg = (role === 'admin' || (role === 'marketing' && currentUser !== 'local'));
   const cardCat = document.getElementById('tncat-card-cat');
   const cardImg = document.getElementById('tncat-card-img');
   if (cardCat) cardCat.style.display = verCat ? '' : 'none';
@@ -6677,9 +6677,9 @@ function aplicarVisibilidadTabs() {
   const tncatBtn = document.getElementById('tab-btn-tncat');
   if (tncatBtn) {
     let verTab;
-    if (role === 'admin') verTab = true;            // ve ambas cards
-    else if (isMkt) verTab = true;                  // marketing: solo imágenes (ambas marcas)
-    else if (isOper) verTab = (key === 'bdi');      // operación: solo categorías (BDI)
+    if (role === 'admin') verTab = true;                          // ve ambas cards
+    else if (isMkt) verTab = (currentUser !== 'local');           // marketing (no "local"): solo imágenes
+    else if (isOper) verTab = (key === 'bdi');                    // operación: solo categorías (BDI)
     else verTab = false;
     tncatBtn.style.display = verTab ? '' : 'none';
   }
