@@ -5558,6 +5558,7 @@ let exhibItems = [];   // [{barcode, sku, productId, name, size, qty, img, cats}
 let exhibState = {};   // { itemId: 'exhibido'|'solucionado'|'una-unidad'|'no-encuentra' }
 let exhibReader = null;
 let exhibLast = { code: '', t: 0 };
+let exhibCand = { code: '', n: 0 }; // candidato en curso: exige 2 lecturas iguales seguidas (anti-lecturas falsas)
 let exhibUltimoFormato = ''; // formato del último escaneo (CODE_128, UPC_A, etc.) para diagnóstico
 function _zxFmtName(fmt) { try { if (fmt == null || typeof ZXing === 'undefined' || !ZXing.BarcodeFormat) return ''; return Object.keys(ZXing.BarcodeFormat).find(k => ZXing.BarcodeFormat[k] === fmt) || ''; } catch { return ''; } }
 
@@ -5634,17 +5635,23 @@ async function exhibStartCam() {
   const fb = document.getElementById('exhib-scan-fb');
   if (typeof ZXing === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el lector de cámara… probá de nuevo en unos segundos.</span>'; return; }
   try {
-    // Restringir a los formatos reales de las etiquetas (Code 128 / Code 39, alfanuméricos).
-    // Sin esto, el lector "fuerza" lecturas UPC-A erróneas (números distintos cada vez) sobre un Code 128.
-    let hints = null;
-    try {
-      hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    } catch (e) { hints = null; }
-    exhibReader = hints ? new ZXing.BrowserMultiFormatReader(hints) : new ZXing.BrowserMultiFormatReader();
+    exhibReader = new ZXing.BrowserMultiFormatReader();
+    exhibCand = { code: '', n: 0 };
     const video = document.getElementById('exhib-video');
-    await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : null); });
+    // Alta resolución + enfoque continuo: las barras finas del Code 128 necesitan detalle para
+    // decodificar bien. En baja resolución el lector agarra patrones falsos (UPC inventados).
+    const constraints = { video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920 }, height: { ideal: 1080 },
+      focusMode: 'continuous',
+      advanced: [{ focusMode: 'continuous' }],
+    } };
+    try {
+      await exhibReader.decodeFromConstraints(constraints, video, (result) => { if (result) exhibOnScan(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : null); });
+    } catch (e) {
+      // Fallback si la cámara no acepta esas constraints
+      await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : null); });
+    }
   } catch (e) {
     fb.innerHTML = `<span style="color:#DC2626;">No se pudo abrir la cámara (${esc(e.message)}). Usá la carga manual de abajo.</span>`;
   }
@@ -5653,8 +5660,15 @@ function exhibStopCam() { if (exhibReader) { try { exhibReader.reset(); } catch 
 
 function exhibOnScan(code, fmt) {
   code = String(code || '').trim();
+  if (!code) return;
   const now = Date.now();
+  // anti-rebote: no re-marcar el mismo código recién aceptado
   if (code === exhibLast.code && now - exhibLast.t < 1800) return;
+  // filtro de estabilidad: exigir 2 lecturas idénticas seguidas. Las lecturas falsas
+  // (UPC inventados) cambian de valor cada vez y nunca se confirman; una lectura real se repite.
+  if (code === exhibCand.code) { exhibCand.n++; } else { exhibCand = { code, n: 1, fmt }; }
+  if (exhibCand.n < 2) return;
+  exhibCand = { code: '', n: 0 };
   exhibLast = { code, t: now };
   exhibUltimoFormato = _zxFmtName(fmt);
   exhibMarcarPorCodigo(code, true);
