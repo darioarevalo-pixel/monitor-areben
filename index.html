@@ -1237,8 +1237,11 @@
             <button onclick="document.getElementById('db-file').click()" style="background:#378ADD;color:#fff;">📁 Cargar imágenes</button>
             <button onclick="dbQuickOpen()" style="background:#7C3AED;color:#fff;">⚡ Revisión rápida</button>
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
+            <button onclick="dbExportar()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬇️ Exportar</button>
+            <button onclick="document.getElementById('db-import').click()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬆️ Importar</button>
             <button onclick="dbLimpiar()" style="background:#fff;color:#DC2626;border:1px solid #FCA5A5;">Vaciar</button>
             <input type="file" id="db-file" accept="image/*" multiple style="display:none;" onchange="dbCargar(this.files)">
+            <input type="file" id="db-import" accept=".json,application/json" style="display:none;" onchange="dbImportar(this.files)">
           </div>
         </div>
         <div id="db-drop" ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='';" ondrop="event.preventDefault();this.style.background='';dbCargar(event.dataTransfer.files);" style="margin-top:12px;border:2px dashed #CBD5E1;border-radius:10px;padding:14px;text-align:center;color:#9CA3AF;font-size:13px;cursor:pointer;" onclick="document.getElementById('db-file').click()">Arrastrá acá todas las imágenes de los diseños, o tocá para elegirlas 📥</div>
@@ -2886,6 +2889,42 @@ function dbVoto(id, tipo) { const d = dbDisenos.find(x => x.id === id); if (!d) 
 function dbSetEstado(id, est) { const d = dbDisenos.find(x => x.id === id); if (!d) return; d.estado = est; dbSave(); dbRender(); }
 function dbQuitar(id) { if (!confirm('¿Quitar este diseño del tablero?')) return; dbDisenos = dbDisenos.filter(x => x.id !== id); dbSave(); dbRender(); }
 function dbLimpiar() { if (!dbDisenos.length) return; if (!confirm('Esto vacía TODO el tablero (todos los diseños y votos). ¿Seguro?')) return; dbDisenos = []; dbSave(); dbRender(); }
+
+// Exporta el tablero completo (imágenes + votos + notas + estados) a un archivo de respaldo
+function dbExportar() {
+  if (!dbDisenos.length) { alert('No hay diseños para exportar.'); return; }
+  try {
+    const blob = new Blob([JSON.stringify(dbDisenos)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `tablero-disenos-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) { alert('No se pudo exportar: ' + e.message); }
+}
+// Importa un tablero desde un archivo de respaldo (reemplaza el actual)
+function dbImportar(files) {
+  const f = files && files[0];
+  const inp = document.getElementById('db-import');
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    try { data = JSON.parse(e.target.result); } catch { alert('El archivo no es válido (no es un respaldo del tablero).'); if (inp) inp.value = ''; return; }
+    if (!Array.isArray(data)) { alert('El archivo no tiene el formato esperado.'); if (inp) inp.value = ''; return; }
+    const estados = ['revisar', 'confirmado', 'duda', 'rechazado'];
+    const limpio = data.filter(d => d && d.url).map(d => ({
+      id: d.id || dbNewId(), name: d.name || '', url: d.url, nota: d.nota || '',
+      up: +d.up || 0, down: +d.down || 0, estado: estados.includes(d.estado) ? d.estado : 'revisar',
+    }));
+    if (!limpio.length) { alert('El archivo no contiene diseños válidos.'); if (inp) inp.value = ''; return; }
+    if (dbDisenos.length && !confirm(`Esto reemplaza el tablero actual (${dbDisenos.length} diseños) por el del archivo (${limpio.length} diseños). ¿Seguir?`)) { if (inp) inp.value = ''; return; }
+    dbDisenos = limpio; dbSave(); dbRender();
+    if (inp) inp.value = '';
+    alert(`✓ Importados ${limpio.length} diseños.`);
+  };
+  reader.readAsText(f);
+}
 
 function dbCard(d) {
   const estadoBtns = DB_ESTADOS.map(e =>
