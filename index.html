@@ -1235,6 +1235,7 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button onclick="document.getElementById('db-file').click()" style="background:#378ADD;color:#fff;">📁 Cargar imágenes</button>
+            <button onclick="dbQuickOpen()" style="background:#7C3AED;color:#fff;">⚡ Revisión rápida</button>
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
             <button onclick="dbLimpiar()" style="background:#fff;color:#DC2626;border:1px solid #FCA5A5;">Vaciar</button>
             <input type="file" id="db-file" accept="image/*" multiple style="display:none;" onchange="dbCargar(this.files)">
@@ -2974,6 +2975,79 @@ function dbReporte() {
   });
   pdf.save(`seleccion-disenos-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
+// ── Modo "Revisión rápida": de a uno, clasificar y avanzar (ideal para la 1ª pasada) ──
+let dbQzOn = false, dbQzIndex = 0;
+function dbQzQueue() { return dbDisenos.filter(d => d.estado === 'revisar'); }
+function dbQuickOverlay() {
+  let o = document.getElementById('db-quick');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'db-quick';
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.78);display:none;align-items:center;justify-content:center;z-index:2900;padding:16px;';
+    o.innerHTML = '<div id="dbq-body" style="width:100%;max-width:520px;"></div>';
+    document.body.appendChild(o);
+  }
+  return o;
+}
+function dbQuickOpen() {
+  if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  if (!dbQzQueue().length) { alert('No queda ningún diseño "por revisar". Si querés re-evaluar, movélos de nuevo a 🕓 Por revisar desde el tablero.'); return; }
+  dbQzIndex = 0; dbQzOn = true; dbQuickRender();
+}
+function dbQuickClose() { dbQzOn = false; const o = document.getElementById('db-quick'); if (o) o.style.display = 'none'; dbRender(); }
+function dbQuickClasificar(est) {
+  const q = dbQzQueue(); const d = q[dbQzIndex]; if (!d) return;
+  d.estado = est; dbSave();
+  const nq = dbQzQueue();
+  if (dbQzIndex >= nq.length) dbQzIndex = Math.max(0, nq.length - 1);
+  dbQuickRender();
+}
+function dbQuickSkip() { const q = dbQzQueue(); if (q.length < 2) return; dbQzIndex = (dbQzIndex + 1) % q.length; dbQuickRender(); }
+function dbQuickRender() {
+  const o = dbQuickOverlay();
+  const body = o.querySelector('#dbq-body');
+  const q = dbQzQueue();
+  const total = dbDisenos.length;
+  const clasificados = total - q.length;
+  if (!q.length) {
+    body.innerHTML = `<div style="background:#fff;border-radius:14px;text-align:center;padding:34px 22px;">
+      <div style="font-size:42px;">🎉</div>
+      <div style="font-size:18px;font-weight:700;margin:10px 0 4px;">¡Revisaste los ${total} diseños!</div>
+      <div style="color:#6B7280;font-size:13px;margin-bottom:18px;">No queda ninguno por revisar. Ahora afiná los votos y desempatá los "En duda" en el tablero.</div>
+      <button onclick="dbQuickClose()" style="background:#111;color:#fff;padding:10px 22px;border-radius:9px;cursor:pointer;">Ver el tablero</button>
+    </div>`;
+    o.style.display = 'flex'; return;
+  }
+  if (dbQzIndex >= q.length) dbQzIndex = 0;
+  const d = q[dbQzIndex];
+  body.innerHTML = `<div style="background:#fff;border-radius:14px;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:13px;color:#6B7280;">Faltan <b style="color:#7C3AED;">${q.length}</b> por revisar · ${clasificados}/${total} ya clasificados</div>
+      <button onclick="dbQuickClose()" title="Cerrar (Esc)" style="border:none;background:#F3F4F6;border-radius:8px;padding:5px 11px;cursor:pointer;">✕</button>
+    </div>
+    <img src="${d.url}" style="width:100%;max-height:48vh;object-fit:contain;border-radius:10px;background:#F8FAFC;">
+    <input value="${esc(d.name)}" onchange="dbSetCampo('${d.id}','name',this.value)" placeholder="Nombre del diseño" style="width:100%;font-size:14px;font-weight:600;text-align:center;border:none;border-bottom:1px solid #F1F5F9;margin:10px 0;padding:5px;box-sizing:border-box;">
+    <textarea oninput="dbSetCampo('${d.id}','nota',this.value)" placeholder="Nota rápida (opcional)…" style="width:100%;font-size:12px;border:1px solid #E5E7EB;border-radius:8px;padding:6px;min-height:32px;resize:vertical;box-sizing:border-box;margin-bottom:11px;">${esc(d.nota)}</textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="dbQuickClasificar('rechazado')" style="flex:1;background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5;padding:11px 0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;">❌ Rechazar<div style="font-size:10px;font-weight:400;opacity:.65;">tecla 1</div></button>
+      <button onclick="dbQuickClasificar('duda')" style="flex:1;background:#FFFBEB;color:#D97706;border:1px solid #FCD34D;padding:11px 0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;">🤔 Duda<div style="font-size:10px;font-weight:400;opacity:.65;">tecla 2</div></button>
+      <button onclick="dbQuickClasificar('confirmado')" style="flex:1;background:#F0FDF4;color:#16A34A;border:1px solid #86EFAC;padding:11px 0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;">✅ Confirmar<div style="font-size:10px;font-weight:400;opacity:.65;">tecla 3</div></button>
+    </div>
+    <button onclick="dbQuickSkip()" style="width:100%;margin-top:8px;background:#fff;color:#6B7280;border:1px solid #E5E7EB;padding:8px 0;border-radius:10px;cursor:pointer;font-size:13px;">Saltar por ahora → <span style="opacity:.6;">(barra espaciadora)</span></button>
+  </div>`;
+  o.style.display = 'flex';
+}
+// Atajos de teclado en modo revisión rápida (no interfiere mientras escribís nombre/nota)
+document.addEventListener('keydown', e => {
+  if (!dbQzOn) return;
+  if (e.key === 'Escape') { dbQuickClose(); return; }
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (e.key === '1') dbQuickClasificar('rechazado');
+  else if (e.key === '2') dbQuickClasificar('duda');
+  else if (e.key === '3') dbQuickClasificar('confirmado');
+  else if (e.key === ' ') { e.preventDefault(); dbQuickSkip(); }
+});
 
 // ¿Está activo el modo variantes y hay al menos una variante definida?
 function fmSimVarActivo() {
