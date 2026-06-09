@@ -5624,7 +5624,7 @@ function tnImgAutoCargar(files) {
   tnImgActiveGrupo = (sinAsignar || tnImgGrupos[tnImgGrupos.length - 1] || {}).id || null;
   tnImgRender();
 }
-function tnImgActivar(gid) { tnImgActiveGrupo = gid; tnImgRender(); }
+function tnImgActivar(gid) { if (tnImgActiveGrupo !== gid) { tnImgActiveGrupo = gid; tnImgRender(); } }
 function tnImgPaste(e) {
   // Solo si estamos en la pestaña Tienda Nube y hay un bloque activo
   const tab = document.getElementById('tab-tncat');
@@ -5727,7 +5727,7 @@ function tnImgRender() {
     const fotos = g.fotos.map(ft => {
       const esPortada = ft.id === g.portadaId;
       const csel = tieneColores
-        ? `<select onchange="tnImgFotoColor(${g.id},${ft.id},this.value)" title="Color de esta foto" style="margin-top:3px;width:68px;padding:3px;border:1px solid ${ft.color ? '#378ADD' : '#D1D5DB'};border-radius:6px;font-size:11px;"><option value="">galería</option>${prod.colores.map(c => `<option ${ft.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+        ? `<select onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" onchange="tnImgFotoColor(${g.id},${ft.id},this.value)" title="Color de esta foto" style="margin-top:3px;width:72px;padding:3px;border:1px solid ${ft.color ? '#378ADD' : '#D1D5DB'};border-radius:6px;font-size:11px;"><option value="">galería</option>${prod.colores.map(c => `<option ${ft.color === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
         : '';
       return `<div style="display:flex;flex-direction:column;align-items:center;flex:none;">
         <div draggable="true" ondragstart="tnImgDragStart(${g.id},${ft.id})" ondragover="event.preventDefault();" ondrop="tnImgDragDrop(event,${g.id},${ft.id})" style="position:relative;">
