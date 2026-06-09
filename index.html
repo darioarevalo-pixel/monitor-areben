@@ -6746,6 +6746,8 @@ const USERS = {
   // Solo Marketing, pero en las 2 marcas (sin cuenta fija → puede cambiar de marca)
   'Marketing':      { pass: 'Areben2026', role: 'marketing' },
   'local':          { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
+  // Local BDI: solo Marketing + Etiquetas (Depósito y Local), marca fija BDI
+  'bdilocal':       { pass: 'Areben2026', role: 'marketing', cuenta: 'bdi' },
 };
 function _userRole() { return (USERS[currentUser]?.role) || 'admin'; }
 const SESSION_KEY = 'monitor-areben-session';
@@ -6892,14 +6894,18 @@ function aplicarVisibilidadTabs() {
     const btn = document.getElementById('tab-btn-' + t);
     if (!btn) return;
     if (isMkt) {
-      // Marketing: solo el usuario "local" (en Zattia) ve además la pestaña de Etiquetas
-      btn.style.display = (t === 'etiquetas' && currentUser === 'local' && key === 'zattia') ? '' : 'none';
+      // Marketing: "local" ve Etiquetas en Zattia; "bdilocal" ve Etiquetas en BDI
+      btn.style.display = (t === 'etiquetas' && ((currentUser === 'local' && key === 'zattia') || (currentUser === 'bdilocal' && key === 'bdi'))) ? '' : 'none';
     } else if (isOper) {
       btn.style.display = (t === 'etiquetas') ? '' : 'none';
     } else {
       btn.style.display = visibles.has(t) ? '' : 'none';
     }
   });
+
+  // bdilocal: dentro de Etiquetas, solo Depósito y Local (sin SKU ni Etiqueta libre)
+  const soloDepLoc = currentUser === 'bdilocal';
+  ['sku', 'libre'].forEach(s => { const b = document.getElementById('eti-sub-btn-' + s); if (b) b.style.display = soloDepLoc ? 'none' : ''; });
 
   // Botones de acceso rápido a admins externos (solo BDI y admin completo)
   const quickLinks = document.getElementById('quick-admin-links');
