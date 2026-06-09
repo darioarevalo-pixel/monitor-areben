@@ -5634,7 +5634,15 @@ async function exhibStartCam() {
   const fb = document.getElementById('exhib-scan-fb');
   if (typeof ZXing === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el lector de cámara… probá de nuevo en unos segundos.</span>'; return; }
   try {
-    exhibReader = new ZXing.BrowserMultiFormatReader();
+    // Restringir a los formatos reales de las etiquetas (Code 128 / Code 39, alfanuméricos).
+    // Sin esto, el lector "fuerza" lecturas UPC-A erróneas (números distintos cada vez) sobre un Code 128.
+    let hints = null;
+    try {
+      hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    } catch (e) { hints = null; }
+    exhibReader = hints ? new ZXing.BrowserMultiFormatReader(hints) : new ZXing.BrowserMultiFormatReader();
     const video = document.getElementById('exhib-video');
     await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : null); });
   } catch (e) {
