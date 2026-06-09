@@ -184,7 +184,7 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-etiquetas"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
     body.rol-marketing #refresh-card {
       display: none !important;
     }
@@ -1206,7 +1206,7 @@
       </div>
 
       <!-- Carga de imágenes a TN -->
-      <div class="card">
+      <div class="card" id="tncat-card-img">
         <div style="font-size:16px;font-weight:700;">📷 Carga de imágenes</div>
         <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.</div>
         <label id="tnimg-auto" ondragover="event.preventDefault();this.style.background='#E0EDFB';" ondragleave="this.style.background='#EFF6FF';" ondrop="event.preventDefault();this.style.background='#EFF6FF';tnImgAutoCargar(event.dataTransfer.files);"
@@ -5514,13 +5514,18 @@ function exhibGenerarPDF() {
 const TNCAT_URL = 'https://bdi-catalogo.vercel.app/api/tn-categorias?store=bdi';
 let tncatData = null;
 
-// Abre la sección: en BDI muestra categorías + imágenes; en Zattia solo imágenes
+// Abre la sección. Categorías: admin/operación en BDI. Imágenes: admin/marketing (ambas marcas).
 function tncatAbrir() {
   const esBdi = _cuentaKey() === 'bdi';
+  const role = _userRole();
+  const verCat = esBdi && (role === 'admin' || role === 'operacion');
+  const verImg = (role === 'admin' || role === 'marketing');
   const cardCat = document.getElementById('tncat-card-cat');
-  if (cardCat) cardCat.style.display = esBdi ? '' : 'none';
-  if (esBdi) tncatCargar();
-  tnImgInit();
+  const cardImg = document.getElementById('tncat-card-img');
+  if (cardCat) cardCat.style.display = verCat ? '' : 'none';
+  if (cardImg) cardImg.style.display = verImg ? '' : 'none';
+  if (verCat) tncatCargar();
+  if (verImg) tnImgInit();
 }
 
 async function tncatCargar() {
@@ -6668,9 +6673,16 @@ function aplicarVisibilidadTabs() {
   // Chequeo de exhibición: solo Zattia (para cualquier rol que tenga acceso)
   const exhibBtn = document.getElementById('tab-btn-exhib');
   if (exhibBtn) exhibBtn.style.display = (key === 'zattia') ? '' : 'none';
-  // Tienda Nube: BDI (categorías + imágenes) y Zattia (solo imágenes). Admin y operación.
+  // Tienda Nube: imágenes (admin + marketing, ambas marcas) · categorías (admin + operación, BDI).
   const tncatBtn = document.getElementById('tab-btn-tncat');
-  if (tncatBtn) tncatBtn.style.display = (!isMkt) ? '' : 'none';
+  if (tncatBtn) {
+    let verTab;
+    if (role === 'admin') verTab = true;            // ve ambas cards
+    else if (isMkt) verTab = true;                  // marketing: solo imágenes (ambas marcas)
+    else if (isOper) verTab = (key === 'bdi');      // operación: solo categorías (BDI)
+    else verTab = false;
+    tncatBtn.style.display = verTab ? '' : 'none';
+  }
 
   // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
