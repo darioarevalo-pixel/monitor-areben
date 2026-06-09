@@ -1242,7 +1242,14 @@
           </div>
         </div>
         <div id="db-drop" ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='';" ondrop="event.preventDefault();this.style.background='';dbCargar(event.dataTransfer.files);" style="margin-top:12px;border:2px dashed #CBD5E1;border-radius:10px;padding:14px;text-align:center;color:#9CA3AF;font-size:13px;cursor:pointer;" onclick="document.getElementById('db-file').click()">Arrastrá acá todas las imágenes de los diseños, o tocá para elegirlas 📥</div>
-        <div id="db-resumen" style="font-size:13px;color:#374151;margin:12px 0 4px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;">
+          <div id="db-resumen" style="font-size:13px;color:#374151;"></div>
+          <div style="display:flex;gap:6px;flex:none;">
+            <button id="db-view-kanban" onclick="dbSetView('kanban')" style="padding:6px 12px;font-size:13px;border-radius:8px;cursor:pointer;">🗂️ Columnas</button>
+            <button id="db-view-galeria" onclick="dbSetView('galeria')" style="padding:6px 12px;font-size:13px;border-radius:8px;cursor:pointer;">🖼️ Galería</button>
+          </div>
+        </div>
+        <div id="db-galfiltro" style="display:none;gap:6px;flex-wrap:wrap;margin:6px 0 10px;"></div>
         <div id="db-board" style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;padding-bottom:6px;"></div>
       </div>
     </div>
@@ -2841,6 +2848,8 @@ function _imgAThumb(file, cb, max = 256) {
 // ════════ Selección de diseños — tablero local de decisión ════════════════════
 let dbDisenos = [];          // [{id, name, url, nota, up, down, estado}]
 let dbSeq = 0, _dbSaveT = null;
+let dbView = 'kanban';       // 'kanban' (columnas) o 'galeria' (paneo de todas)
+let dbGalFiltro = 'todos';   // filtro de la galería: 'todos' o un estado
 const DB_KEY = 'monitor_designboard_v1';
 const DB_ESTADOS = [
   { k: 'revisar',    lbl: 'Por revisar', ico: '🕓', color: '#6B7280', bg: '#F9FAFB', rgb: [107, 114, 128] },
@@ -2851,7 +2860,9 @@ const DB_ESTADOS = [
 function dbNewId() { return 'd' + Date.now() + '_' + (dbSeq++); }
 function dbLoad() { try { const r = localStorage.getItem(DB_KEY); dbDisenos = r ? JSON.parse(r) : []; } catch { dbDisenos = []; } }
 function dbSave() { if (!_lsGuardar(DB_KEY, JSON.stringify(dbDisenos))) alert('No se pudo guardar: el navegador llegó al límite de almacenamiento. Generá el reporte y vaciá diseños ya decididos para liberar espacio.'); }
-function dbInit() { dbLoad(); dbRender(); }
+function dbInit() { dbLoad(); try { dbView = localStorage.getItem('monitor_db_view') || 'kanban'; } catch {} dbRender(); }
+function dbSetView(v) { dbView = v; try { localStorage.setItem('monitor_db_view', v); } catch {} dbRender(); }
+function dbSetGalFiltro(k) { dbGalFiltro = k; dbRender(); }
 
 function dbCargar(files) {
   const arr = [...(files || [])].filter(f => /^image\//.test(f.type));
@@ -2893,9 +2904,59 @@ function dbCard(d) {
   </div>`;
 }
 
+// Tarjeta compacta para la vista Galería (paneo de todas). Borde superior = estado.
+function dbCardGal(d) {
+  const e = DB_ESTADOS.find(x => x.k === d.estado) || DB_ESTADOS[0];
+  const btns = DB_ESTADOS.map(s => `<button onclick="event.stopPropagation();dbSetEstado('${d.id}','${s.k}')" title="${s.lbl}" style="flex:1;min-width:0;padding:2px 0;font-size:12px;border:1px solid ${d.estado === s.k ? s.color : '#E5E7EB'};background:${d.estado === s.k ? s.color : '#fff'};border-radius:5px;cursor:pointer;">${s.ico}</button>`).join('');
+  return `<div style="border:1px solid #E5E7EB;border-top:4px solid ${e.color};border-radius:9px;overflow:hidden;background:#fff;">
+    <img src="${d.url}" onclick="dbPreview('${d.id}')" title="Tocá para verla grande" style="width:100%;height:140px;object-fit:cover;cursor:zoom-in;background:#F3F4F6;display:block;">
+    <div style="padding:6px;">
+      <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(d.name)}">${esc(d.name) || '—'}</div>
+      <div style="display:flex;gap:5px;margin:4px 0;">
+        <button onclick="dbVoto('${d.id}','up')" style="flex:1;min-width:0;padding:3px 0;font-size:11px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:5px;cursor:pointer;">👍 ${d.up}</button>
+        <button onclick="dbVoto('${d.id}','down')" style="flex:1;min-width:0;padding:3px 0;font-size:11px;border:1px solid #FECACA;background:#FEF2F2;border-radius:5px;cursor:pointer;">👎 ${d.down}</button>
+      </div>
+      <div style="display:flex;gap:3px;">${btns}</div>
+    </div>
+  </div>`;
+}
+
 function dbRender() {
   const board = document.getElementById('db-board');
   if (!board) return;
+  // Resumen
+  const r = document.getElementById('db-resumen');
+  if (r) {
+    const c = k => dbDisenos.filter(d => d.estado === k).length;
+    r.innerHTML = dbDisenos.length
+      ? `<b>${dbDisenos.length}</b> diseños · ✅ ${c('confirmado')} · 🤔 ${c('duda')} · ❌ ${c('rechazado')} · 🕓 ${c('revisar')} por revisar`
+      : 'Todavía no cargaste diseños. Soltá las imágenes arriba para empezar. 👆';
+  }
+  // Botones de vista (resaltar el activo)
+  const setBtn = (id, on) => { const b = document.getElementById(id); if (b) { b.style.background = on ? '#111827' : '#fff'; b.style.color = on ? '#fff' : '#374151'; b.style.border = on ? '1px solid #111827' : '1px solid #E5E7EB'; } };
+  setBtn('db-view-kanban', dbView === 'kanban');
+  setBtn('db-view-galeria', dbView === 'galeria');
+  const galf = document.getElementById('db-galfiltro');
+
+  if (dbView === 'galeria') {
+    if (galf) {
+      galf.style.display = 'flex';
+      const chip = (k, lbl, ico, n) => `<button onclick="dbSetGalFiltro('${k}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${dbGalFiltro === k ? '#378ADD' : '#E5E7EB'};background:${dbGalFiltro === k ? '#EFF6FF' : '#fff'};color:${dbGalFiltro === k ? '#1D4ED8' : '#374151'};font-size:12px;cursor:pointer;">${ico} ${lbl} (${n})</button>`;
+      galf.innerHTML = chip('todos', 'Todas', '📋', dbDisenos.length) + DB_ESTADOS.map(e => chip(e.k, e.lbl, e.ico, dbDisenos.filter(d => d.estado === e.k).length)).join('');
+    }
+    const items = dbGalFiltro === 'todos' ? dbDisenos : dbDisenos.filter(d => d.estado === dbGalFiltro);
+    board.style.display = 'block';
+    board.style.overflowX = 'visible';
+    board.innerHTML = items.length
+      ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">${items.map(dbCardGal).join('')}</div>`
+      : '<div style="text-align:center;color:#CBD5E1;padding:30px;">No hay diseños en este filtro.</div>';
+    return;
+  }
+
+  // Vista Kanban (columnas)
+  if (galf) galf.style.display = 'none';
+  board.style.display = 'flex';
+  board.style.overflowX = 'auto';
   board.innerHTML = DB_ESTADOS.map(e => {
     const items = dbDisenos.filter(d => d.estado === e.k);
     return `<div style="flex:1 1 0;min-width:210px;background:${e.bg};border:1px solid #E5E7EB;border-radius:11px;padding:9px;">
@@ -2903,13 +2964,6 @@ function dbRender() {
       ${items.map(dbCard).join('') || '<div style="font-size:11px;color:#CBD5E1;text-align:center;padding:14px 0;">—</div>'}
     </div>`;
   }).join('');
-  const r = document.getElementById('db-resumen');
-  if (r) {
-    const c = k => dbDisenos.filter(d => d.estado === k).length;
-    r.innerHTML = dbDisenos.length
-      ? `<b>${dbDisenos.length}</b> diseños · ✅ ${c('confirmado')} confirmados · 🤔 ${c('duda')} en duda · ❌ ${c('rechazado')} rechazados · 🕓 ${c('revisar')} por revisar`
-      : 'Todavía no cargaste diseños. Soltá las imágenes arriba para empezar. 👆';
-  }
 }
 
 // Lightbox para ver el diseño en grande
