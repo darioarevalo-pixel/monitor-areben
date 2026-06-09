@@ -1190,7 +1190,7 @@
 
     <!-- ── Tienda Nube: categorías por modelo según stock (BDI) ─────────────── -->
     <div id="tab-tncat" class="section">
-      <div class="card">
+      <div class="card" id="tncat-card-cat">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:6px;">
           <div>
             <div style="font-size:16px;font-weight:700;">🛍️ Tienda Nube — Categorías por modelo</div>
@@ -4678,7 +4678,7 @@ function switchTab(id, btn) {
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
-  if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatCargar(); tnImgInit(); } return; }
+  if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -5514,6 +5514,15 @@ function exhibGenerarPDF() {
 const TNCAT_URL = 'https://bdi-catalogo.vercel.app/api/tn-categorias?store=bdi';
 let tncatData = null;
 
+// Abre la sección: en BDI muestra categorías + imágenes; en Zattia solo imágenes
+function tncatAbrir() {
+  const esBdi = _cuentaKey() === 'bdi';
+  const cardCat = document.getElementById('tncat-card-cat');
+  if (cardCat) cardCat.style.display = esBdi ? '' : 'none';
+  if (esBdi) tncatCargar();
+  tnImgInit();
+}
+
 async function tncatCargar() {
   const res = document.getElementById('tncat-resumen');
   const det = document.getElementById('tncat-detalle');
@@ -5567,11 +5576,14 @@ let tnImgGrupos = [];      // [{id, productId, color, fotos:[{id,file,url,subida
 let tnImgSeq = 0;
 let tnImgActiveGrupo = null; // bloque donde se pega (Cmd+V)
 let tnImgDrag = null;        // {gid, fid} mientras se arrastra una miniatura para ordenar
+let tnImgStore = null;       // cuenta cuyos productos están cargados (para recargar al cambiar)
 
 async function tnImgInit() {
+  const store = _cuentaKey();
+  if (tnImgStore !== store) { tnImgStore = store; tnImgProductos = []; tnImgGrupos = []; tnImgActiveGrupo = null; }
   if (!tnImgProductos.length) {
     try {
-      const r = await fetch(TNIMG_URL + _cuentaKey() + '&productos=1');
+      const r = await fetch(TNIMG_URL + store + '&productos=1');
       const j = await r.json();
       tnImgProductos = j.productos || [];
       const dl = document.getElementById('tnimg-prods');
@@ -6656,9 +6668,9 @@ function aplicarVisibilidadTabs() {
   // Chequeo de exhibición: solo Zattia (para cualquier rol que tenga acceso)
   const exhibBtn = document.getElementById('tab-btn-exhib');
   if (exhibBtn) exhibBtn.style.display = (key === 'zattia') ? '' : 'none';
-  // Tienda Nube (categorías por modelo): solo BDI (admin y operación)
+  // Tienda Nube: BDI (categorías + imágenes) y Zattia (solo imágenes). Admin y operación.
   const tncatBtn = document.getElementById('tab-btn-tncat');
-  if (tncatBtn) tncatBtn.style.display = (key === 'bdi' && !isMkt) ? '' : 'none';
+  if (tncatBtn) tncatBtn.style.display = (!isMkt) ? '' : 'none';
 
   // Flag en body para mostrar/ocultar la columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
