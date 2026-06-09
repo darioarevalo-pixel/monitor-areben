@@ -5558,6 +5558,8 @@ let exhibItems = [];   // [{barcode, sku, productId, name, size, qty, img, cats}
 let exhibState = {};   // { itemId: 'exhibido'|'solucionado'|'una-unidad'|'no-encuentra' }
 let exhibReader = null;
 let exhibLast = { code: '', t: 0 };
+let exhibUltimoFormato = ''; // formato del último escaneo (CODE_128, UPC_A, etc.) para diagnóstico
+function _zxFmtName(fmt) { try { if (fmt == null || typeof ZXing === 'undefined' || !ZXing.BarcodeFormat) return ''; return Object.keys(ZXing.BarcodeFormat).find(k => ZXing.BarcodeFormat[k] === fmt) || ''; } catch { return ''; } }
 
 function _exhibId(it) { return it.barcode || (it.productId + '|' + it.size); }
 function exhibKey() { return 'monitor_exhib_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
@@ -5634,24 +5636,26 @@ async function exhibStartCam() {
   try {
     exhibReader = new ZXing.BrowserMultiFormatReader();
     const video = document.getElementById('exhib-video');
-    await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText()); });
+    await exhibReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => { if (result) exhibOnScan(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : null); });
   } catch (e) {
     fb.innerHTML = `<span style="color:#DC2626;">No se pudo abrir la cámara (${esc(e.message)}). Usá la carga manual de abajo.</span>`;
   }
 }
 function exhibStopCam() { if (exhibReader) { try { exhibReader.reset(); } catch (e) {} exhibReader = null; } }
 
-function exhibOnScan(code) {
+function exhibOnScan(code, fmt) {
   code = String(code || '').trim();
   const now = Date.now();
   if (code === exhibLast.code && now - exhibLast.t < 1800) return;
   exhibLast = { code, t: now };
+  exhibUltimoFormato = _zxFmtName(fmt);
   exhibMarcarPorCodigo(code, true);
 }
 function exhibManual() {
   const inp = document.getElementById('exhib-manual');
   const code = (inp.value || '').trim();
   inp.value = '';
+  exhibUltimoFormato = '';
   if (code) exhibMarcarPorCodigo(code, false);
   inp.focus();
 }
@@ -5660,7 +5664,7 @@ function exhibMarcarPorCodigo(code, fromCam) {
   const norm = s => String(s || '').replace(/^0+/, '');
   const lista = _exhibFiltrados();
   const it = lista.find(x => x.barcode === code) || lista.find(x => x.barcode && norm(x.barcode) === norm(code)) || lista.find(x => x.sku && x.sku.toLowerCase() === code.toLowerCase());
-  if (!it) { fb.innerHTML = `<span style="color:#DC2626;">✗ Ese código no está en la lista (${esc(code)})</span>`; return; }
+  if (!it) { fb.innerHTML = `<span style="color:#DC2626;">✗ Ese código no está en la lista (${esc(code)}${exhibUltimoFormato ? ' · ' + esc(exhibUltimoFormato) : ''})</span>`; return; }
   exhibState[_exhibId(it)] = 'exhibido';
   exhibSave();
   fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(it.name)} · ${esc(it.size)}</span>`;
