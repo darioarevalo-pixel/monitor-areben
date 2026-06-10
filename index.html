@@ -1240,6 +1240,7 @@
             <button onclick="document.getElementById('db-file').click()" style="background:#378ADD;color:#fff;">📁 Cargar imágenes</button>
             <button onclick="dbQuickOpen()" style="background:#7C3AED;color:#fff;">⚡ Revisión rápida</button>
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
+            <button onclick="dbReporteGaleria()" style="background:#0D9488;color:#fff;">🖼️ Galería PDF</button>
             <button onclick="dbVotAbrir()" style="background:#0EA5E9;color:#fff;">🌐 Votación online</button>
             <button onclick="dbExportar()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬇️ Exportar</button>
             <button onclick="document.getElementById('db-import').click()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬆️ Importar</button>
@@ -3196,6 +3197,43 @@ function dbReporte() {
     y += 3;
   });
   _pdfCompartir(pdf, `seleccion-disenos-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños');
+}
+
+// Reporte en formato GALERÍA: grilla de fotos con nombre y votos, respetando el orden elegido
+function dbReporteGaleria() {
+  if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 10, cols = 3, gap = 5;
+  const cellW = (W - 2 * M - (cols - 1) * gap) / cols; // ~60
+  const imgH = 56, cellH = imgH + 15;
+  const items = dbOrdenar(dbDisenos);
+  const ordLbl = { carga: 'orden de carga', tildes: 'más votos a favor', cruces: 'más en contra', saldo: 'mejor saldo' }[dbOrden] || '';
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const estadoColor = { revisar: [107, 114, 128], confirmado: [22, 163, 74], duda: [217, 119, 6], rechazado: [220, 38, 38] };
+
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Selección de diseños — galería', M, 14);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
+  pdf.text(`${fecha} · ${items.length} diseños${ordLbl ? ' · orden: ' + ordLbl : ''}`, M, 19);
+  pdf.setTextColor(0);
+
+  let col = 0, y = 25;
+  items.forEach(d => {
+    if (col === 0 && y + cellH > 290) { pdf.addPage(); y = 16; }
+    const x = M + col * (cellW + gap);
+    try { pdf.addImage(d.url, 'JPEG', x, y, cellW, imgH); } catch {}
+    const c = estadoColor[d.estado] || estadoColor.revisar;
+    pdf.setFillColor(c[0], c[1], c[2]); pdf.rect(x, y, cellW, 2.2, 'F'); // barra de estado arriba
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(20);
+    pdf.text(pdf.splitTextToSize(String(d.name || '—'), cellW)[0], x, y + imgH + 4.5);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(80);
+    pdf.text(`A favor ${d.up || 0}    En contra ${d.down || 0}`, x, y + imgH + 9.5);
+    pdf.setTextColor(0);
+    col++;
+    if (col >= cols) { col = 0; y += cellH; }
+  });
+  _pdfCompartir(pdf, `disenos-galeria-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños (galería)');
 }
 
 // ── Modo "Revisión rápida": de a uno, clasificar y avanzar (ideal para la 1ª pasada) ──
