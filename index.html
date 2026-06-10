@@ -307,6 +307,7 @@
       <button class="tab" id="tab-btn-exhib" style="display:none;" onclick="switchTab('exhib', this)">👕 Chequeo de exhibición</button>
       <button class="tab" id="tab-btn-tncat" style="display:none;" onclick="switchTab('tncat', this)">🛍️ Tienda Nube</button>
       <button class="tab" id="tab-btn-disenos" onclick="switchTab('disenos', this)">🗳️ Diseños</button>
+      <button class="tab" id="tab-btn-usuarios" style="display:none;" onclick="switchTab('usuarios', this)">👥 Usuarios</button>
     </div>
 
     <div id="tab-productos" class="section visible">
@@ -1264,6 +1265,24 @@
         </div>
         <div id="db-galfiltro" style="display:none;gap:6px;flex-wrap:wrap;margin:6px 0 10px;"></div>
         <div id="db-board" style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;padding-bottom:6px;"></div>
+      </div>
+    </div>
+
+    <!-- ── Gestión de usuarios y permisos (solo admin) ─────────────────────── -->
+    <div id="tab-usuarios" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">👥 Usuarios y permisos</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Creá usuarios y definí qué ve cada uno, por marca (BDI / Zattia) y por sección. Tocá la ℹ️ para ver qué hace cada parte. Al guardar, los cambios aplican para todos.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="usuAgregar()" style="background:#378ADD;color:#fff;">+ Usuario</button>
+            <button onclick="usuariosGuardar()" style="background:#16A34A;color:#fff;">💾 Guardar cambios</button>
+          </div>
+        </div>
+        <div id="usuarios-status" style="font-size:12px;margin:10px 0;min-height:16px;"></div>
+        <div id="usuarios-cont"></div>
       </div>
     </div>
 
@@ -5117,6 +5136,7 @@ function switchTab(id, btn) {
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
+  if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
@@ -6020,10 +6040,9 @@ let tncatData = null;
 
 // Abre la sección. Categorías: admin/operación en BDI. Imágenes: admin/marketing (ambas marcas).
 function tncatAbrir() {
-  const esBdi = _cuentaKey() === 'bdi';
-  const role = _userRole();
-  const verCat = esBdi && (role === 'admin' || role === 'operacion');
-  const verImg = (role === 'admin' || (role === 'marketing' && currentUser !== 'local'));
+  const key = _cuentaKey();
+  const verCat = (key === 'bdi') && _puedeVer(key, 'tncat.categorias');
+  const verImg = _puedeVer(key, 'tncat.imagenes');
   const cardCat = document.getElementById('tncat-card-cat');
   const cardImg = document.getElementById('tncat-card-img');
   if (cardCat) cardCat.style.display = verCat ? '' : 'none';
@@ -7006,19 +7025,166 @@ function _mesLabel(yyyymm) {
   return MONTH[parseInt(mo)-1] + ' ' + y.slice(2);
 }
 
-// Usuarios: cada uno tiene contraseña y rol. El rol controla qué tabs y cuentas ve.
-const USERS = {
-  'Bruno Arevalo':  { pass: 'BDI123456', role: 'admin' },
-  'Dario Arevalo':  { pass: 'BDI123456', role: 'admin' },
-  // Solo Marketing y Etiquetas, en las 2 marcas (sin cuenta fija → puede cambiar de marca)
-  'Administracion': { pass: 'Areben2026', role: 'operacion' },
-  // Solo Marketing, pero en las 2 marcas (sin cuenta fija → puede cambiar de marca)
-  'Marketing':      { pass: 'Areben2026', role: 'marketing' },
-  'local':          { pass: 'Santafe1435@', role: 'marketing', cuenta: 'zattia' },
-  // Local BDI: solo Marketing + Etiquetas (Depósito y Local), marca fija BDI
-  'bdilocal':       { pass: 'Areben2026', role: 'marketing', cuenta: 'bdi' },
-};
-function _userRole() { return (USERS[currentUser]?.role) || 'admin'; }
+// ════════ Usuarios y permisos (config compartida en KV, con fallback local) ════════
+// Catálogo de secciones controlables. Cada una indica en qué marcas aplica y su info.
+const PERM_CAT = [
+  { key: 'resumen', label: '📈 Resumen / KPIs', info: 'Panel principal con métricas y resumen general del negocio.', brands: ['bdi', 'zattia'] },
+  { key: 'fundas-modelo', label: 'Fundas por modelo', info: 'Demanda y simulación de pedidos de fundas por modelo de iPhone.', brands: ['bdi'] },
+  { key: 'clientes', label: 'Clientes (CRM)', info: 'Clientes mayoristas: segmentos, contacto, historial de compras.', brands: ['bdi'] },
+  { key: 'proveedores', label: 'Proveedores', info: 'Análisis de ventas y stock por proveedor.', brands: ['zattia'] },
+  { key: 'colores', label: 'Colores', info: 'Análisis de ventas por color de prenda.', brands: ['zattia'] },
+  { key: 'talles', label: 'Talles', info: 'Análisis de ventas por talle.', brands: ['zattia'] },
+  { key: 'marketing', label: '📸 Marketing', info: 'Armado de publicaciones (fotos + textos) para redes y TiendaNube.', brands: ['bdi', 'zattia'] },
+  { key: 'comisiones', label: '💵 Comisiones y margen', info: 'Simulador de comisiones de vendedores y cálculo de markup/margen.', brands: ['bdi', 'zattia'] },
+  { key: 'margenes', label: '📊 Margen por producto', info: 'Margen y markup de cada producto disponible, comparado con el objetivo.', brands: ['bdi', 'zattia'] },
+  { key: 'etiquetas', label: '🏷️ Etiquetas', info: 'Impresión de etiquetas con código de barras.', brands: ['bdi', 'zattia'], subs: [
+      { key: 'dep', label: '🏬 Depósito', info: 'Etiquetas para mercadería de depósito.' },
+      { key: 'loc', label: '🏪 Local', info: 'Etiquetas para el local.' },
+      { key: 'sku', label: '🔢 SKU', info: 'Etiquetas con SKU + código de barras.' },
+      { key: 'libre', label: '✏️ Libre', info: 'Etiqueta personalizada (texto o código a elección).' },
+  ] },
+  { key: 'gen-talles', label: '📏 Tabla de talles', info: 'Generador de tablas de talles (HTML) para las descripciones de TiendaNube.', brands: ['bdi', 'zattia'] },
+  { key: 'exhib', label: '👕 Chequeo de exhibición', info: 'Recorrido con lector de código de barras para verificar qué está exhibido en el local.', brands: ['zattia'] },
+  { key: 'tncat', label: '🛍️ Tienda Nube', info: 'Herramientas de TiendaNube.', brands: ['bdi', 'zattia'], subs: [
+      { key: 'imagenes', label: '📷 Carga de imágenes', info: 'Subir fotos y asignarlas a las variantes.', brands: ['bdi', 'zattia'] },
+      { key: 'categorias', label: '🗂️ Categorías por modelo', info: 'Auto-categorización de fundas por modelo de iPhone según stock (solo BDI).', brands: ['bdi'] },
+  ] },
+  { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
+];
+const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
+// Config por defecto = comportamiento actual (fallback si el KV no responde)
+const DEFAULT_USERS = [
+  { name: 'Bruno Arevalo', pass: 'BDI123456', admin: true },
+  { name: 'Dario Arevalo', pass: 'BDI123456', admin: true },
+  { name: 'Administracion', pass: 'Areben2026', acceso: {
+      bdi: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'tncat', 'tncat.categorias']),
+      zattia: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'exhib']) } },
+  { name: 'Marketing', pass: 'Areben2026', acceso: {
+      bdi: _acc(['marketing', 'tncat', 'tncat.imagenes']),
+      zattia: _acc(['marketing', 'tncat', 'tncat.imagenes']) } },
+  { name: 'local', pass: 'Santafe1435@', cuenta: 'zattia', acceso: {
+      bdi: {}, zattia: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'exhib']) } },
+  { name: 'bdilocal', pass: 'Areben2026', cuenta: 'bdi', acceso: {
+      bdi: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc']), zattia: {} } },
+];
+function _buildUsers(arr) {
+  const m = {};
+  (arr || []).forEach(u => { m[u.name] = { pass: u.pass, admin: !!u.admin, cuenta: u.cuenta || null, acceso: u.acceso || { bdi: {}, zattia: {} } }; });
+  return m;
+}
+let USERS_LIST = DEFAULT_USERS;
+let USERS = _buildUsers(USERS_LIST);
+const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
+function _esAdmin() { return !!USERS[currentUser]?.admin; }
+function _puedeVer(brand, key) { if (_esAdmin()) return true; return !!(USERS[currentUser]?.acceso?.[brand]?.[key]); }
+// Compat: el resto del código usa _userRole para limitar la carga de datos de no-admins
+function _userRole() { return _esAdmin() ? 'admin' : 'marketing'; }
+// Trae la config de usuarios del KV; si existe, reemplaza la local. Reaplica visibilidad si hay sesión.
+async function cargarConfigUsuarios() {
+  try {
+    const r = await fetch(USU_API);
+    const d = await r.json();
+    if (d && d.ok && d.config && Array.isArray(d.config.users) && d.config.users.length) {
+      USERS_LIST = d.config.users;
+      USERS = _buildUsers(USERS_LIST);
+      if (currentUser) {
+        if (!USERS[currentUser]) { doLogout(); return; } // el usuario fue eliminado
+        renderUserInfo(); aplicarVisibilidadTabs();
+      }
+    }
+  } catch (e) { /* sin conexión → se usa la config local por defecto */ }
+}
+
+// ── Pantalla de gestión de usuarios (solo admin) ──────────────────────────────
+let usuEdit = null;   // copia de trabajo
+let usuOpen = -1;     // índice del usuario expandido
+async function usuariosAbrir() {
+  const st = document.getElementById('usuarios-status');
+  if (st) { st.textContent = 'Cargando configuración…'; st.style.color = '#6B7280'; }
+  await cargarConfigUsuarios();
+  usuEdit = JSON.parse(JSON.stringify(USERS_LIST));
+  usuEdit.forEach(u => { u.acceso = u.acceso || {}; u.acceso.bdi = u.acceso.bdi || {}; u.acceso.zattia = u.acceso.zattia || {}; });
+  if (st) st.textContent = '';
+  usuariosRender();
+}
+function usuInfo(key) {
+  const [p, s] = key.split('.');
+  const cat = PERM_CAT.find(c => c.key === p);
+  let txt = '';
+  if (cat) txt = s ? ((cat.subs || []).find(x => x.key === s) || {}).info : cat.info;
+  if (txt) alert(txt);
+}
+function usuSetCampo(i, campo, val) { if (usuEdit[i]) usuEdit[i][campo] = val; }
+function usuToggleAdmin(i, val) { usuEdit[i].admin = val; usuariosRender(); }
+function usuSetCuenta(i, val) { usuEdit[i].cuenta = val || null; usuariosRender(); }
+function usuTogglePerm(i, brand, key, val) {
+  const u = usuEdit[i]; u.acceso[brand] = u.acceso[brand] || {};
+  if (val) u.acceso[brand][key] = true; else delete u.acceso[brand][key];
+  const padre = key.split('.')[0];
+  if (key.includes('.')) { if (val) u.acceso[brand][padre] = true; }
+  else { const cat = PERM_CAT.find(c => c.key === padre); if (cat && cat.subs && !val) cat.subs.forEach(s => delete u.acceso[brand][padre + '.' + s.key]); }
+  usuariosRender();
+}
+function usuAgregar() { if (!usuEdit) usuEdit = []; usuEdit.push({ name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} } }); usuOpen = usuEdit.length - 1; usuariosRender(); }
+function usuEliminar(i) { if (!confirm(`¿Eliminar al usuario "${usuEdit[i].name || '(sin nombre)'}"?`)) return; usuEdit.splice(i, 1); usuOpen = -1; usuariosRender(); }
+function usuToggleOpen(i) { usuOpen = (usuOpen === i) ? -1 : i; usuariosRender(); }
+function usuariosRender() {
+  const cont = document.getElementById('usuarios-cont');
+  if (!cont || !usuEdit) return;
+  const cell = (u, i, key, brand, aplica) => {
+    if (!aplica) return '<td style="text-align:center;color:#D1D5DB;">—</td>';
+    const checked = u.admin ? 'checked disabled' : (u.acceso[brand][key] ? 'checked' : '');
+    return `<td style="text-align:center;"><input type="checkbox" ${checked} onchange="usuTogglePerm(${i},'${brand}','${key}',this.checked)"></td>`;
+  };
+  cont.innerHTML = usuEdit.map((u, i) => {
+    const abierto = usuOpen === i;
+    const cab = `<div onclick="usuToggleOpen(${i})" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 12px;">
+        <div><b>${esc(u.name) || '(nuevo usuario)'}</b> ${u.admin ? '<span style="font-size:11px;background:#111827;color:#fff;border-radius:10px;padding:1px 7px;">admin</span>' : ''} <span style="font-size:11px;color:#9CA3AF;">${u.cuenta ? '· solo ' + u.cuenta : '· BDI + Zattia'}</span></div>
+        <span style="color:#9CA3AF;">${abierto ? '▴' : '▾'}</span></div>`;
+    if (!abierto) return `<div style="border:1px solid #E5E7EB;border-radius:10px;margin-bottom:8px;">${cab}</div>`;
+    const datos = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 14px;">
+        <label style="font-size:12px;color:#6B7280;">Usuario<input value="${esc(u.name)}" onchange="usuSetCampo(${i},'name',this.value)" style="display:block;padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;margin-top:3px;"></label>
+        <label style="font-size:12px;color:#6B7280;">Contraseña<input value="${esc(u.pass)}" onchange="usuSetCampo(${i},'pass',this.value)" style="display:block;padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;margin-top:3px;"></label>
+        <label style="font-size:12px;color:#6B7280;">Marca<select onchange="usuSetCuenta(${i},this.value)" style="display:block;padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;margin-top:3px;">
+          <option value="" ${!u.cuenta ? 'selected' : ''}>BDI + Zattia</option>
+          <option value="bdi" ${u.cuenta === 'bdi' ? 'selected' : ''}>Solo BDI</option>
+          <option value="zattia" ${u.cuenta === 'zattia' ? 'selected' : ''}>Solo Zattia</option>
+        </select></label>
+        <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" ${u.admin ? 'checked' : ''} onchange="usuToggleAdmin(${i},this.checked)"> Administrador (ve todo)</label>
+      </div>`;
+    let filas = '';
+    PERM_CAT.forEach(sec => {
+      filas += `<tr style="border-top:1px solid #F1F5F9;"><td style="padding:5px 4px;">${sec.label} <span onclick="usuInfo('${sec.key}')" title="¿Qué es?" style="cursor:pointer;">ℹ️</span></td>${cell(u, i, sec.key, 'bdi', sec.brands.includes('bdi'))}${cell(u, i, sec.key, 'zattia', sec.brands.includes('zattia'))}</tr>`;
+      (sec.subs || []).forEach(sub => {
+        const sb = sub.brands || sec.brands;
+        filas += `<tr style="color:#6B7280;"><td style="padding:3px 4px 3px 22px;font-size:12px;">↳ ${sub.label} <span onclick="usuInfo('${sec.key}.${sub.key}')" style="cursor:pointer;">ℹ️</span></td>${cell(u, i, sec.key + '.' + sub.key, 'bdi', sb.includes('bdi'))}${cell(u, i, sec.key + '.' + sub.key, 'zattia', sb.includes('zattia'))}</tr>`;
+      });
+    });
+    const tabla = u.admin
+      ? '<div style="font-size:12px;color:#6B7280;padding:8px 0;">Es administrador: ve todas las secciones de las dos marcas y puede gestionar usuarios.</div>'
+      : `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:#9CA3AF;font-size:11px;"><th style="text-align:left;">Sección</th><th style="width:60px;">BDI</th><th style="width:60px;">Zattia</th></tr></thead><tbody>${filas}</tbody></table>`;
+    const acciones = `<div style="margin-top:12px;"><button onclick="usuEliminar(${i})" style="background:#fff;color:#DC2626;border:1px solid #FCA5A5;font-size:12px;">🗑 Eliminar usuario</button></div>`;
+    return `<div style="border:1px solid #E5E7EB;border-radius:10px;margin-bottom:10px;">${cab}<div style="padding:0 12px 12px;">${datos}${tabla}${acciones}</div></div>`;
+  }).join('');
+}
+async function usuariosGuardar() {
+  if (!usuEdit) return;
+  const st = document.getElementById('usuarios-status');
+  const set = (t, c) => { if (st) { st.innerHTML = t; st.style.color = c || '#6B7280'; } };
+  if (!usuEdit.some(u => u.admin)) { set('⚠️ Tiene que quedar al menos un administrador.', '#DC2626'); return; }
+  if (usuEdit.some(u => !u.name || !u.pass)) { set('⚠️ Todos los usuarios necesitan nombre y contraseña.', '#DC2626'); return; }
+  const nombres = usuEdit.map(u => u.name.trim());
+  if (new Set(nombres).size !== nombres.length) { set('⚠️ Hay nombres de usuario repetidos.', '#DC2626'); return; }
+  set('Guardando…');
+  try {
+    const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminUser: currentUser, adminPass: USERS[currentUser].pass, config: { users: usuEdit } }) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'no se pudo guardar');
+    USERS_LIST = d.config.users; USERS = _buildUsers(USERS_LIST);
+    aplicarVisibilidadTabs();
+    set('✓ Guardado. Los cambios ya aplican para todos.', '#16A34A');
+  } catch (e) { set('Error: ' + e.message, '#DC2626'); }
+}
 const SESSION_KEY = 'monitor-areben-session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
 let currentUser = null;
@@ -7089,53 +7255,29 @@ function intentarAutoLogin() {
 }
 
 function renderUserInfo() {
-  const isMkt = _userRole() === 'marketing';
-  if (isMkt) {
-    const locked = !!USERS[currentUser]?.cuenta; // si tiene cuenta fija, no puede cambiar de marca
-    if (locked) {
-      // Marketing de una sola marca: vista simple (nombre de cuenta + salir)
-      document.getElementById('user-info').innerHTML =
-        `<span style="color:#666;font-weight:500;">${currentCuenta?.nombre || ''}</span> · ` +
-        `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
-    } else {
-      // Marketing multimarca: puede cambiar de marca, pero sigue viendo solo la pestaña Marketing
-      const opciones = Object.entries(CUENTAS).map(([k, v]) =>
-        `<button class="empresa-opt${currentCuenta === v ? ' active' : ''}" onclick="cambiarEmpresa('${k}')">${v.nombre}</button>`
-      ).join('');
-      document.getElementById('user-info').innerHTML = `
-        <div class="empresa-switcher" onclick="event.stopPropagation()">
-          <button class="empresa-btn" onclick="document.getElementById('empresa-menu').classList.toggle('open')">
-            <span style="font-weight:600;">${currentCuenta?.nombre || ''}</span><span style="opacity:.6;">▾</span>
-          </button>
-          <div class="empresa-menu" id="empresa-menu">
-            <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px 6px;">Cambiar marca</div>
-            ${opciones}
-          </div>
-        </div>
-        <span style="color:#9CA3AF;font-size:12px;">${currentUser}</span>
-        <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:11px;">Salir</button>`;
-    }
+  const fixed = !!USERS[currentUser]?.cuenta; // cuenta fija → no cambia de marca
+  if (fixed) {
+    document.getElementById('user-info').innerHTML =
+      `<span style="color:#666;font-weight:500;">${currentCuenta?.nombre || ''}</span> · ` +
+      `${currentUser} <button onclick="if(confirm('¿Cerrar sesión?'))doLogout()" style="font-size:10px;opacity:.7;">Salir</button>`;
     return;
   }
-  // Admin: dropdown destacado para cambiar empresa + nombre + salir
-  const empresaActual = currentCuenta?.nombre || '';
+  // Multimarca (admin o no): selector de marca + nombre + salir
   const opciones = Object.entries(CUENTAS).map(([k, v]) =>
     `<button class="empresa-opt${currentCuenta === v ? ' active' : ''}" onclick="cambiarEmpresa('${k}')">${v.nombre}</button>`
   ).join('');
   document.getElementById('user-info').innerHTML = `
     <div class="empresa-switcher" onclick="event.stopPropagation()">
       <button class="empresa-btn" onclick="document.getElementById('empresa-menu').classList.toggle('open')">
-        <span style="font-weight:600;">${empresaActual}</span>
-        <span style="opacity:.6;">▾</span>
+        <span style="font-weight:600;">${currentCuenta?.nombre || ''}</span><span style="opacity:.6;">▾</span>
       </button>
       <div class="empresa-menu" id="empresa-menu">
-        <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px 6px;">Cambiar empresa</div>
+        <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px 6px;">Cambiar marca</div>
         ${opciones}
       </div>
     </div>
     <span style="color:#9CA3AF;font-size:12px;">${currentUser}</span>
-    <button onclick="doLogout()" style="font-size:11px;">Salir</button>
-  `;
+    <button onclick="doLogout()" style="font-size:11px;">Salir</button>`;
 }
 
 // Configuración única de qué tabs aparecen en cada cuenta.
@@ -7148,64 +7290,50 @@ const TABS_POR_CUENTA = {
 
 function aplicarVisibilidadTabs() {
   const key = currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
-  const role = _userRole();
-  const isMkt = role === 'marketing';
-  const isOper = role === 'operacion'; // Administracion: solo Marketing + Etiquetas (ambas marcas)
+  const admin = _esAdmin();
+  // Las clases legacy ya no son la fuente de verdad (todo se maneja por permisos)
+  document.body.classList.remove('rol-marketing', 'rol-operacion');
 
-  // Vistas restringidas (clases que ocultan tabs/secciones por CSS)
-  document.body.classList.toggle('rol-marketing', isMkt);
-  document.body.classList.toggle('rol-operacion', isOper);
-
-  // Tabs específicas por cuenta. Marketing: todas ocultas. Operación: solo Etiquetas (Marketing es fija).
-  const todasOcultables = ['proveedores','colores','talles','fundas-modelo','clientes','etiquetas'];
-  const visibles = new Set(TABS_POR_CUENTA[key] || []);
-  todasOcultables.forEach(t => {
-    const btn = document.getElementById('tab-btn-' + t);
-    if (!btn) return;
-    if (isMkt) {
-      // Marketing: "local" ve Etiquetas en Zattia; "bdilocal" ve Etiquetas en BDI
-      btn.style.display = (t === 'etiquetas' && ((currentUser === 'local' && key === 'zattia') || (currentUser === 'bdilocal' && key === 'bdi'))) ? '' : 'none';
-    } else if (isOper) {
-      btn.style.display = (t === 'etiquetas') ? '' : 'none';
-    } else {
-      btn.style.display = visibles.has(t) ? '' : 'none';
-    }
+  // Cada sección del catálogo: visible si aplica a la marca y el usuario tiene el permiso
+  PERM_CAT.forEach(sec => {
+    const btn = document.getElementById('tab-btn-' + sec.key);
+    if (!btn) return; // 'resumen' no tiene botón de pestaña
+    const aplicaMarca = sec.brands.includes(key);
+    btn.style.display = (aplicaMarca && _puedeVer(key, sec.key)) ? '' : 'none';
   });
 
-  // bdilocal: dentro de Etiquetas, solo Depósito y Local (sin SKU ni Etiqueta libre)
-  const soloDepLoc = currentUser === 'bdilocal';
-  ['sku', 'libre'].forEach(s => { const b = document.getElementById('eti-sub-btn-' + s); if (b) b.style.display = soloDepLoc ? 'none' : ''; });
-  // bdilocal: tampoco Tabla de talles (solo Marketing + Etiquetas)
-  const gtBtn = document.getElementById('tab-btn-gen-talles');
-  if (gtBtn) gtBtn.style.display = (currentUser === 'bdilocal') ? 'none' : '';
+  // Subpestañas de Etiquetas
+  ['dep', 'loc', 'sku', 'libre'].forEach(s => {
+    const b = document.getElementById('eti-sub-btn-' + s);
+    if (b) b.style.display = _puedeVer(key, 'etiquetas.' + s) ? '' : 'none';
+  });
 
-  // Botones de acceso rápido a admins externos (solo BDI y admin completo)
+  // Resumen / KPIs + tarjeta de refresco
+  const verResumen = _puedeVer(key, 'resumen');
+  const stats = document.getElementById('stats-overview'); if (stats) stats.style.display = verResumen ? '' : 'none';
+  const refresh = document.getElementById('refresh-card'); if (refresh) refresh.style.display = verResumen ? '' : 'none';
+
+  // Pestaña de gestión de Usuarios: solo admin
+  const usuBtn = document.getElementById('tab-btn-usuarios');
+  if (usuBtn) usuBtn.style.display = admin ? '' : 'none';
+
+  // Accesos rápidos a admins externos: solo admin, en BDI
   const quickLinks = document.getElementById('quick-admin-links');
-  if (quickLinks) quickLinks.style.display = (key === 'bdi' && !isMkt && !isOper) ? 'flex' : 'none';
+  if (quickLinks) quickLinks.style.display = (key === 'bdi' && admin) ? 'flex' : 'none';
 
-  // Chequeo de exhibición: solo Zattia (para cualquier rol que tenga acceso)
-  const exhibBtn = document.getElementById('tab-btn-exhib');
-  if (exhibBtn) exhibBtn.style.display = (key === 'zattia') ? '' : 'none';
-  // Tienda Nube: imágenes (admin + marketing, ambas marcas) · categorías (admin + operación, BDI).
-  const tncatBtn = document.getElementById('tab-btn-tncat');
-  if (tncatBtn) {
-    let verTab;
-    if (role === 'admin') verTab = true;                          // ve ambas cards
-    else if (isMkt) verTab = (currentUser !== 'local' && currentUser !== 'bdilocal'); // marketing (no locales): solo imágenes
-    else if (isOper) verTab = (key === 'bdi');                    // operación: solo categorías (BDI)
-    else verTab = false;
-    tncatBtn.style.display = verTab ? '' : 'none';
-  }
-
-  // Flag en body para mostrar/ocultar la columna Foto
+  // Columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
 
-  // Marketing y Operación: arrancan en la pestaña Marketing por defecto
-  if (isMkt || isOper) {
+  // Si quien entró no es admin, asegurar que caiga en una pestaña visible
+  if (!admin) {
     setTimeout(() => {
-      const mktBtn = document.getElementById('tab-btn-marketing');
-      if (mktBtn && !document.querySelector('.tab.active.tab-btn-marketing')) mktBtn.click();
-    }, 100);
+      const visible = el => el && el.offsetParent !== null;
+      const activa = document.querySelector('[id^="tab-btn-"].active');
+      if (!visible(activa)) {
+        const primera = Array.from(document.querySelectorAll('[id^="tab-btn-"]')).find(visible);
+        if (primera) primera.click();
+      }
+    }, 80);
   }
 }
 
@@ -7381,6 +7509,8 @@ function doLogout() {
 }
 
 window.onload = () => {
+  // Traer la config de usuarios/permisos del KV (si existe). No bloquea: la default ya está cargada.
+  cargarConfigUsuarios();
   // Si hay sesión guardada (no expirada), entrar directo
   if (intentarAutoLogin()) return;
   document.getElementById('login-user').focus();
