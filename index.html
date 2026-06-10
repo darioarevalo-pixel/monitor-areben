@@ -1239,6 +1239,7 @@
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
             <button onclick="dbExportar()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬇️ Exportar</button>
             <button onclick="document.getElementById('db-import').click()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬆️ Importar</button>
+            <button onclick="dbReiniciarVotos()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">🔄 Reiniciar votos</button>
             <button onclick="dbLimpiar()" style="background:#fff;color:#DC2626;border:1px solid #FCA5A5;">Vaciar</button>
             <input type="file" id="db-file" accept="image/*" multiple style="display:none;" onchange="dbCargar(this.files)">
             <input type="file" id="db-import" accept=".json,application/json" style="display:none;" onchange="dbImportar(this.files)">
@@ -2889,6 +2890,7 @@ function dbVoto(id, tipo) { const d = dbDisenos.find(x => x.id === id); if (!d) 
 function dbSetEstado(id, est) { const d = dbDisenos.find(x => x.id === id); if (!d) return; d.estado = est; dbSave(); dbRender(); }
 function dbQuitar(id) { if (!confirm('¿Quitar este diseño del tablero?')) return; dbDisenos = dbDisenos.filter(x => x.id !== id); dbSave(); dbRender(); }
 function dbLimpiar() { if (!dbDisenos.length) return; if (!confirm('Esto vacía TODO el tablero (todos los diseños y votos). ¿Seguro?')) return; dbDisenos = []; dbSave(); dbRender(); }
+function dbReiniciarVotos() { if (!dbDisenos.length) return; if (!confirm('Esto pone en 0 los votos 👍/👎 de TODOS los diseños (no toca las imágenes ni la clasificación). ¿Seguir?')) return; dbDisenos.forEach(d => { d.up = 0; d.down = 0; }); dbSave(); dbRender(); }
 
 // Exporta el tablero completo (imágenes + votos + notas + estados) a un archivo de respaldo
 function dbExportar() {
