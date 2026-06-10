@@ -1237,6 +1237,7 @@
             <button onclick="document.getElementById('db-file').click()" style="background:#378ADD;color:#fff;">📁 Cargar imágenes</button>
             <button onclick="dbQuickOpen()" style="background:#7C3AED;color:#fff;">⚡ Revisión rápida</button>
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
+            <button onclick="dbVotAbrir()" style="background:#0EA5E9;color:#fff;">🌐 Votación online</button>
             <button onclick="dbExportar()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬇️ Exportar</button>
             <button onclick="document.getElementById('db-import').click()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬆️ Importar</button>
             <button onclick="dbReiniciarVotos()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">🔄 Reiniciar votos</button>
@@ -2854,6 +2855,9 @@ let dbDisenos = [];          // [{id, name, url, nota, up, down, estado}]
 let dbSeq = 0, _dbSaveT = null;
 let dbView = 'kanban';       // 'kanban' (columnas) o 'galeria' (paneo de todas)
 let dbGalFiltro = 'todos';   // filtro de la galería: 'todos' o un estado
+let dbVot = null;            // ronda de votación online activa { id, createdAt }
+const VOT_API = 'https://bdi-catalogo.vercel.app/api/votacion';
+const VOT_PAGE = 'https://bdi-catalogo.vercel.app/votar';
 const DB_KEY = 'monitor_designboard_v1';
 const DB_ESTADOS = [
   { k: 'revisar',    lbl: 'Por revisar', ico: '🕓', color: '#6B7280', bg: '#F9FAFB', rgb: [107, 114, 128] },
@@ -2864,7 +2868,7 @@ const DB_ESTADOS = [
 function dbNewId() { return 'd' + Date.now() + '_' + (dbSeq++); }
 function dbLoad() { try { const r = localStorage.getItem(DB_KEY); dbDisenos = r ? JSON.parse(r) : []; } catch { dbDisenos = []; } }
 function dbSave() { if (!_lsGuardar(DB_KEY, JSON.stringify(dbDisenos))) alert('No se pudo guardar: el navegador llegó al límite de almacenamiento. Generá el reporte y vaciá diseños ya decididos para liberar espacio.'); }
-function dbInit() { dbLoad(); try { dbView = localStorage.getItem('monitor_db_view') || 'kanban'; } catch {} dbRender(); }
+function dbInit() { dbLoad(); try { dbView = localStorage.getItem('monitor_db_view') || 'kanban'; dbVot = JSON.parse(localStorage.getItem('monitor_db_votsession')) || null; } catch {} dbRender(); }
 function dbSetView(v) { dbView = v; try { localStorage.setItem('monitor_db_view', v); } catch {} dbRender(); }
 function dbSetGalFiltro(k) { dbGalFiltro = k; dbRender(); }
 
@@ -2891,6 +2895,87 @@ function dbSetEstado(id, est) { const d = dbDisenos.find(x => x.id === id); if (
 function dbQuitar(id) { if (!confirm('¿Quitar este diseño del tablero?')) return; dbDisenos = dbDisenos.filter(x => x.id !== id); dbSave(); dbRender(); }
 function dbLimpiar() { if (!dbDisenos.length) return; if (!confirm('Esto vacía TODO el tablero (todos los diseños y votos). ¿Seguro?')) return; dbDisenos = []; dbSave(); dbRender(); }
 function dbReiniciarVotos() { if (!dbDisenos.length) return; if (!confirm('Esto pone en 0 los votos 👍/👎 de TODOS los diseños (no toca las imágenes ni la clasificación). ¿Seguir?')) return; dbDisenos.forEach(d => { d.up = 0; d.down = 0; }); dbSave(); dbRender(); }
+
+// ── Votación online: comparte un link, el equipo vota, y traés los resultados ──────
+function dbVotSave() { try { localStorage.setItem('monitor_db_votsession', JSON.stringify(dbVot)); } catch {} }
+function dbVotOverlay() {
+  let o = document.getElementById('dbvot-modal');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'dbvot-modal';
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);display:none;align-items:center;justify-content:center;z-index:2800;padding:16px;';
+    o.innerHTML = '<div id="dbvot-body" style="background:#fff;border-radius:14px;max-width:480px;width:100%;padding:18px;"></div>';
+    document.body.appendChild(o);
+  }
+  return o;
+}
+function dbVotAbrir() { if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; } dbVotOverlay().style.display = 'flex'; dbVotRender(); }
+function dbVotCerrar() { const o = document.getElementById('dbvot-modal'); if (o) o.style.display = 'none'; }
+function dbVotRender() {
+  const body = document.getElementById('dbvot-body'); if (!body) return;
+  const head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:700;">🌐 Votación online</div><button onclick="dbVotCerrar()" style="border:none;background:#F3F4F6;border-radius:8px;padding:5px 11px;cursor:pointer;">✕</button></div>`;
+  let inner;
+  if (!dbVot) {
+    inner = `<div style="font-size:13px;color:#374151;line-height:1.5;">Generá un link para que tu equipo vote los <b>${dbDisenos.length}</b> diseños desde el celular. Los votos se juntan acá automáticamente.</div>
+      <button onclick="dbVotCrear()" style="margin-top:14px;background:#378ADD;color:#fff;width:100%;padding:11px;border-radius:9px;font-weight:600;cursor:pointer;">🔗 Crear link de votación</button>`;
+  } else {
+    const link = VOT_PAGE + '?id=' + dbVot.id;
+    inner = `<div style="font-size:13px;color:#374151;margin-bottom:8px;">Compartí este link con tu equipo (WhatsApp, etc.):</div>
+      <div style="display:flex;gap:6px;">
+        <input id="dbvot-link" readonly value="${link}" onclick="this.select()" style="flex:1;font-size:12px;padding:9px;border:1px solid #D1D5DB;border-radius:8px;">
+        <button onclick="dbVotCopiar()" style="background:#111827;color:#fff;padding:0 14px;border-radius:8px;cursor:pointer;">Copiar</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button onclick="dbVotTraer()" style="flex:1;background:#16A34A;color:#fff;padding:11px;border-radius:9px;font-weight:600;cursor:pointer;">📥 Traer votos</button>
+        <a href="${link}" target="_blank" rel="noopener" style="flex:none;background:#fff;border:1px solid #D1D5DB;color:#374151;padding:11px 14px;border-radius:9px;text-decoration:none;">Ver página</a>
+      </div>
+      <button onclick="dbVotCrear()" style="margin-top:8px;background:#fff;border:1px solid #E5E7EB;color:#6B7280;width:100%;padding:8px;border-radius:9px;font-size:12px;cursor:pointer;">Crear ronda nueva (reemplaza el link)</button>`;
+  }
+  body.innerHTML = head + inner + `<div id="dbvot-status" style="font-size:12px;color:#6B7280;margin-top:12px;min-height:16px;line-height:1.4;"></div>`;
+}
+async function dbVotCrear() {
+  if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  if (dbVot && !confirm('Esto crea una ronda NUEVA y el link anterior deja de sumar votos a este tablero. ¿Seguir?')) return;
+  const fb = document.getElementById('dbvot-status');
+  const setFb = t => { const e = document.getElementById('dbvot-status'); if (e) e.textContent = t; };
+  setFb('Creando ronda…');
+  try {
+    const designs = dbDisenos.map(d => ({ id: d.id, name: d.name }));
+    const r = await fetch(VOT_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'crear', title: 'Selección de diseños', designs }) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'no se pudo crear');
+    dbVot = { id: d.id, createdAt: Date.now() }; dbVotSave();
+    for (let i = 0; i < dbDisenos.length; i++) {
+      setFb(`Subiendo imágenes… ${i + 1}/${dbDisenos.length}`);
+      await fetch(VOT_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'img', id: dbVot.id, designId: dbDisenos[i].id, image: dbDisenos[i].url }) });
+    }
+    dbVotRender();
+    setFb('✓ Link listo. Compartilo con tu equipo. Cuando voten, tocá "Traer votos".');
+  } catch (e) { setFb('Error: ' + e.message); }
+}
+async function dbVotTraer() {
+  if (!dbVot) return;
+  const setFb = t => { const e = document.getElementById('dbvot-status'); if (e) e.innerHTML = t; };
+  setFb('Trayendo votos…');
+  try {
+    const r = await fetch(`${VOT_API}?id=${dbVot.id}`);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'error');
+    const ballots = d.ballots || [];
+    const tally = {};
+    ballots.forEach(b => Object.entries(b.votes || {}).forEach(([did, v]) => { tally[did] = tally[did] || { up: 0, down: 0 }; if (v === 'up') tally[did].up++; else if (v === 'down') tally[did].down++; }));
+    dbDisenos.forEach(ds => { const t = tally[ds.id] || { up: 0, down: 0 }; ds.up = t.up; ds.down = t.down; });
+    dbSave(); dbRender();
+    const quienes = ballots.map(b => esc(b.name)).join(', ') || '—';
+    setFb(`✓ <b>${ballots.length}</b> persona(s) votaron: ${quienes}. Los votos 👍/👎 del tablero se actualizaron.`);
+  } catch (e) { setFb('Error: ' + e.message); }
+}
+function dbVotCopiar() {
+  const inp = document.getElementById('dbvot-link'); if (!inp) return;
+  const setFb = t => { const e = document.getElementById('dbvot-status'); if (e) e.textContent = t; };
+  try { navigator.clipboard.writeText(inp.value).then(() => setFb('✓ Link copiado.'), () => { inp.select(); document.execCommand('copy'); setFb('✓ Link copiado.'); }); }
+  catch (e) { inp.select(); try { document.execCommand('copy'); setFb('✓ Link copiado.'); } catch { setFb('Copialo manualmente.'); } }
+}
 
 // Exporta el tablero completo (imágenes + votos + notas + estados) a un archivo de respaldo
 function dbExportar() {
