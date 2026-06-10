@@ -1249,7 +1249,13 @@
         <div id="db-drop" ondragover="event.preventDefault();this.style.background='#EFF6FF';" ondragleave="this.style.background='';" ondrop="event.preventDefault();this.style.background='';dbCargar(event.dataTransfer.files);" style="margin-top:12px;border:2px dashed #CBD5E1;border-radius:10px;padding:14px;text-align:center;color:#9CA3AF;font-size:13px;cursor:pointer;" onclick="document.getElementById('db-file').click()">Arrastrá acá todas las imágenes de los diseños, o tocá para elegirlas 📥</div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;">
           <div id="db-resumen" style="font-size:13px;color:#374151;"></div>
-          <div style="display:flex;gap:6px;flex:none;">
+          <div style="display:flex;gap:6px;flex:none;align-items:center;flex-wrap:wrap;">
+            <select id="db-orden" onchange="dbSetOrden(this.value)" style="padding:6px 8px;font-size:12px;border:1px solid #D1D5DB;border-radius:8px;cursor:pointer;">
+              <option value="carga">↕ Orden de carga</option>
+              <option value="tildes">👍 Top tildes</option>
+              <option value="cruces">👎 Top cruces</option>
+              <option value="saldo">⚖️ Mejor saldo (👍−👎)</option>
+            </select>
             <button id="db-view-kanban" onclick="dbSetView('kanban')" style="padding:6px 12px;font-size:13px;border-radius:8px;cursor:pointer;">🗂️ Columnas</button>
             <button id="db-view-galeria" onclick="dbSetView('galeria')" style="padding:6px 12px;font-size:13px;border-radius:8px;cursor:pointer;">🖼️ Galería</button>
           </div>
@@ -2855,6 +2861,7 @@ let dbDisenos = [];          // [{id, name, url, nota, up, down, estado}]
 let dbSeq = 0, _dbSaveT = null;
 let dbView = 'kanban';       // 'kanban' (columnas) o 'galeria' (paneo de todas)
 let dbGalFiltro = 'todos';   // filtro de la galería: 'todos' o un estado
+let dbOrden = 'carga';       // 'carga' | 'tildes' | 'cruces' | 'saldo'
 let dbVot = null;            // ronda de votación online activa { id, createdAt }
 const VOT_API = 'https://bdi-catalogo.vercel.app/api/votacion';
 const VOT_PAGE = 'https://bdi-catalogo.vercel.app/votar';
@@ -2868,9 +2875,19 @@ const DB_ESTADOS = [
 function dbNewId() { return 'd' + Date.now() + '_' + (dbSeq++); }
 function dbLoad() { try { const r = localStorage.getItem(DB_KEY); dbDisenos = r ? JSON.parse(r) : []; } catch { dbDisenos = []; } }
 function dbSave() { if (!_lsGuardar(DB_KEY, JSON.stringify(dbDisenos))) alert('No se pudo guardar: el navegador llegó al límite de almacenamiento. Generá el reporte y vaciá diseños ya decididos para liberar espacio.'); }
-function dbInit() { dbLoad(); try { dbView = localStorage.getItem('monitor_db_view') || 'kanban'; dbVot = JSON.parse(localStorage.getItem('monitor_db_votsession')) || null; } catch {} dbRender(); }
+function dbInit() { dbLoad(); try { dbView = localStorage.getItem('monitor_db_view') || 'kanban'; dbOrden = localStorage.getItem('monitor_db_orden') || 'carga'; dbVot = JSON.parse(localStorage.getItem('monitor_db_votsession')) || null; } catch {} dbRender(); }
 function dbSetView(v) { dbView = v; try { localStorage.setItem('monitor_db_view', v); } catch {} dbRender(); }
 function dbSetGalFiltro(k) { dbGalFiltro = k; dbRender(); }
+function dbSetOrden(v) { dbOrden = v; try { localStorage.setItem('monitor_db_orden', v); } catch {} dbRender(); }
+// Devuelve una copia ordenada según el criterio elegido (no toca el orden real guardado)
+function dbOrdenar(arr) {
+  const a = arr.slice();
+  const nm = (x, y) => (x.name || '').localeCompare(y.name || '', 'es');
+  if (dbOrden === 'tildes') a.sort((x, y) => (y.up || 0) - (x.up || 0) || nm(x, y));
+  else if (dbOrden === 'cruces') a.sort((x, y) => (y.down || 0) - (x.down || 0) || nm(x, y));
+  else if (dbOrden === 'saldo') a.sort((x, y) => ((y.up || 0) - (y.down || 0)) - ((x.up || 0) - (x.down || 0)) || nm(x, y));
+  return a; // 'carga' = orden original
+}
 
 function dbCargar(files) {
   const arr = [...(files || [])].filter(f => /^image\//.test(f.type));
@@ -3065,6 +3082,7 @@ function dbRender() {
   const setBtn = (id, on) => { const b = document.getElementById(id); if (b) { b.style.background = on ? '#111827' : '#fff'; b.style.color = on ? '#fff' : '#374151'; b.style.border = on ? '1px solid #111827' : '1px solid #E5E7EB'; } };
   setBtn('db-view-kanban', dbView === 'kanban');
   setBtn('db-view-galeria', dbView === 'galeria');
+  const ordSel = document.getElementById('db-orden'); if (ordSel) ordSel.value = dbOrden;
   const galf = document.getElementById('db-galfiltro');
 
   if (dbView === 'galeria') {
@@ -3073,7 +3091,7 @@ function dbRender() {
       const chip = (k, lbl, ico, n) => `<button onclick="dbSetGalFiltro('${k}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${dbGalFiltro === k ? '#378ADD' : '#E5E7EB'};background:${dbGalFiltro === k ? '#EFF6FF' : '#fff'};color:${dbGalFiltro === k ? '#1D4ED8' : '#374151'};font-size:12px;cursor:pointer;">${ico} ${lbl} (${n})</button>`;
       galf.innerHTML = chip('todos', 'Todas', '📋', dbDisenos.length) + DB_ESTADOS.map(e => chip(e.k, e.lbl, e.ico, dbDisenos.filter(d => d.estado === e.k).length)).join('');
     }
-    const items = dbGalFiltro === 'todos' ? dbDisenos : dbDisenos.filter(d => d.estado === dbGalFiltro);
+    const items = dbOrdenar(dbGalFiltro === 'todos' ? dbDisenos : dbDisenos.filter(d => d.estado === dbGalFiltro));
     board.style.display = 'block';
     board.style.overflowX = 'visible';
     board.innerHTML = items.length
@@ -3087,7 +3105,7 @@ function dbRender() {
   board.style.display = 'flex';
   board.style.overflowX = 'auto';
   board.innerHTML = DB_ESTADOS.map(e => {
-    const items = dbDisenos.filter(d => d.estado === e.k);
+    const items = dbOrdenar(dbDisenos.filter(d => d.estado === e.k));
     return `<div style="flex:1 1 0;min-width:210px;background:${e.bg};border:1px solid #E5E7EB;border-radius:11px;padding:9px;">
       <div style="font-weight:700;font-size:13px;color:${e.color};margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;"><span>${e.ico} ${e.lbl}</span><span style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:0 7px;font-size:11px;color:#374151;">${items.length}</span></div>
       ${items.map(dbCard).join('') || '<div style="font-size:11px;color:#CBD5E1;text-align:center;padding:14px 0;">—</div>'}
