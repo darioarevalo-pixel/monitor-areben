@@ -3176,7 +3176,7 @@ function dbReporte() {
     });
     y += 3;
   });
-  pdf.save(`seleccion-disenos-${new Date().toISOString().slice(0, 10)}.pdf`);
+  _pdfCompartir(pdf, `seleccion-disenos-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños');
 }
 
 // ── Modo "Revisión rápida": de a uno, clasificar y avanzar (ideal para la 1ª pasada) ──
@@ -5943,6 +5943,22 @@ function exhibReiniciar() {
   exhibStopCam(); exhibState = {}; exhibSave(); exhibInit();
 }
 
+// Comparte el PDF con la hoja nativa (iPhone/Android) o lo descarga (escritorio).
+// Evita el link "blob:" feo que muestra Safari al usar pdf.save().
+async function _pdfCompartir(pdf, filename, title) {
+  try {
+    const blob = pdf.output('blob');
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: title || filename });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // el usuario cerró la hoja de compartir
+  }
+  pdf.save(filename); // escritorio o navegador sin compartir de archivos
+}
+
 function exhibGenerarPDF() {
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
   const lista = _exhibFiltrados();
@@ -5979,7 +5995,7 @@ function exhibGenerarPDF() {
   seccion('FALTANTE — Exhibición una sola unidad', grupos['una-unidad'], [217, 119, 6]);
   seccion('FALTANTE — No exhibido, ya solucionado', grupos['solucionado'], [37, 99, 235]);
   if (grupos['sin-marcar'].length) seccion('FALTANTE — Sin revisar', grupos['sin-marcar'], [107, 114, 128]);
-  pdf.save('chequeo-exhibicion-zattia-' + fecha.toISOString().slice(0, 10) + '.pdf');
+  _pdfCompartir(pdf, 'chequeo-exhibicion-zattia-' + fecha.toISOString().slice(0, 10) + '.pdf', 'Chequeo de exhibición — Zattia');
 }
 
 // ════════════════════════════════════════════════════════════════
