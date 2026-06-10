@@ -592,6 +592,7 @@
             <tr style="background:#F9FAFB;">
               <td style="font-weight:600;font-size:12px;padding:8px 12px;">
                 <button onclick="fmSimAgregarFila()" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo</button>
+                <button onclick="fmSimAgregarLinea18()" style="background:none;border:none;color:#7C3AED;cursor:pointer;font-size:12px;padding:0;margin-left:12px;">+ Línea 18</button>
               </td>
               <td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-pct-total">0%</td>
               <td style="text-align:center;font-weight:700;font-size:13px;" id="fm-sim-qty-total">0</td>
@@ -1376,6 +1377,7 @@ function normalizeIphoneModel(size) {
 
   // 4. Modelos válidos en orden de más específico a más general
   const MODELS = [
+    ['18 pro max', '18 Pro Max'], ['18 air', '18 Air'], ['18 pro', '18 Pro'], ['18', '18'],
     ['17 pro max', '17 Pro Max'], ['17 air', '17 Air'], ['17 pro', '17 Pro'], ['17', '17'],
     ['16 pro max', '16 Pro Max'], ['16 plus', '16 Plus'], ['16 pro', '16 Pro'], ['16e', '16e'], ['16', '16'],
     ['15 pro max', '15 Pro Max'], ['15 plus', '15 Plus'], ['15 pro', '15 Pro'], ['15', '15'],
@@ -1739,6 +1741,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     let s = sizeName.trim().replace(/^i?phone\s*/i, '');
     s = s.split(' - ')[0].split('/')[0].trim().toLowerCase();
     const RULES = [
+      [/^18 pro max/,'iPhone 18 Pro Max'],[/^18 air/,'iPhone 18 Air'],[/^18 pro/,'iPhone 18 Pro'],[/^18/,'iPhone 18'],
       [/^17 pro max/,'iPhone 17 Pro Max'],[/^17 air/,'iPhone 17 Air'],[/^17 pro/,'iPhone 17 Pro'],[/^17/,'iPhone 17'],
       [/^16 pro max/,'iPhone 16 Pro Max'],[/^16 plus/,'iPhone 16 Plus'],[/^16 pro/,'iPhone 16 Pro'],[/^16e/,'iPhone 16e'],[/^16/,'iPhone 16'],
       [/^15 pro max/,'iPhone 15 Pro Max'],[/^15 plus/,'iPhone 15 Plus'],[/^15 pro/,'iPhone 15 Pro'],[/^15/,'iPhone 15'],
@@ -2485,6 +2488,7 @@ function iphoneModelSort(a, b) {
     'iPhone 15','iPhone 15 Plus','iPhone 15 Pro','iPhone 15 Pro Max',
     'iPhone 16','iPhone 16e','iPhone 16 Plus','iPhone 16 Pro','iPhone 16 Pro Max',
     'iPhone 17','iPhone 17 Air','iPhone 17 Pro','iPhone 17 Pro Max',
+    'iPhone 18','iPhone 18 Air','iPhone 18 Pro','iPhone 18 Pro Max',
   ];
   const ia = ORDER.indexOf(a);
   const ib = ORDER.indexOf(b);
@@ -3326,9 +3330,24 @@ function fmSimRepartir(total, pcts) {
   return base;
 }
 
+// Modelos sugeridos para la simulación (la línea 18 arriba para tenerla a mano)
+const FM_MODELOS = [
+  'iPhone 18', 'iPhone 18 Air', 'iPhone 18 Pro', 'iPhone 18 Pro Max',
+  'iPhone 17', 'iPhone 17 Air', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
+  'iPhone 16', 'iPhone 16e', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+  'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+  'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+  'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+  'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+  'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+  'iPhone XR', 'iPhone XS Max', 'iPhone XS', 'iPhone X',
+  'iPhone SE 3', 'iPhone SE 2', 'iPhone 8 Plus', 'iPhone 8',
+];
 function fmSimRender() {
   const table = document.getElementById('fm-sim-table');
   if (!table) return;
+  let _dl = document.getElementById('fm-sim-modelos');
+  if (!_dl) { _dl = document.createElement('datalist'); _dl.id = 'fm-sim-modelos'; _dl.innerHTML = FM_MODELOS.map(m => `<option value="${m}">`).join(''); document.body.appendChild(_dl); }
   const varOn = fmSimVarActivo();
   const vars = fmSimVars;
 
@@ -3352,7 +3371,7 @@ function fmSimRender() {
 
   // ── Filas ──
   const body = fmSimRows.map((r, i) => {
-    const modelInput = `<input value="${esc(r.model)}" onchange="fmSimRows[${i}].model=this.value"
+    const modelInput = `<input list="fm-sim-modelos" value="${esc(r.model)}" onchange="fmSimRows[${i}].model=this.value"
         style="width:100%;border:none;background:transparent;font-size:13px;padding:4px 0;">`;
     const pctInput = `<input type="number" value="${r.pct.toFixed(1)}" min="0" max="100" step="0.1"
         oninput="fmSimRows[${i}].pct=parseFloat(this.value)||0;fmSimRecalc()"
@@ -3416,6 +3435,13 @@ function fmSimRecalc() {
 
 function fmSimAgregarFila() {
   fmSimRows.push({ model: '', pct: 0 });
+  fmSimRender();
+}
+// Agrega de una la línea 18 completa (los que no estén ya en la simulación)
+function fmSimAgregarLinea18() {
+  ['iPhone 18', 'iPhone 18 Pro', 'iPhone 18 Pro Max', 'iPhone 18 Air'].forEach(m => {
+    if (!fmSimRows.some(r => (r.model || '').trim().toLowerCase() === m.toLowerCase())) fmSimRows.push({ model: m, pct: 0 });
+  });
   fmSimRender();
 }
 
