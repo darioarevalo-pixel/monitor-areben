@@ -3035,7 +3035,10 @@ function dbCardGal(d) {
   const e = DB_ESTADOS.find(x => x.k === d.estado) || DB_ESTADOS[0];
   const btns = DB_ESTADOS.map(s => `<button onclick="event.stopPropagation();dbSetEstado('${d.id}','${s.k}')" title="${s.lbl}" style="flex:1;min-width:0;padding:2px 0;font-size:12px;border:1px solid ${d.estado === s.k ? s.color : '#E5E7EB'};background:${d.estado === s.k ? s.color : '#fff'};border-radius:5px;cursor:pointer;">${s.ico}</button>`).join('');
   return `<div style="border:1px solid #E5E7EB;border-top:4px solid ${e.color};border-radius:9px;overflow:hidden;background:#fff;">
-    <img src="${d.url}" onclick="dbPreview('${d.id}')" title="Tocá para verla grande" style="width:100%;height:140px;object-fit:cover;cursor:zoom-in;background:#F3F4F6;display:block;">
+    <div style="position:relative;">
+      <img src="${d.url}" onclick="dbPreview('${d.id}')" title="Tocá para verla grande" style="width:100%;height:140px;object-fit:cover;cursor:zoom-in;background:#F3F4F6;display:block;">
+      <button onclick="event.stopPropagation();dbQuitar('${d.id}')" title="Eliminar este diseño" style="position:absolute;top:5px;right:5px;width:24px;height:24px;min-width:0;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:1;cursor:pointer;">✕</button>
+    </div>
     <div style="padding:6px;">
       <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(d.name)}">${esc(d.name) || '—'}</div>
       <div style="display:flex;gap:5px;margin:4px 0;">
