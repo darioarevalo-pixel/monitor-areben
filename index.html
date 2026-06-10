@@ -5898,8 +5898,22 @@ function exhibMarcarPorCodigo(code, fromCam) {
   exhibRenderScan();
 }
 
+function exhibPreview(url) {
+  if (!url) return;
+  let ov = document.getElementById('exhib-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'exhib-lightbox';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:3000;padding:20px;cursor:zoom-out;';
+    ov.onclick = () => { ov.style.display = 'none'; };
+    ov.innerHTML = '<img style="max-width:96%;max-height:96%;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);">';
+    document.body.appendChild(ov);
+  }
+  ov.querySelector('img').src = url;
+  ov.style.display = 'flex';
+}
 function _exhibRow(it, triage) {
-  const foto = it.img ? `<img src="${esc(it.img)}" loading="lazy" style="width:42px;height:42px;object-fit:cover;border-radius:6px;background:#F3F4F6;flex:none;">` : `<div style="width:42px;height:42px;border-radius:6px;background:#F3F4F6;flex:none;"></div>`;
+  const foto = it.img ? `<img src="${esc(it.img)}" loading="lazy" onclick="exhibPreview(this.src)" title="Tocá para verla grande" style="width:46px;height:46px;object-fit:cover;border-radius:6px;background:#F3F4F6;flex:none;cursor:zoom-in;">` : `<div style="width:46px;height:46px;border-radius:6px;background:#F3F4F6;flex:none;"></div>`;
   const info = `<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.name)} · ${esc(it.size)}</div><div style="font-size:11px;color:#6B7280;">SKU: ${esc(it.sku || '—')} · Local: ${it.qty}</div></div>`;
   let acciones = '';
   if (triage) {
