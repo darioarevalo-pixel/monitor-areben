@@ -5334,17 +5334,26 @@ async function comProdSelect(val) {
 }
 function comProdInfoRender(p, tn) {
   const div = document.getElementById('com-prod-info'); if (!div) return;
+  const foto = (tn && tn.images && tn.images[0]) || null;
   const normal = (tn && tn.price > 0) ? tn.price : (p.retailer_price || 0);
   const promo = (tn && tn.promo_price > 0) ? tn.promo_price : null;
   const fmt = v => '$' + Math.round(v).toLocaleString('es-AR');
   const btn = (precio, color) => precio > 0 ? `<button onclick="comProdSimular(${precio})" style="background:${color};color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">Simular</button>` : '';
+  const img = foto
+    ? `<img src="${esc(foto)}" onclick="exhibPreview(this.src)" title="Tocá para verla grande" style="width:66px;height:66px;object-fit:cover;border-radius:8px;background:#F3F4F6;flex:none;cursor:zoom-in;border:1px solid #E5E7EB;">`
+    : `<div style="width:66px;height:66px;border-radius:8px;background:#F3F4F6;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9CA3AF;">Sin foto</div>`;
   div.style.display = 'block';
   div.innerHTML =
-    `<div style="font-size:13px;color:#374151;margin-bottom:8px;"><b>${esc(p.name)}</b>${p.sku ? ' · <span style="color:#9CA3AF;">' + esc(p.sku) + '</span>' : ''} · Costo: <b>${p.unit_cost ? fmt(p.unit_cost) : '—'}</b></div>
-     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
-       <div style="font-size:12px;color:#666;">Precio normal TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;">${normal ? fmt(normal) : '—'}</b> ${btn(normal, '#378ADD')}</div></div>
-       <div style="font-size:12px;color:#666;">Precio promo TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;color:#16A34A;">${promo ? fmt(promo) : '—'}</b> ${btn(promo, '#16A34A')}</div></div>
-       <div style="font-size:12px;color:#666;">Precio nuevo (sale)<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input type="number" id="com-precio-nuevo" placeholder="$ sale" style="width:104px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"><button onclick="comProdSimularNuevo()" style="background:#DB2777;color:#fff;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Simular</button></div></div>
+    `<div style="display:flex;gap:12px;align-items:flex-start;">
+       ${img}
+       <div style="flex:1;min-width:0;">
+         <div style="font-size:13px;color:#374151;margin-bottom:8px;"><b>${esc(p.name)}</b>${p.sku ? ' · <span style="color:#9CA3AF;">' + esc(p.sku) + '</span>' : ''} · Costo: <b>${p.unit_cost ? fmt(p.unit_cost) : '—'}</b></div>
+         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+           <div style="font-size:12px;color:#666;">Precio normal TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;">${normal ? fmt(normal) : '—'}</b> ${btn(normal, '#378ADD')}</div></div>
+           <div style="font-size:12px;color:#666;">Precio promo TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;color:#16A34A;">${promo ? fmt(promo) : '—'}</b> ${btn(promo, '#16A34A')}</div></div>
+           <div style="font-size:12px;color:#666;">Precio nuevo (sale)<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input type="number" id="com-precio-nuevo" placeholder="$ sale" style="width:104px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"><button onclick="comProdSimularNuevo()" style="background:#DB2777;color:#fff;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Simular</button></div></div>
+         </div>
+       </div>
      </div>`;
 }
 function comProdSimular(precio) {
