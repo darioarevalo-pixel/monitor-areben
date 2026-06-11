@@ -2230,30 +2230,49 @@ function buildIngresoPills() {
   const sorted = Object.entries(meses).sort(([a], [b]) => b.localeCompare(a)); // más reciente primero
   if (!sorted.length) { el.style.display = 'none'; return; }
   const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const opts = sorted.map(([m, cnt]) => {
+    const [y, mo] = m.split('-');
+    return `<label><input type="checkbox" value="${m}" ${selectedIngresoPills.has(m) ? 'checked' : ''} onchange="ingresoChange(this)"> ${MONTH_NAMES[parseInt(mo) - 1]} ${y} <span style="opacity:.55;">(${cnt})</span></label>`;
+  }).join('');
   el.style.display = 'flex';
+  el.style.alignItems = 'center';
   el.innerHTML =
-    `<span style="font-size:11px;color:#aaa;white-space:nowrap;">Mes de ingreso:</span>` +
-    sorted.map(([m, cnt]) => {
-      const [y, mo] = m.split('-');
-      const label = MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2);
-      const active = selectedIngresoPills.has(m);
-      return `<button onclick="toggleIngresoPill('${m}')" style="padding:4px 10px;font-size:12px;border-radius:99px;border:1px solid ${active ? '#378ADD' : '#e5e5e5'};background:${active ? '#e6f1fb' : '#fff'};color:${active ? '#185fa5' : '#666'};cursor:pointer;white-space:nowrap;">${label} <span style="font-size:10px;opacity:.7;">${cnt}</span></button>`;
-    }).join('') +
-    (selectedIngresoPills.size
-      ? `<button onclick="clearIngresoPills()" style="font-size:11px;color:#e24b4a;border:none;background:none;cursor:pointer;padding:0 4px;">✕ Limpiar</button>`
-      : '');
+    `<span style="font-size:11px;color:#aaa;white-space:nowrap;">Fecha de ingreso:</span>
+     <div class="mkt-multi" style="min-width:180px;">
+       <button type="button" class="mkt-multi-btn" onclick="ingresoToggleDropdown()"><span id="ingreso-lbl">Todos los meses</span><span style="opacity:.5;">▾</span></button>
+       <div class="mkt-multi-panel" id="ingreso-panel" style="display:none;">${opts}<label style="border-top:1px solid #eee;margin-top:4px;padding-top:6px;color:#e24b4a;cursor:pointer;" onclick="clearIngresoPills()">✕ Limpiar selección</label></div>
+     </div>`;
+  _ingUpdateLbl();
 }
-
-function toggleIngresoPill(mes) {
-  if (selectedIngresoPills.has(mes)) selectedIngresoPills.delete(mes);
-  else selectedIngresoPills.add(mes);
-  buildIngresoPills();
+function ingresoToggleDropdown() {
+  const p = document.getElementById('ingreso-panel'); if (!p) return;
+  const abrir = (p.style.display === 'none' || !p.style.display);
+  document.querySelectorAll('.mkt-multi-panel').forEach(x => { x.style.display = 'none'; });
+  p.style.display = abrir ? 'block' : 'none';
+}
+function _ingUpdateLbl() {
+  const lbl = document.getElementById('ingreso-lbl'); if (!lbl) return;
+  const s = selectedIngresoPills;
+  if (!s.size) { lbl.textContent = 'Todos los meses'; lbl.style.color = ''; lbl.style.fontWeight = ''; return; }
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  if (s.size === 1) { const [y, mo] = [...s][0].split('-'); lbl.textContent = MONTH_NAMES[parseInt(mo) - 1] + ' ' + y.slice(2); }
+  else lbl.textContent = s.size + ' meses';
+  lbl.style.color = '#185fa5'; lbl.style.fontWeight = '600';
+}
+function ingresoChange(cb) {
+  if (cb.checked) selectedIngresoPills.add(cb.value); else selectedIngresoPills.delete(cb.value);
+  _ingUpdateLbl();      // solo actualiza el rótulo (no re-arma el panel, así no se cierra)
   renderProductos();
 }
-
+function toggleIngresoPill(mes) { // compat
+  if (selectedIngresoPills.has(mes)) selectedIngresoPills.delete(mes); else selectedIngresoPills.add(mes);
+  buildIngresoPills(); renderProductos();
+}
 function clearIngresoPills() {
   selectedIngresoPills.clear();
-  buildIngresoPills();
+  const panel = document.getElementById('ingreso-panel');
+  if (panel) panel.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+  _ingUpdateLbl();
   renderProductos();
 }
 
@@ -6994,7 +7013,7 @@ function mktMatchCalidad(x, c) {
 // Cerrar los paneles multi al hacer click afuera
 document.addEventListener('click', e => {
   if (!e.target.closest('.mkt-multi')) {
-    document.querySelectorAll('#tab-marketing .mkt-multi-panel').forEach(p => { p.style.display = 'none'; });
+    document.querySelectorAll('.mkt-multi-panel').forEach(p => { p.style.display = 'none'; });
   }
 });
 
