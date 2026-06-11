@@ -331,11 +331,14 @@
           <option value="30d">Vida útil: últimos 30d</option>
           <option value="firstSale">Vida útil: desde 1ª venta</option>
         </select>
+        <button id="outlet-btn" class="btn-sm" onclick="outletReporte()" style="background:#DB2777;color:#fff;">🏷️ Generar sale (0)</button>
+        <button id="outlet-clear" class="btn-sm" onclick="outletLimpiar()" style="display:none;">Limpiar selección</button>
       </div>
       <div id="ingreso-pills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;min-height:0;"></div>
       <div class="card" style="padding:0;overflow:hidden;">
         <table>
           <thead><tr>
+            <th style="width:30px;text-align:center;" title="Marcar para sale / outlet">🏷️</th>
             <th class="foto-col" style="width:72px;">Foto</th>
             <th onclick="sortTable('productos','name')">Producto ↕</th>
             <th onclick="sortTable('productos','lastSale')">Última venta ↕</th>
@@ -1455,6 +1458,7 @@ let allAgotamientoData = [];
 let allTallesData = [], allTallesCategories = [];
 let allVvar = {}, expandedProductPid = null;
 let selectedIngresoPills = new Set(), lifespanMethod = '30d';
+let outletSel = new Set(); // productos marcados para sale/outlet (a criterio manual)
 
 function setStatus(msg, type) {
   const el = document.getElementById('status');
@@ -1944,6 +1948,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     if (prevProv && proveedoresList.includes(prevProv)) provSel.value = prevProv;
   }
   selectedIngresoPills.clear();
+  outletSel.clear();
   buildIngresoPills();
 
   const variantesMap = {};
@@ -2276,6 +2281,49 @@ function clearIngresoPills() {
   renderProductos();
 }
 
+// ── Outlet / Sale: selección manual de productos + reporte ─────────────────────
+function outletToggle(id, checked) { if (checked) outletSel.add(id); else outletSel.delete(id); outletUpdateBtn(); }
+function outletUpdateBtn() {
+  const b = document.getElementById('outlet-btn'); if (b) b.textContent = `🏷️ Generar sale (${outletSel.size})`;
+  const c = document.getElementById('outlet-clear'); if (c) c.style.display = outletSel.size ? '' : 'none';
+}
+function outletLimpiar() {
+  outletSel.clear();
+  document.querySelectorAll('#tbody-productos input[type=checkbox]').forEach(cb => cb.checked = false);
+  outletUpdateBtn();
+}
+function outletReporte() {
+  if (!outletSel.size) { alert('Marcá al menos un producto en la columna 🏷️ para generar el sale.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const sel = allProductos.filter(p => outletSel.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+  if (!sel.length) { alert('No se encontraron los productos marcados.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12; const RIGHT = 198; let y = 16;
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Productos para SALE / Outlet', M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
+  y += 5; pdf.text(`${fecha} · ${sel.length} productos seleccionados`, M, y); pdf.setTextColor(0); y += 8;
+  const cols = [{ t: 'Producto', x: M }, { t: 'SKU', x: M + 84 }, { t: 'Stock', x: M + 116 }, { t: 'Vida útil', x: M + 132 }, { t: 'Ingreso', x: M + 158 }, { t: 'Precio', x: M + 178 }];
+  const head = () => { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(130); cols.forEach(c => pdf.text(c.t, c.x, y)); pdf.setTextColor(0); pdf.setDrawColor(210); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5; };
+  head();
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
+  sel.forEach(p => {
+    if (y > 286) { pdf.addPage(); y = 16; head(); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); }
+    const ls = formatLifespan(lifespanDaysByMode(p, lifespanMethod), p.stock);
+    const ing = p.ingresoMes ? _mesLabel(p.ingresoMes) : '—';
+    const precio = p.retailer_price ? '$' + Math.round(p.retailer_price).toLocaleString('es-AR') : '—';
+    pdf.text(pdf.splitTextToSize(String(p.name || '—'), 80)[0], cols[0].x, y);
+    pdf.text(String(p.sku || '—').slice(0, 18), cols[1].x, y);
+    pdf.text(String(p.stock), cols[2].x, y);
+    pdf.text(ls, cols[3].x, y);
+    pdf.text(ing, cols[4].x, y);
+    pdf.text(precio, cols[5].x, y);
+    pdf.setDrawColor(238); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5.5;
+  });
+  _pdfCompartir(pdf, `sale-outlet-${new Date().toISOString().slice(0, 10)}.pdf`, 'Productos para Sale');
+}
+
 function lifespanDaysByMode(p, mode) {
   if (mode === 'firstSale') return lifespanDaysFromFirst(p.stock, p.totalSales, p.firstSale);
   if (mode === '7d')        return lifespanDaysGeneric(p.stock, p.sales7,  7);
@@ -2295,7 +2343,7 @@ function renderProductos() {
   const slice = lista.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   renderPagination(lista.length, page, 'productos');
   const tnEnabled = currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia;
-  const colspanDetalle = tnEnabled ? 9 : 8;
+  const colspanDetalle = tnEnabled ? 10 : 9;
   document.getElementById('tbody-productos').innerHTML = slice.map(p => {
     const isExpanded = expandedProductPid === p.id;
     const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ');
@@ -2312,6 +2360,7 @@ function renderProductos() {
     }</td>`;
     return `
     <tr onclick="toggleProductoDetalle('${p.id}')" style="cursor:pointer;${isExpanded ? 'background:#eef2ff;' : ''}">
+      <td onclick="event.stopPropagation()" style="text-align:center;"><input type="checkbox" ${outletSel.has(p.id) ? 'checked' : ''} onchange="outletToggle('${p.id}',this.checked)" title="Marcar para sale"></td>
       ${fotoCell}
       <td style="font-weight:500;max-width:200px;">
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</div>
@@ -2326,6 +2375,7 @@ function renderProductos() {
       <td><span class="badge ${p.phase.cls}">${p.phase.label}</span></td>
     </tr>${detailRow}`;
   }).join('');
+  outletUpdateBtn();
 }
 
 function toggleProductoDetalle(pid) {
