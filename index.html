@@ -888,12 +888,15 @@
     <div id="tab-comisiones" class="section">
       <div style="margin-bottom:14px;">
         <div style="font-size:16px;font-weight:700;">💵 Comisiones y margen por forma de pago y canal</div>
-        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Margen neto real contemplando comisiones, costo financiero, IIBB, DREI, Ganancias e IVA. Configuración propia (se guarda en este navegador).</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Margen neto real contemplando comisiones, costo financiero, IIBB, DREI, Ganancias e IVA. La configuración es <b>compartida</b>: la editan los admins y la ven todos.</div>
       </div>
 
       <!-- PARTE 1: CONFIGURACIÓN -->
       <div class="card">
-        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">1 · Configuración</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">1 · Configuración</div>
+          <span id="com-share-status" style="font-size:11px;"></span>
+        </div>
         <!-- Impuestos globales + saldo IVA -->
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
           <label style="font-size:12px;color:#666;">IVA %<br><input type="number" id="com-iva" step="0.1" onchange="comCfgChange()" style="width:80px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
@@ -5143,9 +5146,7 @@ function comDefault() {
   return { formas: [...COM_FORMAS_DEF], matriz, costoCanal, imp: { iva: 21, iibb: 3, drei: 0, ganancias: 35 }, saldoIva: true };
 }
 
-function comLoad() {
-  try { const raw = localStorage.getItem(comCfgKey()); comCfg = raw ? JSON.parse(raw) : comDefault(); }
-  catch { comCfg = comDefault(); }
+function comNormalizar() {
   if (!Array.isArray(comCfg.formas) || !comCfg.formas.length) comCfg.formas = [...COM_FORMAS_DEF];
   if (!comCfg.imp) comCfg.imp = { iva: 21, iibb: 3, drei: 0, ganancias: 35 };
   if (typeof comCfg.saldoIva !== 'boolean') comCfg.saldoIva = true;
@@ -5161,16 +5162,49 @@ function comLoad() {
     });
   });
 }
+function comLoad() {
+  try { const raw = localStorage.getItem(comCfgKey()); comCfg = raw ? JSON.parse(raw) : comDefault(); }
+  catch { comCfg = comDefault(); }
+  comNormalizar();
+}
+
+// ── Config compartida en KV (admins editan, todos ven lo mismo) ────────────────
+const COM_API = 'https://bdi-catalogo.vercel.app/api/comisiones';
+let _comSaveT = null;
+async function comCargarCompartida() {
+  try {
+    const r = await fetch(`${COM_API}?store=${_cuentaKey()}`);
+    const d = await r.json();
+    if (d && d.ok && d.config && d.config.imp) {
+      comCfg = d.config; comNormalizar();
+      _lsGuardar(comCfgKey(), JSON.stringify(comCfg)); // cache local
+      comAplicarUI();
+    }
+  } catch (e) { /* sin conexión → queda la config local */ }
+}
+function comGuardarCompartida() {
+  const st = document.getElementById('com-share-status');
+  if (!_esAdmin()) { if (st) st.textContent = ''; return; } // solo admins persisten al compartido
+  if (st) { st.textContent = 'Guardando…'; st.style.color = '#6B7280'; }
+  clearTimeout(_comSaveT);
+  _comSaveT = setTimeout(async () => {
+    try {
+      const r = await fetch(COM_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: comCfg, adminUser: currentUser, adminPass: USERS[currentUser].pass }) });
+      const d = await r.json();
+      if (st) { st.textContent = d.ok ? '✓ Guardado (lo ve tu socio)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; }
+    } catch (e) { if (st) { st.textContent = 'Error al guardar.'; st.style.color = '#DC2626'; } }
+  }, 600);
+}
 
 function comSave() {
   if (!_lsGuardar(comCfgKey(), JSON.stringify(comCfg))) {
     alert('No se pudo guardar la configuración: almacenamiento del navegador lleno.');
   }
+  comGuardarCompartida();
 }
 function comCanalActual() { return document.getElementById('com-canal-sel')?.value || comCanales()[0]; }
 
-function comInit() {
-  comLoad();
+function comAplicarUI() {
   const sel = document.getElementById('com-canal-sel');
   if (sel) sel.innerHTML = comCanales().map(c => `<option value="${c}">${c}</option>`).join(''); // reconstruir según la cuenta activa
   document.getElementById('com-iva').value = comCfg.imp.iva;
@@ -5181,6 +5215,11 @@ function comInit() {
   document.getElementById('com-saldo-lbl').textContent = comCfg.saldoIva ? 'ACTIVO' : 'AGOTADO';
   comOnCanalChange();
   comRenderSim(); comRenderPiso();
+}
+function comInit() {
+  comLoad();                // local/default inmediato
+  comAplicarUI();
+  comCargarCompartida();    // trae la compartida del KV y re-aplica si existe
 }
 
 function comOnCanalChange() {
