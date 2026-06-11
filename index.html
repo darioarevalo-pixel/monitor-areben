@@ -1279,7 +1279,11 @@
             <div style="font-size:16px;font-weight:700;">📦 Ingresos proyectados</div>
             <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:620px;">Planificá y seguí las importaciones/compras que están por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado. Se ordena por fecha de llegada. Se guarda en esta compu, por marca.</div>
           </div>
-          <button onclick="ingAgregar()" style="background:#378ADD;color:#fff;">+ Agregar ingreso</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span id="ing-save-status" style="font-size:12px;"></span>
+            <button onclick="ingInit()" title="Actualizar" style="background:#fff;border:1px solid #D1D5DB;">🔄</button>
+            <button id="ing-add-btn" onclick="ingAgregar()" style="background:#378ADD;color:#fff;">+ Agregar ingreso</button>
+          </div>
         </div>
         <div id="ingresos-resumen" style="font-size:13px;color:#374151;margin:12px 0;"></div>
         <div id="ingresos-cont"></div>
@@ -3258,6 +3262,8 @@ function dbReporteGaleria() {
 
 // ════════ Ingresos proyectados (importaciones/compras por llegar) ════════════
 let ingData = [];
+let ingSaveT = null;
+const ING_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
 const ING_ESTADOS = [
   { k: 'cotizando', lbl: 'Cotizando', color: '#6B7280', bg: '#F9FAFB' },
   { k: 'pedido', lbl: 'Pedido', color: '#7C3AED', bg: '#F5F3FF' },
@@ -3266,18 +3272,41 @@ const ING_ESTADOS = [
   { k: 'aduana', lbl: 'En aduana', color: '#DB2777', bg: '#FDF2F8' },
   { k: 'arribado', lbl: 'Arribado ✓', color: '#16A34A', bg: '#F0FDF4' },
 ];
-function ingKey() { return 'monitor_ingresos_' + _cuentaKey(); }
-function ingLoad() { try { ingData = JSON.parse(localStorage.getItem(ingKey())) || []; } catch { ingData = []; } }
-function ingSave() { _lsGuardar(ingKey(), JSON.stringify(ingData)); }
-function ingInit() { ingLoad(); ingRender(); }
-function ingAgregar() { ingData.push({ id: 'g' + Date.now() + '_' + Math.floor(Math.random() * 1000), desc: '', proveedor: '', cantidad: 0, costo: 0, moneda: 'USD', fecha: '', estado: 'cotizando', nota: '' }); ingSave(); ingRender(); }
+function ingPuedeEditar() { return _esAdmin(); } // admins cargan/editan; el resto solo ve
+async function ingInit() {
+  const res = document.getElementById('ingresos-resumen');
+  const cont = document.getElementById('ingresos-cont');
+  if (res) res.textContent = 'Cargando ingresos…';
+  if (cont) cont.innerHTML = '';
+  const addBtn = document.getElementById('ing-add-btn'); if (addBtn) addBtn.style.display = ingPuedeEditar() ? '' : 'none';
+  try {
+    const r = await fetch(`${ING_API}?store=${_cuentaKey()}`);
+    const d = await r.json();
+    ingData = (d && d.ok && Array.isArray(d.ingresos)) ? d.ingresos : [];
+  } catch (e) { ingData = []; }
+  ingRender();
+}
+function ingGuardar() {
+  if (!ingPuedeEditar()) return;
+  const st = document.getElementById('ing-save-status'); if (st) { st.textContent = 'Guardando…'; st.style.color = '#6B7280'; }
+  clearTimeout(ingSaveT);
+  ingSaveT = setTimeout(async () => {
+    try {
+      const r = await fetch(ING_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), ingresos: ingData, adminUser: currentUser, adminPass: USERS[currentUser].pass }) });
+      const d = await r.json();
+      if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; }
+    } catch (e) { if (st) { st.textContent = 'Error al guardar.'; st.style.color = '#DC2626'; } }
+  }, 600);
+}
+function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: 'g' + Date.now() + '_' + Math.floor(Math.random() * 1000), desc: '', proveedor: '', cantidad: 0, costo: 0, moneda: 'USD', fecha: '', estado: 'cotizando', nota: '' }); ingRender(); ingGuardar(); }
 function ingSetCampo(id, campo, val) {
+  if (!ingPuedeEditar()) return;
   const g = ingData.find(x => x.id === id); if (!g) return;
   if (campo === 'cantidad' || campo === 'costo') val = parseFloat(val) || 0;
-  g[campo] = val; ingSave();
+  g[campo] = val; ingGuardar();
   if (['fecha', 'estado', 'cantidad', 'costo', 'moneda'].includes(campo)) ingRender(); // afectan totales/orden
 }
-function ingEliminar(id) { if (!confirm('¿Eliminar este ingreso?')) return; ingData = ingData.filter(x => x.id !== id); ingSave(); ingRender(); }
+function ingEliminar(id) { if (!ingPuedeEditar()) return; if (!confirm('¿Eliminar este ingreso?')) return; ingData = ingData.filter(x => x.id !== id); ingRender(); ingGuardar(); }
 function _ingMes(f) { const p = String(f).split('-'); const M = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; return (M[parseInt(p[1]) - 1] || '') + ' ' + p[0]; }
 function ingCard(g) {
   const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
@@ -3299,8 +3328,23 @@ function ingCard(g) {
     <input value="${esc(g.nota)}" onchange="ingSetCampo('${g.id}','nota',this.value)" placeholder="Nota: qué trae (modelos, diseños, detalle)…" style="width:100%;margin-top:9px;font-size:12px;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;box-sizing:border-box;">
   </div>`;
 }
+// Tarjeta de solo lectura (para quien tiene permiso de ver pero no de editar)
+function ingCardRO(g) {
+  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
+  const costo = g.costo ? `${g.moneda} ${(+g.costo).toLocaleString('es-AR')}` : '';
+  const det = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.cantidad && ((+g.cantidad).toLocaleString('es-AR') + ' u.'), costo && esc(costo), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
+  return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div style="font-size:14px;font-weight:600;">${esc(g.desc) || '(sin descripción)'}</div>
+      <span style="font-size:12px;color:${e.color};background:${e.bg};border:1px solid ${e.color};border-radius:7px;padding:3px 9px;font-weight:600;">${e.lbl}</span>
+    </div>
+    ${det ? `<div style="font-size:12px;color:#6B7280;margin-top:5px;">${det}</div>` : ''}
+    ${g.nota ? `<div style="font-size:12px;color:#374151;margin-top:5px;">📝 ${esc(g.nota)}</div>` : ''}
+  </div>`;
+}
 function ingRender() {
   const cont = document.getElementById('ingresos-cont'); if (!cont) return;
+  const editable = ingPuedeEditar();
   const enCamino = ingData.filter(g => g.estado !== 'arribado');
   const unidades = enCamino.reduce((s, g) => s + (+g.cantidad || 0), 0);
   const costoUSD = enCamino.filter(g => g.moneda === 'USD').reduce((s, g) => s + (+g.costo || 0), 0);
@@ -3314,7 +3358,7 @@ function ingRender() {
   ord.forEach(g => {
     const mes = g.fecha ? _ingMes(g.fecha) : 'Sin fecha estimada';
     if (mes !== mesActual) { mesActual = mes; html += `<div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">🗓️ ${mes}</div>`; }
-    html += ingCard(g);
+    html += editable ? ingCard(g) : ingCardRO(g);
   });
   cont.innerHTML = html;
 }
