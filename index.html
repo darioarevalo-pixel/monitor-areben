@@ -2293,9 +2293,25 @@ function outletLimpiar() {
   document.querySelectorAll('#tbody-productos input[type=checkbox]').forEach(cb => cb.checked = false);
   outletUpdateBtn();
 }
-function outletReporte() {
+// Precio para el reporte = el MÁS BARATO entre el minorista de GN y la promo de TN (si la tiene)
+function _precioMasBarato(p, idx) {
+  const tn = _mktFindTN(p, idx);
+  const promo = (tn && tn.promo_price > 0) ? tn.promo_price : null;
+  const gn = (p.retailer_price > 0) ? p.retailer_price : null;
+  const vals = [gn, promo].filter(v => v && v > 0);
+  return vals.length ? Math.min(...vals) : 0;
+}
+async function outletReporte() {
   if (!outletSel.size) { alert('Marcá al menos un producto en la columna 🏷️ para generar el sale.'); return; }
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  // Cargar datos de TiendaNube (para la promo) si todavía no están
+  const _ob = document.getElementById('outlet-btn');
+  if (!window._mktTNData) {
+    if (_ob) _ob.textContent = 'Cargando precios…';
+    try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; }
+    outletUpdateBtn();
+  }
+  const idx = _mktIndexTN();
   const sel = allProductos.filter(p => outletSel.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
   if (!sel.length) { alert('No se encontraron los productos marcados.'); return; }
   const { jsPDF } = window.jspdf;
@@ -2304,7 +2320,7 @@ function outletReporte() {
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Productos para SALE / Outlet', M, y);
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
-  y += 5; pdf.text(`${fecha} · ${sel.length} productos seleccionados`, M, y); pdf.setTextColor(0); y += 8;
+  y += 5; pdf.text(`${fecha} · ${sel.length} productos · precio = el más bajo entre GN y promo TN`, M, y); pdf.setTextColor(0); y += 8;
   const cols = [{ t: 'Producto', x: M }, { t: 'SKU', x: M + 84 }, { t: 'Stock', x: M + 116 }, { t: 'Vida útil', x: M + 132 }, { t: 'Ingreso', x: M + 158 }, { t: 'Precio', x: M + 178 }];
   const head = () => { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(130); cols.forEach(c => pdf.text(c.t, c.x, y)); pdf.setTextColor(0); pdf.setDrawColor(210); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5; };
   head();
@@ -2313,7 +2329,8 @@ function outletReporte() {
     if (y > 286) { pdf.addPage(); y = 16; head(); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); }
     const ls = formatLifespan(lifespanDaysByMode(p, lifespanMethod), p.stock);
     const ing = p.ingresoMes ? _mesLabel(p.ingresoMes) : '—';
-    const precio = p.retailer_price ? '$' + Math.round(p.retailer_price).toLocaleString('es-AR') : '—';
+    const pr = _precioMasBarato(p, idx);
+    const precio = pr ? '$' + Math.round(pr).toLocaleString('es-AR') : '—';
     pdf.text(pdf.splitTextToSize(String(p.name || '—'), 80)[0], cols[0].x, y);
     pdf.text(String(p.sku || '—').slice(0, 18), cols[1].x, y);
     pdf.text(String(p.stock), cols[2].x, y);
