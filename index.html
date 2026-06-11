@@ -1243,6 +1243,7 @@
             <button onclick="dbQuickOpen()" style="background:#7C3AED;color:#fff;">⚡ Revisión rápida</button>
             <button onclick="dbReporte()" style="background:#16A34A;color:#fff;">📄 Reporte PDF</button>
             <button onclick="dbReporteGaleria()" style="background:#0D9488;color:#fff;">🖼️ Galería PDF</button>
+            <button onclick="dbReporteLimpio()" style="background:#334155;color:#fff;">🖼️ Solo diseños</button>
             <button onclick="dbVotAbrir()" style="background:#0EA5E9;color:#fff;">🌐 Votación online</button>
             <button onclick="dbExportar()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬇️ Exportar</button>
             <button onclick="document.getElementById('db-import').click()" style="background:#fff;color:#374151;border:1px solid #D1D5DB;">⬆️ Importar</button>
@@ -3259,6 +3260,32 @@ function dbReporteGaleria() {
     if (col >= cols) { col = 0; y += cellH; }
   });
   _pdfCompartir(pdf, `disenos-galeria-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños (galería)');
+}
+
+// Reporte LIMPIO: solo las imágenes de los diseños (sin votos, sin estados, sin notas)
+function dbReporteLimpio() {
+  if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 10, cols = 3, gap = 6;
+  const cellW = (W - 2 * M - (cols - 1) * gap) / cols;
+  const imgH = cellW * 1.4, cellH = imgH + 6; // caja vertical, generosa para los mockups
+  const items = dbOrdenar(dbDisenos);
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Diseños', M, 14);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
+  pdf.text(`${fecha} · ${items.length} diseños`, M, 19); pdf.setTextColor(0);
+  let col = 0, y = 24;
+  items.forEach(d => {
+    if (col === 0 && y + cellH > 292) { pdf.addPage(); y = 14; }
+    const x = M + col * (cellW + gap);
+    pdf.setFillColor(247, 248, 250); pdf.rect(x, y, cellW, imgH, 'F');
+    _pdfAddImgFit(pdf, d.url, x, y, cellW, imgH);
+    col++;
+    if (col >= cols) { col = 0; y += cellH; }
+  });
+  _pdfCompartir(pdf, `disenos-${new Date().toISOString().slice(0, 10)}.pdf`, 'Diseños');
 }
 
 // ════════ Ingresos proyectados (importaciones/compras por llegar) ════════════
