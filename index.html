@@ -930,6 +930,14 @@
       <!-- PARTE 2: SIMULADOR -->
       <div class="card" style="margin-top:4px;">
         <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">2 · Simulador de margen por producto</div>
+        <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:9px;padding:10px 12px;margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:600;color:#0369A1;margin-bottom:8px;">🔎 Traer un producto real (en vez de simular a mano)</div>
+          <label style="font-size:12px;color:#666;">Producto
+            <input type="text" id="com-prod-search" list="com-prod-list" placeholder="Buscá por nombre o SKU…" onfocus="comProdPopular()" onchange="comProdSelect(this.value)" style="display:block;width:300px;max-width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;margin-top:3px;">
+            <datalist id="com-prod-list"></datalist>
+          </label>
+          <div id="com-prod-info" style="display:none;margin-top:10px;"></div>
+        </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
           <label style="font-size:12px;color:#666;">Costo neto (sin IVA) $<br><input type="number" id="com-costo" step="0.01" oninput="comOnCostoInput()" style="width:120px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
           <label style="font-size:12px;color:#666;">Markup % (s/ costo)<br><input type="number" id="com-markup" step="1" oninput="comOnMarkupInput()" placeholder="ej. 130" style="width:110px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;"></label>
@@ -5298,6 +5306,56 @@ function comOnCostoInput() {
     if (costo > 0 && pvp > 0) mkEl.value = ((pvp / costo - 1) * 100).toFixed(1);
   }
   comRenderSim();
+}
+
+// ── Traer un producto real al simulador ───────────────────────────────────────
+let comProdMap = {};
+function comProdPopular() {
+  const dl = document.getElementById('com-prod-list'); if (!dl) return;
+  comProdMap = {};
+  dl.innerHTML = (allProductos || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es')).map(p => {
+    const label = `${p.name}${p.sku ? ' · ' + p.sku : ''}`;
+    comProdMap[label] = p;
+    return `<option value="${esc(label)}">`;
+  }).join('');
+}
+async function comProdSelect(val) {
+  const p = comProdMap[val] || (allProductos || []).find(x => `${x.name}${x.sku ? ' · ' + x.sku : ''}` === val) || (allProductos || []).find(x => x.name === val);
+  if (!p) return;
+  document.getElementById('com-costo').value = p.unit_cost || '';
+  document.getElementById('com-marca').value = p.name || '';
+  if (!window._mktTNData) {
+    try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; }
+  }
+  const tn = _mktFindTN(p, _mktIndexTN());
+  comProdInfoRender(p, tn);
+  const normal = (tn && tn.price > 0) ? tn.price : (p.retailer_price || 0);
+  if (normal > 0) comProdSimular(normal); // muestra la tabla con el precio normal de entrada
+}
+function comProdInfoRender(p, tn) {
+  const div = document.getElementById('com-prod-info'); if (!div) return;
+  const normal = (tn && tn.price > 0) ? tn.price : (p.retailer_price || 0);
+  const promo = (tn && tn.promo_price > 0) ? tn.promo_price : null;
+  const fmt = v => '$' + Math.round(v).toLocaleString('es-AR');
+  const btn = (precio, color) => precio > 0 ? `<button onclick="comProdSimular(${precio})" style="background:${color};color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">Simular</button>` : '';
+  div.style.display = 'block';
+  div.innerHTML =
+    `<div style="font-size:13px;color:#374151;margin-bottom:8px;"><b>${esc(p.name)}</b>${p.sku ? ' · <span style="color:#9CA3AF;">' + esc(p.sku) + '</span>' : ''} · Costo: <b>${p.unit_cost ? fmt(p.unit_cost) : '—'}</b></div>
+     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+       <div style="font-size:12px;color:#666;">Precio normal TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;">${normal ? fmt(normal) : '—'}</b> ${btn(normal, '#378ADD')}</div></div>
+       <div style="font-size:12px;color:#666;">Precio promo TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;color:#16A34A;">${promo ? fmt(promo) : '—'}</b> ${btn(promo, '#16A34A')}</div></div>
+       <div style="font-size:12px;color:#666;">Precio nuevo (sale)<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input type="number" id="com-precio-nuevo" placeholder="$ sale" style="width:104px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"><button onclick="comProdSimularNuevo()" style="background:#DB2777;color:#fff;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Simular</button></div></div>
+     </div>`;
+}
+function comProdSimular(precio) {
+  document.getElementById('com-pvp').value = Math.round(precio);
+  comOnPvpInput(); // recalcula markup + renderiza la matriz/breakeven
+  const m = document.getElementById('com-sim-matriz'); if (m) m.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function comProdSimularNuevo() {
+  const v = parseFloat(document.getElementById('com-precio-nuevo')?.value);
+  if (!v || v <= 0) { alert('Cargá el precio nuevo (sale).'); return; }
+  comProdSimular(v);
 }
 
 // Coeficientes lineales de la contribución: contrib = A·precioEfectivo + C. (de = factor de descuento)
