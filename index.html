@@ -3262,18 +3262,47 @@ function dbReporteGaleria() {
   _pdfCompartir(pdf, `disenos-galeria-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños (galería)');
 }
 
-// Reporte LIMPIO: solo las imágenes de los diseños (sin votos, sin estados, sin notas)
+// Reporte LIMPIO: solo imágenes. Primero pregunta qué incluir (confirmados / duda / rechazados / todos)
 function dbReporteLimpio() {
   if (!dbDisenos.length) { alert('Cargá diseños primero.'); return; }
+  let ov = document.getElementById('db-rep-chooser');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'db-rep-chooser';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);display:none;align-items:center;justify-content:center;z-index:2950;padding:16px;';
+    ov.innerHTML = '<div id="db-rep-body" style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:18px;"></div>';
+    document.body.appendChild(ov);
+  }
+  const c = k => dbDisenos.filter(d => d.estado === k).length;
+  const btn = (f, txt) => `<button onclick="dbReporteLimpioGen('${f}')" style="width:100%;text-align:left;padding:11px 14px;border:1px solid #E5E7EB;border-radius:9px;background:#fff;cursor:pointer;font-size:14px;">${txt}</button>`;
+  ov.querySelector('#db-rep-body').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div style="font-size:15px;font-weight:700;">🖼️ Solo diseños</div>
+      <button onclick="dbRepCerrar()" style="border:none;background:#F3F4F6;border-radius:8px;padding:5px 11px;cursor:pointer;">✕</button>
+    </div>
+    <div style="font-size:12px;color:#6B7280;margin-bottom:14px;">¿Qué diseños querés en el reporte? (solo las imágenes, sin votos)</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${btn('confirmado', `✅ Confirmados (${c('confirmado')})`)}
+      ${btn('duda', `🤔 En duda (${c('duda')})`)}
+      ${btn('rechazado', `❌ Rechazados (${c('rechazado')})`)}
+      ${btn('todos', `📋 Todos (${dbDisenos.length})`)}
+    </div>`;
+  ov.style.display = 'flex';
+}
+function dbRepCerrar() { const o = document.getElementById('db-rep-chooser'); if (o) o.style.display = 'none'; }
+function dbReporteLimpioGen(filtro) {
+  dbRepCerrar();
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const labels = { confirmado: 'Confirmados', duda: 'En duda', rechazado: 'Rechazados', todos: 'Todos' };
+  const items = dbOrdenar(filtro === 'todos' ? dbDisenos : dbDisenos.filter(d => d.estado === filtro));
+  if (!items.length) { alert('No hay diseños en esa categoría.'); return; }
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = 210, M = 10, cols = 3, gap = 6;
   const cellW = (W - 2 * M - (cols - 1) * gap) / cols;
-  const imgH = cellW * 1.4, cellH = imgH + 6; // caja vertical, generosa para los mockups
-  const items = dbOrdenar(dbDisenos);
+  const imgH = cellW * 1.4, cellH = imgH + 6;
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Diseños', M, 14);
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Diseños' + (filtro !== 'todos' ? ' — ' + labels[filtro] : ''), M, 14);
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
   pdf.text(`${fecha} · ${items.length} diseños`, M, 19); pdf.setTextColor(0);
   let col = 0, y = 24;
@@ -3285,7 +3314,7 @@ function dbReporteLimpio() {
     col++;
     if (col >= cols) { col = 0; y += cellH; }
   });
-  _pdfCompartir(pdf, `disenos-${new Date().toISOString().slice(0, 10)}.pdf`, 'Diseños');
+  _pdfCompartir(pdf, `disenos-${filtro}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Diseños' + (filtro !== 'todos' ? ' ' + labels[filtro] : ''));
 }
 
 // ════════ Ingresos proyectados (importaciones/compras por llegar) ════════════
