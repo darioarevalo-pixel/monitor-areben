@@ -307,6 +307,7 @@
       <button class="tab" id="tab-btn-exhib" style="display:none;" onclick="switchTab('exhib', this)">👕 Chequeo de exhibición</button>
       <button class="tab" id="tab-btn-tncat" style="display:none;" onclick="switchTab('tncat', this)">🛍️ Tienda Nube</button>
       <button class="tab" id="tab-btn-disenos" onclick="switchTab('disenos', this)">🗳️ Diseños</button>
+      <button class="tab" id="tab-btn-ingresos" style="display:none;" onclick="switchTab('ingresos', this)">📦 Ingresos</button>
       <button class="tab" id="tab-btn-usuarios" style="display:none;" onclick="switchTab('usuarios', this)">👥 Usuarios</button>
     </div>
 
@@ -1267,6 +1268,21 @@
         </div>
         <div id="db-galfiltro" style="display:none;gap:6px;flex-wrap:wrap;margin:6px 0 10px;"></div>
         <div id="db-board" style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;padding-bottom:6px;"></div>
+      </div>
+    </div>
+
+    <!-- ── Ingresos proyectados (importaciones por llegar) ─────────────────── -->
+    <div id="tab-ingresos" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">📦 Ingresos proyectados</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:620px;">Planificá y seguí las importaciones/compras que están por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado. Se ordena por fecha de llegada. Se guarda en esta compu, por marca.</div>
+          </div>
+          <button onclick="ingAgregar()" style="background:#378ADD;color:#fff;">+ Agregar ingreso</button>
+        </div>
+        <div id="ingresos-resumen" style="font-size:13px;color:#374151;margin:12px 0;"></div>
+        <div id="ingresos-cont"></div>
       </div>
     </div>
 
@@ -3240,6 +3256,69 @@ function dbReporteGaleria() {
   _pdfCompartir(pdf, `disenos-galeria-${new Date().toISOString().slice(0, 10)}.pdf`, 'Selección de diseños (galería)');
 }
 
+// ════════ Ingresos proyectados (importaciones/compras por llegar) ════════════
+let ingData = [];
+const ING_ESTADOS = [
+  { k: 'cotizando', lbl: 'Cotizando', color: '#6B7280', bg: '#F9FAFB' },
+  { k: 'pedido', lbl: 'Pedido', color: '#7C3AED', bg: '#F5F3FF' },
+  { k: 'produccion', lbl: 'En producción', color: '#0EA5E9', bg: '#F0F9FF' },
+  { k: 'transito', lbl: 'En tránsito', color: '#D97706', bg: '#FFFBEB' },
+  { k: 'aduana', lbl: 'En aduana', color: '#DB2777', bg: '#FDF2F8' },
+  { k: 'arribado', lbl: 'Arribado ✓', color: '#16A34A', bg: '#F0FDF4' },
+];
+function ingKey() { return 'monitor_ingresos_' + _cuentaKey(); }
+function ingLoad() { try { ingData = JSON.parse(localStorage.getItem(ingKey())) || []; } catch { ingData = []; } }
+function ingSave() { _lsGuardar(ingKey(), JSON.stringify(ingData)); }
+function ingInit() { ingLoad(); ingRender(); }
+function ingAgregar() { ingData.push({ id: 'g' + Date.now() + '_' + Math.floor(Math.random() * 1000), desc: '', proveedor: '', cantidad: 0, costo: 0, moneda: 'USD', fecha: '', estado: 'cotizando', nota: '' }); ingSave(); ingRender(); }
+function ingSetCampo(id, campo, val) {
+  const g = ingData.find(x => x.id === id); if (!g) return;
+  if (campo === 'cantidad' || campo === 'costo') val = parseFloat(val) || 0;
+  g[campo] = val; ingSave();
+  if (['fecha', 'estado', 'cantidad', 'costo', 'moneda'].includes(campo)) ingRender(); // afectan totales/orden
+}
+function ingEliminar(id) { if (!confirm('¿Eliminar este ingreso?')) return; ingData = ingData.filter(x => x.id !== id); ingSave(); ingRender(); }
+function _ingMes(f) { const p = String(f).split('-'); const M = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; return (M[parseInt(p[1]) - 1] || '') + ' ' + p[0]; }
+function ingCard(g) {
+  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
+  const opts = ING_ESTADOS.map(s => `<option value="${s.k}" ${g.estado === s.k ? 'selected' : ''}>${s.lbl}</option>`).join('');
+  const fld = (lbl, inner) => `<label style="font-size:11px;color:#9CA3AF;">${lbl}<br>${inner}</label>`;
+  return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input value="${esc(g.desc)}" onchange="ingSetCampo('${g.id}','desc',this.value)" placeholder="Descripción (ej. Pedido fundas China #1)" style="flex:2;min-width:200px;font-size:14px;font-weight:600;border:none;border-bottom:1px solid #F1F5F9;padding:4px 0;">
+      <select onchange="ingSetCampo('${g.id}','estado',this.value)" style="font-size:12px;padding:6px 8px;border:1px solid ${e.color};color:${e.color};border-radius:7px;background:${e.bg};font-weight:600;cursor:pointer;">${opts}</select>
+      <button onclick="ingEliminar('${g.id}')" title="Eliminar" style="min-width:0;padding:5px 9px;border:1px solid #E5E7EB;background:#fff;border-radius:6px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:9px;">
+      ${fld('Proveedor', `<input value="${esc(g.proveedor)}" onchange="ingSetCampo('${g.id}','proveedor',this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;width:150px;">`)}
+      ${fld('Cantidad', `<input type="number" value="${g.cantidad || 0}" onchange="ingSetCampo('${g.id}','cantidad',this.value)" style="width:100px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;">`)}
+      ${fld('Costo total', `<input type="number" value="${g.costo || 0}" onchange="ingSetCampo('${g.id}','costo',this.value)" style="width:120px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;">`)}
+      ${fld('Moneda', `<select onchange="ingSetCampo('${g.id}','moneda',this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;"><option ${g.moneda === 'USD' ? 'selected' : ''}>USD</option><option ${g.moneda === 'ARS' ? 'selected' : ''}>ARS</option></select>`)}
+      ${fld('Llegada estimada', `<input type="date" value="${g.fecha || ''}" onchange="ingSetCampo('${g.id}','fecha',this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;">`)}
+    </div>
+    <input value="${esc(g.nota)}" onchange="ingSetCampo('${g.id}','nota',this.value)" placeholder="Nota: qué trae (modelos, diseños, detalle)…" style="width:100%;margin-top:9px;font-size:12px;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;box-sizing:border-box;">
+  </div>`;
+}
+function ingRender() {
+  const cont = document.getElementById('ingresos-cont'); if (!cont) return;
+  const enCamino = ingData.filter(g => g.estado !== 'arribado');
+  const unidades = enCamino.reduce((s, g) => s + (+g.cantidad || 0), 0);
+  const costoUSD = enCamino.filter(g => g.moneda === 'USD').reduce((s, g) => s + (+g.costo || 0), 0);
+  const costoARS = enCamino.filter(g => g.moneda === 'ARS').reduce((s, g) => s + (+g.costo || 0), 0);
+  const res = document.getElementById('ingresos-resumen');
+  if (res) res.innerHTML = ingData.length
+    ? `📦 <b>${enCamino.length}</b> en camino · <b>${unidades.toLocaleString('es-AR')}</b> unidades` + (costoUSD ? ` · <b>USD ${costoUSD.toLocaleString('es-AR')}</b>` : '') + (costoARS ? ` · <b>ARS ${costoARS.toLocaleString('es-AR')}</b>` : '')
+    : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦';
+  const ord = ingData.slice().sort((a, b) => { if (!a.fecha && !b.fecha) return 0; if (!a.fecha) return 1; if (!b.fecha) return -1; return a.fecha.localeCompare(b.fecha); });
+  let html = '', mesActual = '';
+  ord.forEach(g => {
+    const mes = g.fecha ? _ingMes(g.fecha) : 'Sin fecha estimada';
+    if (mes !== mesActual) { mesActual = mes; html += `<div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">🗓️ ${mes}</div>`; }
+    html += ingCard(g);
+  });
+  cont.innerHTML = html;
+}
+
 // ── Modo "Revisión rápida": de a uno, clasificar y avanzar (ideal para la 1ª pasada) ──
 let dbQzOn = false, dbQzIndex = 0;
 function dbQzQueue() { return dbDisenos.filter(d => d.estado === 'revisar'); }
@@ -5200,6 +5279,7 @@ function switchTab(id, btn) {
   if (id === 'exhib') { if (!tabsRendered[id]) { tabsRendered[id] = true; exhibInit(); } return; }
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
+  if (id === 'ingresos') { ingInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
@@ -7114,6 +7194,7 @@ const PERM_CAT = [
       { key: 'categorias', label: '🗂️ Categorías por modelo', info: 'Auto-categorización de fundas por modelo de iPhone según stock (solo BDI).', brands: ['bdi'] },
   ] },
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
+  { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
 ];
 const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
 // Config por defecto = comportamiento actual (fallback si el KV no responde)
