@@ -6210,17 +6210,21 @@ function _pdfAddImgFit(pdf, dataUrl, x, y, boxW, boxH) {
 // Comparte el PDF con la hoja nativa (iPhone/Android) o lo descarga (escritorio).
 // Evita el link "blob:" feo que muestra Safari al usar pdf.save().
 async function _pdfCompartir(pdf, filename, title) {
-  try {
-    const blob = pdf.output('blob');
-    const file = new File([blob], filename, { type: 'application/pdf' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: title || filename });
-      return;
+  // Celular/tablet → hoja de compartir (ahí está "Guardar en Archivos"). Escritorio → descarga directa.
+  const esMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ((navigator.maxTouchPoints || 0) > 1 && /Macintosh/i.test(navigator.userAgent));
+  if (esMobile) {
+    try {
+      const blob = pdf.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: title || filename });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // el usuario cerró la hoja de compartir
     }
-  } catch (e) {
-    if (e && e.name === 'AbortError') return; // el usuario cerró la hoja de compartir
   }
-  pdf.save(filename); // escritorio o navegador sin compartir de archivos
+  pdf.save(filename); // escritorio (o si no hay compartir) → descarga directa
 }
 
 function exhibGenerarPDF() {
