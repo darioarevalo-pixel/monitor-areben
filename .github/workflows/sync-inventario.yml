@@ -1,0 +1,35 @@
+name: Sync rápido de inventario
+
+on:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: 'Marca (bdi o zattia)'
+        required: true
+        default: 'bdi'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Sync solo inventario
+        env:
+          INPUT_STORE: ${{ inputs.store }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GN_TOKEN: ${{ secrets.GN_TOKEN }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_KEY: ${{ secrets.ZATTIA_SUPABASE_KEY }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
+        run: node scripts/sync-inventario-solo.js
