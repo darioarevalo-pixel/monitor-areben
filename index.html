@@ -290,10 +290,10 @@
     </div>
 
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('productos', this)">Por producto</button>
-      <button class="tab" onclick="switchTab('variantes', this)">Por variante</button>
-      <button class="tab" onclick="switchTab('stock', this)">Stock vs demanda</button>
-      <button class="tab" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
+      <button class="tab active" id="tab-btn-productos" onclick="switchTab('productos', this)">Por producto</button>
+      <button class="tab" id="tab-btn-variantes" onclick="switchTab('variantes', this)">Por variante</button>
+      <button class="tab" id="tab-btn-stock" onclick="switchTab('stock', this)">Stock vs demanda</button>
+      <button class="tab" id="tab-btn-ventas-mensuales" onclick="switchTab('ventas-mensuales', this)">Ventas mensuales</button>
       <button class="tab" id="tab-btn-fundas-modelo" style="display:none;" onclick="switchTab('fundas-modelo', this)">Fundas por modelo</button>
       <button class="tab" id="tab-btn-proveedores" style="display:none;" onclick="switchTab('proveedores', this)">Proveedores</button>
       <button class="tab" id="tab-btn-colores" style="display:none;" onclick="switchTab('colores', this)">Colores</button>
@@ -7518,6 +7518,10 @@ function _mesLabel(yyyymm) {
 // Catálogo de secciones controlables. Cada una indica en qué marcas aplica y su info.
 const PERM_CAT = [
   { key: 'resumen', label: '📈 Resumen / KPIs', info: 'Panel principal con métricas y resumen general del negocio.', brands: ['bdi', 'zattia'] },
+  { key: 'productos', label: '📊 Por producto', info: 'Análisis por producto: ventas, vida útil, stock, estado y selección de outlet/sale.', brands: ['bdi', 'zattia'] },
+  { key: 'variantes', label: '🔠 Por variante', info: 'Ventas y stock por variante (talle / modelo / color).', brands: ['bdi', 'zattia'] },
+  { key: 'stock', label: '📦 Stock vs demanda', info: 'Comparación del stock contra la demanda real.', brands: ['bdi', 'zattia'] },
+  { key: 'ventas-mensuales', label: '📅 Ventas mensuales', info: 'Evolución de las ventas mes a mes.', brands: ['bdi', 'zattia'] },
   { key: 'fundas-modelo', label: 'Fundas por modelo', info: 'Demanda y simulación de pedidos de fundas por modelo de iPhone.', brands: ['bdi'] },
   { key: 'clientes', label: 'Clientes (CRM)', info: 'Clientes mayoristas: segmentos, contacto, historial de compras.', brands: ['bdi'] },
   { key: 'proveedores', label: 'Proveedores', info: 'Análisis de ventas y stock por proveedor.', brands: ['zattia'] },
