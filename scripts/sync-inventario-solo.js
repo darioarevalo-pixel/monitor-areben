@@ -1,5 +1,5 @@
-// Sync RÁPIDO: solo inventario (stock + sku + barcode), para BDI o Zattia.
-// Se elige con INPUT_STORE=bdi|zattia (o argumento). No toca ventas ni productos → es veloz.
+// Sync RÁPIDO: inventario (stock + sku + barcode) + productos (precio, costo, categoría, etc.),
+// para BDI o Zattia. Se elige con INPUT_STORE=bdi|zattia. NO toca ventas → es veloz.
 import { createClient } from '@supabase/supabase-js';
 
 const STORE = (process.env.INPUT_STORE || process.argv[2] || 'bdi').toLowerCase();
@@ -50,8 +50,43 @@ async function fetchAllPages(base) {
   return out;
 }
 
+async function syncProductos() {
+  console.log('\n[productos] descargando...');
+  const rows = await fetchAllPages('productos/obtener?per_page=50');
+  const productos = rows.map(p => {
+    const base = {
+      id: p.id,
+      name: p.name,
+      sku: p.sku || p.code || null,
+      category: p.category || null,
+      retailer_price: p.retailer_price ?? null,
+      wholesaler_price: p.wholesaler_price ?? null,
+      unit_cost: p.unit_cost ?? null,
+      active: p.active ?? null,
+      created_at: p.created_at || null,
+      updated_at: p.updated_at || null,
+    };
+    if (STORE === 'zattia') base.proveedor = p.provider || null;
+    return base;
+  });
+  console.log(`[productos] ${productos.length} registros. Guardando...`);
+  if (!productos.length) return;
+  const BATCH = 500;
+  for (let i = 0; i < productos.length; i += BATCH) {
+    const lote = productos.slice(i, i + BATCH);
+    let { error } = await supabase.from('productos').upsert(lote, { onConflict: 'id' });
+    if (error && /proveedor|provider|column/i.test(error.message)) {
+      const reducido = lote.map(({ proveedor, ...rest }) => rest);
+      ({ error } = await supabase.from('productos').upsert(reducido, { onConflict: 'id' }));
+    }
+    if (error) throw new Error('productos: ' + error.message);
+    process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
+  }
+  console.log(`\n[productos] OK — ${STORE}`);
+}
+
 (async () => {
-  console.log(`=== Sync RÁPIDO de inventario — ${STORE.toUpperCase()} ===`);
+  console.log(`=== Sync RÁPIDO (inventario + productos) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   const rows = await fetchAllPages('inventario/obtener?per_page=50');
   const seen = new Map();
@@ -83,4 +118,6 @@ async function fetchAllPages(base) {
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
+  await syncProductos();
+  console.log(`\n[listo] inventario + productos — ${STORE}`);
 })().catch(e => { console.error('ERROR:', e.message); process.exit(1); });
