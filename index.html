@@ -334,6 +334,7 @@
         </select>
         <button id="outlet-btn" class="btn-sm" onclick="outletReporte()" style="background:#DB2777;color:#fff;">🏷️ Generar sale (0)</button>
         <button id="outlet-clear" class="btn-sm" onclick="outletLimpiar()" style="display:none;">Limpiar selección</button>
+        <button class="btn-sm" onclick="dispararSyncInv(this)" title="Trae el inventario más nuevo de GN (tarda ~2 min)" style="background:#fff;border:1px solid #D1D5DB;white-space:nowrap;">🔄 Actualizar inventario</button>
       </div>
       <div id="ingreso-pills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;min-height:0;"></div>
       <div class="card" style="padding:0;overflow:hidden;">
@@ -991,11 +992,14 @@
     </div>
 
     <div id="tab-etiquetas" class="section">
-      <div class="tabs" style="margin-bottom:16px;">
-        <button class="tab active" id="eti-sub-btn-dep" onclick="etiSwitchSub('dep', this)">🏬 Etiquetas Depósito</button>
-        <button class="tab" id="eti-sub-btn-loc" onclick="etiSwitchSub('loc', this)">🏪 Etiquetas Local</button>
-        <button class="tab" id="eti-sub-btn-sku" onclick="etiSwitchSub('sku', this)">🔢 Etiquetas SKU</button>
-        <button class="tab" id="eti-sub-btn-libre" onclick="etiSwitchSub('libre', this)">✏️ Etiqueta libre</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        <div class="tabs" style="margin-bottom:0;">
+          <button class="tab active" id="eti-sub-btn-dep" onclick="etiSwitchSub('dep', this)">🏬 Etiquetas Depósito</button>
+          <button class="tab" id="eti-sub-btn-loc" onclick="etiSwitchSub('loc', this)">🏪 Etiquetas Local</button>
+          <button class="tab" id="eti-sub-btn-sku" onclick="etiSwitchSub('sku', this)">🔢 Etiquetas SKU</button>
+          <button class="tab" id="eti-sub-btn-libre" onclick="etiSwitchSub('libre', this)">✏️ Etiqueta libre</button>
+        </div>
+        <button class="btn-sm" onclick="dispararSyncInv(this)" title="Trae el inventario más nuevo de GN (sku, código de barras, stock). Tarda ~2 min." style="background:#fff;border:1px solid #D1D5DB;white-space:nowrap;">🔄 Actualizar inventario</button>
       </div>
 
       <!-- DEPÓSITO -->
@@ -1171,6 +1175,7 @@
         </div>
         <div id="exhib-resumen-config" style="font-size:13px;color:#374151;margin-bottom:12px;"></div>
         <button class="btn-sm" onclick="exhibIniciar()" style="background:#378ADD;color:#fff;">▶️ Iniciar recorrido</button>
+        <button class="btn-sm" onclick="dispararSyncInv(this)" title="Trae el stock más nuevo de GN (tarda ~2 min)" style="background:#fff;border:1px solid #D1D5DB;margin-left:6px;">🔄 Actualizar stock</button>
         <div id="exhib-reanudar" style="margin-top:10px;"></div>
       </div>
 
@@ -7830,6 +7835,29 @@ const tnLoadingPromises = { bdi: null, zattia: null };
 
 function _cuentaKey() {
   return currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi';
+}
+
+// ── Botón "Actualizar inventario / stock": dispara el sync rápido en el servidor ──
+const SYNC_API = 'https://bdi-catalogo.vercel.app/api/sync';
+async function dispararSyncInv(btn) {
+  const store = _cuentaKey();
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando…'; }
+  try {
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store }) });
+    const d = await r.json();
+    if (d.ok) {
+      if (btn) btn.textContent = '✓ Iniciado';
+      alert('🔄 Actualización de inventario iniciada (' + store.toUpperCase() + ').\n\nTarda ~2 minutos. Cuando pase ese rato, refrescá la página (poné ?1 al final de la dirección) para ver los datos nuevos.');
+    } else {
+      if (btn) btn.textContent = '⚠️ Error';
+      alert('No se pudo iniciar la actualización.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : ''));
+    }
+  } catch (e) {
+    if (btn) btn.textContent = '⚠️ Sin conexión';
+    alert('Error de conexión al iniciar la actualización.');
+  }
+  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = orig; } }, 9000);
 }
 
 async function cargarImagenesTN(cuentaKey) {
