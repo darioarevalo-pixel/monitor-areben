@@ -8016,7 +8016,7 @@ async function dispararSyncInv(btn) {
 
 // ════════ Reposición de local ════════════════════════════════════════════════
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
-let repoCfg = { mins: {}, apagados: [], defaultMin: 4 };
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1 };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
@@ -8043,8 +8043,17 @@ function _repoModelo(size) {
 // Clave para el mínimo: el modelo (fundas) o la categoría (resto)
 function repoMinKey(it) { return it.modelo || it.cat || '(sin categoría)'; }
 function repoMin(it) { return repoCfg.mins[repoMinKey(it)] ?? repoCfg.defaultMin ?? 4; }
+// Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
+// Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
+function repoSugerido(it) {
+  const obj = repoMin(it);
+  if (it.local >= obj) return 0;
+  const reserva = it.modelo ? (repoCfg.reservaDeposito ?? 1) : 0; // la reserva aplica a fundas
+  return Math.max(0, Math.min(obj - it.local, it.deposito - reserva));
+}
+function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); }
 async function repoCfgLoad() {
-  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4 }; }
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1 }; }
   catch (e) { /* default */ }
 }
 function repoCfgSave() {
@@ -8087,7 +8096,7 @@ async function repoCargarInventario() {
 }
 function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
-  return repoInv.filter(it => !ap.has(it.pid) && it.local < repoMin(it) && it.deposito > 0);
+  return repoInv.filter(it => !ap.has(it.pid) && it.local < repoMin(it) && repoSugerido(it) > 0);
 }
 function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRender(); }
 function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); repoRender(); }
@@ -8113,9 +8122,10 @@ function repoRender() {
   }
   if (modelKeys.length) {
     html += `<div onclick="repoToggleFundas()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:12px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:9px 12px;font-weight:600;font-size:13px;">
-        <span>🛡️ Fundas — mínimo por modelo de iPhone <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
+        <span>🛡️ Fundas — objetivo en Local por modelo <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
         <span style="color:#9CA3AF;">${repoFundasOpen ? '▴ ocultar' : '▾ definir'}</span></div>`;
-    if (repoFundasOpen) html += `<div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
+    if (repoFundasOpen) html += `<div style="background:#FFF7FB;border:1px solid #FBCFE8;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#9D174D;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🛡️ Reservar siempre en depósito (prioridad venta online): <input type="number" value="${repoCfg.reservaDeposito ?? 1}" min="0" onchange="repoSetReserva(this.value)" style="width:56px;padding:4px 6px;border:1px solid #FBCFE8;border-radius:6px;text-align:center;"> u. <span style="color:#9CA3AF;">Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</span></div>
+      <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
   html += `</div>`;
@@ -8135,7 +8145,7 @@ function repoRender() {
     html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? '<th style="text-align:center;">7d</th>' : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
     items.forEach(it => {
       const min = repoMin(it);
-      const sug = Math.min(it.deposito, Math.max(1, min - it.local));
+      const sug = repoSugerido(it);
       const falt = repoFaltantes.has(it.vid);
       html += `<tr style="border-top:1px solid #F3F4F6;${falt ? 'background:#FEF2F2;' : ''}">
         <td style="padding:6px 8px;">${esc(it.size || '—')}${it.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(it.sku)}</span>` : ''}</td>
@@ -8177,7 +8187,7 @@ function repoPDF() {
     items.forEach(it => {
       if (y > 287) { pdf.addPage(); y = 16; }
       const min = repoMin(it);
-      const sug = Math.min(it.deposito, Math.max(1, min - it.local));
+      const sug = repoSugerido(it);
       pdf.setFontSize(8.5);
       pdf.text(pdf.splitTextToSize(String(it.size || '—'), 88)[0], M, y);
       pdf.text(String(it.local), M + 95, y); pdf.text(String(it.deposito), M + 115, y); pdf.text(String(it.s7), M + 135, y); pdf.text(String(min), M + 150, y);
