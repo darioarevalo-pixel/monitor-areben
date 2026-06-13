@@ -1344,6 +1344,16 @@
         </div>
         <div id="repo-cont"></div>
       </div>
+      <div id="repo-cfg-modal" onclick="repoCerrarConfig()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:flex-start;justify-content:center;padding:28px 14px;overflow:auto;">
+        <div style="background:#fff;border-radius:14px;max-width:880px;width:100%;padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.25);" onclick="event.stopPropagation();">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:16px;font-weight:700;">⚙️ Configuración de mínimos</div>
+            <button onclick="repoCerrarConfig()" style="border:none;background:#F3F4F6;border-radius:8px;width:30px;height:30px;font-size:15px;cursor:pointer;color:#374151;">✕</button>
+          </div>
+          <div id="repo-cfg-body"></div>
+          <div style="text-align:right;margin-top:14px;"><button onclick="repoCerrarConfig()" style="background:#378ADD;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">Listo</button></div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Gestión de usuarios y permisos (solo admin) ─────────────────────── -->
@@ -8017,12 +8027,12 @@ async function dispararSyncInv(btn) {
 
 // ════════ Reposición de local ════════════════════════════════════════════════
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
-let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1 };
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, topes: {} };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
 let repoFundasOpen = false;       // desplegable de mínimos por modelo (fundas)
-function repoToggleFundas() { repoFundasOpen = !repoFundasOpen; repoRender(); }
+function repoToggleFundas() { repoFundasOpen = !repoFundasOpen; repoRenderConfig(); }
 // Orden de modelos de iPhone por ciclo de vida (no alfabético)
 function _repoModelSort(a, b) {
   const parse = s => { const m = String(s).match(/iphone\s*(\d{1,2})\s*(.*)/i); return { n: m ? parseInt(m[1]) : 99, suf: (m ? m[2] : '').toLowerCase().trim() }; };
@@ -8067,22 +8077,26 @@ function _repoSubcat(cats) {
 //  - si no, fallback a la categoría
 function repoMinKey(it) { return it.subcat || it.modelo || it.cat || '(sin categoría)'; }
 function repoMin(it) { return repoCfg.mins[repoMinKey(it)] ?? repoCfg.defaultMin ?? 4; }
+// Objetivo en Local = mínimo por modelo/categoría, pero topeado por el "tope por diseño" (por producto) si es menor.
+// Ej: bubble case con tope 1 → aunque el modelo 16 Pro pida 2, su objetivo es 1 (máx 1 por variante).
+function repoObjetivo(it) { const obj = repoMin(it); const t = repoCfg.topes[String(it.pid)]; return (t != null && t < obj) ? t : obj; }
+function repoSetTope(pid, v) { pid = String(pid); if (v === '' || v == null) delete repoCfg.topes[pid]; else repoCfg.topes[pid] = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); }
 // Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
 // Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
 function repoSugerido(it) {
-  const obj = repoMin(it);
+  const obj = repoObjetivo(it);
   if (it.local >= obj) return 0;
   const reserva = it.modelo ? (repoCfg.reservaDeposito ?? 1) : 0; // la reserva aplica a fundas
   return Math.max(0, Math.min(obj - it.local, it.deposito - reserva));
 }
-function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); }
+function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRenderConfig(); }
 // Edición manual de la cantidad a mover (por sesión). Si no se tocó, vale el sugerido.
 let repoMoverManual = {};
 function repoMoverFinal(it) { const v = repoMoverManual[it.vid]; return (v === undefined) ? repoSugerido(it) : v; }
 function repoSetMover(vid, v) { if (v === '' || v == null) delete repoMoverManual[vid]; else repoMoverManual[vid] = Math.max(0, parseInt(v) || 0); repoRender(); }
 function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
-  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1 }; }
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, topes: d.config.topes || {} }; }
   catch (e) { /* default */ }
 }
 function repoCfgSave() {
@@ -8128,26 +8142,23 @@ async function repoCargarInventario() {
 }
 function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
-  return repoInv.filter(it => !ap.has(it.pid) && it.local < repoMin(it) && repoSugerido(it) > 0);
+  return repoInv.filter(it => !ap.has(it.pid) && it.local < repoObjetivo(it) && repoSugerido(it) > 0);
 }
-function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRender(); }
-function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); repoRender(); }
+function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRenderConfig(); }
+function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); repoRenderConfig(); }
 function repoApagar(pid) { pid = String(pid); if (!repoCfg.apagados.includes(pid)) repoCfg.apagados.push(pid); repoCfgSave(); repoRender(); }
 function repoReactivar(pid) { repoCfg.apagados = repoCfg.apagados.filter(x => String(x) !== String(pid)); repoCfgSave(); repoRender(); }
 function repoFaltante(vid) { if (repoFaltantes.has(vid)) repoFaltantes.delete(vid); else repoFaltantes.add(vid); repoRender(); }
 function repoToggleVentas(v) { repoVerVentas = v; repoRender(); }
-function repoRender() {
-  const cont = document.getElementById('repo-cont'); if (!cont) return;
+// HTML del panel de configuración (mínimos por categoría/modelo + reserva). Vive en un modal (engranaje).
+function repoConfigHTML() {
   const allKeys = [...new Set(repoInv.map(repoMinKey))];
   const modelKeys = allKeys.filter(k => /^iphone/i.test(k)).sort(_repoModelSort);
   const catKeys = allKeys.filter(k => !/^iphone/i.test(k)).sort((a, b) => a.localeCompare(b, 'es'));
   const esc2 = c => esc(c).replace(/'/g, "\\'");
   const minInput = c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`;
   const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;';
-  const tsTxt = repoLastUpdate ? repoLastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-  let html = `<div style="font-size:12px;color:#6B7280;margin-top:12px;">🕒 Reporte actualizado: <b>${tsTxt}</b> <span style="color:#9CA3AF;">(datos del inventario en la base; tocá "Traer stock de GN" si necesitás traer lo último)</span></div>
-    <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:10px 0 14px;background:#FAFAFA;">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos en Local <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(por variante; en fundas, por modelo)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
+  let html = `<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Definí cuántas unidades querés mantener en Local. <b>Tip:</b> el "tope por diseño" (en cada producto del reporte) puede bajar este número para un diseño puntual. <span id="repo-cfg-status" style="font-size:11px;margin-left:6px;"></span></div>
     <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>`;
   if (catKeys.length) {
     html += `<div style="font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px;">Categorías</div><div style="${gridStyle}">${catKeys.map(minInput).join('')}</div>`;
@@ -8160,7 +8171,18 @@ function repoRender() {
       <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
-  html += `</div>`;
+  return html;
+}
+function repoRenderConfig() { const b = document.getElementById('repo-cfg-body'); if (b) b.innerHTML = repoConfigHTML(); }
+function repoAbrirConfig() { const m = document.getElementById('repo-cfg-modal'); if (!m) return; repoRenderConfig(); m.style.display = 'flex'; }
+function repoCerrarConfig() { const m = document.getElementById('repo-cfg-modal'); if (m) m.style.display = 'none'; repoRender(); }
+function repoRender() {
+  const cont = document.getElementById('repo-cont'); if (!cont) return;
+  const tsTxt = repoLastUpdate ? repoLastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;">
+      <div style="font-size:12px;color:#6B7280;">🕒 Reporte actualizado: <b>${tsTxt}</b> <span style="color:#9CA3AF;">(tocá "Traer stock de GN" si necesitás traer lo último)</span></div>
+      <button onclick="repoAbrirConfig()" style="border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">⚙️ Configurar mínimos</button>
+    </div>`;
   const rep = repoReporte();
   const porProd = {};
   rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, cat: it.cat, items: [] }; porProd[it.pid].items.push(it); });
@@ -8173,13 +8195,18 @@ function repoRender() {
   prodKeys.forEach(pid => {
     const g = porProd[pid];
     const items = g.items.sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px;gap:8px;">
+    const topeVal = repoCfg.topes[String(pid)];
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px;gap:8px;flex-wrap:wrap;">
         <div style="font-weight:700;font-size:13px;color:#374151;">${esc(g.name)} <span style="color:#9CA3AF;font-weight:400;">· ${esc(g.cat)} · ${items.length}</span></div>
-        <button onclick="repoApagar('${pid}')" title="Apagar este producto (no reponer más)" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">🔌 Apagar</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label title="Máximo de unidades en Local por variante de este diseño. Pisa el mínimo del modelo si es menor (ej: diseño que casi no rota → tope 1)." style="font-size:11px;color:#6B7280;display:flex;align-items:center;gap:4px;background:#fff;border:1px solid ${topeVal != null ? '#378ADD' : '#E5E7EB'};border-radius:6px;padding:2px 7px;">tope local <input type="number" min="0" value="${topeVal ?? ''}" placeholder="—" onchange="repoSetTope('${pid}',this.value)" style="width:42px;padding:2px 4px;border:1px solid #E5E7EB;border-radius:5px;text-align:center;${topeVal != null ? 'background:#EFF6FF;font-weight:700;' : ''}"></label>
+          <button onclick="repoApagar('${pid}')" title="Apagar este producto (no reponer más)" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">🔌 Apagar</button>
+        </div>
       </div>`;
     html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? '<th style="text-align:center;">7d</th>' : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
     items.forEach(it => {
-      const min = repoMin(it);
+      const obj = repoObjetivo(it);
+      const topeado = repoCfg.topes[String(it.pid)] != null && repoCfg.topes[String(it.pid)] < repoMin(it);
       const sug = repoSugerido(it);
       const mover = repoMoverFinal(it);
       const editado = repoMoverManual[it.vid] !== undefined && repoMoverManual[it.vid] !== sug;
@@ -8189,7 +8216,7 @@ function repoRender() {
         <td style="text-align:center;color:${it.local <= 1 ? '#DC2626' : '#374151'};font-weight:600;">${it.local}</td>
         <td style="text-align:center;">${it.deposito}</td>
         ${repoVerVentas ? `<td style="text-align:center;color:#1D9E75;font-weight:600;">${it.s7}</td>` : ''}
-        <td style="text-align:center;color:#9CA3AF;">${min}</td>
+        <td style="text-align:center;color:${topeado ? '#378ADD' : '#9CA3AF'};${topeado ? 'font-weight:700;' : ''}" title="${topeado ? 'Topeado por diseño' : 'Mínimo del modelo/categoría'}">${obj}</td>
         <td style="text-align:center;"><input type="number" min="0" max="${it.deposito}" value="${mover}" onchange="repoSetMover('${it.vid}',this.value)" title="Sugerido: ${sug} · Máx en depósito: ${it.deposito}" style="width:48px;padding:3px 4px;border:1px solid ${editado ? '#378ADD' : '#E5E7EB'};${editado ? 'background:#EFF6FF;' : ''}border-radius:6px;text-align:center;font-weight:700;color:${mover === 0 ? '#9CA3AF' : '#111827'};"></td>
         <td style="text-align:right;padding-right:8px;"><button onclick="repoFaltante('${it.vid}')" title="No se encuentra → conteo urgente" style="border:1px solid ${falt ? '#DC2626' : '#E5E7EB'};background:${falt ? '#DC2626' : '#fff'};color:${falt ? '#fff' : '#6B7280'};border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;">⚠️</button></td></tr>`;
     });
@@ -8224,11 +8251,11 @@ function repoPDF() {
     pdf.text('Variante', M, y); pdf.text('Local', M + 95, y); pdf.text('Depós', M + 115, y); pdf.text('7d', M + 135, y); pdf.text('Mín', M + 150, y); pdf.text('Mover', M + 166, y); pdf.setTextColor(0); pdf.setDrawColor(220); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5;
     items.forEach(it => {
       if (y > 287) { pdf.addPage(); y = 16; }
-      const min = repoMin(it);
+      const obj = repoObjetivo(it);
       const mover = repoMoverFinal(it);
       pdf.setFontSize(8.5);
       pdf.text(pdf.splitTextToSize(String(it.size || '—'), 88)[0], M, y);
-      pdf.text(String(it.local), M + 95, y); pdf.text(String(it.deposito), M + 115, y); pdf.text(String(it.s7), M + 135, y); pdf.text(String(min), M + 150, y);
+      pdf.text(String(it.local), M + 95, y); pdf.text(String(it.deposito), M + 115, y); pdf.text(String(it.s7), M + 135, y); pdf.text(String(obj), M + 150, y);
       pdf.setFont('helvetica', 'bold'); pdf.text(String(mover), M + 166, y); pdf.setFont('helvetica', 'normal');
       pdf.setDrawColor(240); pdf.line(M, y + 1.4, RIGHT, y + 1.4); y += 5;
     });
