@@ -7956,7 +7956,12 @@ async function repoCargarInventario() {
     if (!map[vid]) {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
-      const cat = (tn && tn.categories && tn.categories[0]) || (p && p.category) || '(sin categoría)';
+      // Fundas: la variante es el MODELO de iPhone → agrupamos y ponemos mínimo POR MODELO.
+      // Resto: por categoría de TN (o de GN, o "sin categoría" si no matchea).
+      const esModelo = /iphone/i.test(r.size_name || '');
+      const cat = esModelo
+        ? (r.size_name || '').trim()
+        : ((tn && tn.categories && tn.categories[0]) || (p && p.category) || '(sin categoría)');
       map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, s7: (typeof allVvar !== 'undefined' && allVvar[vid] && allVvar[vid].s7) || 0 };
     }
     const q = r.available_quantity || 0;
@@ -7981,7 +7986,7 @@ function repoRender() {
   const tsTxt = repoLastUpdate ? repoLastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
   let html = `<div style="font-size:12px;color:#6B7280;margin-top:12px;">🕒 Reporte actualizado: <b>${tsTxt}</b> <span style="color:#9CA3AF;">(datos del inventario en la base; tocá "Traer stock de GN" si necesitás traer lo último)</span></div>
     <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:10px 0 14px;background:#FAFAFA;">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos por categoría <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(unidades en Local, por variante)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos por categoría <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(en Local, por variante · en fundas es por modelo de iPhone)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
     <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;">
       ${cats.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('') || '<span style="color:#9CA3AF;font-size:12px;">Sin categorías cargadas.</span>'}
