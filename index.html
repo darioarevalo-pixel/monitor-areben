@@ -1322,7 +1322,8 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="repo-ver-ventas" onchange="repoToggleVentas(this.checked)"> Ver ventas 7d</label>
-            <button class="btn-sm" onclick="dispararSyncInv(this)" title="Traer el stock más nuevo de GN (~2 min)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar</button>
+            <button class="btn-sm" onclick="repoInit()" title="Re-lee el inventario de la base y recalcula el reporte (al instante)" style="background:#378ADD;color:#fff;">↻ Actualizar reporte</button>
+            <button class="btn-sm" onclick="dispararSyncInv(this)" title="Trae el stock más nuevo desde GN (~2 min); después tocá 'Actualizar reporte'" style="background:#fff;border:1px solid #D1D5DB;">📥 Traer stock de GN</button>
             <button class="btn-sm" onclick="repoPDF()" style="background:#16A34A;color:#fff;">📄 Exportar reposición</button>
             <button class="btn-sm" onclick="repoPDFConteo()" style="background:#DC2626;color:#fff;">⚠️ Conteo urgente</button>
           </div>
@@ -7919,6 +7920,7 @@ let repoCfg = { mins: {}, apagados: [], defaultMin: 4 };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
+let repoLastUpdate = null;        // cuándo se generó/recalculó el reporte
 let _repoSaveT = null;
 function repoMin(it) { return repoCfg.mins[it.cat] ?? repoCfg.defaultMin ?? 4; }
 async function repoCfgLoad() {
@@ -7939,6 +7941,7 @@ async function repoInit() {
   await repoCfgLoad();
   if (!window._mktTNData) { try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; } }
   await repoCargarInventario();
+  repoLastUpdate = new Date();
   const cb = document.getElementById('repo-ver-ventas'); if (cb) cb.checked = repoVerVentas;
   repoRender();
 }
@@ -7975,7 +7978,9 @@ function repoRender() {
   const cont = document.getElementById('repo-cont'); if (!cont) return;
   const cats = [...new Set(repoInv.map(it => it.cat))].sort((a, b) => a.localeCompare(b, 'es'));
   const esc2 = c => esc(c).replace(/'/g, "\\'");
-  let html = `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:14px 0;background:#FAFAFA;">
+  const tsTxt = repoLastUpdate ? repoLastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  let html = `<div style="font-size:12px;color:#6B7280;margin-top:12px;">🕒 Reporte actualizado: <b>${tsTxt}</b> <span style="color:#9CA3AF;">(datos del inventario en la base; tocá "Traer stock de GN" si necesitás traer lo último)</span></div>
+    <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:10px 0 14px;background:#FAFAFA;">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos por categoría <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(unidades en Local, por variante)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
     <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;">
