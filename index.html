@@ -955,6 +955,19 @@
         <div id="com-sim-detalle" style="margin-top:12px;"></div>
       </div>
 
+      <!-- LISTA DE PRECIOS DE SALE -->
+      <div class="card" id="com-sale-card" style="margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;">🏷️ Lista de precios de sale</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-sm" onclick="saleExportCSV()" style="background:#fff;border:1px solid #D1D5DB;">⬇️ Excel</button>
+            <button class="btn-sm" onclick="saleExportPDF()" style="background:#16A34A;color:#fff;">📄 PDF</button>
+            <button class="btn-sm" onclick="saleVaciar()" style="background:#fff;border:1px solid #FCA5A5;color:#DC2626;">Vaciar</button>
+          </div>
+        </div>
+        <div id="com-sale-cont"></div>
+      </div>
+
       <!-- EXTRA: PISO DE PRECIO -->
       <div class="card" style="margin-top:4px;">
         <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
@@ -5246,6 +5259,7 @@ function comInit() {
   comLoad();                // local/default inmediato
   comAplicarUI();
   comCargarCompartida();    // trae la compartida del KV y re-aplica si existe
+  saleLoad(); saleRender(); // lista de precios de sale (local por cuenta)
 }
 
 function comOnCanalChange() {
@@ -5375,6 +5389,9 @@ function comOnCostoInput() {
 
 // ── Traer un producto real al simulador ───────────────────────────────────────
 let comProdMap = {};
+let comProdSel = null;            // producto real traído al simulador
+let saleList = [];                // lista de precios de sale definidos (por cuenta, local)
+function _redondear90(v) { if (!v || v <= 0) return 0; const r = Math.round(v / 100) * 100 - 10; return r < 90 ? 90 : r; }
 function comProdPopular() {
   const dl = document.getElementById('com-prod-list'); if (!dl) return;
   comProdMap = {};
@@ -5387,6 +5404,7 @@ function comProdPopular() {
 async function comProdSelect(val) {
   const p = comProdMap[val] || (allProductos || []).find(x => `${x.name}${x.sku ? ' · ' + x.sku : ''}` === val) || (allProductos || []).find(x => x.name === val);
   if (!p) return;
+  comProdSel = p;
   document.getElementById('com-costo').value = p.unit_cost || '';
   document.getElementById('com-marca').value = p.name || '';
   if (!window._mktTNData) {
@@ -5413,13 +5431,29 @@ function comProdInfoRender(p, tn) {
        ${img}
        <div style="flex:1;min-width:0;">
          <div style="font-size:13px;color:#374151;margin-bottom:8px;"><b>${esc(p.name)}</b>${p.sku ? ' · <span style="color:#9CA3AF;">' + esc(p.sku) + '</span>' : ''} · Costo: <b>${p.unit_cost ? fmt(p.unit_cost) : '—'}</b></div>
-         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+         <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
            <div style="font-size:12px;color:#666;">Precio normal TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;">${normal ? fmt(normal) : '—'}</b> ${btn(normal, '#378ADD')}</div></div>
            <div style="font-size:12px;color:#666;">Precio promo TN<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><b style="font-size:14px;color:#16A34A;">${promo ? fmt(promo) : '—'}</b> ${btn(promo, '#16A34A')}</div></div>
-           <div style="font-size:12px;color:#666;">Precio nuevo (sale)<br><div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input type="number" id="com-precio-nuevo" placeholder="$ sale" style="width:104px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"><button onclick="comProdSimularNuevo()" style="background:#DB2777;color:#fff;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Simular</button></div></div>
+         </div>
+         <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #E5E7EB;">
+           <div style="font-size:12px;font-weight:700;color:#DB2777;margin-bottom:6px;">🏷️ Definir precio de sale</div>
+           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+             <label style="font-size:12px;color:#666;">% descuento<br><input type="number" id="com-desc-pct" placeholder="ej. 20" oninput="comProdDesc(${normal || 0})" style="width:80px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;margin-top:3px;"></label>
+             <label style="font-size:12px;color:#666;">Precio sale (termina en 90)<br><input type="number" id="com-precio-nuevo" placeholder="$" style="width:120px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;margin-top:3px;"></label>
+             <button onclick="comProdSimularNuevo()" style="background:#DB2777;color:#fff;border:none;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer;">Simular</button>
+             <button onclick="comSaleAgregar()" style="background:#111827;color:#fff;border:none;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer;">➕ Agregar a la lista</button>
+           </div>
+           <div style="font-size:11px;color:#9CA3AF;margin-top:5px;">Poné el <b>%</b> y el precio se calcula solo (redondeado a terminar en 90). O escribí el precio a mano. "Simular" muestra el margen; "Agregar" lo manda a la lista de sale (abajo).</div>
          </div>
        </div>
      </div>`;
+}
+function comProdDesc(base) {
+  const pct = parseFloat(document.getElementById('com-desc-pct').value);
+  if (!base || base <= 0 || isNaN(pct)) return;
+  const nuevo = _redondear90(base * (1 - pct / 100));
+  document.getElementById('com-precio-nuevo').value = nuevo;
+  comProdSimular(nuevo);
 }
 function comProdSimular(precio) {
   document.getElementById('com-pvp').value = Math.round(precio);
@@ -5428,8 +5462,72 @@ function comProdSimular(precio) {
 }
 function comProdSimularNuevo() {
   const v = parseFloat(document.getElementById('com-precio-nuevo')?.value);
-  if (!v || v <= 0) { alert('Cargá el precio nuevo (sale).'); return; }
+  if (!v || v <= 0) { alert('Cargá el precio de sale (o un % de descuento).'); return; }
   comProdSimular(v);
+}
+
+// ── Lista de precios de sale (definidos) ──────────────────────────────────────
+function saleKey() { return 'monitor_sale_' + _cuentaKey(); }
+function saleLoad() { try { saleList = JSON.parse(localStorage.getItem(saleKey())) || []; } catch { saleList = []; } }
+function saleSave() { _lsGuardar(saleKey(), JSON.stringify(saleList)); }
+function comSaleAgregar() {
+  if (!comProdSel) { alert('Primero traé un producto.'); return; }
+  const sale = parseFloat(document.getElementById('com-pvp').value);
+  const costo = parseFloat(document.getElementById('com-costo').value) || 0;
+  if (!sale || sale <= 0) { alert('Definí un precio de sale (poné un % de descuento o el precio).'); return; }
+  const tn = _mktFindTN(comProdSel, _mktIndexTN());
+  const actual = (tn && tn.price > 0) ? tn.price : (comProdSel.retailer_price || 0);
+  const desc = actual > 0 ? Math.round((1 - sale / actual) * 100) : 0;
+  const markup = costo > 0 ? (sale / costo - 1) * 100 : null;
+  const margin = sale > 0 ? (sale - costo) / sale * 100 : null;
+  const item = { pid: comProdSel.id, name: comProdSel.name, sku: comProdSel.sku || '', actual, sale, desc, markup, margin };
+  const i = saleList.findIndex(x => x.pid === comProdSel.id);
+  if (i >= 0) saleList[i] = item; else saleList.push(item);
+  saleSave(); saleRender();
+  const c = document.getElementById('com-sale-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function saleRemove(pid) { saleList = saleList.filter(x => String(x.pid) !== String(pid)); saleSave(); saleRender(); }
+function saleVaciar() { if (!saleList.length) return; if (!confirm('¿Vaciar la lista de precios de sale?')) return; saleList = []; saleSave(); saleRender(); }
+function saleRender() {
+  const c = document.getElementById('com-sale-cont'); if (!c) return;
+  if (!saleList.length) { c.innerHTML = '<div style="font-size:12px;color:#9CA3AF;padding:8px 0;">Todavía no agregaste productos. Traé un producto, definí el sale (% o precio) y tocá "➕ Agregar a la lista".</div>'; return; }
+  const fmt = v => v == null ? '—' : '$' + Math.round(v).toLocaleString('es-AR');
+  c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:5px 6px;">Producto</th><th style="text-align:right;">Actual</th><th style="text-align:right;">Sale</th><th style="text-align:center;">% desc</th><th style="text-align:center;">Markup</th><th style="text-align:center;">Margen</th><th></th></tr></thead><tbody>` +
+    saleList.map(x => `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:5px 6px;font-weight:500;">${esc(x.name)}${x.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(x.sku)}</span>` : ''}</td><td style="text-align:right;color:#9CA3AF;">${fmt(x.actual)}</td><td style="text-align:right;font-weight:700;color:#DB2777;">${fmt(x.sale)}</td><td style="text-align:center;">${x.desc}%</td><td style="text-align:center;">${x.markup != null ? Math.round(x.markup) + '%' : '—'}</td><td style="text-align:center;color:${x.margin != null && x.margin < 0 ? '#DC2626' : '#16A34A'};font-weight:600;">${x.margin != null ? Math.round(x.margin) + '%' : '—'}</td><td style="text-align:right;"><button onclick="saleRemove('${x.pid}')" title="Quitar" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:15px;">×</button></td></tr>`).join('') +
+    `</tbody></table>`;
+}
+function saleExportCSV() {
+  if (!saleList.length) { alert('La lista está vacía.'); return; }
+  const rows = [['Producto', 'SKU', 'Precio actual', 'Precio sale', '% desc', 'Markup %', 'Margen %']];
+  saleList.forEach(x => rows.push([x.name, x.sku || '', Math.round(x.actual), Math.round(x.sale), x.desc, x.markup != null ? Math.round(x.markup) : '', x.margin != null ? Math.round(x.margin) : '']));
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `sale-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function saleExportPDF() {
+  if (!saleList.length) { alert('La lista está vacía.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12, RIGHT = 198; let y = 16;
+  const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Lista de precios de sale — ' + _cuentaKey().toUpperCase(), M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${saleList.length} productos`, M, y); pdf.setTextColor(0); y += 8;
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(120);
+  pdf.text('Producto', M, y); pdf.text('Actual', M + 108, y); pdf.text('SALE', M + 134, y); pdf.text('%', M + 162, y); pdf.text('Margen', M + 174, y); pdf.setTextColor(0); pdf.setDrawColor(220); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5;
+  pdf.setFont('helvetica', 'normal');
+  saleList.forEach(x => {
+    if (y > 287) { pdf.addPage(); y = 16; }
+    pdf.setFontSize(8.5);
+    pdf.text(pdf.splitTextToSize(`${x.name}${x.sku ? ' (' + x.sku + ')' : ''}`, 103)[0], M, y);
+    pdf.text('$' + Math.round(x.actual).toLocaleString('es-AR'), M + 108, y);
+    pdf.setFont('helvetica', 'bold'); pdf.text('$' + Math.round(x.sale).toLocaleString('es-AR'), M + 134, y); pdf.setFont('helvetica', 'normal');
+    pdf.text(x.desc + '%', M + 162, y); pdf.text(x.margin != null ? Math.round(x.margin) + '%' : '—', M + 174, y);
+    pdf.setDrawColor(240); pdf.line(M, y + 1.4, RIGHT, y + 1.4); y += 5;
+  });
+  _pdfCompartir(pdf, `sale-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Lista de precios de sale');
 }
 
 // Coeficientes lineales de la contribución: contrib = A·precioEfectivo + C. (de = factor de descuento)
