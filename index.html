@@ -8049,8 +8049,11 @@ function _repoSubcat(cats) {
   const u = (cats || []).filter(c => { const l = String(c).toLowerCase().trim(); return !_repoCatGenericas.has(l) && !_repoEsPromo(c) && !_repoEsModeloCat(c); });
   return u[0] || null;
 }
-// Clave para el mínimo: el modelo (fundas) o la categoría (resto)
-function repoMinKey(it) { return it.modelo || it.cat || '(sin categoría)'; }
+// Clave para el mínimo:
+//  - si tiene subcategoría real de TN (vidrios, protectores, auriculares…) → por subcategoría
+//  - si no, y es funda (tiene modelo de iPhone) → por modelo
+//  - si no, fallback a la categoría
+function repoMinKey(it) { return it.subcat || it.modelo || it.cat || '(sin categoría)'; }
 function repoMin(it) { return repoCfg.mins[repoMinKey(it)] ?? repoCfg.defaultMin ?? 4; }
 // Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
 // Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
@@ -8101,8 +8104,9 @@ async function repoCargarInventario() {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
       const modelo = _repoModelo(r.size_name); // modelo de iPhone si la variante lo incluye (aunque tenga color)
-      const cat = (tn && _repoSubcat(tn.categories)) || (p && p.category) || '(sin categoría)';
-      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, modelo, s7: (typeof allVvar !== 'undefined' && allVvar[vid] && allVvar[vid].s7) || 0 };
+      const subcat = tn ? _repoSubcat(tn.categories) : null; // subcategoría real de TN (null en fundas)
+      const cat = subcat || (p && p.category) || '(sin categoría)';
+      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, subcat, modelo, s7: (typeof allVvar !== 'undefined' && allVvar[vid] && allVvar[vid].s7) || 0 };
     }
     const q = r.available_quantity || 0;
     if (String(r.store_name || '').toLowerCase().trim() === 'local') map[vid].local += q; else map[vid].deposito += q;
