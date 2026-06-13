@@ -6397,7 +6397,8 @@ async function exhibInit() {
 async function exhibCargarDatos() {
   const syncEl = document.getElementById('exhib-sync');
   try {
-    const inv = await sbFetch('inventario', 'select=product_id,product_name,size_name,sku,barcode,available_quantity&store_name=eq.Local&available_quantity=gt.0&limit=20000');
+    // fetchAll pagina (sbFetch corta en 1000 filas, y el Local con stock supera eso).
+    const inv = await fetchAll('inventario', 'select=product_id,product_name,size_name,sku,barcode,available_quantity&store_name=eq.Local&available_quantity=gt.0', 'inventario', true);
     if (!window._mktTNData) {
       try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; window._mktTNCats = d.categories || {}; } catch (e) { window._mktTNData = []; }
     }
@@ -8040,13 +8041,24 @@ function _repoModelo(size) {
   const suf = (m[2] || '').replace(/\s+/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
   return ('iPhone ' + m[1] + (suf ? ' ' + suf : '')).trim();
 }
-// Subcategoría real de TN (accesorios): descarta genéricas, promos y la rama de modelos de iPhone,
-// para no agarrar "FUNDAS/ACCESORIOS/PRODUCTOS" (que es lo primero que suele venir).
-const _repoCatGenericas = new Set(['productos', 'accesorios', 'accesorio', 'fundas']);
-function _repoEsPromo(n) { return /off|oferta|sale|new in|outlet|%|liquidaci/i.test(n); }
+// Subcategoría para el mínimo de reposición.
+// Fuente principal: la categoría de GN (es una sola y limpia, ej. "VIDRIOS TEMPLADOS DE CELULAR",
+// "CABLE DE CARGA", "AURICULARES"). Las fundas (FUNDAS/Fundas/CASES) NO son subcategoría → van por modelo.
+// Si la categoría de GN es genérica o vacía, se usa la de TN como respaldo.
+const _repoCatGenericas = new Set(['productos', 'accesorios', 'accesorio', 'fundas', 'varios', 'mayorista', 'sale', 'new in', 'oferta', 'ofertas', '(sin categoría)']);
+function _repoEsPromo(n) { return /off|oferta|sale|new in|outlet|%|liquidaci|ultimos lanzamientos/i.test(n); }
 function _repoEsModeloCat(n) { return /^iphone|modelo de iphone/i.test(n); }
+function _repoEsFundaCat(n) { return /funda|^cases$/i.test(String(n || '')); }
+// Categoría de GN limpia: null si es funda, genérica o vacía (esos no agrupan por subcategoría).
+function _repoCatGN(gnCat) {
+  const c = String(gnCat || '').trim();
+  if (!c || _repoEsFundaCat(c) || _repoEsModeloCat(c) || _repoEsPromo(c)) return null;
+  if (_repoCatGenericas.has(c.toLowerCase())) return null;
+  return c;
+}
+// Subcategoría de TN (respaldo): descarta genéricas, promos y la rama de modelos de iPhone.
 function _repoSubcat(cats) {
-  const u = (cats || []).filter(c => { const l = String(c).toLowerCase().trim(); return !_repoCatGenericas.has(l) && !_repoEsPromo(c) && !_repoEsModeloCat(c); });
+  const u = (cats || []).filter(c => { const l = String(c).toLowerCase().trim(); return !_repoCatGenericas.has(l) && !_repoEsPromo(c) && !_repoEsModeloCat(c) && !_repoEsFundaCat(c); });
   return u[0] || null;
 }
 // Clave para el mínimo:
@@ -8094,7 +8106,8 @@ async function repoInit() {
 }
 async function repoCargarInventario() {
   let inv = [];
-  try { inv = await sbFetch('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name&limit=20000'); } catch (e) { inv = []; }
+  // OJO: sbFetch trae como máximo 1000 filas (tope de Supabase). El inventario tiene miles → usar fetchAll (paginado).
+  try { inv = await fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name', 'inventario', true); } catch (e) { inv = []; }
   const idx = _mktIndexTN();
   const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
   const map = {};
@@ -8104,7 +8117,7 @@ async function repoCargarInventario() {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
       const modelo = _repoModelo(r.size_name); // modelo de iPhone si la variante lo incluye (aunque tenga color)
-      const subcat = tn ? _repoSubcat(tn.categories) : null; // subcategoría real de TN (null en fundas)
+      const subcat = _repoCatGN(p && p.category) || (tn ? _repoSubcat(tn.categories) : null); // GN principal, TN respaldo
       const cat = subcat || (p && p.category) || '(sin categoría)';
       map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, subcat, modelo, s7: (typeof allVvar !== 'undefined' && allVvar[vid] && allVvar[vid].s7) || 0 };
     }
