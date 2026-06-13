@@ -8020,6 +8020,16 @@ let repoCfg = { mins: {}, apagados: [], defaultMin: 4 };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
+let repoFundasOpen = false;       // desplegable de mínimos por modelo (fundas)
+function repoToggleFundas() { repoFundasOpen = !repoFundasOpen; repoRender(); }
+// Orden de modelos de iPhone por ciclo de vida (no alfabético)
+function _repoModelSort(a, b) {
+  const parse = s => { const m = String(s).match(/iphone\s*(\d{1,2})\s*(.*)/i); return { n: m ? parseInt(m[1]) : 99, suf: (m ? m[2] : '').toLowerCase().trim() }; };
+  const rank = { '': 0, 'mini': 1, 'e': 1, 'plus': 2, 'air': 2, 'pro': 3, 'pro max': 4 };
+  const pa = parse(a), pb = parse(b);
+  if (pa.n !== pb.n) return pa.n - pb.n;
+  return (rank[pa.suf] ?? 9) - (rank[pb.suf] ?? 9);
+}
 let repoLastUpdate = null;        // cuándo se generó/recalculó el reporte
 let _repoSaveT = null;
 // Extrae el modelo de iPhone de una variante, ignorando el color (ej. "iPhone 13 Negro" → "iPhone 13")
@@ -8087,16 +8097,28 @@ function repoFaltante(vid) { if (repoFaltantes.has(vid)) repoFaltantes.delete(vi
 function repoToggleVentas(v) { repoVerVentas = v; repoRender(); }
 function repoRender() {
   const cont = document.getElementById('repo-cont'); if (!cont) return;
-  const keys = [...new Set(repoInv.map(repoMinKey))].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  const allKeys = [...new Set(repoInv.map(repoMinKey))];
+  const modelKeys = allKeys.filter(k => /^iphone/i.test(k)).sort(_repoModelSort);
+  const catKeys = allKeys.filter(k => !/^iphone/i.test(k)).sort((a, b) => a.localeCompare(b, 'es'));
   const esc2 = c => esc(c).replace(/'/g, "\\'");
+  const minInput = c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`;
+  const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;';
   const tsTxt = repoLastUpdate ? repoLastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
   let html = `<div style="font-size:12px;color:#6B7280;margin-top:12px;">🕒 Reporte actualizado: <b>${tsTxt}</b> <span style="color:#9CA3AF;">(datos del inventario en la base; tocá "Traer stock de GN" si necesitás traer lo último)</span></div>
     <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:10px 0 14px;background:#FAFAFA;">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos por categoría <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(en Local, por variante · en fundas es por modelo de iPhone)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
-    <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;">
-      ${keys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('') || '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>'}
-    </div></div>`;
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos en Local <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(por variante; en fundas, por modelo)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
+    <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>`;
+  if (catKeys.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px;">Categorías</div><div style="${gridStyle}">${catKeys.map(minInput).join('')}</div>`;
+  }
+  if (modelKeys.length) {
+    html += `<div onclick="repoToggleFundas()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:12px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:9px 12px;font-weight:600;font-size:13px;">
+        <span>🛡️ Fundas — mínimo por modelo de iPhone <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
+        <span style="color:#9CA3AF;">${repoFundasOpen ? '▴ ocultar' : '▾ definir'}</span></div>`;
+    if (repoFundasOpen) html += `<div style="${gridStyle}margin-top:8px;">${modelKeys.map(minInput).join('')}</div>`;
+  }
+  if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
+  html += `</div>`;
   const rep = repoReporte();
   const porProd = {};
   rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, cat: it.cat, items: [] }; porProd[it.pid].items.push(it); });
