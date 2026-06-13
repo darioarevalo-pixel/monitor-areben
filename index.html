@@ -8115,7 +8115,7 @@ function repoRender() {
     html += `<div onclick="repoToggleFundas()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:12px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:9px 12px;font-weight:600;font-size:13px;">
         <span>🛡️ Fundas — mínimo por modelo de iPhone <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
         <span style="color:#9CA3AF;">${repoFundasOpen ? '▴ ocultar' : '▾ definir'}</span></div>`;
-    if (repoFundasOpen) html += `<div style="${gridStyle}margin-top:8px;">${modelKeys.map(minInput).join('')}</div>`;
+    if (repoFundasOpen) html += `<div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
   html += `</div>`;
