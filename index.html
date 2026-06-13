@@ -308,6 +308,7 @@
       <button class="tab" id="tab-btn-tncat" style="display:none;" onclick="switchTab('tncat', this)">🛍️ Tienda Nube</button>
       <button class="tab" id="tab-btn-disenos" onclick="switchTab('disenos', this)">🗳️ Diseños</button>
       <button class="tab" id="tab-btn-ingresos" style="display:none;" onclick="switchTab('ingresos', this)">📦 Ingresos</button>
+      <button class="tab" id="tab-btn-reposicion" style="display:none;" onclick="switchTab('reposicion', this)">🔁 Reposición</button>
       <button class="tab" id="tab-btn-usuarios" style="display:none;" onclick="switchTab('usuarios', this)">👥 Usuarios</button>
     </div>
 
@@ -1308,6 +1309,25 @@
         </div>
         <div id="ingresos-resumen" style="font-size:13px;color:#374151;margin:12px 0;"></div>
         <div id="ingresos-cont"></div>
+      </div>
+    </div>
+
+    <!-- ── Reposición de local ─────────────────────────────────────────────── -->
+    <div id="tab-reposicion" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🔁 Reposición de local</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Variantes que están en el mínimo (o menos) en Local <b>y</b> tienen stock en Depósito. Definí los mínimos por categoría y generá el reporte de qué mover. 🔌 apaga un producto (no reponer); ⚠️ lo manda a conteo urgente si no se encuentra.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="repo-ver-ventas" onchange="repoToggleVentas(this.checked)"> Ver ventas 7d</label>
+            <button class="btn-sm" onclick="dispararSyncInv(this)" title="Traer el stock más nuevo de GN (~2 min)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar</button>
+            <button class="btn-sm" onclick="repoPDF()" style="background:#16A34A;color:#fff;">📄 Exportar reposición</button>
+            <button class="btn-sm" onclick="repoPDFConteo()" style="background:#DC2626;color:#fff;">⚠️ Conteo urgente</button>
+          </div>
+        </div>
+        <div id="repo-cont"></div>
       </div>
     </div>
 
@@ -5607,6 +5627,7 @@ function switchTab(id, btn) {
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (id === 'ingresos') { ingInit(); return; }
+  if (id === 'reposicion') { repoInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
@@ -7544,6 +7565,7 @@ const PERM_CAT = [
   ] },
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
+  { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
 ];
 const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
 // Perfiles por defecto (fallback de VISIBILIDAD si el KV no responde). SIN contraseñas:
@@ -7749,7 +7771,7 @@ async function doLogin() {
     if (d && d.ok && d.perfil) {
       currentUser = d.perfil.name;
       USERS[currentUser] = { admin: d.perfil.admin, cuenta: d.perfil.cuenta, acceso: d.perfil.acceso }; // perfil al día
-      _adminPass = d.perfil.admin ? pass : ''; // guardar la pass en memoria solo si es admin (para gestionar)
+      _adminPass = pass; // contraseña de sesión en memoria (no se persiste ni se descarga); autentica los guardados
       currentCuenta = CUENTAS[d.perfil.cuenta || 'zattia'];
       errEl.textContent = '';
       saveSession();
@@ -7889,6 +7911,156 @@ async function dispararSyncInv(btn) {
     alert('Error de conexión al iniciar la actualización.');
   }
   setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = orig; } }, 9000);
+}
+
+// ════════ Reposición de local ════════════════════════════════════════════════
+const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4 };
+let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
+let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
+let repoVerVentas = false;
+let _repoSaveT = null;
+function repoMin(it) { return repoCfg.mins[it.cat] ?? repoCfg.defaultMin ?? 4; }
+async function repoCfgLoad() {
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4 }; }
+  catch (e) { /* default */ }
+}
+function repoCfgSave() {
+  const st = document.getElementById('repo-cfg-status'); if (st) { st.textContent = 'Guardando…'; st.style.color = '#6B7280'; }
+  clearTimeout(_repoSaveT);
+  _repoSaveT = setTimeout(async () => {
+    try { const r = await fetch(REPO_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: repoCfg, user: currentUser, pass: _getAdminPass() }) }); const d = await r.json(); if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; } }
+    catch (e) { if (st) { st.textContent = 'Error al guardar'; st.style.color = '#DC2626'; } }
+  }, 700);
+}
+async function repoInit() {
+  const cont = document.getElementById('repo-cont');
+  if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando reposición…</div>';
+  await repoCfgLoad();
+  if (!window._mktTNData) { try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; } }
+  await repoCargarInventario();
+  const cb = document.getElementById('repo-ver-ventas'); if (cb) cb.checked = repoVerVentas;
+  repoRender();
+}
+async function repoCargarInventario() {
+  let inv = [];
+  try { inv = await sbFetch('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name&limit=20000'); } catch (e) { inv = []; }
+  const idx = _mktIndexTN();
+  const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
+  const map = {};
+  inv.forEach(r => {
+    const pid = String(r.product_id), sid = String(r.size_id), vid = pid + '_' + sid;
+    if (!map[vid]) {
+      const p = prodById[pid];
+      const tn = p ? _mktFindTN(p, idx) : null;
+      const cat = (tn && tn.categories && tn.categories[0]) || (p && p.category) || '(sin categoría)';
+      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, s7: (typeof allVvar !== 'undefined' && allVvar[vid] && allVvar[vid].s7) || 0 };
+    }
+    const q = r.available_quantity || 0;
+    if (String(r.store_name || '').toLowerCase().trim() === 'local') map[vid].local += q; else map[vid].deposito += q;
+  });
+  repoInv = Object.values(map);
+}
+function repoReporte() {
+  const ap = new Set(repoCfg.apagados.map(String));
+  return repoInv.filter(it => !ap.has(it.pid) && it.local <= repoMin(it) && it.deposito > 0);
+}
+function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRender(); }
+function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); repoRender(); }
+function repoApagar(pid) { pid = String(pid); if (!repoCfg.apagados.includes(pid)) repoCfg.apagados.push(pid); repoCfgSave(); repoRender(); }
+function repoReactivar(pid) { repoCfg.apagados = repoCfg.apagados.filter(x => String(x) !== String(pid)); repoCfgSave(); repoRender(); }
+function repoFaltante(vid) { if (repoFaltantes.has(vid)) repoFaltantes.delete(vid); else repoFaltantes.add(vid); repoRender(); }
+function repoToggleVentas(v) { repoVerVentas = v; repoRender(); }
+function repoRender() {
+  const cont = document.getElementById('repo-cont'); if (!cont) return;
+  const cats = [...new Set(repoInv.map(it => it.cat))].sort((a, b) => a.localeCompare(b, 'es'));
+  const esc2 = c => esc(c).replace(/'/g, "\\'");
+  let html = `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin:14px 0;background:#FAFAFA;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Mínimos por categoría <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(unidades en Local, por variante)</span> <span id="repo-cfg-status" style="font-size:11px;margin-left:8px;"></span></div>
+    <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;">
+      ${cats.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('') || '<span style="color:#9CA3AF;font-size:12px;">Sin categorías cargadas.</span>'}
+    </div></div>`;
+  const rep = repoReporte();
+  const porCat = {}; rep.forEach(it => { (porCat[it.cat] = porCat[it.cat] || []).push(it); });
+  html += `<div style="font-size:13px;margin:4px 0 8px;"><b>${rep.length}</b> variantes para reponer en ${Object.keys(porCat).length} categoría(s)` + (repoFaltantes.size ? ` · <span style="color:#DC2626;font-weight:600;">${repoFaltantes.size} para conteo urgente</span>` : '') + `</div>`;
+  if (!rep.length) html += '<div style="color:#16A34A;padding:14px;">Nada para reponer 🎉 (todo por encima del mínimo, o sin stock en depósito).</div>';
+  Object.keys(porCat).sort((a, b) => a.localeCompare(b, 'es')).forEach(cat => {
+    const items = porCat[cat].sort((a, b) => b.s7 - a.s7);
+    html += `<div style="font-weight:700;font-size:13px;color:#374151;margin:14px 0 6px;">${esc(cat)} <span style="color:#9CA3AF;font-weight:400;">· mín ${repoCfg.mins[cat] ?? repoCfg.defaultMin} · ${items.length}</span></div>`;
+    html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depósito</th>${repoVerVentas ? '<th style="text-align:center;">Ventas 7d</th>' : ''}<th style="text-align:center;">Sugerido</th><th></th></tr></thead><tbody>`;
+    items.forEach(it => {
+      const sug = Math.min(it.deposito, Math.max(1, repoMin(it) - it.local));
+      const falt = repoFaltantes.has(it.vid);
+      html += `<tr style="border-top:1px solid #F3F4F6;${falt ? 'background:#FEF2F2;' : ''}">
+        <td style="padding:6px 8px;"><div style="font-weight:600;">${esc(it.name)} · ${esc(it.size)}</div><div style="font-size:11px;color:#9CA3AF;">${esc(it.sku || '')}</div></td>
+        <td style="text-align:center;color:${it.local <= 1 ? '#DC2626' : '#374151'};font-weight:600;">${it.local}</td>
+        <td style="text-align:center;">${it.deposito}</td>
+        ${repoVerVentas ? `<td style="text-align:center;color:#1D9E75;font-weight:600;">${it.s7}</td>` : ''}
+        <td style="text-align:center;font-weight:700;">${sug}</td>
+        <td style="text-align:right;white-space:nowrap;padding-right:8px;">
+          <button onclick="repoFaltante('${it.vid}')" title="No se encuentra → conteo urgente" style="border:1px solid ${falt ? '#DC2626' : '#E5E7EB'};background:${falt ? '#DC2626' : '#fff'};color:${falt ? '#fff' : '#6B7280'};border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;">⚠️</button>
+          <button onclick="repoApagar('${it.pid}')" title="Apagar producto (no reponer)" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;">🔌</button>
+        </td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  });
+  if (repoCfg.apagados.length) {
+    const nameByPid = {}; repoInv.forEach(it => { if (!nameByPid[it.pid]) nameByPid[it.pid] = it.name; });
+    html += `<div style="margin-top:18px;"><div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">🔌 Apagados (${repoCfg.apagados.length})</div><div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+    repoCfg.apagados.forEach(pid => { html += `<span style="font-size:12px;background:#F3F4F6;border-radius:14px;padding:3px 10px;">${esc(nameByPid[pid] || ('Producto ' + pid))} <button onclick="repoReactivar('${pid}')" title="Reactivar" style="border:none;background:none;color:#378ADD;cursor:pointer;">↺</button></span>`; });
+    html += '</div></div>';
+  }
+  cont.innerHTML = html;
+}
+function repoPDF() {
+  const rep = repoReporte();
+  if (!rep.length) { alert('No hay productos para reponer.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12, RIGHT = 198; let y = 16;
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Reposición de local — ' + _cuentaKey().toUpperCase(), M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${rep.length} variantes`, M, y); pdf.setTextColor(0); y += 8;
+  const porCat = {}; rep.forEach(it => { (porCat[it.cat] = porCat[it.cat] || []).push(it); });
+  Object.keys(porCat).sort((a, b) => a.localeCompare(b, 'es')).forEach(cat => {
+    const items = porCat[cat].sort((a, b) => b.s7 - a.s7);
+    if (y > 273) { pdf.addPage(); y = 16; }
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.text(cat + '  (mín ' + (repoCfg.mins[cat] ?? repoCfg.defaultMin) + ')', M, y); y += 5;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120);
+    pdf.text('Producto · Variante', M, y); pdf.text('Local', M + 112, y); pdf.text('Depós', M + 130, y); pdf.text('7d', M + 150, y); pdf.text('Mover', M + 166, y); pdf.setTextColor(0); pdf.setDrawColor(220); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5;
+    items.forEach(it => {
+      if (y > 287) { pdf.addPage(); y = 16; }
+      const sug = Math.min(it.deposito, Math.max(1, repoMin(it) - it.local));
+      pdf.setFontSize(8.5);
+      pdf.text(pdf.splitTextToSize(`${it.name} · ${it.size}`, 108)[0], M, y);
+      pdf.text(String(it.local), M + 112, y); pdf.text(String(it.deposito), M + 130, y); pdf.text(String(it.s7), M + 150, y);
+      pdf.setFont('helvetica', 'bold'); pdf.text(String(sug), M + 166, y); pdf.setFont('helvetica', 'normal');
+      pdf.setDrawColor(240); pdf.line(M, y + 1.4, RIGHT, y + 1.4); y += 5;
+    });
+    y += 3;
+  });
+  _pdfCompartir(pdf, `reposicion-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Reposición de local');
+}
+function repoPDFConteo() {
+  if (!repoFaltantes.size) { alert('No marcaste ningún producto como "no se encuentra" (botón ⚠️).'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  const items = repoInv.filter(it => repoFaltantes.has(it.vid));
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12; let y = 16;
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Conteo urgente — ' + _cuentaKey().toUpperCase(), M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${items.length} ítems que el sistema marca pero NO se encontraron`, M, y); pdf.setTextColor(0); y += 9;
+  items.forEach(it => {
+    if (y > 285) { pdf.addPage(); y = 16; }
+    pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.text(`${it.name} · ${it.size}`, M, y);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(90);
+    pdf.text(`SKU ${it.sku || '—'} · el sistema dice: Local ${it.local} / Depósito ${it.deposito}`, M, y + 5); pdf.setTextColor(0);
+    pdf.setDrawColor(235); pdf.line(M, y + 8, 198, y + 8); y += 13;
+  });
+  _pdfCompartir(pdf, `conteo-urgente-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Conteo urgente');
 }
 
 async function cargarImagenesTN(cuentaKey) {
