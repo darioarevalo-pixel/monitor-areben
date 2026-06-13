@@ -8081,7 +8081,31 @@ function repoMin(it) { return repoCfg.mins[repoMinKey(it)] ?? repoCfg.defaultMin
 // Objetivo en Local = mínimo por modelo/categoría, pero topeado por el "tope por diseño" (por producto) si es menor.
 // Ej: bubble case con tope 1 → aunque el modelo 16 Pro pida 2, su objetivo es 1 (máx 1 por variante).
 function repoObjetivo(it) { const obj = repoMin(it); const t = repoCfg.topes[String(it.pid)]; return (t != null && t < obj) ? t : obj; }
-function repoSetTope(pid, v) { pid = String(pid); if (v === '' || v == null) delete repoCfg.topes[pid]; else repoCfg.topes[pid] = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
+function repoSetTope(pid, v, inputEl) {
+  pid = String(pid);
+  if (v === '' || v == null) delete repoCfg.topes[pid]; else repoCfg.topes[pid] = Math.max(0, parseInt(v) || 0);
+  repoCfgSave();
+  if (inputEl) {
+    // Edición desde el modal: actualizar el estilo EN EL LUGAR, sin reconstruir la lista
+    // (así no se pierde el foco y el Tab/Enter sigue bajando producto por producto).
+    const set = repoCfg.topes[pid] != null;
+    inputEl.style.border = '1px solid ' + (set ? '#378ADD' : '#E5E7EB');
+    inputEl.style.background = set ? '#EFF6FF' : '';
+    inputEl.style.fontWeight = set ? '700' : '';
+    // El reporte (detrás del modal) se recalcula al cerrar con "Listo" (repoCerrarConfig).
+  } else {
+    repoRender();
+  }
+}
+// Teclado en la lista de topes: Enter / ↓ baja al siguiente, ↑ sube al anterior.
+function repoTopeKey(e) {
+  if (e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const inputs = [...document.querySelectorAll('#repo-topes-list input')];
+  const i = inputs.indexOf(e.target); if (i < 0) return;
+  const next = e.key === 'ArrowUp' ? inputs[i - 1] : inputs[i + 1];
+  if (next) { next.focus(); next.select(); }
+}
 // Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
 // Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
 function repoSugerido(it) {
@@ -8090,7 +8114,7 @@ function repoSugerido(it) {
   const reserva = it.modelo ? (repoCfg.reservaDeposito ?? 1) : 0; // la reserva aplica a fundas
   return Math.max(0, Math.min(obj - it.local, it.deposito - reserva));
 }
-function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRenderConfig(); }
+function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); } // sin reconstruir → no roba foco
 // Edición manual de la cantidad a mover (por sesión). Si no se tocó, vale el sugerido.
 let repoMoverManual = {};
 function repoMoverFinal(it) { const v = repoMoverManual[it.vid]; return (v === undefined) ? repoSugerido(it) : v; }
@@ -8145,8 +8169,8 @@ function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
   return repoInv.filter(it => !ap.has(it.pid) && it.local < repoObjetivo(it) && repoSugerido(it) > 0);
 }
-function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRenderConfig(); }
-function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); repoRenderConfig(); }
+function repoSetDefault(v) { repoCfg.defaultMin = parseInt(v) || 0; repoCfgSave(); repoRenderConfig(); } // refresca placeholders
+function repoSetMin(cat, v) { if (v === '' || v == null) delete repoCfg.mins[cat]; else repoCfg.mins[cat] = parseInt(v) || 0; repoCfgSave(); } // sin reconstruir → Tab baja solo
 function repoApagar(pid) { pid = String(pid); if (!repoCfg.apagados.includes(pid)) repoCfg.apagados.push(pid); repoCfgSave(); repoRender(); }
 function repoReactivar(pid) { repoCfg.apagados = repoCfg.apagados.filter(x => String(x) !== String(pid)); repoCfgSave(); repoRender(); }
 function repoFaltante(vid) { if (repoFaltantes.has(vid)) repoFaltantes.delete(vid); else repoFaltantes.add(vid); repoRender(); }
@@ -8157,7 +8181,7 @@ function repoConfigHTML() {
   const modelKeys = allKeys.filter(k => /^iphone/i.test(k)).sort(_repoModelSort);
   const catKeys = allKeys.filter(k => !/^iphone/i.test(k)).sort((a, b) => a.localeCompare(b, 'es'));
   const esc2 = c => esc(c).replace(/'/g, "\\'");
-  const minInput = c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`;
+  const minInput = c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:7px;padding:5px 8px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" onfocus="this.select()" style="width:60px;padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`;
   const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;';
   let html = `<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Definí cuántas unidades querés mantener en Local por categoría/modelo. <b>Tip:</b> el "tope local" (en cada producto del reporte) puede bajar este número para un producto puntual (ej: cable de marca local → tope 2 aunque la categoría pida 10). <span id="repo-cfg-status" style="font-size:11px;margin-left:6px;"></span></div>
     <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>`;
@@ -8169,7 +8193,7 @@ function repoConfigHTML() {
         <span>🛡️ Fundas — objetivo en Local por modelo <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
         <span style="color:#9CA3AF;">${repoFundasOpen ? '▴ ocultar' : '▾ definir'}</span></div>`;
     if (repoFundasOpen) html += `<div style="background:#FFF7FB;border:1px solid #FBCFE8;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#9D174D;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🛡️ Reservar siempre en depósito (prioridad venta online): <input type="number" value="${repoCfg.reservaDeposito ?? 1}" min="0" onchange="repoSetReserva(this.value)" style="width:56px;padding:4px 6px;border:1px solid #FBCFE8;border-radius:6px;text-align:center;"> u. <span style="color:#9CA3AF;">Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</span></div>
-      <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
+      <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" onfocus="this.select()" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
   // Topes por producto (cualquier producto con stock, aunque hoy no necesite reposición)
@@ -8191,7 +8215,7 @@ function repoTopesListHTML() {
   arr.sort((a, b) => a.name.localeCompare(b.name, 'es'));
   const total = arr.length, MAX = 250, shown = arr.slice(0, MAX);
   let h = `<div style="font-size:11px;color:#9CA3AF;margin:0 0 6px;">${total} producto(s) con stock${total > MAX ? ` · mostrando ${MAX}, afiná la búsqueda` : ''}</div>`;
-  h += shown.map(p => { const t = repoCfg.topes[String(p.pid)]; return `<label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid #F1F5F9;border-radius:6px;margin-bottom:4px;background:#fff;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)} <span style="color:#9CA3AF;">· ${esc(p.cat)} · stock ${p.stock}</span></span><input type="number" min="0" value="${t ?? ''}" placeholder="—" onchange="repoSetTope('${p.pid}',this.value)" style="width:46px;padding:2px 4px;border:1px solid ${t != null ? '#378ADD' : '#E5E7EB'};${t != null ? 'background:#EFF6FF;font-weight:700;' : ''}border-radius:5px;text-align:center;flex:none;"></label>`; }).join('');
+  h += shown.map(p => { const t = repoCfg.topes[String(p.pid)]; return `<label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid #F1F5F9;border-radius:6px;margin-bottom:4px;background:#fff;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)} <span style="color:#9CA3AF;">· ${esc(p.cat)} · stock ${p.stock}</span></span><input type="number" min="0" value="${t ?? ''}" placeholder="—" onchange="repoSetTope('${p.pid}',this.value,this)" onkeydown="repoTopeKey(event)" onfocus="this.select()" style="width:46px;padding:2px 4px;border:1px solid ${t != null ? '#378ADD' : '#E5E7EB'};${t != null ? 'background:#EFF6FF;font-weight:700;' : ''}border-radius:5px;text-align:center;flex:none;"></label>`; }).join('');
   if (!shown.length) h += '<div style="color:#9CA3AF;font-size:12px;padding:8px;">Sin resultados.</div>';
   return h;
 }
