@@ -8032,6 +8032,7 @@ let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
 let repoFundasOpen = false;       // desplegable de mínimos por modelo (fundas)
+let repoTopeSearch = '';          // buscador de la sección "Topes por producto" (modal)
 function repoToggleFundas() { repoFundasOpen = !repoFundasOpen; repoRenderConfig(); }
 // Orden de modelos de iPhone por ciclo de vida (no alfabético)
 function _repoModelSort(a, b) {
@@ -8080,7 +8081,7 @@ function repoMin(it) { return repoCfg.mins[repoMinKey(it)] ?? repoCfg.defaultMin
 // Objetivo en Local = mínimo por modelo/categoría, pero topeado por el "tope por diseño" (por producto) si es menor.
 // Ej: bubble case con tope 1 → aunque el modelo 16 Pro pida 2, su objetivo es 1 (máx 1 por variante).
 function repoObjetivo(it) { const obj = repoMin(it); const t = repoCfg.topes[String(it.pid)]; return (t != null && t < obj) ? t : obj; }
-function repoSetTope(pid, v) { pid = String(pid); if (v === '' || v == null) delete repoCfg.topes[pid]; else repoCfg.topes[pid] = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); }
+function repoSetTope(pid, v) { pid = String(pid); if (v === '' || v == null) delete repoCfg.topes[pid]; else repoCfg.topes[pid] = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
 // Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
 // Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
 function repoSugerido(it) {
@@ -8171,8 +8172,30 @@ function repoConfigHTML() {
       <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
+  // Topes por producto (cualquier producto con stock, aunque hoy no necesite reposición)
+  html += `<div style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Topes por producto <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(máximo en Local por variante; pisa el mínimo de la categoría/modelo)</span></div>
+      <div style="font-size:11.5px;color:#9CA3AF;margin-bottom:8px;">Ej: comprás 10u de un cable de marca local → tope 2 para tenerlo en Local sin importar que la categoría pida 10.</div>
+      <input type="text" value="${esc(repoTopeSearch)}" oninput="repoSetTopeSearch(this.value)" placeholder="Buscar producto o categoría…" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;margin-bottom:8px;box-sizing:border-box;">
+      <div id="repo-topes-list" style="max-height:340px;overflow:auto;">${repoTopesListHTML()}</div>
+    </div>`;
   return html;
 }
+// Lista de "topes por producto" (todos los que tienen stock), con buscador. Vive en el modal.
+function repoTopesListHTML() {
+  const q = (repoTopeSearch || '').toLowerCase().trim();
+  const byPid = {};
+  repoInv.forEach(it => { if (!byPid[it.pid]) byPid[it.pid] = { pid: it.pid, name: it.name, cat: it.cat, stock: 0 }; byPid[it.pid].stock += (it.local + it.deposito); });
+  let arr = Object.values(byPid).filter(p => p.stock > 0);
+  if (q) arr = arr.filter(p => p.name.toLowerCase().includes(q) || String(p.cat || '').toLowerCase().includes(q));
+  arr.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const total = arr.length, MAX = 250, shown = arr.slice(0, MAX);
+  let h = `<div style="font-size:11px;color:#9CA3AF;margin:0 0 6px;">${total} producto(s) con stock${total > MAX ? ` · mostrando ${MAX}, afiná la búsqueda` : ''}</div>`;
+  h += shown.map(p => { const t = repoCfg.topes[String(p.pid)]; return `<label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid #F1F5F9;border-radius:6px;margin-bottom:4px;background:#fff;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)} <span style="color:#9CA3AF;">· ${esc(p.cat)} · stock ${p.stock}</span></span><input type="number" min="0" value="${t ?? ''}" placeholder="—" onchange="repoSetTope('${p.pid}',this.value)" style="width:46px;padding:2px 4px;border:1px solid ${t != null ? '#378ADD' : '#E5E7EB'};${t != null ? 'background:#EFF6FF;font-weight:700;' : ''}border-radius:5px;text-align:center;flex:none;"></label>`; }).join('');
+  if (!shown.length) h += '<div style="color:#9CA3AF;font-size:12px;padding:8px;">Sin resultados.</div>';
+  return h;
+}
+function repoSetTopeSearch(v) { repoTopeSearch = v; const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
 function repoRenderConfig() { const b = document.getElementById('repo-cfg-body'); if (b) b.innerHTML = repoConfigHTML(); }
 function repoAbrirConfig() { const m = document.getElementById('repo-cfg-modal'); if (!m) return; repoRenderConfig(); m.style.display = 'flex'; }
 function repoCerrarConfig() { const m = document.getElementById('repo-cfg-modal'); if (m) m.style.display = 'none'; repoRender(); }
