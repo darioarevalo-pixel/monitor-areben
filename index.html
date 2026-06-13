@@ -3453,7 +3453,7 @@ function ingGuardar() {
   clearTimeout(ingSaveT);
   ingSaveT = setTimeout(async () => {
     try {
-      const r = await fetch(ING_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), ingresos: ingData, adminUser: currentUser, adminPass: USERS[currentUser].pass }) });
+      const r = await fetch(ING_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), ingresos: ingData, adminUser: currentUser, adminPass: _getAdminPass() }) });
       const d = await r.json();
       if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; }
     } catch (e) { if (st) { st.textContent = 'Error al guardar.'; st.style.color = '#DC2626'; } }
@@ -5194,7 +5194,7 @@ function comGuardarCompartida() {
   clearTimeout(_comSaveT);
   _comSaveT = setTimeout(async () => {
     try {
-      const r = await fetch(COM_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: comCfg, adminUser: currentUser, adminPass: USERS[currentUser].pass }) });
+      const r = await fetch(COM_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: comCfg, adminUser: currentUser, adminPass: _getAdminPass() }) });
       const d = await r.json();
       if (st) { st.textContent = d.ok ? '✓ Guardado (lo ve tu socio)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; }
     } catch (e) { if (st) { st.textContent = 'Error al guardar.'; st.style.color = '#DC2626'; } }
@@ -7546,24 +7546,25 @@ const PERM_CAT = [
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
 ];
 const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
-// Config por defecto = comportamiento actual (fallback si el KV no responde)
+// Perfiles por defecto (fallback de VISIBILIDAD si el KV no responde). SIN contraseñas:
+// el login se valida en el servidor, las contraseñas no viven en el cliente.
 const DEFAULT_USERS = [
-  { name: 'Bruno Arevalo', pass: 'BDI123456', admin: true },
-  { name: 'Dario Arevalo', pass: 'BDI123456', admin: true },
-  { name: 'Administracion', pass: 'Areben2026', acceso: {
+  { name: 'Bruno Arevalo', admin: true },
+  { name: 'Dario Arevalo', admin: true },
+  { name: 'Administracion', acceso: {
       bdi: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'tncat', 'tncat.categorias']),
       zattia: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'exhib']) } },
-  { name: 'Marketing', pass: 'Areben2026', acceso: {
+  { name: 'Marketing', acceso: {
       bdi: _acc(['marketing', 'tncat', 'tncat.imagenes']),
       zattia: _acc(['marketing', 'tncat', 'tncat.imagenes']) } },
-  { name: 'local', pass: 'Santafe1435@', cuenta: 'zattia', acceso: {
+  { name: 'local', cuenta: 'zattia', acceso: {
       bdi: {}, zattia: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc', 'etiquetas.sku', 'etiquetas.libre', 'gen-talles', 'exhib']) } },
-  { name: 'bdilocal', pass: 'Areben2026', cuenta: 'bdi', acceso: {
+  { name: 'bdilocal', cuenta: 'bdi', acceso: {
       bdi: _acc(['marketing', 'etiquetas', 'etiquetas.dep', 'etiquetas.loc']), zattia: {} } },
 ];
 function _buildUsers(arr) {
   const m = {};
-  (arr || []).forEach(u => { m[u.name] = { pass: u.pass, admin: !!u.admin, cuenta: u.cuenta || null, acceso: u.acceso || { bdi: {}, zattia: {} } }; });
+  (arr || []).forEach(u => { m[u.name] = { admin: !!u.admin, cuenta: u.cuenta || null, acceso: u.acceso || { bdi: {}, zattia: {} } }; });
   return m;
 }
 let USERS_LIST = DEFAULT_USERS;
@@ -7573,6 +7574,15 @@ function _esAdmin() { return !!USERS[currentUser]?.admin; }
 function _puedeVer(brand, key) { if (_esAdmin()) return true; return !!(USERS[currentUser]?.acceso?.[brand]?.[key]); }
 // Compat: el resto del código usa _userRole para limitar la carga de datos de no-admins
 function _userRole() { return _esAdmin() ? 'admin' : 'marketing'; }
+// Contraseña del admin SOLO en memoria (se ingresa al loguear; nunca se guarda ni se descarga).
+// Se usa para autenticar los guardados que requieren admin (usuarios, ingresos, comisiones).
+let _adminPass = '';
+function _getAdminPass() {
+  if (_adminPass) return _adminPass;
+  const p = prompt('Reingresá tu contraseña de administrador para guardar los cambios:');
+  if (p) _adminPass = p;
+  return _adminPass || '';
+}
 // Trae la config de usuarios del KV; si existe, reemplaza la local. Reaplica visibilidad si hay sesión.
 async function cargarConfigUsuarios() {
   try {
@@ -7595,8 +7605,16 @@ let usuOpen = -1;     // índice del usuario expandido
 async function usuariosAbrir() {
   const st = document.getElementById('usuarios-status');
   if (st) { st.textContent = 'Cargando configuración…'; st.style.color = '#6B7280'; }
-  await cargarConfigUsuarios();
-  usuEdit = JSON.parse(JSON.stringify(USERS_LIST));
+  // La pantalla de gestión necesita la config COMPLETA (con contraseñas) → pedido admin-gated
+  try {
+    const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'config', adminUser: currentUser, adminPass: _getAdminPass() }) });
+    const d = await r.json();
+    if (r.status === 403) { _adminPass = ''; if (st) { st.textContent = 'Contraseña incorrecta. Volvé a abrir Usuarios e ingresala de nuevo.'; st.style.color = '#DC2626'; } usuEdit = []; usuariosRender(); return; }
+    const base = (d && d.ok && d.config && Array.isArray(d.config.users)) ? d.config.users : USERS_LIST;
+    usuEdit = JSON.parse(JSON.stringify(base));
+  } catch (e) {
+    usuEdit = JSON.parse(JSON.stringify(USERS_LIST));
+  }
   usuEdit.forEach(u => { u.acceso = u.acceso || {}; u.acceso.bdi = u.acceso.bdi || {}; u.acceso.zattia = u.acceso.zattia || {}; });
   if (st) st.textContent = '';
   usuariosRender();
@@ -7671,7 +7689,7 @@ async function usuariosGuardar() {
   if (new Set(nombres).size !== nombres.length) { set('⚠️ Hay nombres de usuario repetidos.', '#DC2626'); return; }
   set('Guardando…');
   try {
-    const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminUser: currentUser, adminPass: USERS[currentUser].pass, config: { users: usuEdit } }) });
+    const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminUser: currentUser, adminPass: _getAdminPass(), config: { users: usuEdit } }) });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'no se pudo guardar');
     USERS_LIST = d.config.users; USERS = _buildUsers(USERS_LIST);
@@ -7720,18 +7738,27 @@ function _activarSesion() {
   cargarTodo();
 }
 
-function doLogin() {
+async function doLogin() {
   const user = document.getElementById('login-user').value.trim();
   const pass = document.getElementById('login-pass').value;
-  const u = USERS[user];
-  if (u && u.pass === pass) {
-    currentUser   = user;
-    // Cuenta inicial: la fija del rol (marketing→zattia), o Zattia como default
-    currentCuenta = CUENTAS[u.cuenta || 'zattia'];
-    saveSession();
-    _activarSesion();
-  } else {
-    document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos.';
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = 'Validando…';
+  try {
+    const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'login', user, pass }) });
+    const d = await r.json();
+    if (d && d.ok && d.perfil) {
+      currentUser = d.perfil.name;
+      USERS[currentUser] = { admin: d.perfil.admin, cuenta: d.perfil.cuenta, acceso: d.perfil.acceso }; // perfil al día
+      _adminPass = d.perfil.admin ? pass : ''; // guardar la pass en memoria solo si es admin (para gestionar)
+      currentCuenta = CUENTAS[d.perfil.cuenta || 'zattia'];
+      errEl.textContent = '';
+      saveSession();
+      _activarSesion();
+    } else {
+      errEl.textContent = 'Usuario o contraseña incorrectos.';
+    }
+  } catch (e) {
+    errEl.textContent = 'No se pudo conectar para validar. Probá de nuevo.';
   }
 }
 
@@ -7739,7 +7766,7 @@ function intentarAutoLogin() {
   const s = loadSession();
   if (!s) return false;
   currentUser = s.user;
-  // Si el rol tiene cuenta fija, respetarla
+  // El perfil (acceso/cuenta) ya está en USERS (cargado del KV al iniciar). Sin contraseña.
   const u = USERS[s.user];
   const empresaKey = u?.cuenta || s.empresa;
   currentCuenta = CUENTAS[empresaKey] || CUENTAS.bdi;
@@ -8018,6 +8045,7 @@ function doLogout() {
   clearSession();
   currentUser   = null;
   currentCuenta = null;
+  _adminPass    = '';
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-pass').value = '';
   document.getElementById('login-error').textContent = '';
@@ -8025,9 +8053,10 @@ function doLogout() {
   document.getElementById('user-info').innerHTML = '';
 }
 
-window.onload = () => {
-  // Traer la config de usuarios/permisos del KV (si existe). No bloquea: la default ya está cargada.
-  cargarConfigUsuarios();
+window.onload = async () => {
+  // Traer la config de usuarios/permisos del KV (sin contraseñas) ANTES del auto-login,
+  // así USERS tiene todos los perfiles (incluidos los creados desde la pantalla de Usuarios).
+  await cargarConfigUsuarios();
   // Si hay sesión guardada (no expirada), entrar directo
   if (intentarAutoLogin()) return;
   document.getElementById('login-user').focus();
