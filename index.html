@@ -8051,7 +8051,7 @@ function repoCfgSave() {
   const st = document.getElementById('repo-cfg-status'); if (st) { st.textContent = 'Guardando…'; st.style.color = '#6B7280'; }
   clearTimeout(_repoSaveT);
   _repoSaveT = setTimeout(async () => {
-    try { const r = await fetch(REPO_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: repoCfg, user: currentUser, pass: _getAdminPass() }) }); const d = await r.json(); if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; } }
+    try { const r = await fetch(REPO_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), config: repoCfg }) }); const d = await r.json(); if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; } }
     catch (e) { if (st) { st.textContent = 'Error al guardar'; st.style.color = '#DC2626'; } }
   }, 700);
 }
