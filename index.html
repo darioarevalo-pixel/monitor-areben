@@ -8061,6 +8061,11 @@ function repoSugerido(it) {
   return Math.max(0, Math.min(obj - it.local, it.deposito - reserva));
 }
 function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); repoRender(); }
+// Edición manual de la cantidad a mover (por sesión). Si no se tocó, vale el sugerido.
+let repoMoverManual = {};
+function repoMoverFinal(it) { const v = repoMoverManual[it.vid]; return (v === undefined) ? repoSugerido(it) : v; }
+function repoSetMover(vid, v) { if (v === '' || v == null) delete repoMoverManual[vid]; else repoMoverManual[vid] = Math.max(0, parseInt(v) || 0); repoRender(); }
+function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
   try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1 }; }
   catch (e) { /* default */ }
@@ -8079,6 +8084,7 @@ async function repoInit() {
   await repoCfgLoad();
   if (!window._mktTNData) { try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; } }
   await repoCargarInventario();
+  repoMoverManual = {};
   repoLastUpdate = new Date();
   const cb = document.getElementById('repo-ver-ventas'); if (cb) cb.checked = repoVerVentas;
   repoRender();
@@ -8142,7 +8148,10 @@ function repoRender() {
   const porProd = {};
   rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, cat: it.cat, items: [] }; porProd[it.pid].items.push(it); });
   const prodKeys = Object.keys(porProd).sort((a, b) => porProd[a].name.localeCompare(porProd[b].name, 'es'));
-  html += `<div style="font-size:13px;margin:4px 0 8px;"><b>${rep.length}</b> variantes para reponer en <b>${prodKeys.length}</b> producto(s)` + (repoFaltantes.size ? ` · <span style="color:#DC2626;font-weight:600;">${repoFaltantes.size} para conteo urgente</span>` : '') + `</div>`;
+  const totalMover = rep.reduce((s, it) => s + repoMoverFinal(it), 0);
+  const hayEdit = Object.keys(repoMoverManual).length > 0;
+  html += `<div style="font-size:13px;margin:4px 0 8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>${rep.length}</b> variantes para reponer en <b>${prodKeys.length}</b> producto(s) · <b>${totalMover}</b> u. a mover</span>` + (repoFaltantes.size ? `<span style="color:#DC2626;font-weight:600;">${repoFaltantes.size} para conteo urgente</span>` : '') + (hayEdit ? `<button onclick="repoResetMover()" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:2px 9px;font-size:11px;cursor:pointer;color:#6B7280;">↺ Volver a sugeridos</button>` : '') + `</div>`;
+  if (rep.length) html += `<div style="font-size:11.5px;color:#9CA3AF;margin:-2px 0 8px;">✏️ Podés ajustar a mano la cantidad a mover en cada línea. El PDF usa esos valores (omite las que dejes en 0).</div>`;
   if (!rep.length) html += '<div style="color:#16A34A;padding:14px;">Nada para reponer 🎉 (todo por encima del mínimo, o sin stock en depósito).</div>';
   prodKeys.forEach(pid => {
     const g = porProd[pid];
@@ -8155,6 +8164,8 @@ function repoRender() {
     items.forEach(it => {
       const min = repoMin(it);
       const sug = repoSugerido(it);
+      const mover = repoMoverFinal(it);
+      const editado = repoMoverManual[it.vid] !== undefined && repoMoverManual[it.vid] !== sug;
       const falt = repoFaltantes.has(it.vid);
       html += `<tr style="border-top:1px solid #F3F4F6;${falt ? 'background:#FEF2F2;' : ''}">
         <td style="padding:6px 8px;">${esc(it.size || '—')}${it.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(it.sku)}</span>` : ''}</td>
@@ -8162,7 +8173,7 @@ function repoRender() {
         <td style="text-align:center;">${it.deposito}</td>
         ${repoVerVentas ? `<td style="text-align:center;color:#1D9E75;font-weight:600;">${it.s7}</td>` : ''}
         <td style="text-align:center;color:#9CA3AF;">${min}</td>
-        <td style="text-align:center;font-weight:700;">${sug}</td>
+        <td style="text-align:center;"><input type="number" min="0" max="${it.deposito}" value="${mover}" onchange="repoSetMover('${it.vid}',this.value)" title="Sugerido: ${sug} · Máx en depósito: ${it.deposito}" style="width:48px;padding:3px 4px;border:1px solid ${editado ? '#378ADD' : '#E5E7EB'};${editado ? 'background:#EFF6FF;' : ''}border-radius:6px;text-align:center;font-weight:700;color:${mover === 0 ? '#9CA3AF' : '#111827'};"></td>
         <td style="text-align:right;padding-right:8px;"><button onclick="repoFaltante('${it.vid}')" title="No se encuentra → conteo urgente" style="border:1px solid ${falt ? '#DC2626' : '#E5E7EB'};background:${falt ? '#DC2626' : '#fff'};color:${falt ? '#fff' : '#6B7280'};border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;">⚠️</button></td></tr>`;
     });
     html += '</tbody></table></div>';
@@ -8176,15 +8187,16 @@ function repoRender() {
   cont.innerHTML = html;
 }
 function repoPDF() {
-  const rep = repoReporte();
-  if (!rep.length) { alert('No hay productos para reponer.'); return; }
+  const rep = repoReporte().filter(it => repoMoverFinal(it) > 0);
+  if (!rep.length) { alert('No hay unidades para mover (todas en 0).'); return; }
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 12, RIGHT = 198; let y = 16;
   const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Reposición de local — ' + _cuentaKey().toUpperCase(), M, y);
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${rep.length} variantes`, M, y); pdf.setTextColor(0); y += 8;
+  const totalMover = rep.reduce((s, it) => s + repoMoverFinal(it), 0);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${rep.length} variantes · ${totalMover} u. a mover`, M, y); pdf.setTextColor(0); y += 8;
   const porProd = {}; rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, items: [] }; porProd[it.pid].items.push(it); });
   Object.keys(porProd).sort((a, b) => porProd[a].name.localeCompare(porProd[b].name, 'es')).forEach(pid => {
     const g = porProd[pid];
@@ -8196,11 +8208,11 @@ function repoPDF() {
     items.forEach(it => {
       if (y > 287) { pdf.addPage(); y = 16; }
       const min = repoMin(it);
-      const sug = repoSugerido(it);
+      const mover = repoMoverFinal(it);
       pdf.setFontSize(8.5);
       pdf.text(pdf.splitTextToSize(String(it.size || '—'), 88)[0], M, y);
       pdf.text(String(it.local), M + 95, y); pdf.text(String(it.deposito), M + 115, y); pdf.text(String(it.s7), M + 135, y); pdf.text(String(min), M + 150, y);
-      pdf.setFont('helvetica', 'bold'); pdf.text(String(sug), M + 166, y); pdf.setFont('helvetica', 'normal');
+      pdf.setFont('helvetica', 'bold'); pdf.text(String(mover), M + 166, y); pdf.setFont('helvetica', 'normal');
       pdf.setDrawColor(240); pdf.line(M, y + 1.4, RIGHT, y + 1.4); y += 5;
     });
     y += 3;
