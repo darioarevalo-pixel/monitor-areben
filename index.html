@@ -1263,6 +1263,21 @@
         <div id="tnimg-grupos"></div>
         <datalist id="tnimg-prods"></datalist>
       </div>
+
+      <!-- Asignación masiva de categoría por Excel (Zattia) -->
+      <div class="card" id="tncat-card-asignar">
+        <div style="font-size:16px;font-weight:700;">🗂️ Asignar categoría (Excel)</div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;max-width:680px;">Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <select id="tncat-asig-cat" onchange="tncatAsigPrevisualizar()" style="padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;min-width:220px;"><option value="">Cargando categorías…</option></select>
+          <label class="btn-sm" style="background:#378ADD;color:#fff;cursor:pointer;">📁 Subir Excel<input type="file" id="tncat-asig-file" accept=".xlsx,.xls,.csv" onchange="tncatAsigArchivo(this.files[0]);this.value='';" style="display:none;"></label>
+          <span id="tncat-asig-info" style="font-size:12px;color:#9CA3AF;"></span>
+        </div>
+        <div id="tncat-asig-prev"></div>
+        <div id="tncat-asig-acciones" style="display:none;margin-top:12px;">
+          <button class="btn-sm" id="tncat-asig-aplicar" onclick="tncatAsigAplicar()" style="background:#16A34A;color:#fff;">✅ Aplicar en TiendaNube</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Selección de diseños (tablero local) ───────────────────────────── -->
@@ -6665,12 +6680,90 @@ function tncatAbrir() {
   const key = _cuentaKey();
   const verCat = (key === 'bdi') && _puedeVer(key, 'tncat.categorias');
   const verImg = _puedeVer(key, 'tncat.imagenes');
+  const verAsig = (key === 'zattia') && _puedeVer(key, 'tncat.asignar');
   const cardCat = document.getElementById('tncat-card-cat');
   const cardImg = document.getElementById('tncat-card-img');
+  const cardAsig = document.getElementById('tncat-card-asignar');
   if (cardCat) cardCat.style.display = verCat ? '' : 'none';
   if (cardImg) cardImg.style.display = verImg ? '' : 'none';
+  if (cardAsig) cardAsig.style.display = verAsig ? '' : 'none';
   if (verCat) tncatCargar();
   if (verImg) tnImgInit();
+  if (verAsig) tncatAsigInit();
+}
+// ── Asignación masiva de categoría por Excel (Zattia) ──
+let tncatAsigNombres = [];
+function tncatAsigInit() {
+  const sel = document.getElementById('tncat-asig-cat'); if (!sel) return;
+  fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}&accion=cats`).then(r => r.json()).then(d => {
+    if (!d.ok || !d.categorias) { sel.innerHTML = '<option value="">Error al cargar categorías</option>'; return; }
+    sel.innerHTML = '<option value="">— Elegí una categoría —</option>' + d.categorias.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }).catch(() => { sel.innerHTML = '<option value="">Error de conexión</option>'; });
+}
+function tncatAsigArchivo(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { alert('Se está cargando el lector de Excel. Probá de nuevo en unos segundos.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
+      const names = rows.slice(1).map(r => String((r && r[0]) ?? '').trim()).filter(Boolean); // saltea encabezado (fila 1)
+      tncatAsigNombres = [...new Set(names)];
+      const info = document.getElementById('tncat-asig-info');
+      if (info) info.textContent = `${tncatAsigNombres.length} nombre(s) cargado(s) de "${file.name}"`;
+      tncatAsigPrevisualizar();
+    } catch (err) { alert('No pude leer el Excel: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function tncatAsigPrevisualizar() {
+  const prev = document.getElementById('tncat-asig-prev');
+  const acc = document.getElementById('tncat-asig-acciones');
+  const catId = document.getElementById('tncat-asig-cat')?.value;
+  if (acc) acc.style.display = 'none';
+  if (!tncatAsigNombres.length) { if (prev) prev.innerHTML = ''; return; }
+  if (!catId) { if (prev) prev.innerHTML = '<div style="font-size:13px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px;">Elegí una categoría para previsualizar.</div>'; return; }
+  if (prev) prev.innerHTML = '<div style="color:#9CA3AF;font-size:13px;padding:8px;">Cruzando con TiendaNube…</div>';
+  try {
+    const r = await fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'asignar', categoriaId: catId, nombres: tncatAsigNombres, aplicar: false }) });
+    const d = await r.json();
+    if (!d.ok) { prev.innerHTML = `<div style="color:#DC2626;font-size:13px;">Error: ${esc(d.error || 'desconocido')}</div>`; return; }
+    tncatAsigRender(d, false);
+    if (acc && d.matched.length) acc.style.display = '';
+  } catch (e) { prev.innerHTML = `<div style="color:#DC2626;font-size:13px;">Error: ${esc(e.message)}</div>`; }
+}
+function tncatAsigRender(d, aplicado) {
+  const prev = document.getElementById('tncat-asig-prev'); if (!prev) return;
+  const lista = (titulo, color, arr) => arr.length ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12.5px;color:${color};font-weight:600;">${titulo} (${arr.length})</summary><div style="font-size:12px;color:#374151;max-height:180px;overflow:auto;margin-top:4px;padding-left:6px;">${arr.map(esc).join('<br>')}</div></details>` : '';
+  let h = `<div style="font-size:13px;margin:6px 0;">Categoría: <b>${esc(d.categoria)}</b> · ${aplicado ? `<span style="color:#16A34A;font-weight:700;">✅ ${d.aplicados} aplicados</span>` : `<b>${d.matched.length}</b> se van a asignar`} de ${d.total} nombre(s).</div>`;
+  h += `<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;">
+      <span style="background:#ECFDF5;color:#047857;border-radius:14px;padding:3px 10px;">✓ Matchean: ${d.matched.length}</span>
+      <span style="background:#F3F4F6;color:#6B7280;border-radius:14px;padding:3px 10px;">Ya la tenían: ${d.yaTenian.length}</span>
+      <span style="background:#FEF2F2;color:#B91C1C;border-radius:14px;padding:3px 10px;">No encontrados: ${d.noEncontrados.length}</span>
+      ${d.errores && d.errores.length ? `<span style="background:#FEF2F2;color:#B91C1C;border-radius:14px;padding:3px 10px;">Errores: ${d.errores.length}</span>` : ''}
+    </div>`;
+  h += lista(aplicado ? '✅ Asignados' : '✓ Se van a asignar', '#047857', d.matched);
+  h += lista('Ya tenían la categoría', '#6B7280', d.yaTenian);
+  h += lista('⚠️ No encontrados en TiendaNube (revisá el nombre)', '#B91C1C', d.noEncontrados);
+  if (d.errores && d.errores.length) h += lista('❌ Errores al aplicar', '#B91C1C', d.errores.map(e => `${e.nombre}: ${e.msg || e.status}`));
+  prev.innerHTML = h;
+}
+async function tncatAsigAplicar() {
+  const catId = document.getElementById('tncat-asig-cat')?.value;
+  if (!catId || !tncatAsigNombres.length) return;
+  const btn = document.getElementById('tncat-asig-aplicar');
+  if (!confirm('Se va a agregar la categoría a los productos que matchean. ¿Confirmás?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Aplicando…'; }
+  try {
+    const r = await fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'asignar', categoriaId: catId, nombres: tncatAsigNombres, aplicar: true }) });
+    const d = await r.json();
+    if (!d.ok) { alert('Error: ' + (d.error || 'desconocido')); return; }
+    tncatAsigRender(d, true);
+    const acc = document.getElementById('tncat-asig-acciones'); if (acc) acc.style.display = 'none';
+  } catch (e) { alert('Error: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '✅ Aplicar en TiendaNube'; } }
 }
 
 async function tncatCargar() {
@@ -7674,6 +7767,7 @@ const PERM_CAT = [
   { key: 'tncat', label: '🛍️ Tienda Nube', info: 'Herramientas de TiendaNube.', brands: ['bdi', 'zattia'], subs: [
       { key: 'imagenes', label: '📷 Carga de imágenes', info: 'Subir fotos y asignarlas a las variantes.', brands: ['bdi', 'zattia'] },
       { key: 'categorias', label: '🗂️ Categorías por modelo', info: 'Auto-categorización de fundas por modelo de iPhone según stock (solo BDI).', brands: ['bdi'] },
+      { key: 'asignar', label: '🗂️ Asignar categoría (Excel)', info: 'Asignación masiva: elegís una categoría y subís un Excel con nombres de producto; se la agrega a todos los que matcheen (solo Zattia).', brands: ['zattia'] },
   ] },
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
