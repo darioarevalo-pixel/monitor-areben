@@ -8287,13 +8287,18 @@ function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
   return repoInv.filter(it => !ap.has(it.pid) && it.local < repoObjetivo(it) && repoSugerido(it) > 0);
 }
-// Ventas SOLO del canal "Mi Local" (la tienda física) en los últimos 7 días, por variante (pid_sid).
-// Reponemos el LOCAL, así que la rotación relevante es la del local, no la de depósito/online.
+// Ventas que DESCUENTAN del local en los últimos 7 días, por variante (pid_sid).
+// Reponemos el LOCAL, así que la rotación relevante es la del local.
+//  - BDI: online vende desde depósito → solo cuenta "Mi Local" (ventas físicas).
+//  - Zattia: online vende desde local → cuenta "Mi Local" + "Tienda Nube" (ambas vacían el local).
 async function repoVentasLocal7d() {
   const out = {};
   try {
     const desde = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    const ventas = await fetchAll('ventas', `select=id&channel=ilike.*local*&date_sale=gte.${desde}&order=id`, 'ventas-local', true);
+    const filtroCanal = _cuentaKey() === 'zattia'
+      ? 'or=(channel.ilike.*local*,channel.ilike.*tienda*)'
+      : 'channel=ilike.*local*';
+    const ventas = await fetchAll('ventas', `select=id&${filtroCanal}&date_sale=gte.${desde}&order=id`, 'ventas-local', true);
     if (!ventas.length) return out;
     const ids = new Set(ventas.map(v => String(v.id)));
     const minId = Math.min(...ventas.map(v => v.id));
@@ -8407,7 +8412,7 @@ function repoRender() {
           <button onclick="repoApagar('${pid}')" title="Apagar este producto (no reponer más)" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">🔌 Apagar</button>
         </div>
       </div>`;
-    html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? '<th style="text-align:center;" title="Unidades vendidas en el local (canal Mi Local) en los últimos 7 días">7d local</th>' : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
+    html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? `<th style="text-align:center;" title="${_cuentaKey() === 'zattia' ? 'Unidades vendidas que descuentan del local (Mi Local + Tienda Nube) en los últimos 7 días' : 'Unidades vendidas en el local (canal Mi Local) en los últimos 7 días'}">7d local</th>` : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
     items.forEach(it => {
       const obj = repoObjetivo(it);
       const topeado = repoCfg.topes[String(it.pid)] != null && repoCfg.topes[String(it.pid)] < repoMin(it);
