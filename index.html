@@ -8485,16 +8485,17 @@ function repoPDF() {
     pdf.setTextColor(0); pdf.setDrawColor(200); pdf.line(M, y + 1.6, RIGHT, y + 1.6); y += 5.5;
   };
   header();
-  filas.forEach(it => {
+  filas.forEach((it, i) => {
     if (y > 285) { pdf.addPage(); y = 16; header(); }
     const mover = repoMoverFinal(it);
     const etiqueta = `${it.name} · ${it.size || '—'}`;
+    if (i % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M, y - 4.2, RIGHT - M, 6.6, 'F'); } // cebra: fila gris clara alternada
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(20);
     pdf.text(pdf.splitTextToSize(etiqueta, X.dep - X.prod - 3)[0], X.prod, y);
     pdf.setTextColor(165); pdf.text(String(it.deposito), X.dep, y); pdf.setTextColor(20); // depósito gris claro
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.text(String(mover), X.rep, y); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); // a reponer en negrita
     pdf.setDrawColor(110); pdf.rect(X.pick + 3, y - 3.2, 4, 4); pdf.rect(X.nf + 9, y - 3.2, 4, 4); // casilleros para tildar
-    pdf.setDrawColor(235); pdf.line(M, y + 2.2, RIGHT, y + 2.2); y += 6.6;
+    y += 6.6;
   });
   _pdfCompartir(pdf, `reposicion-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Reposición de local');
 }
