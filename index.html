@@ -8353,7 +8353,9 @@ async function conteoInit() {
     }
     map[vid].esperado += q;
   });
-  conteoVars = Object.values(map).filter(v => v.esperado > 0);
+  // Incluye TODAS las variantes activas del Local (aunque tengan 0 en sistema), para poder
+  // escanear y detectar sobrantes (sistema 0 pero físicamente presente).
+  conteoVars = Object.values(map);
   conteoByBc = {};
   conteoVars.forEach(v => { if (v.barcode) conteoByBc[v.barcode] = v.vid; });
   try { const s = JSON.parse(localStorage.getItem(_conteoKey()) || '{}'); conteoCount = (s && typeof s === 'object') ? s : {}; } catch (e) { conteoCount = {}; }
@@ -8379,8 +8381,10 @@ function conteoReset() { if (!confirm('¿Reiniciar el conteo? Se borra todo lo e
 function _conteoChip(active) { return `font-size:12px;border:1px solid ${active ? '#378ADD' : '#E5E7EB'};background:${active ? '#EFF6FF' : '#fff'};color:${active ? '#1D4ED8' : '#374151'};border-radius:14px;padding:4px 10px;cursor:pointer;font-weight:${active ? '700' : '400'};`; }
 function conteoRender() {
   const cont = document.getElementById('conteo-cont'); if (!cont) return;
-  if (!conteoVars.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos activos con stock en el Local.</div>'; return; }
-  const grupos = [...new Set(conteoVars.map(v => v.grupo))].sort((a, b) => { const ai = /^iphone/i.test(a), bi = /^iphone/i.test(b); if (ai && bi) return _repoModelSort(a, b); if (ai) return -1; if (bi) return 1; return a.localeCompare(b, 'es'); });
+  if (!conteoVars.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos activos en el Local.</div>'; return; }
+  // Visible = tiene stock en sistema (>0) o fue escaneado (sobrante). Las de 0 sin escanear no ensucian la lista.
+  const visible = v => v.esperado > 0 || (conteoCount[v.vid] || 0) > 0;
+  const grupos = [...new Set(conteoVars.filter(visible).map(v => v.grupo))].sort((a, b) => { const ai = /^iphone/i.test(a), bi = /^iphone/i.test(b); if (ai && bi) return _repoModelSort(a, b); if (ai) return -1; if (bi) return 1; return a.localeCompare(b, 'es'); });
   const totalEsp = conteoVars.reduce((s, v) => s + v.esperado, 0);
   const totalCon = conteoVars.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0);
   const gj = g => g.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -8394,7 +8398,7 @@ function conteoRender() {
     const listo = listos.has(conteoGrupoSel);
     html += `<div style="margin-bottom:8px;"><button onclick="conteoToggleGrupoListo('${gj(conteoGrupoSel)}')" style="border:1px solid ${listo ? '#16A34A' : '#D1D5DB'};background:${listo ? '#16A34A' : '#fff'};color:${listo ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">${listo ? '✅ Grupo contado (tocá para desmarcar)' : '☐ Marcar este grupo como contado'}</button> <span style="font-size:11.5px;color:#9CA3AF;">Solo los grupos marcados se incluyen en el ajuste a GN.</span></div>`;
   }
-  const vs = (conteoGrupoSel === '__todos__' ? conteoVars : conteoVars.filter(v => v.grupo === conteoGrupoSel)).slice().sort((a, b) => a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
+  const vs = (conteoGrupoSel === '__todos__' ? conteoVars : conteoVars.filter(v => v.grupo === conteoGrupoSel)).filter(visible).slice().sort((a, b) => a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
   html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:66px"><col style="width:72px"><col style="width:56px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Contado</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
   vs.forEach(v => { const con = conteoCount[v.vid] || 0, dif = con - v.esperado; const color = dif === 0 ? '#16A34A' : (dif < 0 ? '#B91C1C' : '#B45309'); const hl = v.vid === conteoLastVid ? 'background:#EFF6FF;' : ''; html += `<tr style="border-top:1px solid #F3F4F6;${hl}"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.name)} · ${esc(v.size || '—')}</td><td style="text-align:center;color:#9CA3AF;">${v.esperado}</td><td style="text-align:center;"><input type="number" min="0" value="${con || ''}" placeholder="0" onchange="conteoSetCount('${v.vid}',this.value)" style="width:50px;padding:3px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;font-weight:700;"></td><td style="text-align:center;font-weight:700;color:${color};">${dif > 0 ? '+' : ''}${dif}</td></tr>`; });
   if (!vs.length) html += '<tr><td colspan="4" style="padding:10px;color:#9CA3AF;">Sin productos en este grupo.</td></tr>';
