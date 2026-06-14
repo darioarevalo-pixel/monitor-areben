@@ -8497,6 +8497,20 @@ function repoPDF() {
     pdf.setDrawColor(110); pdf.rect(X.pick + 3, y - 3.2, 4, 4); pdf.rect(X.nf + 9, y - 3.2, 4, 4); // casilleros para tildar
     y += 6.6;
   });
+  // ── Pie: firma de quien preparó + cierre del circuito ──
+  if (y > 250) { pdf.addPage(); y = 20; }
+  y += 8; pdf.setDrawColor(150); pdf.line(M, y, RIGHT, y); y += 9;
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9.5); pdf.setTextColor(0);
+  pdf.text('Preparó (encargada de reposición):', M, y); pdf.setDrawColor(120); pdf.line(M + 60, y + 1, M + 122, y + 1);
+  pdf.text('Fecha:', M + 128, y); pdf.line(M + 140, y + 1, RIGHT, y + 1);
+  y += 11;
+  pdf.setFont('helvetica', 'bold'); pdf.text(`Total a reponer: ${totalMover} u.`, M, y); pdf.setFont('helvetica', 'normal');
+  pdf.text('Pickeadas:', M + 60, y); pdf.line(M + 78, y + 1, M + 100, y + 1);
+  pdf.text('No encontradas:', M + 105, y); pdf.line(M + 134, y + 1, M + 156, y + 1);
+  y += 13;
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.text('Al finalizar, entregar este reporte a administración.', M, y); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9.5);
+  y += 11;
+  pdf.text('Recibido por administración:', M, y); pdf.line(M + 52, y + 1, M + 120, y + 1);
   _pdfCompartir(pdf, `reposicion-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Reposición de local');
 }
 function repoPDFConteo() {
