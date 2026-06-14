@@ -8140,7 +8140,7 @@ async function dispararSyncInv(btn) {
 
 // ════════ Reposición de local ════════════════════════════════════════════════
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
-let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, topes: {} };
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, topes: {}, catsOff: [] };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
@@ -8243,7 +8243,7 @@ function repoSetMover(vid, v) {
 }
 function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
-  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, topes: d.config.topes || {} }; }
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, topes: d.config.topes || {}, catsOff: d.config.catsOff || [] }; }
   catch (e) { /* default */ }
 }
 function repoCfgSave() {
@@ -8312,14 +8312,41 @@ async function repoCargarInventario() {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
       const modelo = _repoModelo(r.size_name); // modelo de iPhone si la variante lo incluye (aunque tenga color)
-      const subcat = _repoCatGN(p && p.category) || (tn ? _repoSubcat(tn.categories) : null); // GN principal, TN respaldo
-      const cat = subcat || (p && p.category) || '(sin categoría)';
-      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cat, subcat, modelo, s7: s7local[vid] || 0 };
+      // Categorías candidatas: GN (puede venir separada por comas) + TN, descartando genéricas/promos/modelo/fundas.
+      const cats = [];
+      const pushCand = c => { const t = String(c || '').trim(); if (!t) return; const l = t.toLowerCase(); if (_repoCatGenericas.has(l) || _repoEsPromo(t) || _repoEsModeloCat(t) || _repoEsFundaCat(t)) return; if (!cats.some(x => x.toLowerCase() === l)) cats.push(t); };
+      String((p && p.category) || '').split(',').forEach(pushCand);
+      if (tn && Array.isArray(tn.categories)) tn.categories.forEach(pushCand);
+      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cats, catFallback: (p && p.category) || '(sin categoría)', cat: '(sin categoría)', subcat: null, modelo, s7: s7local[vid] || 0 };
     }
     const q = r.available_quantity || 0;
     if (String(r.store_name || '').toLowerCase().trim() === 'local') map[vid].local += q; else map[vid].deposito += q;
   });
   repoInv = Object.values(map);
+  _repoAplicarCats();
+}
+// Aplica las "categorías ignoradas" (catsOff): elige la subcategoría = primera candidata no ignorada.
+function _repoAplicarCats() {
+  const off = new Set((repoCfg.catsOff || []).map(s => String(s).toLowerCase()));
+  repoInv.forEach(it => {
+    let sc = null;
+    for (const c of (it.cats || [])) { if (!off.has(c.toLowerCase())) { sc = c; break; } }
+    it.subcat = sc;
+    it.cat = sc || it.catFallback || '(sin categoría)';
+  });
+}
+// Categorías reales disponibles (candidatas en todos los productos), para el panel de "ignorar".
+function repoCatsDisponibles() {
+  const set = new Map(); // lower -> nombre original
+  repoInv.forEach(it => (it.cats || []).forEach(c => { const l = c.toLowerCase(); if (!set.has(l)) set.set(l, c); }));
+  return [...set.values()].sort((a, b) => a.localeCompare(b, 'es'));
+}
+function repoSetCatOff(cat) {
+  if (!Array.isArray(repoCfg.catsOff)) repoCfg.catsOff = [];
+  const l = String(cat).toLowerCase();
+  const i = repoCfg.catsOff.findIndex(x => String(x).toLowerCase() === l);
+  if (i >= 0) repoCfg.catsOff.splice(i, 1); else repoCfg.catsOff.push(cat);
+  repoCfgSave(); _repoAplicarCats(); repoRenderConfig();
 }
 function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
@@ -8372,6 +8399,16 @@ function repoConfigHTML() {
       <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" onfocus="this.select()" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
+  // Categorías a ignorar (productos con varias categorías en TN: apagar las raras/repetitivas)
+  const catsDisp = repoCatsDisponibles();
+  if (catsDisp.length) {
+    const offSet = new Set((repoCfg.catsOff || []).map(s => String(s).toLowerCase()));
+    html += `<div style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Categorías a ignorar al agrupar</div>
+        <div style="font-size:11.5px;color:#9CA3AF;margin-bottom:8px;">Si un producto tiene varias categorías en TiendaNube (ej. TOPS Y BODIES + Night), apagá las raras/repetitivas para que agrupe por la correcta. Las de promo (NEW IN, SALE…) ya se ignoran solas.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${catsDisp.map(c => { const off = offSet.has(c.toLowerCase()); return `<button onclick="repoSetCatOff('${esc2(c)}')" title="${off ? 'Ignorada — tocá para usarla' : 'En uso — tocá para ignorar'}" style="font-size:12px;border:1px solid ${off ? '#FCA5A5' : '#BBF7D0'};background:${off ? '#FEF2F2' : '#F0FDF4'};color:${off ? '#B91C1C' : '#166534'};border-radius:14px;padding:3px 10px;cursor:pointer;${off ? 'text-decoration:line-through;' : ''}">${esc(c)}</button>`; }).join('')}</div>
+      </div>`;
+  }
   // Topes por producto (cualquier producto con stock, aunque hoy no necesite reposición)
   html += `<div style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px;">
       <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Topes y apagados por producto <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(tope = máximo en Local por variante; 🔌 = no reponer)</span></div>
