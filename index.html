@@ -8150,6 +8150,7 @@ let repoFundasOpen = false;       // desplegable de mínimos por modelo (fundas)
 let repoTopeSearch = '';          // buscador de la sección "Topes por producto" (modal)
 let repoTopeCat = '';             // filtro por categoría en "Topes por producto" ('' = todas)
 let repoTopeEstado = '';          // filtro por estado: '' todos · 'sin' sin tope · 'con' con tope
+let repoTopeDeposito = 'con';     // filtro por depósito: 'con' con stock en depósito · '' todos · 'sin' sin depósito
 function repoToggleFundas() { repoFundasOpen = !repoFundasOpen; repoRenderConfig(); }
 // Orden de modelos de iPhone por ciclo de vida (no alfabético)
 function _repoModelSort(a, b) {
@@ -8343,8 +8344,13 @@ function repoConfigHTML() {
           <option value="">Todas las categorías</option>
           ${repoTopeCats().map(c => `<option value="${esc(c)}" ${repoTopeCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
         </select>
+        <select onchange="repoSetTopeDeposito(this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:12.5px;">
+          <option value="con" ${repoTopeDeposito === 'con' ? 'selected' : ''}>Con stock en depósito</option>
+          <option value="" ${repoTopeDeposito === '' ? 'selected' : ''}>Depósito: todos</option>
+          <option value="sin" ${repoTopeDeposito === 'sin' ? 'selected' : ''}>Sin stock en depósito</option>
+        </select>
         <select onchange="repoSetTopeEstado(this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:12.5px;">
-          <option value="" ${repoTopeEstado === '' ? 'selected' : ''}>Todos</option>
+          <option value="" ${repoTopeEstado === '' ? 'selected' : ''}>Todos (tope)</option>
           <option value="sin" ${repoTopeEstado === 'sin' ? 'selected' : ''}>Sin tope asignado</option>
           <option value="con" ${repoTopeEstado === 'con' ? 'selected' : ''}>Con tope</option>
         </select>
@@ -8366,22 +8372,25 @@ function repoTopeCats() {
 function repoTopesListHTML() {
   const q = (repoTopeSearch || '').toLowerCase().trim();
   const byPid = {};
-  repoInv.forEach(it => { if (!byPid[it.pid]) byPid[it.pid] = { pid: it.pid, name: it.name, cat: it.cat, stock: 0 }; byPid[it.pid].stock += (it.local + it.deposito); });
-  let arr = Object.values(byPid).filter(p => p.stock > 0);
+  repoInv.forEach(it => { if (!byPid[it.pid]) byPid[it.pid] = { pid: it.pid, name: it.name, cat: it.cat, local: 0, dep: 0 }; byPid[it.pid].local += it.local; byPid[it.pid].dep += it.deposito; });
+  let arr = Object.values(byPid).filter(p => (p.local + p.dep) > 0);
+  if (repoTopeDeposito === 'con') arr = arr.filter(p => p.dep > 0);
+  else if (repoTopeDeposito === 'sin') arr = arr.filter(p => p.dep <= 0);
   if (repoTopeCat) arr = arr.filter(p => String(p.cat || '') === repoTopeCat);
   if (repoTopeEstado === 'sin') arr = arr.filter(p => repoCfg.topes[String(p.pid)] == null);
   else if (repoTopeEstado === 'con') arr = arr.filter(p => repoCfg.topes[String(p.pid)] != null);
   if (q) arr = arr.filter(p => p.name.toLowerCase().includes(q) || String(p.cat || '').toLowerCase().includes(q));
   arr.sort((a, b) => a.name.localeCompare(b.name, 'es'));
   const total = arr.length, MAX = 250, shown = arr.slice(0, MAX);
-  let h = `<div style="font-size:11px;color:#9CA3AF;margin:0 0 6px;">${total} producto(s) con stock${total > MAX ? ` · mostrando ${MAX}, afiná la búsqueda` : ''}</div>`;
-  h += shown.map(p => { const t = repoCfg.topes[String(p.pid)]; return `<label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid #F1F5F9;border-radius:6px;margin-bottom:4px;background:#fff;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)} <span style="color:#9CA3AF;">· ${esc(p.cat)} · stock ${p.stock}</span></span><input type="number" min="0" value="${t ?? ''}" placeholder="—" onchange="repoSetTope('${p.pid}',this.value,this)" onkeydown="repoTopeKey(event)" onfocus="this.select()" style="width:46px;padding:2px 4px;border:1px solid ${t != null ? '#378ADD' : '#E5E7EB'};${t != null ? 'background:#EFF6FF;font-weight:700;' : ''}border-radius:5px;text-align:center;flex:none;"></label>`; }).join('');
+  let h = `<div style="font-size:11px;color:#9CA3AF;margin:0 0 6px;">${total} producto(s)${repoTopeDeposito === 'con' ? ' con stock en depósito' : ''}${total > MAX ? ` · mostrando ${MAX}, afiná la búsqueda` : ''}</div>`;
+  h += shown.map(p => { const t = repoCfg.topes[String(p.pid)]; return `<label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid #F1F5F9;border-radius:6px;margin-bottom:4px;background:#fff;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)} <span style="color:#9CA3AF;">· ${esc(p.cat)} · Local ${p.local} · <b style="color:#6B7280;">Dep ${p.dep}</b></span></span><input type="number" min="0" value="${t ?? ''}" placeholder="—" onchange="repoSetTope('${p.pid}',this.value,this)" onkeydown="repoTopeKey(event)" onfocus="this.select()" style="width:46px;padding:2px 4px;border:1px solid ${t != null ? '#378ADD' : '#E5E7EB'};${t != null ? 'background:#EFF6FF;font-weight:700;' : ''}border-radius:5px;text-align:center;flex:none;"></label>`; }).join('');
   if (!shown.length) h += '<div style="color:#9CA3AF;font-size:12px;padding:8px;">Sin resultados.</div>';
   return h;
 }
 function repoSetTopeSearch(v) { repoTopeSearch = v; const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
 function repoSetTopeCat(v) { repoTopeCat = v; const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
 function repoSetTopeEstado(v) { repoTopeEstado = v; const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
+function repoSetTopeDeposito(v) { repoTopeDeposito = v; const el = document.getElementById('repo-topes-list'); if (el) el.innerHTML = repoTopesListHTML(); }
 function repoRenderConfig() { const b = document.getElementById('repo-cfg-body'); if (b) b.innerHTML = repoConfigHTML(); }
 function repoAbrirConfig() { const m = document.getElementById('repo-cfg-modal'); if (!m) return; repoRenderConfig(); m.style.display = 'flex'; }
 function repoCerrarConfig() { const m = document.getElementById('repo-cfg-modal'); if (m) m.style.display = 'none'; repoRender(); }
