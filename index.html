@@ -1380,7 +1380,7 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn-sm" onclick="conteoActualizarGN(this)" title="Traé el stock más nuevo de GN justo antes de empezar a contar (hacelo con el local cerrado/sin ventas)" style="background:#378ADD;color:#fff;">🔄 Traer stock de GN</button>
-            <label class="btn-sm" title="Subí el Excel exportado de GN (Inventario Actual); te completo nuevo_stock con lo contado en los grupos cerrados" style="background:#fff;border:1px solid #D1D5DB;cursor:pointer;">📥 Ajuste para GN (Excel)<input type="file" accept=".xlsx,.xls" onchange="conteoAjusteGN(this.files[0]);this.value='';" style="display:none;"></label>
+            <label class="btn-sm" title="Paso 1: exportá de GN 'Inventario Actual'. Paso 2: subí ese Excel acá → te lo devuelvo con nuevo_stock cargado (solo Local de los modelos contados). Paso 3: subilo a GN → Importar y Ajustar." style="background:#fff;border:1px solid #D1D5DB;cursor:pointer;">📤 Subí el Excel de GN → te lo completo<input type="file" accept=".xlsx,.xls" onchange="conteoAjusteGN(this.files[0]);this.value='';" style="display:none;"></label>
             <button class="btn-sm" onclick="conteoExportPDF()" style="background:#16A34A;color:#fff;">📄 Reporte de diferencias</button>
             <button class="btn-sm" onclick="conteoReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar</button>
           </div>
