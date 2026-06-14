@@ -310,6 +310,7 @@
       <button class="tab" id="tab-btn-disenos" onclick="switchTab('disenos', this)">🗳️ Diseños</button>
       <button class="tab" id="tab-btn-ingresos" style="display:none;" onclick="switchTab('ingresos', this)">📦 Ingresos</button>
       <button class="tab" id="tab-btn-reposicion" style="display:none;" onclick="switchTab('reposicion', this)">🔁 Reposición</button>
+      <button class="tab" id="tab-btn-conteo" style="display:none;" onclick="switchTab('conteo', this)">🔢 Conteo de local</button>
       <button class="tab" id="tab-btn-usuarios" style="display:none;" onclick="switchTab('usuarios', this)">👥 Usuarios</button>
     </div>
 
@@ -1366,6 +1367,27 @@
           <div id="repo-cfg-body"></div>
           <div style="text-align:right;margin-top:14px;"><button onclick="repoCerrarConfig()" style="background:#378ADD;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">Listo</button></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Conteo de local por código de barras ────────────────────────────── -->
+    <div id="tab-conteo" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🔢 Conteo de local</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Conteo físico por <b>código de barras</b> (una sola persona). Escaneá con el lector: cada lectura suma 1. Contás por <b>grupo</b> (modelo/categoría), y al cerrar cada grupo se compara contra el stock del sistema y muestra las diferencias. El progreso se guarda solo.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn-sm" onclick="conteoExportPDF()" style="background:#16A34A;color:#fff;">📄 Reporte de diferencias</button>
+            <button class="btn-sm" onclick="conteoReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar conteo</button>
+          </div>
+        </div>
+        <div style="margin:12px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="conteo-scan" type="text" autocomplete="off" placeholder="Escaneá el código de barras…" onkeydown="if(event.key==='Enter'){conteoScan(this.value);this.value='';this.focus();}" style="flex:1;min-width:240px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;">
+          <span id="conteo-feedback" style="font-size:13px;min-width:160px;"></span>
+        </div>
+        <div id="conteo-cont"></div>
       </div>
     </div>
 
@@ -5752,6 +5774,7 @@ function switchTab(id, btn) {
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (id === 'ingresos') { ingInit(); return; }
   if (id === 'reposicion') { repoInit(); return; }
+  if (id === 'conteo') { conteoInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
@@ -7791,6 +7814,7 @@ const PERM_CAT = [
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
+  { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
 ];
 const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
 // Perfiles por defecto (fallback de VISIBILIDAD si el KV no responde). SIN contraseñas:
@@ -8287,6 +8311,106 @@ async function repoActualizarGN(btn) {
   } catch (e) { alert('Error al actualizar: ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = orig; } _repoSyncing = false; }
 }
+// ───────── Conteo de local por código de barras ─────────
+let conteoVars = [];     // [{vid,pid,name,size,barcode,grupo,esperado}]
+let conteoByBc = {};     // barcode normalizado -> vid
+let conteoCount = {};    // vid -> contado (persistido en localStorage)
+let conteoGrupoSel = '__todos__';
+let conteoLastVid = null;
+function _conteoKey() { return 'monitor_conteo_' + _cuentaKey(); }
+function _conteoNormBc(b) { return String(b || '').trim().toUpperCase(); }
+function _conteoGuardar() { try { localStorage.setItem(_conteoKey(), JSON.stringify(conteoCount)); } catch (e) {} }
+async function conteoInit() {
+  const cont = document.getElementById('conteo-cont');
+  if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando local…</div>';
+  try { await repoCfgLoad(); } catch (e) {} // catsOff para agrupar igual que reposición
+  const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
+  let inv = [];
+  try { inv = await fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,barcode,available_quantity,store_name&store_name=eq.Local', 'inventario', true); } catch (e) { inv = []; }
+  const off = new Set((repoCfg.catsOff || []).map(s => String(s).toLowerCase()));
+  const map = {};
+  inv.forEach(r => {
+    const pid = String(r.product_id), sid = String(r.size_id), vid = pid + '_' + sid;
+    const p = prodById[pid];
+    if (p && p.active === false) return; // inactivos no existen para el sistema
+    const q = r.available_quantity || 0;
+    if (!map[vid]) {
+      const modelo = _repoModelo(r.size_name);
+      const cats = [];
+      const push = c => { const t = String(c || '').trim(); if (!t) return; const l = t.toLowerCase(); if (_repoCatGenericas.has(l) || _repoEsPromo(t) || _repoEsModeloCat(t) || _repoEsFundaCat(t) || off.has(l)) return; if (!cats.some(x => x.toLowerCase() === l)) cats.push(t); };
+      String((p && p.category) || '').split(',').forEach(push);
+      const grupo = modelo || cats[0] || '(otros)';
+      map[vid] = { vid, pid, name: r.product_name || '—', size: r.size_name || '', barcode: _conteoNormBc(r.barcode), grupo, esperado: 0 };
+    }
+    map[vid].esperado += q;
+  });
+  conteoVars = Object.values(map).filter(v => v.esperado > 0);
+  conteoByBc = {};
+  conteoVars.forEach(v => { if (v.barcode) conteoByBc[v.barcode] = v.vid; });
+  try { const s = JSON.parse(localStorage.getItem(_conteoKey()) || '{}'); conteoCount = (s && typeof s === 'object') ? s : {}; } catch (e) { conteoCount = {}; }
+  conteoLastVid = null;
+  conteoRender();
+  const sc = document.getElementById('conteo-scan'); if (sc) sc.focus();
+}
+function conteoScan(raw) {
+  const bc = _conteoNormBc(raw); if (!bc) return;
+  const fb = document.getElementById('conteo-feedback');
+  const vid = conteoByBc[bc];
+  if (!vid) { if (fb) { fb.textContent = '❓ Código desconocido: ' + bc; fb.style.color = '#B91C1C'; } conteoLastVid = null; conteoRender(); return; }
+  conteoCount[vid] = (conteoCount[vid] || 0) + 1;
+  conteoLastVid = vid; _conteoGuardar();
+  const v = conteoVars.find(x => x.vid === vid);
+  if (fb && v) { fb.textContent = `✓ ${v.name} · ${v.size} → ${conteoCount[vid]}`; fb.style.color = conteoCount[vid] > v.esperado ? '#B45309' : '#16A34A'; }
+  conteoRender();
+}
+function conteoSetGrupo(g) { conteoGrupoSel = g; conteoRender(); const sc = document.getElementById('conteo-scan'); if (sc) sc.focus(); }
+function conteoSetCount(vid, val) { const n = Math.max(0, parseInt(val) || 0); if (n === 0) delete conteoCount[vid]; else conteoCount[vid] = n; _conteoGuardar(); conteoRender(); }
+function conteoReset() { if (!confirm('¿Reiniciar el conteo? Se borra todo lo escaneado.')) return; conteoCount = {}; _conteoGuardar(); conteoLastVid = null; conteoRender(); }
+function _conteoChip(active) { return `font-size:12px;border:1px solid ${active ? '#378ADD' : '#E5E7EB'};background:${active ? '#EFF6FF' : '#fff'};color:${active ? '#1D4ED8' : '#374151'};border-radius:14px;padding:4px 10px;cursor:pointer;font-weight:${active ? '700' : '400'};`; }
+function conteoRender() {
+  const cont = document.getElementById('conteo-cont'); if (!cont) return;
+  if (!conteoVars.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos activos con stock en el Local.</div>'; return; }
+  const grupos = [...new Set(conteoVars.map(v => v.grupo))].sort((a, b) => { const ai = /^iphone/i.test(a), bi = /^iphone/i.test(b); if (ai && bi) return _repoModelSort(a, b); if (ai) return -1; if (bi) return 1; return a.localeCompare(b, 'es'); });
+  const totalEsp = conteoVars.reduce((s, v) => s + v.esperado, 0);
+  const totalCon = conteoVars.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0);
+  const gj = g => g.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  let html = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">`;
+  html += `<button onclick="conteoSetGrupo('__todos__')" style="${_conteoChip(conteoGrupoSel === '__todos__')}">Todos</button>`;
+  grupos.forEach(g => { const vs = conteoVars.filter(v => v.grupo === g); const esp = vs.reduce((s, v) => s + v.esperado, 0), con = vs.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0); const ok = con === esp; html += `<button onclick="conteoSetGrupo('${gj(g)}')" style="${_conteoChip(conteoGrupoSel === g)}">${esc(g)} <span style="opacity:.7;">${con}/${esp}</span>${ok ? ' ✓' : ''}</button>`; });
+  html += `</div><div style="font-size:13px;margin-bottom:8px;">Contado <b>${totalCon}</b> de <b>${totalEsp}</b> esperadas en el sistema.</div>`;
+  const vs = (conteoGrupoSel === '__todos__' ? conteoVars : conteoVars.filter(v => v.grupo === conteoGrupoSel)).slice().sort((a, b) => a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:66px"><col style="width:72px"><col style="width:56px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Contado</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
+  vs.forEach(v => { const con = conteoCount[v.vid] || 0, dif = con - v.esperado; const color = dif === 0 ? '#16A34A' : (dif < 0 ? '#B91C1C' : '#B45309'); const hl = v.vid === conteoLastVid ? 'background:#EFF6FF;' : ''; html += `<tr style="border-top:1px solid #F3F4F6;${hl}"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.name)} · ${esc(v.size || '—')}</td><td style="text-align:center;color:#9CA3AF;">${v.esperado}</td><td style="text-align:center;"><input type="number" min="0" value="${con || ''}" placeholder="0" onchange="conteoSetCount('${v.vid}',this.value)" style="width:50px;padding:3px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;font-weight:700;"></td><td style="text-align:center;font-weight:700;color:${color};">${dif > 0 ? '+' : ''}${dif}</td></tr>`; });
+  if (!vs.length) html += '<tr><td colspan="4" style="padding:10px;color:#9CA3AF;">Sin productos en este grupo.</td></tr>';
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+function conteoExportPDF() {
+  if (!conteoVars.length) { alert('No hay datos cargados.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  const difs = conteoVars.map(v => ({ v, con: conteoCount[v.vid] || 0 })).filter(x => (x.con - x.v.esperado) !== 0).sort((a, b) => a.v.grupo.localeCompare(b.v.grupo, 'es') || a.v.name.localeCompare(b.v.name, 'es'));
+  const { jsPDF } = window.jspdf; const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12, RIGHT = 198; let y = 16;
+  const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Conteo de local — diferencias — ' + _cuentaKey().toUpperCase(), M, y);
+  const totalEsp = conteoVars.reduce((s, v) => s + v.esperado, 0), totalCon = conteoVars.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · contado ${totalCon}/${totalEsp} · ${difs.length} con diferencia`, M, y); pdf.setTextColor(0); y += 8;
+  if (!difs.length) { pdf.setFontSize(11); pdf.text('Sin diferencias: el conteo coincide con el sistema.', M, y); _pdfCompartir(pdf, `conteo-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Conteo de local'); return; }
+  const X = { prod: M, sis: 122, con: 144, dif: 168 };
+  const header = () => { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(120); pdf.text('Producto · Variante', X.prod, y); pdf.text('Sistema', X.sis, y); pdf.text('Contado', X.con, y); pdf.text('Dif', X.dif, y); pdf.setTextColor(0); pdf.setDrawColor(200); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5.5; };
+  header();
+  difs.forEach((x, i) => {
+    if (y > 285) { pdf.addPage(); y = 16; header(); }
+    if (i % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M, y - 4.2, RIGHT - M, 6.6, 'F'); }
+    const dif = x.con - x.v.esperado;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(20);
+    pdf.text(pdf.splitTextToSize(`${x.v.name} · ${x.v.size || '—'}`, X.sis - X.prod - 3)[0], X.prod, y);
+    pdf.setTextColor(120); pdf.text(String(x.v.esperado), X.sis, y); pdf.setTextColor(20); pdf.text(String(x.con), X.con, y);
+    const col = dif < 0 ? [185, 28, 28] : [180, 83, 9]; pdf.setFont('helvetica', 'bold'); pdf.setTextColor(col[0], col[1], col[2]); pdf.text((dif > 0 ? '+' : '') + dif, X.dif, y); pdf.setTextColor(20); pdf.setFont('helvetica', 'normal');
+    y += 6.6;
+  });
+  _pdfCompartir(pdf, `conteo-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Conteo de local');
+}
 async function repoInit() {
   const cont = document.getElementById('repo-cont');
   if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando reposición…</div>';
@@ -8308,6 +8432,8 @@ async function repoCargarInventario() {
   const map = {};
   inv.forEach(r => {
     const pid = String(r.product_id), sid = String(r.size_id), vid = pid + '_' + sid;
+    const pp = prodById[pid];
+    if (pp && pp.active === false) return; // producto inactivo: no existe para el sistema (no se ve en GN)
     if (!map[vid]) {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
