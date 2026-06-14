@@ -8236,7 +8236,13 @@ function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) |
 // Edición manual de la cantidad a mover (por sesión). Si no se tocó, vale el sugerido.
 let repoMoverManual = {};
 function repoMoverFinal(it) { const v = repoMoverManual[it.vid]; return (v === undefined) ? repoSugerido(it) : v; }
-function repoSetMover(vid, v) { if (v === '' || v == null) delete repoMoverManual[vid]; else repoMoverManual[vid] = Math.max(0, parseInt(v) || 0); repoRender(); }
+function repoSetMover(vid, v) {
+  if (v === '' || v == null) { delete repoMoverManual[vid]; repoRender(); return; }
+  const it = repoInv.find(x => x.vid === vid);
+  const maxDep = it ? it.deposito : Infinity; // no se puede mover más de lo que hay en depósito
+  repoMoverManual[vid] = Math.max(0, Math.min(maxDep, parseInt(v) || 0));
+  repoRender();
+}
 function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
   try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, topes: d.config.topes || {} }; }
@@ -8437,7 +8443,8 @@ function repoRender() {
     const g = porProd[pid];
     const items = g.items.sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
     html += `<div style="font-weight:700;font-size:13px;color:#374151;margin:14px 0 6px;">${esc(g.name)} <span style="color:#9CA3AF;font-weight:400;">· ${esc(g.cat)} · ${items.length}</span></div>`;
-    html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? `<th style="text-align:center;" title="${_cuentaKey() === 'zattia' ? 'Unidades vendidas que descuentan del local (Mi Local + Tienda Nube) en los últimos 7 días' : 'Unidades vendidas en el local (canal Mi Local) en los últimos 7 días'}">7d local</th>` : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
+    const colgroup = `<colgroup><col><col style="width:58px"><col style="width:62px">${repoVerVentas ? '<col style="width:64px">' : ''}<col style="width:50px"><col style="width:72px"><col style="width:46px"></colgroup>`;
+    html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">${colgroup}<thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? `<th style="text-align:center;" title="${_cuentaKey() === 'zattia' ? 'Unidades vendidas que descuentan del local (Mi Local + Tienda Nube) en los últimos 7 días' : 'Unidades vendidas en el local (canal Mi Local) en los últimos 7 días'}">7d local</th>` : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th><th></th></tr></thead><tbody>`;
     items.forEach(it => {
       const obj = repoObjetivo(it);
       const topeado = repoCfg.topes[String(it.pid)] != null && repoCfg.topes[String(it.pid)] < repoMin(it);
@@ -8446,13 +8453,13 @@ function repoRender() {
       const editado = repoMoverManual[it.vid] !== undefined && repoMoverManual[it.vid] !== sug;
       const falt = repoFaltantes.has(it.vid);
       html += `<tr style="border-top:1px solid #F3F4F6;${falt ? 'background:#FEF2F2;' : ''}">
-        <td style="padding:6px 8px;">${esc(it.size || '—')}${it.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(it.sku)}</span>` : ''}</td>
+        <td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.size || '—')}${it.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(it.sku)}</span>` : ''}</td>
         <td style="text-align:center;color:${it.local <= 1 ? '#DC2626' : '#374151'};font-weight:600;">${it.local}</td>
         <td style="text-align:center;">${it.deposito}</td>
         ${repoVerVentas ? `<td style="text-align:center;color:#1D9E75;font-weight:600;">${it.s7}</td>` : ''}
         <td style="text-align:center;color:${topeado ? '#378ADD' : '#9CA3AF'};${topeado ? 'font-weight:700;' : ''}" title="${topeado ? 'Topeado por diseño' : 'Mínimo del modelo/categoría'}">${obj}</td>
-        <td style="text-align:center;"><input type="number" min="0" max="${it.deposito}" value="${mover}" onchange="repoSetMover('${it.vid}',this.value)" title="Sugerido: ${sug} · Máx en depósito: ${it.deposito}" style="width:48px;padding:3px 4px;border:1px solid ${editado ? '#378ADD' : '#E5E7EB'};${editado ? 'background:#EFF6FF;' : ''}border-radius:6px;text-align:center;font-weight:700;color:${mover === 0 ? '#9CA3AF' : '#111827'};"></td>
-        <td style="text-align:right;padding-right:8px;"><button onclick="repoFaltante('${it.vid}')" title="No se encuentra → conteo urgente" style="border:1px solid ${falt ? '#DC2626' : '#E5E7EB'};background:${falt ? '#DC2626' : '#fff'};color:${falt ? '#fff' : '#6B7280'};border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;">⚠️</button></td></tr>`;
+        <td style="text-align:center;"><input type="number" min="0" max="${it.deposito}" value="${mover}" onchange="repoSetMover('${it.vid}',this.value)" title="Sugerido: ${sug} · Máx en depósito: ${it.deposito}" style="width:46px;padding:3px 4px;border:1px solid ${editado ? '#378ADD' : '#E5E7EB'};${editado ? 'background:#EFF6FF;' : ''}border-radius:6px;text-align:center;font-weight:700;color:${mover === 0 ? '#9CA3AF' : '#111827'};"></td>
+        <td style="text-align:center;"><button onclick="repoFaltante('${it.vid}')" title="No se encuentra → conteo urgente" style="border:1px solid ${falt ? '#DC2626' : '#E5E7EB'};background:${falt ? '#DC2626' : '#fff'};color:${falt ? '#fff' : '#6B7280'};border-radius:6px;padding:3px 6px;font-size:11px;cursor:pointer;">⚠️</button></td></tr>`;
     });
     html += '</tbody></table></div>';
   });
