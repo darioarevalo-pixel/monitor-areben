@@ -8473,7 +8473,11 @@ function conteoAjusteGN(file) {
       const listos = new Set(conteoGruposListos);
       const byBc = {};
       conteoVars.forEach(v => { if (v.barcode) byBc[v.barcode] = v; });
+      // El archivo de salida lleva SOLO las filas del Local de los grupos contados.
+      // Sacamos depósito y modelos no contados: si no están en el archivo, GN no los puede tocar
+      // (evita revertir ventas de depósito ocurridas durante el conteo).
       let ajustadas = 0, enGrupos = 0;
+      const outRows = [aoa[0]];
       for (let i = 1; i < aoa.length; i++) {
         const row = aoa[i]; if (!row) continue;
         if (String(row[cUbi] || '').trim().toLowerCase() !== 'local') continue;
@@ -8485,8 +8489,10 @@ function conteoAjusteGN(file) {
         const actual = Number(row[cActual] || 0);
         row[cNuevo] = contado;
         if (contado !== actual) ajustadas++;
+        outRows.push(row);
       }
-      const ws2 = XLSX.utils.aoa_to_sheet(aoa);
+      if (enGrupos === 0) { alert('No encontré filas del Local de los grupos marcados en este archivo. ¿Es el export de GN de esta cuenta?'); return; }
+      const ws2 = XLSX.utils.aoa_to_sheet(outRows);
       const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, ws2, wb.SheetNames[0] || 'Worksheet');
       XLSX.writeFile(wb2, `ajuste_local_${_cuentaKey()}_${new Date().toISOString().slice(0, 10)}.xlsx`);
       const limpiar = confirm(`✅ Archivo listo.\n\nGrupos contados: ${listos.size}\nFilas del Local revisadas: ${enGrupos}\nCon diferencia a ajustar: ${ajustadas}\n\nSubí este archivo a GN → "Importar y Ajustar" (procesa solo lo que cambió).\n\n¿Limpiar ahora el conteo de los grupos ya ajustados, para no re-aplicarlos en el próximo conteo? (otros grupos a medio contar quedan intactos)`);
