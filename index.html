@@ -1379,7 +1379,8 @@
             <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Conteo físico por <b>código de barras</b> (una sola persona). Escaneá con el lector: cada lectura suma 1. Contás por <b>grupo</b> (modelo/categoría), y al cerrar cada grupo se compara contra el stock del sistema y muestra las diferencias. El progreso se guarda solo.</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <label class="btn-sm" title="Subí el Excel exportado de GN (Inventario Actual); te completo nuevo_stock con lo contado en los grupos cerrados" style="background:#378ADD;color:#fff;cursor:pointer;">📥 Ajuste para GN (Excel)<input type="file" accept=".xlsx,.xls" onchange="conteoAjusteGN(this.files[0]);this.value='';" style="display:none;"></label>
+            <button class="btn-sm" onclick="conteoActualizarGN(this)" title="Traé el stock más nuevo de GN justo antes de empezar a contar (hacelo con el local cerrado/sin ventas)" style="background:#378ADD;color:#fff;">🔄 Traer stock de GN</button>
+            <label class="btn-sm" title="Subí el Excel exportado de GN (Inventario Actual); te completo nuevo_stock con lo contado en los grupos cerrados" style="background:#fff;border:1px solid #D1D5DB;cursor:pointer;">📥 Ajuste para GN (Excel)<input type="file" accept=".xlsx,.xls" onchange="conteoAjusteGN(this.files[0]);this.value='';" style="display:none;"></label>
             <button class="btn-sm" onclick="conteoExportPDF()" style="background:#16A34A;color:#fff;">📄 Reporte de diferencias</button>
             <button class="btn-sm" onclick="conteoReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar</button>
           </div>
@@ -8425,6 +8426,33 @@ function conteoExportPDF() {
     y += 6.6;
   });
   _pdfCompartir(pdf, `conteo-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Conteo de local');
+}
+// Trae el stock fresco de GN (sync) y recarga el conteo. Ideal: con el local cerrado/sin ventas.
+async function conteoActualizarGN(btn) {
+  if (_repoSyncing) return;
+  if (Object.keys(conteoCount).length && !confirm('Vas a traer el stock más nuevo de GN. Tu conteo escaneado se mantiene; solo se actualiza el stock del sistema. ¿Seguir?')) return;
+  _repoSyncing = true;
+  const orig = btn ? btn.textContent : ''; const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo stock a GN…');
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey() }) });
+    const d = await r.json();
+    if (!d.ok) { alert('No se pudo iniciar la actualización.\n' + (d.error || '')); return; }
+    const t0 = Date.now(), MAX = 7 * 60 * 1000; let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Trayendo stock… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try { const rr = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${secs}`); const dd = await rr.json(); if (dd.run && dd.run.id !== baseId && dd.run.status === 'completed') { done = true; break; } } catch (e) {}
+    }
+    setTxt('↻ Recargando…');
+    await conteoInit();
+    if (!done) alert('La sincronización con GN tardó más de lo normal. Te muestro lo último disponible.');
+  } catch (e) { alert('Error: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } _repoSyncing = false; }
 }
 // Completa la columna nuevo_stock del Excel exportado de GN con lo contado (solo Local + grupos marcados).
 function conteoAjusteGN(file) {
