@@ -1379,8 +1379,9 @@
             <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Conteo físico por <b>código de barras</b> (una sola persona). Escaneá con el lector: cada lectura suma 1. Contás por <b>grupo</b> (modelo/categoría), y al cerrar cada grupo se compara contra el stock del sistema y muestra las diferencias. El progreso se guarda solo.</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <label class="btn-sm" title="Subí el Excel exportado de GN (Inventario Actual); te completo nuevo_stock con lo contado en los grupos cerrados" style="background:#378ADD;color:#fff;cursor:pointer;">📥 Ajuste para GN (Excel)<input type="file" accept=".xlsx,.xls" onchange="conteoAjusteGN(this.files[0]);this.value='';" style="display:none;"></label>
             <button class="btn-sm" onclick="conteoExportPDF()" style="background:#16A34A;color:#fff;">📄 Reporte de diferencias</button>
-            <button class="btn-sm" onclick="conteoReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar conteo</button>
+            <button class="btn-sm" onclick="conteoReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar</button>
           </div>
         </div>
         <div style="margin:12px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -8320,9 +8321,13 @@ let conteoByBc = {};     // barcode normalizado -> vid
 let conteoCount = {};    // vid -> contado (persistido en localStorage)
 let conteoGrupoSel = '__todos__';
 let conteoLastVid = null;
+let conteoGruposListos = []; // grupos marcados como "ya contados" (para el ajuste a GN)
 function _conteoKey() { return 'monitor_conteo_' + _cuentaKey(); }
+function _conteoKeyG() { return 'monitor_conteo_grupos_' + _cuentaKey(); }
 function _conteoNormBc(b) { return String(b || '').trim().toUpperCase(); }
 function _conteoGuardar() { try { localStorage.setItem(_conteoKey(), JSON.stringify(conteoCount)); } catch (e) {} }
+function _conteoGuardarG() { try { localStorage.setItem(_conteoKeyG(), JSON.stringify(conteoGruposListos)); } catch (e) {} }
+function conteoToggleGrupoListo(g) { const i = conteoGruposListos.indexOf(g); if (i >= 0) conteoGruposListos.splice(i, 1); else conteoGruposListos.push(g); _conteoGuardarG(); conteoRender(); }
 async function conteoInit() {
   const cont = document.getElementById('conteo-cont');
   if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando local…</div>';
@@ -8351,6 +8356,7 @@ async function conteoInit() {
   conteoByBc = {};
   conteoVars.forEach(v => { if (v.barcode) conteoByBc[v.barcode] = v.vid; });
   try { const s = JSON.parse(localStorage.getItem(_conteoKey()) || '{}'); conteoCount = (s && typeof s === 'object') ? s : {}; } catch (e) { conteoCount = {}; }
+  try { const g = JSON.parse(localStorage.getItem(_conteoKeyG()) || '[]'); conteoGruposListos = Array.isArray(g) ? g : []; } catch (e) { conteoGruposListos = []; }
   conteoLastVid = null;
   conteoRender();
   const sc = document.getElementById('conteo-scan'); if (sc) sc.focus();
@@ -8368,7 +8374,7 @@ function conteoScan(raw) {
 }
 function conteoSetGrupo(g) { conteoGrupoSel = g; conteoRender(); const sc = document.getElementById('conteo-scan'); if (sc) sc.focus(); }
 function conteoSetCount(vid, val) { const n = Math.max(0, parseInt(val) || 0); if (n === 0) delete conteoCount[vid]; else conteoCount[vid] = n; _conteoGuardar(); conteoRender(); }
-function conteoReset() { if (!confirm('¿Reiniciar el conteo? Se borra todo lo escaneado.')) return; conteoCount = {}; _conteoGuardar(); conteoLastVid = null; conteoRender(); }
+function conteoReset() { if (!confirm('¿Reiniciar el conteo? Se borra todo lo escaneado y los grupos marcados.')) return; conteoCount = {}; conteoGruposListos = []; _conteoGuardar(); _conteoGuardarG(); conteoLastVid = null; conteoRender(); }
 function _conteoChip(active) { return `font-size:12px;border:1px solid ${active ? '#378ADD' : '#E5E7EB'};background:${active ? '#EFF6FF' : '#fff'};color:${active ? '#1D4ED8' : '#374151'};border-radius:14px;padding:4px 10px;cursor:pointer;font-weight:${active ? '700' : '400'};`; }
 function conteoRender() {
   const cont = document.getElementById('conteo-cont'); if (!cont) return;
@@ -8377,10 +8383,16 @@ function conteoRender() {
   const totalEsp = conteoVars.reduce((s, v) => s + v.esperado, 0);
   const totalCon = conteoVars.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0);
   const gj = g => g.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const listos = new Set(conteoGruposListos);
   let html = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">`;
   html += `<button onclick="conteoSetGrupo('__todos__')" style="${_conteoChip(conteoGrupoSel === '__todos__')}">Todos</button>`;
-  grupos.forEach(g => { const vs = conteoVars.filter(v => v.grupo === g); const esp = vs.reduce((s, v) => s + v.esperado, 0), con = vs.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0); const ok = con === esp; html += `<button onclick="conteoSetGrupo('${gj(g)}')" style="${_conteoChip(conteoGrupoSel === g)}">${esc(g)} <span style="opacity:.7;">${con}/${esp}</span>${ok ? ' ✓' : ''}</button>`; });
-  html += `</div><div style="font-size:13px;margin-bottom:8px;">Contado <b>${totalCon}</b> de <b>${totalEsp}</b> esperadas en el sistema.</div>`;
+  grupos.forEach(g => { const vs = conteoVars.filter(v => v.grupo === g); const esp = vs.reduce((s, v) => s + v.esperado, 0), con = vs.reduce((s, v) => s + (conteoCount[v.vid] || 0), 0); const listo = listos.has(g); const sel = conteoGrupoSel === g; html += `<button onclick="conteoSetGrupo('${gj(g)}')" style="font-size:12px;border:1px solid ${sel ? '#378ADD' : (listo ? '#16A34A' : '#E5E7EB')};background:${sel ? '#EFF6FF' : (listo ? '#F0FDF4' : '#fff')};color:${listo ? '#166534' : (sel ? '#1D4ED8' : '#374151')};border-radius:14px;padding:4px 10px;cursor:pointer;font-weight:${sel ? '700' : '400'};">${listo ? '✅ ' : ''}${esc(g)} <span style="opacity:.7;">${con}/${esp}</span></button>`; });
+  html += `</div><div style="font-size:13px;margin-bottom:8px;">Contado <b>${totalCon}</b> de <b>${totalEsp}</b> esperadas · <b>${conteoGruposListos.length}</b> grupo(s) marcado(s) como contados.</div>`;
+  // Botón para marcar el grupo seleccionado como "contado"
+  if (conteoGrupoSel !== '__todos__') {
+    const listo = listos.has(conteoGrupoSel);
+    html += `<div style="margin-bottom:8px;"><button onclick="conteoToggleGrupoListo('${gj(conteoGrupoSel)}')" style="border:1px solid ${listo ? '#16A34A' : '#D1D5DB'};background:${listo ? '#16A34A' : '#fff'};color:${listo ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">${listo ? '✅ Grupo contado (tocá para desmarcar)' : '☐ Marcar este grupo como contado'}</button> <span style="font-size:11.5px;color:#9CA3AF;">Solo los grupos marcados se incluyen en el ajuste a GN.</span></div>`;
+  }
   const vs = (conteoGrupoSel === '__todos__' ? conteoVars : conteoVars.filter(v => v.grupo === conteoGrupoSel)).slice().sort((a, b) => a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
   html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:66px"><col style="width:72px"><col style="width:56px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Contado</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
   vs.forEach(v => { const con = conteoCount[v.vid] || 0, dif = con - v.esperado; const color = dif === 0 ? '#16A34A' : (dif < 0 ? '#B91C1C' : '#B45309'); const hl = v.vid === conteoLastVid ? 'background:#EFF6FF;' : ''; html += `<tr style="border-top:1px solid #F3F4F6;${hl}"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.name)} · ${esc(v.size || '—')}</td><td style="text-align:center;color:#9CA3AF;">${v.esperado}</td><td style="text-align:center;"><input type="number" min="0" value="${con || ''}" placeholder="0" onchange="conteoSetCount('${v.vid}',this.value)" style="width:50px;padding:3px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;font-weight:700;"></td><td style="text-align:center;font-weight:700;color:${color};">${dif > 0 ? '+' : ''}${dif}</td></tr>`; });
@@ -8413,6 +8425,46 @@ function conteoExportPDF() {
     y += 6.6;
   });
   _pdfCompartir(pdf, `conteo-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Conteo de local');
+}
+// Completa la columna nuevo_stock del Excel exportado de GN con lo contado (solo Local + grupos marcados).
+function conteoAjusteGN(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { alert('Se está cargando el lector de Excel. Probá de nuevo en unos segundos.'); return; }
+  if (!conteoGruposListos.length) { alert('Primero marcá al menos un grupo como "contado" (botón en cada modelo). El ajuste solo incluye los grupos marcados, para no pisar lo que no contaste.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+      if (!aoa.length) { alert('El archivo está vacío.'); return; }
+      const hdr = aoa[0].map(h => String(h || '').trim());
+      const ci = n => hdr.indexOf(n);
+      const cBc = ci('codigo_barras'), cUbi = ci('ubicacion'), cNuevo = ci('nuevo_stock'), cActual = ci('stock_actual');
+      if (cBc < 0 || cUbi < 0 || cNuevo < 0) { alert('El archivo no tiene las columnas esperadas (codigo_barras, ubicacion, nuevo_stock). ¿Es el "Inventario Actual" exportado de GN?'); return; }
+      const listos = new Set(conteoGruposListos);
+      const byBc = {};
+      conteoVars.forEach(v => { if (v.barcode) byBc[v.barcode] = v; });
+      let ajustadas = 0, enGrupos = 0;
+      for (let i = 1; i < aoa.length; i++) {
+        const row = aoa[i]; if (!row) continue;
+        if (String(row[cUbi] || '').trim().toLowerCase() !== 'local') continue;
+        const bc = _conteoNormBc(row[cBc]);
+        const v = byBc[bc]; if (!v) continue;
+        if (!listos.has(v.grupo)) continue;
+        enGrupos++;
+        const contado = conteoCount[v.vid] || 0;
+        const actual = Number(row[cActual] || 0);
+        row[cNuevo] = contado;
+        if (contado !== actual) ajustadas++;
+      }
+      const ws2 = XLSX.utils.aoa_to_sheet(aoa);
+      const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, ws2, wb.SheetNames[0] || 'Worksheet');
+      XLSX.writeFile(wb2, `ajuste_local_${_cuentaKey()}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      alert(`✅ Archivo listo.\n\nGrupos contados: ${listos.size}\nFilas del Local revisadas: ${enGrupos}\nCon diferencia a ajustar: ${ajustadas}\n\nSubí este archivo a GN → "Importar y Ajustar". GN solo procesa las filas que cambiaron.`);
+    } catch (err) { alert('No pude procesar el Excel: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 async function repoInit() {
   const cont = document.getElementById('repo-cont');
