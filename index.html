@@ -1882,6 +1882,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   const invByProdModelo = {};
   const invDepoMin = {}; // stock SOLO del Deposito Minorista (para detectar agotamiento real)
   (inventario || []).forEach(i => {
+    if (/mayorista/i.test(i.store_name || '')) return; // Depósito Mayorista: canal aparte, no se cuenta en el stock de análisis
     const pid = String(i.product_id);
     const vid = pid + '_' + String(i.size_id);
     const qty = i.available_quantity || 0;
@@ -2050,6 +2051,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
 
   const variantesMap = {};
   (inventario || []).forEach(i => {
+    if (/mayorista/i.test(i.store_name || '')) return; // Depósito Mayorista: no se cuenta en el stock de análisis
     const pid = String(i.product_id);
     const sid = String(i.size_id);
     const vid = pid + '_' + sid;
@@ -2162,6 +2164,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   // Datos de agotamiento por color
   const invByProdColor = {};
   (inventario || []).forEach(i => {
+    if (/mayorista/i.test(i.store_name || '')) return; // Depósito Mayorista: no se cuenta
     const c = extractColor(i.size_name);
     if (!c || c === '__UNICA__') return;
     const key = `${i.product_id}|${c}`;
