@@ -8446,7 +8446,10 @@ async function repoCargarInventario() {
       map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cats, catFallback: (p && p.category) || '(sin categoría)', cat: '(sin categoría)', subcat: null, modelo, s7: s7local[vid] || 0 };
     }
     const q = r.available_quantity || 0;
-    if (String(r.store_name || '').toLowerCase().trim() === 'local') map[vid].local += q; else map[vid].deposito += q;
+    const _sn = String(r.store_name || '').toLowerCase().trim();
+    if (_sn === 'local') map[vid].local += q;
+    else if (_sn.includes('mayorista')) { /* Depósito Mayorista: stock de venta mayorista, NO se repone desde ahí → se ignora */ }
+    else map[vid].deposito += q;
   });
   repoInv = Object.values(map);
   _repoAplicarCats();
