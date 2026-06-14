@@ -8489,7 +8489,13 @@ function conteoAjusteGN(file) {
       const ws2 = XLSX.utils.aoa_to_sheet(aoa);
       const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, ws2, wb.SheetNames[0] || 'Worksheet');
       XLSX.writeFile(wb2, `ajuste_local_${_cuentaKey()}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      alert(`✅ Archivo listo.\n\nGrupos contados: ${listos.size}\nFilas del Local revisadas: ${enGrupos}\nCon diferencia a ajustar: ${ajustadas}\n\nSubí este archivo a GN → "Importar y Ajustar". GN solo procesa las filas que cambiaron.`);
+      const limpiar = confirm(`✅ Archivo listo.\n\nGrupos contados: ${listos.size}\nFilas del Local revisadas: ${enGrupos}\nCon diferencia a ajustar: ${ajustadas}\n\nSubí este archivo a GN → "Importar y Ajustar" (procesa solo lo que cambió).\n\n¿Limpiar ahora el conteo de los grupos ya ajustados, para no re-aplicarlos en el próximo conteo? (otros grupos a medio contar quedan intactos)`);
+      if (limpiar) {
+        const setG = new Set(conteoGruposListos);
+        conteoVars.forEach(v => { if (setG.has(v.grupo)) delete conteoCount[v.vid]; });
+        conteoGruposListos = [];
+        _conteoGuardar(); _conteoGuardarG(); conteoRender();
+      }
     } catch (err) { alert('No pude procesar el Excel: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
