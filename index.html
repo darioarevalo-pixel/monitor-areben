@@ -6693,6 +6693,8 @@ function tncatAbrir() {
 }
 // ── Asignación masiva de categoría por Excel (Zattia) ──
 let tncatAsigNombres = [];
+let tncatAsigMatched = [];   // objetos {id, nombre, nuevas} resueltos en la previsualización
+let tncatAsigCatName = '';
 function tncatAsigInit() {
   const sel = document.getElementById('tncat-asig-cat'); if (!sel) return;
   fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}&accion=cats`).then(r => r.json()).then(d => {
@@ -6730,39 +6732,58 @@ async function tncatAsigPrevisualizar() {
     const r = await fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'asignar', categoriaId: catId, nombres: tncatAsigNombres, aplicar: false }) });
     const d = await r.json();
     if (!d.ok) { prev.innerHTML = `<div style="color:#DC2626;font-size:13px;">Error: ${esc(d.error || 'desconocido')}</div>`; return; }
-    tncatAsigRender(d, false);
-    if (acc && d.matched.length) acc.style.display = '';
+    tncatAsigMatched = d.matched || [];
+    tncatAsigCatName = d.categoria || '';
+    tncatAsigRenderPreview(d);
+    if (acc && tncatAsigMatched.length) acc.style.display = '';
   } catch (e) { prev.innerHTML = `<div style="color:#DC2626;font-size:13px;">Error: ${esc(e.message)}</div>`; }
 }
-function tncatAsigRender(d, aplicado) {
+function _tncatLista(titulo, color, arr) {
+  return arr.length ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12.5px;color:${color};font-weight:600;">${titulo} (${arr.length})</summary><div style="font-size:12px;color:#374151;max-height:180px;overflow:auto;margin-top:4px;padding-left:6px;">${arr.map(esc).join('<br>')}</div></details>` : '';
+}
+function tncatAsigRenderPreview(d) {
   const prev = document.getElementById('tncat-asig-prev'); if (!prev) return;
-  const lista = (titulo, color, arr) => arr.length ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12.5px;color:${color};font-weight:600;">${titulo} (${arr.length})</summary><div style="font-size:12px;color:#374151;max-height:180px;overflow:auto;margin-top:4px;padding-left:6px;">${arr.map(esc).join('<br>')}</div></details>` : '';
-  let h = `<div style="font-size:13px;margin:6px 0;">Categoría: <b>${esc(d.categoria)}</b> · ${aplicado ? `<span style="color:#16A34A;font-weight:700;">✅ ${d.aplicados} aplicados</span>` : `<b>${d.matched.length}</b> se van a asignar`} de ${d.total} nombre(s).</div>`;
+  const matchedNames = (d.matched || []).map(m => m.nombre);
+  let h = `<div style="font-size:13px;margin:6px 0;">Categoría: <b>${esc(d.categoria)}</b> · <b>${matchedNames.length}</b> se van a asignar de ${d.total} nombre(s).</div>`;
   h += `<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;">
-      <span style="background:#ECFDF5;color:#047857;border-radius:14px;padding:3px 10px;">✓ Matchean: ${d.matched.length}</span>
+      <span style="background:#ECFDF5;color:#047857;border-radius:14px;padding:3px 10px;">✓ Matchean: ${matchedNames.length}</span>
       <span style="background:#F3F4F6;color:#6B7280;border-radius:14px;padding:3px 10px;">Ya la tenían: ${d.yaTenian.length}</span>
       <span style="background:#FEF2F2;color:#B91C1C;border-radius:14px;padding:3px 10px;">No encontrados: ${d.noEncontrados.length}</span>
-      ${d.errores && d.errores.length ? `<span style="background:#FEF2F2;color:#B91C1C;border-radius:14px;padding:3px 10px;">Errores: ${d.errores.length}</span>` : ''}
     </div>`;
-  h += lista(aplicado ? '✅ Asignados' : '✓ Se van a asignar', '#047857', d.matched);
-  h += lista('Ya tenían la categoría', '#6B7280', d.yaTenian);
-  h += lista('⚠️ No encontrados en TiendaNube (revisá el nombre)', '#B91C1C', d.noEncontrados);
-  if (d.errores && d.errores.length) h += lista('❌ Errores al aplicar', '#B91C1C', d.errores.map(e => `${e.nombre}: ${e.msg || e.status}`));
+  h += _tncatLista('✓ Se van a asignar', '#047857', matchedNames);
+  h += _tncatLista('Ya tenían la categoría', '#6B7280', d.yaTenian);
+  h += _tncatLista('⚠️ No encontrados en TiendaNube (revisá el nombre)', '#B91C1C', d.noEncontrados);
   prev.innerHTML = h;
 }
 async function tncatAsigAplicar() {
-  const catId = document.getElementById('tncat-asig-cat')?.value;
-  if (!catId || !tncatAsigNombres.length) return;
+  if (!tncatAsigMatched.length) return;
   const btn = document.getElementById('tncat-asig-aplicar');
-  if (!confirm('Se va a agregar la categoría a los productos que matchean. ¿Confirmás?')) return;
+  const prev = document.getElementById('tncat-asig-prev');
+  if (!confirm(`Se va a agregar la categoría "${tncatAsigCatName}" a ${tncatAsigMatched.length} producto(s). ¿Confirmás?`)) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Aplicando…'; }
+  const total = tncatAsigMatched.length, CHUNK = 20;
+  let aplicados = 0; const errores = [];
+  const base = `${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`;
+  const barra = pct => `<div style="margin:8px 0;"><div style="background:#E5E7EB;border-radius:8px;height:14px;overflow:hidden;"><div style="background:#16A34A;height:100%;width:${pct}%;transition:width .2s;"></div></div><div style="font-size:12px;color:#374151;margin-top:4px;">Aplicando en TiendaNube… ${aplicados}/${total}</div></div>`;
+  if (prev) prev.innerHTML = barra(0);
   try {
-    const r = await fetch(`${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'asignar', categoriaId: catId, nombres: tncatAsigNombres, aplicar: true }) });
-    const d = await r.json();
-    if (!d.ok) { alert('Error: ' + (d.error || 'desconocido')); return; }
-    tncatAsigRender(d, true);
+    for (let i = 0; i < total; i += CHUNK) {
+      const lote = tncatAsigMatched.slice(i, i + CHUNK);
+      const r = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'asignar', items: lote }) });
+      const d = await r.json();
+      if (d.ok) { aplicados += d.aplicados || 0; if (d.errores) errores.push(...d.errores); }
+      else errores.push({ nombre: `(lote ${i / CHUNK + 1})`, msg: d.error || 'error' });
+      if (prev) prev.innerHTML = barra(Math.round(Math.min(i + CHUNK, total) / total * 100));
+    }
+    // Resultado final
+    if (prev) {
+      let h = `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:12px;margin-top:6px;"><div style="font-size:15px;font-weight:700;color:#047857;">✅ Listo</div><div style="font-size:13px;color:#065F46;margin-top:3px;">Se agregó <b>${esc(tncatAsigCatName)}</b> a <b>${aplicados}</b> producto(s).${errores.length ? ` ${errores.length} con error.` : ''}</div></div>`;
+      h += _tncatLista('❌ Errores', '#B91C1C', errores.map(e => `${e.nombre || ''}: ${e.msg || e.status || ''}`));
+      prev.innerHTML = h;
+    }
     const acc = document.getElementById('tncat-asig-acciones'); if (acc) acc.style.display = 'none';
-  } catch (e) { alert('Error: ' + e.message); }
+    tncatAsigMatched = [];
+  } catch (e) { if (prev) prev.innerHTML = `<div style="color:#DC2626;font-size:13px;">Error: ${esc(e.message)} — aplicados ${aplicados}/${total}.</div>`; }
   finally { if (btn) { btn.disabled = false; btn.textContent = '✅ Aplicar en TiendaNube'; } }
 }
 
