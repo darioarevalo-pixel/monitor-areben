@@ -311,6 +311,7 @@
       <button class="tab" id="tab-btn-ingresos" style="display:none;" onclick="switchTab('ingresos', this)">📦 Ingresos</button>
       <button class="tab" id="tab-btn-reposicion" style="display:none;" onclick="switchTab('reposicion', this)">🔁 Reposición</button>
       <button class="tab" id="tab-btn-conteo" style="display:none;" onclick="switchTab('conteo', this)">🔢 Conteo de local</button>
+      <button class="tab" id="tab-btn-caducados" style="display:none;" onclick="switchTab('caducados', this)">🗑️ Productos caducados</button>
       <button class="tab" id="tab-btn-usuarios" style="display:none;" onclick="switchTab('usuarios', this)">👥 Usuarios</button>
     </div>
 
@@ -1390,6 +1391,24 @@
           <span id="conteo-feedback" style="font-size:13px;min-width:160px;"></span>
         </div>
         <div id="conteo-cont"></div>
+      </div>
+    </div>
+
+    <!-- ── Productos caducados (depuración) ────────────────────────────────── -->
+    <div id="tab-caducados" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">🗑️ Productos caducados</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:660px;">Candidatos a depurar: <b>sin stock en ningún depósito</b> (Local + Depósito) y con la <b>última venta hace más de N días</b>. Revisá la lista y, una vez verificado que no queda ninguno, eliminalos de <b>TiendaNube</b> y de <b>Gestión Nube</b>.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:5px;">Días sin venta: <input id="cad-dias" type="number" min="1" value="30" onchange="cadRender()" style="width:60px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;text-align:center;"></label>
+            <button class="btn-sm" onclick="cadActualizarGN(this)" title="Traé el stock más nuevo de GN para verificar que estos productos están realmente en 0" style="background:#378ADD;color:#fff;">🔄 Traer stock de GN</button>
+            <button class="btn-sm" onclick="cadExportPDF()" style="background:#16A34A;color:#fff;">📄 Exportar lista</button>
+          </div>
+        </div>
+        <div id="cad-cont" style="margin-top:12px;"></div>
       </div>
     </div>
 
@@ -5780,6 +5799,7 @@ function switchTab(id, btn) {
   if (id === 'ingresos') { ingInit(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
+  if (id === 'caducados') { cadInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
@@ -7820,6 +7840,7 @@ const PERM_CAT = [
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
   { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
+  { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
 ];
 const _acc = keys => { const o = {}; (keys || []).forEach(k => o[k] = true); return o; };
 // Perfiles por defecto (fallback de VISIBILIDAD si el KV no responde). SIN contraseñas:
@@ -8510,6 +8531,88 @@ function conteoAjusteGN(file) {
     } catch (err) { alert('No pude procesar el Excel: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
+}
+// ───────── Productos caducados (depuración) ─────────
+let cadStock = {};   // pid -> {total, local, dep} (todos los depósitos)
+let cadLast = {};    // pid -> 'YYYY-MM-DD' última venta
+let cadCands = [];
+async function cadInit() {
+  const cont = document.getElementById('cad-cont');
+  if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando…</div>';
+  let inv = [];
+  try { inv = await fetchAll('inventario', 'select=product_id,available_quantity,store_name', 'inventario', true); } catch (e) { inv = []; }
+  cadStock = {};
+  inv.forEach(r => { const p = String(r.product_id), q = r.available_quantity || 0; if (!cadStock[p]) cadStock[p] = { total: 0, local: 0, dep: 0 }; cadStock[p].total += q; if (String(r.store_name || '').toLowerCase().trim() === 'local') cadStock[p].local += q; else cadStock[p].dep += q; });
+  cadLast = {};
+  const fechaById = {}; (window.allVentas || []).forEach(v => fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10));
+  (window.allDetalles || []).forEach(d => { const p = String(d.product_id), f = fechaById[String(d.sale_id)]; if (!f) return; if (!cadLast[p] || f > cadLast[p]) cadLast[p] = f; });
+  cadRender();
+}
+function _cadDiasDesde(fecha) { return Math.floor((Date.now() - Date.parse(fecha + 'T00:00:00')) / 86400000); }
+function cadRender() {
+  const cont = document.getElementById('cad-cont'); if (!cont) return;
+  const dias = Math.max(1, parseInt(document.getElementById('cad-dias')?.value) || 30);
+  const corte = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
+  const prods = (allProductos || []).filter(p => p.active !== false);
+  const cands = [];
+  prods.forEach(p => { const id = String(p.id); const st = cadStock[id] || { total: 0, local: 0, dep: 0 }; if (st.total !== 0) return; const lv = cadLast[id]; if (!lv || lv >= corte) return; cands.push({ id, name: p.name || '—', cat: p.category || '—', last: lv, local: st.local, dep: st.dep }); });
+  cands.sort((a, b) => a.last.localeCompare(b.last));
+  cadCands = cands;
+  let html = `<div style="font-size:13px;margin-bottom:8px;"><b>${cands.length}</b> producto(s) caducado(s): sin stock y última venta hace más de <b>${dias}</b> días.</div>`;
+  if (!cands.length) { cont.innerHTML = html + '<div style="color:#16A34A;padding:10px;">No hay productos para depurar con este criterio 🎉</div>'; return; }
+  html += `<div style="font-size:11.5px;color:#9CA3AF;margin-bottom:8px;">⚠️ Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite borrar por API).</div>`;
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:120px"><col style="width:120px"><col style="width:90px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto</th><th>Categoría</th><th>Última venta</th><th style="text-align:center;">Stock</th></tr></thead><tbody>`;
+  cands.forEach(c => {
+    const d = _cadDiasDesde(c.last);
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6B7280;">${esc(c.cat)}</td><td style="color:#B45309;">${c.last} <span style="color:#9CA3AF;">(${d}d)</span></td><td style="text-align:center;color:#16A34A;font-weight:600;" title="Local ${c.local} · Depósito ${c.dep}">0 ✓</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+function cadExportPDF() {
+  if (!cadCands.length) { alert('No hay productos caducados para exportar.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo.'); return; }
+  const { jsPDF } = window.jspdf; const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 12, RIGHT = 198; let y = 16;
+  const dias = Math.max(1, parseInt(document.getElementById('cad-dias')?.value) || 30);
+  const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Productos caducados — ' + _cuentaKey().toUpperCase(), M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${cadCands.length} productos · sin stock y sin venta hace +${dias} días`, M, y); pdf.setTextColor(0); y += 8;
+  const X = { prod: M, cat: 95, last: 150, dia: 182 };
+  const header = () => { pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(120); pdf.text('Producto', X.prod, y); pdf.text('Categoría', X.cat, y); pdf.text('Últ. venta', X.last, y); pdf.text('Días', X.dia, y); pdf.setTextColor(0); pdf.setDrawColor(200); pdf.line(M, y + 1.5, RIGHT, y + 1.5); y += 5.5; };
+  header();
+  cadCands.forEach((c, i) => {
+    if (y > 285) { pdf.addPage(); y = 16; header(); }
+    if (i % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M, y - 4.2, RIGHT - M, 6.6, 'F'); }
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(20);
+    pdf.text(pdf.splitTextToSize(c.name, X.cat - X.prod - 3)[0], X.prod, y);
+    pdf.text(pdf.splitTextToSize(String(c.cat), X.last - X.cat - 3)[0], X.cat, y);
+    pdf.text(c.last, X.last, y); pdf.text(String(_cadDiasDesde(c.last)), X.dia, y);
+    y += 6.6;
+  });
+  _pdfCompartir(pdf, `caducados-${_cuentaKey()}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Productos caducados');
+}
+async function cadActualizarGN(btn) {
+  if (_repoSyncing) return; _repoSyncing = true;
+  const orig = btn ? btn.textContent : ''; const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo stock a GN…');
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey() }) });
+    const d = await r.json(); if (!d.ok) { alert('No se pudo iniciar la actualización.\n' + (d.error || '')); return; }
+    const t0 = Date.now(), MAX = 7 * 60 * 1000; let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Trayendo stock… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try { const rr = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${secs}`); const dd = await rr.json(); if (dd.run && dd.run.id !== baseId && dd.run.status === 'completed') { done = true; break; } } catch (e) {}
+    }
+    setTxt('↻ Recargando…'); await cadInit();
+    if (!done) alert('La sincronización con GN tardó más de lo normal. Te muestro lo último disponible.');
+  } catch (e) { alert('Error: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } _repoSyncing = false; }
 }
 async function repoInit() {
   const cont = document.getElementById('repo-cont');
