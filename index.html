@@ -1445,6 +1445,7 @@
               <option value="all">Todos los canales</option>
             </select>
             <button class="btn-sm" onclick="renderCRM()">Recalcular</button>
+            <label class="btn-sm" title="Subí el Excel de clientes exportado de GN (con teléfonos). Completa los teléfonos faltantes por ID de cliente." style="background:#378ADD;color:#fff;cursor:pointer;">📇 Cargar teléfonos de GN<input type="file" accept=".xlsx,.xls" onchange="crmCargarTelefonos(this.files[0]);this.value='';" style="display:none;"></label>
           </div>
         </div>
 
@@ -9125,6 +9126,8 @@ let crmRows = [];                     // ventas raw filtradas (mayorista u otro)
 let crmClientes = {};                 // map id -> info personal
 let crmAgregado = [];                 // [{ id, name, total_sales, total_amount, last_sale, ... }]
 let crmSortState = { col: 'total_amount', dir: -1 };
+let crmTelOverride = {};              // map id_cliente -> teléfono (completado desde el export de GN, en KV)
+const CRM_TEL_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
 
 const RIESGO_MIN_DAYS  = 30;          // entre estos dos días → "en riesgo"
 const RIESGO_MAX_DAYS  = 90;
@@ -9166,6 +9169,46 @@ function diasDesde(d) {
   return Math.floor((TODAY - new Date(d)) / 86400000);
 }
 
+// Carga teléfonos desde el export de clientes de GN (Excel) y los vincula por ID de cliente.
+function crmCargarTelefonos(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { alert('Se está cargando el lector de Excel. Probá de nuevo en unos segundos.'); return; }
+  if (!crmAgregado.length) { alert('Primero esperá a que cargue la lista de clientes.'); return; }
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+      const hdr = (aoa[0] || []).map(h => String(h || '').trim().toLowerCase());
+      const ci = n => hdr.indexOf(n);
+      const cId = ci('id_interno') >= 0 ? ci('id_interno') : ci('id');
+      const cCel = ci('celular'), cTel = ci('telefono');
+      if (cId < 0 || (cCel < 0 && cTel < 0)) { alert('El archivo no tiene las columnas esperadas (id_interno y celular/telefono). ¿Es el export de clientes de GN?'); return; }
+      // Solo guardamos los teléfonos de los clientes que están en el CRM (mayoristas), para no inflar.
+      const idsCRM = new Set(crmAgregado.map(c => String(c.id)));
+      const map = {};
+      let vinculados = 0;
+      for (let i = 1; i < aoa.length; i++) {
+        const row = aoa[i]; if (!row) continue;
+        const id = String(row[cId] ?? '').trim(); if (!id || !idsCRM.has(id)) continue;
+        const tel = String((cCel >= 0 && row[cCel]) || (cTel >= 0 && row[cTel]) || '').trim();
+        if (tel && normalizeArgPhone(tel)) { map[id] = tel; vinculados++; }
+      }
+      if (!vinculados) { alert('No se encontraron teléfonos para los clientes del CRM en ese archivo.'); return; }
+      setStatus('Guardando teléfonos…');
+      const merged = Object.assign({}, crmTelOverride, map); // acumula con lo ya cargado
+      const r = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: merged }) });
+      const d = await r.json();
+      if (!d.ok) { setStatus('Error guardando: ' + (d.error || ''), 'error'); return; }
+      crmTelOverride = merged;
+      setStatus('');
+      renderCRM();
+      alert(`✅ Listo. Se vincularon ${vinculados} teléfonos a clientes del CRM (match por ID). Los botones de WhatsApp ya funcionan.`);
+    } catch (err) { setStatus('', ''); alert('No pude leer el Excel: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
 async function cargarCRM() {
   if (!currentCuenta) return;
   setStatus('Cargando clientes mayoristas...');
@@ -9179,6 +9222,9 @@ async function cargarCRM() {
     crmRows = ventas;
 
     // Clientes: solo los que aparecen en las ventas (set de ids)
+    // Override de teléfonos (completados desde el export de GN, compartido en KV)
+    try { const tr = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}&nc=${Math.random()}`); const td = await tr.json(); crmTelOverride = (td && td.ok && td.map) ? td.map : {}; } catch (e) { crmTelOverride = {}; }
+
     const ids = [...new Set(ventas.map(v => v.client_id).filter(Boolean))];
     if (ids.length === 0) {
       crmClientes = {};
@@ -9238,7 +9284,7 @@ function calcularAgregadoCRM() {
       id: e.id,
       name: cliente.name || ('Cliente #' + e.id),
       email: cliente.email || '',
-      phone: cliente.phone || '',
+      phone: cliente.phone || crmTelOverride[String(e.id)] || '',
       city: cliente.city || '',
       province: cliente.province || '',
       first_sale: e.first_sale,
