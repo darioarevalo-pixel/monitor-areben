@@ -8533,7 +8533,8 @@ function conteoAjusteGN(file) {
   reader.readAsArrayBuffer(file);
 }
 // ───────── Productos caducados (depuración) ─────────
-let cadStock = {};   // pid -> {total, local, dep} (todos los depósitos)
+let cadStock = {};   // pid -> {total, stores:{nombre:qty}} (todos los depósitos)
+let cadStoresList = []; // nombres de depósitos/ubicaciones presentes
 let cadLast = {};    // pid -> 'YYYY-MM-DD' última venta
 let cadCands = [];
 async function cadInit() {
@@ -8541,8 +8542,9 @@ async function cadInit() {
   if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando…</div>';
   let inv = [];
   try { inv = await fetchAll('inventario', 'select=product_id,available_quantity,store_name', 'inventario', true); } catch (e) { inv = []; }
-  cadStock = {};
-  inv.forEach(r => { const p = String(r.product_id), q = r.available_quantity || 0; if (!cadStock[p]) cadStock[p] = { total: 0, local: 0, dep: 0 }; cadStock[p].total += q; if (String(r.store_name || '').toLowerCase().trim() === 'local') cadStock[p].local += q; else cadStock[p].dep += q; });
+  cadStock = {}; const storeSet = new Set();
+  inv.forEach(r => { const p = String(r.product_id), q = r.available_quantity || 0, sn = String(r.store_name || '').trim() || '?'; storeSet.add(sn); if (!cadStock[p]) cadStock[p] = { total: 0, stores: {} }; cadStock[p].total += q; cadStock[p].stores[sn] = (cadStock[p].stores[sn] || 0) + q; });
+  cadStoresList = [...storeSet].sort((a, b) => (a === 'Local' ? -1 : b === 'Local' ? 1 : a.localeCompare(b, 'es')));
   cadLast = {};
   const fechaById = {}; (window.allVentas || []).forEach(v => fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10));
   (window.allDetalles || []).forEach(d => { const p = String(d.product_id), f = fechaById[String(d.sale_id)]; if (!f) return; if (!cadLast[p] || f > cadLast[p]) cadLast[p] = f; });
@@ -8555,16 +8557,17 @@ function cadRender() {
   const corte = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   const prods = (allProductos || []).filter(p => p.active !== false);
   const cands = [];
-  prods.forEach(p => { const id = String(p.id); const st = cadStock[id] || { total: 0, local: 0, dep: 0 }; if (st.total !== 0) return; const lv = cadLast[id]; if (!lv || lv >= corte) return; cands.push({ id, name: p.name || '—', cat: p.category || '—', last: lv, local: st.local, dep: st.dep }); });
+  prods.forEach(p => { const id = String(p.id); const st = cadStock[id] || { total: 0, stores: {} }; if (st.total !== 0) return; const lv = cadLast[id]; if (!lv || lv >= corte) return; cands.push({ id, name: p.name || '—', cat: p.category || '—', last: lv, stores: st.stores }); });
   cands.sort((a, b) => a.last.localeCompare(b.last));
   cadCands = cands;
   let html = `<div style="font-size:13px;margin-bottom:8px;"><b>${cands.length}</b> producto(s) caducado(s): sin stock y última venta hace más de <b>${dias}</b> días.</div>`;
   if (!cands.length) { cont.innerHTML = html + '<div style="color:#16A34A;padding:10px;">No hay productos para depurar con este criterio 🎉</div>'; return; }
   html += `<div style="font-size:11.5px;color:#9CA3AF;margin-bottom:8px;">⚠️ Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite borrar por API).</div>`;
-  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:120px"><col style="width:120px"><col style="width:90px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto</th><th>Categoría</th><th>Última venta</th><th style="text-align:center;">Stock</th></tr></thead><tbody>`;
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col style="width:34%"><col style="width:24%"><col style="width:16%"><col style="width:26%"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Producto</th><th>Categoría</th><th>Última venta</th><th>Stock por depósito</th></tr></thead><tbody>`;
   cands.forEach(c => {
     const d = _cadDiasDesde(c.last);
-    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6B7280;">${esc(c.cat)}</td><td style="color:#B45309;">${c.last} <span style="color:#9CA3AF;">(${d}d)</span></td><td style="text-align:center;color:#16A34A;font-weight:600;" title="Local ${c.local} · Depósito ${c.dep}">0 ✓</td></tr>`;
+    const desglose = cadStoresList.map(s => `${esc(s)}: <b style="color:#16A34A;">${c.stores[s] || 0}</b>`).join(' · ');
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6B7280;">${esc(c.cat)}</td><td style="color:#B45309;">${c.last} <span style="color:#9CA3AF;">(${d}d)</span></td><td style="font-size:11.5px;color:#6B7280;">${desglose}</td></tr>`;
   });
   html += '</tbody></table></div>';
   cont.innerHTML = html;
