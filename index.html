@@ -8545,9 +8545,19 @@ async function cadInit() {
   cadStock = {}; const storeSet = new Set();
   inv.forEach(r => { const p = String(r.product_id), q = r.available_quantity || 0, sn = String(r.store_name || '').trim() || '?'; storeSet.add(sn); if (!cadStock[p]) cadStock[p] = { total: 0, stores: {} }; cadStock[p].total += q; cadStock[p].stores[sn] = (cadStock[p].stores[sn] || 0) + q; });
   cadStoresList = [...storeSet].sort((a, b) => (a === 'Local' ? -1 : b === 'Local' ? 1 : a.localeCompare(b, 'es')));
+  // Última venta por producto — datos propios (no dependen del rol ni de la ventana de ventas del login,
+  // que para usuarios no-admin trae solo 35 días). Ventana amplia (~2 años) para tener la última venta real.
   cadLast = {};
-  const fechaById = {}; (window.allVentas || []).forEach(v => fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10));
-  (window.allDetalles || []).forEach(d => { const p = String(d.product_id), f = fechaById[String(d.sale_id)]; if (!f) return; if (!cadLast[p] || f > cadLast[p]) cadLast[p] = f; });
+  try {
+    const desde = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10);
+    const ventas = await fetchAll('ventas', `select=id,date_sale&date_sale=gte.${desde}&order=id`, 'ventas-cad', true);
+    if (ventas.length) {
+      const fechaById = {}; ventas.forEach(v => fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10));
+      const minId = Math.min(...ventas.map(v => v.id));
+      const det = await fetchAll('venta_detalles', `select=sale_id,product_id&sale_id=gte.${minId}&order=sale_id`, 'det-cad', true);
+      det.forEach(d => { const p = String(d.product_id), f = fechaById[String(d.sale_id)]; if (!f) return; if (!cadLast[p] || f > cadLast[p]) cadLast[p] = f; });
+    }
+  } catch (e) { /* si falla, queda sin fechas */ }
   cadRender();
 }
 function _cadDiasDesde(fecha) { return Math.floor((Date.now() - Date.parse(fecha + 'T00:00:00')) / 86400000); }
