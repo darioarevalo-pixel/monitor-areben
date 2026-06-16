@@ -7968,7 +7968,8 @@ async function usuariosGuardar() {
     const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminUser: currentUser, adminPass: _getAdminPass(), config: { users: usuEdit } }) });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'no se pudo guardar');
-    USERS_LIST = d.config.users; USERS = _buildUsers(USERS_LIST);
+    // El backend responde { ok: true } (sin config). Usamos lo que acabamos de guardar.
+    USERS_LIST = JSON.parse(JSON.stringify(usuEdit)); USERS = _buildUsers(USERS_LIST);
     aplicarVisibilidadTabs();
     set('✓ Guardado. Los cambios ya aplican para todos.', '#16A34A');
   } catch (e) { set('Error: ' + e.message, '#DC2626'); }
