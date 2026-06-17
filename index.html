@@ -7065,12 +7065,14 @@ function tnImgRender() {
           <button onclick="event.stopPropagation();tnImgSetPortada(${g.id},${ft.id});" title="${esPortada ? 'Es la portada' : 'Marcar como portada'}" style="position:absolute;top:-7px;left:-7px;background:${esPortada ? '#F59E0B' : '#fff'};color:${esPortada ? '#fff' : '#CBD5E1'};border:1px solid ${esPortada ? '#F59E0B' : '#D1D5DB'};border-radius:50%;width:18px;height:18px;min-width:0;padding:0;font-size:11px;cursor:pointer;line-height:16px;text-align:center;">★</button>
           ${ft.subida ? '<span style="position:absolute;top:-6px;right:-6px;background:#16A34A;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;">✓</span>' : `<button onclick="event.stopPropagation();tnImgQuitarFoto(${g.id},${ft.id});" style="position:absolute;top:-6px;right:-6px;background:#DC2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;min-width:0;padding:0;font-size:12px;cursor:pointer;line-height:18px;text-align:center;display:flex;align-items:center;justify-content:center;">×</button>`}
         </div>
+        <div title="${esc(ft.fn || '')}" style="font-size:9px;color:#9CA3AF;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;text-align:center;">${esc(ft.fn || '')}</div>
         ${csel}
       </div>`;
     }).join('');
     return `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:12px;">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
         <input list="tnimg-prods" placeholder="Buscar producto…" value="${prod ? esc(prod.name) : ''}" onchange="tnImgGrupoSetProd(${g.id}, this.value)" style="flex:1;min-width:200px;padding:7px 10px;border:1px solid ${prod ? '#16A34A' : '#D1D5DB'};border-radius:8px;font-size:13px;font-weight:600;">
+        ${prod ? '<span style="font-size:11px;color:#16A34A;font-weight:600;white-space:nowrap;">✓ vinculado</span>' : '<span style="font-size:11px;color:#DC2626;font-weight:600;white-space:nowrap;">⚠️ sin producto</span>'}
         ${tieneColores ? '<span style="font-size:11px;color:#9CA3AF;">↓ elegí el color de cada foto</span>' : ''}
         <button onclick="tnImgQuitarGrupo(${g.id})" title="Quitar este producto" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:18px;">×</button>
       </div>
