@@ -1260,6 +1260,7 @@
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
           <button class="btn-sm" id="tnimg-subir" onclick="tnImgSubirTodo()" disabled style="background:#16A34A;color:#fff;">⬆️ Subir todo a TN</button>
           <button class="btn-sm" onclick="tnImgAgregarGrupo()">+ Agregar producto a mano</button>
+          <button class="btn-sm" onclick="tnImgRecargarProductos(this)" title="Volvé a traer la lista de productos desde TiendaNube (usalo si importaste productos nuevos y no los reconoce)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Recargar productos de TN</button>
           <span id="tnimg-info" style="font-size:12px;color:#9CA3AF;"></span>
         </div>
         <div id="tnimg-grupos"></div>
@@ -6903,6 +6904,24 @@ async function tnImgInit() {
   }
   if (!window._tnImgPasteWired) { window._tnImgPasteWired = true; document.addEventListener('paste', tnImgPaste); }
   tnImgRender();
+}
+// Vuelve a traer la lista de productos de TN (útil tras importar productos nuevos) y reintenta el match.
+async function tnImgRecargarProductos(btn) {
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Cargando…'; }
+  try {
+    const r = await fetch(TNIMG_URL + _cuentaKey() + '&productos=1&nc=' + Math.random());
+    const j = await r.json();
+    tnImgProductos = j.productos || [];
+    const dl = document.getElementById('tnimg-prods');
+    if (dl) dl.innerHTML = tnImgProductos.map(p => `<option value="${esc(p.name)}${p.sku ? ' (' + esc(p.sku) + ')' : ''}"></option>`).join('');
+    // reintentar el match de los grupos que quedaron sin producto asignado
+    let reasignados = 0;
+    tnImgGrupos.forEach(g => { if (!g.productId && g.fotos.length) { const p = _tnImgMatchByFilename(g.fotos[0].fn); if (p) { g.productId = p.id; reasignados++; } } });
+    tnImgRender();
+    if (btn) { btn.textContent = `✓ ${tnImgProductos.length} productos`; setTimeout(() => { btn.textContent = orig; }, 2500); }
+  } catch (e) { if (btn) btn.textContent = '⚠️ Error'; }
+  finally { if (btn) btn.disabled = false; }
 }
 
 // Limpia el nombre de archivo para matchear el producto (saca extensión, numeración, sufijos)
