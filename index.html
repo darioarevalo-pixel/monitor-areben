@@ -185,14 +185,12 @@
 
     /* Vista restringida para rol Marketing: oculta tabs y secciones no relevantes */
     body.rol-marketing #stats-overview,
-    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
-    body.rol-marketing #refresh-card {
+    body.rol-marketing .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]) {
       display: none !important;
     }
     /* Vista restringida para rol Operación (Administracion): Marketing, Etiquetas, Tabla de talles y Exhibición */
     body.rol-operacion #stats-overview,
-    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]),
-    body.rol-operacion #refresh-card {
+    body.rol-operacion .tab:not([id="tab-btn-marketing"]):not([id="tab-btn-etiquetas"]):not([id="tab-btn-gen-talles"]):not([id="tab-btn-exhib"]):not([id="tab-btn-tncat"]):not([id="eti-sub-btn-dep"]):not([id="eti-sub-btn-loc"]):not([id="eti-sub-btn-sku"]):not([id="eti-sub-btn-libre"]) {
       display: none !important;
     }
     .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
@@ -8189,7 +8187,8 @@ function aplicarVisibilidadTabs() {
   // Resumen / KPIs + tarjeta de refresco
   const verResumen = _puedeVer(key, 'resumen');
   const stats = document.getElementById('stats-overview'); if (stats) stats.style.display = verResumen ? '' : 'none';
-  const refresh = document.getElementById('refresh-card'); if (refresh) refresh.style.display = verResumen ? '' : 'none';
+  // La tarjeta de refresco (botón "Actualizar datos") va para TODOS los roles: cualquiera debe poder forzar datos frescos.
+  const refresh = document.getElementById('refresh-card'); if (refresh) refresh.style.display = '';
 
   // Pestaña de gestión de Usuarios: solo admin
   const usuBtn = document.getElementById('tab-btn-usuarios');
