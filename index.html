@@ -1053,12 +1053,13 @@
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
             <div>
               <div style="font-size:16px;font-weight:700;">🏪 Etiquetas Local</div>
-              <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Igual que depósito + <b>precio</b> (el más barato entre el minorista de GN y el promocional de TN). Cargá cantidades o usá el escáner de arriba.</div>
+              <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Igual que depósito + <b>precio</b> (el de TiendaNube: el <b>promocional</b> si está activo, si no el normal). Si cambiaste precios, tocá <b>🔄 Actualizar precios</b>.</div>
             </div>
             <input type="text" id="eti-search-loc" placeholder="Buscar producto, SKU o código…" oninput="etiRenderTabla('loc')" style="width:240px;">
           </div>
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn-sm" id="eti-btn-imprimir-loc" onclick="etiImprimir('loc')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
+            <button class="btn-sm" onclick="etiActualizarPreciosTN(this)" title="Trae los precios más nuevos desde TiendaNube (promo o normal)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar precios</button>
             <button class="btn-sm" onclick="etiLimpiar('loc')">Limpiar cantidades</button>
             <span id="eti-total-loc" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
@@ -5868,16 +5869,32 @@ function etiSwitchSub(name, btn) {
   if (name === 'libre') libreRenderLineas();
 }
 
-// Precio de cada producto = el más barato entre minorista (GN) y promocional (TN)
+// Precio de cada producto = el de TiendaNube (promocional si está activo, si no el normal).
+// Respaldo: el minorista de GN, solo si el producto no está en TN.
 function _etiBuildPrecios() {
   const idx = _mktIndexTN();
   _etiPrecioMap = {};
   (allProductos || []).forEach(p => {
     const tn = _mktFindTN(p, idx);
-    const promo = tn && tn.promo_price > 0 ? tn.promo_price : null;
-    const cands = [p.retailer_price, promo].filter(x => x > 0);
-    _etiPrecioMap[p.id] = cands.length ? Math.min(...cands) : 0;
+    let precio = 0;
+    if (tn) precio = (tn.promo_price > 0) ? tn.promo_price : (tn.price > 0 ? tn.price : 0);
+    if (!precio && p.retailer_price > 0) precio = p.retailer_price; // respaldo GN si no está en TN
+    _etiPrecioMap[p.id] = precio || 0;
   });
+}
+// Fuerza el refresco de los precios desde TiendaNube (saltea la caché de 1h) y recalcula.
+async function etiActualizarPreciosTN(btn) {
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando precios…'; }
+  try {
+    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}&refresh=1&nc=${Math.random()}`);
+    const d = await r.json();
+    if (d && d.products) { window._mktTNData = d.products; if (d.categories) window._mktTNCats = d.categories; }
+    _etiBuildPrecios();
+    etiRenderTabla('loc');
+    if (btn) { btn.textContent = '✓ Precios actualizados'; setTimeout(() => { btn.textContent = orig; }, 2500); }
+  } catch (e) { if (btn) btn.textContent = '⚠️ Error'; }
+  finally { if (btn) btn.disabled = false; }
 }
 function _etiPrecio(v) { return _etiPrecioMap[v.pid] || 0; }
 
