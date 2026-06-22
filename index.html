@@ -1447,17 +1447,19 @@
             </select>
             <button class="btn-sm" onclick="renderCRM()">Recalcular</button>
             <label class="btn-sm" title="Subí el Excel de clientes exportado de GN (con teléfonos). Completa los teléfonos faltantes por ID de cliente." style="background:#378ADD;color:#fff;cursor:pointer;">📇 Cargar teléfonos de GN<input type="file" accept=".xlsx,.xls" onchange="crmCargarTelefonos(this.files[0]);this.value='';" style="display:none;"></label>
+            <button class="btn-sm" title="Asigna cadencia de contacto automática: Semanal a tus top clientes, Mensual a los activos. No pisa lo que ya cargaste a mano." onclick="crmSugerirCadencias()" style="background:#7C3AED;color:#fff;">🎯 Sugerir cadencias</button>
           </div>
         </div>
 
         <!-- Stats segmentos -->
-        <div id="crm-segmentos" style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px;"></div>
+        <div id="crm-segmentos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
 
         <!-- Toolbar -->
         <div class="toolbar">
           <input type="text" id="crm-search" placeholder="Buscar nombre, email o teléfono..." oninput="renderCRMTabla()">
           <select id="crm-segmento-sel" onchange="renderCRMTabla()">
             <option value="todos">Todos</option>
+            <option value="contactar">📞 Para contactar</option>
             <option value="top">⭐ Top clientes</option>
             <option value="activos">🔥 Activos recurrentes</option>
             <option value="riesgo">⚠️ En riesgo</option>
@@ -1480,11 +1482,12 @@
                 <th onclick="crmSort('total_amount')" style="text-align:right;">Total comprado ↕</th>
                 <th onclick="crmSort('avg_ticket')" style="text-align:right;">Ticket prom. ↕</th>
                 <th onclick="crmSort('last_sale')" style="text-align:right;">Último pedido ↕</th>
+                <th onclick="crmSort('proximo')">Próximo contacto ↕</th>
                 <th>Segmento</th>
                 <th></th>
               </tr>
             </thead>
-            <tbody id="crm-tbody"><tr><td colspan="9" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando...</td></tr></tbody>
+            <tbody id="crm-tbody"><tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -9184,7 +9187,13 @@ let crmClientes = {};                 // map id -> info personal
 let crmAgregado = [];                 // [{ id, name, total_sales, total_amount, last_sale, ... }]
 let crmSortState = { col: 'total_amount', dir: -1 };
 let crmTelOverride = {};              // map id_cliente -> teléfono (completado desde el export de GN, en KV)
+let crmSeg = {};                      // map id_cliente -> { cadencia, ultimo_contacto, proximo_manual, notas[] } (en KV)
+let cmCurrentId = null;               // id del cliente abierto en el modal
 const CRM_TEL_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+
+// Cadencias de contacto del CRM: cada cuántos días recontactar.
+const CADENCIA_DIAS = { semanal: 7, quincenal: 15, mensual: 30 };
+const CADENCIA_LABEL = { '': 'Sin seguimiento', semanal: 'Semanal (7 días)', quincenal: 'Quincenal (15 días)', mensual: 'Mensual (30 días)' };
 
 const RIESGO_MIN_DAYS  = 30;          // entre estos dos días → "en riesgo"
 const RIESGO_MAX_DAYS  = 90;
@@ -9281,6 +9290,8 @@ async function cargarCRM() {
     // Clientes: solo los que aparecen en las ventas (set de ids)
     // Override de teléfonos (completados desde el export de GN, compartido en KV)
     try { const tr = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}&nc=${Math.random()}`); const td = await tr.json(); crmTelOverride = (td && td.ok && td.map) ? td.map : {}; } catch (e) { crmTelOverride = {}; }
+    // Seguimiento del CRM (cadencias + último contacto + notas), compartido en KV
+    try { const sr = await fetch(`${CRM_TEL_API}?kind=crmseg&store=${_cuentaKey()}&nc=${Math.random()}`); const sd = await sr.json(); crmSeg = (sd && sd.ok && sd.map) ? sd.map : {}; } catch (e) { crmSeg = {}; }
 
     const ids = [...new Set(ventas.map(v => v.client_id).filter(Boolean))];
     if (ids.length === 0) {
@@ -9300,8 +9311,210 @@ async function cargarCRM() {
   } catch (e) {
     setStatus('Error cargando CRM: ' + e.message, 'error');
     document.getElementById('crm-tbody').innerHTML =
-      `<tr><td colspan="9" style="text-align:center;padding:24px;color:#DC2626;">Error: ${e.message}</td></tr>`;
+      `<tr><td colspan="10" style="text-align:center;padding:24px;color:#DC2626;">Error: ${e.message}</td></tr>`;
   }
+}
+
+// ── Seguimiento del CRM (cadencias + fecha de recontacto + notas) ──────────────
+function hoyISO() {
+  const d = TODAY;
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function addDiasISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function diasHasta(iso) {
+  if (!iso) return null;
+  const target = new Date(iso + 'T00:00:00');
+  const base = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
+  return Math.round((target - base) / 86400000);
+}
+
+// Calcula el estado de seguimiento de un cliente a partir de crmSeg.
+// estado: 'none' (sin cadencia) | 'pendiente' (con cadencia, nunca contactado)
+//         | 'vencido' | 'semana' | 'aldia'
+function estadoSeguimiento(id) {
+  const s = crmSeg[String(id)] || {};
+  const cad = s.cadencia || '';
+  const notas = Array.isArray(s.notas) ? s.notas : [];
+  if (!cad) return { cadencia:'', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas };
+  let proximo = s.proximo_manual || null;
+  if (!proximo && s.ultimo_contacto) proximo = addDiasISO(s.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  const dias = proximo ? diasHasta(proximo) : null;
+  let estado;
+  if (!proximo)        estado = 'pendiente';   // tiene cadencia pero todavía no lo contactaste
+  else if (dias <= 0)  estado = 'vencido';
+  else if (dias <= 7)  estado = 'semana';
+  else                 estado = 'aldia';
+  return { cadencia: cad, ultimo: s.ultimo_contacto || null, proximo, estado, dias, notas };
+}
+
+// "Para contactar" = con cadencia y vencido o pendiente de primer contacto.
+function paraContactar(c) {
+  return c.seg_estado === 'vencido' || c.seg_estado === 'pendiente';
+}
+
+// HTML de la celda "Próximo contacto" (semáforo + fecha) para la tabla.
+function segCeldaHTML(c) {
+  if (c.seg_estado === 'none') return '<span style="color:#9CA3AF;">—</span>';
+  const cfg = {
+    pendiente: { txt: 'A contactar', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
+    vencido:   { txt: 'Vencido',     col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
+    semana:    { txt: 'Esta semana', col: '#B45309', bg: '#FEF3C7', dot: '🟡' },
+    aldia:     { txt: 'Al día',      col: '#15803D', bg: '#DCFCE7', dot: '🟢' },
+  }[c.seg_estado];
+  let sub;
+  if (c.seg_estado === 'pendiente') sub = 'Sin primer contacto';
+  else {
+    const d = c.dias_proximo;
+    const rel = d === 0 ? 'hoy' : (d < 0 ? `hace ${-d}d` : `en ${d}d`);
+    sub = `${fmtFecha(c.proximo_contacto)} · ${rel}`;
+  }
+  return `<span style="display:inline-block;font-size:11px;font-weight:600;color:${cfg.col};background:${cfg.bg};padding:1px 7px;border-radius:10px;white-space:nowrap;">${cfg.dot} ${cfg.txt}</span><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${sub}</div>`;
+}
+
+// Bloque "Seguimiento" para la ficha del cliente (modal).
+function segBloqueModalHTML(c) {
+  const cadOpts = ['', 'semanal', 'quincenal', 'mensual'].map(v =>
+    `<option value="${v}"${c.cadencia === v ? ' selected' : ''}>${CADENCIA_LABEL[v]}</option>`).join('');
+
+  // Línea de estado del próximo contacto
+  let proxLinea;
+  if (c.seg_estado === 'none') {
+    proxLinea = '<span style="color:#9CA3AF;">Asigná una cadencia para programar el recontacto.</span>';
+  } else if (c.seg_estado === 'pendiente') {
+    proxLinea = '<span style="color:#DC2626;font-weight:600;">🔴 A contactar (todavía sin primer contacto registrado)</span>';
+  } else {
+    const d = c.dias_proximo;
+    const rel = d === 0 ? 'hoy' : (d < 0 ? `hace ${-d} días` : `en ${d} días`);
+    const cfg = { vencido:['🔴','#DC2626'], semana:['🟡','#B45309'], aldia:['🟢','#15803D'] }[c.seg_estado];
+    proxLinea = `<span style="color:${cfg[1]};font-weight:600;">${cfg[0]} ${fmtFecha(c.proximo_contacto)} (${rel})</span>`;
+  }
+
+  const ultimoTxt = c.ultimo_contacto ? fmtFecha(c.ultimo_contacto) : '—';
+
+  const notasHTML = (c.notas && c.notas.length)
+    ? c.notas.map((n, i) => `
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #F3F4F6;">
+          <div style="font-size:11px;color:#9CA3AF;white-space:nowrap;min-width:64px;">${fmtFecha(n.fecha)}</div>
+          <div style="font-size:13px;flex:1;">${escapeHtml(n.texto)}</div>
+          <button class="btn-sm" title="Borrar nota" onclick="crmBorrarNota(${c.id}, ${i})" style="padding:0 6px;color:#DC2626;">✕</button>
+        </div>`).join('')
+    : '<div style="font-size:12px;color:#9CA3AF;padding:6px 0;">Sin notas todavía.</div>';
+
+  return `
+    <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">📞 Seguimiento</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Cadencia de contacto</label>
+          <select onchange="crmSetCadencia(${c.id}, this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;">${cadOpts}</select>
+        </div>
+        <button class="btn-sm" onclick="crmHableHoy(${c.id})" style="background:#16A34A;color:#fff;">✅ Hablé hoy</button>
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Último contacto</label>
+          <div style="font-size:13px;padding:6px 0;">${ultimoTxt}</div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Próximo contacto (manual)</label>
+          <input type="date" value="${c.proximo_contacto && (crmSeg[String(c.id)]||{}).proximo_manual ? c.proximo_contacto : ''}" onchange="crmSetProximoManual(${c.id}, this.value)" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;">
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:13px;">${proxLinea}</div>
+
+      <div style="margin-top:14px;">
+        <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:4px;">Nota de seguimiento</label>
+        <div style="display:flex;gap:8px;">
+          <textarea id="cm-nota-input" rows="2" placeholder="Qué hablaron, qué quedó pendiente..." style="flex:1;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+          <button class="btn-sm" onclick="crmAgregarNota(${c.id})" style="align-self:flex-start;">Agregar</button>
+        </div>
+        <div style="margin-top:8px;">${notasHTML}</div>
+      </div>
+    </div>`;
+}
+
+async function crmSegGuardar() {
+  try {
+    await fetch(`${CRM_TEL_API}?kind=crmseg&store=${_cuentaKey()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: crmSeg })
+    });
+  } catch (e) { alert('No se pudo guardar el seguimiento: ' + e.message); }
+}
+
+function crmSegRef(id) {
+  const k = String(id);
+  if (!crmSeg[k]) crmSeg[k] = { cadencia: '', ultimo_contacto: null, proximo_manual: null, notas: [] };
+  if (!Array.isArray(crmSeg[k].notas)) crmSeg[k].notas = [];
+  return crmSeg[k];
+}
+
+async function crmSetCadencia(id, value) {
+  const s = crmSegRef(id);
+  s.cadencia = value || '';
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+async function crmHableHoy(id) {
+  const s = crmSegRef(id);
+  s.ultimo_contacto = hoyISO();
+  s.proximo_manual = null; // al registrar contacto, el próximo vuelve a calcularse por cadencia
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+async function crmSetProximoManual(id, value) {
+  const s = crmSegRef(id);
+  s.proximo_manual = value || null;
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+async function crmAgregarNota(id) {
+  const ta = document.getElementById('cm-nota-input');
+  const texto = (ta?.value || '').trim();
+  if (!texto) return;
+  const s = crmSegRef(id);
+  s.notas.unshift({ fecha: hoyISO(), texto });
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+async function crmBorrarNota(id, idx) {
+  const s = crmSegRef(id);
+  s.notas.splice(idx, 1);
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+// Asigna cadencia automática según segmento, sin pisar lo que ya cargaste a mano.
+async function crmSugerirCadencias() {
+  if (!crmAgregado.length) return;
+  const topIds = new Set(crmAgregado.slice().sort((a,b) => b.total_amount - a.total_amount).slice(0, TOP_LIMIT).map(c => String(c.id)));
+  // Planificá los cambios sin tocar crmSeg todavía (así si cancela, no se modifica nada).
+  const plan = [];
+  let omitidos = 0;
+  for (const c of crmAgregado) {
+    const actual = crmSeg[String(c.id)];
+    if (actual && actual.cadencia) { omitidos++; continue; } // respeta lo ya asignado
+    if (topIds.has(String(c.id)))               plan.push({ id: c.id, cad: 'semanal' });
+    else if (segmentoCliente(c) === 'activos')  plan.push({ id: c.id, cad: 'mensual' });
+  }
+  if (!plan.length) { alert('No había clientes nuevos para sugerir (ya tienen cadencia asignada).'); return; }
+  const nSem = plan.filter(p => p.cad === 'semanal').length;
+  const nMen = plan.filter(p => p.cad === 'mensual').length;
+  if (!confirm(`Se va a asignar cadencia sugerida a ${plan.length} clientes:\n• ${nSem} top por monto → Semanal\n• ${nMen} activos recurrentes → Mensual\n\nNo se tocan los ${omitidos} que ya tenían cadencia. ¿Confirmás?`)) return;
+  for (const p of plan) crmSegRef(p.id).cadencia = p.cad;
+  await crmSegGuardar();
+  renderCRM();
+  alert(`✅ Listo. Cadencia sugerida asignada a ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada cliente.`);
 }
 
 function calcularAgregadoCRM() {
@@ -9337,6 +9550,7 @@ function calcularAgregadoCRM() {
     const dias = diasDesde(e.last_sale);
     const diasFirst = diasDesde(e.first_sale);
     const avg = e.total_sales > 0 ? e.total_amount / e.total_sales : 0;
+    const seg = estadoSeguimiento(e.id);
     result.push({
       id: e.id,
       name: cliente.name || ('Cliente #' + e.id),
@@ -9352,6 +9566,12 @@ function calcularAgregadoCRM() {
       total_amount: e.total_amount,
       avg_ticket: avg,
       ventas: e.ventas,
+      cadencia: seg.cadencia,
+      ultimo_contacto: seg.ultimo,
+      proximo_contacto: seg.proximo,
+      seg_estado: seg.estado,
+      dias_proximo: seg.dias,
+      notas: seg.notas,
     });
   }
   return result;
@@ -9373,7 +9593,7 @@ function renderCRM() {
   crmAgregado = calcularAgregadoCRM();
 
   // Stats por segmento
-  const counts = { top: Math.min(TOP_LIMIT, crmAgregado.length), activos: 0, riesgo: 0, dormidos: 0, nuevos: 0, sinTel: 0 };
+  const counts = { top: Math.min(TOP_LIMIT, crmAgregado.length), activos: 0, riesgo: 0, dormidos: 0, nuevos: 0, sinTel: 0, contactar: 0 };
   for (const c of crmAgregado) {
     const seg = segmentoCliente(c);
     if (seg === 'activos')  counts.activos++;
@@ -9381,9 +9601,11 @@ function renderCRM() {
     else if (seg === 'dormidos') counts.dormidos++;
     else if (seg === 'nuevos')   counts.nuevos++;
     if (!normalizeArgPhone(c.phone)) counts.sinTel++;
+    if (paraContactar(c)) counts.contactar++;
   }
 
   document.getElementById('crm-segmentos').innerHTML = [
+    { key: 'contactar', label: '📞 Para contactar', n: counts.contactar, hint: 'Recontacto vencido o pendiente' },
     { key: 'top',     label: '⭐ Top clientes', n: counts.top, hint: 'Por monto total' },
     { key: 'activos', label: '🔥 Activos',      n: counts.activos, hint: '3+ pedidos, < 30 días' },
     { key: 'riesgo',  label: '⚠️ En riesgo',     n: counts.riesgo,  hint: '30 a 90 días sin comprar' },
@@ -9423,6 +9645,11 @@ function renderCRMTabla() {
     lista = lista.slice(0, TOP_LIMIT);
   } else if (seg === 'sin-tel') {
     lista = lista.filter(c => !normalizeArgPhone(c.phone));
+  } else if (seg === 'contactar') {
+    // Para contactar: vencidos + pendientes + los de esta semana. Más urgentes primero.
+    lista = lista.filter(c => c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana');
+    const ord = { vencido: 0, pendiente: 1, semana: 2 };
+    lista.sort((a, b) => (ord[a.seg_estado] - ord[b.seg_estado]) || ((a.dias_proximo ?? 0) - (b.dias_proximo ?? 0)));
   } else if (seg !== 'todos') {
     lista = lista.filter(c => segmentoCliente(c) === seg);
   }
@@ -9435,25 +9662,35 @@ function renderCRMTabla() {
     );
   }
 
-  const sortKey = crmSortState.col;
-  const sortDir = crmSortState.dir;
-  lista.sort((a, b) => {
-    let av, bv;
-    if (sortKey === 'name') { av = (a.name || '').toLowerCase(); bv = (b.name || '').toLowerCase(); }
-    else if (sortKey === 'contact') { av = (a.email || a.phone || '').toLowerCase(); bv = (b.email || b.phone || '').toLowerCase(); }
-    else if (sortKey === 'city') { av = (a.city || '').toLowerCase(); bv = (b.city || '').toLowerCase(); }
-    else if (sortKey === 'last_sale') { av = a.last_sale || ''; bv = b.last_sale || ''; }
-    else { av = a[sortKey] || 0; bv = b[sortKey] || 0; }
-    if (av < bv) return -sortDir;
-    if (av > bv) return sortDir;
-    return 0;
-  });
+  // El filtro "Para contactar" trae su propio orden por urgencia; no lo pisamos.
+  if (seg !== 'contactar') {
+    const sortKey = crmSortState.col;
+    const sortDir = crmSortState.dir;
+    lista.sort((a, b) => {
+      let av, bv;
+      if (sortKey === 'name') { av = (a.name || '').toLowerCase(); bv = (b.name || '').toLowerCase(); }
+      else if (sortKey === 'contact') { av = (a.email || a.phone || '').toLowerCase(); bv = (b.email || b.phone || '').toLowerCase(); }
+      else if (sortKey === 'city') { av = (a.city || '').toLowerCase(); bv = (b.city || '').toLowerCase(); }
+      else if (sortKey === 'last_sale') { av = a.last_sale || ''; bv = b.last_sale || ''; }
+      else if (sortKey === 'proximo') {
+        // Sin cadencia van al final; entre los que tienen, por fecha de próximo contacto.
+        av = a.proximo_contacto || (a.seg_estado === 'pendiente' ? '0000-00-00' : '9999-12-31');
+        bv = b.proximo_contacto || (b.seg_estado === 'pendiente' ? '0000-00-00' : '9999-12-31');
+        if (a.seg_estado === 'none') av = '~';
+        if (b.seg_estado === 'none') bv = '~';
+      }
+      else { av = a[sortKey] || 0; bv = b[sortKey] || 0; }
+      if (av < bv) return -sortDir;
+      if (av > bv) return sortDir;
+      return 0;
+    });
+  }
 
   document.getElementById('crm-count').textContent = lista.length + ' cliente' + (lista.length === 1 ? '' : 's');
 
   if (!lista.length) {
     document.getElementById('crm-tbody').innerHTML =
-      `<tr><td colspan="9" style="text-align:center;padding:24px;color:#9CA3AF;">Sin clientes para este filtro</td></tr>`;
+      `<tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Sin clientes para este filtro</td></tr>`;
     return;
   }
 
@@ -9480,6 +9717,7 @@ function renderCRMTabla() {
         <td style="text-align:right;font-weight:600;">${fmtMonto(c.total_amount)}</td>
         <td style="text-align:right;">${fmtMonto(c.avg_ticket)}</td>
         <td style="text-align:right;"><div>${ult}</div><div style="font-size:11px;color:#9CA3AF;">${fmtFecha(c.last_sale)}</div></td>
+        <td>${segCeldaHTML(c)}</td>
         <td><span style="font-size:11px;color:${segColor};font-weight:600;">${segLabel}</span></td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
           ${waUrl ? `<a href="${waUrl}" target="_blank" rel="noopener" class="btn-sm" style="text-decoration:none;display:inline-block;">WA</a>` : ''}
@@ -9496,6 +9734,7 @@ function escapeHtml(s) {
 function abrirClienteModal(id) {
   const c = crmAgregado.find(x => x.id === id);
   if (!c) return;
+  cmCurrentId = id;
   document.getElementById('cm-name').textContent = c.name;
   const partes = [
     c.email ? `📧 ${c.email}` : '',
@@ -9505,6 +9744,7 @@ function abrirClienteModal(id) {
   document.getElementById('cm-meta').innerHTML = partes;
 
   const ventasOrden = c.ventas.slice().sort((a, b) => (b.date_sale || '').localeCompare(a.date_sale || ''));
+  const seguimiento = segBloqueModalHTML(c);
   const stats = `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
       <div class="stat"><div class="stat-label">Pedidos</div><div class="stat-value" style="font-size:22px;">${c.total_sales}</div></div>
@@ -9520,11 +9760,12 @@ function abrirClienteModal(id) {
       </tbody>
     </table>
   `;
-  document.getElementById('cm-body').innerHTML = stats;
+  document.getElementById('cm-body').innerHTML = seguimiento + stats;
   document.getElementById('cliente-modal').style.display = 'flex';
 }
 
 function cerrarClienteModal() {
+  cmCurrentId = null;
   document.getElementById('cliente-modal').style.display = 'none';
 }
 
