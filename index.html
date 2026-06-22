@@ -8252,7 +8252,7 @@ async function dispararSyncInv(btn) {
 
 // ════════ Reposición de local ════════════════════════════════════════════════
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
-let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, topes: {}, catsOff: [] };
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, reservaTodos: true, topes: {}, catsOff: [] };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
@@ -8335,14 +8335,17 @@ function repoTopeKey(e) {
   if (next) { next.focus(); next.select(); }
 }
 // Sugerido a mover: lo justo para llegar al objetivo en Local, sin vaciar el depósito.
-// Fundas (prioridad depósito por venta online): dejar siempre la "reserva en depósito".
+// Prioridad venta online: dejar siempre la "reserva en depósito". Aplica a fundas
+// (siempre) y, en BDI con reservaTodos activado, también al resto de productos.
 function repoSugerido(it) {
   const obj = repoObjetivo(it);
   if (it.local >= obj) return 0;
-  const reserva = it.modelo ? (repoCfg.reservaDeposito ?? 1) : 0; // la reserva aplica a fundas
+  const aplicaReserva = it.modelo || (repoCfg.reservaTodos && _cuentaKey() === 'bdi');
+  const reserva = aplicaReserva ? (repoCfg.reservaDeposito ?? 1) : 0;
   return Math.max(0, Math.min(obj - it.local, it.deposito - reserva));
 }
 function repoSetReserva(v) { repoCfg.reservaDeposito = Math.max(0, parseInt(v) || 0); repoCfgSave(); } // sin reconstruir → no roba foco
+function repoSetReservaTodos(on) { repoCfg.reservaTodos = !!on; repoCfgSave(); repoRender(); } // recalcula el reporte
 // Edición manual de la cantidad a mover (por sesión). Si no se tocó, vale el sugerido.
 let repoMoverManual = {};
 function repoMoverFinal(it) { const v = repoMoverManual[it.vid]; return (v === undefined) ? repoSugerido(it) : v; }
@@ -8355,7 +8358,7 @@ function repoSetMover(vid, v) {
 }
 function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
-  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, topes: d.config.topes || {}, catsOff: d.config.catsOff || [] }; }
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, reservaTodos: d.config.reservaTodos ?? true, topes: d.config.topes || {}, catsOff: d.config.catsOff || [] }; }
   catch (e) { /* default */ }
 }
 function repoCfgSave() {
@@ -8794,6 +8797,12 @@ function repoConfigHTML() {
   const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;';
   let html = `<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Definí cuántas unidades querés mantener en Local por categoría/modelo. <b>Tip:</b> el "tope local" (en cada producto del reporte) puede bajar este número para un producto puntual (ej: cable de marca local → tope 2 aunque la categoría pida 10). <span id="repo-cfg-status" style="font-size:11px;margin-left:6px;"></span></div>
     <label style="font-size:12px;color:#6B7280;display:inline-block;margin-bottom:10px;">Mínimo general (default): <input type="number" value="${repoCfg.defaultMin}" min="0" onchange="repoSetDefault(this.value)" style="width:70px;padding:5px 7px;border:1px solid #D1D5DB;border-radius:7px;"></label>`;
+  // Prioridad venta online: reserva en depósito (general, antes vivía dentro de "Fundas").
+  html += `<div style="background:#FFF7FB;border:1px solid #FBCFE8;border-radius:8px;padding:9px 11px;margin-bottom:12px;font-size:12px;color:#9D174D;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🛡️ <b>Prioridad venta online:</b> reservar siempre <input type="number" value="${repoCfg.reservaDeposito ?? 1}" min="0" onchange="repoSetReserva(this.value)" style="width:56px;padding:4px 6px;border:1px solid #FBCFE8;border-radius:6px;text-align:center;"> u. en depósito.</div>
+      <div style="color:#9CA3AF;margin-top:4px;">Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</div>
+      ${_cuentaKey() === 'bdi' ? `<label style="display:flex;align-items:center;gap:7px;margin-top:7px;color:#374151;cursor:pointer;font-weight:600;"><input type="checkbox" ${repoCfg.reservaTodos ? 'checked' : ''} onchange="repoSetReservaTodos(this.checked)" style="width:15px;height:15px;cursor:pointer;"> Aplicar a <u>todos los productos</u> (no solo fundas)</label>` : ''}
+    </div>`;
   if (catKeys.length) {
     html += `<div style="font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px;">Categorías</div><div style="${gridStyle}">${catKeys.map(minInput).join('')}</div>`;
   }
@@ -8801,8 +8810,7 @@ function repoConfigHTML() {
     html += `<div onclick="repoToggleFundas()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:12px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:9px 12px;font-weight:600;font-size:13px;">
         <span>🛡️ Fundas — objetivo en Local por modelo <span style="color:#9CA3AF;font-weight:400;">(${modelKeys.length} modelos)</span></span>
         <span style="color:#9CA3AF;">${repoFundasOpen ? '▴ ocultar' : '▾ definir'}</span></div>`;
-    if (repoFundasOpen) html += `<div style="background:#FFF7FB;border:1px solid #FBCFE8;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#9D174D;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">🛡️ Reservar siempre en depósito (prioridad venta online): <input type="number" value="${repoCfg.reservaDeposito ?? 1}" min="0" onchange="repoSetReserva(this.value)" style="width:56px;padding:4px 6px;border:1px solid #FBCFE8;border-radius:6px;text-align:center;"> u. <span style="color:#9CA3AF;">Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</span></div>
-      <div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" onfocus="this.select()" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
+    if (repoFundasOpen) html += `<div style="column-width:215px;column-gap:14px;margin-top:8px;">${modelKeys.map(c => `<label style="font-size:12px;color:#374151;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #F1F5F9;border-radius:6px;padding:3px 8px;margin-bottom:5px;break-inside:avoid;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c)}</span><input type="number" value="${repoCfg.mins[c] ?? ''}" placeholder="${repoCfg.defaultMin}" min="0" onchange="repoSetMin('${esc2(c)}',this.value)" onfocus="this.select()" style="width:54px;padding:3px 5px;border:1px solid #D1D5DB;border-radius:6px;text-align:center;flex:none;"></label>`).join('')}</div>`;
   }
   if (!catKeys.length && !modelKeys.length) html += '<span style="color:#9CA3AF;font-size:12px;">Sin datos cargados.</span>';
   // Categorías a ignorar (productos con varias categorías en TN: apagar las raras/repetitivas)
