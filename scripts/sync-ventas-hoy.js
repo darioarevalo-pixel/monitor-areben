@@ -105,7 +105,8 @@ async function fetchAllPages(basePath) {
 }
 
 function mapVentaRow(v) {
-  return {
+  // Columnas base, presentes en ambas marcas.
+  const base = {
     id:             v.id,
     number:         v.number || null,
     date_sale:      v.date_sale || null,
@@ -115,6 +116,11 @@ function mapVentaRow(v) {
     payment_method: v.payment_method || null,
     store:          v.store || null,
     client_name:    v.client_name || null,
+  };
+  // Zattia tiene un esquema simple (solo base). BDI suma columnas de CRM.
+  if (STORE === 'zattia') return base;
+  return {
+    ...base,
     client_id:       v.client_id || null,
     client_email:    v.client_email || null,
     client_phone:    v.client_phone || null,
@@ -163,7 +169,8 @@ function dedupById(arr) {
 async function guardar(rawRows) {
   const rawDedup = dedupById(rawRows);
   const ventas = dedupById(rawDedup.map(mapVentaRow));
-  const clientes = dedupById(extraerClientes(rawDedup));
+  // Zattia no usa la tabla clientes (igual que su sync diario). Solo BDI.
+  const clientes = STORE === 'zattia' ? [] : dedupById(extraerClientes(rawDedup));
   const detalles = dedupById(
     rawDedup.flatMap(v =>
       (v.detalles || []).map(d => ({

@@ -8347,7 +8347,7 @@ async function actualizarVentas(btn) {
     const d = await r.json();
     if (!d.ok) { alert('No se pudo iniciar la actualización de ventas.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : '')); return; }
     const t0 = Date.now(), MAX = 5 * 60 * 1000;
-    let done = false;
+    let done = false, conclusion = null;
     while (Date.now() - t0 < MAX) {
       await new Promise(res => setTimeout(res, 8000));
       const secs = Math.round((Date.now() - t0) / 1000);
@@ -8355,8 +8355,12 @@ async function actualizarVentas(btn) {
       try {
         const rr = await fetch(`${SYNC_API}?kind=ventas&store=${store}&nc=${secs}`); const dd = await rr.json();
         const run = dd.run;
-        if (run && run.id !== baseId && run.status === 'completed') { done = true; break; }
+        if (run && run.id !== baseId && run.status === 'completed') { done = true; conclusion = run.conclusion; break; }
       } catch (e) { /* reintenta */ }
+    }
+    if (done && conclusion !== 'success') {
+      alert('❌ La actualización de ventas falló. Reintentá en un momento; si sigue, avisá.');
+      return;
     }
     setTxt('↻ Recargando…');
     await cargarTodo(true);
