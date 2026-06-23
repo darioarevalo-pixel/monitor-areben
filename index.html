@@ -6573,14 +6573,16 @@ function genTallesImportar() {
   const rows = [...tabla.querySelectorAll('tr')].filter(tr => tr.querySelector('th,td'));
   if (rows.length < 2) { alert('No pude leer la tabla. Cargá los datos a mano desde la tabla de arriba.'); return; }
   const head = [...rows[0].querySelectorAll('th,td')].map(c => c.textContent.trim());
-  const talles = head.slice(1).filter(Boolean);
+  const limpiarTalle = t => t.replace(/^t\s*(?=\d)/i, '').trim();              // "T 36" → "36"
+  const limpiarValor = v => v.replace(/cm\.?/ig, '').replace(/\s+/g, ' ').trim(); // "68 CM" → "68"
+  const talles = head.slice(1).map(limpiarTalle).filter(Boolean);
   if (!talles.length) { alert('No pude identificar los talles. Cargá a mano.'); return; }
   const medidas = [];
   for (let i = 1; i < rows.length; i++) {
     const cells = [...rows[i].querySelectorAll('th,td')].map(c => c.textContent.trim());
     if (!cells.length || !cells[0]) continue;
     const nombre = cells[0].replace(/^[a-zA-Z][.\)]\s*/, '').trim();
-    const valores = {}; talles.forEach((t, idx) => { valores[t] = cells[idx + 1] || ''; });
+    const valores = {}; talles.forEach((t, idx) => { valores[t] = limpiarValor(cells[idx + 1] || ''); });
     medidas.push({ nombre, valores });
   }
   if (!medidas.length) { alert('No pude leer las medidas. Cargá a mano.'); return; }
