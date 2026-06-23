@@ -1149,6 +1149,29 @@
 
     <!-- ── Generador de tabla de talles (autónomo, no usa Supabase) ─────────── -->
     <div id="tab-gen-talles" class="section">
+      <div class="card" id="gt-pend-card" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;">📋 Pendientes de tabla de talles</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Productos que tienen descripción pero les falta la tabla. Elegí uno para trabajarlo abajo.</div>
+          </div>
+          <span id="gt-pend-count" style="font-size:12px;color:#6B7280;white-space:nowrap;"></span>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+          <label style="font-size:12px;color:#666;">Categoría<br>
+            <select id="gt-pend-cat" onchange="gtRenderPendientes()" style="padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;min-width:150px;"></select>
+          </label>
+          <label style="font-size:12px;color:#666;">Mes de ingreso<br>
+            <select id="gt-pend-mes" onchange="gtRenderPendientes()" style="padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;min-width:150px;"></select>
+          </label>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:7px;">
+            <input type="checkbox" id="gt-pend-stock" checked onchange="gtRenderPendientes()"> Solo con stock
+          </label>
+          <button class="btn-sm" onclick="gtRenderPendientes()" style="margin-bottom:1px;">↻ Actualizar lista</button>
+        </div>
+        <div id="gt-pend-list" style="max-height:320px;overflow-y:auto;"></div>
+      </div>
+
       <div class="card">
         <div style="font-size:16px;font-weight:700;">📏 Generador de tabla de talles</div>
         <div style="font-size:12px;color:#9CA3AF;margin:2px 0 14px;">Armá una tabla de talles prolija y estandarizada, y copiala para pegar en la descripción del producto en Tienda Nube.</div>
@@ -6393,6 +6416,7 @@ async function genTallesInit() {
     try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; }
   }
   try { const r = await fetch(`${CRM_TEL_API}?kind=talles&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); gtTallesMap = (d && d.ok && d.map) ? d.map : {}; } catch (e) { gtTallesMap = {}; }
+  gtRenderPendientes();
 }
 
 function _gtTipo() { return GEN_TALLES_PLANTILLAS[document.getElementById('gt-tipo').value]; }
@@ -6638,8 +6662,43 @@ async function gtCargarEnTN(btn) {
     try { const ra = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}&refresh=1&nc=${Math.random()}`); const da = await ra.json(); if (da && da.products) { window._mktTNData = da.products; gtProducto = da.products.find(x => x.id === gtProducto.id) || gtProducto; } } catch (e) {}
     if (msg) { msg.textContent = d.accion === 'reemplazada' ? '✓ Tabla actualizada en TN' : '✓ Tabla cargada en TN'; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
     gtRenderTablaActual();
+    gtRenderPendientes(); // el producto cargado sale de la lista de pendientes
   } catch (e) { alert('Error al cargar en TN: ' + e.message); btn.textContent = '⚠️ Error'; }
   finally { btn.disabled = false; setTimeout(() => { btn.textContent = orig; }, 1500); }
+}
+
+// Lista de pendientes de tabla (en la sección Tabla de talles): con filtros de categoría, mes y stock.
+function gtRenderPendientes() {
+  const card = document.getElementById('gt-pend-card');
+  if (!card) return;
+  if (!_mktAplicaTalles()) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const base = (typeof _mktBuildLista === 'function' ? _mktBuildLista() : [])
+    .filter(x => x.tn && x.tn.has_desc && !_mktTieneTabla(x.tn));
+  // Opciones de filtros según lo disponible entre los pendientes
+  const catSel = document.getElementById('gt-pend-cat');
+  const mesSel = document.getElementById('gt-pend-mes');
+  const cats = [...new Set(base.flatMap(x => x.categoriasTN || []))].sort((a, b) => a.localeCompare(b, 'es'));
+  const meses = [...new Set(base.map(x => x.ingresoMes).filter(Boolean))].sort().reverse();
+  const prevCat = catSel.value, prevMes = mesSel.value;
+  catSel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  mesSel.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m => `<option value="${m}">${_mesLabel(m)}</option>`).join('');
+  if (cats.includes(prevCat)) catSel.value = prevCat;
+  if (meses.includes(prevMes)) mesSel.value = prevMes;
+  // Aplicar filtros
+  let items = base.slice();
+  if (document.getElementById('gt-pend-stock')?.checked) items = items.filter(x => (x.stock || 0) > 0);
+  if (catSel.value) items = items.filter(x => (x.categoriasTN || []).includes(catSel.value));
+  if (mesSel.value) items = items.filter(x => x.ingresoMes === mesSel.value);
+  items.sort((a, b) => (b.stock || 0) - (a.stock || 0));
+  document.getElementById('gt-pend-count').textContent = items.length + (items.length === 1 ? ' pendiente' : ' pendientes');
+  document.getElementById('gt-pend-list').innerHTML = items.length
+    ? items.map(x => {
+        const cat = (x.categoriasTN && x.categoriasTN[0]) ? ' · ' + escapeHtml(x.categoriasTN[0]) : '';
+        const hl = (gtProducto && gtProducto.id === x.tn.id) ? 'background:#ECFDF5;border-color:#16A34A;' : '';
+        return `<button class="btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px;${hl}" onclick="gtProdElegir(${x.tn.id})">${escapeHtml(x.gn.name || x.tn.name)} <span style="color:#9CA3AF;">· stock ${x.stock || 0}${cat}</span></button>`;
+      }).join('')
+    : '<div style="font-size:12px;color:#9CA3AF;">No hay pendientes con esos filtros 🎉</div>';
 }
 
 // ════════════════════════════════════════════════════════════════
