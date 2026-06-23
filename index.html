@@ -291,6 +291,7 @@
   <div class="card" id="refresh-card">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn-primary" onclick="cargarTodo(true)">Actualizar datos</button>
+      <button class="btn-sm" id="btn-actualizar-ventas" style="display:none;background:#0F766E;color:#fff;" title="Baja las ventas de hoy desde Gestión Nube (solo ventas, rápido). Para administradores." onclick="actualizarVentas(this)">🧾 Actualizar ventas</button>
       <div id="quick-admin-links" style="display:none;gap:6px;margin-left:auto;flex-wrap:wrap;">
         <a class="btn-link-admin" href="https://bdi-catalogo.vercel.app/admin" target="_blank" rel="noopener">🔧 Admin Catálogo ↗</a>
         <a class="btn-link-admin" href="https://bdi-distribuidores.vercel.app/admin" target="_blank" rel="noopener">🔧 Admin Distribuidores ↗</a>
@@ -8278,6 +8279,10 @@ function aplicarVisibilidadTabs() {
   const quickLinks = document.getElementById('quick-admin-links');
   if (quickLinks) quickLinks.style.display = (key === 'bdi' && admin) ? 'flex' : 'none';
 
+  // Botón "Actualizar ventas": solo admin (ambas marcas)
+  const btnVentas = document.getElementById('btn-actualizar-ventas');
+  if (btnVentas) btnVentas.style.display = admin ? '' : 'none';
+
   // Columna Foto
   document.body.classList.toggle('tn-habilitada', key === 'bdi' || key === 'zattia');
 
@@ -8322,6 +8327,47 @@ async function dispararSyncInv(btn) {
     alert('Error de conexión al iniciar la actualización.');
   }
   setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = orig; } }, 9000);
+}
+
+// ── Botón "Actualizar ventas" (admin): baja ventas recientes de GN y recarga los datos ──
+let _ventasSyncing = false;
+async function actualizarVentas(btn) {
+  if (_ventasSyncing) return;
+  _ventasSyncing = true;
+  const store = _cuentaKey();
+  const orig = btn ? btn.textContent : '';
+  const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    // Run de referencia para detectar cuándo arranca uno nuevo
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?kind=ventas&store=${store}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo ventas a GN…');
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, kind: 'ventas' }) });
+    const d = await r.json();
+    if (!d.ok) { alert('No se pudo iniciar la actualización de ventas.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : '')); return; }
+    const t0 = Date.now(), MAX = 5 * 60 * 1000;
+    let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Trayendo ventas… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try {
+        const rr = await fetch(`${SYNC_API}?kind=ventas&store=${store}&nc=${secs}`); const dd = await rr.json();
+        const run = dd.run;
+        if (run && run.id !== baseId && run.status === 'completed') { done = true; break; }
+      } catch (e) { /* reintenta */ }
+    }
+    setTxt('↻ Recargando…');
+    await cargarTodo(true);
+    if (done) alert('✅ Ventas actualizadas (' + store.toUpperCase() + ').');
+    else alert('La actualización de ventas está tardando más de lo normal. Te muestro lo último disponible; si falta algo, volvé a tocar "Actualizar ventas" en un minuto.');
+  } catch (e) {
+    alert('Error al actualizar ventas: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    _ventasSyncing = false;
+  }
 }
 
 // ════════ Reposición de local ════════════════════════════════════════════════
