@@ -1153,11 +1153,18 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <div>
             <div style="font-size:15px;font-weight:700;">📋 Pendientes de tabla de talles</div>
-            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Productos que tienen descripción pero les falta la tabla. Elegí uno para trabajarlo abajo.</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Productos sin nuestra tabla nueva (vieja o sin tabla). Elegí uno para actualizarlo abajo.</div>
           </div>
           <span id="gt-pend-count" style="font-size:12px;color:#6B7280;white-space:nowrap;"></span>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+          <label style="font-size:12px;color:#666;">Estado<br>
+            <select id="gt-pend-estado" onchange="gtRenderPendientes()" style="padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;min-width:150px;">
+              <option value="todas">A migrar (todas)</option>
+              <option value="vieja">Tabla vieja</option>
+              <option value="sin">Sin tabla</option>
+            </select>
+          </label>
           <label style="font-size:12px;color:#666;">Categoría<br>
             <select id="gt-pend-cat" onchange="gtRenderPendientes()" style="padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;min-width:150px;"></select>
           </label>
@@ -6673,8 +6680,10 @@ function gtRenderPendientes() {
   if (!card) return;
   if (!_mktAplicaTalles()) { card.style.display = 'none'; return; }
   card.style.display = '';
+  // "Ya migrada" = está en nuestro registro de cargadas (KV). Verdad confiable (TN puede borrar la firma).
+  const tieneTablaVieja = x => /<table/i.test((x.tn && x.tn.raw_desc) || '');
   const base = (typeof _mktBuildLista === 'function' ? _mktBuildLista() : [])
-    .filter(x => x.tn && x.tn.has_desc && !_mktTieneTabla(x.tn));
+    .filter(x => x.tn && !gtTallesMap[String(x.tn.id)] && (tieneTablaVieja(x) || x.tn.has_desc));
   // Opciones de filtros según lo disponible entre los pendientes
   const catSel = document.getElementById('gt-pend-cat');
   const mesSel = document.getElementById('gt-pend-mes');
@@ -6686,7 +6695,10 @@ function gtRenderPendientes() {
   if (cats.includes(prevCat)) catSel.value = prevCat;
   if (meses.includes(prevMes)) mesSel.value = prevMes;
   // Aplicar filtros
+  const estado = document.getElementById('gt-pend-estado')?.value || 'todas';
   let items = base.slice();
+  if (estado === 'vieja') items = items.filter(tieneTablaVieja);
+  else if (estado === 'sin') items = items.filter(x => !tieneTablaVieja(x));
   if (document.getElementById('gt-pend-stock')?.checked) items = items.filter(x => (x.stock || 0) > 0);
   if (catSel.value) items = items.filter(x => (x.categoriasTN || []).includes(catSel.value));
   if (mesSel.value) items = items.filter(x => x.ingresoMes === mesSel.value);
@@ -6695,8 +6707,11 @@ function gtRenderPendientes() {
   document.getElementById('gt-pend-list').innerHTML = items.length
     ? items.map(x => {
         const cat = (x.categoriasTN && x.categoriasTN[0]) ? ' · ' + escapeHtml(x.categoriasTN[0]) : '';
+        const tag = tieneTablaVieja(x)
+          ? '<span style="color:#B45309;font-size:11px;"> · tabla vieja</span>'
+          : '<span style="color:#DC2626;font-size:11px;"> · sin tabla</span>';
         const hl = (gtProducto && gtProducto.id === x.tn.id) ? 'background:#ECFDF5;border-color:#16A34A;' : '';
-        return `<button class="btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px;${hl}" onclick="gtProdElegir(${x.tn.id})">${escapeHtml(x.gn.name || x.tn.name)} <span style="color:#9CA3AF;">· stock ${x.stock || 0}${cat}</span></button>`;
+        return `<button class="btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px;${hl}" onclick="gtProdElegir(${x.tn.id})">${escapeHtml(x.gn.name || x.tn.name)} <span style="color:#9CA3AF;">· stock ${x.stock || 0}${cat}</span>${tag}</button>`;
       }).join('')
     : '<div style="font-size:12px;color:#9CA3AF;">No hay pendientes con esos filtros 🎉</div>';
 }
