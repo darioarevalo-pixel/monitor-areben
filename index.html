@@ -793,6 +793,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
+          <button class="btn-sm" id="mkt-btn-tablas" onclick="mktFiltroTablasPendientes()" title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes." style="display:none;background:#0F766E;color:#fff;">📏 Pendientes de tabla (con stock)</button>
           <button class="btn-sm" onclick="mktGenerarReporteFotos()" title="PDF para separar y fotografiar lo que está filtrado" style="background:#DC2626;color:#fff;">📄 Lista para fotos (PDF)</button>
           <button class="btn-sm" onclick="mktGenerarEtiquetasZebra()" title="Etiquetas 5×2,5 cm, 1 por variante, para impresora Zebra" style="background:#1F2937;color:#fff;">🏷️ Etiquetas Zebra</button>
         </div>
@@ -7801,6 +7802,8 @@ function mktRenderStats() {
       <div class="stat-value danger">${topLow}</div>
     </div>
   `;
+  const btnT = document.getElementById('mkt-btn-tablas');
+  if (btnT) btnT.style.display = _mktAplicaTalles() ? '' : 'none';
 }
 
 function mktSetFiltro(field, value) {
@@ -7809,6 +7812,16 @@ function mktSetFiltro(field, value) {
     document.querySelectorAll('#mkt-calidad-panel input').forEach(cb => { cb.checked = cb.value === value; });
     mktMultiUpdateLabel('calidad');
   }
+  mktRender();
+}
+
+// Atajo: con stock + le falta la tabla de talles (no toca categoría ni mes).
+function mktFiltroTablasPendientes() {
+  const stockSel = document.getElementById('mkt-stock');
+  if (stockSel) { stockSel.value = 'con'; if (typeof mktStockChange === 'function') mktStockChange(); }
+  mktSel.calidad = new Set(['sin-tabla']);
+  document.querySelectorAll('#mkt-calidad-panel input').forEach(cb => { cb.checked = cb.value === 'sin-tabla'; });
+  mktMultiUpdateLabel('calidad');
   mktRender();
 }
 
