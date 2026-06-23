@@ -6518,16 +6518,34 @@ function gtProdBuscar() {
     : '<div style="font-size:12px;color:#9CA3AF;">Sin resultados.</div>';
 }
 
+// Detecta el tipo de prenda a partir del nombre del producto (ej: "Jean Río" → jean).
+// Si hay varias coincidencias, gana la que aparece primero en el nombre.
+function _gtTipoDesdeNombre(name) {
+  const sinAcento = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const n = sinAcento(name);
+  let bestKey = null, bestIdx = Infinity;
+  for (const [k, p] of Object.entries(GEN_TALLES_PLANTILLAS)) {
+    const term = sinAcento(p.nombre).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = n.match(new RegExp('\\b' + term)); // prefijo de palabra (matchea plural: jean/jeans)
+    if (m && m.index < bestIdx) { bestIdx = m.index; bestKey = k; }
+  }
+  return bestKey;
+}
+
 function gtProdElegir(id) {
   const p = (window._mktTNData || []).find(x => x.id === id);
   if (!p) return;
   gtProducto = p;
   document.getElementById('gt-prod-search').value = '';
   document.getElementById('gt-prod-result').innerHTML = '';
+  // Pre-seleccionar el tipo de prenda según el nombre del producto.
+  const tk = _gtTipoDesdeNombre(p.name);
+  if (tk) { document.getElementById('gt-tipo').value = tk; genTallesTipoChange(); }
   const eleg = document.getElementById('gt-prod-elegido');
   const guardada = gtTallesMap[String(p.id)];
+  const tipoTxt = tk ? ` · <span style="color:#0F766E;">tipo detectado: ${escapeHtml(_gtTipo()?.nombre || '')}</span>` : '';
   eleg.style.display = '';
-  eleg.innerHTML = `Producto: <strong>${escapeHtml(p.name)}</strong>` +
+  eleg.innerHTML = `Producto: <strong>${escapeHtml(p.name)}</strong>${tipoTxt}` +
     (guardada ? ` <button class="btn-sm" onclick="gtCargarGuardada()" style="margin-left:8px;">↺ Cargar la guardada</button>` : '');
   const btn = document.getElementById('gt-cargar-tn');
   if (btn) btn.style.display = _esAdmin() ? '' : 'none';
@@ -6545,17 +6563,6 @@ function gtRenderTablaActual() {
     <div style="border:1px solid #E5E7EB;border-radius:8px;padding:10px;overflow-x:auto;background:#fff;">${tabla.outerHTML}</div>
     <button class="btn-sm" onclick="genTallesImportar()" style="margin-top:8px;">⬇️ Recuperar datos de esta tabla</button>
     <span style="font-size:11px;color:#9CA3AF;margin-left:8px;">Si no se carga bien, copiá los números a mano desde la tabla de arriba.</span>`;
-}
-
-function _gtElegirTipo(medidas) {
-  let best = document.getElementById('gt-tipo').value || 'remera', bestScore = -1e9;
-  for (const [k, p] of Object.entries(GEN_TALLES_PLANTILLAS)) {
-    let score = 0;
-    p.medidas.forEach(pm => { if (medidas.some(m => m.nombre && pm.nombre.toLowerCase().includes(m.nombre.toLowerCase().split(' ')[0]))) score++; });
-    score -= Math.abs(p.medidas.length - medidas.length);
-    if (score > bestScore) { bestScore = score; best = k; }
-  }
-  return best;
 }
 
 function genTallesImportar() {
@@ -6577,13 +6584,12 @@ function genTallesImportar() {
     medidas.push({ nombre, valores });
   }
   if (!medidas.length) { alert('No pude leer las medidas. Cargá a mano.'); return; }
-  document.getElementById('gt-tipo').value = _gtElegirTipo(medidas);
-  genTallesTipoChange();                                  // carga medidas del tipo y limpia gtData
+  // Respeta el tipo de prenda elegido por el usuario (no lo auto-cambia).
   document.getElementById('gt-talles').value = talles.join(', ');
   gtData = {};
   medidas.forEach((m, idx) => { const letra = String.fromCharCode(65 + idx); talles.forEach(t => { gtData[t + '|' + letra] = m.valores[t] || ''; }); });
   genTallesBuildGrid();
-  alert('✓ Datos recuperados. Revisá el tipo de prenda y las medidas antes de cargar en TN.');
+  alert('✓ Datos recuperados sobre el tipo "' + (_gtTipo()?.nombre || '') + '". Si el tipo no corresponde, elegilo arriba y volvé a recuperar.');
 }
 
 function gtCargarGuardada() {
