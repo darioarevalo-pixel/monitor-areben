@@ -8427,7 +8427,7 @@ async function conteoInit() {
   inv.forEach(r => {
     const pid = String(r.product_id), sid = String(r.size_id), vid = pid + '_' + sid;
     const p = prodById[pid];
-    if (p && p.active === false) return; // inactivos no existen para el sistema
+    if (!p) return; // allProductos trae solo activos: sin producto activo detrás = inactivo/borrado en GN
     const q = r.available_quantity || 0;
     if (!map[vid]) {
       const modelo = _repoModelo(r.size_name);
@@ -8713,7 +8713,9 @@ async function repoCargarInventario() {
   inv.forEach(r => {
     const pid = String(r.product_id), sid = String(r.size_id), vid = pid + '_' + sid;
     const pp = prodById[pid];
-    if (pp && pp.active === false) return; // producto inactivo: no existe para el sistema (no se ve en GN)
+    // allProductos trae solo los activos (active=eq.1). Si la variante de inventario
+    // no tiene un producto activo detrás, es porque se inactivó (o borró) en GN → no se repone.
+    if (!pp) return;
     if (!map[vid]) {
       const p = prodById[pid];
       const tn = p ? _mktFindTN(p, idx) : null;
