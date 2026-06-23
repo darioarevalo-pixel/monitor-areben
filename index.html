@@ -1030,6 +1030,7 @@
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn-sm" id="eti-btn-imprimir-dep" onclick="etiImprimir('dep')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
             <button class="btn-sm" onclick="etiLimpiar('dep')">Limpiar cantidades</button>
+            <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Al imprimir, vacía las cantidades cargadas para no arrastrarlas a la próxima vez."><input type="checkbox" id="eti-autoclear-dep" onchange="etiSetAutoClear(this.checked)"> Borrar cantidades al imprimir</label>
             <span id="eti-total-dep" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
           <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
@@ -1059,6 +1060,7 @@
             <button class="btn-sm" id="eti-btn-imprimir-loc" onclick="etiImprimir('loc')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
             <button class="btn-sm" onclick="etiActualizarPreciosTN(this)" title="Trae los precios más nuevos desde TiendaNube (promo o normal)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar precios</button>
             <button class="btn-sm" onclick="etiLimpiar('loc')">Limpiar cantidades</button>
+            <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Al imprimir, vacía las cantidades cargadas para no arrastrarlas a la próxima vez."><input type="checkbox" id="eti-autoclear-loc" onchange="etiSetAutoClear(this.checked)"> Borrar cantidades al imprimir</label>
             <span id="eti-total-loc" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
           <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
@@ -1100,6 +1102,7 @@
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn-sm" id="eti-btn-imprimir-sku" onclick="etiImprimir('sku')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
             <button class="btn-sm" onclick="etiLimpiar('sku')">Limpiar cantidades</button>
+            <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Al imprimir, vacía las cantidades cargadas para no arrastrarlas a la próxima vez."><input type="checkbox" id="eti-autoclear-sku" onchange="etiSetAutoClear(this.checked)"> Borrar cantidades al imprimir</label>
             <span id="eti-total-sku" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
           </div>
           <div id="eti-tabla-sku" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
@@ -5839,8 +5842,21 @@ function etiLoad() {
 }
 function etiSave(modo) { _lsGuardar(etiKey(modo), JSON.stringify(etiCant[modo])); }
 
+// "Borrar cantidades al imprimir" (configurable, por cuenta). Default: activado.
+function etiAutoClearKey() { return 'monitor_eti_autoclear_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function etiAutoClear() { return localStorage.getItem(etiAutoClearKey()) !== '0'; } // ausente o '1' = activado
+function etiSetAutoClear(on) {
+  _lsGuardar(etiAutoClearKey(), on ? '1' : '0');
+  ['dep', 'loc', 'sku'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
+}
+function etiSyncAutoClearUI() {
+  const on = etiAutoClear();
+  ['dep', 'loc', 'sku'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
+}
+
 async function renderEtiquetas() {
   etiLoad();
+  etiSyncAutoClearUI();
   etiRenderTabla('dep');
   etiRenderTabla('loc');
   etiRenderTabla('sku');
@@ -6110,9 +6126,11 @@ function etiImprimir(modo) {
     for (let k = 0; k < g.cant; k++) { labels.push(g.v); if (conFP) labels.push({ __fp: true }); }
   });
   _etiPrint(_etiBuildPdf(labels, modo));
-  // Tras imprimir, ofrecer limpiar las cantidades (para no arrastrar las viejas)
+  // Tras imprimir: si "Borrar cantidades al imprimir" está activado, se vacían solas.
+  // Si no, se pregunta (para no arrastrar las viejas a la próxima vez).
   setTimeout(() => {
-    if (confirm('Etiquetas enviadas a imprimir. ¿Borro las cantidades cargadas?')) {
+    const limpiar = etiAutoClear() || confirm('Etiquetas enviadas a imprimir. ¿Borro las cantidades cargadas?');
+    if (limpiar) {
       etiCant[modo] = {};
       etiSave(modo);
       etiRenderTabla(modo);
