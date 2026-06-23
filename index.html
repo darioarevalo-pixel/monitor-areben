@@ -1190,9 +1190,6 @@
             <input type="text" id="gt-talles" oninput="genTallesBuildGrid()" style="width:260px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
           </label>
         </div>
-        <label style="font-size:12px;color:#666;display:block;margin-bottom:14px;">URL del diagrama (foto con flechas A/B/C — opcional)<br>
-          <input type="text" id="gt-diagrama" oninput="genTallesRenderPreview()" placeholder="https://… (la imagen la subís vos aparte)" style="width:100%;max-width:520px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
-        </label>
         <div style="border-top:1px solid #F1F5F9;margin:6px 0 14px;padding-top:12px;">
           <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Vincular a un producto de Tienda Nube (opcional)</div>
           <input type="text" id="gt-prod-search" oninput="gtProdBuscar()" placeholder="Buscar producto por nombre o SKU…" style="width:100%;max-width:520px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
@@ -6433,7 +6430,6 @@ function genTallesTipoChange() {
   const p = _gtTipo();
   if (!p) return;
   document.getElementById('gt-talles').value = p.talles.join(', ');
-  document.getElementById('gt-diagrama').value = p.diagramaUrl || '';
   gtData = {};
   genTallesBuildGrid();
 }
@@ -6476,7 +6472,6 @@ function genTallesHTML() {
   const p = _gtTipo();
   if (!p) return '';
   const talles = _gtTalles();
-  const diag = (document.getElementById('gt-diagrama').value || '').trim();
   const u = esc(p.unidad || 'cm');
   const cel = 'border:1px solid #ddd;padding:8px;text-align:center;';
   const lab = m => esc(m.letra.toLowerCase()) + '. ' + esc(m.nombre);
@@ -6494,11 +6489,7 @@ function genTallesHTML() {
 
   let h = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#222;">';
   h += `<h3 style="text-align:center;font-size:16px;margin:0 0 14px;">Tabla de talles — ${esc(p.nombre)}</h3>`;
-  // Tabla + diagrama lado a lado (se apila en pantallas chicas)
-  h += '<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">';
-  h += `<div style="flex:1;min-width:280px;">${tabla}</div>`;
-  if (diag) h += `<div style="flex:0 0 auto;text-align:center;margin:0 auto;"><img src="${esc(diag)}" alt="Cómo medir" style="max-width:210px;width:100%;"></div>`;
-  h += '</div>';
+  h += tabla;
   // INFO
   h += '<div style="font-size:12px;color:#666;margin-top:16px;"><b>Info</b>' +
     `<ul style="margin:4px 0 0;padding-left:18px;"><li>Las medidas están expresadas en ${u}.</li>` +
@@ -6633,7 +6624,6 @@ function gtCargarGuardada() {
   document.getElementById('gt-tipo').value = s.tipo || 'remera';
   genTallesTipoChange();
   document.getElementById('gt-talles').value = s.talles || '';
-  document.getElementById('gt-diagrama').value = s.diagramaUrl || '';
   gtData = { ...(s.gtData || {}) };
   genTallesBuildGrid();
 }
@@ -6643,7 +6633,6 @@ async function gtGuardarVinculado() {
   gtTallesMap[String(gtProducto.id)] = {
     tipo: document.getElementById('gt-tipo').value,
     talles: document.getElementById('gt-talles').value,
-    diagramaUrl: document.getElementById('gt-diagrama').value,
     gtData: { ...gtData },
     name: gtProducto.name,
     ts: new Date().toISOString(),
