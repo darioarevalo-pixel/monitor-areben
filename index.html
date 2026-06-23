@@ -1449,7 +1449,7 @@
             </select>
             <button class="btn-sm" onclick="renderCRM()">Recalcular</button>
             <label class="btn-sm" title="Subí el Excel de clientes exportado de GN (con teléfonos). Completa los teléfonos faltantes por ID de cliente." style="background:#378ADD;color:#fff;cursor:pointer;">📇 Cargar teléfonos de GN<input type="file" accept=".xlsx,.xls" onchange="crmCargarTelefonos(this.files[0]);this.value='';" style="display:none;"></label>
-            <button class="btn-sm" title="Asigna cadencia de contacto automática: Semanal a tus top clientes, Mensual a los activos. No pisa lo que ya cargaste a mano." onclick="crmSugerirCadencias()" style="background:#7C3AED;color:#fff;">🎯 Sugerir cadencias</button>
+            <button class="btn-sm" title="Programa automáticamente cada cuánto recontactar: cada semana a tus mejores clientes, cada mes a los activos. No pisa lo que ya cargaste a mano." onclick="crmSugerirCadencias()" style="background:#7C3AED;color:#fff;">🎯 Sugerir recontactos</button>
           </div>
         </div>
 
@@ -9277,7 +9277,7 @@ const CRM_TEL_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
 
 // Cadencias de contacto del CRM: cada cuántos días recontactar.
 const CADENCIA_DIAS = { semanal: 7, quincenal: 15, mensual: 30 };
-const CADENCIA_LABEL = { '': 'Sin seguimiento', semanal: 'Semanal (7 días)', quincenal: 'Quincenal (15 días)', mensual: 'Mensual (30 días)' };
+const CADENCIA_LABEL = { '': 'Sin seguimiento', semanal: 'Semana (7 días)', quincenal: 'Quincena (15 días)', mensual: 'Mes (30 días)' };
 
 const RIESGO_MIN_DAYS  = 30;          // entre estos dos días → "en riesgo"
 const RIESGO_MAX_DAYS  = 90;
@@ -9463,18 +9463,20 @@ function segCeldaHTML(c) {
 function segBloqueModalHTML(c) {
   const cadOpts = ['', 'semanal', 'quincenal', 'mensual'].map(v =>
     `<option value="${v}"${c.cadencia === v ? ' selected' : ''}>${CADENCIA_LABEL[v]}</option>`).join('');
+  const manualActivo = !!(crmSeg[String(c.id)] || {}).proximo_manual;
 
   // Línea de estado del próximo contacto
   let proxLinea;
   if (c.seg_estado === 'none') {
-    proxLinea = '<span style="color:#9CA3AF;">Asigná una cadencia para programar el recontacto.</span>';
+    proxLinea = '<span style="color:#9CA3AF;">Elegí cada cuánto recontactarlo para programarlo.</span>';
   } else if (c.seg_estado === 'pendiente') {
     proxLinea = '<span style="color:#DC2626;font-weight:600;">🔴 A contactar (todavía sin primer contacto registrado)</span>';
   } else {
     const d = c.dias_proximo;
     const rel = d === 0 ? 'hoy' : (d < 0 ? `hace ${-d} días` : `en ${d} días`);
     const cfg = { vencido:['🔴','#DC2626'], semana:['🟡','#B45309'], aldia:['🟢','#15803D'] }[c.seg_estado];
-    proxLinea = `<span style="color:${cfg[1]};font-weight:600;">${cfg[0]} ${fmtFecha(c.proximo_contacto)} (${rel})</span>`;
+    const origen = manualActivo ? ' · fijado a mano' : ' · automático';
+    proxLinea = `<span style="color:${cfg[1]};font-weight:600;">${cfg[0]} ${fmtFecha(c.proximo_contacto)} (${rel})</span><span style="color:#9CA3AF;font-weight:400;">${origen}</span>`;
   }
 
   const ultimoTxt = c.ultimo_contacto ? fmtFecha(c.ultimo_contacto) : '—';
@@ -9493,7 +9495,7 @@ function segBloqueModalHTML(c) {
       <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">📞 Seguimiento</div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
         <div>
-          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Cadencia de contacto</label>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Recontactar cada</label>
           <select onchange="crmSetCadencia(${c.id}, this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;">${cadOpts}</select>
         </div>
         <button class="btn-sm" onclick="crmHableHoy(${c.id})" style="background:#16A34A;color:#fff;">✅ Hablé hoy</button>
@@ -9502,8 +9504,12 @@ function segBloqueModalHTML(c) {
           <div style="font-size:13px;padding:6px 0;">${ultimoTxt}</div>
         </div>
         <div>
-          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Próximo contacto (manual)</label>
-          <input type="date" value="${c.proximo_contacto && (crmSeg[String(c.id)]||{}).proximo_manual ? c.proximo_contacto : ''}" onchange="crmSetProximoManual(${c.id}, this.value)" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;">
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Próximo contacto</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="date" value="${c.proximo_contacto || ''}" onchange="crmSetProximoManual(${c.id}, this.value)" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;cursor:pointer;">
+            ${manualActivo ? `<button class="btn-sm" onclick="crmSetProximoManual(${c.id}, '')" title="Volver a calcularlo solo según cada cuánto lo recontactás">↺ Automático</button>` : ''}
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;margin-top:3px;">Tocá la fecha para fijar otra a mano.</div>
         </div>
       </div>
       <div style="margin-top:10px;font-size:13px;">${proxLinea}</div>
@@ -9591,14 +9597,14 @@ async function crmSugerirCadencias() {
     if (topIds.has(String(c.id)))               plan.push({ id: c.id, cad: 'semanal' });
     else if (segmentoCliente(c) === 'activos')  plan.push({ id: c.id, cad: 'mensual' });
   }
-  if (!plan.length) { alert('No había clientes nuevos para sugerir (ya tienen cadencia asignada).'); return; }
+  if (!plan.length) { alert('No había clientes nuevos para sugerir (ya tienen un recontacto programado).'); return; }
   const nSem = plan.filter(p => p.cad === 'semanal').length;
   const nMen = plan.filter(p => p.cad === 'mensual').length;
-  if (!confirm(`Se va a asignar cadencia sugerida a ${plan.length} clientes:\n• ${nSem} top por monto → Semanal\n• ${nMen} activos recurrentes → Mensual\n\nNo se tocan los ${omitidos} que ya tenían cadencia. ¿Confirmás?`)) return;
+  if (!confirm(`Se va a programar el recontacto de ${plan.length} clientes:\n• ${nSem} mejores por monto → cada semana\n• ${nMen} activos recurrentes → cada mes\n\nNo se tocan los ${omitidos} que ya tenían uno. ¿Confirmás?`)) return;
   for (const p of plan) crmSegRef(p.id).cadencia = p.cad;
   await crmSegGuardar();
   renderCRM();
-  alert(`✅ Listo. Cadencia sugerida asignada a ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada cliente.`);
+  alert(`✅ Listo. Recontacto programado para ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada cliente.`);
 }
 
 function calcularAgregadoCRM() {
