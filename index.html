@@ -851,6 +851,7 @@
                 <label><input type="checkbox" value="sin-foto" onchange="mktMultiChange('calidad',this)"> Sin foto en TN</label>
                 <label><input type="checkbox" value="pocas-fotos" onchange="mktMultiChange('calidad',this)"> Pocas fotos (1-2)</label>
                 <label><input type="checkbox" value="sin-desc" onchange="mktMultiChange('calidad',this)"> Sin descripción</label>
+                <label><input type="checkbox" value="sin-tabla" onchange="mktMultiChange('calidad',this)"> 📏 Le falta tabla de talles (Zattia)</label>
                 <label><input type="checkbox" value="sin-foto-desc" onchange="mktMultiChange('calidad',this)"> ❌ Sin foto NI descripción</label>
                 <label><input type="checkbox" value="no-publicado" onchange="mktMultiChange('calidad',this)"> Oculto en TN</label>
                 <label><input type="checkbox" value="var-sin-foto" onchange="mktMultiChange('calidad',this)"> 🎨 Variantes sin foto propia</label>
@@ -1161,6 +1162,13 @@
         <label style="font-size:12px;color:#666;display:block;margin-bottom:14px;">URL del diagrama (foto con flechas A/B/C — opcional)<br>
           <input type="text" id="gt-diagrama" oninput="genTallesRenderPreview()" placeholder="https://… (la imagen la subís vos aparte)" style="width:100%;max-width:520px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
         </label>
+        <div style="border-top:1px solid #F1F5F9;margin:6px 0 14px;padding-top:12px;">
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Vincular a un producto de Tienda Nube (opcional)</div>
+          <input type="text" id="gt-prod-search" oninput="gtProdBuscar()" placeholder="Buscar producto por nombre o SKU…" style="width:100%;max-width:520px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+          <div id="gt-prod-result" style="margin-top:6px;"></div>
+          <div id="gt-prod-elegido" style="display:none;margin-top:8px;font-size:13px;"></div>
+          <div id="gt-tabla-actual" style="margin-top:10px;"></div>
+        </div>
         <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Cargá las medidas</div>
         <div id="gt-grid" style="overflow-x:auto;"></div>
       </div>
@@ -1168,8 +1176,10 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:14px;font-weight:700;">Vista previa <span style="font-weight:400;color:#9CA3AF;font-size:12px;">(así se va a ver en Tienda Nube)</span></div>
-          <div style="display:flex;align-items:center;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span id="gt-tn-msg" style="font-size:12px;color:#16A34A;"></span>
             <span id="gt-copy-msg" style="font-size:12px;color:#16A34A;"></span>
+            <button class="btn-sm" id="gt-cargar-tn" style="display:none;background:#0F766E;color:#fff;" onclick="gtCargarEnTN(this)">📤 Cargar en TN</button>
             <button class="btn-sm" onclick="genTallesCopiar()" style="background:#1F2937;color:#fff;">📋 Copiar HTML para TN</button>
           </div>
         </div>
@@ -6373,10 +6383,15 @@ const GEN_TALLES_PLANTILLAS = {
 
 let gtData = {}; // { 'talle|letra': valor }
 
-function genTallesInit() {
+async function genTallesInit() {
   const sel = document.getElementById('gt-tipo');
   sel.innerHTML = Object.entries(GEN_TALLES_PLANTILLAS).map(([k, p]) => `<option value="${k}">${esc(p.nombre)}</option>`).join('');
   genTallesTipoChange();
+  // Productos de TN (para vincular) + mapa de tablas guardadas
+  if (!window._mktTNData) {
+    try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; }
+  }
+  try { const r = await fetch(`${CRM_TEL_API}?kind=talles&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); gtTallesMap = (d && d.ok && d.map) ? d.map : {}; } catch (e) { gtTallesMap = {}; }
 }
 
 function _gtTipo() { return GEN_TALLES_PLANTILLAS[document.getElementById('gt-tipo').value]; }
@@ -6462,7 +6477,8 @@ function genTallesHTML() {
     p.medidas.map(m => `<div style="margin-bottom:5px;"><b>${lab(m)}:</b> ${esc(m.comoMedir || '')}</div>`).join('') +
     '</div></div>';
   h += '</div>';
-  return h;
+  // Firma para reconocer/actualizar la tabla dentro de la descripción de TN.
+  return '<!--AREBEN-TALLES-INI-->' + h + '<!--AREBEN-TALLES-FIN-->';
 }
 
 function genTallesRenderPreview() {
@@ -6484,6 +6500,137 @@ function _gtCopyFallback(text, ok) {
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); ok(); } catch (e) { alert('No se pudo copiar automáticamente.'); }
   document.body.removeChild(ta);
+}
+
+// ── Vincular tabla de talles a un producto de TN + importar/cargar ───────────────
+let gtProducto = null;   // {id, name, raw_desc, ...} elegido
+let gtTallesMap = {};    // id_producto_TN -> {tipo, talles, gtData, diagramaUrl, name}
+
+function gtProdBuscar() {
+  const q = (document.getElementById('gt-prod-search').value || '').trim().toLowerCase();
+  const cont = document.getElementById('gt-prod-result');
+  if (!cont) return;
+  if (q.length < 2) { cont.innerHTML = ''; return; }
+  const matches = (window._mktTNData || []).filter(p =>
+    (p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q)).slice(0, 8);
+  cont.innerHTML = matches.length
+    ? matches.map(p => `<button class="btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px;" onclick="gtProdElegir(${p.id})">${escapeHtml(p.name)}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</button>`).join('')
+    : '<div style="font-size:12px;color:#9CA3AF;">Sin resultados.</div>';
+}
+
+function gtProdElegir(id) {
+  const p = (window._mktTNData || []).find(x => x.id === id);
+  if (!p) return;
+  gtProducto = p;
+  document.getElementById('gt-prod-search').value = '';
+  document.getElementById('gt-prod-result').innerHTML = '';
+  const eleg = document.getElementById('gt-prod-elegido');
+  const guardada = gtTallesMap[String(p.id)];
+  eleg.style.display = '';
+  eleg.innerHTML = `Producto: <strong>${escapeHtml(p.name)}</strong>` +
+    (guardada ? ` <button class="btn-sm" onclick="gtCargarGuardada()" style="margin-left:8px;">↺ Cargar la guardada</button>` : '');
+  const btn = document.getElementById('gt-cargar-tn');
+  if (btn) btn.style.display = _esAdmin() ? '' : 'none';
+  gtRenderTablaActual();
+}
+
+function gtRenderTablaActual() {
+  const cont = document.getElementById('gt-tabla-actual');
+  if (!cont || !gtProducto) return;
+  const doc = new DOMParser().parseFromString(gtProducto.raw_desc || '', 'text/html');
+  const tabla = doc.querySelector('table');
+  if (!tabla) { cont.innerHTML = '<div style="font-size:12px;color:#9CA3AF;">Este producto todavía no tiene tabla en su descripción.</div>'; return; }
+  cont.innerHTML = `
+    <div style="font-size:12px;color:#6B7280;margin-bottom:6px;">Tabla actual del producto en TN:</div>
+    <div style="border:1px solid #E5E7EB;border-radius:8px;padding:10px;overflow-x:auto;background:#fff;">${tabla.outerHTML}</div>
+    <button class="btn-sm" onclick="genTallesImportar()" style="margin-top:8px;">⬇️ Recuperar datos de esta tabla</button>
+    <span style="font-size:11px;color:#9CA3AF;margin-left:8px;">Si no se carga bien, copiá los números a mano desde la tabla de arriba.</span>`;
+}
+
+function _gtElegirTipo(medidas) {
+  let best = document.getElementById('gt-tipo').value || 'remera', bestScore = -1e9;
+  for (const [k, p] of Object.entries(GEN_TALLES_PLANTILLAS)) {
+    let score = 0;
+    p.medidas.forEach(pm => { if (medidas.some(m => m.nombre && pm.nombre.toLowerCase().includes(m.nombre.toLowerCase().split(' ')[0]))) score++; });
+    score -= Math.abs(p.medidas.length - medidas.length);
+    if (score > bestScore) { bestScore = score; best = k; }
+  }
+  return best;
+}
+
+function genTallesImportar() {
+  if (!gtProducto) return;
+  const doc = new DOMParser().parseFromString(gtProducto.raw_desc || '', 'text/html');
+  const tabla = doc.querySelector('table');
+  if (!tabla) { alert('No hay tabla para recuperar.'); return; }
+  const rows = [...tabla.querySelectorAll('tr')].filter(tr => tr.querySelector('th,td'));
+  if (rows.length < 2) { alert('No pude leer la tabla. Cargá los datos a mano desde la tabla de arriba.'); return; }
+  const head = [...rows[0].querySelectorAll('th,td')].map(c => c.textContent.trim());
+  const talles = head.slice(1).filter(Boolean);
+  if (!talles.length) { alert('No pude identificar los talles. Cargá a mano.'); return; }
+  const medidas = [];
+  for (let i = 1; i < rows.length; i++) {
+    const cells = [...rows[i].querySelectorAll('th,td')].map(c => c.textContent.trim());
+    if (!cells.length || !cells[0]) continue;
+    const nombre = cells[0].replace(/^[a-zA-Z][.\)]\s*/, '').trim();
+    const valores = {}; talles.forEach((t, idx) => { valores[t] = cells[idx + 1] || ''; });
+    medidas.push({ nombre, valores });
+  }
+  if (!medidas.length) { alert('No pude leer las medidas. Cargá a mano.'); return; }
+  document.getElementById('gt-tipo').value = _gtElegirTipo(medidas);
+  genTallesTipoChange();                                  // carga medidas del tipo y limpia gtData
+  document.getElementById('gt-talles').value = talles.join(', ');
+  gtData = {};
+  medidas.forEach((m, idx) => { const letra = String.fromCharCode(65 + idx); talles.forEach(t => { gtData[t + '|' + letra] = m.valores[t] || ''; }); });
+  genTallesBuildGrid();
+  alert('✓ Datos recuperados. Revisá el tipo de prenda y las medidas antes de cargar en TN.');
+}
+
+function gtCargarGuardada() {
+  if (!gtProducto) return;
+  const s = gtTallesMap[String(gtProducto.id)];
+  if (!s) return;
+  document.getElementById('gt-tipo').value = s.tipo || 'remera';
+  genTallesTipoChange();
+  document.getElementById('gt-talles').value = s.talles || '';
+  document.getElementById('gt-diagrama').value = s.diagramaUrl || '';
+  gtData = { ...(s.gtData || {}) };
+  genTallesBuildGrid();
+}
+
+async function gtGuardarVinculado() {
+  if (!gtProducto) return;
+  gtTallesMap[String(gtProducto.id)] = {
+    tipo: document.getElementById('gt-tipo').value,
+    talles: document.getElementById('gt-talles').value,
+    diagramaUrl: document.getElementById('gt-diagrama').value,
+    gtData: { ...gtData },
+    name: gtProducto.name,
+    ts: new Date().toISOString(),
+  };
+  try { await fetch(`${CRM_TEL_API}?kind=talles&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: gtTallesMap }) }); } catch (e) {}
+}
+
+async function gtCargarEnTN(btn) {
+  if (!gtProducto) { alert('Elegí un producto primero.'); return; }
+  if (!confirm(`Cargar esta tabla de talles en la descripción de "${gtProducto.name}" en Tienda Nube?\n\nNo se borra el resto de la descripción; si ya tenía una tabla nuestra, se reemplaza.`)) return;
+  const msg = document.getElementById('gt-tn-msg');
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Cargando…';
+  try {
+    const html = genTallesHTML();
+    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tn-categorias?store=${_cuentaKey()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'descripcion-talles', productId: gtProducto.id, tablaHtml: html })
+    });
+    const d = await r.json();
+    if (!d.ok) { alert('No se pudo cargar en TN.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : '')); btn.textContent = '⚠️ Error'; return; }
+    await gtGuardarVinculado();
+    // Refrescar el audit para que el reporte refleje el cambio
+    try { const ra = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}&refresh=1&nc=${Math.random()}`); const da = await ra.json(); if (da && da.products) { window._mktTNData = da.products; gtProducto = da.products.find(x => x.id === gtProducto.id) || gtProducto; } } catch (e) {}
+    if (msg) { msg.textContent = d.accion === 'reemplazada' ? '✓ Tabla actualizada en TN' : '✓ Tabla cargada en TN'; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
+    gtRenderTablaActual();
+  } catch (e) { alert('Error al cargar en TN: ' + e.message); btn.textContent = '⚠️ Error'; }
+  finally { btn.disabled = false; setTimeout(() => { btn.textContent = orig; }, 1500); }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -7497,8 +7644,16 @@ function _mktFindTN(gn, idx) {
 }
 
 // Compone lista enriquecida: para cada producto GN, le pega data TN
+// ¿La descripción de TN ya tiene la tabla de talles? (firma propia o cualquier <table>)
+function _mktTieneTabla(tn) {
+  const d = (tn && tn.raw_desc) || '';
+  return /AREBEN-TALLES-INI/.test(d) || /<table/i.test(d);
+}
+function _mktAplicaTalles() { return _cuentaKey() === 'zattia'; } // talles solo en Zattia (ropa)
+
 function _mktBuildLista() {
   const idx = _mktIndexTN();
+  const verTalles = _mktAplicaTalles();
   return (allProductos || []).map(gn => {
     const tn = _mktFindTN(gn, idx);
     const stockReal = gn.stock || 0;
@@ -7507,6 +7662,7 @@ function _mktBuildLista() {
     else if (!tn.published) calidad = 'no-publicado';
     else if (tn.image_count === 0) calidad = 'sin-foto';
     else if (!tn.has_desc) calidad = 'sin-desc';
+    else if (verTalles && !_mktTieneTabla(tn)) calidad = 'sin-tabla';
     else if (tn.image_count <= 2) calidad = 'pocas-fotos';
     // Top sales with low stock
     const topLowStock = gn.sales30 >= 5 && stockReal <= 5;
@@ -7562,6 +7718,7 @@ function mktMatchCalidad(x, c) {
   if (c === 'sin-foto')      return x.tn && x.tn.image_count === 0;
   if (c === 'pocas-fotos')   return x.tn && x.tn.image_count > 0 && x.tn.image_count <= 2;
   if (c === 'sin-desc')      return x.tn && !x.tn.has_desc;
+  if (c === 'sin-tabla')     return x.tn && _mktAplicaTalles() && x.tn.has_desc && !_mktTieneTabla(x.tn);
   if (c === 'sin-foto-desc') return x.tn && x.tn.image_count === 0 && !x.tn.has_desc;
   if (c === 'no-publicado')  return x.tn && !x.tn.published;
   if (c === 'var-sin-foto')  return x.tn && x.tn.image_count > 0 && (x.tn.variantes_total || 0) > 1 && (x.tn.variantes_sin_foto || []).length > 0;
@@ -7611,6 +7768,12 @@ function mktRenderStats() {
   const sinDesc = lista.filter(x => x.tn && !x.tn.has_desc).length;
   const sinAmbos = lista.filter(x => x.tn && x.tn.image_count === 0 && !x.tn.has_desc).length;
   const topLow = lista.filter(x => x.topLowStock).length;
+  const sinTabla = _mktAplicaTalles() ? lista.filter(x => x.tn && x.tn.has_desc && !_mktTieneTabla(x.tn)).length : 0;
+  const statTabla = _mktAplicaTalles() ? `
+    <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','sin-tabla')">
+      <div class="stat-label">📏 Le falta tabla de talles</div>
+      <div class="stat-value warning">${sinTabla}</div>
+    </div>` : '';
   document.getElementById('mkt-stats').innerHTML = `
     <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','sin-foto')">
       <div class="stat-label">Sin foto en TN</div>
@@ -7620,6 +7783,7 @@ function mktRenderStats() {
       <div class="stat-label">Sin descripción</div>
       <div class="stat-value warning">${sinDesc}</div>
     </div>
+    ${statTabla}
     <div class="stat" style="cursor:pointer;" onclick="mktSetFiltro('calidad','sin-foto-desc')">
       <div class="stat-label">❌ Sin foto ni descripción</div>
       <div class="stat-value danger">${sinAmbos}</div>
@@ -7848,8 +8012,11 @@ function mktRender() {
         : x.tn.image_count <= 2 ? `<span title="Pocas fotos" style="color:#D97706;">📷 ${x.tn.image_count}</span>`
         : `<span title="OK" style="color:#16A34A;">📷 ${x.tn.image_count}</span>`;
       const descIcon = !x.tn.has_desc ? '<span title="Sin descripción" style="color:#DC2626;">📝 ✗</span>' : '<span title="OK" style="color:#16A34A;">📝 ✓</span>';
+      const tablaIcon = (_mktAplicaTalles() && x.tn.has_desc)
+        ? (_mktTieneTabla(x.tn) ? '<span title="Con tabla de talles" style="color:#16A34A;">📏 ✓</span>' : '<span title="Le falta la tabla de talles" style="color:#D97706;">📏 ✗</span>')
+        : '';
       const pubBadge = !x.tn.published ? '<span title="Oculto" style="color:#DC2626;">●</span>' : '';
-      badges.push(`<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px;">${photoIcon} ${descIcon} ${pubBadge}</span>`);
+      badges.push(`<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px;">${photoIcon} ${descIcon} ${tablaIcon} ${pubBadge}</span>`);
     }
 
     const cohorteLabel = x.ingresoMes ? _mesLabel(x.ingresoMes) : '';
