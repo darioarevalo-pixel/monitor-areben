@@ -10122,7 +10122,8 @@ function renderCRMTabla() {
     const segLabel = ({ activos:'🔥 Activo', riesgo:'⚠️ Riesgo', dormidos:'🥶 Dormido', nuevos:'🆕 Nuevo', otros:'·' })[seg];
     const segColor = ({ activos:'#16A34A', riesgo:'#D97706', dormidos:'#DC2626', nuevos:'#0EA5E9', otros:'#9CA3AF' })[seg];
     const waPhone = normalizeArgPhone(c.phone);
-    const waUrl = waPhone ? `https://wa.me/${waPhone}` : '';
+    // web.whatsapp.com abre WhatsApp Web (la sesión del navegador), no la app ni el redirect de wa.me.
+    const waUrl = waPhone ? `https://web.whatsapp.com/send?phone=${waPhone}` : '';
     const sinTel = !waPhone;
     const contactoBits = [];
     if (c.email) contactoBits.push(`<div style="font-size:12px;">${c.email}</div>`);
@@ -10143,7 +10144,7 @@ function renderCRMTabla() {
         <td>${segCeldaHTML(c)}</td>
         <td><span style="font-size:11px;color:${segColor};font-weight:600;">${segLabel}</span></td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
-          ${waUrl ? `<a href="${waUrl}" target="_blank" rel="noopener" class="btn-sm" title="Abrir WhatsApp" aria-label="WhatsApp" style="text-decoration:none;display:inline-flex;align-items:center;color:#16A34A;">${WA_SVG}</a>` : ''}
+          ${waUrl ? `<a href="${waUrl}" target="whatsapp" rel="noopener" class="btn-sm" title="Abrir WhatsApp" aria-label="WhatsApp" style="text-decoration:none;display:inline-flex;align-items:center;color:#16A34A;">${WA_SVG}</a>` : ''}
         </td>
       </tr>
     `;
@@ -10268,7 +10269,8 @@ function cerrarClienteModal() {
   document.getElementById('cliente-modal').style.display = 'none';
 }
 
-// ── Banco de mensajes (CRM) ─────────────────────────────────────────────────────
+// ── Banco de mensajes (CRM) — editable, compartido en KV ─────────────────────────
+// Plantillas por defecto (semilla). Una vez que se edita, manda lo guardado en KV.
 const BANCO_MENSAJES = [
   { grupo: '👋 Primer contacto (cliente dormido)', mensajes: [
     'Hola [Nombre]! ¿Cómo andás? Soy Bruno de BDI. Tanto tiempo 🙌 ¿Seguís con el local?',
@@ -10280,6 +10282,12 @@ const BANCO_MENSAJES = [
     '¿Necesitás reponer [producto]? Tengo stock fresco de lo tuyo.',
     'Saqué lista nueva con mejores precios en [categoría], ¿te la mando?',
     'Te guardé [producto] que sé que llevás, ¿te lo reservo?',
+  ]},
+  { grupo: '📋 Seguimiento de lista / presupuesto enviado', mensajes: [
+    'Hola [Nombre]! ¿Pudiste ver la lista? Si querés te armo un pedido con lo que más se vende y te aplico el cupón, así lo dejás listo 💪',
+    '[Nombre], te recuerdo que el cupón te da el descuento hasta [fecha]. ¿Te armo el pedido antes de que se venza?',
+    '[Nombre], de la lista que te pasé, lo que más está saliendo es [producto]. ¿Te lo sumo al pedido con el descuento?',
+    '¿Con qué te gustaría arrancar de la lista? Te armo y te paso el total con el cupón ya aplicado 👍',
   ]},
   { grupo: '💬 Si te responde', mensajes: [
     '¡Genial! Renovamos un montón la lista. ¿Qué es lo que más se te vende hoy? Te paso lo nuevo de eso 💪',
@@ -10306,25 +10314,67 @@ const BANCO_MENSAJES = [
     'Te agrego al canal así no te perdés las novedades ni las ofertas que saco solo ahí 📲',
   ]},
 ];
+let bancoData = null;          // banco vigente (lo de KV o copia de las plantillas)
+let bancoEditing = null;       // {gi, mi} si se está editando un mensaje
 
-function abrirBancoMensajes() {
+async function abrirBancoMensajes() {
+  if (!bancoData) {
+    try {
+      const r = await fetch(`${CRM_TEL_API}?kind=mensajes&store=${_cuentaKey()}&nc=${Math.random()}`);
+      const d = await r.json();
+      bancoData = (d && d.ok && Array.isArray(d.bank)) ? d.bank : JSON.parse(JSON.stringify(BANCO_MENSAJES));
+    } catch (e) { bancoData = JSON.parse(JSON.stringify(BANCO_MENSAJES)); }
+  }
+  bancoEditing = null;
   renderBancoMensajes();
   document.getElementById('banco-modal').style.display = 'flex';
 }
 function cerrarBancoMensajes() {
   document.getElementById('banco-modal').style.display = 'none';
 }
+async function _bancoGuardar() {
+  try { await fetch(`${CRM_TEL_API}?kind=mensajes&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bank: bancoData }) }); } catch (e) {}
+}
+function bancoEditar(gi, mi) { bancoEditing = { gi, mi }; renderBancoMensajes(); }
+function bancoCancelarEdit() { bancoEditing = null; renderBancoMensajes(); }
+function bancoGuardarEdit(gi, mi) {
+  const ta = document.getElementById('banco-edit-input'); if (!ta) return;
+  const v = ta.value.trim();
+  if (!v) { bancoBorrar(gi, mi, true); return; }
+  bancoData[gi].mensajes[mi] = v; bancoEditing = null; renderBancoMensajes(); _bancoGuardar();
+}
+function bancoBorrar(gi, mi, silent) {
+  if (!silent && !confirm('¿Borrar este mensaje?')) return;
+  bancoData[gi].mensajes.splice(mi, 1); bancoEditing = null; renderBancoMensajes(); _bancoGuardar();
+}
+function bancoAgregar(gi) { bancoData[gi].mensajes.push(''); bancoEditing = { gi, mi: bancoData[gi].mensajes.length - 1 }; renderBancoMensajes(); }
+function bancoCopiar(gi, mi, btn) { _copiarTexto(bancoData[gi].mensajes[mi], btn); }
+
 function renderBancoMensajes() {
   const body = document.getElementById('banco-body');
   if (!body) return;
-  body.innerHTML = BANCO_MENSAJES.map(g => `
+  body.innerHTML = (bancoData || []).map((g, gi) => `
     <div style="font-size:13px;font-weight:700;color:#0F172A;margin:14px 0 8px;">${escapeHtml(g.grupo)}</div>
-    ${g.mensajes.map(m => `
-      <div style="display:flex;gap:8px;align-items:flex-start;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
-        <div style="flex:1;font-size:13px;color:#1F2937;white-space:pre-wrap;">${escapeHtml(m)}</div>
-        <button class="btn-sm" style="white-space:nowrap;" onclick='_copiarTexto(this.getAttribute("data-msg"), this)' data-msg="${escapeHtml(m)}">📋 Copiar</button>
-      </div>`).join('')}
+    ${(g.mensajes || []).map((m, mi) => {
+      if (bancoEditing && bancoEditing.gi === gi && bancoEditing.mi === mi) return `
+        <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+          <textarea id="banco-edit-input" rows="3" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;">${escapeHtml(m)}</textarea>
+          <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;">
+            <button class="btn-sm" onclick="bancoCancelarEdit()">Cancelar</button>
+            <button class="btn-sm" style="background:#16A34A;color:#fff;" onclick="bancoGuardarEdit(${gi},${mi})">Guardar</button>
+          </div>
+        </div>`;
+      return `
+        <div style="display:flex;gap:6px;align-items:flex-start;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+          <div style="flex:1;font-size:13px;color:#1F2937;white-space:pre-wrap;">${escapeHtml(m)}</div>
+          <button class="btn-sm" style="white-space:nowrap;" onclick="bancoCopiar(${gi},${mi},this)">📋 Copiar</button>
+          <button class="btn-sm" title="Editar" onclick="bancoEditar(${gi},${mi})">✏️</button>
+          <button class="btn-sm" title="Borrar" style="color:#DC2626;" onclick="bancoBorrar(${gi},${mi})">🗑️</button>
+        </div>`;
+    }).join('')}
+    <button class="btn-sm" style="margin-bottom:4px;color:#0F766E;" onclick="bancoAgregar(${gi})">➕ Agregar mensaje</button>
   `).join('');
+  const ta = document.getElementById('banco-edit-input'); if (ta) ta.focus();
 }
 
 // Copiar texto al portapapeles con feedback en el botón.
