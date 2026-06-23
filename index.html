@@ -6611,10 +6611,24 @@ function genTallesImportar() {
   if (!medidas.length) { alert('No pude leer las medidas. Cargá a mano.'); return; }
   // Respeta el tipo de prenda elegido por el usuario (no lo auto-cambia).
   document.getElementById('gt-talles').value = talles.join(', ');
+  const tipo = _gtTipo();
+  // Emparejar CADA medida de la plantilla con la fila de la tabla vieja por NOMBRE
+  // (no por posición), así no importa el orden ni el formato de la tabla original.
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const usadas = new Set(), asignadas = new Set();
   gtData = {};
-  medidas.forEach((m, idx) => { const letra = String.fromCharCode(65 + idx); talles.forEach(t => { gtData[t + '|' + letra] = m.valores[t] || ''; }); });
+  const asignar = (m, fila) => { usadas.add(fila); asignadas.add(m.letra); talles.forEach(t => { gtData[t + '|' + m.letra] = fila.valores[t] || ''; }); };
+  const medsPlant = (tipo && tipo.medidas) || [];
+  // Pase 1: nombre exacto
+  medsPlant.forEach(m => { const f = medidas.find(r => !usadas.has(r) && norm(r.nombre) === norm(m.nombre)); if (f) asignar(m, f); });
+  // Pase 2: uno contiene al otro (ej. "cintura" ⊂ "contorno cintura")
+  medsPlant.forEach(m => { if (asignadas.has(m.letra)) return; const a = norm(m.nombre); const f = medidas.find(r => { if (usadas.has(r)) return false; const b = norm(r.nombre); return b && (a.includes(b) || b.includes(a)); }); if (f) asignar(m, f); });
+  // Pase 3: comparten una palabra significativa (>3 letras)
+  medsPlant.forEach(m => { if (asignadas.has(m.letra)) return; const wa = norm(m.nombre).split(/\s+/).filter(w => w.length > 3); const f = medidas.find(r => { if (usadas.has(r)) return false; const wb = norm(r.nombre).split(/\s+/); return wa.some(w => wb.includes(w)); }); if (f) asignar(m, f); });
+  // Fallback: si no se pudo emparejar nada por nombre, mapear por posición.
+  if (!asignadas.size) medidas.forEach((m, idx) => { const letra = String.fromCharCode(65 + idx); talles.forEach(t => { gtData[t + '|' + letra] = m.valores[t] || ''; }); });
   genTallesBuildGrid();
-  alert('✓ Datos recuperados sobre el tipo "' + (_gtTipo()?.nombre || '') + '". Si el tipo no corresponde, elegilo arriba y volvé a recuperar.');
+  alert('✓ Datos recuperados sobre el tipo "' + (tipo?.nombre || '') + '". Revisá que cada medida quedó en su columna antes de cargar en TN.');
 }
 
 function gtCargarGuardada() {
