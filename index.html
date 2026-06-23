@@ -6585,8 +6585,9 @@ function gtProdElegir(id) {
   eleg.style.display = '';
   eleg.innerHTML = `Producto: <strong>${escapeHtml(p.name)}</strong>${tipoTxt}` +
     (guardada ? ` <button class="btn-sm" onclick="gtCargarGuardada()" style="margin-left:8px;">↺ Cargar la guardada</button>` : '');
+  // Cualquiera con acceso a la sección Tabla de talles puede cargar en TN (ej. usuario "local").
   const btn = document.getElementById('gt-cargar-tn');
-  if (btn) btn.style.display = _esAdmin() ? '' : 'none';
+  if (btn) btn.style.display = '';
   gtRenderTablaActual();
 }
 
