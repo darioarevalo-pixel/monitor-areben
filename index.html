@@ -9821,6 +9821,69 @@ function escapeHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Resumen de compras del cliente (detalle de productos desde venta_detalles) ──
+let crmDetCache = {}; // id_cliente -> detalles[] (cacheado por sesión)
+async function crmCargarDetalles(c) {
+  const key = String(c.id);
+  if (crmDetCache[key]) return crmDetCache[key];
+  const ids = (c.ventas || []).map(v => v.id).filter(v => v != null);
+  const out = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    const lote = ids.slice(i, i + 150);
+    const rows = await sbFetch('venta_detalles', `select=sale_id,product_name,size,quantity,unit_price,total&sale_id=in.(${lote.join(',')})`);
+    out.push(...rows);
+  }
+  crmDetCache[key] = out;
+  return out;
+}
+
+function renderResumenCompras(c, det) {
+  if (!det || !det.length) {
+    return '<div style="font-size:12px;color:#9CA3AF;">Sin detalle de productos disponible para este cliente.</div>';
+  }
+  const fechaPorVenta = {};
+  (c.ventas || []).forEach(v => { fechaPorVenta[String(v.id)] = v.date_sale || ''; });
+
+  // Última compra = la venta con fecha más reciente que tenga detalle
+  let lastSid = null, lastFecha = '';
+  det.forEach(d => {
+    const f = fechaPorVenta[String(d.sale_id)] || '';
+    if (f && (!lastFecha || f > lastFecha)) { lastFecha = f; lastSid = String(d.sale_id); }
+  });
+  const itemsUltima = lastSid ? det.filter(d => String(d.sale_id) === lastSid) : [];
+  const ultimaHTML = itemsUltima.length ? `
+    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">Última compra · ${fmtFecha(lastFecha)}</div>
+    <table style="font-size:12px;width:100%;margin-bottom:14px;">
+      <thead><tr><th>Producto</th><th>Talle</th><th style="text-align:right;">Cant</th><th style="text-align:right;">P. unit.</th><th style="text-align:right;">Total</th></tr></thead>
+      <tbody>
+        ${itemsUltima.map(d => `<tr><td>${escapeHtml(d.product_name || '—')}</td><td style="color:#6B7280;">${escapeHtml(d.size || '')}</td><td style="text-align:right;">${d.quantity ?? ''}</td><td style="text-align:right;">${fmtMonto(d.unit_price || 0)}</td><td style="text-align:right;">${fmtMonto(d.total || (d.unit_price || 0) * (d.quantity || 0))}</td></tr>`).join('')}
+      </tbody>
+    </table>` : '';
+
+  // Lo que más compró: agregar por product_name
+  const agg = new Map();
+  det.forEach(d => {
+    const name = d.product_name || '—';
+    const f = fechaPorVenta[String(d.sale_id)] || '';
+    if (!agg.has(name)) agg.set(name, { name, unidades: 0, ventas: new Set(), ultFecha: '', ultPrecio: 0 });
+    const a = agg.get(name);
+    a.unidades += (d.quantity || 0);
+    a.ventas.add(String(d.sale_id));
+    if (f && (!a.ultFecha || f > a.ultFecha)) { a.ultFecha = f; a.ultPrecio = d.unit_price || 0; }
+  });
+  const top = [...agg.values()].sort((a, b) => b.unidades - a.unidades).slice(0, 8);
+  const topHTML = `
+    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">Lo que más te compró (top ${top.length})</div>
+    <table style="font-size:12px;width:100%;">
+      <thead><tr><th>Producto</th><th style="text-align:right;">Unid.</th><th style="text-align:right;">Veces</th><th style="text-align:right;">Últ. precio</th></tr></thead>
+      <tbody>
+        ${top.map(a => `<tr><td>${escapeHtml(a.name)}</td><td style="text-align:right;">${a.unidades}</td><td style="text-align:right;">${a.ventas.size}</td><td style="text-align:right;">${fmtMonto(a.ultPrecio)}</td></tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  return ultimaHTML + topHTML;
+}
+
 function abrirClienteModal(id) {
   const c = crmAgregado.find(x => x.id === id);
   if (!c) return;
@@ -9842,6 +9905,8 @@ function abrirClienteModal(id) {
       <div class="stat"><div class="stat-label">Ticket prom.</div><div class="stat-value" style="font-size:18px;">${fmtMonto(c.avg_ticket)}</div></div>
       <div class="stat"><div class="stat-label">Último pedido</div><div class="stat-value" style="font-size:16px;">${c.dias_ultimo === null ? '—' : 'hace '+c.dias_ultimo+'d'}</div><div style="font-size:11px;color:#9CA3AF;">${fmtFecha(c.last_sale)}</div></div>
     </div>
+    <div style="font-size:12px;color:#6B7280;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">🛒 Resumen de compras</div>
+    <div id="cm-resumen" style="margin-bottom:16px;font-size:12px;color:#9CA3AF;">Cargando resumen de compras…</div>
     <div style="font-size:12px;color:#6B7280;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Historial de pedidos (${ventasOrden.length})</div>
     <table style="font-size:12px;">
       <thead><tr><th>Fecha</th><th>N°</th><th style="text-align:right;">Total</th><th>Estado</th></tr></thead>
@@ -9852,6 +9917,17 @@ function abrirClienteModal(id) {
   `;
   document.getElementById('cm-body').innerHTML = seguimiento + stats;
   document.getElementById('cliente-modal').style.display = 'flex';
+
+  // Resumen de compras (detalle de productos): se carga async y se cachea por cliente.
+  crmCargarDetalles(c).then(det => {
+    if (cmCurrentId !== c.id) return;
+    const el = document.getElementById('cm-resumen');
+    if (el) el.innerHTML = renderResumenCompras(c, det);
+  }).catch(() => {
+    if (cmCurrentId !== c.id) return;
+    const el = document.getElementById('cm-resumen');
+    if (el) el.innerHTML = '<div style="font-size:12px;color:#DC2626;">No se pudo cargar el detalle de compras.</div>';
+  });
 }
 
 function cerrarClienteModal() {
