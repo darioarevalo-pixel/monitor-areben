@@ -8182,8 +8182,8 @@ function mktRender() {
   // URL pública según cuenta
   const tiendaBaseUrl = currentCuenta === CUENTAS.zattia ? 'https://zattia.com.ar' : 'https://bdiaccesorios.com.ar';
   const adminBaseUrl = currentCuenta === CUENTAS.zattia
-    ? 'https://zattiaco.mitiendanube.com/admin/products'
-    : 'https://bdiaccesorios.mitiendanube.com/admin/products';
+    ? 'https://zattiaco.mitiendanube.com/admin/v2/products'
+    : 'https://bdiaccesorios.mitiendanube.com/admin/v2/products';
 
   const tbody = document.getElementById('mkt-tbody');
   if (!lista.length) {
