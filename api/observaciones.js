@@ -1,5 +1,5 @@
 // Escribe la OBSERVACIÓN (ubicación física) del inventario en Gestión Nube,
-// para TODAS las variantes de un producto en un depósito (default "Deposito Mayorista").
+// para TODAS las variantes de un producto en un depósito (default "Deposito Minorista").
 // POST { productId, observation, store? }
 //   - observation: string (se recorta a 20 chars) o vacío/null para limpiar.
 // Usa GN_TOKEN (token con inventory:read + inventory:write) desde el entorno del servidor.
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const productId = body.productId;
-  const store = (body.store || 'Deposito Mayorista').toLowerCase();
+  const store = (body.store || 'Deposito Minorista').toLowerCase();
   const obs = (body.observation == null ? '' : String(body.observation)).trim().slice(0, 20) || null;
   if (!productId) return res.status(400).json({ error: 'Falta productId' });
 
