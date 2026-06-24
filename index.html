@@ -1454,6 +1454,33 @@
       </div>
     </div>
 
+    <!-- ── Ubicaciones (observación de inventario en GN) — BDI ──────────────── -->
+    <div id="tab-ubicaciones" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">📍 Ubicaciones (Deposito Minorista)</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:680px;">Cargá la ubicación física de cada producto (máx 20 caracteres). Se guarda en la observación de GN, en <b>todas las variantes</b> del producto. Cargá lo que quieras y apretá <b>Guardar cambios</b>.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <span id="ubi-msg" style="font-size:12px;color:#16A34A;"></span>
+            <button class="btn-sm" id="ubi-guardar" onclick="ubicacionesGuardar(this)" style="background:#0F766E;color:#fff;">💾 Guardar cambios</button>
+          </div>
+        </div>
+        <div class="toolbar" style="margin-bottom:10px;">
+          <input type="text" id="ubi-search" placeholder="Buscar producto o SKU..." oninput="ubicacionesRenderTabla()">
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ubi-sin" onchange="ubicacionesRenderTabla()"> Solo sin ubicación</label>
+          <span id="ubi-count" style="font-size:12px;color:#9CA3AF;margin-left:auto;"></span>
+        </div>
+        <div style="overflow-x:auto;max-height:600px;overflow-y:auto;">
+          <table>
+            <thead><tr><th>Producto</th><th>SKU</th><th style="width:170px;">Ubicación</th></tr></thead>
+            <tbody id="ubi-tbody"><tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Gestión de usuarios y permisos (solo admin) ─────────────────────── -->
     <div id="tab-usuarios" class="section">
       <div class="card">
@@ -5870,6 +5897,7 @@ function switchTab(id) {
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
+  if (id === 'ubicaciones') { ubicacionesInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
@@ -8209,13 +8237,14 @@ const PERM_CAT = [
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
   { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
+  { key: 'ubicaciones', label: '📍 Ubicaciones', info: 'Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.', brands: ['bdi'] },
 ];
 // Agrupamiento de la navegación en menús desplegables.
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'margenes', 'comisiones', 'colores', 'talles'] },
-  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'etiquetas', 'caducados', 'exhib'] },
+  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
@@ -10406,6 +10435,72 @@ function _copiarTexto(texto, btn) {
 }
 
 // Cerrar modal con Escape o click en backdrop
+// ── Ubicaciones: cargar la observación (ubicación) de inventario en GN, masivo ──
+let ubiData = [];      // [{product_id, name, sku, actual}]
+let ubiCambios = {};   // product_id -> ubicación nueva tipeada
+
+async function ubicacionesInit() {
+  const tb = document.getElementById('ubi-tbody');
+  if (tb) tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando…</td></tr>';
+  ubiCambios = {};
+  let rows = [];
+  try {
+    rows = await fetchAll('inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent('Deposito Minorista')}&order=product_name`, 'ubicaciones', true);
+  } catch (e) { rows = []; }
+  const map = new Map();
+  for (const r of rows) {
+    const pid = r.product_id;
+    if (!map.has(pid)) map.set(pid, { product_id: pid, name: r.product_name || ('#' + pid), sku: r.sku || '', actual: r.observation || '' });
+    else if (!map.get(pid).actual && r.observation) map.get(pid).actual = r.observation;
+  }
+  ubiData = [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+  ubicacionesRenderTabla();
+}
+
+function ubicacionesSet(pid, val) { ubiCambios[pid] = val; }
+
+function ubicacionesRenderTabla() {
+  const q = (document.getElementById('ubi-search').value || '').toLowerCase().trim();
+  const soloSin = document.getElementById('ubi-sin')?.checked;
+  let lista = ubiData;
+  if (q) lista = lista.filter(p => (p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
+  if (soloSin) lista = lista.filter(p => !((ubiCambios[p.product_id] ?? p.actual) || '').trim());
+  document.getElementById('ubi-count').textContent = lista.length + ' producto' + (lista.length === 1 ? '' : 's');
+  const tb = document.getElementById('ubi-tbody');
+  if (!lista.length) { tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Sin productos</td></tr>'; return; }
+  tb.innerHTML = lista.map(p => {
+    const val = ubiCambios[p.product_id] ?? p.actual;
+    const changed = (ubiCambios[p.product_id] != null && ubiCambios[p.product_id] !== p.actual);
+    return `<tr>
+        <td><div style="font-weight:600;">${escapeHtml(p.name)}</div></td>
+        <td style="color:#6B7280;">${escapeHtml(p.sku)}</td>
+        <td><input type="text" maxlength="20" value="${escapeHtml(val)}" oninput="ubicacionesSet(${p.product_id}, this.value)" placeholder="ej: 17D" style="width:150px;padding:5px 7px;border:1px solid ${changed ? '#0F766E' : '#D1D5DB'};border-radius:6px;${changed ? 'background:#ECFDF5;' : ''}"></td>
+      </tr>`;
+  }).join('');
+}
+
+async function ubicacionesGuardar(btn) {
+  const cambios = ubiData.filter(p => ubiCambios[p.product_id] != null && (ubiCambios[p.product_id] || '').trim() !== (p.actual || '').trim());
+  if (!cambios.length) { alert('No hay cambios para guardar.'); return; }
+  if (!confirm(`Vas a escribir la ubicación en GN (Deposito Minorista) de ${cambios.length} producto(s). ¿Confirmás?`)) return;
+  const msg = document.getElementById('ubi-msg');
+  const orig = btn.textContent; btn.disabled = true;
+  let ok = 0, err = 0;
+  for (let i = 0; i < cambios.length; i++) {
+    const p = cambios[i];
+    btn.textContent = `⏳ ${i + 1}/${cambios.length}`;
+    try {
+      const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: ubiCambios[p.product_id] }) });
+      const d = await r.json();
+      if (d && d.ok) { ok++; p.actual = (ubiCambios[p.product_id] || '').trim().slice(0, 20); delete ubiCambios[p.product_id]; }
+      else err++;
+    } catch (e) { err++; }
+  }
+  btn.disabled = false; btn.textContent = orig;
+  if (msg) { msg.textContent = `✓ ${ok} guardado${ok === 1 ? '' : 's'}` + (err ? ` · ${err} con error` : ''); setTimeout(() => { if (msg) msg.textContent = ''; }, 6000); }
+  ubicacionesRenderTabla();
+}
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cerrarClienteModal(); cerrarBancoMensajes(); navCloseAll(); }
 });

@@ -101,6 +101,7 @@ async function syncProductos() {
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
       sku: r.sku || null,
       barcode: r.barcode || null,
+      observation: r.observation ?? null,
     });
   }
   const inv = Array.from(seen.values());
@@ -110,8 +111,8 @@ async function syncProductos() {
   for (let i = 0; i < inv.length; i += BATCH) {
     const lote = inv.slice(i, i + BATCH);
     let { error } = await supabase.from('inventario').upsert(lote, { onConflict: 'product_id,size_id,store_name' });
-    if (error && /sku|barcode|column/i.test(error.message)) {
-      const reducido = lote.map(({ sku, barcode, ...rest }) => rest);
+    if (error && /sku|barcode|observation|column/i.test(error.message)) {
+      const reducido = lote.map(({ sku, barcode, observation, ...rest }) => rest);
       ({ error } = await supabase.from('inventario').upsert(reducido, { onConflict: 'product_id,size_id,store_name' }));
     }
     if (error) throw new Error(error.message);

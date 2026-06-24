@@ -178,15 +178,16 @@ async function syncInventario() {
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
       sku:                r.sku || null,
       barcode:            r.barcode || null,
+      observation:        r.observation ?? null,
     });
   }
   const inventario = Array.from(seen.values());
   console.log(`[inventario] ${inventario.length} registros (${rows.length - inventario.length} duplicados ignorados). Guardando en Supabase...`);
   if (!inventario.length) return 0;
   let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
-  if (error && /sku|barcode|column/i.test(error.message)) {
-    console.warn(`  ⚠️  columnas sku/barcode no existen aún, guardando sin ellas (${error.message})`);
-    const reducido = inventario.map(({ sku, barcode, ...rest }) => rest);
+  if (error && /sku|barcode|observation|column/i.test(error.message)) {
+    console.warn(`  ⚠️  columnas opcionales no existen aún, guardando sin ellas (${error.message})`);
+    const reducido = inventario.map(({ sku, barcode, observation, ...rest }) => rest);
     ({ error } = await supabase.from('inventario').upsert(reducido, { onConflict: 'product_id,size_id,store_name' }));
   }
   if (error) throw new Error(`Error guardando inventario: ${error.message}`);
