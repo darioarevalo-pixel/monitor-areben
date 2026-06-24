@@ -39,8 +39,7 @@ export default async function handler(req, res) {
         esArray: Array.isArray(dGet),
         topKeys: dGet && typeof dGet === 'object' ? Object.keys(dGet) : null,
         filasCount: filas.length,
-        sample: filas.slice(0, 2),
-        stores: [...new Set(filas.map(f => f && f.store_name))],
+        variantesSample: (dGet.variantes || []).slice(0, 2),
       });
     }
     // 2) Filtrar al depósito pedido (por nombre, tolerante)
