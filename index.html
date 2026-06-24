@@ -10827,11 +10827,14 @@ function _copiarTexto(texto, btn) {
 // ── Ubicaciones: cargar la observación (ubicación) de inventario en GN, masivo ──
 let ubiData = [];      // [{product_id, name, sku, actual}]
 let ubiCambios = {};   // product_id -> ubicación nueva tipeada
+function _ubiPendKey() { return 'monitor_ubi_pend_' + _cuentaKey(); }
+function _ubiPersist() { try { localStorage.setItem(_ubiPendKey(), JSON.stringify(ubiCambios)); } catch (e) {} }
 
 async function ubicacionesInit() {
   const tb = document.getElementById('ubi-tbody');
   if (tb) tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando…</td></tr>';
-  ubiCambios = {};
+  // Restaurar lo tipeado y no guardado (red de seguridad si se cerró/refrescó la pestaña)
+  try { ubiCambios = JSON.parse(localStorage.getItem(_ubiPendKey()) || '{}') || {}; } catch (e) { ubiCambios = {}; }
   let rows = [], prods = [];
   try {
     [rows, prods] = await Promise.all([
@@ -10880,6 +10883,7 @@ async function ubicacionesActualizarGN(btn) {
 function _ubiValido(v) { v = (v || '').trim(); return v === '' || /^\d+-\d+$/.test(v); }
 function ubicacionesSet(pid, val, el) {
   ubiCambios[pid] = val;
+  _ubiPersist(); // guarda lo tipeado en el navegador (no se pierde si cerrás antes de Guardar)
   if (el) el.style.borderColor = _ubiValido(val) ? '#0F766E' : '#DC2626';
 }
 
@@ -10921,7 +10925,7 @@ async function ubicacionesGuardar(btn) {
     try {
       const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: ubiCambios[p.product_id] }) });
       const d = await r.json();
-      if (d && d.ok) { ok++; p.actual = (ubiCambios[p.product_id] || '').trim().slice(0, 20); delete ubiCambios[p.product_id]; }
+      if (d && d.ok) { ok++; p.actual = (ubiCambios[p.product_id] || '').trim().slice(0, 20); delete ubiCambios[p.product_id]; _ubiPersist(); }
       else { err++; if (!primerError) primerError = (d && (d.error || (d.errores && d.errores[0] && (d.errores[0].detalle || ('HTTP ' + d.errores[0].status))))) || 'desconocido'; }
     } catch (e) { err++; if (!primerError) primerError = e.message; }
     await new Promise(res => setTimeout(res, 250)); // pausa entre productos (no saturar GN)
