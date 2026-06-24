@@ -33,6 +33,16 @@ export default async function handler(req, res) {
     const dGet = await rGet.json();
     if (!rGet.ok) return res.status(rGet.status).json({ error: 'No se pudo leer el inventario del producto', detalle: JSON.stringify(dGet).slice(0, 200) });
     const filas = Array.isArray(dGet) ? dGet : (dGet.data || []);
+    if (body.debug) {
+      return res.status(200).json({
+        ok: true, debug: true,
+        esArray: Array.isArray(dGet),
+        topKeys: dGet && typeof dGet === 'object' ? Object.keys(dGet) : null,
+        filasCount: filas.length,
+        sample: filas.slice(0, 2),
+        stores: [...new Set(filas.map(f => f && f.store_name))],
+      });
+    }
     // 2) Filtrar al depósito pedido (por nombre, tolerante)
     const target = filas.filter(f => String(f.store_name || '').toLowerCase().includes(store));
     if (!target.length) return res.status(200).json({ ok: true, productId, updated: 0, total: 0, nota: `Sin variantes en "${body.store || 'Deposito Mayorista'}"` });
