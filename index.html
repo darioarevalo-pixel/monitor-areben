@@ -9744,7 +9744,10 @@ async function cargarCRM() {
 
 // ── Seguimiento del CRM (cadencias + fecha de recontacto + notas) ──────────────
 function hoyISO() {
-  const d = TODAY;
+  // Fecha real del momento (NO la congelada de TODAY): si la pestaña queda
+  // abierta varios días, TODAY se queda en el día que se abrió y las notas /
+  // "Hablé hoy" se guardarían con fecha vieja. new Date() siempre da el día actual.
+  const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 function addDiasISO(iso, n) {
