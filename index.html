@@ -9890,6 +9890,8 @@ function segBloqueModalHTML(c) {
   const cadOpts = ['', 'semanal', 'quincenal', 'mensual'].map(v =>
     `<option value="${v}"${c.cadencia === v ? ' selected' : ''}>${CADENCIA_LABEL[v]}</option>`).join('');
   const manualActivo = !!(crmSeg[String(c.id)] || {}).proximo_manual;
+  const pagina = (crmSeg[String(c.id)] || {}).pagina || '';
+  const pagHref = leadInstaHref(pagina);
 
   // Línea de estado del próximo contacto
   let proxLinea;
@@ -9919,6 +9921,13 @@ function segBloqueModalHTML(c) {
   return `
     <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:16px;">
       <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">📞 Seguimiento</div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Página / Instagram</label>
+        <div style="display:flex;gap:6px;align-items:center;max-width:420px;">
+          <input type="text" value="${escapeHtml(pagina)}" placeholder="@usuario o link de su tienda/IG" onchange="crmSetPagina(${c.id}, this.value)" style="flex:1;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;">
+          ${pagHref ? `<a href="${pagHref}" target="_blank" rel="noopener" class="btn-sm" style="white-space:nowrap;background:#2563EB;color:#fff;">Abrir ↗</a>` : ''}
+        </div>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
         <div>
           <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Recontactar cada</label>
@@ -9974,6 +9983,13 @@ async function crmSetCadencia(id, value) {
   await crmSegGuardar();
   renderCRM();
   if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+async function crmSetPagina(id, value) {
+  const s = crmSegRef(id);
+  s.pagina = (value || '').trim();
+  await crmSegGuardar();
+  if (cmCurrentId === id) abrirClienteModal(id); // refresca el botón "Abrir ↗"
 }
 
 async function crmHableHoy(id) {
