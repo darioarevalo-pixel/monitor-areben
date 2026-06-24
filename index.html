@@ -9862,10 +9862,12 @@ function segBloqueModalHTML(c) {
 
       <div style="margin-top:14px;">
         <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:4px;">Nota de seguimiento</label>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <input type="date" id="cm-nota-fecha" value="${hoyISO()}" title="Fecha de la nota — viene puesta en hoy, cambiala si la charla fue otro día" style="padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;">
           <textarea id="cm-nota-input" rows="2" placeholder="Qué hablaron, qué quedó pendiente..." style="flex:1;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
           <button class="btn-sm" onclick="crmAgregarNota(${c.id})" style="align-self:flex-start;">Agregar</button>
         </div>
+        <div style="font-size:10px;color:#9CA3AF;margin-top:3px;">La fecha viene puesta en hoy. Cambiala si la nota es de otro día.</div>
         <div style="margin-top:8px;">${notasHTML}</div>
       </div>
     </div>`;
@@ -9915,8 +9917,13 @@ async function crmAgregarNota(id) {
   const ta = document.getElementById('cm-nota-input');
   const texto = (ta?.value || '').trim();
   if (!texto) return;
+  const fechaInput = document.getElementById('cm-nota-fecha');
+  const fecha = (fechaInput?.value || '').trim() || hoyISO();
   const s = crmSegRef(id);
-  s.notas.unshift({ fecha: hoyISO(), texto });
+  s.notas.unshift({ fecha, texto });
+  // Ordena por fecha descendente (más nueva arriba); sort estable conserva
+  // el orden de carga entre notas del mismo día.
+  s.notas.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   await crmSegGuardar();
   renderCRM();
   if (cmCurrentId === id) abrirClienteModal(id);
