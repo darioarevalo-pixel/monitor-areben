@@ -9849,12 +9849,14 @@ function estadoSeguimiento(id) {
   const s = crmSeg[String(id)] || {};
   const cad = s.cadencia || '';
   const notas = Array.isArray(s.notas) ? s.notas : [];
-  if (!cad) return { cadencia:'', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas };
+  // El próximo contacto puede venir de una fecha fijada a mano O calculada por cadencia.
   let proximo = s.proximo_manual || null;
-  if (!proximo && s.ultimo_contacto) proximo = addDiasISO(s.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  if (!proximo && cad && s.ultimo_contacto) proximo = addDiasISO(s.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  // Sin cadencia y sin fecha a mano → no hay seguimiento programado.
+  if (!cad && !proximo) return { cadencia:'', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas };
   const dias = proximo ? diasHasta(proximo) : null;
   let estado;
-  if (!proximo)        estado = 'pendiente';   // tiene cadencia pero todavía no lo contactaste
+  if (!proximo)        estado = 'pendiente';   // tiene cadencia pero todavía no hay fecha
   else if (dias <= 0)  estado = 'vencido';
   else if (dias <= 7)  estado = 'semana';
   else                 estado = 'aldia';
@@ -10439,9 +10441,9 @@ function leadsRef(id) {
 // Estado de seguimiento de un lead (misma lógica que estadoSeguimiento, pero sobre el lead)
 function leadEstadoSeg(lead) {
   const cad = lead.cadencia || '';
-  if (!cad) return { proximo: null, estado: 'none', dias: null };
   let proximo = lead.proximo_manual || null;
-  if (!proximo && lead.ultimo_contacto) proximo = addDiasISO(lead.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  if (!proximo && cad && lead.ultimo_contacto) proximo = addDiasISO(lead.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  if (!cad && !proximo) return { proximo: null, estado: 'none', dias: null };
   const dias = proximo ? diasHasta(proximo) : null;
   let estado;
   if (!proximo)        estado = 'pendiente';
