@@ -6,7 +6,7 @@
 // GN: GET /inventario/{product_id} (trae las filas con inventory_id) +
 //     PATCH /inventario/{inventory_id}/observacion { observation }.
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const TOKEN = process.env.GN_TOKEN;
+const TOKEN = process.env.GN_TOKEN; // token GN con inventory:read+write (env del Monitor)
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
