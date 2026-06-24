@@ -10914,7 +10914,7 @@ async function ubicacionesGuardar(btn) {
   if (!invalidos.length && !confirm(`Vas a escribir la ubicación en GN (Deposito Minorista) de ${cambios.length} producto(s). ¿Confirmás?`)) return;
   const msg = document.getElementById('ubi-msg');
   const orig = btn.textContent; btn.disabled = true;
-  let ok = 0, err = 0;
+  let ok = 0, err = 0, primerError = '';
   for (let i = 0; i < cambios.length; i++) {
     const p = cambios[i];
     btn.textContent = `⏳ ${i + 1}/${cambios.length}`;
@@ -10922,12 +10922,14 @@ async function ubicacionesGuardar(btn) {
       const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: ubiCambios[p.product_id] }) });
       const d = await r.json();
       if (d && d.ok) { ok++; p.actual = (ubiCambios[p.product_id] || '').trim().slice(0, 20); delete ubiCambios[p.product_id]; }
-      else err++;
-    } catch (e) { err++; }
+      else { err++; if (!primerError) primerError = (d && (d.error || (d.errores && d.errores[0] && (d.errores[0].detalle || ('HTTP ' + d.errores[0].status))))) || 'desconocido'; }
+    } catch (e) { err++; if (!primerError) primerError = e.message; }
+    await new Promise(res => setTimeout(res, 250)); // pausa entre productos (no saturar GN)
   }
   btn.disabled = false; btn.textContent = orig;
-  if (msg) { msg.textContent = `✓ ${ok} guardado${ok === 1 ? '' : 's'}` + (err ? ` · ${err} con error` : ''); setTimeout(() => { if (msg) msg.textContent = ''; }, 6000); }
+  if (msg) { msg.textContent = `✓ ${ok} guardado${ok === 1 ? '' : 's'}` + (err ? ` · ${err} con error` : ''); setTimeout(() => { if (msg) msg.textContent = ''; }, 8000); }
   ubicacionesRenderTabla();
+  if (err) alert(`Se guardaron ${ok} y ${err} dieron error.\nMotivo del primero: ${primerError}\n\nLos que fallaron siguen cargados acá — apretá "Guardar cambios" de nuevo para reintentar solo esos.`);
 }
 
 document.addEventListener('keydown', e => {

@@ -10,6 +10,21 @@ const TOKEN = process.env.GN_TOKEN; // token GN con inventory:read+write (env de
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// fetch con reintentos: si GN responde 429 (rate limit) o 5xx, espera y reintenta.
+async function gnFetch(url, opts, tries = 4) {
+  let last;
+  for (let a = 1; a <= tries; a++) {
+    try {
+      const r = await fetch(url, opts);
+      if (r.ok) return r;
+      last = r;
+      if ((r.status === 429 || r.status >= 500) && a < tries) { await sleep(900 * a); continue; }
+      return r;
+    } catch (e) { last = e; if (a < tries) { await sleep(900 * a); continue; } throw e; }
+  }
+  return last;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -29,7 +44,7 @@ export default async function handler(req, res) {
 
   try {
     // 1) Traer las filas de inventario del producto
-    const rGet = await fetch(`${GN_BASE}/inventario/${productId}`, { headers });
+    const rGet = await gnFetch(`${GN_BASE}/inventario/${productId}`, { headers });
     const dGet = await rGet.json();
     if (!rGet.ok) return res.status(rGet.status).json({ error: 'No se pudo leer el inventario del producto', detalle: JSON.stringify(dGet).slice(0, 200) });
     // GET /inventario/{id} → { variantes: [ { size_name, stock_por_tienda: [ {inventory_id, store_name, observation, ...} ] } ] }
@@ -49,13 +64,13 @@ export default async function handler(req, res) {
     let updated = 0; const errores = [];
     for (const f of target) {
       try {
-        const rP = await fetch(`${GN_BASE}/inventario/${f.inventory_id}/observacion`, {
+        const rP = await gnFetch(`${GN_BASE}/inventario/${f.inventory_id}/observacion`, {
           method: 'PATCH', headers, body: JSON.stringify({ observation: obs }),
         });
         if (rP.ok) updated++;
         else { const t = await rP.text(); errores.push({ inventory_id: f.inventory_id, status: rP.status, detalle: t.slice(0, 120) }); }
       } catch (e) { errores.push({ inventory_id: f.inventory_id, error: e.message }); }
-      await sleep(150);
+      await sleep(200);
     }
     return res.status(200).json({ ok: errores.length === 0, productId, updated, total: target.length, errores });
   } catch (e) {
