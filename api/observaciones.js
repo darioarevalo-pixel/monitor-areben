@@ -32,14 +32,13 @@ export default async function handler(req, res) {
     const rGet = await fetch(`${GN_BASE}/inventario/${productId}`, { headers });
     const dGet = await rGet.json();
     if (!rGet.ok) return res.status(rGet.status).json({ error: 'No se pudo leer el inventario del producto', detalle: JSON.stringify(dGet).slice(0, 200) });
-    const filas = Array.isArray(dGet) ? dGet : (dGet.data || []);
+    // GET /inventario/{id} → { variantes: [ { size_name, stock_por_tienda: [ {inventory_id, store_name, observation, ...} ] } ] }
+    const filas = (dGet.variantes || []).flatMap(v =>
+      (v.stock_por_tienda || []).map(s => ({ ...s, size_name: v.size_name })));
     if (body.debug) {
       return res.status(200).json({
-        ok: true, debug: true,
-        esArray: Array.isArray(dGet),
-        topKeys: dGet && typeof dGet === 'object' ? Object.keys(dGet) : null,
-        filasCount: filas.length,
-        variantesSample: (dGet.variantes || []).slice(0, 2),
+        ok: true, debug: true, filasCount: filas.length,
+        stores: [...new Set(filas.map(f => f && f.store_name))],
       });
     }
     // 2) Filtrar al depósito pedido (por nombre, tolerante)
