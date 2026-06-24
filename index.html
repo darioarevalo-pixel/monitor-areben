@@ -1520,6 +1520,14 @@
           </div>
         </div>
 
+        <!-- Interruptor de vistas: Clientes (compraron) | Leads (prospectos) -->
+        <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #E5E7EB;">
+          <button id="crm-tab-clientes" onclick="crmSetVista('clientes')" style="padding:9px 16px;background:none;border:none;border-bottom:2px solid #2563EB;cursor:pointer;font-size:14px;font-weight:700;color:#111827;">👥 Clientes</button>
+          <button id="crm-tab-leads" onclick="crmSetVista('leads')" style="padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-size:14px;font-weight:500;color:#6B7280;">🔥 Leads</button>
+        </div>
+
+        <!-- ── VISTA CLIENTES (los que ya compraron) ── -->
+        <div id="crm-vista-clientes">
         <!-- Stats segmentos -->
         <div id="crm-segmentos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
 
@@ -1559,6 +1567,33 @@
             <tbody id="crm-tbody"><tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando...</td></tr></tbody>
           </table>
         </div>
+        </div><!-- /crm-vista-clientes -->
+
+        <!-- ── VISTA LEADS (prospectos que todavía no compraron) ── -->
+        <div id="crm-vista-leads" style="display:none;">
+          <div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;">Prospectos con local a los que les hablás pero todavía no te compraron. Cargalos a mano y seguilos hasta convertirlos. Cuando compren, marcá <b>✓ Ya compró</b> y salen de la lista.</div>
+          <div class="toolbar" style="margin-bottom:14px;">
+            <button class="btn-sm" onclick="leadsAgregar()" style="background:#2563EB;color:#fff;">➕ Nuevo lead</button>
+            <input type="text" id="leads-search" placeholder="Buscar nombre, teléfono o Instagram..." oninput="leadsRender()">
+            <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="leads-archivados" onchange="leadsRender()"> Ver archivados</label>
+            <span style="font-size:12px;color:#9CA3AF;margin-left:auto;" id="leads-count"></span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Contacto</th>
+                  <th>Ciudad</th>
+                  <th>Próximo contacto</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="leads-tbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#9CA3AF;">—</td></tr></tbody>
+            </table>
+          </div>
+        </div><!-- /crm-vista-leads -->
       </div>
     </div>
 
@@ -1573,6 +1608,20 @@
           <button class="btn-sm" onclick="cerrarClienteModal()">Cerrar</button>
         </div>
         <div id="cm-body" style="padding:18px 20px;overflow-y:auto;flex:1;"></div>
+      </div>
+    </div>
+
+    <!-- Modal editor de lead (prospecto) -->
+    <div id="lead-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:500;align-items:center;justify-content:center;padding:1rem;">
+      <div style="background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden;">
+        <div style="padding:18px 20px;border-bottom:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div>
+            <div style="font-size:17px;font-weight:700;">🔥 Lead / Prospecto</div>
+            <div style="font-size:12px;color:#6B7280;margin-top:3px;">Contacto que todavía no compró. Cargá sus datos y seguilo hasta convertirlo.</div>
+          </div>
+          <button class="btn-sm" onclick="leadsCerrarModal()">Cerrar</button>
+        </div>
+        <div id="lead-body" style="padding:18px 20px;overflow-y:auto;flex:1;"></div>
       </div>
     </div>
 
@@ -10318,6 +10367,326 @@ function cerrarClienteModal() {
   document.getElementById('cliente-modal').style.display = 'none';
 }
 
+// ══ LEADS / PROSPECTOS (contactos que todavía no compraron) ══════════════════════
+// Viven dentro de la sección CRM, en una vista aparte. Se cargan a mano y se guardan
+// en KV (kind=crmleads). Mapa id_lead -> { nombre, telefono, instagram, ciudad,
+// estado, cadencia, ultimo_contacto, proximo_manual, notas[], creado }.
+let leadsData = {};        // mapa en KV
+let leadsInited = false;   // carga perezosa al entrar a la vista por primera vez
+let leadCurrentId = null;  // lead abierto en el modal
+const LEAD_ESTADO_LABEL = { activo: '🔥 Activo', comprado: '✓ Compró', descartado: '✕ Descartado' };
+
+// Interruptor de vistas Clientes / Leads dentro de la card del CRM
+function crmSetVista(v) {
+  document.getElementById('crm-vista-clientes').style.display = v === 'leads' ? 'none' : '';
+  document.getElementById('crm-vista-leads').style.display    = v === 'leads' ? '' : 'none';
+  const tc = document.getElementById('crm-tab-clientes'), tl = document.getElementById('crm-tab-leads');
+  const off = b => { b.style.borderBottom = '2px solid transparent'; b.style.color = '#6B7280'; b.style.fontWeight = '500'; };
+  const on  = b => { b.style.borderBottom = '2px solid #2563EB';     b.style.color = '#111827'; b.style.fontWeight = '700'; };
+  if (v === 'leads') { off(tc); on(tl); } else { on(tc); off(tl); }
+  if (v === 'leads' && !leadsInited) { leadsInited = true; leadsInit(); }
+}
+
+function leadsNewId() { return 'l' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+
+async function leadsCargar() {
+  try {
+    const r = await fetch(`${CRM_TEL_API}?kind=crmleads&store=${_cuentaKey()}&nc=${Math.random()}`);
+    const d = await r.json();
+    leadsData = (d && d.ok && d.map) ? d.map : {};
+  } catch (e) { leadsData = {}; }
+}
+
+async function leadsGuardar() {
+  try {
+    await fetch(`${CRM_TEL_API}?kind=crmleads&store=${_cuentaKey()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: leadsData })
+    });
+  } catch (e) { alert('No se pudieron guardar los leads: ' + e.message); }
+}
+
+async function leadsInit() {
+  const tb = document.getElementById('leads-tbody');
+  if (tb) tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando…</td></tr>';
+  await leadsCargar();
+  leadsRender();
+}
+
+function leadsRef(id) {
+  if (!leadsData[id]) leadsData[id] = { id, nombre: '', telefono: '', instagram: '', ciudad: '', estado: 'activo', cadencia: '', ultimo_contacto: null, proximo_manual: null, notas: [], creado: hoyISO() };
+  if (!Array.isArray(leadsData[id].notas)) leadsData[id].notas = [];
+  return leadsData[id];
+}
+
+// Estado de seguimiento de un lead (misma lógica que estadoSeguimiento, pero sobre el lead)
+function leadEstadoSeg(lead) {
+  const cad = lead.cadencia || '';
+  if (!cad) return { proximo: null, estado: 'none', dias: null };
+  let proximo = lead.proximo_manual || null;
+  if (!proximo && lead.ultimo_contacto) proximo = addDiasISO(lead.ultimo_contacto, CADENCIA_DIAS[cad] || 30);
+  const dias = proximo ? diasHasta(proximo) : null;
+  let estado;
+  if (!proximo)        estado = 'pendiente';
+  else if (dias <= 0)  estado = 'vencido';
+  else if (dias <= 7)  estado = 'semana';
+  else                 estado = 'aldia';
+  return { proximo, estado, dias };
+}
+
+// Chip de "próximo contacto" para la tabla de leads
+function leadSegChip(seg) {
+  if (seg.estado === 'none') return '<span style="color:#9CA3AF;">—</span>';
+  const cfg = {
+    pendiente: { txt: 'A contactar', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
+    vencido:   { txt: 'Vencido',     col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
+    semana:    { txt: 'Esta semana', col: '#B45309', bg: '#FEF3C7', dot: '🟡' },
+    aldia:     { txt: 'Al día',      col: '#15803D', bg: '#DCFCE7', dot: '🟢' },
+  }[seg.estado];
+  let sub;
+  if (seg.estado === 'pendiente') sub = 'Sin primer contacto';
+  else { const d = seg.dias; const rel = d === 0 ? 'hoy' : (d < 0 ? `hace ${-d}d` : `en ${d}d`); sub = `${fmtFecha(seg.proximo)} · ${rel}`; }
+  return `<span style="display:inline-block;font-size:11px;font-weight:600;color:${cfg.col};background:${cfg.bg};padding:1px 7px;border-radius:10px;white-space:nowrap;">${cfg.dot} ${cfg.txt}</span><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${sub}</div>`;
+}
+
+// Link clickeable para el Instagram / página del lead
+function leadInstaHref(v) {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  return 'https://instagram.com/' + v.replace(/^@/, '');
+}
+
+function leadsRender() {
+  const q = (document.getElementById('leads-search')?.value || '').trim().toLowerCase();
+  const verArch = document.getElementById('leads-archivados')?.checked;
+  let lista = Object.values(leadsData);
+  lista = lista.filter(l => verArch ? l.estado !== 'activo' : l.estado === 'activo');
+  if (q) lista = lista.filter(l =>
+    (l.nombre || '').toLowerCase().includes(q) ||
+    (l.telefono || '').toLowerCase().includes(q) ||
+    (l.instagram || '').toLowerCase().includes(q));
+  // Orden: más urgentes primero (por estado de próximo contacto), luego por nombre
+  const ord = { vencido: 0, pendiente: 1, semana: 2, aldia: 3, none: 4 };
+  lista.forEach(l => l._seg = leadEstadoSeg(l));
+  lista.sort((a, b) => (ord[a._seg.estado] - ord[b._seg.estado]) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+
+  const cnt = document.getElementById('leads-count');
+  if (cnt) cnt.textContent = lista.length + ' lead' + (lista.length === 1 ? '' : 's') + (verArch ? ' archivados' : '');
+
+  const tb = document.getElementById('leads-tbody');
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#9CA3AF;">${verArch ? 'No hay leads archivados.' : 'Todavía no cargaste ningún lead. Apretá «➕ Nuevo lead» para empezar.'}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = lista.map(l => {
+    const waPhone = normalizeArgPhone(l.telefono);
+    const waUrl = waPhone ? `https://web.whatsapp.com/send?phone=${waPhone}` : '';
+    const insta = leadInstaHref(l.instagram);
+    const contactoBits = [];
+    if (l.telefono) contactoBits.push(`<div style="font-size:12px;">${escapeHtml(l.telefono)}</div>`);
+    if (insta) contactoBits.push(`<div style="font-size:11px;"><a href="${insta}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#2563EB;text-decoration:none;">${escapeHtml(l.instagram)} ↗</a></div>`);
+    const contacto = contactoBits.length ? contactoBits.join('') : '<span style="color:#9CA3AF;">—</span>';
+    const ciudad = l.ciudad ? escapeHtml(l.ciudad) : '<span style="color:#9CA3AF;">—</span>';
+    const estadoTxt = LEAD_ESTADO_LABEL[l.estado] || l.estado;
+    const acciones = l.estado === 'activo'
+      ? `${waUrl ? `<a href="${waUrl}" onclick="event.stopPropagation();event.preventDefault();abrirWhatsApp('${waPhone}');return false;" class="btn-sm" title="Abrir WhatsApp" style="background:#25D366;color:#fff;">${WA_SVG}</a>` : ''}
+         <button class="btn-sm" onclick="event.stopPropagation();leadsMarcarComprado('${l.id}')" title="Marcar que ya compró (sale de la lista)" style="background:#16A34A;color:#fff;">✓ Ya compró</button>
+         <button class="btn-sm" onclick="event.stopPropagation();leadsDescartar('${l.id}')" title="Descartar este lead" style="color:#DC2626;">✕</button>`
+      : `<button class="btn-sm" onclick="event.stopPropagation();leadsReactivar('${l.id}')" title="Volver a la lista de activos">↩ Reactivar</button>
+         <button class="btn-sm" onclick="event.stopPropagation();leadsEliminar('${l.id}')" title="Borrar definitivamente" style="color:#DC2626;">🗑️</button>`;
+    return `
+      <tr style="cursor:pointer;" onclick="leadsAbrirModal('${l.id}')">
+        <td><div style="font-weight:600;">${escapeHtml(l.nombre) || '<span style="color:#9CA3AF;">(sin nombre)</span>'}</div></td>
+        <td onclick="event.stopPropagation()">${contacto}</td>
+        <td>${ciudad}</td>
+        <td>${leadSegChip(l._seg)}</td>
+        <td><span style="font-size:12px;color:#6B7280;">${estadoTxt}</span></td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap;">${acciones}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function leadsAgregar() {
+  const id = leadsNewId();
+  leadsRef(id);
+  await leadsGuardar();
+  leadsRender();
+  leadsAbrirModal(id);
+}
+
+function leadsAbrirModal(id) {
+  const l = leadsData[id];
+  if (!l) return;
+  leadCurrentId = id;
+  document.getElementById('lead-body').innerHTML = leadModalBodyHTML(l);
+  document.getElementById('lead-modal').style.display = 'flex';
+}
+
+function leadsCerrarModal() {
+  leadCurrentId = null;
+  document.getElementById('lead-modal').style.display = 'none';
+}
+
+function leadModalBodyHTML(l) {
+  const seg = leadEstadoSeg(l);
+  const cadOpts = ['', 'semanal', 'quincenal', 'mensual'].map(v =>
+    `<option value="${v}"${l.cadencia === v ? ' selected' : ''}>${CADENCIA_LABEL[v]}</option>`).join('');
+  const manualActivo = !!l.proximo_manual;
+  let proxLinea;
+  if (seg.estado === 'none') proxLinea = '<span style="color:#9CA3AF;">Elegí cada cuánto recontactarlo para programarlo.</span>';
+  else if (seg.estado === 'pendiente') proxLinea = '<span style="color:#DC2626;font-weight:600;">🔴 A contactar (todavía sin primer contacto registrado)</span>';
+  else {
+    const d = seg.dias; const rel = d === 0 ? 'hoy' : (d < 0 ? `hace ${-d} días` : `en ${d} días`);
+    const cfg = { vencido:['🔴','#DC2626'], semana:['🟡','#B45309'], aldia:['🟢','#15803D'] }[seg.estado];
+    proxLinea = `<span style="color:${cfg[1]};font-weight:600;">${cfg[0]} ${fmtFecha(seg.proximo)} (${rel})</span><span style="color:#9CA3AF;font-weight:400;">${manualActivo ? ' · fijado a mano' : ' · automático'}</span>`;
+  }
+  const ultimoTxt = l.ultimo_contacto ? fmtFecha(l.ultimo_contacto) : '—';
+  const insta = leadInstaHref(l.instagram);
+  const fInput = (campo, valor, ph) => `<input type="text" value="${escapeHtml(valor || '')}" placeholder="${ph}" onchange="leadsSetCampo('${l.id}','${campo}',this.value)" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;">`;
+
+  const notasHTML = (l.notas && l.notas.length)
+    ? l.notas.map((n, i) => `
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #F3F4F6;">
+          <div style="font-size:11px;color:#9CA3AF;white-space:nowrap;min-width:64px;">${fmtFecha(n.fecha)}</div>
+          <div style="font-size:13px;flex:1;">${escapeHtml(n.texto)}</div>
+          <button class="btn-sm" title="Borrar nota" onclick="leadsBorrarNota('${l.id}', ${i})" style="padding:0 6px;color:#DC2626;">✕</button>
+        </div>`).join('')
+    : '<div style="font-size:12px;color:#9CA3AF;padding:6px 0;">Sin notas todavía.</div>';
+
+  const archivado = l.estado !== 'activo';
+
+  return `
+    <!-- Datos del lead -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div><label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Nombre</label>${fInput('nombre', l.nombre, 'Nombre del contacto / local')}</div>
+      <div><label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">WhatsApp / Teléfono</label>${fInput('telefono', l.telefono, 'Ej: 2235123456')}</div>
+      <div>
+        <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Instagram / Página</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${fInput('instagram', l.instagram, '@usuario o link')}
+          ${insta ? `<a href="${insta}" target="_blank" rel="noopener" class="btn-sm" style="white-space:nowrap;background:#2563EB;color:#fff;">Abrir ↗</a>` : ''}
+        </div>
+      </div>
+      <div><label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Ciudad</label>${fInput('ciudad', l.ciudad, 'Ej: Mar del Plata')}</div>
+    </div>
+
+    <!-- Seguimiento -->
+    <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">📞 Seguimiento</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Recontactar cada</label>
+          <select onchange="leadsSetCadencia('${l.id}', this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;">${cadOpts}</select>
+        </div>
+        <button class="btn-sm" onclick="leadsHableHoy('${l.id}')" style="background:#16A34A;color:#fff;">✅ Hablé hoy</button>
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Último contacto</label>
+          <div style="font-size:13px;padding:6px 0;">${ultimoTxt}</div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Próximo contacto</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="date" value="${l.proximo_manual || (seg.proximo || '')}" onchange="leadsSetProximoManual('${l.id}', this.value)" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;cursor:pointer;">
+            ${manualActivo ? `<button class="btn-sm" onclick="leadsSetProximoManual('${l.id}', '')" title="Volver a calcularlo solo según cada cuánto lo recontactás">↺ Automático</button>` : ''}
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;margin-top:3px;">Tocá la fecha para fijar otra a mano.</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:13px;">${proxLinea}</div>
+
+      <div style="margin-top:14px;">
+        <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:4px;">Nota de seguimiento</label>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <input type="date" id="lead-nota-fecha" value="${hoyISO()}" title="Fecha de la nota — viene puesta en hoy, cambiala si la charla fue otro día" style="padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;">
+          <textarea id="lead-nota-input" rows="2" placeholder="Qué hablaron, qué quedó pendiente..." style="flex:1;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+          <button class="btn-sm" onclick="leadsAgregarNota('${l.id}')" style="align-self:flex-start;">Agregar</button>
+        </div>
+        <div style="font-size:10px;color:#9CA3AF;margin-top:3px;">La fecha viene puesta en hoy. Cambiala si la nota es de otro día.</div>
+        <div style="margin-top:8px;">${notasHTML}</div>
+      </div>
+    </div>
+
+    <!-- Estado del lead -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      ${archivado
+        ? `<span style="font-size:13px;color:#6B7280;">Estado: <b>${LEAD_ESTADO_LABEL[l.estado]}</b></span>
+           <button class="btn-sm" onclick="leadsReactivar('${l.id}')">↩ Reactivar (volver a activos)</button>`
+        : `<button class="btn-sm" onclick="leadsMarcarComprado('${l.id}')" style="background:#16A34A;color:#fff;">✓ Ya compró (sale de la lista)</button>
+           <button class="btn-sm" onclick="leadsDescartar('${l.id}')" style="color:#DC2626;">✕ Descartar</button>`}
+    </div>`;
+}
+
+async function leadsSetCampo(id, campo, val) {
+  const l = leadsRef(id);
+  l[campo] = val;
+  await leadsGuardar();
+  leadsRender();
+  if (leadCurrentId === id && (campo === 'instagram')) leadsAbrirModal(id); // refrescar el botón "Abrir ↗"
+}
+
+async function leadsSetCadencia(id, val) {
+  const l = leadsRef(id); l.cadencia = val || '';
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsHableHoy(id) {
+  const l = leadsRef(id); l.ultimo_contacto = hoyISO(); l.proximo_manual = null;
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsSetProximoManual(id, val) {
+  const l = leadsRef(id); l.proximo_manual = val || null;
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsAgregarNota(id) {
+  const ta = document.getElementById('lead-nota-input');
+  const texto = (ta?.value || '').trim();
+  if (!texto) return;
+  const fechaInput = document.getElementById('lead-nota-fecha');
+  const fecha = (fechaInput?.value || '').trim() || hoyISO();
+  const l = leadsRef(id);
+  l.notas.unshift({ fecha, texto });
+  l.notas.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsBorrarNota(id, idx) {
+  const l = leadsRef(id); l.notas.splice(idx, 1);
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsMarcarComprado(id) {
+  const l = leadsRef(id); l.estado = 'comprado';
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsCerrarModal();
+}
+
+async function leadsDescartar(id) {
+  if (!confirm('¿Descartar este lead? Sale de la lista de activos (lo podés ver con «Ver archivados»).')) return;
+  const l = leadsRef(id); l.estado = 'descartado';
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsCerrarModal();
+}
+
+async function leadsReactivar(id) {
+  const l = leadsRef(id); l.estado = 'activo';
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsAbrirModal(id);
+}
+
+async function leadsEliminar(id) {
+  if (!confirm('¿Borrar este lead definitivamente? No se puede deshacer.')) return;
+  delete leadsData[id];
+  await leadsGuardar(); leadsRender();
+  if (leadCurrentId === id) leadsCerrarModal();
+}
+
 // ── Banco de mensajes (CRM) — editable, compartido en KV ─────────────────────────
 // Plantillas por defecto (semilla). Una vez que se edita, manda lo guardado en KV.
 const BANCO_MENSAJES = [
@@ -10457,7 +10826,12 @@ async function ubicacionesInit() {
   ubicacionesRenderTabla();
 }
 
-function ubicacionesSet(pid, val) { ubiCambios[pid] = val; }
+// Formato válido: número-número (ej. 11-1). Vacío también es válido (limpia).
+function _ubiValido(v) { v = (v || '').trim(); return v === '' || /^\d+-\d+$/.test(v); }
+function ubicacionesSet(pid, val, el) {
+  ubiCambios[pid] = val;
+  if (el) el.style.borderColor = _ubiValido(val) ? '#0F766E' : '#DC2626';
+}
 
 function ubicacionesRenderTabla() {
   const q = (document.getElementById('ubi-search').value || '').toLowerCase().trim();
@@ -10474,15 +10848,20 @@ function ubicacionesRenderTabla() {
     return `<tr>
         <td><div style="font-weight:600;">${escapeHtml(p.name)}</div></td>
         <td style="color:#6B7280;">${escapeHtml(p.sku)}</td>
-        <td><input type="text" maxlength="20" value="${escapeHtml(val)}" oninput="ubicacionesSet(${p.product_id}, this.value)" placeholder="ej: 17D" style="width:150px;padding:5px 7px;border:1px solid ${changed ? '#0F766E' : '#D1D5DB'};border-radius:6px;${changed ? 'background:#ECFDF5;' : ''}"></td>
+        <td><input type="text" maxlength="20" value="${escapeHtml(val)}" oninput="ubicacionesSet(${p.product_id}, this.value, this)" placeholder="ej: 11-1" title="Formato: número-número (ej. 11-1)" style="width:150px;padding:5px 7px;border:1px solid ${changed ? '#0F766E' : (_ubiValido(val) ? '#D1D5DB' : '#DC2626')};border-radius:6px;${changed ? 'background:#ECFDF5;' : ''}"></td>
       </tr>`;
   }).join('');
 }
 
 async function ubicacionesGuardar(btn) {
-  const cambios = ubiData.filter(p => ubiCambios[p.product_id] != null && (ubiCambios[p.product_id] || '').trim() !== (p.actual || '').trim());
-  if (!cambios.length) { alert('No hay cambios para guardar.'); return; }
-  if (!confirm(`Vas a escribir la ubicación en GN (Deposito Minorista) de ${cambios.length} producto(s). ¿Confirmás?`)) return;
+  const cambiados = ubiData.filter(p => ubiCambios[p.product_id] != null && (ubiCambios[p.product_id] || '').trim() !== (p.actual || '').trim());
+  const invalidos = cambiados.filter(p => !_ubiValido(ubiCambios[p.product_id]));
+  const cambios = cambiados.filter(p => _ubiValido(ubiCambios[p.product_id]));
+  if (invalidos.length) {
+    if (!confirm(`${invalidos.length} producto(s) tienen formato inválido (debe ser número-número, ej: 11-1) y se van a OMITIR.\n\n¿Guardar los ${cambios.length} válido(s)?`)) return;
+  }
+  if (!cambios.length) { alert(invalidos.length ? 'No hay cambios válidos para guardar (revisá el formato número-número, ej: 11-1).' : 'No hay cambios para guardar.'); return; }
+  if (!invalidos.length && !confirm(`Vas a escribir la ubicación en GN (Deposito Minorista) de ${cambios.length} producto(s). ¿Confirmás?`)) return;
   const msg = document.getElementById('ubi-msg');
   const orig = btn.textContent; btn.disabled = true;
   let ok = 0, err = 0;
@@ -10502,7 +10881,7 @@ async function ubicacionesGuardar(btn) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { cerrarClienteModal(); cerrarBancoMensajes(); navCloseAll(); }
+  if (e.key === 'Escape') { cerrarClienteModal(); leadsCerrarModal(); cerrarBancoMensajes(); navCloseAll(); }
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'cliente-modal') cerrarClienteModal();
