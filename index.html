@@ -1464,6 +1464,8 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <span id="ubi-msg" style="font-size:12px;color:#16A34A;"></span>
+            <button class="btn-sm" onclick="ubicacionesInit()" title="Volver a leer la lista">↻ Actualizar lista</button>
+            <button class="btn-sm" onclick="ubicacionesActualizarGN(this)" title="Traé productos/stock nuevos de GN y recargá la lista (para que aparezca un ingreso recién cargado)" style="background:#378ADD;color:#fff;">🔄 Traer de GN</button>
             <button class="btn-sm" id="ubi-guardar" onclick="ubicacionesGuardar(this)" style="background:#0F766E;color:#fff;">💾 Guardar cambios</button>
           </div>
         </div>
@@ -10812,18 +10814,48 @@ async function ubicacionesInit() {
   const tb = document.getElementById('ubi-tbody');
   if (tb) tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando…</td></tr>';
   ubiCambios = {};
-  let rows = [];
+  let rows = [], prods = [];
   try {
-    rows = await fetchAll('inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent('Deposito Minorista')}&order=product_name`, 'ubicaciones', true);
-  } catch (e) { rows = []; }
+    [rows, prods] = await Promise.all([
+      fetchAll('inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent('Deposito Minorista')}&order=product_name`, 'ubicaciones', true),
+      fetchAll('productos', 'select=id&active=eq.1&order=id', 'ubi-activos', true),
+    ]);
+  } catch (e) { rows = []; prods = []; }
+  // Solo productos activos (consultado fresco: un ingreso nuevo recién sincronizado también entra)
+  const activos = new Set(prods.map(p => p.id));
   const map = new Map();
   for (const r of rows) {
     const pid = r.product_id;
+    if (activos.size && !activos.has(pid)) continue; // saltear inactivos
     if (!map.has(pid)) map.set(pid, { product_id: pid, name: r.product_name || ('#' + pid), sku: r.sku || '', actual: r.observation || '' });
     else if (!map.get(pid).actual && r.observation) map.get(pid).actual = r.observation;
   }
   ubiData = [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
   ubicacionesRenderTabla();
+}
+
+// Trae productos/stock nuevos de GN (mismo sync que "Actualizar inventario") y recarga la lista.
+async function ubicacionesActualizarGN(btn) {
+  if (_repoSyncing) return; _repoSyncing = true;
+  const orig = btn ? btn.textContent : ''; const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo a GN…');
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey() }) });
+    const d = await r.json(); if (!d.ok) { alert('No se pudo iniciar la actualización.\n' + (d.error || '')); return; }
+    const t0 = Date.now(), MAX = 7 * 60 * 1000; let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Trayendo… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try { const rr = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${secs}`); const dd = await rr.json(); if (dd.run && dd.run.id !== baseId && dd.run.status === 'completed') { done = true; break; } } catch (e) {}
+    }
+    setTxt('↻ Recargando…'); await ubicacionesInit();
+    if (!done) alert('La sincronización con GN tardó más de lo normal. Te muestro lo último disponible.');
+  } catch (e) { alert('Error: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } _repoSyncing = false; }
 }
 
 // Formato válido: número-número (ej. 11-1). Vacío también es válido (limpia).
