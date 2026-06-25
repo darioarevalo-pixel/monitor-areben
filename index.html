@@ -1472,8 +1472,8 @@
         </div>
         <div class="toolbar" style="margin-bottom:10px;">
           <input type="text" id="ubi-search" placeholder="Buscar producto o SKU..." oninput="ubicacionesRenderTabla()">
-          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ubi-sin" onchange="ubicacionesRenderTabla()"> Solo sin ubicación</label>
-          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ubi-rep" onchange="ubicacionesRenderTabla()"> Solo a reparar</label>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Sin ubicación cargada o con formato viejo (hay que cargarla a mano)"><input type="checkbox" id="ubi-sin" onchange="ubicacionesRenderTabla()"> Solo sin ubicación</label>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Productos con variantes desparejas que se arreglan solos con 🔧 Reparar"><input type="checkbox" id="ubi-rep" onchange="ubicacionesRenderTabla()"> Solo a reparar</label>
           <span id="ubi-count" style="font-size:12px;color:#9CA3AF;margin-left:auto;"></span>
         </div>
         <div style="overflow-x:auto;max-height:600px;overflow-y:auto;">
@@ -11034,8 +11034,10 @@ function ubicacionesRenderTabla() {
   const soloRep = document.getElementById('ubi-rep')?.checked;
   let lista = ubiData;
   if (q) lista = lista.filter(p => (p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
-  if (soloSin) lista = lista.filter(p => !((ubiCambios[p.product_id] ?? p.actual) || '').trim());
-  if (soloRep) lista = lista.filter(p => p.inconsistente || p.malFormato);
+  // "Sin ubicación" = sin un NN-N válido: casillero vacío O formato viejo (ambos se cargan a mano).
+  const esNNN = v => /^\d+-\d+$/.test(String(v || '').trim());
+  if (soloSin) lista = lista.filter(p => !esNNN(ubiCambios[p.product_id] ?? p.actual));
+  if (soloRep) lista = lista.filter(p => p.reparable);
   document.getElementById('ubi-count').textContent = lista.length + ' producto' + (lista.length === 1 ? '' : 's');
   const tb = document.getElementById('ubi-tbody');
   if (!lista.length) { tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Sin productos</td></tr>'; return; }
