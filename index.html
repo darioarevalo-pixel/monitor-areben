@@ -9297,7 +9297,9 @@ async function repoInit() {
 async function repoCargarInventario() {
   let inv = [];
   // OJO: sbFetch trae como máximo 1000 filas (tope de Supabase). El inventario tiene miles → usar fetchAll (paginado).
-  try { inv = await fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name,observation', 'inventario', true); } catch (e) { inv = []; }
+  // observation (ubicación) solo existe en la base de BDI; en Zattia pedirla rompe el select → no la incluimos.
+  const obsSel = _cuentaKey() === 'bdi' ? ',observation' : '';
+  try { inv = await fetchAll('inventario', `select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name${obsSel}`, 'inventario', true); } catch (e) { inv = []; }
   const s7local = await repoVentasLocal7d();
   const idx = _mktIndexTN();
   const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
