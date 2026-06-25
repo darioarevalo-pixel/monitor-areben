@@ -1466,12 +1466,14 @@
             <span id="ubi-msg" style="font-size:12px;color:#16A34A;"></span>
             <button class="btn-sm" onclick="ubicacionesInit()" title="Volver a leer la lista">↻ Actualizar lista</button>
             <button class="btn-sm" onclick="ubicacionesActualizarGN(this)" title="Traé productos/stock nuevos de GN y recargá la lista (para que aparezca un ingreso recién cargado)" style="background:#378ADD;color:#fff;">🔄 Traer de GN</button>
+            <button class="btn-sm" id="ubi-reparar" onclick="ubicacionesReparar(this)" title="Pisa todas las variantes con la ubicación correcta (NN-N) en los productos que quedaron con variantes desparejas" style="background:#B45309;color:#fff;">🔧 Reparar</button>
             <button class="btn-sm" id="ubi-guardar" onclick="ubicacionesGuardar(this)" style="background:#0F766E;color:#fff;">💾 Guardar cambios</button>
           </div>
         </div>
         <div class="toolbar" style="margin-bottom:10px;">
           <input type="text" id="ubi-search" placeholder="Buscar producto o SKU..." oninput="ubicacionesRenderTabla()">
           <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ubi-sin" onchange="ubicacionesRenderTabla()"> Solo sin ubicación</label>
+          <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ubi-rep" onchange="ubicacionesRenderTabla()"> Solo a reparar</label>
           <span id="ubi-count" style="font-size:12px;color:#9CA3AF;margin-left:auto;"></span>
         </div>
         <div style="overflow-x:auto;max-height:600px;overflow-y:auto;">
@@ -10976,10 +10978,21 @@ async function ubicacionesInit() {
   for (const r of rows) {
     const pid = r.product_id;
     if (activos.size && !activos.has(pid)) continue; // saltear inactivos
-    if (!map.has(pid)) map.set(pid, { product_id: pid, name: r.product_name || ('#' + pid), sku: r.sku || '', actual: r.observation || '' });
-    else if (!map.get(pid).actual && r.observation) map.get(pid).actual = r.observation;
+    if (!map.has(pid)) map.set(pid, { product_id: pid, name: r.product_name || ('#' + pid), sku: r.sku || '', obsList: [] });
+    map.get(pid).obsList.push((r.observation == null ? '' : String(r.observation)).trim()); // una entrada por variante
   }
-  ubiData = [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+  // Por producto: ubicación dominante (NN-N más frecuente), inconsistencia (variantes con distinto valor) y formato viejo.
+  ubiData = [...map.values()].map(p => {
+    const obs = p.obsList;
+    const distinct = [...new Set(obs)];                       // incluye '' (variantes sin valor)
+    const valores = [...new Set(obs.filter(Boolean))];        // valores no vacíos distintos (para mostrar)
+    const validos = obs.filter(o => /^\d+-\d+$/.test(o));     // los que tienen formato NN-N
+    let actual = '';
+    if (validos.length) { const f = {}; validos.forEach(v => f[v] = (f[v] || 0) + 1); actual = Object.keys(f).sort((a, b) => f[b] - f[a])[0]; }
+    const inconsistente = distinct.length > 1;                // no todas las variantes tienen el mismo valor
+    const malFormato = valores.length > 0 && !actual;         // tiene códigos pero ninguno es NN-N (formato viejo)
+    return { product_id: p.product_id, name: p.name, sku: p.sku, actual, valores, nvar: obs.length, inconsistente, malFormato, reparable: inconsistente && !!actual };
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
   ubicacionesRenderTabla();
 }
 
@@ -11018,17 +11031,22 @@ function ubicacionesSet(pid, val, el) {
 function ubicacionesRenderTabla() {
   const q = (document.getElementById('ubi-search').value || '').toLowerCase().trim();
   const soloSin = document.getElementById('ubi-sin')?.checked;
+  const soloRep = document.getElementById('ubi-rep')?.checked;
   let lista = ubiData;
   if (q) lista = lista.filter(p => (p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
   if (soloSin) lista = lista.filter(p => !((ubiCambios[p.product_id] ?? p.actual) || '').trim());
+  if (soloRep) lista = lista.filter(p => p.inconsistente || p.malFormato);
   document.getElementById('ubi-count').textContent = lista.length + ' producto' + (lista.length === 1 ? '' : 's');
   const tb = document.getElementById('ubi-tbody');
   if (!lista.length) { tb.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#9CA3AF;">Sin productos</td></tr>'; return; }
   tb.innerHTML = lista.map(p => {
     const val = ubiCambios[p.product_id] ?? p.actual;
     const changed = (ubiCambios[p.product_id] != null && ubiCambios[p.product_id] !== p.actual);
+    let aviso = '';
+    if (p.reparable) aviso = `<div style="font-size:11px;color:#B45309;">⚠ variantes desparejas: ${escapeHtml(p.valores.join(', '))} · se reparan a <b>${escapeHtml(p.actual)}</b></div>`;
+    else if (p.malFormato) aviso = `<div style="font-size:11px;color:#B45309;">⚠ formato viejo (${escapeHtml(p.valores.join(', '))}) — cargá la ubicación nueva</div>`;
     return `<tr>
-        <td><div style="font-weight:600;">${escapeHtml(p.name)}</div></td>
+        <td><div style="font-weight:600;">${escapeHtml(p.name)}</div>${aviso}</td>
         <td style="color:#6B7280;">${escapeHtml(p.sku)}</td>
         <td><input type="text" maxlength="20" value="${escapeHtml(val)}" oninput="ubicacionesSet(${p.product_id}, this.value, this)" placeholder="ej: 11-1" title="Formato: número-número (ej. 11-1)" style="width:150px;padding:5px 7px;border:1px solid ${changed ? '#0F766E' : (_ubiValido(val) ? '#D1D5DB' : '#DC2626')};border-radius:6px;${changed ? 'background:#ECFDF5;' : ''}"></td>
       </tr>`;
@@ -11062,6 +11080,40 @@ async function ubicacionesGuardar(btn) {
   if (msg) { msg.textContent = `✓ ${ok} guardado${ok === 1 ? '' : 's'}` + (err ? ` · ${err} con error` : ''); setTimeout(() => { if (msg) msg.textContent = ''; }, 8000); }
   ubicacionesRenderTabla();
   if (err) alert(`Se guardaron ${ok} y ${err} dieron error.\nMotivo del primero: ${primerError}\n\nLos que fallaron siguen cargados acá — apretá "Guardar cambios" de nuevo para reintentar solo esos.`);
+}
+
+// Repara los productos con variantes desparejas pero con un NN-N dominante: pisa TODAS las variantes con ese valor.
+// Los que tienen solo formato viejo (sin NN-N válido) no se tocan: hay que cargarles la ubicación a mano.
+async function ubicacionesReparar(btn) {
+  const aReparar = ubiData.filter(p => p.reparable);
+  const soloViejo = ubiData.filter(p => p.malFormato && !p.reparable);
+  if (!aReparar.length) {
+    alert(soloViejo.length
+      ? `No hay productos auto-reparables.\n\nHay ${soloViejo.length} con formato viejo (sin NN-N): cargales la ubicación a mano (filtro "Solo a reparar").`
+      : 'No hay variantes desparejas para reparar 🎉');
+    return;
+  }
+  if (!confirm(`Voy a pisar TODAS las variantes con su ubicación correcta en ${aReparar.length} producto(s) que quedaron desparejos.\n\n` +
+    (soloViejo.length ? `(${soloViejo.length} con formato viejo NO se tocan: cargalos a mano.)\n\n` : '') + '¿Confirmás?')) return;
+  const msg = document.getElementById('ubi-msg');
+  const orig = btn.textContent; btn.disabled = true;
+  let ok = 0, err = 0, primerError = '';
+  for (let i = 0; i < aReparar.length; i++) {
+    const p = aReparar[i];
+    btn.textContent = `⏳ ${i + 1}/${aReparar.length}`;
+    try {
+      const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: p.actual }) });
+      const d = await r.json();
+      if (d && d.ok) ok++;
+      else { err++; if (!primerError) primerError = (d && (d.error || (d.pendientes ? `${d.pendientes} variante(s) sin escribir` : ''))) || 'desconocido'; }
+    } catch (e) { err++; if (!primerError) primerError = e.message; }
+    await new Promise(res => setTimeout(res, 300)); // pausa entre productos (no saturar GN)
+  }
+  btn.disabled = false; btn.textContent = orig;
+  if (msg) { msg.textContent = `✓ ${ok} reparado${ok === 1 ? '' : 's'}` + (err ? ` · ${err} con error` : ''); setTimeout(() => { if (msg) msg.textContent = ''; }, 8000); }
+  await ubicacionesInit(); // recargar para reflejar el estado real
+  if (err) alert(`Se repararon ${ok} y ${err} dieron error.\nMotivo del primero: ${primerError}\n\nVolvé a apretar "Reparar" para reintentar los que falten.`);
+  else alert(`Listo: ${ok} producto(s) reparado(s). Ojo: la lista se recarga con los datos del último sync; si querés verlo al instante tocá "🔄 Traer de GN".`);
 }
 
 document.addEventListener('keydown', e => {

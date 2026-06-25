@@ -59,20 +59,44 @@ export default async function handler(req, res) {
     // 2) Filtrar al depósito pedido (por nombre, tolerante)
     const target = filas.filter(f => String(f.store_name || '').toLowerCase().includes(store));
     if (!target.length) return res.status(200).json({ ok: true, productId, updated: 0, total: 0, nota: `Sin variantes en "${body.store || 'Deposito Mayorista'}"` });
+    const total = target.length;
+    const want = (obs || '');                     // valor esperado tras escribir (null → '')
+    const sameObs = v => (v == null ? '' : String(v)).trim() === want;
 
-    // 3) PATCH de la observación en cada fila
-    let updated = 0; const errores = [];
-    for (const f of target) {
+    // 3) Escribir y VERIFICAR: en cada pase, PATCH solo las variantes que aún no tienen el valor,
+    //    luego re-leer y reintentar las que faltan. GN hace rate-limit con muchas variantes seguidas,
+    //    así que cada pase reintenta solo las pendientes hasta que entren todas (máx 4 pases).
+    let pend = target.slice();                    // pendientes de este pase (filas con inventory_id)
+    let lastErr = '';
+    for (let pase = 1; pase <= 4 && pend.length; pase++) {
+      const errInv = [];
+      for (const f of pend) {
+        try {
+          const rP = await gnFetch(`${GN_BASE}/inventario/${f.inventory_id}/observacion`, {
+            method: 'PATCH', headers, body: JSON.stringify({ observation: obs }),
+          });
+          if (!rP.ok) { const t = await rP.text(); errInv.push(f.inventory_id); lastErr = `HTTP ${rP.status}: ${t.slice(0, 120)}`; }
+        } catch (e) { errInv.push(f.inventory_id); lastErr = e.message; }
+        await sleep(300);
+      }
+      // Re-leer el producto y quedarnos solo con las variantes de Minorista que NO tienen el valor todavía.
+      await sleep(600);
       try {
-        const rP = await gnFetch(`${GN_BASE}/inventario/${f.inventory_id}/observacion`, {
-          method: 'PATCH', headers, body: JSON.stringify({ observation: obs }),
-        });
-        if (rP.ok) updated++;
-        else { const t = await rP.text(); errores.push({ inventory_id: f.inventory_id, status: rP.status, detalle: t.slice(0, 120) }); }
-      } catch (e) { errores.push({ inventory_id: f.inventory_id, error: e.message }); }
-      await sleep(200);
+        const rV = await gnFetch(`${GN_BASE}/inventario/${productId}`, { headers });
+        const dV = await rV.json();
+        if (rV.ok) {
+          const filasV = (dV.variantes || []).flatMap(v => (v.stock_por_tienda || []).map(s => ({ ...s, size_name: v.size_name })));
+          pend = filasV.filter(f => String(f.store_name || '').toLowerCase().includes(store) && !sameObs(f.observation));
+        } else {
+          // si no podemos verificar, reintentar solo las que dieron error en el PATCH
+          pend = pend.filter(f => errInv.includes(f.inventory_id));
+        }
+      } catch (e) {
+        pend = pend.filter(f => errInv.includes(f.inventory_id));
+      }
     }
-    return res.status(200).json({ ok: errores.length === 0, productId, updated, total: target.length, errores });
+    const pendientes = pend.length;
+    return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, pendientes, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
