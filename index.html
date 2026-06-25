@@ -3705,7 +3705,7 @@ function ingGuardar() {
   }, 600);
 }
 function ingNuevoId() { return 'g' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
-function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', modelos: [], disenos: [], celdas: {}, gallery: [] }); ingRender(); ingGuardar(); }
+function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', modelos: ingModelosBase(), disenos: ingDisenosVacios(10), celdas: {}, gallery: [] }); ingRender(); ingGuardar(); }
 function ingSetCampo(id, campo, val) {
   if (!ingPuedeEditar()) return;
   const g = ingData.find(x => x.id === id); if (!g) return;
@@ -3713,6 +3713,24 @@ function ingSetCampo(id, campo, val) {
   if (['fecha', 'estado'].includes(campo)) ingRender(); // afectan orden / totales
 }
 function ingEliminar(id) { if (!ingPuedeEditar()) return; if (!confirm('¿Eliminar este ingreso?')) return; ingData = ingData.filter(x => x.id !== id); ingRender(); ingGuardar(); }
+// ── Base fija de modelos (iPhone 13 → 17 Pro Max, sin Plus/mini/Air) ──
+const ING_MODELOS_BASE = [
+  'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+  'iPhone 14', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+  'iPhone 15', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+  'iPhone 16', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+  'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
+];
+function ingModelosBase() { return ING_MODELOS_BASE.map(m => ({ id: ingNuevoId(), model: m })); }
+function ingDisenosVacios(n) { const a = []; for (let i = 0; i < n; i++) a.push({ id: ingNuevoId(), nombre: '', img: '' }); return a; }
+function ingCargarBase(gid) {
+  if (!ingPuedeEditar()) return;
+  const g = ingData.find(x => x.id === gid); if (!g) return;
+  g.modelos = g.modelos || [];
+  const have = new Set(g.modelos.map(m => (m.model || '').toLowerCase().trim()));
+  ING_MODELOS_BASE.forEach(m => { if (!have.has(m.toLowerCase())) g.modelos.push({ id: ingNuevoId(), model: m }); });
+  ingRender(); ingGuardar();
+}
 // ── Modelo de datos: grilla (modelos = filas, diseños = columnas) + galería ──
 function ingNormalizar(g) {
   if (!g || typeof g !== 'object') return g;
@@ -3861,6 +3879,7 @@ function ingCard(g) {
   const addBtns = `<div style="display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap;">
     <button onclick="ingModeloAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo (fila)</button>
     <button onclick="ingDisenoAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar diseño (columna)</button>
+    <button onclick="ingCargarBase('${g.id}')" title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">↺ Cargar modelos base</button>
     <span style="font-size:12px;color:#374151;margin-left:auto;">Total: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
   </div>`;
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
