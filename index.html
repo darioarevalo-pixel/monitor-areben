@@ -3765,6 +3765,31 @@ function ingCelda(gid, mid, did, val) {
   else if (g.celdas[mid]) { delete g.celdas[mid][did]; }
   ingRender(); ingGuardar();
 }
+// Copiar cantidades: igualar una fila (copia la 1ª cantidad cargada a todos los diseños)
+function ingFilaIgualar(gid, mid) {
+  if (!ingPuedeEditar()) return;
+  const g = ingData.find(x => x.id === gid); if (!g) return;
+  const disenos = g.disenos || []; if (!disenos.length) return;
+  let val = 0;
+  for (const d of disenos) { const v = ingCeldaGet(g, mid, d.id); if (v > 0) { val = v; break; } }
+  if (val <= 0) { alert('Cargá una cantidad en algún diseño de esa fila y después tocá ⎘ para copiarla al resto.'); return; }
+  g.celdas = g.celdas || {}; g.celdas[mid] = g.celdas[mid] || {};
+  disenos.forEach(d => { g.celdas[mid][d.id] = val; });
+  ingRender(); ingGuardar();
+}
+// Igualar toda la grilla: misma cantidad en todos los modelos y diseños
+function ingGrillaIgualar(gid) {
+  if (!ingPuedeEditar()) return;
+  const g = ingData.find(x => x.id === gid); if (!g) return;
+  const modelos = g.modelos || [], disenos = g.disenos || [];
+  if (!modelos.length || !disenos.length) { alert('Agregá modelos y diseños primero.'); return; }
+  const raw = prompt('Misma cantidad para TODA la grilla (todos los modelos y diseños):', '');
+  if (raw === null) return;
+  const n = Math.max(0, parseInt(raw) || 0);
+  g.celdas = g.celdas || {};
+  modelos.forEach(m => { g.celdas[m.id] = g.celdas[m.id] || {}; disenos.forEach(d => { if (n > 0) g.celdas[m.id][d.id] = n; else delete g.celdas[m.id][d.id]; }); });
+  ingRender(); ingGuardar();
+}
 // Filas (modelos de celular)
 function ingModeloAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.modelos = g.modelos || []).push({ id: ingNuevoId(), model: '' }); ingRender(); ingGuardar(); }
 function ingModeloSet(gid, mid, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const m = (g.modelos || []).find(x => x.id === mid); if (!m) return; m.model = val; ingGuardar(); }
@@ -3850,6 +3875,7 @@ function ingCard(g) {
       <th style="text-align:left;padding:2px 4px;position:sticky;left:0;background:#fff;z-index:1;">
         <div style="display:flex;align-items:center;gap:2px;">
           <input list="fm-sim-modelos" value="${esc(m.model)}" onchange="ingModeloSet('${g.id}','${m.id}',this.value)" placeholder="Modelo" style="width:128px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;">
+          <button onclick="ingFilaIgualar('${g.id}','${m.id}')" title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:13px;">⎘</button>
           <button onclick="ingModeloDel('${g.id}','${m.id}')" title="Quitar modelo" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button>
         </div>
       </th>
@@ -3880,6 +3906,7 @@ function ingCard(g) {
     <button onclick="ingModeloAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo (fila)</button>
     <button onclick="ingDisenoAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar diseño (columna)</button>
     <button onclick="ingCargarBase('${g.id}')" title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">↺ Cargar modelos base</button>
+    <button onclick="ingGrillaIgualar('${g.id}')" title="Poner la misma cantidad en todos los modelos y diseños" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">= Misma cantidad para toda la grilla</button>
     <span style="font-size:12px;color:#374151;margin-left:auto;">Total: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
   </div>`;
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
