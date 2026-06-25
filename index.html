@@ -9190,7 +9190,7 @@ async function repoInit() {
 async function repoCargarInventario() {
   let inv = [];
   // OJO: sbFetch trae como máximo 1000 filas (tope de Supabase). El inventario tiene miles → usar fetchAll (paginado).
-  try { inv = await fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name', 'inventario', true); } catch (e) { inv = []; }
+  try { inv = await fetchAll('inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name,observation', 'inventario', true); } catch (e) { inv = []; }
   const s7local = await repoVentasLocal7d();
   const idx = _mktIndexTN();
   const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
@@ -9210,8 +9210,10 @@ async function repoCargarInventario() {
       const pushCand = c => { const t = String(c || '').trim(); if (!t) return; const l = t.toLowerCase(); if (_repoCatGenericas.has(l) || _repoEsPromo(t) || _repoEsModeloCat(t) || _repoEsFundaCat(t)) return; if (!cats.some(x => x.toLowerCase() === l)) cats.push(t); };
       String((p && p.category) || '').split(',').forEach(pushCand);
       if (tn && Array.isArray(tn.categories)) tn.categories.forEach(pushCand);
-      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cats, catFallback: (p && p.category) || '(sin categoría)', cat: '(sin categoría)', subcat: null, modelo, s7: s7local[vid] || 0 };
+      map[vid] = { vid, pid, sid, name: r.product_name || '—', size: r.size_name || '', sku: r.sku || '', local: 0, deposito: 0, cats, catFallback: (p && p.category) || '(sin categoría)', cat: '(sin categoría)', subcat: null, modelo, s7: s7local[vid] || 0, ubic: r.observation || '' };
     }
+    // Ubicación física: viene en la fila de "Deposito Minorista" (la que tiene observación). Es a nivel producto.
+    if (r.observation && !map[vid].ubic) map[vid].ubic = r.observation;
     const q = r.available_quantity || 0;
     const _sn = String(r.store_name || '').toLowerCase().trim();
     if (_sn === 'local') map[vid].local += q;
@@ -9243,6 +9245,19 @@ function repoSetCatOff(cat) {
   const i = repoCfg.catsOff.findIndex(x => String(x).toLowerCase() === l);
   if (i >= 0) repoCfg.catsOff.splice(i, 1); else repoCfg.catsOff.push(cat);
   repoCfgSave(); _repoAplicarCats(); repoRenderConfig();
+}
+// Orden por ubicación física (observación de GN). Formato esperado "NN-N" (ubicación-posición);
+// tolera formato viejo ("17D" → ubicación 17). Sin ubicación → al final.
+function _repoUbicKey(s) {
+  s = String(s == null ? '' : s).trim();
+  if (!s) return [Infinity, Infinity, ''];
+  const m = s.match(/^(\d+)\s*[-\s]?\s*(\d+)?\s*(.*)$/);
+  if (m) return [parseInt(m[1], 10), m[2] ? parseInt(m[2], 10) : 0, (m[3] || '').toLowerCase()];
+  return [Number.MAX_SAFE_INTEGER, 0, s.toLowerCase()]; // texto sin número: antes de los vacíos
+}
+function _repoUbicCmp(ua, ub) {
+  const a = _repoUbicKey(ua), b = _repoUbicKey(ub);
+  return (a[0] - b[0]) || (a[1] - b[1]) || a[2].localeCompare(b[2], 'es');
 }
 function repoReporte() {
   const ap = new Set(repoCfg.apagados.map(String));
@@ -9401,8 +9416,8 @@ function repoRender() {
     </div>`;
   const rep = repoReporte();
   const porProd = {};
-  rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, cat: it.cat, items: [] }; porProd[it.pid].items.push(it); });
-  const prodKeys = Object.keys(porProd).sort((a, b) => porProd[a].name.localeCompare(porProd[b].name, 'es'));
+  rep.forEach(it => { if (!porProd[it.pid]) porProd[it.pid] = { name: it.name, cat: it.cat, ubic: it.ubic || '', items: [] }; porProd[it.pid].items.push(it); });
+  const prodKeys = Object.keys(porProd).sort((a, b) => _repoUbicCmp(porProd[a].ubic, porProd[b].ubic) || porProd[a].name.localeCompare(porProd[b].name, 'es'));
   const totalMover = rep.reduce((s, it) => s + repoMoverFinal(it), 0);
   const hayEdit = Object.keys(repoMoverManual).length > 0;
   html += `<div style="font-size:13px;margin:4px 0 8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>${rep.length}</b> variantes para reponer en <b>${prodKeys.length}</b> producto(s) · <b>${totalMover}</b> u. a mover</span>` + (hayEdit ? `<button onclick="repoResetMover()" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:2px 9px;font-size:11px;cursor:pointer;color:#6B7280;">↺ Volver a sugeridos</button>` : '') + `</div>`;
@@ -9411,7 +9426,10 @@ function repoRender() {
   prodKeys.forEach(pid => {
     const g = porProd[pid];
     const items = g.items.sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
-    html += `<div style="font-weight:700;font-size:13px;color:#374151;margin:14px 0 6px;">${esc(g.name)} <span style="color:#9CA3AF;font-weight:400;">· ${esc(g.cat)} · ${items.length}</span></div>`;
+    const ubicBadge = g.ubic
+      ? `<span style="display:inline-block;background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;font-weight:700;border-radius:6px;padding:1px 7px;margin-right:7px;font-size:12px;">📍 ${esc(g.ubic)}</span>`
+      : `<span style="display:inline-block;color:#D1D5DB;margin-right:7px;font-size:12px;" title="Sin ubicación cargada">📍 —</span>`;
+    html += `<div style="font-weight:700;font-size:13px;color:#374151;margin:14px 0 6px;">${ubicBadge}${esc(g.name)} <span style="color:#9CA3AF;font-weight:400;">· ${esc(g.cat)} · ${items.length}</span></div>`;
     const colgroup = `<colgroup><col><col style="width:58px"><col style="width:62px">${repoVerVentas ? '<col style="width:64px">' : ''}<col style="width:50px"><col style="width:72px"></colgroup>`;
     html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">${colgroup}<thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Local</th><th style="text-align:center;">Depós.</th>${repoVerVentas ? `<th style="text-align:center;" title="${_cuentaKey() === 'zattia' ? 'Unidades vendidas que descuentan del local (Mi Local + Tienda Nube) en los últimos 7 días' : 'Unidades vendidas en el local (canal Mi Local) en los últimos 7 días'}">7d local</th>` : ''}<th style="text-align:center;">Mín</th><th style="text-align:center;">Mover</th></tr></thead><tbody>`;
     items.forEach(it => {
@@ -9442,16 +9460,16 @@ function repoPDF() {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 12, RIGHT = 198; let y = 16;
   const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  // Lista plana: una fila por variante (Producto · Variante), ordenada por producto y variante.
-  const filas = rep.slice().sort((a, b) => a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
+  // Lista plana: una fila por variante (Ubicación · Producto · Variante), ordenada por ubicación (recorrido del depósito).
+  const filas = rep.slice().sort((a, b) => _repoUbicCmp(a.ubic, b.ubic) || a.name.localeCompare(b.name, 'es') || (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }));
   const totalMover = filas.reduce((s, it) => s + repoMoverFinal(it), 0);
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.text('Reposición de local — ' + _cuentaKey().toUpperCase(), M, y);
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120); y += 5; pdf.text(`${fecha} · ${filas.length} variantes · ${totalMover} u. a mover`, M, y); pdf.setTextColor(0); y += 8;
-  // Columnas: Producto · Variante | Depós (gris) | Repone (negrita) | ☐ Pickeado | ☐ No se encontró
-  const X = { prod: M, dep: 116, rep: 134, pick: 153, nf: 175 };
+  // Columnas: Ubic (negrita) | Producto · Variante | Depós (gris) | Repone (negrita) | ☐ Pickeado | ☐ No se encontró
+  const X = { ubic: M, prod: 30, dep: 120, rep: 138, pick: 156, nf: 178 };
   const header = () => {
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); pdf.setTextColor(120);
-    pdf.text('Producto · Variante', X.prod, y); pdf.text('Depós', X.dep, y); pdf.text('Repone', X.rep, y); pdf.text('Pickeado', X.pick, y); pdf.text('No se encontró', X.nf, y);
+    pdf.text('Ubic.', X.ubic, y); pdf.text('Producto · Variante', X.prod, y); pdf.text('Depós', X.dep, y); pdf.text('Repone', X.rep, y); pdf.text('Pickeado', X.pick, y); pdf.text('No se encontró', X.nf, y);
     pdf.setTextColor(0); pdf.setDrawColor(200); pdf.line(M, y + 1.6, RIGHT, y + 1.6); y += 5.5;
   };
   header();
@@ -9460,6 +9478,7 @@ function repoPDF() {
     const mover = repoMoverFinal(it);
     const etiqueta = `${it.name} · ${it.size || '—'}`;
     if (i % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M, y - 4.2, RIGHT - M, 6.6, 'F'); } // cebra: fila gris clara alternada
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(20); pdf.text(it.ubic || '—', X.ubic, y); // ubicación: clave de orden, destacada
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(20);
     pdf.text(pdf.splitTextToSize(etiqueta, X.dep - X.prod - 3)[0], X.prod, y);
     pdf.setTextColor(165); pdf.text(String(it.deposito), X.dep, y); pdf.setTextColor(20); // depósito gris claro
