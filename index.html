@@ -1372,7 +1372,7 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
           <div>
             <div style="font-size:16px;font-weight:700;">📦 Ingresos proyectados</div>
-            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:620px;">Planificá y seguí las importaciones/compras que están por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado. Se ordena por fecha de llegada. Se guarda en esta compu, por marca.</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:620px;">Seguí las importaciones de fundas por llegar: diseños (con foto), modelos y cantidades, proveedor, fecha estimada de arribo y estado. Sumá fotos y videos del pedido en la galería. Se ordena por fecha de llegada. Se guarda online, lo ven todos.</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <span id="ing-save-status" style="font-size:12px;"></span>
@@ -3687,11 +3687,13 @@ async function ingInit() {
     const r = await fetch(`${ING_API}?store=${_cuentaKey()}`);
     const d = await r.json();
     ingData = (d && d.ok && Array.isArray(d.ingresos)) ? d.ingresos : [];
+    ingData.forEach(ingNormalizar);
   } catch (e) { ingData = []; }
   ingRender();
 }
 function ingGuardar() {
   if (!ingPuedeEditar()) return;
+  ingData.forEach(ingDerivarItems);
   const st = document.getElementById('ing-save-status'); if (st) { st.textContent = 'Guardando…'; st.style.color = '#6B7280'; }
   clearTimeout(ingSaveT);
   ingSaveT = setTimeout(async () => {
@@ -3703,7 +3705,7 @@ function ingGuardar() {
   }, 600);
 }
 function ingNuevoId() { return 'g' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
-function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', items: [] }); ingRender(); ingGuardar(); }
+function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', modelos: [], disenos: [], celdas: {}, gallery: [] }); ingRender(); ingGuardar(); }
 function ingSetCampo(id, campo, val) {
   if (!ingPuedeEditar()) return;
   const g = ingData.find(x => x.id === id); if (!g) return;
@@ -3711,27 +3713,156 @@ function ingSetCampo(id, campo, val) {
   if (['fecha', 'estado'].includes(campo)) ingRender(); // afectan orden / totales
 }
 function ingEliminar(id) { if (!ingPuedeEditar()) return; if (!confirm('¿Eliminar este ingreso?')) return; ingData = ingData.filter(x => x.id !== id); ingRender(); ingGuardar(); }
-// Ítems (modelo + cantidad) dentro de un ingreso
-function ingItemAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.items = g.items || []).push({ id: ingNuevoId(), model: '', cantidad: 0 }); ingRender(); ingGuardar(); }
-function ingItemSet(gid, iid, campo, val) {
+// ── Modelo de datos: grilla (modelos = filas, diseños = columnas) + galería ──
+function ingNormalizar(g) {
+  if (!g || typeof g !== 'object') return g;
+  g.gallery = Array.isArray(g.gallery) ? g.gallery : [];
+  if (!Array.isArray(g.modelos)) {
+    const its = Array.isArray(g.items) ? g.items : [];
+    g.modelos = its.map(it => ({ id: it.id || ingNuevoId(), model: it.model || '' }));
+    g.disenos = Array.isArray(g.disenos) ? g.disenos : [];
+    g.celdas = (g.celdas && typeof g.celdas === 'object') ? g.celdas : {};
+    const conCant = its.filter(it => (+it.cantidad || 0) > 0);
+    if (conCant.length) { // migrar cantidades viejas a un diseño "General" para no perder nada
+      const did = ingNuevoId();
+      g.disenos.push({ id: did, nombre: 'General', img: '' });
+      its.forEach(it => { const c = +it.cantidad || 0; if (c > 0) { (g.celdas[it.id] = g.celdas[it.id] || {})[did] = c; } });
+    }
+  }
+  g.disenos = Array.isArray(g.disenos) ? g.disenos : [];
+  g.celdas = (g.celdas && typeof g.celdas === 'object') ? g.celdas : {};
+  return g;
+}
+function ingDerivarItems(g) { // mantiene g.items (total por modelo) por compatibilidad con lectores externos
+  g.items = (g.modelos || []).map(m => { let t = 0; const row = (g.celdas || {})[m.id] || {}; for (const d in row) t += +row[d] || 0; return { id: m.id, model: m.model, cantidad: t }; });
+}
+function ingTotalU(g) { let t = 0; const c = g.celdas || {}; for (const m in c) { for (const d in c[m]) t += +c[m][d] || 0; } return t; }
+function ingCeldaGet(g, mid, did) { return (g.celdas && g.celdas[mid] && +g.celdas[mid][did]) || 0; }
+function ingCelda(gid, mid, did, val) {
   if (!ingPuedeEditar()) return;
   const g = ingData.find(x => x.id === gid); if (!g) return;
-  const it = (g.items || []).find(x => x.id === iid); if (!it) return;
-  it[campo] = (campo === 'cantidad') ? (parseInt(val) || 0) : val; ingGuardar();
-  if (campo === 'cantidad') ingRender();
+  const n = Math.max(0, parseInt(val) || 0);
+  g.celdas = g.celdas || {};
+  if (n > 0) { (g.celdas[mid] = g.celdas[mid] || {})[did] = n; }
+  else if (g.celdas[mid]) { delete g.celdas[mid][did]; }
+  ingRender(); ingGuardar();
 }
-function ingItemDel(gid, iid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; g.items = (g.items || []).filter(x => x.id !== iid); ingRender(); ingGuardar(); }
+// Filas (modelos de celular)
+function ingModeloAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.modelos = g.modelos || []).push({ id: ingNuevoId(), model: '' }); ingRender(); ingGuardar(); }
+function ingModeloSet(gid, mid, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const m = (g.modelos || []).find(x => x.id === mid); if (!m) return; m.model = val; ingGuardar(); }
+function ingModeloDel(gid, mid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; if (!confirm('¿Quitar este modelo (fila) y sus cantidades?')) return; g.modelos = (g.modelos || []).filter(x => x.id !== mid); if (g.celdas) delete g.celdas[mid]; ingRender(); ingGuardar(); }
+// Columnas (diseños de funda)
+function ingDisenoAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.disenos = g.disenos || []).push({ id: ingNuevoId(), nombre: '', img: '' }); ingRender(); ingGuardar(); }
+function ingDisenoSet(gid, did, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.nombre = val; ingGuardar(); }
+function ingDisenoImg(gid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240); input.value = ''; }
+function ingDisenoDel(gid, did) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; if (!confirm('¿Quitar este diseño (columna) y sus cantidades?')) return; g.disenos = (g.disenos || []).filter(x => x.id !== did); if (g.celdas) for (const m in g.celdas) delete g.celdas[m][did]; ingRender(); ingGuardar(); }
+// Galería del pedido (fotos subidas + links de video)
+function ingFotoAdd(gid, input) { if (!ingPuedeEditar()) return; const fs = Array.from(input.files || []); if (!fs.length) return; let pend = fs.length; fs.forEach(f => _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (g) { (g.gallery = g.gallery || []).push({ id: ingNuevoId(), tipo: 'img', url, nombre: f.name || '' }); } if (--pend === 0) { ingRender(); ingGuardar(); } }, 520)); input.value = ''; }
+function ingLinkAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const url = (prompt('Pegá el link de la foto o video (YouTube, Google Drive, etc.):') || '').trim(); if (!url) return; const esVideo = /youtube\.com|youtu\.be|vimeo\.com|drive\.google\.com|\.mp4(\?|$)/i.test(url); const nombre = (prompt('Nombre o descripción (opcional):') || '').trim(); (g.gallery = g.gallery || []).push({ id: ingNuevoId(), tipo: esVideo ? 'video' : 'img', url, nombre }); ingRender(); ingGuardar(); }
+function ingGaleriaDel(gid, fid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; g.gallery = (g.gallery || []).filter(x => x.id !== fid); ingRender(); ingGuardar(); }
+function _ytId(u) { const m = String(u).match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/); return m ? m[1] : null; }
+function _driveId(u) { const m = String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/); return m ? m[1] : null; }
+function _ingThumbHtml(it) {
+  if (it.tipo === 'video') {
+    const yt = _ytId(it.url);
+    const bg = yt ? `background-image:url('https://img.youtube.com/vi/${yt}/mqdefault.jpg');background-size:cover;background-position:center;` : 'background:#1F2937;';
+    return `<div style="width:84px;height:84px;border-radius:8px;${bg}display:flex;align-items:center;justify-content:center;border:1px solid #E5E7EB;"><span style="font-size:26px;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.7);">▶</span></div>`;
+  }
+  return `<img src="${esc(it.url)}" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;" onerror="this.style.opacity=.4;this.title='No se pudo cargar la imagen';">`;
+}
+function ingGaleriaHtml(g, editable) {
+  const items = (g.gallery || []).map(it => `<div style="position:relative;">
+      <div onclick="ingMediaVer('${g.id}','${it.id}')" style="cursor:pointer;" title="Ver">${_ingThumbHtml(it)}</div>
+      ${it.nombre ? `<div style="font-size:10px;color:#6B7280;text-align:center;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.nombre)}</div>` : ''}
+      ${editable ? `<button onclick="ingGaleriaDel('${g.id}','${it.id}')" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;font-size:12px;color:#DC2626;line-height:1;">×</button>` : ''}
+    </div>`).join('');
+  const adders = editable ? `<label style="width:84px;height:84px;border:1px dashed #CBD5E1;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94A3B8;font-size:11px;text-align:center;background:#F8FAFC;">+ foto<input type="file" accept="image/*" multiple style="display:none" onchange="ingFotoAdd('${g.id}',this)"></label>
+    <button onclick="ingLinkAdd('${g.id}')" style="width:84px;height:84px;border:1px dashed #CBD5E1;border-radius:8px;cursor:pointer;color:#94A3B8;font-size:11px;background:#F8FAFC;line-height:1.3;">+ link<br>(video)</button>` : '';
+  if (!items && !editable) return '';
+  return `<div style="margin-top:12px;">
+    <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">📸 Galería del pedido</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">${items}${adders}</div>
+  </div>`;
+}
+function ingMediaVer(gid, fid) {
+  const g = ingData.find(x => x.id === gid); if (!g) return;
+  const it = (g.gallery || []).find(x => x.id === fid); if (!it) return;
+  let inner = '';
+  if (it.tipo === 'video') {
+    const yt = _ytId(it.url), dr = _driveId(it.url);
+    if (yt) inner = `<iframe width="100%" height="480" src="https://www.youtube.com/embed/${yt}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="border-radius:10px;display:block;"></iframe>`;
+    else if (dr) inner = `<iframe width="100%" height="480" src="https://drive.google.com/file/d/${dr}/preview" frameborder="0" allow="autoplay" allowfullscreen style="border-radius:10px;display:block;"></iframe>`;
+    else if (/\.mp4(\?|$)/i.test(it.url)) inner = `<video src="${esc(it.url)}" controls autoplay style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;"></video>`;
+    else { window.open(it.url, '_blank'); return; }
+  } else {
+    inner = `<img src="${esc(it.url)}" style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;">`;
+  }
+  let o = document.getElementById('ing-media-modal');
+  if (!o) { o = document.createElement('div'); o.id = 'ing-media-modal'; o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:2000;padding:28px;'; o.addEventListener('click', ev => { if (ev.target === o) o.remove(); }); document.body.appendChild(o); }
+  o.innerHTML = `<div style="max-width:900px;width:100%;position:relative;">
+      <button onclick="document.getElementById('ing-media-modal').remove()" title="Cerrar" style="position:absolute;top:-16px;right:-16px;width:36px;height:36px;border-radius:50%;border:none;background:#fff;cursor:pointer;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.4);z-index:1;">×</button>
+      ${inner}
+      ${it.nombre ? `<div style="color:#fff;text-align:center;margin-top:10px;font-size:13px;">${esc(it.nombre)}</div>` : ''}
+    </div>`;
+}
 function _ingMes(f) { const p = String(f).split('-'); const M = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; return (M[parseInt(p[1]) - 1] || '') + ' ' + p[0]; }
 function ingCard(g) {
   const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
   const opts = ING_ESTADOS.map(s => `<option value="${s.k}" ${g.estado === s.k ? 'selected' : ''}>${s.lbl}</option>`).join('');
-  const items = g.items || [];
-  const totU = items.reduce((s, it) => s + (+it.cantidad || 0), 0);
-  const filas = items.map(it => `<tr>
-      <td style="padding:3px 4px;"><input list="fm-sim-modelos" value="${esc(it.model)}" onchange="ingItemSet('${g.id}','${it.id}','model',this.value)" placeholder="Modelo" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;box-sizing:border-box;"></td>
-      <td style="padding:3px 4px;width:96px;"><input type="number" value="${it.cantidad || 0}" onchange="ingItemSet('${g.id}','${it.id}','cantidad',this.value)" style="width:84px;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:13px;text-align:center;"></td>
-      <td style="width:26px;text-align:center;"><button onclick="ingItemDel('${g.id}','${it.id}')" title="Quitar fila" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:15px;">×</button></td>
-    </tr>`).join('');
+  const disenos = g.disenos || [], modelos = g.modelos || [];
+  const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
+  const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:96px;vertical-align:bottom;">
+      <label style="cursor:pointer;display:block;" title="Subir/cambiar imagen del diseño">
+        <input type="file" accept="image/*" style="display:none" onchange="ingDisenoImg('${g.id}','${d.id}',this)">
+        ${d.img
+          ? `<img src="${d.img}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;">`
+          : `<div style="width:64px;height:64px;border-radius:8px;border:1px dashed #CBD5E1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94A3B8;font-size:10px;text-align:center;margin:0 auto 4px;background:#F8FAFC;">📷<span>subir</span></div>`}
+      </label>
+      <input value="${esc(d.nombre)}" onchange="ingDisenoSet('${g.id}','${d.id}',this.value)" placeholder="Diseño" style="width:88px;font-size:12px;font-weight:600;text-align:center;border:none;border-bottom:1px solid #F1F5F9;padding:2px;">
+      <div><button onclick="ingDisenoDel('${g.id}','${d.id}')" title="Quitar diseño" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:11px;">✕ quitar</button></div>
+    </th>`).join('');
+  const rows = modelos.map(m => {
+    let rowTot = 0;
+    const cells = disenos.map(d => {
+      const v = ingCeldaGet(g, m.id, d.id); rowTot += v; colTot[d.id] += v;
+      return `<td style="padding:2px;text-align:center;"><input type="number" min="0" value="${v || ''}" onchange="ingCelda('${g.id}','${m.id}','${d.id}',this.value)" style="width:64px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px;font-size:13px;"></td>`;
+    }).join('');
+    grand += rowTot;
+    return `<tr>
+      <th style="text-align:left;padding:2px 4px;position:sticky;left:0;background:#fff;z-index:1;">
+        <div style="display:flex;align-items:center;gap:2px;">
+          <input list="fm-sim-modelos" value="${esc(m.model)}" onchange="ingModeloSet('${g.id}','${m.id}',this.value)" placeholder="Modelo" style="width:128px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;">
+          <button onclick="ingModeloDel('${g.id}','${m.id}')" title="Quitar modelo" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button>
+        </div>
+      </th>
+      ${cells}
+      <td style="text-align:center;font-weight:700;font-size:13px;color:#374151;padding:2px 8px;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
+    </tr>`;
+  }).join('');
+  const totCells = disenos.map(d => `<td style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:5px 2px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
+  const vacio = (!modelos.length && !disenos.length) ? `<div style="font-size:12px;color:#9CA3AF;margin:8px 0;">Agregá modelos (filas) y diseños (columnas) para cargar las cantidades. 👇</div>` : '';
+  const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:6px;">
+    <table style="border-collapse:collapse;">
+      <thead><tr>
+        <th style="position:sticky;left:0;background:#fff;z-index:2;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>
+        ${colHead}
+        <th style="font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${rows}
+        <tr>
+          <th style="text-align:right;font-size:12px;color:#6B7280;padding:5px 8px 5px 4px;position:sticky;left:0;background:#F9FAFB;z-index:1;">Total</th>
+          ${totCells}
+          <td style="text-align:center;font-weight:800;font-size:14px;color:#111827;padding:5px 8px;background:#F3F4F6;">${grand ? grand.toLocaleString('es-AR') : '—'}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>` : '';
+  const addBtns = `<div style="display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+    <button onclick="ingModeloAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo (fila)</button>
+    <button onclick="ingDisenoAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar diseño (columna)</button>
+    <span style="font-size:12px;color:#374151;margin-left:auto;">Total: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
+  </div>`;
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <input value="${esc(g.desc)}" onchange="ingSetCampo('${g.id}','desc',this.value)" placeholder="Descripción (ej. Pedido fundas China #1)" style="flex:2;min-width:200px;font-size:14px;font-weight:600;border:none;border-bottom:1px solid #F1F5F9;padding:4px 0;">
@@ -3743,30 +3874,42 @@ function ingCard(g) {
       <label style="font-size:11px;color:#9CA3AF;">Llegada estimada<br><input type="date" value="${g.fecha || ''}" onchange="ingSetCampo('${g.id}','fecha',this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;"></label>
     </div>
     <div style="margin-top:10px;">
-      <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Cantidad por modelo</div>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr style="font-size:11px;color:#9CA3AF;"><th style="text-align:left;padding:0 4px;">Modelo</th><th style="width:96px;">Cantidad</th><th style="width:26px;"></th></tr></thead><tbody>${filas}</tbody></table>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-        <button onclick="ingItemAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo</button>
-        <span style="font-size:12px;color:#374151;">Total: <b>${totU.toLocaleString('es-AR')}</b> u.</span>
-      </div>
+      <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Cantidades por modelo y diseño</div>
+      ${vacio}${grid}${addBtns}
     </div>
+    ${ingGaleriaHtml(g, true)}
     <input value="${esc(g.nota)}" onchange="ingSetCampo('${g.id}','nota',this.value)" placeholder="Nota general del pedido…" style="width:100%;margin-top:10px;font-size:12px;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;box-sizing:border-box;">
   </div>`;
 }
 // Tarjeta de solo lectura (para quien tiene permiso de ver pero no de editar)
 function ingCardRO(g) {
   const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
-  const items = (g.items || []).filter(it => it.model || it.cantidad);
-  const totU = items.reduce((s, it) => s + (+it.cantidad || 0), 0);
-  const filas = items.map(it => `<tr><td style="padding:2px 6px;border-top:1px solid #F1F5F9;">${esc(it.model) || '—'}</td><td style="padding:2px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${(+it.cantidad || 0).toLocaleString('es-AR')}</td></tr>`).join('');
+  const disenos = (g.disenos || []), modelos = (g.modelos || []);
   const meta = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
+  const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
+  const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:84px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
+      ${d.img ? `<img src="${d.img}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;">` : ''}
+      ${esc(d.nombre) || '—'}
+    </th>`).join('');
+  const rows = modelos.map(m => {
+    let rowTot = 0;
+    const cells = disenos.map(d => { const v = ingCeldaGet(g, m.id, d.id); rowTot += v; colTot[d.id] += v; return `<td style="text-align:center;font-size:13px;padding:3px 6px;border-top:1px solid #F1F5F9;">${v ? v.toLocaleString('es-AR') : '·'}</td>`; }).join('');
+    grand += rowTot;
+    return `<tr><th style="text-align:left;font-size:13px;font-weight:600;padding:3px 8px 3px 4px;border-top:1px solid #F1F5F9;position:sticky;left:0;background:#fff;">${esc(m.model) || '—'}</th>${cells}<td style="text-align:center;font-weight:700;font-size:13px;padding:3px 8px;border-top:1px solid #F1F5F9;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td></tr>`;
+  }).join('');
+  const totCells = disenos.map(d => `<td style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:4px 6px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
+  const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:8px;"><table style="border-collapse:collapse;">
+      <thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>${colHead}<th style="font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Total</th></tr></thead>
+      <tbody>${rows}<tr><th style="text-align:right;font-size:12px;color:#6B7280;padding:5px 8px;position:sticky;left:0;background:#F9FAFB;">Total</th>${totCells}<td style="text-align:center;font-weight:800;font-size:14px;color:#111827;padding:5px 8px;background:#F3F4F6;">${grand ? grand.toLocaleString('es-AR') : '—'}</td></tr></tbody>
+    </table></div>` : '';
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
       <div style="font-size:14px;font-weight:600;">${esc(g.desc) || '(sin descripción)'}</div>
       <span style="font-size:12px;color:${e.color};background:${e.bg};border:1px solid ${e.color};border-radius:7px;padding:3px 9px;font-weight:600;">${e.lbl}</span>
     </div>
     ${meta ? `<div style="font-size:12px;color:#6B7280;margin-top:5px;">${meta}</div>` : ''}
-    ${items.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;"><tbody>${filas}<tr><td style="padding:3px 6px;border-top:2px solid #E5E7EB;font-weight:700;">Total</td><td style="padding:3px 6px;border-top:2px solid #E5E7EB;text-align:right;font-weight:700;">${totU.toLocaleString('es-AR')}</td></tr></tbody></table>` : ''}
+    ${grid}
+    ${ingGaleriaHtml(g, false)}
     ${g.nota ? `<div style="font-size:12px;color:#374151;margin-top:6px;">📝 ${esc(g.nota)}</div>` : ''}
   </div>`;
 }
@@ -3777,9 +3920,8 @@ function ingRender() {
   if (!document.getElementById('fm-sim-modelos') && typeof FM_MODELOS !== 'undefined') {
     const dl = document.createElement('datalist'); dl.id = 'fm-sim-modelos'; dl.innerHTML = FM_MODELOS.map(m => `<option value="${m}">`).join(''); document.body.appendChild(dl);
   }
-  const _u = g => (g.items || []).reduce((a, it) => a + (+it.cantidad || 0), 0);
   const enCamino = ingData.filter(g => g.estado !== 'arribado');
-  const unidades = enCamino.reduce((s, g) => s + _u(g), 0);
+  const unidades = enCamino.reduce((s, g) => s + ingTotalU(g), 0);
   const res = document.getElementById('ingresos-resumen');
   if (res) res.innerHTML = ingData.length
     ? `📦 <b>${enCamino.length}</b> en camino · <b>${unidades.toLocaleString('es-AR')}</b> unidades`
@@ -8393,7 +8535,7 @@ const PERM_CAT = [
       { key: 'asignar', label: '🗂️ Asignar categoría (Excel)', info: 'Asignación masiva: elegís una categoría y subís un Excel con nombres de producto; se la agrega a todos los que matcheen (solo Zattia).', brands: ['zattia'] },
   ] },
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
-  { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Planificá y seguí las importaciones/compras por llegar: proveedor, cantidad, costo, fecha estimada de arribo y estado.', brands: ['bdi', 'zattia'] },
+  { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.', brands: ['bdi'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
   { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
