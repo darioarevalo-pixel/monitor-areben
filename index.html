@@ -1232,7 +1232,7 @@
         </div>
         <div id="exhib-resumen-config" style="font-size:13px;color:#374151;margin-bottom:12px;"></div>
         <button class="btn-sm" onclick="exhibIniciar()" style="background:#378ADD;color:#fff;">▶️ Iniciar recorrido</button>
-        <button class="btn-sm" onclick="dispararSyncInv(this)" title="Trae el stock más nuevo de GN (tarda ~2 min)" style="background:#fff;border:1px solid #D1D5DB;margin-left:6px;">🔄 Actualizar stock</button>
+        <button class="btn-sm" onclick="exhibActualizarGN(this)" title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista al terminar (~2-4 min)" style="background:#fff;border:1px solid #D1D5DB;margin-left:6px;">🔄 Traer de GN</button>
         <div id="exhib-reanudar" style="margin-top:10px;"></div>
       </div>
 
@@ -6828,7 +6828,16 @@ function _zxFmtName(fmt) { try { if (fmt == null || typeof ZXing === 'undefined'
 function _exhibId(it) { return it.barcode || (it.productId + '|' + it.size); }
 function exhibKey() { return 'monitor_exhib_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
 function exhibSave() { _lsGuardar(exhibKey(), JSON.stringify(exhibState)); }
-function exhibLoad() { try { const r = localStorage.getItem(exhibKey()); exhibState = r ? JSON.parse(r) : {}; } catch { exhibState = {}; } }
+function exhibLoad() { try { const r = localStorage.getItem(exhibKey()); exhibState = r ? JSON.parse(r) : {}; } catch { exhibState = {}; } exhibLoadErr(); }
+// Reporte de "categorías a corregir en TN": productId -> { name, sku, tnId, catTN, catCorrecta }
+let exhibErrores = {};
+function exhibErrKey() { return 'monitor_exhib_err_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
+function exhibSaveErr() { _lsGuardar(exhibErrKey(), JSON.stringify(exhibErrores)); }
+function exhibLoadErr() { try { const r = localStorage.getItem(exhibErrKey()); exhibErrores = r ? JSON.parse(r) : {}; } catch { exhibErrores = {}; } }
+// Categorías TN limpias (sin promos/genéricas/fundas/modelo). Mismo criterio que _repoSubcat, pero devuelve TODAS.
+function _exhibCleanCats(tnCats) { return (tnCats || []).filter(c => { const l = String(c).toLowerCase().trim(); return l && !_repoCatGenericas.has(l) && !_repoEsPromo(c) && !_repoEsModeloCat(c) && !_repoEsFundaCat(c); }); }
+// Link al producto en el admin de TN (para corregir la categoría).
+function _tnAdminUrl(tnId) { if (!tnId) return null; const base = currentCuenta === CUENTAS.zattia ? 'https://zattiaco.mitiendanube.com/admin/products' : 'https://bdiaccesorios4.mitiendanube.com/admin/products'; return base + '/' + tnId; }
 
 async function exhibInit() {
   exhibStopCam();
@@ -6851,16 +6860,23 @@ async function exhibCargarDatos() {
     }
     const idx = _mktIndexTN();
     const prodMap = {};
-    (allProductos || []).forEach(p => { const tn = _mktFindTN(p, idx); prodMap[String(p.id)] = { img: (tn && tn.images && tn.images[0]) || null, cats: (tn && tn.categories) || [] }; });
+    (allProductos || []).forEach(p => { const tn = _mktFindTN(p, idx); prodMap[String(p.id)] = { img: (tn && tn.images && tn.images[0]) || null, tnCats: (tn && tn.categories) || [], tnId: (tn && tn.id) || null }; });
     exhibItems = inv.map(r => {
-      const pm = prodMap[String(r.product_id)] || { img: null, cats: [] };
-      return { barcode: r.barcode ? String(r.barcode) : '', sku: r.sku || '', productId: String(r.product_id), name: r.product_name || '—', size: r.size_name || '', qty: r.available_quantity || 0, img: pm.img, cats: pm.cats };
+      const pm = prodMap[String(r.product_id)] || { img: null, tnCats: [], tnId: null };
+      const pid = String(r.product_id);
+      const cleanCats = _exhibCleanCats(pm.tnCats);          // categorías TN reales (ordenadas), sin promos
+      let cat = cleanCats[0] || '(Sin categoría)';
+      const err = exhibErrores[pid];                          // si la empleada marcó "categoría errónea", la reasignamos
+      if (err) { cat = err.catCorrecta; if (!cleanCats.includes(cat)) cleanCats.push(cat); }
+      return { barcode: r.barcode ? String(r.barcode) : '', sku: r.sku || '', productId: pid, name: r.product_name || '—', size: r.size_name || '', qty: r.available_quantity || 0, img: pm.img, cat, cleanCats, tnId: pm.tnId };
     });
     const cats = new Set();
-    exhibItems.forEach(it => it.cats.forEach(c => cats.add(c)));
+    exhibItems.forEach(it => cats.add(it.cat));
     const sel = document.getElementById('exhib-cat');
     const prev = sel.value;
-    sel.innerHTML = '<option value="">Todas las categorías</option>' + [...cats].sort((a, b) => a.localeCompare(b, 'es')).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    // "(Sin categoría)" siempre al final; el resto alfabético.
+    const catsOrden = [...cats].sort((a, b) => (a === '(Sin categoría)') - (b === '(Sin categoría)') || a.localeCompare(b, 'es'));
+    sel.innerHTML = '<option value="">Todas las categorías</option>' + catsOrden.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     if (prev) sel.value = prev;
     if (syncEl) syncEl.innerHTML = `📅 <b>${exhibItems.length}</b> variantes con stock en Local. Datos del último sync diario (pueden tener unas horas) — conviene chequear en momentos de baja venta.`;
     exhibResumenConfig();
@@ -6870,9 +6886,42 @@ async function exhibCargarDatos() {
   }
 }
 
+// Trae lo más nuevo de GN (dispara el sync, espera a que termine) y recarga la lista. Espejo de repoActualizarGN.
+let _exhibSyncing = false;
+async function exhibActualizarGN(btn) {
+  if (_exhibSyncing) return;
+  _exhibSyncing = true;
+  const orig = btn ? btn.textContent : '';
+  const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo a GN…');
+    const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey() }) });
+    const d = await r.json();
+    if (!d.ok) { alert('No se pudo iniciar la actualización.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : '')); return; }
+    const t0 = Date.now(), MAX = 7 * 60 * 1000;
+    let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Trayendo de GN… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try {
+        const rr = await fetch(`${SYNC_API}?store=${_cuentaKey()}&nc=${secs}`); const dd = await rr.json();
+        const run = dd.run;
+        if (run && run.id !== baseId && run.status === 'completed') { done = true; break; }
+      } catch (e) { /* reintenta */ }
+    }
+    setTxt('↻ Recargando…');
+    await exhibCargarDatos();
+    if (!done) alert('La sincronización con GN está tardando más de lo normal. Te muestro lo último disponible; si falta algo, volvé a tocar “Traer de GN” en un minuto.');
+  } catch (e) { alert('Error al actualizar: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } _exhibSyncing = false; }
+}
 function _exhibFiltrados() {
   const cat = document.getElementById('exhib-cat').value;
-  return cat ? exhibItems.filter(it => it.cats.includes(cat)) : exhibItems;
+  return cat ? exhibItems.filter(it => it.cat === cat) : exhibItems;
 }
 
 function exhibResumenConfig() {
@@ -6948,14 +6997,48 @@ function exhibManual() {
 }
 function exhibMarcarPorCodigo(code, fromCam) {
   const fb = document.getElementById('exhib-scan-fb');
-  const norm = s => String(s || '').replace(/^0+/, '');
-  const lista = _exhibFiltrados();
-  const it = lista.find(x => x.barcode === code) || lista.find(x => x.barcode && norm(x.barcode) === norm(code)) || lista.find(x => x.sku && x.sku.toLowerCase() === code.toLowerCase());
+  // Normaliza fuerte: saca espacios, guiones y ceros a la izquierda (el lector no lee guiones; etiquetas con SKU "RCA-0035-NG").
+  const norm = s => String(s || '').replace(/[\s-]/g, '').replace(/^0+/, '').toLowerCase();
+  const nc = norm(code);
+  // Buscar en TODA la lista (no solo la categoría filtrada): barcode exacto → barcode normalizado → SKU normalizado.
+  const it = exhibItems.find(x => x.barcode === code)
+    || exhibItems.find(x => x.barcode && norm(x.barcode) === nc)
+    || exhibItems.find(x => x.sku && norm(x.sku) === nc);
   if (!it) { fb.innerHTML = `<span style="color:#DC2626;">✗ Ese código no está en la lista (${esc(code)}${exhibUltimoFormato ? ' · ' + esc(exhibUltimoFormato) : ''})</span>`; return; }
+  if (fromCam && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
+  // Siempre marcar exhibido (no perder el escaneo)
   exhibState[_exhibId(it)] = 'exhibido';
   exhibSave();
-  fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(it.name)} · ${esc(it.size)}</span>`;
-  if (fromCam && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
+  const catSel = document.getElementById('exhib-cat').value;
+  const cruce = catSel && catSel !== '(Sin categoría)' && !it.cleanCats.includes(catSel);
+  if (cruce) {
+    // El producto escaneado no pertenece (según TN) a la categoría que se está recorriendo. La empleada decide.
+    const pidJ = it.productId.replace(/'/g, "\\'");
+    const catSelJ = catSel.replace(/'/g, "\\'");
+    fb.innerHTML = `<div style="color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;">
+      <div style="font-weight:700;">⚠ "${esc(it.name)}" no es de «${esc(catSel)}»</div>
+      <div style="font-size:12px;margin:2px 0 8px;">En TN figura en «${esc(it.cat)}». ¿Qué hacés?</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="exhibMarcarErrorCat('${pidJ}','${catSelJ}')" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid #2563EB;background:#2563EB;color:#fff;cursor:pointer;font-weight:600;">Va acá → corregir TN</button>
+        <button onclick="exhibRenderScan()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid #D1D5DB;background:#fff;color:#374151;cursor:pointer;">Es de «${esc(it.cat)}», mal colgado</button>
+      </div></div>`;
+  } else {
+    fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(it.name)} · ${esc(it.size)}</span>`;
+  }
+  exhibRenderScan();
+}
+// "Va acá → corregir TN": registra el error de categoría, reasigna el ítem a la categoría correcta (para que cuente) y lo deja en el reporte.
+function exhibMarcarErrorCat(pid, catCorrecta) {
+  const it = exhibItems.find(x => x.productId === pid);
+  if (!it) return;
+  exhibErrores[pid] = { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta };
+  exhibSaveErr();
+  it.cat = catCorrecta;                                       // reasignación de sesión → cuenta en la categoría correcta
+  if (!it.cleanCats.includes(catCorrecta)) it.cleanCats.push(catCorrecta);
+  exhibState[_exhibId(it)] = 'exhibido';
+  exhibSave();
+  const fb = document.getElementById('exhib-scan-fb');
+  if (fb) fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(it.name)} · ${esc(it.size)} — corregido a «${esc(catCorrecta)}» (queda en el reporte para TN)</span>`;
   exhibRenderScan();
 }
 
@@ -7000,10 +7083,27 @@ function exhibTerminar() {
   document.getElementById('exhib-triage').style.display = '';
   exhibRenderTriage();
 }
+// Tarjeta de "categorías a corregir en TN" (lo que la empleada marcó como categoría errónea durante el escaneo).
+function exhibErroresHTML() {
+  const arr = Object.entries(exhibErrores);
+  if (!arr.length) return '';
+  const filas = arr.map(([pid, e]) => {
+    const url = _tnAdminUrl(e.tnId);
+    const link = url ? `<a href="${esc(url)}" target="_blank" style="color:#2563EB;text-decoration:none;font-size:12px;white-space:nowrap;">Editar en TN ↗</a>` : '';
+    const pidJ = String(pid).replace(/'/g, "\\'");
+    return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 2px;border-bottom:1px solid #FDE68A;">
+      <div style="min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(e.name)}</div>
+      <div style="font-size:11.5px;color:#92400E;">SKU: ${esc(e.sku || '—')} · TN: «${esc(e.catTN)}» → debería: «${esc(e.catCorrecta)}»</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex:none;">${link}<button onclick="exhibQuitarError('${pidJ}')" style="font-size:11px;padding:3px 8px;border:1px solid #D1D5DB;background:#fff;border-radius:6px;cursor:pointer;color:#6B7280;">quitar</button></div></div>`;
+  }).join('');
+  return `<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:9px;padding:10px 12px;margin-bottom:12px;">
+    <div style="font-weight:700;font-size:13px;color:#92400E;margin-bottom:6px;">⚠ Categorías a corregir en TN (${arr.length})</div>${filas}</div>`;
+}
+function exhibQuitarError(pid) { delete exhibErrores[pid]; exhibSaveErr(); exhibRenderTriage(); }
 function exhibRenderTriage() {
   const faltantes = _exhibFiltrados().filter(it => exhibState[_exhibId(it)] !== 'exhibido');
   const cont = document.getElementById('exhib-triage-list');
-  cont.innerHTML = faltantes.length ? faltantes.map(it => _exhibRow(it, true)).join('') : '<div style="color:#16A34A;padding:14px;text-align:center;">No quedaron faltantes: todo escaneado/exhibido ✅</div>';
+  cont.innerHTML = exhibErroresHTML() + (faltantes.length ? faltantes.map(it => _exhibRow(it, true)).join('') : '<div style="color:#16A34A;padding:14px;text-align:center;">No quedaron faltantes: todo escaneado/exhibido ✅</div>');
   const sinMarcar = faltantes.filter(it => !['solucionado', 'una-unidad', 'no-encuentra'].includes(exhibState[_exhibId(it)])).length;
   const av = document.getElementById('exhib-triage-aviso');
   if (av) av.innerHTML = sinMarcar
@@ -7014,8 +7114,8 @@ function exhibSetEstado(id, estado) { exhibState[id] = estado; exhibSave(); exhi
 function exhibVolverScan() { document.getElementById('exhib-triage').style.display = 'none'; document.getElementById('exhib-scan').style.display = ''; exhibRenderScan(); exhibFocus(); }
 function exhibCancelar() { exhibStopCam(); exhibInit(); }
 function exhibReiniciar() {
-  if (Object.keys(exhibState).length && !confirm('¿Borrar el chequeo en curso y empezar de cero?')) return;
-  exhibStopCam(); exhibState = {}; exhibSave(); exhibInit();
+  if ((Object.keys(exhibState).length || Object.keys(exhibErrores).length) && !confirm('¿Borrar el chequeo en curso y empezar de cero?')) return;
+  exhibStopCam(); exhibState = {}; exhibSave(); exhibErrores = {}; exhibSaveErr(); exhibInit();
 }
 
 // Coloca una imagen en el PDF RESPETANDO su proporción (sin deformar), centrada dentro de la caja.
@@ -7088,6 +7188,13 @@ function exhibGenerarPDF() {
   seccion('FALTANTE — Exhibición una sola unidad', grupos['una-unidad'], [217, 119, 6]);
   seccion('FALTANTE — No exhibido, ya solucionado', grupos['solucionado'], [37, 99, 235]);
   if (grupos['sin-marcar'].length) seccion('FALTANTE — Sin revisar', grupos['sin-marcar'], [107, 114, 128]);
+  // Categorías a corregir en TN (lo marcado como categoría errónea durante el escaneo)
+  const errArr = Object.values(exhibErrores);
+  if (errArr.length) {
+    if (y > 264) { pdf.addPage(); y = 16; }
+    y += 4; line('CATEGORÍA A CORREGIR EN TN (' + errArr.length + ')', { bold: true, fs: 11, color: [180, 83, 9] });
+    errArr.forEach(e => line('•  ' + e.name + ' · SKU: ' + (e.sku || '—') + ' — TN: «' + e.catTN + '» -> deberia: «' + e.catCorrecta + '»' + (e.tnId ? ' (TN #' + e.tnId + ')' : ''), { fs: 9, x: M + 3, color: [146, 64, 14] }));
+  }
   _pdfCompartir(pdf, 'chequeo-exhibicion-zattia-' + fecha.toISOString().slice(0, 10) + '.pdf', 'Chequeo de exhibición — Zattia');
 }
 
