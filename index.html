@@ -3799,6 +3799,28 @@ function ingDisenoAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.fi
 function ingDisenoSet(gid, did, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.nombre = val; ingGuardar(); }
 function ingDisenoImg(gid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240); input.value = ''; }
 function ingDisenoDel(gid, did) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; if (!confirm('¿Quitar este diseño (columna) y sus cantidades?')) return; g.disenos = (g.disenos || []).filter(x => x.id !== did); if (g.celdas) for (const m in g.celdas) delete g.celdas[m][did]; ingRender(); ingGuardar(); }
+// Pegar imagen de diseño desde el portapapeles (Excel/WhatsApp) o arrastrar
+let ingPasteTarget = null, _ingPasteEl = null;
+function ingPasteSel(gid, did, el) {
+  ingPasteTarget = { gid, did };
+  if (_ingPasteEl && _ingPasteEl !== el) _ingPasteEl.style.outline = '';
+  _ingPasteEl = el; if (el) { el.style.outline = '2px solid #378ADD'; el.focus && el.focus(); }
+}
+function _ingImgAplicar(file, gid, did) {
+  if (!file || !/^image\//.test(file.type)) return false;
+  _imgAThumb(file, url => { const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240);
+  return true;
+}
+function ingDisenoDrop(e, gid, did) { if (!ingPuedeEditar()) return; e.preventDefault(); const dt = e.dataTransfer; if (dt && dt.files) _ingImgAplicar(Array.from(dt.files).find(f => /^image\//.test(f.type)), gid, did); }
+function ingPaste(e) {
+  const tab = document.getElementById('tab-ingresos');
+  if (!tab || !tab.classList.contains('visible') || !ingPasteTarget || !ingPuedeEditar()) return;
+  const dt = e.clipboardData; if (!dt) return;
+  let file = null;
+  for (const it of (dt.items || [])) { if (it.kind === 'file') { const f = it.getAsFile(); if (f && /^image\//.test(f.type)) { file = f; break; } } }
+  if (!file && dt.files) for (const f of dt.files) if (/^image\//.test(f.type)) { file = f; break; }
+  if (file) { e.preventDefault(); _ingImgAplicar(file, ingPasteTarget.gid, ingPasteTarget.did); }
+}
 // Galería del pedido (fotos subidas + links de video)
 function ingFotoAdd(gid, input) { if (!ingPuedeEditar()) return; const fs = Array.from(input.files || []); if (!fs.length) return; let pend = fs.length; fs.forEach(f => _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (g) { (g.gallery = g.gallery || []).push({ id: ingNuevoId(), tipo: 'img', url, nombre: f.name || '' }); } if (--pend === 0) { ingRender(); ingGuardar(); } }, 520)); input.value = ''; }
 function ingLinkAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const url = (prompt('Pegá el link de la foto o video (YouTube, Google Drive, etc.):') || '').trim(); if (!url) return; const esVideo = /youtube\.com|youtu\.be|vimeo\.com|drive\.google\.com|\.mp4(\?|$)/i.test(url); const nombre = (prompt('Nombre o descripción (opcional):') || '').trim(); (g.gallery = g.gallery || []).push({ id: ingNuevoId(), tipo: esVideo ? 'video' : 'img', url, nombre }); ingRender(); ingGuardar(); }
@@ -3855,14 +3877,16 @@ function ingCard(g) {
   const disenos = g.disenos || [], modelos = g.modelos || [];
   const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
   const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:96px;vertical-align:bottom;">
-      <label style="cursor:pointer;display:block;" title="Subir/cambiar imagen del diseño">
-        <input type="file" accept="image/*" style="display:none" onchange="ingDisenoImg('${g.id}','${d.id}',this)">
+      <div onclick="ingPasteSel('${g.id}','${d.id}',this)" ondragover="event.preventDefault();this.firstElementChild&&(this.style.opacity=.6);" ondragleave="this.style.opacity='';" ondrop="this.style.opacity='';ingDisenoDrop(event,'${g.id}','${d.id}')" tabindex="0" title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá 📷 subir" style="cursor:pointer;outline:none;border-radius:8px;">
         ${d.img
-          ? `<img src="${d.img}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;">`
-          : `<div style="width:64px;height:64px;border-radius:8px;border:1px dashed #CBD5E1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94A3B8;font-size:10px;text-align:center;margin:0 auto 4px;background:#F8FAFC;">📷<span>subir</span></div>`}
-      </label>
+          ? `<img src="${d.img}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;pointer-events:none;">`
+          : `<div style="width:64px;height:64px;border-radius:8px;border:1px dashed #CBD5E1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94A3B8;font-size:9px;text-align:center;margin:0 auto 4px;background:#F8FAFC;line-height:1.2;pointer-events:none;">📷<span>pegá o<br>subí</span></div>`}
+      </div>
       <input value="${esc(d.nombre)}" onchange="ingDisenoSet('${g.id}','${d.id}',this.value)" placeholder="Diseño" style="width:88px;font-size:12px;font-weight:600;text-align:center;border:none;border-bottom:1px solid #F1F5F9;padding:2px;">
-      <div><button onclick="ingDisenoDel('${g.id}','${d.id}')" title="Quitar diseño" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:11px;">✕ quitar</button></div>
+      <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:2px;">
+        <label style="cursor:pointer;color:#378ADD;font-size:10px;" title="Subir desde archivo">📷 subir<input type="file" accept="image/*" style="display:none" onchange="ingDisenoImg('${g.id}','${d.id}',this)"></label>
+        <button onclick="ingDisenoDel('${g.id}','${d.id}')" title="Quitar diseño" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:11px;">✕</button>
+      </div>
     </th>`).join('');
   const rows = modelos.map(m => {
     let rowTot = 0;
@@ -3961,6 +3985,7 @@ function ingCardRO(g) {
 }
 function ingRender() {
   const cont = document.getElementById('ingresos-cont'); if (!cont) return;
+  if (!window._ingPasteWired) { window._ingPasteWired = true; document.addEventListener('paste', ingPaste); }
   const editable = ingPuedeEditar();
   // Asegurar el datalist de modelos para el autocompletado de la tabla
   if (!document.getElementById('fm-sim-modelos') && typeof FM_MODELOS !== 'undefined') {
