@@ -1380,6 +1380,7 @@
             <button id="ing-add-btn" onclick="ingAgregar()" style="background:#378ADD;color:#fff;">+ Agregar ingreso</button>
           </div>
         </div>
+        <div id="ingresos-vista-sel" style="margin:12px 0 0;"></div>
         <div id="ingresos-resumen" style="font-size:13px;color:#374151;margin:12px 0;"></div>
         <div id="ingresos-cont"></div>
       </div>
@@ -3677,12 +3678,31 @@ const ING_ESTADOS = [
   { k: 'arribado', lbl: 'Arribado ✓', color: '#16A34A', bg: '#F0FDF4' },
 ];
 function ingPuedeEditar() { return _esAdmin(); } // admins cargan/editan; el resto solo ve
+// Vista de la sección: 'lector' (default) | 'resumen' | 'editar' (solo admins)
+let ingVista = 'lector';
+function ingVistaInit() {
+  let v = 'lector';
+  try { v = localStorage.getItem('monitor_ing_vista') || 'lector'; } catch {}
+  if (v === 'editar' && !ingPuedeEditar()) v = 'lector';
+  ingVista = (['lector', 'resumen', 'editar'].includes(v)) ? v : 'lector';
+}
+function ingSetVista(v) {
+  if (v === 'editar' && !ingPuedeEditar()) return;
+  ingVista = v;
+  try { localStorage.setItem('monitor_ing_vista', v); } catch {}
+  ingRender();
+}
+function ingVistaSelHtml() {
+  const opt = (k, lbl) => { const on = ingVista === k; return `<button onclick="ingSetVista('${k}')" style="border:1px solid ${on ? '#378ADD' : '#D1D5DB'};background:${on ? '#378ADD' : '#fff'};color:${on ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">${lbl}</button>`; };
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${opt('lector', '👁 Lector')}${opt('resumen', '📋 Resumen')}${ingPuedeEditar() ? opt('editar', '✏️ Editar') : ''}</div>`;
+}
 async function ingInit() {
+  ingVistaInit();
   const res = document.getElementById('ingresos-resumen');
   const cont = document.getElementById('ingresos-cont');
   if (res) res.textContent = 'Cargando ingresos…';
   if (cont) cont.innerHTML = '';
-  const addBtn = document.getElementById('ing-add-btn'); if (addBtn) addBtn.style.display = ingPuedeEditar() ? '' : 'none';
+  const addBtn = document.getElementById('ing-add-btn'); if (addBtn) addBtn.style.display = (ingVista === 'editar' && ingPuedeEditar()) ? '' : 'none';
   try {
     const r = await fetch(`${ING_API}?store=${_cuentaKey()}`);
     const d = await r.json();
@@ -3865,7 +3885,7 @@ function ingModeloDel(gid, bid, mid) { if (!ingPuedeEditar()) return; const g = 
 // Columnas (diseños de funda) — dentro de un bloque
 function ingDisenoAdd(gid, bid) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; (b.disenos = b.disenos || []).push({ id: ingNuevoId(), nombre: '', img: '' }); ingRender(); ingGuardar(); }
 function ingDisenoSet(gid, bid, did, val) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.nombre = val; ingGuardar(); }
-function ingDisenoImg(gid, bid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240); input.value = ''; }
+function ingDisenoImg(gid, bid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 480); input.value = ''; }
 function ingDisenoDel(gid, bid, did) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; if (!confirm('¿Quitar este diseño (columna) y sus cantidades?')) return; b.disenos = (b.disenos || []).filter(x => x.id !== did); if (b.celdas) for (const m in b.celdas) delete b.celdas[m][did]; ingRender(); ingGuardar(); }
 // Pegar imagen de diseño desde el portapapeles (Excel/WhatsApp) o arrastrar
 let ingPasteTarget = null, _ingPasteEl = null;
@@ -3876,7 +3896,7 @@ function ingPasteSel(gid, bid, did, el) {
 }
 function _ingImgAplicar(file, gid, bid, did) {
   if (!file || !/^image\//.test(file.type)) return false;
-  _imgAThumb(file, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240);
+  _imgAThumb(file, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 480);
   return true;
 }
 function ingDisenoDrop(e, gid, bid, did) { if (!ingPuedeEditar()) return; e.preventDefault(); const dt = e.dataTransfer; if (dt && dt.files) _ingImgAplicar(Array.from(dt.files).find(f => /^image\//.test(f.type)), gid, bid, did); }
@@ -4038,11 +4058,12 @@ function ingCard(g) {
   </div>`;
 }
 // Tarjeta de solo lectura (para quien tiene permiso de ver pero no de editar)
-function ingBloqueCardRO(g, b) {
+// ── Vista LECTOR (solo lectura, imágenes grandes con zoom) ──
+function ingBloqueCardLector(g, b) {
   const disenos = b.disenos || [], modelos = b.modelos || [];
   const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
-  const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:84px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
-      ${d.img ? `<img src="${d.img}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;">` : ''}
+  const colHead = disenos.map(d => `<th style="padding:6px 6px;min-width:104px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
+      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:92px;height:92px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;display:block;margin:0 auto 5px;cursor:zoom-in;">` : `<div style="width:92px;height:92px;border-radius:10px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;margin:0 auto 5px;">—</div>`}
       ${esc(d.nombre) || '—'}
     </th>`).join('');
   const rows = modelos.map(m => {
@@ -4064,11 +4085,11 @@ function ingBloqueCardRO(g, b) {
     ${grid}
   </div>`;
 }
-function ingCardRO(g) {
+function ingCardLector(g) {
   const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
   const meta = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
   const bloques = g.bloques || [];
-  const bloquesHtml = bloques.map(b => ingBloqueCardRO(g, b)).join('');
+  const bloquesHtml = bloques.map(b => ingBloqueCardLector(g, b)).join('');
   const totImpo = ingTotalU(g);
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -4082,10 +4103,60 @@ function ingCardRO(g) {
     ${g.nota ? `<div style="font-size:12px;color:#374151;margin-top:6px;">📝 ${esc(g.nota)}</div>` : ''}
   </div>`;
 }
+// ── Vista RESUMEN (solo diseño + cantidad total pedida, ordenado por cantidad) ──
+function ingBloqueResumen(g, b) {
+  const tot = d => { let t = 0; (b.modelos || []).forEach(m => t += ingCeldaGet(b, m.id, d.id)); return t; };
+  const conTot = (b.disenos || []).map(d => ({ d, t: tot(d) })).sort((a, c) => c.t - a.t);
+  const cards = conTot.map(({ d, t }) => `<div style="width:130px;text-align:center;">
+      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:130px;height:130px;object-fit:cover;border-radius:12px;border:1px solid #E5E7EB;display:block;cursor:zoom-in;">` : `<div style="width:130px;height:130px;border-radius:12px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;font-size:11px;">sin foto</div>`}
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-top:5px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.nombre) || '—'}</div>
+      <div style="font-size:16px;font-weight:800;color:#111827;">${t.toLocaleString('es-AR')} <span style="font-size:11px;font-weight:500;color:#9CA3AF;">u.</span></div>
+    </div>`).join('');
+  return `<div style="border:1px solid #EEF2F7;border-radius:10px;padding:10px 12px;margin-top:10px;background:#FCFDFE;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:700;color:#374151;">${esc(b.nombre) || 'Bloque'}</div>
+      <span style="font-size:12px;color:#374151;">Total bloque: <b>${ingBloqueU(b).toLocaleString('es-AR')}</b> u.</span>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;">${cards || '<div style="font-size:12px;color:#9CA3AF;">Sin diseños.</div>'}</div>
+  </div>`;
+}
+function ingCardResumen(g) {
+  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
+  const meta = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
+  const bloques = g.bloques || [];
+  const bloquesHtml = bloques.map(b => ingBloqueResumen(g, b)).join('');
+  return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div style="font-size:14px;font-weight:600;">${esc(g.desc) || '(sin descripción)'}</div>
+      <span style="font-size:12px;color:${e.color};background:${e.bg};border:1px solid ${e.color};border-radius:7px;padding:3px 9px;font-weight:600;">${e.lbl}</span>
+    </div>
+    ${meta ? `<div style="font-size:12px;color:#6B7280;margin-top:5px;">${meta}</div>` : ''}
+    ${bloquesHtml}
+    <div style="text-align:right;font-size:13px;color:#111827;margin-top:8px;">Total importación: <b>${ingTotalU(g).toLocaleString('es-AR')}</b> u.</div>
+  </div>`;
+}
+// Zoom de imágenes de diseño (lightbox; reusa el overlay #ing-media-modal)
+function ingImgZoom(src, cap) {
+  if (!src) return;
+  let o = document.getElementById('ing-media-modal');
+  if (!o) { o = document.createElement('div'); o.id = 'ing-media-modal'; o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:2000;padding:28px;'; o.addEventListener('click', ev => { if (ev.target === o) o.remove(); }); document.body.appendChild(o); }
+  o.innerHTML = `<div style="max-width:1000px;width:100%;position:relative;text-align:center;">
+      <button onclick="document.getElementById('ing-media-modal').remove()" title="Cerrar" style="position:absolute;top:-16px;right:-16px;width:36px;height:36px;border-radius:50%;border:none;background:#fff;cursor:pointer;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.4);z-index:1;">×</button>
+      <img src="${src}" style="max-width:100%;max-height:86vh;border-radius:10px;display:block;margin:auto;">
+      ${cap ? `<div style="color:#fff;margin-top:10px;font-size:14px;">${esc(cap)}</div>` : ''}
+    </div>`;
+}
+function ingImgZoomD(gid, bid, did) {
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  const d = (b.disenos || []).find(x => x.id === did); if (!d || !d.img) return;
+  ingImgZoom(d.img, d.nombre);
+}
 function ingRender() {
   const cont = document.getElementById('ingresos-cont'); if (!cont) return;
   if (!window._ingPasteWired) { window._ingPasteWired = true; document.addEventListener('paste', ingPaste); }
-  const editable = ingPuedeEditar();
+  if (ingVista === 'editar' && !ingPuedeEditar()) ingVista = 'lector';
+  const sel = document.getElementById('ingresos-vista-sel'); if (sel) sel.innerHTML = ingData.length || ingPuedeEditar() ? ingVistaSelHtml() : '';
+  const addBtn = document.getElementById('ing-add-btn'); if (addBtn) addBtn.style.display = (ingVista === 'editar' && ingPuedeEditar()) ? '' : 'none';
   // Asegurar el datalist de modelos para el autocompletado de la tabla
   if (!document.getElementById('fm-sim-modelos') && typeof FM_MODELOS !== 'undefined') {
     const dl = document.createElement('datalist'); dl.id = 'fm-sim-modelos'; dl.innerHTML = FM_MODELOS.map(m => `<option value="${m}">`).join(''); document.body.appendChild(dl);
@@ -4096,7 +4167,7 @@ function ingRender() {
   ord.forEach(g => {
     const mes = g.fecha ? _ingMes(g.fecha) : 'Sin fecha estimada';
     if (mes !== mesActual) { mesActual = mes; html += `<div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">🗓️ ${mes}</div>`; }
-    html += editable ? ingCard(g) : ingCardRO(g);
+    html += ingVista === 'editar' ? ingCard(g) : ingVista === 'resumen' ? ingCardResumen(g) : ingCardLector(g);
   });
   cont.innerHTML = html;
 }
