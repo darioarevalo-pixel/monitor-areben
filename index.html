@@ -3945,18 +3945,12 @@ function ingMediaVer(gid, fid) {
     const yt = _ytId(it.url), dr = _driveId(it.url);
     if (yt) inner = `<iframe width="100%" height="480" src="https://www.youtube.com/embed/${yt}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="border-radius:10px;display:block;"></iframe>`;
     else if (dr) inner = `<iframe width="100%" height="480" src="https://drive.google.com/file/d/${dr}/preview" frameborder="0" allow="autoplay" allowfullscreen style="border-radius:10px;display:block;"></iframe>`;
-    else if (/\.mp4(\?|$)/i.test(it.url)) inner = `<video src="${esc(it.url)}" controls autoplay style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;"></video>`;
+    else if (/\.mp4(\?|$)/i.test(it.url)) inner = `<video src="${esc(it.url)}" controls autoplay onclick="event.stopPropagation()" style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;"></video>`;
     else { window.open(it.url, '_blank'); return; }
   } else {
-    inner = `<img src="${esc(it.url)}" style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;">`;
+    inner = `<img src="${esc(it.url)}" onclick="event.stopPropagation()" style="max-width:100%;max-height:80vh;border-radius:10px;display:block;margin:auto;">`;
   }
-  let o = document.getElementById('ing-media-modal');
-  if (!o) { o = document.createElement('div'); o.id = 'ing-media-modal'; o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:2000;padding:28px;'; o.addEventListener('click', ev => { if (ev.target === o) o.remove(); }); document.body.appendChild(o); }
-  o.innerHTML = `<div style="max-width:900px;width:100%;position:relative;">
-      <button onclick="document.getElementById('ing-media-modal').remove()" title="Cerrar" style="position:absolute;top:-16px;right:-16px;width:36px;height:36px;border-radius:50%;border:none;background:#fff;cursor:pointer;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.4);z-index:1;">×</button>
-      ${inner}
-      ${it.nombre ? `<div style="color:#fff;text-align:center;margin-top:10px;font-size:13px;">${esc(it.nombre)}</div>` : ''}
-    </div>`;
+  _ingModalShow(`${inner}${it.nombre ? `<div style="color:#fff;text-align:center;margin-top:10px;font-size:13px;">${esc(it.nombre)}</div>` : ''}`);
 }
 function _ingMes(f) { const p = String(f).split('-'); const M = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; return (M[parseInt(p[1]) - 1] || '') + ' ' + p[0]; }
 function ingBloqueCard(g, b) {
@@ -4062,8 +4056,8 @@ function ingCard(g) {
 function ingBloqueCardLector(g, b) {
   const disenos = b.disenos || [], modelos = b.modelos || [];
   const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
-  const colHead = disenos.map(d => `<th style="padding:6px 6px;min-width:104px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
-      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:92px;height:92px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;display:block;margin:0 auto 5px;cursor:zoom-in;">` : `<div style="width:92px;height:92px;border-radius:10px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;margin:0 auto 5px;">—</div>`}
+  const colHead = disenos.map(d => `<th style="padding:6px 6px;min-width:128px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
+      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:120px;height:68px;object-fit:contain;background:#F8FAFC;border-radius:10px;border:1px solid #E5E7EB;display:block;margin:0 auto 5px;cursor:zoom-in;">` : `<div style="width:120px;height:68px;border-radius:10px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;margin:0 auto 5px;background:#F8FAFC;">—</div>`}
       ${esc(d.nombre) || '—'}
     </th>`).join('');
   const rows = modelos.map(m => {
@@ -4107,9 +4101,9 @@ function ingCardLector(g) {
 function ingBloqueResumen(g, b) {
   const tot = d => { let t = 0; (b.modelos || []).forEach(m => t += ingCeldaGet(b, m.id, d.id)); return t; };
   const conTot = (b.disenos || []).map(d => ({ d, t: tot(d) })).sort((a, c) => c.t - a.t);
-  const cards = conTot.map(({ d, t }) => `<div style="width:130px;text-align:center;">
-      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:130px;height:130px;object-fit:cover;border-radius:12px;border:1px solid #E5E7EB;display:block;cursor:zoom-in;">` : `<div style="width:130px;height:130px;border-radius:12px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;font-size:11px;">sin foto</div>`}
-      <div style="font-size:12px;font-weight:600;color:#374151;margin-top:5px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.nombre) || '—'}</div>
+  const cards = conTot.map(({ d, t }) => `<div style="width:200px;text-align:center;">
+      ${d.img ? `<img src="${d.img}" onclick="ingImgZoomD('${g.id}','${b.id}','${d.id}')" title="Ampliar" style="width:200px;height:112px;object-fit:contain;background:#F8FAFC;border-radius:12px;border:1px solid #E5E7EB;display:block;cursor:zoom-in;">` : `<div style="width:200px;height:112px;border-radius:12px;border:1px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;color:#CBD5E1;font-size:11px;background:#F8FAFC;">sin foto</div>`}
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-top:5px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.nombre) || '—'}</div>
       <div style="font-size:16px;font-weight:800;color:#111827;">${t.toLocaleString('es-AR')} <span style="font-size:11px;font-weight:500;color:#9CA3AF;">u.</span></div>
     </div>`).join('');
   return `<div style="border:1px solid #EEF2F7;border-radius:10px;padding:10px 12px;margin-top:10px;background:#FCFDFE;">
@@ -4136,15 +4130,21 @@ function ingCardResumen(g) {
   </div>`;
 }
 // Zoom de imágenes de diseño (lightbox; reusa el overlay #ing-media-modal)
-function ingImgZoom(src, cap) {
-  if (!src) return;
+// Overlay/lightbox compartido: cierra al tocar afuera del medio o con Escape
+function _ingModalShow(innerHtml) {
+  if (!window._ingEscWired) { window._ingEscWired = true; document.addEventListener('keydown', e => { if (e.key === 'Escape') { const m = document.getElementById('ing-media-modal'); if (m) m.remove(); } }); }
   let o = document.getElementById('ing-media-modal');
-  if (!o) { o = document.createElement('div'); o.id = 'ing-media-modal'; o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:2000;padding:28px;'; o.addEventListener('click', ev => { if (ev.target === o) o.remove(); }); document.body.appendChild(o); }
+  if (!o) { o = document.createElement('div'); o.id = 'ing-media-modal'; document.body.appendChild(o); }
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:2000;padding:28px;';
+  o.onclick = () => o.remove(); // tocar afuera de la imagen/medio cierra
   o.innerHTML = `<div style="max-width:1000px;width:100%;position:relative;text-align:center;">
       <button onclick="document.getElementById('ing-media-modal').remove()" title="Cerrar" style="position:absolute;top:-16px;right:-16px;width:36px;height:36px;border-radius:50%;border:none;background:#fff;cursor:pointer;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.4);z-index:1;">×</button>
-      <img src="${src}" style="max-width:100%;max-height:86vh;border-radius:10px;display:block;margin:auto;">
-      ${cap ? `<div style="color:#fff;margin-top:10px;font-size:14px;">${esc(cap)}</div>` : ''}
+      ${innerHtml}
     </div>`;
+}
+function ingImgZoom(src, cap) {
+  if (!src) return;
+  _ingModalShow(`<img src="${src}" onclick="event.stopPropagation()" style="max-width:100%;max-height:86vh;border-radius:10px;display:block;margin:auto;">${cap ? `<div style="color:#fff;margin-top:10px;font-size:14px;">${esc(cap)}</div>` : ''}`);
 }
 function ingImgZoomD(gid, bid, did) {
   const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
@@ -10178,10 +10178,11 @@ function doLogout() {
 }
 
 window.onload = async () => {
-  // Traer la config de usuarios/permisos del KV (sin contraseñas) ANTES del auto-login,
-  // así USERS tiene todos los perfiles (incluidos los creados desde la pantalla de Usuarios).
+  // Auto-login INMEDIATO con la config local (Bruno/Darío ya están en DEFAULT_USERS): evita el
+  // "flash" de la pantalla de login al refrescar. Los perfiles/permisos se refrescan en 2º plano.
+  if (intentarAutoLogin()) { cargarConfigUsuarios(); return; }
+  // Si el usuario guardado no está en la config local, traerla del KV y reintentar.
   await cargarConfigUsuarios();
-  // Si hay sesión guardada (no expirada), entrar directo
   if (intentarAutoLogin()) return;
   document.getElementById('login-user').focus();
 };
