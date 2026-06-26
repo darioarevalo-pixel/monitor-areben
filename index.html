@@ -1513,11 +1513,11 @@
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <label style="font-size:12px;color:#6B7280;">Canal:</label>
-            <select id="crm-canal" onchange="renderCRM()">
+            <select id="crm-canal" onchange="cargarCRM(true)">
               <option value="10">Mayorista</option>
               <option value="all">Todos los canales</option>
             </select>
-            <button class="btn-sm" onclick="renderCRM()">Recalcular</button>
+            <button class="btn-sm" onclick="cargarCRM(true)">Recalcular</button>
             <label class="btn-sm" title="Subí el Excel de clientes exportado de GN (con teléfonos). Completa los teléfonos faltantes por ID de cliente." style="background:#378ADD;color:#fff;cursor:pointer;">📇 Cargar teléfonos de GN<input type="file" accept=".xlsx,.xls" onchange="crmCargarTelefonos(this.files[0]);this.value='';" style="display:none;"></label>
             <button class="btn-sm" title="Programa automáticamente cada cuánto recontactar: cada semana a tus mejores clientes, cada mes a los activos. No pisa lo que ya cargaste a mano." onclick="crmSugerirCadencias()" style="background:#7C3AED;color:#fff;">🎯 Sugerir recontactos</button>
             <button class="btn-sm" title="Mensajes listos para copiar y mandar por WhatsApp, según la situación." onclick="abrirBancoMensajes()" style="background:#0F766E;color:#fff;">💬 Banco de mensajes</button>
@@ -10119,6 +10119,7 @@ window.onload = async () => {
 // CRM Mayorista — Tab Clientes
 // ═══════════════════════════════════════════════════════════════════════════════
 let crmRows = [];                     // ventas raw filtradas (mayorista u otro)
+let crmCargadoCuenta = null;          // _cuentaKey() de la última carga del CRM; evita recargar al volver a la card
 let crmClientes = {};                 // map id -> info personal
 let crmAgregado = [];                 // [{ id, name, total_sales, total_amount, last_sale, ... }]
 let crmSortState = { col: 'total_amount', dir: -1 };
@@ -10223,8 +10224,12 @@ function crmCargarTelefonos(file) {
   };
   reader.readAsArrayBuffer(file);
 }
-async function cargarCRM() {
+async function cargarCRM(forzar = false) {
   if (!currentCuenta) return;
+  // Carga única por cuenta: al volver a la card aparece instantáneo (el DOM persiste).
+  // Sobrevive al reset de tabsRendered que hace procesarYRenderizar. Se refresca con
+  // "Recalcular" (forzar=true) o al cambiar de cuenta (cambia _cuentaKey()).
+  if (!forzar && crmCargadoCuenta === _cuentaKey()) return;
   setStatus('Cargando clientes mayoristas...');
   try {
     const canalSel = document.getElementById('crm-canal').value;
@@ -10254,6 +10259,7 @@ async function cargarCRM() {
       }
     }
 
+    crmCargadoCuenta = _cuentaKey();
     setStatus('');
     renderCRM();
   } catch (e) {
