@@ -3705,7 +3705,7 @@ function ingGuardar() {
   }, 600);
 }
 function ingNuevoId() { return 'g' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
-function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', modelos: ingModelosBase(), disenos: ingDisenosVacios(10), celdas: {}, gallery: [] }); ingRender(); ingGuardar(); }
+function ingAgregar() { if (!ingPuedeEditar()) return; ingData.push({ id: ingNuevoId(), desc: '', proveedor: '', fecha: '', estado: 'cotizando', nota: '', bloques: [{ id: ingNuevoId(), nombre: '', modelos: ingModelosBase(), disenos: ingDisenosVacios(10), celdas: {} }], gallery: [] }); ingRender(); ingGuardar(); }
 function ingSetCampo(id, campo, val) {
   if (!ingPuedeEditar()) return;
   const g = ingData.find(x => x.id === id); if (!g) return;
@@ -3723,95 +3723,127 @@ const ING_MODELOS_BASE = [
 ];
 function ingModelosBase() { return ING_MODELOS_BASE.map(m => ({ id: ingNuevoId(), model: m })); }
 function ingDisenosVacios(n) { const a = []; for (let i = 0; i < n; i++) a.push({ id: ingNuevoId(), nombre: '', img: '' }); return a; }
-function ingCargarBase(gid) {
+function _ingG(gid) { return ingData.find(x => x.id === gid); }
+function _ingB(g, bid) { return g && (g.bloques || []).find(x => x.id === bid); }
+function ingCargarBase(gid, bid) {
   if (!ingPuedeEditar()) return;
-  const g = ingData.find(x => x.id === gid); if (!g) return;
-  g.modelos = g.modelos || [];
-  const have = new Set(g.modelos.map(m => (m.model || '').toLowerCase().trim()));
-  ING_MODELOS_BASE.forEach(m => { if (!have.has(m.toLowerCase())) g.modelos.push({ id: ingNuevoId(), model: m }); });
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  b.modelos = b.modelos || [];
+  const have = new Set(b.modelos.map(m => (m.model || '').toLowerCase().trim()));
+  ING_MODELOS_BASE.forEach(m => { if (!have.has(m.toLowerCase())) b.modelos.push({ id: ingNuevoId(), model: m }); });
   ingRender(); ingGuardar();
 }
-// ── Modelo de datos: grilla (modelos = filas, diseños = columnas) + galería ──
+// ── Modelo de datos: importación → bloques (material) → grilla (modelos × diseños) + galería ──
 function ingNormalizar(g) {
   if (!g || typeof g !== 'object') return g;
   g.gallery = Array.isArray(g.gallery) ? g.gallery : [];
-  if (!Array.isArray(g.modelos)) {
-    const its = Array.isArray(g.items) ? g.items : [];
-    g.modelos = its.map(it => ({ id: it.id || ingNuevoId(), model: it.model || '' }));
-    g.disenos = Array.isArray(g.disenos) ? g.disenos : [];
-    g.celdas = (g.celdas && typeof g.celdas === 'object') ? g.celdas : {};
-    const conCant = its.filter(it => (+it.cantidad || 0) > 0);
-    if (conCant.length) { // migrar cantidades viejas a un diseño "General" para no perder nada
-      const did = ingNuevoId();
-      g.disenos.push({ id: did, nombre: 'General', img: '' });
-      its.forEach(it => { const c = +it.cantidad || 0; if (c > 0) { (g.celdas[it.id] = g.celdas[it.id] || {})[did] = c; } });
+  if (!Array.isArray(g.bloques)) {
+    // Migrar la grilla vieja del tope (o el formato más viejo de items) a un único bloque
+    let modelos, disenos, celdas;
+    if (Array.isArray(g.modelos)) {
+      modelos = g.modelos;
+      disenos = Array.isArray(g.disenos) ? g.disenos : [];
+      celdas = (g.celdas && typeof g.celdas === 'object') ? g.celdas : {};
+    } else {
+      const its = Array.isArray(g.items) ? g.items : [];
+      modelos = its.map(it => ({ id: it.id || ingNuevoId(), model: it.model || '' }));
+      disenos = []; celdas = {};
+      const conCant = its.filter(it => (+it.cantidad || 0) > 0);
+      if (conCant.length) { const did = ingNuevoId(); disenos.push({ id: did, nombre: 'General', img: '' }); its.forEach(it => { const c = +it.cantidad || 0; if (c > 0) (celdas[it.id] = celdas[it.id] || {})[did] = c; }); }
     }
+    g.bloques = [{ id: ingNuevoId(), nombre: '', modelos, disenos, celdas }];
+    delete g.modelos; delete g.disenos; delete g.celdas;
   }
-  g.disenos = Array.isArray(g.disenos) ? g.disenos : [];
-  g.celdas = (g.celdas && typeof g.celdas === 'object') ? g.celdas : {};
+  g.bloques.forEach(b => { b.modelos = Array.isArray(b.modelos) ? b.modelos : []; b.disenos = Array.isArray(b.disenos) ? b.disenos : []; b.celdas = (b.celdas && typeof b.celdas === 'object') ? b.celdas : {}; });
   return g;
 }
-function ingDerivarItems(g) { // mantiene g.items (total por modelo) por compatibilidad con lectores externos
-  g.items = (g.modelos || []).map(m => { let t = 0; const row = (g.celdas || {})[m.id] || {}; for (const d in row) t += +row[d] || 0; return { id: m.id, model: m.model, cantidad: t }; });
-}
-function ingTotalU(g) { let t = 0; const c = g.celdas || {}; for (const m in c) { for (const d in c[m]) t += +c[m][d] || 0; } return t; }
-function ingCeldaGet(g, mid, did) { return (g.celdas && g.celdas[mid] && +g.celdas[mid][did]) || 0; }
-function ingCelda(gid, mid, did, val) {
+// Bloques (cada uno = un material con su propia grilla)
+function ingBloqueAdd(gid) {
   if (!ingPuedeEditar()) return;
-  const g = ingData.find(x => x.id === gid); if (!g) return;
+  const g = _ingG(gid); if (!g) return;
+  const nombre = prompt('Nombre del bloque (ej. IMD, Formas, Silicona…):', '');
+  if (nombre === null) return;
+  let n = parseInt(prompt('¿Cuántos diseños tiene este bloque?', '10'), 10);
+  if (!Number.isFinite(n) || n < 0) n = 0; if (n > 60) n = 60;
+  (g.bloques = g.bloques || []).push({ id: ingNuevoId(), nombre: nombre.trim(), modelos: ingModelosBase(), disenos: ingDisenosVacios(n), celdas: {} });
+  ingRender(); ingGuardar();
+}
+function ingBloqueDel(gid, bid) {
+  if (!ingPuedeEditar()) return;
+  const g = _ingG(gid); if (!g) return;
+  if (!confirm('¿Quitar este bloque y todas sus cantidades e imágenes?')) return;
+  g.bloques = (g.bloques || []).filter(x => x.id !== bid);
+  ingRender(); ingGuardar();
+}
+function ingBloqueSet(gid, bid, val) {
+  if (!ingPuedeEditar()) return;
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  b.nombre = val; ingGuardar();
+}
+function ingDerivarItems(g) { // mantiene g.items (total por modelo, sumando bloques) por compatibilidad
+  const map = {};
+  (g.bloques || []).forEach(b => { (b.modelos || []).forEach(m => { let t = 0; const row = (b.celdas || {})[m.id] || {}; for (const d in row) t += +row[d] || 0; if (t) map[m.model] = (map[m.model] || 0) + t; }); });
+  g.items = Object.keys(map).map(model => ({ id: model, model, cantidad: map[model] }));
+}
+function ingBloqueU(b) { let t = 0; const c = b.celdas || {}; for (const m in c) { for (const d in c[m]) t += +c[m][d] || 0; } return t; }
+function ingTotalU(g) { return (g.bloques || []).reduce((s, b) => s + ingBloqueU(b), 0); }
+function ingCeldaGet(b, mid, did) { return (b.celdas && b.celdas[mid] && +b.celdas[mid][did]) || 0; }
+function ingCelda(gid, bid, mid, did, val) {
+  if (!ingPuedeEditar()) return;
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
   const n = Math.max(0, parseInt(val) || 0);
-  g.celdas = g.celdas || {};
-  if (n > 0) { (g.celdas[mid] = g.celdas[mid] || {})[did] = n; }
-  else if (g.celdas[mid]) { delete g.celdas[mid][did]; }
+  b.celdas = b.celdas || {};
+  if (n > 0) { (b.celdas[mid] = b.celdas[mid] || {})[did] = n; }
+  else if (b.celdas[mid]) { delete b.celdas[mid][did]; }
   ingRender(); ingGuardar();
 }
-// Copiar cantidades: igualar una fila (copia la 1ª cantidad cargada a todos los diseños)
-function ingFilaIgualar(gid, mid) {
+// Copiar cantidades: igualar una fila del bloque (copia la 1ª cantidad cargada a todos los diseños)
+function ingFilaIgualar(gid, bid, mid) {
   if (!ingPuedeEditar()) return;
-  const g = ingData.find(x => x.id === gid); if (!g) return;
-  const disenos = g.disenos || []; if (!disenos.length) return;
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  const disenos = b.disenos || []; if (!disenos.length) return;
   let val = 0;
-  for (const d of disenos) { const v = ingCeldaGet(g, mid, d.id); if (v > 0) { val = v; break; } }
+  for (const d of disenos) { const v = ingCeldaGet(b, mid, d.id); if (v > 0) { val = v; break; } }
   if (val <= 0) { alert('Cargá una cantidad en algún diseño de esa fila y después tocá ⎘ para copiarla al resto.'); return; }
-  g.celdas = g.celdas || {}; g.celdas[mid] = g.celdas[mid] || {};
-  disenos.forEach(d => { g.celdas[mid][d.id] = val; });
+  b.celdas = b.celdas || {}; b.celdas[mid] = b.celdas[mid] || {};
+  disenos.forEach(d => { b.celdas[mid][d.id] = val; });
   ingRender(); ingGuardar();
 }
-// Igualar toda la grilla: misma cantidad en todos los modelos y diseños
-function ingGrillaIgualar(gid) {
+// Igualar todo el bloque: misma cantidad en todos los modelos y diseños del bloque
+function ingBloqueIgualar(gid, bid) {
   if (!ingPuedeEditar()) return;
-  const g = ingData.find(x => x.id === gid); if (!g) return;
-  const modelos = g.modelos || [], disenos = g.disenos || [];
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  const modelos = b.modelos || [], disenos = b.disenos || [];
   if (!modelos.length || !disenos.length) { alert('Agregá modelos y diseños primero.'); return; }
-  const raw = prompt('Misma cantidad para TODA la grilla (todos los modelos y diseños):', '');
+  const raw = prompt('Misma cantidad para TODO este bloque (todos los modelos y diseños):', '');
   if (raw === null) return;
   const n = Math.max(0, parseInt(raw) || 0);
-  g.celdas = g.celdas || {};
-  modelos.forEach(m => { g.celdas[m.id] = g.celdas[m.id] || {}; disenos.forEach(d => { if (n > 0) g.celdas[m.id][d.id] = n; else delete g.celdas[m.id][d.id]; }); });
+  b.celdas = b.celdas || {};
+  modelos.forEach(m => { b.celdas[m.id] = b.celdas[m.id] || {}; disenos.forEach(d => { if (n > 0) b.celdas[m.id][d.id] = n; else delete b.celdas[m.id][d.id]; }); });
   ingRender(); ingGuardar();
 }
-// Filas (modelos de celular)
-function ingModeloAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.modelos = g.modelos || []).push({ id: ingNuevoId(), model: '' }); ingRender(); ingGuardar(); }
-function ingModeloSet(gid, mid, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const m = (g.modelos || []).find(x => x.id === mid); if (!m) return; m.model = val; ingGuardar(); }
-function ingModeloDel(gid, mid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; if (!confirm('¿Quitar este modelo (fila) y sus cantidades?')) return; g.modelos = (g.modelos || []).filter(x => x.id !== mid); if (g.celdas) delete g.celdas[mid]; ingRender(); ingGuardar(); }
-// Columnas (diseños de funda)
-function ingDisenoAdd(gid) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; (g.disenos = g.disenos || []).push({ id: ingNuevoId(), nombre: '', img: '' }); ingRender(); ingGuardar(); }
-function ingDisenoSet(gid, did, val) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.nombre = val; ingGuardar(); }
-function ingDisenoImg(gid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240); input.value = ''; }
-function ingDisenoDel(gid, did) { if (!ingPuedeEditar()) return; const g = ingData.find(x => x.id === gid); if (!g) return; if (!confirm('¿Quitar este diseño (columna) y sus cantidades?')) return; g.disenos = (g.disenos || []).filter(x => x.id !== did); if (g.celdas) for (const m in g.celdas) delete g.celdas[m][did]; ingRender(); ingGuardar(); }
+// Filas (modelos de celular) — dentro de un bloque
+function ingModeloAdd(gid, bid) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; (b.modelos = b.modelos || []).push({ id: ingNuevoId(), model: '' }); ingRender(); ingGuardar(); }
+function ingModeloSet(gid, bid, mid, val) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const m = (b.modelos || []).find(x => x.id === mid); if (!m) return; m.model = val; ingGuardar(); }
+function ingModeloDel(gid, bid, mid) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; if (!confirm('¿Quitar este modelo (fila) y sus cantidades?')) return; b.modelos = (b.modelos || []).filter(x => x.id !== mid); if (b.celdas) delete b.celdas[mid]; ingRender(); ingGuardar(); }
+// Columnas (diseños de funda) — dentro de un bloque
+function ingDisenoAdd(gid, bid) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; (b.disenos = b.disenos || []).push({ id: ingNuevoId(), nombre: '', img: '' }); ingRender(); ingGuardar(); }
+function ingDisenoSet(gid, bid, did, val) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.nombre = val; ingGuardar(); }
+function ingDisenoImg(gid, bid, did, input) { if (!ingPuedeEditar()) return; const f = input.files && input.files[0]; if (!f) return; _imgAThumb(f, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240); input.value = ''; }
+function ingDisenoDel(gid, bid, did) { if (!ingPuedeEditar()) return; const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; if (!confirm('¿Quitar este diseño (columna) y sus cantidades?')) return; b.disenos = (b.disenos || []).filter(x => x.id !== did); if (b.celdas) for (const m in b.celdas) delete b.celdas[m][did]; ingRender(); ingGuardar(); }
 // Pegar imagen de diseño desde el portapapeles (Excel/WhatsApp) o arrastrar
 let ingPasteTarget = null, _ingPasteEl = null;
-function ingPasteSel(gid, did, el) {
-  ingPasteTarget = { gid, did };
+function ingPasteSel(gid, bid, did, el) {
+  ingPasteTarget = { gid, bid, did };
   if (_ingPasteEl && _ingPasteEl !== el) _ingPasteEl.style.outline = '';
   _ingPasteEl = el; if (el) { el.style.outline = '2px solid #378ADD'; el.focus && el.focus(); }
 }
-function _ingImgAplicar(file, gid, did) {
+function _ingImgAplicar(file, gid, bid, did) {
   if (!file || !/^image\//.test(file.type)) return false;
-  _imgAThumb(file, url => { const g = ingData.find(x => x.id === gid); if (!g) return; const d = (g.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240);
+  _imgAThumb(file, url => { const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return; const d = (b.disenos || []).find(x => x.id === did); if (!d) return; d.img = url; ingRender(); ingGuardar(); }, 240);
   return true;
 }
-function ingDisenoDrop(e, gid, did) { if (!ingPuedeEditar()) return; e.preventDefault(); const dt = e.dataTransfer; if (dt && dt.files) _ingImgAplicar(Array.from(dt.files).find(f => /^image\//.test(f.type)), gid, did); }
+function ingDisenoDrop(e, gid, bid, did) { if (!ingPuedeEditar()) return; e.preventDefault(); const dt = e.dataTransfer; if (dt && dt.files) _ingImgAplicar(Array.from(dt.files).find(f => /^image\//.test(f.type)), gid, bid, did); }
 function ingPaste(e) {
   const tab = document.getElementById('tab-ingresos');
   if (!tab || !tab.classList.contains('visible') || !ingPasteTarget || !ingPuedeEditar()) return;
@@ -3819,7 +3851,7 @@ function ingPaste(e) {
   let file = null;
   for (const it of (dt.items || [])) { if (it.kind === 'file') { const f = it.getAsFile(); if (f && /^image\//.test(f.type)) { file = f; break; } } }
   if (!file && dt.files) for (const f of dt.files) if (/^image\//.test(f.type)) { file = f; break; }
-  if (file) { e.preventDefault(); _ingImgAplicar(file, ingPasteTarget.gid, ingPasteTarget.did); }
+  if (file) { e.preventDefault(); _ingImgAplicar(file, ingPasteTarget.gid, ingPasteTarget.bid, ingPasteTarget.did); }
 }
 // Galería del pedido (fotos subidas + links de video)
 function ingFotoAdd(gid, input) { if (!ingPuedeEditar()) return; const fs = Array.from(input.files || []); if (!fs.length) return; let pend = fs.length; fs.forEach(f => _imgAThumb(f, url => { const g = ingData.find(x => x.id === gid); if (g) { (g.gallery = g.gallery || []).push({ id: ingNuevoId(), tipo: 'img', url, nombre: f.name || '' }); } if (--pend === 0) { ingRender(); ingGuardar(); } }, 520)); input.value = ''; }
@@ -3871,36 +3903,34 @@ function ingMediaVer(gid, fid) {
     </div>`;
 }
 function _ingMes(f) { const p = String(f).split('-'); const M = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; return (M[parseInt(p[1]) - 1] || '') + ' ' + p[0]; }
-function ingCard(g) {
-  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
-  const opts = ING_ESTADOS.map(s => `<option value="${s.k}" ${g.estado === s.k ? 'selected' : ''}>${s.lbl}</option>`).join('');
-  const disenos = g.disenos || [], modelos = g.modelos || [];
+function ingBloqueCard(g, b) {
+  const disenos = b.disenos || [], modelos = b.modelos || [];
   const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
   const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:96px;vertical-align:bottom;">
-      <div onclick="ingPasteSel('${g.id}','${d.id}',this)" ondragover="event.preventDefault();this.firstElementChild&&(this.style.opacity=.6);" ondragleave="this.style.opacity='';" ondrop="this.style.opacity='';ingDisenoDrop(event,'${g.id}','${d.id}')" tabindex="0" title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá 📷 subir" style="cursor:pointer;outline:none;border-radius:8px;">
+      <div onclick="ingPasteSel('${g.id}','${b.id}','${d.id}',this)" ondragover="event.preventDefault();this.style.opacity=.6;" ondragleave="this.style.opacity='';" ondrop="this.style.opacity='';ingDisenoDrop(event,'${g.id}','${b.id}','${d.id}')" tabindex="0" title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá 📷 subir" style="cursor:pointer;outline:none;border-radius:8px;">
         ${d.img
           ? `<img src="${d.img}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;pointer-events:none;">`
           : `<div style="width:64px;height:64px;border-radius:8px;border:1px dashed #CBD5E1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94A3B8;font-size:9px;text-align:center;margin:0 auto 4px;background:#F8FAFC;line-height:1.2;pointer-events:none;">📷<span>pegá o<br>subí</span></div>`}
       </div>
-      <input value="${esc(d.nombre)}" onchange="ingDisenoSet('${g.id}','${d.id}',this.value)" placeholder="Diseño" style="width:88px;font-size:12px;font-weight:600;text-align:center;border:none;border-bottom:1px solid #F1F5F9;padding:2px;">
+      <input value="${esc(d.nombre)}" onchange="ingDisenoSet('${g.id}','${b.id}','${d.id}',this.value)" placeholder="Diseño" style="width:88px;font-size:12px;font-weight:600;text-align:center;border:none;border-bottom:1px solid #F1F5F9;padding:2px;">
       <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:2px;">
-        <label style="cursor:pointer;color:#378ADD;font-size:10px;" title="Subir desde archivo">📷 subir<input type="file" accept="image/*" style="display:none" onchange="ingDisenoImg('${g.id}','${d.id}',this)"></label>
-        <button onclick="ingDisenoDel('${g.id}','${d.id}')" title="Quitar diseño" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:11px;">✕</button>
+        <label style="cursor:pointer;color:#378ADD;font-size:10px;" title="Subir desde archivo">📷 subir<input type="file" accept="image/*" style="display:none" onchange="ingDisenoImg('${g.id}','${b.id}','${d.id}',this)"></label>
+        <button onclick="ingDisenoDel('${g.id}','${b.id}','${d.id}')" title="Quitar diseño" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:11px;">✕</button>
       </div>
     </th>`).join('');
   const rows = modelos.map(m => {
     let rowTot = 0;
     const cells = disenos.map(d => {
-      const v = ingCeldaGet(g, m.id, d.id); rowTot += v; colTot[d.id] += v;
-      return `<td style="padding:2px;text-align:center;"><input type="number" min="0" value="${v || ''}" onchange="ingCelda('${g.id}','${m.id}','${d.id}',this.value)" style="width:64px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px;font-size:13px;"></td>`;
+      const v = ingCeldaGet(b, m.id, d.id); rowTot += v; colTot[d.id] += v;
+      return `<td style="padding:2px;text-align:center;"><input type="number" min="0" value="${v || ''}" onchange="ingCelda('${g.id}','${b.id}','${m.id}','${d.id}',this.value)" style="width:64px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px;font-size:13px;"></td>`;
     }).join('');
     grand += rowTot;
     return `<tr>
-      <th style="text-align:left;padding:2px 4px;position:sticky;left:0;background:#fff;z-index:1;">
+      <th style="text-align:left;padding:2px 4px;position:sticky;left:0;background:#FCFDFE;z-index:1;">
         <div style="display:flex;align-items:center;gap:2px;">
-          <input list="fm-sim-modelos" value="${esc(m.model)}" onchange="ingModeloSet('${g.id}','${m.id}',this.value)" placeholder="Modelo" style="width:128px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;">
-          <button onclick="ingFilaIgualar('${g.id}','${m.id}')" title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:13px;">⎘</button>
-          <button onclick="ingModeloDel('${g.id}','${m.id}')" title="Quitar modelo" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button>
+          <input list="fm-sim-modelos" value="${esc(m.model)}" onchange="ingModeloSet('${g.id}','${b.id}','${m.id}',this.value)" placeholder="Modelo" style="width:128px;font-size:13px;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;">
+          <button onclick="ingFilaIgualar('${g.id}','${b.id}','${m.id}')" title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:13px;">⎘</button>
+          <button onclick="ingModeloDel('${g.id}','${b.id}','${m.id}')" title="Quitar modelo" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button>
         </div>
       </th>
       ${cells}
@@ -3908,11 +3938,11 @@ function ingCard(g) {
     </tr>`;
   }).join('');
   const totCells = disenos.map(d => `<td style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:5px 2px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
-  const vacio = (!modelos.length && !disenos.length) ? `<div style="font-size:12px;color:#9CA3AF;margin:8px 0;">Agregá modelos (filas) y diseños (columnas) para cargar las cantidades. 👇</div>` : '';
+  const vacio = (!modelos.length && !disenos.length) ? `<div style="font-size:12px;color:#9CA3AF;margin:8px 0;">Agregá modelos (filas) y diseños (columnas). 👇</div>` : '';
   const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:6px;">
     <table style="border-collapse:collapse;">
       <thead><tr>
-        <th style="position:sticky;left:0;background:#fff;z-index:2;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>
+        <th style="position:sticky;left:0;background:#FCFDFE;z-index:2;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>
         ${colHead}
         <th style="font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Total</th>
       </tr></thead>
@@ -3927,12 +3957,27 @@ function ingCard(g) {
     </table>
   </div>` : '';
   const addBtns = `<div style="display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap;">
-    <button onclick="ingModeloAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo (fila)</button>
-    <button onclick="ingDisenoAdd('${g.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar diseño (columna)</button>
-    <button onclick="ingCargarBase('${g.id}')" title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">↺ Cargar modelos base</button>
-    <button onclick="ingGrillaIgualar('${g.id}')" title="Poner la misma cantidad en todos los modelos y diseños" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">= Misma cantidad para toda la grilla</button>
-    <span style="font-size:12px;color:#374151;margin-left:auto;">Total: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
+    <button onclick="ingModeloAdd('${g.id}','${b.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar modelo</button>
+    <button onclick="ingDisenoAdd('${g.id}','${b.id}')" style="background:none;border:none;color:#378ADD;cursor:pointer;font-size:12px;padding:0;">+ Agregar diseño</button>
+    <button onclick="ingCargarBase('${g.id}','${b.id}')" title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">↺ Cargar modelos base</button>
+    <button onclick="ingBloqueIgualar('${g.id}','${b.id}')" title="Misma cantidad en todo este bloque" style="background:none;border:none;color:#6B7280;cursor:pointer;font-size:12px;padding:0;">= Misma cantidad (bloque)</button>
   </div>`;
+  return `<div style="border:1px solid #EEF2F7;border-radius:10px;padding:8px 10px;margin-top:10px;background:#FCFDFE;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;">Bloque</span>
+      <input value="${esc(b.nombre)}" onchange="ingBloqueSet('${g.id}','${b.id}',this.value)" placeholder="Nombre del bloque (ej. IMD, Formas…)" style="flex:1;min-width:150px;font-size:13px;font-weight:600;border:none;border-bottom:1px solid #E5E7EB;padding:3px 0;">
+      <span style="font-size:12px;color:#374151;">Subtotal: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
+      <button onclick="ingBloqueDel('${g.id}','${b.id}')" title="Quitar bloque" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;cursor:pointer;font-size:12px;padding:3px 7px;">🗑 bloque</button>
+    </div>
+    ${vacio}${grid}${addBtns}
+  </div>`;
+}
+function ingCard(g) {
+  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
+  const opts = ING_ESTADOS.map(s => `<option value="${s.k}" ${g.estado === s.k ? 'selected' : ''}>${s.lbl}</option>`).join('');
+  const bloques = g.bloques || [];
+  const bloquesHtml = bloques.map(b => ingBloqueCard(g, b)).join('');
+  const totImpo = ingTotalU(g);
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <input value="${esc(g.desc)}" onchange="ingSetCampo('${g.id}','desc',this.value)" placeholder="Descripción (ej. Pedido fundas China #1)" style="flex:2;min-width:200px;font-size:14px;font-weight:600;border:none;border-bottom:1px solid #F1F5F9;padding:4px 0;">
@@ -3944,18 +3989,21 @@ function ingCard(g) {
       <label style="font-size:11px;color:#9CA3AF;">Llegada estimada<br><input type="date" value="${g.fecha || ''}" onchange="ingSetCampo('${g.id}','fecha',this.value)" style="padding:5px 7px;border:1px solid #D1D5DB;border-radius:6px;"></label>
     </div>
     <div style="margin-top:10px;">
-      <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Cantidades por modelo y diseño</div>
-      ${vacio}${grid}${addBtns}
+      <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Bloques (por material) · modelos × diseños</div>
+      ${bloques.length ? '' : `<div style="font-size:12px;color:#9CA3AF;margin:8px 0;">Esta importación todavía no tiene bloques. Agregá uno (ej. IMD, Formas…). 👇</div>`}
+      ${bloquesHtml}
+      <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+        <button onclick="ingBloqueAdd('${g.id}')" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:7px;">+ Agregar bloque</button>
+        <span style="font-size:13px;color:#111827;margin-left:auto;">Total importación: <b>${totImpo.toLocaleString('es-AR')}</b> u.</span>
+      </div>
     </div>
     ${ingGaleriaHtml(g, true)}
     <input value="${esc(g.nota)}" onchange="ingSetCampo('${g.id}','nota',this.value)" placeholder="Nota general del pedido…" style="width:100%;margin-top:10px;font-size:12px;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;box-sizing:border-box;">
   </div>`;
 }
 // Tarjeta de solo lectura (para quien tiene permiso de ver pero no de editar)
-function ingCardRO(g) {
-  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
-  const disenos = (g.disenos || []), modelos = (g.modelos || []);
-  const meta = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
+function ingBloqueCardRO(g, b) {
+  const disenos = b.disenos || [], modelos = b.modelos || [];
   const colTot = {}; disenos.forEach(d => colTot[d.id] = 0); let grand = 0;
   const colHead = disenos.map(d => `<th style="padding:6px 4px;min-width:84px;vertical-align:bottom;font-weight:600;font-size:12px;color:#374151;">
       ${d.img ? `<img src="${d.img}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;display:block;margin:0 auto 4px;">` : ''}
@@ -3963,22 +4011,37 @@ function ingCardRO(g) {
     </th>`).join('');
   const rows = modelos.map(m => {
     let rowTot = 0;
-    const cells = disenos.map(d => { const v = ingCeldaGet(g, m.id, d.id); rowTot += v; colTot[d.id] += v; return `<td style="text-align:center;font-size:13px;padding:3px 6px;border-top:1px solid #F1F5F9;">${v ? v.toLocaleString('es-AR') : '·'}</td>`; }).join('');
+    const cells = disenos.map(d => { const v = ingCeldaGet(b, m.id, d.id); rowTot += v; colTot[d.id] += v; return `<td style="text-align:center;font-size:13px;padding:3px 6px;border-top:1px solid #F1F5F9;">${v ? v.toLocaleString('es-AR') : '·'}</td>`; }).join('');
     grand += rowTot;
-    return `<tr><th style="text-align:left;font-size:13px;font-weight:600;padding:3px 8px 3px 4px;border-top:1px solid #F1F5F9;position:sticky;left:0;background:#fff;">${esc(m.model) || '—'}</th>${cells}<td style="text-align:center;font-weight:700;font-size:13px;padding:3px 8px;border-top:1px solid #F1F5F9;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td></tr>`;
+    return `<tr><th style="text-align:left;font-size:13px;font-weight:600;padding:3px 8px 3px 4px;border-top:1px solid #F1F5F9;position:sticky;left:0;background:#FCFDFE;">${esc(m.model) || '—'}</th>${cells}<td style="text-align:center;font-weight:700;font-size:13px;padding:3px 8px;border-top:1px solid #F1F5F9;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td></tr>`;
   }).join('');
   const totCells = disenos.map(d => `<td style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:4px 6px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
-  const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:8px;"><table style="border-collapse:collapse;">
-      <thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>${colHead}<th style="font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Total</th></tr></thead>
+  const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:6px;"><table style="border-collapse:collapse;">
+      <thead><tr><th style="position:sticky;left:0;background:#FCFDFE;text-align:left;font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Modelo \\ Diseño</th>${colHead}<th style="font-size:11px;color:#9CA3AF;padding:4px;vertical-align:bottom;">Total</th></tr></thead>
       <tbody>${rows}<tr><th style="text-align:right;font-size:12px;color:#6B7280;padding:5px 8px;position:sticky;left:0;background:#F9FAFB;">Total</th>${totCells}<td style="text-align:center;font-weight:800;font-size:14px;color:#111827;padding:5px 8px;background:#F3F4F6;">${grand ? grand.toLocaleString('es-AR') : '—'}</td></tr></tbody>
     </table></div>` : '';
+  return `<div style="border:1px solid #EEF2F7;border-radius:10px;padding:8px 10px;margin-top:10px;background:#FCFDFE;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <div style="font-size:13px;font-weight:600;color:#374151;">${esc(b.nombre) || 'Bloque'}</div>
+      <span style="font-size:12px;color:#374151;">Subtotal: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
+    </div>
+    ${grid}
+  </div>`;
+}
+function ingCardRO(g) {
+  const e = ING_ESTADOS.find(x => x.k === g.estado) || ING_ESTADOS[0];
+  const meta = [g.proveedor && ('Proveedor: ' + esc(g.proveedor)), g.fecha && ('Llega: ' + esc(g.fecha))].filter(Boolean).join('  ·  ');
+  const bloques = g.bloques || [];
+  const bloquesHtml = bloques.map(b => ingBloqueCardRO(g, b)).join('');
+  const totImpo = ingTotalU(g);
   return `<div style="border:1px solid #E5E7EB;border-left:4px solid ${e.color};border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fff;">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
       <div style="font-size:14px;font-weight:600;">${esc(g.desc) || '(sin descripción)'}</div>
       <span style="font-size:12px;color:${e.color};background:${e.bg};border:1px solid ${e.color};border-radius:7px;padding:3px 9px;font-weight:600;">${e.lbl}</span>
     </div>
     ${meta ? `<div style="font-size:12px;color:#6B7280;margin-top:5px;">${meta}</div>` : ''}
-    ${grid}
+    ${bloquesHtml}
+    ${bloques.length > 1 ? `<div style="text-align:right;font-size:13px;color:#111827;margin-top:8px;">Total importación: <b>${totImpo.toLocaleString('es-AR')}</b> u.</div>` : ''}
     ${ingGaleriaHtml(g, false)}
     ${g.nota ? `<div style="font-size:12px;color:#374151;margin-top:6px;">📝 ${esc(g.nota)}</div>` : ''}
   </div>`;
