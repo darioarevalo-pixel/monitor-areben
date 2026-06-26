@@ -3700,6 +3700,7 @@ function ingGuardar() {
     try {
       const r = await fetch(ING_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), ingresos: ingData, adminUser: currentUser, adminPass: _getAdminPass() }) });
       const d = await r.json();
+      if (!d.ok && r.status === 403) _olvidarAdminPass(); // contraseña equivocada: la pide de nuevo el próximo guardado
       if (st) { st.textContent = d.ok ? '✓ Guardado (lo ven todos)' : ('Error: ' + (d.error || '')); st.style.color = d.ok ? '#16A34A' : '#DC2626'; }
     } catch (e) { if (st) { st.textContent = 'Error al guardar.'; st.style.color = '#DC2626'; } }
   }, 600);
@@ -3795,7 +3796,42 @@ function ingCelda(gid, bid, mid, did, val) {
   b.celdas = b.celdas || {};
   if (n > 0) { (b.celdas[mid] = b.celdas[mid] || {})[did] = n; }
   else if (b.celdas[mid]) { delete b.celdas[mid][did]; }
-  ingRender(); ingGuardar();
+  _ingActualizarTotales(gid, bid); ingGuardar(); // sin redibujar: mantiene el foco para tabular
+}
+const _ingFmt = n => n ? n.toLocaleString('es-AR') : '—';
+function _ingSet(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+function _ingActualizarTotales(gid, bid) {
+  const g = _ingG(gid); const b = _ingB(g, bid); if (!b) return;
+  (b.modelos || []).forEach(m => { let t = 0; const row = (b.celdas || {})[m.id] || {}; for (const d in row) t += +row[d] || 0; _ingSet(`rt_${bid}_${m.id}`, _ingFmt(t)); });
+  (b.disenos || []).forEach(d => { let t = 0; (b.modelos || []).forEach(m => { t += ingCeldaGet(b, m.id, d.id); }); _ingSet(`ct_${bid}_${d.id}`, _ingFmt(t)); });
+  const sub = ingBloqueU(b);
+  _ingSet(`bt_${bid}`, sub.toLocaleString('es-AR'));
+  _ingSet(`bg_${bid}`, _ingFmt(sub));
+  _ingSet(`it_${gid}`, ingTotalU(g).toLocaleString('es-AR'));
+  ingResumen();
+}
+// Navegación por teclado entre casilleros de cantidad: Tab = al lado (y baja al final de fila), Enter = abajo
+function ingCeldaKey(e, el) {
+  if (e.key === 'Tab') {
+    const all = Array.from(document.querySelectorAll('#ingresos-cont .ing-celda'));
+    const i = all.indexOf(el); if (i < 0) return;
+    const next = all[i + (e.shiftKey ? -1 : 1)];
+    if (next) { e.preventDefault(); next.focus(); next.select && next.select(); }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const col = Array.from(document.querySelectorAll(`#ingresos-cont .ing-celda[data-b="${el.dataset.b}"][data-d="${el.dataset.d}"]`));
+    const i = col.indexOf(el); if (i < 0) return;
+    const next = col[i + (e.shiftKey ? -1 : 1)];
+    if (next) { next.focus(); next.select && next.select(); }
+  }
+}
+function ingResumen() {
+  const res = document.getElementById('ingresos-resumen'); if (!res) return;
+  const enCamino = ingData.filter(g => g.estado !== 'arribado');
+  const unidades = enCamino.reduce((s, g) => s + ingTotalU(g), 0);
+  res.innerHTML = ingData.length
+    ? `📦 <b>${enCamino.length}</b> en camino · <b>${unidades.toLocaleString('es-AR')}</b> unidades`
+    : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦';
 }
 // Copiar cantidades: igualar una fila del bloque (copia la 1ª cantidad cargada a todos los diseños)
 function ingFilaIgualar(gid, bid, mid) {
@@ -3922,7 +3958,7 @@ function ingBloqueCard(g, b) {
     let rowTot = 0;
     const cells = disenos.map(d => {
       const v = ingCeldaGet(b, m.id, d.id); rowTot += v; colTot[d.id] += v;
-      return `<td style="padding:2px;text-align:center;"><input type="number" min="0" value="${v || ''}" onchange="ingCelda('${g.id}','${b.id}','${m.id}','${d.id}',this.value)" style="width:64px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px;font-size:13px;"></td>`;
+      return `<td style="padding:2px;text-align:center;"><input type="number" min="0" value="${v || ''}" class="ing-celda" data-b="${b.id}" data-m="${m.id}" data-d="${d.id}" onkeydown="ingCeldaKey(event,this)" onchange="ingCelda('${g.id}','${b.id}','${m.id}','${d.id}',this.value)" style="width:64px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:4px;font-size:13px;"></td>`;
     }).join('');
     grand += rowTot;
     return `<tr>
@@ -3934,10 +3970,10 @@ function ingBloqueCard(g, b) {
         </div>
       </th>
       ${cells}
-      <td style="text-align:center;font-weight:700;font-size:13px;color:#374151;padding:2px 8px;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
+      <td id="rt_${b.id}_${m.id}" style="text-align:center;font-weight:700;font-size:13px;color:#374151;padding:2px 8px;background:#F9FAFB;">${rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
     </tr>`;
   }).join('');
-  const totCells = disenos.map(d => `<td style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:5px 2px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
+  const totCells = disenos.map(d => `<td id="ct_${b.id}_${d.id}" style="text-align:center;font-weight:600;font-size:12px;color:#6B7280;padding:5px 2px;background:#F9FAFB;">${colTot[d.id] ? colTot[d.id].toLocaleString('es-AR') : '—'}</td>`).join('');
   const vacio = (!modelos.length && !disenos.length) ? `<div style="font-size:12px;color:#9CA3AF;margin:8px 0;">Agregá modelos (filas) y diseños (columnas). 👇</div>` : '';
   const grid = (modelos.length || disenos.length) ? `<div style="overflow-x:auto;margin-top:6px;">
     <table style="border-collapse:collapse;">
@@ -3951,7 +3987,7 @@ function ingBloqueCard(g, b) {
         <tr>
           <th style="text-align:right;font-size:12px;color:#6B7280;padding:5px 8px 5px 4px;position:sticky;left:0;background:#F9FAFB;z-index:1;">Total</th>
           ${totCells}
-          <td style="text-align:center;font-weight:800;font-size:14px;color:#111827;padding:5px 8px;background:#F3F4F6;">${grand ? grand.toLocaleString('es-AR') : '—'}</td>
+          <td id="bg_${b.id}" style="text-align:center;font-weight:800;font-size:14px;color:#111827;padding:5px 8px;background:#F3F4F6;">${grand ? grand.toLocaleString('es-AR') : '—'}</td>
         </tr>
       </tbody>
     </table>
@@ -3966,7 +4002,7 @@ function ingBloqueCard(g, b) {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;">Bloque</span>
       <input value="${esc(b.nombre)}" onchange="ingBloqueSet('${g.id}','${b.id}',this.value)" placeholder="Nombre del bloque (ej. IMD, Formas…)" style="flex:1;min-width:150px;font-size:13px;font-weight:600;border:none;border-bottom:1px solid #E5E7EB;padding:3px 0;">
-      <span style="font-size:12px;color:#374151;">Subtotal: <b>${grand.toLocaleString('es-AR')}</b> u.</span>
+      <span style="font-size:12px;color:#374151;">Subtotal: <b id="bt_${b.id}">${grand.toLocaleString('es-AR')}</b> u.</span>
       <button onclick="ingBloqueDel('${g.id}','${b.id}')" title="Quitar bloque" style="border:1px solid #E5E7EB;background:#fff;border-radius:6px;cursor:pointer;font-size:12px;padding:3px 7px;">🗑 bloque</button>
     </div>
     ${vacio}${grid}${addBtns}
@@ -3994,7 +4030,7 @@ function ingCard(g) {
       ${bloquesHtml}
       <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap;">
         <button onclick="ingBloqueAdd('${g.id}')" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:7px;">+ Agregar bloque</button>
-        <span style="font-size:13px;color:#111827;margin-left:auto;">Total importación: <b>${totImpo.toLocaleString('es-AR')}</b> u.</span>
+        <span style="font-size:13px;color:#111827;margin-left:auto;">Total importación: <b id="it_${g.id}">${totImpo.toLocaleString('es-AR')}</b> u.</span>
       </div>
     </div>
     ${ingGaleriaHtml(g, true)}
@@ -4054,12 +4090,7 @@ function ingRender() {
   if (!document.getElementById('fm-sim-modelos') && typeof FM_MODELOS !== 'undefined') {
     const dl = document.createElement('datalist'); dl.id = 'fm-sim-modelos'; dl.innerHTML = FM_MODELOS.map(m => `<option value="${m}">`).join(''); document.body.appendChild(dl);
   }
-  const enCamino = ingData.filter(g => g.estado !== 'arribado');
-  const unidades = enCamino.reduce((s, g) => s + ingTotalU(g), 0);
-  const res = document.getElementById('ingresos-resumen');
-  if (res) res.innerHTML = ingData.length
-    ? `📦 <b>${enCamino.length}</b> en camino · <b>${unidades.toLocaleString('es-AR')}</b> unidades`
-    : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦';
+  ingResumen();
   const ord = ingData.slice().sort((a, b) => { if (!a.fecha && !b.fecha) return 0; if (!a.fecha) return 1; if (!b.fecha) return -1; return a.fecha.localeCompare(b.fecha); });
   let html = '', mesActual = '';
   ord.forEach(g => {
@@ -8718,10 +8749,14 @@ function _userRole() { return _esAdmin() ? 'admin' : 'marketing'; }
 // Contraseña del admin SOLO en memoria (se ingresa al loguear; nunca se guarda ni se descarga).
 // Se usa para autenticar los guardados que requieren admin (usuarios, ingresos, comisiones).
 let _adminPass = '';
+const _ADMINPASS_KEY = 'monitor_adminpass';
+function _setAdminPass(p) { _adminPass = p || ''; try { if (_adminPass) sessionStorage.setItem(_ADMINPASS_KEY, _adminPass); else sessionStorage.removeItem(_ADMINPASS_KEY); } catch {} }
+function _olvidarAdminPass() { _adminPass = ''; try { sessionStorage.removeItem(_ADMINPASS_KEY); } catch {} }
 function _getAdminPass() {
   if (_adminPass) return _adminPass;
-  const p = prompt('Reingresá tu contraseña de administrador para guardar los cambios:');
-  if (p) _adminPass = p;
+  try { const s = sessionStorage.getItem(_ADMINPASS_KEY); if (s) { _adminPass = s; return _adminPass; } } catch {}
+  const p = prompt('Ingresá tu contraseña de administrador (te la pido una sola vez):');
+  if (p) _setAdminPass(p);
   return _adminPass || '';
 }
 // Trae la config de usuarios del KV; si existe, reemplaza la local. Reaplica visibilidad si hay sesión.
@@ -8750,7 +8785,7 @@ async function usuariosAbrir() {
   try {
     const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'config', adminUser: currentUser, adminPass: _getAdminPass() }) });
     const d = await r.json();
-    if (r.status === 403) { _adminPass = ''; if (st) { st.textContent = 'Contraseña incorrecta. Volvé a abrir Usuarios e ingresala de nuevo.'; st.style.color = '#DC2626'; } usuEdit = []; usuariosRender(); return; }
+    if (r.status === 403) { _olvidarAdminPass(); if (st) { st.textContent = 'Contraseña incorrecta. Volvé a abrir Usuarios e ingresala de nuevo.'; st.style.color = '#DC2626'; } usuEdit = []; usuariosRender(); return; }
     const base = (d && d.ok && d.config && Array.isArray(d.config.users)) ? d.config.users : USERS_LIST;
     usuEdit = JSON.parse(JSON.stringify(base));
   } catch (e) {
@@ -8891,7 +8926,7 @@ async function doLogin() {
     if (d && d.ok && d.perfil) {
       currentUser = d.perfil.name;
       USERS[currentUser] = { admin: d.perfil.admin, cuenta: d.perfil.cuenta, acceso: d.perfil.acceso }; // perfil al día
-      _adminPass = pass; // contraseña de sesión en memoria (no se persiste ni se descarga); autentica los guardados
+      _setAdminPass(pass); // contraseña de sesión: cacheada en sessionStorage para no volver a pedirla en esta sesión
       currentCuenta = CUENTAS[d.perfil.cuenta || 'zattia'];
       errEl.textContent = '';
       saveSession();
@@ -10063,7 +10098,7 @@ function doLogout() {
   clearSession();
   currentUser   = null;
   currentCuenta = null;
-  _adminPass    = '';
+  _olvidarAdminPass();
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-pass').value = '';
   document.getElementById('login-error').textContent = '';
