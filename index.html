@@ -9147,7 +9147,32 @@ let sfPendMkt = null;  // ids de producto que llegan desde Marketing
 let sfViendo = null;   // id de solicitud que se está viendo
 let sfSaveT = null;
 const SF_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta';
+let SF_FORZAR_LOCAL = true; // ⚠️ TEMPORAL: mientras se ordena el depósito, todo se retira de Local. (poner false para volver a depósito/local automático)
 function sfNuevoId() { return 's' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+function sfBanner() { return SF_FORZAR_LOCAL ? '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px;color:#92400E;">⚠️ Modo temporal: <b>todo se retira de Local</b> (mientras se ordena el depósito).</div>' : ''; }
+async function sfCrearVentas(id) {
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  if (_cuentaKey() !== 'zattia') { alert('Por ahora solo se pueden crear ventas en Zattia.'); return; }
+  if (s.ventas && !confirm('Esta solicitud ya tiene ventas creadas. ¿Crear de nuevo? (puede duplicar)')) return;
+  const user = currentUser, pass = _getAdminPass();
+  if (!pass) { alert('Necesito tu contraseña para crear las ventas.'); return; }
+  const origenes = ['deposito', 'local'].filter(o => s.items.some(i => i.origen === o));
+  const btn = document.getElementById('sf-crear-btn'); if (btn) { btn.disabled = true; btn.textContent = '⏳ Creando ventas en GN…'; }
+  const result = {}; const errores = [];
+  for (const origen of origenes) {
+    const items = s.items.filter(i => i.origen === origen).map(i => ({ product_id: i.pid, size_id: i.sid, quantity: i.qty }));
+    const comments = `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`;
+    try {
+      const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), origen, items, comments, solicitudId: s.id, user, pass }) });
+      const d = await r.json();
+      if (d.ok) result[origen] = d.venta; else errores.push(`${origen}: ${d.error || ''}${d.detalle ? ' — ' + JSON.stringify(d.detalle).slice(0, 200) : ''}`);
+    } catch (e) { errores.push(`${origen}: error de conexión`); }
+  }
+  if (Object.keys(result).length) { s.ventas = Object.assign({}, s.ventas, result); s.estado = 'cargada'; sfGuardar(); }
+  if (errores.length) alert('No se pudieron crear todas las ventas:\n' + errores.join('\n'));
+  sfRender();
+}
 
 function sfDesdeMarketing() {
   const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id)));
@@ -9216,7 +9241,7 @@ function sfProcesar() {
   const items = [];
   sfDraft.prods.forEach(p => p.variantes.filter(v => v.sel).forEach(v => {
     const qty = Math.max(1, +v.qty || 1);
-    const origen = (v.deposito >= qty) ? 'deposito' : 'local';
+    const origen = SF_FORZAR_LOCAL ? 'local' : ((v.deposito >= qty) ? 'deposito' : 'local');
     items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen });
   }));
   if (!items.length) { alert('Tildá al menos una variante para procesar.'); return; }
@@ -9229,8 +9254,46 @@ function sfProcesar() {
 }
 function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) return; s.estado = val; sfGuardar(); }
 function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
-function sfVer(id) { sfViendo = id; sfRender(); }
-function sfVolver() { sfViendo = null; sfRender(); }
+let sfFase = 'retiro'; // fase de verificación: 'retiro' (preparar) | 'devolucion' (al volver)
+function sfVer(id) { sfViendo = id; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
+function sfVolver() { sfViendo = null; window._sfFb = null; sfRender(); }
+function sfSetFase(f) { sfFase = f; window._sfFb = null; sfRender(); }
+// ── Verificación por escaneo (Fase 3): retiro (preparar) y devolución (al volver de la sesión) ──
+function sfBcVid(code) {
+  code = String(code || '').trim(); if (!code) return null;
+  if (!window._sfBc) { const m = {}; (allVariantes || []).forEach(v => { if (v.barcode) m[String(v.barcode).trim()] = v.id; }); window._sfBc = m; }
+  return window._sfBc[code] || window._sfBc[code.replace(/^0+/, '')] || null;
+}
+function _sfFoco(id) { setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 30); }
+function sfFaseCompleta(s, fase) {
+  const mk = fase === 'devolucion' ? 'devuelto' : 'verif';
+  const m = s[mk] || {};
+  return (s.items || []).length > 0 && s.items.every(i => (m[i.vid] || 0) >= i.qty);
+}
+function sfScan(id, origen, inputEl, fase) {
+  const code = (inputEl.value || '').trim(); inputEl.value = '';
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const mapKey = fase === 'devolucion' ? 'devuelto' : 'verif';
+  const fbKey = origen + '-' + fase;
+  const arr = s.items.filter(i => i.origen === origen);
+  const vid = sfBcVid(code);
+  let it = vid ? arr.find(i => i.vid === vid) : null;
+  if (!it && code) it = arr.find(i => String(i.sku).toLowerCase() === code.toLowerCase()); // fallback por SKU
+  if (!it) { window._sfFb = { key: fbKey, html: `<span style="color:#DC2626;">✗ "${esc(code)}" no está en esta lista (producto o talle equivocado).</span>` }; sfRender(); _sfFoco('sf-scan-' + origen); return; }
+  s[mapKey] = s[mapKey] || {};
+  const done = s[mapKey][it.vid] || 0;
+  if (done >= it.qty) { window._sfFb = { key: fbKey, html: `<span style="color:#D97706;">⚠ ${esc(it.nombre)} · ${esc(it.variante)} ya estaba completo (${it.qty}).</span>` }; }
+  else {
+    s[mapKey][it.vid] = done + 1;
+    window._sfFb = { key: fbKey, html: `<span style="color:#16A34A;">✓ ${esc(it.nombre)} · ${esc(it.variante)} (${done + 1}/${it.qty})</span>` };
+    if (sfFaseCompleta(s, fase)) {                              // estado automático al completar la fase
+      if (fase === 'devolucion') s.estado = 'devuelta';
+      else if (s.estado !== 'devuelta') s.estado = 'preparada';
+    }
+    sfGuardar();
+  }
+  sfRender(); _sfFoco('sf-scan-' + origen);
+}
 function sfRender() {
   const cont = document.getElementById('sf-cont'); if (!cont) return;
   if (sfDraft) { cont.innerHTML = sfDraftHtml(); return; }
@@ -9252,7 +9315,7 @@ function sfDraftHtml() {
       <div style="margin-top:4px;">${vars || '<span style="color:#9CA3AF;font-size:12px;">sin variantes con stock</span>'}</div>
     </div>`;
   }).join('');
-  return `<div>
+  return `<div>${sfBanner()}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="flex:1;min-width:220px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
       <button class="btn-sm" onclick="sfAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto</button>
@@ -9268,22 +9331,47 @@ function sfDraftHtml() {
 function sfVerHtml(s) {
   const dep = s.items.filter(i => i.origen === 'deposito');
   const loc = s.items.filter(i => i.origen === 'local');
-  const grupo = (titulo, arr, origen) => `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:10px 12px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <div style="font-weight:700;">${titulo} <span style="color:#9CA3AF;font-weight:500;font-size:12px;">(${arr.reduce((a, i) => a + i.qty, 0)} u.)</span></div>
-        ${arr.length ? `<button class="btn-sm" onclick="sfReportePDF('${s.id}','${origen}')" style="background:#1F2937;color:#fff;">📄 Reporte</button>` : ''}
+  const mapKey = sfFase === 'devolucion' ? 'devuelto' : 'verif';
+  s[mapKey] = s[mapKey] || {};
+  const accionN = sfFase === 'devolucion' ? 'devueltos' : 'preparados';
+  const accionV = sfFase === 'devolucion' ? 'la devolución' : 'el preparado';
+  const conf = it => Math.min(s[mapKey][it.vid] || 0, it.qty);
+  const grupo = (titulo, arr, origen) => {
+    if (!arr.length) return '';
+    const totQ = arr.reduce((a, i) => a + i.qty, 0);
+    const confTot = arr.reduce((a, i) => a + conf(i), 0);
+    const completo = confTot >= totQ;
+    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${c}/${i.qty}</td></tr>`; }).join('');
+    const fbKey = origen + '-' + sfFase;
+    const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
+    return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="font-weight:700;">${titulo} <span style="color:#9CA3AF;font-weight:500;font-size:12px;">(${confTot}/${totQ} ${accionN})</span>${completo ? ` <span style="color:#16A34A;font-weight:700;">✓ completo</span>` : ''}</div>
+        <button class="btn-sm" onclick="sfReportePDF('${s.id}','${origen}')" style="background:#1F2937;color:#fff;">📄 Reporte</button>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Cant.</th></tr></thead><tbody>
-        ${arr.length ? arr.map(i => `<tr><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.qty}</td></tr>`).join('') : `<tr><td colspan="4" style="padding:6px;color:#9CA3AF;">— sin ítems —</td></tr>`}
-      </tbody></table>
+      <div style="margin:8px 0;"><input id="sf-scan-${origen}" onkeydown="if(event.key==='Enter'){event.preventDefault();sfScan('${s.id}','${origen}',this,'${sfFase}');}" placeholder="🔫 Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…" style="width:100%;padding:8px 10px;border:2px solid #378ADD;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      ${fb ? `<div style="font-size:13px;margin-bottom:6px;">${fb}</div>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">${sfFase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
-  const opts = ['pendiente', 'preparada', 'cargada'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
+  };
+  const opts = ['pendiente', 'preparada', 'cargada', 'devuelta'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
+  const ventasHtml = s.ventas
+    ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')}</div>`
+    : (_cuentaKey() === 'zattia'
+      ? `<div style="margin-bottom:10px;"><button id="sf-crear-btn" class="btn-primary" onclick="sfCrearVentas('${s.id}')">🧾 Crear ventas en GN</button> <span style="color:#9CA3AF;font-size:12px;">Descuenta el stock con el cliente "Sesión de fotos".</span></div>`
+      : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN está disponible solo en Zattia por ahora.</div>`);
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
       <div style="font-weight:700;font-size:15px;">${esc(s.descripcion) || 'Solicitud'}</div>
       <span style="color:#9CA3AF;font-size:12px;">${esc(s.fecha)}</span>
       <label style="font-size:12px;color:#6B7280;margin-left:auto;">Estado <select onchange="sfEstado('${s.id}',this.value)" style="padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;">${opts}</select></label>
+    </div>
+    ${sfBanner()}
+    ${ventasHtml}
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+      <button onclick="sfSetFase('retiro')" style="border:1px solid ${sfFase === 'retiro' ? '#378ADD' : '#D1D5DB'};background:${sfFase === 'retiro' ? '#378ADD' : '#fff'};color:${sfFase === 'retiro' ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📤 Preparado</button>
+      <button onclick="sfSetFase('devolucion')" style="border:1px solid ${sfFase === 'devolucion' ? '#378ADD' : '#D1D5DB'};background:${sfFase === 'devolucion' ? '#378ADD' : '#fff'};color:${sfFase === 'devolucion' ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📥 Devolución (al volver)</button>
     </div>
     ${grupo('📦 Retirar de Depósito', dep, 'deposito')}
     ${grupo('🏪 Retirar de Local', loc, 'local')}
