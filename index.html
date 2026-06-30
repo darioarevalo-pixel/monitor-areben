@@ -849,8 +849,8 @@
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
           <button class="btn-sm" id="mkt-btn-tablas" onclick="mktFiltroTablasPendientes()" title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes." style="display:none;background:#0F766E;color:#fff;">📏 Pendientes de tabla (con stock)</button>
-          <button class="btn-sm" onclick="mktGenerarReporteFotos()" title="PDF para separar y fotografiar lo que está filtrado" style="background:#DC2626;color:#fff;">📄 Lista para fotos (PDF)</button>
-          <button class="btn-sm" onclick="mktGenerarEtiquetasZebra()" title="Etiquetas 5×2,5 cm, 1 por variante, para impresora Zebra" style="background:#1F2937;color:#fff;">🏷️ Etiquetas Zebra</button>
+          <button class="btn-sm" id="mkt-sf-btn" onclick="mktSelEntrar()" title="Elegí productos para mandarlos a Sesión de fotos" style="background:#7C3AED;color:#fff;">📷 Productos para sesión de fotos</button>
+          <button class="btn-sm" id="mkt-sf-cancel" onclick="mktSelCancelar()" style="display:none;background:#fff;border:1px solid #D1D5DB;">Cancelar</button>
         </div>
       </div>
 
@@ -928,7 +928,7 @@
         <table style="font-size:13px;">
           <thead>
             <tr>
-              <th style="width:34px;text-align:center;"><input type="checkbox" id="mkt-sel-all" checked onchange="mktSelAll(this.checked)" title="Incluir todos / ninguno en el reporte"></th>
+              <th id="mkt-th-sel" style="width:34px;text-align:center;display:none;"><input type="checkbox" id="mkt-sel-all" onchange="mktSelAll(this.checked)" title="Elegir todos / ninguno"></th>
               <th style="width:72px;">Foto</th>
               <th onclick="mktSort('name')" style="cursor:pointer;">Producto ↕</th>
               <th onclick="mktSort('cat_tn')" style="cursor:pointer;width:160px;">Cat. TN ↕</th>
@@ -1441,6 +1441,15 @@
         <div id="ingresos-vista-sel" style="margin:12px 0 0;"></div>
         <div id="ingresos-resumen" style="font-size:13px;color:#374151;margin:12px 0;"></div>
         <div id="ingresos-cont"></div>
+      </div>
+    </div>
+
+    <!-- ── Sesión de fotos (solicitud de productos) ────────────────────────── -->
+    <div id="tab-sesion-fotos" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">📷 Sesión de fotos</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Armá la solicitud de productos para fotografiar: elegí las variantes (solo se ofrecen las que tienen stock), poné cantidad, y al <b>Procesar</b> el sistema decide solo de dónde sacar cada una (📦 depósito si hay, si no 🏪 local) y genera <b>2 reportes</b> con SKU. Queda guardado en el historial.</div>
+        <div id="sf-cont" style="margin-top:14px;"></div>
       </div>
     </div>
 
@@ -6384,6 +6393,7 @@ function switchTab(id) {
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (id === 'ingresos') { ingInit(); return; }
+  if (id === 'sesion-fotos') { sfAbrir(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
@@ -8190,26 +8200,38 @@ function renderMargenesGrid() {
 let mktDataReady = false;
 let mktSortState = { col: 'sales30', dir: -1 };
 let mktExpanded = null; // id de producto con el detalle abierto
-let mktExcl = new Set(); // productos destildados (no van al reporte de fotos)
+let mktExcl = new Set();        // (en desuso: lo usan funciones viejas de reporte/Zebra ya sin botón)
+let mktSelMode = false;        // modo "elegir productos para sesión de fotos"
+let mktSfSel = new Set();       // productos elegidos (ids) para mandar a Sesión de fotos
 
-function mktToggleSel(pid, checked, el) {
-  if (checked) mktExcl.delete(String(pid)); else mktExcl.add(String(pid));
-  const tr = el && el.closest('tr');
-  if (tr) tr.style.opacity = checked ? '' : '.4';
-  // actualizar contador sin re-render completo
-  const lista = _mktListaFiltrada();
-  const selCount = lista.filter(x => !mktExcl.has(String(x.gn.id))).length;
-  const cnt = document.getElementById('mkt-count');
-  if (cnt) cnt.innerHTML = `<b>${selCount}</b> seleccionados para el reporte · Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` + (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
-  const selAll = document.getElementById('mkt-sel-all');
-  if (selAll) selAll.checked = lista.length > 0 && selCount === lista.length;
+function mktSelBtn() {
+  const b = document.getElementById('mkt-sf-btn'), c = document.getElementById('mkt-sf-cancel');
+  if (!b) return;
+  if (mktSelMode) { b.textContent = `📷 Mandar a sesión de fotos (${mktSfSel.size})`; b.setAttribute('onclick', 'mktSelMandar()'); if (c) c.style.display = ''; }
+  else { b.textContent = '📷 Productos para sesión de fotos'; b.setAttribute('onclick', 'mktSelEntrar()'); if (c) c.style.display = 'none'; }
 }
-
+function mktSelEntrar() { mktSelMode = true; mktSfSel.clear(); const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = ''; mktSelBtn(); mktRender(); }
+function mktSelCancelar() { mktSelMode = false; mktSfSel.clear(); const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = 'none'; mktSelBtn(); mktRender(); }
+function mktSelMandar() {
+  if (!mktSfSel.size) { alert('Tildá al menos un producto para mandar a Sesión de fotos.'); return; }
+  sfPendMkt = [...mktSfSel];
+  mktSelMode = false; const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = 'none'; mktSelBtn();
+  switchTab('sesion-fotos');
+}
+function mktToggleSel(pid, checked) {
+  if (checked) mktSfSel.add(String(pid)); else mktSfSel.delete(String(pid));
+  mktSelBtn();
+  const lista = _mktListaFiltrada();
+  const cnt = document.getElementById('mkt-count');
+  if (cnt) cnt.innerHTML = `<b>${mktSfSel.size}</b> elegidos · Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` + (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
+  const selAll = document.getElementById('mkt-sel-all');
+  if (selAll) selAll.checked = lista.length > 0 && lista.every(x => mktSfSel.has(String(x.gn.id)));
+}
 function mktSelAll(checked) {
   const lista = _mktListaFiltrada();
-  if (checked) lista.forEach(x => mktExcl.delete(String(x.gn.id)));
-  else lista.forEach(x => mktExcl.add(String(x.gn.id)));
-  mktRender();
+  if (checked) lista.forEach(x => mktSfSel.add(String(x.gn.id)));
+  else lista.forEach(x => mktSfSel.delete(String(x.gn.id)));
+  mktSelBtn(); mktRender();
 }
 
 // Muestra/oculta los inputs de rango del filtro de stock
@@ -8769,9 +8791,8 @@ function mktRender() {
     const editarTN = tnId ? `<a href="${adminBaseUrl}/${tnId}" target="_blank" title="Editar en TN admin" style="color:#6366F1;text-decoration:none;">✏️</a>` : '';
 
     const abierto = String(mktExpanded) === String(x.gn.id);
-    const incluido = !mktExcl.has(String(x.gn.id));
-    const fila = `<tr style="${incluido ? '' : 'opacity:.4;'}">
-      <td style="text-align:center;"><input type="checkbox" ${incluido ? 'checked' : ''} onchange="mktToggleSel('${x.gn.id}', this.checked, this)" title="Incluir en el reporte de fotos"></td>
+    const fila = `<tr>
+      ${mktSelMode ? `<td style="text-align:center;"><input type="checkbox" ${mktSfSel.has(String(x.gn.id)) ? 'checked' : ''} onchange="mktToggleSel('${x.gn.id}', this.checked)" title="Elegir para sesión de fotos"></td>` : ''}
       <td>${fotoCell}</td>
       <td onclick="mktToggleDetalle('${x.gn.id}')" style="cursor:pointer;" title="Ver stock completo y ventas por canal">
         <div style="font-weight:500;">${abierto ? '▾' : '▸'} ${esc(x.gn.name)}</div>
@@ -8786,12 +8807,12 @@ function mktRender() {
     return fila + (abierto ? mktDetalleRow(x) : '');
   }).join('');
 
-  const selCount = lista.filter(x => !mktExcl.has(String(x.gn.id))).length;
   document.getElementById('mkt-count').innerHTML =
-    `<b>${selCount}</b> seleccionados para el reporte · Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` +
+    (mktSelMode ? `<b>${mktSfSel.size}</b> elegidos · ` : '') + `Mostrando ${Math.min(lista.length, 300)} de ${lista.length} productos` +
     (lista.length > 300 ? ' (limitado a 300, refiná filtros para ver más)' : '');
   const selAll = document.getElementById('mkt-sel-all');
-  if (selAll) selAll.checked = lista.length > 0 && selCount === lista.length;
+  if (selAll) selAll.checked = mktSelMode && lista.length > 0 && lista.every(x => mktSfSel.has(String(x.gn.id)));
+  mktSelBtn();
 }
 
 function _mesLabel(yyyymm) {
@@ -8814,6 +8835,7 @@ const PERM_CAT = [
   { key: 'colores', label: 'Colores', info: 'Análisis de ventas por color de prenda.', brands: ['zattia'] },
   { key: 'talles', label: 'Talles', info: 'Análisis de ventas por talle.', brands: ['zattia'] },
   { key: 'marketing', label: '📸 Marketing', info: 'Armado de publicaciones (fotos + textos) para redes y TiendaNube.', brands: ['bdi', 'zattia'] },
+  { key: 'sesion-fotos', label: '📷 Sesión de fotos', info: 'Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.', brands: ['bdi', 'zattia'] },
   { key: 'comisiones', label: '💵 Comisiones y margen', info: 'Simulador de comisiones de vendedores y cálculo de markup/margen.', brands: ['bdi', 'zattia'] },
   { key: 'margenes', label: '📊 Margen por producto', info: 'Margen y markup de cada producto disponible, comparado con el objetivo.', brands: ['bdi', 'zattia'] },
   { key: 'etiquetas', label: '🏷️ Etiquetas', info: 'Impresión de etiquetas con código de barras.', brands: ['bdi', 'zattia'], subs: [
@@ -8842,7 +8864,7 @@ const PERM_CAT = [
 const NAV_CATS = [
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
-  { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
+  { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
   { id: 'config',    label: '⚙️ Config',    keys: ['usuarios'], adminOnly: true },
@@ -9117,6 +9139,206 @@ const TABS_POR_CUENTA = {
   zattia: ['proveedores', 'colores', 'talles', 'etiquetas'],
   bdi:    ['fundas-modelo', 'clientes', 'etiquetas'],
 };
+
+// ════════ Sesión de fotos (solicitud de productos para fotografiar) ════════════
+let sfData = [];       // historial de solicitudes (KV, por marca)
+let sfDraft = null;    // borrador en armado: { desc, prods:[{pid,name,cat,variantes:[...]}] }
+let sfPendMkt = null;  // ids de producto que llegan desde Marketing
+let sfViendo = null;   // id de solicitud que se está viendo
+let sfSaveT = null;
+const SF_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+function sfNuevoId() { return 's' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+
+function sfDesdeMarketing() {
+  const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id)));
+  if (!lista.length) { alert('No hay productos seleccionados en Marketing. Filtrá y tildá lo que querés fotografiar.'); return; }
+  sfPendMkt = lista.map(x => String(x.gn.id));
+  switchTab('sesion-fotos');
+}
+async function sfAbrir() {
+  const cont = document.getElementById('sf-cont');
+  if (cont && !sfData.length && !sfDraft && !sfViendo) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>';
+  // Inventario por ubicación (depósito/local) por variante — mismos pasos que repoInit
+  if (!repoInv.length) {
+    try {
+      if (typeof repoCfgLoad === 'function') await repoCfgLoad();
+      if (!window._mktTNData) { try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; } }
+      await repoCargarInventario();
+    } catch (e) {}
+  }
+  await sfInit();
+  if (sfPendMkt) { sfDraftDesdeProductos(sfPendMkt); sfPendMkt = null; }
+  sfRender();
+}
+async function sfInit() {
+  try { const r = await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`); const d = await r.json(); sfData = (d && d.ok && Array.isArray(d.list)) ? d.list : []; }
+  catch (e) { sfData = []; }
+}
+function sfGuardar() {
+  clearTimeout(sfSaveT);
+  sfSaveT = setTimeout(async () => {
+    try { await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), list: sfData }) }); } catch (e) {}
+  }, 500);
+}
+// Expande el borrador con productos (cada uno con sus variantes CON stock)
+function sfDraftDesdeProductos(pids) {
+  if (!sfDraft) sfDraft = { desc: '', prods: [] };
+  const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
+  pids.forEach(pid => {
+    pid = String(pid);
+    if (sfDraft.prods.some(p => p.pid === pid)) return;
+    const vars = (repoInv || []).filter(it => String(it.pid) === pid && ((+it.local || 0) + (+it.deposito || 0)) > 0)
+      .map(it => ({ vid: it.vid, sid: it.sid, size: it.size || '—', sku: it.sku || '', local: +it.local || 0, deposito: +it.deposito || 0, sel: false, qty: 1 }))
+      .sort((a, b) => String(a.size).localeCompare(String(b.size), 'es', { numeric: true }));
+    if (!vars.length) return;
+    const p = prodById[pid];
+    sfDraft.prods.push({ pid, name: (p && p.name) || ((repoInv.find(it => String(it.pid) === pid) || {}).name) || '—', cat: (p && p.category) || '', variantes: vars });
+  });
+}
+function sfDraftToggleVar(pid, vid, checked) { if (!sfDraft) return; const p = sfDraft.prods.find(x => x.pid === pid); if (!p) return; const v = p.variantes.find(x => x.vid === vid); if (v) v.sel = checked; sfRender(); }
+function sfDraftQty(pid, vid, val) { if (!sfDraft) return; const p = sfDraft.prods.find(x => x.pid === pid); if (!p) return; const v = p.variantes.find(x => x.vid === vid); if (v) v.qty = Math.max(1, parseInt(val) || 1); }
+function sfDraftDesc(val) { if (sfDraft) sfDraft.desc = val; }
+function sfDraftQuitarProd(pid) { if (!sfDraft) return; sfDraft.prods = sfDraft.prods.filter(x => x.pid !== pid); sfRender(); }
+function sfNuevoDraft() { sfDraft = { desc: '', prods: [] }; sfViendo = null; sfRender(); }
+function sfCancelarDraft() { sfDraft = null; sfRender(); }
+function sfAddProductoPrompt() {
+  const q = (prompt('Buscar producto por nombre o SKU:') || '').trim().toLowerCase();
+  if (!q) return;
+  const pids = [...new Set((repoInv || []).filter(it => (String(it.name).toLowerCase().includes(q) || String(it.sku).toLowerCase().includes(q)) && ((+it.local || 0) + (+it.deposito || 0)) > 0).map(it => String(it.pid)))];
+  if (!pids.length) { alert('No encontré productos con stock para "' + q + '".'); return; }
+  if (!sfDraft) sfDraft = { desc: '', prods: [] };
+  sfDraftDesdeProductos(pids);
+  sfRender();
+}
+// Procesar: asigna origen por variante (depósito si hay, si no local) y guarda la solicitud
+function sfProcesar() {
+  if (!sfDraft) return;
+  const items = [];
+  sfDraft.prods.forEach(p => p.variantes.filter(v => v.sel).forEach(v => {
+    const qty = Math.max(1, +v.qty || 1);
+    const origen = (v.deposito >= qty) ? 'deposito' : 'local';
+    items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen });
+  }));
+  if (!items.length) { alert('Tildá al menos una variante para procesar.'); return; }
+  const sol = { id: sfNuevoId(), fecha: new Date().toISOString().slice(0, 10), creado: Date.now(), creadoPor: currentUser || '', descripcion: sfDraft.desc || '', estado: 'pendiente', items };
+  sfData.unshift(sol);
+  sfGuardar();
+  sfDraft = null;
+  sfViendo = sol.id;
+  sfRender();
+}
+function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) return; s.estado = val; sfGuardar(); }
+function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
+function sfVer(id) { sfViendo = id; sfRender(); }
+function sfVolver() { sfViendo = null; sfRender(); }
+function sfRender() {
+  const cont = document.getElementById('sf-cont'); if (!cont) return;
+  if (sfDraft) { cont.innerHTML = sfDraftHtml(); return; }
+  if (sfViendo) { const s = sfData.find(x => x.id === sfViendo); if (s) { cont.innerHTML = sfVerHtml(s); return; } sfViendo = null; }
+  cont.innerHTML = sfHistorialHtml();
+}
+function sfDraftHtml() {
+  const prods = sfDraft.prods || [];
+  const totalSel = prods.reduce((s, p) => s + p.variantes.filter(v => v.sel).reduce((a, v) => a + (+v.qty || 1), 0), 0);
+  const rows = prods.map(p => {
+    const vars = p.variantes.map(v => `<label style="display:inline-flex;align-items:center;gap:6px;margin:3px 12px 3px 0;font-size:13px;${v.sel ? 'font-weight:600;' : ''}">
+        <input type="checkbox" ${v.sel ? 'checked' : ''} onchange="sfDraftToggleVar('${p.pid}','${v.vid}',this.checked)">
+        ${esc(v.size)} <span style="color:#9CA3AF;font-size:11px;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span>
+        ${v.sel ? `<input type="number" min="1" value="${v.qty}" onchange="sfDraftQty('${p.pid}','${v.vid}',this.value)" title="Cantidad" style="width:48px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:2px 4px;">` : ''}
+      </label>`).join('');
+    return `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="font-weight:600;font-size:14px;">${esc(p.name)}</div>
+        <button onclick="sfDraftQuitarProd('${p.pid}')" title="Quitar producto" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button></div>
+      <div style="margin-top:4px;">${vars || '<span style="color:#9CA3AF;font-size:12px;">sin variantes con stock</span>'}</div>
+    </div>`;
+  }).join('');
+  return `<div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="flex:1;min-width:220px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+      <button class="btn-sm" onclick="sfAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto</button>
+    </div>
+    ${prods.length ? rows : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Agregá productos (desde Marketing con "📷 Mandar a sesión de fotos", o acá con "+ Agregar producto") y tildá las variantes a fotografiar.</div>'}
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn-primary" onclick="sfProcesar()">✓ Procesar (${totalSel} u.)</button>
+      <button class="btn-sm" onclick="sfCancelarDraft()">Cancelar</button>
+      <span style="color:#9CA3AF;font-size:12px;">El sistema asigna depósito/local automáticamente al procesar.</span>
+    </div>
+  </div>`;
+}
+function sfVerHtml(s) {
+  const dep = s.items.filter(i => i.origen === 'deposito');
+  const loc = s.items.filter(i => i.origen === 'local');
+  const grupo = (titulo, arr, origen) => `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="font-weight:700;">${titulo} <span style="color:#9CA3AF;font-weight:500;font-size:12px;">(${arr.reduce((a, i) => a + i.qty, 0)} u.)</span></div>
+        ${arr.length ? `<button class="btn-sm" onclick="sfReportePDF('${s.id}','${origen}')" style="background:#1F2937;color:#fff;">📄 Reporte</button>` : ''}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Cant.</th></tr></thead><tbody>
+        ${arr.length ? arr.map(i => `<tr><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.qty}</td></tr>`).join('') : `<tr><td colspan="4" style="padding:6px;color:#9CA3AF;">— sin ítems —</td></tr>`}
+      </tbody></table>
+    </div>`;
+  const opts = ['pendiente', 'preparada', 'cargada'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
+  return `<div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
+      <div style="font-weight:700;font-size:15px;">${esc(s.descripcion) || 'Solicitud'}</div>
+      <span style="color:#9CA3AF;font-size:12px;">${esc(s.fecha)}</span>
+      <label style="font-size:12px;color:#6B7280;margin-left:auto;">Estado <select onchange="sfEstado('${s.id}',this.value)" style="padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;">${opts}</select></label>
+    </div>
+    ${grupo('📦 Retirar de Depósito', dep, 'deposito')}
+    ${grupo('🏪 Retirar de Local', loc, 'local')}
+  </div>`;
+}
+function sfHistorialHtml() {
+  const rows = (sfData || []).map(s => {
+    const dep = s.items.filter(i => i.origen === 'deposito').reduce((a, i) => a + i.qty, 0);
+    const loc = s.items.filter(i => i.origen === 'local').reduce((a, i) => a + i.qty, 0);
+    return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${esc(s.descripcion) || '(sin descripción)'}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
+        <button class="btn-sm" onclick="sfVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
+        <button onclick="sfBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>
+      </div>`;
+  }).join('');
+  return `<div>
+    <div style="margin-bottom:12px;"><button class="btn-primary" onclick="sfNuevoDraft()">+ Nueva solicitud</button></div>
+    <div style="font-size:12px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Historial</div>
+    ${rows || '<div style="color:#9CA3AF;font-size:13px;">Todavía no hay solicitudes. Tocá "+ Nueva solicitud" o mandá productos desde Marketing.</div>'}
+  </div>`;
+}
+function sfReportePDF(id, origen) {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const arr = s.items.filter(i => i.origen === origen);
+  if (!arr.length) { alert('No hay ítems para ese origen.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
+  const M = 40; let y = M;
+  const titulo = origen === 'deposito' ? 'Retiro de Deposito' : 'Retiro de Local';
+  const tot = arr.reduce((a, i) => a + i.qty, 0);
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.setTextColor(0);
+  pdf.text('Sesion de fotos - ' + titulo, M, y);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(120);
+  pdf.text(new Date().toLocaleDateString('es-AR') + '  -  ' + arr.length + ' items, ' + tot + ' u.', W - M, y, { align: 'right' });
+  y += 16;
+  if (s.descripcion) { pdf.setFontSize(9); pdf.setTextColor(90); pdf.text(String(s.descripcion).slice(0, 90), M, y); y += 12; }
+  pdf.setDrawColor(210); pdf.line(M, y, W - M, y); y += 18;
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(120);
+  pdf.text('OK', M, y); pdf.text('Producto', M + 26, y); pdf.text('Variante', M + 250, y); pdf.text('SKU', M + 360, y); pdf.text('Cant.', W - M, y, { align: 'right' });
+  y += 6; pdf.setDrawColor(225); pdf.line(M, y, W - M, y); y += 14;
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
+  arr.forEach((i, idx) => {
+    if (y > H - M) { pdf.addPage(); y = M; }
+    if (idx % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M - 6, y - 11, W - 2 * M + 12, 18, 'F'); }
+    pdf.setDrawColor(120); pdf.rect(M, y - 8, 10, 10);
+    pdf.setTextColor(0); pdf.text(String(i.nombre || '').slice(0, 42), M + 26, y);
+    pdf.text(String(i.variante || '').slice(0, 20), M + 250, y);
+    pdf.setTextColor(110); pdf.text(String(i.sku || '—').slice(0, 18), M + 360, y);
+    pdf.setTextColor(0); pdf.setFont('helvetica', 'bold'); pdf.text(String(i.qty), W - M, y, { align: 'right' }); pdf.setFont('helvetica', 'normal');
+    y += 18;
+  });
+  pdf.save('sesion-fotos-' + origen + '.pdf');
+}
 
 // ── Navegación: menús desplegables agrupados por categoría ───────────────────
 function _navLabel(key) {
