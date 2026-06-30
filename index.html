@@ -9253,6 +9253,7 @@ function sfProcesar() {
   sfRender();
 }
 function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) return; s.estado = val; sfGuardar(); }
+function sfSetDesc(id, val) { if (!_esAdmin()) return; const s = sfData.find(x => x.id === id); if (!s) return; s.descripcion = val; sfGuardar(); }
 function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
 let sfFase = 'retiro'; // fase de verificación: 'retiro' (preparar) | 'devolucion' (al volver)
 function sfVer(id) { sfViendo = id; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
@@ -9363,8 +9364,11 @@ function sfVerHtml(s) {
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
-      <div style="font-weight:700;font-size:15px;">${esc(s.descripcion) || 'Solicitud'}</div>
+      ${_esAdmin()
+      ? `<input value="${esc(s.descripcion)}" onchange="sfSetDesc('${s.id}',this.value)" placeholder="Descripción" title="Editar descripción (solo administradores)" style="font-weight:700;font-size:15px;border:none;border-bottom:1px solid #E5E7EB;padding:2px 0;min-width:200px;flex:1;background:transparent;">`
+      : `<div style="font-weight:700;font-size:15px;">${esc(s.descripcion) || 'Solicitud'}</div>`}
       <span style="color:#9CA3AF;font-size:12px;">${esc(s.fecha)}</span>
+      <button class="btn-sm" onclick="sfEtiquetaBolsa('${s.id}')" title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style="background:#fff;border:1px solid #D1D5DB;">🏷️ Etiqueta de bolsa</button>
       <label style="font-size:12px;color:#6B7280;margin-left:auto;">Estado <select onchange="sfEstado('${s.id}',this.value)" style="padding:4px 6px;border:1px solid #D1D5DB;border-radius:6px;">${opts}</select></label>
     </div>
     ${sfBanner()}
@@ -9392,6 +9396,30 @@ function sfHistorialHtml() {
     <div style="font-size:12px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Historial</div>
     ${rows || '<div style="color:#9CA3AF;font-size:13px;">Todavía no hay solicitudes. Tocá "+ Nueva solicitud" o mandá productos desde Marketing.</div>'}
   </div>`;
+}
+function sfEtiquetaBolsa(id) {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const desc = (s.descripcion || '').trim() || 'Sesión de fotos';
+  const { jsPDF } = window.jspdf;
+  const W = 50, Hh = 25, M = 2.5;             // 5 cm × 2,5 cm
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' });
+  // Encabezado chico
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(120);
+  pdf.text('SESIÓN DE FOTOS', W / 2, 4.5, { align: 'center' });
+  // Descripción grande, centrada, con auto-ajuste de tamaño para que entre
+  pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+  const top = 6.5, bottom = Hh - 4, avail = bottom - top;
+  let fs = 16, lines = [];
+  for (; fs >= 7; fs--) { pdf.setFontSize(fs); lines = pdf.splitTextToSize(desc, W - M * 2); if (lines.length * (fs * 0.42) <= avail) break; }
+  pdf.setFontSize(fs);
+  const blockH = lines.length * (fs * 0.42);
+  let y = top + (avail - blockH) / 2 + fs * 0.35;
+  lines.forEach(l => { pdf.text(l, W / 2, y, { align: 'center' }); y += fs * 0.42; });
+  // Fecha abajo
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(120);
+  pdf.text(String(s.fecha || ''), W / 2, Hh - 1.6, { align: 'center' });
+  pdf.save('etiqueta-bolsa.pdf');
 }
 function sfReportePDF(id, origen) {
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
