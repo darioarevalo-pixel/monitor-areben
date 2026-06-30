@@ -9396,7 +9396,11 @@ function sfHistorialHtml() {
 function sfReportePDF(id, origen) {
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
   const s = sfData.find(x => x.id === id); if (!s) return;
-  const arr = s.items.filter(i => i.origen === origen);
+  const arr = s.items.filter(i => i.origen === origen).sort((a, b) => { // ordenado por SKU asc (como el depósito); sin SKU van al final
+    const ka = String(a.sku || '').trim(), kb = String(b.sku || '').trim();
+    if (!ka && kb) return 1; if (ka && !kb) return -1;
+    return ka.localeCompare(kb, 'es', { numeric: true, sensitivity: 'base' });
+  });
   if (!arr.length) { alert('No hay ítems para ese origen.'); return; }
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -9417,7 +9421,7 @@ function sfReportePDF(id, origen) {
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
   arr.forEach((i, idx) => {
     if (y > H - M) { pdf.addPage(); y = M; }
-    if (idx % 2 === 1) { pdf.setFillColor(243, 244, 246); pdf.rect(M - 6, y - 11, W - 2 * M + 12, 18, 'F'); }
+    if (idx % 2 === 1) { pdf.setFillColor(219, 234, 254); pdf.rect(M - 6, y - 11, W - 2 * M + 12, 18, 'F'); }
     pdf.setDrawColor(120); pdf.rect(M, y - 8, 10, 10);
     pdf.setTextColor(0); pdf.text(String(i.nombre || '').slice(0, 42), M + 26, y);
     pdf.text(String(i.variante || '').slice(0, 20), M + 250, y);
