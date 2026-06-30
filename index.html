@@ -9181,6 +9181,7 @@ function sfDesdeMarketing() {
   switchTab('sesion-fotos');
 }
 async function sfAbrir() {
+  window._sfBc = null; // rearmar el mapa de códigos de barras con los datos de la marca activa
   const cont = document.getElementById('sf-cont');
   if (cont && !sfData.length && !sfDraft && !sfViendo) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>';
   // Inventario por ubicación (depósito/local) por variante — mismos pasos que repoInit
@@ -9260,9 +9261,14 @@ function sfVer(id) { sfViendo = id; sfFase = 'retiro'; window._sfFb = null; sfRe
 function sfVolver() { sfViendo = null; window._sfFb = null; sfRender(); }
 function sfSetFase(f) { sfFase = f; window._sfFb = null; sfRender(); }
 // ── Verificación por escaneo (Fase 3): retiro (preparar) y devolución (al volver de la sesión) ──
+function _sfNormBc(b) { return String(b || '').trim().toUpperCase(); } // igual que Conteo
 function sfBcVid(code) {
-  code = String(code || '').trim(); if (!code) return null;
-  if (!window._sfBc) { const m = {}; (allVariantes || []).forEach(v => { if (v.barcode) m[String(v.barcode).trim()] = v.id; }); window._sfBc = m; }
+  code = _sfNormBc(code); if (!code) return null;
+  if (!window._sfBc) {
+    const m = {};
+    (allVariantes || []).forEach(v => { if (v.barcode) { const b = _sfNormBc(v.barcode); m[b] = v.id; const b2 = b.replace(/^0+/, ''); if (b2 && b2 !== b) m[b2] = v.id; } });
+    window._sfBc = m;
+  }
   return window._sfBc[code] || window._sfBc[code.replace(/^0+/, '')] || null;
 }
 function _sfFoco(id) { setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 30); }
