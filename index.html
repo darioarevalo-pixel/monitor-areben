@@ -1633,11 +1633,12 @@
                 <th onclick="crmSort('avg_ticket')" style="text-align:right;">Ticket prom. ↕</th>
                 <th onclick="crmSort('last_sale')" style="text-align:right;">Último pedido ↕</th>
                 <th onclick="crmSort('proximo')">Próximo contacto ↕</th>
+                <th>Última nota</th>
                 <th>Segmento</th>
                 <th></th>
               </tr>
             </thead>
-            <tbody id="crm-tbody"><tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando...</td></tr></tbody>
+            <tbody id="crm-tbody"><tr><td colspan="11" style="text-align:center;padding:24px;color:#9CA3AF;">Cargando...</td></tr></tbody>
           </table>
         </div>
         </div><!-- /crm-vista-clientes -->
@@ -10765,7 +10766,7 @@ async function cargarCRM(forzar = false) {
   } catch (e) {
     setStatus('Error cargando CRM: ' + e.message, 'error');
     document.getElementById('crm-tbody').innerHTML =
-      `<tr><td colspan="10" style="text-align:center;padding:24px;color:#DC2626;">Error: ${e.message}</td></tr>`;
+      `<tr><td colspan="11" style="text-align:center;padding:24px;color:#DC2626;">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -11178,7 +11179,7 @@ function renderCRMTabla() {
 
   if (!lista.length) {
     document.getElementById('crm-tbody').innerHTML =
-      `<tr><td colspan="10" style="text-align:center;padding:24px;color:#9CA3AF;">Sin clientes para este filtro</td></tr>`;
+      `<tr><td colspan="11" style="text-align:center;padding:24px;color:#9CA3AF;">Sin clientes para este filtro</td></tr>`;
     return;
   }
 
@@ -11197,6 +11198,11 @@ function renderCRMTabla() {
     const contacto = contactoBits.length ? contactoBits.join('') : '<span style="color:#9CA3AF;">—</span>';
     const ciudad = [c.city, c.province].filter(Boolean).join(', ') || '<span style="color:#9CA3AF;">—</span>';
     const ult = c.dias_ultimo === null ? '—' : (c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`);
+    const notas = Array.isArray(c.notas) ? c.notas : [];
+    const ultNota = notas.length ? notas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0] : null;
+    const notaCell = ultNota
+      ? `<div style="font-size:11px;color:#9CA3AF;">${fmtFecha(ultNota.fecha)}</div><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(ultNota.texto)}">${escapeHtml(ultNota.texto)}</div>`
+      : '<span style="color:#9CA3AF;">—</span>';
     return `
       <tr style="cursor:pointer;" onclick="abrirClienteModal(${c.id})">
         <td><div style="font-weight:600;">${escapeHtml(c.name)}</div><div style="font-size:11px;color:#9CA3AF;">#${c.id}</div></td>
@@ -11207,6 +11213,7 @@ function renderCRMTabla() {
         <td style="text-align:right;">${fmtMonto(c.avg_ticket)}</td>
         <td style="text-align:right;"><div>${ult}</div><div style="font-size:11px;color:#9CA3AF;">${fmtFecha(c.last_sale)}</div></td>
         <td>${segCeldaHTML(c)}</td>
+        <td style="max-width:240px;">${notaCell}</td>
         <td><span style="font-size:11px;color:${segColor};font-weight:600;">${segLabel}</span></td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
           ${waUrl ? `<a href="${waUrl}" onclick="event.preventDefault();abrirWhatsApp('${waPhone}');return false;" class="btn-sm" title="Abrir WhatsApp" aria-label="WhatsApp" style="text-decoration:none;display:inline-flex;align-items:center;color:#16A34A;">${WA_SVG}</a>` : ''}
