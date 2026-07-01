@@ -9205,6 +9205,29 @@ async function sfCrearVentas(id) {
   sfRender();
 }
 
+// Anula las ventas de la solicitud en GN (restituye stock). Solo admin.
+async function sfAnularVentas(id) {
+  const s = sfData.find(x => x.id === id); if (!s || !s.ventas) return;
+  if (!_esAdmin()) { alert('Solo un administrador puede anular ventas.'); return; }
+  if (!confirm('¿Anular las ventas de esta solicitud en GN? Esto restituye el stock (usalo cuando los productos ya volvieron).')) return;
+  const user = currentUser, pass = _getAdminPass();
+  if (!pass) { alert('Necesito tu contraseña para anular las ventas.'); return; }
+  const okd = [], errores = [];
+  for (const o of ['deposito', 'local']) {
+    if (!s.ventas[o]) continue;
+    const ventaId = s.ventas[o].id;
+    try {
+      const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar', store: _cuentaKey(), ventaId, user, pass }) });
+      const d = await r.json();
+      if (d.ok) okd.push(o); else errores.push(`${o} (N° ${s.ventas[o].number || ventaId}): ${d.error || ''}${d.detalle ? ' — ' + JSON.stringify(d.detalle).slice(0, 200) : ''}`);
+    } catch (e) { errores.push(`${o}: error de conexión`); }
+  }
+  if (okd.length) { okd.forEach(o => delete s.ventas[o]); if (!Object.keys(s.ventas).length) delete s.ventas; sfGuardar(); }
+  if (errores.length) alert('No se pudieron anular todas las ventas:\n' + errores.join('\n'));
+  else alert('✅ Ventas anuladas en GN (stock restituido).');
+  sfRender();
+}
+
 function sfDesdeMarketing() {
   const lista = _mktListaFiltrada().filter(x => !mktExcl.has(String(x.gn.id)));
   if (!lista.length) { alert('No hay productos seleccionados en Marketing. Filtrá y tildá lo que querés fotografiar.'); return; }
@@ -9421,7 +9444,7 @@ function sfVerHtml(s) {
   };
   const opts = ['pendiente', 'preparada', 'cargada', 'devuelta'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
   const ventasHtml = s.ventas
-    ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')}</div>`
+    ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')}${_esAdmin() ? ` <button onclick="sfAnularVentas('${s.id}')" title="Anular las ventas en GN y restituir el stock (solo admin)" style="border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;margin-left:8px;">🗑️ Anular en GN</button>` : ''}</div>`
     : (['zattia', 'bdi'].includes(_cuentaKey())
       ? `<div style="margin-bottom:10px;"><button id="sf-crear-btn" class="btn-primary" onclick="sfCrearVentas('${s.id}')">🧾 Crear ventas en GN</button> <span style="color:#9CA3AF;font-size:12px;">Descuenta el stock con el cliente "Sesión de fotos".</span></div>`
       : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN no está disponible para esta cuenta.</div>`);
