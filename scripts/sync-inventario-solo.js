@@ -55,11 +55,15 @@ async function syncProductos() {
   const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
   const activeIds = new Set();   // ids de productos activos (para filtrar el stock)
   const varBarcode = {};         // `${pid}|${sid}` -> barcode (para completar inventario)
+  const prodBarcode = {};        // pid -> barcode (respaldo para productos de UNA sola variante)
   const prodSku = {};            // pid -> sku (respaldo)
   const productos = rows.map(p => {
     if (p.active === 1 || p.active === true) activeIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
-    (p.variantes || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
+    const vs = p.variantes || [];
+    vs.forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
+    // Si tiene UNA sola variante con barcode, guardarlo a nivel producto (no depende del size_id).
+    if (vs.length === 1 && vs[0].barcode) prodBarcode[p.id] = vs[0].barcode;
     const base = {
       id: p.id,
       name: p.name,
@@ -88,21 +92,23 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
-  return { activeIds, varBarcode, prodSku };
+  return { activeIds, varBarcode, prodBarcode, prodSku };
 }
 
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
-  const { activeIds, varBarcode, prodSku } = await syncProductos();
+  const { activeIds, varBarcode, prodBarcode, prodSku } = await syncProductos();
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
-  let saltInactivos = 0;
+  let saltInactivos = 0, bcCompletados = 0;
   for (const r of rows) {
     if (!activeIds.has(r.product_id)) { saltInactivos++; continue; } // no cargar stock de inactivos
     const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
+    const bc = r.barcode || varBarcode[skey] || prodBarcode[r.product_id] || null; // completa el barcode desde productos
+    if (!r.barcode && bc) bcCompletados++;
     seen.set(key, {
       product_id: r.product_id,
       product_name: r.product_name || null,
@@ -110,11 +116,12 @@ async function syncProductos() {
       size_name: r.size_name || null,
       store_name: r.store_name || r.store || '',
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
-      sku: r.sku || prodSku[r.product_id] || null,           // completa el sku que falta
-      barcode: r.barcode || varBarcode[skey] || null,        // completa el barcode desde productos
+      sku: r.sku || prodSku[r.product_id] || null,   // completa el sku que falta
+      barcode: bc,
       observation: r.observation ?? null,
     });
   }
+  console.log(`[inventario] ${bcCompletados} códigos de barra completados desde productos.`);
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
