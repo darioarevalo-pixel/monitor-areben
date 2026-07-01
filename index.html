@@ -9310,6 +9310,12 @@ let sfFase = 'retiro'; // fase de verificación: 'retiro' (preparar) | 'devoluci
 function sfVer(id) { sfViendo = id; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
 function sfVolver() { sfViendo = null; window._sfFb = null; sfRender(); }
 function sfSetFase(f) { sfFase = f; window._sfFb = null; sfRender(); }
+// ── Vista combinada: verificar/preparar 2+ solicitudes juntas (no destructiva) ──
+let sfSeleccion = new Set();  // ids tildados en el historial
+let sfCombiIds = null;        // array de ids si estamos en vista combinada; null si no
+function sfSelToggle(id, checked) { if (checked) sfSeleccion.add(id); else sfSeleccion.delete(id); sfRender(); }
+function sfVerCombinada() { sfCombiIds = [...sfSeleccion].filter(id => sfData.some(s => s.id === id)); sfViendo = null; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
+function sfSalirCombi() { sfCombiIds = null; window._sfFb = null; sfRender(); }
 // ── Verificación por escaneo (Fase 3): retiro (preparar) y devolución (al volver de la sesión) ──
 function _sfNormBc(b) { return String(b || '').trim().toUpperCase(); } // igual que Conteo
 function sfBcVid(code) {
@@ -9354,6 +9360,7 @@ function sfScan(id, origen, inputEl, fase) {
 function sfRender() {
   const cont = document.getElementById('sf-cont'); if (!cont) return;
   if (sfDraft) { cont.innerHTML = sfDraftHtml(); return; }
+  if (sfCombiIds) { cont.innerHTML = sfVerCombiHtml(sfCombiIds); return; }
   if (sfViendo) { const s = sfData.find(x => x.id === sfViendo); if (s) { cont.innerHTML = sfVerHtml(s); return; } sfViendo = null; }
   cont.innerHTML = sfHistorialHtml();
 }
@@ -9447,15 +9454,112 @@ function sfHistorialHtml() {
     const dep = s.items.filter(i => i.origen === 'deposito').reduce((a, i) => a + i.qty, 0);
     const loc = s.items.filter(i => i.origen === 'local').reduce((a, i) => a + i.qty, 0);
     return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;">
+        <input type="checkbox" ${sfSeleccion.has(s.id) ? 'checked' : ''} onchange="sfSelToggle('${s.id}',this.checked)" title="Seleccionar para verificar/preparar combinadas" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">
         <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${esc(s.descripcion) || '(sin descripción)'}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
         <button class="btn-sm" onclick="sfVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
         <button onclick="sfBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>
       </div>`;
   }).join('');
   return `<div>
-    <div style="margin-bottom:12px;"><button class="btn-primary" onclick="sfNuevoDraft()">+ Nueva solicitud</button></div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn-primary" onclick="sfNuevoDraft()">+ Nueva solicitud</button>${sfSeleccion.size >= 2 ? `<button class="btn-sm" onclick="sfVerCombinada()" style="background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3;font-weight:600;">🔗 Ver combinadas (${sfSeleccion.size})</button>` : (sfSeleccion.size === 1 ? `<span style="font-size:12px;color:#9CA3AF;">Tildá otra solicitud para combinarlas.</span>` : '')}</div>
     <div style="font-size:12px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Historial</div>
     ${rows || '<div style="color:#9CA3AF;font-size:13px;">Todavía no hay solicitudes. Tocá "+ Nueva solicitud" o mandá productos desde Marketing.</div>'}
+  </div>`;
+}
+// ── Vista combinada: render + escaneo sobre varias solicitudes a la vez ──
+function sfFaseCompletaCombi(ids, fase) {
+  const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
+  return sols.length > 0 && sols.every(s => sfFaseCompleta(s, fase));
+}
+// Agrupa por vid los items de varias solicitudes dentro de un origen (suma pedido y confirmado).
+function _sfCombiAgg(ids, origen, fase) {
+  const mk = fase === 'devolucion' ? 'devuelto' : 'verif';
+  const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
+  const map = {};
+  sols.forEach(s => (s.items || []).filter(i => i.origen === origen).forEach(i => {
+    const e = map[i.vid] || (map[i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: 0, conf: 0 });
+    e.ped += i.qty;
+    e.conf += Math.min((s[mk] || {})[i.vid] || 0, i.qty);
+  }));
+  return Object.values(map).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es') || (a.variante || '').localeCompare(b.variante || '', 'es', { numeric: true }));
+}
+function sfGrupoCombi(titulo, origen, ids, fase) {
+  const items = _sfCombiAgg(ids, origen, fase);
+  if (!items.length) return '';
+  const totQ = items.reduce((a, i) => a + i.ped, 0);
+  const confTot = items.reduce((a, i) => a + i.conf, 0);
+  const completo = confTot >= totQ;
+  const accionN = fase === 'devolucion' ? 'devueltos' : 'preparados';
+  const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado';
+  const rows = items.map(i => { const ok = i.conf >= i.ped; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.conf}/${i.ped}</td></tr>`; }).join('');
+  const fbKey = 'combi-' + origen + '-' + fase;
+  const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
+  return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+    <div style="font-weight:700;">${titulo} <span style="color:#9CA3AF;font-weight:500;font-size:12px;">(${confTot}/${totQ} ${accionN})</span>${completo ? ` <span style="color:#16A34A;font-weight:700;">✓ completo</span>` : ''}</div>
+    <div style="margin:8px 0;"><input id="sf-combi-scan-${origen}" onkeydown="if(event.key==='Enter'){event.preventDefault();sfScanCombi('${origen}',this,'${fase}');}" placeholder="🔫 Escaneá para confirmar ${accionV} de las 2 (o tipeá el SKU + Enter)…" style="width:100%;padding:8px 10px;border:2px solid #378ADD;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+    ${fb ? `<div style="font-size:13px;margin-bottom:6px;">${fb}</div>` : ''}
+    <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">${fase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+function sfScanCombi(origen, inputEl, fase) {
+  const code = (inputEl.value || '').trim(); inputEl.value = '';
+  const ids = sfCombiIds || [];
+  const mapKey = fase === 'devolucion' ? 'devuelto' : 'verif';
+  const fbKey = 'combi-' + origen + '-' + fase;
+  const vid = sfBcVid(code);
+  const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
+  let target = null, item = null;
+  for (const s of sols) {                                        // primera solicitud con lugar para ese item
+    const arr = (s.items || []).filter(i => i.origen === origen);
+    let it = vid ? arr.find(i => i.vid === vid) : null;
+    if (!it && code) it = arr.find(i => String(i.sku).toLowerCase() === code.toLowerCase());
+    if (!it) continue;
+    if (!item) item = it;                                        // existe en alguna (aunque esté completa)
+    const done = (s[mapKey] || {})[it.vid] || 0;
+    if (done < it.qty) { target = s; item = it; break; }
+  }
+  if (!item) { window._sfFb = { key: fbKey, html: `<span style="color:#DC2626;">✗ "${esc(code)}" no está en estas solicitudes (producto o talle equivocado).</span>` }; sfRender(); _sfFoco('sf-combi-scan-' + origen); return; }
+  if (!target) { window._sfFb = { key: fbKey, html: `<span style="color:#D97706;">⚠ ${esc(item.nombre)} · ${esc(item.variante)} ya está completo en las solicitudes.</span>` }; sfRender(); _sfFoco('sf-combi-scan-' + origen); return; }
+  target[mapKey] = target[mapKey] || {};
+  const done = target[mapKey][item.vid] || 0;
+  target[mapKey][item.vid] = done + 1;
+  window._sfFb = { key: fbKey, html: `<span style="color:#16A34A;">✓ ${esc(item.nombre)} · ${esc(item.variante)} (${done + 1}/${item.qty})</span>` };
+  if (sfFaseCompleta(target, fase)) {
+    if (fase === 'devolucion') target.estado = 'devuelta';
+    else if (target.estado !== 'devuelta') target.estado = 'preparada';
+  }
+  sfGuardar();
+  sfRender(); _sfFoco('sf-combi-scan-' + origen);
+}
+function sfVerCombiHtml(ids) {
+  const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
+  if (sols.length < 2) { sfCombiIds = null; return sfHistorialHtml(); }
+  const fase = sfFase;
+  const nventa = s => s.ventas ? ['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° ${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}`).join(' · ') : '';
+  const listaSol = sols.map(s => `<div style="font-size:12px;color:#374151;">• <b>${esc(s.descripcion) || '(sin descripción)'}</b> <span style="color:#9CA3AF;">· ${esc(s.fecha)} · ${esc(s.estado)}</span>${nventa(s) ? ` <span style="color:#065F46;">· ${nventa(s)}</span>` : ''}</div>`).join('');
+  let banner = '';
+  if (sfFaseCompletaCombi(ids, fase)) {
+    if (fase === 'devolucion') {
+      const vtxt = sols.map(s => s.ventas ? ['deposito', 'local'].filter(o => s.ventas[o]).map(o => `#${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}`).join(', ') : null).filter(Boolean).join(' · ');
+      banner = `<div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#065F46;">✅ <b>Devolución completa</b> de las ${sols.length} solicitudes. Ya podés verificar y <b>borrar las ventas en GN</b>${vtxt ? `: ${vtxt}` : ''}.</div>`;
+    } else {
+      banner = `<div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#065F46;">✅ <b>Preparación completa</b> de las ${sols.length} solicitudes.</div>`;
+    }
+  }
+  return `<div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn-sm" onclick="sfSalirCombi()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
+      <div style="font-weight:700;font-size:15px;">🔗 Vista combinada — ${sols.length} solicitudes</div>
+    </div>
+    <div style="border:1px solid #E5E7EB;border-radius:9px;padding:9px 12px;margin-bottom:10px;background:#F9FAFB;">${listaSol}</div>
+    ${sfBanner()}
+    ${banner}
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+      <button onclick="sfSetFase('retiro')" style="border:1px solid ${fase === 'retiro' ? '#378ADD' : '#D1D5DB'};background:${fase === 'retiro' ? '#378ADD' : '#fff'};color:${fase === 'retiro' ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📤 Preparado</button>
+      <button onclick="sfSetFase('devolucion')" style="border:1px solid ${fase === 'devolucion' ? '#378ADD' : '#D1D5DB'};background:${fase === 'devolucion' ? '#378ADD' : '#fff'};color:${fase === 'devolucion' ? '#fff' : '#374151'};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📥 Devolución (al volver)</button>
+    </div>
+    ${sfGrupoCombi('📦 Depósito (todas)', 'deposito', ids, fase)}
+    ${sfGrupoCombi('🏪 Local (todas)', 'local', ids, fase)}
   </div>`;
 }
 function sfEtiquetaBolsa(id) {
