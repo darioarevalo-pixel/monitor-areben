@@ -95,30 +95,46 @@ async function fetchAllPages(basePath) {
     process.stdout.write(` ${items.length} registros\n`);
     if (!data.meta?.has_more_pages || items.length === 0) break;
     page++;
-    await sleep(1100);
+    await sleep(400);
   }
   return results;
 }
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
-async function syncProductos() {
-  console.log('\n[productos] Descargando (sync semanal)...');
-  const rows = await fetchAllPages('productos/obtener?per_page=50');
-  const productos = rows.map(p => ({
-    id:               p.id,
-    name:             p.name,
-    sku:              p.sku || p.code || null,
-    category:         p.category || null,
-    proveedor:        p.provider || null,
-    retailer_price:   p.retailer_price ?? null,
-    wholesaler_price: p.wholesaler_price ?? null,
-    unit_cost:        p.unit_cost ?? null,
-    active:           p.active ?? null,
-    created_at:       p.created_at || null,
-    updated_at:       p.updated_at || null,
-  }));
-  console.log(`[productos] ${productos.length} registros. Guardando en Supabase...`);
+// Descarga productos CON variantes y arma los mapas. Se corre SIEMPRE (aunque los
+// productos no se guarden ese día) porque el inventario los necesita para completar
+// el código de barras y para saber cuáles están activos.
+async function cargarProductos() {
+  console.log('\n[productos] Descargando (con variantes)...');
+  const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
+  const activeIds = new Set();   // ids activos (para filtrar el stock)
+  const varBarcode = {};         // `${pid}|${sid}` -> barcode (completa inventario)
+  const prodSku = {};            // pid -> sku (respaldo)
+  const productos = rows.map(p => {
+    if (p.active === 1 || p.active === true) activeIds.add(p.id);
+    if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
+    (p.variantes || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
+    return {
+      id:               p.id,
+      name:             p.name,
+      sku:              p.sku || p.code || null,
+      category:         p.category || null,
+      proveedor:        p.provider || null,
+      retailer_price:   p.retailer_price ?? null,
+      wholesaler_price: p.wholesaler_price ?? null,
+      unit_cost:        p.unit_cost ?? null,
+      active:           p.active ?? null,
+      created_at:       p.created_at || null,
+      updated_at:       p.updated_at || null,
+    };
+  });
+  console.log(`[productos] ${productos.length} descargados (${activeIds.size} activos).`);
+  return { activeIds, varBarcode, prodSku, productos };
+}
+
+async function guardarProductos(productos) {
+  console.log('[productos] Guardando en Supabase (sync semanal)...');
   if (!productos.length) return 0;
   const BATCH = 500;
   for (let i = 0; i < productos.length; i += BATCH) {
@@ -132,13 +148,17 @@ async function syncProductos() {
   return productos.length;
 }
 
-async function syncInventario() {
+async function syncInventario(maps) {
+  const { activeIds, varBarcode, prodSku } = maps;
   console.log('\n[inventario] Descargando (siempre completo)...');
-  const rows = await fetchAllPages('inventario/obtener?per_page=50');
+  const rows = await fetchAllPages('inventario/obtener?per_page=200');
 
-  // Dedup: la API puede devolver filas duplicadas con misma clave compuesta
+  // Dedup + saltear inactivos + completar sku/barcode desde productos.
   const invMap = {};
+  let saltInactivos = 0;
   rows.forEach(r => {
+    if (!activeIds.has(r.product_id)) { saltInactivos++; return; } // no cargar stock de inactivos
+    const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     if (!invMap[key]) {
       invMap[key] = {
@@ -148,8 +168,8 @@ async function syncInventario() {
         size_name:          r.size_name || null,
         store_name:         r.store_name || r.store || '',
         available_quantity: r.available_quantity ?? r.quantity ?? 0,
-        sku:                r.sku || null,
-        barcode:            r.barcode || null,
+        sku:                r.sku || prodSku[r.product_id] || null,
+        barcode:            r.barcode || varBarcode[skey] || null,
       };
     } else {
       invMap[key].available_quantity += r.available_quantity ?? r.quantity ?? 0;
@@ -157,7 +177,7 @@ async function syncInventario() {
   });
 
   const inventario = Object.values(invMap);
-  console.log(`[inventario] ${inventario.length} registros únicos (de ${rows.length} raw). Guardando en Supabase...`);
+  console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
   let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
   if (error && /sku|barcode|column/i.test(error.message)) {
@@ -258,12 +278,13 @@ async function main() {
   if (productosPendiente) console.log('\nSync semanal de productos activado.');
 
   try {
-    const inventario = await syncInventario();
+    const maps       = await cargarProductos();     // siempre (para completar barcode + saltear inactivos)
+    const inventario = await syncInventario(maps);
     const ventas     = await syncVentas(ventasFrom);
     let productos    = 'omitido';
 
     if (productosPendiente) {
-      productos = await syncProductos();
+      productos = await guardarProductos(maps.productos);
     }
 
     writeLastSync({

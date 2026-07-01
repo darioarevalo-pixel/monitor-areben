@@ -45,15 +45,21 @@ async function fetchAllPages(base) {
     out.push(...items);
     process.stdout.write(`  pág ${page}: ${items.length}\n`);
     if (!d.meta?.has_more_pages || items.length === 0) break;
-    page++; await sleep(1100);
+    page++; await sleep(400);
   }
   return out;
 }
 
 async function syncProductos() {
-  console.log('\n[productos] descargando...');
-  const rows = await fetchAllPages('productos/obtener?per_page=50');
+  console.log('\n[productos] descargando (con variantes)...');
+  const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
+  const activeIds = new Set();   // ids de productos activos (para filtrar el stock)
+  const varBarcode = {};         // `${pid}|${sid}` -> barcode (para completar inventario)
+  const prodSku = {};            // pid -> sku (respaldo)
   const productos = rows.map(p => {
+    if (p.active === 1 || p.active === true) activeIds.add(p.id);
+    if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
+    (p.variantes || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
     const base = {
       id: p.id,
       name: p.name,
@@ -69,8 +75,7 @@ async function syncProductos() {
     if (STORE === 'zattia') base.proveedor = p.provider || null;
     return base;
   });
-  console.log(`[productos] ${productos.length} registros. Guardando...`);
-  if (!productos.length) return;
+  console.log(`[productos] ${productos.length} registros (${activeIds.size} activos). Guardando...`);
   const BATCH = 500;
   for (let i = 0; i < productos.length; i += BATCH) {
     const lote = productos.slice(i, i + BATCH);
@@ -83,14 +88,20 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
+  return { activeIds, varBarcode, prodSku };
 }
 
 (async () => {
-  console.log(`=== Sync RÁPIDO (inventario + productos) — ${STORE.toUpperCase()} ===`);
+  console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
-  const rows = await fetchAllPages('inventario/obtener?per_page=50');
+  // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
+  const { activeIds, varBarcode, prodSku } = await syncProductos();
+  const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
+  let saltInactivos = 0;
   for (const r of rows) {
+    if (!activeIds.has(r.product_id)) { saltInactivos++; continue; } // no cargar stock de inactivos
+    const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     seen.set(key, {
       product_id: r.product_id,
@@ -99,14 +110,14 @@ async function syncProductos() {
       size_name: r.size_name || null,
       store_name: r.store_name || r.store || '',
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
-      sku: r.sku || null,
-      barcode: r.barcode || null,
+      sku: r.sku || prodSku[r.product_id] || null,           // completa el sku que falta
+      barcode: r.barcode || varBarcode[skey] || null,        // completa el barcode desde productos
       observation: r.observation ?? null,
     });
   }
   const inv = Array.from(seen.values());
-  console.log(`[inventario] ${inv.length} registros únicos. Guardando...`);
-  if (!inv.length) { console.log('Nada que guardar.'); return; }
+  console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
+  if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
   const BATCH = 500;
   for (let i = 0; i < inv.length; i += BATCH) {
     const lote = inv.slice(i, i + BATCH);
@@ -119,6 +130,5 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
-  await syncProductos();
-  console.log(`\n[listo] inventario + productos — ${STORE}`);
+  console.log(`\n[listo] productos + inventario — ${STORE}`);
 })().catch(e => { console.error('ERROR:', e.message); process.exit(1); });
