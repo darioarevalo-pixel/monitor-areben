@@ -1,15 +1,17 @@
 // Crea una venta en Gestión Nube para la "Sesión de fotos" (descuenta stock del depósito o del local).
 // POST { store, origen:'deposito'|'local', items:[{product_id,size_id,quantity}], comments, solicitudId, user, pass }
 // Seguridad: valida que (user, pass) sea un usuario válido del Monitor (login server-side).
-// Usa GN_TOKEN_VENTAS (token con permiso de ventas). Por ahora solo Zattia.
+// Usa GN_TOKEN_VENTAS (Zattia) / GN_TOKEN_VENTAS_BDI (BDI): token con permiso de ventas.
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const TOKEN = process.env.GN_TOKEN_VENTAS;
 const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
 
-// Config descubierta de GN (Zattia). store_id por ubicación.
+// Config descubierta de GN. store_id por ubicación (según cómo el Monitor cuenta deposito/local).
+// BDI: deposito = Deposito Minorista (13307), local = Local (18393). channel 12 = "Ninguno".
 const SF_CFG = {
   zattia: { client_id: 312923, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 18210, local: 11780 } },
+  bdi:    { client_id: 338755, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 13307, local: 18393 } },
 };
+const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function gnFetch(url, opts, tries = 3) {
@@ -33,12 +35,13 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-  if (!TOKEN) return res.status(500).json({ error: 'falta GN_TOKEN_VENTAS en el entorno' });
 
   const b = req.body || {};
   const store = String(b.store || '').toLowerCase();
   const cfg = SF_CFG[store];
-  if (!cfg) return res.status(400).json({ error: 'Por ahora solo se pueden crear ventas en Zattia.' });
+  if (!cfg) return res.status(400).json({ error: 'No hay configuración de ventas para esta cuenta.' });
+  const TOKEN = TOKENS[store];
+  if (!TOKEN) return res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
   if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
   const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && (+it.quantity > 0)) : [];
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });

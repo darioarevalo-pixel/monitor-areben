@@ -9184,7 +9184,7 @@ function sfSetPrioridad(v) {
 }
 async function sfCrearVentas(id) {
   const s = sfData.find(x => x.id === id); if (!s) return;
-  if (_cuentaKey() !== 'zattia') { alert('Por ahora solo se pueden crear ventas en Zattia.'); return; }
+  if (!['zattia', 'bdi'].includes(_cuentaKey())) { alert('Por ahora las ventas de sesión de fotos son solo para Zattia y BDI.'); return; }
   if (s.ventas && !confirm('Esta solicitud ya tiene ventas creadas. ¿Crear de nuevo? (puede duplicar)')) return;
   const user = currentUser, pass = _getAdminPass();
   if (!pass) { alert('Necesito tu contraseña para crear las ventas.'); return; }
@@ -9422,9 +9422,9 @@ function sfVerHtml(s) {
   const opts = ['pendiente', 'preparada', 'cargada', 'devuelta'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
   const ventasHtml = s.ventas
     ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')}</div>`
-    : (_cuentaKey() === 'zattia'
+    : (['zattia', 'bdi'].includes(_cuentaKey())
       ? `<div style="margin-bottom:10px;"><button id="sf-crear-btn" class="btn-primary" onclick="sfCrearVentas('${s.id}')">🧾 Crear ventas en GN</button> <span style="color:#9CA3AF;font-size:12px;">Descuenta el stock con el cliente "Sesión de fotos".</span></div>`
-      : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN está disponible solo en Zattia por ahora.</div>`);
+      : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN no está disponible para esta cuenta.</div>`);
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
