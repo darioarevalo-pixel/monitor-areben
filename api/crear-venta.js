@@ -44,21 +44,7 @@ export default async function handler(req, res) {
   if (!TOKEN) return res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
 
-  // ── Eliminar venta (para revertir el stock al volver de la sesión) ──
-  if (b.accion === 'eliminar') {
-    const ventaId = parseInt(b.ventaId, 10);
-    if (!ventaId) return res.status(400).json({ error: 'ventaId inválido' });
-    try {
-      const r = await gnFetch(`${GN_BASE}/ventas/${ventaId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } });
-      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
-      if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la eliminación', status: r.status, detalle: d });
-      return res.status(200).json({ ok: true, eliminada: ventaId, detalle: d });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  }
-
-  // ── Crear venta ──
+  // ── Crear venta ── (GN no soporta anular/borrar por API: eso se hace a mano en la web de GN)
   if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
   const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && (+it.quantity > 0)) : [];
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
