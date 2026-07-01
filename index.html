@@ -9226,6 +9226,7 @@ async function sfAbrir() {
   await sfInit();
   if (sfPendMkt) { sfDraftDesdeProductos(sfPendMkt); sfPendMkt = null; }
   sfRender();
+  sfChequearAnulacionesTodas({ auto: true }); // al entrar, cierra las que ya se anularon en GN
 }
 async function sfInit() {
   try { const r = await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`); const d = await r.json(); sfData = (d && d.ok && Array.isArray(d.list)) ? d.list : []; }
@@ -9316,6 +9317,35 @@ let sfCombiIds = null;        // array de ids si estamos en vista combinada; nul
 function sfSelToggle(id, checked) { if (checked) sfSeleccion.add(id); else sfSeleccion.delete(id); sfRender(); }
 function sfVerCombinada() { sfCombiIds = [...sfSeleccion].filter(id => sfData.some(s => s.id === id)); sfViendo = null; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
 function sfSalirCombi() { sfCombiIds = null; window._sfFb = null; sfRender(); }
+// ── Cierre automático de solicitudes cuya venta se anuló en GN (lectura por N° de venta) ──
+let sfVerCerradas = false;      // toggle "ver cerradas" en el historial
+let _sfChequeando = false;      // evita chequeos solapados
+function sfToggleCerradas(v) { sfVerCerradas = !!v; sfRender(); }
+function _sfVentaAnulada(resp) {
+  if (!resp || !resp.ok) return false;              // ante la duda (error/desconocido), NO cerrar
+  return resp.existe === false || resp.active === false || resp.archived === true;
+}
+async function sfChequearAnulacionesTodas(opts = {}) {
+  if (_sfChequeando) return;
+  const pend = (sfData || []).filter(s => s.estado !== 'cerrada' && s.ventas && ['deposito', 'local'].some(o => s.ventas[o] && s.ventas[o].id));
+  if (!pend.length) { if (!opts.auto) alert('No hay solicitudes con ventas para verificar.'); return; }
+  _sfChequeando = true; sfRender();
+  let cerradas = 0;
+  try {
+    await Promise.all(pend.map(async s => {
+      const ventas = ['deposito', 'local'].map(o => s.ventas[o]).filter(v => v && v.id);
+      const res = await Promise.all(ventas.map(async v => {
+        try { const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'estado', store: _cuentaKey(), ventaId: v.id }) }); return await r.json(); }
+        catch (e) { return null; }
+      }));
+      if (res.length && res.every(_sfVentaAnulada)) { s.estado = 'cerrada'; cerradas++; }
+    }));
+  } catch (e) {}
+  _sfChequeando = false;
+  if (cerradas) sfGuardar();
+  sfRender();
+  if (!opts.auto) alert(cerradas ? `✅ ${cerradas} solicitud(es) cerrada(s) — su venta fue anulada en GN.` : 'Todavía ninguna venta fue anulada en GN.');
+}
 // ── Verificación por escaneo (Fase 3): retiro (preparar) y devolución (al volver de la sesión) ──
 function _sfNormBc(b) { return String(b || '').trim().toUpperCase(); } // igual que Conteo
 function sfBcVid(code) {
@@ -9419,7 +9449,7 @@ function sfVerHtml(s) {
       <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">${sfFase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th><th style="padding:3px 6px;"></th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
   };
-  const opts = ['pendiente', 'preparada', 'cargada', 'devuelta'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
+  const opts = ['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
   const ventasHtml = s.ventas
     ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')} <span style="color:#9CA3AF;font-size:11px;">(para anular, hacelo en GN)</span></div>`
     : (['zattia', 'bdi'].includes(_cuentaKey())
@@ -9450,18 +9480,21 @@ function sfVerHtml(s) {
   </div>`;
 }
 function sfHistorialHtml() {
-  const rows = (sfData || []).map(s => {
+  const cerradasN = (sfData || []).filter(s => s.estado === 'cerrada').length;
+  const visibles = (sfData || []).filter(s => sfVerCerradas || s.estado !== 'cerrada');
+  const rows = visibles.map(s => {
     const dep = s.items.filter(i => i.origen === 'deposito').reduce((a, i) => a + i.qty, 0);
     const loc = s.items.filter(i => i.origen === 'local').reduce((a, i) => a + i.qty, 0);
-    return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;">
+    const cerr = s.estado === 'cerrada';
+    return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;${cerr ? 'opacity:.6;background:#F9FAFB;' : ''}">
         <input type="checkbox" ${sfSeleccion.has(s.id) ? 'checked' : ''} onchange="sfSelToggle('${s.id}',this.checked)" title="Seleccionar para verificar/preparar combinadas" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">
-        <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${esc(s.descripcion) || '(sin descripción)'}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
+        <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${cerr ? '✅ ' : ''}${esc(s.descripcion) || '(sin descripción)'}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
         <button class="btn-sm" onclick="sfVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
         <button onclick="sfBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>
       </div>`;
   }).join('');
   return `<div>
-    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn-primary" onclick="sfNuevoDraft()">+ Nueva solicitud</button>${sfSeleccion.size >= 2 ? `<button class="btn-sm" onclick="sfVerCombinada()" style="background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3;font-weight:600;">🔗 Ver combinadas (${sfSeleccion.size})</button>` : (sfSeleccion.size === 1 ? `<span style="font-size:12px;color:#9CA3AF;">Tildá otra solicitud para combinarlas.</span>` : '')}</div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn-primary" onclick="sfNuevoDraft()">+ Nueva solicitud</button>${sfSeleccion.size >= 2 ? `<button class="btn-sm" onclick="sfVerCombinada()" style="background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3;font-weight:600;">🔗 Ver combinadas (${sfSeleccion.size})</button>` : (sfSeleccion.size === 1 ? `<span style="font-size:12px;color:#9CA3AF;">Tildá otra solicitud para combinarlas.</span>` : '')}${_esAdmin() ? `<button class="btn-sm" onclick="sfChequearAnulacionesTodas()" title="Consulta en GN si las ventas ya se anularon y cierra esas solicitudes" style="background:#fff;border:1px solid #D1D5DB;">🔄 Verificar anulaciones en GN</button>` : ''}${_sfChequeando ? `<span style="font-size:12px;color:#9CA3AF;">⏳ verificando en GN…</span>` : ''}${cerradasN ? `<label style="font-size:12px;color:#6B7280;margin-left:auto;cursor:pointer;"><input type="checkbox" ${sfVerCerradas ? 'checked' : ''} onchange="sfToggleCerradas(this.checked)" style="vertical-align:middle;margin-right:4px;">Ver cerradas (${cerradasN})</label>` : ''}</div>
     <div style="font-size:12px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Historial</div>
     ${rows || '<div style="color:#9CA3AF;font-size:13px;">Todavía no hay solicitudes. Tocá "+ Nueva solicitud" o mandá productos desde Marketing.</div>'}
   </div>`;

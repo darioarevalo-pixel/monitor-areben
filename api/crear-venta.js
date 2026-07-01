@@ -42,6 +42,23 @@ export default async function handler(req, res) {
   if (!cfg) return res.status(400).json({ error: 'No hay configuración de ventas para esta cuenta.' });
   const TOKEN = TOKENS[store];
   if (!TOKEN) return res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
+
+  // ── Estado de una venta (solo lectura, sin login) — para saber si ya se anuló en GN ──
+  if (b.accion === 'estado') {
+    const ventaId = parseInt(b.ventaId, 10);
+    if (!ventaId) return res.status(400).json({ error: 'ventaId inválido' });
+    try {
+      const r = await gnFetch(`${GN_BASE}/ventas/${ventaId}`, { headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } });
+      if (r.status === 404) return res.status(200).json({ ok: true, existe: false });
+      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = null; }
+      const v = (d && d.data) ? d.data : d;
+      if (!r.ok || !v) return res.status(200).json({ ok: true, existe: true, desconocido: true });
+      return res.status(200).json({ ok: true, existe: true, active: v.active, archived: v.archived, sale_state_id: v.sale_state_id });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
 
   // ── Crear venta ── (GN no soporta anular/borrar por API: eso se hace a mano en la web de GN)
