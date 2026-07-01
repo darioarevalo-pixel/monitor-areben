@@ -9398,10 +9398,10 @@ function sfDraftHtml() {
   const prods = sfDraft.prods || [];
   const totalSel = prods.reduce((s, p) => s + p.variantes.filter(v => v.sel).reduce((a, v) => a + (+v.qty || 1), 0), 0);
   const rows = prods.map(p => {
-    const vars = p.variantes.map(v => `<label style="display:inline-flex;align-items:center;gap:6px;margin:3px 12px 3px 0;font-size:13px;${v.sel ? 'font-weight:600;' : ''}">
-        <input type="checkbox" ${v.sel ? 'checked' : ''} onchange="sfDraftToggleVar('${p.pid}','${v.vid}',this.checked)">
-        ${esc(v.size)} <span style="color:#9CA3AF;font-size:11px;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span>
-        ${v.sel ? `<input type="number" min="1" value="${v.qty}" onchange="sfDraftQty('${p.pid}','${v.vid}',this.value)" title="Cantidad" style="width:48px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:2px 4px;">` : ''}
+    const vars = p.variantes.map(v => `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;border-top:1px solid #F1F5F9;cursor:pointer;${v.sel ? 'font-weight:600;' : ''}">
+        <input type="checkbox" ${v.sel ? 'checked' : ''} onchange="sfDraftToggleVar('${p.pid}','${v.vid}',this.checked)" style="flex:0 0 auto;">
+        <span style="flex:1;min-width:0;">${esc(v.size)} <span style="color:#9CA3AF;font-size:11px;font-weight:400;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span></span>
+        ${v.sel ? `<input type="number" min="1" value="${v.qty}" onchange="sfDraftQty('${p.pid}','${v.vid}',this.value)" title="Cantidad" style="width:56px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:3px 4px;flex:0 0 auto;">` : ''}
       </label>`).join('');
     return `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="font-weight:600;font-size:14px;">${esc(p.name)}</div>
