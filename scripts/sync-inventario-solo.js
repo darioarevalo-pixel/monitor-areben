@@ -115,33 +115,6 @@ async function syncProductos() {
     });
   }
   console.log(`[inventario] ${skuCompletados} sku completados desde productos.`);
-
-  // Fallback dirigido: para variantes CON stock pero SIN código de barras, consultar GN
-  // por NOMBRE (algunos productos nuevos no salen en la lista paginada pero sí en la
-  // búsqueda ?q=). Trae sku (nivel producto) + barcode (por variante) y los completa.
-  const faltan = [...seen.values()].filter(v => (v.available_quantity || 0) > 0 && !v.barcode);
-  const nombres = [...new Set(faltan.map(v => v.product_name).filter(Boolean))].slice(0, 60);
-  let bcResueltos = 0;
-  for (const nombre of nombres) {
-    try {
-      const d = await gnFetch(`productos/obtener?q=${encodeURIComponent(nombre)}&include_variants=1&per_page=5`);
-      for (const p of (d.data || [])) {
-        const psku = p.sku || p.code || null;
-        const vs = p.variantes || [];
-        const bcByS = {};
-        vs.forEach(v => { if (v.barcode) bcByS[`${p.id}|${v.size_id}`] = v.barcode; });
-        const bcUnica = (vs.length === 1 && vs[0].barcode) ? vs[0].barcode : null;
-        for (const row of seen.values()) {
-          if (row.product_id !== p.id) continue;
-          if (!row.sku && psku) row.sku = psku;
-          if (!row.barcode) { const nb = bcByS[`${p.id}|${row.size_id}`] || bcUnica; if (nb) { row.barcode = nb; bcResueltos++; } }
-        }
-      }
-    } catch (e) { /* si una búsqueda falla, seguimos */ }
-    await sleep(300);
-  }
-  if (nombres.length) console.log(`[inventario] fallback por búsqueda: ${bcResueltos} códigos resueltos (${nombres.length} consultas).`);
-
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
