@@ -9922,7 +9922,7 @@ function cuponesMarcarUsado(id) { const c = cuponesData.find(x => x.id === id); 
 function cuponesDesmarcarUsado(id) { const c = cuponesData.find(x => x.id === id); if (!c) return; c.usado = false; c.usadoFecha = ''; cuponesGuardar(); cuponesRender(); }
 function cuponesAnular(id) { if (!_cupPuedeCrear()) return; const c = cuponesData.find(x => x.id === id); if (!c || !confirm('¿Anular este cupón?')) return; c.anulado = true; cuponesGuardar(); cuponesRender(); }
 function cuponesReactivar(id) { if (!_cupPuedeCrear()) return; const c = cuponesData.find(x => x.id === id); if (!c) return; c.anulado = false; cuponesGuardar(); cuponesRender(); }
-function cuponesBorrar(id) { if (!_cupPuedeCrear()) return; if (!confirm('¿Borrar este cupón de la lista?')) return; cuponesData = cuponesData.filter(x => x.id !== id); cuponesGuardar(); cuponesRender(); }
+function cuponesBorrar(id) { if (!_esAdmin()) { alert('Solo un administrador puede borrar cupones.'); return; } if (!confirm('¿Borrar este cupón de la lista?')) return; cuponesData = cuponesData.filter(x => x.id !== id); cuponesGuardar(); cuponesRender(); }
 function cuponesCopiarRecordatorio(id) {
   const c = cuponesData.find(x => x.id === id); if (!c) return;
   const primer = (c.nombre || '').split(' ')[0] || '';
@@ -9934,6 +9934,7 @@ function cuponesCopiarRecordatorio(id) {
 function cuponesRender() {
   const cont = document.getElementById('cupones-cont'); if (!cont) return;
   const puedeCrear = _cupPuedeCrear();
+  const esAdmin = _esAdmin();
   const q = cuponesBusqueda.trim().toLowerCase();
   const conEstado = cuponesData.map(c => ({ c, e: cuponesEstado(c) }));
   const porVencerN = conEstado.filter(x => x.e === 'porvencer').length;
@@ -9955,8 +9956,8 @@ function cuponesRender() {
     if (puedeCrear) {
       if (!c.anulado) acc.push(`<button onclick="cuponesAnular('${c.id}')" title="Anular" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:13px;">✕</button>`);
       else acc.push(`<button onclick="cuponesReactivar('${c.id}')" title="Reactivar" style="border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;">Reactivar</button>`);
-      acc.push(`<button onclick="cuponesBorrar('${c.id}')" title="Borrar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:14px;">🗑</button>`);
     }
+    if (esAdmin) acc.push(`<button onclick="cuponesBorrar('${c.id}')" title="Borrar (solo admin)" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:14px;">🗑</button>`);
     return `<tr style="${e === 'porvencer' ? 'background:#FFFBEB;' : ''}">
       <td style="padding:6px 8px;border-top:1px solid #F1F5F9;font-weight:600;">${esc(c.nombre)}${c.telefono ? `<div style="font-size:11px;color:#9CA3AF;font-weight:400;">${esc(c.telefono)}</div>` : ''}</td>
       <td style="padding:6px 8px;border-top:1px solid #F1F5F9;font-weight:700;">${_cupDesc(c)}${(+c.minimo > 0) ? `<div style="font-size:11px;color:#9CA3AF;font-weight:400;">desde $${Math.round(+c.minimo).toLocaleString('es-AR')}</div>` : ''}</td>
