@@ -9279,6 +9279,22 @@ function sfProcesar() {
 function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) return; s.estado = val; sfGuardar(); }
 function sfSetDesc(id, val) { if (!_esAdmin()) return; const s = sfData.find(x => x.id === id); if (!s) return; s.descripcion = val; sfGuardar(); }
 function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
+// Quitar una variante de la solicitud (solo admin, antes de crear las ventas). Queda registrada en s.eliminados.
+function sfEliminarItem(id, vid) {
+  if (!_esAdmin()) return;
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  if (s.ventas) { alert('Ya se crearon las ventas de esta solicitud; no se puede quitar.'); return; }
+  const it = (s.items || []).find(i => i.vid === vid); if (!it) return;
+  if (!confirm(`¿Quitar "${it.nombre} · ${it.variante}" de la solicitud?`)) return;
+  const motivo = (prompt('Motivo (opcional): ¿por qué lo quitás? (ej: no había stock, estaba en otra tienda)') || '').trim();
+  s.eliminados = s.eliminados || [];
+  s.eliminados.push({ vid: it.vid, pid: it.pid, nombre: it.nombre, variante: it.variante, sku: it.sku || '', qty: it.qty, origen: it.origen, fecha: new Date().toISOString().slice(0, 10), por: currentUser || '', motivo });
+  s.items = s.items.filter(i => i.vid !== vid);
+  if (s.verif) delete s.verif[vid];
+  if (s.devuelto) delete s.devuelto[vid];
+  sfGuardar();
+  sfRender();
+}
 let sfFase = 'retiro'; // fase de verificación: 'retiro' (preparar) | 'devolucion' (al volver)
 function sfVer(id) { sfViendo = id; sfFase = 'retiro'; window._sfFb = null; sfRender(); }
 function sfVolver() { sfViendo = null; window._sfFb = null; sfRender(); }
@@ -9371,7 +9387,8 @@ function sfVerHtml(s) {
     const totQ = arr.reduce((a, i) => a + i.qty, 0);
     const confTot = arr.reduce((a, i) => a + conf(i), 0);
     const completo = confTot >= totQ;
-    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${c}/${i.qty}</td></tr>`; }).join('');
+    const puedeQuitar = _esAdmin() && !s.ventas;
+    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${c}/${i.qty}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;">${puedeQuitar ? `<button onclick="sfEliminarItem('${s.id}','${i.vid}')" title="Quitar de la solicitud (solo admin)" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>` : ''}</td></tr>`; }).join('');
     const fbKey = origen + '-' + sfFase;
     const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
     return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
@@ -9381,7 +9398,7 @@ function sfVerHtml(s) {
       </div>
       <div style="margin:8px 0;"><input id="sf-scan-${origen}" onkeydown="if(event.key==='Enter'){event.preventDefault();sfScan('${s.id}','${origen}',this,'${sfFase}');}" placeholder="🔫 Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…" style="width:100%;padding:8px 10px;border:2px solid #378ADD;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
       ${fb ? `<div style="font-size:13px;margin-bottom:6px;">${fb}</div>` : ''}
-      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">${sfFase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th></tr></thead><tbody>${rows}</tbody></table>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">${sfFase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th><th style="padding:3px 6px;"></th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
   };
   const opts = ['pendiente', 'preparada', 'cargada', 'devuelta'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
@@ -9408,6 +9425,10 @@ function sfVerHtml(s) {
     </div>
     ${grupo('📦 Retirar de Depósito', dep, 'deposito')}
     ${grupo('🏪 Retirar de Local', loc, 'local')}
+    ${(s.eliminados && s.eliminados.length) ? `<div style="border:1px dashed #FCA5A5;border-radius:9px;padding:9px 12px;margin-top:6px;background:#FEF2F2;">
+      <div style="font-size:12px;font-weight:700;color:#991B1B;margin-bottom:4px;">🗑️ Quitados de la solicitud (${s.eliminados.length})</div>
+      ${s.eliminados.map(e => `<div style="font-size:12px;color:#7F1D1D;">• ${esc(e.nombre)} · ${esc(e.variante)} (${e.qty}) — ${e.origen === 'deposito' ? '📦' : '🏪'} · ${esc(e.fecha)}${e.por ? ' · ' + esc(e.por) : ''}${e.motivo ? ' · "' + esc(e.motivo) + '"' : ''}</div>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 function sfHistorialHtml() {
