@@ -9618,25 +9618,40 @@ function _cuentaKey() {
 
 // ── Botón "Actualizar inventario / stock": dispara el sync rápido en el servidor ──
 const SYNC_API = 'https://bdi-catalogo.vercel.app/api/sync';
+let _invSyncing = false;
 async function dispararSyncInv(btn) {
+  if (_invSyncing) return;
+  _invSyncing = true;
   const store = _cuentaKey();
   const orig = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando…'; }
+  const setTxt = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
   try {
+    // Run de referencia para detectar cuándo arranca uno nuevo
+    let baseId = null;
+    try { const r0 = await fetch(`${SYNC_API}?store=${store}&nc=${Math.random()}`); const d0 = await r0.json(); baseId = d0.run ? d0.run.id : null; } catch (e) {}
+    setTxt('⏳ Pidiendo a GN…');
     const r = await fetch(SYNC_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store }) });
     const d = await r.json();
-    if (d.ok) {
-      if (btn) btn.textContent = '✓ Iniciado';
-      alert('🔄 Actualización de inventario iniciada (' + store.toUpperCase() + ').\n\nTarda ~2 minutos. Cuando pase ese rato, refrescá la página (poné ?1 al final de la dirección) para ver los datos nuevos.');
-    } else {
-      if (btn) btn.textContent = '⚠️ Error';
-      alert('No se pudo iniciar la actualización.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : ''));
+    if (!d.ok) { alert('No se pudo iniciar la actualización de inventario.\n' + (d.error || '') + (d.detalle ? '\n' + d.detalle : '')); return; }
+    const t0 = Date.now(), MAX = 7 * 60 * 1000;
+    let done = false;
+    while (Date.now() - t0 < MAX) {
+      await new Promise(res => setTimeout(res, 8000));
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setTxt(`⏳ Actualizando inventario… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+      try { const rr = await fetch(`${SYNC_API}?store=${store}&nc=${secs}`); const dd = await rr.json(); if (dd.run && dd.run.id !== baseId && dd.run.status === 'completed') { done = true; break; } } catch (e) {}
     }
+    setTxt('↻ Recargando…');
+    await cargarTodo(true);
+    if (done) alert('✅ Inventario actualizado (' + store.toUpperCase() + ').');
+    else alert('La actualización está tardando más de lo normal. Te muestro lo último disponible; si falta algo, volvé a tocar "Actualizar inventario" en un minuto.');
   } catch (e) {
-    if (btn) btn.textContent = '⚠️ Sin conexión';
-    alert('Error de conexión al iniciar la actualización.');
+    alert('Error al actualizar inventario: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    _invSyncing = false;
   }
-  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = orig; } }, 9000);
 }
 
 // ── Botón "Actualizar ventas" (admin): baja ventas recientes de GN y recarga los datos ──
