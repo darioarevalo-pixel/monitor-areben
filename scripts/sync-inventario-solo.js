@@ -51,19 +51,13 @@ async function fetchAllPages(base) {
 }
 
 async function syncProductos() {
-  console.log('\n[productos] descargando (con variantes)...');
-  const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
+  console.log('\n[productos] descargando...');
+  const rows = await fetchAllPages('productos/obtener?per_page=200');
   const inactiveIds = new Set(); // SOLO los explícitamente inactivos (no saltear nuevos/desconocidos)
-  const varBarcode = {};         // `${pid}|${sid}` -> barcode (para completar inventario)
-  const prodBarcode = {};        // pid -> barcode (respaldo para productos de UNA sola variante)
-  const prodSku = {};            // pid -> sku (respaldo)
+  const prodSku = {};            // pid -> sku (para completar el inventario cuando GN no lo manda)
   const productos = rows.map(p => {
     if (p.active === 0 || p.active === false) inactiveIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
-    const vs = p.variantes || [];
-    vs.forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
-    // Si tiene UNA sola variante con barcode, guardarlo a nivel producto (no depende del size_id).
-    if (vs.length === 1 && vs[0].barcode) prodBarcode[p.id] = vs[0].barcode;
     const base = {
       id: p.id,
       name: p.name,
@@ -92,23 +86,22 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
-  return { inactiveIds, varBarcode, prodBarcode, prodSku };
+  return { inactiveIds, prodSku };
 }
 
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
-  const { inactiveIds, varBarcode, prodBarcode, prodSku } = await syncProductos();
+  const { inactiveIds, prodSku } = await syncProductos();
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
-  let saltInactivos = 0, bcCompletados = 0;
+  let saltInactivos = 0, skuCompletados = 0;
   for (const r of rows) {
     if (inactiveIds.has(r.product_id)) { saltInactivos++; continue; } // saltear SOLO inactivos explícitos
-    const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
-    const bc = r.barcode || varBarcode[skey] || prodBarcode[r.product_id] || null; // completa el barcode desde productos
-    if (!r.barcode && bc) bcCompletados++;
+    const sku = r.sku || prodSku[r.product_id] || null;   // completa el sku desde productos cuando GN no lo manda
+    if (!r.sku && sku) skuCompletados++;
     seen.set(key, {
       product_id: r.product_id,
       product_name: r.product_name || null,
@@ -116,12 +109,12 @@ async function syncProductos() {
       size_name: r.size_name || null,
       store_name: r.store_name || r.store || '',
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
-      sku: r.sku || prodSku[r.product_id] || null,   // completa el sku que falta
-      barcode: bc,
+      sku,
+      barcode: r.barcode || null,
       observation: r.observation ?? null,
     });
   }
-  console.log(`[inventario] ${bcCompletados} códigos de barra completados desde productos.`);
+  console.log(`[inventario] ${skuCompletados} sku completados desde productos.`);
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
