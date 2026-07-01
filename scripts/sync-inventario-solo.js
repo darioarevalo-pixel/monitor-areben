@@ -53,12 +53,12 @@ async function fetchAllPages(base) {
 async function syncProductos() {
   console.log('\n[productos] descargando (con variantes)...');
   const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
-  const activeIds = new Set();   // ids de productos activos (para filtrar el stock)
+  const inactiveIds = new Set(); // SOLO los explícitamente inactivos (no saltear nuevos/desconocidos)
   const varBarcode = {};         // `${pid}|${sid}` -> barcode (para completar inventario)
   const prodBarcode = {};        // pid -> barcode (respaldo para productos de UNA sola variante)
   const prodSku = {};            // pid -> sku (respaldo)
   const productos = rows.map(p => {
-    if (p.active === 1 || p.active === true) activeIds.add(p.id);
+    if (p.active === 0 || p.active === false) inactiveIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
     const vs = p.variantes || [];
     vs.forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
@@ -79,7 +79,7 @@ async function syncProductos() {
     if (STORE === 'zattia') base.proveedor = p.provider || null;
     return base;
   });
-  console.log(`[productos] ${productos.length} registros (${activeIds.size} activos). Guardando...`);
+  console.log(`[productos] ${productos.length} registros (${inactiveIds.size} inactivos). Guardando...`);
   const BATCH = 500;
   for (let i = 0; i < productos.length; i += BATCH) {
     const lote = productos.slice(i, i + BATCH);
@@ -92,19 +92,19 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
-  return { activeIds, varBarcode, prodBarcode, prodSku };
+  return { inactiveIds, varBarcode, prodBarcode, prodSku };
 }
 
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
-  const { activeIds, varBarcode, prodBarcode, prodSku } = await syncProductos();
+  const { inactiveIds, varBarcode, prodBarcode, prodSku } = await syncProductos();
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
   let saltInactivos = 0, bcCompletados = 0;
   for (const r of rows) {
-    if (!activeIds.has(r.product_id)) { saltInactivos++; continue; } // no cargar stock de inactivos
+    if (inactiveIds.has(r.product_id)) { saltInactivos++; continue; } // saltear SOLO inactivos explícitos
     const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     const bc = r.barcode || varBarcode[skey] || prodBarcode[r.product_id] || null; // completa el barcode desde productos
