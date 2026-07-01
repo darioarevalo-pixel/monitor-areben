@@ -6506,6 +6506,16 @@ async function etiActualizarPreciosTN(btn) {
 }
 function _etiPrecio(v) { return _etiPrecioMap[v.pid] || 0; }
 
+// Aviso: productos activos CON stock pero SIN código de barras. No se pueden etiquetar
+// (falta el código), pero se muestran para que no "desaparezcan" en silencio.
+function _etiAvisoSinCodigo() {
+  const sc = (allVariantes || []).filter(v => !v.barcode && (v.stock || 0) > 0)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+  if (!sc.length) return '';
+  const items = sc.slice(0, 80).map(v => `<div style="margin-top:2px;">• ${esc(v.name || '—')}${v.size && v.size !== '—' ? ' · ' + esc(v.size) : ''}${v.sku ? ' · ' + esc(v.sku) : ''} <span style="color:#B45309;">(stock ${v.stock || 0})</span></div>`).join('');
+  return `<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">⚠️ <b>${sc.length} producto(s) con stock SIN código de barras.</b> No se pueden etiquetar hasta tener el código (cargalo en GN; a veces GN tarda en sincronizarlo). <details style="margin-top:4px;"><summary style="cursor:pointer;">Ver cuáles</summary>${items}${sc.length > 80 ? `<div style="margin-top:2px;color:#9CA3AF;">…y ${sc.length - 80} más</div>` : ''}</details></div>`;
+}
+
 // Variantes etiquetables: las que tienen código de barras, ordenadas por producto y variante
 function _etiVariantes() {
   return (allVariantes || [])
@@ -6519,12 +6529,13 @@ function etiRenderTabla(modo) {
   if (!cont) return;
   const conPrecio = modo === 'loc';
   const q = (document.getElementById('eti-search-' + modo).value || '').toLowerCase().trim();
+  const aviso = _etiAvisoSinCodigo();
   let lista = _etiVariantes();
   if (q) lista = lista.filter(v => (v.name || '').toLowerCase().includes(q) || (v.sku || '').toLowerCase().includes(q) || (v.barcode || '').includes(q));
   const CAP = 500;
   const shown = lista.slice(0, CAP);
   if (!shown.length) {
-    cont.innerHTML = '<div style="color:#9CA3AF;padding:24px;text-align:center;">No hay variantes con código de barras que coincidan.</div>';
+    cont.innerHTML = aviso + '<div style="color:#9CA3AF;padding:24px;text-align:center;">No hay variantes con código de barras que coincidan.</div>';
     etiActualizarTotal(modo);
     return;
   }
@@ -6550,7 +6561,7 @@ function etiRenderTabla(modo) {
   });
   html += '</tbody></table>';
   if (lista.length > CAP) html += `<div style="font-size:11px;color:#9CA3AF;padding:8px;">Mostrando ${CAP} de ${lista.length}. Refiná la búsqueda para ver el resto.</div>`;
-  cont.innerHTML = html;
+  cont.innerHTML = aviso + html;
   etiActualizarTotal(modo);
 }
 
