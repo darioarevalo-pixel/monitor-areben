@@ -1453,6 +1453,15 @@
       </div>
     </div>
 
+    <!-- ── Cupones (descuentos por cliente para el local) ───────────────────── -->
+    <div id="tab-cupones" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">🎟️ Cupones</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Guardá los descuentos que le das a cada cliente para aplicarlos en el <b>local</b>. Cuando la clienta viene a comprar, la buscás por nombre y ves su cupón y hasta cuándo vale. Nada de esto toca la tienda online.</div>
+        <div id="cupones-cont" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
     <!-- ── Reposición de local ─────────────────────────────────────────────── -->
     <div id="tab-reposicion" class="section">
       <div class="card">
@@ -6395,6 +6404,7 @@ function switchTab(id) {
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (id === 'ingresos') { ingInit(); return; }
   if (id === 'sesion-fotos') { sfAbrir(); return; }
+  if (id === 'cupones') { cuponesInit(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
@@ -8867,6 +8877,7 @@ const PERM_CAT = [
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.', brands: ['bdi'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
   { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
+  { key: 'cupones', label: '🎟️ Cupones', info: 'Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.', brands: ['bdi', 'zattia'] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
   { key: 'ubicaciones', label: '📍 Ubicaciones', info: 'Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.', brands: ['bdi'] },
 ];
@@ -8875,7 +8886,7 @@ const PERM_CAT = [
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'margenes', 'comisiones', 'colores', 'talles'] },
-  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
+  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
@@ -9845,6 +9856,134 @@ async function actualizarVentas(btn) {
     if (btn) { btn.disabled = false; btn.textContent = orig; }
     _ventasSyncing = false;
   }
+}
+
+// ════════ Cupones (descuentos por cliente para aplicar en el local) ═══════════
+const CUP_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+let cuponesData = [];
+let cuponesForm = false;          // formulario de alta abierto
+let cuponesBusqueda = '';
+let cuponesFiltro = 'vigentes';   // vigentes | porvencer | usados | vencidos | todos
+let cuponesSaveT = null;
+function cuponesNuevoId() { return 'c' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+async function cuponesInit() {
+  const cont = document.getElementById('cupones-cont');
+  if (cont && !cuponesData.length) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>';
+  try { const r = await fetch(`${CUP_API}?kind=cupones&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); cuponesData = (d && d.ok && Array.isArray(d.cupones)) ? d.cupones : []; }
+  catch (e) { cuponesData = []; }
+  cuponesRender();
+}
+function cuponesGuardar() {
+  clearTimeout(cuponesSaveT);
+  cuponesSaveT = setTimeout(async () => {
+    try { await fetch(`${CUP_API}?kind=cupones&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), cupones: cuponesData }) }); } catch (e) {}
+  }, 500);
+}
+function _cupDias(vence) { if (!vence) return null; const hoy = new Date(hoyISO() + 'T00:00:00'), fin = new Date(vence + 'T00:00:00'); return Math.round((fin - hoy) / 86400000); }
+function cuponesEstado(c) {
+  if (c.anulado) return 'anulado';
+  if (c.unSoloUso && c.usado) return 'usado';
+  const d = _cupDias(c.vence);
+  if (d !== null && d < 0) return 'vencido';
+  if (d !== null && d <= 3) return 'porvencer';
+  return 'vigente';
+}
+function _cupDesc(c) { return c.tipo === 'monto' ? ('$' + Math.round(+c.valor || 0).toLocaleString('es-AR')) : ((+c.valor || 0) + '%'); }
+function cuponesSetFiltro(f) { cuponesFiltro = f; cuponesRender(); }
+function cuponesSetBusqueda(v) { cuponesBusqueda = v; cuponesRender(); }
+function cuponesToggleForm() { cuponesForm = !cuponesForm; cuponesRender(); }
+function cuponesCrear() {
+  const g = id => (document.getElementById(id) || {}).value;
+  const nombre = (g('cup-nombre') || '').trim();
+  const valor = parseFloat(g('cup-valor'));
+  const vence = g('cup-vence');
+  if (!nombre) { alert('Poné el nombre y apellido del cliente.'); return; }
+  if (!(valor > 0)) { alert('Poné el valor del descuento.'); return; }
+  if (!vence) { alert('Poné hasta cuándo vale el cupón.'); return; }
+  cuponesData.unshift({
+    id: cuponesNuevoId(), nombre,
+    telefono: (g('cup-tel') || '').trim(),
+    tipo: g('cup-tipo') === 'monto' ? 'monto' : 'porcentaje', valor,
+    codigo: (g('cup-codigo') || '').trim(),
+    minimo: parseFloat(g('cup-minimo')) || 0,
+    motivo: (g('cup-motivo') || '').trim(),
+    unSoloUso: !!(document.getElementById('cup-unuso') || {}).checked,
+    vence, fechaCreado: hoyISO(),
+    creadoPor: (g('cup-por') || '').trim() || currentUser || '',
+    usado: false, usadoFecha: '', anulado: false,
+  });
+  cuponesGuardar(); cuponesForm = false; cuponesRender();
+}
+function cuponesMarcarUsado(id) { const c = cuponesData.find(x => x.id === id); if (!c) return; c.usado = true; c.usadoFecha = hoyISO(); cuponesGuardar(); cuponesRender(); }
+function cuponesDesmarcarUsado(id) { const c = cuponesData.find(x => x.id === id); if (!c) return; c.usado = false; c.usadoFecha = ''; cuponesGuardar(); cuponesRender(); }
+function cuponesAnular(id) { const c = cuponesData.find(x => x.id === id); if (!c || !confirm('¿Anular este cupón?')) return; c.anulado = true; cuponesGuardar(); cuponesRender(); }
+function cuponesReactivar(id) { const c = cuponesData.find(x => x.id === id); if (!c) return; c.anulado = false; cuponesGuardar(); cuponesRender(); }
+function cuponesBorrar(id) { if (!confirm('¿Borrar este cupón de la lista?')) return; cuponesData = cuponesData.filter(x => x.id !== id); cuponesGuardar(); cuponesRender(); }
+function cuponesCopiarRecordatorio(id) {
+  const c = cuponesData.find(x => x.id === id); if (!c) return;
+  const primer = (c.nombre || '').split(' ')[0] || '';
+  const venceTxt = c.vence ? c.vence.split('-').reverse().join('/') : '';
+  const msg = `Hola ${primer}! 🙌 Te recuerdo que tenés un descuento de ${_cupDesc(c)} para usar en el local${venceTxt ? `, vale hasta el ${venceTxt}` : ''}. ¡Te esperamos!`;
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(() => alert('📋 Mensaje copiado. Pegalo en WhatsApp.'), () => prompt('Copiá el mensaje:', msg));
+  else prompt('Copiá el mensaje:', msg);
+}
+function cuponesRender() {
+  const cont = document.getElementById('cupones-cont'); if (!cont) return;
+  const q = cuponesBusqueda.trim().toLowerCase();
+  const conEstado = cuponesData.map(c => ({ c, e: cuponesEstado(c) }));
+  const porVencerN = conEstado.filter(x => x.e === 'porvencer').length;
+  let lista = conEstado;
+  if (cuponesFiltro === 'vigentes') lista = conEstado.filter(x => x.e === 'vigente' || x.e === 'porvencer');
+  else if (cuponesFiltro === 'porvencer') lista = conEstado.filter(x => x.e === 'porvencer');
+  else if (cuponesFiltro === 'usados') lista = conEstado.filter(x => x.e === 'usado');
+  else if (cuponesFiltro === 'vencidos') lista = conEstado.filter(x => x.e === 'vencido');
+  if (q) lista = lista.filter(x => (x.c.nombre || '').toLowerCase().includes(q) || (x.c.codigo || '').toLowerCase().includes(q));
+  const badge = e => { const m = { vigente: ['#065F46', '#D1FAE5', 'Vigente'], porvencer: ['#92400E', '#FEF3C7', 'Por vencer'], vencido: ['#991B1B', '#FEE2E2', 'Vencido'], usado: ['#374151', '#E5E7EB', 'Usado'], anulado: ['#6B7280', '#F3F4F6', 'Anulado'] }; const [col, bg, txt] = m[e] || m.vigente; return `<span style="background:${bg};color:${col};border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;">${txt}</span>`; };
+  const fBtn = (key, txt) => `<button onclick="cuponesSetFiltro('${key}')" style="border:1px solid ${cuponesFiltro === key ? '#378ADD' : '#D1D5DB'};background:${cuponesFiltro === key ? '#378ADD' : '#fff'};color:${cuponesFiltro === key ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${txt}</button>`;
+  const rows = lista.map(({ c, e }) => {
+    const venceTxt = c.vence ? c.vence.split('-').reverse().join('/') : '—';
+    const dias = _cupDias(c.vence);
+    const acc = [];
+    if (c.unSoloUso && (e === 'vigente' || e === 'porvencer')) acc.push(`<button onclick="cuponesMarcarUsado('${c.id}')" title="Marcar como usado" style="border:1px solid #A7F3D0;background:#ECFDF5;color:#065F46;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;">✔ Usado</button>`);
+    if (e === 'usado') acc.push(`<button onclick="cuponesDesmarcarUsado('${c.id}')" title="Deshacer usado" style="border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;">↺</button>`);
+    if (e === 'porvencer' || e === 'vigente') acc.push(`<button onclick="cuponesCopiarRecordatorio('${c.id}')" title="Copiar recordatorio para WhatsApp" style="border:1px solid #D1D5DB;background:#fff;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;">📋 Recordar</button>`);
+    if (!c.anulado) acc.push(`<button onclick="cuponesAnular('${c.id}')" title="Anular" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:13px;">✕</button>`);
+    else acc.push(`<button onclick="cuponesReactivar('${c.id}')" title="Reactivar" style="border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;">Reactivar</button>`);
+    acc.push(`<button onclick="cuponesBorrar('${c.id}')" title="Borrar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:14px;">🗑</button>`);
+    return `<tr style="${e === 'porvencer' ? 'background:#FFFBEB;' : ''}">
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;font-weight:600;">${esc(c.nombre)}${c.telefono ? `<div style="font-size:11px;color:#9CA3AF;font-weight:400;">${esc(c.telefono)}</div>` : ''}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;font-weight:700;">${_cupDesc(c)}${(+c.minimo > 0) ? `<div style="font-size:11px;color:#9CA3AF;font-weight:400;">desde $${Math.round(+c.minimo).toLocaleString('es-AR')}</div>` : ''}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;">${venceTxt}${(e === 'porvencer' && dias != null) ? `<div style="font-size:11px;color:#B45309;">${dias <= 0 ? 'vence hoy' : ('en ' + dias + 'd')}</div>` : ''}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;">${badge(e)}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(c.motivo) || '—'}${c.codigo ? ` · <span style="color:#9CA3AF;">${esc(c.codigo)}</span>` : ''}${c.unSoloUso ? '' : ' · <span style="color:#9CA3AF;">reutilizable</span>'}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;color:#9CA3AF;font-size:11px;">${esc(c.creadoPor) || '—'}</td>
+      <td style="padding:6px 8px;border-top:1px solid #F1F5F9;text-align:right;white-space:nowrap;"><span style="display:inline-flex;gap:4px;align-items:center;">${acc.join('')}</span></td>
+    </tr>`;
+  }).join('');
+  const form = cuponesForm ? `<div style="border:1px solid #C7D2FE;background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="font-weight:700;margin-bottom:8px;">Nuevo cupón</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
+        <label style="font-size:12px;color:#374151;">Nombre y apellido *<input id="cup-nombre" placeholder="Ej: Ana Pérez" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Teléfono (opcional)<input id="cup-tel" placeholder="Para recordarle" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Descuento *<span style="display:flex;gap:4px;margin-top:2px;"><select id="cup-tipo" style="padding:6px;border:1px solid #D1D5DB;border-radius:6px;"><option value="porcentaje">%</option><option value="monto">$</option></select><input id="cup-valor" type="number" min="1" placeholder="15" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;box-sizing:border-box;"></span></label>
+        <label style="font-size:12px;color:#374151;">Vale hasta *<input id="cup-vence" type="date" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Compra mínima (opcional)<input id="cup-minimo" type="number" min="0" placeholder="0" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Código (opcional)<input id="cup-codigo" placeholder="Ej: ANA15" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Motivo (opcional)<input id="cup-motivo" placeholder="Reactivación, cumpleaños…" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+        <label style="font-size:12px;color:#374151;">Generado por<input id="cup-por" value="${esc(currentUser || '')}" style="width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;margin-top:2px;box-sizing:border-box;"></label>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-top:8px;"><input id="cup-unuso" type="checkbox" checked> Un solo uso (se marca como usado al aplicarlo)</label>
+      <div style="display:flex;gap:8px;margin-top:10px;"><button class="btn-primary" onclick="cuponesCrear()">✓ Guardar cupón</button><button class="btn-sm" onclick="cuponesToggleForm()">Cancelar</button></div>
+    </div>` : '';
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn-primary" onclick="cuponesToggleForm()">➕ Generar cupón</button>
+      <input value="${esc(cuponesBusqueda)}" oninput="cuponesSetBusqueda(this.value)" placeholder="🔎 Buscar por nombre o código…" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+    </div>
+    ${form}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('vigentes', 'Vigentes')}${fBtn('porvencer', `Por vencer${porVencerN ? ` (${porVencerN})` : ''}`)}${fBtn('usados', 'Usados')}${fBtn('vencidos', 'Vencidos')}${fBtn('todos', 'Todos')}</div>
+    ${lista.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Cliente</th><th style="padding:6px 8px;">Descuento</th><th style="padding:6px 8px;">Vence</th><th style="padding:6px 8px;">Estado</th><th style="padding:6px 8px;">Motivo / código</th><th style="padding:6px 8px;">Generó</th><th style="padding:6px 8px;"></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay cupones en este filtro. Tocá "➕ Generar cupón" para crear uno.</div>'}
+  `;
 }
 
 // ════════ Reposición de local ════════════════════════════════════════════════
