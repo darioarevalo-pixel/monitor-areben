@@ -9149,9 +9149,28 @@ let sfViendo = null;   // id de solicitud que se está viendo
 let sfSaveT = null;
 const SF_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
 const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta';
-let SF_FORZAR_LOCAL = true; // ⚠️ TEMPORAL: mientras se ordena el depósito, todo se retira de Local. (poner false para volver a depósito/local automático)
 function sfNuevoId() { return 's' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
-function sfBanner() { return SF_FORZAR_LOCAL ? '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px;color:#92400E;">⚠️ Modo temporal: <b>todo se retira de Local</b> (mientras se ordena el depósito).</div>' : ''; }
+// Banner de prioridad de retiro: lo ven todos (info); solo el admin puede cambiarlo.
+function sfBanner() {
+  const prio = (repoCfg && repoCfg.prioridadRetiro) || 'deposito';
+  const txt = prio === 'local'
+    ? '<b>Local primero</b> (si no hay stock, se retira de Depósito)'
+    : '<b>Depósito primero</b> (si no hay stock, se retira de Local)';
+  let html = '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px;color:#075985;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🏷️ <b>Prioridad de retiro:</b> ' + txt;
+  if (_esAdmin()) {
+    html += ' <select onchange="sfSetPrioridad(this.value)" style="padding:4px 6px;border:1px solid #BAE6FD;border-radius:6px;background:#fff;">'
+      + '<option value="deposito"' + (prio !== 'local' ? ' selected' : '') + '>Depósito primero</option>'
+      + '<option value="local"' + (prio === 'local' ? ' selected' : '') + '>Local primero</option>'
+      + '</select> <span style="color:#9CA3AF;">(solo admin)</span>';
+  }
+  return html + '</div>';
+}
+function sfSetPrioridad(v) {
+  if (!_esAdmin()) return;
+  repoCfg.prioridadRetiro = (v === 'local') ? 'local' : 'deposito';
+  repoCfgSave();
+  sfRender();
+}
 async function sfCrearVentas(id) {
   const s = sfData.find(x => x.id === id); if (!s) return;
   if (_cuentaKey() !== 'zattia') { alert('Por ahora solo se pueden crear ventas en Zattia.'); return; }
@@ -9243,7 +9262,10 @@ function sfProcesar() {
   const items = [];
   sfDraft.prods.forEach(p => p.variantes.filter(v => v.sel).forEach(v => {
     const qty = Math.max(1, +v.qty || 1);
-    const origen = SF_FORZAR_LOCAL ? 'local' : ((v.deposito >= qty) ? 'deposito' : 'local');
+    const prio = (repoCfg && repoCfg.prioridadRetiro) || 'deposito';
+    const origen = prio === 'local'
+      ? (v.local >= qty ? 'local' : 'deposito')      // Local primero, fallback Depósito
+      : (v.deposito >= qty ? 'deposito' : 'local');  // Depósito primero, fallback Local
     items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen });
   }));
   if (!items.length) { alert('Tildá al menos una variante para procesar.'); return; }
@@ -9643,7 +9665,7 @@ async function actualizarVentas(btn) {
 
 // ════════ Reposición de local ════════════════════════════════════════════════
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion';
-let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, reservaTodos: true, topes: {}, catsOff: [] };
+let repoCfg = { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, reservaTodos: true, topes: {}, catsOff: [], prioridadRetiro: 'deposito' };
 let repoInv = [];                 // variantes agregadas {vid,pid,sid,name,size,sku,local,deposito,cat,s7}
 let repoFaltantes = new Set();    // variantes marcadas "no se encuentra" (sesión)
 let repoVerVentas = false;
@@ -9749,7 +9771,7 @@ function repoSetMover(vid, v) {
 }
 function repoResetMover() { repoMoverManual = {}; repoRender(); }
 async function repoCfgLoad() {
-  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, reservaTodos: d.config.reservaTodos ?? true, topes: d.config.topes || {}, catsOff: d.config.catsOff || [] }; }
+  try { const r = await fetch(`${REPO_API}?store=${_cuentaKey()}`); const d = await r.json(); if (d && d.ok && d.config) repoCfg = { mins: d.config.mins || {}, apagados: (d.config.apagados || []).map(String), defaultMin: d.config.defaultMin ?? 4, reservaDeposito: d.config.reservaDeposito ?? 1, reservaTodos: d.config.reservaTodos ?? true, topes: d.config.topes || {}, catsOff: d.config.catsOff || [], prioridadRetiro: d.config.prioridadRetiro === 'local' ? 'local' : 'deposito' }; }
   catch (e) { /* default */ }
 }
 function repoCfgSave() {
