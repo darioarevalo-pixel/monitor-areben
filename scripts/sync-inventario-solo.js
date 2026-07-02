@@ -50,9 +50,25 @@ async function fetchAllPages(base) {
   return out;
 }
 
+// Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
+async function desactivarBorrados(gnIds) {
+  const { data: activos, error } = await supabase.from('productos').select('id, created_at').eq('active', true);
+  if (error || !activos) { if (error) console.warn('[limpieza] no se pudo leer activos:', error.message); return; }
+  const CORTE = Date.now() - 2 * 24 * 60 * 60 * 1000; // no tocar los creados hace < 2 días (pueden estar indexándose en GN)
+  const aDesactivar = activos.filter(p => !gnIds.has(p.id) && (!p.created_at || new Date(p.created_at).getTime() < CORTE)).map(p => p.id);
+  if (!aDesactivar.length) { console.log('[limpieza] sin productos borrados para desactivar.'); return; }
+  const BATCH = 200;
+  for (let i = 0; i < aDesactivar.length; i += BATCH) {
+    const { error: e2 } = await supabase.from('productos').update({ active: false }).in('id', aDesactivar.slice(i, i + BATCH));
+    if (e2) { console.warn('[limpieza] error:', e2.message); break; }
+  }
+  console.log(`[limpieza] ${aDesactivar.length} producto(s) borrados en GN → marcados inactivos.`);
+}
+
 async function syncProductos() {
   console.log('\n[productos] descargando...');
   const rows = await fetchAllPages('productos/obtener?per_page=200');
+  const gnIds = new Set(rows.map(p => p.id));
   const inactiveIds = new Set(); // SOLO los explícitamente inactivos (no saltear nuevos/desconocidos)
   const prodSku = {};            // pid -> sku (para completar el inventario cuando GN no lo manda)
   const productos = rows.map(p => {
@@ -86,6 +102,7 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
+  await desactivarBorrados(gnIds);
   return { inactiveIds, prodSku };
 }
 

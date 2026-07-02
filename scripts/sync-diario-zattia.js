@@ -102,12 +102,28 @@ async function fetchAllPages(basePath) {
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
+// Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
+async function desactivarBorrados(gnIds) {
+  const { data: activos, error } = await supabase.from('productos').select('id, created_at').eq('active', true);
+  if (error || !activos) { if (error) console.warn('[limpieza] no se pudo leer activos:', error.message); return; }
+  const CORTE = Date.now() - 2 * 24 * 60 * 60 * 1000; // no tocar los creados hace < 2 días (pueden estar indexándose en GN)
+  const aDesactivar = activos.filter(p => !gnIds.has(p.id) && (!p.created_at || new Date(p.created_at).getTime() < CORTE)).map(p => p.id);
+  if (!aDesactivar.length) { console.log('[limpieza] sin productos borrados para desactivar.'); return; }
+  const BATCH = 200;
+  for (let i = 0; i < aDesactivar.length; i += BATCH) {
+    const { error: e2 } = await supabase.from('productos').update({ active: false }).in('id', aDesactivar.slice(i, i + BATCH));
+    if (e2) { console.warn('[limpieza] error:', e2.message); break; }
+  }
+  console.log(`[limpieza] ${aDesactivar.length} producto(s) borrados en GN → marcados inactivos.`);
+}
+
 // Descarga productos CON variantes y arma los mapas. Se corre SIEMPRE (aunque los
 // productos no se guarden ese día) porque el inventario los necesita para completar
 // el código de barras y para saber cuáles están activos.
 async function cargarProductos() {
   console.log('\n[productos] Descargando (con variantes)...');
   const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
+  const gnIds = new Set(rows.map(p => p.id));
   const activeIds = new Set();   // ids activos (para filtrar el stock)
   const varBarcode = {};         // `${pid}|${sid}` -> barcode (completa inventario)
   const prodSku = {};            // pid -> sku (respaldo)
@@ -130,6 +146,7 @@ async function cargarProductos() {
     };
   });
   console.log(`[productos] ${productos.length} descargados (${activeIds.size} activos).`);
+  await desactivarBorrados(gnIds);
   return { activeIds, varBarcode, prodSku, productos };
 }
 
