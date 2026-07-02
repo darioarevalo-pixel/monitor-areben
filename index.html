@@ -359,6 +359,7 @@
 
 
   <div id="dashboard">
+    <div id="si-aviso-inicio" style="display:none;margin-bottom:12px;"></div>
     <div class="stats-grid" id="stats-overview">
       <div class="stat"><div class="stat-label">Productos</div><div class="stat-value" id="stat-total">—</div></div>
       <div class="stat"><div class="stat-label">Sin ventas +30d</div><div class="stat-value danger" id="stat-stale">—</div></div>
@@ -1465,6 +1466,15 @@
         <div style="font-size:16px;font-weight:700;">🎟️ Cupones</div>
         <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Guardá los descuentos que le das a cada cliente para aplicarlos en el <b>local</b>. Cuando la clienta viene a comprar, la buscás por nombre y ves su cupón y hasta cuándo vale. Nada de esto toca la tienda online.</div>
         <div id="cupones-cont" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
+    <!-- ── Solicitudes internas (retiros con motivo/aprobación) ─────────────── -->
+    <div id="tab-solicitudes-internas" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">📋 Solicitudes internas</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:680px;">Retiros de productos para uso interno (moldería, video, muestras, consumo). <b>Retornable</b> = vuelve y se repone (igual que Sesión de fotos). <b>Consumo</b> = no vuelve y necesita aprobación de un gerente/admin.</div>
+        <div id="si-cont" style="margin-top:14px;"></div>
       </div>
     </div>
 
@@ -6411,6 +6421,7 @@ function switchTab(id) {
   if (id === 'ingresos') { ingInit(); return; }
   if (id === 'sesion-fotos') { sfAbrir(); return; }
   if (id === 'cupones') { cuponesInit(); return; }
+  if (id === 'solicitudes-internas') { siAbrir(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
@@ -8886,6 +8897,9 @@ const PERM_CAT = [
   { key: 'cupones', label: '🎟️ Cupones', info: 'Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.', brands: ['bdi', 'zattia'], subs: [
       { key: 'crear', label: '✏️ Puede generar cupones', info: 'Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local.' },
   ] },
+  { key: 'solicitudes-internas', label: '📋 Solicitudes internas', info: 'Retiros de productos para uso interno (moldería, video, muestras, consumo). Retornable (vuelve, se repone) o consumo (no vuelve). Los consumos requieren aprobación de un gerente/admin.', brands: ['bdi', 'zattia'], subs: [
+      { key: 'aprobar', label: '✅ Puede aprobar consumos', info: 'Puede APROBAR o rechazar las solicitudes de consumo (las que no vuelven). Los admins pueden siempre. Solo los aprobadores ven los pendientes.' },
+  ] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
   { key: 'ubicaciones', label: '📍 Ubicaciones', info: 'Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.', brands: ['bdi'] },
 ];
@@ -8894,7 +8908,7 @@ const PERM_CAT = [
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'margenes', 'comisiones', 'colores', 'talles'] },
-  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
+  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
@@ -9773,10 +9787,11 @@ function renderNav() {
     const accent = cat.accent === 'marketing' ? ' nav-accent-mkt' : '';
     if (items.length === 1) {                           // un solo ítem → botón directo
       const k = items[0];
-      html += `<button class="nav-cat${accent}" data-key="${k}" onclick="navGo('${k}')">${_navLabel(k)}</button>`;
+      html += `<button class="nav-cat${accent}" data-key="${k}" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}</button>`;
     } else {
-      const opts = items.map(k => `<button class="nav-opt" data-key="${k}" role="menuitem" onclick="navGo('${k}')">${_navLabel(k)}</button>`).join('');
-      html += `<div class="nav-group" data-cat="${cat.id}"><button class="nav-cat${accent}" aria-haspopup="true" aria-expanded="false" onclick="navToggle(this)">${cat.label} <span class="nav-caret">▾</span></button><div class="nav-menu" role="menu">${opts}</div></div>`;
+      const opts = items.map(k => `<button class="nav-opt" data-key="${k}" role="menuitem" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}</button>`).join('');
+      const gb = items.includes('solicitudes-internas') ? _siNavBadge() : '';
+      html += `<div class="nav-group" data-cat="${cat.id}"><button class="nav-cat${accent}" aria-haspopup="true" aria-expanded="false" onclick="navToggle(this)">${cat.label}${gb} <span class="nav-caret">▾</span></button><div class="nav-menu" role="menu">${opts}</div></div>`;
     }
   });
   bar.innerHTML = html;
@@ -9813,6 +9828,9 @@ function aplicarVisibilidadTabs() {
 
   // Navegación: reconstruye los menús desplegables según marca + permisos.
   renderNav();
+  if (typeof siCargarPendientes === 'function') siCargarPendientes(); // badge + aviso de inicio de Solicitudes internas
+
+
 
   // Subpestañas de Etiquetas
   ['dep', 'loc', 'sku', 'libre'].forEach(s => {
@@ -10070,6 +10088,220 @@ function cuponesRender() {
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('vigentes', 'Vigentes')}${fBtn('porvencer', `Por vencer${porVencerN ? ` (${porVencerN})` : ''}`)}${fBtn('usados', 'Usados')}${fBtn('vencidos', 'Vencidos')}${fBtn('todos', 'Todos')}</div>
     ${lista.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Cliente</th><th style="padding:6px 8px;">Descuento</th><th style="padding:6px 8px;">Vence</th><th style="padding:6px 8px;">Estado</th><th style="padding:6px 8px;">Motivo / código</th><th style="padding:6px 8px;">Generó</th><th style="padding:6px 8px;"></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay cupones en este filtro. Tocá "➕ Generar cupón" para crear uno.</div>'}
   `;
+}
+
+// ════════ Solicitudes internas (retiros con motivo / aprobación) ══════════════
+const SI_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+let SI_MOTIVOS = ['Moldería', 'Video/contenido', 'Muestra', 'Consumo', 'Prueba', 'Otro'];
+let siData = [];
+let siDraft = null;          // { motivo, tipo, descripcion, origen, prods:[...] }
+let siViendo = null;
+let siSaveT = null;
+let siFiltro = 'activas';    // activas | pendientes | todas
+let siBusqueda = '';
+let siPendientesCount = 0;   // para el badge del menú y el aviso de inicio
+function siNuevoId() { return 'si' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+function _siEsAprobador() { return _esAdmin() || _puedeVer(_cuentaKey(), 'solicitudes-internas.aprobar'); }
+function _siPendientes() { return (siData || []).filter(s => s.tipo === 'consumo' && s.estado === 'pendiente'); }
+function _siBadgeEstado(e) { const m = { pendiente: ['#92400E', '#FEF3C7', '⏳ Pendiente'], aprobada: ['#1D4ED8', '#DBEAFE', 'Aprobada'], retirada: ['#065F46', '#D1FAE5', 'Retirada'], devuelta: ['#065F46', '#D1FAE5', 'Devuelta'], cerrada: ['#374151', '#E5E7EB', '✅ Cerrada'], rechazada: ['#991B1B', '#FEE2E2', '✖ Rechazada'] }; const [c, b, t] = m[e] || m.aprobada; return `<span style="background:${b};color:${c};border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;">${t}</span>`; }
+function _siBadgeTipo(t) { return t === 'consumo' ? `<span style="background:#FEE2E2;color:#991B1B;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;">🔥 Consumo</span>` : `<span style="background:#D1FAE5;color:#065F46;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;">🔁 Retornable</span>`; }
+function _siNavBadge() { return (_siEsAprobador() && siPendientesCount > 0) ? ` <span style="background:#DC2626;color:#fff;border-radius:999px;padding:0 6px;font-size:11px;font-weight:700;">${siPendientesCount}</span>` : ''; }
+async function siInit() {
+  try { const r = await fetch(`${SI_API}?kind=solicitudesinternas&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); siData = (d && d.ok && Array.isArray(d.list)) ? d.list : []; }
+  catch (e) { siData = []; }
+  siPendientesCount = _siPendientes().length;
+}
+function siGuardar() {
+  clearTimeout(siSaveT);
+  siSaveT = setTimeout(async () => { try { await fetch(`${SI_API}?kind=solicitudesinternas&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), list: siData }) }); } catch (e) {} }, 500);
+}
+// Conteo liviano de pendientes para el badge del menú y el aviso de inicio (sin abrir la sección).
+async function siCargarPendientes() {
+  if (!_siEsAprobador()) { siPendientesCount = 0; _siRefrescarAvisos(); return; }
+  try { const r = await fetch(`${SI_API}?kind=solicitudesinternas&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); const list = (d && d.ok && Array.isArray(d.list)) ? d.list : []; siPendientesCount = list.filter(s => s.tipo === 'consumo' && s.estado === 'pendiente').length; }
+  catch (e) { siPendientesCount = 0; }
+  _siRefrescarAvisos();
+}
+function _siRefrescarAvisos() { if (typeof renderNav === 'function') renderNav(); _siRenderAvisoInicio(); }
+function _siRenderAvisoInicio() {
+  const el = document.getElementById('si-aviso-inicio'); if (!el) return;
+  if (_siEsAprobador() && siPendientesCount > 0) { el.style.display = ''; el.innerHTML = `<div style="background:#FFFBEB;border:1px solid #FBBF24;border-radius:10px;padding:10px 14px;font-size:13px;color:#92400E;cursor:pointer;" onclick="switchTab('solicitudes-internas')">⏳ Tenés <b>${siPendientesCount}</b> solicitud(es) interna(s) para aprobar. <span style="color:#2563EB;text-decoration:underline;">Ver</span></div>`; }
+  else { el.style.display = 'none'; el.innerHTML = ''; }
+}
+async function siAbrir() {
+  const cont = document.getElementById('si-cont');
+  if (cont && !siData.length && !siDraft && !siViendo) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>';
+  if (!repoInv.length) { try { if (typeof repoCfgLoad === 'function') await repoCfgLoad(); await repoCargarInventario(); } catch (e) {} }
+  window._sfBc = null;
+  await siInit();
+  siRender(); _siRefrescarAvisos();
+}
+function siRender() {
+  const cont = document.getElementById('si-cont'); if (!cont) return;
+  if (siDraft) { cont.innerHTML = siDraftHtml(); return; }
+  if (siViendo) { const s = siData.find(x => x.id === siViendo); if (s) { cont.innerHTML = siVerHtml(s); return; } siViendo = null; }
+  cont.innerHTML = siHistorialHtml();
+}
+// ── Borrador ──
+function siNuevoDraft() { siDraft = { motivo: SI_MOTIVOS[0], tipo: 'retornable', descripcion: '', origen: (repoCfg && repoCfg.prioridadRetiro) || 'deposito', prods: [] }; siViendo = null; siRender(); }
+function siCancelarDraft() { siDraft = null; siRender(); }
+function siSetMotivo(v) { if (siDraft) siDraft.motivo = v; }
+function siSetTipo(v) { if (siDraft) { siDraft.tipo = (v === 'consumo') ? 'consumo' : 'retornable'; siRender(); } }
+function siSetDesc(v) { if (siDraft) siDraft.descripcion = v; }
+function siDraftSetOrigen(o) { if (siDraft) { siDraft.origen = (o === 'local') ? 'local' : 'deposito'; siRender(); _sfFoco('si-draft-scan'); } }
+function siDraftDesdeProductos(pids) {
+  const prodById = {}; (allProductos || []).forEach(p => prodById[String(p.id)] = p);
+  pids.forEach(pid => {
+    pid = String(pid);
+    if (siDraft.prods.some(p => p.pid === pid)) return;
+    const vars = (repoInv || []).filter(it => String(it.pid) === pid && ((+it.local || 0) + (+it.deposito || 0)) > 0)
+      .map(it => ({ vid: it.vid, sid: it.sid, size: it.size || '—', sku: it.sku || '', local: +it.local || 0, deposito: +it.deposito || 0, sel: false, qty: 1 }))
+      .sort((a, b) => String(a.size).localeCompare(String(b.size), 'es', { numeric: true }));
+    if (!vars.length) return;
+    const p = prodById[pid];
+    siDraft.prods.push({ pid, name: (p && p.name) || ((repoInv.find(it => String(it.pid) === pid) || {}).name) || '—', variantes: vars });
+  });
+}
+function siDraftScan(inputEl) {
+  const code = (inputEl.value || '').trim(); inputEl.value = '';
+  const fb = document.getElementById('si-draft-scan-fb');
+  if (!code || !siDraft) { inputEl.focus(); return; }
+  const vid = sfBcVid(code);
+  let it = vid ? (repoInv || []).find(x => x.vid === vid) : null;
+  if (!it && code) it = (repoInv || []).find(x => String(x.sku).toLowerCase() === code.toLowerCase());
+  if (!it) { if (fb) fb.innerHTML = `<span style="color:#DC2626;">✗ No encontré ningún producto con el código <b>${esc(code)}</b>.</span>`; inputEl.focus(); return; }
+  const pid = String(it.pid);
+  let p = siDraft.prods.find(x => x.pid === pid);
+  if (!p) { siDraftDesdeProductos([pid]); p = siDraft.prods.find(x => x.pid === pid); }
+  if (!p) { p = { pid, name: it.name || '—', variantes: [] }; siDraft.prods.push(p); }
+  let v = p.variantes.find(x => x.vid === it.vid);
+  if (!v) { v = { vid: it.vid, sid: it.sid, size: it.size || '—', sku: it.sku || '', local: +it.local || 0, deposito: +it.deposito || 0, sel: false, qty: 0 }; p.variantes.push(v); }
+  v.sel = true; v.qty = (+v.qty || 0) + 1; v.origenManual = siDraft.origen;
+  if (fb) fb.innerHTML = `<span style="color:#16A34A;">✓ ${esc(p.name)} · ${esc(v.size)} (x${v.qty}) → ${siDraft.origen === 'local' ? '🏪 Local' : '📦 Depósito'}</span>`;
+  siRender(); _sfFoco('si-draft-scan');
+}
+function siDraftToggleVar(pid, vid, checked) { if (!siDraft) return; const p = siDraft.prods.find(x => x.pid === pid); if (!p) return; const v = p.variantes.find(x => x.vid === vid); if (v) v.sel = checked; siRender(); }
+function siDraftQty(pid, vid, val) { if (!siDraft) return; const p = siDraft.prods.find(x => x.pid === pid); if (!p) return; const v = p.variantes.find(x => x.vid === vid); if (v) v.qty = Math.max(1, parseInt(val) || 1); }
+function siDraftQuitarProd(pid) { if (!siDraft) return; siDraft.prods = siDraft.prods.filter(x => x.pid !== pid); siRender(); }
+function siAddProductoPrompt() {
+  const q = (prompt('Buscar producto por nombre o SKU:') || '').trim().toLowerCase();
+  if (!q || !siDraft) return;
+  const pids = [...new Set((repoInv || []).filter(it => (String(it.name).toLowerCase().includes(q) || String(it.sku).toLowerCase().includes(q)) && ((+it.local || 0) + (+it.deposito || 0)) > 0).map(it => String(it.pid)))];
+  if (!pids.length) { alert('No encontré productos con stock para "' + q + '".'); return; }
+  siDraftDesdeProductos(pids); siRender();
+}
+function siProcesar() {
+  if (!siDraft) return;
+  const items = [];
+  siDraft.prods.forEach(p => p.variantes.filter(v => v.sel).forEach(v => {
+    const qty = Math.max(1, +v.qty || 1);
+    const prio = (repoCfg && repoCfg.prioridadRetiro) || 'deposito';
+    const origen = v.origenManual || (prio === 'local' ? (v.local >= qty ? 'local' : 'deposito') : (v.deposito >= qty ? 'deposito' : 'local'));
+    items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen });
+  }));
+  if (!items.length) { alert('Escaneá o tildá al menos un producto.'); return; }
+  const estado = siDraft.tipo === 'consumo' ? 'pendiente' : 'aprobada';
+  const sol = { id: siNuevoId(), fecha: hoyISO(), creado: Date.now(), creadoPor: currentUser || '', motivo: siDraft.motivo || 'Otro', tipo: siDraft.tipo || 'retornable', descripcion: siDraft.descripcion || '', estado, items, verif: {}, devuelto: {} };
+  siData.unshift(sol);
+  siPendientesCount = _siPendientes().length;
+  siGuardar();
+  siDraft = null; siViendo = sol.id;
+  siRender(); _siRefrescarAvisos();
+}
+// ── Aprobación ──
+function siAprobar(id) {
+  if (!_siEsAprobador()) { alert('No tenés permiso para aprobar.'); return; }
+  const s = siData.find(x => x.id === id); if (!s) return;
+  s.estado = 'aprobada'; s.aprobadoPor = currentUser || ''; s.aprobadoFecha = hoyISO();
+  siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos();
+}
+function siRechazar(id) {
+  if (!_siEsAprobador()) { alert('No tenés permiso para aprobar.'); return; }
+  const s = siData.find(x => x.id === id); if (!s) return;
+  const motivo = (prompt('Motivo del rechazo (opcional):') || '').trim();
+  s.estado = 'rechazada'; s.rechazadoMotivo = motivo; s.aprobadoPor = currentUser || ''; s.aprobadoFecha = hoyISO();
+  siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos();
+}
+function siVer(id) { siViendo = id; siRender(); }
+function siVolver() { siViendo = null; siRender(); }
+function siBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; siData = siData.filter(x => x.id !== id); siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos(); }
+function siSetFiltro(f) { siFiltro = f; siRender(); }
+function siSetBusqueda(v) { siBusqueda = v; siRender(); }
+// ── HTML ──
+function siDraftHtml() {
+  const prods = siDraft.prods || [];
+  const total = prods.reduce((s, p) => s + p.variantes.filter(v => v.sel).reduce((a, v) => a + (+v.qty || 1), 0), 0);
+  const rows = prods.map(p => {
+    const vars = p.variantes.map(v => `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;border-top:1px solid #F1F5F9;cursor:pointer;${v.sel ? 'font-weight:600;' : ''}"><input type="checkbox" ${v.sel ? 'checked' : ''} onchange="siDraftToggleVar('${p.pid}','${v.vid}',this.checked)" style="flex:0 0 auto;"><span style="flex:1;min-width:0;">${esc(v.size)}${v.origenManual ? ` <span style="font-size:11px;">${v.origenManual === 'local' ? '🏪' : '📦'}</span>` : ''} <span style="color:#9CA3AF;font-size:11px;font-weight:400;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span></span>${v.sel ? `<input type="number" min="1" value="${v.qty}" onchange="siDraftQty('${p.pid}','${v.vid}',this.value)" style="width:56px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:3px 4px;flex:0 0 auto;">` : ''}</label>`).join('');
+    return `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="font-weight:600;font-size:14px;">${esc(p.name)}</div><button onclick="siDraftQuitarProd('${p.pid}')" title="Quitar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button></div><div style="margin-top:4px;">${vars}</div></div>`;
+  }).join('');
+  const motivoOpts = SI_MOTIVOS.map(m => `<option value="${esc(m)}" ${siDraft.motivo === m ? 'selected' : ''}>${esc(m)}</option>`).join('');
+  const tipoBtn = (t, txt) => `<button onclick="siSetTipo('${t}')" style="border:1px solid ${siDraft.tipo === t ? '#378ADD' : '#D1D5DB'};background:${siDraft.tipo === t ? '#378ADD' : '#fff'};color:${siDraft.tipo === t ? '#fff' : '#374151'};border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;">${txt}</button>`;
+  return `<div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <label style="font-size:12px;color:#374151;">Motivo <select onchange="siSetMotivo(this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;">${motivoOpts}</select></label>
+      <span style="font-size:12px;color:#374151;">Tipo:</span> ${tipoBtn('retornable', '🔁 Retornable')} ${tipoBtn('consumo', '🔥 Consumo')}
+    </div>
+    ${siDraft.tipo === 'consumo' ? `<div style="font-size:12px;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:6px 10px;margin-bottom:10px;">🔥 Consumo: no vuelve y necesita <b>aprobación</b> de un gerente/admin antes de retirarse.</div>` : ''}
+    <input value="${esc(siDraft.descripcion)}" onchange="siSetDesc(this.value)" placeholder="¿Para qué? (ej. molde falda otoño / video reel funda)" style="width:100%;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;margin-bottom:10px;box-sizing:border-box;">
+    <div style="border:1px solid #C7D2FE;background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="font-weight:700;margin-bottom:6px;">⚡ Cargar por escáner</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><span style="font-size:12px;color:#374151;">Sacando de:</span>
+        <button onclick="siDraftSetOrigen('deposito')" style="border:1px solid ${siDraft.origen === 'deposito' ? '#378ADD' : '#D1D5DB'};background:${siDraft.origen === 'deposito' ? '#378ADD' : '#fff'};color:${siDraft.origen === 'deposito' ? '#fff' : '#374151'};border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;">📦 Depósito</button>
+        <button onclick="siDraftSetOrigen('local')" style="border:1px solid ${siDraft.origen === 'local' ? '#378ADD' : '#D1D5DB'};background:${siDraft.origen === 'local' ? '#378ADD' : '#fff'};color:${siDraft.origen === 'local' ? '#fff' : '#374151'};border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;">🏪 Local</button></div>
+      <input type="text" id="si-draft-scan" onkeydown="if(event.key==='Enter'){event.preventDefault();siDraftScan(this);}" placeholder="🔫 Escaneá el código de barras…" style="width:100%;max-width:340px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;box-sizing:border-box;">
+      <div id="si-draft-scan-fb" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+    </div>
+    <div style="margin-bottom:10px;"><button class="btn-sm" onclick="siAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto (buscar)</button></div>
+    ${prods.length ? rows : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Escaneá o agregá productos.</div>'}
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn-primary" onclick="siProcesar()">✓ Crear solicitud (${total} u.)</button>
+      <button class="btn-sm" onclick="siCancelarDraft()">Cancelar</button>
+    </div>
+  </div>`;
+}
+function siHistorialHtml() {
+  const esAprob = _siEsAprobador();
+  const pend = _siPendientes();
+  let aprobHtml = '';
+  if (esAprob && pend.length) {
+    aprobHtml = `<div style="border:1px solid #FBBF24;background:#FFFBEB;border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#92400E;margin-bottom:6px;">⏳ ${pend.length} solicitud(es) esperando tu aprobación</div>
+      ${pend.map(s => { const u = (s.items || []).reduce((a, i) => a + (i.qty || 0), 0); return `<div style="border-top:1px solid #FDE68A;padding:8px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><div style="flex:1;min-width:180px;"><div style="font-weight:600;">${esc(s.motivo)} <span style="color:#9CA3AF;font-weight:400;font-size:12px;">· ${esc(s.creadoPor) || '—'} · ${esc(s.fecha)}</span></div><div style="font-size:12px;color:#6B7280;">${u} u. · ${(s.items || []).length} variantes${s.descripcion ? ' · ' + esc(s.descripcion) : ''} · <a onclick="siVer('${s.id}')" style="color:#2563EB;cursor:pointer;">ver detalle</a></div></div><button onclick="siAprobar('${s.id}')" style="border:1px solid #A7F3D0;background:#ECFDF5;color:#065F46;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;">✅ Aprobar</button><button onclick="siRechazar('${s.id}')" style="border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;">✖ Rechazar</button></div>`; }).join('')}
+    </div>`;
+  }
+  const q = siBusqueda.trim().toLowerCase();
+  let lista = (siData || []);
+  if (siFiltro === 'pendientes') lista = lista.filter(s => s.estado === 'pendiente');
+  else if (siFiltro === 'activas') lista = lista.filter(s => s.estado !== 'cerrada' && s.estado !== 'rechazada');
+  if (q) lista = lista.filter(s => (s.motivo || '').toLowerCase().includes(q) || (s.descripcion || '').toLowerCase().includes(q) || (s.creadoPor || '').toLowerCase().includes(q));
+  const rows = lista.map(s => { const u = (s.items || []).reduce((a, i) => a + (i.qty || 0), 0); return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;"><div style="flex:1;min-width:180px;cursor:pointer;" onclick="siVer('${s.id}')"><div style="font-weight:600;">${esc(s.motivo)} ${_siBadgeTipo(s.tipo)} ${_siBadgeEstado(s.estado)}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · ${esc(s.creadoPor) || '—'} · ${u} u.${s.descripcion ? ' · ' + esc(s.descripcion) : ''}</div></div><button class="btn-sm" onclick="siVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button><button onclick="siBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button></div>`; }).join('');
+  const fBtn = (k, t) => `<button onclick="siSetFiltro('${k}')" style="border:1px solid ${siFiltro === k ? '#378ADD' : '#D1D5DB'};background:${siFiltro === k ? '#378ADD' : '#fff'};color:${siFiltro === k ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${t}</button>`;
+  return `<div>
+    ${aprobHtml}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn-primary" onclick="siNuevoDraft()">+ Nueva solicitud</button>
+      <input value="${esc(siBusqueda)}" oninput="siSetBusqueda(this.value)" placeholder="🔎 Buscar motivo, quién pidió…" style="flex:1;min-width:180px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('activas', 'Activas')}${fBtn('pendientes', 'Pendientes')}${fBtn('todas', 'Todas')}</div>
+    ${lista.length ? rows : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay solicitudes en este filtro. Tocá "+ Nueva solicitud".</div>'}
+  </div>`;
+}
+function siVerHtml(s) {
+  const dep = s.items.filter(i => i.origen === 'deposito');
+  const loc = s.items.filter(i => i.origen === 'local');
+  const grupo = (titulo, arr) => arr.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:10px 12px;margin-bottom:10px;"><div style="font-weight:700;margin-bottom:6px;">${titulo}</div><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Cant.</th></tr></thead><tbody>${arr.map(i => `<tr><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.qty}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const aprobBtns = (s.estado === 'pendiente' && _siEsAprobador()) ? `<div style="display:flex;gap:8px;margin-bottom:10px;"><button onclick="siAprobar('${s.id}')" style="border:1px solid #A7F3D0;background:#ECFDF5;color:#065F46;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">✅ Aprobar</button><button onclick="siRechazar('${s.id}')" style="border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:8px;padding:8px 14px;cursor:pointer;">✖ Rechazar</button></div>` : '';
+  return `<div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><button class="btn-sm" onclick="siVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button><div style="font-weight:700;font-size:15px;">${esc(s.motivo)}</div> ${_siBadgeTipo(s.tipo)} ${_siBadgeEstado(s.estado)}<span style="color:#9CA3AF;font-size:12px;margin-left:auto;">${esc(s.fecha)} · ${esc(s.creadoPor) || '—'}</span></div>
+    ${s.descripcion ? `<div style="font-size:13px;color:#374151;margin-bottom:10px;">${esc(s.descripcion)}</div>` : ''}
+    ${s.estado === 'rechazada' ? `<div style="font-size:12px;color:#991B1B;background:#FEE2E2;border-radius:8px;padding:6px 10px;margin-bottom:10px;">✖ Rechazada por ${esc(s.aprobadoPor) || '—'}${s.rechazadoMotivo ? ' — "' + esc(s.rechazadoMotivo) + '"' : ''}</div>` : ''}
+    ${(s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente') ? `<div style="font-size:12px;color:#065F46;margin-bottom:10px;">✅ Aprobada por ${esc(s.aprobadoPor)}${s.aprobadoFecha ? ' · ' + esc(s.aprobadoFecha) : ''}</div>` : ''}
+    ${aprobBtns}
+    ${grupo('📦 Depósito', dep)}
+    ${grupo('🏪 Local', loc)}
+    <div style="font-size:12px;color:#9CA3AF;margin-top:6px;">🛠️ La venta en GN y la verificación de devolución se agregan en la Parte 2.</div>
+  </div>`;
 }
 
 // ════════ Reposición de local ════════════════════════════════════════════════
