@@ -111,6 +111,25 @@ async function syncProductos() {
   return { inactiveIds, prodSku };
 }
 
+// Deriva el código de barras del SKU para las filas de inventario de Zattia que quedaron SIN código
+// (productos nuevos que GN todavía no devuelve en su feed de inventario). Opera directo sobre el espejo.
+async function derivarCodigosZattia() {
+  if (STORE !== 'zattia') return;
+  const { data: inv, error: e0 } = await supabase.from('inventario').select('product_id').is('barcode', null);
+  if (e0 || !inv || !inv.length) { console.log('[códigos] nada para derivar.'); return; }
+  const pids = [...new Set(inv.map(r => r.product_id))];
+  const { data: prods } = await supabase.from('productos').select('id, sku').in('id', pids);
+  const skuById = {}; (prods || []).forEach(p => { if (p.sku) skuById[p.id] = p.sku; });
+  let n = 0;
+  for (const pid of pids) {
+    const sku = skuById[pid]; if (!sku) continue;
+    const bc = _bcDeSku(sku); if (!bc) continue;
+    const { error } = await supabase.from('inventario').update({ barcode: bc, sku }).eq('product_id', pid).is('barcode', null);
+    if (!error) n++;
+  }
+  console.log(`[códigos] ${n} producto(s) con código derivado del SKU (Zattia).`);
+}
+
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
@@ -154,5 +173,6 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
+  await derivarCodigosZattia();
   console.log(`\n[listo] productos + inventario — ${STORE}`);
 })().catch(e => { console.error('ERROR:', e.message); process.exit(1); });
