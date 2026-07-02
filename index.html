@@ -10135,6 +10135,7 @@ async function siAbrir() {
   window._sfBc = null;
   await siInit();
   siRender(); _siRefrescarAvisos();
+  siChequearAnulaciones({ auto: true }); // cierra las retornables cuya venta ya se anuló en GN
 }
 function siRender() {
   const cont = document.getElementById('si-cont'); if (!cont) return;
@@ -10227,6 +10228,72 @@ function siVolver() { siViendo = null; siRender(); }
 function siBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; siData = siData.filter(x => x.id !== id); siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos(); }
 function siSetFiltro(f) { siFiltro = f; siRender(); }
 function siSetBusqueda(v) { siBusqueda = v; siRender(); }
+// ── Venta en GN (descuenta stock) ──
+async function siCrearVentas(id) {
+  const s = siData.find(x => x.id === id); if (!s) return;
+  if (!['zattia', 'bdi'].includes(_cuentaKey())) { alert('Crear ventas en GN es solo para Zattia y BDI.'); return; }
+  if (s.estado === 'pendiente') { alert('La solicitud tiene que estar aprobada antes de crear la venta.'); return; }
+  if (s.ventas && !confirm('Esta solicitud ya tiene venta creada. ¿Crear de nuevo? (puede duplicar)')) return;
+  const user = currentUser, pass = _getAdminPass();
+  if (!pass) { alert('Necesito tu contraseña para crear la venta.'); return; }
+  const origenes = ['deposito', 'local'].filter(o => s.items.some(i => i.origen === o));
+  const btn = document.getElementById('si-crear-btn'); if (btn) { btn.disabled = true; btn.textContent = '⏳ Creando en GN…'; }
+  const result = {}, errores = [];
+  for (const origen of origenes) {
+    const items = s.items.filter(i => i.origen === origen).map(i => ({ product_id: i.pid, size_id: i.sid, quantity: i.qty }));
+    const comments = `Uso interno — ${s.motivo || ''} (${s.tipo}) — solicitud ${s.id} (Monitor)`;
+    try {
+      const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), origen, items, comments, solicitudId: s.id, user, pass }) });
+      const d = await r.json();
+      if (d.ok) result[origen] = d.venta; else errores.push(`${origen}: ${d.error || ''}${d.detalle ? ' — ' + JSON.stringify(d.detalle).slice(0, 200) : ''}`);
+    } catch (e) { errores.push(`${origen}: error de conexión`); }
+  }
+  if (Object.keys(result).length) { s.ventas = Object.assign({}, s.ventas, result); s.estado = 'retirada'; siGuardar(); }
+  if (errores.length) alert('No se pudieron crear todas las ventas:\n' + errores.join('\n'));
+  siRender();
+}
+// ── Verificación de devolución (retornables) ──
+function siScan(id, origen, inputEl) {
+  const code = (inputEl.value || '').trim(); inputEl.value = '';
+  const s = siData.find(x => x.id === id); if (!s) return;
+  const arr = s.items.filter(i => i.origen === origen);
+  const vid = sfBcVid(code);
+  let it = vid ? arr.find(i => i.vid === vid) : null;
+  if (!it && code) it = arr.find(i => String(i.sku).toLowerCase() === code.toLowerCase());
+  if (!it && code) it = arr.find(i => i.barcode && _sfNormBc(i.barcode) === _sfNormBc(code));
+  if (!it) { window._siFb = { key: origen, html: `<span style="color:#DC2626;">✗ "${esc(code)}" no está en esta lista.</span>` }; siRender(); _sfFoco('si-scan-' + origen); return; }
+  s.devuelto = s.devuelto || {};
+  const done = s.devuelto[it.vid] || 0;
+  if (done >= it.qty) { window._siFb = { key: origen, html: `<span style="color:#D97706;">⚠ ${esc(it.nombre)} · ${esc(it.variante)} ya estaba completo (${it.qty}).</span>` }; }
+  else {
+    s.devuelto[it.vid] = done + 1;
+    window._siFb = { key: origen, html: `<span style="color:#16A34A;">✓ ${esc(it.nombre)} · ${esc(it.variante)} (${done + 1}/${it.qty})</span>` };
+    if ((s.items || []).length && s.items.every(i => (s.devuelto[i.vid] || 0) >= i.qty)) s.estado = 'devuelta';
+    siGuardar();
+  }
+  siRender(); _sfFoco('si-scan-' + origen);
+}
+// ── Auto-cierre al anular la venta en GN (solo retornables) ──
+let _siChequeando = false;
+function _siVentaAnulada(resp) { if (!resp || !resp.ok) return false; return resp.existe === false || resp.active === false || resp.archived === true; }
+async function siChequearAnulaciones(opts = {}) {
+  if (_siChequeando) return;
+  const pend = (siData || []).filter(s => s.tipo === 'retornable' && s.estado !== 'cerrada' && s.ventas && ['deposito', 'local'].some(o => s.ventas[o] && s.ventas[o].id));
+  if (!pend.length) { if (!opts.auto) alert('No hay retornables con venta para verificar.'); return; }
+  _siChequeando = true; siRender();
+  let cerradas = 0;
+  try {
+    await Promise.all(pend.map(async s => {
+      const ventas = ['deposito', 'local'].map(o => s.ventas[o]).filter(v => v && v.id);
+      const res = await Promise.all(ventas.map(async v => { try { const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'estado', store: _cuentaKey(), ventaId: v.id }) }); return await r.json(); } catch (e) { return null; } }));
+      if (res.length && res.every(_siVentaAnulada)) { s.estado = 'cerrada'; cerradas++; }
+    }));
+  } catch (e) {}
+  _siChequeando = false;
+  if (cerradas) siGuardar();
+  siRender();
+  if (!opts.auto) alert(cerradas ? `✅ ${cerradas} solicitud(es) cerrada(s) — venta anulada en GN.` : 'Todavía ninguna venta fue anulada en GN.');
+}
 // ── HTML ──
 function siDraftHtml() {
   const prods = siDraft.prods || [];
@@ -10290,17 +10357,39 @@ function siHistorialHtml() {
 function siVerHtml(s) {
   const dep = s.items.filter(i => i.origen === 'deposito');
   const loc = s.items.filter(i => i.origen === 'local');
-  const grupo = (titulo, arr) => arr.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:10px 12px;margin-bottom:10px;"><div style="font-weight:700;margin-bottom:6px;">${titulo}</div><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Cant.</th></tr></thead><tbody>${arr.map(i => `<tr><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.qty}</td></tr>`).join('')}</tbody></table></div>` : '';
+  s.devuelto = s.devuelto || {};
+  const conf = it => Math.min(s.devuelto[it.vid] || 0, it.qty);
+  const puedeDevolver = s.tipo === 'retornable' && s.ventas && (s.estado === 'retirada' || s.estado === 'devuelta');
+  const grupo = (titulo, arr, origen) => {
+    if (!arr.length) return '';
+    if (!puedeDevolver) {  // tabla de solo lectura
+      return `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:10px 12px;margin-bottom:10px;"><div style="font-weight:700;margin-bottom:6px;">${titulo}</div><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Cant.</th></tr></thead><tbody>${arr.map(i => `<tr><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.qty}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    const totQ = arr.reduce((a, i) => a + i.qty, 0), confTot = arr.reduce((a, i) => a + conf(i), 0), completo = confTot >= totQ;
+    const fb = (window._siFb && window._siFb.key === origen) ? window._siFb.html : '';
+    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${c}/${i.qty}</td></tr>`; }).join('');
+    return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+      <div style="font-weight:700;">${titulo} <span style="color:#9CA3AF;font-weight:500;font-size:12px;">(${confTot}/${totQ} devueltos)</span>${completo ? ' <span style="color:#16A34A;font-weight:700;">✓ completo</span>' : ''}</div>
+      <div style="margin:8px 0;"><input id="si-scan-${origen}" onkeydown="if(event.key==='Enter'){event.preventDefault();siScan('${s.id}','${origen}',this);}" placeholder="🔫 Escaneá lo que vuelve…" style="width:100%;padding:8px 10px;border:2px solid #378ADD;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      ${fb ? `<div style="font-size:13px;margin-bottom:6px;">${fb}</div>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:3px 6px;">Producto</th><th style="padding:3px 6px;">Variante</th><th style="padding:3px 6px;">SKU</th><th style="padding:3px 6px;text-align:right;">Devuelto/Ped.</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  };
   const aprobBtns = (s.estado === 'pendiente' && _siEsAprobador()) ? `<div style="display:flex;gap:8px;margin-bottom:10px;"><button onclick="siAprobar('${s.id}')" style="border:1px solid #A7F3D0;background:#ECFDF5;color:#065F46;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">✅ Aprobar</button><button onclick="siRechazar('${s.id}')" style="border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:8px;padding:8px 14px;cursor:pointer;">✖ Rechazar</button></div>` : '';
+  const ventasHtml = s.ventas
+    ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Venta en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')} ${s.tipo === 'consumo' ? '<span style="color:#991B1B;">· baja definitiva (no se anula)</span>' : '<span style="color:#9CA3AF;font-size:11px;">· cuando vuelva todo, anulá la venta en GN y se cierra sola</span>'}</div>`
+    : (s.estado === 'aprobada' && ['zattia', 'bdi'].includes(_cuentaKey())
+      ? `<div style="margin-bottom:10px;"><button id="si-crear-btn" class="btn-primary" onclick="siCrearVentas('${s.id}')">🧾 Crear venta en GN (descontar stock)</button></div>`
+      : (s.estado === 'pendiente' ? `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Esperando aprobación para poder crear la venta.</div>` : ''));
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><button class="btn-sm" onclick="siVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button><div style="font-weight:700;font-size:15px;">${esc(s.motivo)}</div> ${_siBadgeTipo(s.tipo)} ${_siBadgeEstado(s.estado)}<span style="color:#9CA3AF;font-size:12px;margin-left:auto;">${esc(s.fecha)} · ${esc(s.creadoPor) || '—'}</span></div>
     ${s.descripcion ? `<div style="font-size:13px;color:#374151;margin-bottom:10px;">${esc(s.descripcion)}</div>` : ''}
     ${s.estado === 'rechazada' ? `<div style="font-size:12px;color:#991B1B;background:#FEE2E2;border-radius:8px;padding:6px 10px;margin-bottom:10px;">✖ Rechazada por ${esc(s.aprobadoPor) || '—'}${s.rechazadoMotivo ? ' — "' + esc(s.rechazadoMotivo) + '"' : ''}</div>` : ''}
     ${(s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente') ? `<div style="font-size:12px;color:#065F46;margin-bottom:10px;">✅ Aprobada por ${esc(s.aprobadoPor)}${s.aprobadoFecha ? ' · ' + esc(s.aprobadoFecha) : ''}</div>` : ''}
     ${aprobBtns}
-    ${grupo('📦 Depósito', dep)}
-    ${grupo('🏪 Local', loc)}
-    <div style="font-size:12px;color:#9CA3AF;margin-top:6px;">🛠️ La venta en GN y la verificación de devolución se agregan en la Parte 2.</div>
+    ${(s.estado !== 'pendiente' && s.estado !== 'rechazada') ? ventasHtml : ''}
+    ${grupo('📦 Depósito', dep, 'deposito')}
+    ${grupo('🏪 Local', loc, 'local')}
   </div>`;
 }
 
