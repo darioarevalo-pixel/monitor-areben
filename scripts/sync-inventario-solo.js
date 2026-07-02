@@ -50,6 +50,9 @@ async function fetchAllPages(base) {
   return out;
 }
 
+// Zattia: el código de barras = el SKU sin guiones ni espacios (convención de la marca).
+const _bcDeSku = (sku) => String(sku || '').replace(/[-\s]/g, '').toUpperCase();
+
 // Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
 async function desactivarBorrados(gnIds) {
   const { data: activos, error } = await supabase.from('productos').select('id, created_at').eq('active', true);
@@ -102,6 +105,8 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}\r`);
   }
   console.log(`\n[productos] OK — ${STORE}`);
+  // prodSku robusto: sumar TODO el sku que ya está en el espejo (evita el parpadeo del fetch de GN con productos nuevos)
+  try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
   await desactivarBorrados(gnIds);
   return { inactiveIds, prodSku };
 }
@@ -113,12 +118,14 @@ async function syncProductos() {
   const { inactiveIds, prodSku } = await syncProductos();
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
-  let saltInactivos = 0, skuCompletados = 0;
+  let saltInactivos = 0, skuCompletados = 0, bcCompletados = 0;
   for (const r of rows) {
     if (inactiveIds.has(r.product_id)) { saltInactivos++; continue; } // saltear SOLO inactivos explícitos
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     const sku = r.sku || prodSku[r.product_id] || null;   // completa el sku desde productos cuando GN no lo manda
     if (!r.sku && sku) skuCompletados++;
+    const barcode = r.barcode || (STORE === 'zattia' && sku ? _bcDeSku(sku) : null); // Zattia: derivar el código del SKU si GN no lo dio
+    if (!r.barcode && barcode) bcCompletados++;
     seen.set(key, {
       product_id: r.product_id,
       product_name: r.product_name || null,
@@ -127,11 +134,11 @@ async function syncProductos() {
       store_name: r.store_name || r.store || '',
       available_quantity: r.available_quantity ?? r.quantity ?? 0,
       sku,
-      barcode: r.barcode || null,
+      barcode,
       observation: r.observation ?? null,
     });
   }
-  console.log(`[inventario] ${skuCompletados} sku completados desde productos.`);
+  console.log(`[inventario] ${skuCompletados} sku + ${bcCompletados} códigos completados desde el SKU.`);
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }

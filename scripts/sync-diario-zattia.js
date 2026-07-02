@@ -102,6 +102,9 @@ async function fetchAllPages(basePath) {
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
+// Zattia: el código de barras = el SKU sin guiones ni espacios (convención de la marca).
+const _bcDeSku = (sku) => String(sku || '').replace(/[-\s]/g, '').toUpperCase();
+
 // Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
 async function desactivarBorrados(gnIds) {
   const { data: activos, error } = await supabase.from('productos').select('id, created_at').eq('active', true);
@@ -146,6 +149,8 @@ async function cargarProductos() {
     };
   });
   console.log(`[productos] ${productos.length} descargados (${activeIds.size} activos).`);
+  // prodSku robusto: sumar el sku que ya está en el espejo (evita el parpadeo del fetch con productos nuevos)
+  try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
   await desactivarBorrados(gnIds);
   return { activeIds, varBarcode, prodSku, productos };
 }
@@ -186,7 +191,7 @@ async function syncInventario(maps) {
         store_name:         r.store_name || r.store || '',
         available_quantity: r.available_quantity ?? r.quantity ?? 0,
         sku:                r.sku || prodSku[r.product_id] || null,
-        barcode:            r.barcode || varBarcode[skey] || null,
+        barcode:            r.barcode || varBarcode[skey] || _bcDeSku(r.sku || prodSku[r.product_id]) || null, // Zattia: derivar del SKU si GN no lo dio
       };
     } else {
       invMap[key].available_quantity += r.available_quantity ?? r.quantity ?? 0;
