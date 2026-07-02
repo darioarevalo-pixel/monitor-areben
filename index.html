@@ -9276,7 +9276,7 @@ function sfDraftToggleVar(pid, vid, checked) { if (!sfDraft) return; const p = s
 function sfDraftQty(pid, vid, val) { if (!sfDraft) return; const p = sfDraft.prods.find(x => x.pid === pid); if (!p) return; const v = p.variantes.find(x => x.vid === vid); if (v) v.qty = Math.max(1, parseInt(val) || 1); }
 function sfDraftDesc(val) { if (sfDraft) sfDraft.desc = val; }
 function sfDraftQuitarProd(pid) { if (!sfDraft) return; sfDraft.prods = sfDraft.prods.filter(x => x.pid !== pid); sfRender(); }
-function sfNuevoDraft() { sfDraft = { desc: '', prods: [] }; sfViendo = null; sfRender(); }
+function sfNuevoDraft() { sfDraft = { desc: '', prods: [] }; sfDraftOrigen = (repoCfg && repoCfg.prioridadRetiro) || 'deposito'; sfViendo = null; sfRender(); }
 function sfCancelarDraft() { sfDraft = null; sfRender(); }
 function sfAddProductoPrompt() {
   const q = (prompt('Buscar producto por nombre o SKU:') || '').trim().toLowerCase();
@@ -9294,9 +9294,11 @@ function sfProcesar() {
   sfDraft.prods.forEach(p => p.variantes.filter(v => v.sel).forEach(v => {
     const qty = Math.max(1, +v.qty || 1);
     const prio = (repoCfg && repoCfg.prioridadRetiro) || 'deposito';
-    const origen = prio === 'local'
-      ? (v.local >= qty ? 'local' : 'deposito')      // Local primero, fallback Depósito
-      : (v.deposito >= qty ? 'deposito' : 'local');  // Depósito primero, fallback Local
+    const origen = v.origenManual                      // fijado por escaneo (el operario sabe de dónde lo sacó)
+      ? v.origenManual
+      : (prio === 'local'
+        ? (v.local >= qty ? 'local' : 'deposito')      // Local primero, fallback Depósito
+        : (v.deposito >= qty ? 'deposito' : 'local')); // Depósito primero, fallback Local
     items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen });
   }));
   if (!items.length) { alert('Tildá al menos una variante para procesar.'); return; }
@@ -9413,13 +9415,35 @@ function sfRender() {
   if (sfViendo) { const s = sfData.find(x => x.id === sfViendo); if (s) { cont.innerHTML = sfVerHtml(s); return; } sfViendo = null; }
   cont.innerHTML = sfHistorialHtml();
 }
+let sfDraftOrigen = 'deposito';   // ubicación que se fija al escanear (toggle del borrador)
+function sfDraftSetOrigen(o) { sfDraftOrigen = (o === 'local') ? 'local' : 'deposito'; sfRender(); _sfFoco('sf-draft-scan'); }
+function sfDraftScan(inputEl) {
+  const code = (inputEl.value || '').trim(); inputEl.value = '';
+  const fb = document.getElementById('sf-draft-scan-fb');
+  if (!code) { inputEl.focus(); return; }
+  const vid = sfBcVid(code);
+  let it = vid ? (repoInv || []).find(x => x.vid === vid) : null;
+  if (!it && code) it = (repoInv || []).find(x => String(x.sku).toLowerCase() === code.toLowerCase()); // fallback por SKU
+  if (!it) { if (fb) fb.innerHTML = `<span style="color:#DC2626;">✗ No encontré ningún producto con el código <b>${esc(code)}</b>.</span>`; inputEl.focus(); return; }
+  if (!sfDraft) sfDraft = { desc: '', prods: [] };
+  const pid = String(it.pid);
+  let p = sfDraft.prods.find(x => x.pid === pid);
+  if (!p) { sfDraftDesdeProductos([pid]); p = sfDraft.prods.find(x => x.pid === pid); }
+  if (!p) { p = { pid, name: it.name || '—', cat: it.cat || '', variantes: [] }; sfDraft.prods.push(p); } // stock 0 en sistema pero físicamente presente → igual se carga
+  let v = p.variantes.find(x => x.vid === it.vid);
+  if (!v) { v = { vid: it.vid, sid: it.sid, size: it.size || '—', sku: it.sku || '', local: +it.local || 0, deposito: +it.deposito || 0, sel: false, qty: 0 }; p.variantes.push(v); }
+  v.sel = true; v.qty = (+v.qty || 0) + 1; v.origenManual = sfDraftOrigen;   // cada escaneo suma 1 y fija la ubicación
+  if (fb) fb.innerHTML = `<span style="color:#16A34A;">✓ Agregado: <b>${esc(p.name)}</b> · ${esc(v.size)} (x${v.qty}) → ${sfDraftOrigen === 'local' ? '🏪 Local' : '📦 Depósito'}</span>`;
+  sfRender();
+  _sfFoco('sf-draft-scan');
+}
 function sfDraftHtml() {
   const prods = sfDraft.prods || [];
   const totalSel = prods.reduce((s, p) => s + p.variantes.filter(v => v.sel).reduce((a, v) => a + (+v.qty || 1), 0), 0);
   const rows = prods.map(p => {
     const vars = p.variantes.map(v => `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;border-top:1px solid #F1F5F9;cursor:pointer;${v.sel ? 'font-weight:600;' : ''}">
         <input type="checkbox" ${v.sel ? 'checked' : ''} onchange="sfDraftToggleVar('${p.pid}','${v.vid}',this.checked)" style="flex:0 0 auto;">
-        <span style="flex:1;min-width:0;">${esc(v.size)} <span style="color:#9CA3AF;font-size:11px;font-weight:400;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span></span>
+        <span style="flex:1;min-width:0;">${esc(v.size)}${v.origenManual ? ` <span title="Ubicación fijada por escaneo" style="font-size:11px;">${v.origenManual === 'local' ? '🏪' : '📦'}</span>` : ''} <span style="color:#9CA3AF;font-size:11px;font-weight:400;">(stock ${v.local + v.deposito}${v.sku ? ' · ' + esc(v.sku) : ''})</span></span>
         ${v.sel ? `<input type="number" min="1" value="${v.qty}" onchange="sfDraftQty('${p.pid}','${v.vid}',this.value)" title="Cantidad" style="width:56px;text-align:center;border:1px solid #E5E7EB;border-radius:6px;padding:3px 4px;flex:0 0 auto;">` : ''}
       </label>`).join('');
     return `<div style="border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:8px;">
@@ -9429,6 +9453,17 @@ function sfDraftHtml() {
     </div>`;
   }).join('');
   return `<div>${sfBanner()}
+    <div style="border:1px solid #C7D2FE;background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="font-weight:700;margin-bottom:4px;">⚡ Cargar por escáner</div>
+      <div style="font-size:12px;color:#6B7280;margin-bottom:8px;">Escaneá los productos ya separados: se agregan solos con la ubicación elegida. La búsqueda manual sigue disponible abajo.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <span style="font-size:12px;color:#374151;">Sacando de:</span>
+        <button onclick="sfDraftSetOrigen('deposito')" style="border:1px solid ${sfDraftOrigen === 'deposito' ? '#378ADD' : '#D1D5DB'};background:${sfDraftOrigen === 'deposito' ? '#378ADD' : '#fff'};color:${sfDraftOrigen === 'deposito' ? '#fff' : '#374151'};border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;">📦 Depósito</button>
+        <button onclick="sfDraftSetOrigen('local')" style="border:1px solid ${sfDraftOrigen === 'local' ? '#378ADD' : '#D1D5DB'};background:${sfDraftOrigen === 'local' ? '#378ADD' : '#fff'};color:${sfDraftOrigen === 'local' ? '#fff' : '#374151'};border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;">🏪 Local</button>
+      </div>
+      <input type="text" id="sf-draft-scan" onkeydown="if(event.key==='Enter'){event.preventDefault();sfDraftScan(this);}" placeholder="🔫 Escaneá el código de barras…" style="width:100%;max-width:340px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;box-sizing:border-box;">
+      <div id="sf-draft-scan-fb" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="flex:1;min-width:220px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
       <button class="btn-sm" onclick="sfAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto</button>
@@ -9437,7 +9472,7 @@ function sfDraftHtml() {
     <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
       <button class="btn-primary" onclick="sfProcesar()">✓ Procesar (${totalSel} u.)</button>
       <button class="btn-sm" onclick="sfCancelarDraft()">Cancelar</button>
-      <span style="color:#9CA3AF;font-size:12px;">El sistema asigna depósito/local automáticamente al procesar.</span>
+      <span style="color:#9CA3AF;font-size:12px;">Lo agregado a mano se asigna depósito/local automático; lo escaneado (📦/🏪) respeta la ubicación elegida.</span>
     </div>
   </div>`;
 }
