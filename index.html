@@ -10227,7 +10227,7 @@ function siVer(id) { siViendo = id; siRender(); }
 function siVolver() { siViendo = null; siRender(); }
 function siBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; siData = siData.filter(x => x.id !== id); siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos(); }
 function siSetFiltro(f) { siFiltro = f; siRender(); }
-function siSetBusqueda(v) { siBusqueda = v; siRender(); }
+function siSetBusqueda(v) { siBusqueda = v; const el = document.getElementById('si-lista'); if (el) el.innerHTML = siListaRows(); else siRender(); } // actualiza solo la lista (no pierde el foco del buscador)
 // ── Venta en GN (descuenta stock) ──
 async function siCrearVentas(id) {
   const s = siData.find(x => x.id === id); if (!s) return;
@@ -10337,12 +10337,6 @@ function siHistorialHtml() {
       ${pend.map(s => { const u = (s.items || []).reduce((a, i) => a + (i.qty || 0), 0); return `<div style="border-top:1px solid #FDE68A;padding:8px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><div style="flex:1;min-width:180px;"><div style="font-weight:600;">${esc(s.motivo)} <span style="color:#9CA3AF;font-weight:400;font-size:12px;">· ${esc(s.creadoPor) || '—'} · ${esc(s.fecha)}</span></div><div style="font-size:12px;color:#6B7280;">${u} u. · ${(s.items || []).length} variantes${s.descripcion ? ' · ' + esc(s.descripcion) : ''} · <a onclick="siVer('${s.id}')" style="color:#2563EB;cursor:pointer;">ver detalle</a></div></div><button onclick="siAprobar('${s.id}')" style="border:1px solid #A7F3D0;background:#ECFDF5;color:#065F46;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;">✅ Aprobar</button><button onclick="siRechazar('${s.id}')" style="border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;">✖ Rechazar</button></div>`; }).join('')}
     </div>`;
   }
-  const q = siBusqueda.trim().toLowerCase();
-  let lista = (siData || []);
-  if (siFiltro === 'pendientes') lista = lista.filter(s => s.estado === 'pendiente');
-  else if (siFiltro === 'activas') lista = lista.filter(s => s.estado !== 'cerrada' && s.estado !== 'rechazada');
-  if (q) lista = lista.filter(s => (s.motivo || '').toLowerCase().includes(q) || (s.descripcion || '').toLowerCase().includes(q) || (s.creadoPor || '').toLowerCase().includes(q));
-  const rows = lista.map(s => { const u = (s.items || []).reduce((a, i) => a + (i.qty || 0), 0); return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;"><div style="flex:1;min-width:180px;cursor:pointer;" onclick="siVer('${s.id}')"><div style="font-weight:600;">${esc(s.motivo)} ${_siBadgeTipo(s.tipo)} ${_siBadgeEstado(s.estado)}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · ${esc(s.creadoPor) || '—'} · ${u} u.${s.descripcion ? ' · ' + esc(s.descripcion) : ''}</div></div><button class="btn-sm" onclick="siVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button><button onclick="siBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button></div>`; }).join('');
   const fBtn = (k, t) => `<button onclick="siSetFiltro('${k}')" style="border:1px solid ${siFiltro === k ? '#378ADD' : '#D1D5DB'};background:${siFiltro === k ? '#378ADD' : '#fff'};color:${siFiltro === k ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${t}</button>`;
   return `<div>
     ${aprobHtml}
@@ -10351,8 +10345,17 @@ function siHistorialHtml() {
       <input value="${esc(siBusqueda)}" oninput="siSetBusqueda(this.value)" placeholder="🔎 Buscar motivo, quién pidió…" style="flex:1;min-width:180px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('activas', 'Activas')}${fBtn('pendientes', 'Pendientes')}${fBtn('todas', 'Todas')}</div>
-    ${lista.length ? rows : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay solicitudes en este filtro. Tocá "+ Nueva solicitud".</div>'}
+    <div id="si-lista">${siListaRows()}</div>
   </div>`;
+}
+function siListaRows() {
+  const q = siBusqueda.trim().toLowerCase();
+  let lista = (siData || []);
+  if (siFiltro === 'pendientes') lista = lista.filter(s => s.estado === 'pendiente');
+  else if (siFiltro === 'activas') lista = lista.filter(s => s.estado !== 'cerrada' && s.estado !== 'rechazada');
+  if (q) lista = lista.filter(s => (s.motivo || '').toLowerCase().includes(q) || (s.descripcion || '').toLowerCase().includes(q) || (s.creadoPor || '').toLowerCase().includes(q));
+  if (!lista.length) return '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay solicitudes en este filtro. Tocá "+ Nueva solicitud".</div>';
+  return lista.map(s => { const u = (s.items || []).reduce((a, i) => a + (i.qty || 0), 0); return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;"><div style="flex:1;min-width:180px;cursor:pointer;" onclick="siVer('${s.id}')"><div style="font-weight:600;">${esc(s.motivo)} ${_siBadgeTipo(s.tipo)} ${_siBadgeEstado(s.estado)}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · ${esc(s.creadoPor) || '—'} · ${u} u.${s.descripcion ? ' · ' + esc(s.descripcion) : ''}</div></div><button class="btn-sm" onclick="siVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button><button onclick="siBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button></div>`; }).join('');
 }
 function siVerHtml(s) {
   const dep = s.items.filter(i => i.origen === 'deposito');
