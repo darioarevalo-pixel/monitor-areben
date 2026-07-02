@@ -9989,7 +9989,7 @@ function cuponesEstado(c) {
 }
 function _cupDesc(c) { return c.tipo === 'monto' ? ('$' + Math.round(+c.valor || 0).toLocaleString('es-AR')) : ((+c.valor || 0) + '%'); }
 function cuponesSetFiltro(f) { cuponesFiltro = f; cuponesRender(); }
-function cuponesSetBusqueda(v) { cuponesBusqueda = v; cuponesRender(); }
+function cuponesSetBusqueda(v) { cuponesBusqueda = v; cuponesRender(); const el = document.getElementById('cup-buscar'); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} } } // re-enfoca el buscador tras re-render
 function cuponesToggleForm() { if (!_cupPuedeCrear()) return; cuponesForm = !cuponesForm; cuponesRender(); }
 function cuponesCrear() {
   if (!_cupPuedeCrear()) { alert('No tenés permiso para generar cupones.'); return; }
@@ -10082,7 +10082,7 @@ function cuponesRender() {
   cont.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       ${puedeCrear ? `<button class="btn-primary" onclick="cuponesToggleForm()">➕ Generar cupón</button>` : `<span style="font-size:12px;color:#9CA3AF;">Buscá el cupón del cliente y confirmá el uso. (Generar cupones: solo con permiso.)</span>`}
-      <input value="${esc(cuponesBusqueda)}" oninput="cuponesSetBusqueda(this.value)" placeholder="🔎 Buscar por nombre o código…" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+      <input id="cup-buscar" value="${esc(cuponesBusqueda)}" oninput="cuponesSetBusqueda(this.value)" placeholder="🔎 Buscar por nombre o código…" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
     </div>
     ${form}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('vigentes', 'Vigentes')}${fBtn('porvencer', `Por vencer${porVencerN ? ` (${porVencerN})` : ''}`)}${fBtn('usados', 'Usados')}${fBtn('vencidos', 'Vencidos')}${fBtn('todos', 'Todos')}</div>
@@ -10226,6 +10226,7 @@ function siRechazar(id) {
 function siVer(id) { siViendo = id; siRender(); }
 function siVolver() { siViendo = null; siRender(); }
 function siBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; siData = siData.filter(x => x.id !== id); siPendientesCount = _siPendientes().length; siGuardar(); siRender(); _siRefrescarAvisos(); }
+function siCerrar(id) { const s = siData.find(x => x.id === id); if (!s) return; if (!confirm('¿Marcar como cerrada (archivar)? Sale de la lista de activas.')) return; s.estado = 'cerrada'; siGuardar(); siRender(); }
 function siSetFiltro(f) { siFiltro = f; siRender(); }
 function siSetBusqueda(v) { siBusqueda = v; const el = document.getElementById('si-lista'); if (el) el.innerHTML = siListaRows(); else siRender(); } // actualiza solo la lista (no pierde el foco del buscador)
 // ── Venta en GN (descuenta stock) ──
@@ -10343,6 +10344,7 @@ function siHistorialHtml() {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-primary" onclick="siNuevoDraft()">+ Nueva solicitud</button>
       <input value="${esc(siBusqueda)}" oninput="siSetBusqueda(this.value)" placeholder="🔎 Buscar motivo, quién pidió…" style="flex:1;min-width:180px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+      ${(siData || []).some(s => s.tipo === 'retornable' && s.estado !== 'cerrada' && s.ventas && (s.ventas.deposito || s.ventas.local)) ? `<button class="btn-sm" onclick="siChequearAnulaciones()" title="Consulta en GN si las ventas de los retornables ya se anularon y cierra esas solicitudes" style="background:#fff;border:1px solid #D1D5DB;white-space:nowrap;">🔄 Verificar anulaciones</button>` : ''}${_siChequeando ? '<span style="font-size:12px;color:#9CA3AF;">⏳ verificando…</span>' : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('activas', 'Activas')}${fBtn('pendientes', 'Pendientes')}${fBtn('todas', 'Todas')}</div>
     <div id="si-lista">${siListaRows()}</div>
@@ -10391,6 +10393,7 @@ function siVerHtml(s) {
     ${(s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente') ? `<div style="font-size:12px;color:#065F46;margin-bottom:10px;">✅ Aprobada por ${esc(s.aprobadoPor)}${s.aprobadoFecha ? ' · ' + esc(s.aprobadoFecha) : ''}</div>` : ''}
     ${aprobBtns}
     ${(s.estado !== 'pendiente' && s.estado !== 'rechazada') ? ventasHtml : ''}
+    ${(s.tipo === 'consumo' && s.estado === 'retirada') ? `<div style="margin-bottom:10px;"><button class="btn-sm" onclick="siCerrar('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">✓ Cerrar (archivar)</button> <span style="color:#9CA3AF;font-size:12px;">Ya está descontado; archivala para sacarla de "Activas".</span></div>` : ''}
     ${grupo('📦 Depósito', dep, 'deposito')}
     ${grupo('🏪 Local', loc, 'local')}
   </div>`;
