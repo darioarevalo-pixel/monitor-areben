@@ -1373,6 +1373,15 @@
         <datalist id="tnimg-prods"></datalist>
       </div>
 
+      <div class="card" id="tncat-card-fotos">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div style="font-size:16px;font-weight:700;">🔎 Revisar fotos por variante</div>
+          <button class="btn-sm" onclick="fchkAbrir(this)" title="Volvé a traer el estado real desde TiendaNube" style="background:#fff;border:1px solid #D1D5DB;margin-left:auto;">🔄 Actualizar</button>
+        </div>
+        <div style="font-size:12px;color:#9CA3AF;margin:2px 0 12px;">Encontrá los productos donde una foto se cargó pero <b>no quedó pegada al color</b>, o que no tienen ninguna foto. Tocá una foto del producto para vincularla al color.</div>
+        <div id="fchk-cont"></div>
+      </div>
+
       <!-- Asignación masiva de categoría por Excel (Zattia) -->
       <div class="card" id="tncat-card-asignar">
         <div style="font-size:16px;font-weight:700;">🗂️ Asignar categoría (Excel)</div>
@@ -7701,11 +7710,14 @@ function tncatAbrir() {
   const cardCat = document.getElementById('tncat-card-cat');
   const cardImg = document.getElementById('tncat-card-img');
   const cardAsig = document.getElementById('tncat-card-asignar');
+  const cardFotos = document.getElementById('tncat-card-fotos');
   if (cardCat) cardCat.style.display = verCat ? '' : 'none';
   if (cardImg) cardImg.style.display = verImg ? '' : 'none';
   if (cardAsig) cardAsig.style.display = verAsig ? '' : 'none';
+  if (cardFotos) cardFotos.style.display = verImg ? '' : 'none';  // revisar fotos: mismo permiso que Carga de fotos
   if (verCat) tncatCargar();
   if (verImg) tnImgInit();
+  if (verImg) fchkAbrir();
   if (verAsig) tncatAsigInit();
 }
 // ── Asignación masiva de categoría por Excel (Zattia) ──
@@ -8118,6 +8130,109 @@ async function tnImgRevincular(gid, fid) {
     else { ft.avisoColor = j.variantesObjetivo ? `Se vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}` : `El color "${ft.color}" no coincide con ninguna variante`; if (info) info.innerHTML = `<span style="color:#D97706;">⚠ ${esc(ft.avisoColor)}</span>`; }
   } catch (e) { if (info) info.textContent = 'Error al revincular.'; }
   tnImgRender();
+}
+
+// ════════ Revisar fotos por variante (auditoría + vincular) ════════════════════
+const FCHK_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
+let fchkData = [];            // products del audit (con variantes)
+let fchkStore = null;
+let fchkFiltro = 'problema';  // problema | sinvincular | sinfoto
+let fchkBusqueda = '';
+let fchkCargando = false;
+// Colores (reales) de un producto cuyas variantes NO tienen foto vinculada. Ignora variantes sin color
+// (single/sin color): esas usan la foto principal y no son "un problema".
+function _fchkColoresSinFoto(p) {
+  const by = {};
+  (p.variantes || []).forEach(v => { const c = v.color; if (!c) return; if (!(c in by)) by[c] = false; if (v.image_url) by[c] = true; });
+  return Object.keys(by).filter(c => !by[c]);
+}
+function _fchkSinVincular(p) { return (p.image_count > 0) && _fchkColoresSinFoto(p).length > 0; }
+function _fchkSinFoto(p) { return !p.image_count; }
+function _fchkProblema(p) { return _fchkSinVincular(p) || _fchkSinFoto(p); }
+
+async function fchkAbrir(btn) {
+  const store = _cuentaKey();
+  const refrescar = !!btn;
+  if (!refrescar && fchkStore === store && fchkData.length) { fchkRender(); return; }
+  const cont = document.getElementById('fchk-cont');
+  if (cont && !(fchkStore === store && fchkData.length)) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando estado de fotos…</div>';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando…'; }
+  fchkCargando = true;
+  try {
+    const r = await fetch(`${FCHK_AUDIT}?store=${store}&variantes=1${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`);
+    const d = await r.json();
+    fchkData = (d && d.products) ? d.products : [];
+    fchkStore = store;
+  } catch (e) { fchkData = []; }
+  fchkCargando = false;
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Actualizar'; }
+  fchkRender();
+}
+function fchkSetFiltro(f) { fchkFiltro = f; fchkRender(); }
+function fchkSetBusqueda(v) { fchkBusqueda = v; const el = document.getElementById('fchk-lista'); if (el) el.innerHTML = fchkListaHtml(); else fchkRender(); }
+function fchkRender() {
+  const cont = document.getElementById('fchk-cont'); if (!cont) return;
+  if (fchkCargando) { cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>'; return; }
+  const fBtn = (k, t) => `<button onclick="fchkSetFiltro('${k}')" style="border:1px solid ${fchkFiltro === k ? '#378ADD' : '#D1D5DB'};background:${fchkFiltro === k ? '#378ADD' : '#fff'};color:${fchkFiltro === k ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${t}</button>`;
+  const nSinVinc = fchkData.filter(_fchkSinVincular).length;
+  const nSinFoto = fchkData.filter(_fchkSinFoto).length;
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      ${fBtn('problema', 'Todos con problema')} ${fBtn('sinvincular', `Sin vincular al color (${nSinVinc})`)} ${fBtn('sinfoto', `Sin ninguna foto (${nSinFoto})`)}
+      <input value="${esc(fchkBusqueda)}" oninput="fchkSetBusqueda(this.value)" placeholder="🔎 Buscar producto…" style="flex:1;min-width:180px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+    </div>
+    <div id="fchk-lista">${fchkListaHtml()}</div>`;
+}
+function fchkListaHtml() {
+  const q = fchkBusqueda.trim().toLowerCase();
+  const test = fchkFiltro === 'sinvincular' ? _fchkSinVincular : fchkFiltro === 'sinfoto' ? _fchkSinFoto : _fchkProblema;
+  let lista = fchkData.filter(test);
+  if (q) lista = lista.filter(p => (p.name || '').toLowerCase().includes(q));
+  lista.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+  if (!lista.length) return '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">✅ No hay productos con problema en este filtro.</div>';
+  const MAX = 150;
+  return lista.slice(0, MAX).map(fchkProductoHtml).join('') + (lista.length > MAX ? `<div style="color:#9CA3AF;font-size:12px;text-align:center;padding:8px;">Mostrando ${MAX} de ${lista.length}. Afiná con el buscador.</div>` : '');
+}
+function fchkProductoHtml(p) {
+  if (_fchkSinFoto(p)) {
+    return `<div style="border:1px solid #FED7AA;background:#FFF7ED;border-radius:9px;padding:10px 12px;margin-bottom:8px;">
+      <div style="font-weight:600;">${esc(p.name)} <span style="background:#FEE2E2;color:#991B1B;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">sin ninguna foto</span></div>
+      <div style="font-size:12px;color:#9CA3AF;margin-top:3px;">Subí las fotos en <b>📷 Carga de imágenes</b> (arriba). Acá no hay nada para vincular todavía.</div>
+    </div>`;
+  }
+  const by = {};
+  (p.variantes || []).forEach(v => { const c = v.color; if (!c) return; if (!by[c]) by[c] = { foto: null }; if (v.image_url && !by[c].foto) by[c].foto = v.image_url; });
+  const colores = Object.entries(by);
+  const conFoto = colores.filter(([, o]) => o.foto).length;
+  const nSin = colores.length - conFoto;
+  const imgs = p.imagenes || [];
+  const coloresHtml = colores.map(([c, o]) => {
+    if (o.foto) return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #F1F5F9;"><img src="${esc(o.foto)}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:2px solid #16A34A;flex:0 0 auto;"><div style="font-size:13px;"><b>${esc(c)}</b> <span style="color:#16A34A;">✓ con foto</span></div></div>`;
+    const picker = imgs.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">${imgs.map(im => `<img src="${esc(im.src)}" onclick="fchkVincular(${p.id},${im.id},'${encodeURIComponent(c)}',this)" title="Vincular esta foto a ${esc(c)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:2px solid #D1D5DB;cursor:pointer;flex:0 0 auto;">`).join('')}</div>` : '';
+    return `<div style="padding:5px 0;border-top:1px solid #F1F5F9;"><div style="font-size:13px;"><b>${esc(c)}</b> <span style="color:#DC2626;">⚠ sin foto</span> <span style="color:#9CA3AF;font-size:11px;">— tocá una foto para vincularla:</span></div>${picker}</div>`;
+  }).join('');
+  return `<div style="border:1px solid ${nSin ? '#FCA5A5' : '#E5E7EB'};background:${nSin ? '#FEF2F2' : '#fff'};border-radius:9px;padding:10px 12px;margin-bottom:8px;" id="fchk-prod-${p.id}">
+    <div style="font-weight:600;">${esc(p.name)} <span style="color:#9CA3AF;font-size:12px;font-weight:400;">· ${conFoto}/${colores.length} colores con foto${nSin ? ` · ${nSin} sin vincular` : ''}</span></div>
+    <div style="margin-top:4px;">${coloresHtml}</div>
+  </div>`;
+}
+async function fchkVincular(prodId, imageId, colorEnc, imgEl) {
+  const color = decodeURIComponent(colorEnc);
+  const p = fchkData.find(x => x.id === prodId); if (!p) return;
+  if (imgEl) { imgEl.style.opacity = '.45'; imgEl.style.pointerEvents = 'none'; }
+  try {
+    const r = await fetch(`${TNIMG_URL}${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'link', product_id: prodId, image_id: imageId, color }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok && j.variantesObjetivo > 0 && j.variantesAsignadas >= j.variantesObjetivo) {
+      const src = (p.imagenes || []).find(im => im.id === imageId)?.src || null;
+      (p.variantes || []).forEach(v => { if (v.color === color) v.image_url = src; });
+      p.variantes_con_foto = (p.variantes || []).filter(v => v.image_url).length;
+      fchkRender();
+    } else {
+      alert('No se pudo vincular: ' + (j.error || (j.variantesObjetivo === 0 ? `el color "${color}" no coincide con ninguna variante en TN` : `vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}`)));
+      if (imgEl) { imgEl.style.opacity = ''; imgEl.style.pointerEvents = ''; }
+    }
+  } catch (e) { alert('Error de conexión al vincular.'); if (imgEl) { imgEl.style.opacity = ''; imgEl.style.pointerEvents = ''; } }
 }
 // Sube las fotos pendientes y publica (hace visibles) los productos en TiendaNube.
 async function tnImgSubirYPublicar(btn) {
