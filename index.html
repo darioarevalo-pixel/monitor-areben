@@ -8036,6 +8036,7 @@ function tnImgRender() {
         </div>
         <div title="${esc(ft.fn || '')}" style="font-size:9px;color:#9CA3AF;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;text-align:center;">${esc(ft.fn || '')}</div>
         ${csel}
+        ${ft.avisoColor ? `<button onclick="event.stopPropagation();tnImgRevincular(${g.id},${ft.id});" title="${esc(ft.avisoColor)}" style="font-size:10px;margin-top:3px;border:1px solid #F59E0B;background:#FFFBEB;color:#92400E;border-radius:5px;padding:1px 6px;cursor:pointer;white-space:nowrap;">🔗 Revincular</button>` : ''}
       </div>`;
     }).join('');
     return `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:12px;">
@@ -8077,7 +8078,7 @@ async function tnImgSubirTodo() {
   const btn = document.getElementById('tnimg-subir'); btn.disabled = true;
   const info = document.getElementById('tnimg-info');
   const total = grupos.reduce((s, g) => s + g.fotos.filter(f => f.url && !f.subida).length, 0);
-  let ok = 0, err = 0; const errMsgs = [];
+  let ok = 0, err = 0, sinVincular = 0; const errMsgs = [];
   for (const g of grupos) {
     const colorUsado = new Set(); // la 1ª foto de cada color asigna la variante; el resto va a galería
     // La portada va primera (queda como imagen principal del producto en TN)
@@ -8089,14 +8090,34 @@ async function tnImgSubirTodo() {
         if (ft.color && !colorUsado.has(ft.color)) { body.color = ft.color; colorUsado.add(ft.color); }
         const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json().catch(() => ({}));
-        if (r.ok && j.ok) { ft.subida = true; ok++; }
+        if (r.ok && j.ok) {
+          ft.subida = true; ok++; ft.imageId = j.image_id;
+          if (body.color) { // controlar que el color realmente se haya vinculado
+            if (!j.variantesObjetivo) { ft.avisoColor = `El color "${body.color}" no coincide con ninguna variante en TN`; sinVincular++; }
+            else if (j.variantesAsignadas < j.variantesObjetivo) { ft.avisoColor = `Se vinculó ${j.variantesAsignadas}/${j.variantesObjetivo} — tocá Revincular`; sinVincular++; }
+            else ft.avisoColor = null;
+          }
+        }
         else { err++; errMsgs.push(j.error || ('HTTP ' + r.status)); }
       } catch (e) { err++; errMsgs.push(e.message); }
     }
   }
   tnImgRender();
   btn.disabled = false;
-  if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${ok} subidas</span>` + (err ? ` · <span style="color:#DC2626;">${err} con error: ${esc([...new Set(errMsgs)].slice(0, 2).join(' / '))}</span>` : '');
+  if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${ok} subidas</span>` + (sinVincular ? ` · <span style="color:#D97706;">⚠ ${sinVincular} sin vincular color (tocá 🔗 Revincular)</span>` : '') + (err ? ` · <span style="color:#DC2626;">${err} con error: ${esc([...new Set(errMsgs)].slice(0, 2).join(' / '))}</span>` : '');
+}
+// Revincula el color de una foto YA subida usando su image_id (no re-sube → no duplica).
+async function tnImgRevincular(gid, fid) {
+  const g = tnImgGrupos.find(x => x.id === gid); const ft = g && g.fotos.find(f => f.id === fid);
+  if (!g || !ft || !ft.imageId || !ft.color) return;
+  const info = document.getElementById('tnimg-info'); if (info) info.textContent = 'Revinculando color…';
+  try {
+    const r = await fetch(TNIMG_URL + _cuentaKey(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'link', product_id: g.productId, image_id: ft.imageId, color: ft.color }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok && j.variantesObjetivo > 0 && j.variantesAsignadas >= j.variantesObjetivo) { ft.avisoColor = null; if (info) info.innerHTML = '<span style="color:#16A34A;">✅ Color vinculado.</span>'; }
+    else { ft.avisoColor = j.variantesObjetivo ? `Se vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}` : `El color "${ft.color}" no coincide con ninguna variante`; if (info) info.innerHTML = `<span style="color:#D97706;">⚠ ${esc(ft.avisoColor)}</span>`; }
+  } catch (e) { if (info) info.textContent = 'Error al revincular.'; }
+  tnImgRender();
 }
 // Sube las fotos pendientes y publica (hace visibles) los productos en TiendaNube.
 async function tnImgSubirYPublicar(btn) {
