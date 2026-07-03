@@ -9392,7 +9392,7 @@ async function sfChequearAnulacionesTodas(opts = {}) {
         try { const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'estado', store: _cuentaKey(), ventaId: v.id }) }); return await r.json(); }
         catch (e) { return null; }
       }));
-      if (res.length && res.every(_sfVentaAnulada)) { s.estado = 'cerrada'; cerradas++; }
+      if (res.length && res.every(_sfVentaAnulada) && sfFaseCompleta(s, 'devolucion')) { s.estado = 'cerrada'; cerradas++; } // no cierra hasta que vuelva todo
     }));
   } catch (e) {}
   _sfChequeando = false;
@@ -9527,9 +9527,45 @@ function sfDraftHtml() {
     </div>
   </div>`;
 }
+// Faltantes de devolución: ítems que aún no volvieron (qty - devuelto > 0).
+function sfFaltantes(s) { const d = s.devuelto || {}; return (s.items || []).map(i => ({ ...i, falta: i.qty - (d[i.vid] || 0) })).filter(x => x.falta > 0); }
+function sfReporteFaltantesCopiar(id) {
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const f = sfFaltantes(s); if (!f.length) { alert('No hay faltantes: volvió todo.'); return; }
+  const lineas = f.map(x => `• ${x.nombre} · ${x.variante}${x.sku ? ' (' + x.sku + ')' : ''} — faltan ${x.falta} de ${x.qty}`).join('\n');
+  const msg = `⚠ FALTANTES — Sesión de fotos\n${s.descripcion || 'Solicitud'} · ${s.fecha}\n\n${lineas}\n\nTotal sin devolver: ${f.reduce((a, x) => a + x.falta, 0)} u.\nPor favor, ubicar y devolver antes de cerrar el proceso.`;
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(() => alert('📋 Reporte copiado. Pegalo en WhatsApp.'), () => prompt('Copiá el reporte:', msg));
+  else prompt('Copiá el reporte:', msg);
+}
+function sfReporteFaltantesPDF(id) {
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const f = sfFaltantes(s); if (!f.length) { alert('No hay faltantes: volvió todo.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('Se está cargando el generador de PDF. Probá de nuevo en unos segundos.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  let y = 18;
+  pdf.setFontSize(15); pdf.setFont(undefined, 'bold'); pdf.text('Faltantes — Sesión de fotos', 14, y); y += 7;
+  pdf.setFontSize(11); pdf.setFont(undefined, 'normal'); pdf.text(`${s.descripcion || 'Solicitud'}   ·   ${s.fecha}`, 14, y); y += 8;
+  pdf.setFontSize(10); pdf.setFont(undefined, 'bold');
+  pdf.text('Producto', 14, y); pdf.text('Variante', 80, y); pdf.text('SKU', 130, y); pdf.text('Faltan', 196, y, { align: 'right' }); y += 2;
+  pdf.setLineWidth(0.2); pdf.line(14, y, 196, y); y += 5;
+  pdf.setFont(undefined, 'normal');
+  f.forEach(x => {
+    if (y > 282) { pdf.addPage(); y = 18; }
+    pdf.text(String(x.nombre || '').slice(0, 40), 14, y);
+    pdf.text(String(x.variante || '').slice(0, 26), 80, y);
+    pdf.text(String(x.sku || '—').slice(0, 22), 130, y);
+    pdf.text(`${x.falta}/${x.qty}`, 196, y, { align: 'right' });
+    y += 6;
+  });
+  y += 3; pdf.setFont(undefined, 'bold');
+  pdf.text(`Total sin devolver: ${f.reduce((a, x) => a + x.falta, 0)} u.`, 14, y);
+  pdf.save(`faltantes-${String(s.descripcion || 'sesion').replace(/[^\w]+/g, '-').slice(0, 30)}.pdf`);
+}
 function sfVerHtml(s) {
   const dep = s.items.filter(i => i.origen === 'deposito');
   const loc = s.items.filter(i => i.origen === 'local');
+  const faltantes = sfFaltantes(s);
   const mapKey = sfFase === 'devolucion' ? 'devuelto' : 'verif';
   s[mapKey] = s[mapKey] || {};
   const accionN = sfFase === 'devolucion' ? 'devueltos' : 'preparados';
@@ -9578,6 +9614,14 @@ function sfVerHtml(s) {
     </div>
     ${grupo('📦 Retirar de Depósito', dep, 'deposito')}
     ${grupo('🏪 Retirar de Local', loc, 'local')}
+    ${(sfFase === 'devolucion' && s.ventas && faltantes.length) ? `<div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:9px;padding:10px 12px;margin:10px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <div style="font-weight:700;color:#991B1B;">⚠ Faltan por devolver (${faltantes.reduce((a, f) => a + f.falta, 0)} u.)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn-sm" onclick="sfReporteFaltantesCopiar('${s.id}')" style="background:#fff;border:1px solid #FCA5A5;color:#991B1B;">📋 Copiar reporte</button><button class="btn-sm" onclick="sfReporteFaltantesPDF('${s.id}')" style="background:#1F2937;color:#fff;">📄 PDF</button></div>
+      </div>
+      ${faltantes.map(f => `<div style="font-size:13px;color:#7F1D1D;padding:2px 0;">• ${esc(f.nombre)} · ${esc(f.variante)}${f.sku ? ' · ' + esc(f.sku) : ''} — <b>faltan ${f.falta} de ${f.qty}</b> ${f.origen === 'local' ? '🏪' : '📦'}</div>`).join('')}
+      <div style="font-size:11px;color:#B45309;margin-top:6px;">La solicitud queda abierta hasta que vuelva todo.</div>
+    </div>` : ''}
     ${(s.eliminados && s.eliminados.length) ? `<div style="border:1px dashed #FCA5A5;border-radius:9px;padding:9px 12px;margin-top:6px;background:#FEF2F2;">
       <div style="font-size:12px;font-weight:700;color:#991B1B;margin-bottom:4px;">🗑️ Quitados de la solicitud (${s.eliminados.length})</div>
       ${s.eliminados.map(e => `<div style="font-size:12px;color:#7F1D1D;">• ${esc(e.nombre)} · ${esc(e.variante)} (${e.qty}) — ${e.origen === 'deposito' ? '📦' : '🏪'} · ${esc(e.fecha)}${e.por ? ' · ' + esc(e.por) : ''}${e.motivo ? ' · "' + esc(e.motivo) + '"' : ''}</div>`).join('')}
@@ -9591,9 +9635,10 @@ function sfHistorialHtml() {
     const dep = s.items.filter(i => i.origen === 'deposito').reduce((a, i) => a + i.qty, 0);
     const loc = s.items.filter(i => i.origen === 'local').reduce((a, i) => a + i.qty, 0);
     const cerr = s.estado === 'cerrada';
-    return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;${cerr ? 'opacity:.6;background:#F9FAFB;' : ''}">
+    const falt = (s.ventas && !cerr && s.estado !== 'devuelta') ? sfFaltantes(s).reduce((a, f) => a + f.falta, 0) : 0;
+    return `<div style="display:flex;gap:10px;align-items:center;border:1px solid ${falt ? '#FCA5A5' : '#E5E7EB'};border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;${cerr ? 'opacity:.6;background:#F9FAFB;' : (falt ? 'background:#FEF2F2;' : '')}">
         <input type="checkbox" ${sfSeleccion.has(s.id) ? 'checked' : ''} onchange="sfSelToggle('${s.id}',this.checked)" title="Seleccionar para verificar/preparar combinadas" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">
-        <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${cerr ? '✅ ' : ''}${esc(s.descripcion) || '(sin descripción)'}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
+        <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${cerr ? '✅ ' : ''}${esc(s.descripcion) || '(sin descripción)'}${falt ? ` <span style="background:#FEE2E2;color:#991B1B;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">⏳ ${falt} por devolver</span>` : ''}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
         <button class="btn-sm" onclick="sfVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
         <button onclick="sfBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>
       </div>`;
