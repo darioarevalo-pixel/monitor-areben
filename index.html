@@ -1487,6 +1487,15 @@
       </div>
     </div>
 
+    <!-- ── Verificación de ventas (cancelada en TN / activa en GN) ──────────── -->
+    <div id="tab-verif-ventas" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">🧾 Verificación de ventas</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:720px;">Cruza los pedidos <b>cancelados en TiendaNube</b> con las ventas de <b>Gestión Nube</b> y te muestra las que <b>siguen activas en GN</b> (hay que anularlas a mano en GN). Tildá las que ya anulaste para llevar el control del mes.</div>
+        <div id="vvta-cont" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
     <!-- ── Reposición de local ─────────────────────────────────────────────── -->
     <div id="tab-reposicion" class="section">
       <div class="card">
@@ -6431,6 +6440,7 @@ function switchTab(id) {
   if (id === 'sesion-fotos') { sfAbrir(); return; }
   if (id === 'cupones') { cuponesInit(); return; }
   if (id === 'solicitudes-internas') { siAbrir(); return; }
+  if (id === 'verif-ventas') { vvtaAbrir(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
@@ -9036,6 +9046,7 @@ const PERM_CAT = [
   { key: 'solicitudes-internas', label: '📋 Solicitudes internas', info: 'Retiros de productos para uso interno (moldería, video, muestras, consumo). Retornable (vuelve, se repone) o consumo (no vuelve). Los consumos requieren aprobación de un gerente/admin.', brands: ['bdi', 'zattia'], subs: [
       { key: 'aprobar', label: '✅ Puede aprobar consumos', info: 'Puede APROBAR o rechazar las solicitudes de consumo (las que no vuelven). Los admins pueden siempre. Solo los aprobadores ven los pendientes.' },
   ] },
+  { key: 'verif-ventas', label: '🧾 Verificación de ventas', info: 'Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.', brands: ['bdi', 'zattia'] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
   { key: 'ubicaciones', label: '📍 Ubicaciones', info: 'Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.', brands: ['bdi'] },
 ];
@@ -9043,7 +9054,7 @@ const PERM_CAT = [
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
-  { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'margenes', 'comisiones', 'colores', 'talles'] },
+  { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
@@ -10578,6 +10589,90 @@ function siVerHtml(s) {
     ${grupo('📦 Depósito', dep, 'deposito')}
     ${grupo('🏪 Local', loc, 'local')}
   </div>`;
+}
+
+// ════════ Verificación de ventas (cancelada en TN / activa en GN) ══════════════
+const VVTA_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
+const VVTA_KV = 'https://bdi-catalogo.vercel.app/api/ingresos';
+let vvtaData = null;       // { resumen, discrepancias, tn_debug, error }
+let vvtaResueltas = {};    // { [tn_order]: { resuelto, por, fecha, mes } }
+let vvtaMes = null;        // 'YYYY-MM'
+let vvtaVerResueltas = false;
+let vvtaCargando = false;
+function _vvtaMesActual() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function _vvtaRango(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return { from: `${mes}-01`, to: `${mes}-${String(last).padStart(2, '0')}` };
+}
+function vvtaAbrir() {
+  if (!vvtaMes) vvtaMes = _vvtaMesActual();
+  vvtaData = null; vvtaCargando = false;
+  vvtaRender();
+}
+function vvtaSetMes(v) { if (v) vvtaMes = v; }
+async function vvtaVerificar() {
+  const store = _cuentaKey();
+  const { from, to } = _vvtaRango(vvtaMes);
+  vvtaCargando = true; vvtaData = null; vvtaRender();
+  try {
+    const [rv, rk] = await Promise.all([
+      fetch(`${VVTA_AUDIT}?verificar_ventas=1&store=${store}&from=${from}&to=${to}&nc=${Math.random()}`).then(r => r.json()),
+      fetch(`${VVTA_KV}?kind=verifventas&store=${store}&nc=${Math.random()}`).then(r => r.json()).catch(() => ({})),
+    ]);
+    vvtaData = rv || { error: 'Sin respuesta' };
+    vvtaResueltas = (rk && rk.resueltas) ? rk.resueltas : {};
+  } catch (e) { vvtaData = { error: 'No se pudo consultar. Probá de nuevo en un momento.' }; }
+  vvtaCargando = false; vvtaRender();
+}
+async function _vvtaGuardarResueltas() {
+  try { await fetch(`${VVTA_KV}?kind=verifventas&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), resueltas: vvtaResueltas }) }); } catch (e) {}
+}
+function vvtaMarcar(tnOrder, checked) {
+  if (checked) vvtaResueltas[tnOrder] = { resuelto: true, por: currentUser || '', fecha: hoyISO(), mes: vvtaMes };
+  else delete vvtaResueltas[tnOrder];
+  _vvtaGuardarResueltas(); vvtaRender();
+}
+function vvtaToggleResueltas() { vvtaVerResueltas = !vvtaVerResueltas; vvtaRender(); }
+function vvtaRender() {
+  const cont = document.getElementById('vvta-cont'); if (!cont) return;
+  const header = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <label style="font-size:13px;color:#374151;">Mes <input type="month" value="${vvtaMes}" onchange="vvtaSetMes(this.value)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:7px;"></label>
+    <button class="btn-primary" onclick="vvtaVerificar()" ${vvtaCargando ? 'disabled' : ''}>${vvtaCargando ? '⏳ Verificando…' : '🔍 Verificar'}</button>
+  </div>`;
+  if (vvtaCargando) { cont.innerHTML = header + '<div style="padding:16px;color:#9CA3AF;">Consultando TiendaNube y Gestión Nube… (puede tardar unos segundos)</div>'; return; }
+  if (!vvtaData) { cont.innerHTML = header + '<div style="padding:16px;color:#9CA3AF;">Elegí el mes y tocá <b>Verificar</b>.</div>'; return; }
+  const scope403 = vvtaData.tn_debug && vvtaData.tn_debug.status === 403;
+  if (scope403) { cont.innerHTML = header + `<div style="background:#FFFBEB;border:1px solid #FBBF24;border-radius:9px;padding:12px;color:#92400E;">⚠ TiendaNube todavía no nos deja leer los pedidos: falta habilitar el permiso <b>read_orders</b> en la app de TiendaNube (y regenerar el token). Cuando esté, esto funciona solo.</div>`; return; }
+  if (vvtaData.error) { cont.innerHTML = header + `<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:9px;padding:12px;color:#991B1B;">${esc(vvtaData.error)}</div>`; return; }
+  const r = vvtaData.resumen || {};
+  const disc = vvtaData.discrepancias || [];
+  const pend = disc.filter(d => !vvtaResueltas[d.tn_order]);
+  const res = disc.filter(d => vvtaResueltas[d.tn_order]);
+  const money = n => (n == null ? '—' : '$' + Math.round(+n).toLocaleString('es-AR'));
+  const resumen = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+    <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:9px;padding:8px 14px;font-size:13px;">Cancelados en TN: <b>${r.tn_cancelados ?? 0}</b></div>
+    <div style="background:${pend.length ? '#FEF2F2' : '#ECFDF5'};border:1px solid ${pend.length ? '#FCA5A5' : '#A7F3D0'};border-radius:9px;padding:8px 14px;font-size:13px;">A revisar (activas en GN): <b style="color:${pend.length ? '#991B1B' : '#065F46'};">${pend.length}</b></div>
+    ${res.length ? `<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:9px;padding:8px 14px;font-size:13px;">Resueltas: <b>${res.length}</b></div>` : ''}
+  </div>`;
+  const row = d => { const ok = !!vvtaResueltas[d.tn_order]; return `<tr style="${ok ? 'opacity:.55;' : ''}">
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;"><input type="checkbox" ${ok ? 'checked' : ''} onchange="vvtaMarcar('${esc(String(d.tn_order))}',this.checked)" title="Marcar como ya anulada en GN" style="width:16px;height:16px;cursor:pointer;"></td>
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;font-weight:600;">#${esc(String(d.tn_order))}</td>
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;">${esc(String(d.gn_number || d.gn_id || '—'))}</td>
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;">${esc(d.date_sale || '—')}</td>
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;">${esc(d.client_name || '—')}</td>
+    <td style="padding:5px 8px;border-top:1px solid #F1F5F9;text-align:right;">${money(d.total_price)}</td>
+  </tr>`; };
+  const tabla = arr => `<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:4px 8px;">✔</th><th style="padding:4px 8px;">Pedido TN</th><th style="padding:4px 8px;">Venta GN</th><th style="padding:4px 8px;">Fecha</th><th style="padding:4px 8px;">Cliente</th><th style="padding:4px 8px;text-align:right;">Monto</th></tr></thead><tbody>${arr.map(row).join('')}</tbody></table></div>`;
+  let cuerpo;
+  if (!disc.length) {
+    cuerpo = '<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:14px;color:#065F46;text-align:center;">✅ No hay ventas activas en GN que estén canceladas en TN para este mes.</div>';
+  } else {
+    cuerpo = `<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:10px;">GN no permite anular por API → anulá la venta en <b>Gestión Nube</b> a mano y después tildala acá.</div>`;
+    cuerpo += pend.length ? tabla(pend) : '<div style="color:#065F46;font-size:13px;padding:8px 0;">✅ Todas las de este mes ya están resueltas.</div>';
+    if (res.length) cuerpo += `<div style="margin-top:12px;"><button class="btn-sm" onclick="vvtaToggleResueltas()" style="background:#fff;border:1px solid #D1D5DB;">${vvtaVerResueltas ? 'Ocultar' : 'Ver'} resueltas (${res.length})</button>${vvtaVerResueltas ? tabla(res) : ''}</div>`;
+  }
+  cont.innerHTML = header + resumen + cuerpo;
 }
 
 // ════════ Reposición de local ════════════════════════════════════════════════
