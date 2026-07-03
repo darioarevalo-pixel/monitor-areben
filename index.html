@@ -1612,7 +1612,7 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
           <div>
             <h3 style="margin:0;font-size:16px;font-weight:700;">Clientes mayoristas</h3>
-            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">CRM filtrado por canal Mayorista</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Canal Mayorista + clientes marcados ⭐ (aunque compren por otro canal)</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <label style="font-size:12px;color:#6B7280;">Canal:</label>
@@ -11673,18 +11673,39 @@ async function cargarCRM(forzar = false) {
   setStatus('Cargando clientes mayoristas...');
   try {
     const canalSel = document.getElementById('crm-canal').value;
-    const filtroCanal = canalSel === 'all' ? '' : `&channel_id=eq.${canalSel}`;
+    const SEL_CAMPOS = 'select=id,date_sale,total_price,client_id,channel_id,sale_state';
 
-    // Traemos solo los campos que necesitamos para minimizar la carga
-    const ventasParams = `select=id,date_sale,total_price,client_id,channel_id,sale_state${filtroCanal}&client_id=not.is.null&order=date_sale.desc`;
-    const ventas = await fetchAll('ventas', ventasParams, 'ventas mayoristas', true);
-    crmRows = ventas;
-
-    // Clientes: solo los que aparecen en las ventas (set de ids)
+    // Cargar PRIMERO los overrides por cliente (teléfonos y seguimiento), porque
+    // el seguimiento (crmSeg) trae la marca "es_mayorista" que necesitamos ANTES
+    // de armar la consulta de ventas.
     // Override de teléfonos (completados desde el export de GN, compartido en KV)
     try { const tr = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}&nc=${Math.random()}`); const td = await tr.json(); crmTelOverride = (td && td.ok && td.map) ? td.map : {}; } catch (e) { crmTelOverride = {}; }
-    // Seguimiento del CRM (cadencias + último contacto + notas), compartido en KV
+    // Seguimiento del CRM (cadencias + último contacto + notas + es_mayorista), en KV
     try { const sr = await fetch(`${CRM_TEL_API}?kind=crmseg&store=${_cuentaKey()}&nc=${Math.random()}`); const sd = await sr.json(); crmSeg = (sd && sd.ok && sd.map) ? sd.map : {}; } catch (e) { crmSeg = {}; }
+
+    // Clientes marcados a mano como mayoristas (aparecen en la vista Mayorista
+    // aunque hayan comprado por otro canal, ej. Whatsapp).
+    const flagged = Object.keys(crmSeg).filter(id => crmSeg[id] && crmSeg[id].es_mayorista);
+
+    let ventas;
+    if (canalSel === 'all') {
+      // Todos los canales: sin filtro.
+      ventas = await fetchAll('ventas', `${SEL_CAMPOS}&client_id=not.is.null&order=date_sale.desc`, 'ventas', true);
+    } else {
+      // Modo Mayorista: ventas del canal Mayorista + TODAS las ventas de los
+      // clientes marcados (cualquier canal), unidas y deduplicadas por id.
+      const porCanal = await fetchAll('ventas', `${SEL_CAMPOS}&channel_id=eq.${canalSel}&client_id=not.is.null&order=date_sale.desc`, 'ventas mayoristas', true);
+      let porMarcados = [];
+      for (let i = 0; i < flagged.length; i += 150) {
+        const lote = flagged.slice(i, i + 150);
+        const parte = await sbFetch('ventas', `${SEL_CAMPOS}&client_id=in.(${lote.join(',')})&client_id=not.is.null`);
+        porMarcados = porMarcados.concat(parte);
+      }
+      const porId = new Map();
+      for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v);
+      ventas = [...porId.values()];
+    }
+    crmRows = ventas;
 
     const ids = [...new Set(ventas.map(v => v.client_id).filter(Boolean))];
     if (ids.length === 0) {
@@ -11810,6 +11831,10 @@ function segBloqueModalHTML(c) {
   return `
     <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:16px;">
       <div style="font-size:12px;color:#6B7280;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">📞 Seguimiento</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;font-size:13px;font-weight:600;color:#7C3AED;">
+        <input type="checkbox" ${esMayoristaCliente(c.id) ? 'checked' : ''} onchange="crmSetMayorista(${c.id}, this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#7C3AED;">
+        ⭐ Cliente mayorista <span style="font-weight:400;color:#9CA3AF;font-size:11px;">(aparece en el CRM Mayorista aunque compre por otro canal)</span>
+      </label>
       <div style="margin-bottom:12px;">
         <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Página / Instagram</label>
         <div style="display:flex;gap:6px;align-items:center;max-width:420px;">
@@ -11871,6 +11896,21 @@ async function crmSetCadencia(id, value) {
   s.cadencia = value || '';
   await crmSegGuardar();
   renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+// Marca/desmarca un cliente como MAYORISTA. Los marcados aparecen en la vista
+// "Mayorista" del CRM aunque hayan comprado por otro canal (Whatsapp, etc.).
+function esMayoristaCliente(id) {
+  const s = crmSeg[String(id)];
+  return !!(s && s.es_mayorista);
+}
+async function crmSetMayorista(id, value) {
+  const s = crmSegRef(id);
+  s.es_mayorista = !!value;
+  await crmSegGuardar();
+  // Recargamos: entra/sale de la lista Mayorista según la marca.
+  await cargarCRM(true);
   if (cmCurrentId === id) abrirClienteModal(id);
 }
 
@@ -12144,7 +12184,7 @@ function renderCRMTabla() {
       : '<span style="color:#9CA3AF;">—</span>';
     return `
       <tr style="cursor:pointer;" onclick="abrirClienteModal(${c.id})">
-        <td><div style="font-weight:600;">${escapeHtml(c.name)}</div><div style="font-size:11px;color:#9CA3AF;">#${c.id}</div></td>
+        <td><div style="font-weight:600;">${escapeHtml(c.name)}${esMayoristaCliente(c.id) ? ' <span style="font-size:9px;font-weight:700;color:#7C3AED;background:#F3E8FF;padding:1px 6px;border-radius:10px;vertical-align:middle;">MAYORISTA</span>' : ''}</div><div style="font-size:11px;color:#9CA3AF;">#${c.id}</div></td>
         <td onclick="event.stopPropagation()">${contacto}</td>
         <td>${ciudad}</td>
         <td style="text-align:right;">${c.total_sales}</td>
@@ -12155,6 +12195,7 @@ function renderCRMTabla() {
         <td style="max-width:240px;">${notaCell}</td>
         <td><span style="font-size:11px;color:${segColor};font-weight:600;">${segLabel}</span></td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
+          <button onclick="crmSetMayorista(${c.id}, ${!esMayoristaCliente(c.id)})" title="${esMayoristaCliente(c.id) ? 'Quitar de mayoristas' : 'Marcar como cliente mayorista'}" style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;vertical-align:middle;color:${esMayoristaCliente(c.id) ? '#F59E0B' : '#D1D5DB'};">★</button>
           ${waUrl ? `<a href="${waUrl}" onclick="event.preventDefault();abrirWhatsApp('${waPhone}');return false;" class="btn-sm" title="Abrir WhatsApp" aria-label="WhatsApp" style="text-decoration:none;display:inline-flex;align-items:center;color:#16A34A;">${WA_SVG}</a>` : ''}
         </td>
       </tr>
