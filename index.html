@@ -12000,13 +12000,31 @@ function esMayoristaCliente(id) {
   const s = crmSeg[String(id)];
   return !!(s && s.es_mayorista);
 }
+let crmMayoristaBusy = false;
 async function crmSetMayorista(id, value) {
-  const s = crmSegRef(id);
-  s.es_mayorista = !!value;
-  await crmSegGuardar();
-  // Recargamos: entra/sale de la lista Mayorista según la marca.
-  await cargarCRM(true);
-  if (cmCurrentId === id) abrirClienteModal(id);
+  if (crmMayoristaBusy) return;          // evita doble-click mientras procesa
+  crmMayoristaBusy = true;
+  try {
+    crmSegRef(id).es_mayorista = !!value;
+    renderCRM();                          // feedback inmediato (estrella/badge)
+    crmSegGuardar();                       // persistir en KV (sin bloquear la UI)
+    // Actualización PUNTUAL (sin recargar las 27k ventas) en modo Mayorista.
+    if (document.getElementById('crm-canal').value !== 'all') {
+      const SEL = 'select=id,date_sale,total_price,client_id,channel_id,sale_state';
+      if (value) {
+        // recién marcado: sumar SUS ventas a la lista (consulta chica por client_id)
+        const nuevas = await sbFetch('ventas', `${SEL}&client_id=eq.${id}&client_id=not.is.null`);
+        const have = new Set(crmRows.map(v => v.id));
+        for (const v of nuevas) if (!have.has(v.id)) crmRows.push(v);
+        if (!crmClientes[id]) { try { const cs = await sbFetch('clientes', `select=id,name,email,phone,city,province&id=eq.${id}`); if (cs[0]) crmClientes[cs[0].id] = cs[0]; } catch (e) {} }
+      } else if (!crmRows.some(v => v.client_id == id && v.channel_id === 10)) {
+        // desmarcado y sin ventas del canal Mayorista: sale de la vista
+        crmRows = crmRows.filter(v => v.client_id != id);
+      }
+      renderCRM();
+    }
+    if (cmCurrentId === id) abrirClienteModal(id);
+  } finally { crmMayoristaBusy = false; }
 }
 
 async function crmSetPagina(id, value) {
