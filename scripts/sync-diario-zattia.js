@@ -209,6 +209,46 @@ async function syncInventario(maps) {
   }
   if (error) throw new Error(`Error guardando inventario: ${error.message}`);
   console.log(`[inventario] OK`);
+
+  // Limpieza: el espejo de inventario debe reflejar exactamente lo que GN devuelve para
+  // productos activos (= el set `inventario` recién armado). Cualquier fila del espejo que
+  // no esté en ese set quedó colgada y fantasmea en Exhibición (que no filtra por activo):
+  //   1) variante borrada en GN de un producto que sigue vivo (ej: un color),
+  //   2) producto dado de baja (inactivo) con stock viejo,
+  //   3) producto que GN ya no devuelve.
+  // Seguro: fetchAllPages corta con error si GN falla (no hay descargas a medias), y hay un
+  // tope del 30% como red de seguridad ante una respuesta rara de GN.
+  try {
+    const gnKeys = new Set(inventario.map(x => `${x.product_id}|${x.size_id}|${x.store_name}`));
+    const espejo = [];
+    for (let desde = 0; ; desde += 1000) { // paginado: la tabla supera el tope de 1000 filas
+      const { data, error: e } = await supabase
+        .from('inventario')
+        .select('product_id,size_id,store_name')
+        .range(desde, desde + 999);
+      if (e) throw new Error(e.message);
+      espejo.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`));
+    if (aBorrar.length > espejo.length * 0.3) {
+      console.warn(`[inventario] limpieza ABORTADA por seguridad: borraría ${aBorrar.length}/${espejo.length} filas (>30%). Revisar a mano.`);
+    } else {
+      let borradas = 0;
+      for (const r of aBorrar) {
+        const { error: de } = await supabase
+          .from('inventario')
+          .delete()
+          .match({ product_id: r.product_id, size_id: r.size_id, store_name: r.store_name });
+        if (de) console.warn(`  ⚠️  no se pudo borrar ${r.product_id}|${r.size_id}|${r.store_name}: ${de.message}`);
+        else borradas++;
+      }
+      console.log(`[inventario] limpieza: ${borradas} fila(s) que GN ya no tiene → borradas.`);
+    }
+  } catch (e) {
+    console.warn(`[inventario] limpieza omitida por error (no crítico): ${e.message}`);
+  }
+
   return inventario.length;
 }
 
