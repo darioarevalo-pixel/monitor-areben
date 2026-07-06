@@ -11956,6 +11956,15 @@ function segBloqueModalHTML(c) {
           <div style="font-size:10px;color:#9CA3AF;margin-top:3px;">Tocá la fecha para fijar otra a mano.</div>
         </div>
       </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #E5E7EB;">
+        <div style="font-size:11px;color:#6B7280;margin-bottom:5px;">✍️ Le escribí hoy — recordarme de nuevo en:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <button class="btn-sm" onclick="crmEscribiHoy(${c.id}, 1)" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">Mañana</button>
+          <button class="btn-sm" onclick="crmEscribiHoy(${c.id}, 2)" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">En 2 días</button>
+          <button class="btn-sm" onclick="crmEscribiHoy(${c.id}, 3)" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">En 3 días</button>
+          <button class="btn-sm" onclick="crmEscribiHoy(${c.id}, 7)" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">En 1 semana</button>
+        </div>
+      </div>
       <div style="margin-top:10px;font-size:13px;">${proxLinea}</div>
 
       <div style="margin-top:14px;">
@@ -12038,6 +12047,17 @@ async function crmHableHoy(id) {
   const s = crmSegRef(id);
   s.ultimo_contacto = hoyISO();
   s.proximo_manual = null; // al registrar contacto, el próximo vuelve a calcularse por cadencia
+  await crmSegGuardar();
+  renderCRM();
+  if (cmCurrentId === id) abrirClienteModal(id);
+}
+
+// Registra "le escribí hoy" y fija el próximo recontacto a hoy + `dias`
+// (para el caso típico: "le mandé un mensaje, revisar mañana si respondió").
+async function crmEscribiHoy(id, dias) {
+  const s = crmSegRef(id);
+  s.ultimo_contacto = hoyISO();
+  s.proximo_manual = addDiasISO(hoyISO(), dias);
   await crmSegGuardar();
   renderCRM();
   if (cmCurrentId === id) abrirClienteModal(id);
