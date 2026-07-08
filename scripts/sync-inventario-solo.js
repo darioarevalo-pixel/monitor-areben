@@ -70,13 +70,15 @@ async function desactivarBorrados(gnIds) {
 
 async function syncProductos() {
   console.log('\n[productos] descargando...');
-  const rows = await fetchAllPages('productos/obtener?per_page=200');
+  const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
   const gnIds = new Set(rows.map(p => p.id));
   const inactiveIds = new Set(); // SOLO los explícitamente inactivos (no saltear nuevos/desconocidos)
   const prodSku = {};            // pid -> sku (para completar el inventario cuando GN no lo manda)
+  const varBarcode = {};         // `${pid}|${size_id}` -> barcode REAL por variante (GN lo expone en las variantes aunque el feed de inventario todavía no)
   const productos = rows.map(p => {
     if (p.active === 0 || p.active === false) inactiveIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
+    (p.variantes || p.variants || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
     const base = {
       id: p.id,
       name: p.name,
@@ -108,7 +110,7 @@ async function syncProductos() {
   // prodSku robusto: sumar TODO el sku que ya está en el espejo (evita el parpadeo del fetch de GN con productos nuevos)
   try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
   await desactivarBorrados(gnIds);
-  return { inactiveIds, prodSku };
+  return { inactiveIds, prodSku, varBarcode };
 }
 
 // Deriva el código de barras del SKU para las filas de inventario de Zattia que quedaron SIN código
@@ -134,7 +136,7 @@ async function derivarCodigosZattia() {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
-  const { inactiveIds, prodSku } = await syncProductos();
+  const { inactiveIds, prodSku, varBarcode } = await syncProductos();
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
   let saltInactivos = 0, skuCompletados = 0, bcCompletados = 0;
@@ -143,7 +145,7 @@ async function derivarCodigosZattia() {
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     const sku = r.sku || prodSku[r.product_id] || null;   // completa el sku desde productos cuando GN no lo manda
     if (!r.sku && sku) skuCompletados++;
-    const barcode = r.barcode || (STORE === 'zattia' && sku ? _bcDeSku(sku) : null); // Zattia: derivar el código del SKU si GN no lo dio
+    const barcode = r.barcode || varBarcode[`${r.product_id}|${r.size_id}`] || (STORE === 'zattia' && sku ? _bcDeSku(sku) : null); // código real de la variante; si no, derivar del SKU (Zattia)
     if (!r.barcode && barcode) bcCompletados++;
     seen.set(key, {
       product_id: r.product_id,
