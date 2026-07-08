@@ -102,8 +102,6 @@ async function fetchAllPages(basePath) {
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
-// Zattia: el código de barras = el SKU sin guiones ni espacios (convención de la marca).
-const _bcDeSku = (sku) => String(sku || '').replace(/[-\s]/g, '').toUpperCase();
 
 // Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
 async function desactivarBorrados(gnIds) {
@@ -191,7 +189,7 @@ async function syncInventario(maps) {
         store_name:         r.store_name || r.store || '',
         available_quantity: r.available_quantity ?? r.quantity ?? 0,
         sku:                r.sku || prodSku[r.product_id] || null,
-        barcode:            r.barcode || varBarcode[skey] || _bcDeSku(r.sku || prodSku[r.product_id]) || null, // Zattia: derivar del SKU si GN no lo dio
+        barcode:            r.barcode || varBarcode[skey] || null, // código REAL de GN (feed de inventario o variante)
       };
     } else {
       invMap[key].available_quantity += r.available_quantity ?? r.quantity ?? 0;

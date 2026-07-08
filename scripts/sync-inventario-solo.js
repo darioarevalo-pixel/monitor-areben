@@ -50,8 +50,6 @@ async function fetchAllPages(base) {
   return out;
 }
 
-// Zattia: el código de barras = el SKU sin guiones ni espacios (convención de la marca).
-const _bcDeSku = (sku) => String(sku || '').replace(/[-\s]/g, '').toUpperCase();
 
 // Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
 async function desactivarBorrados(gnIds) {
@@ -114,25 +112,6 @@ async function syncProductos() {
   return { inactiveIds, prodSku, varBarcode };
 }
 
-// Deriva el código de barras del SKU para las filas de inventario de Zattia que quedaron SIN código
-// (productos nuevos que GN todavía no devuelve en su feed de inventario). Opera directo sobre el espejo.
-async function derivarCodigosZattia() {
-  if (STORE !== 'zattia') return;
-  const { data: inv, error: e0 } = await supabase.from('inventario').select('product_id').is('barcode', null);
-  if (e0 || !inv || !inv.length) { console.log('[códigos] nada para derivar.'); return; }
-  const pids = [...new Set(inv.map(r => r.product_id))];
-  const { data: prods } = await supabase.from('productos').select('id, sku').in('id', pids);
-  const skuById = {}; (prods || []).forEach(p => { if (p.sku) skuById[p.id] = p.sku; });
-  let n = 0;
-  for (const pid of pids) {
-    const sku = skuById[pid]; if (!sku) continue;
-    const bc = _bcDeSku(sku); if (!bc) continue;
-    const { error } = await supabase.from('inventario').update({ barcode: bc, sku }).eq('product_id', pid).is('barcode', null);
-    if (!error) n++;
-  }
-  console.log(`[códigos] ${n} producto(s) con código derivado del SKU (Zattia).`);
-}
-
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
@@ -146,7 +125,7 @@ async function derivarCodigosZattia() {
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     const sku = r.sku || prodSku[r.product_id] || null;   // completa el sku desde productos cuando GN no lo manda
     if (!r.sku && sku) skuCompletados++;
-    const barcode = r.barcode || varBarcode[`${r.product_id}|${r.size_id}`] || (STORE === 'zattia' && sku ? _bcDeSku(sku) : null); // código real de la variante; si no, derivar del SKU (Zattia)
+    const barcode = r.barcode || varBarcode[`${r.product_id}|${r.size_id}`] || null; // código REAL de GN: del feed de inventario o de la variante
     if (!r.barcode && barcode) bcCompletados++;
     seen.set(key, {
       product_id: r.product_id,
@@ -160,7 +139,7 @@ async function derivarCodigosZattia() {
       observation: r.observation ?? null,
     });
   }
-  console.log(`[inventario] ${skuCompletados} sku + ${bcCompletados} códigos completados desde el SKU.`);
+  console.log(`[inventario] ${skuCompletados} sku completados + ${bcCompletados} códigos tomados de la variante.`);
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
@@ -184,6 +163,5 @@ async function derivarCodigosZattia() {
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
-  await derivarCodigosZattia();
   console.log(`\n[listo] productos + inventario — ${STORE}`);
 })().catch(e => { console.error('ERROR:', e.message); process.exit(1); });
