@@ -3,12 +3,20 @@
 // indexado en el feed de GN (de donde el sync arma el espejo) o si todavía no.
 //
 // Uso:  GET /api/gn-inventario?store=zattia&q=TOP%20THUMB
-//   store: bdi | zattia   ·   q: parte del nombre del producto
+//   store: bdi | zattia            · q: parte del nombre del producto
+//   tokenEnv (opcional): nombre EXACTO de la variable de entorno del token a usar
+//                        (para probar cuál es la de cada cuenta). Nunca se devuelve su valor.
 //
 // El token de GN queda en el servidor (no se expone). No escribe nada.
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const TOKENS = { zattia: process.env.GN_TOKEN_ZATTIA, bdi: process.env.GN_TOKEN };
-const ENV_NAME = { zattia: 'GN_TOKEN_ZATTIA', bdi: 'GN_TOKEN' };
+
+// Candidatas por cuenta (se usa la primera que exista si no se pasa ?tokenEnv=).
+const CANDIDATOS = {
+  zattia: ['GN_TOKEN_ZATTIA', 'gestion_nube_token_zattia', 'GESTION_NUBE_TOKEN_ZATTIA', 'gestion_nube_token', 'GESTION_NUBE_TOKEN'],
+  bdi: ['GN_TOKEN', 'GN_TOKEN_BDI', 'gestion_nube_token', 'GESTION_NUBE_TOKEN'],
+};
+// Todas las que reportamos como presentes/ausentes (solo el nombre, nunca el valor).
+const A_REPORTAR = ['GN_TOKEN', 'GN_TOKEN_ZATTIA', 'GN_TOKEN_VENTAS', 'GN_TOKEN_VENTAS_BDI', 'gestion_nube_token', 'gestion_nube_token_zattia', 'GESTION_NUBE_TOKEN', 'GESTION_NUBE_TOKEN_ZATTIA', 'GN_TOKEN_BDI'];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -30,9 +38,24 @@ export default async function handler(req, res) {
 
   const store = String(req.query.store || 'bdi').toLowerCase();
   const q = String(req.query.q || '').trim().toLowerCase();
-  const token = TOKENS[store];
-  if (!token) return res.status(500).json({ ok: false, error: `Falta ${ENV_NAME[store] || 'el token de GN'} en el entorno de Vercel del Monitor.` });
-  if (!q) return res.status(400).json({ ok: false, error: 'Indicá ?q=<parte del nombre del producto>. Ej: ?store=zattia&q=TOP THUMB' });
+
+  // Qué variables de token existen (solo presencia, nunca el valor).
+  const env_disponibles = {};
+  A_REPORTAR.forEach(n => { if (process.env[n] != null && process.env[n] !== '') env_disponibles[n] = true; });
+
+  // Elegir la variable de token: la que indique ?tokenEnv=, o la primera candidata disponible.
+  const pedida = req.query.tokenEnv ? String(req.query.tokenEnv) : null;
+  let tokenEnvUsado = null, token = null;
+  if (pedida) {
+    if (process.env[pedida]) { tokenEnvUsado = pedida; token = process.env[pedida]; }
+  } else {
+    for (const n of (CANDIDATOS[store] || [])) { if (process.env[n]) { tokenEnvUsado = n; token = process.env[n]; break; } }
+  }
+
+  if (!token) {
+    return res.status(500).json({ ok: false, error: pedida ? `La variable ${pedida} no está seteada en Vercel.` : `No encontré ninguna variable de token para ${store}.`, env_disponibles, probar_con: 'Agregá &tokenEnv=NOMBRE con alguna de las de env_disponibles.' });
+  }
+  if (!q) return res.status(400).json({ ok: false, error: 'Indicá ?q=<parte del nombre del producto>. Ej: ?store=zattia&q=TOP THUMB', env_disponibles, token_env_usado: tokenEnvUsado });
 
   try {
     const out = [];
@@ -53,8 +76,8 @@ export default async function handler(req, res) {
       if (!d.meta?.has_more_pages || items.length === 0) break;
       page++; await sleep(300);
     }
-    return res.status(200).json({ ok: true, store, q, productos_encontrados: out.length, productos_escaneados: scanned, productos: out });
+    return res.status(200).json({ ok: true, store, q, token_env_usado: tokenEnvUsado, env_disponibles, productos_encontrados: out.length, productos_escaneados: scanned, productos: out });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: e.message, token_env_usado: tokenEnvUsado, env_disponibles });
   }
 }
