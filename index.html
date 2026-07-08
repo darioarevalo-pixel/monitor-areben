@@ -9481,6 +9481,11 @@ function sfProcesar() {
     const qty = Math.max(1, +pn.qty || 1);
     items.push({ vid: 'bc_' + pn.barcode, pid: null, sid: null, nombre: '(nuevo sin cargar)', variante: '', sku: '', barcode: pn.barcode, qty, origen: pn.origenManual || 'deposito', nuevo: true, pendiente: true });
   });
+  (sfDraft.manuales || []).forEach(mn => {   // producto SIN código de barras: control a mano (salió/volvió), no genera venta ni toca stock
+    const desc = String(mn.desc || '').trim(); if (!desc) return;
+    const qty = Math.max(1, +mn.qty || 1);
+    items.push({ vid: 'man_' + mn.mid, pid: null, sid: null, nombre: desc, variante: '', sku: '', qty, origen: 'deposito', nuevo: true, manual: true });
+  });
   if (!items.length) { alert('Escaneá o tildá al menos un producto para procesar.'); return; }
   const sol = { id: sfNuevoId(), fecha: new Date().toISOString().slice(0, 10), creado: Date.now(), creadoPor: currentUser || '', descripcion: sfDraft.desc || '', estado: 'pendiente', items };
   sfData.unshift(sol);
@@ -9589,6 +9594,16 @@ function sfScan(id, origen, inputEl, fase) {
   }
   sfRender(); _sfFoco('sf-scan-' + origen);
 }
+// Ítems a mano (sin código): suma/resta la cuenta de la fase actual (preparado o devolución) con los botones + / −.
+function sfManualAjustar(id, vid, delta) {
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  const it = (s.items || []).find(i => i.vid === vid); if (!it) return;
+  const mk = sfFase === 'devolucion' ? 'devuelto' : 'verif';
+  s[mk] = s[mk] || {};
+  s[mk][it.vid] = Math.max(0, Math.min(it.qty, (s[mk][it.vid] || 0) + delta));
+  if (sfFaseCompleta(s, sfFase)) { if (sfFase === 'devolucion') s.estado = 'devuelta'; else if (s.estado !== 'devuelta') s.estado = 'preparada'; }
+  sfGuardar(); sfRender();
+}
 function sfRender() {
   const cont = document.getElementById('sf-cont'); if (!cont) return;
   if (sfDraft) { cont.innerHTML = sfDraftHtml(); return; }
@@ -9628,11 +9643,28 @@ function sfDraftScan(inputEl) {
   _sfFoco('sf-draft-scan');
 }
 function sfDraftQuitarPendiente(bc) { if (!sfDraft || !sfDraft.pendientes) return; sfDraft.pendientes = sfDraft.pendientes.filter(x => _sfNormBc(x.barcode) !== _sfNormBc(bc)); sfRender(); }
+// ── Ítems "a mano" (sin código de barras): solo descripción + cantidad, para controlar salida/devolución ──
+function sfNuevoMid() { return 'm' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
+function sfDraftAddManual() {
+  if (!sfDraft) sfDraft = { desc: '', prods: [] };
+  const dEl = document.getElementById('sf-man-desc'), qEl = document.getElementById('sf-man-qty');
+  const desc = ((dEl && dEl.value) || '').trim();
+  const qty = Math.max(1, parseInt((qEl && qEl.value) || '1') || 1);
+  if (!desc) { alert('Escribí una descripción (ej. Remera estampa X).'); if (dEl) dEl.focus(); return; }
+  sfDraft.manuales = sfDraft.manuales || [];
+  sfDraft.manuales.push({ mid: sfNuevoMid(), desc, qty });
+  sfRender();
+  setTimeout(() => { const e = document.getElementById('sf-man-desc'); if (e) e.focus(); }, 30);
+}
+function sfDraftManualQty(mid, val) { if (!sfDraft || !sfDraft.manuales) return; const m = sfDraft.manuales.find(x => x.mid === mid); if (m) m.qty = Math.max(1, parseInt(val) || 1); }
+function sfDraftQuitarManual(mid) { if (!sfDraft || !sfDraft.manuales) return; sfDraft.manuales = sfDraft.manuales.filter(x => x.mid !== mid); sfRender(); }
 function sfDraftHtml() {
   const prods = sfDraft.prods || [];
   const pend = sfDraft.pendientes || [];
+  const man = sfDraft.manuales || [];
   const totalSel = prods.reduce((s, p) => s + p.variantes.filter(v => v.sel).reduce((a, v) => a + (+v.qty || 1), 0), 0)
-    + pend.reduce((a, p) => a + (+p.qty || 1), 0);
+    + pend.reduce((a, p) => a + (+p.qty || 1), 0)
+    + man.reduce((a, m) => a + (+m.qty || 1), 0);
   const rows = prods.map(p => {
     const vars = p.variantes.map(v => `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;border-top:1px solid #F1F5F9;cursor:pointer;${v.sel ? 'font-weight:600;' : ''}">
         <input type="checkbox" ${v.sel ? 'checked' : ''} onchange="sfDraftToggleVar('${p.pid}','${v.vid}',this.checked)" style="flex:0 0 auto;">
@@ -9650,6 +9682,11 @@ function sfDraftHtml() {
       ${pend.map(p => `<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;border-top:1px solid #FDE68A;"><span style="flex:1;font-family:monospace;">${esc(p.barcode)} <span style="font-size:11px;font-family:inherit;">${p.origenManual === 'local' ? '🏪' : '📦'}</span></span><span style="color:#92400E;font-weight:600;">x${p.qty}</span><button onclick="sfDraftQuitarPendiente('${esc(p.barcode)}')" title="Quitar (mal escaneo)" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button></div>`).join('')}
       <div style="font-size:11px;color:#B45309;margin-top:4px;">Se guardan por código de barras. Cuando el producto se cargue en GN, se vinculan solos.</div>
     </div>` : '';
+  const manHtml = man.length ? `<div style="border:1px dashed #C4B5FD;background:#F5F3FF;border-radius:9px;padding:9px 11px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:13px;color:#5B21B6;margin-bottom:4px;">✍️ Sin código (control a mano)</div>
+      ${man.map(m => `<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;border-top:1px solid #DDD6FE;"><span style="flex:1;min-width:0;">${esc(m.desc)} <span style="font-size:11px;" title="Sale de Depósito">📦</span></span><input type="number" min="1" value="${m.qty}" onchange="sfDraftManualQty('${m.mid}',this.value)" title="Cantidad" style="width:56px;text-align:center;border:1px solid #DDD6FE;border-radius:6px;padding:3px 4px;flex:0 0 auto;"><button onclick="sfDraftQuitarManual('${m.mid}')" title="Quitar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">×</button></div>`).join('')}
+      <div style="font-size:11px;color:#7C3AED;margin-top:4px;">No generan venta ni tocan stock. Se retiran de 📦 Depósito y se controla su devolución a mano.</div>
+    </div>` : '';
   return `<div>${sfBanner()}
     <div style="border:1px solid #C7D2FE;background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;">
       <div style="font-weight:700;margin-bottom:4px;">⚡ Cargar por escáner</div>
@@ -9666,7 +9703,16 @@ function sfDraftHtml() {
       <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="flex:1;min-width:220px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
       <button class="btn-sm" onclick="sfAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto</button>
     </div>
-    ${(prods.length || pend.length) ? (rows + pendHtml) : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Escaneá los productos ya separados (arriba) o agregalos a mano con "+ Agregar producto".</div>'}
+    <div style="border:1px dashed #C4B5FD;background:#F5F3FF;border-radius:9px;padding:9px 11px;margin-bottom:10px;">
+      <div style="font-weight:700;font-size:13px;color:#5B21B6;margin-bottom:4px;">✍️ Producto sin código de barra</div>
+      <div style="font-size:11px;color:#7C3AED;margin-bottom:7px;">Para prendas que todavía no tienen código (no se pueden escanear). No genera venta: solo se controla que salga y vuelva.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="sf-man-desc" onkeydown="if(event.key==='Enter'){event.preventDefault();sfDraftAddManual();}" placeholder="Descripción (ej. Remera estampa X)" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid #DDD6FE;border-radius:7px;">
+        <input id="sf-man-qty" type="number" min="1" value="1" title="Cantidad" style="width:72px;text-align:center;padding:7px 6px;border:1px solid #DDD6FE;border-radius:7px;">
+        <button class="btn-sm" onclick="sfDraftAddManual()" style="background:#7C3AED;color:#fff;border:1px solid #7C3AED;">+ Agregar</button>
+      </div>
+    </div>
+    ${(prods.length || pend.length || man.length) ? (rows + pendHtml + manHtml) : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Escaneá los productos ya separados (arriba), agregalos a mano con "+ Agregar producto", o cargá una prenda sin código.</div>'}
     <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
       <button class="btn-primary" onclick="sfProcesar()">✓ Procesar (${totalSel} u.)</button>
       <button class="btn-sm" onclick="sfCancelarDraft()">Cancelar</button>
@@ -9676,6 +9722,8 @@ function sfDraftHtml() {
 }
 // Faltantes de devolución: ítems que aún no volvieron (qty - devuelto > 0).
 function sfFaltantes(s) { const d = s.devuelto || {}; return (s.items || []).map(i => ({ ...i, falta: i.qty - (d[i.vid] || 0) })).filter(x => x.falta > 0); }
+// ¿Ya salió físicamente? (hay venta creada, o hay ítems a mano y la solicitud dejó de estar 'pendiente') → habilita el control de devolución.
+function sfSalio(s) { return !!(s && s.ventas) || ((s.items || []).some(i => i.manual) && s.estado && s.estado !== 'pendiente'); }
 function sfReporteFaltantesCopiar(id) {
   const s = sfData.find(x => x.id === id); if (!s) return;
   const f = sfFaltantes(s); if (!f.length) { alert('No hay faltantes: volvió todo.'); return; }
@@ -9724,7 +9772,7 @@ function sfVerHtml(s) {
     const confTot = arr.reduce((a, i) => a + conf(i), 0);
     const completo = confTot >= totQ;
     const puedeQuitar = _esAdmin() && !s.ventas;
-    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${c}/${i.qty}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;">${puedeQuitar ? `<button onclick="sfEliminarItem('${s.id}','${i.vid}')" title="Quitar de la solicitud (solo admin)" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>` : ''}</td></tr>`; }).join('');
+    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.manual ? ` <span style="background:#EDE9FE;color:#5B21B6;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Sin código — se cuenta a mano">✍️ a mano</span>` : (i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : '')}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;white-space:nowrap;">${i.manual ? `<button onclick="sfManualAjustar('${s.id}','${i.vid}',-1)" title="Quitar 1" style="border:1px solid #DDD6FE;background:#fff;color:#5B21B6;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">−</button> ${c}/${i.qty} <button onclick="sfManualAjustar('${s.id}','${i.vid}',1)" title="Sumar 1" style="border:1px solid #7C3AED;background:#7C3AED;color:#fff;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">+</button>` : `${c}/${i.qty}`}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;">${puedeQuitar ? `<button onclick="sfEliminarItem('${s.id}','${i.vid}')" title="Quitar de la solicitud (solo admin)" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>` : ''}</td></tr>`; }).join('');
     const fbKey = origen + '-' + sfFase;
     const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
     return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
@@ -9740,9 +9788,11 @@ function sfVerHtml(s) {
   const opts = ['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'].map(e => `<option value="${e}" ${s.estado === e ? 'selected' : ''}>${e}</option>`).join('');
   const ventasHtml = s.ventas
     ? `<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13px;">✅ Ventas creadas en GN: ${['deposito', 'local'].filter(o => s.ventas[o]).map(o => `${o === 'deposito' ? '📦' : '🏪'} N° <b>${esc(String(s.ventas[o].number || s.ventas[o].id || '?'))}</b>`).join(' · ')} <span style="color:#9CA3AF;font-size:11px;">(para anular, hacelo en GN)</span></div>`
-    : (['zattia', 'bdi'].includes(_cuentaKey())
-      ? `<div style="margin-bottom:10px;"><button id="sf-crear-btn" class="btn-primary" onclick="sfCrearVentas('${s.id}')">🧾 Crear ventas en GN</button> <span style="color:#9CA3AF;font-size:12px;">Descuenta el stock con el cliente "Sesión de fotos".</span></div>`
-      : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN no está disponible para esta cuenta.</div>`);
+    : (!s.items.some(i => !i.nuevo)
+      ? ''  // solo ítems a mano / nuevos sin cargar: no hay venta que generar
+      : (['zattia', 'bdi'].includes(_cuentaKey())
+        ? `<div style="margin-bottom:10px;"><button id="sf-crear-btn" class="btn-primary" onclick="sfCrearVentas('${s.id}')">🧾 Crear ventas en GN</button> <span style="color:#9CA3AF;font-size:12px;">Descuenta el stock con el cliente "Sesión de fotos".</span></div>`
+        : `<div style="color:#9CA3AF;font-size:12px;margin-bottom:10px;">Crear ventas en GN no está disponible para esta cuenta.</div>`));
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
@@ -9761,7 +9811,7 @@ function sfVerHtml(s) {
     </div>
     ${grupo('📦 Retirar de Depósito', dep, 'deposito')}
     ${grupo('🏪 Retirar de Local', loc, 'local')}
-    ${(sfFase === 'devolucion' && s.ventas && faltantes.length) ? `<div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:9px;padding:10px 12px;margin:10px 0;">
+    ${(sfFase === 'devolucion' && sfSalio(s) && faltantes.length) ? `<div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:9px;padding:10px 12px;margin:10px 0;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
         <div style="font-weight:700;color:#991B1B;">⚠ Faltan por devolver (${faltantes.reduce((a, f) => a + f.falta, 0)} u.)</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn-sm" onclick="sfReporteFaltantesCopiar('${s.id}')" style="background:#fff;border:1px solid #FCA5A5;color:#991B1B;">📋 Copiar reporte</button><button class="btn-sm" onclick="sfReporteFaltantesPDF('${s.id}')" style="background:#1F2937;color:#fff;">📄 PDF</button></div>
@@ -9782,7 +9832,7 @@ function sfHistorialHtml() {
     const dep = s.items.filter(i => i.origen === 'deposito').reduce((a, i) => a + i.qty, 0);
     const loc = s.items.filter(i => i.origen === 'local').reduce((a, i) => a + i.qty, 0);
     const cerr = s.estado === 'cerrada';
-    const falt = (s.ventas && !cerr && s.estado !== 'devuelta') ? sfFaltantes(s).reduce((a, f) => a + f.falta, 0) : 0;
+    const falt = (sfSalio(s) && !cerr && s.estado !== 'devuelta') ? sfFaltantes(s).reduce((a, f) => a + f.falta, 0) : 0;
     return `<div style="display:flex;gap:10px;align-items:center;border:1px solid ${falt ? '#FCA5A5' : '#E5E7EB'};border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;${cerr ? 'opacity:.6;background:#F9FAFB;' : (falt ? 'background:#FEF2F2;' : '')}">
         <input type="checkbox" ${sfSeleccion.has(s.id) ? 'checked' : ''} onchange="sfSelToggle('${s.id}',this.checked)" title="Seleccionar para verificar/preparar combinadas" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">
         <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${cerr ? '✅ ' : ''}${esc(s.descripcion) || '(sin descripción)'}${falt ? ` <span style="background:#FEE2E2;color:#991B1B;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">⏳ ${falt} por devolver</span>` : ''}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
@@ -9807,6 +9857,7 @@ function _sfCombiAgg(ids, origen, fase) {
   const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
   const map = {};
   sols.forEach(s => (s.items || []).filter(i => i.origen === origen).forEach(i => {
+    if (i.manual) { map['m_' + i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: i.qty, conf: Math.min((s[mk] || {})[i.vid] || 0, i.qty), manual: true, solId: s.id, vid: i.vid }; return; }
     const e = map[i.vid] || (map[i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: 0, conf: 0 });
     e.ped += i.qty;
     e.conf += Math.min((s[mk] || {})[i.vid] || 0, i.qty);
@@ -9821,7 +9872,7 @@ function sfGrupoCombi(titulo, origen, ids, fase) {
   const completo = confTot >= totQ;
   const accionN = fase === 'devolucion' ? 'devueltos' : 'preparados';
   const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado';
-  const rows = items.map(i => { const ok = i.conf >= i.ped; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.conf}/${i.ped}</td></tr>`; }).join('');
+  const rows = items.map(i => { const ok = i.conf >= i.ped; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.manual ? ` <span style="background:#EDE9FE;color:#5B21B6;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Sin código — se cuenta a mano">✍️ a mano</span>` : (i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : '')}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;white-space:nowrap;">${i.manual ? `<button onclick="sfManualAjustar('${i.solId}','${i.vid}',-1)" title="Quitar 1" style="border:1px solid #DDD6FE;background:#fff;color:#5B21B6;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">−</button> ${i.conf}/${i.ped} <button onclick="sfManualAjustar('${i.solId}','${i.vid}',1)" title="Sumar 1" style="border:1px solid #7C3AED;background:#7C3AED;color:#fff;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">+</button>` : `${i.conf}/${i.ped}`}</td></tr>`; }).join('');
   const fbKey = 'combi-' + origen + '-' + fase;
   const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
   return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
