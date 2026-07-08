@@ -9502,7 +9502,13 @@ function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) re
 function _sfPuedeQuitarItem() { return _esAdmin() || _puedeVer(_cuentaKey(), 'sesion-fotos.quitar-item'); }
 function _sfPuedeEditarDesc() { return _esAdmin() || _puedeVer(_cuentaKey(), 'sesion-fotos.editar-desc'); }
 function sfSetDesc(id, val) { if (!_sfPuedeEditarDesc()) return; const s = sfData.find(x => x.id === id); if (!s) return; s.descripcion = val; sfGuardar(); }
-function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
+function sfBorrar(id) {
+  if (!_sfPuedeQuitarItem()) { alert('No tenés permiso para borrar solicitudes.'); return; }
+  const s = sfData.find(x => x.id === id); if (!s) return;
+  if (!_esAdmin() && sfSalio(s) && !['devuelta', 'cerrada'].includes(s.estado)) { alert('Esta solicitud ya salió y todavía tiene devoluciones pendientes. Cerrá la devolución primero, o pedile a un administrador que la borre.'); return; }
+  if (!confirm('¿Eliminar esta solicitud del historial?')) return;
+  sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender();
+}
 // Quitar una variante de la solicitud (solo admin, antes de crear las ventas). Queda registrada en s.eliminados.
 function sfEliminarItem(id, vid) {
   if (!_sfPuedeQuitarItem()) return;
@@ -9843,7 +9849,7 @@ function sfHistorialHtml() {
         <input type="checkbox" ${sfSeleccion.has(s.id) ? 'checked' : ''} onchange="sfSelToggle('${s.id}',this.checked)" title="Seleccionar para verificar/preparar combinadas" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">
         <div style="flex:1;min-width:160px;cursor:pointer;" onclick="sfVer('${s.id}')"><div style="font-weight:600;">${cerr ? '✅ ' : ''}${esc(s.descripcion) || '(sin descripción)'}${falt ? ` <span style="background:#FEE2E2;color:#991B1B;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">⏳ ${falt} por devolver</span>` : ''}</div><div style="font-size:12px;color:#9CA3AF;">${esc(s.fecha)} · 📦 ${dep} · 🏪 ${loc} · ${esc(s.estado)}</div></div>
         <button class="btn-sm" onclick="sfVer('${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
-        <button onclick="sfBorrar('${s.id}')" title="Eliminar" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>
+        ${_sfPuedeQuitarItem() ? `<button onclick="sfBorrar('${s.id}')" title="Eliminar solicitud" style="border:none;background:none;color:#CBD5E1;cursor:pointer;font-size:15px;">🗑</button>` : ''}
       </div>`;
   }).join('');
   return `<div>
