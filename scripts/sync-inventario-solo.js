@@ -100,6 +100,7 @@ async function syncProductos() {
     const lote = productos.slice(i, i + BATCH);
     let { error } = await supabase.from('productos').upsert(lote, { onConflict: 'id' });
     if (error && /proveedor|provider|column/i.test(error.message)) {
+      console.warn(`  ⚠️ productos upsert falló (${error.message}); reintento sin proveedor.`);
       const reducido = lote.map(({ proveedor, ...rest }) => rest);
       ({ error } = await supabase.from('productos').upsert(reducido, { onConflict: 'id' }));
     }
@@ -167,11 +168,19 @@ async function derivarCodigosZattia() {
   for (let i = 0; i < inv.length; i += BATCH) {
     const lote = inv.slice(i, i + BATCH);
     let { error } = await supabase.from('inventario').upsert(lote, { onConflict: 'product_id,size_id,store_name' });
-    if (error && /sku|barcode|observation|column/i.test(error.message)) {
-      const reducido = lote.map(({ sku, barcode, observation, ...rest }) => rest);
-      ({ error } = await supabase.from('inventario').upsert(reducido, { onConflict: 'product_id,size_id,store_name' }));
+    // Fallback por etapas y con aviso: si falta una columna, primero se quita SOLO `observation`
+    // (manteniendo sku/barcode); recién como último recurso se quitan sku/barcode. Nunca en silencio.
+    if (error && /column|observation|sku|barcode/i.test(error.message)) {
+      console.warn(`  ⚠️ inventario upsert falló (${error.message}); reintento SIN observation (mantengo sku/barcode).`);
+      const sinObs = lote.map(({ observation, ...rest }) => rest);
+      ({ error } = await supabase.from('inventario').upsert(sinObs, { onConflict: 'product_id,size_id,store_name' }));
+      if (error && /column|sku|barcode/i.test(error.message)) {
+        console.warn(`  ⚠️ inventario sigue fallando (${error.message}); último recurso: SIN sku/barcode.`);
+        const reducido = lote.map(({ sku, barcode, ...rest }) => rest);
+        ({ error } = await supabase.from('inventario').upsert(reducido, { onConflict: 'product_id,size_id,store_name' }));
+      }
     }
-    if (error) throw new Error(error.message);
+    if (error) throw new Error('inventario: ' + error.message);
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
