@@ -137,6 +137,8 @@ async function derivarCodigosZattia() {
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
   // Productos primero: deja los mapas (activos, barcode por variante, sku por producto).
   const { inactiveIds, prodSku, varBarcode } = await syncProductos();
+  const _DBG = new Set([1026315, 1026314]); // TEMP diagnóstico TOP THUMB / TOP YOKO
+  console.log('[DBG] varBarcode de objetivos:', Object.keys(varBarcode).filter(k => _DBG.has(+k.split('|')[0])).map(k => `${k}=${varBarcode[k]}`).join(' , ') || '(ninguna)');
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
   let saltInactivos = 0, skuCompletados = 0, bcCompletados = 0;
@@ -147,6 +149,7 @@ async function derivarCodigosZattia() {
     if (!r.sku && sku) skuCompletados++;
     const barcode = r.barcode || varBarcode[`${r.product_id}|${r.size_id}`] || (STORE === 'zattia' && sku ? _bcDeSku(sku) : null); // código real de la variante; si no, derivar del SKU (Zattia)
     if (!r.barcode && barcode) bcCompletados++;
+    if (_DBG.has(r.product_id)) console.log(`[DBG] inv pid=${r.product_id} size_id=${r.size_id} size_name=${r.size_name} r.barcode=${r.barcode} sku=${sku} varBc=${varBarcode[`${r.product_id}|${r.size_id}`]} => barcode=${barcode}`);
     seen.set(key, {
       product_id: r.product_id,
       product_name: r.product_name || null,
