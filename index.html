@@ -9020,7 +9020,10 @@ const PERM_CAT = [
   { key: 'colores', label: 'Colores', info: 'Análisis de ventas por color de prenda.', brands: ['zattia'] },
   { key: 'talles', label: 'Talles', info: 'Análisis de ventas por talle.', brands: ['zattia'] },
   { key: 'marketing', label: '📸 Marketing', info: 'Armado de publicaciones (fotos + textos) para redes y TiendaNube.', brands: ['bdi', 'zattia'] },
-  { key: 'sesion-fotos', label: '📷 Sesión de fotos', info: 'Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.', brands: ['bdi', 'zattia'] },
+  { key: 'sesion-fotos', label: '📷 Sesión de fotos', info: 'Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.', brands: ['bdi', 'zattia'], subs: [
+      { key: 'quitar-item', label: '🗑 Puede quitar ítems de una solicitud', info: 'Puede quitar variantes de una solicitud (queda registrado quién y por qué). Los admins pueden siempre. Sin este permiso, solo ve la solicitud.' },
+      { key: 'editar-desc', label: '✏️ Puede editar la descripción', info: 'Puede cambiar el texto/descripción de una solicitud. Los admins pueden siempre.' },
+  ] },
   { key: 'comisiones', label: '💵 Comisiones y margen', info: 'Simulador de comisiones de vendedores y cálculo de markup/margen.', brands: ['bdi', 'zattia'] },
   { key: 'margenes', label: '📊 Margen por producto', info: 'Margen y markup de cada producto disponible, comparado con el objetivo.', brands: ['bdi', 'zattia'] },
   { key: 'etiquetas', label: '🏷️ Etiquetas', info: 'Impresión de etiquetas con código de barras.', brands: ['bdi', 'zattia'], subs: [
@@ -9495,11 +9498,14 @@ function sfProcesar() {
   sfRender();
 }
 function sfEstado(id, val) { const s = sfData.find(x => x.id === id); if (!s) return; s.estado = val; sfGuardar(); }
-function sfSetDesc(id, val) { if (!_esAdmin()) return; const s = sfData.find(x => x.id === id); if (!s) return; s.descripcion = val; sfGuardar(); }
+// Permisos granulares de Sesión de fotos (los admins pueden siempre; si no, según lo tildado en Usuarios).
+function _sfPuedeQuitarItem() { return _esAdmin() || _puedeVer(_cuentaKey(), 'sesion-fotos.quitar-item'); }
+function _sfPuedeEditarDesc() { return _esAdmin() || _puedeVer(_cuentaKey(), 'sesion-fotos.editar-desc'); }
+function sfSetDesc(id, val) { if (!_sfPuedeEditarDesc()) return; const s = sfData.find(x => x.id === id); if (!s) return; s.descripcion = val; sfGuardar(); }
 function sfBorrar(id) { if (!confirm('¿Eliminar esta solicitud del historial?')) return; sfData = sfData.filter(x => x.id !== id); if (sfViendo === id) sfViendo = null; sfGuardar(); sfRender(); }
 // Quitar una variante de la solicitud (solo admin, antes de crear las ventas). Queda registrada en s.eliminados.
 function sfEliminarItem(id, vid) {
-  if (!_esAdmin()) return;
+  if (!_sfPuedeQuitarItem()) return;
   const s = sfData.find(x => x.id === id); if (!s) return;
   if (s.ventas) { alert('Ya se crearon las ventas de esta solicitud; no se puede quitar.'); return; }
   const it = (s.items || []).find(i => i.vid === vid); if (!it) return;
@@ -9771,8 +9777,8 @@ function sfVerHtml(s) {
     const totQ = arr.reduce((a, i) => a + i.qty, 0);
     const confTot = arr.reduce((a, i) => a + conf(i), 0);
     const completo = confTot >= totQ;
-    const puedeQuitar = _esAdmin() && !s.ventas;
-    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.manual ? ` <span style="background:#EDE9FE;color:#5B21B6;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Sin código — se cuenta a mano">✍️ a mano</span>` : (i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : '')}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;white-space:nowrap;">${i.manual ? `<button onclick="sfManualAjustar('${s.id}','${i.vid}',-1)" title="Quitar 1" style="border:1px solid #DDD6FE;background:#fff;color:#5B21B6;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">−</button> ${c}/${i.qty} <button onclick="sfManualAjustar('${s.id}','${i.vid}',1)" title="Sumar 1" style="border:1px solid #7C3AED;background:#7C3AED;color:#fff;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">+</button>` : `${c}/${i.qty}`}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;">${puedeQuitar ? `<button onclick="sfEliminarItem('${s.id}','${i.vid}')" title="Quitar de la solicitud (solo admin)" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>` : ''}</td></tr>`; }).join('');
+    const puedeQuitar = _sfPuedeQuitarItem() && !s.ventas;
+    const rows = arr.map(i => { const c = conf(i); const ok = c >= i.qty; return `<tr style="${ok ? 'background:#F0FDF4;' : ''}"><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${ok ? '✅' : '⬜'} ${esc(i.nombre)}${i.manual ? ` <span style="background:#EDE9FE;color:#5B21B6;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Sin código — se cuenta a mano">✍️ a mano</span>` : (i.nuevo ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:0 6px;font-size:10px;font-weight:600;" title="Retiro para fotos sin venta generada">🆕 sin venta</span>` : '')}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;">${esc(i.variante)}${i.nuevo && i.barcode ? `<div style="font-size:11px;color:#9CA3AF;font-family:monospace;">${esc(i.barcode)}${i.pendiente ? ' · pendiente en GN' : ''}</div>` : ''}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;color:#6B7280;">${esc(i.sku) || '—'}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;font-weight:600;white-space:nowrap;">${i.manual ? `<button onclick="sfManualAjustar('${s.id}','${i.vid}',-1)" title="Quitar 1" style="border:1px solid #DDD6FE;background:#fff;color:#5B21B6;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">−</button> ${c}/${i.qty} <button onclick="sfManualAjustar('${s.id}','${i.vid}',1)" title="Sumar 1" style="border:1px solid #7C3AED;background:#7C3AED;color:#fff;border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;font-weight:700;vertical-align:middle;">+</button>` : `${c}/${i.qty}`}</td><td style="padding:3px 6px;border-top:1px solid #F1F5F9;text-align:right;">${puedeQuitar ? `<button onclick="sfEliminarItem('${s.id}','${i.vid}')" title="Quitar de la solicitud" style="border:none;background:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>` : ''}</td></tr>`; }).join('');
     const fbKey = origen + '-' + sfFase;
     const fb = (window._sfFb && window._sfFb.key === fbKey) ? window._sfFb.html : '';
     return `<div style="border:1px solid ${completo ? '#A7F3D0' : '#E5E7EB'};border-radius:9px;padding:10px 12px;margin-bottom:10px;">
@@ -9796,8 +9802,8 @@ function sfVerHtml(s) {
   return `<div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-sm" onclick="sfVolver()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button>
-      ${_esAdmin()
-      ? `<input value="${esc(s.descripcion)}" onchange="sfSetDesc('${s.id}',this.value)" placeholder="Descripción" title="Editar descripción (solo administradores)" style="font-weight:700;font-size:15px;border:none;border-bottom:1px solid #E5E7EB;padding:2px 0;min-width:200px;flex:1;background:transparent;">`
+      ${_sfPuedeEditarDesc()
+      ? `<input value="${esc(s.descripcion)}" onchange="sfSetDesc('${s.id}',this.value)" placeholder="Descripción" title="Editar descripción de la solicitud" style="font-weight:700;font-size:15px;border:none;border-bottom:1px solid #E5E7EB;padding:2px 0;min-width:200px;flex:1;background:transparent;">`
       : `<div style="font-weight:700;font-size:15px;">${esc(s.descripcion) || 'Solicitud'}</div>`}
       <span style="color:#9CA3AF;font-size:12px;">${esc(s.fecha)}</span>
       <button class="btn-sm" onclick="sfEtiquetaBolsa('${s.id}')" title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style="background:#fff;border:1px solid #D1D5DB;">🏷️ Etiqueta de bolsa</button>
