@@ -1070,6 +1070,7 @@
         <div class="tabs" style="margin-bottom:0;">
           <button class="tab active" id="eti-sub-btn-dep" onclick="etiSwitchSub('dep', this)">🏬 Etiquetas Depósito</button>
           <button class="tab" id="eti-sub-btn-loc" onclick="etiSwitchSub('loc', this)">🏪 Etiquetas Local</button>
+          <button class="tab" id="eti-sub-btn-promo" onclick="etiSwitchSub('promo', this)">🔥 Etiquetas Promo</button>
           <button class="tab" id="eti-sub-btn-sku" onclick="etiSwitchSub('sku', this)">🔢 Etiquetas SKU</button>
           <button class="tab" id="eti-sub-btn-libre" onclick="etiSwitchSub('libre', this)">✏️ Etiqueta libre</button>
         </div>
@@ -1147,6 +1148,33 @@
             <div id="eti-fp-preview" style="width:200px;height:100px;border:1px solid #E5E7EB;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px;background:#fff;"></div>
             <button class="btn-sm" onclick="etiFPImprimirSolo()">🖨️ Imprimir solo formas de pago…</button>
           </div>
+        </div>
+      </div>
+
+      <!-- PROMO (precio anterior tachado + nuevo) -->
+      <div id="eti-sub-promo" style="display:none;">
+        <div class="card" style="border:1px solid #FBCFE8;background:#FDF2F8;">
+          <div style="font-size:15px;font-weight:700;margin-bottom:2px;">⚡ Impresión rápida (escáner)</div>
+          <div style="font-size:12px;color:#6B7280;margin-bottom:10px;">Escaneá el código de un producto <b>en promoción</b>: imprime su etiqueta con el <b>precio anterior tachado</b> y el <b>nuevo</b>. Si el producto no tiene promo en TiendaNube, te avisa.</div>
+          <input type="text" id="eti-scan-input-promo" onkeydown="etiScanKey(event, 'promo')" placeholder="🔫 Escaneá acá el código de barras…" style="width:320px;font-size:15px;padding:9px 12px;border:2px solid #DB2777;border-radius:8px;">
+          <div id="eti-scan-feedback-promo" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-size:16px;font-weight:700;">🔥 Etiquetas Promo</div>
+              <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Solo productos con <b>precio promocional</b> en TiendaNube. Muestra el <b>precio anterior tachado</b> (chico) y el <b>nuevo</b> (grande). Si cambiaste precios, tocá <b>🔄 Actualizar precios</b>.</div>
+            </div>
+            <input type="text" id="eti-search-promo" placeholder="Buscar producto, SKU o código…" oninput="etiRenderTabla('promo')" style="width:240px;">
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn-sm" id="eti-btn-imprimir-promo" onclick="etiImprimir('promo')" disabled style="background:#1F2937;color:#fff;">🖨️ Imprimir etiquetas</button>
+            <button class="btn-sm" onclick="etiActualizarPreciosTN(this)" title="Trae los precios más nuevos desde TiendaNube (promo o normal)" style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar precios</button>
+            <button class="btn-sm" onclick="etiLimpiar('promo')">Limpiar cantidades</button>
+            <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;" title="Al imprimir, vacía las cantidades cargadas para no arrastrarlas a la próxima vez."><input type="checkbox" id="eti-autoclear-promo" onchange="etiSetAutoClear(this.checked)"> Borrar cantidades al imprimir</label>
+            <span id="eti-total-promo" style="font-size:12px;color:#6B7280;">Cargá cantidades para imprimir</span>
+          </div>
+          <div id="eti-tabla-promo" style="overflow-x:auto;max-height:560px;overflow-y:auto;"></div>
         </div>
       </div>
 
@@ -6511,13 +6539,14 @@ function switchTab(id) {
 // Impresión de etiquetas (BDI) — tabla con cantidades + PDF Code 128
 // ════════════════════════════════════════════════════════════════
 // Modos: 'dep' (depósito), 'loc' (local con precio), 'sku' (solo el SKU).
-let etiCant = { dep: {}, loc: {}, sku: {} };
+let etiCant = { dep: {}, loc: {}, sku: {}, promo: {} };
 let _etiPrecioMap = {}; // pid -> precio (el más barato entre minorista GN y promo TN)
+let _etiPromoMap = {};  // pid -> { normal, promo } (solo productos con promo real en TN)
 
 // Persistencia por cuenta y por modo (sobrevive a refrescos/cierres)
 function etiKey(modo) { return 'monitor_etiquetas_' + modo + '_' + (currentCuenta === CUENTAS.zattia ? 'zattia' : 'bdi'); }
 function etiLoad() {
-  ['dep', 'loc', 'sku'].forEach(m => {
+  ['dep', 'loc', 'sku', 'promo'].forEach(m => {
     try { const raw = localStorage.getItem(etiKey(m)); etiCant[m] = raw ? JSON.parse(raw) : {}; }
     catch { etiCant[m] = {}; }
   });
@@ -6529,11 +6558,11 @@ function etiAutoClearKey() { return 'monitor_eti_autoclear_' + (currentCuenta ==
 function etiAutoClear() { return localStorage.getItem(etiAutoClearKey()) !== '0'; } // ausente o '1' = activado
 function etiSetAutoClear(on) {
   _lsGuardar(etiAutoClearKey(), on ? '1' : '0');
-  ['dep', 'loc', 'sku'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
+  ['dep', 'loc', 'sku', 'promo'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
 }
 function etiSyncAutoClearUI() {
   const on = etiAutoClear();
-  ['dep', 'loc', 'sku'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
+  ['dep', 'loc', 'sku', 'promo'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
 }
 
 async function renderEtiquetas() {
@@ -6555,6 +6584,7 @@ async function renderEtiquetas() {
   }
   _etiBuildPrecios();
   etiRenderTabla('loc'); // re-render ya con los precios
+  etiRenderTabla('promo');
 }
 
 function etiSwitchSub(name, btn) {
@@ -6562,9 +6592,10 @@ function etiSwitchSub(name, btn) {
   document.getElementById('eti-sub-loc').style.display = name === 'loc' ? '' : 'none';
   document.getElementById('eti-sub-sku').style.display = name === 'sku' ? '' : 'none';
   document.getElementById('eti-sub-libre').style.display = name === 'libre' ? '' : 'none';
-  document.querySelectorAll('#tab-etiquetas > .tabs .tab').forEach(b => b.classList.remove('active'));
+  const subPromo = document.getElementById('eti-sub-promo'); if (subPromo) subPromo.style.display = name === 'promo' ? '' : 'none';
+  document.querySelectorAll('#tab-etiquetas > .tabs .tab, #tab-etiquetas .tabs .tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (name === 'loc' || name === 'sku' || name === 'dep') setTimeout(() => { const i = document.getElementById('eti-scan-input-' + name); if (i) i.focus(); }, 50);
+  if (name === 'loc' || name === 'sku' || name === 'dep' || name === 'promo') setTimeout(() => { const i = document.getElementById('eti-scan-input-' + name); if (i) i.focus(); }, 50);
   if (name === 'libre') libreRenderLineas();
 }
 
@@ -6573,14 +6604,23 @@ function etiSwitchSub(name, btn) {
 function _etiBuildPrecios() {
   const idx = _mktIndexTN();
   _etiPrecioMap = {};
+  _etiPromoMap = {};
   (allProductos || []).forEach(p => {
     const tn = _mktFindTN(p, idx);
     let precio = 0;
     if (tn) precio = (tn.promo_price > 0) ? tn.promo_price : (tn.price > 0 ? tn.price : 0);
     if (!precio && p.retailer_price > 0) precio = p.retailer_price; // respaldo GN si no está en TN
     _etiPrecioMap[p.id] = precio || 0;
+    // Promo: solo si TN tiene promo_price y es MENOR al precio normal (descuento real)
+    if (tn && tn.promo_price > 0) {
+      const normal = tn.price > 0 ? tn.price : (p.retailer_price > 0 ? p.retailer_price : 0);
+      if (normal > tn.promo_price) _etiPromoMap[p.id] = { normal, promo: tn.promo_price };
+    }
   });
 }
+function _etiPromo(v) { return _etiPromoMap[v.pid] || null; }
+// Variantes en promoción y etiquetables (con código de barras).
+function _etiVariantesPromo() { return _etiVariantes().filter(v => _etiPromoMap[v.pid]); }
 // Fuerza el refresco de los precios desde TiendaNube (saltea la caché de 1h) y recalcula.
 async function etiActualizarPreciosTN(btn) {
   const orig = btn ? btn.textContent : '';
@@ -6591,6 +6631,7 @@ async function etiActualizarPreciosTN(btn) {
     if (d && d.products) { window._mktTNData = d.products; if (d.categories) window._mktTNCats = d.categories; }
     _etiBuildPrecios();
     etiRenderTabla('loc');
+    etiRenderTabla('promo');
     if (btn) { btn.textContent = '✓ Precios actualizados'; setTimeout(() => { btn.textContent = orig; }, 2500); }
   } catch (e) { if (btn) btn.textContent = '⚠️ Error'; }
   finally { if (btn) btn.disabled = false; }
@@ -6619,26 +6660,30 @@ function etiRenderTabla(modo) {
   const cont = document.getElementById('eti-tabla-' + modo);
   if (!cont) return;
   const conPrecio = modo === 'loc';
+  const esPromo = modo === 'promo';
   const q = (document.getElementById('eti-search-' + modo).value || '').toLowerCase().trim();
   const aviso = _etiAvisoSinCodigo();
-  let lista = _etiVariantes();
+  let lista = esPromo ? _etiVariantesPromo() : _etiVariantes();
   if (q) lista = lista.filter(v => (v.name || '').toLowerCase().includes(q) || (v.sku || '').toLowerCase().includes(q) || (v.barcode || '').includes(q));
   const CAP = 500;
   const shown = lista.slice(0, CAP);
   if (!shown.length) {
-    cont.innerHTML = aviso + '<div style="color:#9CA3AF;padding:24px;text-align:center;">No hay variantes con código de barras que coincidan.</div>';
+    cont.innerHTML = aviso + `<div style="color:#9CA3AF;padding:24px;text-align:center;">${esPromo ? 'No hay productos en promoción (con código de barras) que coincidan.' : 'No hay variantes con código de barras que coincidan.'}</div>`;
     etiActualizarTotal(modo);
     return;
   }
   const th = (t, extra) => `<th style="text-align:${extra || 'left'};padding:6px 10px;position:sticky;top:0;background:#F3F4F6;">${t}</th>`;
   let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>' +
-    th('Producto') + th('Variante') + th('SKU') + th('Código') + (conPrecio ? th('Precio', 'right') : '') + th('Stock', 'center') + th('Etiquetas', 'center') + '</tr></thead><tbody>';
+    th('Producto') + th('Variante') + th('SKU') + th('Código') + (conPrecio ? th('Precio', 'right') : '') + (esPromo ? th('Antes', 'right') + th('Ahora', 'right') : '') + th('Stock', 'center') + th('Etiquetas', 'center') + '</tr></thead><tbody>';
   shown.forEach(v => {
     const cant = etiCant[modo][v.id] || '';
     let precioCell = '';
     if (conPrecio) {
       const p = _etiPrecio(v);
       precioCell = `<td style="padding:5px 10px;text-align:right;font-weight:600;">${p ? '$' + Math.round(p).toLocaleString('es-AR') : '—'}</td>`;
+    } else if (esPromo) {
+      const pr = _etiPromo(v) || {};
+      precioCell = `<td style="padding:5px 10px;text-align:right;color:#9CA3AF;text-decoration:line-through;">${pr.normal ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td><td style="padding:5px 10px;text-align:right;font-weight:700;color:#DB2777;">${pr.promo ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>`;
     }
     html += `<tr style="border-top:1px solid #EEF0F2;">
       <td style="padding:5px 10px;">${esc(v.name || '—')}</td>
@@ -6715,6 +6760,47 @@ function _etiBuildPdf(labels, modo) {
       let fs = 28; pdf.setFontSize(fs);
       while (fs > 8 && pdf.getTextWidth(txt) > (W - M * 2)) { fs -= 1; pdf.setFontSize(fs); }
       pdf.text(txt, CX, Hh / 2, { align: 'center', baseline: 'middle' });
+      return;
+    }
+
+    if (modo === 'promo') {
+      // ── ETIQUETA DE PROMO ── 1ª fila: precio viejo (chico, tachado, izq) + nuevo (grande, der). Luego nombre, variante, código, SKU.
+      const pr = _etiPromo(v) || { normal: _etiPrecio(v), promo: _etiPrecio(v) };
+      const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+      const nameFS = 8, varFS = 7.5, skuFS = 7.5;
+      const priceRowH = 5.0, nameLineH = 2.9, varLineH = 2.7, skuLineH = 2.8;
+      const gPriceName = 2.0, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0;
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(nameFS);
+      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2);
+      const nameH = nom.length * nameLineH;
+      const skuBlock = v.sku ? (gBarSku + skuLineH) : 0;
+      const nonBar = priceRowH + gPriceName + nameH + gNameVar + varLineH + gVarBar + skuBlock;
+      let barH = 5.5;
+      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar);
+      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2);
+      // 1) Fila de precios
+      const oldX = W * 0.30, newX = W * 0.70, midY = y + priceRowH / 2;
+      const oldTxt = fmt(pr.normal);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120);
+      pdf.text(oldTxt, oldX, midY, { align: 'center', baseline: 'middle' });
+      const ow = pdf.getTextWidth(oldTxt);
+      pdf.setDrawColor(120); pdf.setLineWidth(0.35); pdf.line(oldX - ow / 2 - 0.4, midY, oldX + ow / 2 + 0.4, midY);
+      pdf.setTextColor(0); pdf.setDrawColor(0);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13.5);
+      pdf.text(fmt(pr.promo), newX, midY, { align: 'center', baseline: 'middle' });
+      y += priceRowH + gPriceName;
+      // 2) Nombre
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(nameFS);
+      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' });
+      y += nameH + gNameVar;
+      // 3) Variante
+      pdf.setFontSize(varFS);
+      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' });
+      y += varLineH + gVarBar;
+      // 4) Código de barras
+      barras(y, barH); y += barH;
+      // 5) SKU
+      if (v.sku) { y += gBarSku; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(skuFS); pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' }); }
       return;
     }
 
@@ -6846,11 +6932,15 @@ function etiScan(modo) {
     || vars.find(x => (x.sku || '').toLowerCase() === code.toLowerCase());
   if (!v) { fb.innerHTML = `<span style="color:#DC2626;">✗ No se encontró ningún producto con el código <b>${esc(code)}</b>.</span>`; inp.focus(); return; }
   if (modo === 'sku' && !v.sku) { fb.innerHTML = `<span style="color:#DC2626;">✗ <b>${esc(v.name || '')}</b> no tiene SKU cargado.</span>`; inp.focus(); return; }
+  if (modo === 'promo' && !_etiPromo(v)) { fb.innerHTML = `<span style="color:#DC2626;">✗ <b>${esc(v.name || '')}</b> no está en promoción en TiendaNube.</span>`; inp.focus(); return; }
   if (!window.jspdf || !window.jspdf.jsPDF || typeof JsBarcode === 'undefined') { fb.innerHTML = '<span style="color:#D97706;">Cargando el generador… escaneá de nuevo en unos segundos.</span>'; return; }
   const conFP = modo === 'loc' && document.getElementById('eti-fp-incluir') && document.getElementById('eti-fp-incluir').checked;
   _etiPrint(_etiBuildPdf(conFP ? [v, { __fp: true }] : [v], modo));
   const p = _etiPrecio(v);
-  const extra = modo === 'sku' ? (' · SKU ' + esc(v.sku)) : (modo === 'loc' && p ? ' · $' + Math.round(p).toLocaleString('es-AR') : '');
+  const prPromo = modo === 'promo' ? _etiPromo(v) : null;
+  const extra = modo === 'sku' ? (' · SKU ' + esc(v.sku))
+    : prPromo ? ` · $${Math.round(prPromo.normal).toLocaleString('es-AR')} → $${Math.round(prPromo.promo).toLocaleString('es-AR')}`
+    : (modo === 'loc' && p ? ' · $' + Math.round(p).toLocaleString('es-AR') : '');
   fb.innerHTML = `<span style="color:#16A34A;">✓ Imprimiendo: <b>${esc(v.name || '')}</b> · ${esc(v.size || '')}${extra}</span>`;
   inp.focus();
 }
@@ -10261,6 +10351,9 @@ function aplicarVisibilidadTabs() {
     const b = document.getElementById('eti-sub-btn-' + s);
     if (b) b.style.display = _puedeVer(key, 'etiquetas.' + s) ? '' : 'none';
   });
+  // Promo usa el mismo permiso que Local (es una etiqueta con precio de TN)
+  const bPromo = document.getElementById('eti-sub-btn-promo');
+  if (bPromo) bPromo.style.display = _puedeVer(key, 'etiquetas.loc') ? '' : 'none';
 
   // Resumen / KPIs + tarjeta de refresco
   const verResumen = _puedeVer(key, 'resumen');
