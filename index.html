@@ -12367,7 +12367,8 @@ async function crmSetPagina(id, value) {
   const s = crmSegRef(id);
   s.pagina = (value || '').trim();
   await crmSegGuardar();
-  if (cmCurrentId === id) abrirClienteModal(id); // refresca el botón "Abrir ↗"
+  if (cmCurrentId === id) abrirClienteModal(id); // refresca el botón "Abrir ↗" del modal
+  if (document.getElementById('crm-tbody')) renderCRMTabla(); // refresca la fila (link ↗) al cargar desde la vista principal
 }
 
 async function crmHableHoy(id) {
@@ -12635,12 +12636,12 @@ function renderCRMTabla() {
     if (c.phone) contactoBits.push(`<div style="font-size:11px;color:#6B7280;">${c.phone}</div>`);
     if (sinTel) contactoBits.push(`<div style="font-size:10px;color:#DC2626;font-weight:600;margin-top:2px;">📵 Sin teléfono</div>`);
     const pagina = (crmSeg[String(c.id)] || {}).pagina || '';
-    if (pagina) {
-      const ph = leadInstaHref(pagina);
-      contactoBits.push(`<div style="font-size:11px;margin-top:2px;">${ph
-        ? `<a href="${ph}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#DB2777;text-decoration:none;font-weight:600;">📷 ${escapeHtml(pagina)} ↗</a>`
-        : `<span style="color:#DB2777;font-weight:600;">📷 ${escapeHtml(pagina)}</span>`}</div>`);
-    }
+    const pagHref = pagina ? leadInstaHref(pagina) : '';
+    contactoBits.push(`<div style="display:flex;align-items:center;gap:5px;margin-top:3px;">
+      <span style="font-size:12px;line-height:1;">📷</span>
+      <input type="text" value="${escapeHtml(pagina)}" placeholder="@instagram" onchange="crmSetPagina(${c.id}, this.value)" onclick="event.stopPropagation()" style="flex:1;min-width:80px;max-width:160px;font-size:11px;padding:3px 6px;border:1px solid #F3C6E0;border-radius:6px;color:#DB2777;background:#fff;">
+      ${pagHref ? `<a href="${pagHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir Instagram" style="color:#DB2777;text-decoration:none;font-size:13px;font-weight:700;">↗</a>` : ''}
+    </div>`);
     const contacto = contactoBits.length ? contactoBits.join('') : '<span style="color:#9CA3AF;">—</span>';
     const ciudad = [c.city, c.province].filter(Boolean).join(', ') || '<span style="color:#9CA3AF;">—</span>';
     const ult = c.dias_ultimo === null ? '—' : (c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`);
