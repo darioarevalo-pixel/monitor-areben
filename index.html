@@ -1021,6 +1021,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-sm" onclick="saleExportXLSX()" style="background:#107C41;color:#fff;">⬇️ Excel (.xlsx)</button>
             <button class="btn-sm" onclick="saleExportPDF()" style="background:#16A34A;color:#fff;">📄 PDF</button>
+            <button class="btn-sm" id="com-sale-asignar-btn" onclick="comSaleAsignarCategoria()" style="background:#7C3AED;color:#fff;display:none;" title="Lleva estos productos a Asignar categoría de TiendaNube">🗂️ Asignar categoría en TN</button>
             <button class="btn-sm" onclick="saleVaciar()" style="background:#fff;border:1px solid #FCA5A5;color:#DC2626;">Vaciar</button>
           </div>
         </div>
@@ -6209,11 +6210,32 @@ function saleRemove(pid) { saleList = saleList.filter(x => String(x.pid) !== Str
 function saleVaciar() { if (!saleList.length) return; if (!confirm('¿Vaciar la lista de precios de sale?')) return; saleList = []; saleSave(); saleRender(); }
 function saleRender() {
   const c = document.getElementById('com-sale-cont'); if (!c) return;
+  const ab = document.getElementById('com-sale-asignar-btn');
+  if (ab) ab.style.display = (saleList.length && _cuentaKey() === 'zattia' && (_esAdmin() || _puedeVer('zattia', 'tncat.asignar'))) ? '' : 'none';
   if (!saleList.length) { c.innerHTML = '<div style="font-size:12px;color:#9CA3AF;padding:8px 0;">Todavía no agregaste productos. Traé un producto, definí el sale (% o precio) y tocá "➕ Agregar a la lista".</div>'; return; }
   const fmt = v => v == null ? '—' : '$' + Math.round(v).toLocaleString('es-AR');
   c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;"><th style="padding:5px 6px;">Producto</th><th style="text-align:right;">Actual</th><th style="text-align:right;">Sale</th><th style="text-align:center;">% desc</th><th style="text-align:center;">Markup</th><th style="text-align:center;">Margen</th><th></th></tr></thead><tbody>` +
     saleList.map(x => `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:5px 6px;font-weight:500;">${esc(x.name)}${x.sku ? ` <span style="font-size:11px;color:#9CA3AF;">${esc(x.sku)}</span>` : ''}</td><td style="text-align:right;color:#9CA3AF;">${fmt(x.actual)}</td><td style="text-align:right;font-weight:700;color:#DB2777;">${fmt(x.sale)}</td><td style="text-align:center;">${x.desc}%</td><td style="text-align:center;">${x.markup != null ? Math.round(x.markup) + '%' : '—'}</td><td style="text-align:center;color:${x.margin != null && x.margin < 0 ? '#DC2626' : '#16A34A'};font-weight:600;">${x.margin != null ? Math.round(x.margin) + '%' : '—'}</td><td style="text-align:right;"><button onclick="saleRemove('${x.pid}')" title="Quitar" style="border:none;background:none;color:#9CA3AF;cursor:pointer;font-size:15px;">×</button></td></tr>`).join('') +
     `</tbody></table>`;
+}
+// Lleva los productos de la lista de sale al flujo "Asignar categoría (Excel)" de TiendaNube (precarga los nombres).
+function comSaleAsignarCategoria() {
+  if (!saleList.length) { alert('La lista de sale está vacía.'); return; }
+  const nombres = [...new Set(saleList.map(x => String(x.name || '').trim()).filter(Boolean))];
+  if (!nombres.length) { alert('No hay nombres de producto para asignar.'); return; }
+  tncatAsigNombres = nombres;
+  switchTab('tncat');
+  setTimeout(() => {
+    const card = document.getElementById('tncat-card-asignar');
+    if (!card || card.style.display === 'none') {
+      alert('La asignación por lista está habilitada para Zattia (con el permiso correspondiente). Cambiá a Zattia o pedí habilitarlo para esta marca.');
+      return;
+    }
+    const info = document.getElementById('tncat-asig-info');
+    if (info) info.textContent = `${nombres.length} producto(s) traídos de la lista de sale`;
+    tncatAsigPrevisualizar();   // muestra "elegí categoría" si aún no elegiste una
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 250);
 }
 function saleExportXLSX() {
   if (!saleList.length) { alert('La lista está vacía.'); return; }
