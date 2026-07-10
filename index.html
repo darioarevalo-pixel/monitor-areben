@@ -12634,6 +12634,13 @@ function renderCRMTabla() {
     if (c.email) contactoBits.push(`<div style="font-size:12px;">${c.email}</div>`);
     if (c.phone) contactoBits.push(`<div style="font-size:11px;color:#6B7280;">${c.phone}</div>`);
     if (sinTel) contactoBits.push(`<div style="font-size:10px;color:#DC2626;font-weight:600;margin-top:2px;">📵 Sin teléfono</div>`);
+    const pagina = (crmSeg[String(c.id)] || {}).pagina || '';
+    if (pagina) {
+      const ph = leadInstaHref(pagina);
+      contactoBits.push(`<div style="font-size:11px;margin-top:2px;">${ph
+        ? `<a href="${ph}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#DB2777;text-decoration:none;font-weight:600;">📷 ${escapeHtml(pagina)} ↗</a>`
+        : `<span style="color:#DB2777;font-weight:600;">📷 ${escapeHtml(pagina)}</span>`}</div>`);
+    }
     const contacto = contactoBits.length ? contactoBits.join('') : '<span style="color:#9CA3AF;">—</span>';
     const ciudad = [c.city, c.province].filter(Boolean).join(', ') || '<span style="color:#9CA3AF;">—</span>';
     const ult = c.dias_ultimo === null ? '—' : (c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`);
