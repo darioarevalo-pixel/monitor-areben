@@ -1460,6 +1460,15 @@
       </div>
     </div>
 
+    <!-- ── Inicio (novedades: solicitudes de fotos pendientes de armar, multimarca) ── -->
+    <div id="tab-inicio" class="section">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;">🏠 Inicio</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:640px;">Novedades del día: solicitudes de <b>Sesión de fotos</b> pendientes de armar, de todas las marcas que manejás.</div>
+        <div id="inicio-cont" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
     <!-- ── Sesión de fotos (solicitud de productos) ────────────────────────── -->
     <div id="tab-sesion-fotos" class="section">
       <div class="card">
@@ -6418,6 +6427,7 @@ let _currentTabId = 'productos'; // sección activa (la nav resalta según esto)
 function markActiveNav(id) {
   document.querySelectorAll('.nav-cat.active, .nav-opt.active').forEach(b => b.classList.remove('active'));
   const tt = document.getElementById('topbar-title'); if (tt) tt.textContent = _navLabel(id);
+  document.title = (_navLabel(id) || 'Monitor') + ' · Monitor AREBEN';   // título de la pestaña del navegador según la sección
   const item = document.querySelector('.nav-bar [data-key="' + id + '"]');
   if (!item) return;
   item.classList.add('active');
@@ -6437,6 +6447,7 @@ function switchTab(id) {
   if (id === 'tncat') { if (!tabsRendered[id]) { tabsRendered[id] = true; tncatAbrir(); } return; }
   if (id === 'disenos') { if (!tabsRendered[id]) { tabsRendered[id] = true; dbInit(); } return; }
   if (id === 'ingresos') { ingInit(); return; }
+  if (id === 'inicio') { inicioAbrir(); return; }
   if (id === 'sesion-fotos') { sfAbrir(); return; }
   if (id === 'cupones') { cuponesInit(); return; }
   if (id === 'solicitudes-internas') { siAbrir(); return; }
@@ -9057,6 +9068,7 @@ const PERM_CAT = [
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
+  { id: 'inicio',    label: '🏠 Inicio',    keys: ['inicio'] },
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
@@ -9262,6 +9274,10 @@ function _activarSesion() {
   aplicarVisibilidadTabs();
   if (currentCuenta === CUENTAS.bdi || currentCuenta === CUENTAS.zattia) cargarImagenesTN();
   cargarTodo();
+  // Inicio queda como pestaña (primera del menú, con su globito de pendientes), NO como pantalla de arranque
+  // forzada — para no cambiarle el inicio a los empleados. Se puede activar como landing más adelante.
+  // Refresco automático liviano del contador de pendientes (cada 3 min) mientras la sesión esté abierta.
+  if (!_inicioPollT) _inicioPollT = setInterval(() => { if (currentUser && typeof inicioCargarPendientes === 'function') inicioCargarPendientes(); }, 180000);
 }
 
 async function doLogin() {
@@ -9339,6 +9355,7 @@ const TABS_POR_CUENTA = {
 let sfData = [];       // historial de solicitudes (KV, por marca)
 let sfDraft = null;    // borrador en armado: { desc, prods:[{pid,name,cat,variantes:[...]}] }
 let sfPendMkt = null;  // ids de producto que llegan desde Marketing
+let sfPendVer = null;  // id de solicitud a abrir directo (viene desde Inicio)
 let sfViendo = null;   // id de solicitud que se está viendo
 let sfSaveT = null;
 const SF_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
@@ -9409,8 +9426,83 @@ async function sfAbrir() {
   await sfInit();
   sfVincularNuevos();                          // vincula los productos nuevos que ya aparecieron en GN (por código de barras)
   if (sfPendMkt) { sfDraftDesdeProductos(sfPendMkt); sfPendMkt = null; }
+  if (sfPendVer) { const s = sfData.find(x => x.id === sfPendVer); if (s) { sfViendo = sfPendVer; sfFase = 'retiro'; window._sfFb = null; } sfPendVer = null; }
   sfRender();
   sfChequearAnulacionesTodas({ auto: true }); // al entrar, cierra las que ya se anularon en GN
+}
+// ════════ Inicio (novedades: solicitudes de fotos pendientes de armar, multimarca) ════════
+let inicioPend = [];        // solicitudes pendientes (de todas las marcas visibles), la más nueva primero
+let inicioPendCount = 0;    // total, para el globito del menú
+let _inicioPollT = null;    // timer del refresco automático
+// Marcas a las que este usuario puede ver Sesión de fotos (respeta cuenta fija).
+function _inicioMarcasVisibles() {
+  const fija = USERS[currentUser] && USERS[currentUser].cuenta;
+  const marcas = fija ? [fija] : ['bdi', 'zattia'];
+  return marcas.filter(m => _esAdmin() || _puedeVer(m, 'sesion-fotos'));
+}
+function _inicioNavBadge() { return inicioPendCount > 0 ? ` <span style="background:#DC2626;color:#fff;border-radius:999px;padding:0 6px;font-size:11px;font-weight:700;">${inicioPendCount}</span>` : ''; }
+// Conteo liviano (sin abrir la sección) de las solicitudes 'pendiente' de cada marca visible.
+async function inicioCargarPendientes() {
+  const marcas = _inicioMarcasVisibles();
+  if (!marcas.length) { inicioPend = []; inicioPendCount = 0; _inicioRefrescar(); return; }
+  const acc = [];
+  await Promise.all(marcas.map(async m => {
+    try {
+      const r = await fetch(`${SF_API}?kind=sesionfotos&store=${m}&nc=${Math.random()}`);
+      const d = await r.json();
+      const list = (d && d.ok && Array.isArray(d.list)) ? d.list : [];
+      list.filter(s => s.estado === 'pendiente').forEach(s => acc.push({ id: s.id, marca: m, descripcion: s.descripcion || '', creadoPor: s.creadoPor || '', creado: s.creado || 0, fecha: s.fecha || '', items: s.items || [] }));
+    } catch (e) {}
+  }));
+  acc.sort((a, b) => (b.creado || 0) - (a.creado || 0));
+  inicioPend = acc; inicioPendCount = acc.length;
+  _inicioRefrescar();
+}
+function _inicioRefrescar() { if (typeof renderNav === 'function') renderNav(); if (_currentTabId === 'inicio') inicioRender(); }
+function _inicioHora(creado, fecha) {
+  if (!creado) return fecha || '';
+  const d = new Date(creado), hoy = new Date(), ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1);
+  const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+  const dia = d.toDateString() === hoy.toDateString() ? 'hoy' : (d.toDateString() === ayer.toDateString() ? 'ayer' : d.toLocaleDateString('es-AR'));
+  return `${dia} ${hh}:${mm}`;
+}
+function _inicioMarcaChip(m) { return m === 'zattia' ? `<span style="background:#EDE9FE;color:#5B21B6;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;">Zattia</span>` : `<span style="background:#DBEAFE;color:#1E40AF;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;">BDI</span>`; }
+async function inicioAbrir() {
+  const cont = document.getElementById('inicio-cont');
+  if (cont && !inicioPend.length) cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando…</div>';
+  await inicioCargarPendientes();
+  inicioRender();
+}
+function inicioRender() {
+  const cont = document.getElementById('inicio-cont'); if (!cont) return;
+  let filas;
+  if (!inicioPend.length) {
+    filas = `<div style="color:#059669;font-size:14px;padding:14px 4px;">✅ Todo al día — no hay solicitudes de fotos pendientes de armar.</div>`;
+  } else {
+    filas = inicioPend.map(s => {
+      const uds = (s.items || []).reduce((a, i) => a + (+i.qty || 0), 0);
+      return `<div style="display:flex;gap:10px;align-items:center;border:1px solid #E5E7EB;border-radius:9px;padding:9px 11px;margin-bottom:7px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;cursor:pointer;" onclick="inicioVerSolicitud('${s.marca}','${s.id}')">
+          <div style="font-weight:600;">${_inicioMarcaChip(s.marca)} ${esc(s.descripcion) || '(sin descripción)'}</div>
+          <div style="font-size:12px;color:#9CA3AF;">${uds} u. · creada por ${esc(s.creadoPor) || '—'} · ${_inicioHora(s.creado, s.fecha)}</div>
+        </div>
+        <button class="btn-sm" onclick="inicioVerSolicitud('${s.marca}','${s.id}')" style="background:#fff;border:1px solid #D1D5DB;">Ver</button>
+      </div>`;
+    }).join('');
+  }
+  cont.innerHTML = `<div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="font-size:15px;font-weight:700;">📸 Solicitudes de fotos para armar${inicioPendCount ? ` (${inicioPendCount})` : ''}</div>
+      <button class="btn-sm" onclick="inicioCargarPendientes()" style="background:#fff;border:1px solid #D1D5DB;margin-left:auto;">🔄 Actualizar</button>
+    </div>
+    ${filas}
+  </div>`;
+}
+// Abrir una solicitud desde Inicio (cambia de marca si hace falta y la abre directo).
+async function inicioVerSolicitud(marca, id) {
+  sfPendVer = id;
+  if (_cuentaKey() !== marca) { await cambiarEmpresa(marca); }
+  switchTab('sesion-fotos');
 }
 // Vincula los ítems "nuevos" (escaneados sin estar en GN) con su producto de GN cuando aparece (mismo código de barras).
 function sfVincularNuevos() {
@@ -9457,14 +9549,53 @@ function sfDraftDesc(val) { if (sfDraft) sfDraft.desc = val; }
 function sfDraftQuitarProd(pid) { if (!sfDraft) return; sfDraft.prods = sfDraft.prods.filter(x => x.pid !== pid); sfRender(); }
 function sfNuevoDraft() { sfDraft = { desc: '', prods: [] }; sfDraftOrigen = (repoCfg && repoCfg.prioridadRetiro) || 'deposito'; sfViendo = null; sfRender(); }
 function sfCancelarDraft() { sfDraft = null; sfRender(); }
-function sfAddProductoPrompt() {
-  const q = (prompt('Buscar producto por nombre o SKU:') || '').trim().toLowerCase();
-  if (!q) return;
-  const pids = [...new Set((repoInv || []).filter(it => (String(it.name).toLowerCase().includes(q) || String(it.sku).toLowerCase().includes(q)) && ((+it.local || 0) + (+it.deposito || 0)) > 0).map(it => String(it.pid)))];
-  if (!pids.length) { alert('No encontré productos con stock para "' + q + '".'); return; }
+// Buscador incremental para agregar un producto: podés elegir la variante ahí mismo o traerlo entero.
+function sfAddBuscar(q) {
+  const cont = document.getElementById('sf-add-resultados'); if (!cont) return;
+  q = String(q || '').trim().toLowerCase();
+  if (q.length < 2) { cont.innerHTML = q ? '<div style="font-size:12px;color:#9CA3AF;padding:4px 2px;">Escribí al menos 2 letras…</div>' : ''; return; }
+  const yaEn = new Set(((sfDraft && sfDraft.prods) || []).map(p => String(p.pid)));
+  // Agrupa por producto y junta las variantes con stock.
+  const byPid = new Map();
+  for (const it of (repoInv || [])) {
+    if (((+it.local || 0) + (+it.deposito || 0)) <= 0) continue;
+    const pid = String(it.pid);
+    let e = byPid.get(pid);
+    if (!e) { e = { pid, name: it.name || '—', match: false, vars: [] }; byPid.set(pid, e); }
+    e.vars.push({ vid: it.vid, size: it.size || '—', sku: it.sku || '', stock: (+it.local || 0) + (+it.deposito || 0) });
+    if (String(it.name || '').toLowerCase().includes(q) || String(it.sku || '').toLowerCase().includes(q)) e.match = true;
+  }
+  const prods = [...byPid.values()].filter(e => e.match).slice(0, 25);
+  if (!prods.length) { cont.innerHTML = '<div style="font-size:12px;color:#9CA3AF;padding:4px 2px;">Sin resultados con stock.</div>'; return; }
+  cont.innerHTML = '<div style="border:1px solid #E5E7EB;border-radius:8px;max-height:280px;overflow:auto;">'
+    + prods.map(p => {
+      const vars = p.vars.slice().sort((a, b) => String(a.size).localeCompare(String(b.size), 'es', { numeric: true }));
+      const chips = vars.map(v => `<button onclick="sfAddProductoVariante('${p.pid}','${v.vid}')" title="${esc(v.sku)}" style="border:1px solid #C7D2FE;background:#EEF2FF;color:#3730A3;border-radius:7px;padding:2px 8px;font-size:12px;cursor:pointer;">${esc(v.size)} <span style="color:#6366F1;">(${v.stock})</span></button>`).join('');
+      return `<div style="padding:7px 10px;border-top:1px solid #F1F5F9;">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <span style="font-weight:600;font-size:13px;">${esc(p.name)}${yaEn.has(p.pid) ? ' <span style="color:#16A34A;font-size:11px;">✓ ya está</span>' : ''}</span>
+          <button onclick="sfAddProducto('${p.pid}')" style="border:1px solid #D1D5DB;background:#fff;border-radius:7px;padding:2px 8px;font-size:12px;cursor:pointer;white-space:nowrap;">Traer producto</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">${chips}</div>
+      </div>`;
+    }).join('')
+    + '</div>' + (prods.length >= 25 ? '<div style="font-size:11px;color:#9CA3AF;padding:3px 2px;">Mostrando 25 — afiná la búsqueda.</div>' : '');
+}
+// Traer el producto entero (variantes sin tildar, se eligen después en la tarjeta).
+function sfAddProducto(pid) {
   if (!sfDraft) sfDraft = { desc: '', prods: [] };
-  sfDraftDesdeProductos(pids);
+  sfDraftDesdeProductos([String(pid)]);
   sfRender();
+  setTimeout(() => { const el = document.getElementById('sf-add-search'); if (el) el.focus(); }, 30);
+}
+// Agregar el producto con UNA variante ya elegida (tildada, cantidad 1). Se puede tocar varias del mismo producto.
+function sfAddProductoVariante(pid, vid) {
+  if (!sfDraft) sfDraft = { desc: '', prods: [] };
+  sfDraftDesdeProductos([String(pid)]);
+  const p = sfDraft.prods.find(x => x.pid === String(pid));
+  if (p) { const v = p.variantes.find(x => x.vid === vid); if (v) { v.sel = true; if (!(+v.qty > 0)) v.qty = 1; } }
+  sfRender();
+  setTimeout(() => { const el = document.getElementById('sf-add-search'); if (el) el.focus(); }, 30);
 }
 // Procesar: asigna origen por variante (depósito si hay, si no local) y guarda la solicitud
 function sfProcesar() {
@@ -9711,9 +9842,10 @@ function sfDraftHtml() {
       <input type="text" id="sf-draft-scan" onkeydown="if(event.key==='Enter'){event.preventDefault();sfDraftScan(this);}" placeholder="🔫 Escaneá el código de barras…" style="width:100%;max-width:340px;font-size:15px;padding:9px 12px;border:2px solid #378ADD;border-radius:8px;box-sizing:border-box;">
       <div id="sf-draft-scan-fb" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-      <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="flex:1;min-width:220px;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
-      <button class="btn-sm" onclick="sfAddProductoPrompt()" style="background:#fff;border:1px solid #D1D5DB;">+ Agregar producto</button>
+    <div style="margin-bottom:10px;">
+      <input value="${esc(sfDraft.desc)}" onchange="sfDraftDesc(this.value)" placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;margin-bottom:8px;">
+      <input id="sf-add-search" oninput="sfAddBuscar(this.value)" onfocus="sfAddBuscar(this.value)" autocomplete="off" placeholder="🔎 Agregar producto: buscá por nombre o SKU y tocá el que querés…" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #D1D5DB;border-radius:7px;">
+      <div id="sf-add-resultados" style="margin-top:4px;"></div>
     </div>
     <div style="border:1px dashed #C4B5FD;background:#F5F3FF;border-radius:9px;padding:9px 11px;margin-bottom:10px;">
       <div style="font-weight:700;font-size:13px;color:#5B21B6;margin-bottom:4px;">✍️ Producto sin código de barra</div>
@@ -9724,7 +9856,7 @@ function sfDraftHtml() {
         <button class="btn-sm" onclick="sfDraftAddManual()" style="background:#7C3AED;color:#fff;border:1px solid #7C3AED;">+ Agregar</button>
       </div>
     </div>
-    ${(prods.length || pend.length || man.length) ? (rows + pendHtml + manHtml) : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Escaneá los productos ya separados (arriba), agregalos a mano con "+ Agregar producto", o cargá una prenda sin código.</div>'}
+    ${(prods.length || pend.length || man.length) ? (rows + pendHtml + manHtml) : '<div style="color:#9CA3AF;font-size:13px;padding:8px 0;">Escaneá los productos ya separados (arriba), buscalos con el 🔎 buscador, o cargá una prenda sin código.</div>'}
     <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
       <button class="btn-primary" onclick="sfProcesar()">✓ Procesar (${totalSel} u.)</button>
       <button class="btn-sm" onclick="sfCancelarDraft()">Cancelar</button>
@@ -10021,11 +10153,13 @@ function sfReportePDF(id, origen) {
 // ── Navegación: menús desplegables agrupados por categoría ───────────────────
 function _navLabel(key) {
   if (key === 'usuarios') return '👥 Usuarios';
+  if (key === 'inicio') return '🏠 Inicio';
   const s = PERM_CAT.find(x => x.key === key);
   return s ? s.label : key;
 }
 function _navItemVisible(brand, key) {
   if (key === 'usuarios') return _esAdmin();
+  if (key === 'inicio') return _esAdmin() || _puedeVer('bdi', 'sesion-fotos') || _puedeVer('zattia', 'sesion-fotos');
   const s = PERM_CAT.find(x => x.key === key);
   if (!s) return false;
   return s.brands.includes(brand) && _puedeVer(brand, key);
@@ -10042,9 +10176,9 @@ function renderNav() {
     const accent = cat.accent === 'marketing' ? ' nav-accent-mkt' : '';
     if (items.length === 1) {                           // un solo ítem → botón directo
       const k = items[0];
-      html += `<button class="nav-cat${accent}" data-key="${k}" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}</button>`;
+      html += `<button class="nav-cat${accent}" data-key="${k}" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}${k === 'inicio' ? _inicioNavBadge() : ''}</button>`;
     } else {
-      const opts = items.map(k => `<button class="nav-opt" data-key="${k}" role="menuitem" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}</button>`).join('');
+      const opts = items.map(k => `<button class="nav-opt" data-key="${k}" role="menuitem" onclick="navGo('${k}')">${_navLabel(k)}${k === 'solicitudes-internas' ? _siNavBadge() : ''}${k === 'inicio' ? _inicioNavBadge() : ''}</button>`).join('');
       const gb = items.includes('solicitudes-internas') ? _siNavBadge() : '';
       html += `<div class="nav-group" data-cat="${cat.id}"><button class="nav-cat${accent}" aria-haspopup="true" aria-expanded="false" onclick="navToggle(this)">${cat.label}${gb} <span class="nav-caret">▾</span></button><div class="nav-menu" role="menu">${opts}</div></div>`;
     }
@@ -10084,6 +10218,7 @@ function aplicarVisibilidadTabs() {
   // Navegación: reconstruye los menús desplegables según marca + permisos.
   renderNav();
   if (typeof siCargarPendientes === 'function') siCargarPendientes(); // badge + aviso de inicio de Solicitudes internas
+  if (typeof inicioCargarPendientes === 'function') inicioCargarPendientes(); // badge de Inicio (solicitudes de fotos pendientes, ambas marcas)
 
 
 
@@ -11692,6 +11827,8 @@ async function cambiarEmpresa(empresaKey) {
 
 function doLogout() {
   clearSession();
+  if (_inicioPollT) { clearInterval(_inicioPollT); _inicioPollT = null; }
+  inicioPend = []; inicioPendCount = 0;
   currentUser   = null;
   currentCuenta = null;
   _olvidarAdminPass();
