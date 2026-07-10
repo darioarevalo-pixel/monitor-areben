@@ -997,9 +997,9 @@
         <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:9px;padding:10px 12px;margin-bottom:14px;">
           <div style="font-size:12px;font-weight:600;color:#0369A1;margin-bottom:8px;">🔎 Traer un producto real (en vez de simular a mano)</div>
           <label style="font-size:12px;color:#666;">Producto
-            <input type="text" id="com-prod-search" list="com-prod-list" placeholder="Buscá por nombre o SKU…" onfocus="comProdPopular()" onchange="comProdSelect(this.value)" style="display:block;width:300px;max-width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;margin-top:3px;">
-            <datalist id="com-prod-list"></datalist>
+            <input type="text" id="com-prod-search" autocomplete="off" placeholder="Buscá por nombre o SKU…" oninput="comProdBuscar(this.value)" style="display:block;width:300px;max-width:100%;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;margin-top:3px;">
           </label>
+          <div id="com-prod-resultados" style="margin-top:4px;max-width:340px;"></div>
           <div id="com-prod-info" style="display:none;margin-top:10px;"></div>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
@@ -6099,14 +6099,26 @@ let comProdMap = {};
 let comProdSel = null;            // producto real traído al simulador
 let saleList = [];                // lista de precios de sale definidos (por cuenta, local)
 function _redondear90(v) { if (!v || v <= 0) return 0; const r = Math.round(v / 100) * 100 - 10; return r < 90 ? 90 : r; }
-function comProdPopular() {
-  const dl = document.getElementById('com-prod-list'); if (!dl) return;
-  comProdMap = {};
-  dl.innerHTML = (allProductos || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es')).map(p => {
-    const label = `${p.name}${p.sku ? ' · ' + p.sku : ''}`;
-    comProdMap[label] = p;
-    return `<option value="${esc(label)}">`;
-  }).join('');
+// Buscador propio (reemplaza al <datalist> nativo, que dibujaba el desplegable fuera de lugar).
+function comProdBuscar(q) {
+  const cont = document.getElementById('com-prod-resultados'); if (!cont) return;
+  q = String(q || '').trim().toLowerCase();
+  if (q.length < 2) { cont.innerHTML = ''; return; }
+  const res = (allProductos || [])
+    .filter(p => String(p.name || '').toLowerCase().includes(q) || String(p.sku || '').toLowerCase().includes(q))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'))
+    .slice(0, 25);
+  if (!res.length) { cont.innerHTML = '<div style="font-size:12px;color:#9CA3AF;padding:4px 2px;">Sin resultados.</div>'; return; }
+  cont.innerHTML = '<div style="border:1px solid #E5E7EB;border-radius:8px;max-height:240px;overflow:auto;background:#fff;">'
+    + res.map(p => `<div onclick="comProdElegir('${p.id}')" style="padding:7px 10px;border-top:1px solid #F1F5F9;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;"><span>${esc(p.name || '—')}</span>${p.sku ? `<span style="color:#9CA3AF;font-size:11px;white-space:nowrap;">${esc(p.sku)}</span>` : ''}</div>`).join('')
+    + '</div>';
+}
+function comProdElegir(id) {
+  const p = (allProductos || []).find(x => String(x.id) === String(id)); if (!p) return;
+  const label = `${p.name}${p.sku ? ' · ' + p.sku : ''}`;
+  const inp = document.getElementById('com-prod-search'); if (inp) inp.value = label;
+  const cont = document.getElementById('com-prod-resultados'); if (cont) cont.innerHTML = '';
+  comProdSelect(label);
 }
 async function comProdSelect(val) {
   const p = comProdMap[val] || (allProductos || []).find(x => `${x.name}${x.sku ? ' · ' + x.sku : ''}` === val) || (allProductos || []).find(x => x.name === val);
