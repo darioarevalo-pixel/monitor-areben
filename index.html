@@ -849,6 +849,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div id="mkt-cache-info" style="font-size:11px;color:#9CA3AF;"></div>
+          <button class="btn-sm" id="mkt-btn-refrescar" onclick="mktRefrescarFotos(this)" title="Trae las fotos y datos más nuevos de TiendaNube (bypassa el cache). Tocalo si cargaste fotos recién." style="background:#fff;border:1px solid #D1D5DB;">🔄 Actualizar fotos</button>
           <button class="btn-sm" id="mkt-btn-tablas" onclick="mktFiltroTablasPendientes()" title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes." style="display:none;background:#0F766E;color:#fff;">📏 Pendientes de tabla (con stock)</button>
           <button class="btn-sm" id="mkt-sf-btn" onclick="mktSelEntrar()" title="Elegí productos para mandarlos a Sesión de fotos" style="background:#7C3AED;color:#fff;">📷 Productos para sesión de fotos</button>
           <button class="btn-sm" id="mkt-sf-cancel" onclick="mktSelCancelar()" style="display:none;background:#fff;border:1px solid #D1D5DB;">Cancelar</button>
@@ -8262,6 +8263,7 @@ async function tnImgSubirTodo() {
   tnImgRender();
   btn.disabled = false;
   if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${ok} subidas</span>` + (sinVincular ? ` · <span style="color:#D97706;">⚠ ${sinVincular} sin vincular color (tocá 🔗 Revincular)</span>` : '') + (err ? ` · <span style="color:#DC2626;">${err} con error: ${esc([...new Set(errMsgs)].slice(0, 2).join(' / '))}</span>` : '');
+  if (ok) _mktBustAudit(); // refresca el audit para que las fotos nuevas se vean al instante en Marketing
 }
 // Revincula el color de una foto YA subida usando su image_id (no re-sube → no duplica).
 async function tnImgRevincular(gid, fid) {
@@ -8393,7 +8395,7 @@ async function tnImgSubirYPublicar(btn) {
     const base = `${TNCAT_URL.split('?')[0]}?store=${_cuentaKey()}`;
     const r = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'publicar', ids }) });
     const d = await r.json();
-    if (d.ok) { if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${d.publicados} producto(s) publicado(s) en TiendaNube</span>` + (d.errores && d.errores.length ? ` · <span style="color:#DC2626;">${d.errores.length} con error</span>` : ''); }
+    if (d.ok) { if (info) info.innerHTML = `<span style="color:#16A34A;">✅ ${d.publicados} producto(s) publicado(s) en TiendaNube</span>` + (d.errores && d.errores.length ? ` · <span style="color:#DC2626;">${d.errores.length} con error</span>` : ''); _mktBustAudit(); }
     else alert('Error al publicar: ' + (d.error || 'desconocido'));
   } catch (e) { alert('Error al publicar: ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
@@ -8530,7 +8532,18 @@ function mktSelBtn() {
   if (mktSelMode) { b.textContent = `📷 Mandar a sesión de fotos (${mktSfSel.size})`; b.setAttribute('onclick', 'mktSelMandar()'); if (c) c.style.display = ''; }
   else { b.textContent = '📷 Productos para sesión de fotos'; b.setAttribute('onclick', 'mktSelEntrar()'); if (c) c.style.display = 'none'; }
 }
-function mktSelEntrar() { mktSelMode = true; mktSfSel.clear(); const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = ''; mktSelBtn(); mktRender(); }
+async function mktSelEntrar() {
+  // Salvaguarda: si las fotos están viejas (>15 min), refrescar antes de elegir — así no se mandan a la
+  // sesión productos que ya tienen imágenes (el dato de "sin foto" queda fresco).
+  const STALE = 15 * 60 * 1000;
+  if (!_mktCachedAt || (Date.now() - _mktCachedAt) > STALE) {
+    const btn = document.getElementById('mkt-sf-btn'); const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando fotos…'; }
+    await cargarMarketingTab(true);
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+  mktSelMode = true; mktSfSel.clear(); const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = ''; mktSelBtn(); mktRender();
+}
 function mktSelCancelar() { mktSelMode = false; mktSfSel.clear(); const th = document.getElementById('mkt-th-sel'); if (th) th.style.display = 'none'; mktSelBtn(); mktRender(); }
 function mktSelMandar() {
   if (!mktSfSel.size) { alert('Tildá al menos un producto para mandar a Sesión de fotos.'); return; }
@@ -8656,13 +8669,15 @@ function mktDetalleRow(x) {
       </div></td></tr>`;
 }
 
-async function cargarMarketingTab() {
+let _mktCachedAt = 0; // ms del snapshot del audit de TN (para saber si está viejo)
+async function cargarMarketingTab(forzar) {
   document.getElementById('mkt-tbody').innerHTML =
     '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9CA3AF;">Cargando datos de TiendaNube y cruzando con stock/ventas…</td></tr>';
-  // Asegurar que tnImageMaps esté cargado (lo tira por dentro datos completos: cats + imágenes)
   const key = _cuentaKey();
   try {
-    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${key}`);
+    // forzar = bypassa el cache del endpoint (trae las fotos recién cargadas)
+    const url = `https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${key}` + (forzar ? `&refresh=1&nc=${Math.random()}` : '');
+    const r = await fetch(url);
     const data = await r.json();
     // Guardar payload completo en variable global para uso en filtros
     window._mktTNData = data.products || [];
@@ -8670,9 +8685,10 @@ async function cargarMarketingTab() {
     // Cache info
     if (data.cached_at) {
       const d = new Date(data.cached_at);
+      _mktCachedAt = d.getTime();
       document.getElementById('mkt-cache-info').textContent =
         'TN actualizado: ' + d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
-    }
+    } else { _mktCachedAt = Date.now(); }
     mktDataReady = true;
     mktPopulateCohortes();
     mktPopulateCategorias();
@@ -8682,6 +8698,22 @@ async function cargarMarketingTab() {
     document.getElementById('mkt-tbody').innerHTML =
       `<tr><td colspan="8" style="text-align:center;padding:30px;color:#DC2626;">Error: ${e.message}</td></tr>`;
   }
+}
+// Refresco forzado de fotos/datos de TN (bypassa el cache), con estado en el botón.
+async function mktRefrescarFotos(btn) {
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando fotos…'; }
+  try { await cargarMarketingTab(true); if (btn) { btn.textContent = '✓ Fotos actualizadas'; setTimeout(() => { btn.textContent = orig; }, 2500); } }
+  catch (e) { if (btn) btn.textContent = '⚠️ Error'; }
+  finally { if (btn) btn.disabled = false; }
+}
+// Bustea el cache del audit (refresh=1) y actualiza el payload en memoria. Se llama tras subir/publicar fotos.
+async function _mktBustAudit() {
+  try {
+    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}&refresh=1&nc=${Math.random()}`);
+    const d = await r.json();
+    if (d && d.products) { window._mktTNData = d.products; if (d.categories) window._mktTNCats = d.categories; if (d.cached_at) _mktCachedAt = new Date(d.cached_at).getTime(); }
+  } catch (e) {}
 }
 
 // Crear índice rápido TN producto matchado por SKU/nombre
