@@ -1699,6 +1699,7 @@
             <option value="nuevos">🆕 Nuevos</option>
             <option value="sin-tel">📵 Sin teléfono (cargar)</option>
           </select>
+          <label style="font-size:12px;color:#6B7280;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="crm-ver-descartados" onchange="crmToggleDescartados(this.checked)"> 🚫 Ver descartados</label>
           <span style="font-size:12px;color:#9CA3AF;margin-left:auto;" id="crm-count"></span>
         </div>
 
@@ -12015,7 +12016,11 @@ window.onload = async () => {
 let crmRows = [];                     // ventas raw filtradas (mayorista u otro)
 let crmCargadoCuenta = null;          // _cuentaKey() de la última carga del CRM; evita recargar al volver a la card
 let crmClientes = {};                 // map id -> info personal
-let crmAgregado = [];                 // [{ id, name, total_sales, total_amount, last_sale, ... }]
+let crmAgregado = [];                 // [{ id, name, total_sales, total_amount, last_sale, ... }] (solo activos)
+let crmDescartados = [];              // clientes marcados "ya no se dedica" (fuera de KPIs/segmentos/recontacto)
+let crmVerDescartados = false;        // toggle "Ver descartados" en la tabla
+function esDescartado(id) { const s = crmSeg[String(id)]; return !!(s && s.descartado); }
+function crmToggleDescartados(v) { crmVerDescartados = !!v; renderCRMTabla(); }
 let crmSortState = { col: 'total_amount', dir: -1 };
 let crmTelOverride = {};              // map id_cliente -> teléfono (completado desde el export de GN, en KV)
 let crmSeg = {};                      // map id_cliente -> { cadencia, ultimo_contacto, proximo_manual, notas[] } (en KV)
@@ -12289,6 +12294,10 @@ function segBloqueModalHTML(c) {
         <input type="checkbox" ${esMayoristaCliente(c.id) ? 'checked' : ''} onchange="crmSetMayorista(${c.id}, this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#7C3AED;">
         ⭐ Cliente mayorista <span style="font-weight:400;color:#9CA3AF;font-size:11px;">(aparece en el CRM Mayorista aunque compre por otro canal)</span>
       </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;font-size:13px;font-weight:600;color:#6B7280;">
+        <input type="checkbox" ${esDescartado(c.id) ? 'checked' : ''} onchange="crmSetDescartado(${c.id}, this.checked)" style="width:16px;height:16px;cursor:pointer;">
+        🚫 Ya no se dedica <span style="font-weight:400;color:#9CA3AF;font-size:11px;">(lo saca del CRM, KPIs y recontacto; reversible)</span>
+      </label>
       <div style="margin-bottom:12px;">
         <label style="font-size:11px;color:#6B7280;display:block;margin-bottom:3px;">Página / Instagram</label>
         <div style="display:flex;gap:6px;align-items:center;max-width:420px;">
@@ -12401,6 +12410,14 @@ async function crmSetPagina(id, value) {
   await crmSegGuardar();
   if (cmCurrentId === id) abrirClienteModal(id); // refresca el botón "Abrir ↗" del modal
   if (document.getElementById('crm-tbody')) renderCRMTabla(); // refresca la fila (link ↗) al cargar desde la vista principal
+}
+// "Ya no se dedica": saca al cliente del CRM (KPIs, segmentos, recontacto). Reversible.
+async function crmSetDescartado(id, val) {
+  const s = crmSegRef(id);
+  s.descartado = !!val;
+  await crmSegGuardar();
+  if (cmCurrentId === id) abrirClienteModal(id);
+  renderCRM(); // recalcula agregado (activos vs descartados) + KPIs + tabla
 }
 
 async function crmHableHoy(id) {
@@ -12535,7 +12552,9 @@ function calcularAgregadoCRM() {
       notas: seg.notas,
     });
   }
-  return result;
+  // Separar los "ya no se dedica": quedan fuera de KPIs/segmentos/recontacto (solo se ven con "Ver descartados").
+  crmDescartados = result.filter(c => esDescartado(c.id));
+  return result.filter(c => !esDescartado(c.id));
 }
 
 function segmentoCliente(c) {
@@ -12597,9 +12616,9 @@ function crmSort(col) {
 
 function renderCRMTabla() {
   const q = (document.getElementById('crm-search').value || '').trim().toLowerCase();
-  const seg = document.getElementById('crm-segmento-sel').value;
+  const seg = crmVerDescartados ? 'todos' : document.getElementById('crm-segmento-sel').value;
 
-  let lista = crmAgregado.slice();
+  let lista = (crmVerDescartados ? crmDescartados : crmAgregado).slice();
 
   if (seg === 'top') {
     lista.sort((a, b) => b.total_amount - a.total_amount);
@@ -12697,6 +12716,9 @@ function renderCRMTabla() {
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
           <button onclick="crmSetMayorista(${c.id}, ${!esMayoristaCliente(c.id)})" title="${esMayoristaCliente(c.id) ? 'Quitar de mayoristas' : 'Marcar como cliente mayorista'}" style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;vertical-align:middle;color:${esMayoristaCliente(c.id) ? '#F59E0B' : '#D1D5DB'};">★</button>
           ${waUrl ? `<a href="${waUrl}" onclick="event.preventDefault();abrirWhatsApp('${waPhone}');return false;" class="btn-sm" title="Abrir WhatsApp" aria-label="WhatsApp" style="text-decoration:none;display:inline-flex;align-items:center;color:#16A34A;">${WA_SVG}</a>` : ''}
+          ${crmVerDescartados
+            ? `<button onclick="crmSetDescartado(${c.id}, false)" title="Reactivar — vuelve al CRM" style="background:none;border:none;cursor:pointer;font-size:15px;line-height:1;vertical-align:middle;">↩️</button>`
+            : `<button onclick="crmSetDescartado(${c.id}, true)" title="Ya no se dedica — sacar del CRM (reversible)" style="background:none;border:none;cursor:pointer;font-size:14px;line-height:1;vertical-align:middle;color:#D1D5DB;">🚫</button>`}
         </td>
       </tr>
     `;
