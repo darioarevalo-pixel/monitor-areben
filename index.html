@@ -1587,6 +1587,24 @@
       </div>
     </div>
 
+    <!-- ── Conteo de Depósito (por producto, cantidades a mano) ─────────────── -->
+    <div id="tab-conteo-deposito" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">📦 Conteo de Depósito</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:700px;">Conteo físico del depósito <b>por producto</b>, cargando las cantidades a mano. Buscá un producto, contá todas sus variantes y terminalo. El ajuste a GN usa <b>stock vivo + diferencia</b>, así las ventas que entren durante el conteo no lo ensucian. Ideal: arrancá con los pedidos al día y sin despachar mientras contás.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn-sm" onclick="conteoDepActualizarGN(this)" title="Traé el stock más nuevo de GN al arrancar (con los pedidos al día y sin despachar)" style="background:#378ADD;color:#fff;">🔄 Traer stock de GN</button>
+            <button class="btn-sm" onclick="conteoDepHistorial()" style="background:#fff;border:1px solid #D1D5DB;">🕘 Historial</button>
+            <button class="btn-sm" onclick="conteoDepReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar</button>
+          </div>
+        </div>
+        <div id="conteodep-cont" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
     <!-- ── Productos caducados (depuración) ────────────────────────────────── -->
     <div id="tab-caducados" class="section">
       <div class="card">
@@ -6518,6 +6536,7 @@ function switchTab(id) {
   if (id === 'verif-ventas') { vvtaAbrir(); return; }
   if (id === 'reposicion') { repoInit(); return; }
   if (id === 'conteo') { conteoInit(); return; }
+  if (id === 'conteo-deposito') { conteoDepInit(); return; }
   if (id === 'caducados') { cadInit(); return; }
   if (id === 'ubicaciones') { ubicacionesInit(); return; }
   if (id === 'usuarios') { if (_esAdmin()) usuariosAbrir(); return; }
@@ -9211,6 +9230,7 @@ const PERM_CAT = [
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.', brands: ['bdi'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
   { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
+  { key: 'conteo-deposito', label: '🔢 Conteo', info: 'Conteo físico del depósito por producto (cargando cantidades a mano, no por escaneo). Buscás el producto, contás sus variantes y lo terminás. El ajuste a GN se calcula con stock vivo + diferencia, así las ventas durante el conteo no lo ensucian. Guarda historial de cada conteo aplicado.', brands: ['bdi', 'zattia'] },
   { key: 'cupones', label: '🎟️ Cupones', info: 'Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.', brands: ['bdi', 'zattia'], subs: [
       { key: 'crear', label: '✏️ Puede generar cupones', info: 'Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local.' },
   ] },
@@ -9228,6 +9248,7 @@ const NAV_CATS = [
   { id: 'inicio',    label: '🏠 Inicio',    keys: ['inicio'] },
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
+  { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
@@ -11379,6 +11400,333 @@ function conteoAjusteGN(file) {
   };
   reader.readAsArrayBuffer(file);
 }
+// ───────── Conteo de Depósito (por producto, cantidades a mano) ─────────
+// Ajuste por DIFERENCIA (±), nunca número absoluto. La diferencia se congela al TERMINAR cada
+// producto (contado − sistema del momento en que se abrió). Al aplicar, se relee el stock VIVO de
+// GN y se calcula nuevo_stock = vivo + diferencia. La app arma el Excel de ajuste sola desde la API.
+let cdepProducts = [];   // [{pid, name, variants:[{vid,sid,size,barcode,inventory_id,esperado}]}]
+let cdepState = {};      // pid -> {estado:'sin_iniciar'|'en_progreso'|'terminado', contado:{vid:n}, snap:{vid:sistema}, dif:{vid:d}}
+let cdepInicio = null;   // ms de cuándo arrancó el conteo
+let cdepFocusPid = null; // producto en modo enfocado (null = lista)
+let cdepSearch = '';
+let cdepOrderAsc = true;
+let cdepPreview = null;  // {rows, resumen, missing} calculado al Aplicar
+let cdepView = 'lista';  // 'lista' | 'foco' | 'preview' | 'historial'
+let cdepLoading = false;
+
+function _cdepKey() { return 'monitor_conteodep_' + _cuentaKey(); }
+function _cdepSave() { try { localStorage.setItem(_cdepKey(), JSON.stringify({ inicio: cdepInicio, prods: cdepState })); } catch (e) {} }
+function _cdepLoad() { try { const s = JSON.parse(localStorage.getItem(_cdepKey()) || '{}'); return (s && typeof s === 'object') ? s : {}; } catch (e) { return {}; } }
+function _cdepStore() { return _cuentaKey(); }
+
+// Elige la línea de inventario REAL cuando hay duplicados/fantasmas (mismo product_id+size_id):
+// la que tiene stock>0; en empate, la de inventory_id más bajo (la original; la fantasma es la nueva en 0).
+function _cdepPickReal(list) {
+  if (list.length === 1) return list[0];
+  const conStock = list.filter(r => Number(r.available_quantity) > 0);
+  const pool = conStock.length ? conStock : list;
+  return pool.slice().sort((a, b) => Number(a.inventory_id) - Number(b.inventory_id))[0];
+}
+function _cdepRealMap(rows) {
+  const g = {};
+  rows.forEach(r => { const vid = r.product_id + '_' + r.size_id; (g[vid] = g[vid] || []).push(r); });
+  const m = {}; Object.entries(g).forEach(([vid, list]) => { m[vid] = _cdepPickReal(list); });
+  return m;
+}
+
+async function _cdepFetchVivo() {
+  const r = await fetch('/api/inventario-vivo?store=' + _cdepStore() + '&nc=' + Date.now());
+  const d = await r.json();
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el stock en vivo de GN.');
+  return d;
+}
+
+async function conteoDepInit() {
+  const cont = document.getElementById('conteodep-cont');
+  if (cdepLoading) return;
+  cdepLoading = true;
+  if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando depósito en vivo desde Gestión Nube…</div>';
+  try {
+    const d = await _cdepFetchVivo();
+    const realMap = _cdepRealMap(d.rows || []);
+    const byPid = {};
+    Object.values(realMap).forEach(r => {
+      const pid = String(r.product_id);
+      if (!byPid[pid]) byPid[pid] = { pid, name: r.product_name || '—', variants: [] };
+      byPid[pid].variants.push({ vid: pid + '_' + r.size_id, sid: r.size_id, size: r.size_name || '—', barcode: r.barcode, inventory_id: r.inventory_id, esperado: Number(r.available_quantity) || 0 });
+    });
+    cdepProducts = Object.values(byPid).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const saved = _cdepLoad();
+    cdepState = (saved && saved.prods) ? saved.prods : {};
+    cdepInicio = saved ? (saved.inicio || null) : null;
+  } catch (e) {
+    cdepLoading = false;
+    if (cont) cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el stock en vivo: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="conteoDepInit()">Reintentar</button></div>';
+    return;
+  }
+  cdepLoading = false;
+  cdepFocusPid = null; cdepView = 'lista';
+  conteoDepRender();
+}
+
+async function conteoDepActualizarGN(btn) {
+  if (cdepLoading) return;
+  const hayContado = Object.values(cdepState).some(s => s.contado && Object.keys(s.contado).length);
+  if (hayContado && !confirm('Vas a traer el stock más nuevo de GN. Lo que ya contaste se mantiene (la diferencia de cada producto queda congelada). ¿Seguir?')) return;
+  const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Trayendo…'; }
+  await conteoDepInit();
+  if (btn) { btn.disabled = false; btn.textContent = orig; }
+}
+
+function conteoDepReset() {
+  if (!confirm('¿Reiniciar el conteo? Se borra todo lo cargado (los ajustes ya aplicados quedan en el Historial).')) return;
+  cdepState = {}; cdepInicio = null; cdepFocusPid = null; cdepView = 'lista'; _cdepSave();
+  conteoDepRender();
+}
+
+function _cdepEstado(pid) { const s = cdepState[String(pid)]; return s ? s.estado : 'sin_iniciar'; }
+function _cdepChipEstado(e) {
+  if (e === 'terminado') return '<span style="font-size:11px;background:#F0FDF4;color:#166534;border:1px solid #16A34A;border-radius:12px;padding:2px 8px;">✅ Terminado</span>';
+  if (e === 'en_progreso') return '<span style="font-size:11px;background:#FFFBEB;color:#B45309;border:1px solid #F59E0B;border-radius:12px;padding:2px 8px;">✏️ En progreso</span>';
+  return '<span style="font-size:11px;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:12px;padding:2px 8px;">Sin iniciar</span>';
+}
+
+function conteoDepRender() {
+  const cont = document.getElementById('conteodep-cont'); if (!cont) return;
+  if (cdepView === 'preview') return _cdepRenderPreview();
+  if (cdepView === 'historial') return; // lo renderiza su propia función async
+  if (cdepFocusPid) return _cdepRenderFoco();
+  _cdepRenderLista();
+}
+
+function _cdepRenderLista() {
+  const cont = document.getElementById('conteodep-cont'); if (!cont) return;
+  if (!cdepProducts.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos en el depósito. Tocá "Traer stock de GN".</div>'; return; }
+  const term = cdepProducts.filter(p => _cdepEstado(p.pid) === 'terminado').length;
+  const prog = cdepProducts.filter(p => _cdepEstado(p.pid) === 'en_progreso').length;
+  const q = cdepSearch.trim().toLowerCase();
+  const lista = q ? cdepProducts.filter(p => p.name.toLowerCase().includes(q)) : cdepProducts;
+  let html = '';
+  html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">`;
+  html += `<input id="conteodep-buscar" type="text" value="${esc(cdepSearch)}" oninput="conteoDepSearch(this.value)" placeholder="🔎 Buscá un producto (ej: Cover Case)…" autocomplete="off" style="flex:1;min-width:240px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;">`;
+  html += `</div>`;
+  html += `<div style="font-size:13px;margin-bottom:10px;color:#374151;"><b>${cdepProducts.length}</b> productos · <b style="color:#166534;">${term}</b> terminados · <b style="color:#B45309;">${prog}</b> en progreso</div>`;
+  if (_esAdmin() && term) {
+    html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="conteoDepAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} producto${term > 1 ? 's' : ''} terminado${term > 1 ? 's' : ''})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo de GN y genera el Excel de ajuste.</span></div>`;
+  }
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:7px 10px;">Producto</th><th style="text-align:center;width:90px;">Variantes</th><th style="text-align:center;width:130px;">Estado</th><th style="width:110px;"></th></tr></thead><tbody>`;
+  lista.slice(0, 400).forEach(p => {
+    const e = _cdepEstado(p.pid);
+    const btnTxt = e === 'terminado' ? 'Ver / editar' : (e === 'en_progreso' ? 'Seguir' : 'Contar');
+    const btnBg = e === 'sin_iniciar' ? '#378ADD' : '#fff';
+    const btnCol = e === 'sin_iniciar' ? '#fff' : '#1D4ED8';
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:7px 10px;">${esc(p.name)}</td><td style="text-align:center;color:#9CA3AF;">${p.variants.length}</td><td style="text-align:center;">${_cdepChipEstado(e)}</td><td style="text-align:right;padding-right:10px;"><button class="btn-sm" onclick="conteoDepOpen('${p.pid}')" style="background:${btnBg};color:${btnCol};border:1px solid #378ADD;">${btnTxt}</button></td></tr>`;
+  });
+  if (!lista.length) html += '<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan con la búsqueda.</td></tr>';
+  if (lista.length > 400) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 400 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+  const b = document.getElementById('conteodep-buscar'); if (b && document.activeElement !== b) { /* no robar foco */ }
+}
+
+function conteoDepSearch(v) { cdepSearch = v; _cdepRenderLista(); const b = document.getElementById('conteodep-buscar'); if (b) { b.focus(); const val = b.value; b.value = ''; b.value = val; } }
+
+function conteoDepOpen(pid) {
+  pid = String(pid);
+  const prod = cdepProducts.find(p => String(p.pid) === pid); if (!prod) return;
+  let st = cdepState[pid];
+  if (!st) st = cdepState[pid] = { estado: 'sin_iniciar', contado: {}, snap: {}, dif: {} };
+  if (!st.contado) st.contado = {}; if (!st.snap) st.snap = {}; if (!st.dif) st.dif = {};
+  // Congelar el "sistema" (baseline) la PRIMERA vez que se abre el producto para contar.
+  if (!Object.keys(st.snap).length) prod.variants.forEach(v => { st.snap[v.vid] = v.esperado; });
+  if (st.estado === 'sin_iniciar' || st.estado === 'terminado') st.estado = 'en_progreso';
+  if (!cdepInicio) cdepInicio = Date.now();
+  _cdepSave();
+  cdepFocusPid = pid; cdepView = 'foco';
+  conteoDepRender();
+}
+
+function conteoDepBack() {
+  const pid = cdepFocusPid; const st = pid ? cdepState[pid] : null;
+  if (st && st.estado !== 'terminado') { const any = st.contado && Object.keys(st.contado).length; st.estado = any ? 'en_progreso' : 'sin_iniciar'; _cdepSave(); }
+  cdepFocusPid = null; cdepView = 'lista';
+  conteoDepRender();
+}
+
+function conteoDepToggleOrder() { cdepOrderAsc = !cdepOrderAsc; _cdepRenderFoco(); }
+
+function conteoDepSetCount(pid, vid, val) {
+  const st = cdepState[String(pid)]; if (!st) return; if (!st.contado) st.contado = {};
+  const s = String(val).trim();
+  if (s === '') delete st.contado[vid]; else st.contado[vid] = Math.max(0, parseInt(s) || 0);
+  _cdepSave();
+  _cdepRenderFoco();
+}
+
+function _cdepRenderFoco() {
+  const cont = document.getElementById('conteodep-cont'); if (!cont) return;
+  const pid = cdepFocusPid; const prod = cdepProducts.find(p => String(p.pid) === String(pid)); if (!prod) { conteoDepBack(); return; }
+  const st = cdepState[pid] || { contado: {}, snap: {}, dif: {} };
+  const vars = prod.variants.slice().sort((a, b) => _repoModelSort(a.size, b.size));
+  if (!cdepOrderAsc) vars.reverse();
+  const sinCargar = vars.filter(v => st.contado[v.vid] == null).length;
+  let html = '';
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">`;
+  html += `<div><button class="btn-sm" onclick="conteoDepBack()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button> <b style="font-size:15px;margin-left:6px;">${esc(prod.name)}</b></div>`;
+  html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn-sm" onclick="conteoDepToggleOrder()" style="background:#fff;border:1px solid #D1D5DB;" title="Ordenar los modelos">${cdepOrderAsc ? '↓ Modelo ↑' : '↑ Modelo ↓'}</button><button class="btn-sm" onclick="conteoDepFinish('${prod.pid}')" style="background:#16A34A;color:#fff;font-weight:600;">✓ Terminar producto</button></div>`;
+  html += `</div>`;
+  html += `<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">Cargá la cantidad física de cada variante. Las que dejes en blanco cuentan como <b>0</b> al terminar. ${sinCargar ? `<b style="color:#B45309;">${sinCargar} sin cargar.</b>` : ''}</div>`;
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:74px"><col style="width:80px"><col style="width:60px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Físico</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
+  vars.forEach(v => {
+    const sis = (st.snap[v.vid] != null) ? st.snap[v.vid] : v.esperado;
+    const con = st.contado[v.vid];
+    const dif = (con == null) ? null : (con - sis);
+    const difTxt = dif == null ? '—' : ((dif > 0 ? '+' : '') + dif);
+    const difCol = dif == null ? '#9CA3AF' : (dif === 0 ? '#16A34A' : (dif < 0 ? '#B91C1C' : '#B45309'));
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.size)}</td><td style="text-align:center;color:#9CA3AF;">${sis}</td><td style="text-align:center;"><input type="number" min="0" inputmode="numeric" value="${con != null ? con : ''}" placeholder="—" onchange="conteoDepSetCount('${prod.pid}','${v.vid}',this.value)" style="width:56px;padding:4px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;font-weight:700;"></td><td style="text-align:center;font-weight:700;color:${difCol};">${difTxt}</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+
+function conteoDepFinish(pid) {
+  pid = String(pid);
+  const prod = cdepProducts.find(p => String(p.pid) === pid); if (!prod) return;
+  const st = cdepState[pid]; if (!st) return; if (!st.contado) st.contado = {}; if (!st.snap) st.snap = {};
+  const sinCargar = prod.variants.filter(v => st.contado[v.vid] == null).length;
+  if (sinCargar && !confirm(`Quedan ${sinCargar} variante(s) sin cargar. Al terminar se toman como 0 (faltante total). ¿Terminar igual?`)) return;
+  st.dif = {};
+  prod.variants.forEach(v => {
+    if (st.contado[v.vid] == null) st.contado[v.vid] = 0;
+    const sis = (st.snap[v.vid] != null) ? st.snap[v.vid] : v.esperado;
+    st.snap[v.vid] = sis;
+    st.dif[v.vid] = (st.contado[v.vid] || 0) - sis;   // diferencia CONGELADA
+  });
+  st.estado = 'terminado';
+  _cdepSave();
+  cdepFocusPid = null; cdepView = 'lista';
+  conteoDepRender();
+}
+
+async function conteoDepAplicar(btn) {
+  const terminados = cdepProducts.filter(p => _cdepEstado(p.pid) === 'terminado');
+  if (!terminados.length) { alert('No hay productos terminados para aplicar.'); return; }
+  const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Leyendo stock vivo…'; }
+  try {
+    const d = await _cdepFetchVivo();
+    const realMap = _cdepRealMap(d.rows || []);
+    const ubicacion = d.store_name || 'Deposito Minorista';
+    const rows = []; const missing = [];
+    let mas = 0, menos = 0, unidades = 0;
+    terminados.forEach(p => {
+      const st = cdepState[String(p.pid)];
+      p.variants.forEach(v => {
+        const dif = st.dif ? st.dif[v.vid] : 0;
+        if (!dif) return; // solo variantes con diferencia
+        const live = realMap[v.vid];
+        if (!live) { missing.push({ prod: p.name, size: v.size }); return; }
+        const vivo = Number(live.available_quantity) || 0;
+        const nuevo = vivo + dif;
+        rows.push({ inventory_id: live.inventory_id, product_code: live.product_code || '', producto: p.name, variante: v.size, ubicacion, barcode: live.barcode || '', vivo, dif, nuevo, sistema: (st.snap ? st.snap[v.vid] : null), contado: (st.contado ? st.contado[v.vid] : null) });
+        if (dif > 0) mas++; else if (dif < 0) menos++;
+        unidades += Math.abs(dif);
+      });
+    });
+    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades }, missing, ubicacion };
+    cdepView = 'preview';
+    _cdepRenderPreview();
+  } catch (e) {
+    alert('No pude leer el stock vivo de GN: ' + e.message);
+  } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+}
+
+function _cdepRenderPreview() {
+  const cont = document.getElementById('conteodep-cont'); if (!cont || !cdepPreview) return;
+  const { rows, resumen, missing } = cdepPreview;
+  let html = '';
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:15px;">Revisión del ajuste</b><button class="btn-sm" onclick="conteoDepCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button></div>`;
+  html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> variante(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es) de diferencia. El resto no se toca.</div>`;
+  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} variante(s) con diferencia ya no están en el stock vivo de GN (¿borradas?). No se incluyen: ${esc(missing.slice(0, 5).map(m => m.prod + ' · ' + m.size).join(' / '))}${missing.length > 5 ? '…' : ''}</div>`;
+  if (!rows.length) {
+    html += `<div style="padding:12px;color:#166534;background:#F0FDF4;border:1px solid #16A34A;border-radius:8px;">No hay diferencias para ajustar: lo contado coincide con el sistema. 🎉</div>`;
+    cont.innerHTML = html; return;
+  }
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;max-height:52vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;position:sticky;top:0;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Contado</th><th style="text-align:center;">Dif</th><th style="text-align:center;">Vivo GN</th><th style="text-align:center;">→ Nuevo</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const dcol = r.dif < 0 ? '#B91C1C' : '#B45309';
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;">${esc(r.producto)} · ${esc(r.variante)}</td><td style="text-align:center;color:#9CA3AF;">${r.sistema != null ? r.sistema : '—'}</td><td style="text-align:center;">${r.contado != null ? r.contado : '—'}</td><td style="text-align:center;font-weight:700;color:${dcol};">${r.dif > 0 ? '+' : ''}${r.dif}</td><td style="text-align:center;color:#6B7280;">${r.vivo}</td><td style="text-align:center;font-weight:700;color:#1D4ED8;">${r.nuevo}</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-sm" onclick="conteoDepConfirmar(this)" style="background:#16A34A;color:#fff;font-weight:700;">📥 Generar Excel y guardar</button><button class="btn-sm" onclick="conteoDepCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">Cancelar</button></div>`;
+  html += `<div style="font-size:11.5px;color:#9CA3AF;margin-top:6px;">Después subí el Excel a GN → "Importar y Ajustar".</div>`;
+  cont.innerHTML = html;
+}
+
+function conteoDepCancelPreview() { cdepPreview = null; cdepView = 'lista'; conteoDepRender(); }
+
+async function conteoDepConfirmar(btn) {
+  if (!cdepPreview || !cdepPreview.rows.length) return;
+  if (typeof XLSX === 'undefined') { alert('Se está cargando el generador de Excel. Probá de nuevo en unos segundos.'); return; }
+  const { rows, resumen, ubicacion } = cdepPreview;
+  const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
+  try {
+    // 1) Excel con el header EXACTO de GN. Solo filas con diferencia.
+    const header = ['id_inventario', 'codigo_producto', 'producto', 'variante', 'ubicacion', 'codigo_barras', 'stock_actual', 'nuevo_stock'];
+    const aoa = [header];
+    rows.forEach(r => aoa.push([r.inventory_id, r.product_code || '', r.producto, r.variante, r.ubicacion, r.barcode || '', r.vivo, r.nuevo]));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 18 }, { wch: 16 }, { wch: 11 }, { wch: 11 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `ajuste_deposito_${_cdepStore()}_${fecha}.xlsx`);
+    // 2) Guardar en el historial (automático).
+    try {
+      await fetch('/api/conteos-deposito', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store: _cdepStore(), ubicacion, usuario: currentUser || '',
+          fecha_inicio: cdepInicio ? new Date(cdepInicio).toISOString() : null,
+          resumen, detalle: rows.map(r => ({ inventory_id: r.inventory_id, barcode: r.barcode, producto: r.producto, variante: r.variante, sistema: r.sistema, contado: r.contado, diferencia: r.dif, vivo_aplicado: r.vivo, nuevo_stock: r.nuevo })),
+        }),
+      });
+    } catch (e) { /* si falla el historial, el Excel ya se generó igual */ }
+    // 3) Limpiar los productos terminados que se acaban de ajustar.
+    const limpiar = confirm(`✅ Excel generado (${rows.length} línea(s)) y conteo guardado en el historial.\n\nSubilo a GN → "Importar y Ajustar".\n\n¿Limpiar ahora los productos terminados que se ajustaron? (los que están a medio contar quedan intactos)`);
+    if (limpiar) {
+      cdepProducts.forEach(p => { if (_cdepEstado(p.pid) === 'terminado') delete cdepState[String(p.pid)]; });
+      const quedan = Object.values(cdepState).some(s => s.contado && Object.keys(s.contado).length);
+      if (!quedan) cdepInicio = null;
+      _cdepSave();
+    }
+    cdepPreview = null; cdepView = 'lista'; conteoDepRender();
+  } catch (e) {
+    alert('Error al generar el Excel: ' + e.message);
+  } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+}
+
+async function conteoDepHistorial() {
+  const cont = document.getElementById('conteodep-cont'); if (!cont) return;
+  cdepView = 'historial';
+  cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando historial…</div>';
+  let conteos = [];
+  try { const r = await fetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = d.conteos || []; else throw new Error((d && d.error) || 'error'); }
+  catch (e) { cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el historial: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="conteoDepVolverLista()">← Volver</button></div>'; return; }
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:15px;">🕘 Historial de conteos</b><button class="btn-sm" onclick="conteoDepVolverLista()" style="background:#fff;border:1px solid #D1D5DB;">← Volver al conteo</button></div>`;
+  if (!conteos.length) { html += '<div style="padding:12px;color:#9CA3AF;">Todavía no hay conteos aplicados.</div>'; cont.innerHTML = html; return; }
+  conteos.forEach(c => {
+    const rr = c.resumen || {}; const f = c.fecha_aplicado ? new Date(c.fecha_aplicado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const det = Array.isArray(c.detalle) ? c.detalle : [];
+    html += `<details style="border:1px solid #E5E7EB;border-radius:9px;padding:8px 12px;margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;"><b>${f}</b> · ${esc(c.usuario || '—')} · <span style="color:#B45309;">+${rr.mas || 0}</span> / <span style="color:#B91C1C;">−${rr.menos || 0}</span> · ${rr.lineas || det.length} línea(s) · ${rr.unidades_ajustadas || 0} u.</summary>`;
+    if (det.length) {
+      html += `<div style="overflow:auto;margin-top:8px;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:#9CA3AF;text-align:left;"><th style="padding:4px 6px;">Producto · Variante</th><th style="text-align:center;">Sist.</th><th style="text-align:center;">Cont.</th><th style="text-align:center;">Dif</th><th style="text-align:center;">Vivo</th><th style="text-align:center;">Nuevo</th></tr></thead><tbody>`;
+      det.forEach(x => { const dc = (x.diferencia || 0) < 0 ? '#B91C1C' : '#B45309'; html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:4px 6px;">${esc((x.producto || '') + ' · ' + (x.variante || ''))}</td><td style="text-align:center;color:#9CA3AF;">${x.sistema != null ? x.sistema : '—'}</td><td style="text-align:center;">${x.contado != null ? x.contado : '—'}</td><td style="text-align:center;font-weight:700;color:${dc};">${(x.diferencia > 0 ? '+' : '') + (x.diferencia || 0)}</td><td style="text-align:center;color:#6B7280;">${x.vivo_aplicado != null ? x.vivo_aplicado : '—'}</td><td style="text-align:center;font-weight:700;color:#1D4ED8;">${x.nuevo_stock != null ? x.nuevo_stock : '—'}</td></tr>`; });
+      html += '</tbody></table></div>';
+    }
+    html += `</details>`;
+  });
+  cont.innerHTML = html;
+}
+function conteoDepVolverLista() { cdepView = 'lista'; conteoDepRender(); }
 // ───────── Productos caducados (depuración) ─────────
 let cadStock = {};   // pid -> {total, stores:{nombre:qty}} (todos los depósitos)
 let cadStoresList = []; // nombres de depósitos/ubicaciones presentes
