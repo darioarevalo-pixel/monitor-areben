@@ -11416,12 +11416,20 @@ let cdepPreview = null;  // {rows, resumen, missing} calculado al Aplicar
 let cdepView = 'lista';  // 'lista' | 'foco' | 'preview' | 'historial'
 let cdepLoading = false;
 let cdepFeedStore = null; // marca del feed en vivo cargado ('bdi'|'zattia') — candado anti-cruce de marcas
+let cdepStockTime = null; // ms de cuándo se trajo el stock de GN (la "foto" en cero pendientes)
 
 function _cdepKey() { return 'monitor_conteodep_' + _cuentaKey(); }
-function _cdepSave() { try { localStorage.setItem(_cdepKey(), JSON.stringify({ inicio: cdepInicio, prods: cdepState })); } catch (e) {} }
+function _cdepSave() { try { localStorage.setItem(_cdepKey(), JSON.stringify({ inicio: cdepInicio, stockTime: cdepStockTime, prods: cdepState })); } catch (e) {} }
 function _cdepLoad() { try { const s = JSON.parse(localStorage.getItem(_cdepKey()) || '{}'); return (s && typeof s === 'object') ? s : {}; } catch (e) { return {}; } }
 function _cdepStore() { return _cuentaKey(); }
 function _cdepPuedeAplicar() { return _puedeVer(_cdepStore(), 'conteo-deposito.aplicar'); } // admins siempre; o usuarios con el permiso
+function _cdepStockLabel() {
+  if (!cdepStockTime) return '';
+  const d = new Date(cdepStockTime), now = new Date();
+  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const dia = d.toDateString() === now.toDateString() ? 'hoy' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+  return `${dia} ${hora} hs`;
+}
 
 // Elige la línea de inventario REAL cuando hay duplicados/fantasmas (mismo product_id+size_id):
 // la que tiene stock>0; en empate, la de inventory_id más bajo (la original; la fantasma es la nueva en 0).
@@ -11445,7 +11453,7 @@ async function _cdepFetchVivo() {
   return d;
 }
 
-async function conteoDepInit() {
+async function conteoDepInit(resetStock) {
   const cont = document.getElementById('conteodep-cont');
   if (cdepLoading) return;
   cdepLoading = true;
@@ -11464,6 +11472,11 @@ async function conteoDepInit() {
     const saved = _cdepLoad();
     cdepState = (saved && saved.prods) ? saved.prods : {};
     cdepInicio = saved ? (saved.inicio || null) : null;
+    // Hora de la "foto" de stock: se fija al traer el stock. Si ya hay un conteo en curso y no es un
+    // "Traer stock" explícito, se conserva la hora original (así el "no despachar desde" no se corre solo).
+    const hayConteo = Object.values(cdepState).some(s => s.contado && Object.keys(s.contado).length);
+    cdepStockTime = (resetStock || !saved.stockTime || !hayConteo) ? Date.now() : saved.stockTime;
+    _cdepSave();
   } catch (e) {
     cdepLoading = false;
     if (cont) cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el stock en vivo: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="conteoDepInit()">Reintentar</button></div>';
@@ -11479,13 +11492,13 @@ async function conteoDepActualizarGN(btn) {
   const hayContado = Object.values(cdepState).some(s => s.contado && Object.keys(s.contado).length);
   if (hayContado && !confirm('Vas a traer el stock más nuevo de GN. Lo que ya contaste se mantiene (la diferencia de cada producto queda congelada). ¿Seguir?')) return;
   const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Trayendo…'; }
-  await conteoDepInit();
+  await conteoDepInit(true); // "Traer stock" explícito → re-fija la hora de la foto
   if (btn) { btn.disabled = false; btn.textContent = orig; }
 }
 
 function conteoDepReset() {
   if (!confirm('¿Reiniciar el conteo? Se borra todo lo cargado (los ajustes ya aplicados quedan en el Historial).')) return;
-  cdepState = {}; cdepInicio = null; cdepFocusPid = null; cdepView = 'lista'; _cdepSave();
+  cdepState = {}; cdepInicio = null; cdepStockTime = null; cdepFocusPid = null; cdepView = 'lista'; _cdepSave();
   conteoDepRender();
 }
 
@@ -11515,6 +11528,7 @@ function _cdepRenderLista() {
   html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">`;
   html += `<input id="conteodep-buscar" type="text" value="${esc(cdepSearch)}" oninput="conteoDepSearch(this.value)" placeholder="🔎 Buscá un producto (ej: Cover Case)…" autocomplete="off" style="flex:1;min-width:240px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;">`;
   html += `</div>`;
+  if (cdepStockTime) html += `<div style="font-size:12.5px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;border-radius:8px;padding:8px 10px;margin-bottom:10px;">📸 <b>Stock de GN traído: ${_cdepStockLabel()}</b> — hasta ese momento estaban los pedidos preparados. <b>Desde esa hora no despaches nada</b> hasta terminar el conteo. <span style="color:#B45309;">Si volvés a "Traer stock de GN", esta hora se actualiza.</span></div>`;
   html += `<div style="font-size:13px;margin-bottom:10px;color:#374151;"><b>${cdepProducts.length}</b> productos · <b style="color:#166534;">${term}</b> terminados · <b style="color:#B45309;">${prog}</b> en progreso</div>`;
   if (_cdepPuedeAplicar() && term) {
     html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="conteoDepAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} producto${term > 1 ? 's' : ''} terminado${term > 1 ? 's' : ''})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo de GN y genera el Excel de ajuste.</span></div>`;
@@ -11637,7 +11651,7 @@ async function conteoDepAplicar(btn) {
         unidades += Math.abs(dif);
       });
     });
-    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades }, missing, ubicacion, store: d.store || _cdepStore() };
+    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades, hora_stock: cdepStockTime ? new Date(cdepStockTime).toISOString() : null }, missing, ubicacion, store: d.store || _cdepStore() };
     cdepView = 'preview';
     _cdepRenderPreview();
   } catch (e) {
@@ -11726,8 +11740,9 @@ async function conteoDepHistorial() {
   if (!conteos.length) { html += '<div style="padding:12px;color:#9CA3AF;">Todavía no hay conteos aplicados.</div>'; cont.innerHTML = html; return; }
   conteos.forEach(c => {
     const rr = c.resumen || {}; const f = c.fecha_aplicado ? new Date(c.fecha_aplicado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const fStock = rr.hora_stock ? new Date(rr.hora_stock).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
     const det = Array.isArray(c.detalle) ? c.detalle : [];
-    html += `<details style="border:1px solid #E5E7EB;border-radius:9px;padding:8px 12px;margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;"><b>${f}</b> · ${esc(c.usuario || '—')} · <span style="color:#B45309;">+${rr.mas || 0}</span> / <span style="color:#B91C1C;">−${rr.menos || 0}</span> · ${rr.lineas || det.length} línea(s) · ${rr.unidades_ajustadas || 0} u.</summary>`;
+    html += `<details style="border:1px solid #E5E7EB;border-radius:9px;padding:8px 12px;margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;"><b>${f}</b> · ${esc(c.usuario || '—')} · <span style="color:#B45309;">+${rr.mas || 0}</span> / <span style="color:#B91C1C;">−${rr.menos || 0}</span> · ${rr.lineas || det.length} línea(s) · ${rr.unidades_ajustadas || 0} u.${fStock ? ` · <span style="color:#92400E;">📸 stock ${fStock}</span>` : ''}</summary>`;
     if (det.length) {
       html += `<div style="overflow:auto;margin-top:8px;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:#9CA3AF;text-align:left;"><th style="padding:4px 6px;">Producto · Variante</th><th style="text-align:center;">Sist.</th><th style="text-align:center;">Cont.</th><th style="text-align:center;">Dif</th><th style="text-align:center;">Vivo</th><th style="text-align:center;">Nuevo</th></tr></thead><tbody>`;
       det.forEach(x => { const dc = (x.diferencia || 0) < 0 ? '#B91C1C' : '#B45309'; html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:4px 6px;">${esc((x.producto || '') + ' · ' + (x.variante || ''))}</td><td style="text-align:center;color:#9CA3AF;">${x.sistema != null ? x.sistema : '—'}</td><td style="text-align:center;">${x.contado != null ? x.contado : '—'}</td><td style="text-align:center;font-weight:700;color:${dc};">${(x.diferencia > 0 ? '+' : '') + (x.diferencia || 0)}</td><td style="text-align:center;color:#6B7280;">${x.vivo_aplicado != null ? x.vivo_aplicado : '—'}</td><td style="text-align:center;font-weight:700;color:#1D4ED8;">${x.nuevo_stock != null ? x.nuevo_stock : '—'}</td></tr>`; });
