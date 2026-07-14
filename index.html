@@ -11413,6 +11413,7 @@ let cdepOrderAsc = true;
 let cdepPreview = null;  // {rows, resumen, missing} calculado al Aplicar
 let cdepView = 'lista';  // 'lista' | 'foco' | 'preview' | 'historial'
 let cdepLoading = false;
+let cdepFeedStore = null; // marca del feed en vivo cargado ('bdi'|'zattia') — candado anti-cruce de marcas
 
 function _cdepKey() { return 'monitor_conteodep_' + _cuentaKey(); }
 function _cdepSave() { try { localStorage.setItem(_cdepKey(), JSON.stringify({ inicio: cdepInicio, prods: cdepState })); } catch (e) {} }
@@ -11448,6 +11449,7 @@ async function conteoDepInit() {
   if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando depósito en vivo desde Gestión Nube…</div>';
   try {
     const d = await _cdepFetchVivo();
+    cdepFeedStore = d.store; // marca del feed cargado (para el candado anti-cruce de marcas)
     const realMap = _cdepRealMap(d.rows || []);
     const byPid = {};
     Object.values(realMap).forEach(r => {
@@ -11632,7 +11634,7 @@ async function conteoDepAplicar(btn) {
         unidades += Math.abs(dif);
       });
     });
-    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades }, missing, ubicacion };
+    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades }, missing, ubicacion, store: d.store || _cdepStore() };
     cdepView = 'preview';
     _cdepRenderPreview();
   } catch (e) {
@@ -11643,8 +11645,10 @@ async function conteoDepAplicar(btn) {
 function _cdepRenderPreview() {
   const cont = document.getElementById('conteodep-cont'); if (!cont || !cdepPreview) return;
   const { rows, resumen, missing } = cdepPreview;
+  const marca = (cdepPreview.store || _cdepStore() || '').toUpperCase();
   let html = '';
   html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:15px;">Revisión del ajuste</b><button class="btn-sm" onclick="conteoDepCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button></div>`;
+  html += `<div style="font-size:13px;background:#EFF6FF;border:1px solid #93C5FD;color:#1D4ED8;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-weight:600;">🏷️ Ajuste de <b>${esc(marca)}</b> · ubicación <b>${esc(cdepPreview.ubicacion || '—')}</b>. El Excel se sube SOLO al Gestión Nube de ${esc(marca)} (no mezclar marcas).</div>`;
   html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> variante(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es) de diferencia. El resto no se toca.</div>`;
   if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} variante(s) con diferencia ya no están en el stock vivo de GN (¿borradas?). No se incluyen: ${esc(missing.slice(0, 5).map(m => m.prod + ' · ' + m.size).join(' / '))}${missing.length > 5 ? '…' : ''}</div>`;
   if (!rows.length) {
@@ -11668,6 +11672,9 @@ async function conteoDepConfirmar(btn) {
   if (!cdepPreview || !cdepPreview.rows.length) return;
   if (typeof XLSX === 'undefined') { alert('Se está cargando el generador de Excel. Probá de nuevo en unos segundos.'); return; }
   const { rows, resumen, ubicacion } = cdepPreview;
+  const marca = (cdepPreview.store || _cdepStore() || '').toUpperCase();
+  // Candado anti-cruce de marcas: este Excel SOLO sirve para el GN de esta marca (los id_inventario no existen en otra cuenta).
+  if (!confirm(`El Excel es de ${marca}. Subilo SOLO al Gestión Nube de ${marca} — si lo subís a otra marca, GN va a rechazar los IDs ("Inventario no encontrado").\n\n¿Generar el Excel de ${marca}?`)) { if (btn) { btn.disabled = false; } return; }
   const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
   try {
     // 1) Excel con el header EXACTO de GN. Solo filas con diferencia.
@@ -11678,13 +11685,14 @@ async function conteoDepConfirmar(btn) {
     ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 18 }, { wch: 16 }, { wch: 11 }, { wch: 11 }];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
     const fecha = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `ajuste_deposito_${_cdepStore()}_${fecha}.xlsx`);
+    const marcaLc = (cdepPreview.store || _cdepStore());
+    XLSX.writeFile(wb, `ajuste_deposito_${marcaLc}_${fecha}.xlsx`);
     // 2) Guardar en el historial (automático).
     try {
       await fetch('/api/conteos-deposito', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          store: _cdepStore(), ubicacion, usuario: currentUser || '',
+          store: marcaLc, ubicacion, usuario: currentUser || '',
           fecha_inicio: cdepInicio ? new Date(cdepInicio).toISOString() : null,
           resumen, detalle: rows.map(r => ({ inventory_id: r.inventory_id, barcode: r.barcode, producto: r.producto, variante: r.variante, sistema: r.sistema, contado: r.contado, diferencia: r.dif, vivo_aplicado: r.vivo, nuevo_stock: r.nuevo })),
         }),
