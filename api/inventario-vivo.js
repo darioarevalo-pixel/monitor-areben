@@ -86,6 +86,20 @@ async function fetchInventarioCompleto(storeId, token) {
   return [...byKey.values()];
 }
 
+// Consulta puntual y CONFIABLE del stock en vivo de UN producto (GN responde bien a esto, a diferencia de
+// pedir la lista completa). Devuelve las variantes de la tienda pedida con inventory_id y stock reales.
+async function fetchProductoVivo(productId, storeId, token) {
+  const d = await gnFetch(`inventario/${productId}`, token);
+  const out = [];
+  (d.variantes || []).forEach(v => {
+    (v.stock_por_tienda || []).forEach(s => {
+      if (Number(s.store_id) !== storeId) return;
+      out.push({ inventory_id: s.inventory_id, product_id: d.product_id, product_name: d.product_name || null, product_code: d.product_code || null, size_id: v.size_id, size_name: v.size_name || null, store_name: s.store_name || null, sku: v.sku || null, barcode: v.barcode || null, available_quantity: s.available_quantity ?? 0, fuente: 'vivo' });
+    });
+  });
+  return out;
+}
+
 // Varias pasadas de paginación pueden tardar → subimos el techo de tiempo de la función.
 export const config = { maxDuration: 30 };
 
@@ -103,15 +117,6 @@ export default async function handler(req, res) {
   const token = TOKENS[store];
   if (!storeId) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
   if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
-
-  // Sonda temporal: ver la forma cruda de GET /inventario/{pid} para diseñar el relleno por producto en vivo.
-  if (req.query.probe_pid) {
-    try {
-      const d = await gnFetch(`inventario/${req.query.probe_pid}`, token);
-      const v0 = (d.variantes || [])[0] || null;
-      return res.status(200).json({ ok: true, topKeys: Object.keys(d || {}), variantesCount: (d.variantes || []).length, primeraVariante: v0 });
-    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
-  }
 
   try {
     // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.
@@ -134,21 +139,35 @@ export default async function handler(req, res) {
     const storeName = (dep.length ? dep[0].store_name : null) || (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || null;
     // Nombre EXACTO con el que el espejo guarda esta ubicación (ej: ZATTIA usa "Deposito " con espacio).
     const espejoName = (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || storeName;
-    // Completar con el ESPEJO: cualquier variante que el vivo no haya traído se agrega (stock del espejo, sin inventory_id).
     const byKey = new Map(dep.map(r => [r.product_id + '_' + r.size_id, r]));
-    let desdeEspejo = 0;
-    try {
-      const esp = await fetchEspejo(store, espejoName);
-      esp.forEach(m => {
-        const k = m.product_id + '_' + m.size_id;
-        if (!byKey.has(k)) {
-          byKey.set(k, { inventory_id: null, product_id: m.product_id, product_name: m.product_name || null, product_code: null, size_id: m.size_id, size_name: m.size_name || null, store_name: m.store_name || storeName, sku: m.sku || null, barcode: m.barcode || null, available_quantity: m.available_quantity ?? 0, fuente: 'espejo' });
-          desdeEspejo++;
-        }
-      });
-    } catch (e) { /* si el espejo falla, devuelvo al menos lo del vivo */ }
+    // El ESPEJO da la lista COMPLETA esperada → sirve para saber QUÉ variantes faltaron del vivo.
+    let espRows = [];
+    try { espRows = await fetchEspejo(store, espejoName); } catch (e) { /* si el espejo falla, sigo con el vivo */ }
+    const espByKey = new Map(espRows.map(m => [m.product_id + '_' + m.size_id, m]));
+    const faltanPids = [...new Set([...espByKey.keys()].filter(k => !byKey.has(k)).map(k => espByKey.get(k).product_id))];
+    // RELLENO EN VIVO: por cada producto con faltantes, consulta PUNTUAL a GN (confiable) para traer su stock
+    // real e inventory_id. Acotado por tiempo/cantidad para no pasar el techo de la función.
+    let fromDirecto = 0;
+    const fillStart = Date.now();
+    for (const pid of faltanPids) {
+      if (Date.now() - fillStart > 8000 || fromDirecto > 400) break;
+      try {
+        const vrows = await fetchProductoVivo(pid, storeId, token);
+        vrows.forEach(r => { const k = r.product_id + '_' + r.size_id; if (!byKey.has(k)) { byKey.set(k, r); fromDirecto++; } });
+      } catch (e) { /* si un producto falla, sigue; queda para el espejo */ }
+      await sleep(40);
+    }
+    // ÚLTIMO RECURSO: lo que ni el vivo ni la consulta puntual trajeron se completa con el espejo (sin inventory_id
+    // → el candado de "Aplicar" NO lo ajusta; queda para revisar a mano). Así la lista se ve completa igual.
+    let fromEspejo = 0;
+    espByKey.forEach((m, k) => {
+      if (!byKey.has(k)) {
+        byKey.set(k, { inventory_id: null, product_id: m.product_id, product_name: m.product_name || null, product_code: null, size_id: m.size_id, size_name: m.size_name || null, store_name: m.store_name || storeName, sku: m.sku || null, barcode: m.barcode || null, available_quantity: m.available_quantity ?? 0, fuente: 'espejo' });
+        fromEspejo++;
+      }
+    });
     const merged = [...byKey.values()];
-    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: merged.length, from_vivo: dep.length, from_espejo: desdeEspejo, rows: merged });
+    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: merged.length, from_vivo: dep.length, from_directo: fromDirecto, from_espejo: fromEspejo, rows: merged });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
