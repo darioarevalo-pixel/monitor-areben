@@ -64,7 +64,7 @@ async function fetchInventarioCompleto(storeId, token) {
   const byKey = new Map();
   const MAX_PASSES = 2;      // el espejo garantiza la lista completa; el vivo aporta stock fresco + inventory_id
   const start = Date.now();
-  const BUDGET_MS = 15000;   // tope duro: nunca pasar del límite de la función (maxDuration 30s)
+  const BUDGET_MS = 10000;   // tope de la lectura completa; deja margen para el relleno puntual y no timeoutear
   const vencido = () => (Date.now() - start) > BUDGET_MS;
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const before = byKey.size;
@@ -150,7 +150,7 @@ export default async function handler(req, res) {
     let fromDirecto = 0;
     const fillStart = Date.now();
     for (const pid of faltanPids) {
-      if (Date.now() - fillStart > 8000 || fromDirecto > 400) break;
+      if (Date.now() - fillStart > 9000 || fromDirecto > 400) break;
       try {
         const vrows = await fetchProductoVivo(pid, storeId, token);
         vrows.forEach(r => { const k = r.product_id + '_' + r.size_id; if (!byKey.has(k)) { byKey.set(k, r); fromDirecto++; } });
