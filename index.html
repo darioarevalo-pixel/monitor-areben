@@ -11417,6 +11417,7 @@ let cdepView = 'lista';  // 'lista' | 'foco' | 'preview' | 'historial'
 let cdepLoading = false;
 let cdepFeedStore = null; // marca del feed en vivo cargado ('bdi'|'zattia') — candado anti-cruce de marcas
 let cdepStockTime = null; // ms de cuándo se trajo el stock de GN (la "foto" en cero pendientes)
+let cdepLastCount = {};  // pid -> ISO de la fecha del último conteo APLICADO de ese producto (del historial)
 
 function _cdepKey() { return 'monitor_conteodep_' + _cuentaKey(); }
 function _cdepSave() { try { localStorage.setItem(_cdepKey(), JSON.stringify({ inicio: cdepInicio, stockTime: cdepStockTime, prods: cdepState })); } catch (e) {} }
@@ -11429,6 +11430,44 @@ function _cdepStockLabel() {
   const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   const dia = d.toDateString() === now.toDateString() ? 'hoy' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
   return `${dia} ${hora} hs`;
+}
+// Etiqueta corta de "fecha del último conteo" de un producto (ms o ISO) para la lista.
+function _cdepFechaLabel(ms) {
+  if (!ms) return '';
+  const d = new Date(ms); if (isNaN(d)) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'hoy ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const mismoAnio = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString('es-AR', mismoAnio ? { day: '2-digit', month: '2-digit' } : { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+// Trae del historial la fecha del último conteo APLICADO de cada producto → cdepLastCount[pid] = ms.
+// Matchea por resumen.productos[].pid (registros nuevos) y, de fallback, por nombre en detalle[].producto.
+async function _cdepCargarUltimos() {
+  try {
+    const r = await fetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now());
+    const d = await r.json();
+    if (!d || !d.ok) return;
+    const porPid = {}; const porNombre = {};
+    (d.conteos || []).forEach(c => {
+      const ms = c.fecha_aplicado ? new Date(c.fecha_aplicado).getTime() : 0; if (!ms) return;
+      const rr = c.resumen || {};
+      (Array.isArray(rr.productos) ? rr.productos : []).forEach(p => {
+        const pid = String(p.pid != null ? p.pid : ''); if (pid) porPid[pid] = Math.max(porPid[pid] || 0, ms);
+        const nom = String(p.nombre || '').trim(); if (nom) porNombre[nom] = Math.max(porNombre[nom] || 0, ms);
+      });
+      (Array.isArray(c.detalle) ? c.detalle : []).forEach(x => {
+        const nom = String(x.producto || '').trim(); if (nom) porNombre[nom] = Math.max(porNombre[nom] || 0, ms);
+      });
+    });
+    const map = {};
+    cdepProducts.forEach(p => {
+      const pid = String(p.pid);
+      const ms = Math.max(porPid[pid] || 0, porNombre[String(p.name || '').trim()] || 0);
+      if (ms) map[pid] = ms;
+    });
+    cdepLastCount = map;
+    if (cdepView === 'lista' && !cdepFocusPid) _cdepRenderLista();
+  } catch (e) { /* si falla, la lista simplemente no muestra fechas */ }
 }
 
 // Elige la línea de inventario REAL cuando hay duplicados/fantasmas (mismo product_id+size_id):
@@ -11485,6 +11524,7 @@ async function conteoDepInit(resetStock) {
   cdepLoading = false;
   cdepFocusPid = null; cdepView = 'lista';
   conteoDepRender();
+  _cdepCargarUltimos(); // trae las fechas del último conteo por producto (async, re-renderiza al llegar)
 }
 
 async function conteoDepActualizarGN(btn) {
@@ -11539,7 +11579,12 @@ function _cdepRenderLista() {
     const btnTxt = e === 'terminado' ? 'Ver / editar' : (e === 'en_progreso' ? 'Seguir' : 'Contar');
     const btnBg = e === 'sin_iniciar' ? '#378ADD' : '#fff';
     const btnCol = e === 'sin_iniciar' ? '#fff' : '#1D4ED8';
-    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:7px 10px;">${esc(p.name)}</td><td style="text-align:center;color:#9CA3AF;">${p.variants.length}</td><td style="text-align:center;">${_cdepChipEstado(e)}</td><td style="text-align:right;padding-right:10px;"><button class="btn-sm" onclick="conteoDepOpen('${p.pid}')" style="background:${btnBg};color:${btnCol};border:1px solid #378ADD;">${btnTxt}</button></td></tr>`;
+    const stp = cdepState[String(p.pid)];
+    const ultMs = Math.max((stp && stp.terminadoAt) || 0, cdepLastCount[String(p.pid)] || 0);
+    const fecha = ultMs
+      ? `<div style="font-size:10.5px;color:#6B7280;margin-top:3px;">📅 Último: ${_cdepFechaLabel(ultMs)}</div>`
+      : `<div style="font-size:10.5px;color:#C4C4C4;margin-top:3px;">Sin conteo previo</div>`;
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:7px 10px;">${esc(p.name)}</td><td style="text-align:center;color:#9CA3AF;">${p.variants.length}</td><td style="text-align:center;">${_cdepChipEstado(e)}${fecha}</td><td style="text-align:right;padding-right:10px;"><button class="btn-sm" onclick="conteoDepOpen('${p.pid}')" style="background:${btnBg};color:${btnCol};border:1px solid #378ADD;">${btnTxt}</button></td></tr>`;
   });
   if (!lista.length) html += '<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan con la búsqueda.</td></tr>';
   if (lista.length > 400) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 400 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
@@ -11622,6 +11667,7 @@ function conteoDepFinish(pid) {
     st.dif[v.vid] = (st.contado[v.vid] || 0) - sis;   // diferencia CONGELADA
   });
   st.estado = 'terminado';
+  st.terminadoAt = Date.now();   // sello local: fecha del conteo de este producto (aún sin aplicar)
   _cdepSave();
   cdepFocusPid = null; cdepView = 'lista';
   conteoDepRender();
@@ -11651,7 +11697,8 @@ async function conteoDepAplicar(btn) {
         unidades += Math.abs(dif);
       });
     });
-    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades, hora_stock: cdepStockTime ? new Date(cdepStockTime).toISOString() : null }, missing, ubicacion, store: d.store || _cdepStore() };
+    const productos = terminados.map(p => ({ pid: String(p.pid), nombre: p.name })); // TODOS los contados, tengan o no diferencia (para la fecha del último conteo)
+    cdepPreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades, hora_stock: cdepStockTime ? new Date(cdepStockTime).toISOString() : null, productos }, missing, ubicacion, store: d.store || _cdepStore() };
     cdepView = 'preview';
     _cdepRenderPreview();
   } catch (e) {
@@ -11669,7 +11716,9 @@ function _cdepRenderPreview() {
   html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> variante(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es) de diferencia. El resto no se toca.</div>`;
   if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} variante(s) con diferencia ya no están en el stock vivo de GN (¿borradas?). No se incluyen: ${esc(missing.slice(0, 5).map(m => m.prod + ' · ' + m.size).join(' / '))}${missing.length > 5 ? '…' : ''}</div>`;
   if (!rows.length) {
+    const nprod = (resumen.productos || []).length;
     html += `<div style="padding:12px;color:#166534;background:#F0FDF4;border:1px solid #16A34A;border-radius:8px;">No hay diferencias para ajustar: lo contado coincide con el sistema. 🎉</div>`;
+    html += `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button class="btn-sm" onclick="conteoDepGuardarSinDif(this)" style="background:#16A34A;color:#fff;font-weight:700;">✅ Guardar el conteo igual</button><button class="btn-sm" onclick="conteoDepCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">Volver</button><span style="font-size:11.5px;color:#9CA3AF;">Sin Excel (no hay ajuste), pero deja registrada la fecha del conteo de ${nprod} producto(s).</span></div>`;
     cont.innerHTML = html; return;
   }
   html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;max-height:52vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;position:sticky;top:0;"><th style="padding:6px 8px;">Producto · Variante</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">Contado</th><th style="text-align:center;">Dif</th><th style="text-align:center;">Vivo GN</th><th style="text-align:center;">→ Nuevo</th></tr></thead><tbody>`;
@@ -11684,6 +11733,42 @@ function _cdepRenderPreview() {
 }
 
 function conteoDepCancelPreview() { cdepPreview = null; cdepView = 'lista'; conteoDepRender(); }
+
+// Guarda un conteo que coincidió con el sistema (sin diferencias): no genera Excel, pero deja la
+// fecha registrada en el historial para que esos productos figuren con "último conteo".
+async function conteoDepGuardarSinDif(btn) {
+  if (!cdepPreview) return;
+  const { resumen, ubicacion } = cdepPreview;
+  const marca = (cdepPreview.store || _cdepStore() || '').toUpperCase();
+  const productos = resumen.productos || [];
+  if (!productos.length) { alert('No hay productos para guardar.'); return; }
+  if (!confirm(`Se registra el conteo de ${productos.length} producto(s) de ${marca} (sin ajuste, porque coincidieron con el sistema). ¿Guardar?`)) return;
+  const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
+  try {
+    await fetch('/api/conteos-deposito', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        store: (cdepPreview.store || _cdepStore()), ubicacion, usuario: currentUser || '',
+        fecha_inicio: cdepInicio ? new Date(cdepInicio).toISOString() : null,
+        resumen, detalle: [],
+      }),
+    });
+    // Fecha inmediata en la lista, sin esperar la relectura del servidor.
+    const now = Date.now();
+    productos.forEach(p => { if (p && p.pid != null) cdepLastCount[String(p.pid)] = now; });
+    const limpiar = confirm(`✅ Conteo guardado en el historial (sin ajuste).\n\n¿Limpiar ahora los productos terminados que se registraron? (los que están a medio contar quedan intactos)`);
+    if (limpiar) {
+      cdepProducts.forEach(p => { if (_cdepEstado(p.pid) === 'terminado') delete cdepState[String(p.pid)]; });
+      const quedan = Object.values(cdepState).some(s => s.contado && Object.keys(s.contado).length);
+      if (!quedan) cdepInicio = null;
+      _cdepSave();
+    }
+    cdepPreview = null; cdepView = 'lista'; conteoDepRender();
+    _cdepCargarUltimos();
+  } catch (e) {
+    alert('No pude guardar el conteo: ' + e.message);
+  } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+}
 
 async function conteoDepConfirmar(btn) {
   if (!cdepPreview || !cdepPreview.rows.length) return;
@@ -11715,6 +11800,9 @@ async function conteoDepConfirmar(btn) {
         }),
       });
     } catch (e) { /* si falla el historial, el Excel ya se generó igual */ }
+    // Fecha inmediata en la lista para los productos recién aplicados.
+    const nowAplic = Date.now();
+    (resumen.productos || []).forEach(p => { if (p && p.pid != null) cdepLastCount[String(p.pid)] = nowAplic; });
     // 3) Limpiar los productos terminados que se acaban de ajustar.
     const limpiar = confirm(`✅ Excel generado (${rows.length} línea(s)) y conteo guardado en el historial.\n\nSubilo a GN → "Importar y Ajustar".\n\n¿Limpiar ahora los productos terminados que se ajustaron? (los que están a medio contar quedan intactos)`);
     if (limpiar) {
@@ -11724,6 +11812,7 @@ async function conteoDepConfirmar(btn) {
       _cdepSave();
     }
     cdepPreview = null; cdepView = 'lista'; conteoDepRender();
+    _cdepCargarUltimos();
   } catch (e) {
     alert('Error al generar el Excel: ' + e.message);
   } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
