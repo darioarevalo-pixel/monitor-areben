@@ -11743,7 +11743,9 @@ async function conteoDepAplicar(btn) {
         const dif = st.dif ? st.dif[v.vid] : 0;
         if (!dif) return; // solo variantes con diferencia
         const live = realMap[v.vid];
-        if (!live) { missing.push({ prod: p.name, size: v.size }); return; }
+        // SEGURIDAD: solo ajustar con stock confirmado EN VIVO. Si al contar o al aplicar la variante vino del
+        // espejo (inventory_id null) o no está en el vivo, NO se ajusta (stock no confiable) → va a "revisar a mano".
+        if (!live || live.inventory_id == null || v.inventory_id == null) { missing.push({ prod: p.name, size: v.size }); return; }
         const vivo = Number(live.available_quantity) || 0;
         const nuevo = vivo + dif;
         rows.push({ inventory_id: live.inventory_id, product_code: live.product_code || '', producto: p.name, variante: v.size, ubicacion, barcode: live.barcode || '', vivo, dif, nuevo, sistema: (st.snap ? st.snap[v.vid] : null), contado: (st.contado ? st.contado[v.vid] : null) });
@@ -11768,7 +11770,7 @@ function _cdepRenderPreview() {
   html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:15px;">Revisión del ajuste</b><button class="btn-sm" onclick="conteoDepCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button></div>`;
   html += `<div style="font-size:13px;background:#EFF6FF;border:1px solid #93C5FD;color:#1D4ED8;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-weight:600;">🏷️ Ajuste de <b>${esc(marca)}</b> · ubicación <b>${esc(cdepPreview.ubicacion || '—')}</b>. El Excel se sube SOLO al Gestión Nube de ${esc(marca)} (no mezclar marcas).</div>`;
   html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> variante(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es) de diferencia. El resto no se toca.</div>`;
-  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} variante(s) con diferencia ya no están en el stock vivo de GN (¿borradas?). No se incluyen: ${esc(missing.slice(0, 5).map(m => m.prod + ' · ' + m.size).join(' / '))}${missing.length > 5 ? '…' : ''}</div>`;
+  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} variante(s) con diferencia <b>NO se ajustan</b>: no se pudo confirmar su stock en vivo en GN (se leyeron del respaldo, o no están en GN). <b>Revisalas a mano</b> y volvé a aplicar. Son: ${esc(missing.slice(0, 5).map(m => m.prod + ' · ' + m.size).join(' / '))}${missing.length > 5 ? '…' : ''}</div>`;
   if (!rows.length) {
     const nprod = (resumen.productos || []).length;
     html += `<div style="padding:12px;color:#166534;background:#F0FDF4;border:1px solid #16A34A;border-radius:8px;">No hay diferencias para ajustar: lo contado coincide con el sistema. 🎉</div>`;
@@ -12167,7 +12169,8 @@ async function ceAplicar(btn) {
       const st = ceState[String(p.pid)];
       p.variants.forEach(v => {
         const dif = st.dif ? st.dif[v.vid] : 0; if (!dif) return;
-        const live = realMap[v.vid]; if (!live) { missing.push({ prod: p.name, size: v.size }); return; }
+        // SEGURIDAD: solo ajustar con stock confirmado EN VIVO (no del espejo, ni sin inventory_id).
+        const live = realMap[v.vid]; if (!live || live.inventory_id == null || v.inventory_id == null) { missing.push({ prod: p.name, size: v.size }); return; }
         const vivo = Number(live.available_quantity) || 0; const nuevo = vivo + dif;
         rows.push({ inventory_id: live.inventory_id, product_code: live.product_code || '', producto: p.name, variante: v.size, ubicacion, barcode: live.barcode || '', vivo, dif, nuevo, sistema: (st.snap ? st.snap[v.vid] : null), exhibido: (st.exhibido ? st.exhibido[v.vid] || 0 : 0), deposito: (st.deposito ? st.deposito[v.vid] || 0 : 0), contado: _ceTotal(st, v.vid) });
         if (dif > 0) mas++; else if (dif < 0) menos++; unidades += Math.abs(dif);
@@ -12186,7 +12189,7 @@ function _ceRenderPreview() {
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:15px;">Revisión del ajuste · ${_ceLineaLabel(ceLinea)}</b><button class="btn-sm" onclick="ceCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button></div>`;
   html += `<div style="font-size:13px;background:#EFF6FF;border:1px solid #93C5FD;color:#1D4ED8;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-weight:600;">🏷️ Ajuste del <b>Local de ${esc(marca)}</b> · ubicación <b>${esc(cePreview.ubicacion || '—')}</b>. El Excel se sube SOLO al Gestión Nube de ${esc(marca)}.</div>`;
   html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> talle(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es). El resto no se toca.</div>`;
-  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} talle(s) con diferencia ya no están en el stock vivo. No se incluyen.</div>`;
+  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} talle(s) con diferencia <b>NO se ajustan</b>: no se pudo confirmar su stock en vivo (respaldo o no están en GN). <b>Revisalos a mano</b> y volvé a aplicar.</div>`;
   if (!rows.length) {
     const nprod = (resumen.productos || []).length;
     html += `<div style="padding:12px;color:#166534;background:#F0FDF4;border:1px solid #16A34A;border-radius:8px;">No hay diferencias: lo contado coincide con el sistema. 🎉</div>`;
