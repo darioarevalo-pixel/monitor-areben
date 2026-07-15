@@ -12016,7 +12016,21 @@ function ceRender() {
   _ceRenderLista();
 }
 function _ceScanBox() {
-  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><input id="ce-scan" type="text" autocomplete="off" placeholder="🔫 Escaneá lo EXHIBIDO (suma 1)…" onkeydown="if(event.key==='Enter'){ceScan(this.value);this.value='';this.focus();}" style="flex:1;min-width:220px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;"><span id="ce-feedback" style="font-size:13px;min-width:160px;"></span></div>`;
+  return `<div style="margin-bottom:10px;"><input id="ce-scan" type="text" autocomplete="off" inputmode="none" placeholder="🔫 Escaneá lo EXHIBIDO (suma 1)…" onkeydown="if(event.key==='Enter'){ceScan(this.value);this.value='';this.focus();}" style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid #378ADD;border-radius:10px;font-size:16px;"><div id="ce-feedback" style="margin-top:8px;padding:14px;border:1px solid #E5E7EB;border-radius:10px;font-size:16px;text-align:center;background:#F9FAFB;color:#9CA3AF;">Escaneá un producto para empezar…</div></div>`;
+}
+// Confirmación grande + beep + vibración (pensado para escanear desde el celu sin mirar).
+let _ceAudioCtx = null;
+function _ceBeep(ok) { try { if (!_ceAudioCtx) _ceAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); const ctx = _ceAudioCtx; if (ctx.state === 'suspended') ctx.resume(); const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.value = ok ? 880 : 200; g.gain.value = 0.06; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.09 : 0.28)); } catch (e) {} }
+function _ceVibrate(ok) { try { if (navigator.vibrate) navigator.vibrate(ok ? 55 : [90, 60, 90]); } catch (e) {} }
+function _ceScanMsg(type, a, size, count) {
+  const fb = document.getElementById('ce-feedback');
+  const c = { ok: ['#DCFCE7', '#166534', '#16A34A'], error: ['#FEE2E2', '#B91C1C', '#EF4444'], warn: ['#FEF3C7', '#B45309', '#F59E0B'] }[type];
+  if (fb && c) {
+    fb.style.background = c[0]; fb.style.color = c[1]; fb.style.borderColor = c[2];
+    if (type === 'ok') fb.innerHTML = `✓ <b style="font-size:20px;">${esc(a)}</b>${size ? ` · <b>${esc(size)}</b>` : ''}<div style="font-size:13px;margin-top:2px;">exhibido: <b>${count}</b></div>`;
+    else fb.textContent = (type === 'error' ? '❓ ' : '⚠️ ') + a;
+  }
+  _ceBeep(type === 'ok'); _ceVibrate(type === 'ok');
 }
 function _ceRenderLista() {
   const cont = document.getElementById('ce-cont'); if (!cont) return;
@@ -12058,12 +12072,11 @@ function ceFiltroFn(f) { ceFiltro = f; _ceRenderLista(); }
 
 function ceScan(raw) {
   const bc = _ceNormBc(raw); if (!bc) return;
-  const fb = document.getElementById('ce-feedback');
   const vid = ceByBc[bc];
-  if (!vid) { if (fb) { fb.textContent = '❓ Código desconocido: ' + bc; fb.style.color = '#B91C1C'; } return; }
+  if (!vid) { _ceScanMsg('error', 'Código desconocido: ' + bc); return; }
   const pid = vid.split('_')[0];
   const prod = ceProducts.find(p => String(p.pid) === pid); if (!prod) return;
-  if (prod.linea !== ceLinea) { if (fb) { fb.textContent = `⚠️ ${prod.name} es de la línea ${_ceLineaLabel(prod.linea)}, no de ${_ceLineaLabel(ceLinea)}.`; fb.style.color = '#B45309'; } return; }
+  if (prod.linea !== ceLinea) { _ceScanMsg('warn', `${prod.name} es de la línea ${_ceLineaLabel(prod.linea)}, no de ${_ceLineaLabel(ceLinea)}.`); return; }
   let st = ceState[pid]; if (!st) st = ceState[pid] = { estado: 'sin_iniciar', exhibido: {}, deposito: {}, snap: {}, dif: {} };
   if (!st.exhibido) st.exhibido = {}; if (!st.deposito) st.deposito = {}; if (!st.snap) st.snap = {};
   if (!Object.keys(st.snap).length) prod.variants.forEach(v => { st.snap[v.vid] = v.esperado; });
@@ -12072,8 +12085,9 @@ function ceScan(raw) {
   if (!ceInicio) ceInicio = Date.now();
   _ceSave();
   const v = prod.variants.find(x => x.vid === vid);
-  if (fb && v) { fb.textContent = `✓ ${prod.name} · ${v.size} → exhibido ${st.exhibido[vid]}`; fb.style.color = '#16A34A'; }
-  if (ceFocusPid === pid) _ceRenderFoco(); else _ceRenderLista();
+  // Si estoy mirando ESE producto, refresco sus números; si no, NO redibujo la lista (fluido en el celu y no borra el cartel).
+  if (ceFocusPid === pid) { _ceRenderFoco(); const sc = document.getElementById('ce-scan'); if (sc) sc.focus(); }
+  _ceScanMsg('ok', prod.name, v ? v.size : '', st.exhibido[vid]);
 }
 
 function ceOpen(pid) {
