@@ -11411,6 +11411,7 @@ let cdepState = {};      // pid -> {estado:'sin_iniciar'|'en_progreso'|'terminad
 let cdepInicio = null;   // ms de cuándo arrancó el conteo
 let cdepFocusPid = null; // producto en modo enfocado (null = lista)
 let cdepSearch = '';
+let cdepFiltro = 'todos'; // filtro de la lista: 'todos'|'sin_previo'|'contados'|'en_progreso'|'terminado'
 let cdepOrderAsc = true;
 let cdepPreview = null;  // {rows, resumen, missing} calculado al Aplicar
 let cdepView = 'lista';  // 'lista' | 'foco' | 'preview' | 'historial'
@@ -11543,6 +11544,17 @@ function conteoDepReset() {
 }
 
 function _cdepEstado(pid) { const s = cdepState[String(pid)]; return s ? s.estado : 'sin_iniciar'; }
+// ms del último conteo de un producto: el más reciente entre el sello local (sesión actual) y el historial.
+function _cdepUltimoMs(pid) { const stp = cdepState[String(pid)]; return Math.max((stp && stp.terminadoAt) || 0, cdepLastCount[String(pid)] || 0); }
+// ¿pasa el filtro activo?
+function _cdepPasaFiltro(p) {
+  if (cdepFiltro === 'sin_previo') return _cdepUltimoMs(p.pid) === 0;
+  if (cdepFiltro === 'contados') return _cdepUltimoMs(p.pid) > 0;
+  if (cdepFiltro === 'en_progreso') return _cdepEstado(p.pid) === 'en_progreso';
+  if (cdepFiltro === 'terminado') return _cdepEstado(p.pid) === 'terminado';
+  return true;
+}
+function conteoDepFiltro(f) { cdepFiltro = f; _cdepRenderLista(); }
 function _cdepChipEstado(e) {
   if (e === 'terminado') return '<span style="font-size:11px;background:#F0FDF4;color:#166534;border:1px solid #16A34A;border-radius:12px;padding:2px 8px;">✅ Terminado</span>';
   if (e === 'en_progreso') return '<span style="font-size:11px;background:#FFFBEB;color:#B45309;border:1px solid #F59E0B;border-radius:12px;padding:2px 8px;">✏️ En progreso</span>';
@@ -11562,14 +11574,29 @@ function _cdepRenderLista() {
   if (!cdepProducts.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos en el depósito. Tocá "Traer stock de GN".</div>'; return; }
   const term = cdepProducts.filter(p => _cdepEstado(p.pid) === 'terminado').length;
   const prog = cdepProducts.filter(p => _cdepEstado(p.pid) === 'en_progreso').length;
+  const sinPrev = cdepProducts.filter(p => _cdepUltimoMs(p.pid) === 0).length;
+  const conteados = cdepProducts.length - sinPrev;
   const q = cdepSearch.trim().toLowerCase();
-  const lista = q ? cdepProducts.filter(p => p.name.toLowerCase().includes(q)) : cdepProducts;
+  const lista = cdepProducts.filter(p => (!q || p.name.toLowerCase().includes(q)) && _cdepPasaFiltro(p));
   let html = '';
   html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">`;
   html += `<input id="conteodep-buscar" type="text" value="${esc(cdepSearch)}" oninput="conteoDepSearch(this.value)" placeholder="🔎 Buscá un producto (ej: Cover Case)…" autocomplete="off" style="flex:1;min-width:240px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;">`;
   html += `</div>`;
   if (cdepStockTime) html += `<div style="font-size:12.5px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;border-radius:8px;padding:8px 10px;margin-bottom:10px;">📸 <b>Stock de GN traído: ${_cdepStockLabel()}</b> — hasta ese momento estaban los pedidos preparados. <b>Desde esa hora no despaches nada</b> hasta terminar el conteo. <span style="color:#B45309;">Si volvés a "Traer stock de GN", esta hora se actualiza.</span></div>`;
-  html += `<div style="font-size:13px;margin-bottom:10px;color:#374151;"><b>${cdepProducts.length}</b> productos · <b style="color:#166534;">${term}</b> terminados · <b style="color:#B45309;">${prog}</b> en progreso</div>`;
+  html += `<div style="font-size:13px;margin-bottom:8px;color:#374151;"><b>${cdepProducts.length}</b> productos · <b style="color:#166534;">${term}</b> terminados · <b style="color:#B45309;">${prog}</b> en progreso</div>`;
+  const chips = [
+    ['todos', 'Todos', cdepProducts.length],
+    ['sin_previo', '🔴 Sin conteo previo', sinPrev],
+    ['contados', '📅 Ya contados', conteados],
+    ['en_progreso', '✏️ En progreso', prog],
+    ['terminado', '✅ Terminados', term],
+  ];
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">`;
+  chips.forEach(([f, label, n]) => {
+    const on = cdepFiltro === f;
+    html += `<button class="btn-sm" onclick="conteoDepFiltro('${f}')" style="background:${on ? '#378ADD' : '#fff'};color:${on ? '#fff' : '#374151'};border:1px solid ${on ? '#378ADD' : '#D1D5DB'};font-weight:${on ? '700' : '500'};">${label} <span style="opacity:.75;">(${n})</span></button>`;
+  });
+  html += `</div>`;
   if (_cdepPuedeAplicar() && term) {
     html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="conteoDepAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} producto${term > 1 ? 's' : ''} terminado${term > 1 ? 's' : ''})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo de GN y genera el Excel de ajuste.</span></div>`;
   }
@@ -11579,14 +11606,13 @@ function _cdepRenderLista() {
     const btnTxt = e === 'terminado' ? 'Ver / editar' : (e === 'en_progreso' ? 'Seguir' : 'Contar');
     const btnBg = e === 'sin_iniciar' ? '#378ADD' : '#fff';
     const btnCol = e === 'sin_iniciar' ? '#fff' : '#1D4ED8';
-    const stp = cdepState[String(p.pid)];
-    const ultMs = Math.max((stp && stp.terminadoAt) || 0, cdepLastCount[String(p.pid)] || 0);
+    const ultMs = _cdepUltimoMs(p.pid);
     const fecha = ultMs
       ? `<div style="font-size:10.5px;color:#6B7280;margin-top:3px;">📅 Último: ${_cdepFechaLabel(ultMs)}</div>`
       : `<div style="font-size:10.5px;color:#C4C4C4;margin-top:3px;">Sin conteo previo</div>`;
     html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:7px 10px;">${esc(p.name)}</td><td style="text-align:center;color:#9CA3AF;">${p.variants.length}</td><td style="text-align:center;">${_cdepChipEstado(e)}${fecha}</td><td style="text-align:right;padding-right:10px;"><button class="btn-sm" onclick="conteoDepOpen('${p.pid}')" style="background:${btnBg};color:${btnCol};border:1px solid #378ADD;">${btnTxt}</button></td></tr>`;
   });
-  if (!lista.length) html += '<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan con la búsqueda.</td></tr>';
+  if (!lista.length) html += `<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan${cdepFiltro !== 'todos' ? ' con este filtro' : ''}${q ? ' con la búsqueda' : ''}.</td></tr>`;
   if (lista.length > 400) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 400 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
   html += '</tbody></table></div>';
   cont.innerHTML = html;
