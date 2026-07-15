@@ -104,6 +104,15 @@ export default async function handler(req, res) {
   if (!storeId) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
   if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
 
+  // Sonda temporal: ver la forma cruda de GET /inventario/{pid} para diseñar el relleno por producto en vivo.
+  if (req.query.probe_pid) {
+    try {
+      const d = await gnFetch(`inventario/${req.query.probe_pid}`, token);
+      const v0 = (d.variantes || [])[0] || null;
+      return res.status(200).json({ ok: true, topKeys: Object.keys(d || {}), variantesCount: (d.variantes || []).length, primeraVariante: v0 });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+
   try {
     // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.
     const rows = await fetchInventarioCompleto(storeId, token);
