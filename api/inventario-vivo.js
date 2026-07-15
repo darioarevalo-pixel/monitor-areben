@@ -37,27 +37,26 @@ function _pickReal(a, b) {
   if (as !== bs) return as ? a : b;
   return Number(a.inventory_id) <= Number(b.inventory_id) ? a : b;
 }
-// Prueba si GN acepta páginas grandes (menos cortes = menos inestabilidad). Si no, cae a 200.
-async function _probePerPage(base, token) {
-  try { const d = await gnFetch(`${base}&per_page=1000&page=1`, token); return (d.data || []).length > 200 ? 1000 : 200; }
-  catch (e) { return 200; }
-}
 async function fetchInventarioCompleto(storeId, token) {
-  const base = `inventario/obtener?store_id=${storeId}`;
-  const perPage = await _probePerPage(base, token);
+  const base = `inventario/obtener?per_page=200&store_id=${storeId}`; // 200 es lo que GN soporta bien
   const byKey = new Map();
-  const MAX_PASSES = 5;
+  const MAX_PASSES = 3;   // 3 pasadas ⇒ prob. de saltear una variante en TODAS es despreciable
   let prev = -1;
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
-    let page = 1;
-    while (true) {
-      const d = await gnFetch(`${base}&per_page=${perPage}&page=${page}`, token);
-      const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
-      for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
-      if (!d.meta?.has_more_pages || (d.data || []).length === 0) break;
-      page++; await sleep(60);
+    try {
+      let page = 1;
+      while (true) {
+        const d = await gnFetch(`${base}&page=${page}`, token);
+        const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
+        for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
+        if (!d.meta?.has_more_pages || (d.data || []).length === 0) break;
+        page++; await sleep(50);
+      }
+    } catch (e) {
+      if (byKey.size === 0) throw e;   // si ni siquiera arrancó, propagá el error; si ya junté datos, sigo con lo que hay
+      break;
     }
-    if (byKey.size === prev) break;   // una pasada entera no sumó ninguna variante nueva → completo
+    if (byKey.size === prev) break;    // una pasada entera no sumó ninguna variante nueva → completo
     prev = byKey.size;
   }
   return [...byKey.values()];
