@@ -10,6 +10,28 @@ const DEPOSITO_STORE_ID = { bdi: 13307, zattia: 18210 };
 // store_id del LOCAL por marca (según SF_CFG.store.local de crear-venta.js). Para el "Conteo estándar" del Local.
 const LOCAL_STORE_ID = { bdi: 18393, zattia: 11780 };
 const TOKENS = { bdi: process.env.GN_TOKEN, zattia: process.env.GN_TOKEN_ZATTIA };
+// Nombre de la ubicación en el ESPEJO (Supabase) por marca+ubicación (fallback si el vivo no responde).
+const MIRROR_STORE_NAME = { bdi: { deposito: 'Deposito Minorista', local: 'Local' }, zattia: { deposito: 'Deposito ', local: 'Local' } };
+function _sbCfg(store) {
+  if (store === 'zattia') return { url: process.env.ZATTIA_SUPABASE_URL, key: process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY };
+  return { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
+}
+// Lee del espejo TODAS las variantes de una ubicación (paginado y ordenado → estable, completo).
+async function fetchEspejo(store, storeName) {
+  const { url, key } = _sbCfg(store);
+  if (!url || !key || !storeName) return [];
+  const out = []; let offset = 0; const PAGE = 1000;
+  while (true) {
+    const q = `${url.replace(/\/$/, '')}/rest/v1/inventario?select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name&store_name=eq.${encodeURIComponent(storeName)}&order=product_id.asc,size_id.asc&limit=${PAGE}&offset=${offset}`;
+    let d;
+    try { const r = await fetch(q, { headers: { apikey: key, Authorization: 'Bearer ' + key } }); if (!r.ok) break; d = await r.json(); } catch (e) { break; }
+    if (!Array.isArray(d) || !d.length) break;
+    out.push(...d);
+    if (d.length < PAGE) break;
+    offset += PAGE;
+  }
+  return out;
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -40,9 +62,9 @@ function _pickReal(a, b) {
 async function fetchInventarioCompleto(storeId, token) {
   const base = `inventario/obtener?per_page=200&store_id=${storeId}`; // 200 es lo que GN soporta bien
   const byKey = new Map();
-  const MAX_PASSES = 3;      // varias pasadas ⇒ lo que una saltea, otra lo trae
+  const MAX_PASSES = 2;      // el espejo garantiza la lista completa; el vivo aporta stock fresco + inventory_id
   const start = Date.now();
-  const BUDGET_MS = 21000;   // tope duro: nunca pasar del límite de la función (maxDuration 30s)
+  const BUDGET_MS = 15000;   // tope duro: nunca pasar del límite de la función (maxDuration 30s)
   const vencido = () => (Date.now() - start) > BUDGET_MS;
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const before = byKey.size;
@@ -97,9 +119,27 @@ export default async function handler(req, res) {
         sku: r.sku || null,                // para separar líneas (STUNNED = sku empieza con STU)
         barcode: r.barcode || null,
         available_quantity: r.available_quantity ?? 0,
+        fuente: 'vivo',
       }));
-    const store_name = dep.length ? dep[0].store_name : null;
-    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name, count: dep.length, rows: dep });
+    // Nombre de la ubicación para la respuesta/Excel (naming de GN): lo da el vivo.
+    const storeName = (dep.length ? dep[0].store_name : null) || (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || null;
+    // Nombre EXACTO con el que el espejo guarda esta ubicación (ej: ZATTIA usa "Deposito " con espacio).
+    const espejoName = (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || storeName;
+    // Completar con el ESPEJO: cualquier variante que el vivo no haya traído se agrega (stock del espejo, sin inventory_id).
+    const byKey = new Map(dep.map(r => [r.product_id + '_' + r.size_id, r]));
+    let desdeEspejo = 0;
+    try {
+      const esp = await fetchEspejo(store, espejoName);
+      esp.forEach(m => {
+        const k = m.product_id + '_' + m.size_id;
+        if (!byKey.has(k)) {
+          byKey.set(k, { inventory_id: null, product_id: m.product_id, product_name: m.product_name || null, product_code: null, size_id: m.size_id, size_name: m.size_name || null, store_name: m.store_name || storeName, sku: m.sku || null, barcode: m.barcode || null, available_quantity: m.available_quantity ?? 0, fuente: 'espejo' });
+          desdeEspejo++;
+        }
+      });
+    } catch (e) { /* si el espejo falla, devuelvo al menos lo del vivo */ }
+    const merged = [...byKey.values()];
+    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: merged.length, from_vivo: dep.length, from_espejo: desdeEspejo, rows: merged });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
