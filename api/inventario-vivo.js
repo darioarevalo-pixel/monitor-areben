@@ -40,24 +40,21 @@ function _pickReal(a, b) {
 async function fetchInventarioCompleto(storeId, token) {
   const base = `inventario/obtener?per_page=200&store_id=${storeId}`; // 200 es lo que GN soporta bien
   const byKey = new Map();
-  const MAX_PASSES = 3;   // 3 pasadas ⇒ prob. de saltear una variante en TODAS es despreciable
-  let prev = -1;
+  const MAX_PASSES = 3;   // varias pasadas ⇒ lo que una saltea, otra lo trae
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
-    try {
-      let page = 1;
-      while (true) {
+    const before = byKey.size;
+    let page = 1, more = true;
+    while (more && page <= 25) {
+      try {
         const d = await gnFetch(`${base}&page=${page}`, token);
         const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
         for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
-        if (!d.meta?.has_more_pages || (d.data || []).length === 0) break;
-        page++; await sleep(50);
-      }
-    } catch (e) {
-      if (byKey.size === 0) throw e;   // si ni siquiera arrancó, propagá el error; si ya junté datos, sigo con lo que hay
-      break;
+        more = !!(d.meta && d.meta.has_more_pages) && (d.data || []).length > 0;
+      } catch (e) { /* una página falló: la salteo y sigo (otra pasada la recupera) */ }
+      page++; await sleep(50);
     }
-    if (byKey.size === prev) break;    // una pasada entera no sumó ninguna variante nueva → completo
-    prev = byKey.size;
+    if (byKey.size === 0) throw new Error('No se pudo leer el inventario de GN. Reintentá en unos segundos.');
+    if (pass >= 2 && byKey.size === before) break;  // una pasada entera no sumó nada nuevo → completo
   }
   return [...byKey.values()];
 }
