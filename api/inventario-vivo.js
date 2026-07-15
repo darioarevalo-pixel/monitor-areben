@@ -40,21 +40,26 @@ function _pickReal(a, b) {
 async function fetchInventarioCompleto(storeId, token) {
   const base = `inventario/obtener?per_page=200&store_id=${storeId}`; // 200 es lo que GN soporta bien
   const byKey = new Map();
-  const MAX_PASSES = 3;   // varias pasadas ⇒ lo que una saltea, otra lo trae
+  const MAX_PASSES = 3;      // varias pasadas ⇒ lo que una saltea, otra lo trae
+  const start = Date.now();
+  const BUDGET_MS = 21000;   // tope duro: nunca pasar del límite de la función (maxDuration 30s)
+  const vencido = () => (Date.now() - start) > BUDGET_MS;
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const before = byKey.size;
     let page = 1, more = true;
     while (more && page <= 25) {
+      if (vencido()) { more = false; break; }
       try {
         const d = await gnFetch(`${base}&page=${page}`, token);
         const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
         for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
         more = !!(d.meta && d.meta.has_more_pages) && (d.data || []).length > 0;
       } catch (e) { /* una página falló: la salteo y sigo (otra pasada la recupera) */ }
-      page++; await sleep(50);
+      page++; await sleep(40);
     }
     if (byKey.size === 0) throw new Error('No se pudo leer el inventario de GN. Reintentá en unos segundos.');
-    if (pass >= 2 && byKey.size === before) break;  // una pasada entera no sumó nada nuevo → completo
+    if (vencido()) break;                             // se acabó el presupuesto: devuelvo lo juntado
+    if (pass >= 2 && byKey.size === before) break;    // una pasada entera no sumó nada nuevo → completo
   }
   return [...byKey.values()];
 }
