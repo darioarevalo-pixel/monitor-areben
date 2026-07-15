@@ -27,18 +27,44 @@ async function gnFetch(path, token, tries = 4) {
   throw last;
 }
 
-async function fetchAllPages(basePath, token) {
-  const out = []; let page = 1;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    const d = await gnFetch(`${basePath}${sep}page=${page}`, token);
-    const items = d.data || [];
-    out.push(...items);
-    if (!d.meta?.has_more_pages || items.length === 0) break;
-    page++; await sleep(120);
-  }
-  return out;
+// La paginación de GN NO es estable: entre página y página el orden se corre, así que una sola
+// pasada duplica algunas variantes y SALTEA otras (distinto en cada llamada). Para que nunca falte
+// una variante, hacemos varias pasadas completas y UNIMOS por (product_id+size_id), quedándonos con
+// la línea real de cada variante (stock>0; en empate, el inventory_id más bajo). Cortamos cuando una
+// pasada no agrega nada nuevo (convergió).
+function _pickReal(a, b) {
+  const as = Number(a.available_quantity) > 0, bs = Number(b.available_quantity) > 0;
+  if (as !== bs) return as ? a : b;
+  return Number(a.inventory_id) <= Number(b.inventory_id) ? a : b;
 }
+// Prueba si GN acepta páginas grandes (menos cortes = menos inestabilidad). Si no, cae a 200.
+async function _probePerPage(base, token) {
+  try { const d = await gnFetch(`${base}&per_page=1000&page=1`, token); return (d.data || []).length > 200 ? 1000 : 200; }
+  catch (e) { return 200; }
+}
+async function fetchInventarioCompleto(storeId, token) {
+  const base = `inventario/obtener?store_id=${storeId}`;
+  const perPage = await _probePerPage(base, token);
+  const byKey = new Map();
+  const MAX_PASSES = 5;
+  let prev = -1;
+  for (let pass = 1; pass <= MAX_PASSES; pass++) {
+    let page = 1;
+    while (true) {
+      const d = await gnFetch(`${base}&per_page=${perPage}&page=${page}`, token);
+      const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
+      for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
+      if (!d.meta?.has_more_pages || (d.data || []).length === 0) break;
+      page++; await sleep(60);
+    }
+    if (byKey.size === prev) break;   // una pasada entera no sumó ninguna variante nueva → completo
+    prev = byKey.size;
+  }
+  return [...byKey.values()];
+}
+
+// Varias pasadas de paginación pueden tardar → subimos el techo de tiempo de la función.
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -56,10 +82,9 @@ export default async function handler(req, res) {
   if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
 
   try {
-    // GN filtra por store_id → baja SOLO el depósito de la marca (mucho menos páginas). Igual filtramos por las dudas.
-    const rows = await fetchAllPages(`inventario/obtener?per_page=200&store_id=${storeId}`, token);
+    // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.
+    const rows = await fetchInventarioCompleto(storeId, token);
     const dep = rows
-      .filter(r => Number(r.store_id) === storeId)
       .map(r => ({
         inventory_id: r.inventory_id,   // == id_inventario del Excel de ajuste de GN
         product_id: r.product_id,
