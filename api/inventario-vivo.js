@@ -7,6 +7,8 @@ const GN_BASE = 'https://www.gestionnube.com/api/v1';
 // store_id del DEPÓSITO por marca (coincide con crear-venta.js → SF_CFG.store.deposito).
 // BDI: 13307 = "Deposito Minorista". ZATTIA: 18210. (El "Deposito Mayorista" 19320 de BDI está eliminado/vacío → no aplica acá.)
 const DEPOSITO_STORE_ID = { bdi: 13307, zattia: 18210 };
+// store_id del LOCAL por marca (según SF_CFG.store.local de crear-venta.js). Para el "Conteo estándar" del Local.
+const LOCAL_STORE_ID = { bdi: 18393, zattia: 11780 };
 const TOKENS = { bdi: process.env.GN_TOKEN, zattia: process.env.GN_TOKEN_ZATTIA };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -47,7 +49,8 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'método no permitido' });
 
   const store = String(req.query.store || '').toLowerCase();
-  const storeId = DEPOSITO_STORE_ID[store];
+  const loc = String(req.query.loc || 'deposito').toLowerCase(); // 'deposito' (default) | 'local'
+  const storeId = loc === 'local' ? LOCAL_STORE_ID[store] : DEPOSITO_STORE_ID[store];
   const token = TOKENS[store];
   if (!storeId) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
   if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
@@ -65,11 +68,12 @@ export default async function handler(req, res) {
         size_id: r.size_id,
         size_name: r.size_name || null,
         store_name: r.store_name || null,  // nombre de la ubicación (para la columna 'ubicacion' del Excel de GN)
+        sku: r.sku || null,                // para separar líneas (STUNNED = sku empieza con STU)
         barcode: r.barcode || null,
         available_quantity: r.available_quantity ?? 0,
       }));
     const store_name = dep.length ? dep[0].store_name : null;
-    return res.status(200).json({ ok: true, store, store_id: storeId, store_name, count: dep.length, rows: dep });
+    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name, count: dep.length, rows: dep });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }

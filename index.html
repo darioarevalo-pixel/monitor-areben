@@ -1605,6 +1605,24 @@
       </div>
     </div>
 
+    <!-- ── Conteo estándar del Local (ZATTIA): exhibido escaneado + depósito a mano ─ -->
+    <div id="tab-conteo-estandar" class="section">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div id="ce-titulo" style="font-size:16px;font-weight:700;">🔢 Conteo estándar</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:2px;max-width:720px;">Conteo físico del <b>Local</b> por producto y talle. Escaneá lo <b>exhibido</b> (cada lectura suma 1) y cargá a mano el <b>depósito del local</b>; el total (exhibido + depósito) se compara contra el stock del Local. El ajuste usa <b>stock vivo + diferencia</b>. Arrancá con los pedidos al día.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn-sm" onclick="ceActualizarGN(this)" title="Traé el stock más nuevo del Local de GN al arrancar (con los pedidos al día)" style="background:#378ADD;color:#fff;">🔄 Traer stock de GN</button>
+            <button class="btn-sm" onclick="ceHistorial()" style="background:#fff;border:1px solid #D1D5DB;">🕘 Historial</button>
+            <button class="btn-sm" onclick="ceReset()" style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C;">🗑️ Reiniciar</button>
+          </div>
+        </div>
+        <div id="ce-cont" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
     <!-- ── Productos caducados (depuración) ────────────────────────────────── -->
     <div id="tab-caducados" class="section">
       <div class="card">
@@ -6519,9 +6537,13 @@ function markActiveNav(id) {
 
 function switchTab(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
-  document.getElementById('tab-' + id).classList.add('visible');
+  // Las dos entradas de "Conteo estándar" (Zattia/Stunned) comparten una sola sección.
+  const tabId = (id === 'conteo-estandar-zattia' || id === 'conteo-estandar-stunned') ? 'conteo-estandar' : id;
+  const tabEl = document.getElementById('tab-' + tabId); if (tabEl) tabEl.classList.add('visible');
   _currentTabId = id;
   markActiveNav(id);
+  if (id === 'conteo-estandar-zattia') { ceInit('zattia'); return; }
+  if (id === 'conteo-estandar-stunned') { ceInit('stunned'); return; }
   // Comisiones no depende de los datos de ventas (es config), se inicializa aparte
   if (id === 'comisiones') { if (!tabsRendered[id]) { tabsRendered[id] = true; comInit(); } return; }
   if (id === 'gen-talles') { if (!tabsRendered[id]) { tabsRendered[id] = true; genTallesInit(); } return; }
@@ -9229,9 +9251,15 @@ const PERM_CAT = [
   { key: 'disenos', label: '🗳️ Diseños', info: 'Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).', brands: ['bdi', 'zattia'] },
   { key: 'ingresos', label: '📦 Ingresos proyectados', info: 'Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.', brands: ['bdi'] },
   { key: 'reposicion', label: '🔁 Reposición', info: 'Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.', brands: ['bdi', 'zattia'] },
-  { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso.', brands: ['bdi', 'zattia'] },
+  { key: 'conteo', label: '🔢 Conteo de local', info: 'Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso. Exclusiva de BDI (en BDI el conteo del local es 100% por código de barras).', brands: ['bdi'] },
   { key: 'conteo-deposito', label: '🔢 Conteo', info: 'Conteo físico del depósito por producto (cargando cantidades a mano, no por escaneo). Buscás el producto, contás sus variantes y lo terminás. El ajuste a GN se calcula con stock vivo + diferencia, así las ventas durante el conteo no lo ensucian. Guarda historial de cada conteo aplicado.', brands: ['bdi', 'zattia'], subs: [
       { key: 'aplicar', label: '✅ Puede aplicar el ajuste', info: 'Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos, pero no ve el botón de aplicar. OJO: el conteo se guarda en el dispositivo donde se cuenta, así que quien aplique tiene que hacerlo en esa misma compu/celular.' },
+  ] },
+  { key: 'conteo-estandar-zattia', label: '🔢 Conteo Zattia', info: 'Conteo físico del LOCAL de ZATTIA (línea Zattia, SKU que NO empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.', brands: ['zattia'], subs: [
+      { key: 'aplicar', label: '✅ Puede aplicar el ajuste', info: 'Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos. OJO: el conteo se guarda en el dispositivo donde se cuenta.' },
+  ] },
+  { key: 'conteo-estandar-stunned', label: '👕 Conteo Stunned', info: 'Conteo físico del LOCAL de ZATTIA (línea STUNNED, SKU que empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.', brands: ['zattia'], subs: [
+      { key: 'aplicar', label: '✅ Puede aplicar el ajuste', info: 'Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos. OJO: el conteo se guarda en el dispositivo donde se cuenta.' },
   ] },
   { key: 'cupones', label: '🎟️ Cupones', info: 'Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.', brands: ['bdi', 'zattia'], subs: [
       { key: 'crear', label: '✏️ Puede generar cupones', info: 'Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local.' },
@@ -9249,7 +9277,7 @@ const PERM_CAT = [
 const NAV_CATS = [
   { id: 'inicio',    label: '🏠 Inicio',    keys: ['inicio'] },
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
-  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
+  { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
@@ -11868,6 +11896,367 @@ async function conteoDepHistorial() {
   cont.innerHTML = html;
 }
 function conteoDepVolverLista() { cdepView = 'lista'; conteoDepRender(); }
+
+// ═════════ Conteo estándar del Local (ZATTIA): exhibido (escaneo) + depósito (a mano) ═════════
+// Reusa la maquinaria del Conteo de Depósito, pero: lee el LOCAL, separa líneas por SKU
+// (STUNNED = empieza con STU), y cada talle tiene DOS cargas que se suman (exhibido + depósito).
+let ceProducts = [];   // [{pid, name, linea:'zattia'|'stunned', variants:[{vid,sid,size,barcode,sku,inventory_id,esperado}]}]
+let ceByBc = {};       // barcode normalizado -> vid (para el escaneo)
+let ceState = {};      // pid -> {estado, exhibido:{vid:n}, deposito:{vid:n}, snap:{vid:sis}, dif:{vid:d}, terminadoAt}
+let ceLinea = 'zattia';// línea activa (viene del ítem del sidebar)
+let ceFiltro = 'todos';
+let ceSearch = '';
+let ceOrderAsc = true;
+let ceView = 'lista';  // 'lista'|'foco'|'preview'|'historial'
+let ceFocusPid = null;
+let ceStockTime = null;
+let ceInicio = null;
+let ceLoading = false;
+let ceLastCount = {};  // pid -> ms del último conteo aplicado de esa línea
+let cePreview = null;
+function _ceStore() { return _cuentaKey(); }
+function _ceKey() { return 'monitor_conteoest_' + _cuentaKey(); }
+function _ceNormBc(b) { return String(b || '').trim().toUpperCase(); }
+function _ceLineaOf(variants) { return (variants || []).some(v => /^STU/i.test(String(v.sku || ''))) ? 'stunned' : 'zattia'; }
+function _ceLineaLabel(l) { return l === 'stunned' ? '👕 Stunned' : 'Zattia'; }
+function _cePuedeAplicar() { return _puedeVer(_ceStore(), 'conteo-estandar-' + ceLinea + '.aplicar'); }
+function _ceSave() { try { localStorage.setItem(_ceKey(), JSON.stringify({ inicio: ceInicio, stockTime: ceStockTime, prods: ceState })); } catch (e) {} }
+function _ceLoad() { try { const s = JSON.parse(localStorage.getItem(_ceKey()) || '{}'); return (s && typeof s === 'object') ? s : {}; } catch (e) { return {}; } }
+function _ceStockLabel() { if (!ceStockTime) return ''; const d = new Date(ceStockTime), n = new Date(); const h = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); return (d.toDateString() === n.toDateString() ? 'hoy' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })) + ' ' + h + ' hs'; }
+function _ceEstado(pid) { const s = ceState[String(pid)]; return s ? s.estado : 'sin_iniciar'; }
+function _ceTotal(st, vid) { return ((st.exhibido && st.exhibido[vid]) || 0) + ((st.deposito && st.deposito[vid] != null) ? st.deposito[vid] : 0); }
+function _ceTocada(st, vid) { return ((st.exhibido && st.exhibido[vid]) || 0) > 0 || (st.deposito && st.deposito[vid] != null); }
+function _ceUltimoMs(pid) { const s = ceState[String(pid)]; return Math.max((s && s.terminadoAt) || 0, ceLastCount[String(pid)] || 0); }
+function _cePasaFiltro(p) {
+  if (ceFiltro === 'sin_previo') return _ceUltimoMs(p.pid) === 0;
+  if (ceFiltro === 'contados') return _ceUltimoMs(p.pid) > 0;
+  if (ceFiltro === 'en_progreso') return _ceEstado(p.pid) === 'en_progreso';
+  if (ceFiltro === 'terminado') return _ceEstado(p.pid) === 'terminado';
+  return true;
+}
+
+async function _ceFetchVivo() {
+  const r = await fetch('/api/inventario-vivo?store=' + _ceStore() + '&loc=local&nc=' + Date.now());
+  const d = await r.json();
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el stock del Local en vivo.');
+  return d;
+}
+async function ceInit(linea, forzarStock) {
+  if (linea) ceLinea = linea;
+  const cont = document.getElementById('ce-cont');
+  const tit = document.getElementById('ce-titulo'); if (tit) tit.textContent = (ceLinea === 'stunned' ? '👕 Conteo Stunned' : '🔢 Conteo Zattia') + ' · Local';
+  ceFocusPid = null; ceView = 'lista'; ceFiltro = 'todos';
+  // Si ya tengo el feed cargado y no piden traer stock, solo re-filtro por la línea nueva.
+  if (ceProducts.length && !forzarStock) { ceRender(); _ceCargarUltimos(); return; }
+  if (ceLoading) return;
+  ceLoading = true;
+  if (cont) cont.innerHTML = '<div style="padding:20px;color:#9CA3AF;">Cargando el Local en vivo desde Gestión Nube…</div>';
+  try {
+    const d = await _ceFetchVivo();
+    const realMap = _cdepRealMap(d.rows || []);
+    const byPid = {};
+    Object.values(realMap).forEach(r => {
+      const pid = String(r.product_id);
+      if (!byPid[pid]) byPid[pid] = { pid, name: r.product_name || '—', variants: [] };
+      byPid[pid].variants.push({ vid: pid + '_' + r.size_id, sid: r.size_id, size: r.size_name || '—', barcode: r.barcode, sku: r.sku, inventory_id: r.inventory_id, esperado: Number(r.available_quantity) || 0 });
+    });
+    ceProducts = Object.values(byPid).map(p => ({ ...p, linea: _ceLineaOf(p.variants) })).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    ceByBc = {}; ceProducts.forEach(p => p.variants.forEach(v => { const bc = _ceNormBc(v.barcode); if (bc) ceByBc[bc] = v.vid; }));
+    const saved = _ceLoad();
+    ceState = (saved && saved.prods) ? saved.prods : {};
+    ceInicio = saved ? (saved.inicio || null) : null;
+    const hayConteo = Object.values(ceState).some(s => (s.exhibido && Object.keys(s.exhibido).length) || (s.deposito && Object.keys(s.deposito).length));
+    ceStockTime = (forzarStock || !saved.stockTime || !hayConteo) ? Date.now() : saved.stockTime;
+    _ceSave();
+  } catch (e) {
+    ceLoading = false;
+    if (cont) cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el Local en vivo: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="ceInit()">Reintentar</button></div>';
+    return;
+  }
+  ceLoading = false;
+  ceRender();
+  _ceCargarUltimos();
+}
+async function ceActualizarGN(btn) {
+  if (ceLoading) return;
+  const hay = Object.values(ceState).some(s => (s.exhibido && Object.keys(s.exhibido).length) || (s.deposito && Object.keys(s.deposito).length));
+  if (hay && !confirm('Vas a traer el stock más nuevo del Local. Lo que ya contaste se mantiene (la diferencia queda congelada). ¿Seguir?')) return;
+  const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Trayendo…'; }
+  await ceInit(null, true);
+  if (btn) { btn.disabled = false; btn.textContent = o; }
+}
+function ceReset() {
+  if (!confirm('¿Reiniciar el conteo del Local? Se borra todo lo cargado (Zattia y Stunned). Los ajustes ya aplicados quedan en el Historial.')) return;
+  ceState = {}; ceInicio = null; ceStockTime = null; ceFocusPid = null; ceView = 'lista'; _ceSave();
+  ceRender();
+}
+async function _ceCargarUltimos() {
+  try {
+    const r = await fetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now());
+    const d = await r.json(); if (!d || !d.ok) return;
+    const porPid = {}, porNombre = {};
+    (d.conteos || []).forEach(c => {
+      const rr = c.resumen || {};
+      if (rr.modo !== 'estandar' || rr.linea !== ceLinea) return; // solo esta línea
+      const ms = c.fecha_aplicado ? new Date(c.fecha_aplicado).getTime() : 0; if (!ms) return;
+      (Array.isArray(rr.productos) ? rr.productos : []).forEach(p => { const pid = String(p.pid || ''); if (pid) porPid[pid] = Math.max(porPid[pid] || 0, ms); const n = String(p.nombre || '').trim(); if (n) porNombre[n] = Math.max(porNombre[n] || 0, ms); });
+      (Array.isArray(c.detalle) ? c.detalle : []).forEach(x => { const n = String(x.producto || '').trim(); if (n) porNombre[n] = Math.max(porNombre[n] || 0, ms); });
+    });
+    const map = {}; ceProducts.forEach(p => { const pid = String(p.pid); const ms = Math.max(porPid[pid] || 0, porNombre[String(p.name || '').trim()] || 0); if (ms) map[pid] = ms; });
+    ceLastCount = map;
+    if (ceView === 'lista' && !ceFocusPid) _ceRenderLista();
+  } catch (e) {}
+}
+
+function ceRender() {
+  const cont = document.getElementById('ce-cont'); if (!cont) return;
+  if (ceView === 'preview') return _ceRenderPreview();
+  if (ceView === 'historial') return;
+  if (ceFocusPid) return _ceRenderFoco();
+  _ceRenderLista();
+}
+function _ceScanBox() {
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><input id="ce-scan" type="text" autocomplete="off" placeholder="🔫 Escaneá lo EXHIBIDO (suma 1)…" onkeydown="if(event.key==='Enter'){ceScan(this.value);this.value='';this.focus();}" style="flex:1;min-width:220px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;"><span id="ce-feedback" style="font-size:13px;min-width:160px;"></span></div>`;
+}
+function _ceRenderLista() {
+  const cont = document.getElementById('ce-cont'); if (!cont) return;
+  const dela = ceProducts.filter(p => p.linea === ceLinea);
+  if (!ceProducts.length) { cont.innerHTML = '<div style="padding:14px;color:#9CA3AF;">Sin productos en el Local. Tocá "Traer stock de GN".</div>'; return; }
+  const term = dela.filter(p => _ceEstado(p.pid) === 'terminado').length;
+  const prog = dela.filter(p => _ceEstado(p.pid) === 'en_progreso').length;
+  const sinPrev = dela.filter(p => _ceUltimoMs(p.pid) === 0).length;
+  const conteados = dela.length - sinPrev;
+  const q = ceSearch.trim().toLowerCase();
+  const lista = dela.filter(p => (!q || p.name.toLowerCase().includes(q)) && _cePasaFiltro(p));
+  let html = _ceScanBox();
+  html += `<div style="font-size:12px;color:#6B7280;margin-bottom:8px;">Línea: <b>${_ceLineaLabel(ceLinea)}</b>. El escaneo solo suma dentro de esta línea. El <b>Depósito local</b> lo cargás a mano abriendo cada producto.</div>`;
+  html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><input id="ce-buscar" type="text" value="${esc(ceSearch)}" oninput="ceSearchFn(this.value)" placeholder="🔎 Buscá un producto…" autocomplete="off" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;"></div>`;
+  if (ceStockTime) html += `<div style="font-size:12.5px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;border-radius:8px;padding:8px 10px;margin-bottom:10px;">📸 <b>Stock del Local traído: ${_ceStockLabel()}</b> — arrancá con los pedidos al día. <span style="color:#B45309;">Si volvés a "Traer stock de GN", esta hora se actualiza.</span></div>`;
+  html += `<div style="font-size:13px;margin-bottom:8px;color:#374151;"><b>${dela.length}</b> productos · <b style="color:#166534;">${term}</b> terminados · <b style="color:#B45309;">${prog}</b> en progreso</div>`;
+  const chips = [['todos', 'Todos', dela.length], ['sin_previo', '🔴 Sin conteo previo', sinPrev], ['contados', '📅 Ya contados', conteados], ['en_progreso', '✏️ En progreso', prog], ['terminado', '✅ Terminados', term]];
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">`;
+  chips.forEach(([f, label, n]) => { const on = ceFiltro === f; html += `<button class="btn-sm" onclick="ceFiltroFn('${f}')" style="background:${on ? '#378ADD' : '#fff'};color:${on ? '#fff' : '#374151'};border:1px solid ${on ? '#378ADD' : '#D1D5DB'};font-weight:${on ? '700' : '500'};">${label} <span style="opacity:.75;">(${n})</span></button>`; });
+  html += `</div>`;
+  if (_cePuedeAplicar() && term) html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="ceAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} terminado${term > 1 ? 's' : ''} de ${_ceLineaLabel(ceLinea)})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo del Local y genera el Excel.</span></div>`;
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:7px 10px;">Producto</th><th style="text-align:center;width:80px;">Talles</th><th style="text-align:center;width:130px;">Estado</th><th style="width:110px;"></th></tr></thead><tbody>`;
+  lista.slice(0, 500).forEach(p => {
+    const e = _ceEstado(p.pid);
+    const btnTxt = e === 'terminado' ? 'Ver / editar' : (e === 'en_progreso' ? 'Seguir' : 'Contar');
+    const btnBg = e === 'sin_iniciar' ? '#378ADD' : '#fff', btnCol = e === 'sin_iniciar' ? '#fff' : '#1D4ED8';
+    const ultMs = _ceUltimoMs(p.pid);
+    const fecha = ultMs ? `<div style="font-size:10.5px;color:#6B7280;margin-top:3px;">📅 Último: ${_cdepFechaLabel(ultMs)}</div>` : `<div style="font-size:10.5px;color:#C4C4C4;margin-top:3px;">Sin conteo previo</div>`;
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:7px 10px;">${esc(p.name)}</td><td style="text-align:center;color:#9CA3AF;">${p.variants.length}</td><td style="text-align:center;">${_cdepChipEstado(e)}${fecha}</td><td style="text-align:right;padding-right:10px;"><button class="btn-sm" onclick="ceOpen('${p.pid}')" style="background:${btnBg};color:${btnCol};border:1px solid #378ADD;">${btnTxt}</button></td></tr>`;
+  });
+  if (!lista.length) html += `<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan${ceFiltro !== 'todos' ? ' con este filtro' : ''}${q ? ' con la búsqueda' : ''}.</td></tr>`;
+  if (lista.length > 500) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 500 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+  const sc = document.getElementById('ce-scan'); if (sc && ceView === 'lista') sc.focus();
+}
+function ceSearchFn(v) { ceSearch = v; _ceRenderLista(); const b = document.getElementById('ce-buscar'); if (b) { b.focus(); const val = b.value; b.value = ''; b.value = val; } }
+function ceFiltroFn(f) { ceFiltro = f; _ceRenderLista(); }
+
+function ceScan(raw) {
+  const bc = _ceNormBc(raw); if (!bc) return;
+  const fb = document.getElementById('ce-feedback');
+  const vid = ceByBc[bc];
+  if (!vid) { if (fb) { fb.textContent = '❓ Código desconocido: ' + bc; fb.style.color = '#B91C1C'; } return; }
+  const pid = vid.split('_')[0];
+  const prod = ceProducts.find(p => String(p.pid) === pid); if (!prod) return;
+  if (prod.linea !== ceLinea) { if (fb) { fb.textContent = `⚠️ ${prod.name} es de la línea ${_ceLineaLabel(prod.linea)}, no de ${_ceLineaLabel(ceLinea)}.`; fb.style.color = '#B45309'; } return; }
+  let st = ceState[pid]; if (!st) st = ceState[pid] = { estado: 'sin_iniciar', exhibido: {}, deposito: {}, snap: {}, dif: {} };
+  if (!st.exhibido) st.exhibido = {}; if (!st.deposito) st.deposito = {}; if (!st.snap) st.snap = {};
+  if (!Object.keys(st.snap).length) prod.variants.forEach(v => { st.snap[v.vid] = v.esperado; });
+  st.exhibido[vid] = (st.exhibido[vid] || 0) + 1;
+  if (st.estado === 'sin_iniciar' || st.estado === 'terminado') st.estado = 'en_progreso';
+  if (!ceInicio) ceInicio = Date.now();
+  _ceSave();
+  const v = prod.variants.find(x => x.vid === vid);
+  if (fb && v) { fb.textContent = `✓ ${prod.name} · ${v.size} → exhibido ${st.exhibido[vid]}`; fb.style.color = '#16A34A'; }
+  if (ceFocusPid === pid) _ceRenderFoco(); else _ceRenderLista();
+}
+
+function ceOpen(pid) {
+  pid = String(pid);
+  const prod = ceProducts.find(p => String(p.pid) === pid); if (!prod) return;
+  let st = ceState[pid]; if (!st) st = ceState[pid] = { estado: 'sin_iniciar', exhibido: {}, deposito: {}, snap: {}, dif: {} };
+  if (!st.exhibido) st.exhibido = {}; if (!st.deposito) st.deposito = {}; if (!st.snap) st.snap = {};
+  if (!Object.keys(st.snap).length) prod.variants.forEach(v => { st.snap[v.vid] = v.esperado; });
+  if (st.estado === 'sin_iniciar' || st.estado === 'terminado') st.estado = 'en_progreso';
+  if (!ceInicio) ceInicio = Date.now();
+  _ceSave();
+  ceFocusPid = pid; ceView = 'foco'; ceRender();
+}
+function ceBack() {
+  const pid = ceFocusPid; const st = pid ? ceState[pid] : null;
+  if (st && st.estado !== 'terminado') { const any = (st.exhibido && Object.keys(st.exhibido).length) || (st.deposito && Object.keys(st.deposito).length); st.estado = any ? 'en_progreso' : 'sin_iniciar'; _ceSave(); }
+  ceFocusPid = null; ceView = 'lista'; ceRender();
+}
+function ceToggleOrder() { ceOrderAsc = !ceOrderAsc; _ceRenderFoco(); }
+function ceSetExhibido(pid, vid, val) { const st = ceState[String(pid)]; if (!st) return; if (!st.exhibido) st.exhibido = {}; const s = String(val).trim(); if (s === '') delete st.exhibido[vid]; else st.exhibido[vid] = Math.max(0, parseInt(s) || 0); _ceSave(); _ceRenderFoco(); }
+function ceSetDeposito(pid, vid, val) { const st = ceState[String(pid)]; if (!st) return; if (!st.deposito) st.deposito = {}; const s = String(val).trim(); if (s === '') delete st.deposito[vid]; else st.deposito[vid] = Math.max(0, parseInt(s) || 0); _ceSave(); _ceRenderFoco(); }
+function _ceRenderFoco() {
+  const cont = document.getElementById('ce-cont'); if (!cont) return;
+  const pid = ceFocusPid; const prod = ceProducts.find(p => String(p.pid) === String(pid)); if (!prod) { ceBack(); return; }
+  const st = ceState[pid] || { exhibido: {}, deposito: {}, snap: {}, dif: {} };
+  const vars = prod.variants.slice().sort((a, b) => _repoModelSort(a.size, b.size));
+  if (!ceOrderAsc) vars.reverse();
+  const sinCargar = vars.filter(v => !_ceTocada(st, v.vid)).length;
+  let html = _ceScanBox();
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">`;
+  html += `<div><button class="btn-sm" onclick="ceBack()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button> <b style="font-size:15px;margin-left:6px;">${esc(prod.name)}</b> <span style="font-size:11px;color:#9CA3AF;">${_ceLineaLabel(prod.linea)}</span></div>`;
+  html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn-sm" onclick="ceToggleOrder()" style="background:#fff;border:1px solid #D1D5DB;">${ceOrderAsc ? '↓ Talle ↑' : '↑ Talle ↓'}</button><button class="btn-sm" onclick="ceFinish('${prod.pid}')" style="background:#16A34A;color:#fff;font-weight:600;">✓ Terminar producto</button></div>`;
+  html += `</div>`;
+  html += `<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">Total = <b>Exhibido</b> (escaneado, editable) + <b>Depósito local</b> (a mano). Lo que dejes sin tocar cuenta como <b>0</b> al terminar. ${sinCargar ? `<b style="color:#B45309;">${sinCargar} sin tocar.</b>` : ''}</div>`;
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;"><colgroup><col><col style="width:66px"><col style="width:76px"><col style="width:82px"><col style="width:58px"><col style="width:52px"></colgroup><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Talle</th><th style="text-align:center;">Sistema</th><th style="text-align:center;">🔫 Exhib.</th><th style="text-align:center;">✍️ Depósito</th><th style="text-align:center;">Total</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
+  vars.forEach(v => {
+    const sis = (st.snap && st.snap[v.vid] != null) ? st.snap[v.vid] : v.esperado;
+    const ex = (st.exhibido && st.exhibido[v.vid]) || 0;
+    const dep = (st.deposito && st.deposito[v.vid] != null) ? st.deposito[v.vid] : null;
+    const tocada = _ceTocada(st, v.vid);
+    const total = ex + (dep || 0);
+    const dif = !tocada ? null : (total - sis);
+    const difTxt = dif == null ? '—' : ((dif > 0 ? '+' : '') + dif);
+    const difCol = dif == null ? '#9CA3AF' : (dif === 0 ? '#16A34A' : (dif < 0 ? '#B91C1C' : '#B45309'));
+    html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.size)}</td><td style="text-align:center;color:#9CA3AF;">${sis}</td><td style="text-align:center;"><input type="number" min="0" inputmode="numeric" value="${ex || ''}" placeholder="0" onchange="ceSetExhibido('${prod.pid}','${v.vid}',this.value)" style="width:48px;padding:4px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;"></td><td style="text-align:center;"><input type="number" min="0" inputmode="numeric" value="${dep != null ? dep : ''}" placeholder="—" onchange="ceSetDeposito('${prod.pid}','${v.vid}',this.value)" style="width:56px;padding:4px;border:1px solid #E5E7EB;border-radius:6px;text-align:center;font-weight:700;"></td><td style="text-align:center;font-weight:700;">${tocada ? total : '—'}</td><td style="text-align:center;font-weight:700;color:${difCol};">${difTxt}</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+function ceFinish(pid) {
+  pid = String(pid);
+  const prod = ceProducts.find(p => String(p.pid) === pid); if (!prod) return;
+  const st = ceState[pid]; if (!st) return; if (!st.exhibido) st.exhibido = {}; if (!st.deposito) st.deposito = {}; if (!st.snap) st.snap = {};
+  const sinCargar = prod.variants.filter(v => !_ceTocada(st, v.vid)).length;
+  if (sinCargar && !confirm(`Quedan ${sinCargar} talle(s) sin tocar. Al terminar se toman como 0 (faltante total). ¿Terminar igual?`)) return;
+  st.dif = {};
+  prod.variants.forEach(v => {
+    const sis = (st.snap[v.vid] != null) ? st.snap[v.vid] : v.esperado;
+    st.snap[v.vid] = sis;
+    st.dif[v.vid] = _ceTotal(st, v.vid) - sis;   // diferencia CONGELADA (exhibido + depósito − sistema)
+  });
+  st.estado = 'terminado'; st.terminadoAt = Date.now();
+  _ceSave();
+  ceFocusPid = null; ceView = 'lista'; ceRender();
+}
+
+async function ceAplicar(btn) {
+  const terminados = ceProducts.filter(p => p.linea === ceLinea && _ceEstado(p.pid) === 'terminado');
+  if (!terminados.length) { alert('No hay productos terminados de esta línea para aplicar.'); return; }
+  const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Leyendo stock vivo…'; }
+  try {
+    const d = await _ceFetchVivo();
+    const realMap = _cdepRealMap(d.rows || []);
+    const ubicacion = d.store_name || 'Local';
+    const rows = [], missing = []; let mas = 0, menos = 0, unidades = 0;
+    terminados.forEach(p => {
+      const st = ceState[String(p.pid)];
+      p.variants.forEach(v => {
+        const dif = st.dif ? st.dif[v.vid] : 0; if (!dif) return;
+        const live = realMap[v.vid]; if (!live) { missing.push({ prod: p.name, size: v.size }); return; }
+        const vivo = Number(live.available_quantity) || 0; const nuevo = vivo + dif;
+        rows.push({ inventory_id: live.inventory_id, product_code: live.product_code || '', producto: p.name, variante: v.size, ubicacion, barcode: live.barcode || '', vivo, dif, nuevo, sistema: (st.snap ? st.snap[v.vid] : null), exhibido: (st.exhibido ? st.exhibido[v.vid] || 0 : 0), deposito: (st.deposito ? st.deposito[v.vid] || 0 : 0), contado: _ceTotal(st, v.vid) });
+        if (dif > 0) mas++; else if (dif < 0) menos++; unidades += Math.abs(dif);
+      });
+    });
+    const productos = terminados.map(p => ({ pid: String(p.pid), nombre: p.name }));
+    cePreview = { rows, resumen: { mas, menos, lineas: rows.length, unidades_ajustadas: unidades, hora_stock: ceStockTime ? new Date(ceStockTime).toISOString() : null, modo: 'estandar', linea: ceLinea, productos }, missing, ubicacion, store: d.store || _ceStore() };
+    ceView = 'preview'; _ceRenderPreview();
+  } catch (e) { alert('No pude leer el stock vivo del Local: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = o; } }
+}
+function _ceRenderPreview() {
+  const cont = document.getElementById('ce-cont'); if (!cont || !cePreview) return;
+  const { rows, resumen, missing } = cePreview;
+  const marca = (cePreview.store || _ceStore() || '').toUpperCase();
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:15px;">Revisión del ajuste · ${_ceLineaLabel(ceLinea)}</b><button class="btn-sm" onclick="ceCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">← Volver</button></div>`;
+  html += `<div style="font-size:13px;background:#EFF6FF;border:1px solid #93C5FD;color:#1D4ED8;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-weight:600;">🏷️ Ajuste del <b>Local de ${esc(marca)}</b> · ubicación <b>${esc(cePreview.ubicacion || '—')}</b>. El Excel se sube SOLO al Gestión Nube de ${esc(marca)}.</div>`;
+  html += `<div style="font-size:13px;margin-bottom:10px;">Se ajustan <b>${resumen.lineas}</b> talle(s): <b style="color:#B45309;">${resumen.mas}</b> con sobrante (+) y <b style="color:#B91C1C;">${resumen.menos}</b> con faltante (−) · <b>${resumen.unidades_ajustadas}</b> unidad(es). El resto no se toca.</div>`;
+  if (missing && missing.length) html += `<div style="font-size:12px;color:#B91C1C;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">⚠️ ${missing.length} talle(s) con diferencia ya no están en el stock vivo. No se incluyen.</div>`;
+  if (!rows.length) {
+    const nprod = (resumen.productos || []).length;
+    html += `<div style="padding:12px;color:#166534;background:#F0FDF4;border:1px solid #16A34A;border-radius:8px;">No hay diferencias: lo contado coincide con el sistema. 🎉</div>`;
+    html += `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button class="btn-sm" onclick="ceGuardarSinDif(this)" style="background:#16A34A;color:#fff;font-weight:700;">✅ Guardar el conteo igual</button><button class="btn-sm" onclick="ceCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">Volver</button><span style="font-size:11.5px;color:#9CA3AF;">Sin Excel, pero deja la fecha del conteo de ${nprod} producto(s).</span></div>`;
+    cont.innerHTML = html; return;
+  }
+  html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;max-height:52vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;position:sticky;top:0;"><th style="padding:6px 8px;">Producto · Talle</th><th style="text-align:center;">Sist.</th><th style="text-align:center;">Total</th><th style="text-align:center;">Dif</th><th style="text-align:center;">Vivo</th><th style="text-align:center;">Nuevo</th></tr></thead><tbody>`;
+  rows.forEach(r => { const dc = r.dif < 0 ? '#B91C1C' : '#B45309'; html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:6px 8px;">${esc(r.producto)} · ${esc(r.variante)}</td><td style="text-align:center;color:#9CA3AF;">${r.sistema != null ? r.sistema : '—'}</td><td style="text-align:center;">${r.contado != null ? r.contado : '—'}</td><td style="text-align:center;font-weight:700;color:${dc};">${r.dif > 0 ? '+' : ''}${r.dif}</td><td style="text-align:center;color:#6B7280;">${r.vivo}</td><td style="text-align:center;font-weight:700;color:#1D4ED8;">${r.nuevo}</td></tr>`; });
+  html += '</tbody></table></div>';
+  html += `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-sm" onclick="ceConfirmar(this)" style="background:#16A34A;color:#fff;font-weight:700;">📥 Generar Excel y guardar</button><button class="btn-sm" onclick="ceCancelPreview()" style="background:#fff;border:1px solid #D1D5DB;">Cancelar</button></div>`;
+  html += `<div style="font-size:11.5px;color:#9CA3AF;margin-top:6px;">Después subí el Excel a GN → "Importar y Ajustar".</div>`;
+  cont.innerHTML = html;
+}
+function ceCancelPreview() { cePreview = null; ceView = 'lista'; ceRender(); }
+function _ceLimpiarTerminados() {
+  ceProducts.filter(p => p.linea === ceLinea).forEach(p => { if (_ceEstado(p.pid) === 'terminado') delete ceState[String(p.pid)]; });
+  const quedan = Object.values(ceState).some(s => (s.exhibido && Object.keys(s.exhibido).length) || (s.deposito && Object.keys(s.deposito).length));
+  if (!quedan) ceInicio = null;
+  _ceSave();
+}
+async function ceConfirmar(btn) {
+  if (!cePreview || !cePreview.rows.length) return;
+  if (typeof XLSX === 'undefined') { alert('Se está cargando el generador de Excel. Probá de nuevo en unos segundos.'); return; }
+  const { rows, resumen, ubicacion } = cePreview;
+  const marca = (cePreview.store || _ceStore() || '').toUpperCase();
+  if (!confirm(`El Excel es del Local de ${marca} (${_ceLineaLabel(ceLinea)}). Subilo SOLO al Gestión Nube de ${marca}.\n\n¿Generar el Excel?`)) { if (btn) btn.disabled = false; return; }
+  const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
+  try {
+    const header = ['id_inventario', 'codigo_producto', 'producto', 'variante', 'ubicacion', 'codigo_barras', 'stock_actual', 'nuevo_stock'];
+    const aoa = [header];
+    rows.forEach(r => aoa.push([r.inventory_id, r.product_code || '', r.producto, r.variante, r.ubicacion, r.barcode || '', r.vivo, r.nuevo]));
+    const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 18 }, { wch: 16 }, { wch: 11 }, { wch: 11 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
+    const fecha = new Date().toISOString().slice(0, 10); const marcaLc = (cePreview.store || _ceStore());
+    XLSX.writeFile(wb, `ajuste_local_${marcaLc}_${ceLinea}_${fecha}.xlsx`);
+    try {
+      await fetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: marcaLc, ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: rows.map(r => ({ inventory_id: r.inventory_id, barcode: r.barcode, producto: r.producto, variante: r.variante, sistema: r.sistema, exhibido: r.exhibido, deposito: r.deposito, contado: r.contado, diferencia: r.dif, vivo_aplicado: r.vivo, nuevo_stock: r.nuevo })) }) });
+    } catch (e) {}
+    const now = Date.now(); (resumen.productos || []).forEach(p => { if (p && p.pid != null) ceLastCount[String(p.pid)] = now; });
+    const limpiar = confirm(`✅ Excel generado (${rows.length} línea(s)) y conteo guardado en el historial.\n\nSubilo a GN → "Importar y Ajustar".\n\n¿Limpiar ahora los productos terminados de esta línea?`);
+    if (limpiar) _ceLimpiarTerminados();
+    cePreview = null; ceView = 'lista'; ceRender(); _ceCargarUltimos();
+  } catch (e) { alert('Error al generar el Excel: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = o; } }
+}
+async function ceGuardarSinDif(btn) {
+  if (!cePreview) return;
+  const { resumen, ubicacion } = cePreview; const marca = (cePreview.store || _ceStore() || '').toUpperCase();
+  const productos = resumen.productos || []; if (!productos.length) { alert('No hay productos para guardar.'); return; }
+  if (!confirm(`Se registra el conteo de ${productos.length} producto(s) de ${_ceLineaLabel(ceLinea)} (sin ajuste). ¿Guardar?`)) return;
+  const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
+  try {
+    await fetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: (cePreview.store || _ceStore()), ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: [] }) });
+    const now = Date.now(); productos.forEach(p => { if (p && p.pid != null) ceLastCount[String(p.pid)] = now; });
+    const limpiar = confirm('✅ Conteo guardado en el historial (sin ajuste).\n\n¿Limpiar los productos terminados de esta línea?');
+    if (limpiar) _ceLimpiarTerminados();
+    cePreview = null; ceView = 'lista'; ceRender(); _ceCargarUltimos();
+  } catch (e) { alert('No pude guardar el conteo: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = o; } }
+}
+async function ceHistorial() {
+  const cont = document.getElementById('ce-cont'); if (!cont) return;
+  ceView = 'historial';
+  cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando historial…</div>';
+  let conteos = [];
+  try { const r = await fetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = (d.conteos || []).filter(c => (c.resumen || {}).modo === 'estandar' && (c.resumen || {}).linea === ceLinea); else throw new Error((d && d.error) || 'error'); }
+  catch (e) { cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el historial: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="ceVolverLista()">← Volver</button></div>'; return; }
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:15px;">🕘 Historial · ${_ceLineaLabel(ceLinea)}</b><button class="btn-sm" onclick="ceVolverLista()" style="background:#fff;border:1px solid #D1D5DB;">← Volver al conteo</button></div>`;
+  if (!conteos.length) { html += '<div style="padding:12px;color:#9CA3AF;">Todavía no hay conteos de esta línea.</div>'; cont.innerHTML = html; return; }
+  conteos.forEach(c => {
+    const rr = c.resumen || {}; const f = c.fecha_aplicado ? new Date(c.fecha_aplicado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const det = Array.isArray(c.detalle) ? c.detalle : [];
+    html += `<details style="border:1px solid #E5E7EB;border-radius:9px;padding:8px 12px;margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;"><b>${f}</b> · ${esc(c.usuario || '—')} · <span style="color:#B45309;">+${rr.mas || 0}</span> / <span style="color:#B91C1C;">−${rr.menos || 0}</span> · ${rr.lineas || det.length} línea(s) · ${(rr.productos || []).length} producto(s)</summary>`;
+    if (det.length) {
+      html += `<div style="overflow:auto;margin-top:8px;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:#9CA3AF;text-align:left;"><th style="padding:4px 6px;">Producto · Talle</th><th style="text-align:center;">Sist.</th><th style="text-align:center;">Total</th><th style="text-align:center;">Dif</th></tr></thead><tbody>`;
+      det.forEach(x => { const dc = (x.diferencia || 0) < 0 ? '#B91C1C' : '#B45309'; html += `<tr style="border-top:1px solid #F3F4F6;"><td style="padding:4px 6px;">${esc((x.producto || '') + ' · ' + (x.variante || ''))}</td><td style="text-align:center;color:#9CA3AF;">${x.sistema != null ? x.sistema : '—'}</td><td style="text-align:center;">${x.contado != null ? x.contado : '—'}</td><td style="text-align:center;font-weight:700;color:${dc};">${(x.diferencia > 0 ? '+' : '') + (x.diferencia || 0)}</td></tr>`; });
+      html += '</tbody></table></div>';
+    }
+    html += `</details>`;
+  });
+  cont.innerHTML = html;
+}
+function ceVolverLista() { ceView = 'lista'; ceRender(); }
+
 // ───────── Productos caducados (depuración) ─────────
 let cadStock = {};   // pid -> {total, stores:{nombre:qty}} (todos los depósitos)
 let cadStoresList = []; // nombres de depósitos/ubicaciones presentes
