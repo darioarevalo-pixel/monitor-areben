@@ -6608,6 +6608,17 @@ function etiSyncAutoClearUI() {
   ['dep', 'loc', 'sku', 'promo'].forEach(m => { const cb = document.getElementById('eti-autoclear-' + m); if (cb) cb.checked = on; });
 }
 
+// Trae los precios de TN de la marca activa y, si es ZATTIA, TAMBIÉN de la TN de STUNNED (tienda propia),
+// fusionando ambos. Así los productos STUNNED (SKU STU...) toman su precio/promo de su propia tienda.
+async function _etiTNFetch(refresh) {
+  const base = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
+  const q = refresh ? '&refresh=1&nc=' + Math.random() : '';
+  const stores = _cuentaKey() === 'zattia' ? ['zattia', 'stunned'] : [_cuentaKey()];
+  const results = await Promise.all(stores.map(s => fetch(`${base}?store=${s}${q}`).then(r => r.json()).catch(() => ({}))));
+  let products = [], categories = {};
+  results.forEach(d => { if (d && Array.isArray(d.products)) products = products.concat(d.products); if (d && d.categories) Object.assign(categories, d.categories); });
+  return { products, categories };
+}
 async function renderEtiquetas() {
   etiLoad();
   etiSyncAutoClearUI();
@@ -6616,11 +6627,10 @@ async function renderEtiquetas() {
   etiRenderTabla('sku');
   libreRenderLineas();
   etiFPInit();
-  // Para las etiquetas de local necesitamos el precio promocional de TN
+  // Para las etiquetas de local necesitamos el precio promocional de TN (incluye STUNNED si es ZATTIA)
   if (!window._mktTNData) {
     try {
-      const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`);
-      const d = await r.json();
+      const d = await _etiTNFetch(false);
       window._mktTNData = d.products || [];
       window._mktTNCats = d.categories || {};
     } catch (e) { window._mktTNData = []; }
@@ -6669,8 +6679,7 @@ async function etiActualizarPreciosTN(btn) {
   const orig = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando precios…'; }
   try {
-    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}&refresh=1&nc=${Math.random()}`);
-    const d = await r.json();
+    const d = await _etiTNFetch(true);
     if (d && d.products) { window._mktTNData = d.products; if (d.categories) window._mktTNCats = d.categories; }
     _etiBuildPrecios();
     etiRenderTabla('loc');
