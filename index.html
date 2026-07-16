@@ -10599,7 +10599,7 @@ function cuponesEstado(c) {
 }
 function _cupDesc(c) { return c.tipo === 'monto' ? ('$' + Math.round(+c.valor || 0).toLocaleString('es-AR')) : ((+c.valor || 0) + '%'); }
 function cuponesSetFiltro(f) { cuponesFiltro = f; cuponesRender(); }
-function cuponesSetBusqueda(v) { cuponesBusqueda = v; cuponesRender(); const el = document.getElementById('cup-buscar'); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} } } // re-enfoca el buscador tras re-render
+function cuponesSetBusqueda(v) { cuponesBusqueda = v; const el = document.getElementById('cupones-lista'); if (el) el.innerHTML = cuponesListaHtml(); else cuponesRender(); } // actualiza solo la lista (no pierde el foco del buscador)
 function cuponesToggleForm() { if (!_cupPuedeCrear()) return; cuponesForm = !cuponesForm; cuponesRender(); }
 function cuponesCrear() {
   if (!_cupPuedeCrear()) { alert('No tenés permiso para generar cupones.'); return; }
@@ -10637,21 +10637,22 @@ function cuponesCopiarRecordatorio(id) {
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(() => alert('📋 Mensaje copiado. Pegalo en WhatsApp.'), () => prompt('Copiá el mensaje:', msg));
   else prompt('Copiá el mensaje:', msg);
 }
-function cuponesRender() {
-  const cont = document.getElementById('cupones-cont'); if (!cont) return;
-  const puedeCrear = _cupPuedeCrear();
-  const esAdmin = _esAdmin();
+function _cupListaFiltrada() {
   const q = cuponesBusqueda.trim().toLowerCase();
   const conEstado = cuponesData.map(c => ({ c, e: cuponesEstado(c) }));
-  const porVencerN = conEstado.filter(x => x.e === 'porvencer').length;
   let lista = conEstado;
   if (cuponesFiltro === 'vigentes') lista = conEstado.filter(x => x.e === 'vigente' || x.e === 'porvencer');
   else if (cuponesFiltro === 'porvencer') lista = conEstado.filter(x => x.e === 'porvencer');
   else if (cuponesFiltro === 'usados') lista = conEstado.filter(x => x.e === 'usado');
   else if (cuponesFiltro === 'vencidos') lista = conEstado.filter(x => x.e === 'vencido');
   if (q) lista = lista.filter(x => (x.c.nombre || '').toLowerCase().includes(q) || (x.c.codigo || '').toLowerCase().includes(q));
+  return lista;
+}
+function cuponesListaHtml() {
+  const puedeCrear = _cupPuedeCrear();
+  const esAdmin = _esAdmin();
+  const lista = _cupListaFiltrada();
   const badge = e => { const m = { vigente: ['#065F46', '#D1FAE5', 'Vigente'], porvencer: ['#92400E', '#FEF3C7', 'Por vencer'], vencido: ['#991B1B', '#FEE2E2', 'Vencido'], usado: ['#374151', '#E5E7EB', 'Usado'], anulado: ['#6B7280', '#F3F4F6', 'Anulado'] }; const [col, bg, txt] = m[e] || m.vigente; return `<span style="background:${bg};color:${col};border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;">${txt}</span>`; };
-  const fBtn = (key, txt) => `<button onclick="cuponesSetFiltro('${key}')" style="border:1px solid ${cuponesFiltro === key ? '#378ADD' : '#D1D5DB'};background:${cuponesFiltro === key ? '#378ADD' : '#fff'};color:${cuponesFiltro === key ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${txt}</button>`;
   const rows = lista.map(({ c, e }) => {
     const venceTxt = c.vence ? c.vence.split('-').reverse().join('/') : '—';
     const dias = _cupDias(c.vence);
@@ -10674,6 +10675,13 @@ function cuponesRender() {
       <td style="padding:6px 8px;border-top:1px solid #F1F5F9;text-align:right;white-space:nowrap;"><span style="display:inline-flex;gap:4px;align-items:center;">${acc.join('')}</span></td>
     </tr>`;
   }).join('');
+  return lista.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Cliente</th><th style="padding:6px 8px;">Descuento</th><th style="padding:6px 8px;">Vence</th><th style="padding:6px 8px;">Estado</th><th style="padding:6px 8px;">Motivo / código</th><th style="padding:6px 8px;">Generó</th><th style="padding:6px 8px;"></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay cupones en este filtro. Tocá "➕ Generar cupón" para crear uno.</div>';
+}
+function cuponesRender() {
+  const cont = document.getElementById('cupones-cont'); if (!cont) return;
+  const puedeCrear = _cupPuedeCrear();
+  const porVencerN = cuponesData.filter(c => cuponesEstado(c) === 'porvencer').length;
+  const fBtn = (key, txt) => `<button onclick="cuponesSetFiltro('${key}')" style="border:1px solid ${cuponesFiltro === key ? '#378ADD' : '#D1D5DB'};background:${cuponesFiltro === key ? '#378ADD' : '#fff'};color:${cuponesFiltro === key ? '#fff' : '#374151'};border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">${txt}</button>`;
   const form = (cuponesForm && puedeCrear) ? `<div style="border:1px solid #C7D2FE;background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:12px;">
       <div style="font-weight:700;margin-bottom:8px;">Nuevo cupón</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
@@ -10696,7 +10704,7 @@ function cuponesRender() {
     </div>
     ${form}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${fBtn('vigentes', 'Vigentes')}${fBtn('porvencer', `Por vencer${porVencerN ? ` (${porVencerN})` : ''}`)}${fBtn('usados', 'Usados')}${fBtn('vencidos', 'Vencidos')}${fBtn('todos', 'Todos')}</div>
-    ${lista.length ? `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:6px 8px;">Cliente</th><th style="padding:6px 8px;">Descuento</th><th style="padding:6px 8px;">Vence</th><th style="padding:6px 8px;">Estado</th><th style="padding:6px 8px;">Motivo / código</th><th style="padding:6px 8px;">Generó</th><th style="padding:6px 8px;"></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:#9CA3AF;font-size:13px;padding:16px;text-align:center;">No hay cupones en este filtro. Tocá "➕ Generar cupón" para crear uno.</div>'}
+    <div id="cupones-lista">${cuponesListaHtml()}</div>
   `;
 }
 
@@ -11613,8 +11621,6 @@ function _cdepRenderLista() {
   const prog = cdepProducts.filter(p => _cdepEstado(p.pid) === 'en_progreso').length;
   const sinPrev = cdepProducts.filter(p => _cdepUltimoMs(p.pid) === 0).length;
   const conteados = cdepProducts.length - sinPrev;
-  const q = cdepSearch.trim().toLowerCase();
-  const lista = cdepProducts.filter(p => (!q || p.name.toLowerCase().includes(q)) && _cdepPasaFiltro(p));
   let html = '';
   html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">`;
   html += `<input id="conteodep-buscar" type="text" value="${esc(cdepSearch)}" oninput="conteoDepSearch(this.value)" placeholder="🔎 Buscá un producto (ej: Cover Case)…" autocomplete="off" style="flex:1;min-width:240px;padding:10px 12px;border:2px solid #378ADD;border-radius:10px;font-size:15px;">`;
@@ -11637,6 +11643,14 @@ function _cdepRenderLista() {
   if (_cdepPuedeAplicar() && term) {
     html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="conteoDepAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} producto${term > 1 ? 's' : ''} terminado${term > 1 ? 's' : ''})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo de GN y genera el Excel de ajuste.</span></div>`;
   }
+  html += `<div id="conteodep-lista">${_cdepListaHtml()}</div>`;
+  cont.innerHTML = html;
+}
+
+function _cdepListaHtml() {
+  const q = cdepSearch.trim().toLowerCase();
+  const lista = cdepProducts.filter(p => (!q || p.name.toLowerCase().includes(q)) && _cdepPasaFiltro(p));
+  let html = '';
   html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:7px 10px;">Producto</th><th style="text-align:center;width:90px;">Variantes</th><th style="text-align:center;width:130px;">Estado</th><th style="width:110px;"></th></tr></thead><tbody>`;
   lista.slice(0, 400).forEach(p => {
     const e = _cdepEstado(p.pid);
@@ -11652,11 +11666,10 @@ function _cdepRenderLista() {
   if (!lista.length) html += `<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan${cdepFiltro !== 'todos' ? ' con este filtro' : ''}${q ? ' con la búsqueda' : ''}.</td></tr>`;
   if (lista.length > 400) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 400 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
   html += '</tbody></table></div>';
-  cont.innerHTML = html;
-  const b = document.getElementById('conteodep-buscar'); if (b && document.activeElement !== b) { /* no robar foco */ }
+  return html;
 }
 
-function conteoDepSearch(v) { cdepSearch = v; _cdepRenderLista(); const b = document.getElementById('conteodep-buscar'); if (b) { b.focus(); const val = b.value; b.value = ''; b.value = val; } }
+function conteoDepSearch(v) { cdepSearch = v; const el = document.getElementById('conteodep-lista'); if (el) el.innerHTML = _cdepListaHtml(); else _cdepRenderLista(); } // actualiza solo la lista (no pierde el foco del buscador)
 
 function conteoDepOpen(pid) {
   pid = String(pid);
@@ -12051,8 +12064,6 @@ function _ceRenderLista() {
   const prog = dela.filter(p => _ceEstado(p.pid) === 'en_progreso').length;
   const sinPrev = dela.filter(p => _ceUltimoMs(p.pid) === 0).length;
   const conteados = dela.length - sinPrev;
-  const q = ceSearch.trim().toLowerCase();
-  const lista = dela.filter(p => (!q || p.name.toLowerCase().includes(q)) && _cePasaFiltro(p));
   let html = _ceScanBox();
   html += `<div style="font-size:12px;color:#6B7280;margin-bottom:8px;">Línea: <b>${_ceLineaLabel(ceLinea)}</b>. El escaneo solo suma dentro de esta línea. El <b>Depósito local</b> lo cargás a mano abriendo cada producto.</div>`;
   html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><input id="ce-buscar" type="text" value="${esc(ceSearch)}" oninput="ceSearchFn(this.value)" placeholder="🔎 Buscá un producto…" autocomplete="off" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;"></div>`;
@@ -12063,6 +12074,15 @@ function _ceRenderLista() {
   chips.forEach(([f, label, n]) => { const on = ceFiltro === f; html += `<button class="btn-sm" onclick="ceFiltroFn('${f}')" style="background:${on ? '#378ADD' : '#fff'};color:${on ? '#fff' : '#374151'};border:1px solid ${on ? '#378ADD' : '#D1D5DB'};font-weight:${on ? '700' : '500'};">${label} <span style="opacity:.75;">(${n})</span></button>`; });
   html += `</div>`;
   if (_cePuedeAplicar() && term) html += `<div style="margin-bottom:12px;"><button class="btn-sm" onclick="ceAplicar(this)" style="background:#16A34A;color:#fff;font-weight:600;">✔️ Aplicar ajuste (${term} terminado${term > 1 ? 's' : ''} de ${_ceLineaLabel(ceLinea)})</button> <span style="font-size:11.5px;color:#9CA3AF;">Relee el stock vivo del Local y genera el Excel.</span></div>`;
+  html += `<div id="ce-lista">${_ceListaHtml()}</div>`;
+  cont.innerHTML = html;
+  const sc = document.getElementById('ce-scan'); if (sc && ceView === 'lista') sc.focus({ preventScroll: true });
+}
+
+function _ceListaHtml() {
+  const q = ceSearch.trim().toLowerCase();
+  const lista = ceProducts.filter(p => p.linea === ceLinea).filter(p => (!q || p.name.toLowerCase().includes(q)) && _cePasaFiltro(p));
+  let html = '';
   html += `<div style="border:1px solid #E5E7EB;border-radius:9px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="font-size:11px;color:#9CA3AF;text-align:left;background:#F9FAFB;"><th style="padding:7px 10px;">Producto</th><th style="text-align:center;width:80px;">Talles</th><th style="text-align:center;width:130px;">Estado</th><th style="width:110px;"></th></tr></thead><tbody>`;
   lista.slice(0, 500).forEach(p => {
     const e = _ceEstado(p.pid);
@@ -12075,10 +12095,9 @@ function _ceRenderLista() {
   if (!lista.length) html += `<tr><td colspan="4" style="padding:12px;color:#9CA3AF;">No hay productos que coincidan${ceFiltro !== 'todos' ? ' con este filtro' : ''}${q ? ' con la búsqueda' : ''}.</td></tr>`;
   if (lista.length > 500) html += `<tr><td colspan="4" style="padding:8px 10px;color:#9CA3AF;font-size:12px;">Mostrando 500 de ${lista.length}. Afiná la búsqueda.</td></tr>`;
   html += '</tbody></table></div>';
-  cont.innerHTML = html;
-  const sc = document.getElementById('ce-scan'); if (sc && ceView === 'lista') sc.focus();
+  return html;
 }
-function ceSearchFn(v) { ceSearch = v; _ceRenderLista(); const b = document.getElementById('ce-buscar'); if (b) { b.focus(); const val = b.value; b.value = ''; b.value = val; } }
+function ceSearchFn(v) { ceSearch = v; const el = document.getElementById('ce-lista'); if (el) el.innerHTML = _ceListaHtml(); else _ceRenderLista(); } // actualiza solo la lista (no pierde el foco del buscador)
 function ceFiltroFn(f) { ceFiltro = f; _ceRenderLista(); }
 
 function ceScan(raw) {
