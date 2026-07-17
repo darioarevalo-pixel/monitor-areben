@@ -365,3 +365,161 @@ body {
   min-height: 18px;
   margin-top: 8px;
 }
+
+/* ── Contenido de las secciones ──────────────────────────────────────────────
+   Copiado TEXTUAL del CSS global del legacy (index.html:22-156), con el mismo
+   criterio con el que la Fase 3 copió el sidebar: mientras convivan los dos
+   mundos, el usuario no tiene que notar dónde termina uno y empieza el otro.
+
+   Por qué esto y no Tailwind + el kit de areben-produccion, que era lo que el
+   plan pedía: la verificación de la sección migrada es ponerla AL LADO del
+   iframe y compararlas. Ese A/B es lo único que convierte "migrar la sección más
+   grande primero" de apuesta en experimento reversible. Si además se rediseña el
+   estilo, todo se ve distinto y el A/B pierde el poder de detección: no se puede
+   distinguir "cambió porque lo rediseñé" de "cambió porque el port está mal".
+   Sumado a que el preflight de Tailwind pelearía contra este mismo CSS en el
+   mismo documento.
+
+   El rediseño con el kit va después, como su propio cambio verificable, cuando
+   no quede iframe. Es lo que ya decía el comentario del principio de este archivo.
+
+   Dos ajustes, los únicos:
+
+   1. Los selectores de elemento (`button`, `input`, `select`, `table`, `th`, `td`)
+      van scopeados bajo `.shell-content`. En el legacy son globales porque ahí no
+      hay nada más; acá pisarían el login y el sidebar, que tienen su propio estilo.
+   2. `.section { display:none }` es el mecanismo de pestañas del legacy y acá el
+      router ya decide qué se muestra. Se copia igual, y la sección se renderiza con
+      `className="section visible"`: así el CSS queda textual y la animación de
+      entrada se mantiene. */
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.section { display: none; }
+.section.visible { display: block; animation: fadeUp 0.2s ease; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Inputs & selects */
+.shell-content input[type='text'],
+.shell-content input[type='date'],
+.shell-content input[type='number'] {
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.shell-content input:focus,
+.shell-content select:focus { border-color: #111827; }
+
+.shell-content select {
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+/* Buttons */
+.shell-content button {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  color: #374151;
+}
+.shell-content button:hover { background: #f9fafb; border-color: #9ca3af; color: #111827; }
+.shell-content button:active { background: #f3f4f6; }
+
+.btn-primary { background: #111827; color: #fff; border: none; font-weight: 600; }
+.btn-primary:hover { background: #1f2937; color: #fff; border: none; box-shadow: none; }
+.btn-sm { font-size: 12px; padding: 5px 12px; color: #6b7280; border-radius: 6px; }
+.btn-sm:hover { color: #111827; background: #f3f4f6; border-color: #d1d5db; }
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.15s ease;
+  cursor: default;
+}
+.stat:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+.stat-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.stat-value.danger { color: #dc2626; }
+.stat-value.warning { color: #d97706; }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.toolbar input[type='text'] { width: 220px; }
+
+/* Table */
+.shell-content table { width: 100%; border-collapse: collapse; }
+.shell-content th {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.shell-content th:hover { color: #111827; }
+.shell-content td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  vertical-align: middle;
+}
+.shell-content tr:last-child td { border-bottom: none; }
+.shell-content tr:hover td { background: #f9fafb; }

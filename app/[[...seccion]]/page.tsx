@@ -1,12 +1,13 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { createElement, useEffect } from 'react'
 import { LegacyFrame } from '@/components/legacy/LegacyFrame'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, esKeyValida, estaMigrada, labelDe } from '@/lib/nav'
+import { componenteDe } from '@/components/secciones/registro'
+import { esDeMarca, esKeyValida } from '@/lib/nav'
 import { esAdmin, puedeVer } from '@/lib/permisos'
 
 /** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
@@ -36,17 +37,20 @@ export default function Seccion() {
   if (!perfil) return <LoginScreen />
   if (!permitida) return <div className="login-screen" />
 
+  // Estar en el registro ES el interruptor del strangler: si la sección tiene
+  // componente, la sirve el shell; si no, sigue viniendo del legacy embebido.
+  //
+  // createElement y no <Seccion />: la regla "Cannot create components during
+  // render" no puede saber que `componenteDe` devuelve una referencia estable de
+  // un objeto de módulo y no un componente nuevo por render. Acá no hay ambigüedad.
+  const seccion = componenteDe(key)
+
   return (
     <div className="shell">
       <Sidebar activa={key} />
       <div className="shell-main">
         <div className="shell-content">
-          {estaMigrada(key) ? (
-            // Todavía no hay ninguna migrada; acá entra el CRM en la Fase 5.
-            <div style={{ padding: 24 }}>{labelDe(key)}</div>
-          ) : (
-            <LegacyFrame tab={key} marca={marca} />
-          )}
+          {seccion ? createElement(seccion) : <LegacyFrame tab={key} marca={marca} />}
         </div>
       </div>
     </div>
