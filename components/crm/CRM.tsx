@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
+import { BancoMensajes } from './BancoMensajes'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente } from '@/lib/crm/core'
 import type { ClienteCRM } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
@@ -10,18 +11,21 @@ import type { ModoCanal } from '@/lib/crm/datos'
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
  * renderCRMTabla).
  *
- * ⚠️ SOLO LECTURA, Y LA LISTA ES EXPLÍCITA. "Blast radius cero" no es un adjetivo:
- * estos son los 5 controles que en el legacy escriben y que acá se renderizan
- * inertes, uno por uno:
+ * ⚠️ LA LISTA DE LO QUE ESCRIBE Y LO QUE NO ES EXPLÍCITA. "Blast radius cero" no
+ * es un adjetivo.
  *
+ * **Inertes** — los 5 controles que en el legacy escriben en el KV:
  *   1. `<input type=file>` de teléfonos (1718) → POSTea el mapa `crmtel` ENTERO.
  *   2. "Sugerir cadencias" (1719) → escritura masiva a cientos de clientes, sin undo.
  *   3. El input de Instagram de cada fila (13568) → crmSetPagina.
- *   4. La ★ de cada fila (13712) → crmSetMayorista.
+ *   4. El checkbox de mayorista de cada fila (13712) → crmSetMayorista.
  *   5. 🚫/↩️ de cada fila (13715) → crmSetDescartado.
  *
- * El banco de mensajes y los leads tampoco están: son el Paso 7.
- * El modal del cliente tampoco: llega después, con su propio paso.
+ * **Escribe**: solo el banco de mensajes, y a propósito es la escritura más barata
+ * del CRM — `mensajes:bdi` no existe en el KV, así que no hay un dato real que
+ * perder. Si esta capa está mal, se descubre acá y no con las 39 notas.
+ *
+ * Los leads y el modal del cliente todavía no están: son los pasos que siguen.
  *
  * Vive en la ruta sombra `/clientes/next`. `/clientes` sigue sirviendo el legacy
  * embebido, así se pueden abrir las dos y compararlas. Ese A/B es lo único que
@@ -151,6 +155,7 @@ export function CRM() {
   const [seg, setSeg] = useState('todos')
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
+  const [banco, setBanco] = useState(false)
   const { cargando, error, agregado, crmSeg, cargado, recargar } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
@@ -190,7 +195,9 @@ export function CRM() {
             {/* Inertes (1) y (2): en el legacy escriben el mapa entero del KV. */}
             <button className="btn-sm" disabled title="Solo lectura en esta versión">📱 Cargar teléfonos</button>
             <button className="btn-sm" disabled title="Solo lectura en esta versión">🗓️ Sugerir cadencias</button>
-            <button className="btn-sm" disabled title="Solo lectura en esta versión">💬 Banco de mensajes</button>
+            {/* El banco SÍ escribe: es la primera escritura habilitada, y la más
+                barata (mensajes:bdi no existe en el KV → cero datos en riesgo). */}
+            <button className="btn-sm" onClick={() => setBanco(true)}>💬 Banco de mensajes</button>
           </div>
         </div>
 
@@ -268,6 +275,8 @@ export function CRM() {
           <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>El KV no se pudo leer: los guardados están bloqueados.</div>
         )}
       </div>
+
+      {banco && <BancoMensajes onCerrar={() => setBanco(false)} />}
     </div>
   )
 }
