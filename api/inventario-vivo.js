@@ -2,6 +2,9 @@
 // Lo usa la sección "Depósito → Conteo" del Monitor: como base al contar y como stock del momento al aplicar.
 // GET /api/inventario-vivo?store=bdi|zattia
 // Devuelve SOLO el depósito de esa marca (por store_id, no por nombre) para que sirva igual en ambas cuentas.
+// Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
+import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
 // store_id del DEPÓSITO por marca (coincide con crear-venta.js → SF_CFG.store.deposito).
@@ -104,12 +107,13 @@ async function fetchProductoVivo(productId, storeId, token) {
 export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (soloMismoOrigen(req, res, 'GET, OPTIONS')) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'método no permitido' });
+
+  // Es solo lectura, pero expone el stock completo de las dos marcas: hasta acá
+  // era público. El chequeo agrega ~200ms de ida al KV, dentro del presupuesto
+  // de 30s (los sub-presupuestos de 10s/9s de fetchInventarioCompleto no se tocan).
+  if (!(await exigirUsuario(req, res))) return;
 
   const store = String(req.query.store || '').toLowerCase();
   const loc = String(req.query.loc || 'deposito').toLowerCase(); // 'deposito' (default) | 'local'

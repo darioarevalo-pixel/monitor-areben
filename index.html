@@ -9389,10 +9389,40 @@ function _olvidarAdminPass() { _adminPass = ''; try { sessionStorage.removeItem(
 function _getAdminPass() {
   if (_adminPass) return _adminPass;
   try { const s = sessionStorage.getItem(_ADMINPASS_KEY); if (s) { _adminPass = s; return _adminPass; } } catch {}
-  const p = prompt('Ingresá tu contraseña de administrador (te la pido una sola vez):');
+  // Dice "del Monitor" y no "de administrador" porque ya no la pide solo el admin:
+  // desde que los endpoints exigen usuario, Conteo depósito y Ubicaciones también
+  // pueden llegar acá. Solo aparece si sessionStorage se limpió (doLogin la cachea).
+  const p = prompt('Ingresá tu contraseña del Monitor (te la pido una sola vez):');
   if (p) _setAdminPass(p);
   return _adminPass || '';
 }
+
+// ── Llamadas a la API propia (/api/*) ────────────────────────────────────────
+// Los endpoints del Monitor que escriben en Gestión Nube o que exponen el stock
+// de las dos marcas ahora exigen un usuario válido (ver api/_auth.js). Antes
+// estaban abiertos a internet. Este helper les adjunta la credencial: es el mismo
+// par (user, pass) que sesión de fotos ya le mandaba a crear-venta.
+//
+// Va en base64 y no en headers de texto plano porque los valores de header son
+// latin-1: una contraseña con "ñ" o un acento haría que fetch tire TypeError
+// antes de salir del browser.
+function _apiAuthHeader() {
+  const u = currentUser, p = _getAdminPass();
+  if (!u || !p) return null;
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify({ user: u, pass: p }));
+    return btoa(String.fromCharCode(...bytes));
+  } catch { return null; }
+}
+
+// Drop-in de fetch para /api/*: misma firma, agrega la credencial.
+async function _apiFetch(url, opts = {}) {
+  const auth = _apiAuthHeader();
+  const headers = Object.assign({}, opts.headers || {});
+  if (auth) headers['x-monitor-auth'] = auth;
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
+
 // Trae la config de usuarios del KV; si existe, reemplaza la local. Reaplica visibilidad si hay sesión.
 async function cargarConfigUsuarios() {
   try {
@@ -11548,7 +11578,7 @@ function _cdepFechaLabel(ms) {
 // Matchea por resumen.productos[].pid (registros nuevos) y, de fallback, por nombre en detalle[].producto.
 async function _cdepCargarUltimos() {
   try {
-    const r = await fetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now());
+    const r = await _apiFetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now());
     const d = await r.json();
     if (!d || !d.ok) return;
     const porPid = {}; const porNombre = {};
@@ -11590,7 +11620,7 @@ function _cdepRealMap(rows) {
 }
 
 async function _cdepFetchVivo() {
-  const r = await fetch('/api/inventario-vivo?store=' + _cdepStore() + '&nc=' + Date.now());
+  const r = await _apiFetch('/api/inventario-vivo?store=' + _cdepStore() + '&nc=' + Date.now());
   const d = await r.json();
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el stock en vivo de GN.');
   return d;
@@ -11881,7 +11911,7 @@ async function conteoDepGuardarSinDif(btn) {
   if (!confirm(`Se registra el conteo de ${productos.length} producto(s) de ${marca} (sin ajuste, porque coincidieron con el sistema). ¿Guardar?`)) return;
   const orig = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
   try {
-    await fetch('/api/conteos-deposito', {
+    await _apiFetch('/api/conteos-deposito', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         store: (cdepPreview.store || _cdepStore()), ubicacion, usuario: currentUser || '',
@@ -11927,7 +11957,7 @@ async function conteoDepConfirmar(btn) {
     XLSX.writeFile(wb, `ajuste_deposito_${marcaLc}_${fecha}.xlsx`);
     // 2) Guardar en el historial (automático).
     try {
-      await fetch('/api/conteos-deposito', {
+      await _apiFetch('/api/conteos-deposito', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           store: marcaLc, ubicacion, usuario: currentUser || '',
@@ -11959,7 +11989,7 @@ async function conteoDepHistorial() {
   cdepView = 'historial';
   cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando historial…</div>';
   let conteos = [];
-  try { const r = await fetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = d.conteos || []; else throw new Error((d && d.error) || 'error'); }
+  try { const r = await _apiFetch('/api/conteos-deposito?store=' + _cdepStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = d.conteos || []; else throw new Error((d && d.error) || 'error'); }
   catch (e) { cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el historial: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="conteoDepVolverLista()">← Volver</button></div>'; return; }
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:15px;">🕘 Historial de conteos</b><button class="btn-sm" onclick="conteoDepVolverLista()" style="background:#fff;border:1px solid #D1D5DB;">← Volver al conteo</button></div>`;
   if (!conteos.length) { html += '<div style="padding:12px;color:#9CA3AF;">Todavía no hay conteos aplicados.</div>'; cont.innerHTML = html; return; }
@@ -12018,7 +12048,7 @@ function _cePasaFiltro(p) {
 }
 
 async function _ceFetchVivo() {
-  const r = await fetch('/api/inventario-vivo?store=' + _ceStore() + '&loc=local&nc=' + Date.now());
+  const r = await _apiFetch('/api/inventario-vivo?store=' + _ceStore() + '&loc=local&nc=' + Date.now());
   const d = await r.json();
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el stock del Local en vivo.');
   return d;
@@ -12074,7 +12104,7 @@ function ceReset() {
 }
 async function _ceCargarUltimos() {
   try {
-    const r = await fetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now());
+    const r = await _apiFetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now());
     const d = await r.json(); if (!d || !d.ok) return;
     const porPid = {}, porNombre = {};
     (d.conteos || []).forEach(c => {
@@ -12312,7 +12342,7 @@ async function ceConfirmar(btn) {
     const fecha = new Date().toISOString().slice(0, 10); const marcaLc = (cePreview.store || _ceStore());
     XLSX.writeFile(wb, `ajuste_local_${marcaLc}_${ceLinea}_${fecha}.xlsx`);
     try {
-      await fetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: marcaLc, ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: rows.map(r => ({ inventory_id: r.inventory_id, barcode: r.barcode, producto: r.producto, variante: r.variante, sistema: r.sistema, exhibido: r.exhibido, deposito: r.deposito, contado: r.contado, diferencia: r.dif, vivo_aplicado: r.vivo, nuevo_stock: r.nuevo })) }) });
+      await _apiFetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: marcaLc, ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: rows.map(r => ({ inventory_id: r.inventory_id, barcode: r.barcode, producto: r.producto, variante: r.variante, sistema: r.sistema, exhibido: r.exhibido, deposito: r.deposito, contado: r.contado, diferencia: r.dif, vivo_aplicado: r.vivo, nuevo_stock: r.nuevo })) }) });
     } catch (e) {}
     const now = Date.now(); (resumen.productos || []).forEach(p => { if (p && p.pid != null) ceLastCount[String(p.pid)] = now; });
     const limpiar = confirm(`✅ Excel generado (${rows.length} línea(s)) y conteo guardado en el historial.\n\nSubilo a GN → "Importar y Ajustar".\n\n¿Limpiar ahora los productos terminados de esta línea?`);
@@ -12328,7 +12358,7 @@ async function ceGuardarSinDif(btn) {
   if (!confirm(`Se registra el conteo de ${productos.length} producto(s) de ${_ceLineaLabel(ceLinea)} (sin ajuste). ¿Guardar?`)) return;
   const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
   try {
-    await fetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: (cePreview.store || _ceStore()), ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: [] }) });
+    await _apiFetch('/api/conteos-deposito', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: (cePreview.store || _ceStore()), ubicacion, usuario: currentUser || '', fecha_inicio: ceInicio ? new Date(ceInicio).toISOString() : null, resumen, detalle: [] }) });
     const now = Date.now(); productos.forEach(p => { if (p && p.pid != null) ceLastCount[String(p.pid)] = now; });
     const limpiar = confirm('✅ Conteo guardado en el historial (sin ajuste).\n\n¿Limpiar los productos terminados de esta línea?');
     if (limpiar) _ceLimpiarTerminados();
@@ -12341,7 +12371,7 @@ async function ceHistorial() {
   ceView = 'historial';
   cont.innerHTML = '<div style="padding:16px;color:#9CA3AF;">Cargando historial…</div>';
   let conteos = [];
-  try { const r = await fetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = (d.conteos || []).filter(c => (c.resumen || {}).modo === 'estandar' && (c.resumen || {}).linea === ceLinea); else throw new Error((d && d.error) || 'error'); }
+  try { const r = await _apiFetch('/api/conteos-deposito?store=' + _ceStore() + '&nc=' + Date.now()); const d = await r.json(); if (d && d.ok) conteos = (d.conteos || []).filter(c => (c.resumen || {}).modo === 'estandar' && (c.resumen || {}).linea === ceLinea); else throw new Error((d && d.error) || 'error'); }
   catch (e) { cont.innerHTML = '<div style="padding:16px;color:#B91C1C;">No pude cargar el historial: ' + esc(e.message) + '<br><button class="btn-sm" style="margin-top:10px;" onclick="ceVolverLista()">← Volver</button></div>'; return; }
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:15px;">🕘 Historial · ${_ceLineaLabel(ceLinea)}</b><button class="btn-sm" onclick="ceVolverLista()" style="background:#fff;border:1px solid #D1D5DB;">← Volver al conteo</button></div>`;
   if (!conteos.length) { html += '<div style="padding:12px;color:#9CA3AF;">Todavía no hay conteos de esta línea.</div>'; cont.innerHTML = html; return; }
@@ -14386,7 +14416,7 @@ async function ubicacionesGuardar(btn) {
     const p = cambios[i];
     btn.textContent = `⏳ ${i + 1}/${cambios.length}`;
     try {
-      const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: ubiCambios[p.product_id] }) });
+      const r = await _apiFetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: ubiCambios[p.product_id] }) });
       const d = await r.json();
       if (d && d.ok) { ok++; p.actual = (ubiCambios[p.product_id] || '').trim().slice(0, 20); delete ubiCambios[p.product_id]; _ubiPersist(); }
       else { err++; if (!primerError) primerError = (d && (d.error || (d.errores && d.errores[0] && (d.errores[0].detalle || ('HTTP ' + d.errores[0].status))))) || 'desconocido'; }
@@ -14419,7 +14449,7 @@ async function ubicacionesReparar(btn) {
     const p = aReparar[i];
     btn.textContent = `⏳ ${i + 1}/${aReparar.length}`;
     try {
-      const r = await fetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: p.actual }) });
+      const r = await _apiFetch('/api/observaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: p.product_id, observation: p.actual }) });
       const d = await r.json();
       if (d && d.ok) ok++;
       else { err++; if (!primerError) primerError = (d && (d.error || (d.pendientes ? `${d.pendientes} variante(s) sin escribir` : ''))) || 'desconocido'; }

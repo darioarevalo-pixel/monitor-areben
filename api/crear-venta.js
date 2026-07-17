@@ -2,8 +2,9 @@
 // POST { store, origen:'deposito'|'local', items:[{product_id,size_id,quantity}], comments, solicitudId, user, pass }
 // Seguridad: valida que (user, pass) sea un usuario válido del Monitor (login server-side).
 // Usa GN_TOKEN_VENTAS (Zattia) / GN_TOKEN_VENTAS_BDI (BDI): token con permiso de ventas.
+import { usuarioValido } from './_auth.js';
+
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
 
 // Config descubierta de GN. store_id por ubicación (según cómo el Monitor cuenta deposito/local).
 // BDI: deposito = Deposito Minorista (13307), local = Local (18393). channel 12 = "Ninguno".
@@ -22,11 +23,9 @@ async function gnFetch(url, opts, tries = 3) {
   }
   return last;
 }
-async function usuarioValido(user, pass) {
-  if (!user || !pass) return false;
-  try { const r = await fetch(USU_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'login', user, pass }) }); const d = await r.json(); return !!(d && d.ok && d.perfil); }
-  catch (e) { return false; }
-}
+// usuarioValido vivía acá; ahora es compartida (api/_auth.js) porque observaciones,
+// inventario-vivo y conteos-deposito exigen lo mismo. Devuelve el perfil o null en
+// vez de un booleano: el `if (!(await ...))` de abajo funciona igual.
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

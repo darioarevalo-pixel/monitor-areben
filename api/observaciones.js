@@ -2,9 +2,12 @@
 // para TODAS las variantes de un producto en un depósito (default "Deposito Minorista").
 // POST { productId, observation, store? }
 //   - observation: string (se recorta a 20 chars) o vacío/null para limpiar.
+// Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
 // Usa GN_TOKEN (token con inventory:read + inventory:write) desde el entorno del servidor.
 // GN: GET /inventario/{product_id} (trae las filas con inventory_id) +
 //     PATCH /inventario/{inventory_id}/observacion { observation }.
+import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 const TOKEN = process.env.GN_TOKEN; // token GN con inventory:read+write (env del Monitor)
 
@@ -26,13 +29,13 @@ async function gnFetch(url, opts, tries = 4) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (soloMismoOrigen(req, res, 'POST, OPTIONS')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
   if (!TOKEN) return res.status(500).json({ error: 'Falta GN_TOKEN en el entorno del servidor' });
+
+  // Escribe en el GN de producción con un token de inventory:write: sin usuario
+  // válido no se sigue. Va antes de leer el body a propósito.
+  if (!(await exigirUsuario(req, res))) return;
 
   const body = req.body || {};
   const productId = body.productId;

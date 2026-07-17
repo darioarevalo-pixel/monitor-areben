@@ -2,7 +2,9 @@
 // POST { store, ubicacion, usuario, fecha_inicio, resumen, detalle }  → guarda un conteo aplicado.
 // GET  ?store=bdi|zattia[&limit=50]                                    → lista los últimos conteos.
 // Usa la tabla conteos_deposito (ver sql/migrate-conteos-deposito.sql) en el Supabase de cada marca.
+// Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
 import { createClient } from '@supabase/supabase-js';
+import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -18,11 +20,11 @@ function cfgFor(store) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
+
+  // El POST escribe con la service key de Supabase (se saltea RLS) y el GET lista
+  // los conteos de la marca: los dos exigen usuario. Antes ninguno pedía nada.
+  if (!(await exigirUsuario(req, res))) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
