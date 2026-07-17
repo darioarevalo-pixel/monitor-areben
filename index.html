@@ -2219,12 +2219,11 @@ function renderSyncInfo(syncMeta, maxVentaDate, lineasVenta) {
   el.innerHTML = parts.join(' &nbsp;·&nbsp; ');
 }
 
-function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta) {
-  // Hacer accesibles globalmente para módulos que los necesiten (ej. Marketing tab)
-  window.allVentas = ventas || [];
-  window.allDetalles = detalles || [];
-  // Invalidar cache de ventas por canal (se reconstruye en próximo acceso)
-  window._mktSaleCh = null;
+// Calcula TODO lo que consumen las secciones a partir de los datos crudos.
+// No toca el DOM ni asigna globales: devuelve un objeto y listo. Esa separación es
+// lo que la hace portable a TypeScript tal cual (Fase 4 de la migración).
+// El que asigna globales y pinta es aplicarDatos().
+function computarDatos(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta) {
   const invByProduct = {};
   const invByVariant = {};
   function _matchModelo(sizeName) {
@@ -2267,14 +2266,14 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       }
     }
   });
-  window._invByProduct = invByProduct;
-  window._invByProdModelo = invByProdModelo;
-  window._invDepoMin = invDepoMin;
+  const _invByProductOut = invByProduct;
+  const _invByProdModeloOut = invByProdModelo;
+  const _invDepoMinOut = invDepoMin;
 
   // Metadata de productos para el cálculo de demanda por modelo (fecha de lanzamiento + categoría)
-  window._prodMeta = {};
+  const _prodMetaOut = {};
   (productos || []).forEach(p => {
-    window._prodMeta[String(p.id)] = {
+    _prodMetaOut[String(p.id)] = {
       created: p.created_at ? p.created_at.substring(0, 10) : null,
       cat: (p.category || '').toUpperCase().trim(),
     };
@@ -2342,7 +2341,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     else if (fechaObj >= cutoff60) vvar[vid].s60 += qty;
     if (!vvar[vid].last || fecha > vvar[vid].last) vvar[vid].last = fecha;
   });
-  allVvar = vvar;
+  const allVvarOut = vvar;
 
   // Estadísticas mensuales desde vistas materializadas
   const mStats = {};
@@ -2373,10 +2372,10 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       fProdCreatedAt[row.product_name] = row.product_created_at.substring(0, 10);
     }
   });
-  window._fmKeyPids = fKeyPids;
-  window._fmProdCreatedAt = fProdCreatedAt;
+  const _fmKeyPidsOut = fKeyPids;
+  const _fmProdCreatedAtOut = fProdCreatedAt;
 
-  allProductos = (productos || []).map(p => {
+  const allProductos = (productos || []).map(p => {
     const pid = String(p.id);
     const d = vprod[pid] || { total: 0, s7: 0, s15: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null, first: null };
     const dsl = d.last ? daysSince(d.last) : 999;
@@ -2405,18 +2404,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     };
   });
 
-  // Poblar filtro de proveedores
   const proveedoresList = [...new Set(allProductos.map(p => p.proveedor).filter(Boolean))].sort();
-  const provSel = document.getElementById('filter-prod-prov');
-  if (provSel) {
-    const prevProv = provSel.value;
-    provSel.innerHTML = '<option value="">Todos los proveedores</option>' +
-      proveedoresList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
-    if (prevProv && proveedoresList.includes(prevProv)) provSel.value = prevProv;
-  }
-  selectedIngresoPills.clear();
-  outletSel.clear();
-  buildIngresoPills();
 
   const variantesMap = {};
   (inventario || []).forEach(i => {
@@ -2434,7 +2422,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
 
   const activeProductIds = new Set(allProductos.map(p => p.id));
 
-  allVariantes = Object.values(variantesMap).filter(v => activeProductIds.has(v.pid)).map(v => {
+  const allVariantes = Object.values(variantesMap).filter(v => activeProductIds.has(v.pid)).map(v => {
     const d = vvar[v.id] || { total: 0, s7: 0, s15: 0, s30: 0, s60: 0, s90: 0, byMonth: {}, last: null };
     const dsl = d.last ? daysSince(d.last) : 999;
     const ls = lifespanDays(v.stock, d.s30);
@@ -2446,24 +2434,17 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     };
   });
 
-  document.getElementById('stat-total').textContent = allProductos.length;
-  document.getElementById('stat-stale').textContent = allProductos.filter(p => p.daysSinceLast > 30).length;
-  document.getElementById('stat-decline').textContent = allProductos.filter(p => p.phase.label === 'declive').length;
-  document.getElementById('stat-growth').textContent = allProductos.filter(p => p.phase.label === 'crecimiento').length;
-  document.getElementById('stat-variants').textContent = allVariantes.length;
-
   // Fecha de la venta más reciente cargada (date_sale es 'YYYY-MM-DD', compara como string)
   let maxVentaDate = null;
   for (const v of ventas) {
     if (v.date_sale && (!maxVentaDate || v.date_sale > maxVentaDate)) maxVentaDate = v.date_sale;
   }
-  renderSyncInfo(syncMeta, maxVentaDate, detalles.length);
 
   // allMonths: unión de meses de vistas y últimos 16 meses, ordenados
   const viewMeses = new Set([...Object.keys(mStats), ...Object.keys(fStats)]);
-  allMonths = [...new Set([...months, ...viewMeses])].sort();
-  allMonthlyStats = allMonths.map(m => ({ mes: m, ...(mStats[m] || { items: 0, ventasCount: 0, byCategory: {}, byChannel: {} }) }));
-  allFundasStats = fStats;
+  const allMonths = [...new Set([...months, ...viewMeses])].sort();
+  const allMonthlyStats = allMonths.map(m => ({ mes: m, ...(mStats[m] || { items: 0, ventasCount: 0, byCategory: {}, byChannel: {} }) }));
+  const allFundasStats = fStats;
 
   // Datos de proveedores (para pestaña Zattia)
   const provData = {};
@@ -2483,7 +2464,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       stock, soldTotal: sales.total, soldByMonth: sales.byMonth, margin,
     });
   });
-  allProveedoresData = provData;
+  const allProveedoresData = provData;
 
   // Datos de colores (para pestaña Colores — Zattia)
   const TALLE_VALS = new Set(['s','m','l','xl','xxl','xs','xxxl','xss',
@@ -2528,7 +2509,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     }
     coloresSales.push({ product_name: pnombre, color, qty, mes });
   });
-  allColoresSales = coloresSales;
+  const allColoresSales = coloresSales;
 
   // Datos de agotamiento por color
   const invByProdColor = {};
@@ -2598,7 +2579,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
       firstSelloutDate, soldOutColors, colors, ratioAtRef
     });
   });
-  allAgotamientoData = agotamientoArr;
+  const allAgotamientoData = agotamientoArr;
 
   // Datos de talles (para pestaña Talles — Zattia)
   const productInfoMap = {};
@@ -2606,7 +2587,7 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     productInfoMap[String(p.id)] = { category: (p.category || '').trim(), active: p.active };
   });
 
-  allTallesCategories = [...new Set(
+  const allTallesCategories = [...new Set(
     (productos || [])
       .filter(p => p.active !== false)
       .map(p => (p.category || '').trim())
@@ -2626,7 +2607,61 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
     if (!size) return;
     tallesData.push({ category: info.category, size, qty, mes });
   });
-  allTallesData = tallesData;
+  const allTallesData = tallesData;
+
+  return {
+    ventas: ventas || [], detalles: detalles || [],
+    invByProduct: _invByProductOut, invByProdModelo: _invByProdModeloOut, invDepoMin: _invDepoMinOut,
+    prodMeta: _prodMetaOut, fmKeyPids: _fmKeyPidsOut, fmProdCreatedAt: _fmProdCreatedAtOut,
+    allVvar: allVvarOut, allProductos, allVariantes,
+    allMonths, allMonthlyStats, allFundasStats, allProveedoresData,
+    allColoresSales, allAgotamientoData, allTallesData, allTallesCategories,
+    proveedoresList, maxVentaDate, syncMeta,
+  };
+}
+
+// Toma lo que calculó computarDatos, lo publica en los globales que usan las
+// secciones, y recién ahí pinta. Todo el DOM de esta etapa vive acá.
+function aplicarDatos(d) {
+  window.allVentas = d.ventas;
+  window.allDetalles = d.detalles;
+  window._mktSaleCh = null; // invalidar cache de ventas por canal
+  window._invByProduct = d.invByProduct;
+  window._invByProdModelo = d.invByProdModelo;
+  window._invDepoMin = d.invDepoMin;
+  window._prodMeta = d.prodMeta;
+  window._fmKeyPids = d.fmKeyPids;
+  window._fmProdCreatedAt = d.fmProdCreatedAt;
+  allVvar = d.allVvar;
+  allProductos = d.allProductos;
+  allVariantes = d.allVariantes;
+  allMonths = d.allMonths;
+  allMonthlyStats = d.allMonthlyStats;
+  allFundasStats = d.allFundasStats;
+  allProveedoresData = d.allProveedoresData;
+  allColoresSales = d.allColoresSales;
+  allAgotamientoData = d.allAgotamientoData;
+  allTallesData = d.allTallesData;
+  allTallesCategories = d.allTallesCategories;
+
+  // Filtro de proveedores (conserva lo elegido si sigue existiendo)
+  const provSel = document.getElementById('filter-prod-prov');
+  if (provSel) {
+    const prevProv = provSel.value;
+    provSel.innerHTML = '<option value="">Todos los proveedores</option>' +
+      d.proveedoresList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    if (prevProv && d.proveedoresList.includes(prevProv)) provSel.value = prevProv;
+  }
+  selectedIngresoPills.clear();
+  outletSel.clear();
+  buildIngresoPills();
+
+  document.getElementById('stat-total').textContent = allProductos.length;
+  document.getElementById('stat-stale').textContent = allProductos.filter(p => p.daysSinceLast > 30).length;
+  document.getElementById('stat-decline').textContent = allProductos.filter(p => p.phase.label === 'declive').length;
+  document.getElementById('stat-growth').textContent = allProductos.filter(p => p.phase.label === 'crecimiento').length;
+  document.getElementById('stat-variants').textContent = allVariantes.length;
+  renderSyncInfo(d.syncMeta, d.maxVentaDate, d.detalles.length);
 
   document.getElementById('dashboard').style.display = 'block';
   setProgress(0);
@@ -2635,6 +2670,10 @@ function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmC
   // Si quedó activa otra pestaña (ej. marketing entró directo antes de cargar los datos),
   // re-disparar su render ahora que ya hay datos.
   if (_currentTabId && _currentTabId !== 'productos') switchTab(_currentTabId);
+}
+
+function procesarYRenderizar(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta) {
+  aplicarDatos(computarDatos(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta));
 }
 
 function filtrarLista(lista, searchId, filterId) {
