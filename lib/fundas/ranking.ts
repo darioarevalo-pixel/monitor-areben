@@ -124,7 +124,7 @@ export function defaultsRanking(datos: DatosRanking): DefaultsRanking {
   const modelos = Object.keys(modelTotals).sort(iphoneModelSort)
 
   // Rango: hasta = más nuevo, desde = 3º más nuevo (3107-3108)...
-  let rangeEnd = meses.length ? meses[0] : ''
+  const rangeEnd = meses.length ? meses[0] : ''
   let rangeStart = meses.length ? meses[Math.min(2, meses.length - 1)] : ''
 
   // ...pero si hay un Wave Case, desde se corre a su primer mes (3155-3158).

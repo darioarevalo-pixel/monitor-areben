@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import {
   computarRanking,
@@ -45,7 +45,8 @@ export function RankingCard({ datos }: { datos: DatosRanking }) {
   const [prodSort, setProdSort] = useState<OrdenProd>('qty')
   const [corteEnabled, setCorteEnabled] = useState(def.corteEnabled)
   const [corteN, setCorteN] = useState(3)
-  const [corteDiseno, setCorteDiseno] = useState<string | undefined>(undefined)
+  // La elección manual del diseño de corte; el efectivo se deriva abajo.
+  const [corteDisenoSel, setCorteDisenoSel] = useState<string | undefined>(undefined)
   const [modelSearch, setModelSearch] = useState('')
   const [prodSearch, setProdSearch] = useState('')
   const [modelosOpen, setModelosOpen] = useState(false)
@@ -56,15 +57,13 @@ export function RankingCard({ datos }: { datos: DatosRanking }) {
   // Opciones del corte = fundas elegidas, alfabético (index.html:5352-5354).
   const corteOpciones = useMemo(() => [...checkedProds].sort((a, b) => a.localeCompare(b, 'es')), [checkedProds])
 
-  // Reconciliar el diseño de corte cuando cambia la selección (5355-5365):
-  // se mantiene si sigue elegido, si no cae a un "wave case" o al primero.
-  useEffect(() => {
-    setCorteDiseno((prev) => {
-      if (prev && checkedProds.has(prev)) return prev
-      const wc = [...checkedProds].find((p) => p.toLowerCase().includes('wave case'))
-      return wc ?? corteOpciones[0]
-    })
-  }, [checkedProds, corteOpciones])
+  // Diseño de corte efectivo (5355-5365): se respeta la elección manual mientras
+  // siga entre las fundas elegidas; si no, cae a un "wave case" o al primero. Es
+  // estado derivado, así que se calcula en el render, no con un effect.
+  const corteDiseno =
+    corteDisenoSel && checkedProds.has(corteDisenoSel)
+      ? corteDisenoSel
+      : ([...checkedProds].find((p) => p.toLowerCase().includes('wave case')) ?? corteOpciones[0])
 
   const prodsOrdenados = useMemo(
     () => ordenarProds(base.prodTotals, base.prodFirstMes, prodSort),
@@ -145,7 +144,7 @@ export function RankingCard({ datos }: { datos: DatosRanking }) {
         <span style={{ fontSize: 12, color: '#666' }}>modelos de</span>
         <select
           value={corteDiseno ?? ''}
-          onChange={(e) => setCorteDiseno(e.target.value)}
+          onChange={(e) => setCorteDisenoSel(e.target.value)}
           style={{ maxWidth: 200, fontSize: 12 }}
         >
           {corteOpciones.map((p) => <option key={p} value={p}>{p}</option>)}
