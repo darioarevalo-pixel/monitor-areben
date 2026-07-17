@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
+import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -48,7 +49,11 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM y Fundas ya flipearon a SECCIONES)
+  // Sesión de fotos, en migración. Paso 1: historial + detalle READ-ONLY en
+  // `/sesion-fotos/next`, leyendo la misma clave del KV que el iframe. Todavía no
+  // arma solicitudes ni escanea; el flip a SECCIONES es una línea, cuando estén
+  // los pasos de escritura.
+  'sesion-fotos': SesionFotos,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

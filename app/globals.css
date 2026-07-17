@@ -531,3 +531,7 @@ body {
 .fm-model-label:hover { background: #f3f4f6; border-radius: 6px; }
 .fm-models-panel { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
 .fm-models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
+
+/* Sesión de fotos (Next, ruta sombra): cartel de "solo lectura" mientras migra. */
+.sf-shadow-note { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; border-radius: 8px; padding: 7px 11px; font-size: 12px; margin-bottom: 12px; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }

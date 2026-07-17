@@ -234,7 +234,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
   const proveedoresList = [...new Set(allProductos.map((p) => p.proveedor).filter(Boolean))].sort() as string[]
 
   // ── Variantes ───────────────────────────────────────────────────────────────
-  type VarBase = Pick<Variante, 'id' | 'pid' | 'sid' | 'name' | 'size' | 'stock' | 'sku' | 'barcode'>
+  type VarBase = Pick<Variante, 'id' | 'pid' | 'sid' | 'name' | 'size' | 'stock' | 'local' | 'deposito' | 'sku' | 'barcode'>
   const variantesMap: Record<string, VarBase> = {}
   ;(inventario || []).forEach((i) => {
     if (/mayorista/i.test(i.store_name || '')) return // Depósito Mayorista: no se cuenta en el stock de análisis
@@ -242,9 +242,14 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     const sid = String(i.size_id)
     const vid = pid + '_' + sid
     if (!variantesMap[vid]) {
-      variantesMap[vid] = { id: vid, pid, sid, name: i.product_name || '', size: i.size_name || '', stock: 0, sku: i.sku || '', barcode: i.barcode || '' }
+      variantesMap[vid] = { id: vid, pid, sid, name: i.product_name || '', size: i.size_name || '', stock: 0, local: 0, deposito: 0, sku: i.sku || '', barcode: i.barcode || '' }
     }
-    variantesMap[vid].stock += i.available_quantity || 0
+    const qty = i.available_quantity || 0
+    variantesMap[vid].stock += qty
+    // Split por ubicación, mismo criterio que repoCargarInventario: el Mayorista
+    // ya quedó afuera arriba, así que acá solo resta separar Local del resto (Depósito).
+    if (String(i.store_name || '').toLowerCase().trim() === 'local') variantesMap[vid].local += qty
+    else variantesMap[vid].deposito += qty
     if (!variantesMap[vid].sku && i.sku) variantesMap[vid].sku = i.sku
     if (!variantesMap[vid].barcode && i.barcode) variantesMap[vid].barcode = i.barcode
   })

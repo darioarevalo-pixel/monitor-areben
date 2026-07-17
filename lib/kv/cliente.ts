@@ -42,6 +42,8 @@ const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
 /** `mensajes` es la excepción: guarda un array bajo `{bank}`. */
 export type KindBanco = 'mensajes'
+/** `sesionfotos` guarda el historial de solicitudes como array bajo `{list}`. */
+export type KindLista = 'sesionfotos'
 
 /**
  * El resultado de leer. Distingue los tres desenlaces que el legacy mezclaba en
@@ -97,6 +99,45 @@ export async function leerBanco<T = unknown>(store: Marca): Promise<Lectura<T[] 
   const r = await pedir(`${API}?kind=mensajes&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
   return { ok: true, dato: Array.isArray(r.dato.bank) ? (r.dato.bank as T[]) : null }
+}
+
+/**
+ * Lee el historial de Sesión de fotos (`kind=sesionfotos`, forma `{list:[...]}`).
+ *
+ * A diferencia del banco, la clave `sesionfotos:<marca>` SÍ existe y tiene datos
+ * del equipo, así que distinguir "no se pudo leer" de "leí y está vacío" es
+ * crítico: guardar tras una lectura fallida borraría el historial entero (es
+ * exactamente el modo de falla que este archivo existe para prevenir). Una lista
+ * vacía confirmada por el servidor es éxito: `{ok:true, dato:[]}`.
+ */
+export async function leerLista<T = unknown>(kind: KindLista, store: Marca): Promise<Lectura<T[]>> {
+  const r = await pedir(`${API}?kind=${kind}&store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  return { ok: true, dato: Array.isArray(r.dato.list) ? (r.dato.list as T[]) : [] }
+}
+
+export type OpcionesGuardarLista<T> = {
+  kind: KindLista
+  store: Marca
+  lista: T[]
+  /**
+   * Igual que en guardarMapa/guardarBanco: obligatorio. El legacy (sfInit, 9821)
+   * caía a `sfData=[]` cuando la lectura fallaba y después `sfGuardar` pisaba la
+   * clave con esa lista vacía — el bug que casi cuesta 305 clientes, acá aplicado
+   * al historial de fotos. Exigir `cargado` lo hace imposible de escribir.
+   */
+  cargado: boolean
+}
+
+export async function guardarLista<T>({ kind, store, lista, cargado }: OpcionesGuardarLista<T>): Promise<Escritura> {
+  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const r = await pedir(`${API}?kind=${kind}&store=${store}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, list: lista }),
+  })
+  if (!r.ok) return r
+  return { ok: true, total: Number(r.dato.total ?? lista.length) }
 }
 
 export type OpcionesGuardarMapa<T> = {

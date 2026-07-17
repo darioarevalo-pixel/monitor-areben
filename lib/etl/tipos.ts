@@ -142,6 +142,15 @@ export type Variante = {
   name: string
   size: string
   stock: number
+  /**
+   * Stock partido por ubicación física, con el mismo criterio que
+   * repoCargarInventario (index.html:12523): `store_name==='local'` → local, el
+   * resto → depósito (el Mayorista ya se descartó antes). `local + deposito ===
+   * stock`. Lo consume Sesión de fotos para decidir de dónde se retira cada
+   * variante; el resto de las secciones sigue mirando `stock`.
+   */
+  local: number
+  deposito: number
   sku: string
   barcode: string
   lastSale: string | null
