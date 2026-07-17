@@ -18,8 +18,16 @@ const AHORA = new Date('2026-07-16T12:00:00.000Z')
 
 const fixture = leerFixture('bdi')
 
-describe.skipIf(!fixture)('Ranking de Fundas (fixture BDI)', () => {
-  const datosETL = computarDatos(fixture!.entrada, { today: AHORA, colorManualMap: fixture!.ctx.colorManualMap })
+describe('Ranking de Fundas (fixture BDI)', () => {
+  // El fixture no está en el repo (ventas reales); el job "sin red" corre sin él.
+  // `describe.skipIf` igual ejecuta este cuerpo para recolectar los tests, así que
+  // el guard va acá adentro, ANTES de tocar el fixture (patrón de etl-paridad).
+  if (!fixture) {
+    it.skip("falta tests/fixtures/etl-bdi.json — corré 'npm run fixture-etl'", () => {})
+    return
+  }
+
+  const datosETL = computarDatos(fixture.entrada, { today: AHORA, colorManualMap: fixture.ctx.colorManualMap })
   const datos: DatosRanking = {
     allMonths: datosETL.allMonths,
     allFundasStats: datosETL.allFundasStats,
