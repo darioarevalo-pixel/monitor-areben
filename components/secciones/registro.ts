@@ -25,7 +25,11 @@ import { FundasModelo } from '@/components/fundas/FundasModelo'
  * página → registro → componentes → lib.
  */
 export const SECCIONES: Record<string, ComponentType> = {
-  // Todavía ninguna en vivo. 'clientes' está en SOMBRAS mientras se compara.
+  // El flip de Fundas (17-jul-2026): `/fundas-modelo` lo sirve el shell para todo
+  // el equipo, con las claves de localStorage REALES (las mismas del iframe).
+  // Rollback: mover esta línea de vuelta a SOMBRAS → `/fundas-modelo` vuelve al
+  // iframe legacy y `/fundas-modelo/next` a la sombra, sin tocar datos.
+  'fundas-modelo': FundasModelo,
 }
 
 /**
@@ -39,7 +43,6 @@ export const SECCIONES: Record<string, ComponentType> = {
  */
 export const SOMBRAS: Record<string, ComponentType> = {
   clientes: CRM,
-  'fundas-modelo': FundasModelo,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

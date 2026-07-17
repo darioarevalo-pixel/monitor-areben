@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from './useDatosMonitor'
 import { RankingCard } from './RankingCard'
@@ -30,7 +31,11 @@ const scrollSim = () => document.getElementById('fm-sim-card')?.scrollIntoView({
 export function FundasModelo() {
   const { marca } = useSesion()
   const { datos, estado, error } = useDatosMonitor()
-  const sombra = true // Paso 3: siempre en sombra
+  // La ruta sombra `/fundas-modelo/next` usa claves namespaceadas (`_next_`) para
+  // probar sin pisar nada; la ruta real `/fundas-modelo` (SECCIONES) usa las
+  // claves reales del equipo, las mismas que lee/escribe el iframe legacy.
+  const pathname = usePathname()
+  const sombra = pathname?.endsWith('/next') ?? false
 
   const [editor, setEditor] = useState<EditorSim>(EDITOR_VACIO)
   const [pedidos, setPedidos] = useState<SimBloque[]>([])
