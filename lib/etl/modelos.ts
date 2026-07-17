@@ -2,19 +2,32 @@
  * Normalización de modelos de iPhone. Port literal de _matchModelo
  * (index.html:2229), que estaba anidada dentro de computarDatos.
  *
- * ⚠️ HAY DOS TAXONOMÍAS DE MODELO EN EL LEGACY Y NO COINCIDEN.
+ * ⚠️ HAY TRES TAXONOMÍAS DE MODELO Y UNA DIVERGE. Medido contra los 1044 talles
+ * distintos de BDI el 16-jul-2026 (ver tests/modelos.test.ts):
  *
- * `normalizeIphoneModel` (index.html:1848) hace lo mismo con otra tabla y otro
- * algoritmo (igualdad exacta del prefijo más largo, en vez de regex `^`). Difieren:
+ *   1. Esta función — alimenta el ETL (invByProdModelo: el stock por modelo).
+ *   2. `normalize_iphone_model` en SQL (sql/vistas-materializadas.sql:8) — construye
+ *      la vista fundas_por_modelo_mes, que el ETL consume como vmFundas.
+ *   3. `normalizeIphoneModel` (index.html:1848) — la usa el módulo Fundas (3270, 3302).
  *
- *   - a normalizeIphoneModel le faltan: 13 Mini, SE / SE 2 / SE 3, XS Max, 6, 6s,
- *     6 Plus, 6s Plus → devuelve null donde esta función devuelve el modelo;
- *   - escribe 'iPhone Xs' donde esta escribe 'iPhone XS'.
+ * **1 y 2 coinciden: cero divergencias sobre los 1044 talles** (verificado llamando la
+ * función SQL real por RPC, no leyéndola). Que sigan coincidiendo importa: el ETL cruza
+ * el stock que calcula ACÁ contra las ventas que vienen del SQL. Si divergen, el cruce
+ * falla sin avisar. Tocar una es tocar la otra.
  *
- * Cuál es la correcta es una pregunta abierta, y contestarla es cambiar números
- * en producción. Este archivo porta SOLO _matchModelo, que es la que alimenta el
- * ETL (invByProdModelo). normalizeIphoneModel sigue viva en el legacy y se
- * unifica cuando se migre la sección que la usa, con su propia verificación.
+ * **3 diverge: 8 talles, 1022 unidades vendidas.** Usa igualdad exacta del prefijo más
+ * largo en vez de regex `^`, y su tabla no tiene `13 mini`, `se*` ni `xs max`. Resultado:
+ * mete el 13 Mini adentro de 'iPhone 13' y colapsa el XS Max en 'iPhone Xs' — categoría
+ * que no existe en 1 ni en 2 (las dos escriben 'XS'). **No es deuda de migración: son
+ * números mal en producción hoy.** Unificar es cambiar lo que Fundas muestra, así que es
+ * decisión de producto y va con su propia verificación, antes de portar Fundas (Fase 5).
+ *
+ * (El comentario anterior decía que a `normalizeIphoneModel` le faltaban 6/6s/6 Plus/
+ * 6s Plus. Es falso, están: verificado en el test.)
+ *
+ * ⏰ **El SQL no conoce el iPhone 18** y la vista filtra lo que no reconoce
+ * (`IS NOT NULL`, línea 141). Hoy no hay un solo talle del 18 en los datos; cuando los
+ * haya, el stock va a existir y las ventas van a dar cero. Se arregla en el SQL.
  */
 
 /**
