@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
+
+// Zattia es otra base: su propia fila en sync_state, con la misma clave 'diario'.
+const SYNC_KEY = 'diario';
 
 function loadEnv() {
   try {
@@ -23,8 +27,6 @@ const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
 const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN_ZATTIA;
 const GN_BASE      = 'https://www.gestionnube.com/api/v1';
-const LAST_SYNC_FILE = resolve(process.cwd(), '.last-sync-zattia');
-
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY, GN_TOKEN_ZATTIA');
   process.exit(1);
@@ -34,22 +36,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function readLastSync() {
-  try {
-    const raw = JSON.parse(readFileSync(LAST_SYNC_FILE, 'utf8'));
-    return {
-      ventasDate:    raw.ventasDate    || null,
-      productosDate: raw.productosDate || null,
-    };
-  } catch {
-    return { ventasDate: null, productosDate: null };
-  }
-}
-
-function writeLastSync(data) {
-  writeFileSync(LAST_SYNC_FILE, JSON.stringify(data, null, 2));
-}
 
 function daysBetween(isoA, isoB) {
   return Math.abs(new Date(isoA) - new Date(isoB)) / 86400000;
@@ -320,7 +306,7 @@ async function syncVentas(fromDate) {
 
 async function main() {
   const today = new Date().toISOString().substring(0, 10);
-  const lastSync = readLastSync();
+  const lastSync = await leerEstado(supabase, SYNC_KEY);
 
   console.log('=== Sincronización diaria — Zattia ===');
   console.log(`Supabase:            ${SUPABASE_URL}`);
@@ -347,7 +333,7 @@ async function main() {
       productos = await guardarProductos(maps.productos);
     }
 
-    writeLastSync({
+    await guardarEstado(supabase, SYNC_KEY, {
       ventasDate:    today,
       productosDate: productosPendiente ? today : lastSync.productosDate,
     });

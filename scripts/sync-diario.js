@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
+
+// Identifica esta fila en sync_state. BDI y Zattia son bases distintas, así que
+// alcanza con 'diario'; si algún día hay más de un sync por base, se distinguen acá.
+const SYNC_KEY = 'diario';
 
 function loadEnv() {
   try {
@@ -23,8 +28,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const GN_TOKEN    = process.env.GN_TOKEN;
 const GN_BASE     = 'https://www.gestionnube.com/api/v1';
-const LAST_SYNC_FILE = resolve(process.cwd(), '.last-sync');
-
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_KEY, GN_TOKEN');
   process.exit(1);
@@ -33,22 +36,6 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function readLastSync() {
-  try {
-    const raw = JSON.parse(readFileSync(LAST_SYNC_FILE, 'utf8'));
-    return {
-      ventasDate:    raw.ventasDate    || null,
-      productosDate: raw.productosDate || null,
-    };
-  } catch {
-    return { ventasDate: null, productosDate: null };
-  }
-}
-
-function writeLastSync(data) {
-  writeFileSync(LAST_SYNC_FILE, JSON.stringify(data, null, 2));
-}
 
 function daysBetween(isoA, isoB) {
   return Math.abs(new Date(isoA) - new Date(isoB)) / 86400000;
@@ -400,7 +387,7 @@ async function main() {
   const now = new Date().toISOString();
   const today = now.substring(0, 10);
 
-  const lastSync = readLastSync();
+  const lastSync = await leerEstado(supabase, SYNC_KEY);
   console.log('=== Sincronización diaria — Gestión Nube ===');
   console.log(`Fecha actual:        ${today}`);
   console.log(`Último sync ventas:  ${lastSync.ventasDate || 'nunca'}`);
@@ -431,7 +418,7 @@ async function main() {
       ventasDate:    today,
       productosDate: productosPendiente ? today : lastSync.productosDate,
     };
-    writeLastSync(newSync);
+    await guardarEstado(supabase, SYNC_KEY, newSync);
 
     // Refrescar vistas materializadas
     process.stdout.write('\n[vistas] Refrescando vistas materializadas...');
@@ -444,7 +431,7 @@ async function main() {
     console.log(`Ventas:         ${ventas.ventas}`);
     console.log(`Venta detalles: ${ventas.detalles}`);
     console.log(`Productos:      ${productos}`);
-    console.log(`\nSync guardado en .last-sync`);
+    console.log(`\nSync guardado en sync_state (Supabase)`);
     console.log('Sincronización diaria completada.');
   } catch (e) {
     console.error('\nERROR:', e.message);
