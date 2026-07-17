@@ -65,3 +65,51 @@ export type ResultadoRanking = {
   /** Cantidad de modelos con datos en el rango (para el pie "N modelos"). */
   cantModelos: number
 }
+
+// ── Demanda por modelo (corregida) ────────────────────────────────────────────
+
+import type { FilaVenta, FilaDetalle } from '@/lib/etl/tipos'
+
+/** Fila cruda por modelo del cálculo de demanda. Espejo de `rows` de
+ *  fmDemandaPorModelo (index.html:3320-3332). */
+export type FilaDemanda = {
+  model: string
+  /** Unidades minoristas y mayoristas dentro de la ventana. */
+  umin: number
+  umay: number
+  /** Proporción por volumen crudo, en % (dentro de su canal). */
+  volMin: number
+  volMay: number
+  /** Proporción ajustada por agotamiento (volumen + empujón capado), en %. */
+  ajMin: number
+  ajMay: number
+}
+
+/** Salida de fmDemandaPorModelo (3336). */
+export type ResultadoDemanda = {
+  rows: FilaDemanda[]
+  totMin: number
+  totMay: number
+  /** Peso natural del minorista en la combinada (totMin/total). */
+  wMinDefault: number
+  cutoff: string
+}
+
+/** Lo que el port necesita del store para computar la demanda. */
+export type DatosDemanda = {
+  allVentas: FilaVenta[]
+  allDetalles: FilaDetalle[]
+  /** Stock del Depósito Minorista, clave `${pid}|||${modelo}` (agotamiento real). */
+  invDepoMin: Record<string, number>
+  prodMeta: Record<string, { created: string | null; cat: string }>
+  /** Clave `${modelo}|||${product_name}` → Set de pids. NO serializable. */
+  fmKeyPids: Record<string, Set<string>>
+  /** Era `Date.now()` (3233). Congelado por parámetro para paridad determinista. */
+  today: Date
+}
+
+/** Ventana de corte por diseño (index.html:3226). */
+export type CorteDemanda = { on: boolean; dias: number; modelos: number }
+
+/** Fila combinada de la tabla, tras aplicar método (aj/vol) y peso de canal. */
+export type FilaDemandaComb = { model: string; pMin: number; pMay: number; pComb: number }

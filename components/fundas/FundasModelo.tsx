@@ -2,6 +2,7 @@
 
 import { useDatosMonitor } from './useDatosMonitor'
 import { RankingCard } from './RankingCard'
+import { DemandaCard } from './DemandaCard'
 
 /**
  * "Fundas por modelo" (key `fundas-modelo`, solo BDI) en Next.
@@ -25,7 +26,10 @@ export function FundasModelo() {
       ) : !datos ? (
         <div className="card" style={{ color: '#9CA3AF' }}>Cargando datos…</div>
       ) : (
-        <RankingCard datos={datos} />
+        <>
+          <RankingCard datos={datos} />
+          <DemandaCard datos={datos} />
+        </>
       )}
     </div>
   )
