@@ -29,7 +29,7 @@ function toggleSet<T>(s: Set<T>, v: T, on: boolean): Set<T> {
  *
  * "Usar los elegidos" queda inerte hasta el Paso 3 (la simulación).
  */
-export function DemandaCard({ datos }: { datos: DatosETL }) {
+export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows: { model: string; pct: number }[]) => void }) {
   const [today] = useState(() => new Date())
 
   const [cutoff, setCutoff] = useState('2026-01-01')
@@ -191,7 +191,19 @@ export function DemandaCard({ datos }: { datos: DatosETL }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: '#6B7280' }}>{selCount} de {rowsSorted.length} modelos</span>
-          <button className="btn-sm" disabled title="La simulación llega en el próximo paso del port" style={{ background: '#378ADD', color: '#fff', opacity: 0.5, cursor: 'not-allowed' }}>↓ Usar los elegidos en la simulación</button>
+          <button
+            className="btn-sm"
+            onClick={() => {
+              // Elegidos con peso > 0, renormalizados a 100% (fmDemandaUsar, 3454).
+              const sel = rowsSorted.filter((r) => !excl.has(r.model) && r.pComb > 0)
+              const suma = sel.reduce((s, r) => s + r.pComb, 0)
+              onUsar?.(suma > 0 ? sel.map((r) => ({ model: r.model, pct: +((r.pComb / suma) * 100).toFixed(1) })) : [])
+            }}
+            title="Lleva los modelos tildados a la simulación (renormalizados a 100%)"
+            style={{ background: '#378ADD', color: '#fff' }}
+          >
+            ↓ Usar los elegidos en la simulación
+          </button>
         </div>
       </div>
     </div>

@@ -32,7 +32,7 @@ function toggleSet<T>(s: Set<T>, v: T, on: boolean): Set<T> {
  * corte con su propia UI), pero read-only pura: no persiste nada. Valida el
  * cableado del store en la ruta sombra.
  */
-export function RankingCard({ datos }: { datos: DatosRanking }) {
+export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImportar?: (filas: { model: string; pct: number }[]) => void }) {
   const base = useMemo(() => totalesBase(datos.allFundasStats), [datos])
   const def = useMemo(() => defaultsRanking(datos), [datos])
   const totalModels = def.modelos.length
@@ -226,7 +226,14 @@ export function RankingCard({ datos }: { datos: DatosRanking }) {
           <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Ranking por modelo</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, color: '#aaa' }}>{totalTexto}</span>
-            <button className="btn-sm" disabled title="La simulación llega en el próximo paso del port" style={{ fontSize: 11, opacity: 0.5, cursor: 'not-allowed' }}>↓ Importar a simulación</button>
+            <button
+              className="btn-sm"
+              onClick={() => onImportar?.(filasOrdenadas.map((f) => ({ model: f.model, pct: f.pct })))}
+              title="Lleva este ranking (en el orden actual) a la simulación"
+              style={{ fontSize: 11 }}
+            >
+              ↓ Importar a simulación
+            </button>
           </div>
         </div>
         <table>

@@ -52,3 +52,18 @@ export function windowDeLegacy(datos: DatosDemanda): Record<string, unknown> {
     _fmKeyPids: datos.fmKeyPids,
   }
 }
+
+/**
+ * Devuelve `fmSimRepartir` y `fmComputeFrom` del legacy. Son puras (sin DOM ni
+ * globales; fmComputeFrom llama a fmSimRepartir, que viaja en el mismo bundle).
+ * No necesitan fixture: se comparan con casos armados a mano.
+ */
+export function cargarSimLegacy(): {
+  fmSimRepartir: (total: number, pcts: number[]) => number[]
+  fmComputeFrom: (total: number, rows: unknown[], vars: unknown[], varOn: boolean) => unknown[]
+} {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = ['fmSimRepartir', 'fmComputeFrom'].map((n) => extraerFuncion(html, n)).join('\n\n')
+  const fabricar = new Function(`${fuente}\nreturn { fmSimRepartir, fmComputeFrom };`)
+  return fabricar()
+}

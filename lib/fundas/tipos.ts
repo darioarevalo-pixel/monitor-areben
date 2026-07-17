@@ -113,3 +113,42 @@ export type CorteDemanda = { on: boolean; dias: number; modelos: number }
 
 /** Fila combinada de la tabla, tras aplicar método (aj/vol) y peso de canal. */
 export type FilaDemandaComb = { model: string; pMin: number; pMay: number; pComb: number }
+
+// ── Simulación de pedido ──────────────────────────────────────────────────────
+
+/** Una fila del editor de simulación (index.html:4601). */
+export type SimRow = { model: string; pct: number }
+
+/** Una variante (color o diseño) del pedido (3458). La foto es un data URL. */
+export type SimVar = { name: string; pct: number; img: string | null }
+
+/** Una línea calculada del pedido: cantidad total y, si hay variantes, el reparto. */
+export type SimLinea = { model: string; qty: number; parts: number[] | null }
+
+/**
+ * Un pedido guardado. **Forma persistida exacta** de fmSimSnapshot (5238): se
+ * respeta para poder leer los pedidos que ya escribió el legacy (gate de compat,
+ * Paso 5). Ojo: acá `total` es number (snapshot), mientras que en el estado del
+ * editor es string (fmSimSave, 4836) — la inconsistencia se preserva a propósito.
+ */
+export type SimBloque = {
+  id: string
+  nombre: string
+  total: number
+  rows: SimRow[]
+  vars: SimVar[]
+  varOn: boolean
+  img: string | null
+}
+
+/** Estado persistido del editor: clave `monitor_sim_<cuenta>` (fmSimSave, 4835). */
+export type SimEstado = {
+  rows: SimRow[]
+  vars: SimVar[]
+  varOn: boolean
+  /** String, como lo guarda el legacy (el value crudo del input). */
+  total: string
+  img: string | null
+  /** Id del pedido que se está editando, o null. */
+  editando: string | null
+}
