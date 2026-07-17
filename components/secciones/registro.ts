@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import { CRM } from '@/components/crm/CRM'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -23,10 +24,28 @@ import type { ComponentType } from 'react'
  * página → registro → componentes → lib.
  */
 export const SECCIONES: Record<string, ComponentType> = {
-  // El CRM ('clientes') entra acá en el Paso 6, primero en ruta sombra.
+  // Todavía ninguna en vivo. 'clientes' está en SOMBRAS mientras se compara.
+}
+
+/**
+ * Las secciones que ya existen en Next pero **todavía no son el default**.
+ *
+ * Se ven solo en `/<seccion>/next`; `/<seccion>` sigue sirviendo el legacy
+ * embebido para todo el equipo. Es lo que permite abrir las dos y compararlas con
+ * los mismos datos antes de flipear.
+ *
+ * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
+ */
+export const SOMBRAS: Record<string, ComponentType> = {
+  clientes: CRM,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
 export function componenteDe(key: string): ComponentType | null {
   return SECCIONES[key] ?? null
+}
+
+/** El componente de la ruta sombra `/<key>/next`, si existe. */
+export function componenteSombraDe(key: string): ComponentType | null {
+  return SOMBRAS[key] ?? null
 }

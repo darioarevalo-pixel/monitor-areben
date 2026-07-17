@@ -6,7 +6,7 @@ import { LegacyFrame } from '@/components/legacy/LegacyFrame'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useSesion } from '@/components/SesionProvider'
-import { componenteDe } from '@/components/secciones/registro'
+import { componenteDe, componenteSombraDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida } from '@/lib/nav'
 import { esAdmin, puedeVer } from '@/lib/permisos'
 
@@ -40,10 +40,20 @@ export default function Seccion() {
   // Estar en el registro ES el interruptor del strangler: si la sección tiene
   // componente, la sirve el shell; si no, sigue viniendo del legacy embebido.
   //
+  // `/<seccion>/next` es la ruta sombra: sirve la versión Next de una sección que
+  // todavía NO es el default, para poder abrir las dos y compararlas con los
+  // mismos datos. El guard de arriba usa partes[0], así que la sombra no lo toca.
+  //
+  // Es una sub-ruta y no `?next=1` porque esta página es 'use client' y
+  // useSearchParams rompe el prerender del build en Next 16 si no está bajo
+  // <Suspense>. La sombra es el mecanismo de seguridad de todo el Paso 6: si no
+  // compila, la presión es flipear antes de tiempo.
+  //
   // createElement y no <Seccion />: la regla "Cannot create components during
   // render" no puede saber que `componenteDe` devuelve una referencia estable de
   // un objeto de módulo y no un componente nuevo por render. Acá no hay ambigüedad.
-  const seccion = componenteDe(key)
+  const sombra = Array.isArray(partes) && partes[1] === 'next'
+  const seccion = sombra ? componenteSombraDe(key) : componenteDe(key)
 
   return (
     <div className="shell">
