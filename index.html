@@ -306,6 +306,16 @@
     .estado-info .nombre { font-size: 14px; font-weight: 700; color: #1F2937; margin-bottom: 2px; }
     .estado-info .regla { font-size: 12px; color: #6B7280; line-height: 1.5; }
     .estado-info .accion { font-size: 11px; color: #9CA3AF; margin-top: 3px; font-style: italic; }
+
+    /* ── Modo embebido (?embed=1) ────────────────────────────────────────────
+       El shell Next sirve las secciones todavía no migradas desde este archivo,
+       adentro de un iframe. Ahí el chrome (sidebar + topbar) lo pone el shell,
+       así que el propio se oculta. Nada de esto afecta al modo normal.
+       Muere cuando se migre la última sección. */
+    html.embed .sidebar,
+    html.embed .topbar,
+    html.embed .sidebar-backdrop { display: none !important; }
+    html.embed .container { padding: 12px 16px !important; max-width: none !important; }
   </style>
 </head>
 <body>
@@ -1875,6 +1885,15 @@ function normalizeIphoneModel(size) {
 }
 
 // Repo de GitHub donde corren los workflows de sync (para mostrar la última actualización)
+// ── Modo embebido (shell Next) ────────────────────────────────────────────────
+// El shell sirve las secciones que todavía no migró desde este mismo archivo, en
+// un iframe same-origin: por eso comparten localStorage y el auto-login entra
+// solo, sin doble login. `?embed=1` oculta el chrome propio (lo pone el shell) y
+// `tab` dice qué sección abrir. Todo esto se borra con el iframe.
+const _EMBED_PARAMS = new URLSearchParams(location.search);
+const _ES_EMBED = _EMBED_PARAMS.get('embed') === '1';
+if (_ES_EMBED) document.documentElement.classList.add('embed');
+
 const GH_REPO = 'darioarevalo-pixel/monitor-areben';
 
 const CUENTAS = {
@@ -12924,6 +12943,14 @@ function doLogout() {
 }
 
 window.onload = async () => {
+  // Embebido: la sección la elige el shell. Se setea antes de arrancar así la
+  // abre procesarYRenderizar (que termina llamando a switchTab(_currentTabId)),
+  // sin renderizar Productos al pedo primero. switchTab ya resuelve solo el caso
+  // de conteo-estandar-zattia/stunned (dos entradas de nav, una sección).
+  if (_ES_EMBED) {
+    const _t = _EMBED_PARAMS.get('tab');
+    if (_t) _currentTabId = _t;
+  }
   // Auto-login INMEDIATO con la config local (Bruno/Darío ya están en DEFAULT_USERS): evita el
   // "flash" de la pantalla de login al refrescar. Los perfiles/permisos se refrescan en 2º plano.
   if (intentarAutoLogin()) { cargarConfigUsuarios(); return; }

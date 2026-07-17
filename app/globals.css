@@ -1,0 +1,367 @@
+/* Chrome del shell. El CSS del sidebar está copiado del legacy (index.html:60-120)
+   a propósito: mientras convivan los dos mundos, el usuario no tiene que notar
+   dónde termina uno y empieza el otro. Cuando no quede iframe se puede rehacer
+   con el sistema de componentes de areben-produccion. */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 14px;
+}
+
+/* ── Layout: sidebar fijo + contenido que ocupa el resto ── */
+.shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden; /* el legacy scrollea adentro del iframe, el shell no scrollea */
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Sidebar (tema oscuro, igual al legacy) ── */
+.sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  height: 100vh;
+  background: #111827;
+  color: #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px;
+  z-index: 60;
+}
+
+.sidebar-brand {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.05;
+  padding: 4px 6px 2px;
+}
+
+.sidebar-brand span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.12em;
+  margin-top: 2px;
+}
+
+.side-nav {
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.nav-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-cat {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  text-align: left;
+  font-family: inherit;
+}
+
+.nav-cat:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.nav-cat.active {
+  background: #378add;
+  color: #fff;
+}
+
+.nav-caret {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+
+.nav-group.open > .nav-cat .nav-caret {
+  transform: rotate(180deg);
+}
+
+.nav-menu {
+  display: none;
+  padding: 2px 0 4px 8px;
+  margin: 1px 0 2px 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.nav-group.open .nav-menu {
+  display: block;
+}
+
+.nav-opt {
+  display: block;
+  width: 100%;
+  padding: 8px 11px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-opt:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.nav-opt.active {
+  background: #378add;
+  color: #fff;
+  font-weight: 600;
+}
+
+.nav-accent-mkt {
+  color: #fdba74;
+}
+
+.nav-accent-mkt:hover {
+  color: #fed7aa;
+}
+
+.nav-accent-mkt.active {
+  background: #378add;
+  color: #fff;
+}
+
+/* ── Switch de marca ── */
+.empresa-switcher {
+  position: relative;
+  margin: 10px 4px 6px;
+}
+
+.empresa-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: #fff;
+  color: #111827;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.empresa-menu {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  padding: 4px;
+  z-index: 70;
+}
+
+.empresa-menu.open {
+  display: block;
+}
+
+.empresa-opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.empresa-opt:hover {
+  background: #f3f4f6;
+}
+
+.empresa-opt.active {
+  background: #eff6ff;
+  font-weight: 600;
+}
+
+.empresa-fija {
+  margin: 10px 4px 6px;
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0 6px;
+}
+
+/* ── Pie del sidebar ── */
+.sidebar-foot {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 8px;
+  padding-top: 10px;
+}
+
+.user-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.side-user {
+  font-size: 12px;
+  color: #e2e8f0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-salir {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.side-salir:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Login ── */
+.login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f3f4f6;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 32px;
+  width: 340px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.login-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.login-title span {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.login-sub {
+  color: #9ca3af;
+  font-size: 13px;
+  margin-bottom: 22px;
+}
+
+.login-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.login-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+  margin-bottom: 14px;
+  transition: border-color 0.15s;
+}
+
+.login-input:focus {
+  border-color: #111827;
+}
+
+.login-btn {
+  width: 100%;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.login-error {
+  color: #dc2626;
+  font-size: 12px;
+  min-height: 18px;
+  margin-top: 8px;
+}
