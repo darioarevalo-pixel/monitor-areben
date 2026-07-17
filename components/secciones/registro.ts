@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
+import { FundasModelo } from '@/components/fundas/FundasModelo'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -38,6 +39,7 @@ export const SECCIONES: Record<string, ComponentType> = {
  */
 export const SOMBRAS: Record<string, ComponentType> = {
   clientes: CRM,
+  'fundas-modelo': FundasModelo,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

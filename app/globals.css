@@ -523,3 +523,11 @@ body {
 }
 .shell-content tr:last-child td { border-bottom: none; }
 .shell-content tr:hover td { background: #f9fafb; }
+
+/* Fundas por modelo — copiadas textual de index.html:170,209-211.
+   Son clases (no selectores de elemento), así que no se scopean bajo
+   .shell-content: no pisan login ni sidebar. */
+.chart-wrap { position: relative; width: 100%; }
+.fm-model-label:hover { background: #f3f4f6; border-radius: 6px; }
+.fm-models-panel { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.fm-models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
