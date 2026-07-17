@@ -94,7 +94,11 @@ function Fila({ c, esMayorista, pagina }: { c: ClienteCRM; esMayorista: boolean;
       <td>
         <div style={{ fontWeight: 600 }}>
           {c.name}
-          {esMayorista && <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED' }}> ★</span>}
+          {esMayorista && (
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', background: '#F3E8FF', padding: '1px 6px', borderRadius: 10, verticalAlign: 'middle', marginLeft: 4 }}>
+              MAYORISTA
+            </span>
+          )}
         </div>
       </td>
       <td>
@@ -131,8 +135,12 @@ function Fila({ c, esMayorista, pagina }: { c: ClienteCRM; esMayorista: boolean;
       <td>
         <span style={{ fontSize: 11, fontWeight: 600, color: SEG_COLOR[seg] }}>{SEG_LABEL[seg]}</span>
       </td>
-      {/* Inertes (4) y (5): la ★ y el 🚫 del legacy escriben en el KV. */}
-      <td />
+      {/* Inertes (4) y (5): en el legacy son un checkbox (crmSetMayorista, 13712)
+          y 🚫/↩️ (crmSetDescartado, 13715). Se renderizan deshabilitados en vez de
+          omitirse, para que la comparación contra el iframe no tenga huecos. */}
+      <td onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={esMayorista} disabled readOnly title="Solo lectura en esta versión" style={{ width: 16, height: 16, accentColor: '#7C3AED' }} />
+      </td>
     </tr>
   )
 }
