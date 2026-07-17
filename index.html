@@ -9657,6 +9657,8 @@ let sfPendMkt = null;  // ids de producto que llegan desde Marketing
 let sfPendVer = null;  // id de solicitud a abrir directo (viene desde Inicio)
 let sfViendo = null;   // id de solicitud que se está viendo
 let sfSaveT = null;
+let sfCargado = false;  // ¿se pudo leer sesionfotos:<marca> del KV? Sin esto, guardar reescribe el `list` ENTERO y un read fallido borra el historial de la marca (mismo modo de falla que el CRM, commit 5822355).
+const _KV_NO_LEIDO_SF = 'No se pudo leer el historial de Sesión de fotos, así que no se guarda nada:\n\nguardar ahora borraría lo que ya está cargado. Recargá la página y probá de nuevo.';
 const SF_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
 const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta';
 function sfNuevoId() { return 's' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
@@ -9818,13 +9820,28 @@ function sfVincularNuevos() {
   if (cambios) sfGuardar();
 }
 async function sfInit() {
-  try { const r = await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`); const d = await r.json(); sfData = (d && d.ok && Array.isArray(d.list)) ? d.list : []; }
-  catch (e) { sfData = []; }
+  // Distinguir "no se pudo leer" de "leí y está vacío": confundirlos es lo que borra
+  // el historial. El KV manda 500 CON JSON válido, así que hay que mirar r.ok Y d.ok.
+  try {
+    const r = await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`);
+    const d = await r.json();
+    if (r.ok && d && d.ok) { sfData = Array.isArray(d.list) ? d.list : []; sfCargado = true; }
+    else { sfData = []; sfCargado = false; }
+  }
+  catch (e) { sfData = []; sfCargado = false; }
 }
 function sfGuardar() {
+  // Sin haber leído, guardar pisaría la clave entera con lo que haya en memoria (vacío
+  // o parcial) y borraría el historial real. Se bloquea y se avisa (como el CRM/talles).
+  if (!sfCargado) { alert(_KV_NO_LEIDO_SF); return; }
   clearTimeout(sfSaveT);
+  // Capturar marca Y la referencia de la lista AL AGENDAR: si se cambia de cuenta en la
+  // ventana de 500 ms, `sfInit` reasigna `sfData` a la lista de la otra marca, y leer
+  // `_cuentaKey()`/`sfData` dentro del setTimeout escribiría datos cruzados de marca.
+  const marca = _cuentaKey();
+  const lista = sfData;
   sfSaveT = setTimeout(async () => {
-    try { await fetch(`${SF_API}?kind=sesionfotos&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: _cuentaKey(), list: sfData }) }); } catch (e) {}
+    try { await fetch(`${SF_API}?kind=sesionfotos&store=${marca}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: marca, list: lista }) }); } catch (e) {}
   }, 500);
 }
 // Expande el borrador con productos (cada uno con sus variantes CON stock)
@@ -12971,6 +12988,10 @@ function mostrarCambioMarca(nombre) {
 }
 function ocultarCambioMarca() { const o = document.getElementById('switch-overlay'); if (o) o.style.display = 'none'; }
 async function cambiarEmpresa(empresaKey) {
+  // Sesión de fotos: cancelar cualquier guardado pendiente de la marca saliente y
+  // bajar el flag de "leído" hasta que sfInit relea la nueva marca. Sin esto, un
+  // guardado agendado o un sfGuardar en el hueco escribiría el historial cruzado.
+  clearTimeout(sfSaveT); sfCargado = false;
   currentCuenta = CUENTAS[empresaKey];
   saveSession();
   renderUserInfo();
