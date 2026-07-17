@@ -7252,7 +7252,11 @@ async function genTallesInit() {
   if (!window._mktTNData) {
     try { const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${_cuentaKey()}`); const d = await r.json(); window._mktTNData = d.products || []; } catch (e) { window._mktTNData = []; }
   }
-  try { const r = await fetch(`${CRM_TEL_API}?kind=talles&store=${_cuentaKey()}&nc=${Math.random()}`); const d = await r.json(); gtTallesMap = (d && d.ok && d.map) ? d.map : {}; } catch (e) { gtTallesMap = {}; }
+  // Mismo mapa-entero-en-cada-guardado que las 4 claves del CRM, y mismo riesgo:
+  // talles:zattia tiene 145 productos (medido el 17-jul-2026). Ver _kvLeer.
+  const _gt = await _kvLeer('talles', 'map');
+  gtTallesMap = (_gt.ok && _gt.dato && typeof _gt.dato === 'object') ? _gt.dato : {};
+  gtTallesCargado = _gt.ok;
   gtRenderPendientes();
 }
 
@@ -7361,6 +7365,7 @@ function _gtCopyFallback(text, ok) {
 // ── Vincular tabla de talles a un producto de TN + importar/cargar ───────────────
 let gtProducto = null;   // {id, name, raw_desc, ...} elegido
 let gtTallesMap = {};    // id_producto_TN -> {tipo, talles, gtData, diagramaUrl, name}
+let gtTallesCargado = false; // ¿se pudo leer talles:<marca> del KV? Sin esto, guardar lo borraría.
 
 function gtProdBuscar() {
   const q = (document.getElementById('gt-prod-search').value || '').trim().toLowerCase();
@@ -7485,7 +7490,9 @@ async function gtGuardarVinculado() {
     name: gtProducto.name,
     ts: new Date().toISOString(),
   };
-  try { await fetch(`${CRM_TEL_API}?kind=talles&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: gtTallesMap }) }); } catch (e) {}
+  if (!gtTallesCargado) { alert(_KV_NO_LEIDO); return; }
+  const _r = await _kvGuardar('talles', 'map', gtTallesMap);
+  if (!_r.ok) alert('No se pudo guardar la tabla de talles: ' + _r.error);
 }
 
 async function gtCargarEnTN(btn) {
@@ -13032,6 +13039,55 @@ let crmTelOverride = {};              // map id_cliente -> teléfono (completado
 let crmSeg = {};                      // map id_cliente -> { cadencia, ultimo_contacto, proximo_manual, notas[] } (en KV)
 let cmCurrentId = null;               // id del cliente abierto en el modal
 const CRM_TEL_API = 'https://bdi-catalogo.vercel.app/api/ingresos';
+
+// ── KV del CRM: leer y escribir sin borrar lo que hay ────────────────────────
+// Las 4 claves del CRM (crmtel/crmseg/crmleads/mensajes) se reescriben ENTERAS en
+// cada guardado. Si el GET previo falló y la variable quedó vacía, el guardado
+// siguiente deja la clave vacía: el servidor lo acepta sin chistar, porque su
+// única guarda es `if (!map || typeof map !== 'object') return 400` y **`{}` ES un
+// objeto** (bdi-catalogo/api/ingresos.js:62,78,94). Para `mensajes` la guarda es
+// `!Array.isArray(bank)`, así que `[]` también pasa.
+//
+// Lo que hay en juego, medido el 17-jul-2026 con scripts/crm-kv.mjs --dump:
+// crm:seg:bdi = 305 clientes (274 marcados mayorista, 39 notas a mano de 3 semanas)
+// y crm:tel:bdi = 653 teléfonos. Nada de eso está en Supabase ni tiene backup.
+//
+// ⚠️ EL MODO DE FALLA REAL NO ES UNA EXCEPCIÓN. El KV devuelve **500 con JSON
+// válido** (ingresos.js:32 → `{error:'KV no configurado'}`), así que `await
+// r.json()` NO tira y el `catch` NUNCA corre: el código caía al `: {}` del
+// ternario, en silencio. Por eso acá se miran `r.ok` Y `d.ok` por separado, y el
+// flag no se setea en el catch.
+//
+// El flag responde "¿pude leer el KV?", no "¿vino con datos?". Un mapa vacío que
+// el servidor confirmó es legítimo (ej.: mensajes:bdi hoy no existe y el banco
+// cae a la semilla, que es lo correcto).
+let crmTelCargado = false, crmSegCargado = false, leadsCargados = false, bancoCargado = false;
+
+// Aviso por alert y no por setStatus: dentro del iframe del shell, #status está en
+// el panel lateral oculto (html.embed .sidebar { display:none }) y no lo ve nadie.
+const _KV_NO_LEIDO = 'No se pudo leer el seguimiento del CRM, así que no se guarda nada:\n\nguardar ahora borraría lo que ya está cargado. Recargá la página y probá de nuevo.';
+
+async function _kvLeer(kind, campo) {
+  try {
+    const r = await fetch(`${CRM_TEL_API}?kind=${kind}&store=${_cuentaKey()}&nc=${Math.random()}`);
+    const d = await r.json();
+    if (!r.ok || !d || !d.ok) return { ok: false };
+    return { ok: true, dato: d[campo] };
+  } catch (e) { return { ok: false }; }
+}
+
+// Los 4 guardadores hacían `await fetch(...)` sin mirar la respuesta: un POST que
+// devolvía 500 fallaba en silencio y el usuario creía que había guardado.
+async function _kvGuardar(kind, campo, dato) {
+  try {
+    const r = await fetch(`${CRM_TEL_API}?kind=${kind}&store=${_cuentaKey()}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [campo]: dato })
+    });
+    let d = null; try { d = await r.json(); } catch (e) {}
+    if (!r.ok || !d || !d.ok) return { ok: false, error: (d && d.error) || ('HTTP ' + r.status) };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
 // Logo de WhatsApp (inline) para los botones de contacto.
 const WA_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 0 0 1.51 5.26l-.999 3.648 3.748-.607zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
 // Reusar SIEMPRE la misma pestaña de WhatsApp: guardamos la referencia a la ventana
@@ -13116,11 +13172,14 @@ function crmCargarTelefonos(file) {
         if (tel && normalizeArgPhone(tel)) { map[id] = tel; vinculados++; }
       }
       if (!vinculados) { alert('No se encontraron teléfonos para los clientes del CRM en ese archivo.'); return; }
+      // El merge acumula sobre crmTelOverride: si el GET falló y quedó en {}, la
+      // base del merge es vacía y este import borra los 653 teléfonos ya cargados,
+      // dejando solo los del Excel. Es el único mapa sin otra copia.
+      if (!crmTelCargado) { setStatus('', ''); alert(_KV_NO_LEIDO); return; }
       setStatus('Guardando teléfonos…');
       const merged = Object.assign({}, crmTelOverride, map); // acumula con lo ya cargado
-      const r = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: merged }) });
-      const d = await r.json();
-      if (!d.ok) { setStatus('Error guardando: ' + (d.error || ''), 'error'); return; }
+      const g = await _kvGuardar('crmtel', 'map', merged);
+      if (!g.ok) { setStatus('Error guardando: ' + g.error, 'error'); alert('No se pudieron guardar los teléfonos: ' + g.error); return; }
       crmTelOverride = merged;
       setStatus('');
       renderCRM();
@@ -13144,9 +13203,17 @@ async function cargarCRM(forzar = false) {
     // el seguimiento (crmSeg) trae la marca "es_mayorista" que necesitamos ANTES
     // de armar la consulta de ventas.
     // Override de teléfonos (completados desde el export de GN, compartido en KV)
-    try { const tr = await fetch(`${CRM_TEL_API}?kind=crmtel&store=${_cuentaKey()}&nc=${Math.random()}`); const td = await tr.json(); crmTelOverride = (td && td.ok && td.map) ? td.map : {}; } catch (e) { crmTelOverride = {}; }
+    const _t = await _kvLeer('crmtel', 'map');
+    crmTelOverride = (_t.ok && _t.dato && typeof _t.dato === 'object') ? _t.dato : {};
+    crmTelCargado = _t.ok;
     // Seguimiento del CRM (cadencias + último contacto + notas + es_mayorista), en KV
-    try { const sr = await fetch(`${CRM_TEL_API}?kind=crmseg&store=${_cuentaKey()}&nc=${Math.random()}`); const sd = await sr.json(); crmSeg = (sd && sd.ok && sd.map) ? sd.map : {}; } catch (e) { crmSeg = {}; }
+    const _s = await _kvLeer('crmseg', 'map');
+    crmSeg = (_s.ok && _s.dato && typeof _s.dato === 'object') ? _s.dato : {};
+    crmSegCargado = _s.ok;
+    // Si el KV no se pudo leer, el CRM se ve vacío igual que antes (la marca
+    // es_mayorista arma la consulta de ventas), pero ahora además NO se puede
+    // guardar encima. Se avisa, porque antes esto pasaba mudo.
+    if (!_s.ok || !_t.ok) alert('⚠️ No se pudo leer el seguimiento del CRM desde el KV.\n\nLa lista va a verse vacía o incompleta, y los guardados están bloqueados para no borrar lo que hay. Recargá la página.');
 
     // Clientes marcados a mano como mayoristas (aparecen en la vista Mayorista
     // aunque hayan comprado por otro canal, ej. Whatsapp).
@@ -13355,11 +13422,11 @@ function segBloqueModalHTML(c) {
 }
 
 async function crmSegGuardar() {
-  try {
-    await fetch(`${CRM_TEL_API}?kind=crmseg&store=${_cuentaKey()}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: crmSeg })
-    });
-  } catch (e) { alert('No se pudo guardar el seguimiento: ' + e.message); }
+  // Postea el mapa ENTERO: si crmSeg quedó vacío porque el GET falló, esto borraba
+  // los 305 clientes. Ver el bloque de _kvLeer.
+  if (!crmSegCargado) { alert(_KV_NO_LEIDO); return; }
+  const r = await _kvGuardar('crmseg', 'map', crmSeg);
+  if (!r.ok) alert('No se pudo guardar el seguimiento: ' + r.error);
 }
 
 function crmSegRef(id) {
@@ -13872,19 +13939,15 @@ function crmSetVista(v) {
 function leadsNewId() { return 'l' + Date.now() + '_' + Math.floor(Math.random() * 100000); }
 
 async function leadsCargar() {
-  try {
-    const r = await fetch(`${CRM_TEL_API}?kind=crmleads&store=${_cuentaKey()}&nc=${Math.random()}`);
-    const d = await r.json();
-    leadsData = (d && d.ok && d.map) ? d.map : {};
-  } catch (e) { leadsData = {}; }
+  const r = await _kvLeer('crmleads', 'map');
+  leadsData = (r.ok && r.dato && typeof r.dato === 'object') ? r.dato : {};
+  leadsCargados = r.ok;
 }
 
 async function leadsGuardar() {
-  try {
-    await fetch(`${CRM_TEL_API}?kind=crmleads&store=${_cuentaKey()}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: leadsData })
-    });
-  } catch (e) { alert('No se pudieron guardar los leads: ' + e.message); }
+  if (!leadsCargados) { alert(_KV_NO_LEIDO); return; }
+  const r = await _kvGuardar('crmleads', 'map', leadsData);
+  if (!r.ok) alert('No se pudieron guardar los leads: ' + r.error);
 }
 
 async function leadsInit() {
@@ -14219,11 +14282,13 @@ let bancoEditing = null;       // {gi, mi} si se está editando un mensaje
 
 async function abrirBancoMensajes() {
   if (!bancoData) {
-    try {
-      const r = await fetch(`${CRM_TEL_API}?kind=mensajes&store=${_cuentaKey()}&nc=${Math.random()}`);
-      const d = await r.json();
-      bancoData = (d && d.ok && Array.isArray(d.bank)) ? d.bank : JSON.parse(JSON.stringify(BANCO_MENSAJES));
-    } catch (e) { bancoData = JSON.parse(JSON.stringify(BANCO_MENSAJES)); }
+    // Caer a la semilla cuando el KV respondió bien pero la clave no existe es lo
+    // correcto, no un fallo: hoy mensajes:bdi no existe (verificado con el dump del
+    // 17-jul-2026), así que este es el camino normal. Por eso bancoCargado = r.ok
+    // y no depende de que haya datos.
+    const r = await _kvLeer('mensajes', 'bank');
+    bancoData = (r.ok && Array.isArray(r.dato)) ? r.dato : JSON.parse(JSON.stringify(BANCO_MENSAJES));
+    bancoCargado = r.ok;
   }
   bancoEditing = null;
   renderBancoMensajes();
@@ -14233,7 +14298,11 @@ function cerrarBancoMensajes() {
   document.getElementById('banco-modal').style.display = 'none';
 }
 async function _bancoGuardar() {
-  try { await fetch(`${CRM_TEL_API}?kind=mensajes&store=${_cuentaKey()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bank: bancoData }) }); } catch (e) {}
+  if (!bancoCargado) { alert(_KV_NO_LEIDO); return; }
+  const r = await _kvGuardar('mensajes', 'bank', bancoData);
+  // Antes tragaba el error entero (catch vacío): se editaba un mensaje, no se
+  // guardaba nada y no te enterabas hasta recargar.
+  if (!r.ok) alert('No se pudo guardar el banco de mensajes: ' + r.error);
 }
 function bancoEditar(gi, mi) { bancoEditing = { gi, mi }; renderBancoMensajes(); }
 function bancoCancelarEdit() { bancoEditing = null; renderBancoMensajes(); }
