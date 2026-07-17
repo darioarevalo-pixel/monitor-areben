@@ -13136,6 +13136,14 @@ function normalizeArgPhone(phone) {
 
 function fmtFecha(d) {
   if (!d) return '—';
+  // Las fechas del CRM son 'YYYY-MM-DD' pelado. `new Date('2026-07-16')` se parsea
+  // como medianoche UTC y getDate() la lee en hora local (UTC-3), o sea las 21:00
+  // del día anterior: mostraba TODAS las fechas un día antes, y el 1 de enero
+  // aparecía como 31 de diciembre del año pasado. Se formatea desde el string,
+  // sin pasar por Date. (addDiasISO, más abajo, ya lo hacía bien con 'T00:00:00':
+  // el archivo era inconsistente consigo mismo.)
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[3] + '/' + m[2] + '/' + m[1];
   const dt = new Date(d);
   return dt.getDate().toString().padStart(2,'0') + '/' + (dt.getMonth()+1).toString().padStart(2,'0') + '/' + dt.getFullYear();
 }
