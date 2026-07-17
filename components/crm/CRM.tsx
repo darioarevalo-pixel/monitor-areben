@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
 import { BancoMensajes } from './BancoMensajes'
+import { Leads } from './Leads'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente } from '@/lib/crm/core'
 import type { ClienteCRM } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
@@ -21,11 +22,13 @@ import type { ModoCanal } from '@/lib/crm/datos'
  *   4. El checkbox de mayorista de cada fila (13712) → crmSetMayorista.
  *   5. 🚫/↩️ de cada fila (13715) → crmSetDescartado.
  *
- * **Escribe**: solo el banco de mensajes, y a propósito es la escritura más barata
- * del CRM — `mensajes:bdi` no existe en el KV, así que no hay un dato real que
- * perder. Si esta capa está mal, se descubre acá y no con las 39 notas.
+ * **Escribe**: el banco de mensajes y los leads. En ese orden a propósito, de
+ * menos a más para perder: `mensajes:bdi` no existía en el KV (cero datos reales)
+ * y los leads son 11 prospectos. El `crmSeg` de 305 clientes con las 39 notas —
+ * lo que mueven los 5 controles de arriba — va último y con la red puesta
+ * (`scripts/crm-kv.mjs --restore`).
  *
- * Los leads y el modal del cliente todavía no están: son los pasos que siguen.
+ * El modal del cliente todavía no está: es el paso que sigue.
  *
  * Vive en la ruta sombra `/clientes/next`. `/clientes` sigue sirviendo el legacy
  * embebido, así se pueden abrir las dos y compararlas. Ese A/B es lo único que
@@ -156,6 +159,7 @@ export function CRM() {
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
   const [banco, setBanco] = useState(false)
+  const [vista, setVista] = useState<'clientes' | 'leads'>('clientes')
   const { cargando, error, agregado, crmSeg, cargado, recargar } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
@@ -202,9 +206,33 @@ export function CRM() {
         </div>
 
         <div style={{ background: '#EFF6FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '7px 11px', marginBottom: 14, fontSize: 12, color: '#075985' }}>
-          👀 Versión nueva, <b>solo lectura</b>. Los números tienen que dar igual que en la versión de siempre; para editar, usá esa.
+          👀 Versión nueva. Los números tienen que dar igual que en la de siempre. <b>Clientes es solo lectura</b>; Leads y el banco de mensajes ya se pueden editar.
         </div>
 
+        {/* Interruptor de vistas (crmSetVista, 13942). */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+          {(['clientes', 'leads'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setVista(v)}
+              style={{
+                padding: '9px 16px',
+                background: 'none',
+                border: 'none',
+                borderBottom: vista === v ? '2px solid #2563EB' : '2px solid transparent',
+                color: vista === v ? '#111827' : '#6B7280',
+                fontWeight: vista === v ? 700 : 500,
+              }}
+            >
+              {v === 'clientes' ? 'Clientes' : 'Leads'}
+            </button>
+          ))}
+        </div>
+
+        {vista === 'leads' ? (
+          <Leads />
+        ) : (
+          <>
         {error && (
           <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 11px', marginBottom: 14, fontSize: 12, color: '#991B1B' }}>
             ⚠️ {error}
@@ -273,6 +301,8 @@ export function CRM() {
 
         {!cargado && !cargando && (
           <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>El KV no se pudo leer: los guardados están bloqueados.</div>
+        )}
+          </>
         )}
       </div>
 
