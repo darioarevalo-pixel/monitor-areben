@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "mkdir -p public/legacy && cp index.html public/legacy/index.html",
-    "dev": "npm run prebuild && next dev",
-    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "//NOTA": "build/prebuild sacados a proposito: con el preset en Other, un build script hace que Vercel sirva public/ y la home queda en 404. Volver a agregarlos SOLO junto con el cambio de preset a Next.js en el panel.",
+    "dev": "npm run _copiar-legacy && next dev",
+    "_copiar-legacy": "mkdir -p public/legacy && cp index.html public/legacy/index.html"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
