@@ -2,3 +2,12 @@ node_modules/
 .env
 .env.local
 .vercel
+
+# Next
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Copia del legacy que genera `npm run prebuild` desde index.html (la raíz manda).
+# No se commitea: son ~970KB duplicados.
+public/legacy/

@@ -1,7 +1,31 @@
 {
+  "name": "monitor-areben",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
+  "scripts": {
+    "//NOTA": "Requiere el framework preset en Next.js. Con el preset en 'Other', Vercel usa public/ como output directory y la home queda en 404.",
+    "_copiar-legacy": "mkdir -p public/legacy && cp index.html public/legacy/index.html",
+    "prebuild": "npm run _copiar-legacy",
+    "build": "next build",
+    "dev": "npm run _copiar-legacy && next dev",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "typescript": "^5"
   }
 }
