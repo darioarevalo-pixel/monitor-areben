@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "//NOTA": "Requiere el framework preset en Next.js. Con el preset en 'Other', Vercel usa public/ como output directory y la home queda en 404.",
+    "_copiar-legacy": "mkdir -p public/legacy && cp index.html public/legacy/index.html",
+    "prebuild": "npm run _copiar-legacy",
+    "build": "next build",
+    "dev": "npm run _copiar-legacy && next dev",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
-    "//NOTA": "build/prebuild sacados a proposito: con el preset en Other, un build script hace que Vercel sirva public/ y la home queda en 404. Volver a agregarlos SOLO junto con el cambio de preset a Next.js en el panel.",
-    "dev": "npm run _copiar-legacy && next dev",
-    "_copiar-legacy": "mkdir -p public/legacy && cp index.html public/legacy/index.html"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
