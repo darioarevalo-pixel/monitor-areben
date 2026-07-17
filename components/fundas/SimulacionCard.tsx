@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { computeFrom, repartir, sumaVars, varActivo } from '@/lib/fundas/simulacion'
 import { iphoneModelSort } from '@/lib/fundas/ranking'
+import { bloqueToCanvas, copiarOdescargarPNG } from '@/lib/fundas/export'
 import { imgAThumb } from '@/lib/imagenes'
 import type { SimVar } from '@/lib/fundas/tipos'
 
@@ -50,6 +51,7 @@ type Props = {
 export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar }: Props) {
   const [sort, setSort] = useState<{ col: 'model' | 'pct' | null; dir: number }>({ col: null, dir: 1 })
   const [copiado, setCopiado] = useState('')
+  const [imgMsg, setImgMsg] = useState('')
 
   const { total, rows, vars, varOn, img } = editor
   const totalNum = parseFloat(total) || 0
@@ -135,6 +137,22 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       texto = `${r.model}: ${qty}u`
     }
     copiar(texto, 'fila-' + i)
+  }
+
+  // Copiar la simulación actual como imagen PNG (fmSimCopiarImagen, 5250).
+  const copiarImagen = async () => {
+    if (!computeFrom(totalNum, rows, vars, activo).length) return
+    setImgMsg('Generando...')
+    try {
+      const canvas = await bloqueToCanvas({ nombre: '', total: totalNum, rows, vars, varOn, img })
+      const res = await copiarOdescargarPNG(canvas, 'pedido.png')
+      setImgMsg(res === 'copiado' ? '✓ Copiado' : '✓ Descargado')
+    } catch {
+      setImgMsg('')
+      alert('No se pudo generar la imagen.')
+      return
+    }
+    setTimeout(() => setImgMsg(''), 1500)
   }
 
   // ── Totales del pie ──
@@ -278,7 +296,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
           <button className="btn-sm" onClick={onVaciar} title="Borra todo y empieza de cero" style={{ color: '#DC2626' }}>🗑 Vaciar</button>
           <button className="btn-sm" onClick={() => copiarTabla('ambos')} title="Copia modelo y cantidad separados por tabulación">{copiado === 'tabla-ambos' ? '✓ Copiado' : '⎘ Modelo + Cantidad'}</button>
           <button className="btn-sm" onClick={() => copiarTabla('cantidad')} title="Copia solo las cantidades">{copiado === 'tabla-cantidad' ? '✓ Copiado' : '⎘ Solo cantidad'}</button>
-          <button className="btn-sm" disabled title="La imagen del pedido llega en el próximo paso del port" style={{ background: '#25D366', color: '#fff', opacity: 0.5, cursor: 'not-allowed' }}>📷 Imagen</button>
+          <button className="btn-sm" onClick={copiarImagen} disabled={imgMsg === 'Generando...'} title="Copia la tabla como imagen para pegar en WhatsApp" style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen'}</button>
         </div>
       </div>
     </div>

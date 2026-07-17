@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { computeFrom } from '@/lib/fundas/simulacion'
+import { copiarOdescargarPNG, imagenDeTodos, pdfDeTodos } from '@/lib/fundas/export'
 import type { SimBloque } from '@/lib/fundas/tipos'
 
 type Props = {
@@ -18,6 +20,38 @@ type Props = {
  * "PDF de todo" quedan inertes hasta el Paso 4.
  */
 export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onEliminar, onNombre }: Props) {
+  const [imgMsg, setImgMsg] = useState('')
+  const [pdfMsg, setPdfMsg] = useState('')
+
+  const imagenTodo = async () => {
+    if (!pedidos.length) return
+    setImgMsg('Generando...')
+    try {
+      const canvas = await imagenDeTodos(pedidos)
+      const res = await copiarOdescargarPNG(canvas, 'pedidos-proveedor.png')
+      setImgMsg(res === 'copiado' ? '✓ Copiado' : '✓ Descargado')
+    } catch {
+      setImgMsg('')
+      alert('No se pudo generar la imagen.')
+      return
+    }
+    setTimeout(() => setImgMsg(''), 1500)
+  }
+
+  const pdfTodo = async () => {
+    if (!pedidos.length) return
+    setPdfMsg('Generando...')
+    try {
+      await pdfDeTodos(pedidos)
+      setPdfMsg('✓ Listo')
+    } catch {
+      setPdfMsg('')
+      alert('No se pudo generar el PDF.')
+      return
+    }
+    setTimeout(() => setPdfMsg(''), 1500)
+  }
+
   if (!pedidos.length) return null
 
   return (
@@ -27,8 +61,8 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
           Pedidos del proveedor <span style={{ color: '#378ADD' }}>({pedidos.length})</span>
         </span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-sm" disabled title="Llega en el próximo paso del port" style={{ background: '#25D366', color: '#fff', opacity: 0.5, cursor: 'not-allowed' }}>📷 Imagen de todo</button>
-          <button className="btn-sm" disabled title="Llega en el próximo paso del port" style={{ background: '#DC2626', color: '#fff', opacity: 0.5, cursor: 'not-allowed' }}>📄 PDF de todo</button>
+          <button className="btn-sm" onClick={imagenTodo} disabled={imgMsg === 'Generando...'} title="Una imagen con todos los pedidos juntos" style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen de todo'}</button>
+          <button className="btn-sm" onClick={pdfTodo} disabled={pdfMsg === 'Generando...'} title="Un PDF con todos los pedidos" style={{ background: '#DC2626', color: '#fff' }}>{pdfMsg || '📄 PDF de todo'}</button>
         </div>
       </div>
 
