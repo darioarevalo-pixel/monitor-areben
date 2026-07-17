@@ -11,3 +11,7 @@ tsconfig.tsbuildinfo
 # Copia del legacy que genera `npm run prebuild` desde index.html (la raíz manda).
 # No se commitea: son ~970KB duplicados.
 public/legacy/
+
+# Fixture del test de paridad del ETL: son ventas reales bajadas de Supabase.
+# Se regenera con `npm run fixture-etl`.
+tests/fixtures/
