@@ -13230,7 +13230,12 @@ async function cargarCRM(forzar = false) {
       let porMarcados = [];
       for (let i = 0; i < flagged.length; i += 150) {
         const lote = flagged.slice(i, i + 150);
-        const parte = await sbFetch('ventas', `${SEL_CAMPOS}&client_id=in.(${lote.join(',')})&client_id=not.is.null`);
+        // fetchAll y no sbFetch: PostgREST corta en 1000 filas y sbFetch no pagina,
+        // así que un lote de 150 clientes con más de 1000 ventas perdía el resto en
+        // silencio. Medido el 17-jul-2026: el lote 1 tenía 1653 ventas → se caían
+        // 653, y tras la unión con porCanal quedaban 445 ventas sin contar de 20
+        // clientes ($12,5M). El límite se verificó pidiendo limit=2000 y recibiendo 999.
+        const parte = await fetchAll('ventas', `${SEL_CAMPOS}&client_id=in.(${lote.join(',')})&client_id=not.is.null`, 'ventas marcados', true);
         porMarcados = porMarcados.concat(parte);
       }
       const porId = new Map();
