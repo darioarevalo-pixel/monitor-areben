@@ -61,80 +61,115 @@ describe('matchModelo: el contrato que comparte con el SQL', () => {
 })
 
 /**
- * Divergencias medidas contra los 1044 talles reales de BDI (16-jul-2026):
- * 8 talles, 1022 unidades vendidas. Fundas mete el 13 Mini adentro del iPhone 13
- * y colapsa el XS Max en 'iPhone Xs' — una categoria que no existe en ninguna otra
- * parte del sistema (las otras dos escriben 'XS').
+ * UNIFICADAS (16-jul-2026). Antes `normalizeIphoneModel` tenia su propia tabla y
+ * divergia en 8 talles / 1022 unidades vendidas: metia el 13 Mini adentro de
+ * 'iPhone 13' y colapsaba el XS Max en 'iPhone Xs'. Ahora delega en _matchModelo,
+ * que es la unica taxonomia del sistema.
  *
- * El test NO dice cual esta bien: congela la diferencia para que unificar sea una
- * decision con numeros y no un descubrimiento a mitad del port de Fundas.
+ * Los casos de abajo son los talles reales que ANTES divergian. Siguen aca, dados
+ * vuelta: ahora exigen que las dos den lo mismo. Si alguien vuelve a duplicar la
+ * tabla, estos tests lo cazan con los datos que lo destaparon.
  */
-describe('normalizeIphoneModel (modulo Fundas) diverge — casos reales', () => {
+describe('normalizeIphoneModel (modulo Fundas) ya no diverge', () => {
   const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
   const lineas = html.split('\n')
+
+  const trozo = (nombre: string) => {
+    const desde = lineas.findIndex((l) => l.startsWith(`function ${nombre}(`))
+    const hasta = lineas.findIndex((l, i) => i > desde && l === '}')
+    if (desde === -1) throw new Error(`No encontré 'function ${nombre}(' en index.html`)
+    return lineas.slice(desde, hasta + 1).join('\n')
+  }
+
+  // Las dos juntas: normalizeIphoneModel delega en _matchModelo, así que sola no corre.
+  // Que haga falta traer _matchModelo ES la prueba de que ya no duplica la tabla.
   const ini = lineas.findIndex((l) => l.startsWith('function normalizeIphoneModel('))
   const fin = lineas.findIndex((l, i) => i > ini && l === '}')
   const normalizeIphoneModel = new Function(
-    `${lineas.slice(ini, fin + 1).join('\n')}\nreturn normalizeIphoneModel;`,
+    `${trozo('_matchModelo')}\n${trozo('normalizeIphoneModel')}\nreturn normalizeIphoneModel;`,
   )() as (s: string) => string | null
 
-  it('sigue existiendo en el legacy (si esto falla, alguien ya la unifico)', () => {
+  it('sigue existiendo: Fundas la llama por nombre (index.html:3270, 3302)', () => {
     expect(ini).toBeGreaterThan(-1)
   })
 
+  // Los 8 talles reales que divergian, con las unidades que estaban mal agrupadas.
   it.each([
-    ['iPhone 13 mini / 13', 'iPhone 13 Mini', 'iPhone 13', 960],
-    ['iPhone 13 Mini', 'iPhone 13 Mini', 'iPhone 13', 18],
-    ['iPhone Xs Max/11 Pro Max', 'iPhone XS Max', 'iPhone Xs', 14],
-    ['iPhone Xs Max', 'iPhone XS Max', 'iPhone Xs', 12],
-    ['iPhone Xs Max Amarilla', 'iPhone XS Max', 'iPhone Xs', 7],
-    ['iPhone Xs Max/ 11 Pro Max', 'iPhone XS Max', 'iPhone Xs', 5],
-    ['iPhone 13 mini', 'iPhone 13 Mini', 'iPhone 13', 3],
-    ['iPhone Xs Max Negra', 'iPhone XS Max', 'iPhone Xs', 3],
-  ])('%s: ETL dice %s, Fundas dice %s (%i unidades)', (talle, etl, fundas) => {
-    expect(matchModelo(talle)).toBe(etl)
-    expect(normalizeIphoneModel(talle)).toBe(fundas)
+    ['iPhone 13 mini / 13', 'iPhone 13 Mini', 960],
+    ['iPhone 13 Mini', 'iPhone 13 Mini', 18],
+    ['iPhone Xs Max/11 Pro Max', 'iPhone XS Max', 14],
+    ['iPhone Xs Max', 'iPhone XS Max', 12],
+    ['iPhone Xs Max Amarilla', 'iPhone XS Max', 7],
+    ['iPhone Xs Max/ 11 Pro Max', 'iPhone XS Max', 5],
+    ['iPhone 13 mini', 'iPhone 13 Mini', 3],
+    ['iPhone Xs Max Negra', 'iPhone XS Max', 3],
+  ])('%s → %s en las dos (antes Fundas lo agrupaba mal: %i unidades)', (talle, esperado) => {
+    expect(matchModelo(talle)).toBe(esperado)
+    expect(normalizeIphoneModel(talle)).toBe(esperado)
   })
 
-  // El comentario del port decia que a esta tabla le faltaban 6/6s/6 Plus/6s Plus.
-  // No es cierto: estan. Lo que falta de verdad es 13 Mini, SE* y XS Max.
-  it('los 6 NO son una divergencia: las dos tablas los tienen', () => {
-    for (const t of ['6', '6s', '6 Plus', '6s Plus']) {
-      expect(normalizeIphoneModel(t)).toBe(matchModelo(t))
+  // 'iPhone Xs' era una categoria inventada por la tabla vieja: no existe en el
+  // ETL ni en el SQL, que escriben 'XS'. No puede volver.
+  it("'iPhone Xs' no existe mas como categoria", () => {
+    for (const t of ['iPhone Xs Max', 'Xs Max', 'iPhone Xs Max Negra']) {
+      expect(normalizeIphoneModel(t)).not.toBe('iPhone Xs')
     }
   })
 
-  it('SE: el ETL lo reconoce y Fundas no (sin datos hoy, pero la tabla difiere)', () => {
-    expect(matchModelo('SE 2')).toBe('iPhone SE 2')
-    expect(normalizeIphoneModel('SE 2')).toBeNull()
+  it('SE y 13 Mini: los reconocen las dos', () => {
+    for (const t of ['SE', 'SE 2', 'SE 3', '13 Mini', 'XS Max']) {
+      expect(normalizeIphoneModel(t)).toBe(matchModelo(t))
+      expect(normalizeIphoneModel(t)).not.toBeNull()
+    }
+  })
+
+  it('una sola tabla: la de Fundas delega, no duplica', () => {
+    const cuerpo = lineas.slice(ini, fin + 1).join('\n')
+    expect(cuerpo).toContain('_matchModelo(size)')
+    expect(cuerpo).not.toContain('pro max') // si vuelve una tabla propia, falla
   })
 })
 
 /**
- * ⏰ BUG LATENTE CON FECHA: el SQL no conoce el iPhone 18.
+ * El JS y el SQL tienen que conocer los MISMOS modelos, en el mismo orden.
  *
- * matchModelo y normalizeIphoneModel tienen las 4 reglas del 18; la funcion SQL
- * (sql/vistas-materializadas.sql:8) no. Y la vista filtra con
- * `AND normalize_iphone_model(d.size) IS NOT NULL` (linea 141): lo que el SQL no
- * reconoce, **no entra en fundas_por_modelo_mes**.
+ * No es prolijidad: el ETL cruza el stock por modelo (que sale de _matchModelo,
+ * sobre `inventario`) contra las ventas por modelo (que salen de la vista
+ * fundas_por_modelo_mes, o sea del SQL). Un modelo que una conoce y la otra no
+ * **no rompe nada**: da cero, callado. Stock con "cero ventas" es el sintoma.
  *
- * Hoy no molesta — no hay un solo talle de iPhone 18 en los datos (verificado). El
- * dia que BDI cargue fundas del 18, el stock va a existir (lo calcula el JS) y las
- * ventas van a valer cero (el SQL las filtra): fundas nuevas que parecen no
- * venderse nunca. No falla nada, solo miente.
+ * Y el orden ES la logica en las dos: '^16' antes que '^16 pro max' mandaria todos
+ * los Pro Max a 'iPhone 16'.
  *
- * Se arregla agregando las 4 reglas del 18 a la funcion SQL y refrescando la vista.
+ * Este test compara las dos tablas de verdad, por eso no hace falta acordarse del
+ * comentario que dice "se mueven juntas": si alguien agrega un modelo a una sola,
+ * esto falla.
  */
-describe('el iPhone 18 y el SQL', () => {
-  it('el JS ya conoce el 18', () => {
-    expect(matchModelo('iPhone 18 Pro Max')).toBe('iPhone 18 Pro Max')
-    expect(matchModelo('18 Air')).toBe('iPhone 18 Air')
+describe('JS y SQL: la misma taxonomia', () => {
+  const sql = readFileSync(join(RAIZ, 'sql', 'vistas-materializadas.sql'), 'utf8')
+  const ts = readFileSync(join(RAIZ, 'lib', 'etl', 'modelos.ts'), 'utf8')
+
+  /** `ELSIF s ~ '^15 pro' THEN RETURN 'iPhone 15 Pro';` → ['15 pro', 'iPhone 15 Pro'] */
+  const reglasSql = [...(sql.split('CREATE OR REPLACE FUNCTION normalize_iphone_model')[1] ?? '')
+    .split('$$;')[0]
+    .matchAll(/s ~ '\^([^']+)'\s+THEN RETURN '([^']+)'/g)]
+    .map((m) => [m[1], m[2]])
+
+  /** `[/^15 pro/, 'iPhone 15 Pro'],` → ['15 pro', 'iPhone 15 Pro'] */
+  const reglasTs = [...ts.matchAll(/\[\/\^([^/]+)\/, '([^']+)'\]/g)].map((m) => [m[1], m[2]])
+
+  it('las dos tablas se parsearon (si no, el test no prueba nada)', () => {
+    expect(reglasSql.length).toBeGreaterThan(40)
+    expect(reglasTs.length).toBeGreaterThan(40)
   })
 
-  it('la funcion SQL no: si esto falla, alguien la actualizo y este test sobra', () => {
-    const sql = readFileSync(join(RAIZ, 'sql', 'vistas-materializadas.sql'), 'utf8')
-    const cuerpo = sql.split('CREATE OR REPLACE FUNCTION normalize_iphone_model')[1]?.split('$$;')[0] ?? ''
-    expect(cuerpo).toContain("'^17 pro max'")
-    expect(cuerpo).not.toContain("'^18")
+  it('mismos modelos, mismo orden, mismas reglas', () => {
+    expect(reglasTs).toEqual(reglasSql)
+  })
+
+  it('las dos conocen el iPhone 18', () => {
+    expect(matchModelo('iPhone 18 Pro Max')).toBe('iPhone 18 Pro Max')
+    expect(matchModelo('18 Air')).toBe('iPhone 18 Air')
+    expect(reglasSql.map((r) => r[1])).toContain('iPhone 18 Pro Max')
   })
 })

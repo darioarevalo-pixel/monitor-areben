@@ -4,6 +4,22 @@
 -- =============================================================================
 
 -- ── Función auxiliar: normalizar modelo de iPhone desde size ─────────────────
+--
+-- ⚠️ ESTA TABLA TIENE UN GEMELO EN JS: _matchModelo (index.html), la única
+-- taxonomía del lado del cliente. **Se mueven juntas.**
+--
+-- Por qué importa: el ETL cruza el stock por modelo (que calcula el JS sobre
+-- `inventario`) contra las ventas por modelo (que salen de la vista
+-- `fundas_por_modelo_mes`, o sea de acá). Si una conoce un modelo que la otra no,
+-- el cruce no explota: da cero, callado. Un modelo nuevo con stock y "cero
+-- ventas" es el síntoma de que estas dos se desincronizaron.
+--
+-- Y ojo con el filtro de la vista (`normalize_iphone_model(d.size) IS NOT NULL`):
+-- lo que esta función no reconoce no entra. Devolver NULL acá es hacer
+-- desaparecer ventas, no ignorar un talle raro.
+--
+-- Al tocar esto hay que refrescar la vista (abajo del todo) o los datos viejos
+-- quedan cacheados con la taxonomía anterior.
 
 CREATE OR REPLACE FUNCTION normalize_iphone_model(size text)
 RETURNS text
@@ -18,7 +34,13 @@ BEGIN
   s := trim(split_part(s, '/', 1));
   s := lower(trim(s));
 
-  IF    s ~ '^17 pro max'  THEN RETURN 'iPhone 17 Pro Max';
+  -- El 18 todavía no existe en los datos (jul-2026), pero el JS ya lo conoce:
+  -- sin estas 4 reglas, las primeras fundas del 18 entran con stock y cero ventas.
+  IF    s ~ '^18 pro max'  THEN RETURN 'iPhone 18 Pro Max';
+  ELSIF s ~ '^18 air'      THEN RETURN 'iPhone 18 Air';
+  ELSIF s ~ '^18 pro'      THEN RETURN 'iPhone 18 Pro';
+  ELSIF s ~ '^18'          THEN RETURN 'iPhone 18';
+  ELSIF s ~ '^17 pro max'  THEN RETURN 'iPhone 17 Pro Max';
   ELSIF s ~ '^17 air'      THEN RETURN 'iPhone 17 Air';
   ELSIF s ~ '^17 pro'      THEN RETURN 'iPhone 17 Pro';
   ELSIF s ~ '^17'          THEN RETURN 'iPhone 17';

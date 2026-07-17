@@ -1845,43 +1845,49 @@
 </div>
 
 <script>
-function normalizeIphoneModel(size) {
-  if (!size) return null;
-
-  // 1. Strip "iPhone" prefix (any capitalización: iPhone, IPhone, iphone)
-  let s = size.trim().replace(/^i?phone\s*/i, '').trim();
-
-  // 2. Strip color after " - "  (e.g. "14 Pro Max - Blanco" → "14 Pro Max")
-  s = s.split(' - ')[0].trim();
-
-  // 3. For combined models (e.g. "12 / 12 Pro", "6/6s Plus"), tomar el primer modelo
-  s = s.split('/')[0].trim();
-
-  // 4. Modelos válidos en orden de más específico a más general
-  const MODELS = [
-    ['18 pro max', '18 Pro Max'], ['18 air', '18 Air'], ['18 pro', '18 Pro'], ['18', '18'],
-    ['17 pro max', '17 Pro Max'], ['17 air', '17 Air'], ['17 pro', '17 Pro'], ['17', '17'],
-    ['16 pro max', '16 Pro Max'], ['16 plus', '16 Plus'], ['16 pro', '16 Pro'], ['16e', '16e'], ['16', '16'],
-    ['15 pro max', '15 Pro Max'], ['15 plus', '15 Plus'], ['15 pro', '15 Pro'], ['15', '15'],
-    ['14 pro max', '14 Pro Max'], ['14 plus', '14 Plus'], ['14 pro', '14 Pro'], ['14', '14'],
-    ['13 pro max', '13 Pro Max'], ['13 pro', '13 Pro'], ['13', '13'],
-    ['12 pro max', '12 Pro Max'], ['12 mini', '12 Mini'], ['12 pro', '12 Pro'], ['12', '12'],
-    ['11 pro max', '11 Pro Max'], ['11 pro', '11 Pro'], ['11', '11'],
-    ['xr', 'XR'], ['xs', 'Xs'], ['x', 'X'],
-    ['8 plus', '8 Plus'], ['8', '8'],
-    ['7 plus', '7 Plus'], ['7', '7'],
-    ['6s plus', '6s Plus'], ['6 plus', '6 Plus'], ['6s', '6s'], ['6', '6'],
+// ── Modelo de iPhone: UNA sola taxonomía para todo el sistema ────────────────
+//
+// Antes había dos tablas acá adentro: esta y la de _matchModelo (que vivía
+// anidada dentro de computarDatos). No coincidían, y el módulo Fundas usaba la
+// peor: metía el 13 Mini adentro de 'iPhone 13' y colapsaba el XS Max en
+// 'iPhone Xs' — categoría que no existe en ninguna otra parte. Medido sobre los
+// 1044 talles reales de BDI: 8 talles, 1022 unidades vendidas mal agrupadas.
+//
+// Ahora hay una sola. Las reglas son las de _matchModelo, que ya coincidía al
+// 100% con la función SQL normalize_iphone_model (sql/vistas-materializadas.sql),
+// la que arma la vista fundas_por_modelo_mes.
+//
+// ⚠️ **Esta tabla y la de SQL tienen que moverse juntas.** El ETL cruza el stock
+// por modelo (que sale de acá) contra las ventas por modelo (que salen del SQL).
+// Si una conoce un modelo que la otra no, el cruce no falla: da cero callado.
+function _matchModelo(sizeName) {
+  if (!sizeName) return null;
+  let s = sizeName.trim().replace(/^i?phone\s*/i, '');
+  s = s.split(' - ')[0].split('/')[0].trim().toLowerCase();
+  // Orden: de más específico a más general. Gana la primera que matchea, así
+  // '^16 pro max' se evalúa antes que '^16'. El orden ES la lógica: no reordenar.
+  const RULES = [
+    [/^18 pro max/,'iPhone 18 Pro Max'],[/^18 air/,'iPhone 18 Air'],[/^18 pro/,'iPhone 18 Pro'],[/^18/,'iPhone 18'],
+    [/^17 pro max/,'iPhone 17 Pro Max'],[/^17 air/,'iPhone 17 Air'],[/^17 pro/,'iPhone 17 Pro'],[/^17/,'iPhone 17'],
+    [/^16 pro max/,'iPhone 16 Pro Max'],[/^16 plus/,'iPhone 16 Plus'],[/^16 pro/,'iPhone 16 Pro'],[/^16e/,'iPhone 16e'],[/^16/,'iPhone 16'],
+    [/^15 pro max/,'iPhone 15 Pro Max'],[/^15 plus/,'iPhone 15 Plus'],[/^15 pro/,'iPhone 15 Pro'],[/^15/,'iPhone 15'],
+    [/^14 pro max/,'iPhone 14 Pro Max'],[/^14 plus/,'iPhone 14 Plus'],[/^14 pro/,'iPhone 14 Pro'],[/^14/,'iPhone 14'],
+    [/^13 pro max/,'iPhone 13 Pro Max'],[/^13 mini/,'iPhone 13 Mini'],[/^13 pro/,'iPhone 13 Pro'],[/^13/,'iPhone 13'],
+    [/^12 pro max/,'iPhone 12 Pro Max'],[/^12 mini/,'iPhone 12 Mini'],[/^12 pro/,'iPhone 12 Pro'],[/^12/,'iPhone 12'],
+    [/^11 pro max/,'iPhone 11 Pro Max'],[/^11 pro/,'iPhone 11 Pro'],[/^11/,'iPhone 11'],
+    [/^xs max/,'iPhone XS Max'],[/^xs/,'iPhone XS'],[/^xr/,'iPhone XR'],[/^x(\s|$)/,'iPhone X'],
+    [/^se 3/,'iPhone SE 3'],[/^se 2/,'iPhone SE 2'],[/^se/,'iPhone SE'],
+    [/^8 plus/,'iPhone 8 Plus'],[/^8/,'iPhone 8'],[/^7 plus/,'iPhone 7 Plus'],[/^7/,'iPhone 7'],
+    [/^6s plus/,'iPhone 6s Plus'],[/^6s/,'iPhone 6s'],[/^6 plus/,'iPhone 6 Plus'],[/^6/,'iPhone 6'],
   ];
-
-  // Intentar el prefijo más largo que coincida (maneja colores sin guión como "Pro Max Black")
-  const words = s.toLowerCase().trim().split(/\s+/);
-  for (let len = words.length; len >= 1; len--) {
-    const candidate = words.slice(0, len).join(' ');
-    for (const [key, canonical] of MODELS) {
-      if (candidate === key) return 'iPhone ' + canonical;
-    }
-  }
+  for (const [re, name] of RULES) { if (re.test(s)) return name; }
   return null;
+}
+
+// Alias histórico: lo llama el módulo Fundas (dos veces). Se mantiene el nombre
+// para no tocar los call sites; la lógica es una sola.
+function normalizeIphoneModel(size) {
+  return _matchModelo(size);
 }
 
 // Repo de GitHub donde corren los workflows de sync (para mostrar la última actualización)
@@ -2226,27 +2232,8 @@ function renderSyncInfo(syncMeta, maxVentaDate, lineasVenta) {
 function computarDatos(productos, ventas, detalles, inventario, vmMes, vmCat, vmFundas, lastSync, syncMeta) {
   const invByProduct = {};
   const invByVariant = {};
-  function _matchModelo(sizeName) {
-    if (!sizeName) return null;
-    let s = sizeName.trim().replace(/^i?phone\s*/i, '');
-    s = s.split(' - ')[0].split('/')[0].trim().toLowerCase();
-    const RULES = [
-      [/^18 pro max/,'iPhone 18 Pro Max'],[/^18 air/,'iPhone 18 Air'],[/^18 pro/,'iPhone 18 Pro'],[/^18/,'iPhone 18'],
-      [/^17 pro max/,'iPhone 17 Pro Max'],[/^17 air/,'iPhone 17 Air'],[/^17 pro/,'iPhone 17 Pro'],[/^17/,'iPhone 17'],
-      [/^16 pro max/,'iPhone 16 Pro Max'],[/^16 plus/,'iPhone 16 Plus'],[/^16 pro/,'iPhone 16 Pro'],[/^16e/,'iPhone 16e'],[/^16/,'iPhone 16'],
-      [/^15 pro max/,'iPhone 15 Pro Max'],[/^15 plus/,'iPhone 15 Plus'],[/^15 pro/,'iPhone 15 Pro'],[/^15/,'iPhone 15'],
-      [/^14 pro max/,'iPhone 14 Pro Max'],[/^14 plus/,'iPhone 14 Plus'],[/^14 pro/,'iPhone 14 Pro'],[/^14/,'iPhone 14'],
-      [/^13 pro max/,'iPhone 13 Pro Max'],[/^13 mini/,'iPhone 13 Mini'],[/^13 pro/,'iPhone 13 Pro'],[/^13/,'iPhone 13'],
-      [/^12 pro max/,'iPhone 12 Pro Max'],[/^12 mini/,'iPhone 12 Mini'],[/^12 pro/,'iPhone 12 Pro'],[/^12/,'iPhone 12'],
-      [/^11 pro max/,'iPhone 11 Pro Max'],[/^11 pro/,'iPhone 11 Pro'],[/^11/,'iPhone 11'],
-      [/^xs max/,'iPhone XS Max'],[/^xs/,'iPhone XS'],[/^xr/,'iPhone XR'],[/^x(\s|$)/,'iPhone X'],
-      [/^se 3/,'iPhone SE 3'],[/^se 2/,'iPhone SE 2'],[/^se/,'iPhone SE'],
-      [/^8 plus/,'iPhone 8 Plus'],[/^8/,'iPhone 8'],[/^7 plus/,'iPhone 7 Plus'],[/^7/,'iPhone 7'],
-      [/^6s plus/,'iPhone 6s Plus'],[/^6s/,'iPhone 6s'],[/^6 plus/,'iPhone 6 Plus'],[/^6/,'iPhone 6'],
-    ];
-    for (const [re, name] of RULES) { if (re.test(s)) return name; }
-    return null;
-  }
+  // _matchModelo vive arriba (top-level, junto a normalizeIphoneModel): es la
+  // única taxonomía de modelo del sistema. Antes estaba duplicada acá adentro.
   const invByProdModelo = {};
   const invDepoMin = {}; // stock SOLO del Deposito Minorista (para detectar agotamiento real)
   (inventario || []).forEach(i => {

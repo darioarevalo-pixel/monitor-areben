@@ -29,14 +29,19 @@ function extraerFuncion(fuente: string, nombre: string): string {
 /**
  * Devuelve el computarDatos del legacy, listo para invocar.
  *
- * Sus helpers anidados (_matchModelo, normalizeCat, toTitleCase, extractColor)
- * viajan adentro de la función. Los únicos de afuera son estos cuatro, y los
- * únicos globales que toca son TODAY y colorManualMap: por eso alcanza con
- * pasarlos como parámetros en vez de montar un DOM.
+ * Parte de sus helpers viajan anidados adentro (normalizeCat, toTitleCase,
+ * extractColor). Los de afuera son estos cinco, y los únicos globales que toca
+ * son TODAY y colorManualMap: por eso alcanza con pasarlos como parámetros en
+ * vez de montar un DOM.
+ *
+ * `_matchModelo` estaba anidada y ahora es top-level: es la única taxonomía de
+ * modelo del sistema, y Fundas la usa vía normalizeIphoneModel. Por eso se
+ * extrae aparte — si volviera adentro de computarDatos, esto tira error en vez
+ * de comparar contra una función que no existe.
  */
 export function cargarComputarDatosLegacy(today: Date, colorManualMap: Record<string, string>) {
   const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
-  const fuente = ['daysSince', 'lifespanDays', 'getPhase', 'lifespanDaysFromFirst', 'computarDatos']
+  const fuente = ['_matchModelo', 'daysSince', 'lifespanDays', 'getPhase', 'lifespanDaysFromFirst', 'computarDatos']
     .map((n) => extraerFuncion(html, n))
     .join('\n\n')
 
