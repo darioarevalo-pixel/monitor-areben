@@ -1,13 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { leerMapa } from '@/lib/kv/cliente'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
 import { traerClientes, traerVentas, type ModoCanal } from '@/lib/crm/datos'
 import { calcularAgregado } from '@/lib/crm/core'
-import type { Agregado, FilaCliente, MapaSeguimiento, MapaTelefonos } from '@/lib/crm/tipos'
+import type { Agregado, FilaCliente, FilaVenta, MapaSeguimiento, MapaTelefonos } from '@/lib/crm/tipos'
 
 /**
- * Carga del CRM. Port de cargarCRM (index.html:13188-13260).
+ * Carga y edición del CRM. Port de cargarCRM (index.html:13188) + las escrituras
+ * de seguimiento y teléfonos (`crmSeg…` / `crmTel…`, 13437-13580).
  *
  * Tres trampas que este hook existe para no pisar:
  *
@@ -15,13 +16,16 @@ import type { Agregado, FilaCliente, MapaSeguimiento, MapaTelefonos } from '@/li
  *    `crmSeg`, y con ella se arma la consulta de ventas. Un `Promise.all` "de
  *    sentido común" hace desaparecer a los 274 clientes ★ **en silencio**.
  *
- * 2. **`renderCRM` reentra en `cargarCRM`** (13646). En el legacy el corte es el
- *    early-return de `crmCargadoCuenta`; en un `useEffect` eso sería un loop de
- *    fetch. Acá el corte es explícito: un ref que marca la carga en curso.
+ * 2. **`renderCRM` reentra en `cargarCRM`.** Acá el corte es un ref que marca la
+ *    carga en curso.
  *
- * 3. **`cargado` viaja hacia afuera.** Es lo que habilita o bloquea los guardados
- *    (ver lib/kv/cliente.ts). Si el KV no se pudo leer, la lista se ve vacía —
- *    igual que hoy — pero además no se puede guardar encima.
+ * 3. **`cargado` viaja hacia afuera.** Sin él en `true`, ningún guardado sale:
+ *    es lo que evita que un POST del mapa entero borre los 305 clientes cuando el
+ *    GET falló y `crmSeg` quedó en `{}`.
+ *
+ * El agregado se recomputa reactivamente sobre las ventas ya cargadas cada vez
+ * que cambia `crmSeg` — igual que el legacy re-corría calcularAgregadoCRM tras
+ * cada escritura, sin volver a bajar las 27k ventas.
  */
 
 export type EstadoCRM = {
@@ -30,10 +34,13 @@ export type EstadoCRM = {
   agregado: Agregado
   crmSeg: MapaSeguimiento
   crmTelOverride: MapaTelefonos
-  clientes: Record<number, FilaCliente>
   /** ¿Se pudo leer el KV? Sin esto en true, ningún guardado puede salir. */
   cargado: boolean
   recargar: () => void
+  /** Persiste un mapa de seguimiento nuevo (optimista + POST del mapa entero). */
+  guardarSeg: (nuevo: MapaSeguimiento) => Promise<boolean>
+  /** Persiste un mapa de teléfonos nuevo. */
+  guardarTel: (nuevo: MapaTelefonos) => Promise<boolean>
 }
 
 const VACIO: Agregado = { activos: [], descartados: [] }
@@ -41,16 +48,18 @@ const VACIO: Agregado = { activos: [], descartados: [] }
 export function useCRM(modo: ModoCanal): EstadoCRM {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [agregado, setAgregado] = useState<Agregado>(VACIO)
+  const [ventas, setVentas] = useState<FilaVenta[]>([])
+  const [clientes, setClientes] = useState<Record<number, FilaCliente>>({})
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
   const [crmTelOverride, setCrmTelOverride] = useState<MapaTelefonos>({})
-  const [clientes, setClientes] = useState<Record<number, FilaCliente>>({})
   const [cargado, setCargado] = useState(false)
   const [tick, setTick] = useState(0)
 
-  // El corte de la reentrada: si ya hay una carga en curso, no se dispara otra.
-  const enCurso = useRef(false)
+  // TODAY del legacy (index.html:1914): congelado al montar. Los cortes de días
+  // del agregado lo usan; las escrituras (hoyISO) usan el día real, aparte.
+  const [today] = useState(() => new Date())
 
+  const enCurso = useRef(false)
   const recargar = useCallback(() => setTick((t) => t + 1), [])
 
   useEffect(() => {
@@ -77,13 +86,13 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
         setCargado(okKv)
 
         // 2. Recién ahora las ventas: la consulta depende de es_mayorista.
-        const ventas = await traerVentas(modo, mapaSeg)
+        const vts = await traerVentas(modo, mapaSeg)
         if (!vivo) return
-        const cli = await traerClientes(ventas)
+        const cli = await traerClientes(vts)
         if (!vivo) return
 
+        setVentas(vts)
         setClientes(cli)
-        setAgregado(calcularAgregado({ ventas, clientes: cli, crmSeg: mapaSeg, crmTelOverride: mapaTel, today: new Date() }))
 
         if (!okKv) {
           setError(
@@ -103,5 +112,34 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     }
   }, [modo, tick])
 
-  return { cargando, error, agregado, crmSeg, crmTelOverride, clientes, cargado, recargar }
+  // El agregado se recalcula solo cuando cambian las ventas cargadas o crmSeg.
+  const agregado = useMemo(
+    () =>
+      ventas.length || Object.keys(clientes).length
+        ? calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, today })
+        : VACIO,
+    [ventas, clientes, crmSeg, crmTelOverride, today],
+  )
+
+  const guardarSeg = useCallback(
+    async (nuevo: MapaSeguimiento): Promise<boolean> => {
+      setCrmSeg(nuevo) // optimista, como el legacy (renderCRM antes del POST)
+      const r = await guardarMapa({ kind: 'crmseg', store: 'bdi', mapa: nuevo, cargado })
+      if (!r.ok) alert('No se pudo guardar el seguimiento: ' + r.motivo)
+      return r.ok
+    },
+    [cargado],
+  )
+
+  const guardarTel = useCallback(
+    async (nuevo: MapaTelefonos): Promise<boolean> => {
+      setCrmTelOverride(nuevo)
+      const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa: nuevo, cargado })
+      if (!r.ok) alert('No se pudieron guardar los teléfonos: ' + r.motivo)
+      return r.ok
+    },
+    [cargado],
+  )
+
+  return { cargando, error, agregado, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel }
 }

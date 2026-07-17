@@ -55,6 +55,8 @@ export type Seguimiento = {
   notas?: Nota[]
   es_mayorista?: boolean
   descartado?: boolean
+  /** Instagram / página del cliente (crmSetPagina, index.html:13493). */
+  pagina?: string
 }
 
 /** `crm:seg:<marca>`: id de cliente → seguimiento. */
