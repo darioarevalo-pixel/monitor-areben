@@ -18,9 +18,11 @@ describe('registro de secciones', () => {
     }
   })
 
-  it('el CRM está en sombra y todavía no en vivo', () => {
-    expect(Object.keys(SOMBRAS)).toContain('clientes')
-    expect(componenteDe('clientes')).toBeNull()
+  it('el CRM y Fundas ya flipearon: en vivo en su ruta normal, no en sombra', () => {
+    for (const key of ['clientes', 'fundas-modelo']) {
+      expect(componenteDe(key)).not.toBeNull() // /<key> → Next
+      expect(componenteSombraDe(key)).toBeNull() // ya no hay ruta sombra
+    }
   })
 
   it('una key que no está en ningún registro va al legacy', () => {

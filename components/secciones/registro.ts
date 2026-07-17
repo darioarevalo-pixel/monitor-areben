@@ -30,6 +30,12 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Rollback: mover esta línea de vuelta a SOMBRAS → `/fundas-modelo` vuelve al
   // iframe legacy y `/fundas-modelo/next` a la sombra, sin tocar datos.
   'fundas-modelo': FundasModelo,
+  // El flip del CRM (17-jul-2026): `/clientes` lo sirve el shell para el equipo.
+  // Ya usaba las claves REALES del KV (`crm:seg:bdi`) en sombra, con forma
+  // idéntica al legacy → sin migración de datos. El camino de escritura se
+  // verificó end-to-end contra el KV real (round-trip con clave sintética, diff
+  // aislado). Rollback: mover esta línea de vuelta a SOMBRAS.
+  clientes: CRM,
 }
 
 /**
@@ -42,7 +48,7 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  clientes: CRM,
+  // (vacío: CRM y Fundas ya flipearon a SECCIONES)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
