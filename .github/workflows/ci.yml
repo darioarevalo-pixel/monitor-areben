@@ -1,0 +1,59 @@
+name: CI — typecheck, lint, tests y build
+
+# Hasta ahora el repo tenía 6 workflows y los 6 eran de sync: no había ninguna
+# verificación automática. El único "test" era que la página cargara en producción.
+#
+# Esto corre en cada push y en cada PR. `next build` fallando acá ataja la mayoría
+# de los errores de port antes de que lleguen a la app de Darío, gratis.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # El fixture son datos reales de Supabase y no está en el repo (.gitignore).
+      # Se baja con las anon keys, que son públicas: no hace falta ningún secret.
+      - name: Bajar el fixture de datos reales
+        run: npm run fixture-etl
+
+      # ⚠️ Sin esto el CI miente. Los tests de paridad hacen `it.skip` cuando falta
+      # el fixture (tests/etl-paridad.test.ts:41), así que si la descarga fallara a
+      # medias, vitest pasaría en verde SIN haber comparado un solo número. Ese verde
+      # es peor que no tener CI. Acá se corta.
+      - name: Verificar que el fixture está de verdad
+        run: |
+          for f in tests/fixtures/etl-bdi.json tests/fixtures/etl-zattia.json; do
+            if [ ! -s "$f" ]; then
+              echo "::error::Falta $f — los tests de paridad se skipearían y el verde no valdría nada."
+              exit 1
+            fi
+          done
+          echo "Fixture OK: $(du -sh tests/fixtures | cut -f1)"
+
+      - name: Tests
+        run: npm test
+
+      # Va último porque es el más lento. `prebuild` copia index.html a
+      # public/legacy/, así que esto también verifica que el legacy siga en su lugar.
+      - name: Build
+        run: npm run build
