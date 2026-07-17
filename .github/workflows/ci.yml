@@ -3,8 +3,19 @@ name: CI — typecheck, lint, tests y build
 # Hasta ahora el repo tenía 6 workflows y los 6 eran de sync: no había ninguna
 # verificación automática. El único "test" era que la página cargara en producción.
 #
-# Esto corre en cada push y en cada PR. `next build` fallando acá ataja la mayoría
-# de los errores de port antes de que lleguen a la app de Darío, gratis.
+# Son DOS jobs a propósito, y la división importa:
+#
+#   verificar → rápido, sin red, bloquea cada push. Es el que tiene que estar
+#               siempre verde: si se pone rojo, es culpa del código.
+#   paridad   → compara el ETL nuevo contra el legacy con datos REALES, que hay
+#               que bajarse de Supabase. Depende de una base ajena con statement
+#               timeout, así que puede fallar por razones que no son el código.
+#
+# Por qué separados: el primer intento los tenía juntos y el CI nació rojo — la
+# descarga del fixture se comió un `statement timeout` (57014) en la tabla ventas.
+# Un CI que se pone rojo por un timeout ajeno es un CI que el equipo aprende a
+# ignorar, y ahí deja de servir para algo. El gate que bloquea tiene que depender
+# solo de este repo.
 
 on:
   push:
@@ -13,6 +24,7 @@ on:
 
 jobs:
   verificar:
+    name: Verificar (typecheck, lint, tests sin red, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,15 +43,61 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # El fixture son datos reales de Supabase y no está en el repo (.gitignore).
-      # Se baja con las anon keys, que son públicas: no hace falta ningún secret.
-      - name: Bajar el fixture de datos reales
-        run: npm run fixture-etl
+      # ⚠️ Estos son 42 tests y NO incluyen la paridad del ETL: sin el fixture,
+      # etl-paridad.test.ts hace it.skip (tests/etl-paridad.test.ts:41). O sea que
+      # el verde de ESTE job no dice nada sobre si el ETL portado calcula igual que
+      # el legacy. Eso lo dice el job `paridad`. Es una división deliberada, no un
+      # olvido: acá no se puede afirmar más de lo que se probó.
+      - name: Tests que no necesitan datos reales
+        run: npm test
 
-      # ⚠️ Sin esto el CI miente. Los tests de paridad hacen `it.skip` cuando falta
-      # el fixture (tests/etl-paridad.test.ts:41), así que si la descarga fallara a
-      # medias, vitest pasaría en verde SIN haber comparado un solo número. Ese verde
-      # es peor que no tener CI. Acá se corta.
+      # Va último porque es el más lento. `prebuild` copia index.html a
+      # public/legacy/, así que esto también verifica que el legacy siga en su lugar.
+      - name: Build
+        run: npm run build
+
+  paridad:
+    name: Paridad del ETL contra el legacy (datos reales)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # El fixture son ~20 MB de ventas reales y no está en el repo (.gitignore).
+      # Se cachea por día: así Supabase recibe una descarga diaria y no una por push.
+      - name: Caché del fixture (una descarga por día)
+        id: cache-fixture
+        uses: actions/cache@v4
+        with:
+          path: tests/fixtures
+          key: fixture-etl-${{ hashFiles('scripts/fixture-etl.mjs') }}-${{ github.run_id }}
+          restore-keys: |
+            fixture-etl-${{ hashFiles('scripts/fixture-etl.mjs') }}-
+
+      # Se baja con las anon keys, que son públicas: no necesita ningún secret.
+      # Con reintentos porque Supabase corta la query de `ventas` por statement
+      # timeout de forma intermitente (57014) — pasó en el primer run de este CI.
+      - name: Bajar el fixture de datos reales
+        if: steps.cache-fixture.outputs.cache-hit != 'true'
+        run: |
+          for intento in 1 2 3; do
+            if npm run fixture-etl; then exit 0; fi
+            echo "::warning::Intento $intento falló (Supabase suele cortar ventas por statement timeout). Reintentando en $((intento * 20))s…"
+            sleep $((intento * 20))
+          done
+          echo "::error::No se pudo bajar el fixture después de 3 intentos."
+          exit 1
+
+      # ⚠️ Sin esto el job miente. Los tests de paridad hacen `it.skip` cuando falta
+      # el fixture, así que si la descarga fallara a medias vitest pasaría en verde
+      # SIN haber comparado un solo número. Ese verde es peor que no tener CI.
       - name: Verificar que el fixture está de verdad
         run: |
           for f in tests/fixtures/etl-bdi.json tests/fixtures/etl-zattia.json; do
@@ -50,10 +108,5 @@ jobs:
           done
           echo "Fixture OK: $(du -sh tests/fixtures | cut -f1)"
 
-      - name: Tests
+      - name: Tests de paridad
         run: npm test
-
-      # Va último porque es el más lento. `prebuild` copia index.html a
-      # public/legacy/, así que esto también verifica que el legacy siga en su lugar.
-      - name: Build
-        run: npm run build
