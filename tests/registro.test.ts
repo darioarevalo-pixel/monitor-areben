@@ -19,7 +19,7 @@ describe('registro de secciones', () => {
   })
 
   it('las secciones flipeadas: en vivo en su ruta normal, no en sombra', () => {
-    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos']) {
+    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos', 'variantes']) {
       expect(componenteDe(key)).not.toBeNull() // /<key> → Next
       expect(componenteSombraDe(key)).toBeNull() // ya no hay ruta sombra
     }

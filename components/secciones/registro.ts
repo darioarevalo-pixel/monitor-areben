@@ -5,6 +5,7 @@ import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
 import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
 import { ProductosTable } from '@/components/productos/ProductosTable'
+import { VariantesTable } from '@/components/variantes/VariantesTable'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -64,6 +65,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // selección de sale es local + PDF (no escribe a GN, confirmado por Bruno).
   // Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy, sin tocar datos.
   productos: ProductosTable,
+  // El flip de Variantes (18-jul-2026, Tanda A #4): `/variantes` lo sirve el shell.
+  // Read-only sobre `allVariantes` del store (buscar + estado + orden + paginación);
+  // reusa el molde de productos (lib/tabla, formatLifespan, colorStock, CSS). Flip
+  // directo (bajo riesgo). Rollback: mover esta línea a SOMBRAS.
+  variantes: VariantesTable,
 }
 
 /**
