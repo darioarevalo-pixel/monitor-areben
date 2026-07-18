@@ -100,6 +100,18 @@ export const SECCIONES: Record<string, ComponentType> = {
   // empareja las variantes desparejas con su NN-N dominante; "Traer de GN" dispara el
   // sync. Rollback: mover esta línea a SOMBRAS. Pendiente Bruno: 1 escritura real.
   ubicaciones: Ubicaciones,
+  // El flip de los 4 conteos (18-jul-2026, cierre Tanda D): `/conteo-deposito`,
+  // `/conteo-estandar-zattia`, `/conteo-estandar-stunned` y `/conteo` los sirve el
+  // shell. Generan un Excel de ajuste que el operador sube a mano a GN (NO escriben
+  // stock por API). Se flipearon tras la PARIDAD DE FLUJO COMPLETO (tests/conteo-flujo):
+  // el flujo Next entero (agrupar→abrir→contar/escanear→terminar→ajuste→Excel) da un
+  // Excel byte-idéntico al del legacy extraído en vivo de index.html — el riesgo era
+  // la fidelidad del Excel y quedó cubierto sin conteo físico. Rollback: mover estas
+  // líneas de vuelta a SOMBRAS.
+  'conteo-deposito': ConteoDeposito,
+  'conteo-estandar-zattia': ConteoEstandar,
+  'conteo-estandar-stunned': ConteoEstandar,
+  conteo: Conteo,
   'sesion-fotos': SesionFotos,
   // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con
@@ -224,18 +236,6 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // Conteo de Depósito (Tanda D #1): conteo físico a mano vs stock vivo de GN
-  // (`/api/inventario-vivo`); ajuste `nuevo=vivo+dif` → Excel para subir a mano. En
-  // sombra para comparar `/conteo-deposito/next` contra el legacy antes de flipear.
-  'conteo-deposito': ConteoDeposito,
-  // Conteo estándar del Local (Tanda D #2): dos entradas de nav (zattia/stunned) que
-  // comparten el componente; la línea sale de la ruta (useParams). Exhibido (escáner)
-  // + depósito (a mano) vs stock vivo del Local; ajuste → Excel. En sombra.
-  'conteo-estandar-zattia': ConteoEstandar,
-  'conteo-estandar-stunned': ConteoEstandar,
-  // Conteo de local (Tanda D #3, BDI): conteo por escáner vs espejo Supabase; COMPLETA
-  // el Excel de GN (rellena nuevo_stock, solo Local de grupos marcados). En sombra.
-  conteo: Conteo,
   // Tienda Nube (tncat, Tanda C): 4 herramientas que ESCRIBEN en la tienda online EN
   // VIVO — Categorías por modelo (BDI), Carga de imágenes + Revisar fotos (ambas), y
   // Asignar categoría por Excel (Zattia). EN SOMBRA a propósito: los endpoints
