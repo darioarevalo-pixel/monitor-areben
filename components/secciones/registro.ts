@@ -17,6 +17,7 @@ import { Cargando } from './Cargando'
 // ⚠️ El 2º arg de dynamic() DEBE ser un objeto literal inline (`{ loading: … }`), no
 // una variable: Turbopack lo exige en build ("options must be an object literal") aunque
 // `next dev` sea permisivo. Por eso se repite el literal en cada línea.
+const Inicio = dynamic(() => import('@/components/inicio/Inicio').then((m) => m.Inicio), { loading: Cargando })
 const CRM = dynamic(() => import('@/components/crm/CRM').then((m) => m.CRM), { loading: Cargando })
 const Ingresos = dynamic(() => import('@/components/ingresos/Ingresos').then((m) => m.Ingresos), { loading: Cargando })
 const Marketing = dynamic(() => import('@/components/marketing/Marketing').then((m) => m.Marketing), { loading: Cargando })
@@ -69,6 +70,13 @@ const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exh
  * página → registro → componentes → lib.
  */
 export const SECCIONES: Record<string, ComponentType> = {
+  // El flip de Inicio (18-jul-2026): `/inicio` lo sirve el shell (era de las últimas
+  // en el iframe). Novedades: solicitudes de Sesión de fotos pendientes de armar,
+  // multimarca (lee `sesionfotos:<marca>` de las marcas visibles y filtra 'pendiente');
+  // cada una abre esa solicitud vía el 2º puente (ponerVerSolicitud) cambiando de marca
+  // si hace falta. Aviso al aprobador de solicitudes internas. Read-only (no escribe).
+  // Sacarlo del iframe cierra el último legacy pesado del uso diario. Rollback: a SOMBRAS.
+  inicio: Inicio,
   // El flip de Fundas (17-jul-2026): `/fundas-modelo` lo sirve el shell para todo
   // el equipo, con las claves de localStorage REALES (las mismas del iframe).
   // Rollback: mover esta línea de vuelta a SOMBRAS → `/fundas-modelo` vuelve al

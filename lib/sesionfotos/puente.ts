@@ -27,3 +27,23 @@ export function tomarPuenteFotos(): string[] | null {
   pendiente = null
   return p
 }
+
+/**
+ * El segundo puente: Inicio → Sesión de fotos para ABRIR una solicitud puntual.
+ * Port de `sfPendVer` (index.html:9782): Inicio deja el id de la solicitud a ver
+ * (tras cambiar de marca si hace falta) y navega; al montar, Sesión de fotos la abre
+ * en su detalle. Mismo singleton client-side, mismo consumo de una sola vez.
+ */
+let verSolicitud: string | null = null
+
+/** Inicio deja acá el id de la solicitud a abrir y navega a Sesión de fotos. */
+export function ponerVerSolicitud(id: string): void {
+  verSolicitud = id
+}
+
+/** Sesión de fotos toma (una sola vez) el id de la solicitud a abrir, o null. */
+export function tomarVerSolicitud(): string | null {
+  const p = verSolicitud
+  verSolicitud = null
+  return p
+}

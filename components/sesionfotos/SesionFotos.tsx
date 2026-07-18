@@ -52,7 +52,7 @@ import {
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
-import { tomarPuenteFotos } from '@/lib/sesionfotos/puente'
+import { tomarPuenteFotos, tomarVerSolicitud } from '@/lib/sesionfotos/puente'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -136,9 +136,11 @@ function Contenido({
   // borrador ya pre-cargado. Se toma UNA vez al montar (tomar consume), en el
   // inicializador de estado para no dispararlo en cada render.
   const [pidsPuente] = useState<string[] | null>(() => tomarPuenteFotos())
+  // Puente desde Inicio: si venimos a ver una solicitud puntual, abrimos su detalle.
+  const [verInicial] = useState<string | null>(() => tomarVerSolicitud())
 
   const [verCerradas, setVerCerradas] = useState(false)
-  const [viendo, setViendo] = useState<string | null>(null)
+  const [viendo, setViendo] = useState<string | null>(verInicial)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
   const [armando, setArmando] = useState(!!pidsPuente?.length)
