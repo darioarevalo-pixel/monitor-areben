@@ -13,6 +13,7 @@ import { Talles } from '@/components/talles/Talles'
 import { Colores } from '@/components/colores/Colores'
 import { SolicitudesInternas } from '@/components/solicitudes-internas/SolicitudesInternas'
 import { GenTalles } from '@/components/gen-talles/GenTalles'
+import { Cupones } from '@/components/cupones/Cupones'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -117,6 +118,12 @@ export const SECCIONES: Record<string, ComponentType> = {
   // descripción de TN (payload byte-idéntico, endpoint intacto) + lista de pendientes
   // (Zattia). Rollback: mover esta línea de vuelta a SOMBRAS.
   'gen-talles': GenTalles,
+  // El flip de Cupones (18-jul-2026, Tanda B #3): `/cupones` lo sirve el shell.
+  // CRUD de descuentos por cliente para el local (KV kind `cupones`, misma clave del
+  // iframe → sin migración de datos; merge por-cupón con `cargado`). Gate de creación
+  // por `cupones.crear`; borrar solo admin. No toca la tienda online. Rollback: mover
+  // esta línea de vuelta a SOMBRAS.
+  cupones: Cupones,
 }
 
 /**
@@ -129,8 +136,8 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, Solicitudes internas y
-  // Tabla de talles flipeados)
+  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, Solicitudes internas,
+  // Tabla de talles y Cupones flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

@@ -42,6 +42,8 @@ const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
 /** `mensajes` es la excepción: guarda un array bajo `{bank}`. */
 export type KindBanco = 'mensajes'
+/** `cupones` guarda su array bajo `{cupones}` (otra clave más del mismo endpoint). */
+export type KindCupones = 'cupones'
 /**
  * Kinds que guardan un array bajo `{list}`. `sesionfotos` (historial de retiros
  * para fotos) y `solicitudesinternas` (retiros de uso interno con motivo/aprobación)
@@ -142,6 +144,36 @@ export async function guardarLista<T>({ kind, store, lista, cargado }: OpcionesG
   })
   if (!r.ok) return r
   return { ok: true, total: Number(r.dato.total ?? lista.length) }
+}
+
+/**
+ * Lee los cupones (`kind=cupones`, forma `{cupones:[...]}`). Igual disciplina que
+ * `leerLista`: distinguir "no se pudo leer" de "leí y está vacío" es crítico, porque
+ * un guardado tras lectura fallida borraría todos los cupones del local. Array vacío
+ * confirmado por el servidor = éxito.
+ */
+export async function leerCupones<T = unknown>(store: Marca): Promise<Lectura<T[]>> {
+  const r = await pedir(`${API}?kind=cupones&store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  return { ok: true, dato: Array.isArray(r.dato.cupones) ? (r.dato.cupones as T[]) : [] }
+}
+
+export type OpcionesGuardarCupones<T> = {
+  store: Marca
+  cupones: T[]
+  /** Obligatorio, igual que las demás: sin lectura previa, guardar borraría la lista. */
+  cargado: boolean
+}
+
+export async function guardarCupones<T>({ store, cupones, cargado }: OpcionesGuardarCupones<T>): Promise<Escritura> {
+  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const r = await pedir(`${API}?kind=cupones&store=${store}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, cupones }),
+  })
+  if (!r.ok) return r
+  return { ok: true, total: Number(r.dato.total ?? cupones.length) }
 }
 
 export type OpcionesGuardarMapa<T> = {
