@@ -40,6 +40,13 @@ body {
   overflow: auto;
 }
 
+/* Aire uniforme para las secciones servidas por el shell (no el iframe legacy,
+   que trae su propio padding interno). Despega el contenido del borde superior y
+   del sidebar; las que ya usan .card quedan levemente metidas hacia adentro. */
+.seccion-pad {
+  padding: 16px 20px;
+}
+
 /* ── Sidebar (tema oscuro, igual al legacy) ── */
 .sidebar {
   width: 248px;

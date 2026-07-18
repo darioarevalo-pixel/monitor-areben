@@ -60,7 +60,13 @@ export default function Seccion() {
       <Sidebar activa={key} />
       <div className="shell-main">
         <div className="shell-content">
-          {seccion ? createElement(seccion) : <LegacyFrame tab={key} marca={marca} />}
+          {/* Las secciones flipeadas van con aire uniforme (.seccion-pad); el iframe
+              legacy queda full-bleed porque ya trae su propio padding interno. */}
+          {seccion ? (
+            <div className="seccion-pad">{createElement(seccion)}</div>
+          ) : (
+            <LegacyFrame tab={key} marca={marca} />
+          )}
         </div>
       </div>
     </div>
