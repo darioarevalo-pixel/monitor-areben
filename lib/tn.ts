@@ -17,6 +17,15 @@ export type TnProducto = {
   name?: string | null
   images?: string[]
   promo_price?: number
+  // Campos ricos que consume Tabla de talles (gen-talles): la descripción cruda
+  // para leer/mostrar la tabla vieja, las categorías y las señales de calidad de la
+  // lista de pendientes. Opcionales: el resto de los consumidores no los mira.
+  raw_desc?: string
+  categories?: string[]
+  has_desc?: boolean
+  published?: boolean
+  image_count?: number
+  created_at?: string
 }
 
 export type IndiceTn = { bySku: Record<string, TnProducto>; byName: Record<string, TnProducto> }

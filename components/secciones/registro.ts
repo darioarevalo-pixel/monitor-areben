@@ -12,6 +12,7 @@ import { Margenes } from '@/components/margenes/Margenes'
 import { Talles } from '@/components/talles/Talles'
 import { Colores } from '@/components/colores/Colores'
 import { SolicitudesInternas } from '@/components/solicitudes-internas/SolicitudesInternas'
+import { GenTalles } from '@/components/gen-talles/GenTalles'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -109,6 +110,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // de payload OFFLINE byte-idéntica (cero venta de prueba) y contramedida
   // anti-duplicado. Rollback: mover esta línea de vuelta a SOMBRAS.
   'solicitudes-internas': SolicitudesInternas,
+  // El flip de Tabla de talles (18-jul-2026, Tanda B #2): `/gen-talles` lo sirve el
+  // shell. Generador de tablas (HTML byte-idéntico al legacy, paridad ejecutable) +
+  // vincular a un producto de TN + guardar en el KV (kind `talles`, misma clave del
+  // iframe → sin migración de datos, merge por-clave con `cargado`) + cargar en la
+  // descripción de TN (payload byte-idéntico, endpoint intacto) + lista de pendientes
+  // (Zattia). Rollback: mover esta línea de vuelta a SOMBRAS.
+  'gen-talles': GenTalles,
 }
 
 /**
@@ -121,8 +129,8 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, Resumen, Ventas mensuales, Productos y
-  // Solicitudes internas flipeados)
+  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, Solicitudes internas y
+  // Tabla de talles flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
