@@ -11,6 +11,32 @@ type JsPdfLike = {
   save: (filename: string) => void
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Dibuja una imagen (data URL) dentro de una caja, sin deformarla (fit + centrado).
+ * Port de `_pdfAddImgFit` (index.html:7869). Compartido por diseños, exhib, etc.
+ */
+export function agregarImagenFit(pdf: any, dataUrl: string, x: number, y: number, boxW: number, boxH: number): void {
+  try {
+    const p = pdf.getImageProperties(dataUrl)
+    const ar = (p.width || 1) / (p.height || 1)
+    let w = boxW
+    let h = w / ar
+    if (h > boxH) {
+      h = boxH
+      w = h * ar
+    }
+    pdf.addImage(dataUrl, 'JPEG', x + (boxW - w) / 2, y + (boxH - h) / 2, w, h, undefined, 'SLOW')
+  } catch {
+    try {
+      pdf.addImage(dataUrl, 'JPEG', x, y, boxW, boxH)
+    } catch {
+      /* imagen ilegible: se omite */
+    }
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export async function compartirODescargarPDF(pdf: JsPdfLike, filename: string, title?: string): Promise<void> {
   const nav = navigator as Navigator & {
     canShare?: (data: { files: File[] }) => boolean

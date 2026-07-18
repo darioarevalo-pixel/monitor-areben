@@ -21,6 +21,7 @@ import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
 import { Conteo } from '@/components/conteo/Conteo'
 import { Reposicion } from '@/components/reposicion/Reposicion'
 import { VerifVentas } from '@/components/verif-ventas/VerifVentas'
+import { Disenos } from '@/components/disenos/Disenos'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -159,6 +160,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // localStorage con las MISMAS claves del legacy. DIFERIDO: el botón "Asignar
   // categoría en TN" (necesita tncat, Tanda C). Rollback: mover esta línea a SOMBRAS.
   comisiones: Comisiones,
+  // El flip de Selección de diseños (18-jul-2026, Tanda C, bajo riesgo): `/disenos` lo
+  // sirve el shell. Tablero local (kanban/galería) para cargar opciones de diseño,
+  // opinar (👍/👎 + notas), clasificar (confirmado/duda/rechazado) y exportar PDFs.
+  // Solo escribe localStorage (MISMAS claves del iframe → sin migración) + endpoint
+  // `votacion` (Vercel, no TN/GN) para juntar votos del equipo. NO toca stock ni GN.
+  // Lógica pura con paridad (orden/tally/import). Rollback: mover esta línea a SOMBRAS.
+  disenos: Disenos,
 }
 
 /**
