@@ -26,9 +26,9 @@ describe('registro de secciones', () => {
   })
 
   it('una key que no está en ningún registro va al legacy', () => {
-    // `tncat` (Tienda Nube) todavía no se migró: ni componente vivo ni sombra.
-    expect(componenteDe('tncat')).toBeNull()
-    expect(componenteSombraDe('tncat')).toBeNull()
+    // `ubicaciones` todavía no se migró: ni componente vivo ni sombra.
+    expect(componenteDe('ubicaciones')).toBeNull()
+    expect(componenteSombraDe('ubicaciones')).toBeNull()
   })
 
   it('las keys de los dos registros existen en el nav (si no, son ruta muerta)', () => {

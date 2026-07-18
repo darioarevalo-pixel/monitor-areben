@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
 import { Ingresos } from '@/components/ingresos/Ingresos'
 import { Marketing } from '@/components/marketing/Marketing'
+import { Tncat } from '@/components/tncat/Tncat'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
@@ -225,6 +226,14 @@ export const SOMBRAS: Record<string, ComponentType> = {
   // Conteo de local (Tanda D #3, BDI): conteo por escáner vs espejo Supabase; COMPLETA
   // el Excel de GN (rellena nuevo_stock, solo Local de grupos marcados). En sombra.
   conteo: Conteo,
+  // Tienda Nube (tncat, Tanda C): 4 herramientas que ESCRIBEN en la tienda online EN
+  // VIVO — Categorías por modelo (BDI), Carga de imágenes + Revisar fotos (ambas), y
+  // Asignar categoría por Excel (Zattia). EN SOMBRA a propósito: los endpoints
+  // (tn-categorias/tn-subir-imagen, byte-fieles) modifican categorías/fotos/
+  // publicación que ve el cliente, así que Bruno hace UNA operación real de cada tipo
+  // en `/tncat/next` y la compara con el legacy antes de flipear (misma disciplina que
+  // los conteos de la Tanda D). Rollback = ya está: sigue sirviendo el iframe.
+  tncat: Tncat,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
