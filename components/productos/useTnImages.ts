@@ -15,8 +15,8 @@ import type { Marca } from '@/lib/nav'
  * productos sin imagen no entran al índice). El precio promo (P3) usará otro índice
  * sobre el mismo payload, por eso se guarda `products` crudo también.
  */
-const cacheIdx: Partial<Record<Marca, IndiceTn>> = {}
-const cacheProducts: Partial<Record<Marca, unknown[]>> = {}
+const cacheIdx: Partial<Record<Marca, IndiceTn>> = {} // fotos (solo con imagen)
+const cachePromo: Partial<Record<Marca, IndiceTn>> = {} // precio promo (todos los productos)
 const enVuelo: Partial<Record<Marca, Promise<void>>> = {}
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -30,17 +30,28 @@ async function cargar(marca: Marca): Promise<void> {
         if (!r.ok) throw new Error('HTTP ' + r.status)
         const d = await r.json()
         const products = d.products || []
-        cacheProducts[marca] = products
         cacheIdx[marca] = indexarTn(products, { soloConImagenes: true })
+        cachePromo[marca] = indexarTn(products) // todos, para el precio promo (P3)
       } catch {
-        cacheProducts[marca] = []
         cacheIdx[marca] = indexarTn([])
+        cachePromo[marca] = indexarTn([])
       } finally {
         enVuelo[marca] = undefined
       }
     })()
   }
   await enVuelo[marca]
+}
+
+/**
+ * Asegura que el catálogo TN de la marca esté bajado y devuelve el índice de precio
+ * promo (todos los productos). Lo usa el reporte de sale, que necesita el promo en
+ * el momento del click aunque las fotos ya estén cacheadas. Una sola bajada del
+ * endpoint sirve a fotos y a promo.
+ */
+export async function asegurarTnPromo(marca: Marca): Promise<IndiceTn> {
+  await cargar(marca)
+  return cachePromo[marca] ?? indexarTn([])
 }
 
 export function useTnImages(marca: Marca): IndiceTn | null {

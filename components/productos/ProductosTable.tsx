@@ -5,7 +5,8 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { DetalleVariante } from '@/components/productos/DetalleVariante'
 import { Lightbox } from '@/components/productos/Lightbox'
-import { useTnImages } from '@/components/productos/useTnImages'
+import { asegurarTnPromo, useTnImages } from '@/components/productos/useTnImages'
+import { generarReporteSale } from '@/components/productos/reporteSale'
 import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
@@ -51,6 +52,8 @@ export function ProductosTable() {
   const [ingresoOpen, setIngresoOpen] = useState(false)
   const [expandido, setExpandido] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ imagenes: string[]; nombre: string } | null>(null)
+  const [outletSel, setOutletSel] = useState<Set<string>>(new Set())
+  const [generando, setGenerando] = useState(false)
 
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
   const listaProv = useMemo(() => proveedores(productos), [productos])
@@ -106,6 +109,29 @@ export function ProductosTable() {
       else n.delete(m)
       return n
     })
+  }
+
+  function toggleOutlet(id: string, on: boolean) {
+    setOutletSel((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  }
+
+  // La selección persiste a través de páginas y filtros (index.html:2807 filtra
+  // sobre allProductos, no sobre la página). El precio promo se asegura al click.
+  async function generarSale() {
+    if (!outletSel.size || generando) return
+    setGenerando(true)
+    try {
+      const promoIdx = await asegurarTnPromo(marca)
+      const sel = productos.filter((p) => outletSel.has(p.id))
+      await generarReporteSale(sel, promoIdx, modoVU)
+    } finally {
+      setGenerando(false)
+    }
   }
 
   const th = (c: ColOrden, label: string) => (
@@ -172,12 +198,24 @@ export function ProductosTable() {
           <option value="30d">Vida útil: últimos 30d</option>
           <option value="firstSale">Vida útil: desde 1ª venta</option>
         </select>
+        <button
+          className="btn-sm"
+          onClick={generarSale}
+          disabled={!outletSel.size || generando}
+          style={{ background: outletSel.size ? '#DB2777' : undefined, color: outletSel.size ? '#fff' : undefined }}
+        >
+          {generando ? 'Generando…' : `🏷️ Generar sale (${outletSel.size})`}
+        </button>
+        {outletSel.size > 0 && (
+          <button className="btn-sm" onClick={() => setOutletSel(new Set())}>Limpiar selección</button>
+        )}
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
         <table>
           <thead>
             <tr>
+              <th style={{ width: 30, textAlign: 'center', cursor: 'default' }} title="Marcar para sale / outlet">🏷️</th>
               <th className="foto-col" style={{ width: 72, cursor: 'default' }}>Foto</th>
               {th('name', 'Producto')}
               {th('lastSale', 'Última venta')}
@@ -197,6 +235,8 @@ export function ProductosTable() {
                 modoVU={modoVU}
                 tnIdx={tnIdx}
                 datos={datos}
+                marcado={outletSel.has(p.id)}
+                onMarcar={(on) => toggleOutlet(p.id, on)}
                 expandido={expandido === p.id}
                 onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
                 onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
@@ -224,6 +264,8 @@ function FilaProducto({
   modoVU,
   tnIdx,
   datos,
+  marcado,
+  onMarcar,
   expandido,
   onToggle,
   onFoto,
@@ -232,6 +274,8 @@ function FilaProducto({
   modoVU: ModoVidaUtil
   tnIdx: IndiceTn | null
   datos: DatosETL
+  marcado: boolean
+  onMarcar: (on: boolean) => void
   expandido: boolean
   onToggle: () => void
   onFoto: (imagenes: string[]) => void
@@ -242,6 +286,9 @@ function FilaProducto({
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: 'pointer', ...(expandido ? { background: '#eef2ff' } : {}) }}>
+        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+          <input type="checkbox" checked={marcado} onChange={(e) => onMarcar(e.target.checked)} title="Marcar para sale" />
+        </td>
         <td className="foto-col" onClick={(e) => e.stopPropagation()}>
           {foto ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -281,7 +328,7 @@ function FilaProducto({
       </tr>
       {expandido && (
         <tr>
-          <td colSpan={9} style={{ padding: 0, background: '#f8f9ff', borderBottom: '2px solid #d0dbf5' }}>
+          <td colSpan={10} style={{ padding: 0, background: '#f8f9ff', borderBottom: '2px solid #d0dbf5' }}>
             <DetalleVariante allVvar={datos.allVvar} allVariantes={datos.allVariantes} pid={p.id} />
           </td>
         </tr>
