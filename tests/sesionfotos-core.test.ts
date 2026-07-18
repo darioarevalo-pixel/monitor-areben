@@ -8,8 +8,9 @@ import {
   salio,
   unidadesOrigen,
 } from '@/lib/sesionfotos/core'
-import type { Solicitud } from '@/lib/sesionfotos/tipos'
-import { cargarSesionFotosLegacy } from './legacy-sesionfotos'
+import { agregarCombinada, faseCompletaCombi } from '@/lib/sesionfotos/combinada'
+import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+import { cargarCombinadaLegacy, cargarSesionFotosLegacy } from './legacy-sesionfotos'
 
 /**
  * Paridad de la lógica pura de Sesión de fotos: el port (lib/sesionfotos/core)
@@ -134,5 +135,47 @@ describe('derivaciones del historial', () => {
     expect(cerradas).toBe(1)
     expect(historialVisible(data, false)).toHaveLength(data.length - cerradas)
     expect(historialVisible(data, true)).toHaveLength(data.length)
+  })
+})
+
+describe('vista combinada · paridad con index.html', () => {
+  // Dos solicitudes que comparten una variante (a) y tienen ítems propios, con un
+  // manual y ambos orígenes, para ejercer suma por vid, no-suma de manuales y orden.
+  const SOLS: Solicitud[] = [
+    sol({
+      id: 's1',
+      estado: 'preparada',
+      items: [
+        item({ vid: 'a', nombre: 'Remera', qty: 2, origen: 'deposito' }),
+        item({ vid: 'b', nombre: 'Buzo', qty: 1, origen: 'local' }),
+        item({ vid: 'man_1', nombre: 'Estampa X', variante: '', sku: '', manual: true, qty: 2, origen: 'deposito' }),
+      ],
+      verif: { a: 2, b: 0, man_1: 1 },
+    }),
+    sol({
+      id: 's2',
+      estado: 'cargada',
+      ventas: { deposito: { id: 9, number: 77 } },
+      items: [
+        item({ vid: 'a', nombre: 'Remera', qty: 3, origen: 'deposito' }),
+        item({ vid: 'c', nombre: 'Campera', qty: 1, origen: 'deposito' }),
+      ],
+      verif: { a: 1, c: 1 },
+      devuelto: { a: 3 },
+    }),
+  ]
+  const ids = SOLS.map((s) => s.id)
+  const legacy = cargarCombinadaLegacy(SOLS)
+
+  it.each(['retiro', 'devolucion'] as const)('_sfCombiAgg coincide por origen · fase %s', (fase) => {
+    for (const origen of ['deposito', 'local'] as Origen[]) {
+      const a = legacy._sfCombiAgg(ids, origen, fase).map((x) => ({ nombre: x.nombre, variante: x.variante, sku: x.sku, ped: x.ped, conf: x.conf, manual: !!x.manual }))
+      const b = agregarCombinada(SOLS, origen, fase).map((x) => ({ nombre: x.nombre, variante: x.variante, sku: x.sku, ped: x.ped, conf: x.conf, manual: !!x.manual }))
+      expect(b).toEqual(a)
+    }
+  })
+
+  it.each(['retiro', 'devolucion'] as const)('sfFaseCompletaCombi coincide · fase %s', (fase) => {
+    expect(faseCompletaCombi(SOLS, fase)).toBe(legacy.sfFaseCompletaCombi(ids, fase))
   })
 })

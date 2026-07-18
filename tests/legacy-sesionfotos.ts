@@ -49,3 +49,21 @@ export function cargarSesionFotosLegacy(): LegacySF {
   const fabricar = new Function(`${fuente}\nreturn { sfFaltantes, sfSalio, sfFaseCompleta };`)
   return fabricar() as LegacySF
 }
+
+export type LegacyCombi = {
+  _sfCombiAgg: (ids: string[], origen: string, fase: string) => Array<{ vid?: string; nombre: string; variante: string; sku: string; ped: number; conf: number; manual?: boolean; solId?: string }>
+  sfFaseCompletaCombi: (ids: string[], fase: string) => boolean
+}
+
+/**
+ * `_sfCombiAgg` y `sfFaseCompletaCombi` del legacy, que leen el global `sfData`
+ * (inyectado por parámetro) y llaman a `sfFaseCompleta` (viaja en el bundle).
+ */
+export function cargarCombinadaLegacy(sfData: Solicitud[]): LegacyCombi {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = ['sfFaseCompleta', '_sfCombiAgg', 'sfFaseCompletaCombi']
+    .map((n) => extraerBalanceado(html, n))
+    .join('\n\n')
+  const fabricar = new Function('sfData', `${fuente}\nreturn { _sfCombiAgg, sfFaseCompletaCombi };`)
+  return fabricar(sfData) as LegacyCombi
+}
