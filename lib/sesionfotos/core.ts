@@ -109,3 +109,56 @@ export function conEstado(lista: Solicitud[], id: string, estado: EstadoSolicitu
 export function conDescripcion(lista: Solicitud[], id: string, descripcion: string): Solicitud[] {
   return lista.map((s) => (s.id === id ? { ...s, descripcion } : s))
 }
+
+/**
+ * ¿Se puede borrar la solicitud? Devuelve el motivo del bloqueo o null. Port de la
+ * guarda de sfBorrar (index.html:9938): un no-admin no puede borrar una solicitud
+ * que ya salió y todavía tiene devoluciones pendientes.
+ */
+export function bloqueoBorrado(s: Solicitud, admin: boolean): string | null {
+  if (!admin && salio(s) && !['devuelta', 'cerrada'].includes(s.estado)) {
+    return 'Esta solicitud ya salió y todavía tiene devoluciones pendientes. Cerrá la devolución primero, o pedile a un administrador que la borre.'
+  }
+  return null
+}
+
+/** Quita una solicitud del historial. Port de sfBorrar. */
+export function sinSolicitud(lista: Solicitud[], id: string): Solicitud[] {
+  return lista.filter((s) => s.id !== id)
+}
+
+/** ¿Se puede quitar un ítem? Bloqueado si ya hay ventas creadas. Port de la guarda de sfEliminarItem. */
+export function bloqueoQuitarItem(s: Solicitud): string | null {
+  return s.ventas ? 'Ya se crearon las ventas de esta solicitud; no se puede quitar.' : null
+}
+
+export type DatosEliminacion = { por: string; motivo: string; fecha: string }
+
+/**
+ * Quita un ítem de la solicitud dejando rastro en `eliminados` (con quién, cuándo y
+ * por qué) y borrando su conteo de verif/devuelto. Port de sfEliminarItem
+ * (index.html:9943). NO crea `verif`/`devuelto` si no existían (como el legacy).
+ */
+export function sinItemSol(s: Solicitud, vid: string, datos: DatosEliminacion): Solicitud {
+  const it = (s.items || []).find((i) => i.vid === vid)
+  if (!it) return s
+  const ns: Solicitud = {
+    ...s,
+    items: s.items.filter((i) => i.vid !== vid),
+    eliminados: [
+      ...(s.eliminados || []),
+      { vid: it.vid, pid: it.pid, nombre: it.nombre, variante: it.variante, sku: it.sku || '', qty: it.qty, origen: it.origen, fecha: datos.fecha, por: datos.por, motivo: datos.motivo },
+    ],
+  }
+  if (s.verif) {
+    const verif = { ...s.verif }
+    delete verif[vid]
+    ns.verif = verif
+  }
+  if (s.devuelto) {
+    const devuelto = { ...s.devuelto }
+    delete devuelto[vid]
+    ns.devuelto = devuelto
+  }
+  return ns
+}

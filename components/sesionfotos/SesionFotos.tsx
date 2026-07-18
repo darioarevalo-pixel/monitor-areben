@@ -20,7 +20,16 @@ import {
   reportePDF,
   textoReporteFaltantes,
 } from '@/lib/sesionfotos/pdf'
-import { contarCerradas, faltantes, filaHistorial, historialVisible, salio } from '@/lib/sesionfotos/core'
+import {
+  bloqueoBorrado,
+  contarCerradas,
+  faltantes,
+  filaHistorial,
+  historialVisible,
+  salio,
+  sinItemSol,
+  sinSolicitud,
+} from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
@@ -86,12 +95,30 @@ function Contenido({
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
 
+  // Borrar una solicitud (desde el historial). Port de sfBorrar: guarda de "ya salió",
+  // confirm, y limpia la selección / la vista si apuntaban a ella.
+  const onBorrar = (s: Solicitud) => {
+    const bloqueo = bloqueoBorrado(s, admin)
+    if (bloqueo) {
+      alert(bloqueo)
+      return
+    }
+    if (!confirm('¿Eliminar esta solicitud del historial?')) return
+    persistir((l) => sinSolicitud(l, s.id))
+    if (viendo === s.id) setViendo(null)
+    setSeleccion((sel) => {
+      const n = new Set(sel)
+      n.delete(s.id)
+      return n
+    })
+  }
+
   return (
     <div>
       <div className="sf-shadow-note">
-        Vista previa (Next) · el armado de solicitudes y la creación de ventas siguen en la versión
-        actual; <b>editar estado/descripción, el escaneo de preparado y devolución, y los PDFs ya
-        funcionan</b> y escriben en los datos reales.
+        Vista previa (Next) · solo <b>armar una solicitud nueva</b> y <b>crear ventas en GN</b> siguen en
+        la versión actual; el resto (editar, escanear, quitar ítems, borrar, PDFs) ya funciona y escribe
+        en los datos reales.
       </div>
       {solsCombi && solsCombi.length >= 2 ? (
         <Combinada
@@ -111,6 +138,7 @@ function Contenido({
           admin={admin}
           puedeQuitar={puedeQuitar}
           puedeEditarDesc={puedeEditarDesc}
+          usuario={perfil?.name ?? ''}
           persistir={persistir}
           mapaBc={mapaBc}
           catalogoListo={catalogoListo}
@@ -124,6 +152,7 @@ function Contenido({
           verCerradas={verCerradas}
           onToggleCerradas={setVerCerradas}
           onVer={setViendo}
+          onBorrar={onBorrar}
           seleccion={seleccion}
           onToggleSel={(id, on) =>
             setSeleccion((s) => {
@@ -223,6 +252,7 @@ function Historial({
   verCerradas,
   onToggleCerradas,
   onVer,
+  onBorrar,
   seleccion,
   onToggleSel,
   onVerCombinada,
@@ -233,6 +263,7 @@ function Historial({
   verCerradas: boolean
   onToggleCerradas: (v: boolean) => void
   onVer: (id: string) => void
+  onBorrar: (s: Solicitud) => void
   seleccion: Set<string>
   onToggleSel: (id: string, on: boolean) => void
   onVerCombinada: () => void
@@ -317,7 +348,7 @@ function Historial({
                 Ver
               </button>
               {puedeQuitar && (
-                <button disabled title={DISABLED_TITLE} style={{ border: 'none', background: 'none', color: '#CBD5E1', fontSize: 15, cursor: 'not-allowed' }}>
+                <button onClick={() => onBorrar(s)} title="Eliminar solicitud" style={{ border: 'none', background: 'none', color: '#CBD5E1', fontSize: 15, cursor: 'pointer' }}>
                   🗑
                 </button>
               )}
@@ -348,6 +379,7 @@ function Detalle({
   admin,
   puedeQuitar,
   puedeEditarDesc,
+  usuario,
   persistir,
   mapaBc,
   catalogoListo,
@@ -358,6 +390,7 @@ function Detalle({
   admin: boolean
   puedeQuitar: boolean
   puedeEditarDesc: boolean
+  usuario: string
   persistir: Persistir
   mapaBc: Record<string, string>
   catalogoListo: boolean
@@ -390,6 +423,15 @@ function Detalle({
     const { sol: ns, resultado } = escanearSol(work, origen, fase, code.trim(), mapaBc)
     setWork(ns)
     setFb({ key: `${origen}-${fase}`, r: resultado })
+  }
+
+  // Quitar un ítem de la solicitud (solo admin/quitar-item, antes de crear ventas).
+  // Port de sfEliminarItem: confirm + prompt de motivo → queda en s.eliminados.
+  const onQuitarItem = (it: ItemSolicitud) => {
+    if (!confirm(`¿Quitar "${it.nombre} · ${it.variante}" de la solicitud?`)) return
+    const motivo = (prompt('Motivo (opcional): ¿por qué lo quitás? (ej: no había stock, estaba en otra tienda)') || '').trim()
+    const fecha = new Date().toISOString().slice(0, 10)
+    setWork((w) => sinItemSol(w, it.vid, { por: usuario, motivo, fecha }))
   }
 
   const grupo = (titulo: string, arr: ItemSolicitud[], origen: Origen) => {
@@ -462,7 +504,7 @@ function Detalle({
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right' }}>
                     {puedeQuitar && !s.ventas ? (
-                      <button disabled title={DISABLED_TITLE} style={{ border: 'none', background: 'none', color: '#FCA5A5', fontSize: 14, cursor: 'not-allowed' }}>
+                      <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: '#DC2626', fontSize: 14, cursor: 'pointer' }}>
                         ✕
                       </button>
                     ) : null}

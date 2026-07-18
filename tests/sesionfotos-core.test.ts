@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  bloqueoBorrado,
+  bloqueoQuitarItem,
   conDescripcion,
   conEstado,
   contarCerradas,
@@ -8,6 +10,8 @@ import {
   filaHistorial,
   historialVisible,
   salio,
+  sinItemSol,
+  sinSolicitud,
   unidadesOrigen,
 } from '@/lib/sesionfotos/core'
 import { agregarCombinada, faseCompletaCombi } from '@/lib/sesionfotos/combinada'
@@ -165,6 +169,52 @@ describe('mutaciones puras (SF-4)', () => {
     const once = conEstado(lista, 'a', 'devuelta')
     const twice = conEstado(once, 'a', 'devuelta')
     expect(twice.map((s) => s.estado)).toEqual(once.map((s) => s.estado))
+  })
+})
+
+describe('borrar y quitar-item (SF-4c)', () => {
+  it('bloqueoBorrado: admin siempre puede; no-admin no si salió y falta devolver', () => {
+    const salida = sol({ estado: 'cargada', ventas: { deposito: { id: 1 } }, items: [item({ vid: 'a', qty: 2 })], devuelto: { a: 1 } })
+    expect(bloqueoBorrado(salida, true)).toBeNull() // admin
+    expect(bloqueoBorrado(salida, false)).toMatch(/ya salió/) // no-admin bloqueado
+    // devuelta o cerrada: se puede aunque haya salido
+    expect(bloqueoBorrado({ ...salida, estado: 'devuelta' }, false)).toBeNull()
+    expect(bloqueoBorrado({ ...salida, estado: 'cerrada' }, false)).toBeNull()
+    // no salió: se puede
+    expect(bloqueoBorrado(sol({ estado: 'pendiente' }), false)).toBeNull()
+  })
+
+  it('sinSolicitud quita por id', () => {
+    const lista = [sol({ id: 'a' }), sol({ id: 'b' })]
+    expect(sinSolicitud(lista, 'a').map((s) => s.id)).toEqual(['b'])
+    expect(lista).toHaveLength(2) // inmutable
+  })
+
+  it('bloqueoQuitarItem bloquea si ya hay ventas', () => {
+    expect(bloqueoQuitarItem(sol({ ventas: { deposito: { id: 1 } } }))).toMatch(/ventas/)
+    expect(bloqueoQuitarItem(sol())).toBeNull()
+  })
+
+  it('sinItemSol quita el ítem, deja rastro y borra su conteo', () => {
+    const s = sol({
+      items: [item({ vid: 'a', nombre: 'Rem', qty: 2 }), item({ vid: 'b', nombre: 'Buzo', qty: 1, origen: 'local' })],
+      verif: { a: 1, b: 1 },
+      devuelto: { a: 2 },
+    })
+    const ns = sinItemSol(s, 'a', { por: 'ana', motivo: 'no había stock', fecha: '2026-07-18' })
+    expect(ns.items.map((i) => i.vid)).toEqual(['b'])
+    expect(ns.verif).toEqual({ b: 1 }) // borró a
+    expect(ns.devuelto).toEqual({}) // borró a
+    expect(ns.eliminados).toHaveLength(1)
+    expect(ns.eliminados![0]).toMatchObject({ vid: 'a', nombre: 'Rem', qty: 2, origen: 'deposito', por: 'ana', motivo: 'no había stock', fecha: '2026-07-18' })
+    expect(s.items).toHaveLength(2) // inmutable
+  })
+
+  it('sinItemSol no crea verif/devuelto si no existían', () => {
+    const s = sol({ items: [item({ vid: 'a' })] })
+    const ns = sinItemSol(s, 'a', { por: '', motivo: '', fecha: '2026-07-18' })
+    expect(ns.verif).toBeUndefined()
+    expect(ns.devuelto).toBeUndefined()
   })
 })
 
