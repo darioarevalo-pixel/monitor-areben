@@ -4,6 +4,7 @@ import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
 import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
+import { ProductosTable } from '@/components/productos/ProductosTable'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -68,7 +69,11 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos y Resumen ya flipearon a SECCIONES)
+  // Productos (Tanda A #3) — PASO 1: la tabla read-only (filtros + orden + paginación
+  // + estado + vida útil por modo) en `/productos/next`, para comparar contra el
+  // legacy con los mismos datos. Faltan fotos + detalle (P2) y sale/PDF (P3) antes
+  // del flip. `/productos` sigue viniendo del iframe legacy para el equipo.
+  productos: ProductosTable,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

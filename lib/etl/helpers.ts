@@ -19,6 +19,23 @@ export function lifespanDays(stock: number, sales30: number): number | null {
   return Math.round((stock / sales30) * 30)
 }
 
+/** lifespanDaysGeneric (index.html:2130): igual que lifespanDays pero con período arbitrario. */
+export function lifespanDaysGeneric(stock: number, sales: number, periodDays: number): number | null {
+  if (!sales || sales <= 0) return null
+  return Math.round((stock / sales) * periodDays)
+}
+
+/**
+ * Texto de vida útil estimada. Port de formatLifespan (index.html:2143): sin dato
+ * → "Sin movimiento" si hay stock, "—" si no; y buckets de +1 año / meses / días.
+ */
+export function formatLifespan(d: number | null, stock: number): string {
+  if (d === null) return stock > 0 ? 'Sin movimiento' : '—'
+  if (d > 365) return '+1 año'
+  if (d > 60) return Math.round(d / 30) + ' meses'
+  return d + ' días'
+}
+
 /** lifespanDaysFromFirst (index.html:2721): igual pero contra el promedio desde la primera venta. */
 export function lifespanDaysFromFirst(
   stock: number,
