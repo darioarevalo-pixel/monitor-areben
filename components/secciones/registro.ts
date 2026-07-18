@@ -16,6 +16,7 @@ import { GenTalles } from '@/components/gen-talles/GenTalles'
 import { Cupones } from '@/components/cupones/Cupones'
 import { Etiquetas } from '@/components/etiquetas/Etiquetas'
 import { Comisiones } from '@/components/comisiones/Comisiones'
+import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -153,8 +154,10 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, toda la Tanda B y
-  // Comisiones flipeados)
+  // Conteo de Depósito (Tanda D #1): conteo físico a mano vs stock vivo de GN
+  // (`/api/inventario-vivo`); ajuste `nuevo=vivo+dif` → Excel para subir a mano. En
+  // sombra para comparar `/conteo-deposito/next` contra el legacy antes de flipear.
+  'conteo-deposito': ConteoDeposito,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
