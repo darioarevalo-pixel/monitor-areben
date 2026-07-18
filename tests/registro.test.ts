@@ -19,16 +19,16 @@ describe('registro de secciones', () => {
   })
 
   it('las secciones flipeadas: en vivo en su ruta normal, no en sombra', () => {
-    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos', 'variantes']) {
+    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos', 'variantes', 'proveedores', 'caducados', 'margenes', 'talles']) {
       expect(componenteDe(key)).not.toBeNull() // /<key> → Next
       expect(componenteSombraDe(key)).toBeNull() // ya no hay ruta sombra
     }
   })
 
   it('una key que no está en ningún registro va al legacy', () => {
-    // `talles` todavía no se migró (Tanda A #9): ni componente vivo ni sombra.
-    expect(componenteDe('talles')).toBeNull()
-    expect(componenteSombraDe('talles')).toBeNull()
+    // `reposicion` todavía no se migró (Tanda D): ni componente vivo ni sombra.
+    expect(componenteDe('reposicion')).toBeNull()
+    expect(componenteSombraDe('reposicion')).toBeNull()
   })
 
   it('las keys de los dos registros existen en el nav (si no, son ruta muerta)', () => {

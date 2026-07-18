@@ -9,6 +9,7 @@ import { VariantesTable } from '@/components/variantes/VariantesTable'
 import { Proveedores } from '@/components/proveedores/Proveedores'
 import { Caducados } from '@/components/caducados/Caducados'
 import { Margenes } from '@/components/margenes/Margenes'
+import { Talles } from '@/components/talles/Talles'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -89,6 +90,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // (default 130%), sobre disponibles. Read-only; usa el índice promo de TN
   // (useTnPromo). Flip directo. Rollback: mover esta línea a SOMBRAS.
   margenes: Margenes,
+  // El flip de Talles (18-jul-2026, Tanda A #9, Zattia): `/talles` lo sirve el shell.
+  // Read-only sobre `allTallesData`: categoría + rango de meses → chart + tabla por
+  // talle. recharts. Flip directo. Rollback: mover esta línea a SOMBRAS.
+  talles: Talles,
 }
 
 /**
