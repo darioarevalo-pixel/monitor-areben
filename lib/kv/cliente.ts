@@ -42,8 +42,12 @@ const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
 /** `mensajes` es la excepción: guarda un array bajo `{bank}`. */
 export type KindBanco = 'mensajes'
-/** `sesionfotos` guarda el historial de solicitudes como array bajo `{list}`. */
-export type KindLista = 'sesionfotos'
+/**
+ * Kinds que guardan un array bajo `{list}`. `sesionfotos` (historial de retiros
+ * para fotos) y `solicitudesinternas` (retiros de uso interno con motivo/aprobación)
+ * comparten forma: gemelas en el KV, misma disciplina de `cargado`.
+ */
+export type KindLista = 'sesionfotos' | 'solicitudesinternas'
 
 /**
  * El resultado de leer. Distingue los tres desenlaces que el legacy mezclaba en

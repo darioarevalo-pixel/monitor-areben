@@ -11,6 +11,7 @@ import { Caducados } from '@/components/caducados/Caducados'
 import { Margenes } from '@/components/margenes/Margenes'
 import { Talles } from '@/components/talles/Talles'
 import { Colores } from '@/components/colores/Colores'
+import { SolicitudesInternas } from '@/components/solicitudes-internas/SolicitudesInternas'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -112,7 +113,10 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, Resumen, Ventas mensuales y Productos flipeados)
+  // Solicitudes internas (Tanda B #1): gemela de Sesión de fotos (KV `list`, escaneo,
+  // venta GN) + capa propia de motivo/tipo/aprobación. En sombra para comparar
+  // `/solicitudes-internas/next` contra el legacy antes de flipear.
+  'solicitudes-internas': SolicitudesInternas,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
