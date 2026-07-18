@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  conDescripcion,
+  conEstado,
   contarCerradas,
   faltantes,
   faseCompleta,
@@ -135,6 +137,34 @@ describe('derivaciones del historial', () => {
     expect(cerradas).toBe(1)
     expect(historialVisible(data, false)).toHaveLength(data.length - cerradas)
     expect(historialVisible(data, true)).toHaveLength(data.length)
+  })
+})
+
+describe('mutaciones puras (SF-4)', () => {
+  const lista: Solicitud[] = [
+    sol({ id: 'a', estado: 'pendiente', descripcion: 'Uno' }),
+    sol({ id: 'b', estado: 'preparada', descripcion: 'Dos' }),
+  ]
+
+  it('conEstado cambia solo la solicitud del id y no muta el original', () => {
+    const out = conEstado(lista, 'b', 'cerrada')
+    expect(out.find((s) => s.id === 'b')!.estado).toBe('cerrada')
+    expect(out.find((s) => s.id === 'a')!.estado).toBe('pendiente')
+    expect(lista.find((s) => s.id === 'b')!.estado).toBe('preparada') // inmutable
+    expect(out).not.toBe(lista)
+  })
+
+  it('conDescripcion cambia solo la descripción del id', () => {
+    const out = conDescripcion(lista, 'a', 'Editada')
+    expect(out.find((s) => s.id === 'a')!.descripcion).toBe('Editada')
+    expect(out.find((s) => s.id === 'b')!.descripcion).toBe('Dos')
+    expect(lista.find((s) => s.id === 'a')!.descripcion).toBe('Uno')
+  })
+
+  it('son idempotentes al aplicarse dos veces (base del merge por-solicitud)', () => {
+    const once = conEstado(lista, 'a', 'devuelta')
+    const twice = conEstado(once, 'a', 'devuelta')
+    expect(twice.map((s) => s.estado)).toEqual(once.map((s) => s.estado))
   })
 })
 

@@ -8,7 +8,7 @@
  * Cada función es un port literal; los números de línea apuntan al original.
  */
 
-import type { Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
+import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** El mapa de conteo de la fase: `verif` para preparado, `devuelto` para la vuelta. */
 export function claveConteo(fase: Fase): 'verif' | 'devuelto' {
@@ -93,4 +93,19 @@ export function historialVisible(data: Solicitud[], verCerradas: boolean): Solic
 /** Cuántas cerradas hay (para el toggle "Ver cerradas (N)"). */
 export function contarCerradas(data: Solicitud[]): number {
   return (data || []).filter((s) => s.estado === 'cerrada').length
+}
+
+// ── Mutaciones puras (lista → lista) ────────────────────────────────────────────
+// Cada una toca UNA sola solicitud por id y deja el resto intacto. Se aplican
+// tanto al estado optimista como a la lista fresca re-leída antes de guardar (el
+// merge por-solicitud), así que tienen que depender solo de su entrada.
+
+/** Cambia el estado de una solicitud. Port de sfEstado (index.html:9930). */
+export function conEstado(lista: Solicitud[], id: string, estado: EstadoSolicitud): Solicitud[] {
+  return lista.map((s) => (s.id === id ? { ...s, estado } : s))
+}
+
+/** Cambia la descripción de una solicitud. Port de sfSetDesc (index.html:9934). */
+export function conDescripcion(lista: Solicitud[], id: string, descripcion: string): Solicitud[] {
+  return lista.map((s) => (s.id === id ? { ...s, descripcion } : s))
 }

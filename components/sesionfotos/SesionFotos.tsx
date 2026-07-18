@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
-import { leerLista } from '@/lib/kv/cliente'
-import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
+import { useSesionFotos } from './useSesionFotos'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
 import {
   etiquetaBolsa,
@@ -13,13 +12,18 @@ import {
   textoReporteFaltantes,
 } from '@/lib/sesionfotos/pdf'
 import {
+  conDescripcion,
+  conEstado,
   contarCerradas,
   faltantes,
   filaHistorial,
   historialVisible,
   salio,
 } from '@/lib/sesionfotos/core'
-import type { Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+
+/** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
+type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
 
 /**
  * "📷 Sesión de fotos" (key `sesion-fotos`, BDI + Zattia) en Next.
@@ -42,52 +46,41 @@ import type { Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/t
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
 
 export function SesionFotos() {
+  const { marca } = useSesion()
+  const sf = useSesionFotos(marca)
+
+  if (sf.error && !sf.data) {
+    return (
+      <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>
+        No se pudo leer el historial de Sesión de fotos: {sf.error}
+      </div>
+    )
+  }
+  if (!sf.data) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
+
+  // key={marca}: al cambiar de cuenta, el estado de UI (qué solicitud se ve, la
+  // selección) se resetea remontando, sin setState en effects.
+  return <Contenido key={marca} data={sf.data} prioridad={sf.prioridad} persistir={sf.persistir} />
+}
+
+function Contenido({
+  data,
+  prioridad,
+  persistir,
+}: {
+  data: Solicitud[]
+  prioridad: Origen
+  persistir: Persistir
+}) {
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
   const puedeQuitar = admin || puedeSub(perfil, marca, 'sesion-fotos', 'quitar-item')
   const puedeEditarDesc = admin || puedeSub(perfil, marca, 'sesion-fotos', 'editar-desc')
 
-  const [data, setData] = useState<Solicitud[] | null>(null)
-  const [errorKv, setErrorKv] = useState<string | null>(null)
-  const [prioridad, setPrioridad] = useState<Origen>('deposito')
   const [verCerradas, setVerCerradas] = useState(false)
   const [viendo, setViendo] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
-
-  // Cargar historial (KV) + prioridad de retiro (config de Reposición) al montar /
-  // cambiar de marca. Todo en solo lectura; los resets van dentro del callback
-  // async (no en el cuerpo del effect) para no disparar renders en cascada.
-  useEffect(() => {
-    let vivo = true
-    ;(async () => {
-      setData(null)
-      setErrorKv(null)
-      setViendo(null)
-      setCombiIds(null)
-      setSeleccion(new Set())
-      const [lista, prio] = await Promise.all([
-        leerLista<Solicitud>('sesionfotos', marca),
-        leerPrioridadRetiro(marca),
-      ])
-      if (!vivo) return
-      setPrioridad(prio)
-      if (lista.ok) setData(lista.dato)
-      else setErrorKv(lista.motivo)
-    })()
-    return () => {
-      vivo = false
-    }
-  }, [marca])
-
-  if (errorKv) {
-    return (
-      <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>
-        No se pudo leer el historial de Sesión de fotos: {errorKv}
-      </div>
-    )
-  }
-  if (!data) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -95,23 +88,21 @@ export function SesionFotos() {
   return (
     <div>
       <div className="sf-shadow-note">
-        Vista previa (Next) · <b>solo lectura</b> — el armado, escaneo y creación de ventas siguen en la
-        versión actual. Los reportes en PDF y la etiqueta de bolsa ya funcionan.
+        Vista previa (Next) · el armado y la creación de ventas siguen en la versión actual; <b>editar
+        estado y descripción, los reportes en PDF y la etiqueta de bolsa ya funcionan</b> y escriben en
+        los datos reales.
       </div>
       {solsCombi && solsCombi.length >= 2 ? (
-        <Combinada
-          sols={solsCombi}
-          prioridad={prioridad}
-          admin={admin}
-          onVolver={() => setCombiIds(null)}
-        />
+        <Combinada sols={solsCombi} prioridad={prioridad} admin={admin} onVolver={() => setCombiIds(null)} />
       ) : solViendo ? (
         <Detalle
+          key={solViendo.id}
           solicitud={solViendo}
           prioridad={prioridad}
           admin={admin}
           puedeQuitar={puedeQuitar}
           puedeEditarDesc={puedeEditarDesc}
+          persistir={persistir}
           onVolver={() => setViendo(null)}
         />
       ) : (
@@ -317,6 +308,7 @@ function Detalle({
   admin,
   puedeQuitar,
   puedeEditarDesc,
+  persistir,
   onVolver,
 }: {
   solicitud: Solicitud
@@ -324,9 +316,14 @@ function Detalle({
   admin: boolean
   puedeQuitar: boolean
   puedeEditarDesc: boolean
+  persistir: Persistir
   onVolver: () => void
 }) {
   const [fase, setFase] = useState<Fase>('retiro')
+  // Descripción editable (SF-4a). Estado local para el tipeo; persiste al salir del
+  // campo (blur), como el `onchange` del legacy. El componente va keyed por id, así
+  // que abrir otra solicitud arranca con su propia descripción.
+  const [desc, setDesc] = useState(s.descripcion || '')
   const conteo = s[fase === 'devolucion' ? 'devuelto' : 'verif'] || {}
   const conf = (it: ItemSolicitud) => Math.min(conteo[it.vid] || 0, it.qty)
 
@@ -426,9 +423,13 @@ function Detalle({
         </button>
         {puedeEditarDesc ? (
           <input
-            defaultValue={s.descripcion}
-            disabled
-            title={DISABLED_TITLE}
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            onBlur={() => {
+              if (desc !== s.descripcion) persistir((l) => conDescripcion(l, s.id, desc))
+            }}
+            placeholder="Descripción"
+            title="Editar descripción de la solicitud"
             style={{ fontWeight: 700, fontSize: 15, border: 'none', borderBottom: '1px solid #E5E7EB', padding: '2px 0', minWidth: 200, flex: 1, background: 'transparent' }}
           />
         ) : (
@@ -440,7 +441,11 @@ function Detalle({
         </button>
         <label style={{ fontSize: 12, color: '#6B7280', marginLeft: 'auto' }}>
           Estado{' '}
-          <select value={s.estado} disabled title={DISABLED_TITLE} style={{ padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }}>
+          <select
+            value={s.estado}
+            onChange={(e) => persistir((l) => conEstado(l, s.id, e.target.value as EstadoSolicitud))}
+            style={{ padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }}
+          >
             {(['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'] as const).map((e) => (
               <option key={e} value={e}>{e}</option>
             ))}
