@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
+import { Resumen } from '@/components/resumen/Resumen'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -57,7 +58,9 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas y Sesión de fotos ya flipearon a SECCIONES)
+  // Tanda A (analítica ETL). Resumen: los 5 KPIs + la línea de sync, read-only
+  // sobre el store, en `/resumen/next`. Flip a SECCIONES cuando se valide el render.
+  resumen: Resumen,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
