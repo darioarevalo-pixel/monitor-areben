@@ -185,13 +185,7 @@ export function Ubicaciones() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>📍 Ubicaciones (Deposito Minorista)</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 680 }}>
-            Cargá la ubicación física de cada producto (máx 20 caracteres). Se guarda en la observación de GN, en <b>todas las variantes</b> del producto. Cargá lo que quieras y apretá <b>Guardar cambios</b>.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#16A34A' }}>{msg || progreso || syncLabel}</span>
           <button className="btn-sm" onClick={recargar} disabled={ocupado} title="Volver a leer la lista">↻ Actualizar lista</button>

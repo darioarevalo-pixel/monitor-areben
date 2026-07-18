@@ -92,13 +92,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🔁 Reposición de local</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 640 }}>
-            Variantes por debajo del mínimo en Local <b>y</b> con stock en Depósito. Los mínimos, topes y apagados se configuran en <b>⚙️ Configurar mínimos</b>. El PDF es la hoja de trabajo de depósito.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" checked={verVentas} onChange={(e) => setVerVentas(e.target.checked)} /> Ver ventas del local (7d)</label>
           <button className="btn-sm" onClick={onActualizar} disabled={syncing} style={{ background: '#378ADD', color: '#fff' }}>{syncLabel}</button>

@@ -213,13 +213,7 @@ function Header({
   const txt = estado === 'guardando' ? 'Guardando…' : estado === 'ok' ? '✓ Guardado (lo ven todos)' : estado === 'error' ? 'Error al guardar.' : ''
   const color = estado === 'ok' ? '#16A34A' : estado === 'error' ? '#DC2626' : '#6B7280'
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>📦 Ingresos proyectados</div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 620 }}>
-          Seguí las importaciones de fundas por llegar: diseños (con foto), modelos y cantidades, proveedor, fecha estimada de arribo y estado. Sumá fotos y videos del pedido en la galería. Se ordena por fecha de llegada. Se guarda online, lo ven todos.
-        </div>
-      </div>
+    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color }}>{txt}</span>
         <button onClick={onRefrescar} title="Actualizar" style={{ background: '#fff', border: '1px solid #D1D5DB', borderRadius: 6, padding: '5px 9px', cursor: 'pointer' }}>

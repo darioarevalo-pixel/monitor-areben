@@ -229,11 +229,7 @@ export function CRM() {
   return (
     <div className="section visible">
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Clientes mayoristas</h3>
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>Canal Mayorista + clientes marcados ⭐ (aunque compren por otro canal)</div>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, color: '#6B7280' }}>Canal:</label>
             <select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)}>

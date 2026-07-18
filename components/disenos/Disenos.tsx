@@ -202,11 +202,7 @@ export function Disenos() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🗳️ Selección de diseños</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 560 }}>Cargá las opciones de diseño, opiná en equipo (👍/👎 y notas) y clasificalas en Confirmados, En duda o Rechazados. Todo se guarda en esta compu.</div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn-sm" onClick={() => fileRef.current?.click()} style={{ background: '#378ADD', color: '#fff' }}>📁 Cargar imágenes</button>
           <button className="btn-sm" onClick={abrirQuick} style={{ background: '#7C3AED', color: '#fff' }}>⚡ Revisión rápida</button>

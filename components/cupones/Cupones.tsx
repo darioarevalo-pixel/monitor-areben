@@ -73,13 +73,7 @@ export function Cupones() {
 
   return (
     <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>🎟️ Cupones</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 640 }}>
-        Guardá los descuentos que le das a cada cliente para aplicarlos en el <b>local</b>. Cuando la clienta viene a comprar,
-        la buscás por nombre y ves su cupón y hasta cuándo vale. Nada de esto toca la tienda online.
-      </div>
-
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 0 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
           {puedeCrear ? (
             <button className="btn-primary" onClick={() => setForm((v) => !v)}>➕ Generar cupón</button>

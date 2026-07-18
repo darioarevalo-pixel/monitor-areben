@@ -51,3 +51,87 @@ export function esKeyValida(key: string): boolean {
 export function todasLasKeys(): string[] {
   return [...PERM_CAT.map((p) => p.key), ...KEYS_SIN_PERMISO]
 }
+
+// ── Metadata para el encabezado de sección (SeccionHeader) ──────────────────────
+
+/**
+ * Labels de las keys que NO están en PERM_CAT (`inicio`, `usuarios`) — CON emoji,
+ * para el sidebar. Fuente única: antes vivían inline en Sidebar.tsx.
+ */
+export const LABELS_EXTRA: Record<string, string> = {
+  inicio: '🏠 Inicio',
+  usuarios: '👤 Usuarios',
+}
+
+/** El label CON emoji (para el sidebar): LABELS_EXTRA o el de PERM_CAT, o la key. */
+export function labelConEmoji(key: string): string {
+  return LABELS_EXTRA[key] ?? labelDe(key)
+}
+
+// Emoji(s) inicial(es) + espacio. `Extended_Pictographic` NO incluye dígitos ASCII,
+// así que no toca títulos que empiecen con número/letra. Cubre variation selector
+// (️), ZWJ (‍) y modificadores de tono de piel.
+const RE_EMOJI_INICIAL = /^(\p{Extended_Pictographic}[\p{Extended_Pictographic}️‍\u{1F3FB}-\u{1F3FF}]*\s*)+/u
+
+/** El título SIN el emoji inicial (para el `<h1>` del encabezado). */
+export function tituloLimpio(key: string): string {
+  const raw = labelConEmoji(key)
+  return raw.replace(RE_EMOJI_INICIAL, '').trim() || raw
+}
+
+const CAT_POR_KEY = new Map<string, NavCat>()
+NAV_CATS.forEach((c) => c.keys.forEach((k) => CAT_POR_KEY.set(k, c)))
+
+/**
+ * La categoría (grupo del nav) de una key, en MAYÚSCULAS y sin emoji, para el eyebrow.
+ * `null` si la key no está en ningún grupo (ej. `resumen`) o si el eyebrow duplicaría
+ * el título (ej. `inicio`, cuyo grupo también se llama "Inicio").
+ */
+export function categoriaDe(key: string): string | null {
+  const c = CAT_POR_KEY.get(key)
+  if (!c) return null
+  const cat = c.label.replace(RE_EMOJI_INICIAL, '').trim().toUpperCase()
+  if (!cat || cat.toLowerCase() === tituloLimpio(key).toLowerCase()) return null
+  return cat
+}
+
+/**
+ * Descripción curada (1 línea) por sección, para el encabezado. Condensada del `info`
+ * del nav. El test `seccion-header` obliga a que TODA sección registrada tenga una.
+ */
+export const DESCRIPCIONES: Record<string, string> = {
+  inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
+  resumen: 'Panel principal con los KPIs del negocio.',
+  productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',
+  variantes: 'Ventas y stock por variante (talle, modelo o color).',
+  'ventas-mensuales': 'Evolución de ventas mes a mes, por categoría y canal.',
+  margenes: 'Markup y margen de cada producto disponible, contra el objetivo.',
+  comisiones: 'Margen neto real por forma de pago y canal, con simulador por producto.',
+  colores: 'Ventas por color y análisis de agotamiento por variante.',
+  talles: 'Análisis de ventas por talle y categoría.',
+  proveedores: 'Comparativa de ventas y stock por proveedor.',
+  caducados: 'Candidatos a depurar: sin stock y sin ventas hace más de N días.',
+  'verif-ventas': 'Cruce de ventas anuladas en TiendaNube contra Gestión Nube.',
+  marketing: 'Auditoría de fotos y descripciones cruzada con stock y ventas.',
+  'sesion-fotos': 'Pedí productos para la sesión de fotos y controlá su retiro y devolución.',
+  tncat: 'Herramientas de TiendaNube: categorías por stock, carga de imágenes y más.',
+  'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',
+  disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
+  etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',
+  cupones: 'Descuentos por cliente para el local (no toca la tienda online).',
+  'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',
+  clientes: 'Clientes mayoristas: ranking, seguimiento y banco de mensajes.',
+  'fundas-modelo': 'Ranking y demanda de fundas por modelo de iPhone, con simulador de pedido.',
+  ingresos: 'Importaciones de fundas por llegar: diseños, cantidades, proveedor y estado.',
+  ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
+  reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',
+  exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
+  conteo: 'Conteo físico del local por escáner, contra el stock del sistema.',
+  'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
+  'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
+  'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',
+}
+
+export function descripcionDe(key: string): string | undefined {
+  return DESCRIPCIONES[key]
+}

@@ -97,8 +97,7 @@ export function Exhib() {
       {/* ── Config ── */}
       {fase === 'config' && (
         <div className="card">
-          <div style={{ fontSize: 16, fontWeight: 700 }}>👕 Chequeo de exhibición</div>
-          <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', margin: '10px 0 14px' }}>
+          <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', margin: '0 0 14px' }}>
             {ex.errorMsg ? <span style={{ color: '#DC2626' }}>Error cargando inventario: {ex.errorMsg}</span> : ex.cargando ? 'Cargando inventario…' : <>📅 <b>{ex.items.length}</b> variantes con stock en Local. Datos del último sync diario (pueden tener unas horas) — conviene chequear en momentos de baja venta.</>}
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>

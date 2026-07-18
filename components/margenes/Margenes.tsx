@@ -51,13 +51,7 @@ export function Margenes() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>📊 Margen por producto</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
-            Solo productos <b>disponibles</b> (con stock). <b>Markup</b> = recargo sobre el costo (objetivo actual <b>{objetivo}%</b>). Se calcula con el precio efectivo (promo si hay, si no minorista).
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 12, color: '#6B7280' }}>
             Objetivo %

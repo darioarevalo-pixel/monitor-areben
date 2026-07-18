@@ -111,13 +111,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🔢 Conteo de local</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 640 }}>
-            Conteo físico por <b>código de barras</b> (una sola persona). Cada lectura suma 1. Contás por <b>grupo</b> (modelo/categoría), y al cerrar cada grupo se compara contra el stock del sistema. El progreso se guarda solo.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn-sm" onClick={onActualizarGN} disabled={syncing} style={{ background: '#378ADD', color: '#fff' }}>{syncLabel}</button>
           <label className="btn-sm" title="Subí el Excel 'Inventario Actual' de GN → te lo devuelvo con nuevo_stock cargado (solo Local de los modelos contados)." style={{ background: '#fff', border: '1px solid #D1D5DB', cursor: 'pointer' }}>

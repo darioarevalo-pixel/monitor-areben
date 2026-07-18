@@ -178,12 +178,8 @@ export function Marketing() {
 
   return (
     <div>
-      {/* Encabezado */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>📸 Catálogo Marketing</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>Auditoría de fotos y descripciones cruzada con stock y ventas</div>
-        </div>
+      {/* Barra de acciones (el título/descripción los pone el SeccionHeader del shell). */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {audit.data?.cachedAt ? (
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>

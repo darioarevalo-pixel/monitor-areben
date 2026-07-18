@@ -130,10 +130,6 @@ export function GenTalles() {
       )}
 
       <div className="card">
-        <div style={{ fontSize: 16, fontWeight: 700 }}>📏 Generador de tabla de talles</div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 14px' }}>
-          Armá una tabla de talles prolija y estandarizada, y copiala para pegar en la descripción del producto en Tienda Nube.
-        </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <label style={{ fontSize: 12, color: '#666' }}>
             Tipo de prenda

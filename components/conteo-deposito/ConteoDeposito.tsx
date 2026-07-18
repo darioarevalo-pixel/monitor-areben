@@ -159,13 +159,7 @@ export function ConteoDeposito() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>📦 Conteo de Depósito</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 700 }}>
-            Conteo físico del depósito <b>por producto</b>, cargando las cantidades a mano. El ajuste a GN usa <b>stock vivo + diferencia</b>. Ideal: arrancá con los pedidos al día y sin despachar mientras contás.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn-sm" onClick={onActualizarGN} disabled={cd.cargando} style={{ background: '#378ADD', color: '#fff' }}>🔄 Traer stock de GN</button>
           <button className="btn-sm" onClick={onHistorial} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>🕘 Historial</button>

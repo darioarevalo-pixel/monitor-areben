@@ -67,12 +67,7 @@ export function SolicitudesInternas() {
 
   return (
     <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>📋 Solicitudes internas</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 680 }}>
-        Retiros de productos para uso interno (moldería, video, muestras, consumo). <b>Retornable</b> = vuelve y se repone
-        (igual que Sesión de fotos). <b>Consumo</b> = no vuelve y necesita aprobación de un gerente/admin.
-      </div>
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 0 }}>
         <Contenido
           key={marca}
           data={si.data}

@@ -3,18 +3,13 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, labelDe, NAV_CATS, type Marca } from '@/lib/nav'
+import { esDeMarca, labelConEmoji, NAV_CATS, type Marca } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 
-/** Labels de las keys que no están en PERM_CAT (ver KEYS_SIN_PERMISO). */
-const LABELS_EXTRA: Record<string, string> = {
-  inicio: '🏠 Inicio',
-  usuarios: '👤 Usuarios',
-}
-
+/** Label del menú (con emoji): LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
-  return LABELS_EXTRA[key] ?? labelDe(key)
+  return labelConEmoji(key)
 }
 
 export function Sidebar({ activa }: { activa: string }) {

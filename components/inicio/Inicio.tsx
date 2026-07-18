@@ -59,11 +59,6 @@ export function Inicio() {
 
   return (
     <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>🏠 Inicio</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 640 }}>
-        Novedades del día: solicitudes de <b>Sesión de fotos</b> pendientes de armar, de todas las marcas que manejás.
-      </div>
-
       {avisoSI > 0 && (
         <div
           onClick={() => router.push('/solicitudes-internas')}

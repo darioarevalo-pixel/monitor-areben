@@ -116,13 +116,6 @@ export function Comisiones() {
 
   return (
     <div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>💵 Comisiones y margen por forma de pago y canal</div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
-          Margen neto real contemplando comisiones, costo financiero, IIBB, DREI, Ganancias e IVA. La configuración es <b>compartida</b>: la editan los admins y la ven todos.
-        </div>
-      </div>
-
       {/* PARTE 1: CONFIGURACIÓN */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>

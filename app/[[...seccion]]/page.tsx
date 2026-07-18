@@ -5,6 +5,7 @@ import { createElement, useEffect } from 'react'
 import { LegacyFrame } from '@/components/legacy/LegacyFrame'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe, componenteSombraDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida } from '@/lib/nav'
@@ -63,7 +64,10 @@ export default function Seccion() {
           {/* Las secciones flipeadas van con aire uniforme (.seccion-pad); el iframe
               legacy queda full-bleed porque ya trae su propio padding interno. */}
           {seccion ? (
-            <div className="seccion-pad">{createElement(seccion)}</div>
+            <div className="seccion-pad">
+              <SeccionHeader seccion={key} />
+              {createElement(seccion)}
+            </div>
           ) : (
             <LegacyFrame tab={key} marca={marca} />
           )}

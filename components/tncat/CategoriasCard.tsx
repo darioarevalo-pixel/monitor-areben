@@ -81,7 +81,7 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🛍️ Tienda Nube — Categorías por modelo</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Categorías por modelo</div>
           <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
             Mantiene cada producto en las categorías de los modelos que <b>tienen stock</b>, y saca las de los modelos <b>sin stock</b>. Así el cliente ve solo lo disponible para su celular.
           </div>

@@ -229,13 +229,7 @@ export function ConteoEstandar() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{linea === 'stunned' ? '👕 Conteo Stunned' : '🔢 Conteo Zattia'} · Local</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 720 }}>
-            Conteo físico del <b>Local</b> por producto y talle. Escaneá lo <b>exhibido</b> (cada lectura suma 1) y cargá a mano el <b>depósito del local</b>; el total se compara contra el stock del Local. El ajuste usa <b>stock vivo + diferencia</b>.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn-sm" onClick={onActualizarGN} disabled={ce.cargando} style={{ background: '#378ADD', color: '#fff' }}>🔄 Traer stock de GN</button>
           <button className="btn-sm" onClick={onHistorial} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>🕘 Historial</button>

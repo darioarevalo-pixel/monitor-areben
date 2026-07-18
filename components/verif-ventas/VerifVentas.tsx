@@ -77,12 +77,7 @@ export function VerifVentas() {
 
   return (
     <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>🧾 Verificación de ventas</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 720 }}>
-        Cruza los pedidos <b>cancelados en TiendaNube</b> con las ventas de <b>Gestión Nube</b> y te muestra las que <b>siguen activas en GN</b> (hay que anularlas a mano). Tildá las que ya anulaste para llevar el control del mes.
-      </div>
-
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 0 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
           <label style={{ fontSize: 13, color: '#374151' }}>Mes <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 7 }} /></label>
           <button className="btn-primary" onClick={verificar} disabled={cargando}>{cargando ? '⏳ Verificando…' : '🔍 Verificar'}</button>

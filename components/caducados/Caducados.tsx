@@ -53,13 +53,7 @@ export function Caducados() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🗑️ Productos caducados</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, maxWidth: 660 }}>
-            Candidatos a depurar: <b>sin stock en ningún depósito</b> (Local + Depósito) y con la <b>última venta hace más de N días</b>. Revisá la lista y, una vez verificado que no queda ninguno, eliminalos de <b>TiendaNube</b> y de <b>Gestión Nube</b>.
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 5 }}>
             Días sin venta:
