@@ -14,6 +14,7 @@ import { Colores } from '@/components/colores/Colores'
 import { SolicitudesInternas } from '@/components/solicitudes-internas/SolicitudesInternas'
 import { GenTalles } from '@/components/gen-talles/GenTalles'
 import { Cupones } from '@/components/cupones/Cupones'
+import { Etiquetas } from '@/components/etiquetas/Etiquetas'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -124,6 +125,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // por `cupones.crear`; borrar solo admin. No toca la tienda online. Rollback: mover
   // esta línea de vuelta a SOMBRAS.
   cupones: Cupones,
+  // El flip de Etiquetas (18-jul-2026, Tanda B #4): `/etiquetas` lo sirve el shell.
+  // Impresión de etiquetas con código de barras (Code 128): depósito/local/promo/SKU
+  // + etiqueta libre + formas de pago. Solo escribe localStorage (cantidades/config
+  // por cuenta, MISMAS claves del iframe → sin migración); imprime PDFs locales (no
+  // toca datos). PDF ported byte-fiel; JsBarcode como dep npm. Precios de TN (Zattia
+  // mergea zattia+stunned). Rollback: mover esta línea de vuelta a SOMBRAS.
+  etiquetas: Etiquetas,
 }
 
 /**
@@ -136,8 +144,8 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, Solicitudes internas,
-  // Tabla de talles y Cupones flipeados)
+  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, y la Tanda B completa
+  // —Solicitudes internas, Tabla de talles, Cupones, Etiquetas— flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

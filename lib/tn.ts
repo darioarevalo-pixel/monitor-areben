@@ -16,6 +16,8 @@ export type TnProducto = {
   sku?: string | null
   name?: string | null
   images?: string[]
+  /** Precio normal y promocional de TN. Los consume Etiquetas (precio de la etiqueta de local/promo). */
+  price?: number
   promo_price?: number
   // Campos ricos que consume Tabla de talles (gen-talles): la descripción cruda
   // para leer/mostrar la tabla vieja, las categorías y las señales de calidad de la
