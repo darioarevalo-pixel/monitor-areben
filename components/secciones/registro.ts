@@ -22,6 +22,7 @@ import { Conteo } from '@/components/conteo/Conteo'
 import { Reposicion } from '@/components/reposicion/Reposicion'
 import { VerifVentas } from '@/components/verif-ventas/VerifVentas'
 import { Disenos } from '@/components/disenos/Disenos'
+import { Exhib } from '@/components/exhib/Exhib'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -167,6 +168,15 @@ export const SECCIONES: Record<string, ComponentType> = {
   // `votacion` (Vercel, no TN/GN) para juntar votos del equipo. NO toca stock ni GN.
   // Lógica pura con paridad (orden/tally/import). Rollback: mover esta línea a SOMBRAS.
   disenos: Disenos,
+  // El flip de Chequeo de exhibición (18-jul-2026, Tanda C, bajo riesgo): `/exhib` lo
+  // sirve el shell. Recorrer el Local con el lector físico confirmando que cada variante
+  // con stock está colgada; triage de faltantes + PDF + registro de "categorías a
+  // corregir en TN" (se corrigen a mano, con link al admin). Read-only sobre Supabase/TN;
+  // solo escribe localStorage (MISMAS claves del iframe → sin migración). NO toca stock
+  // ni GN. La cámara ZXing del legacy era código muerto (sin <video> ni llamador) → se
+  // portó el flujo de lector físico. Lógica pura con paridad (buscar/limpiarCats/agrupar).
+  // Rollback: mover esta línea a SOMBRAS.
+  exhib: Exhib,
 }
 
 /**
