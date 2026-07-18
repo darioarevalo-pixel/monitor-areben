@@ -57,6 +57,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // categoría + tabla por canal); filas con paridad contra el fixture ETL. Chart
   // en recharts (como Fundas), no Chart.js. Rollback: mover esta línea a SOMBRAS.
   'ventas-mensuales': VentasMensuales,
+  // El flip de Productos (18-jul-2026, Tanda A #3): `/productos` lo sirve el shell.
+  // La analítica más pesada de la tanda, hecha en 4 pasos (tabla read-only → fotos
+  // TN + detalle → sale/PDF → flip). Read-only sobre el store salvo el botón
+  // "Actualizar inventario", que sólo DISPARA el sync de GN (no escribe stock). La
+  // selección de sale es local + PDF (no escribe a GN, confirmado por Bruno).
+  // Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy, sin tocar datos.
+  productos: ProductosTable,
 }
 
 /**
@@ -69,11 +76,7 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // Productos (Tanda A #3) — PASO 1: la tabla read-only (filtros + orden + paginación
-  // + estado + vida útil por modo) en `/productos/next`, para comparar contra el
-  // legacy con los mismos datos. Faltan fotos + detalle (P2) y sale/PDF (P3) antes
-  // del flip. `/productos` sigue viniendo del iframe legacy para el equipo.
-  productos: ProductosTable,
+  // (vacío: CRM, Fundas, Sesión de fotos, Resumen, Ventas mensuales y Productos flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

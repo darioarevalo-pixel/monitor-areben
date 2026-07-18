@@ -7,6 +7,7 @@ import { DetalleVariante } from '@/components/productos/DetalleVariante'
 import { Lightbox } from '@/components/productos/Lightbox'
 import { asegurarTnPromo, useTnImages } from '@/components/productos/useTnImages'
 import { generarReporteSale } from '@/components/productos/reporteSale'
+import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
@@ -209,6 +210,7 @@ export function ProductosTable() {
         {outletSel.size > 0 && (
           <button className="btn-sm" onClick={() => setOutletSel(new Set())}>Limpiar selección</button>
         )}
+        <BotonActualizarInventario />
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
