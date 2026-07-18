@@ -558,3 +558,20 @@ body {
 .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
 .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
 .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
+
+/* Lightbox de fotos — copiado textual de index.html:271-292. */
+.lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 2000; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out; }
+.lightbox-overlay.show { display: flex; }
+.lightbox-img { max-width: 90vw; max-height: 78vh; object-fit: contain; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 4px; }
+.lightbox-close { position: absolute; top: 16px; right: 20px; background: rgba(0,0,0,0.4); border: none; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; padding: 4px 12px; border-radius: 999px; }
+.lightbox-close:hover { background: rgba(0,0,0,0.7); }
+.lightbox-info { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; max-width: 90vw; text-align: center; }
+.lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; border: none; cursor: pointer; font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; z-index: 5; transition: background .2s; }
+.lightbox-nav:hover { background: rgba(0,0,0,0.75); }
+.lightbox-nav.prev { left: 18px; }
+.lightbox-nav.next { right: 18px; }
+.lightbox-counter { position: absolute; top: 20px; left: 24px; color: #fff; font-size: 13px; background: rgba(0,0,0,0.45); padding: 5px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.lightbox-thumbs { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px 10px; background: rgba(0,0,0,0.4); border-radius: 8px; max-width: 90vw; overflow-x: auto; }
+.lightbox-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: 0.55; border: 2px solid transparent; transition: opacity .15s, border-color .15s; flex-shrink: 0; }
+.lightbox-thumb:hover { opacity: 0.85; }
+.lightbox-thumb.active { opacity: 1; border-color: #fff; }

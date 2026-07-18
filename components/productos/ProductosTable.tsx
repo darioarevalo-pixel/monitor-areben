@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { useSesion } from '@/components/SesionProvider'
+import { DetalleVariante } from '@/components/productos/DetalleVariante'
+import { Lightbox } from '@/components/productos/Lightbox'
+import { useTnImages } from '@/components/productos/useTnImages'
 import { formatLifespan } from '@/lib/etl/helpers'
-import type { Producto } from '@/lib/etl/tipos'
+import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
 import {
   colorStock,
@@ -14,6 +18,7 @@ import {
   proveedores,
   type ModoVidaUtil,
 } from '@/lib/productos'
+import { imagenDe, imagenesDe, type IndiceTn } from '@/lib/tn'
 import { paginar, sortList, totalPaginas } from '@/lib/tabla'
 
 /**
@@ -31,6 +36,8 @@ type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifesp
 
 export function ProductosTable() {
   const { datos, error } = useDatosMonitor()
+  const { marca } = useSesion()
+  const tnIdx = useTnImages(marca)
 
   const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState('')
@@ -42,6 +49,8 @@ export function ProductosTable() {
   const [dir, setDir] = useState(-1)
   const [page, setPage] = useState(1)
   const [ingresoOpen, setIngresoOpen] = useState(false)
+  const [expandido, setExpandido] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ imagenes: string[]; nombre: string } | null>(null)
 
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
   const listaProv = useMemo(() => proveedores(productos), [productos])
@@ -169,6 +178,7 @@ export function ProductosTable() {
         <table>
           <thead>
             <tr>
+              <th className="foto-col" style={{ width: 72, cursor: 'default' }}>Foto</th>
               {th('name', 'Producto')}
               {th('lastSale', 'Última venta')}
               {th('sales7', 'Ventas 7d')}
@@ -181,7 +191,16 @@ export function ProductosTable() {
           </thead>
           <tbody>
             {slice.map((p) => (
-              <FilaProducto key={p.id} p={p} modoVU={modoVU} />
+              <FilaProducto
+                key={p.id}
+                p={p}
+                modoVU={modoVU}
+                tnIdx={tnIdx}
+                datos={datos}
+                expandido={expandido === p.id}
+                onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
+                onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
+              />
             ))}
           </tbody>
         </table>
@@ -194,37 +213,79 @@ export function ProductosTable() {
           <button onClick={() => setPage((n) => Math.min(paginas, n + 1))} disabled={pageClamp === paginas}>→</button>
         </div>
       )}
+
+      {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
     </div>
   )
 }
 
-function FilaProducto({ p, modoVU }: { p: Producto; modoVU: ModoVidaUtil }) {
+function FilaProducto({
+  p,
+  modoVU,
+  tnIdx,
+  datos,
+  expandido,
+  onToggle,
+  onFoto,
+}: {
+  p: Producto
+  modoVU: ModoVidaUtil
+  tnIdx: IndiceTn | null
+  datos: DatosETL
+  expandido: boolean
+  onToggle: () => void
+  onFoto: (imagenes: string[]) => void
+}) {
   const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ')
   const lsStr = formatLifespan(lifespanDaysByMode(p, modoVU), p.stock)
+  const foto = tnIdx ? imagenDe(p, tnIdx) : null
   return (
-    <tr>
-      <td style={{ fontWeight: 500, maxWidth: 200 }}>
-        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-        {meta ? <div style={{ fontSize: 11, color: '#aaa', marginTop: 1 }}>{meta}</div> : null}
-      </td>
-      <td style={{ color: '#666' }}>
-        {p.lastSale || <span style={{ color: '#aaa' }}>Sin ventas</span>}
-        <br />
-        <span style={{ fontSize: 11, color: '#aaa' }}>{p.daysSinceLast < 999 ? p.daysSinceLast + 'd atrás' : ''}</span>
-      </td>
-      <td style={{ fontWeight: 600, color: '#1D9E75' }}>{p.sales7}</td>
-      <td style={{ fontWeight: 500 }}>{p.sales30}</td>
-      <td>{p.sales90}</td>
-      <td style={{ color: '#666', fontSize: 12 }}>{lsStr}</td>
-      <td>
-        {p.stock}
-        <div className="mini-bar">
-          <div className="mini-bar-fill" style={{ width: `${Math.min(100, p.stock / 2)}%`, background: colorStock(p.stock) }} />
-        </div>
-      </td>
-      <td>
-        <span className={`badge ${p.phase.cls}`}>{p.phase.label}</span>
-      </td>
-    </tr>
+    <>
+      <tr onClick={onToggle} style={{ cursor: 'pointer', ...(expandido ? { background: '#eef2ff' } : {}) }}>
+        <td className="foto-col" onClick={(e) => e.stopPropagation()}>
+          {foto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="foto-thumb"
+              src={foto}
+              loading="lazy"
+              alt={p.name}
+              onClick={() => onFoto(imagenesDe(p, tnIdx!))}
+            />
+          ) : (
+            <div className="foto-thumb-placeholder">Sin foto</div>
+          )}
+        </td>
+        <td style={{ fontWeight: 500, maxWidth: 200 }}>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+          {meta ? <div style={{ fontSize: 11, color: '#aaa', marginTop: 1 }}>{meta}</div> : null}
+        </td>
+        <td style={{ color: '#666' }}>
+          {p.lastSale || <span style={{ color: '#aaa' }}>Sin ventas</span>}
+          <br />
+          <span style={{ fontSize: 11, color: '#aaa' }}>{p.daysSinceLast < 999 ? p.daysSinceLast + 'd atrás' : ''}</span>
+        </td>
+        <td style={{ fontWeight: 600, color: '#1D9E75' }}>{p.sales7}</td>
+        <td style={{ fontWeight: 500 }}>{p.sales30}</td>
+        <td>{p.sales90}</td>
+        <td style={{ color: '#666', fontSize: 12 }}>{lsStr}</td>
+        <td>
+          {p.stock}
+          <div className="mini-bar">
+            <div className="mini-bar-fill" style={{ width: `${Math.min(100, p.stock / 2)}%`, background: colorStock(p.stock) }} />
+          </div>
+        </td>
+        <td>
+          <span className={`badge ${p.phase.cls}`}>{p.phase.label}</span>
+        </td>
+      </tr>
+      {expandido && (
+        <tr>
+          <td colSpan={9} style={{ padding: 0, background: '#f8f9ff', borderBottom: '2px solid #d0dbf5' }}>
+            <DetalleVariante allVvar={datos.allVvar} allVariantes={datos.allVariantes} pid={p.id} />
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
