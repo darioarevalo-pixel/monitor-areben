@@ -28,6 +28,13 @@ export type TnProducto = {
   published?: boolean
   image_count?: number
   created_at?: string
+  // Campos que consume Marketing (auditoría de fotos por variante + links). El
+  // handle arma la URL pública; los variantes_* alimentan el filtro "variantes sin
+  // foto propia" y la fila de detalle. Opcionales: el resto no los mira.
+  handle?: string
+  variantes_total?: number
+  variantes_con_foto?: number
+  variantes_sin_foto?: string[]
 }
 
 export type IndiceTn = { bySku: Record<string, TnProducto>; byName: Record<string, TnProducto> }

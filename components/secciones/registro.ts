@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
+import { Marketing } from '@/components/marketing/Marketing'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
@@ -65,6 +66,17 @@ export const SECCIONES: Record<string, ComponentType> = {
   // armar) y la creación de ventas GN con paridad de payload OFFLINE byte-idéntica
   // (cero venta de prueba). Rollback: mover esta línea de vuelta a SOMBRAS → vuelve
   // el iframe legacy, sin tocar datos.
+  // El flip de Marketing (18-jul-2026, con puente): `/marketing` lo sirve el shell.
+  // Catálogo cruzado GN⨯TN (auditoría de fotos/descripciones/tabla de talles + stock
+  // y ventas por canal). READ-ONLY sobre el store + `tiendanube-audit` (matcheo de
+  // lib/tn, el mismo que Productos/Márgenes); el botón "Actualizar fotos" solo bustea
+  // el caché del endpoint (no escribe TN). El PUENTE "Productos para sesión de fotos"
+  // tilda productos, los deja en lib/sesionfotos/puente y navega a `/sesion-fotos`,
+  // que abre un borrador pre-cargado (expandirProductos) — NO crea ventas ni toca
+  // stock: eso sigue siendo un paso humano en Sesión de fotos. El reporte de fotos y
+  // las etiquetas Zebra del legacy eran código muerto (sin botón) → no se portaron.
+  // Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy, sin tocar datos.
+  marketing: Marketing,
   'sesion-fotos': SesionFotos,
   // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con

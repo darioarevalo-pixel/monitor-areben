@@ -25,6 +25,7 @@ import {
   agregarManual,
   buscarProductos,
   draftVacio,
+  expandirProductos,
   escanearDraft,
   procesarDraft,
   quitarManual,
@@ -51,6 +52,7 @@ import {
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+import { tomarPuenteFotos } from '@/lib/sesionfotos/puente'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -130,11 +132,16 @@ function Contenido({
   const puedeQuitar = admin || puedeSub(perfil, marca, 'sesion-fotos', 'quitar-item')
   const puedeEditarDesc = admin || puedeSub(perfil, marca, 'sesion-fotos', 'editar-desc')
 
+  // Puente desde Marketing: si venimos con una selección de productos, abrimos el
+  // borrador ya pre-cargado. Se toma UNA vez al montar (tomar consume), en el
+  // inicializador de estado para no dispararlo en cada render.
+  const [pidsPuente] = useState<string[] | null>(() => tomarPuenteFotos())
+
   const [verCerradas, setVerCerradas] = useState(false)
   const [viendo, setViendo] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
-  const [armando, setArmando] = useState(false)
+  const [armando, setArmando] = useState(!!pidsPuente?.length)
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -169,6 +176,7 @@ function Contenido({
           catalogoListo={catalogoListo}
           variantes={variantes}
           productos={productos}
+          pidsIniciales={pidsPuente}
           onCancelar={() => setArmando(false)}
           onCreada={(id) => {
             setArmando(false)
@@ -889,6 +897,7 @@ function Draft({
   catalogoListo,
   variantes,
   productos,
+  pidsIniciales,
   onCancelar,
   onCreada,
 }: {
@@ -900,10 +909,17 @@ function Draft({
   catalogoListo: boolean
   variantes: Variante[]
   productos: Producto[]
+  /** Ids de producto que llegan por el puente desde Marketing (borrador pre-cargado). */
+  pidsIniciales?: string[] | null
   onCancelar: () => void
   onCreada: (id: string) => void
 }) {
-  const [draft, setDraft] = useState<DraftT>(draftVacio)
+  // Con puente desde Marketing, arranca con esos productos expandidos (variantes con
+  // stock, sin tildar) — el mismo estado que "Traer producto" de a uno. Inicializador
+  // de useState: corre una sola vez.
+  const [draft, setDraft] = useState<DraftT>(() =>
+    pidsIniciales?.length ? expandirProductos(draftVacio(), pidsIniciales, variantes, productos) : draftVacio(),
+  )
   const [origenSel, setOrigenSel] = useState<Origen>(prioridad)
   const [busqueda, setBusqueda] = useState('')
   const [fbScan, setFbScan] = useState<ResultadoDraftScan | null>(null)
