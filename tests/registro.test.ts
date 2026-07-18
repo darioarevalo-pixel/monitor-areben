@@ -26,9 +26,10 @@ describe('registro de secciones', () => {
   })
 
   it('una key que no está en ningún registro va al legacy', () => {
-    // `stock` es la última sección sin migrar (de hecho, va a borrarse): ni vivo ni sombra.
-    expect(componenteDe('stock')).toBeNull()
-    expect(componenteSombraDe('stock')).toBeNull()
+    // `usuarios` (gestión de usuarios, admin) sigue sirviéndose del iframe legacy:
+    // no tiene componente ni sombra. `stock` ya no existe (se borró del legacy).
+    expect(componenteDe('usuarios')).toBeNull()
+    expect(componenteSombraDe('usuarios')).toBeNull()
   })
 
   it('las keys de los dos registros existen en el nav (si no, son ruta muerta)', () => {

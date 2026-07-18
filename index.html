@@ -455,16 +455,6 @@
       <div class="pagination" id="pag-variantes"></div>
     </div>
 
-    <div id="tab-stock" class="section">
-      <div class="card">
-        <div class="legend">
-          <span><span class="legend-dot" style="background:#85B7EB"></span>Stock actual</span>
-          <span><span class="legend-dot" style="background:#1D9E75"></span>Demanda 30d</span>
-        </div>
-        <div class="chart-wrap" style="height:340px;"><canvas id="stockChart"></canvas></div>
-      </div>
-    </div>
-
     <div id="tab-ventas-mensuales" class="section">
       <div class="toolbar">
         <select id="vm-periodo" onchange="renderVentasMensuales()">
@@ -1923,7 +1913,7 @@ let sortState = { productos: { col: 'sales30', dir: -1 }, variantes: { col: 'sal
 let pageState = { productos: 1, variantes: 1 };
 let detalleVarSort = { col: 'total', dir: -1 };
 const PAGE_SIZE = 50;
-let sChart = null, vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null, tallesChart = null;
+let vmChart = null, fmChart = null, provChart = null, provCompChart = null, provCompraChart = null, colChart = null, tallesChart = null;
 let tabsRendered = {};
 let allMonthlyStats = [], allMonths = [], allFundasStats = {}, allProveedoresData = {};
 let allColoresSales = [], colorManualMap = {};
@@ -2979,16 +2969,6 @@ function renderVariantes() {
       <td>${v.stock}<div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,v.stock/2)}%;background:${v.stock<5?'#e24b4a':v.stock<20?'#ef9f27':'#1d9e75'};"></div></div></td>
       <td><span class="badge ${v.phase.cls}">${v.phase.label}</span></td>
     </tr>`).join('');
-}
-
-function renderStock() {
-  const sorted = [...allProductos].filter(p=>p.stock>0||p.sales30>0).sort((a,b)=>b.stock-a.stock).slice(0,15);
-  if (sChart) sChart.destroy();
-  sChart = new Chart(document.getElementById('stockChart'), {
-    type: 'bar',
-    data: { labels: sorted.map(p=>p.name.length>20?p.name.slice(0,20)+'…':p.name), datasets: [{ label: 'Stock actual', data: sorted.map(p=>p.stock), backgroundColor: '#85B7EB', borderRadius: 3 },{ label: 'Demanda 30d', data: sorted.map(p=>p.sales30), backgroundColor: '#1D9E75', borderRadius: 3 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888', font: { size: 11 }, maxRotation: 40, autoSkip: false }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#f0f0f0' } } } }
-  });
 }
 
 function renderVentasMensuales() {
@@ -6610,7 +6590,6 @@ function switchTab(id) {
   if (!tabsRendered[id] && allProductos.length) {
     tabsRendered[id] = true;
     if (id === 'variantes')       renderVariantes();
-    else if (id === 'stock')      renderStock();
     else if (id === 'ventas-mensuales') renderVentasMensuales();
     else if (id === 'fundas-modelo')    { initFundasSelectors(); renderFundasPorModelo(); fmSimRestore(); fmBloquesRestore(); fmDemandaRender(); }
     else if (id === 'proveedores')      updateProveedoresTab();
@@ -9282,7 +9261,6 @@ const PERM_CAT = [
   { key: 'resumen', label: '📈 Resumen / KPIs', info: 'Panel principal con métricas y resumen general del negocio.', brands: ['bdi', 'zattia'] },
   { key: 'productos', label: '📊 Por producto', info: 'Análisis por producto: ventas, vida útil, stock, estado y selección de outlet/sale.', brands: ['bdi', 'zattia'] },
   { key: 'variantes', label: '🔠 Por variante', info: 'Ventas y stock por variante (talle / modelo / color).', brands: ['bdi', 'zattia'] },
-  { key: 'stock', label: '📦 Stock vs demanda', info: 'Comparación del stock contra la demanda real.', brands: ['bdi', 'zattia'] },
   { key: 'ventas-mensuales', label: '📅 Ventas mensuales', info: 'Evolución de las ventas mes a mes.', brands: ['bdi', 'zattia'] },
   { key: 'fundas-modelo', label: 'Fundas por modelo', info: 'Demanda y simulación de pedidos de fundas por modelo de iPhone.', brands: ['bdi'] },
   { key: 'clientes', label: 'Clientes (CRM)', info: 'Clientes mayoristas: segmentos, contacto, historial de compras.', brands: ['bdi'] },
@@ -9337,7 +9315,7 @@ const PERM_CAT = [
 // 'usuarios' es caso especial (adminOnly): no está en PERM_CAT.
 const NAV_CATS = [
   { id: 'inicio',    label: '🏠 Inicio',    keys: ['inicio'] },
-  { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'stock', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
+  { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },

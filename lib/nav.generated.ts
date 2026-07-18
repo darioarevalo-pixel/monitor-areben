@@ -37,15 +37,6 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
-    "key": "stock",
-    "label": "📦 Stock vs demanda",
-    "info": "Comparación del stock contra la demanda real.",
-    "brands": [
-      "bdi",
-      "zattia"
-    ]
-  },
-  {
     "key": "ventas-mensuales",
     "label": "📅 Ventas mensuales",
     "info": "Evolución de las ventas mes a mes.",
@@ -380,7 +371,6 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "productos",
       "variantes",
-      "stock",
       "ventas-mensuales",
       "verif-ventas",
       "margenes",
