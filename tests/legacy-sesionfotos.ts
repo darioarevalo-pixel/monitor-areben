@@ -79,3 +79,37 @@ export function cargarBcVidLegacy(allVariantes: Array<{ id: string; barcode?: st
   const fabricar = new Function('allVariantes', 'window', `${fuente}\nreturn sfBcVid;`)
   return fabricar(allVariantes, {}) as (code: string) => string | null
 }
+
+/**
+ * `sfProcesar` del legacy: corre sobre un `sfDraft` inyectado y devuelve los items
+ * de la solicitud creada (lo que importa para la paridad: la asignación de origen).
+ * El id/fecha/creado salen de globales que se ignoran en la comparación.
+ */
+export function cargarProcesarLegacy(sfDraft: unknown, prioridad: string, currentUser: string): unknown[] | null {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = extraerBalanceado(html, 'sfProcesar')
+  const fabricar = new Function(
+    'sfDraft', 'sfData', 'repoCfg', 'currentUser', 'sfNuevoId', 'sfGuardar', 'sfRender', 'alert',
+    `${fuente}\nsfProcesar();\nreturn sfData[0] ? sfData[0].items : null;`,
+  )
+  const noop = () => {}
+  return fabricar(sfDraft, [], { prioridadRetiro: prioridad }, currentUser, () => 's_test', noop, noop, noop) as unknown[] | null
+}
+
+/**
+ * `sfDraftDesdeProductos` del legacy: corre sobre `repoInv`/`allProductos`
+ * inyectados y devuelve `sfDraft.prods` tras expandir los pids pedidos.
+ */
+export function cargarExpandirLegacy(
+  repoInv: unknown[],
+  allProductos: unknown[],
+): (pids: string[]) => unknown[] {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = extraerBalanceado(html, 'sfDraftDesdeProductos')
+  const sfDraft = { desc: '', prods: [] as unknown[] }
+  const fabricar = new Function(
+    'repoInv', 'allProductos', 'sfDraft',
+    `${fuente}\nreturn (pids) => { sfDraftDesdeProductos(pids); return sfDraft.prods; };`,
+  )
+  return fabricar(repoInv, allProductos, sfDraft) as (pids: string[]) => unknown[]
+}

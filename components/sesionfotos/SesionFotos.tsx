@@ -21,6 +21,25 @@ import {
   textoReporteFaltantes,
 } from '@/lib/sesionfotos/pdf'
 import {
+  agregarManual,
+  buscarProductos,
+  draftVacio,
+  escanearDraft,
+  procesarDraft,
+  quitarManual,
+  quitarPendiente,
+  quitarProd,
+  setManualQty,
+  setVarQty,
+  toggleVar,
+  totalDraft,
+  traerProducto,
+  traerVariante,
+  type Draft as DraftT,
+  type ResultadoDraftScan,
+} from '@/lib/sesionfotos/draft'
+import type { Producto, Variante } from '@/lib/etl/tipos'
+import {
   bloqueoBorrado,
   contarCerradas,
   faltantes,
@@ -65,6 +84,8 @@ export function SesionFotos() {
       persistir={sf.persistir}
       mapaBc={mapaBc}
       catalogoListo={catalogoListo}
+      variantes={datos?.allVariantes ?? []}
+      productos={datos?.allProductos ?? []}
     />
   )
 }
@@ -75,12 +96,16 @@ function Contenido({
   persistir,
   mapaBc,
   catalogoListo,
+  variantes,
+  productos,
 }: {
   data: Solicitud[]
   prioridad: Origen
   persistir: Persistir
   mapaBc: Record<string, string>
   catalogoListo: boolean
+  variantes: Variante[]
+  productos: Producto[]
 }) {
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
@@ -91,6 +116,7 @@ function Contenido({
   const [viendo, setViendo] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
+  const [armando, setArmando] = useState(false)
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -120,7 +146,23 @@ function Contenido({
         la versión actual; el resto (editar, escanear, quitar ítems, borrar, PDFs) ya funciona y escribe
         en los datos reales.
       </div>
-      {solsCombi && solsCombi.length >= 2 ? (
+      {armando ? (
+        <Draft
+          prioridad={prioridad}
+          admin={admin}
+          usuario={perfil?.name ?? ''}
+          persistir={persistir}
+          mapaBc={mapaBc}
+          catalogoListo={catalogoListo}
+          variantes={variantes}
+          productos={productos}
+          onCancelar={() => setArmando(false)}
+          onCreada={(id) => {
+            setArmando(false)
+            setViendo(id)
+          }}
+        />
+      ) : solsCombi && solsCombi.length >= 2 ? (
         <Combinada
           sols={solsCombi}
           prioridad={prioridad}
@@ -153,6 +195,7 @@ function Contenido({
           onToggleCerradas={setVerCerradas}
           onVer={setViendo}
           onBorrar={onBorrar}
+          onNueva={() => setArmando(true)}
           seleccion={seleccion}
           onToggleSel={(id, on) =>
             setSeleccion((s) => {
@@ -253,6 +296,7 @@ function Historial({
   onToggleCerradas,
   onVer,
   onBorrar,
+  onNueva,
   seleccion,
   onToggleSel,
   onVerCombinada,
@@ -264,6 +308,7 @@ function Historial({
   onToggleCerradas: (v: boolean) => void
   onVer: (id: string) => void
   onBorrar: (s: Solicitud) => void
+  onNueva: () => void
   seleccion: Set<string>
   onToggleSel: (id: string, on: boolean) => void
   onVerCombinada: () => void
@@ -274,7 +319,7 @@ function Historial({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button className="btn-primary" disabled title={DISABLED_TITLE}>
+        <button className="btn-primary" onClick={onNueva}>
           + Nueva solicitud
         </button>
         {seleccion.size >= 2 ? (
@@ -763,6 +808,316 @@ function Combinada({
       {grupo('📦 Depósito (todas)', 'deposito')}
       {grupo('🏪 Local (todas)', 'local')}
     </div>
+  )
+}
+
+// ── Armado de una solicitud nueva (draft) ──────────────────────────────────────
+
+const nuevoId = () => 's' + Date.now() + '_' + Math.floor(Math.random() * 100000)
+const nuevoMid = () => 'm' + Date.now() + '_' + Math.floor(Math.random() * 100000)
+const hoyISO = () => new Date().toISOString().slice(0, 10)
+
+function Draft({
+  prioridad,
+  admin,
+  usuario,
+  persistir,
+  mapaBc,
+  catalogoListo,
+  variantes,
+  productos,
+  onCancelar,
+  onCreada,
+}: {
+  prioridad: Origen
+  admin: boolean
+  usuario: string
+  persistir: Persistir
+  mapaBc: Record<string, string>
+  catalogoListo: boolean
+  variantes: Variante[]
+  productos: Producto[]
+  onCancelar: () => void
+  onCreada: (id: string) => void
+}) {
+  const [draft, setDraft] = useState<DraftT>(draftVacio)
+  const [origenSel, setOrigenSel] = useState<Origen>(prioridad)
+  const [busqueda, setBusqueda] = useState('')
+  const [fbScan, setFbScan] = useState<ResultadoDraftScan | null>(null)
+  const [manDesc, setManDesc] = useState('')
+  const [manQty, setManQty] = useState('1')
+
+  const total = totalDraft(draft)
+  const yaEn = useMemo(() => new Set(draft.prods.map((p) => p.pid)), [draft])
+  const resultados = useMemo(() => buscarProductos(variantes, busqueda, yaEn), [variantes, busqueda, yaEn])
+  const vacio = draft.prods.length === 0 && draft.pendientes.length === 0 && draft.manuales.length === 0
+
+  const onScan = (code: string) => {
+    if (!code.trim()) return
+    const { draft: nd, resultado } = escanearDraft(draft, code, mapaBc, variantes, origenSel, productos)
+    setDraft(nd)
+    setFbScan(resultado)
+  }
+  const addManual = () => {
+    const desc = manDesc.trim()
+    if (!desc) {
+      alert('Escribí una descripción (ej. Remera estampa X).')
+      return
+    }
+    setDraft((d) => agregarManual(d, nuevoMid(), desc, Math.max(1, parseInt(manQty) || 1)))
+    setManDesc('')
+    setManQty('1')
+  }
+  const procesar = () => {
+    const sol = procesarDraft(draft, prioridad, { id: nuevoId(), fecha: hoyISO(), creado: Date.now(), creadoPor: usuario })
+    if (!sol) {
+      alert('Escaneá o tildá al menos un producto para procesar.')
+      return
+    }
+    persistir((l) => [sol, ...l])
+    onCreada(sol.id)
+  }
+
+  const chipOrigen = (o: Origen) => (
+    <button
+      key={o}
+      onClick={() => setOrigenSel(o)}
+      style={{
+        border: `1px solid ${origenSel === o ? '#378ADD' : '#D1D5DB'}`,
+        background: origenSel === o ? '#378ADD' : '#fff',
+        color: origenSel === o ? '#fff' : '#374151',
+        borderRadius: 8,
+        padding: '5px 12px',
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: 'pointer',
+      }}
+    >
+      {o === 'deposito' ? '📦 Depósito' : '🏪 Local'}
+    </button>
+  )
+
+  return (
+    <div>
+      <Banner prioridad={prioridad} admin={admin} />
+
+      <div style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚡ Cargar por escáner</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
+          Escaneá los productos ya separados: se agregan solos con la ubicación elegida. La búsqueda manual sigue disponible abajo.
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: '#374151' }}>Sacando de:</span>
+          {chipOrigen('deposito')}
+          {chipOrigen('local')}
+        </div>
+        <ScanInput
+          disabled={!catalogoListo}
+          placeholder={catalogoListo ? '🔫 Escaneá el código de barras…' : 'Cargando catálogo…'}
+          onScan={onScan}
+        />
+        <div style={{ fontSize: 13, marginTop: 8, minHeight: 18 }}>{fbScan ? fbDraft(fbScan) : null}</div>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <input
+          value={draft.desc}
+          onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
+          placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7, marginBottom: 8 }}
+        />
+        <input
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          autoComplete="off"
+          placeholder="🔎 Agregar producto: buscá por nombre o SKU y tocá el que querés…"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+        />
+        {busqueda.trim().length >= 2 && (
+          <div style={{ marginTop: 4 }}>
+            {resultados.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '4px 2px' }}>Sin resultados con stock.</div>
+            ) : (
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, maxHeight: 280, overflow: 'auto' }}>
+                {resultados.map((r) => (
+                  <div key={r.pid} style={{ padding: '7px 10px', borderTop: '1px solid #F1F5F9' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>
+                        {r.name}
+                        {r.yaEsta ? <span style={{ color: '#16A34A', fontSize: 11 }}> ✓ ya está</span> : null}
+                      </span>
+                      <button
+                        onClick={() => setDraft((d) => traerProducto(d, r.pid, variantes, productos))}
+                        style={{ border: '1px solid #D1D5DB', background: '#fff', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        Traer producto
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                      {r.vars.map((v) => (
+                        <button
+                          key={v.vid}
+                          onClick={() => setDraft((d) => traerVariante(d, r.pid, v.vid, variantes, productos))}
+                          title={v.sku}
+                          style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#3730A3', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+                        >
+                          {v.size} <span style={{ color: '#6366F1' }}>({v.stock})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: '1px dashed #C4B5FD', background: '#F5F3FF', borderRadius: 9, padding: '9px 11px', marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#5B21B6', marginBottom: 4 }}>✍️ Producto sin código de barra</div>
+        <div style={{ fontSize: 11, color: '#7C3AED', marginBottom: 7 }}>
+          Para prendas que todavía no tienen código. No genera venta: solo se controla que salga y vuelva.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={manDesc}
+            onChange={(e) => setManDesc(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addManual()
+              }
+            }}
+            placeholder="Descripción (ej. Remera estampa X)"
+            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #DDD6FE', borderRadius: 7 }}
+          />
+          <input
+            type="number"
+            min={1}
+            value={manQty}
+            onChange={(e) => setManQty(e.target.value)}
+            title="Cantidad"
+            style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: '1px solid #DDD6FE', borderRadius: 7 }}
+          />
+          <button className="btn-sm" onClick={addManual} style={{ background: '#7C3AED', color: '#fff', border: '1px solid #7C3AED' }}>
+            + Agregar
+          </button>
+        </div>
+      </div>
+
+      {vacio ? (
+        <div style={{ color: '#9CA3AF', fontSize: 13, padding: '8px 0' }}>
+          Escaneá los productos ya separados (arriba), buscalos con el 🔎 buscador, o cargá una prenda sin código.
+        </div>
+      ) : (
+        <>
+          {draft.prods.map((p) => (
+            <div key={p.pid} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
+                <button onClick={() => setDraft((d) => quitarProd(d, p.pid))} title="Quitar producto" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                  ×
+                </button>
+              </div>
+              <div style={{ marginTop: 4 }}>
+                {p.variantes.length === 0 ? (
+                  <span style={{ color: '#9CA3AF', fontSize: 12 }}>sin variantes con stock</span>
+                ) : (
+                  p.variantes.map((v) => (
+                    <label
+                      key={v.vid}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 2px', fontSize: 13, borderTop: '1px solid #F1F5F9', cursor: 'pointer', fontWeight: v.sel ? 600 : 400 }}
+                    >
+                      <input type="checkbox" checked={v.sel} onChange={(e) => setDraft((d) => toggleVar(d, p.pid, v.vid, e.target.checked))} style={{ flex: '0 0 auto' }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {v.size}
+                        {v.origenManual ? <span title="Ubicación fijada por escaneo" style={{ fontSize: 11 }}> {v.origenManual === 'local' ? '🏪' : '📦'}</span> : null}{' '}
+                        <span style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 400 }}>(stock {v.local + v.deposito}{v.sku ? ' · ' + v.sku : ''})</span>
+                      </span>
+                      {v.sel ? (
+                        <input
+                          type="number"
+                          min={1}
+                          value={v.qty}
+                          onChange={(e) => setDraft((d) => setVarQty(d, p.pid, v.vid, e.target.value))}
+                          title="Cantidad"
+                          style={{ width: 56, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
+                        />
+                      ) : null}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+
+          {draft.pendientes.length > 0 && (
+            <div style={{ border: '1px dashed #FBBF24', background: '#FFFBEB', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', marginBottom: 4 }}>🆕 Nuevos escaneados (aún no en GN)</div>
+              {draft.pendientes.map((pn) => (
+                <div key={pn.barcode} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid #FDE68A' }}>
+                  <span style={{ flex: 1, fontFamily: 'monospace' }}>
+                    {pn.barcode} <span style={{ fontSize: 11, fontFamily: 'inherit' }}>{pn.origenManual === 'local' ? '🏪' : '📦'}</span>
+                  </span>
+                  <span style={{ color: '#92400E', fontWeight: 600 }}>x{pn.qty}</span>
+                  <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Quitar (mal escaneo)" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>Se guardan por código de barras. Cuando el producto se cargue en GN, se vinculan solos.</div>
+            </div>
+          )}
+
+          {draft.manuales.length > 0 && (
+            <div style={{ border: '1px dashed #C4B5FD', background: '#F5F3FF', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#5B21B6', marginBottom: 4 }}>✍️ Sin código (control a mano)</div>
+              {draft.manuales.map((m) => (
+                <div key={m.mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid #DDD6FE' }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {m.desc} <span style={{ fontSize: 11 }} title="Sale de Depósito">📦</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={m.qty}
+                    onChange={(e) => setDraft((d) => setManualQty(d, m.mid, e.target.value))}
+                    title="Cantidad"
+                    style={{ width: 56, textAlign: 'center', border: '1px solid #DDD6FE', borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
+                  />
+                  <button onClick={() => setDraft((d) => quitarManual(d, m.mid))} title="Quitar" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: '#7C3AED', marginTop: 4 }}>No generan venta ni tocan stock. Se retiran de 📦 Depósito y se controla su devolución a mano.</div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+        <button className="btn-primary" onClick={procesar}>✓ Procesar ({total} u.)</button>
+        <button className="btn-sm" onClick={onCancelar}>Cancelar</button>
+        <span style={{ color: '#9CA3AF', fontSize: 12 }}>Lo agregado a mano se asigna depósito/local automático; lo escaneado (📦/🏪) respeta la ubicación elegida.</span>
+      </div>
+    </div>
+  )
+}
+
+/** Feedback de un escaneo en el borrador. */
+function fbDraft(r: ResultadoDraftScan) {
+  if (r.tipo === 'nuevo') {
+    return (
+      <span style={{ color: '#16A34A' }}>
+        🆕 Nuevo (sin cargar): <b>{r.barcode}</b> (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
+      </span>
+    )
+  }
+  return (
+    <span style={{ color: '#16A34A' }}>
+      ✓ Agregado: <b>{r.nombre}</b> · {r.size} (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
+    </span>
   )
 }
 
