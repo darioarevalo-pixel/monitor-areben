@@ -69,6 +69,15 @@ export function guardarAdminPass(pass: string): void {
   } catch {}
 }
 
+/** Lee la contraseña cacheada en sessionStorage (la deja el login). Port de la lectura de _getAdminPass. */
+export function leerAdminPass(): string {
+  try {
+    return sessionStorage.getItem(ADMINPASS_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
 export type RespuestaLogin =
   | { ok: true; perfil: Perfil }
   | { ok: false; error: string }

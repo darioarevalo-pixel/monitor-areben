@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.generated'
 import { guardarLista, leerLista } from '@/lib/kv/cliente'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
-import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+import { crearVentas, idsParaCerrar } from '@/lib/sesionfotos/ventas'
+import type { EstadoSolicitud, Origen, Solicitud, VentaGN } from '@/lib/sesionfotos/tipos'
 
 /**
  * Carga y persistencia del historial de Sesión de fotos. Port de sfInit/sfGuardar
@@ -40,7 +41,20 @@ export type EstadoSF = {
    * merge por-solicitud. Devuelve false si no se guardó (KV no leído / error).
    */
   persistir: (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
+  /**
+   * Crea las ventas en GN de una solicitud (la superficie IRREVERSIBLE). Contramedida
+   * anti-duplicado: re-lee fresco y aborta si ya tiene ventas server-fresh. Persiste
+   * s.ventas + estado='cargada'.
+   */
+  crearVentasDe: (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrear>
+  /** Cierra las solicitudes cuyas ventas fueron anuladas en GN (read-only + estado='cerrada'). */
+  cerrarAnuladas: () => Promise<number>
 }
+
+export type ResultadoCrear =
+  | { tipo: 'ya-tenia'; ventas: Partial<Record<Origen, VentaGN>>; estadoSol: EstadoSolicitud }
+  | { tipo: 'hecho'; ventas: Partial<Record<Origen, VentaGN>>; errores: string[] }
+  | { tipo: 'no-leido' }
 
 export function useSesionFotos(marca: Marca): EstadoSF {
   const [cargando, setCargando] = useState(true)
@@ -113,5 +127,33 @@ export function useSesionFotos(marca: Marca): EstadoSF {
     [cargado],
   )
 
-  return { cargando, error, data, prioridad, cargado, recargar, persistir }
+  const crearVentasDe = useCallback(
+    async (s: Solicitud, cred: { user: string; pass: string }): Promise<ResultadoCrear> => {
+      if (!cargado) return { tipo: 'no-leido' }
+      const marcaAhora = marcaRef.current
+      // Anti-duplicado: re-leer fresco y abortar si ya tiene ventas server-fresh.
+      const fresca = await leerLista<Solicitud>('sesionfotos', marcaAhora)
+      if (!fresca.ok) return { tipo: 'no-leido' }
+      const fresh = fresca.dato.find((x) => x.id === s.id) ?? null
+      if (fresh?.ventas && Object.keys(fresh.ventas).length) {
+        return { tipo: 'ya-tenia', ventas: fresh.ventas, estadoSol: fresh.estado }
+      }
+      const { ventas, errores } = await crearVentas(s, { store: marcaAhora, user: cred.user, pass: cred.pass })
+      if (Object.keys(ventas).length) {
+        await persistir((l) => l.map((x) => (x.id === s.id ? { ...x, ventas: { ...(x.ventas || {}), ...ventas }, estado: 'cargada' } : x)))
+      }
+      return { tipo: 'hecho', ventas, errores }
+    },
+    [cargado, persistir],
+  )
+
+  const cerrarAnuladas = useCallback(async (): Promise<number> => {
+    if (!data) return 0
+    const cerrar = await idsParaCerrar(data, marcaRef.current)
+    if (!cerrar.length) return 0
+    await persistir((l) => l.map((x) => (cerrar.includes(x.id) ? { ...x, estado: 'cerrada' as EstadoSolicitud } : x)))
+    return cerrar.length
+  }, [data, persistir])
+
+  return { cargando, error, data, prioridad, cargado, recargar, persistir, crearVentasDe, cerrarAnuladas }
 }

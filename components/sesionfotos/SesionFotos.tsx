@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeSub } from '@/lib/permisos'
-import { useSesionFotos } from './useSesionFotos'
+import { useSesionFotos, type ResultadoCrear } from './useSesionFotos'
+import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
 import {
   ajustarManualSol,
@@ -53,8 +54,19 @@ import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
+type CrearVentasDe = (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrear>
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
+
+/** Contraseña del Monitor para las ventas: cacheada por el login, o se pide una vez. Port de _getAdminPass. */
+function obtenerPass(): string {
+  let p = leerAdminPass()
+  if (!p) {
+    p = (prompt('Ingresá tu contraseña del Monitor (te la pido una sola vez):') || '').trim()
+    if (p) guardarAdminPass(p)
+  }
+  return p
+}
 
 export function SesionFotos() {
   const { marca } = useSesion()
@@ -82,6 +94,8 @@ export function SesionFotos() {
       data={sf.data}
       prioridad={sf.prioridad}
       persistir={sf.persistir}
+      crearVentasDe={sf.crearVentasDe}
+      cerrarAnuladas={sf.cerrarAnuladas}
       mapaBc={mapaBc}
       catalogoListo={catalogoListo}
       variantes={datos?.allVariantes ?? []}
@@ -94,6 +108,8 @@ function Contenido({
   data,
   prioridad,
   persistir,
+  crearVentasDe,
+  cerrarAnuladas,
   mapaBc,
   catalogoListo,
   variantes,
@@ -102,6 +118,8 @@ function Contenido({
   data: Solicitud[]
   prioridad: Origen
   persistir: Persistir
+  crearVentasDe: CrearVentasDe
+  cerrarAnuladas: () => Promise<number>
   mapaBc: Record<string, string>
   catalogoListo: boolean
   variantes: Variante[]
@@ -142,9 +160,9 @@ function Contenido({
   return (
     <div>
       <div className="sf-shadow-note">
-        Vista previa (Next) · solo <b>armar una solicitud nueva</b> y <b>crear ventas en GN</b> siguen en
-        la versión actual; el resto (editar, escanear, quitar ítems, borrar, PDFs) ya funciona y escribe
-        en los datos reales.
+        Vista previa (Next) · el módulo está <b>completo y funcional</b> (armar, escanear, editar, quitar,
+        borrar, PDFs y crear ventas en GN) sobre los datos reales. Falta solo el flip para que reemplace a
+        la versión actual.
       </div>
       {armando ? (
         <Draft
@@ -182,6 +200,7 @@ function Contenido({
           puedeEditarDesc={puedeEditarDesc}
           usuario={perfil?.name ?? ''}
           persistir={persistir}
+          crearVentasDe={crearVentasDe}
           mapaBc={mapaBc}
           catalogoListo={catalogoListo}
           onVolver={() => setViendo(null)}
@@ -196,6 +215,7 @@ function Contenido({
           onVer={setViendo}
           onBorrar={onBorrar}
           onNueva={() => setArmando(true)}
+          cerrarAnuladas={cerrarAnuladas}
           seleccion={seleccion}
           onToggleSel={(id, on) =>
             setSeleccion((s) => {
@@ -297,6 +317,7 @@ function Historial({
   onVer,
   onBorrar,
   onNueva,
+  cerrarAnuladas,
   seleccion,
   onToggleSel,
   onVerCombinada,
@@ -309,12 +330,23 @@ function Historial({
   onVer: (id: string) => void
   onBorrar: (s: Solicitud) => void
   onNueva: () => void
+  cerrarAnuladas: () => Promise<number>
   seleccion: Set<string>
   onToggleSel: (id: string, on: boolean) => void
   onVerCombinada: () => void
 }) {
   const cerradasN = useMemo(() => contarCerradas(data), [data])
   const visibles = useMemo(() => historialVisible(data, verCerradas), [data, verCerradas])
+  const [chequeando, setChequeando] = useState(false)
+  const verificarAnulaciones = async () => {
+    setChequeando(true)
+    try {
+      const n = await cerrarAnuladas()
+      alert(n ? `✅ ${n} solicitud(es) cerrada(s) — su venta fue anulada en GN.` : 'Todavía ninguna venta fue anulada en GN.')
+    } finally {
+      setChequeando(false)
+    }
+  }
 
   return (
     <div>
@@ -334,8 +366,14 @@ function Historial({
           <span style={{ fontSize: 12, color: '#9CA3AF' }}>Tildá otra solicitud para combinarlas.</span>
         ) : null}
         {admin && (
-          <button className="btn-sm" disabled title={DISABLED_TITLE} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
-            🔄 Verificar anulaciones en GN
+          <button
+            className="btn-sm"
+            onClick={verificarAnulaciones}
+            disabled={chequeando}
+            title="Consulta en GN si las ventas ya se anularon y cierra esas solicitudes"
+            style={{ background: '#fff', border: '1px solid #D1D5DB' }}
+          >
+            {chequeando ? '⏳ verificando en GN…' : '🔄 Verificar anulaciones en GN'}
           </button>
         )}
         {cerradasN > 0 && (
@@ -426,6 +464,7 @@ function Detalle({
   puedeEditarDesc,
   usuario,
   persistir,
+  crearVentasDe,
   mapaBc,
   catalogoListo,
   onVolver,
@@ -437,10 +476,12 @@ function Detalle({
   puedeEditarDesc: boolean
   usuario: string
   persistir: Persistir
+  crearVentasDe: CrearVentasDe
   mapaBc: Record<string, string>
   catalogoListo: boolean
   onVolver: () => void
 }) {
+  const [creando, setCreando] = useState(false)
   // Copia de trabajo local (como sfData en memoria): todas las ediciones la mutan
   // al instante; un autosave con debounce la persiste con merge por-id.
   const [work, setWork] = useState<Solicitud>(s0)
@@ -468,6 +509,33 @@ function Detalle({
     const { sol: ns, resultado } = escanearSol(work, origen, fase, code.trim(), mapaBc)
     setWork(ns)
     setFb({ key: `${origen}-${fase}`, r: resultado })
+  }
+
+  // Crear las ventas en GN (la única escritura IRREVERSIBLE). Pide la contraseña,
+  // el hook re-lee fresco y aborta si ya hay ventas (anti-duplicado), y persiste.
+  const onCrearVentas = async () => {
+    const pass = obtenerPass()
+    if (!pass) {
+      alert('Necesito tu contraseña para crear las ventas.')
+      return
+    }
+    setCreando(true)
+    try {
+      const r = await crearVentasDe(work, { user: usuario, pass })
+      if (r.tipo === 'no-leido') {
+        alert('No se pudo leer el historial para crear las ventas de forma segura. Recargá y probá de nuevo.')
+        return
+      }
+      if (r.tipo === 'ya-tenia') {
+        alert('Esta solicitud ya tiene ventas creadas en GN.')
+        setWork((w) => ({ ...w, ventas: r.ventas, estado: r.estadoSol }))
+        return
+      }
+      if (Object.keys(r.ventas).length) setWork((w) => ({ ...w, ventas: { ...(w.ventas || {}), ...r.ventas }, estado: 'cargada' }))
+      if (r.errores.length) alert('No se pudieron crear todas las ventas:\n' + r.errores.join('\n'))
+    } finally {
+      setCreando(false)
+    }
   }
 
   // Quitar un ítem de la solicitud (solo admin/quitar-item, antes de crear ventas).
@@ -614,8 +682,8 @@ function Detalle({
         </div>
       ) : hayVentables ? (
         <div style={{ marginBottom: 10 }}>
-          <button className="btn-primary" disabled title={DISABLED_TITLE}>
-            🧾 Crear ventas en GN
+          <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
+            {creando ? '⏳ Creando ventas en GN…' : '🧾 Crear ventas en GN'}
           </button>{' '}
           <span style={{ color: '#9CA3AF', fontSize: 12 }}>Descuenta el stock con el cliente “Sesión de fotos”.</span>
         </div>

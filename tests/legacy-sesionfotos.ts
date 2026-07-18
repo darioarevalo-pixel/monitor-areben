@@ -13,11 +13,16 @@ const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
  * error en vez de comparar contra algo que no existe.
  */
 function extraerBalanceado(fuente: string, nombre: string): string {
-  const marca = `function ${nombre}(`
-  const inicio = fuente.indexOf('\n' + marca) === -1
-    ? (fuente.startsWith(marca) ? 0 : -1)
-    : fuente.indexOf('\n' + marca) + 1
-  if (inicio === -1) throw new Error(`No encontré '${marca}' en columna 0 de index.html`)
+  // Soporta `function nombre(` y `async function nombre(`, en columna 0.
+  let inicio = -1
+  for (const marca of [`function ${nombre}(`, `async function ${nombre}(`]) {
+    const i = fuente.startsWith(marca) ? 0 : fuente.indexOf('\n' + marca)
+    if (i !== -1) {
+      inicio = i === 0 ? 0 : i + 1
+      break
+    }
+  }
+  if (inicio === -1) throw new Error(`No encontré 'function ${nombre}(' (ni async) en columna 0 de index.html`)
   const llaveAbre = fuente.indexOf('{', inicio)
   let prof = 0
   for (let i = llaveAbre; i < fuente.length; i++) {
@@ -94,6 +99,30 @@ export function cargarProcesarLegacy(sfDraft: unknown, prioridad: string, curren
   )
   const noop = () => {}
   return fabricar(sfDraft, [], { prioridadRetiro: prioridad }, currentUser, () => 's_test', noop, noop, noop) as unknown[] | null
+}
+
+/**
+ * `sfCrearVentas` del legacy: corre sobre la solicitud dada con `fetch` mockeado
+ * (cero POST real) y devuelve los BODIES que hubiera mandado a /api/crear-venta.
+ * Es la fuente de verdad de la paridad de payload.
+ */
+export function cargarCrearVentasBodies(s: Solicitud, store: string, user: string, pass: string): Promise<unknown[]> {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = extraerBalanceado(html, 'sfCrearVentas')
+  const capturados: unknown[] = []
+  const fetchMock = async (_url: string, opts: { body: string }) => {
+    capturados.push(JSON.parse(opts.body))
+    return { json: async () => ({ ok: true, venta: { id: 1, number: 1 } }) }
+  }
+  const fabricar = new Function(
+    'sfData', '_cuentaKey', 'currentUser', '_getAdminPass', 'document', 'SF_CREAR_VENTA_API', 'fetch', 'alert', 'confirm', 'sfGuardar', 'sfRender',
+    `${fuente}\nreturn sfCrearVentas;`,
+  )
+  const noop = () => {}
+  const sfCrearVentas = fabricar(
+    [s], () => store, user, () => pass, { getElementById: () => null }, 'https://x/api/crear-venta', fetchMock, noop, () => true, noop, noop,
+  ) as (id: string) => Promise<void>
+  return sfCrearVentas(s.id).then(() => capturados)
 }
 
 /**
