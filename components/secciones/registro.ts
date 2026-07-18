@@ -101,6 +101,14 @@ export const SECCIONES: Record<string, ComponentType> = {
   // agotamiento (ratio por color congelado al primer sellout). Read-only sobre
   // allColoresSales/allAgotamientoData. Flip directo. Rollback: mover a SOMBRAS.
   colores: Colores,
+  // El flip de Solicitudes internas (18-jul-2026, Tanda B #1): `/solicitudes-internas`
+  // lo sirve el shell. Gemela de Sesión de fotos —KV `list` (kind
+  // `solicitudesinternas`, misma clave del iframe → sin migración de datos),
+  // escaneo, venta GN— con capa propia de motivo/tipo/aprobación. Escrituras al KV
+  // con la misma disciplina (merge por-solicitud + `cargado`); venta GN con paridad
+  // de payload OFFLINE byte-idéntica (cero venta de prueba) y contramedida
+  // anti-duplicado. Rollback: mover esta línea de vuelta a SOMBRAS.
+  'solicitudes-internas': SolicitudesInternas,
 }
 
 /**
@@ -113,10 +121,8 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // Solicitudes internas (Tanda B #1): gemela de Sesión de fotos (KV `list`, escaneo,
-  // venta GN) + capa propia de motivo/tipo/aprobación. En sombra para comparar
-  // `/solicitudes-internas/next` contra el legacy antes de flipear.
-  'solicitudes-internas': SolicitudesInternas,
+  // (vacío: CRM, Fundas, Sesión de fotos, Resumen, Ventas mensuales, Productos y
+  // Solicitudes internas flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
