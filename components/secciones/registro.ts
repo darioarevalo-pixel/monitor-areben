@@ -3,6 +3,7 @@ import { CRM } from '@/components/crm/CRM'
 import { Ingresos } from '@/components/ingresos/Ingresos'
 import { Marketing } from '@/components/marketing/Marketing'
 import { Tncat } from '@/components/tncat/Tncat'
+import { Ubicaciones } from '@/components/ubicaciones/Ubicaciones'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
@@ -90,6 +91,15 @@ export const SECCIONES: Record<string, ComponentType> = {
   // entero (LWW, como el legacy) con debounce 600ms. NO toca stock ni GN. Rollback: mover
   // esta línea a SOMBRAS.
   ingresos: Ingresos,
+  // El flip de Ubicaciones (18-jul-2026, solo BDI): `/ubicaciones` lo sirve el shell.
+  // Carga masiva de la ubicación física (NN-N) por producto → observación de GN en
+  // TODAS sus variantes (endpoint `/api/observaciones`, byte-fiel, vía apiFetch). Es
+  // metadata INTERNA de depósito (no stock/plata, reversible re-editando) → flip
+  // directo como gen-talles. Lo tipeado se persiste en localStorage
+  // (`monitor_ubi_pend_<marca>`, MISMA clave del iframe → sin migración). "Reparar"
+  // empareja las variantes desparejas con su NN-N dominante; "Traer de GN" dispara el
+  // sync. Rollback: mover esta línea a SOMBRAS. Pendiente Bruno: 1 escritura real.
+  ubicaciones: Ubicaciones,
   'sesion-fotos': SesionFotos,
   // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con
