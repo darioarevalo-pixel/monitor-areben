@@ -1,32 +1,48 @@
+import dynamic from 'next/dynamic'
 import type { ComponentType } from 'react'
-import { CRM } from '@/components/crm/CRM'
-import { Ingresos } from '@/components/ingresos/Ingresos'
-import { Marketing } from '@/components/marketing/Marketing'
-import { Tncat } from '@/components/tncat/Tncat'
-import { Ubicaciones } from '@/components/ubicaciones/Ubicaciones'
-import { FundasModelo } from '@/components/fundas/FundasModelo'
-import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
-import { Resumen } from '@/components/resumen/Resumen'
-import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
-import { ProductosTable } from '@/components/productos/ProductosTable'
-import { VariantesTable } from '@/components/variantes/VariantesTable'
-import { Proveedores } from '@/components/proveedores/Proveedores'
-import { Caducados } from '@/components/caducados/Caducados'
-import { Margenes } from '@/components/margenes/Margenes'
-import { Talles } from '@/components/talles/Talles'
-import { Colores } from '@/components/colores/Colores'
-import { SolicitudesInternas } from '@/components/solicitudes-internas/SolicitudesInternas'
-import { GenTalles } from '@/components/gen-talles/GenTalles'
-import { Cupones } from '@/components/cupones/Cupones'
-import { Etiquetas } from '@/components/etiquetas/Etiquetas'
-import { Comisiones } from '@/components/comisiones/Comisiones'
-import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
-import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
-import { Conteo } from '@/components/conteo/Conteo'
-import { Reposicion } from '@/components/reposicion/Reposicion'
-import { VerifVentas } from '@/components/verif-ventas/VerifVentas'
-import { Disenos } from '@/components/disenos/Disenos'
-import { Exhib } from '@/components/exhib/Exhib'
+import { Cargando } from './Cargando'
+
+/**
+ * Cada sección se carga con `next/dynamic` (code-splitting): su JS es un chunk
+ * aparte que se descarga SOLO al entrar a esa sección, no en el bundle inicial.
+ *
+ * Antes las 28 secciones se importaban estáticas, así que el bundle inicial de
+ * CUALQUIER ruta —incluido `inicio`, que ni usa secciones— traía la app entera
+ * (~2,8 MB de JS: recharts, xlsx, jspdf, jsbarcode, todas las tablas). Eso hacía
+ * lento el primer load de todo. Con lazy, entrar a `inicio` solo baja el shell.
+ *
+ * `componenteDe(key)` sigue devolviendo un ComponentType (el wrapper de dynamic es
+ * truthy), así que el interruptor del strangler y los tests no cambian.
+ */
+const opt = { loading: Cargando }
+const CRM = dynamic(() => import('@/components/crm/CRM').then((m) => m.CRM), opt)
+const Ingresos = dynamic(() => import('@/components/ingresos/Ingresos').then((m) => m.Ingresos), opt)
+const Marketing = dynamic(() => import('@/components/marketing/Marketing').then((m) => m.Marketing), opt)
+const Tncat = dynamic(() => import('@/components/tncat/Tncat').then((m) => m.Tncat), opt)
+const Ubicaciones = dynamic(() => import('@/components/ubicaciones/Ubicaciones').then((m) => m.Ubicaciones), opt)
+const FundasModelo = dynamic(() => import('@/components/fundas/FundasModelo').then((m) => m.FundasModelo), opt)
+const SesionFotos = dynamic(() => import('@/components/sesionfotos/SesionFotos').then((m) => m.SesionFotos), opt)
+const Resumen = dynamic(() => import('@/components/resumen/Resumen').then((m) => m.Resumen), opt)
+const VentasMensuales = dynamic(() => import('@/components/ventas-mensuales/VentasMensuales').then((m) => m.VentasMensuales), opt)
+const ProductosTable = dynamic(() => import('@/components/productos/ProductosTable').then((m) => m.ProductosTable), opt)
+const VariantesTable = dynamic(() => import('@/components/variantes/VariantesTable').then((m) => m.VariantesTable), opt)
+const Proveedores = dynamic(() => import('@/components/proveedores/Proveedores').then((m) => m.Proveedores), opt)
+const Caducados = dynamic(() => import('@/components/caducados/Caducados').then((m) => m.Caducados), opt)
+const Margenes = dynamic(() => import('@/components/margenes/Margenes').then((m) => m.Margenes), opt)
+const Talles = dynamic(() => import('@/components/talles/Talles').then((m) => m.Talles), opt)
+const Colores = dynamic(() => import('@/components/colores/Colores').then((m) => m.Colores), opt)
+const SolicitudesInternas = dynamic(() => import('@/components/solicitudes-internas/SolicitudesInternas').then((m) => m.SolicitudesInternas), opt)
+const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), opt)
+const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), opt)
+const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), opt)
+const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), opt)
+const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), opt)
+const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), opt)
+const Conteo = dynamic(() => import('@/components/conteo/Conteo').then((m) => m.Conteo), opt)
+const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').then((m) => m.Reposicion), opt)
+const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), opt)
+const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), opt)
+const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), opt)
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
