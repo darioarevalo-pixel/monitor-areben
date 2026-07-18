@@ -7,6 +7,7 @@ import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
 import { ProductosTable } from '@/components/productos/ProductosTable'
 import { VariantesTable } from '@/components/variantes/VariantesTable'
 import { Proveedores } from '@/components/proveedores/Proveedores'
+import { Caducados } from '@/components/caducados/Caducados'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -76,6 +77,12 @@ export const SECCIONES: Record<string, ComponentType> = {
   // (selector + rango de 1ª venta + 4 KPIs + chart mensual + ranking). Charts en
   // recharts. Flip directo (bajo riesgo). Rollback: mover esta línea a SOMBRAS.
   proveedores: Proveedores,
+  // El flip de Caducados (18-jul-2026, Tanda A #10): `/caducados` lo sirve el shell.
+  // Candidatos a depurar (sin stock + última venta > N días) con fetches propios a
+  // Supabase (stock por depósito + ventas ~2 años). Read-only: no borra nada (la baja
+  // es a mano en TN/GN); el botón "Traer stock de GN" sólo dispara el sync. PDF
+  // exportable. Flip directo. Rollback: mover esta línea a SOMBRAS.
+  caducados: Caducados,
 }
 
 /**
