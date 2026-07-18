@@ -487,6 +487,8 @@ body {
 .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
 .stat-value.danger { color: #dc2626; }
 .stat-value.warning { color: #d97706; }
+.stat-value.success { color: #16a34a; }
+.stat-value.info { color: #111827; }
 
 /* Toolbar */
 .toolbar {

@@ -6,6 +6,7 @@ import { Resumen } from '@/components/resumen/Resumen'
 import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
 import { ProductosTable } from '@/components/productos/ProductosTable'
 import { VariantesTable } from '@/components/variantes/VariantesTable'
+import { Proveedores } from '@/components/proveedores/Proveedores'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -70,6 +71,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // reusa el molde de productos (lib/tabla, formatLifespan, colorStock, CSS). Flip
   // directo (bajo riesgo). Rollback: mover esta línea a SOMBRAS.
   variantes: VariantesTable,
+  // El flip de Proveedores (18-jul-2026, Tanda A #7): `/proveedores` lo sirve el shell.
+  // Read-only sobre `allProveedoresData` del store: comparativa (2 charts) + detalle
+  // (selector + rango de 1ª venta + 4 KPIs + chart mensual + ranking). Charts en
+  // recharts. Flip directo (bajo riesgo). Rollback: mover esta línea a SOMBRAS.
+  proveedores: Proveedores,
 }
 
 /**
