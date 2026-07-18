@@ -91,6 +91,15 @@ export const SECCIONES: Record<string, ComponentType> = {
   // entero (LWW, como el legacy) con debounce 600ms. NO toca stock ni GN. Rollback: mover
   // esta línea a SOMBRAS.
   ingresos: Ingresos,
+  // El flip de Tienda Nube (tncat, 18-jul-2026): `/tncat` lo sirve el shell. 4 herramientas
+  // que ESCRIBEN en la tienda online EN VIVO — Categorías por modelo (BDI), Carga de
+  // imágenes + Revisar fotos (ambas), Asignar categoría por Excel (Zattia). Bruno autorizó
+  // el flip aceptando el port byte-fiel de los endpoints (tn-categorias/tn-subir-imagen), sin
+  // operación de prueba previa (es su tienda). El flip NO escribe nada por sí mismo: los
+  // writes siguen ocurriendo solo al apretar cada botón, igual que el legacy. La lógica pura
+  // (matcheo por nombre de archivo, filtros de fotos, cruce del Excel) está testeada
+  // (tests/tncat). Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy.
+  tncat: Tncat,
   // El flip de Ubicaciones (18-jul-2026, solo BDI): `/ubicaciones` lo sirve el shell.
   // Carga masiva de la ubicación física (NN-N) por producto → observación de GN en
   // TODAS sus variantes (endpoint `/api/observaciones`, byte-fiel, vía apiFetch). Es
@@ -235,16 +244,9 @@ export const SECCIONES: Record<string, ComponentType> = {
  *
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
-export const SOMBRAS: Record<string, ComponentType> = {
-  // Tienda Nube (tncat, Tanda C): 4 herramientas que ESCRIBEN en la tienda online EN
-  // VIVO — Categorías por modelo (BDI), Carga de imágenes + Revisar fotos (ambas), y
-  // Asignar categoría por Excel (Zattia). EN SOMBRA a propósito: los endpoints
-  // (tn-categorias/tn-subir-imagen, byte-fieles) modifican categorías/fotos/
-  // publicación que ve el cliente, así que Bruno hace UNA operación real de cada tipo
-  // en `/tncat/next` y la compara con el legacy antes de flipear (misma disciplina que
-  // los conteos de la Tanda D). Rollback = ya está: sigue sirviendo el iframe.
-  tncat: Tncat,
-}
+// Vacío: todas las secciones migradas ya están flipeadas. La ruta sombra `/<key>/next`
+// sigue disponible para la próxima migración (inicio/usuarios, si se hacen algún día).
+export const SOMBRAS: Record<string, ComponentType> = {}
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
 export function componenteDe(key: string): ComponentType | null {
