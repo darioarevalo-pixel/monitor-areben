@@ -18,6 +18,7 @@ import { Etiquetas } from '@/components/etiquetas/Etiquetas'
 import { Comisiones } from '@/components/comisiones/Comisiones'
 import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
 import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
+import { Conteo } from '@/components/conteo/Conteo'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -164,6 +165,9 @@ export const SOMBRAS: Record<string, ComponentType> = {
   // + depósito (a mano) vs stock vivo del Local; ajuste → Excel. En sombra.
   'conteo-estandar-zattia': ConteoEstandar,
   'conteo-estandar-stunned': ConteoEstandar,
+  // Conteo de local (Tanda D #3, BDI): conteo por escáner vs espejo Supabase; COMPLETA
+  // el Excel de GN (rellena nuevo_stock, solo Local de grupos marcados). En sombra.
+  conteo: Conteo,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */

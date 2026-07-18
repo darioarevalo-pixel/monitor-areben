@@ -22,21 +22,9 @@ import type {
 
 const prodVacio = (): EstadoDeProd => ({ estado: 'sin_iniciar', contado: {}, snap: {}, dif: {} })
 
-/**
- * Orden de modelos de iPhone (número, luego sufijo mini/plus/pro/pro max). Port de
- * `_repoModelSort` (index.html:11216). Lo comparte con Reposición cuando se migre.
- */
-export function ordenarModelo(a: string, b: string): number {
-  const parse = (s: string) => {
-    const m = String(s).match(/iphone\s*(\d{1,2})\s*(.*)/i)
-    return { n: m ? parseInt(m[1], 10) : 99, suf: (m ? m[2] : '').toLowerCase().trim() }
-  }
-  const rank: Record<string, number> = { '': 0, mini: 1, e: 1, plus: 2, air: 2, pro: 3, 'pro max': 4 }
-  const pa = parse(a)
-  const pb = parse(b)
-  if (pa.n !== pb.n) return pa.n - pb.n
-  return (rank[pa.suf] ?? 9) - (rank[pb.suf] ?? 9)
-}
+// `ordenarModelo` (=_repoModelSort) vive en lib/reposicion/grupos (hogar compartido).
+// Se re-exporta acá para no cambiar los imports de conteo-deposito/-estandar.
+export { ordenarModelo } from '../reposicion/grupos'
 
 /** Agrupa las filas reales del vivo en productos con sus variantes. Port de conteoDepInit @11648-11655. */
 export function agruparVivo(realMap: Record<string, FilaVivo>): CdepProducto[] {
