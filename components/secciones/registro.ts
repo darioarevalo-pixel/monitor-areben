@@ -15,6 +15,7 @@ import { SolicitudesInternas } from '@/components/solicitudes-internas/Solicitud
 import { GenTalles } from '@/components/gen-talles/GenTalles'
 import { Cupones } from '@/components/cupones/Cupones'
 import { Etiquetas } from '@/components/etiquetas/Etiquetas'
+import { Comisiones } from '@/components/comisiones/Comisiones'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -132,6 +133,14 @@ export const SECCIONES: Record<string, ComponentType> = {
   // toca datos). PDF ported byte-fiel; JsBarcode como dep npm. Precios de TN (Zattia
   // mergea zattia+stunned). Rollback: mover esta línea de vuelta a SOMBRAS.
   etiquetas: Etiquetas,
+  // El flip de Comisiones (18-jul-2026): `/comisiones` lo sirve el shell. Margen neto
+  // real por forma de pago × canal (comisiones/financiación/IIBB/DREI/Ganancias/IVA) +
+  // simulador por producto + break-even + piso + lista de precios de sale (XLSX/PDF).
+  // La MATH es byte-fiel (parity ejecutable). Config COMPARTIDA en KV (COM_API,
+  // endpoint propio, POST byte-idéntico) que solo los admins persisten; todos la ven.
+  // localStorage con las MISMAS claves del legacy. DIFERIDO: el botón "Asignar
+  // categoría en TN" (necesita tncat, Tanda C). Rollback: mover esta línea a SOMBRAS.
+  comisiones: Comisiones,
 }
 
 /**
@@ -144,8 +153,8 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, y la Tanda B completa
-  // —Solicitudes internas, Tabla de talles, Cupones, Etiquetas— flipeados)
+  // (vacío: CRM, Fundas, Sesión de fotos, toda la Tanda A, toda la Tanda B y
+  // Comisiones flipeados)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
