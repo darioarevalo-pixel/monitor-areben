@@ -67,3 +67,15 @@ export function cargarCombinadaLegacy(sfData: Solicitud[]): LegacyCombi {
   const fabricar = new Function('sfData', `${fuente}\nreturn { _sfCombiAgg, sfFaseCompletaCombi };`)
   return fabricar(sfData) as LegacyCombi
 }
+
+/**
+ * `sfBcVid` del legacy: código de barras → vid. Usa `_sfNormBc`, el global
+ * `allVariantes` (inyectado) y cachea en `window._sfBc` (se le pasa un window
+ * mutable de mentira). Cada variante es `{id, barcode}`.
+ */
+export function cargarBcVidLegacy(allVariantes: Array<{ id: string; barcode?: string | null }>): (code: string) => string | null {
+  const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
+  const fuente = ['_sfNormBc', 'sfBcVid'].map((n) => extraerBalanceado(html, n)).join('\n\n')
+  const fabricar = new Function('allVariantes', 'window', `${fuente}\nreturn sfBcVid;`)
+  return fabricar(allVariantes, {}) as (code: string) => string | null
+}

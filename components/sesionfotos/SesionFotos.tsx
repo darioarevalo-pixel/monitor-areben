@@ -1,53 +1,41 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
+import {
+  ajustarManualSol,
+  construirMapaBc,
+  escanearCombi,
+  escanearSol,
+  type ResultadoCombi,
+  type ResultadoEscaneo,
+} from '@/lib/sesionfotos/escaneo'
 import {
   etiquetaBolsa,
   reporteFaltantesPDF,
   reportePDF,
   textoReporteFaltantes,
 } from '@/lib/sesionfotos/pdf'
-import {
-  conDescripcion,
-  conEstado,
-  contarCerradas,
-  faltantes,
-  filaHistorial,
-  historialVisible,
-  salio,
-} from '@/lib/sesionfotos/core'
+import { contarCerradas, faltantes, filaHistorial, historialVisible, salio } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
-
-/**
- * "📷 Sesión de fotos" (key `sesion-fotos`, BDI + Zattia) en Next.
- *
- * PASO SF-3 — sombra SOLO-LECTURA en `/sesion-fotos/next`. Las 3 vistas de lectura
- * (historial, ver-solicitud, combinada) leyendo la MISMA clave del KV que el
- * iframe, para un A/B fiel. TODO control de escritura va PRESENTE pero INERTE
- * (deshabilitado, no omitido), como los inertes del CRM, así abrir la sombra
- * dispara CERO escrituras:
- *   · "Crear ventas en GN", Estado, escaneo, +/− a mano, borrar, quitar, prioridad,
- *     verificar-anulaciones, nueva solicitud → deshabilitados.
- *   · Selección para combinar y el toggle de fase son estado de UI local (no
- *     escriben), así que van VIVOS.
- *   · Los PDFs (reporte, faltantes, etiqueta de bolsa) y "copiar reporte" son
- *     salida pura → VIVOS, refuerzan el A/B.
- * El armado de solicitud (draft), el escaneo y la creación de ventas se habilitan
- * en los pasos de escritura (SF-4/SF-5).
- */
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
 
 export function SesionFotos() {
   const { marca } = useSesion()
   const sf = useSesionFotos(marca)
+  // allVariantes del ETL → mapa código-de-barras → vid para el escaneo. Se baja en
+  // paralelo con el historial; hasta que esté, el escaneo va deshabilitado.
+  const { datos } = useDatosMonitor()
+  const mapaBc = useMemo(() => construirMapaBc(datos?.allVariantes ?? []), [datos])
+  const catalogoListo = !!datos
 
   if (sf.error && !sf.data) {
     return (
@@ -60,17 +48,30 @@ export function SesionFotos() {
 
   // key={marca}: al cambiar de cuenta, el estado de UI (qué solicitud se ve, la
   // selección) se resetea remontando, sin setState en effects.
-  return <Contenido key={marca} data={sf.data} prioridad={sf.prioridad} persistir={sf.persistir} />
+  return (
+    <Contenido
+      key={marca}
+      data={sf.data}
+      prioridad={sf.prioridad}
+      persistir={sf.persistir}
+      mapaBc={mapaBc}
+      catalogoListo={catalogoListo}
+    />
+  )
 }
 
 function Contenido({
   data,
   prioridad,
   persistir,
+  mapaBc,
+  catalogoListo,
 }: {
   data: Solicitud[]
   prioridad: Origen
   persistir: Persistir
+  mapaBc: Record<string, string>
+  catalogoListo: boolean
 }) {
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
@@ -88,12 +89,20 @@ function Contenido({
   return (
     <div>
       <div className="sf-shadow-note">
-        Vista previa (Next) · el armado y la creación de ventas siguen en la versión actual; <b>editar
-        estado y descripción, los reportes en PDF y la etiqueta de bolsa ya funcionan</b> y escriben en
-        los datos reales.
+        Vista previa (Next) · el armado de solicitudes y la creación de ventas siguen en la versión
+        actual; <b>editar estado/descripción, el escaneo de preparado y devolución, y los PDFs ya
+        funcionan</b> y escriben en los datos reales.
       </div>
       {solsCombi && solsCombi.length >= 2 ? (
-        <Combinada sols={solsCombi} prioridad={prioridad} admin={admin} onVolver={() => setCombiIds(null)} />
+        <Combinada
+          sols={solsCombi}
+          prioridad={prioridad}
+          admin={admin}
+          persistir={persistir}
+          mapaBc={mapaBc}
+          catalogoListo={catalogoListo}
+          onVolver={() => setCombiIds(null)}
+        />
       ) : solViendo ? (
         <Detalle
           key={solViendo.id}
@@ -103,6 +112,8 @@ function Contenido({
           puedeQuitar={puedeQuitar}
           puedeEditarDesc={puedeEditarDesc}
           persistir={persistir}
+          mapaBc={mapaBc}
+          catalogoListo={catalogoListo}
           onVolver={() => setViendo(null)}
         />
       ) : (
@@ -130,6 +141,35 @@ function Contenido({
       )}
     </div>
   )
+}
+
+/**
+ * Autoguardado con debounce (500 ms, como el legacy) + flush al desmontar para no
+ * perder el último escaneo si se toca "Volver" antes de que dispare. `persistUno`
+ * tiene que ser estable (useCallback) o el debounce se reinicia en cada render.
+ */
+function useAutosave<T>(work: T, inicial: T, persistUno: (w: T) => void) {
+  const guardado = useRef(inicial)
+  const actual = useRef(inicial)
+  useEffect(() => {
+    actual.current = work
+  }, [work])
+  useEffect(() => {
+    if (work === guardado.current) return
+    const t = setTimeout(() => {
+      guardado.current = work
+      persistUno(work)
+    }, 500)
+    return () => clearTimeout(t)
+  }, [work, persistUno])
+  useEffect(() => {
+    return () => {
+      if (actual.current !== guardado.current) {
+        guardado.current = actual.current
+        persistUno(actual.current)
+      }
+    }
+  }, [persistUno])
 }
 
 // ── Banner de prioridad de retiro (admin: select DESHABILITADO) ─────────────────
@@ -303,12 +343,14 @@ async function correrSalida(fn: () => void | Promise<void>) {
 }
 
 function Detalle({
-  solicitud: s,
+  solicitud: s0,
   prioridad,
   admin,
   puedeQuitar,
   puedeEditarDesc,
   persistir,
+  mapaBc,
+  catalogoListo,
   onVolver,
 }: {
   solicitud: Solicitud
@@ -317,13 +359,24 @@ function Detalle({
   puedeQuitar: boolean
   puedeEditarDesc: boolean
   persistir: Persistir
+  mapaBc: Record<string, string>
+  catalogoListo: boolean
   onVolver: () => void
 }) {
+  // Copia de trabajo local (como sfData en memoria): todas las ediciones la mutan
+  // al instante; un autosave con debounce la persiste con merge por-id.
+  const [work, setWork] = useState<Solicitud>(s0)
   const [fase, setFase] = useState<Fase>('retiro')
-  // Descripción editable (SF-4a). Estado local para el tipeo; persiste al salir del
-  // campo (blur), como el `onchange` del legacy. El componente va keyed por id, así
-  // que abrir otra solicitud arranca con su propia descripción.
-  const [desc, setDesc] = useState(s.descripcion || '')
+  const [desc, setDesc] = useState(s0.descripcion || '')
+  const [fb, setFb] = useState<{ key: string; r: ResultadoEscaneo } | null>(null)
+
+  const persistUno = useCallback(
+    (w: Solicitud) => persistir((l) => l.map((x) => (x.id === w.id ? w : x))),
+    [persistir],
+  )
+  useAutosave(work, s0, persistUno)
+
+  const s = work
   const conteo = s[fase === 'devolucion' ? 'devuelto' : 'verif'] || {}
   const conf = (it: ItemSolicitud) => Math.min(conteo[it.vid] || 0, it.qty)
 
@@ -332,6 +385,13 @@ function Detalle({
   const falt = faltantes(s)
   const hayVentables = s.items.some((i) => !i.nuevo)
 
+  const onScan = (origen: Origen, code: string) => {
+    if (!code.trim()) return
+    const { sol: ns, resultado } = escanearSol(work, origen, fase, code.trim(), mapaBc)
+    setWork(ns)
+    setFb({ key: `${origen}-${fase}`, r: resultado })
+  }
+
   const grupo = (titulo: string, arr: ItemSolicitud[], origen: Origen) => {
     if (!arr.length) return null
     const totQ = arr.reduce((a, i) => a + i.qty, 0)
@@ -339,6 +399,7 @@ function Detalle({
     const completo = confTot >= totQ
     const accionN = fase === 'devolucion' ? 'devueltos' : 'preparados'
     const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado'
+    const fbKey = `${origen}-${fase}`
     return (
       <div style={{ border: `1px solid ${completo ? '#A7F3D0' : '#E5E7EB'}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -351,13 +412,13 @@ function Detalle({
           </button>
         </div>
         <div style={{ margin: '8px 0' }}>
-          <input
-            disabled
-            title={DISABLED_TITLE}
-            placeholder={`🔫 Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…`}
-            style={{ width: '100%', padding: '8px 10px', border: '2px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', background: '#F9FAFB' }}
+          <ScanInput
+            disabled={!catalogoListo}
+            placeholder={catalogoListo ? `🔫 Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            onScan={(v) => onScan(origen, v)}
           />
         </div>
+        {fb && fb.key === fbKey ? <div style={{ fontSize: 13, marginBottom: 6 }}>{fbTexto(fb.r)}</div> : null}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}>
@@ -391,9 +452,9 @@ function Detalle({
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {i.manual ? (
                       <>
-                        <BotonMini disabled label="−" />
+                        <BotonMini label="−" onClick={() => setWork((w) => ajustarManualSol(w, fase, i.vid, -1))} />
                         {' '}{c}/{i.qty}{' '}
-                        <BotonMini disabled label="+" acento />
+                        <BotonMini label="+" acento onClick={() => setWork((w) => ajustarManualSol(w, fase, i.vid, 1))} />
                       </>
                     ) : (
                       <>{c}/{i.qty}</>
@@ -426,7 +487,7 @@ function Detalle({
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             onBlur={() => {
-              if (desc !== s.descripcion) persistir((l) => conDescripcion(l, s.id, desc))
+              if (desc !== s.descripcion) setWork((w) => ({ ...w, descripcion: desc }))
             }}
             placeholder="Descripción"
             title="Editar descripción de la solicitud"
@@ -443,7 +504,7 @@ function Detalle({
           Estado{' '}
           <select
             value={s.estado}
-            onChange={(e) => persistir((l) => conEstado(l, s.id, e.target.value as EstadoSolicitud))}
+            onChange={(e) => setWork((w) => ({ ...w, estado: e.target.value as EstadoSolicitud }))}
             style={{ padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }}
           >
             {(['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'] as const).map((e) => (
@@ -474,8 +535,8 @@ function Detalle({
       ) : null}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <BotonFase activo={fase === 'retiro'} onClick={() => setFase('retiro')} label="📤 Preparado" />
-        <BotonFase activo={fase === 'devolucion'} onClick={() => setFase('devolucion')} label="📥 Devolución (al volver)" />
+        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="📤 Preparado" />
+        <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />
       </div>
 
       {grupo('📦 Retirar de Depósito', dep, 'deposito')}
@@ -521,35 +582,58 @@ function Detalle({
   )
 }
 
-// ── Vista combinada (read-only) ─────────────────────────────────────────────────
+// ── Vista combinada ─────────────────────────────────────────────────────────────
 
 function Combinada({
-  sols,
+  sols: sols0,
   prioridad,
   admin,
+  persistir,
+  mapaBc,
+  catalogoListo,
   onVolver,
 }: {
   sols: Solicitud[]
   prioridad: Origen
   admin: boolean
+  persistir: Persistir
+  mapaBc: Record<string, string>
+  catalogoListo: boolean
   onVolver: () => void
 }) {
+  const [works, setWorks] = useState<Solicitud[]>(sols0)
   const [fase, setFase] = useState<Fase>('retiro')
-  const completa = faseCompletaCombi(sols, fase)
+  const [fb, setFb] = useState<{ key: string; r: ResultadoCombi } | null>(null)
+
+  const persistTodas = useCallback(
+    (ws: Solicitud[]) => persistir((l) => l.map((x) => ws.find((w) => w.id === x.id) ?? x)),
+    [persistir],
+  )
+  useAutosave(works, sols0, persistTodas)
+
+  const completa = faseCompletaCombi(works, fase)
 
   const nventa = (s: Solicitud) =>
     s.ventas
       ? (['deposito', 'local'] as Origen[]).filter((o) => s.ventas?.[o]).map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`).join(' · ')
       : ''
 
+  const onScan = (origen: Origen, code: string) => {
+    if (!code.trim()) return
+    const { sols: ns, resultado } = escanearCombi(works, origen, fase, code.trim(), mapaBc)
+    setWorks(ns)
+    setFb({ key: `combi-${origen}-${fase}`, r: resultado })
+  }
+
   const grupo = (titulo: string, origen: Origen) => {
-    const items = agregarCombinada(sols, origen, fase)
+    const items = agregarCombinada(works, origen, fase)
     if (!items.length) return null
     const totQ = items.reduce((a, i) => a + i.ped, 0)
     const confTot = items.reduce((a, i) => a + i.conf, 0)
     const completo = confTot >= totQ
     const accionN = fase === 'devolucion' ? 'devueltos' : 'preparados'
     const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado'
+    const fbKey = `combi-${origen}-${fase}`
     return (
       <div style={{ border: `1px solid ${completo ? '#A7F3D0' : '#E5E7EB'}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
         <div style={{ fontWeight: 700 }}>
@@ -557,13 +641,13 @@ function Combinada({
           {completo ? <span style={{ color: '#16A34A', fontWeight: 700 }}> ✓ completo</span> : null}
         </div>
         <div style={{ margin: '8px 0' }}>
-          <input
-            disabled
-            title={DISABLED_TITLE}
-            placeholder={`🔫 Escaneá para confirmar ${accionV} de las ${sols.length} (o tipeá el SKU + Enter)…`}
-            style={{ width: '100%', padding: '8px 10px', border: '2px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', background: '#F9FAFB' }}
+          <ScanInput
+            disabled={!catalogoListo}
+            placeholder={catalogoListo ? `🔫 Escaneá para confirmar ${accionV} de las ${works.length} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            onScan={(v) => onScan(origen, v)}
           />
         </div>
+        {fb && fb.key === fbKey ? <div style={{ fontSize: 13, marginBottom: 6 }}>{fbTextoCombi(fb.r)}</div> : null}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}>
@@ -585,11 +669,11 @@ function Combinada({
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>{i.variante}</td>
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', color: '#6B7280' }}>{i.sku || '—'}</td>
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {i.manual ? (
+                    {i.manual && i.solId ? (
                       <>
-                        <BotonMini disabled label="−" />
+                        <BotonMini label="−" onClick={() => setWorks((ws) => ws.map((s) => (s.id === i.solId ? ajustarManualSol(s, fase, i.vid, -1) : s)))} />
                         {' '}{i.conf}/{i.ped}{' '}
-                        <BotonMini disabled label="+" acento />
+                        <BotonMini label="+" acento onClick={() => setWorks((ws) => ws.map((s) => (s.id === i.solId ? ajustarManualSol(s, fase, i.vid, 1) : s)))} />
                       </>
                     ) : (
                       <>{i.conf}/{i.ped}</>
@@ -610,10 +694,10 @@ function Combinada({
         <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
           ← Volver
         </button>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>🔗 Vista combinada — {sols.length} solicitudes</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>🔗 Vista combinada — {works.length} solicitudes</div>
       </div>
       <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 12px', marginBottom: 10, background: '#F9FAFB' }}>
-        {sols.map((s) => (
+        {works.map((s) => (
           <div key={s.id} style={{ fontSize: 12, color: '#374151' }}>
             • <b>{s.descripcion || '(sin descripción)'}</b> <span style={{ color: '#9CA3AF' }}>· {s.fecha} · {s.estado}</span>
             {nventa(s) ? <span style={{ color: '#065F46' }}> · {nventa(s)}</span> : null}
@@ -624,15 +708,15 @@ function Combinada({
       {completa ? (
         <div style={{ background: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 13, color: '#065F46' }}>
           {fase === 'devolucion' ? (
-            <>✅ <b>Devolución completa</b> de las {sols.length} solicitudes.</>
+            <>✅ <b>Devolución completa</b> de las {works.length} solicitudes.</>
           ) : (
-            <>✅ <b>Preparación completa</b> de las {sols.length} solicitudes.</>
+            <>✅ <b>Preparación completa</b> de las {works.length} solicitudes.</>
           )}
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <BotonFase activo={fase === 'retiro'} onClick={() => setFase('retiro')} label="📤 Preparado" />
-        <BotonFase activo={fase === 'devolucion'} onClick={() => setFase('devolucion')} label="📥 Devolución (al volver)" />
+        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="📤 Preparado" />
+        <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />
       </div>
       {grupo('📦 Depósito (todas)', 'deposito')}
       {grupo('🏪 Local (todas)', 'local')}
@@ -642,18 +726,45 @@ function Combinada({
 
 // ── Helpers de UI ────────────────────────────────────────────────────────────────
 
-async function copiarReporte(s: Solicitud) {
-  const msg = textoReporteFaltantes(s)
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(msg)
-      alert('📋 Reporte copiado. Pegalo en WhatsApp.')
-      return
-    } catch {
-      /* cae al prompt */
-    }
-  }
-  prompt('Copiá el reporte:', msg)
+/** Feedback de un escaneo en el detalle. */
+function fbTexto(r: ResultadoEscaneo) {
+  if (r.tipo === 'no-encontrado') return <span style={{ color: '#DC2626' }}>✗ &quot;{r.code}&quot; no está en esta lista (producto o talle equivocado).</span>
+  if (r.tipo === 'ya-completo') return <span style={{ color: '#D97706' }}>⚠ {r.nombre} · {r.variante} ya estaba completo ({r.qty}).</span>
+  return <span style={{ color: '#16A34A' }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
+}
+
+/** Feedback de un escaneo en la vista combinada. */
+function fbTextoCombi(r: ResultadoCombi) {
+  if (r.tipo === 'no-encontrado') return <span style={{ color: '#DC2626' }}>✗ &quot;{r.code}&quot; no está en estas solicitudes (producto o talle equivocado).</span>
+  if (r.tipo === 'ya-completo') return <span style={{ color: '#D97706' }}>⚠ {r.nombre} · {r.variante} ya está completo en las solicitudes.</span>
+  return <span style={{ color: '#16A34A' }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
+}
+
+/** Input de escaneo: al Enter dispara onScan con el valor y limpia el campo. */
+function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; placeholder: string; onScan: (v: string) => void }) {
+  return (
+    <input
+      disabled={disabled}
+      placeholder={placeholder}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const v = e.currentTarget.value
+          e.currentTarget.value = ''
+          onScan(v)
+        }
+      }}
+      style={{
+        width: '100%',
+        padding: '8px 10px',
+        border: `2px solid ${disabled ? '#E5E7EB' : '#378ADD'}`,
+        borderRadius: 8,
+        fontSize: 14,
+        boxSizing: 'border-box',
+        background: disabled ? '#F9FAFB' : '#fff',
+      }}
+    />
+  )
 }
 
 function EtiquetaMini({ texto, fg, bg }: { texto: string; fg: string; bg: string }) {
@@ -664,11 +775,10 @@ function EtiquetaMini({ texto, fg, bg }: { texto: string; fg: string; bg: string
   )
 }
 
-function BotonMini({ disabled, label, acento }: { disabled?: boolean; label: string; acento?: boolean }) {
+function BotonMini({ label, acento, onClick }: { label: string; acento?: boolean; onClick: () => void }) {
   return (
     <button
-      disabled={disabled}
-      title={DISABLED_TITLE}
+      onClick={onClick}
       style={{
         border: `1px solid ${acento ? '#7C3AED' : '#DDD6FE'}`,
         background: acento ? '#7C3AED' : '#fff',
@@ -677,10 +787,9 @@ function BotonMini({ disabled, label, acento }: { disabled?: boolean; label: str
         width: 24,
         height: 24,
         lineHeight: 1,
-        cursor: 'not-allowed',
+        cursor: 'pointer',
         fontWeight: 700,
         verticalAlign: 'middle',
-        opacity: 0.6,
       }}
     >
       {label}
@@ -706,4 +815,18 @@ function BotonFase({ activo, onClick, label }: { activo: boolean; onClick: () =>
       {label}
     </button>
   )
+}
+
+async function copiarReporte(s: Solicitud) {
+  const msg = textoReporteFaltantes(s)
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(msg)
+      alert('📋 Reporte copiado. Pegalo en WhatsApp.')
+      return
+    } catch {
+      /* cae al prompt */
+    }
+  }
+  prompt('Copiá el reporte:', msg)
 }
