@@ -3,6 +3,7 @@ import { CRM } from '@/components/crm/CRM'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
 import { Resumen } from '@/components/resumen/Resumen'
+import { VentasMensuales } from '@/components/ventas-mensuales/VentasMensuales'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -50,6 +51,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con
   // paridad contra el fixture ETL real. Rollback: mover esta línea a SOMBRAS.
   resumen: Resumen,
+  // El flip de Ventas mensuales (18-jul-2026, Tanda A #2): `/ventas-mensuales` lo
+  // sirve el shell. Read-only sobre `allMonthlyStats` del store (chart + tabla por
+  // categoría + tabla por canal); filas con paridad contra el fixture ETL. Chart
+  // en recharts (como Fundas), no Chart.js. Rollback: mover esta línea a SOMBRAS.
+  'ventas-mensuales': VentasMensuales,
 }
 
 /**
