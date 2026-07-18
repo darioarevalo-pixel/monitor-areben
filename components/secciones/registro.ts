@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { CRM } from '@/components/crm/CRM'
+import { Ingresos } from '@/components/ingresos/Ingresos'
 import { Marketing } from '@/components/marketing/Marketing'
 import { FundasModelo } from '@/components/fundas/FundasModelo'
 import { SesionFotos } from '@/components/sesionfotos/SesionFotos'
@@ -77,6 +78,17 @@ export const SECCIONES: Record<string, ComponentType> = {
   // las etiquetas Zebra del legacy eran código muerto (sin botón) → no se portaron.
   // Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy, sin tocar datos.
   marketing: Marketing,
+  // El flip de Ingresos proyectados (18-jul-2026, Tanda C, solo BDI): `/ingresos` lo
+  // sirve el shell. Editor de importaciones de fundas por llegar: bloques (por material)
+  // × grilla modelos·diseños con fotos inline (data URL) + galería de fotos/videos +
+  // proveedor/fecha/estado/nota. 3 vistas (lector/resumen/editar). Persiste en el KV
+  // (`api/ingresos`, forma default `{ingresos}`, config COMPARTIDA que SOLO los admins
+  // escriben —el server valida adminUser/adminPass). Se sumó `leerIngresos`/`guardarIngresos`
+  // al seam con la MISMA disciplina de `cargado` (sin lectura previa no se guarda:
+  // borraría todas las importaciones); un 403 olvida la pass cacheada. Guardado del array
+  // entero (LWW, como el legacy) con debounce 600ms. NO toca stock ni GN. Rollback: mover
+  // esta línea a SOMBRAS.
+  ingresos: Ingresos,
   'sesion-fotos': SesionFotos,
   // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con

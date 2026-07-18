@@ -207,6 +207,58 @@ export async function guardarResueltas<T>({ store, resueltas, cargado }: Opcione
   return { ok: true, total: Number(r.dato.total ?? Object.keys(resueltas).length) }
 }
 
+/**
+ * Lee las importaciones proyectadas (la clave DEFAULT del endpoint, sin `kind`,
+ * forma `{ingresos:[...]}`). Es el uso original de `api/ingresos`; las demás formas
+ * (`{map}`/`{list}`/…) se le agregaron después con `kind`. Misma disciplina: distinguir
+ * "no se pudo leer" de "leí y está vacío" es crítico, porque un guardado tras lectura
+ * fallida borraría todas las importaciones. Array vacío confirmado = éxito.
+ */
+export async function leerIngresos<T = unknown>(store: Marca): Promise<Lectura<T[]>> {
+  const r = await pedir(`${API}?store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  return { ok: true, dato: Array.isArray(r.dato.ingresos) ? (r.dato.ingresos as T[]) : [] }
+}
+
+export type OpcionesGuardarIngresos<T> = {
+  store: Marca
+  ingresos: T[]
+  /** El server valida que sea admin (config de usuarios en KV). Port del gate de ingresos.js. */
+  adminUser: string
+  adminPass: string
+  /** Obligatorio, igual que las demás: sin lectura previa, guardar borraría todo. */
+  cargado: boolean
+}
+
+/**
+ * Guarda las importaciones (solo admins: el server valida `adminUser`/`adminPass`).
+ * `prohibido` distingue el 403 (contraseña equivocada) para que el llamador olvide
+ * la pass cacheada, como hace `_olvidarAdminPass` en el legacy.
+ */
+export type EscrituraIngresos = { ok: true } | { ok: false; motivo: string; prohibido?: boolean }
+
+export async function guardarIngresos<T>({ store, ingresos, adminUser, adminPass, cargado }: OpcionesGuardarIngresos<T>): Promise<EscrituraIngresos> {
+  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  try {
+    const r = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store, ingresos, adminUser, adminPass }),
+    })
+    let d: Record<string, unknown> | null = null
+    try {
+      d = (await r.json()) as Record<string, unknown>
+    } catch {
+      return { ok: false, motivo: `respuesta no-JSON (HTTP ${r.status})` }
+    }
+    if (r.status === 403) return { ok: false, motivo: String(d?.error ?? 'no autorizado'), prohibido: true }
+    if (!r.ok || d?.ok !== true) return { ok: false, motivo: `HTTP ${r.status}: ${String(d?.error ?? '').slice(0, 120)}` }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 export type OpcionesGuardarMapa<T> = {
   kind: KindMapa
   store: Marca
