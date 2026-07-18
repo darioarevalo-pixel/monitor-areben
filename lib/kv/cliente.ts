@@ -44,6 +44,8 @@ export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
 export type KindBanco = 'mensajes'
 /** `cupones` guarda su array bajo `{cupones}` (otra clave más del mismo endpoint). */
 export type KindCupones = 'cupones'
+/** `verifventas` guarda el checklist de anuladas bajo `{resueltas}` (un mapa). */
+export type KindResueltas = 'verifventas'
 /**
  * Kinds que guardan un array bajo `{list}`. `sesionfotos` (historial de retiros
  * para fotos) y `solicitudesinternas` (retiros de uso interno con motivo/aprobación)
@@ -174,6 +176,35 @@ export async function guardarCupones<T>({ store, cupones, cargado }: OpcionesGua
   })
   if (!r.ok) return r
   return { ok: true, total: Number(r.dato.total ?? cupones.length) }
+}
+
+/**
+ * Lee el checklist de "ventas resueltas" (`kind=verifventas`, forma `{resueltas}`, un
+ * mapa `tn_order → {resuelto,por,fecha,mes}`). Mapa vacío confirmado = éxito.
+ */
+export async function leerResueltas<T = unknown>(store: Marca): Promise<Lectura<Record<string, T>>> {
+  const r = await pedir(`${API}?kind=verifventas&store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  const m = r.dato.resueltas
+  return { ok: true, dato: (m && typeof m === 'object' ? m : {}) as Record<string, T> }
+}
+
+export type OpcionesGuardarResueltas<T> = {
+  store: Marca
+  resueltas: Record<string, T>
+  /** Obligatorio: sin lectura previa, guardar borraría el checklist. */
+  cargado: boolean
+}
+
+export async function guardarResueltas<T>({ store, resueltas, cargado }: OpcionesGuardarResueltas<T>): Promise<Escritura> {
+  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const r = await pedir(`${API}?kind=verifventas&store=${store}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, resueltas }),
+  })
+  if (!r.ok) return r
+  return { ok: true, total: Number(r.dato.total ?? Object.keys(resueltas).length) }
 }
 
 export type OpcionesGuardarMapa<T> = {

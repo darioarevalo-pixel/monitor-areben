@@ -20,6 +20,7 @@ import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
 import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
 import { Conteo } from '@/components/conteo/Conteo'
 import { Reposicion } from '@/components/reposicion/Reposicion'
+import { VerifVentas } from '@/components/verif-ventas/VerifVentas'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -116,6 +117,12 @@ export const SECCIONES: Record<string, ComponentType> = {
   // va con paridad ejecutable. Reusa lib/reposicion (cfg+grupos ya usados por conteo).
   // Rollback: mover esta línea a SOMBRAS.
   reposicion: Reposicion,
+  // El flip de Verificación de ventas (18-jul-2026, Tanda C #1): `/verif-ventas` lo
+  // sirve el shell. Read-only: el cruce TN↔GN lo hace server-side `tiendanube-audit
+  // ?verificar_ventas=1`; el cliente solo muestra + tilda el checklist de "ya anuladas
+  // a mano en GN" (KV kind `verifventas`, forma `{resueltas}`, con `cargado`). No
+  // escribe stock ni anula en GN (GN no lo permite por API). Rollback: mover a SOMBRAS.
+  'verif-ventas': VerifVentas,
   // El flip de Solicitudes internas (18-jul-2026, Tanda B #1): `/solicitudes-internas`
   // lo sirve el shell. Gemela de Sesión de fotos —KV `list` (kind
   // `solicitudesinternas`, misma clave del iframe → sin migración de datos),
