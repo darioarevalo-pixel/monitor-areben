@@ -10,6 +10,7 @@ import { Proveedores } from '@/components/proveedores/Proveedores'
 import { Caducados } from '@/components/caducados/Caducados'
 import { Margenes } from '@/components/margenes/Margenes'
 import { Talles } from '@/components/talles/Talles'
+import { Colores } from '@/components/colores/Colores'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -94,6 +95,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Read-only sobre `allTallesData`: categoría + rango de meses → chart + tabla por
   // talle. recharts. Flip directo. Rollback: mover esta línea a SOMBRAS.
   talles: Talles,
+  // El flip de Colores (18-jul-2026, Tanda A #8, Zattia): `/colores` lo sirve el shell.
+  // Dos sub-pestañas: Ventas por color (selección + chart + tabla) y Análisis de
+  // agotamiento (ratio por color congelado al primer sellout). Read-only sobre
+  // allColoresSales/allAgotamientoData. Flip directo. Rollback: mover a SOMBRAS.
+  colores: Colores,
 }
 
 /**
