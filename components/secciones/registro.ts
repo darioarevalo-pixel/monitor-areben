@@ -19,6 +19,7 @@ import { Comisiones } from '@/components/comisiones/Comisiones'
 import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
 import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
 import { Conteo } from '@/components/conteo/Conteo'
+import { Reposicion } from '@/components/reposicion/Reposicion'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -108,6 +109,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // agotamiento (ratio por color congelado al primer sellout). Read-only sobre
   // allColoresSales/allAgotamientoData. Flip directo. Rollback: mover a SOMBRAS.
   colores: Colores,
+  // El flip de Reposición (18-jul-2026, Tanda D, cierre): `/reposicion` lo sirve el
+  // shell. READ-ONLY: reporte "bajo mínimo en Local + stock en Depósito" + hoja de
+  // trabajo PDF + config compartida (mins/topes/apagados/catsOff a REPO_API). NO
+  // ajusta stock (a diferencia de los conteos). El reporte (minimo/objetivo/sugerido)
+  // va con paridad ejecutable. Reusa lib/reposicion (cfg+grupos ya usados por conteo).
+  // Rollback: mover esta línea a SOMBRAS.
+  reposicion: Reposicion,
   // El flip de Solicitudes internas (18-jul-2026, Tanda B #1): `/solicitudes-internas`
   // lo sirve el shell. Gemela de Sesión de fotos —KV `list` (kind
   // `solicitudesinternas`, misma clave del iframe → sin migración de datos),

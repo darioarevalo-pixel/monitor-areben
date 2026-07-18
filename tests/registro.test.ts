@@ -26,9 +26,9 @@ describe('registro de secciones', () => {
   })
 
   it('una key que no está en ningún registro va al legacy', () => {
-    // `reposicion` todavía no se migró (Tanda D): ni componente vivo ni sombra.
-    expect(componenteDe('reposicion')).toBeNull()
-    expect(componenteSombraDe('reposicion')).toBeNull()
+    // `marketing` todavía no se migró (Tanda C): ni componente vivo ni sombra.
+    expect(componenteDe('marketing')).toBeNull()
+    expect(componenteSombraDe('marketing')).toBeNull()
   })
 
   it('las keys de los dos registros existen en el nav (si no, son ruta muerta)', () => {

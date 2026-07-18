@@ -22,3 +22,29 @@ export type RepoCfg = {
 export function repoCfgDefault(): RepoCfg {
   return { mins: {}, apagados: [], defaultMin: 4, reservaDeposito: 1, reservaTodos: true, topes: {}, catsOff: [], prioridadRetiro: 'deposito' }
 }
+
+/** Una variante agregada del reporte de reposición. Port de la forma de `repoInv` (index.html:11206). */
+export type RepoItem = {
+  vid: string
+  pid: string
+  sid: string
+  name: string
+  size: string
+  sku: string
+  local: number
+  deposito: number
+  /** Categorías candidatas (GN + TN, ya filtradas). */
+  cats: string[]
+  /** Categoría de respaldo (la de GN). */
+  catFallback: string
+  /** Categoría efectiva (subcat elegida o catFallback). */
+  cat: string
+  /** Subcategoría = primera candidata no ignorada (catsOff). */
+  subcat: string | null
+  /** Modelo de iPhone si el talle lo incluye. */
+  modelo: string | null
+  /** Ventas que descuentan del local, últimos 7d. */
+  s7: number
+  /** Ubicación física (observación de GN). */
+  ubic: string
+}
