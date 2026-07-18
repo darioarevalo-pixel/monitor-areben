@@ -8,6 +8,7 @@ import { ProductosTable } from '@/components/productos/ProductosTable'
 import { VariantesTable } from '@/components/variantes/VariantesTable'
 import { Proveedores } from '@/components/proveedores/Proveedores'
 import { Caducados } from '@/components/caducados/Caducados'
+import { Margenes } from '@/components/margenes/Margenes'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -83,6 +84,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // es a mano en TN/GN); el botón "Traer stock de GN" sólo dispara el sync. PDF
   // exportable. Flip directo. Rollback: mover esta línea a SOMBRAS.
   caducados: Caducados,
+  // El flip de Márgenes (18-jul-2026, Tanda A #5): `/margenes` lo sirve el shell.
+  // Grilla de tarjetas con foto (TN) + markup/margen + desfase vs objetivo editable
+  // (default 130%), sobre disponibles. Read-only; usa el índice promo de TN
+  // (useTnPromo). Flip directo. Rollback: mover esta línea a SOMBRAS.
+  margenes: Margenes,
 }
 
 /**

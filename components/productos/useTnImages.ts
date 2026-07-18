@@ -54,11 +54,13 @@ export async function asegurarTnPromo(marca: Marca): Promise<IndiceTn> {
   return cachePromo[marca] ?? indexarTn([])
 }
 
-export function useTnImages(marca: Marca): IndiceTn | null {
-  // El índice se lee del caché EN el render (no en un effect), así el cache-hit no
-  // necesita un setState — evita `react-hooks/set-state-in-effect`, que rompe el CI.
-  // El effect sólo dispara el fetch cuando falta y fuerza un re-render al terminar.
-  const cached = cacheIdx[marca] ?? null
+/**
+ * Hook genérico: devuelve el índice `sel(marca)` del caché, disparando el fetch si
+ * falta. Lee el caché EN el render (no setState en effect) para no romper el CI; el
+ * effect sólo fuerza un re-render cuando la bajada termina.
+ */
+function useIndice(marca: Marca, sel: (m: Marca) => IndiceTn | undefined): IndiceTn | null {
+  const cached = sel(marca) ?? null
   const [, forzar] = useState(0)
 
   useEffect(() => {
@@ -70,7 +72,21 @@ export function useTnImages(marca: Marca): IndiceTn | null {
     return () => {
       vivo = false
     }
-  }, [marca, cached])
+  }, [marca, cached, sel])
 
   return cached
+}
+
+/** Índice de fotos (sólo productos con imagen), o null mientras carga. */
+export function useTnImages(marca: Marca): IndiceTn | null {
+  return useIndice(marca, (m) => cacheIdx[m])
+}
+
+/**
+ * Índice completo de TN (todos los productos, con fotos Y precio promo), o null
+ * mientras carga. Lo usa márgenes (necesita `promo_price` + `images` en un solo
+ * match). Misma bajada que las fotos.
+ */
+export function useTnPromo(marca: Marca): IndiceTn | null {
+  return useIndice(marca, (m) => cachePromo[m])
 }
