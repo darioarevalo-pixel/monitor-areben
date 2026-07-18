@@ -46,6 +46,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // (cero venta de prueba). Rollback: mover esta línea de vuelta a SOMBRAS → vuelve
   // el iframe legacy, sin tocar datos.
   'sesion-fotos': SesionFotos,
+  // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
+  // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con
+  // paridad contra el fixture ETL real. Rollback: mover esta línea a SOMBRAS.
+  resumen: Resumen,
 }
 
 /**
@@ -58,9 +62,7 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // Tanda A (analítica ETL). Resumen: los 5 KPIs + la línea de sync, read-only
-  // sobre el store, en `/resumen/next`. Flip a SECCIONES cuando se valide el render.
-  resumen: Resumen,
+  // (vacío: CRM, Fundas, Sesión de fotos y Resumen ya flipearon a SECCIONES)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
