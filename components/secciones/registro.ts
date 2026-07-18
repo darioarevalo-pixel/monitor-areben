@@ -17,6 +17,7 @@ import { Cupones } from '@/components/cupones/Cupones'
 import { Etiquetas } from '@/components/etiquetas/Etiquetas'
 import { Comisiones } from '@/components/comisiones/Comisiones'
 import { ConteoDeposito } from '@/components/conteo-deposito/ConteoDeposito'
+import { ConteoEstandar } from '@/components/conteo-estandar/ConteoEstandar'
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -158,6 +159,11 @@ export const SOMBRAS: Record<string, ComponentType> = {
   // (`/api/inventario-vivo`); ajuste `nuevo=vivo+dif` → Excel para subir a mano. En
   // sombra para comparar `/conteo-deposito/next` contra el legacy antes de flipear.
   'conteo-deposito': ConteoDeposito,
+  // Conteo estándar del Local (Tanda D #2): dos entradas de nav (zattia/stunned) que
+  // comparten el componente; la línea sale de la ruta (useParams). Exhibido (escáner)
+  // + depósito (a mano) vs stock vivo del Local; ajuste → Excel. En sombra.
+  'conteo-estandar-zattia': ConteoEstandar,
+  'conteo-estandar-stunned': ConteoEstandar,
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
