@@ -159,11 +159,6 @@ function Contenido({
 
   return (
     <div>
-      <div className="sf-shadow-note">
-        Vista previa (Next) · el módulo está <b>completo y funcional</b> (armar, escanear, editar, quitar,
-        borrar, PDFs y crear ventas en GN) sobre los datos reales. Falta solo el flip para que reemplace a
-        la versión actual.
-      </div>
       {armando ? (
         <Draft
           prioridad={prioridad}

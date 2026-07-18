@@ -37,6 +37,14 @@ export const SECCIONES: Record<string, ComponentType> = {
   // verificó end-to-end contra el KV real (round-trip con clave sintética, diff
   // aislado). Rollback: mover esta línea de vuelta a SOMBRAS.
   clientes: CRM,
+  // El flip de Sesión de fotos (18-jul-2026): `/sesion-fotos` lo sirve el shell.
+  // Nunca namespaceó el KV (siempre leyó/escribió `sesionfotos:<marca>`, la misma
+  // clave del iframe) → sin migración de datos. Todas las escrituras se
+  // verificaron E2E reversibles contra el KV real (estado/desc/escaneo/borrar/
+  // armar) y la creación de ventas GN con paridad de payload OFFLINE byte-idéntica
+  // (cero venta de prueba). Rollback: mover esta línea de vuelta a SOMBRAS → vuelve
+  // el iframe legacy, sin tocar datos.
+  'sesion-fotos': SesionFotos,
 }
 
 /**
@@ -49,11 +57,7 @@ export const SECCIONES: Record<string, ComponentType> = {
  * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
  */
 export const SOMBRAS: Record<string, ComponentType> = {
-  // Sesión de fotos, en migración. Paso 1: historial + detalle READ-ONLY en
-  // `/sesion-fotos/next`, leyendo la misma clave del KV que el iframe. Todavía no
-  // arma solicitudes ni escanea; el flip a SECCIONES es una línea, cuando estén
-  // los pasos de escritura.
-  'sesion-fotos': SesionFotos,
+  // (vacío: CRM, Fundas y Sesión de fotos ya flipearon a SECCIONES)
 }
 
 /** ¿Esta sección la sirve el shell? Si no, va al iframe. */
