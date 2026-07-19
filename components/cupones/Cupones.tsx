@@ -3,9 +3,10 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { useCupones } from './useCupones'
-import { crearCupon, descuento, dias, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
-import type { Cupon, EstadoCupon, FiltroCupon } from '@/lib/cupones/tipos'
+import { crearCupon, descuento, dias, editarCupon, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
+import type { Cupon, EstadoCupon, FiltroCupon, TipoDescuento } from '@/lib/cupones/tipos'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 const nuevoId = () => 'c' + Date.now() + '_' + Math.floor(Math.random() * 100000)
@@ -25,7 +26,8 @@ export function Cupones() {
   const admin = esAdmin(perfil)
   const cup = useCupones(marca)
 
-  const [form, setForm] = useState(false)
+  // null = form cerrado · 'nuevo' = alta · Cupon = editando ese cupón.
+  const [form, setForm] = useState<Cupon | 'nuevo' | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<FiltroCupon>('vigentes')
 
@@ -34,14 +36,18 @@ export function Cupones() {
   const lista = useMemo(() => filtrar(data, filtro, busqueda, hoy), [data, filtro, busqueda, hoy])
   const porVencerN = useMemo(() => data.filter((c) => filtrar([c], 'porvencer', '', hoy).length).length, [data, hoy])
 
-  const onCrear = async (datos: Parameters<typeof crearCupon>[0]) => {
-    const r = crearCupon(datos, { id: nuevoId(), hoy, usuario })
-    if (!r.ok) {
-      alert(r.error)
-      return
+  const onGuardar = async (datos: Parameters<typeof crearCupon>[0]) => {
+    if (form === 'nuevo') {
+      const r = crearCupon(datos, { id: nuevoId(), hoy, usuario })
+      if (!r.ok) return void alert(r.error)
+      const ok = await cup.persistir((l) => [r.cupon, ...l])
+      if (ok) setForm(null)
+    } else if (form) {
+      const r = editarCupon(form, datos)
+      if (!r.ok) return void alert(r.error)
+      const ok = await cup.persistir((l) => l.map((c) => (c.id === form.id ? r.cupon : c)))
+      if (ok) setForm(null)
     }
-    const ok = await cup.persistir((l) => [r.cupon, ...l])
-    if (ok) setForm(false)
   }
   const mutar = (id: string, fn: (c: Cupon) => Cupon) => cup.persistir((l) => l.map((c) => (c.id === id ? fn(c) : c)))
   const onMarcarUsado = (id: string) => void mutar(id, (c) => ({ ...c, usado: true, usadoFecha: hoy }))
@@ -76,7 +82,7 @@ export function Cupones() {
       <div style={{ marginTop: 0 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
           {puedeCrear ? (
-            <button className="btn-primary" onClick={() => setForm((v) => !v)}>➕ Generar cupón</button>
+            <button className="btn-primary" onClick={() => setForm((v) => (v === 'nuevo' ? null : 'nuevo'))}>➕ Generar cupón</button>
           ) : (
             <span style={{ fontSize: 12, color: '#9CA3AF' }}>Buscá el cupón del cliente y confirmá el uso. (Generar cupones: solo con permiso.)</span>
           )}
@@ -88,7 +94,9 @@ export function Cupones() {
           />
         </div>
 
-        {form && puedeCrear && <FormNuevo usuario={usuario} onCrear={onCrear} onCancelar={() => setForm(false)} />}
+        {form && puedeCrear && (
+          <FormCupon usuario={usuario} cuponInicial={form === 'nuevo' ? undefined : form} onGuardar={onGuardar} onCancelar={() => setForm(null)} />
+        )}
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           <FiltroBtn f="vigentes" actual={filtro} onClick={setFiltro}>Vigentes</FiltroBtn>
@@ -148,6 +156,9 @@ export function Cupones() {
                           {(e === 'porvencer' || e === 'vigente') && (
                             <button onClick={() => onRecordar(c)} title="Copiar recordatorio para WhatsApp" style={btnGris}>📋 Recordar</button>
                           )}
+                          {puedeCrear && !c.anulado && (
+                            <button onClick={() => setForm(c)} title="Editar" style={btnGris}>✏️</button>
+                          )}
                           {puedeCrear && (c.anulado
                             ? <button onClick={() => onReactivar(c.id)} title="Reactivar" style={btnGris}>Reactivar</button>
                             : <button onClick={() => onAnular(c.id)} title="Anular" style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 13 }}>✕</button>)}
@@ -172,47 +183,108 @@ export function Cupones() {
   )
 }
 
-function FormNuevo({ usuario, onCrear, onCancelar }: { usuario: string; onCrear: (d: Parameters<typeof crearCupon>[0]) => void; onCancelar: () => void }) {
-  const [nombre, setNombre] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [tipo, setTipo] = useState('porcentaje')
-  const [valor, setValor] = useState('')
-  const [vence, setVence] = useState('')
-  const [minimo, setMinimo] = useState('')
-  const [codigo, setCodigo] = useState('')
-  const [motivo, setMotivo] = useState('')
-  const [por, setPor] = useState(usuario)
-  const [unSoloUso, setUnSoloUso] = useState(true)
+function FormCupon({ usuario, cuponInicial, onGuardar, onCancelar }: { usuario: string; cuponInicial?: Cupon; onGuardar: (d: Parameters<typeof crearCupon>[0]) => void; onCancelar: () => void }) {
+  const editando = !!cuponInicial
+  const [nombre, setNombre] = useState(cuponInicial?.nombre ?? '')
+  const [telefono, setTelefono] = useState(cuponInicial?.telefono ?? '')
+  const [tipo, setTipo] = useState<TipoDescuento>(cuponInicial?.tipo ?? 'porcentaje')
+  const [valor, setValor] = useState(cuponInicial ? String(cuponInicial.valor) : '')
+  const [vence, setVence] = useState(cuponInicial?.vence ?? '')
+  const [minimo, setMinimo] = useState(cuponInicial?.minimo ? String(cuponInicial.minimo) : '')
+  const [codigo, setCodigo] = useState(cuponInicial?.codigo ?? '')
+  const [motivo, setMotivo] = useState(cuponInicial?.motivo ?? '')
+  const [por, setPor] = useState(cuponInicial?.creadoPor || usuario)
+  // Default: un solo uso (reutilizable apagado). En los datos viaja como unSoloUso = !reutilizable.
+  const [reutilizable, setReutilizable] = useState(cuponInicial ? !cuponInicial.unSoloUso : false)
+
+  const guardar = () => onGuardar({ nombre, telefono, tipo, valor, codigo, minimo, motivo, unSoloUso: !reutilizable, vence, creadoPor: por })
 
   return (
-    <div style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Nuevo cupón</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
+    <div style={{ border: '1px solid #E5E7EB', background: '#FAFBFC', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+      <div style={{ fontWeight: 700 }}>{editando ? 'Editar cupón' : 'Nuevo cupón'}</div>
+      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 14px' }}>Descuento para clientes del <b>local</b> — no toca la tienda online.</div>
+
+      {/* Cliente */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
         <label style={lbl}>Nombre y apellido *<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Ana Pérez" style={inp} /></label>
         <label style={lbl}>Teléfono (opcional)<input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Para recordarle" style={inp} /></label>
-        <label style={lbl}>Descuento *
-          <span style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ padding: 6, border: '1px solid #D1D5DB', borderRadius: 6 }}>
-              <option value="porcentaje">%</option>
-              <option value="monto">$</option>
-            </select>
-            <input value={valor} onChange={(e) => setValor(e.target.value)} type="number" min={1} placeholder="15" style={{ flex: 1, minWidth: 0, padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 6, boxSizing: 'border-box' }} />
-          </span>
-        </label>
+      </div>
+
+      {/* Descuento: tipo (botones) + monto de la opción elegida */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ ...lbl, marginBottom: 5 }}>Descuento *</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <TipoBtn on={tipo === 'porcentaje'} onClick={() => setTipo('porcentaje')}>% Porcentaje</TipoBtn>
+            <TipoBtn on={tipo === 'monto'} onClick={() => setTipo('monto')}>$ Monto</TipoBtn>
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 7, background: '#fff', overflow: 'hidden' }}>
+            {tipo === 'monto' && <span style={{ padding: '0 4px 0 9px', color: '#6B7280', fontSize: 14 }}>$</span>}
+            <input
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              type="number"
+              min={1}
+              max={tipo === 'porcentaje' ? 100 : undefined}
+              placeholder={tipo === 'porcentaje' ? '15' : '1500'}
+              style={{ width: 96, padding: '8px 8px', border: 'none', outline: 'none', textAlign: 'right', fontSize: 14 }}
+            />
+            {tipo === 'porcentaje' && <span style={{ padding: '0 9px 0 4px', color: '#6B7280', fontSize: 14 }}>%</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Vigencia + compra mínima + código */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
         <label style={lbl}>Vale hasta *<input value={vence} onChange={(e) => setVence(e.target.value)} type="date" style={inp} /></label>
-        <label style={lbl}>Compra mínima (opcional)<input value={minimo} onChange={(e) => setMinimo(e.target.value)} type="number" min={0} placeholder="0" style={inp} /></label>
-        <label style={lbl}>Código (opcional)<input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Ej: ANA15" style={inp} /></label>
+        <div style={lbl}>
+          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Compra mínima (opcional)
+            <InfoPopover titulo="Compra mínima">El cupón solo aplica si la compra supera este monto. Dejalo vacío o en 0 para que aplique siempre.</InfoPopover>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, marginTop: 2, background: '#fff', boxSizing: 'border-box', width: '100%' }}>
+            <span style={{ padding: '0 4px 0 8px', color: '#6B7280' }}>$</span>
+            <input value={minimo} onChange={(e) => setMinimo(e.target.value)} type="number" min={0} placeholder="0" style={{ flex: 1, minWidth: 0, padding: '6px 8px 6px 4px', border: 'none', outline: 'none' }} />
+          </span>
+        </div>
+        <div style={lbl}>
+          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Código (opcional)
+            <InfoPopover titulo="Código">Un código corto para identificar el cupón (ej. ANA15). Opcional; igual lo podés buscar por el nombre del cliente.</InfoPopover>
+          </span>
+          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Ej: ANA15" style={inp} />
+        </div>
+      </div>
+
+      {/* Extras */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
         <label style={lbl}>Motivo (opcional)<input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Reactivación, cumpleaños…" style={inp} /></label>
         <label style={lbl}>Generado por<input value={por} onChange={(e) => setPor(e.target.value)} style={inp} /></label>
       </div>
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 8 }}>
-        <input type="checkbox" checked={unSoloUso} onChange={(e) => setUnSoloUso(e.target.checked)} /> Un solo uso (se marca como usado al aplicarlo)
+
+      {/* Usos: por default un solo uso; se opta por reutilizable. */}
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 14 }}>
+        <input type="checkbox" checked={reutilizable} onChange={(e) => setReutilizable(e.target.checked)} />
+        Se puede usar más de una vez
+        <InfoPopover titulo="Usos del cupón">Por default el cupón es de <b>un solo uso</b>: se marca como usado al aplicarlo. Tildá esto solo si el cliente lo puede usar varias veces (reutilizable).</InfoPopover>
       </label>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <button className="btn-primary" onClick={() => onCrear({ nombre, telefono, tipo, valor, codigo, minimo, motivo, unSoloUso, vence, creadoPor: por })}>✓ Guardar cupón</button>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn-primary" onClick={guardar}>✓ {editando ? 'Guardar cambios' : 'Guardar cupón'}</button>
         <button className="btn-sm" onClick={onCancelar}>Cancelar</button>
       </div>
     </div>
+  )
+}
+
+function TipoBtn({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ border: `1px solid ${on ? '#378ADD' : '#D1D5DB'}`, background: on ? '#378ADD' : '#fff', color: on ? '#fff' : '#374151', borderRadius: 7, padding: '7px 13px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+    >
+      {children}
+    </button>
   )
 }
 

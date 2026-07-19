@@ -73,26 +73,39 @@ export type DatosNuevoCupon = {
   creadoPor?: string
 }
 
+const parseMinimo = (m: string | number | undefined) => (typeof m === 'number' ? m : parseFloat(String(m ?? ''))) || 0
+
 /**
- * Arma un cupón nuevo desde el formulario, con la misma validación que cuponesCrear:
- * nombre obligatorio, valor > 0 y vencimiento. Devuelve el error de validación o el
- * cupón listo para persistir. `meta.usuario` es el fallback de "generado por".
+ * Valida los datos del formulario (para crear y para editar): nombre obligatorio,
+ * valor > 0, vencimiento, y —nuevo— el porcentaje no puede superar 100%. Devuelve el
+ * error o los valores ya normalizados (nombre trim, valor numérico, tipo).
  */
-export function crearCupon(d: DatosNuevoCupon, meta: { id: string; hoy: string; usuario: string }): { ok: true; cupon: Cupon } | { ok: false; error: string } {
+export function validar(d: DatosNuevoCupon): { ok: true; nombre: string; valor: number; tipo: TipoDescuento } | { ok: false; error: string } {
   const nombre = (d.nombre || '').trim()
   const valor = typeof d.valor === 'number' ? d.valor : parseFloat(d.valor)
+  const tipo: TipoDescuento = d.tipo === 'monto' ? 'monto' : 'porcentaje'
   if (!nombre) return { ok: false, error: 'Poné el nombre y apellido del cliente.' }
   if (!(valor > 0)) return { ok: false, error: 'Poné el valor del descuento.' }
+  if (tipo === 'porcentaje' && valor > 100) return { ok: false, error: 'El descuento en porcentaje no puede superar 100%.' }
   if (!d.vence) return { ok: false, error: 'Poné hasta cuándo vale el cupón.' }
-  const tipo: TipoDescuento = d.tipo === 'monto' ? 'monto' : 'porcentaje'
+  return { ok: true, nombre, valor, tipo }
+}
+
+/**
+ * Arma un cupón NUEVO desde el formulario. Devuelve el error de validación o el cupón
+ * listo para persistir. `meta.usuario` es el fallback de "generado por".
+ */
+export function crearCupon(d: DatosNuevoCupon, meta: { id: string; hoy: string; usuario: string }): { ok: true; cupon: Cupon } | { ok: false; error: string } {
+  const v = validar(d)
+  if (!v.ok) return v
   const cupon: Cupon = {
     id: meta.id,
-    nombre,
+    nombre: v.nombre,
     telefono: (d.telefono || '').trim(),
-    tipo,
-    valor,
+    tipo: v.tipo,
+    valor: v.valor,
     codigo: (d.codigo || '').trim(),
-    minimo: (typeof d.minimo === 'number' ? d.minimo : parseFloat(String(d.minimo ?? ''))) || 0,
+    minimo: parseMinimo(d.minimo),
     motivo: (d.motivo || '').trim(),
     unSoloUso: !!d.unSoloUso,
     vence: d.vence,
@@ -101,6 +114,30 @@ export function crearCupon(d: DatosNuevoCupon, meta: { id: string; hoy: string; 
     usado: false,
     usadoFecha: '',
     anulado: false,
+  }
+  return { ok: true, cupon }
+}
+
+/**
+ * Aplica los datos del formulario a un cupón EXISTENTE (edición). Misma validación que
+ * crear. CONSERVA `id`, `fechaCreado`, `usado`, `usadoFecha` y `anulado` (el estado del
+ * cupón no se toca al editar sus datos); solo cambia los campos editables.
+ */
+export function editarCupon(orig: Cupon, d: DatosNuevoCupon): { ok: true; cupon: Cupon } | { ok: false; error: string } {
+  const v = validar(d)
+  if (!v.ok) return v
+  const cupon: Cupon = {
+    ...orig,
+    nombre: v.nombre,
+    telefono: (d.telefono || '').trim(),
+    tipo: v.tipo,
+    valor: v.valor,
+    codigo: (d.codigo || '').trim(),
+    minimo: parseMinimo(d.minimo),
+    motivo: (d.motivo || '').trim(),
+    unSoloUso: !!d.unSoloUso,
+    vence: d.vence,
+    creadoPor: (d.creadoPor || '').trim() || orig.creadoPor,
   }
   return { ok: true, cupon }
 }

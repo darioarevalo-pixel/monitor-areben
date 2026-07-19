@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { crearCupon, descuento, dias, estado, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
+import { crearCupon, descuento, dias, editarCupon, estado, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
 import type { Cupon } from '@/lib/cupones/tipos'
 import { cargarCuponesLegacy } from './legacy-cupones'
 
@@ -112,5 +112,31 @@ describe('crearCupon · validación y armado', () => {
         creadoPor: 'jefe', usado: false, anulado: false,
       })
     }
+  })
+  it('rechaza un porcentaje mayor a 100 (pero un MONTO > 100 es válido)', () => {
+    expect(crearCupon({ nombre: 'Ana', tipo: 'porcentaje', valor: 150, unSoloUso: true, vence: '2026-08-01' }, meta)).toEqual({ ok: false, error: 'El descuento en porcentaje no puede superar 100%.' })
+    expect(crearCupon({ nombre: 'Ana', tipo: 'porcentaje', valor: 100, unSoloUso: true, vence: '2026-08-01' }, meta).ok).toBe(true)
+    expect(crearCupon({ nombre: 'Ana', tipo: 'monto', valor: 1500, unSoloUso: true, vence: '2026-08-01' }, meta).ok).toBe(true)
+  })
+})
+
+describe('editarCupon · conserva el estado del cupón y actualiza los datos', () => {
+  const orig: Cupon = {
+    id: 'C1', nombre: 'Ana', telefono: '', tipo: 'porcentaje', valor: 15, codigo: 'ANA15', minimo: 0, motivo: 'cumple',
+    unSoloUso: true, vence: '2026-08-01', fechaCreado: '2026-07-01', creadoPor: 'jefe',
+    usado: true, usadoFecha: '2026-07-10', anulado: false,
+  }
+  it('cambia tipo/valor/vence/reutilizable pero preserva id, fechaCreado, usado, usadoFecha y anulado', () => {
+    const r = editarCupon(orig, { nombre: 'Ana Pérez', telefono: '11-99', tipo: 'monto', valor: '2000', codigo: 'ANA', minimo: '3000', motivo: 'reactivación', unSoloUso: false, vence: '2026-09-01', creadoPor: 'jefe' })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.cupon).toMatchObject({
+        id: 'C1', fechaCreado: '2026-07-01', usado: true, usadoFecha: '2026-07-10', anulado: false, // conservados
+        nombre: 'Ana Pérez', tipo: 'monto', valor: 2000, minimo: 3000, motivo: 'reactivación', unSoloUso: false, vence: '2026-09-01',
+      })
+    }
+  })
+  it('valida igual que crear (rechaza % > 100 al editar)', () => {
+    expect(editarCupon(orig, { nombre: 'Ana', tipo: 'porcentaje', valor: '120', unSoloUso: true, vence: '2026-09-01' })).toEqual({ ok: false, error: 'El descuento en porcentaje no puede superar 100%.' })
   })
 })
