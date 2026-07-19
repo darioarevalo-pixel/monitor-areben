@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { Lightbox } from '@/components/productos/Lightbox'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ponerPuenteFotos } from '@/lib/sesionfotos/puente'
 import type { Variante } from '@/lib/etl/tipos'
 import {
@@ -72,7 +73,6 @@ export function Marketing() {
   const [orden, setOrden] = useState<OrdenState>({ col: 'sales30', dir: -1 })
   const [expandido, setExpandido] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ imagenes: string[]; nombre: string } | null>(null)
-  const [infoAbierto, setInfoAbierto] = useState<string | null>(null)
   const [multiAbierto, setMultiAbierto] = useState<'cohorte' | 'calidad' | null>(null)
   const [refrescando, setRefrescando] = useState(false)
 
@@ -261,8 +261,6 @@ export function Marketing() {
           <Filtro
             label="Buscar"
             info={<>Filtra los productos por su <b>nombre o código (SKU)</b>.</>}
-            abierto={infoAbierto === 'buscar'}
-            onInfo={() => setInfoAbierto((k) => (k === 'buscar' ? null : 'buscar'))}
           >
             <input
               type="text"
@@ -281,8 +279,6 @@ export function Marketing() {
                 nada tildado = todos.
               </>
             }
-            abierto={infoAbierto === 'cohorte'}
-            onInfo={() => setInfoAbierto((k) => (k === 'cohorte' ? null : 'cohorte'))}
           >
             <MultiSelect
               open={multiAbierto === 'cohorte'}
@@ -297,8 +293,6 @@ export function Marketing() {
           <Filtro
             label="Categoría TN"
             info={<>Filtra por la <b>categoría</b> que tiene el producto en Tienda Nube.</>}
-            abierto={infoAbierto === 'cat'}
-            onInfo={() => setInfoAbierto((k) => (k === 'cat' ? null : 'cat'))}
           >
             <select value={filtros.catTn} onChange={(e) => setFiltro('catTn', e.target.value)} style={inputStyle}>
               <option value="">Todas las categorías</option>
@@ -318,8 +312,6 @@ export function Marketing() {
                 lo que está por agotarse). Independiente de los demás filtros.
               </>
             }
-            abierto={infoAbierto === 'stock'}
-            onInfo={() => setInfoAbierto((k) => (k === 'stock' ? null : 'stock'))}
           >
             <select value={filtros.stock} onChange={(e) => setFiltro('stock', e.target.value)} style={inputStyle}>
               <option value="">Todos</option>
@@ -358,8 +350,6 @@ export function Marketing() {
                 completar.
               </>
             }
-            abierto={infoAbierto === 'calidad'}
-            onInfo={() => setInfoAbierto((k) => (k === 'calidad' ? null : 'calidad'))}
           >
             <MultiSelect
               open={multiAbierto === 'calidad'}
@@ -469,34 +459,15 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 }
 
-// ── Un filtro con su etiqueta + botón de info desplegable ──────────────────────────
-function Filtro({
-  label,
-  info,
-  abierto,
-  onInfo,
-  children,
-}: {
-  label: string
-  info: React.ReactNode
-  abierto: boolean
-  onInfo: () => void
-  children: React.ReactNode
-}) {
+// ── Un filtro con su etiqueta + botón de info (popover) ────────────────────────────
+function Filtro({ label, info, children }: { label: string; info: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600, marginBottom: 5 }}>
-        {label}{' '}
-        <button type="button" className="info-btn" onClick={onInfo} title="¿Qué hace?">
-          i
-        </button>
+      <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center' }}>
+        {label}
+        <InfoPopover titulo={label}>{info}</InfoPopover>
       </div>
       {children}
-      {abierto && (
-        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6, lineHeight: 1.5, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 7, padding: '7px 9px' }}>
-          {info}
-        </div>
-      )}
     </div>
   )
 }

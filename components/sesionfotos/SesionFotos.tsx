@@ -53,6 +53,7 @@ import {
 } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { tomarPuenteFotos, tomarVerSolicitud } from '@/lib/sesionfotos/puente'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -980,39 +981,23 @@ function Draft({
 
   return (
     <div>
-      <Banner prioridad={prioridad} admin={admin} />
+      {/* Descripción de la sesión — el "nombre" del pedido (arriba). */}
+      <input
+        value={draft.desc}
+        onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
+        placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)"
+        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, marginBottom: 14 }}
+      />
 
-      <div style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚡ Cargar por escáner</div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
-          Escaneá los productos ya separados: se agregan solos con la ubicación elegida. La búsqueda manual sigue disponible abajo.
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: '#374151' }}>Sacando de:</span>
-          {chipOrigen('deposito')}
-          {chipOrigen('local')}
-        </div>
-        <ScanInput
-          disabled={!catalogoListo}
-          placeholder={catalogoListo ? '🔫 Escaneá el código de barras…' : 'Cargando catálogo…'}
-          onScan={onScan}
-        />
-        <div style={{ fontSize: 13, marginTop: 8, minHeight: 18 }}>{fbScan ? fbDraft(fbScan) : null}</div>
-      </div>
-
-      <div style={{ marginBottom: 10 }}>
-        <input
-          value={draft.desc}
-          onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
-          placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7, marginBottom: 8 }}
-        />
+      {/* Agregar producto — la forma PRINCIPAL de pedir. */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Agregar producto</div>
         <input
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           autoComplete="off"
-          placeholder="🔎 Agregar producto: buscá por nombre o SKU y tocá el que querés…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+          placeholder="🔎 Buscá por nombre o SKU y tocá el que querés…"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14 }}
         />
         {busqueda.trim().length >= 2 && (
           <div style={{ marginTop: 4 }}>
@@ -1054,10 +1039,34 @@ function Draft({
         )}
       </div>
 
-      <div style={{ border: '1px dashed #C4B5FD', background: '#F5F3FF', borderRadius: 9, padding: '9px 11px', marginBottom: 10 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: '#5B21B6', marginBottom: 4 }}>✍️ Producto sin código de barra</div>
-        <div style={{ fontSize: 11, color: '#7C3AED', marginBottom: 7 }}>
-          Para prendas que todavía no tienen código. No genera venta: solo se controla que salga y vuelva.
+      {/* Escáner — secundario: para cuando ya separaste los productos físicamente. */}
+      <div style={{ border: '1px solid #E5E7EB', background: '#FAFBFC', borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#374151' }}>¿Ya los separaste? Escaneálos</span>
+          <InfoPopover titulo="Cargar por escáner">
+            Si ya separaste los productos físicamente, escaneá el código de barras: se agregan solos con la ubicación elegida. Es una alternativa al buscador.
+          </InfoPopover>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#6B7280' }}>Sacás de:</span>
+            {chipOrigen('deposito')}
+            {chipOrigen('local')}
+          </span>
+        </div>
+        <ScanInput
+          disabled={!catalogoListo}
+          placeholder={catalogoListo ? '🔫 Escaneá el código de barras…' : 'Cargando catálogo…'}
+          onScan={onScan}
+        />
+        <div style={{ fontSize: 13, marginTop: 8, minHeight: 18 }}>{fbScan ? fbDraft(fbScan) : null}</div>
+      </div>
+
+      {/* Producto sin código — alternativo (neutro, no protagonista, sin fondo violeta). */}
+      <div style={{ border: '1px dashed #D1D5DB', borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+          <span style={{ fontWeight: 600, fontSize: 12.5, color: '#374151' }}>¿No lo encontrás? Cargalo sin código</span>
+          <InfoPopover titulo="Producto sin código de barra">
+            Para prendas que todavía no tienen código de barras. No genera venta: solo se controla que salga y vuelva.
+          </InfoPopover>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input
@@ -1070,7 +1079,7 @@ function Draft({
               }
             }}
             placeholder="Descripción (ej. Remera estampa X)"
-            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #DDD6FE', borderRadius: 7 }}
+            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
           />
           <input
             type="number"
@@ -1078,17 +1087,21 @@ function Draft({
             value={manQty}
             onChange={(e) => setManQty(e.target.value)}
             title="Cantidad"
-            style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: '1px solid #DDD6FE', borderRadius: 7 }}
+            style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: '1px solid #D1D5DB', borderRadius: 7 }}
           />
-          <button className="btn-sm" onClick={addManual} style={{ background: '#7C3AED', color: '#fff', border: '1px solid #7C3AED' }}>
+          <button className="btn-sm" onClick={addManual} style={{ background: '#fff', color: '#374151', border: '1px solid #D1D5DB' }}>
             + Agregar
           </button>
         </div>
       </div>
 
+      {/* Agregados — lo que llevás pedido en esta sesión. */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
+        Agregados{total ? ` · ${total} u.` : ''}
+      </div>
       {vacio ? (
-        <div style={{ color: '#9CA3AF', fontSize: 13, padding: '8px 0' }}>
-          Escaneá los productos ya separados (arriba), buscalos con el 🔎 buscador, o cargá una prenda sin código.
+        <div style={{ color: '#9CA3AF', fontSize: 13, padding: '10px 0 4px' }}>
+          Todavía no agregaste nada. Buscá un producto arriba para empezar a pedir.
         </div>
       ) : (
         <>
@@ -1177,10 +1190,17 @@ function Draft({
         </>
       )}
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-        <button className="btn-primary" onClick={procesar}>✓ Procesar ({total} u.)</button>
+      {/* Prioridad de retiro — config de lógica: abajo, sin color. */}
+      <div style={{ fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 5, margin: '16px 0 12px' }}>
+        🏷️ Prioridad de retiro: <b style={{ color: '#374151' }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
+        <InfoPopover titulo="Prioridad de retiro">
+          De dónde se retira cada producto: <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b> (si no hay stock, del otro depósito). Lo escaneado respeta la ubicación que elijas; lo agregado a mano se asigna solo.{admin ? ' Se configura al completar la migración.' : ''}
+        </InfoPopover>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="btn-primary" onClick={procesar} disabled={total === 0}>✓ Procesar ({total} u.)</button>
         <button className="btn-sm" onClick={onCancelar}>Cancelar</button>
-        <span style={{ color: '#9CA3AF', fontSize: 12 }}>Lo agregado a mano se asigna depósito/local automático; lo escaneado (📦/🏪) respeta la ubicación elegida.</span>
       </div>
     </div>
   )

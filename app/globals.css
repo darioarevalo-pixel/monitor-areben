@@ -597,8 +597,15 @@ a {
 .mkt-multi-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; background: #fff; border: 1px solid #D1D5DB; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; max-height: 240px; overflow: auto; min-width: 190px; }
 .mkt-multi-panel label { display: flex; align-items: center; gap: 7px; padding: 5px 7px; font-size: 13px; border-radius: 6px; cursor: pointer; }
 .mkt-multi-panel label:hover { background: #F3F4F6; }
-.info-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; margin-left: 4px; background: transparent; border: none; color: #9CA3AF; font-size: 12px; cursor: pointer; vertical-align: middle; }
-.info-btn:hover { color: #378ADD; }
+/* Botón ⓘ + popover (components/ui/InfoPopover.tsx). Círculo ámbar; el panel va en
+   portal con position:fixed, así no lo recorta el overflow de las cards. */
+.info-dot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; border-radius: 50%; color: #9CA3AF; cursor: pointer; transition: color .15s, background .15s; vertical-align: middle; }
+.info-dot:hover { color: #B45309; background: #FEF3C7; }
+.info-dot.open { color: #B45309; background: #FDE68A; }
+.info-pop { z-index: 100; max-width: 92vw; background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.14); padding: 12px 13px; text-align: left; }
+.info-pop-title { font-size: 12.5px; font-weight: 700; color: #1F2937; margin-bottom: 4px; }
+.info-pop-body { font-size: 11.5px; line-height: 1.55; color: #6B7280; }
+.info-pop-body b { color: #374151; }
 .foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
 .foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
 .foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
