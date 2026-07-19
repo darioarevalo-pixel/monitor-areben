@@ -47,6 +47,7 @@ const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas'
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
 const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), { loading: Cargando })
 const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m) => m.Usuarios), { loading: Cargando })
+const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) => m.MetaAds), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -269,6 +270,12 @@ export const SECCIONES: Record<string, ComponentType> = {
   // portó el flujo de lector físico. Lógica pura con paridad (buscar/limpiarCats/agrupar).
   // Rollback: mover esta línea a SOMBRAS.
   exhib: Exhib,
+  // Meta Ads (19-jul-2026, sección NUEVA — no existe en el legacy): `/meta-ads` lo sirve
+  // el shell. Read-only sobre la API de Marketing de Meta vía `/api/meta-ads` (token de
+  // system user en env, scope ads_read). Descubre las cuentas con /me/adaccounts y muestra
+  // gasto/rendimiento por cuenta. No toca stock, GN ni localStorage. Gateada por permiso
+  // `meta-ads` (ambas marcas).
+  'meta-ads': MetaAds,
 }
 
 /**

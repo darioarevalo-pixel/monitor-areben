@@ -354,6 +354,15 @@ export const PERM_CAT: PermCat[] = [
     "brands": [
       "bdi"
     ]
+  },
+  {
+    "key": "meta-ads",
+    "label": "💰 Meta Ads",
+    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
   }
 ]
 
@@ -410,7 +419,8 @@ export const NAV_CATS: NavCat[] = [
       "sesion-fotos",
       "tncat",
       "gen-talles",
-      "disenos"
+      "disenos",
+      "meta-ads"
     ],
     "accent": "marketing"
   },

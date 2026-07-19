@@ -131,6 +131,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
   'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
   'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',
+  'meta-ads': 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria.',
 }
 
 export function descripcionDe(key: string): string | undefined {

@@ -9309,6 +9309,7 @@ const PERM_CAT = [
   { key: 'verif-ventas', label: '🧾 Verificación de ventas', info: 'Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.', brands: ['bdi', 'zattia'] },
   { key: 'caducados', label: '🗑️ Productos caducados', info: 'Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.', brands: ['bdi', 'zattia'] },
   { key: 'ubicaciones', label: '📍 Ubicaciones', info: 'Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.', brands: ['bdi'] },
+  { key: 'meta-ads', label: '💰 Meta Ads', info: 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.', brands: ['bdi', 'zattia'] },
 ];
 // Agrupamiento de la navegación en menús desplegables.
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
@@ -9318,7 +9319,7 @@ const NAV_CATS = [
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
-  { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos'], accent: 'marketing' },
+  { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos', 'meta-ads'], accent: 'marketing' },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
   { id: 'config',    label: '⚙️ Config',    keys: ['usuarios'], adminOnly: true },
