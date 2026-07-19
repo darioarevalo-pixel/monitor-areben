@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin as esAdminDe } from '@/lib/permisos'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
-import { imgAThumb } from '@/lib/imagenes'
+import { imgAThumbYSubir } from '@/lib/imagenes'
 import { MODELOS_AUTOCOMPLETE } from '@/lib/ingresos/modelos'
 import {
   agregarBloque,
@@ -46,6 +46,16 @@ import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos
 import { nuevoId, useIngresos } from './useIngresos'
 
 const VISTA_KEY = 'monitor_ing_vista'
+
+/**
+ * Reduce la foto, la sube a Blob y persiste la URL (o el base64 si el Blob falla).
+ * A diferencia de Fundas NO usa preview: acá `guardar` persiste en el KV COMPARTIDO,
+ * así que meter el base64 aunque sea de paso lo mandaría al KV. Se persiste una sola
+ * vez, con la URL corta ya resuelta.
+ */
+function subirFotoIngreso(file: File | null | undefined, persistir: (url: string) => void, max: number) {
+  imgAThumbYSubir(file, { onUrl: persistir, onFallback: persistir }, 'ingresos', max)
+}
 
 /** Contraseña del Monitor para los guardados admin: cacheada por el login, o se pide una vez. */
 function obtenerPass(): string {
@@ -112,7 +122,7 @@ export function Ingresos() {
       if (file) {
         e.preventDefault()
         const { gid, bid, did } = pasteTarget
-        imgAThumb(file, (url) => guardar((l) => setDisenoImg(l, gid, bid, did, url)), 480)
+        subirFotoIngreso(file, (url) => guardar((l) => setDisenoImg(l, gid, bid, did, url)), 480)
       }
     }
     document.addEventListener('paste', onPaste)
@@ -277,7 +287,7 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
   const onFotos = (files: FileList | null) => {
     const fs = Array.from(files || [])
     fs.forEach((f) =>
-      imgAThumb(f, (url) => guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: 'img', url, nombre: f.name || '' })), 520),
+      subirFotoIngreso(f, (url) => guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: 'img', url, nombre: f.name || '' })), 520),
     )
   }
   const onLink = () => {
@@ -380,12 +390,12 @@ function BloqueEditar({
 
   const onImg = (did: string, files: FileList | null) => {
     const f = files?.[0]
-    if (f) imgAThumb(f, (url) => guardar((l) => setDisenoImg(l, g.id, b.id, did, url)), 480)
+    if (f) subirFotoIngreso(f, (url) => guardar((l) => setDisenoImg(l, g.id, b.id, did, url)), 480)
   }
   const onDrop = (e: React.DragEvent, did: string) => {
     e.preventDefault()
     const f = Array.from(e.dataTransfer?.files || []).find((x) => /^image\//.test(x.type))
-    if (f) imgAThumb(f, (url) => guardar((l) => setDisenoImg(l, g.id, b.id, did, url)), 480)
+    if (f) subirFotoIngreso(f, (url) => guardar((l) => setDisenoImg(l, g.id, b.id, did, url)), 480)
   }
   const igualarFila = (mid: string) => {
     const next = filaIgualar([g], g.id, b.id, mid) // opera sobre este ingreso; si null, no había cantidad

@@ -13,10 +13,18 @@ import type { SimBloque } from './tipos'
 /** Lo que `bloqueToCanvas` necesita dibujar (subconjunto de SimBloque). */
 export type BloqueDibujable = Pick<SimBloque, 'nombre' | 'total' | 'rows' | 'vars' | 'varOn' | 'img'>
 
-/** Carga una imagen desde un data URL. Resuelve null si falla (no rompe el dibujo). */
+/**
+ * Carga una imagen para dibujarla en canvas. Resuelve null si falla (no rompe el
+ * dibujo). `crossOrigin='anonymous'` es OBLIGATORIO: las fotos ahora pueden ser
+ * URLs remotas de Vercel Blob, y sin esto taintean el canvas → `toDataURL`/`toBlob`
+ * (la "📷 Imagen" de WhatsApp y el PDF) tiran SecurityError. Blob sirve con
+ * `Access-Control-Allow-Origin:*`, así que el anónimo funciona; los data URLs
+ * viejos no se ven afectados por el flag.
+ */
 function cargarImg(src: string): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
     const im = new Image()
+    im.crossOrigin = 'anonymous'
     im.onload = () => res(im)
     im.onerror = () => res(null)
     im.src = src

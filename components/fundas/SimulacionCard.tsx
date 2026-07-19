@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { computeFrom, repartir, sumaVars, varActivo } from '@/lib/fundas/simulacion'
 import { iphoneModelSort } from '@/lib/fundas/ranking'
 import { bloqueToCanvas, copiarOdescargarPNG } from '@/lib/fundas/export'
-import { imgAThumb } from '@/lib/imagenes'
+import { imgAThumbYSubir } from '@/lib/imagenes'
 import type { SimVar } from '@/lib/fundas/tipos'
 
 /** El estado del editor de simulación, propiedad del shell (FundasModelo). */
@@ -52,6 +52,18 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
   const [sort, setSort] = useState<{ col: 'model' | 'pct' | null; dir: number }>({ col: null, dir: 1 })
   const [copiado, setCopiado] = useState('')
   const [imgMsg, setImgMsg] = useState('')
+  // Fotos en curso de subida a Blob (clave 'pedido' o `var-<i>`): mientras suben se
+  // ve el preview base64 con opacidad reducida. La subida es en segundo plano; si
+  // falla, imgAThumbYSubir cae al base64 y la quita del set igual.
+  const [subiendo, setSubiendo] = useState<Set<string>>(new Set())
+  const marcarSubiendo = (k: string, on: boolean) =>
+    setSubiendo((s) => { const n = new Set(s); if (on) n.add(k); else n.delete(k); return n })
+  const subirFoto = (file: File | undefined, k: string, guardar: (url: string) => void) =>
+    imgAThumbYSubir(file, {
+      onPreview: (b64) => { guardar(b64); marcarSubiendo(k, true) },
+      onUrl: (url) => { guardar(url); marcarSubiendo(k, false) },
+      onFallback: (b64) => { guardar(b64); marcarSubiendo(k, false) },
+    }, 'fundas', 256)
 
   const { total, rows, vars, varOn, img } = editor
   const totalNum = parseFloat(total) || 0
@@ -185,9 +197,9 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       {/* Foto general del pedido */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <label title="Foto del pedido (opcional)" style={{ cursor: 'pointer', flex: 'none' }}>
-          <input type="file" accept="image/*" onChange={(e) => imgAThumb(e.target.files?.[0], (url) => set({ img: url }))} style={{ display: 'none' }} />
+          <input type="file" accept="image/*" onChange={(e) => subirFoto(e.target.files?.[0], 'pedido', (url) => set({ img: url }))} style={{ display: 'none' }} />
           {img ? (
-            <img src={img} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB', display: 'block' }} />
+            <img src={img} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB', display: 'block', opacity: subiendo.has('pedido') ? 0.5 : 1 }} />
           ) : (
             <span style={{ display: 'flex', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', border: '1px dashed #CBD5E1', borderRadius: 8, color: '#9CA3AF', fontSize: 18 }}>📷</span>
           )}
@@ -212,9 +224,9 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
               {vars.map((v, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <label title="Foto (opcional)" style={{ cursor: 'pointer', flex: 'none' }}>
-                    <input type="file" accept="image/*" onChange={(e) => imgAThumb(e.target.files?.[0], (url) => setVarCampo(i, { img: url }))} style={{ display: 'none' }} />
+                    <input type="file" accept="image/*" onChange={(e) => subirFoto(e.target.files?.[0], `var-${i}`, (url) => setVarCampo(i, { img: url }))} style={{ display: 'none' }} />
                     {v.img ? (
-                      <img src={v.img} alt="" style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: '1px solid #E5E7EB', display: 'block' }} />
+                      <img src={v.img} alt="" style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: '1px solid #E5E7EB', display: 'block', opacity: subiendo.has(`var-${i}`) ? 0.5 : 1 }} />
                     ) : (
                       <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: '1px dashed #CBD5E1', borderRadius: 6, color: '#9CA3AF', fontSize: 16 }}>📷</span>
                     )}
