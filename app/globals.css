@@ -20,6 +20,14 @@ body {
   font-size: 14px;
 }
 
+/* Los <Link> del shell (sidebar) son <a>, y el navegador los subraya por default.
+   El legacy usaba <button> para el menú, así que nunca se vio; el shell necesita
+   el reset. Ningún link de la app va subrayado; los que quieren color lo ponen inline. */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
 /* ── Layout: sidebar fijo + contenido que ocupa el resto ── */
 .shell {
   display: flex;
