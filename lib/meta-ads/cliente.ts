@@ -2,13 +2,13 @@
  * Acceso al endpoint propio `/api/meta-ads` (métricas de Meta Ads). Usa `apiFetch`
  * para mandar el header `x-monitor-auth` (el endpoint exige usuario logueado).
  *
- * Distingue "no se pudo leer" de "se leyó": una respuesta OK con cuentas vacías o
- * con `sinDatos`/`error` por cuenta es un éxito a nivel request; solo `{ok:false}`
- * significa que ni siquiera se pudo consultar (token faltante, red, etc.).
+ * Distingue "no se pudo leer" de "se leyó": una respuesta OK con cuentas/anuncios
+ * vacíos es un éxito; solo `{ok:false}` significa que ni siquiera se pudo consultar
+ * (token faltante, red, etc.).
  */
 
 import { apiFetch } from '../api-fetch'
-import type { PresetMetaAds, RespuestaMetaAds } from './tipos'
+import type { DetalleCuenta, PresetMetaAds, RespuestaOverview } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
 
@@ -16,33 +16,44 @@ export type OpcionesMetaAds =
   | { preset: PresetMetaAds }
   | { since: string; until: string }
 
-export async function traerMetaAds(opts: OpcionesMetaAds): Promise<Lectura<RespuestaMetaAds>> {
-  const params = new URLSearchParams()
+function rangoQS(opts: OpcionesMetaAds): URLSearchParams {
+  const p = new URLSearchParams()
   if ('since' in opts) {
-    params.set('since', opts.since)
-    params.set('until', opts.until)
+    p.set('since', opts.since)
+    p.set('until', opts.until)
   } else {
-    params.set('preset', opts.preset)
+    p.set('preset', opts.preset)
   }
+  return p
+}
+
+async function pedir<T>(qs: URLSearchParams): Promise<Lectura<T>> {
   try {
-    const r = await apiFetch(`/api/meta-ads?${params.toString()}`)
-    let d: { ok?: boolean; error?: unknown; rango?: unknown; cuentas?: unknown } | null = null
+    const r = await apiFetch(`/api/meta-ads?${qs.toString()}`)
+    let d: (T & { ok?: boolean }) | { ok?: boolean; error?: unknown } | null = null
     try {
       d = await r.json()
     } catch {
       return { ok: false, motivo: `respuesta no-JSON (HTTP ${r.status})` }
     }
-    if (!r.ok || !d?.ok) {
-      return { ok: false, motivo: `HTTP ${r.status}: ${String(d?.error ?? '').slice(0, 150)}` }
+    if (!r.ok || !d || (d as { ok?: boolean }).ok !== true) {
+      const err = (d as { error?: unknown })?.error
+      return { ok: false, motivo: `HTTP ${r.status}: ${String(err ?? '').slice(0, 150)}` }
     }
-    return {
-      ok: true,
-      dato: {
-        rango: d.rango as RespuestaMetaAds['rango'],
-        cuentas: Array.isArray(d.cuentas) ? (d.cuentas as RespuestaMetaAds['cuentas']) : [],
-      },
-    }
+    return { ok: true, dato: d as T }
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** Overview: las cuentas del token con su total (para el selector). */
+export function traerOverview(opts: OpcionesMetaAds): Promise<Lectura<RespuestaOverview>> {
+  return pedir<RespuestaOverview>(rangoQS(opts))
+}
+
+/** Detalle de una cuenta: totales + campañas/anuncios + serie diaria + placements. */
+export function traerDetalleCuenta(accountId: string, opts: OpcionesMetaAds): Promise<Lectura<DetalleCuenta>> {
+  const qs = rangoQS(opts)
+  qs.set('account', accountId)
+  return pedir<DetalleCuenta>(qs)
 }
