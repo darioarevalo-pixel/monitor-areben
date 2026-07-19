@@ -46,6 +46,7 @@ const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').th
 const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), { loading: Cargando })
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
 const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), { loading: Cargando })
+const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m) => m.Usuarios), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -126,6 +127,15 @@ export const SECCIONES: Record<string, ComponentType> = {
   // (matcheo por nombre de archivo, filtros de fotos, cruce del Excel) está testeada
   // (tests/tncat). Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy.
   tncat: Tncat,
+  // El flip de Usuarios (19-jul-2026, admin): `/usuarios` lo sirve el shell — la ÚLTIMA
+  // sección que quedaba en el iframe legacy (con esto el index.html ya no se usa en el
+  // día a día). Gestión de usuarios/permisos: pide la config COMPLETA admin-gated
+  // (`api/usuarios` action:config), la edita en copia local (toggle padre/sub en
+  // lib/usuarios/core) y la guarda validada (≥1 admin, nombre+pass, sin repetidos) con
+  // payload byte-fiel al legacy. Escribe `cfg:usuarios` (la config de AUTH de toda la
+  // app). Rollback: mover esta línea a SOMBRAS. Pendiente admin: editar 1 permiso y
+  // confirmar que el usuario ve el cambio.
+  usuarios: Usuarios,
   // El flip de Ubicaciones (18-jul-2026, solo BDI): `/ubicaciones` lo sirve el shell.
   // Carga masiva de la ubicación física (NN-N) por producto → observación de GN en
   // TODAS sus variantes (endpoint `/api/observaciones`, byte-fiel, vía apiFetch). Es

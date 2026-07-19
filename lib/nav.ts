@@ -101,6 +101,7 @@ export function categoriaDe(key: string): string | null {
  */
 export const DESCRIPCIONES: Record<string, string> = {
   inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
+  usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',
   resumen: 'Panel principal con los KPIs del negocio.',
   productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',
   variantes: 'Ventas y stock por variante (talle, modelo o color).',

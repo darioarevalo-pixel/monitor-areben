@@ -19,17 +19,17 @@ describe('registro de secciones', () => {
   })
 
   it('las secciones flipeadas: en vivo en su ruta normal, no en sombra', () => {
-    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos', 'variantes', 'proveedores', 'caducados', 'margenes', 'talles', 'marketing', 'ingresos', 'ubicaciones', 'conteo-deposito', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'conteo', 'tncat', 'inicio']) {
+    for (const key of ['clientes', 'fundas-modelo', 'resumen', 'ventas-mensuales', 'productos', 'variantes', 'proveedores', 'caducados', 'margenes', 'talles', 'marketing', 'ingresos', 'ubicaciones', 'conteo-deposito', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'conteo', 'tncat', 'inicio', 'usuarios']) {
       expect(componenteDe(key)).not.toBeNull() // /<key> → Next
       expect(componenteSombraDe(key)).toBeNull() // ya no hay ruta sombra
     }
   })
 
-  it('una key que no está en ningún registro va al legacy', () => {
-    // `usuarios` (gestión de usuarios, admin) sigue sirviéndose del iframe legacy:
-    // no tiene componente ni sombra. `stock` ya no existe (se borró del legacy).
-    expect(componenteDe('usuarios')).toBeNull()
-    expect(componenteSombraDe('usuarios')).toBeNull()
+  it('una key desconocida cae al iframe legacy (el fallback sigue existiendo)', () => {
+    // Ya NO queda ninguna sección real en el legacy (usuarios fue la última migrada);
+    // el fallback al iframe solo lo pega una key inexistente/inválida.
+    expect(componenteDe('seccion-que-no-existe')).toBeNull()
+    expect(componenteSombraDe('seccion-que-no-existe')).toBeNull()
   })
 
   it('las keys de los dos registros existen en el nav (si no, son ruta muerta)', () => {

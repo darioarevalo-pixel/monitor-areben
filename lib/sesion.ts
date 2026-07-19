@@ -109,3 +109,47 @@ export async function traerPerfiles(): Promise<Perfil[] | null> {
     return null
   }
 }
+
+/**
+ * La config COMPLETA (con contraseñas) para la pantalla de gestión de usuarios.
+ * Admin-gated: POST `{action:'config', adminUser, adminPass}`. Port de usuariosAbrir
+ * (index.html:9422). `prohibido` = 403 (contraseña equivocada) → el llamador olvida
+ * la pass cacheada, como `_olvidarAdminPass`.
+ */
+export type ConfigAdmin<T> = { ok: true; users: T[] } | { ok: false; prohibido?: boolean; error: string }
+
+export async function traerConfigAdmin<T = unknown>(adminUser: string, adminPass: string): Promise<ConfigAdmin<T>> {
+  try {
+    const r = await fetch(USU_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'config', adminUser, adminPass }),
+    })
+    if (r.status === 403) return { ok: false, prohibido: true, error: 'Contraseña de administrador incorrecta.' }
+    const d = await r.json()
+    if (d?.ok && Array.isArray(d.config?.users)) return { ok: true, users: d.config.users as T[] }
+    return { ok: false, error: d?.error || 'No se pudo leer la configuración.' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'error de conexión' }
+  }
+}
+
+/**
+ * Guarda la config de usuarios (solo admin). El server valida adminUser/adminPass y
+ * responde `{ok:true}` (sin config). Port del POST de usuariosGuardar (index.html:9504).
+ */
+export async function guardarConfigAdmin<T>(adminUser: string, adminPass: string, users: T[]): Promise<{ ok: boolean; prohibido?: boolean; error?: string }> {
+  try {
+    const r = await fetch(USU_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminUser, adminPass, config: { users } }),
+    })
+    if (r.status === 403) return { ok: false, prohibido: true, error: 'Contraseña de administrador incorrecta.' }
+    const d = await r.json()
+    if (d?.ok) return { ok: true }
+    return { ok: false, error: d?.error || 'No se pudo guardar.' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'error de conexión' }
+  }
+}
