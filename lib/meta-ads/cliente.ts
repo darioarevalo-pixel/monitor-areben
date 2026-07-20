@@ -38,7 +38,11 @@ async function pedir<T>(qs: URLSearchParams): Promise<Lectura<T>> {
     }
     if (!r.ok || !d || (d as { ok?: boolean }).ok !== true) {
       const err = (d as { error?: unknown })?.error
-      return { ok: false, motivo: `HTTP ${r.status}: ${String(err ?? '').slice(0, 150)}` }
+      // `detalle` trae el mensaje REAL de Meta (ej. token vencido). El endpoint lo
+      // devuelve pero antes se descartaba, así que el error se veía genérico.
+      const detalle = (d as { detalle?: unknown })?.detalle
+      const extra = detalle ? ` — ${String(detalle).slice(0, 200)}` : ''
+      return { ok: false, motivo: `HTTP ${r.status}: ${String(err ?? '').slice(0, 150)}${extra}` }
     }
     return { ok: true, dato: d as T }
   } catch (e) {
