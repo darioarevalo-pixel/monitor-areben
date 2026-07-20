@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
-import type { AdRow, Campaña, CuentaMetaAds, DetalleCuenta, Metricas, PresetMetaAds } from '@/lib/meta-ads/tipos'
+import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
 
 const RANGOS: { k: PresetMetaAds; label: string }[] = [
   { k: 'today', label: 'Hoy' },
@@ -28,7 +28,32 @@ const money = (v: number | undefined, moneda: string) => {
   }
 }
 const roas = (v?: number) => (v ? `${nf1.format(v)}×` : '—')
+const pct = (v?: number) => `${nf1.format(v ?? 0)}%`
 const diaCorto = (iso: string) => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '')
+
+// Rótulo + color de un ranking de Meta (ABOVE_AVERAGE / AVERAGE / BELOW_AVERAGE_* / UNKNOWN).
+function rotuloRanking(r?: string | null): { txt: string; color: string; bg: string } | null {
+  if (!r || r === 'UNKNOWN') return null
+  if (r === 'ABOVE_AVERAGE') return { txt: 'Arriba del promedio', color: '#15803D', bg: '#F0FDF4' }
+  if (r === 'AVERAGE') return { txt: 'En el promedio', color: '#6B7280', bg: '#F3F4F6' }
+  return { txt: 'Debajo del promedio', color: '#B91C1C', bg: '#FEF2F2' } // BELOW_AVERAGE_10/20/35
+}
+
+// Rótulo + color del estado de entrega (effective_status).
+function rotuloEstado(s?: string | null): { txt: string; color: string; bg: string } | null {
+  if (!s) return null
+  if (s === 'ACTIVE') return { txt: 'Activo', color: '#15803D', bg: '#F0FDF4' }
+  if (s === 'PAUSED' || s === 'ADSET_PAUSED' || s === 'CAMPAIGN_PAUSED') return { txt: 'Pausado', color: '#6B7280', bg: '#F3F4F6' }
+  if (s === 'PENDING_REVIEW' || s === 'IN_PROCESS' || s === 'PENDING_PROCESSING') return { txt: 'En revisión', color: '#B45309', bg: '#FFFBEB' }
+  if (s === 'DISAPPROVED' || s === 'WITH_ISSUES') return { txt: 'Con problemas', color: '#B91C1C', bg: '#FEF2F2' }
+  return { txt: s.toLowerCase().replace(/_/g, ' '), color: '#6B7280', bg: '#F3F4F6' }
+}
+
+const genero = (g: string) => (g === 'male' ? 'Hombres' : g === 'female' ? 'Mujeres' : g === 'unknown' ? 'Sin dato' : g || '—')
+
+function Badge({ txt, color, bg }: { txt: string; color: string; bg: string }) {
+  return <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, borderRadius: 6, padding: '1px 7px', whiteSpace: 'nowrap' }}>{txt}</span>
+}
 
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
@@ -137,8 +162,38 @@ function Detalle({ d }: { d: DetalleCuenta }) {
       {/* Totales */}
       <div className="card">
         <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Totales · {d.cuenta.nombre}</div>
-        <TilesTotales t={d.totales} moneda={moneda} />
+        <TilesTotales t={d.totales} moneda={moneda} hookRate={d.video?.hookRate} />
       </div>
+
+      {/* Embudo de compra */}
+      {d.funnel && d.funnel.some((p) => p.count > 0) && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Embudo de compra</div>
+            <InfoPopover titulo="Embudo de compra">
+              De cada paso, cuántas personas lo hicieron y cuánto costó cada resultado (gasto ÷ cantidad).
+              La barra muestra la caída respecto del primer paso. Sirve para ver <b>dónde se corta</b> el camino a la compra.
+            </InfoPopover>
+          </div>
+          <Embudo pasos={d.funnel} moneda={moneda} />
+        </div>
+      )}
+
+      {/* Quién (edad × género) */}
+      {d.demografia && d.demografia.length > 0 && (
+        <div className="card">
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Quién compra · edad y género</div>
+          <TablaDemografia rows={d.demografia} moneda={moneda} />
+        </div>
+      )}
+
+      {/* Dónde (región) */}
+      {d.regiones && d.regiones.length > 0 && (
+        <div className="card">
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Dónde · por región</div>
+          <TablaRegiones rows={d.regiones} moneda={moneda} />
+        </div>
+      )}
 
       {/* Evolución diaria */}
       {d.daily.length > 0 && (
@@ -184,7 +239,7 @@ function Detalle({ d }: { d: DetalleCuenta }) {
   )
 }
 
-function TilesTotales({ t, moneda }: { t: Metricas; moneda: string }) {
+function TilesTotales({ t, moneda, hookRate }: { t: Metricas; moneda: string; hookRate?: number }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: 10 }}>
       <Tile label="Gasto" valor={money(t.spend, moneda)} destacado />
@@ -193,8 +248,84 @@ function TilesTotales({ t, moneda }: { t: Metricas; moneda: string }) {
       <Tile label="ROAS" valor={roas(t.roas)} destacado color="#16A34A" />
       <Tile label="Impresiones" valor={entero(t.impressions)} />
       <Tile label="Alcance" valor={entero(t.reach)} />
-      <Tile label="CTR" valor={`${nf1.format(t.ctr)}%`} />
+      <Tile label="CTR" valor={pct(t.ctr)} />
       <Tile label="CPC" valor={money(t.cpc, moneda)} />
+      {hookRate ? <Tile label="Hook (video)" valor={pct(hookRate)} /> : null}
+    </div>
+  )
+}
+
+// Embudo: cada paso con su cantidad, costo por resultado y una barra proporcional al primer paso.
+function Embudo({ pasos, moneda }: { pasos: FunnelPaso[]; moneda: string }) {
+  const base = pasos[0]?.count || 0
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {pasos.map((p) => {
+        const pctBar = base ? Math.max(2, (p.count / base) * 100) : 0
+        return (
+          <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ width: 130, fontSize: 13, color: '#374151' }}>{p.label}</div>
+            <div style={{ flex: 1, minWidth: 120, background: '#F1F5F9', borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ width: `${pctBar}%`, background: '#93C5FD', height: '100%', borderRadius: 6 }} />
+              <span style={{ position: 'absolute', left: 8, top: 0, lineHeight: '22px', fontSize: 12, fontWeight: 600, color: '#1E3A8A' }}>{entero(p.count)}</span>
+            </div>
+            <div style={{ width: 130, textAlign: 'right', fontSize: 12, color: '#6B7280' }}>
+              {p.count ? `${money(p.costo, moneda)} c/u` : '—'}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TablaDemografia({ rows, moneda }: { rows: DemografiaFila[]; moneda: string }) {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+            <Th left>Género</Th><Th left>Edad</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderTop: '1px solid #F1F5F9' }}>
+              <td style={{ padding: '7px 10px', fontWeight: 500 }}>{genero(r.gender)}</td>
+              <td style={{ padding: '7px 10px', color: '#6B7280' }}>{r.age || '—'}</td>
+              <Td>{money(r.spend, moneda)}</Td>
+              <Td>{entero(r.purchases)}</Td>
+              <Td>{money(r.revenue, moneda)}</Td>
+              <Td color={r.spend && r.revenue ? '#16A34A' : '#9CA3AF'}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TablaRegiones({ rows, moneda }: { rows: RegionFila[]; moneda: string }) {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+            <Th left>Región</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderTop: '1px solid #F1F5F9' }}>
+              <td style={{ padding: '7px 10px', fontWeight: 500 }}>{r.region}</td>
+              <Td>{money(r.spend, moneda)}</Td>
+              <Td>{entero(r.purchases)}</Td>
+              <Td>{money(r.revenue, moneda)}</Td>
+              <Td color={r.spend && r.revenue ? '#16A34A' : '#9CA3AF'}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -245,11 +376,24 @@ function CampañaBloque({ c, moneda }: { c: Campaña; moneda: string }) {
 }
 
 function FilaAd({ a, moneda }: { a: AdRow; moneda: string }) {
+  const estado = rotuloEstado(a.status)
+  const rk = a.ranking
+  const badges = [
+    estado,
+    rk ? rotuloRanking(rk.quality) : null,
+    rk ? rotuloRanking(rk.conversion) : null,
+  ].filter((b): b is { txt: string; color: string; bg: string } => b !== null)
   return (
     <tr style={{ borderTop: '1px solid #F1F5F9' }}>
-      <td style={{ padding: '7px 10px', maxWidth: 260 }}>
+      <td style={{ padding: '7px 10px', maxWidth: 300 }}>
         <div style={{ fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ad_name}</div>
         {a.adset_name ? <div style={{ fontSize: 11, color: '#9CA3AF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adset_name}</div> : null}
+        {(badges.length > 0 || (a.video && a.video.hookRate > 0)) && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+            {badges.map((b, i) => <Badge key={i} {...b} />)}
+            {a.video && a.video.hookRate > 0 ? <span style={{ fontSize: 11, color: '#6B7280' }}>Hook {pct(a.video.hookRate)}</span> : null}
+          </div>
+        )}
       </td>
       <Td>{money(a.spend, moneda)}</Td>
       <Td>{entero(a.purchases)}</Td>

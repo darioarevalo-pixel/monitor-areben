@@ -96,12 +96,22 @@ async function detalle(res, account, rango, rangoEco) {
   if (!/^\d+$/.test(account)) return res.status(400).json({ error: 'account inválido' });
   const act = `act_${account}`;
   const attr = `action_attribution_windows=${ATTR}`;
+  const filtroGasto = `filtering=${encodeURIComponent(JSON.stringify([{ field: 'spend', operator: 'GREATER_THAN', value: 0 }]))}`;
 
-  const [totRes, adsRes, dayRes, plRes] = await Promise.all([
+  // Las 4 primeras son las llamadas núcleo (no se tocan); las 4 nuevas son enriquecimientos
+  // AISLADOS: si alguna falla, su dato queda vacío y el resto del detalle igual responde.
+  const [totRes, adsRes, dayRes, plRes, extraRes, statusRes, ageRes, regRes] = await Promise.all([
     graph(`${act}/insights?fields=account_name,account_currency,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas&${rango}&${attr}`),
-    insightsTodas(`${act}/insights?level=ad&fields=ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,inline_link_clicks,actions,action_values,purchase_roas&filtering=${encodeURIComponent(JSON.stringify([{ field: 'spend', operator: 'GREATER_THAN', value: 0 }]))}&${rango}&${attr}&limit=500`),
+    insightsTodas(`${act}/insights?level=ad&fields=ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,inline_link_clicks,actions,action_values,purchase_roas&${filtroGasto}&${rango}&${attr}&limit=500`),
     graph(`${act}/insights?fields=spend,actions,action_values&time_increment=1&${rango}&${attr}&limit=500`),
     graph(`${act}/insights?fields=spend,actions,action_values&breakdowns=publisher_platform,platform_position&${rango}&${attr}&limit=500`),
+    // Diagnóstico de creativos + video por anuncio (call separada para no arriesgar la de anuncios).
+    insightsTodas(`${act}/insights?level=ad&fields=ad_id,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,video_3_sec_watched_actions,video_thruplay_watched_actions&${filtroGasto}&${rango}&${attr}&limit=500`),
+    // Estado de entrega (activo/pausado/en aprendizaje) por anuncio.
+    graph(`${act}/ads?fields=id,effective_status&limit=500`),
+    // Quién: edad × género. Dónde: región.
+    graph(`${act}/insights?breakdowns=age,gender&fields=spend,impressions,actions,action_values&${rango}&${attr}&limit=500`),
+    graph(`${act}/insights?breakdowns=region&fields=spend,actions,action_values&${rango}&${attr}&limit=500`),
   ]);
 
   if (!adsRes.ok) return res.status(502).json({ error: 'No se pudieron traer los anuncios de la cuenta', detalle: adsRes.error });
@@ -111,8 +121,49 @@ async function detalle(res, account, rango, rangoEco) {
   const nombre = (totRow && totRow.account_name) || act;
   const totales = totRow ? metricasDe(totRow) : sumar(adsRes.rows.map(adDe));
 
+  // Índices de los enriquecimientos por ad_id.
+  const extraPorId = new Map();
+  if (extraRes.ok) for (const r of extraRes.rows) extraPorId.set(String(r.ad_id), r);
+  const statusPorId = new Map();
+  if (statusRes.ok && statusRes.data && Array.isArray(statusRes.data.data)) {
+    for (const a of statusRes.data.data) statusPorId.set(String(a.id), a.effective_status || null);
+  }
+
+  // Embudo (de los totales de cuenta) + video de cuenta (sumando las filas de extra).
+  const funnel = totRow ? embudoDe(totRow) : [];
+  const videoTotal = extraRes.ok
+    ? extraRes.rows.reduce(
+        (t, r) => {
+          const v = videoDe(r);
+          return { plays3s: t.plays3s + v.plays3s, thruplay: t.thruplay + v.thruplay, impressions: t.impressions + num(r.impressions) };
+        },
+        { plays3s: 0, thruplay: 0, impressions: 0 },
+      )
+    : { plays3s: 0, thruplay: 0, impressions: 0 };
+  videoTotal.hookRate = videoTotal.impressions ? (videoTotal.plays3s / videoTotal.impressions) * 100 : 0;
+
+  // Demografía (edad×género) y regiones, ordenadas por gasto, solo con gasto > 0.
+  const demografia = (ageRes.ok ? ageRes.data.data || [] : [])
+    .map((row) => ({ age: row.age || '', gender: row.gender || '', ...ventaDe(row) }))
+    .filter((d) => d.spend > 0)
+    .sort((a, b) => b.spend - a.spend);
+  const regiones = (regRes.ok ? regRes.data.data || [] : [])
+    .map((row) => ({ region: row.region || '—', ...ventaDe(row) }))
+    .filter((d) => d.spend > 0)
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 15);
+
   // Anuncios → agrupar por campaña, subtotal por campaña, ordenar por gasto.
-  const ads = adsRes.rows.map(adDe);
+  const ads = adsRes.rows.map((row) => {
+    const base = adDe(row);
+    const ex = extraPorId.get(String(row.ad_id));
+    return {
+      ...base,
+      status: statusPorId.get(String(row.ad_id)) || null,
+      ranking: ex ? { quality: ex.quality_ranking || null, engagement: ex.engagement_rate_ranking || null, conversion: ex.conversion_rate_ranking || null } : null,
+      video: ex ? videoDe(ex) : { plays3s: 0, thruplay: 0, hookRate: 0 },
+    };
+  });
   const porCamp = new Map();
   for (const a of ads) {
     if (!porCamp.has(a.campaign_id)) porCamp.set(a.campaign_id, { id: a.campaign_id, nombre: a.campaign_name, ads: [] });
@@ -131,7 +182,7 @@ async function detalle(res, account, rango, rangoEco) {
     .filter((p) => p.spend > 0)
     .sort((a, b) => b.spend - a.spend);
 
-  return res.status(200).json({ ok: true, rango: rangoEco, cuenta: { id: account, nombre, moneda }, totales, campañas, daily, placements });
+  return res.status(200).json({ ok: true, rango: rangoEco, cuenta: { id: account, nombre, moneda }, totales, funnel, video: videoTotal, demografia, regiones, campañas, daily, placements });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -147,6 +198,40 @@ function accion(arr, type) {
   if (!Array.isArray(arr)) return 0;
   const hit = arr.find((a) => a && a.action_type === type);
   return hit ? num(hit.value) : 0;
+}
+
+// Suma los `value` de un array de acciones (métricas de video: [{action_type,value}]).
+function sumaAcciones(arr) {
+  if (!Array.isArray(arr)) return 0;
+  return arr.reduce((s, a) => s + num(a && a.value), 0);
+}
+
+// Pasos del embudo de compra, en orden, con su action_type de Meta.
+const FUNNEL = [
+  { key: 'link_click', label: 'Clic al enlace', type: 'link_click' },
+  { key: 'landing_page_view', label: 'Visita a la web', type: 'landing_page_view' },
+  { key: 'add_to_cart', label: 'Agregó al carrito', type: 'omni_add_to_cart' },
+  { key: 'initiate_checkout', label: 'Inició compra', type: 'omni_initiated_checkout' },
+  { key: 'purchase', label: 'Compró', type: 'omni_purchase' },
+];
+// Embudo (cantidad + costo por paso) de una fila de insights.
+function embudoDe(row) {
+  const spend = num(row.spend);
+  return FUNNEL.map((p) => {
+    const count = accion(row.actions, p.type);
+    return { key: p.key, label: p.label, count, costo: count ? spend / count : 0 };
+  });
+}
+// Métricas de video de una fila (hook = reproducciones de 3s ÷ impresiones).
+function videoDe(row) {
+  const plays3s = sumaAcciones(row.video_3_sec_watched_actions);
+  const thruplay = sumaAcciones(row.video_thruplay_watched_actions);
+  const impr = num(row.impressions);
+  return { plays3s, thruplay, hookRate: impr ? (plays3s / impr) * 100 : 0 };
+}
+// Ventas/ingresos de una fila de breakdown (demografía/región).
+function ventaDe(row) {
+  return { spend: num(row.spend), purchases: accion(row.actions, COMPRA), revenue: accion(row.action_values, COMPRA) };
 }
 
 // Métricas de una fila de insights (nivel cuenta o campaña), con ventas/ROAS ya resueltas.
