@@ -214,6 +214,15 @@ export const PERM_CAT: PermCat[] = [
         "brands": [
           "zattia"
         ]
+      },
+      {
+        "key": "ocultar",
+        "label": "🙈 Ocultar agotados",
+        "info": "Despublicar de la tienda los productos sin stock que siguen visibles (reversible). Escribe en la tienda online en vivo.",
+        "brands": [
+          "bdi",
+          "zattia"
+        ]
       }
     ]
   },

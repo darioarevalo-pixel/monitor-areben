@@ -75,6 +75,17 @@ export async function publicar(store: Marca, ids: (string | number)[]): Promise<
   return r.json()
 }
 
+// ── Ocultar agotados (card 5) ───────────────────────────────────────────────────
+/** Oculta (despublica) productos en la tienda EN VIVO. Espejo de publicar(), reversible con publicar(). */
+export async function despublicar(store: Marca, ids: (string | number)[]): Promise<{ ok: boolean; ocultados?: number; errores?: unknown[]; error?: string }> {
+  const r = await fetch(catUrl(store), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accion: 'ocultar', ids }),
+  })
+  return r.json()
+}
+
 // ── Carga de imágenes (card 2) ──────────────────────────────────────────────────
 /** Lista de productos con sus colores (para el datalist y el match). Port de tnImgInit/Recargar. */
 export async function traerProductosImg(store: Marca, bust = false): Promise<ProductoImg[]> {

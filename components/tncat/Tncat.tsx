@@ -6,6 +6,7 @@ import { CategoriasCard } from './CategoriasCard'
 import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
 import { AsignarCard } from './AsignarCard'
+import { AgotadosCard } from './AgotadosCard'
 
 /**
  * Tienda Nube (tncat): 4 herramientas de escritura sobre la tienda online, cada una
@@ -19,6 +20,7 @@ export function Tncat() {
   const verCat = marca === 'bdi' && puedeSub(perfil, marca, 'tncat', 'categorias')
   const verImg = puedeSub(perfil, marca, 'tncat', 'imagenes')
   const verAsig = marca === 'zattia' && puedeSub(perfil, marca, 'tncat', 'asignar')
+  const verOcultar = puedeSub(perfil, marca, 'tncat', 'ocultar')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -26,6 +28,7 @@ export function Tncat() {
       {verImg && <ImagenesCard marca={marca} />}
       {verImg && <FotosCard marca={marca} />}
       {verAsig && <AsignarCard marca={marca} />}
+      {verOcultar && <AgotadosCard marca={marca} />}
     </div>
   )
 }
