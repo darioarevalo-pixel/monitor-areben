@@ -110,6 +110,35 @@ describe('calcularAjuste · nuevo = vivo + dif (con desglose)', () => {
   })
 })
 
+describe('registroConteo · guarda TODO lo contado (no solo diferencias)', () => {
+  const prod: CeProducto = {
+    pid: '10',
+    name: 'Remera',
+    linea: 'zattia',
+    variants: [
+      { vid: '10_1', sid: '1', size: 'S', barcode: 'B1', sku: 'REM-S', inventory_id: 100, esperado: 5 },
+      { vid: '10_2', sid: '2', size: 'M', barcode: 'B2', sku: 'REM-M', inventory_id: 101, esperado: 4 },
+    ],
+  }
+  // 10_1: total 7 vs sistema 5 → +2 (diferencia). 10_2: contado 4 = sistema 4 → 0 (coincide).
+  const state: CeState = { '10': { estado: 'terminado', exhibido: { '10_1': 1, '10_2': 4 }, deposito: { '10_1': 6 }, snap: { '10_1': 5, '10_2': 4 }, dif: { '10_1': 2, '10_2': 0 } } }
+  const vivo = realMap([
+    fv({ product_id: '10', size_id: '1', inventory_id: 500, available_quantity: 4, barcode: 'B1', size_name: 'S' }),
+    fv({ product_id: '10', size_id: '2', inventory_id: 501, available_quantity: 4, barcode: 'B2', size_name: 'M' }),
+  ])
+
+  it('rows solo trae la diferencia; registro trae TODAS las variantes (incluida la que coincide)', () => {
+    const pv = calcularAjuste([prod], state, vivo, 'Local', 'zattia', null, 'zattia')
+    // El Excel/ajuste: solo la diferencia.
+    expect(pv.rows).toHaveLength(1)
+    expect(pv.rows[0]).toMatchObject({ variante: 'S', dif: 2 })
+    // El registro del historial: todo lo contado.
+    expect(pv.registro).toHaveLength(2)
+    const m = pv.registro.find((r) => r.variante === 'M')!
+    expect(m).toMatchObject({ producto: 'Remera', variante: 'M', diferencia: 0, sistema: 4, contado: 4, exhibido: 4, deposito: 0, vivo_aplicado: 4, nuevo_stock: 4, inventory_id: 501 })
+  })
+})
+
 describe('resolverScan / ultimosPorProducto', () => {
   it('resolverScan normaliza y matchea', () => {
     const byBc = { '779001': '10_1' }
@@ -126,6 +155,18 @@ describe('resolverScan / ultimosPorProducto', () => {
     ]
     const map = ultimosPorProducto(conteos, products, 'zattia')
     expect(map['10']).toBe(new Date('2026-07-10T10:00:00Z').getTime())
+  })
+
+  it('asigna fecha aunque el producto NO tenga diferencia, vía el detalle-por-nombre (fix del balance)', () => {
+    // Simula el registro nuevo: el detalle ahora incluye una línea del producto
+    // que coincidió con el sistema (diferencia 0). Antes solo entraba por
+    // resumen.productos; ahora el detalle lo rescata igual.
+    const products: CeProducto[] = [{ pid: '10', name: 'Remera', linea: 'zattia', variants: [] }]
+    const conteos = [
+      { fecha_aplicado: '2026-07-12T10:00:00Z', resumen: { modo: 'estandar', linea: 'zattia', lineas: 0 }, detalle: [{ producto: 'Remera', variante: 'S', diferencia: 0 }] },
+    ]
+    const map = ultimosPorProducto(conteos, products, 'zattia')
+    expect(map['10']).toBe(new Date('2026-07-12T10:00:00Z').getTime())
   })
 })
 

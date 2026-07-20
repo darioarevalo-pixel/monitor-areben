@@ -8,7 +8,7 @@
 
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial } from '../conteo-deposito/tipos'
-import type { CeEstadoProd, CeFilaAjuste, CePreview, CeProducto, CeResumen, CeState, Linea } from './tipos'
+import type { CeDetalleConteo, CeEstadoProd, CeFilaAjuste, CePreview, CeProducto, CeResumen, CeState, Linea } from './tipos'
 
 const vacio = (): CeEstadoProd => ({ estado: 'sin_iniciar', exhibido: {}, deposito: {}, snap: {}, dif: {} })
 
@@ -177,7 +177,7 @@ export function calcularAjuste(
     linea,
     productos,
   }
-  return { rows, resumen, missing, ubicacion, store }
+  return { rows, registro: registroConteo(terminados, state, vivo), resumen, missing, ubicacion, store }
 }
 
 /** El `detalle` del historial: incluye el desglose exhibido/depósito. Port de ceConfirmar @12356. */
@@ -195,6 +195,40 @@ export function detalleHistorial(rows: CeFilaAjuste[]): Array<Record<string, unk
     vivo_aplicado: r.vivo,
     nuevo_stock: r.nuevo,
   }))
+}
+
+/**
+ * Registro COMPLETO del conteo: TODAS las variantes de TODOS los terminados,
+ * incluidas las que coinciden con el sistema (diferencia 0) y las que quedaron en
+ * 0. Es lo que se guarda como `detalle` del historial, para poder mostrar el
+ * balance ("se contaron estos productos") y para que los talles sin diferencia
+ * también reciban fecha de último conteo (ver `ultimosPorProducto`, que matchea el
+ * detalle por nombre). El ajuste/Excel siguen usando solo `rows` (las diferencias).
+ */
+export function registroConteo(terminados: CeProducto[], state: CeState, vivo: Record<string, FilaVivo>): CeDetalleConteo[] {
+  const out: CeDetalleConteo[] = []
+  terminados.forEach((p) => {
+    const st = state[String(p.pid)]
+    p.variants.forEach((v) => {
+      const live = vivo[v.vid]
+      const vivoQty = live ? Number(live.available_quantity) || 0 : null
+      const dif = st?.dif ? st.dif[v.vid] || 0 : 0
+      out.push({
+        inventory_id: (live && live.inventory_id != null ? live.inventory_id : v.inventory_id) ?? null,
+        barcode: (live && live.barcode) || v.barcode || '',
+        producto: p.name,
+        variante: v.size,
+        sistema: st?.snap && st.snap[v.vid] != null ? st.snap[v.vid] : v.esperado,
+        exhibido: st?.exhibido ? st.exhibido[v.vid] || 0 : 0,
+        deposito: st?.deposito ? st.deposito[v.vid] || 0 : 0,
+        contado: st ? total(st, v.vid) : null,
+        diferencia: dif,
+        vivo_aplicado: vivoQty,
+        nuevo_stock: vivoQty != null ? vivoQty + dif : null,
+      })
+    })
+  })
+  return out
 }
 
 /** Fechas del último conteo por producto, SOLO de esta línea (modo estandar). Port de _ceCargarUltimos @12120-12128. */

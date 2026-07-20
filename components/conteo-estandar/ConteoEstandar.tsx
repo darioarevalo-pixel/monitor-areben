@@ -12,7 +12,6 @@ import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
   abrir,
   calcularAjuste,
-  detalleHistorial,
   escanear,
   estadoDe,
   normBc,
@@ -186,7 +185,8 @@ export function ConteoEstandar() {
       const fecha = new Date().toISOString().slice(0, 10)
       XLSX.writeFile(wb, `ajuste_local_${preview.store || marca}_${linea}_${fecha}.xlsx`)
       try {
-        await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: detalleHistorial(preview.rows) })
+        await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
+        await ce.refrescarUltimos()
       } catch {
         /* si falla el historial, el Excel ya se generó */
       }
@@ -204,7 +204,8 @@ export function ConteoEstandar() {
     if (!productos.length) return alert('No hay productos para guardar.')
     if (!confirm(`Se registra el conteo de ${productos.length} producto(s) de ${lineaLabel(linea)} (sin ajuste). ¿Guardar?`)) return
     try {
-      await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: [] })
+      await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
+      await ce.refrescarUltimos()
       if (confirm('✅ Conteo guardado en el historial (sin ajuste).\n\n¿Limpiar los productos terminados de esta línea?')) limpiarTerminados()
       setPreview(null)
       setVista('lista')
@@ -487,33 +488,75 @@ function Historial({ hist, linea, onVolver }: { hist: { cargando: boolean; conte
         : hist.error ? <div style={{ padding: 16, color: '#B91C1C' }}>No pude cargar el historial: {hist.error}</div>
         : !hist.conteos.length ? <div style={{ padding: 12, color: '#9CA3AF' }}>Todavía no hay conteos de esta línea.</div>
         : hist.conteos.map((c, i) => {
-          const rr = (c.resumen || {}) as { mas?: number; menos?: number; lineas?: number; productos?: unknown[] }
+          const rr = (c.resumen || {}) as { mas?: number; menos?: number; lineas?: number; productos?: { pid?: string; nombre?: string }[] }
           const f = c.fecha_aplicado ? new Date(c.fecha_aplicado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
-          const det = Array.isArray(c.detalle) ? c.detalle : []
+          const det = (Array.isArray(c.detalle) ? c.detalle : []) as Record<string, number | string | null>[]
+          const difs = det.filter((d) => Number(d.diferencia || 0) !== 0)
+          // Nombres de lo contado: del resumen (todos los terminados) o, si el
+          // conteo es viejo y no lo trae, de las líneas del detalle.
+          const nombres = Array.isArray(rr.productos) && rr.productos.length
+            ? rr.productos.map((p) => String(p?.nombre || '').trim()).filter(Boolean)
+            : Array.from(new Set(det.map((d) => String(d.producto || '').trim()).filter(Boolean)))
+          const hayBalance = det.length > difs.length // guardó líneas sin diferencia = conteo nuevo
           return (
             <details key={i} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '8px 12px', marginBottom: 8 }}>
-              <summary style={{ cursor: 'pointer', fontSize: 13 }}><b>{f}</b> · {c.usuario || '—'} · <span style={{ color: '#B45309' }}>+{rr.mas || 0}</span> / <span style={{ color: '#B91C1C' }}>−{rr.menos || 0}</span> · {rr.lineas || det.length} línea(s) · {(rr.productos || []).length} producto(s)</summary>
-              {det.length > 0 && (
-                <div style={{ overflow: 'auto', marginTop: 8 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead><tr style={{ color: '#9CA3AF', textAlign: 'left' }}><th style={{ padding: '4px 6px' }}>Producto · Talle</th><th style={{ textAlign: 'center' }}>Sist.</th><th style={{ textAlign: 'center' }}>Total</th><th style={{ textAlign: 'center' }}>Dif</th></tr></thead>
-                    <tbody>
-                      {det.map((x, j) => {
-                        const d = x as Record<string, number | string | null>
-                        const dif = Number(d.diferencia || 0)
-                        return (
-                          <tr key={j} style={{ borderTop: '1px solid #F3F4F6' }}>
-                            <td style={{ padding: '4px 6px' }}>{String(d.producto || '')} · {String(d.variante || '')}</td>
-                            <td style={{ textAlign: 'center', color: '#9CA3AF' }}>{d.sistema != null ? d.sistema : '—'}</td>
-                            <td style={{ textAlign: 'center' }}>{d.contado != null ? d.contado : '—'}</td>
-                            <td style={{ textAlign: 'center', fontWeight: 700, color: dif < 0 ? '#B91C1C' : '#B45309' }}>{dif > 0 ? '+' : ''}{dif}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <summary style={{ cursor: 'pointer', fontSize: 13 }}><b>{f}</b> · {c.usuario || '—'} · <span style={{ color: '#B45309' }}>+{rr.mas || 0}</span> / <span style={{ color: '#B91C1C' }}>−{rr.menos || 0}</span> · {difs.length} con diferencia · {nombres.length} producto(s)</summary>
+
+              <div style={{ marginTop: 8, fontSize: 12.5, color: '#374151', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 10px' }}>
+                🧾 <b>Se contaron {nombres.length} producto(s)</b>{nombres.length ? <>: {nombres.join(', ')}</> : null}
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 4 }}>Líneas con diferencia</div>
+                {difs.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: '#166534', background: '#F0FDF4', border: '1px solid #16A34A', borderRadius: 8, padding: '8px 10px' }}>✅ Todo coincidió con el sistema, sin diferencias.</div>
+                ) : (
+                  <div style={{ overflow: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead><tr style={{ color: '#9CA3AF', textAlign: 'left' }}><th style={{ padding: '4px 6px' }}>Producto · Talle</th><th style={{ textAlign: 'center' }}>Sist.</th><th style={{ textAlign: 'center' }}>Total</th><th style={{ textAlign: 'center' }}>Dif</th></tr></thead>
+                      <tbody>
+                        {difs.map((d, j) => {
+                          const dif = Number(d.diferencia || 0)
+                          return (
+                            <tr key={j} style={{ borderTop: '1px solid #F3F4F6' }}>
+                              <td style={{ padding: '4px 6px' }}>{String(d.producto || '')} · {String(d.variante || '')}</td>
+                              <td style={{ textAlign: 'center', color: '#9CA3AF' }}>{d.sistema != null ? d.sistema : '—'}</td>
+                              <td style={{ textAlign: 'center' }}>{d.contado != null ? d.contado : '—'}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700, color: dif < 0 ? '#B91C1C' : '#B45309' }}>{dif > 0 ? '+' : ''}{dif}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {hayBalance ? (
+                <details style={{ marginTop: 8 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 12, color: '#2563EB' }}>Ver todo lo contado ({det.length} talle{det.length === 1 ? '' : 's'})</summary>
+                  <div style={{ overflow: 'auto', marginTop: 6 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead><tr style={{ color: '#9CA3AF', textAlign: 'left' }}><th style={{ padding: '4px 6px' }}>Producto · Talle</th><th style={{ textAlign: 'center' }}>Sist.</th><th style={{ textAlign: 'center' }}>Total</th><th style={{ textAlign: 'center' }}>Dif</th></tr></thead>
+                      <tbody>
+                        {det.map((d, j) => {
+                          const dif = Number(d.diferencia || 0)
+                          return (
+                            <tr key={j} style={{ borderTop: '1px solid #F3F4F6' }}>
+                              <td style={{ padding: '4px 6px' }}>{String(d.producto || '')} · {String(d.variante || '')}</td>
+                              <td style={{ textAlign: 'center', color: '#9CA3AF' }}>{d.sistema != null ? d.sistema : '—'}</td>
+                              <td style={{ textAlign: 'center' }}>{d.contado != null ? d.contado : '—'}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700, color: dif < 0 ? '#B91C1C' : dif > 0 ? '#B45309' : '#9CA3AF' }}>{dif > 0 ? '+' : ''}{dif}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ) : difs.length > 0 ? (
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>Este conteo es anterior a la mejora: solo guardó las diferencias, no el balance completo.</div>
+              ) : null}
             </details>
           )
         })}

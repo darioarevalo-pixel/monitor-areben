@@ -34,10 +34,31 @@ export type CeState = Record<string, CeEstadoProd>
 /** Fila del ajuste: la del depósito + el desglose exhibido/depósito (para el historial). */
 export type CeFilaAjuste = FilaAjuste & { exhibido: number; deposito: number }
 
+/**
+ * Una línea del REGISTRO del conteo (todo lo contado, no solo las diferencias).
+ * Mismas claves que produce `detalleHistorial`, así el historial renderiza igual
+ * las filas nuevas (balance completo) y las viejas (solo diferencias).
+ */
+export type CeDetalleConteo = {
+  inventory_id: number | string | null
+  barcode: string
+  producto: string
+  variante: string
+  sistema: number | null
+  exhibido: number
+  deposito: number
+  contado: number | null
+  diferencia: number
+  vivo_aplicado: number | null
+  nuevo_stock: number | null
+}
+
 export type CeResumen = ResumenAjuste & { modo: 'estandar'; linea: Linea }
 
 export type CePreview = {
   rows: CeFilaAjuste[]
+  /** Todo lo contado (incluye talles sin diferencia y en 0). Se guarda como `detalle`. */
+  registro: CeDetalleConteo[]
   resumen: CeResumen
   missing: { prod: string; size: string }[]
   ubicacion: string

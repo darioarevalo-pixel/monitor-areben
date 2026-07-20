@@ -43,6 +43,8 @@ export type EstadoConteoEst = {
   aplicar: (next: CeState) => void
   setInicio: (v: number | null) => void
   reset: () => void
+  /** Relee el historial y recomputa las fechas de último conteo (tras guardar). */
+  refrescarUltimos: () => Promise<void>
 }
 
 export function useConteoEstandar(marca: Marca, linea: Linea): EstadoConteoEst {
@@ -101,11 +103,23 @@ export function useConteoEstandar(marca: Marca, linea: Linea): EstadoConteoEst {
     })()
   }, [traerStock])
 
-  // Fechas del último conteo de ESTA línea (async).
+  // Fechas del último conteo de ESTA línea. Se recalcula al montar/cambiar de
+  // línea y también a mano tras guardar un conteo (para que la fecha aparezca sin
+  // recargar la página).
+  const refrescarUltimos = useCallback(async () => {
+    if (!products.length) return
+    try {
+      const conteos = await leerHistorial(marca)
+      setLastCount(ultimosPorProducto(conteos, products, linea))
+    } catch {
+      /* si falla, no muestra fechas */
+    }
+  }, [products, marca, linea])
+
   useEffect(() => {
     if (!products.length) return
     let vivo = true
-    ;(async () => {
+    void (async () => {
       try {
         const conteos = await leerHistorial(marca)
         if (vivo) setLastCount(ultimosPorProducto(conteos, products, linea))
@@ -125,5 +139,5 @@ export function useConteoEstandar(marca: Marca, linea: Linea): EstadoConteoEst {
     setStockTime(null)
   }, [])
 
-  return { products, byBc, state, inicio, stockTime, lastCount, cargando, error, traerStock, aplicar, setInicio, reset }
+  return { products, byBc, state, inicio, stockTime, lastCount, cargando, error, traerStock, aplicar, setInicio, reset, refrescarUltimos }
 }
