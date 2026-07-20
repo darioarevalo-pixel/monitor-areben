@@ -40,6 +40,8 @@ export type EstadoConteoDep = {
   aplicar: (next: CdepState) => void
   setInicio: (v: number | null) => void
   reset: () => void
+  /** Relee el historial y recomputa las fechas de último conteo (tras guardar). */
+  refrescarUltimos: () => Promise<void>
 }
 
 export function useConteoDeposito(marca: Marca): EstadoConteoDep {
@@ -99,6 +101,18 @@ export function useConteoDeposito(marca: Marca): EstadoConteoDep {
     })()
   }, [traerStock])
 
+  // Relee el historial y recomputa las fechas de último conteo. Se llama a mano
+  // tras guardar un conteo (para que la fecha aparezca sin recargar la página).
+  const refrescarUltimos = useCallback(async () => {
+    if (!products.length) return
+    try {
+      const conteos = await leerHistorial(marca)
+      setLastCount(ultimosPorProducto(conteos, products))
+    } catch {
+      /* si falla, la lista no muestra fechas */
+    }
+  }, [products, marca])
+
   // Cuando hay productos, traer las fechas del último conteo (async, no bloquea).
   useEffect(() => {
     if (!products.length) return
@@ -123,5 +137,5 @@ export function useConteoDeposito(marca: Marca): EstadoConteoDep {
     setStockTime(null)
   }, [])
 
-  return { products, state, inicio, stockTime, lastCount, cargando, error, feedStore, traerStock, aplicar, setInicio, reset }
+  return { products, state, inicio, stockTime, lastCount, cargando, error, feedStore, traerStock, aplicar, setInicio, reset, refrescarUltimos }
 }

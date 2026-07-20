@@ -11,6 +11,7 @@
 
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type {
+  CdepDetalleConteo,
   CdepProducto,
   CdepState,
   ConteoHistorial,
@@ -160,7 +161,7 @@ export function calcularAjuste(
     hora_stock: horaStock ? new Date(horaStock).toISOString() : null,
     productos,
   }
-  return { rows, resumen, missing, ubicacion, store }
+  return { rows, registro: registroConteo(terminados, state, vivo), resumen, missing, ubicacion, store }
 }
 
 /** El header EXACTO de GN. No tocar: es lo que espera "Importar y Ajustar". */
@@ -186,6 +187,37 @@ export function detalleHistorial(rows: FilaAjuste[]): Array<Record<string, unkno
     vivo_aplicado: r.vivo,
     nuevo_stock: r.nuevo,
   }))
+}
+
+/**
+ * Registro COMPLETO del conteo: TODAS las variantes de TODOS los terminados,
+ * incluidas las que coinciden con el sistema (diferencia 0) y las que quedaron en
+ * 0. Es lo que se guarda como `detalle` del historial, para mostrar el balance y
+ * para que los productos sin diferencia también reciban fecha de último conteo. El
+ * ajuste/Excel siguen usando solo `rows` (las diferencias).
+ */
+export function registroConteo(terminados: CdepProducto[], state: CdepState, vivo: Record<string, FilaVivo>): CdepDetalleConteo[] {
+  const out: CdepDetalleConteo[] = []
+  terminados.forEach((p) => {
+    const st = state[String(p.pid)]
+    p.variants.forEach((v) => {
+      const live = vivo[v.vid]
+      const vivoQty = live ? Number(live.available_quantity) || 0 : null
+      const dif = st?.dif ? st.dif[v.vid] || 0 : 0
+      out.push({
+        inventory_id: (live && live.inventory_id != null ? live.inventory_id : v.inventory_id) ?? null,
+        barcode: (live && live.barcode) || v.barcode || '',
+        producto: p.name,
+        variante: v.size,
+        sistema: st?.snap && st.snap[v.vid] != null ? st.snap[v.vid] : v.esperado,
+        contado: st?.contado && st.contado[v.vid] != null ? st.contado[v.vid] : null,
+        diferencia: dif,
+        vivo_aplicado: vivoQty,
+        nuevo_stock: vivoQty != null ? vivoQty + dif : null,
+      })
+    })
+  })
+  return out
 }
 
 /**

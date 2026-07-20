@@ -54,8 +54,27 @@ export type ResumenAjuste = {
   productos: { pid: string; nombre: string }[]
 }
 
+/**
+ * Una línea del REGISTRO del conteo (todo lo contado, no solo las diferencias).
+ * Mismas claves que produce `detalleHistorial`, para que el historial renderice
+ * igual las filas nuevas (balance completo) y las viejas (solo diferencias).
+ */
+export type CdepDetalleConteo = {
+  inventory_id: number | string | null
+  barcode: string
+  producto: string
+  variante: string
+  sistema: number | null
+  contado: number | null
+  diferencia: number
+  vivo_aplicado: number | null
+  nuevo_stock: number | null
+}
+
 export type Preview = {
   rows: FilaAjuste[]
+  /** Todo lo contado (incluye variantes sin diferencia y en 0). Se guarda como `detalle`. */
+  registro: CdepDetalleConteo[]
   resumen: ResumenAjuste
   /** Variantes con diferencia que NO se ajustan (stock no confiable). */
   missing: { prod: string; size: string }[]

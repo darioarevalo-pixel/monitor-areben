@@ -137,6 +137,16 @@ describe('calcularAjuste · nuevo = vivo + dif + candado de seguridad', () => {
     expect(pv.rows).toHaveLength(0)
     expect(pv.missing.length).toBeGreaterThan(0)
   })
+
+  it('registro guarda TODAS las variantes contadas (incluida la que coincide), no solo las diferencias', () => {
+    const pv = calcularAjuste([prod], state, vivo, 'Deposito Minorista', 'bdi', 1_700_000_000_000)
+    expect(pv.rows).toHaveLength(1) // el ajuste: solo la diferencia con stock confiable
+    expect(pv.registro).toHaveLength(3) // el registro: todo lo contado
+    const b = pv.registro.find((r) => r.variante === 'B')! // coincidió con el sistema (dif 0)
+    expect(b).toMatchObject({ producto: 'Cover', variante: 'B', diferencia: 0, sistema: 3, contado: 3, vivo_aplicado: null, nuevo_stock: null })
+    const a = pv.registro.find((r) => r.variante === 'A')!
+    expect(a).toMatchObject({ diferencia: 3, contado: 8, sistema: 5, vivo_aplicado: 6, nuevo_stock: 9, inventory_id: 500 })
+  })
 })
 
 describe('aoaAjuste · Excel byte-fiel', () => {
@@ -168,5 +178,16 @@ describe('ultimosPorProducto', () => {
     expect(map['10']).toBe(new Date('2026-07-15T10:00:00Z').getTime())
     expect(map['11']).toBe(new Date('2026-07-10T10:00:00Z').getTime()) // por nombre
     expect(map['12']).toBeUndefined()
+  })
+
+  it('asigna fecha aunque el producto NO tenga diferencia, vía el detalle-por-nombre (fix del balance)', () => {
+    // El registro nuevo mete en el detalle también las variantes que coinciden
+    // (diferencia 0). Antes solo entraban por resumen.productos.
+    const products: CdepProducto[] = [{ pid: '10', name: 'Cover', variants: [] }]
+    const conteos = [
+      { fecha_aplicado: '2026-07-12T10:00:00Z', resumen: { lineas: 0 }, detalle: [{ producto: 'Cover', variante: 'A', diferencia: 0 }] },
+    ]
+    const map = ultimosPorProducto(conteos, products)
+    expect(map['10']).toBe(new Date('2026-07-12T10:00:00Z').getTime())
   })
 })
