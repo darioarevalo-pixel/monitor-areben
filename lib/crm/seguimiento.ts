@@ -59,6 +59,9 @@ export const setPagina = (crmSeg: MapaSeguimiento, id: number | string, value: s
 export const setDescartado = (crmSeg: MapaSeguimiento, id: number | string, value: boolean) =>
   conPatch(crmSeg, id, { descartado: !!value })
 
+export const setDifusion = (crmSeg: MapaSeguimiento, id: number | string, value: boolean) =>
+  conPatch(crmSeg, id, { en_difusion: !!value })
+
 /** "Hablé hoy": registra contacto y deja que el próximo lo recalcule la cadencia. */
 export const hableHoy = (crmSeg: MapaSeguimiento, id: number | string, today?: Date) =>
   conPatch(crmSeg, id, { ultimo_contacto: hoyISO(today), proximo_manual: null })

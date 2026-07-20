@@ -109,6 +109,7 @@ function cli(over: Partial<ClienteCRM>): ClienteCRM {
     first_sale: null, last_sale: null, dias_ultimo: 5, dias_primero: 200,
     total_sales: 5, total_amount: 0, avg_ticket: 0, ventas: [],
     cadencia: '', ultimo_contacto: null, proximo_contacto: null, seg_estado: 'none', dias_proximo: null, notas: [],
+    en_difusion: false,
     ...over,
   }
 }

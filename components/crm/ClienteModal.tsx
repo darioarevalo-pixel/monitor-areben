@@ -9,6 +9,7 @@ import {
   hoyISO,
   setCadencia,
   setDescartado,
+  setDifusion,
   setMayorista,
   setPagina,
   setProximoManual,
@@ -127,6 +128,11 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#7C3AED' }}>
             <input type="checkbox" checked={!!seg.es_mayorista} onChange={(e) => mutar((s) => setMayorista(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: '#7C3AED' }} />
             ⭐ Cliente mayorista <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 11 }}>(aparece en el CRM Mayorista aunque compre por otro canal)</span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#15803D' }}>
+            <input type="checkbox" checked={!!seg.en_difusion} onChange={(e) => mutar((s) => setDifusion(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: '#16A34A' }} />
+            📢 En el canal de difusión <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 11 }}>(para que reciba los ingresos y novedades por WhatsApp)</span>
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#6B7280' }}>

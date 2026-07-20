@@ -11,7 +11,7 @@ import {
   parsearTelefonos,
   planSugerirCadencias,
   setDescartado,
-  setMayorista,
+  setDifusion,
   setPagina,
 } from '@/lib/crm/seguimiento'
 import type { ClienteCRM, MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
@@ -36,6 +36,7 @@ const SEGMENTOS = [
   { v: 'riesgo', t: '⚠️ En riesgo' },
   { v: 'dormidos', t: '🥶 Dormidos (90+ días)' },
   { v: 'nuevos', t: '🆕 Nuevos' },
+  { v: 'sin-difusion', t: '📢 Sin difusión' },
   { v: 'sin-tel', t: '📵 Sin teléfono (cargar)' },
 ]
 
@@ -78,14 +79,15 @@ type FilaProps = {
   seg: Seguimiento
   verDescartados: boolean
   onAbrir: (id: number) => void
-  onMayorista: (id: number, val: boolean) => void
+  onDifusion: (id: number, val: boolean) => void
   onDescartado: (id: number, val: boolean) => void
   onPagina: (id: number, val: string) => void
 }
 
-function Fila({ c, seg, verDescartados, onAbrir, onMayorista, onDescartado, onPagina }: FilaProps) {
+function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina }: FilaProps) {
   const segm = segmentoCliente(c)
   const esMayorista = !!seg.es_mayorista
+  const enDifusion = !!seg.en_difusion
   const waPhone = normalizeArgPhone(c.phone)
   const ciudad = [c.city, c.province].filter(Boolean).join(', ')
   const ult = c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`
@@ -137,18 +139,24 @@ function Fila({ c, seg, verDescartados, onAbrir, onMayorista, onDescartado, onPa
           <span style={{ color: '#9CA3AF' }}>—</span>
         )}
       </td>
+      <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+        <button
+          onClick={() => onDifusion(c.id, !enDifusion)}
+          title={enDifusion ? 'Está en el canal de difusión — tocá para sacarlo' : 'Todavía no está en el canal — tocá cuando ya lo hayas agregado'}
+          style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? '1px solid #16A34A' : '1px dashed #D1D5DB', background: enDifusion ? '#DCFCE7' : 'transparent', color: enDifusion ? '#15803D' : '#9CA3AF' }}
+        >
+          {enDifusion ? '📢 Sí' : '＋ Sumar'}
+        </button>
+      </td>
       <td>
         <span style={{ fontSize: 11, fontWeight: 600, color: SEG_COLOR[segm] }}>{SEG_LABEL[segm]}</span>
       </td>
       <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-        <button onClick={() => onMayorista(c.id, !esMayorista)} title={esMayorista ? 'Quitar de mayoristas' : 'Marcar como cliente mayorista'} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 17, lineHeight: 1, verticalAlign: 'middle', color: esMayorista ? '#F59E0B' : '#D1D5DB' }}>★</button>
         {waPhone && (
           <a href={`https://web.whatsapp.com/send?phone=${waPhone}`} target="_blank" rel="noopener" className="btn-sm" title="Abrir WhatsApp" style={{ textDecoration: 'none', color: '#16A34A' }}>💬</a>
         )}
-        {verDescartados ? (
+        {verDescartados && (
           <button onClick={() => onDescartado(c.id, false)} title="Reactivar — vuelve al CRM" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, lineHeight: 1, verticalAlign: 'middle' }}>↩️</button>
-        ) : (
-          <button onClick={() => onDescartado(c.id, true)} title="Ya no se dedica — sacar del CRM (reversible)" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, verticalAlign: 'middle', color: '#D1D5DB' }}>🚫</button>
         )}
       </td>
     </tr>
@@ -167,6 +175,9 @@ export function CRM() {
   const { cargando, error, agregado, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
+  // Los que compraron pero todavía no están en el canal de difusión. Se cuenta
+  // acá (no en contarKpis) para no tocar la paridad de KPIs contra el legacy.
+  const sinDifusion = useMemo(() => agregado.activos.filter((c) => !c.en_difusion).length, [agregado])
   const lista = useMemo(
     () => filtrarOrdenar(verDescartados ? agregado.descartados : agregado.activos, { q: q.trim().toLowerCase(), seg: verDescartados ? 'todos' : seg, sort }),
     [agregado, q, seg, sort, verDescartados],
@@ -176,11 +187,7 @@ export function CRM() {
 
   // Cada edición: transformación pura → persiste el mapa entero (gateado por cargado).
   const mutar = (fn: (s: MapaSeguimiento) => MapaSeguimiento) => guardarSeg(fn(crmSeg))
-  const onMayorista = async (id: number, val: boolean) => {
-    await guardarSeg(setMayorista(crmSeg, id, val))
-    // En vista Mayorista, marcar/desmarcar cambia qué ventas hay que tener: refetch.
-    if (modo === '10') recargar()
-  }
+  const onDifusion = (id: number, val: boolean) => mutar((s) => setDifusion(s, id, val))
   const onDescartado = (id: number, val: boolean) => mutar((s) => setDescartado(s, id, val))
   const onPagina = (id: number, val: string) => mutar((s) => setPagina(s, id, val))
 
@@ -221,6 +228,7 @@ export function CRM() {
     { key: 'riesgo', label: '⚠️ En riesgo', n: kpis.riesgo },
     { key: 'dormidos', label: '🥶 Dormidos', n: kpis.dormidos },
     { key: 'nuevos', label: '🆕 Nuevos', n: kpis.nuevos },
+    { key: 'sin-difusion', label: '📢 Sin difusión', n: sinDifusion },
     { key: 'sin-tel', label: '📵 Sin teléfono', n: kpis.sinTel },
   ]
 
@@ -306,18 +314,19 @@ export function CRM() {
                     <th onClick={() => ordenarPor('last_sale')} style={{ textAlign: 'right' }}>Último pedido ↕</th>
                     <th onClick={() => ordenarPor('proximo')}>Próximo contacto ↕</th>
                     <th>Última nota</th>
+                    <th style={{ textAlign: 'center' }}>📢 Difusión</th>
                     <th>Segmento</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
                   {cargando ? (
-                    <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Cargando…</td></tr>
+                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Cargando…</td></tr>
                   ) : !lista.length ? (
-                    <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Sin clientes para este filtro</td></tr>
+                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Sin clientes para este filtro</td></tr>
                   ) : (
                     lista.map((c) => (
-                      <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onMayorista={onMayorista} onDescartado={onDescartado} onPagina={onPagina} />
+                      <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} />
                     ))
                   )}
                 </tbody>

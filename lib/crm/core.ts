@@ -187,6 +187,7 @@ export function calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, tod
       seg_estado: seg.estado,
       dias_proximo: seg.dias,
       notas: seg.notas,
+      en_difusion: !!(crmSeg[String(e.id)] && crmSeg[String(e.id)].en_difusion),
     })
   }
 
@@ -241,6 +242,9 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTa
     out = out.slice(0, TOP_LIMIT)
   } else if (seg === 'sin-tel') {
     out = out.filter((c) => !normalizeArgPhone(c.phone))
+  } else if (seg === 'sin-difusion') {
+    // Clientes que compraron pero todavía no están en el canal de difusión.
+    out = out.filter((c) => !c.en_difusion)
   } else if (seg === 'contactar') {
     // Vencidos + pendientes + los de esta semana. Más urgentes primero.
     out = out.filter((c) => c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana')

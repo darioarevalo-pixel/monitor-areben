@@ -55,6 +55,9 @@ export type Seguimiento = {
   notas?: Nota[]
   es_mayorista?: boolean
   descartado?: boolean
+  /** Está en el canal de difusión de WhatsApp. Marca manual (WhatsApp no expone
+   *  la membresía del canal); sirve para ver a quién le falta sumarse. */
+  en_difusion?: boolean
   /** Instagram / página del cliente (crmSetPagina, index.html:13493). */
   pagina?: string
 }
@@ -102,6 +105,8 @@ export type ClienteCRM = {
   seg_estado: EstadoSeg
   dias_proximo: number | null
   notas: Nota[]
+  /** Del seguimiento: si está en el canal de difusión de WhatsApp. */
+  en_difusion: boolean
 }
 
 /**
