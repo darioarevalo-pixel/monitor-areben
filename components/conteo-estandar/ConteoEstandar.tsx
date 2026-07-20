@@ -104,11 +104,19 @@ export function ConteoEstandar() {
       vibrate(false)
       return
     }
+    const yaEscaneado = (state[pid]?.exhibido?.[vid] || 0) > 0
     const next = escanear(state, prod, vid)
     ce.aplicar(next)
     if (!inicio) ce.setInicio(Date.now())
     const v = prod.variants.find((x) => x.vid === vid)
-    setFeedback({ tipo: 'ok', texto: prod.name, size: v?.size, count: next[pid].exhibido[vid] })
+    const count = next[pid].exhibido[vid]
+    if (yaEscaneado) {
+      // Re-escaneo de un talle ya contado: puede ser una 2ª unidad real o un doble
+      // escaneo por error. Se suma igual, pero avisa para que se note.
+      setFeedback({ tipo: 'warn', texto: `Ojo: ${prod.name}${v?.size ? ' · ' + v.size : ''} ya estaba escaneado — ahora van ${count}. Si es otra unidad, todo bien.`, size: v?.size, count })
+    } else {
+      setFeedback({ tipo: 'ok', texto: prod.name, size: v?.size, count })
+    }
     beep(true)
     vibrate(true)
     scanRef.current?.focus()
