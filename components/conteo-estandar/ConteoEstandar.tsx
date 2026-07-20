@@ -341,6 +341,16 @@ function Lista({ products, state, lastCount, linea, stockTime, search, setSearch
   return (
     <div>
       <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>Línea: <b>{lineaLabel(linea)}</b>. El escaneo solo suma dentro de esta línea. El <b>Depósito local</b> lo cargás a mano abriendo cada producto.</div>
+      <details style={{ marginBottom: 10, border: '1px solid #BAE6FD', background: '#F0F9FF', borderRadius: 8, padding: '8px 12px' }}>
+        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#075985' }}>❓ ¿Cómo cierro un conteo? (para que quede guardado y con fecha)</summary>
+        <ol style={{ margin: '8px 0 2px', paddingLeft: 20, fontSize: 12.5, color: '#0C4A6E', lineHeight: 1.7 }}>
+          <li>Hacé todo el conteo en <b>la misma compu y la misma pestaña</b>, de principio a fin (no cambies de aparato).</li>
+          <li>Por cada producto: escaneá lo <b>exhibido</b> y cargá el <b>depósito</b> a mano.</li>
+          <li>Apretá <b>✓ Terminar producto</b> en cada uno. <b>Si no lo terminás, ese producto no se guarda ni recibe fecha.</b></li>
+          <li>Cuando terminaste todos, apretá <b>✔️ Aplicar ajuste</b>.</li>
+          <li>En la revisión, apretá <b>📥 Generar Excel y guardar</b> (o <b>✅ Guardar el conteo igual</b> si no hubo diferencias). <b>Si salís con Volver o Cancelar, no se guarda nada.</b></li>
+        </ol>
+      </details>
       <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔎 Buscá un producto…" autoComplete="off" style={{ width: '100%', padding: '9px 12px', border: '1px solid #D1D5DB', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', marginBottom: 10 }} />
       {stockTime && <div style={{ fontSize: 12.5, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>📸 <b>Stock del Local traído: {stockLabel(stockTime)}</b> — arrancá con los pedidos al día. Si volvés a &quot;Traer stock de GN&quot;, esta hora se actualiza.</div>}
       <div style={{ fontSize: 13, marginBottom: 8, color: '#374151' }}><b>{dela.length}</b> productos · <b style={{ color: '#166534' }}>{term}</b> terminados · <b style={{ color: '#B45309' }}>{prog}</b> en progreso</div>
