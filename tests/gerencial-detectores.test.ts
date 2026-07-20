@@ -2,9 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { detectarComercial } from '@/lib/gerencial/detectores/comercial'
 import { detectarOperativo } from '@/lib/gerencial/detectores/operativo'
 import { detectarImportaciones } from '@/lib/gerencial/detectores/importaciones'
+import { detectarPrecios } from '@/lib/gerencial/detectores/precios'
+import { detectarCaducados } from '@/lib/gerencial/detectores/caducados'
+import { detectarAds, type CuentaAds } from '@/lib/gerencial/detectores/ads'
 import { ordenar, type Accionable } from '@/lib/gerencial/tipos'
 import { UMBRALES } from '@/lib/gerencial/umbrales'
 import type { DatosETL, Fase, Producto, SyncMeta } from '@/lib/etl/tipos'
+import type { FilaMargen } from '@/lib/margenes'
+import type { Metricas } from '@/lib/meta-ads/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import type { Ingreso } from '@/lib/ingresos/tipos'
@@ -109,6 +114,65 @@ describe('detectarImportaciones', () => {
     expect(out.find((a) => a.id === 'importaciones:proxima:bdi:prox')?.severidad).toBe('oportunidad')
     expect(out.some((a) => a.id.includes('lejos'))).toBe(false)
     expect(out.some((a) => a.id.includes('lleg'))).toBe(false)
+  })
+})
+
+describe('detectarPrecios', () => {
+  const fila = (name: string, desfase: number): FilaMargen =>
+    ({ p: prod({ name }), foto: null, precio: 100, esPromo: false, markup: 130 + desfase, margin: 0, desfase })
+
+  it('subprecio (desfase < -umbral) → atención; sobreprecio (> +umbral) → oportunidad', () => {
+    const out = detectarPrecios('bdi', [
+      fila('Barato', -30),   // subprecio
+      fila('Ok', 5),         // en objetivo
+      fila('Caro', 60),      // sobreprecio
+    ], UMBRALES)
+    expect(out.find((a) => a.id === 'comercial:precio-bajo:bdi')?.valor).toBe(1)
+    expect(out.find((a) => a.id === 'comercial:precio-bajo:bdi')?.severidad).toBe('atencion')
+    expect(out.find((a) => a.id === 'comercial:precio-alto:bdi')?.valor).toBe(1)
+    expect(out.find((a) => a.id === 'comercial:precio-alto:bdi')?.severidad).toBe('oportunidad')
+  })
+
+  it('todo en objetivo → sin accionables', () => {
+    expect(detectarPrecios('bdi', [fila('A', 0), fila('B', -10), fila('C', 10)], UMBRALES)).toEqual([])
+  })
+})
+
+describe('detectarCaducados', () => {
+  it('sin stock + con última venta más vieja que el corte → candidato; nunca vendido → no', () => {
+    const out = detectarCaducados('zattia', [
+      prod({ id: 'a', name: 'A', stock: 0, lastSale: '2026-01-01', daysSinceLast: 200 }), // candidato
+      prod({ id: 'b', name: 'B', stock: 3, lastSale: '2026-01-01', daysSinceLast: 200 }), // tiene stock → no
+      prod({ id: 'c', name: 'C', stock: 0, lastSale: null, daysSinceLast: 999 }),          // nunca vendió → no
+      prod({ id: 'd', name: 'D', stock: 0, lastSale: '2026-07-15', daysSinceLast: 5 }),    // vendió reciente → no
+    ], UMBRALES)
+    expect(out).toHaveLength(1)
+    expect(out[0].valor).toBe(1)
+    expect(out[0].area).toBe('stock')
+  })
+})
+
+describe('detectarAds', () => {
+  const met = (over: Partial<Metricas>): Metricas =>
+    ({ spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0, purchases: 0, revenue: 0, roas: 0, ...over })
+  const cuenta = (nombre: string, totales: Partial<Metricas>): CuentaAds =>
+    ({ id: nombre, nombre, moneda: 'ARS', totales: met(totales) })
+
+  it('gasto sin compras → crítico; ROAS bajo con compras → atención; ROAS bueno → nada', () => {
+    const out = detectarAds([
+      cuenta('BDI', { spend: 50000, purchases: 0 }),                        // sin compras
+      cuenta('Zattia', { spend: 50000, purchases: 10, revenue: 60000, roas: 1.2 }), // ROAS bajo
+      cuenta('Stunned', { spend: 50000, purchases: 20, revenue: 300000, roas: 6 }), // ROAS bueno
+    ], UMBRALES)
+    expect(out.find((a) => a.id === 'ads:sin-compras:BDI')?.severidad).toBe('critico')
+    expect(out.find((a) => a.id === 'ads:sin-compras:BDI')?.marca).toBe('bdi')
+    expect(out.find((a) => a.id === 'ads:roas-bajo:Zattia')?.severidad).toBe('atencion')
+    expect(out.find((a) => a.id === 'ads:roas-bajo:Zattia')?.marca).toBe('zattia')
+    expect(out.some((a) => a.id.includes('Stunned'))).toBe(false)
+  })
+
+  it('gasto por debajo del mínimo no dispara señal', () => {
+    expect(detectarAds([cuenta('BDI', { spend: 100, purchases: 0 })], UMBRALES)).toEqual([])
   })
 })
 

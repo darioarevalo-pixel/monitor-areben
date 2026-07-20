@@ -9,9 +9,9 @@ import type { Marca } from '@/lib/nav.generated'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import { pendientesDeMarca } from '@/lib/inicio/core'
-import { contarPendientes } from '@/lib/solicitudes-internas/core'
+import { pendientes, unidades } from '@/lib/solicitudes-internas/core'
 import { estadoSync } from '@/lib/resumen'
-import type { Accionable } from '../tipos'
+import type { Accionable, ConsumoPendiente } from '../tipos'
 import type { Umbrales } from '../umbrales'
 
 export function detectarOperativo(
@@ -41,18 +41,25 @@ export function detectarOperativo(
   }
 
   // 2. Consumos internos esperando aprobación (no descuentan stock hasta aprobarse).
-  const nAprob = contarPendientes(internas)
-  if (nAprob) {
+  const pend = pendientes(internas)
+  if (pend.length) {
+    const consumos: ConsumoPendiente[] = pend.map((s) => ({
+      marca,
+      id: s.id,
+      texto: `${s.motivo || 'Consumo'}${s.descripcion ? ' — ' + s.descripcion : ''}`,
+      sub: `${unidades(s)} u. · pidió ${s.creadoPor || '—'}`,
+    }))
     out.push({
       id: `operativo:aprobaciones:${marca}`,
       area: 'operativo',
       severidad: 'atencion',
       marca,
-      titulo: `${nAprob} consumo(s) interno(s) para aprobar`,
+      titulo: `${pend.length} consumo(s) interno(s) para aprobar`,
       detalle: 'Retiros de uso interno frenados hasta la aprobación de un responsable.',
       recomendacion: 'Aprobar o rechazar para destrabar el retiro.',
-      valor: nAprob,
+      valor: pend.length,
       acciones: [{ tipo: 'link', seccion: 'solicitudes-internas', label: 'Ir a Solicitudes internas' }],
+      consumos,
     })
   }
 

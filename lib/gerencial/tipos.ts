@@ -14,11 +14,17 @@ import type { Marca } from '@/lib/nav.generated'
 export type Severidad = 'critico' | 'atencion' | 'oportunidad'
 export type Area = 'stock' | 'comercial' | 'operativo' | 'ads' | 'importaciones'
 
-/** Fase 1: solo `link` (navegar a la sección). Fase 2 sumará `{ tipo: 'ejecutar' }`. */
+/** Navegar a la sección donde se ejecuta la decisión. */
 export type Accion = { tipo: 'link'; seccion: string; label: string }
 
+/**
+ * Un consumo interno pendiente de aprobación, colgado del accionable para aprobar/
+ * rechazar in-place (fase 2). El detector lo llena; la tarjeta lo renderiza expandible.
+ */
+export type ConsumoPendiente = { marca: Marca; id: string; texto: string; sub: string }
+
 export type Accionable = {
-  /** Estable (area+marca+entidad) para deduplicar y, más adelante, silenciar (snooze). */
+  /** Estable (area+marca+entidad) para deduplicar y silenciar (snooze). */
   id: string
   area: Area
   severidad: Severidad
@@ -32,6 +38,8 @@ export type Accionable = {
   /** Magnitud (unidades, $, días) para ordenar dentro de una misma severidad. */
   valor?: number
   acciones: Accion[]
+  /** Solo la tarjeta de aprobaciones: los consumos que se pueden accionar in-place. */
+  consumos?: ConsumoPendiente[]
 }
 
 export const SEVERIDADES: Severidad[] = ['critico', 'atencion', 'oportunidad']

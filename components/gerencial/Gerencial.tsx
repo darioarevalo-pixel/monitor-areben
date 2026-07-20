@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { esAdmin, puedeSub } from '@/lib/permisos'
+import { aprobarConsumo, rechazarConsumo } from '@/lib/gerencial/acciones'
+import { DIAS_SNOOZE, idsSilenciados, reactivar, silenciar } from '@/lib/gerencial/snooze'
 import { useGerencial } from './useGerencial'
 import {
   ETIQUETA_AREA,
@@ -12,14 +15,16 @@ import {
   type Accion,
   type Accionable,
   type Area,
+  type ConsumoPendiente,
   type Severidad,
 } from '@/lib/gerencial/tipos'
 import type { Marca } from '@/lib/nav.generated'
 
 /**
  * Panel Gerencial (key `gerencial`): la vista de decisiones. Toma los accionables que
- * arman los detectores (multimarca) y los muestra ordenados por severidad, con la
- * recomendación y un botón que lleva a la sección donde se ejecuta. Read-only (fase 1).
+ * arman los detectores (multimarca + Ads global) y los muestra ordenados por severidad,
+ * con la recomendación y acciones: link a la sección, silenciar (baja el ruido), y —en la
+ * tarjeta de aprobaciones— aprobar/rechazar consumos in-place.
  */
 
 const COLOR_SEVERIDAD: Record<Severidad, { fondo: string; texto: string; punto: string }> = {
@@ -28,24 +33,42 @@ const COLOR_SEVERIDAD: Record<Severidad, { fondo: string; texto: string; punto: 
   oportunidad: { fondo: '#F0FDF4', texto: '#15803D', punto: '#22C55E' },
 }
 
-/** Orden de preferencia de las áreas en el filtro. */
-const AREAS: Area[] = ['comercial', 'operativo', 'importaciones', 'stock', 'ads']
+const AREAS: Area[] = ['comercial', 'ads', 'stock', 'operativo', 'importaciones']
+
+const hoyISO = () => new Date().toISOString().slice(0, 10)
 
 export function Gerencial() {
   const { accionables, cargando, errores, recargar } = useGerencial()
   const [fSev, setFSev] = useState<Severidad | 'todas'>('todas')
   const [fArea, setFArea] = useState<Area | 'todas'>('todas')
+  const [mostrarSil, setMostrarSil] = useState(false)
+  // Un contador para re-leer los silenciados de localStorage tras silenciar/reactivar.
+  const [snoozeNonce, setSnoozeNonce] = useState(0)
 
-  const visibles = useMemo(
-    () =>
-      accionables.filter(
-        (a) => (fSev === 'todas' || a.severidad === fSev) && (fArea === 'todas' || a.area === fArea),
-      ),
-    [accionables, fSev, fArea],
-  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- snoozeNonce fuerza re-leer localStorage
+  const silenciados = useMemo(() => idsSilenciados(), [snoozeNonce])
 
-  const conteoSev = (s: Severidad) => accionables.filter((a) => a.severidad === s).length
-  const areasPresentes = AREAS.filter((ar) => accionables.some((a) => a.area === ar))
+  const onSilenciar = (id: string) => {
+    silenciar(id)
+    setSnoozeNonce((n) => n + 1)
+  }
+  const onReactivar = (id: string) => {
+    reactivar(id)
+    setSnoozeNonce((n) => n + 1)
+  }
+
+  const activos = accionables.filter((a) => !silenciados.has(a.id))
+  const visibles = useMemo(() => {
+    const base = mostrarSil ? accionables.filter((a) => silenciados.has(a.id)) : activos
+    return base.filter(
+      (a) => (fSev === 'todas' || a.severidad === fSev) && (fArea === 'todas' || a.area === fArea),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accionables, silenciados, mostrarSil, fSev, fArea])
+
+  const conteoSev = (s: Severidad) => activos.filter((a) => a.severidad === s).length
+  const areasPresentes = AREAS.filter((ar) => activos.some((a) => a.area === ar))
+  const nSilenciados = accionables.length - activos.length
   const filtrando = fSev !== 'todas' || fArea !== 'todas'
 
   return (
@@ -63,9 +86,9 @@ export function Gerencial() {
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <InfoPopover titulo="Panel Gerencial">
-            Reúne, de todas tus marcas, lo que requiere una decisión: capital parado, productos en
-            declive, pendientes operativos e importaciones. Cada tarjeta te lleva a la sección donde se
-            ejecuta. Es de solo lectura.
+            Reúne, de todas tus marcas, lo que requiere una decisión: capital parado, precios fuera de
+            objetivo, stock a depurar, Ads con mal retorno, pendientes operativos e importaciones. Podés
+            silenciar lo que no aplica y aprobar consumos internos desde acá.
           </InfoPopover>
           <button
             className="btn-sm"
@@ -77,18 +100,31 @@ export function Gerencial() {
         </div>
       </div>
 
-      {/* Filtro por área */}
-      {areasPresentes.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 2px' }}>
-          <Chip label="Todas las áreas" activo={fArea === 'todas'} onClick={() => setFArea('todas')} />
-          {areasPresentes.map((ar) => (
-            <Chip
-              key={ar}
-              label={ETIQUETA_AREA[ar]}
-              activo={fArea === ar}
-              onClick={() => setFArea(fArea === ar ? 'todas' : ar)}
-            />
-          ))}
+      {/* Filtro por área + silenciados */}
+      {(areasPresentes.length > 1 || nSilenciados > 0) && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 2px', alignItems: 'center' }}>
+          {areasPresentes.length > 1 && (
+            <>
+              <Chip label="Todas las áreas" activo={fArea === 'todas'} onClick={() => setFArea('todas')} />
+              {areasPresentes.map((ar) => (
+                <Chip
+                  key={ar}
+                  label={ETIQUETA_AREA[ar]}
+                  activo={fArea === ar}
+                  onClick={() => setFArea(fArea === ar ? 'todas' : ar)}
+                />
+              ))}
+            </>
+          )}
+          {nSilenciados > 0 && (
+            <button
+              className="btn-sm"
+              onClick={() => setMostrarSil((v) => !v)}
+              style={{ marginLeft: 'auto', background: '#fff', border: '1px solid #D1D5DB', color: '#6B7280' }}
+            >
+              {mostrarSil ? '← Volver' : `🔕 ${nSilenciados} silenciado(s)`}
+            </button>
+          )}
         </div>
       )}
 
@@ -105,7 +141,11 @@ export function Gerencial() {
         <div className="card" style={{ color: '#9CA3AF' }}>Analizando el negocio…</div>
       ) : visibles.length === 0 ? (
         <div className="card" style={{ color: '#059669', fontSize: 14 }}>
-          ✅ {filtrando ? 'No hay accionables con estos filtros.' : 'No hay accionables pendientes. Todo en orden.'}
+          {mostrarSil
+            ? 'No hay accionables silenciados con estos filtros.'
+            : filtrando
+              ? '✅ No hay accionables con estos filtros.'
+              : '✅ No hay accionables pendientes. Todo en orden.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -113,7 +153,14 @@ export function Gerencial() {
             <div style={{ fontSize: 12, color: '#9CA3AF', padding: '0 2px' }}>Actualizando…</div>
           )}
           {visibles.map((a) => (
-            <CardAccionable key={a.id} a={a} />
+            <CardAccionable
+              key={a.id}
+              a={a}
+              silenciado={mostrarSil}
+              onSilenciar={() => onSilenciar(a.id)}
+              onReactivar={() => onReactivar(a.id)}
+              onCambio={recargar}
+            />
           ))}
         </div>
       )}
@@ -121,7 +168,19 @@ export function Gerencial() {
   )
 }
 
-function CardAccionable({ a }: { a: Accionable }) {
+function CardAccionable({
+  a,
+  silenciado,
+  onSilenciar,
+  onReactivar,
+  onCambio,
+}: {
+  a: Accionable
+  silenciado: boolean
+  onSilenciar: () => void
+  onReactivar: () => void
+  onCambio: () => void
+}) {
   const c = COLOR_SEVERIDAD[a.severidad]
   return (
     <div className="card" style={{ borderLeft: `4px solid ${c.punto}`, background: c.fondo }}>
@@ -151,11 +210,112 @@ function CardAccionable({ a }: { a: Accionable }) {
           <b>Qué hacer:</b> {a.recomendacion}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+
+      {a.consumos && a.consumos.length > 0 && <Aprobaciones consumos={a.consumos} onCambio={onCambio} />}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         {a.acciones.map((ac, i) => (
           <BotonAccion key={i} marca={a.marca} accion={ac} />
         ))}
+        {silenciado ? (
+          <button className="btn-sm" onClick={onReactivar} style={{ background: '#fff', border: '1px solid #D1D5DB', color: '#6B7280', marginLeft: 'auto' }}>
+            🔔 Reactivar
+          </button>
+        ) : (
+          <button
+            className="btn-sm"
+            onClick={onSilenciar}
+            title={`Ocultar por ${DIAS_SNOOZE} días`}
+            style={{ background: 'transparent', border: 'none', color: '#9CA3AF', marginLeft: 'auto' }}
+          >
+            🔕 Silenciar
+          </button>
+        )}
       </div>
+    </div>
+  )
+}
+
+/** Lista expandible de consumos internos pendientes, con aprobar/rechazar in-place. */
+function Aprobaciones({ consumos, onCambio }: { consumos: ConsumoPendiente[]; onCambio: () => void }) {
+  const { perfil, marca: marcaActiva, setMarca } = useSesion()
+  const [abierto, setAbierto] = useState(false)
+  const [procesando, setProcesando] = useState<string | null>(null)
+
+  // El permiso se evalúa por la marca del consumo (todos comparten marca en esta tarjeta).
+  const marcaCard = consumos[0]?.marca
+  const puede = !!marcaCard && (esAdmin(perfil) || puedeSub(perfil, marcaCard, 'solicitudes-internas', 'aprobar'))
+  const usuario = perfil?.name || ''
+
+  const correr = async (c: ConsumoPendiente, accion: 'aprobar' | 'rechazar') => {
+    if (!puede || procesando) return
+    // El KV es por marca: si la activa no coincide, alinearla antes de escribir.
+    if (marcaActiva !== c.marca) setMarca(c.marca)
+    const motivo = accion === 'rechazar' ? (prompt('Motivo del rechazo (opcional):') || '').trim() : ''
+    setProcesando(c.id)
+    const r =
+      accion === 'aprobar'
+        ? await aprobarConsumo(c.marca, c.id, usuario, hoyISO())
+        : await rechazarConsumo(c.marca, c.id, motivo, usuario, hoyISO())
+    setProcesando(null)
+    if (!r.ok) {
+      alert('No se pudo guardar: ' + r.motivo)
+      return
+    }
+    onCambio()
+  }
+
+  if (!puede) return null
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        className="btn-sm"
+        onClick={() => setAbierto((v) => !v)}
+        style={{ background: '#fff', border: '1px solid #D1D5DB' }}
+      >
+        {abierto ? '▾ Ocultar' : `▸ Revisar ${consumos.length} para aprobar acá`}
+      </button>
+      {abierto && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {consumos.map((c) => (
+            <div
+              key={c.id}
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                border: '1px solid #E5E7EB',
+                background: '#fff',
+                borderRadius: 8,
+                padding: '7px 10px',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{c.texto}</div>
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{c.sub}</div>
+              </div>
+              <button
+                className="btn-sm"
+                disabled={procesando === c.id}
+                onClick={() => void correr(c, 'aprobar')}
+                style={{ background: '#16A34A', color: '#fff', border: 'none', opacity: procesando === c.id ? 0.6 : 1 }}
+              >
+                {procesando === c.id ? '…' : '✓ Aprobar'}
+              </button>
+              <button
+                className="btn-sm"
+                disabled={procesando === c.id}
+                onClick={() => void correr(c, 'rechazar')}
+                style={{ background: '#fff', color: '#B91C1C', border: '1px solid #FCA5A5', opacity: procesando === c.id ? 0.6 : 1 }}
+              >
+                Rechazar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
