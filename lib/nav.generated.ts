@@ -363,6 +363,15 @@ export const PERM_CAT: PermCat[] = [
       "bdi",
       "zattia"
     ]
+  },
+  {
+    "key": "gerencial",
+    "label": "🎯 Gerencial",
+    "info": "Panel de decisiones: reúne de todas las marcas lo que requiere tu atención (capital parado, productos en declive, pendientes operativos, importaciones por llegar) con la acción recomendada y un acceso directo a la sección donde se ejecuta. Solo lectura.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
   }
 ]
 
@@ -372,6 +381,13 @@ export const NAV_CATS: NavCat[] = [
     "label": "🏠 Inicio",
     "keys": [
       "inicio"
+    ]
+  },
+  {
+    "id": "direccion",
+    "label": "🎯 Dirección",
+    "keys": [
+      "gerencial"
     ]
   },
   {

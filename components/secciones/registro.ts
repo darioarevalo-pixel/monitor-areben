@@ -48,6 +48,7 @@ const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) =>
 const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), { loading: Cargando })
 const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m) => m.Usuarios), { loading: Cargando })
 const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) => m.MetaAds), { loading: Cargando })
+const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then((m) => m.Gerencial), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -276,6 +277,14 @@ export const SECCIONES: Record<string, ComponentType> = {
   // gasto/rendimiento por cuenta. No toca stock, GN ni localStorage. Gateada por permiso
   // `meta-ads` (ambas marcas).
   'meta-ads': MetaAds,
+  // Gerencial (20-jul-2026, sección NUEVA — no existe en el legacy): `/gerencial` lo sirve
+  // el shell. Panel de decisiones: agrega de todas las marcas visibles las señales que otras
+  // secciones ya calculan (capital parado y declive del ETL, fotos/aprobaciones/sync del KV,
+  // importaciones por llegar) como accionables priorizados por severidad, cada uno con su
+  // recomendación y un link a la sección donde se ejecuta. Read-only (fase 1): NO escribe
+  // stock, GN, Meta ni KV; el ETL por marca sale del MISMO caché del store (o la red si no hay).
+  // Gateada por permiso `gerencial` (ambas marcas). Rollback: comentar esta línea.
+  gerencial: Gerencial,
 }
 
 /**
