@@ -186,5 +186,5 @@ export function textoReporteFaltantes(s: Solicitud): string {
   const lineas = f
     .map((x) => `• ${x.nombre} · ${x.variante}${x.sku ? ' (' + x.sku + ')' : ''} — faltan ${x.falta} de ${x.qty}`)
     .join('\n')
-  return `⚠ FALTANTES — Sesión de fotos\n${s.descripcion || 'Solicitud'} · ${s.fecha}\n\n${lineas}\n\nTotal sin devolver: ${f.reduce((a, x) => a + x.falta, 0)} u.\nPor favor, ubicar y devolver antes de cerrar el proceso.`
+  return `⚠ PRODUCTOS NO DEVUELTOS\n${s.descripcion || 'Solicitud'} · ${s.fecha}\n\n${lineas}\n\nTotal sin devolver: ${f.reduce((a, x) => a + x.falta, 0)} u.\nPor favor, ubicar y devolver para cerrar el proceso.`
 }

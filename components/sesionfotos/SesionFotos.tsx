@@ -887,13 +887,16 @@ function Detalle({
         </div>
       ) : null}
 
-      {fase === 'devolucion' && salio(s) && falt.length > 0 ? (
+      {!esConsumo && salio(s) && falt.length > 0 && (fase === 'devolucion' || (s.devuelto && Object.keys(s.devuelto).length > 0)) ? (
         <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, color: '#991B1B' }}>⚠ Faltan por devolver ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
+            <div style={{ fontWeight: 700, color: '#991B1B' }}>📋 Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s))} style={{ background: '#16A34A', color: '#fff' }}>
+                📤 Enviar a Marketing
+              </button>
               <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s))} style={{ background: '#fff', border: '1px solid #FCA5A5', color: '#991B1B' }}>
-                📋 Copiar reporte
+                📋 Copiar
               </button>
               <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s))} style={{ background: '#1F2937', color: '#fff' }}>
                 📄 PDF
@@ -1591,4 +1594,23 @@ async function copiarReporte(s: Solicitud) {
     }
   }
   prompt('Copiá el reporte:', msg)
+}
+
+/**
+ * Enviar el reporte de no devueltos a Marketing: abre la hoja de compartir del sistema
+ * (WhatsApp, mail, etc. en el cel); si no hay Web Share (escritorio), cae a copiar.
+ */
+async function enviarReporte(s: Solicitud) {
+  const msg = textoReporteFaltantes(s)
+  const nav = navigator as Navigator & { share?: (d: { title?: string; text: string }) => Promise<void> }
+  if (nav.share) {
+    try {
+      await nav.share({ title: 'Productos no devueltos', text: msg })
+      return
+    } catch (e) {
+      if (e && (e as Error).name === 'AbortError') return // cerró la hoja de compartir
+      /* si falla el share, cae a copiar */
+    }
+  }
+  await copiarReporte(s)
 }
