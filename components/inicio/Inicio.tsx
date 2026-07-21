@@ -10,7 +10,7 @@ import { contarPendientes } from '@/lib/solicitudes-internas/core'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav'
-import { horaLabel, marcasVisibles, ordenar, pendientesDeMarca, type PendienteFoto } from '@/lib/inicio/core'
+import { filtrarPorOrigen, horaLabel, marcasVisibles, modoInicio, ordenar, origenesDe, pendientesDeMarca, type PendienteFoto } from '@/lib/inicio/core'
 
 const POLL_MS = 180000 // refresco automático cada 3 min (como el legacy)
 
@@ -57,49 +57,80 @@ export function Inicio() {
     router.push('/sesion-fotos')
   }
 
+  const modo = modoInicio(perfil)
+  const origenes = origenesDe(perfil)
+  // En modo sector: solo lo pendiente de MI origen (retirar en local / preparar en depósito).
+  const lista = pend === null ? null : modo === 'sector' ? filtrarPorOrigen(pend, origenes) : pend
+  // Unidades relevantes por fila: en sector, solo las de mi origen; si no, el total.
+  const uDe = (p: PendienteFoto) => (modo === 'sector' ? origenes.reduce((a, o) => a + (o === 'local' ? p.uLocal : p.uDeposito), 0) : p.unidades)
+
+  const soloLocal = origenes.length === 1 && origenes[0] === 'local'
+  const soloDep = origenes.length === 1 && origenes[0] === 'deposito'
+  const tituloSector = soloLocal ? '🏪 Pendiente de retirar en local' : soloDep ? '📦 Pendiente de preparar en depósito' : '📋 Tus tareas pendientes'
+  const titulo = modo === 'sector' ? tituloSector : '📸 Solicitudes de fotos para armar'
+  const vacioMsg = modo === 'sector' ? '✅ No tenés nada pendiente en tu sector.' : '✅ Todo al día — no hay solicitudes de fotos pendientes de armar.'
+
   return (
     <div className="card">
       {avisoSI > 0 && (
         <div
           onClick={() => router.push('/solicitudes-internas')}
-          style={{ marginTop: 14, background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#92400E', cursor: 'pointer' }}
+          style={{ background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#92400E', cursor: 'pointer' }}
         >
           ⏳ Tenés <b>{avisoSI}</b> solicitud(es) interna(s) para aprobar. <span style={{ color: '#2563EB', textDecoration: 'underline' }}>Ver</span>
         </div>
       )}
 
-      <div style={{ marginTop: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>
-            📸 Solicitudes de fotos para armar{pend && pend.length ? ` (${pend.length})` : ''}
+      {modo === 'gerencial' ? (
+        // Dirección/Admin: el frente NO son las fotos para armar; solo un resumen discreto.
+        <div style={{ marginTop: avisoSI > 0 ? 14 : 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>👋 Inicio</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, color: '#6B7280' }}>
+            <span>
+              📸 {pend === null ? '…' : pend.length} solicitud(es) de fotos pendientes de armar.
+            </span>
+            <button className="btn-sm" onClick={() => router.push('/sesion-fotos')} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              Ver Sesión de fotos
+            </button>
+            <button className="btn-sm" onClick={() => router.push('/gerencial')} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              🎯 Panel gerencial
+            </button>
           </div>
-          <button className="btn-sm" onClick={() => void cargar()} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
-            🔄 Actualizar
-          </button>
         </div>
-
-        {pend === null ? (
-          <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
-        ) : pend.length === 0 ? (
-          <div style={{ color: '#059669', fontSize: 14, padding: '14px 4px' }}>✅ Todo al día — no hay solicitudes de fotos pendientes de armar.</div>
-        ) : (
-          pend.map((p) => (
-            <div key={`${p.marca}-${p.id}`} style={{ display: 'flex', gap: 10, alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 11px', marginBottom: 7, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 180, cursor: 'pointer' }} onClick={() => ver(p)}>
-                <div style={{ fontWeight: 600 }}>
-                  <MarcaChip marca={p.marca} /> {p.descripcion || '(sin descripción)'}
-                </div>
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                  {p.unidades} u. · creada por {p.creadoPor || '—'} · {horaLabel(p.creado, p.fecha)}
-                </div>
-              </div>
-              <button className="btn-sm" onClick={() => ver(p)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
-                Ver
-              </button>
+      ) : (
+        <div style={{ marginTop: avisoSI > 0 ? 14 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>
+              {titulo}{lista && lista.length ? ` (${lista.length})` : ''}
             </div>
-          ))
-        )}
-      </div>
+            <button className="btn-sm" onClick={() => void cargar()} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
+              🔄 Actualizar
+            </button>
+          </div>
+
+          {lista === null ? (
+            <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
+          ) : lista.length === 0 ? (
+            <div style={{ color: '#059669', fontSize: 14, padding: '14px 4px' }}>{vacioMsg}</div>
+          ) : (
+            lista.map((p) => (
+              <div key={`${p.marca}-${p.id}`} style={{ display: 'flex', gap: 10, alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 11px', marginBottom: 7, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180, cursor: 'pointer' }} onClick={() => ver(p)}>
+                  <div style={{ fontWeight: 600 }}>
+                    <MarcaChip marca={p.marca} /> {p.descripcion || '(sin descripción)'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                    {uDe(p)} u.{modo === 'sector' ? ' en tu sector' : ''} · creada por {p.creadoPor || '—'} · {horaLabel(p.creado, p.fecha)}
+                  </div>
+                </div>
+                <button className="btn-sm" onClick={() => ver(p)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+                  Ver
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

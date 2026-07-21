@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { horaLabel, marcasVisibles, ordenar, pendientesDeMarca, unidadesDe } from '@/lib/inicio/core'
+import { filtrarPorOrigen, horaLabel, marcasVisibles, modoInicio, ordenar, origenesDe, pendientesDeMarca, unidadesDe } from '@/lib/inicio/core'
 import type { Perfil } from '@/lib/permisos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 
@@ -42,6 +42,44 @@ describe('inicio/core — pendientes', () => {
   it('ordenar: la más nueva primero', () => {
     const p = pendientesDeMarca([sol({ id: 'a', creado: 10 }), sol({ id: 'c', creado: 30 }), sol({ id: 'b', creado: 20 })], 'bdi')
     expect(ordenar(p).map((x) => x.id)).toEqual(['c', 'b', 'a'])
+  })
+})
+
+describe('inicio/core — modo por función', () => {
+  it('admin o Dirección → gerencial', () => {
+    expect(modoInicio(perfil({ admin: true }))).toBe('gerencial')
+    expect(modoInicio(perfil({ funcion: ['direccion'] }))).toBe('gerencial')
+  })
+  it('Marketing/Administración → completa', () => {
+    expect(modoInicio(perfil({ funcion: ['marketing'] }))).toBe('completa')
+    expect(modoInicio(perfil({ funcion: ['administracion'] }))).toBe('completa')
+  })
+  it('Local/Depósito → sector', () => {
+    expect(modoInicio(perfil({ funcion: ['local'] }))).toBe('sector')
+    expect(modoInicio(perfil({ funcion: ['deposito'] }))).toBe('sector')
+  })
+  it('sin función → completa (compatibilidad)', () => {
+    expect(modoInicio(perfil({}))).toBe('completa')
+  })
+  it('Dirección gana sobre Local (no arranca con fotos)', () => {
+    expect(modoInicio(perfil({ funcion: ['local', 'direccion'] }))).toBe('gerencial')
+  })
+  it('origenesDe: según las funciones Local/Depósito', () => {
+    expect(origenesDe(perfil({ funcion: ['local'] }))).toEqual(['local'])
+    expect(origenesDe(perfil({ funcion: ['local', 'deposito'] }))).toEqual(['local', 'deposito'])
+    expect(origenesDe(perfil({ funcion: ['marketing'] }))).toEqual([])
+  })
+  it('filtrarPorOrigen: solo pendientes con unidades del origen', () => {
+    const p = pendientesDeMarca(
+      [
+        sol({ id: 'a', items: [{ vid: 'v', pid: '1', sid: '1', nombre: 'A', variante: 'M', sku: '', qty: 2, origen: 'local' }] }),
+        sol({ id: 'b', items: [{ vid: 'v', pid: '1', sid: '1', nombre: 'A', variante: 'M', sku: '', qty: 2, origen: 'deposito' }] }),
+      ],
+      'bdi',
+    )
+    expect(filtrarPorOrigen(p, ['local']).map((x) => x.id)).toEqual(['a'])
+    expect(filtrarPorOrigen(p, ['deposito']).map((x) => x.id)).toEqual(['b'])
+    expect(filtrarPorOrigen(p, []).map((x) => x.id)).toEqual([])
   })
 })
 

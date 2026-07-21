@@ -5,9 +5,9 @@
  */
 
 import { CUENTAS } from '@/lib/cuentas'
-import { esAdmin, puedeVer, type Perfil } from '@/lib/permisos'
+import { esAdmin, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
-import type { Solicitud } from '@/lib/sesionfotos/tipos'
+import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
 /** Una solicitud pendiente, aplanada para el listado de Inicio. */
 export type PendienteFoto = {
@@ -18,6 +18,32 @@ export type PendienteFoto = {
   creado: number
   fecha: string
   unidades: number
+  /** Unidades partidas por origen (para las vistas por sector: Local / Depósito). */
+  uLocal: number
+  uDeposito: number
+}
+
+/**
+ * Cómo se arma el Inicio según la función del usuario:
+ * - `gerencial`: admin o Dirección → NO arranca con "fotos para armar" (solo un resumen).
+ * - `sector`: Local/Depósito → solo lo pendiente de su origen.
+ * - `completa`: Marketing/Administración, o sin función (compatibilidad) → la lista completa.
+ */
+export type ModoInicio = 'gerencial' | 'sector' | 'completa'
+
+export function modoInicio(perfil: Perfil | null): ModoInicio {
+  if (esAdmin(perfil) || tieneFuncion(perfil, 'direccion')) return 'gerencial'
+  if (tieneFuncion(perfil, 'marketing') || tieneFuncion(perfil, 'administracion')) return 'completa'
+  if (tieneFuncion(perfil, 'local') || tieneFuncion(perfil, 'deposito')) return 'sector'
+  return 'completa'
+}
+
+/** Los orígenes que le tocan a este usuario en modo `sector` (Local y/o Depósito). */
+export function origenesDe(perfil: Perfil | null): Origen[] {
+  const o: Origen[] = []
+  if (tieneFuncion(perfil, 'local')) o.push('local')
+  if (tieneFuncion(perfil, 'deposito')) o.push('deposito')
+  return o
 }
 
 /**
@@ -36,6 +62,11 @@ export function unidadesDe(s: Solicitud): number {
   return (s.items || []).reduce((a, i) => a + (Number(i.qty) || 0), 0)
 }
 
+/** Suma las unidades de los ítems de un origen dado. */
+export function unidadesOrigen(s: Solicitud, origen: Origen): number {
+  return (s.items || []).reduce((a, i) => a + (i.origen === origen ? Number(i.qty) || 0 : 0), 0)
+}
+
 /** Aplana una solicitud a PendienteFoto (con su marca). */
 export function aPendiente(s: Solicitud, marca: Marca): PendienteFoto {
   return {
@@ -46,6 +77,8 @@ export function aPendiente(s: Solicitud, marca: Marca): PendienteFoto {
     creado: s.creado || 0,
     fecha: s.fecha || '',
     unidades: unidadesDe(s),
+    uLocal: unidadesOrigen(s, 'local'),
+    uDeposito: unidadesOrigen(s, 'deposito'),
   }
 }
 
@@ -55,6 +88,12 @@ export function aPendiente(s: Solicitud, marca: Marca): PendienteFoto {
  */
 export function pendientesDeMarca(lista: Solicitud[], marca: Marca): PendienteFoto[] {
   return lista.filter((s) => s.estado === 'pendiente').map((s) => aPendiente(s, marca))
+}
+
+/** Filtra las pendientes a las que tienen unidades en alguno de los orígenes del usuario (modo sector). */
+export function filtrarPorOrigen(pend: PendienteFoto[], origenes: Origen[]): PendienteFoto[] {
+  if (!origenes.length) return []
+  return pend.filter((p) => origenes.some((o) => (o === 'local' ? p.uLocal : p.uDeposito) > 0))
 }
 
 /** Ordena las pendientes: la más nueva primero. Port del sort de inicioCargarPendientes. */
