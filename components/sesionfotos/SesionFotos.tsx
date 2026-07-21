@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeSub } from '@/lib/permisos'
-import { useSesionFotos, type ResultadoCrear } from './useSesionFotos'
+import { useSesionFotos } from './useSesionFotos'
+import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
+import { PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
 import {
@@ -61,7 +63,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
-type CrearVentasDe = (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrear>
+type CrearVentasDe = (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrearGen>
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
 
@@ -78,6 +80,17 @@ function obtenerPass(): string {
 export function SesionFotos() {
   const { marca } = useSesion()
   const sf = useSesionFotos(marca)
+  return <SolicitudesInner sf={sf} preset={PRESET_FOTOS} />
+}
+
+/**
+ * El motor de UI compartido por Sesión de fotos y Solicitudes internas (convergencia
+ * Fase B): recibe el hook ya llamado (por eso las dos entradas usan su propio hook sin
+ * romper las reglas de hooks) + el `preset` que las distingue. Fotos = preset default;
+ * internas pasa PRESET_INTERNAS.
+ */
+export function SolicitudesInner({ sf, preset }: { sf: HistorialSolicitudes<Solicitud>; preset: PresetSolicitud }) {
+  const { marca } = useSesion()
   // allVariantes del ETL → mapa código-de-barras → vid para el escaneo. Se baja en
   // paralelo con el historial; hasta que esté, el escaneo va deshabilitado.
   const { datos } = useDatosMonitor()
@@ -87,7 +100,7 @@ export function SesionFotos() {
   if (sf.error && !sf.data) {
     return (
       <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>
-        No se pudo leer el historial de Sesión de fotos: {sf.error}
+        No se pudo leer el historial de {preset.etiqueta}: {sf.error}
       </div>
     )
   }
@@ -98,6 +111,7 @@ export function SesionFotos() {
   return (
     <Contenido
       key={marca}
+      preset={preset}
       data={sf.data}
       prioridad={sf.prioridad}
       persistir={sf.persistir}
@@ -112,6 +126,7 @@ export function SesionFotos() {
 }
 
 function Contenido({
+  preset,
   data,
   prioridad,
   persistir,
@@ -122,6 +137,7 @@ function Contenido({
   variantes,
   productos,
 }: {
+  preset: PresetSolicitud
   data: Solicitud[]
   prioridad: Origen
   persistir: Persistir
@@ -134,8 +150,8 @@ function Contenido({
 }) {
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
-  const puedeQuitar = admin || puedeSub(perfil, marca, 'sesion-fotos', 'quitar-item')
-  const puedeEditarDesc = admin || puedeSub(perfil, marca, 'sesion-fotos', 'editar-desc')
+  const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'quitar-item')
+  const puedeEditarDesc = admin || puedeSub(perfil, marca, preset.seccionKey, 'editar-desc')
   const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
   const puedeRetiroLoc = puedeRetirar(perfil, 'local')
 
@@ -555,7 +571,7 @@ function Detalle({
       }
       if (r.tipo === 'ya-tenia') {
         alert('Esta solicitud ya tiene ventas creadas en GN.')
-        setWork((w) => ({ ...w, ventas: r.ventas, estado: r.estadoSol }))
+        setWork((w) => ({ ...w, ventas: r.ventas, estado: r.estadoSol as EstadoSolicitud }))
         return
       }
       if (Object.keys(r.ventas).length) setWork((w) => ({ ...w, ventas: { ...(w.ventas || {}), ...r.ventas }, estado: 'cargada' }))
