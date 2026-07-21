@@ -47,11 +47,14 @@ import {
   faltantes,
   filaHistorial,
   historialVisible,
+  origenesConItems,
+  retiradoDe,
   salio,
   sinItemSol,
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
+import { puedeRetirar } from '@/lib/solicitudes/overview'
 import { tomarPuenteFotos, tomarVerSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 
@@ -132,6 +135,8 @@ function Contenido({
   const admin = esAdmin(perfil)
   const puedeQuitar = admin || puedeSub(perfil, marca, 'sesion-fotos', 'quitar-item')
   const puedeEditarDesc = admin || puedeSub(perfil, marca, 'sesion-fotos', 'editar-desc')
+  const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
+  const puedeRetiroLoc = puedeRetirar(perfil, 'local')
 
   // Puente desde Marketing: si venimos con una selección de productos, abrimos el
   // borrador ya pre-cargado. Se toma UNA vez al montar (tomar consume), en el
@@ -204,6 +209,8 @@ function Contenido({
           admin={admin}
           puedeQuitar={puedeQuitar}
           puedeEditarDesc={puedeEditarDesc}
+          puedeRetiroDep={puedeRetiroDep}
+          puedeRetiroLoc={puedeRetiroLoc}
           usuario={perfil?.name ?? ''}
           persistir={persistir}
           crearVentasDe={crearVentasDe}
@@ -468,6 +475,8 @@ function Detalle({
   admin,
   puedeQuitar,
   puedeEditarDesc,
+  puedeRetiroDep,
+  puedeRetiroLoc,
   usuario,
   persistir,
   crearVentasDe,
@@ -480,6 +489,8 @@ function Detalle({
   admin: boolean
   puedeQuitar: boolean
   puedeEditarDesc: boolean
+  puedeRetiroDep: boolean
+  puedeRetiroLoc: boolean
   usuario: string
   persistir: Persistir
   crearVentasDe: CrearVentasDe
@@ -516,6 +527,10 @@ function Detalle({
     setWork(ns)
     setFb({ key: `${origen}-${fase}`, r: resultado })
   }
+
+  // Marcar/desmarcar el retiro FÍSICO de un origen (el autosave lo persiste).
+  const onRetirar = (origen: Origen, val: boolean) => setWork((w) => ({ ...w, retirado: { ...(w.retirado || {}), [origen]: val } }))
+  const puedeRetiroDe = (o: Origen) => (o === 'deposito' ? puedeRetiroDep : puedeRetiroLoc)
 
   // Crear las ventas en GN (la única escritura IRREVERSIBLE). Pide la contraseña,
   // el hook re-lee fresco y aborta si ya hay ventas (anti-duplicado), y persiste.
@@ -669,7 +684,7 @@ function Detalle({
             style={{ padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }}
           >
             {(['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'] as const).map((e) => (
-              <option key={e} value={e}>{e}</option>
+              <option key={e} value={e}>{e === 'cargada' ? 'separado' : e}</option>
             ))}
           </select>
         </label>
@@ -679,19 +694,42 @@ function Detalle({
 
       {s.ventas ? (
         <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13 }}>
-          ✅ Ventas creadas en GN:{' '}
-          {(['deposito', 'local'] as Origen[])
-            .filter((o) => s.ventas?.[o])
-            .map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`)
-            .join(' · ')}{' '}
-          <span style={{ color: '#9CA3AF', fontSize: 11 }}>(para anular, hacelo en GN)</span>
+          <div>
+            ✅ <b>Separado</b> en GN:{' '}
+            {(['deposito', 'local'] as Origen[])
+              .filter((o) => s.ventas?.[o])
+              .map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`)
+              .join(' · ')}{' '}
+            <span style={{ color: '#9CA3AF', fontSize: 11 }}>Se separó el stock (no es retiro). Para anular, hacelo en GN.</span>
+          </div>
+          {/* Retiro físico por sector: local retira lo suyo, depósito lo suyo. */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {origenesConItems(s).map((o) => {
+              const yaRet = retiradoDe(s, o)
+              const et = o === 'deposito' ? '📦 Depósito' : '🏪 Local'
+              return yaRet ? (
+                <span key={o} style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 7, padding: '3px 9px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  ✅ {et} retirado
+                  {puedeRetiroDe(o) ? (
+                    <button onClick={() => onRetirar(o, false)} title="Deshacer" style={{ background: 'none', border: 'none', color: '#0F766E', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>deshacer</button>
+                  ) : null}
+                </span>
+              ) : puedeRetiroDe(o) ? (
+                <button key={o} onClick={() => onRetirar(o, true)} style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
+                  Marcar retirado de {et}
+                </button>
+              ) : (
+                <span key={o} style={{ fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB', borderRadius: 7, padding: '3px 9px' }}>{et}: sin retirar</span>
+              )
+            })}
+          </div>
         </div>
       ) : hayVentables ? (
         <div style={{ marginBottom: 10 }}>
           <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
-            {creando ? '⏳ Creando ventas en GN…' : '🧾 Crear ventas en GN'}
+            {creando ? '⏳ Separando en GN…' : '🧾 Crear venta en GN (separar)'}
           </button>{' '}
-          <span style={{ color: '#9CA3AF', fontSize: 12 }}>Descuenta el stock con el cliente “Sesión de fotos”.</span>
+          <span style={{ color: '#9CA3AF', fontSize: 12 }}>Separa el stock con el cliente “Sesión de fotos” (no es retiro).</span>
         </div>
       ) : null}
 

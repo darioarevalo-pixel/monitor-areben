@@ -4,11 +4,15 @@ import {
   bloqueoQuitarItem,
   conDescripcion,
   conEstado,
+  conRetirado,
   contarCerradas,
   faltantes,
   faseCompleta,
+  faseSolicitud,
   filaHistorial,
   historialVisible,
+  origenesConItems,
+  retiradoCompleto,
   salio,
   sinItemSol,
   sinSolicitud,
@@ -257,5 +261,41 @@ describe('vista combinada · paridad con index.html', () => {
 
   it.each(['retiro', 'devolucion'] as const)('sfFaseCompletaCombi coincide · fase %s', (fase) => {
     expect(faseCompletaCombi(SOLS, fase)).toBe(legacy.sfFaseCompletaCombi(ids, fase))
+  })
+})
+
+describe('sesionfotos/core — separado vs retirado', () => {
+  const conVenta = (over = {}) =>
+    sol({ estado: 'cargada', items: [item({ origen: 'deposito' }), item({ vid: 'v2', origen: 'local' })], ventas: { deposito: { id: 1 }, local: { id: 2 } }, ...over })
+
+  it('origenesConItems detecta los dos orígenes', () => {
+    expect(origenesConItems(conVenta()).sort()).toEqual(['deposito', 'local'])
+    expect(origenesConItems(sol({ items: [item({ origen: 'local' })] }))).toEqual(['local'])
+  })
+
+  it('retiradoCompleto: false hasta que TODOS los orígenes estén retirados', () => {
+    const s = conVenta()
+    expect(retiradoCompleto(s)).toBe(false)
+    expect(retiradoCompleto({ ...s, retirado: { deposito: true } })).toBe(false)
+    expect(retiradoCompleto({ ...s, retirado: { deposito: true, local: true } })).toBe(true)
+  })
+
+  it('retiradoCompleto: false si no hay venta (nada separado)', () => {
+    expect(retiradoCompleto(sol({ estado: 'preparada', retirado: { deposito: true } }))).toBe(false)
+  })
+
+  it('faseSolicitud: cargada = separado; retirado cuando está todo', () => {
+    const s = conVenta()
+    expect(faseSolicitud(s)).toBe('separado')
+    expect(faseSolicitud({ ...s, retirado: { deposito: true, local: true } })).toBe('retirado')
+    expect(faseSolicitud(sol({ estado: 'pendiente' }))).toBe('pendiente')
+    expect(faseSolicitud(sol({ estado: 'devuelta' }))).toBe('devuelta')
+  })
+
+  it('conRetirado marca el origen de la solicitud correcta', () => {
+    const lista = [conVenta({ id: 'a' }), conVenta({ id: 'b' })]
+    const out = conRetirado(lista, 'a', 'local', true)
+    expect(out[0].retirado).toEqual({ local: true })
+    expect(out[1].retirado).toBeUndefined()
   })
 })

@@ -50,6 +50,47 @@ export function unidadesOrigen(s: Solicitud, origen: Origen): number {
   return (s.items || []).filter((i) => i.origen === origen).reduce((a, i) => a + i.qty, 0)
 }
 
+/** Orígenes que tienen ítems en la solicitud (los que hay que retirar). */
+export function origenesConItems(s: Solicitud): Origen[] {
+  const out: Origen[] = []
+  for (const o of ['deposito', 'local'] as Origen[]) if ((s.items || []).some((i) => i.origen === o)) out.push(o)
+  return out
+}
+
+/** ¿El origen ya se marcó como retirado físicamente? */
+export function retiradoDe(s: Solicitud, origen: Origen): boolean {
+  return !!s.retirado?.[origen]
+}
+
+/**
+ * ¿Está TODO retirado? (todos los orígenes con ítems marcados). Solo aplica cuando ya
+ * hay venta GN (separado): antes de separar no hay nada retirado.
+ */
+export function retiradoCompleto(s: Solicitud): boolean {
+  const origs = origenesConItems(s)
+  return !!s.ventas && origs.length > 0 && origs.every((o) => retiradoDe(s, o))
+}
+
+/**
+ * Fase legible de la solicitud, con la distinción separado/retirado. Crear la venta GN
+ * = SEPARADO (no retirado); el retiro físico se marca aparte por origen. Deriva del
+ * estado interno + el flag `retirado` (no cambia el enum ni migra datos: `cargada` sigue
+ * siendo "venta creada").
+ */
+export type FaseSolicitud = 'pendiente' | 'preparada' | 'separado' | 'retirado' | 'devuelta' | 'cerrada'
+export function faseSolicitud(s: Solicitud): FaseSolicitud {
+  if (s.estado === 'cerrada') return 'cerrada'
+  if (s.estado === 'devuelta') return 'devuelta'
+  if (s.estado === 'cargada') return retiradoCompleto(s) ? 'retirado' : 'separado'
+  if (s.estado === 'preparada') return 'preparada'
+  return 'pendiente'
+}
+
+/** Mutación pura: marca/desmarca el retiro físico de un origen en una solicitud. */
+export function conRetirado(lista: Solicitud[], id: string, origen: Origen, val: boolean): Solicitud[] {
+  return lista.map((s) => (s.id === id ? { ...s, retirado: { ...(s.retirado || {}), [origen]: val } } : s))
+}
+
 /** Fila del historial: los valores que el legacy computa por solicitud (index.html:10274-10284). */
 export type FilaHistorial = {
   id: string

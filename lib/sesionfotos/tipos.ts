@@ -76,8 +76,14 @@ export type Solicitud = {
   descripcion: string
   estado: EstadoSolicitud
   items: ItemSolicitud[]
-  /** Ventas creadas en GN, por origen. Su presencia marca "ya salió". */
+  /** Ventas creadas en GN, por origen. Su presencia marca "ya salió" (SEPARADO, no retirado). */
   ventas?: Partial<Record<Origen, VentaGN>>
+  /**
+   * Retiro FÍSICO confirmado por origen. Crear la venta en GN solo SEPARA el stock; el
+   * retiro real (que la mercadería salió del depósito/local) se marca acá aparte, por
+   * sector. Ausente/false = separado pero sin retirar.
+   */
+  retirado?: Partial<Record<Origen, boolean>>
   /** Conteo de preparado por vid (fase retiro). */
   verif?: Record<string, number>
   /** Conteo de devolución por vid (fase devolución). */

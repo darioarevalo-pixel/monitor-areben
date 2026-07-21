@@ -11,6 +11,7 @@
 
 import { esAdmin, tieneFuncion, type Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
+import { retiradoCompleto } from '@/lib/sesionfotos/core'
 import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 
@@ -41,6 +42,7 @@ export type ResumenSolicitud = {
 const AMBAR = { color: '#B45309', bg: '#FFFBEB' }
 const AZUL = { color: '#1D4ED8', bg: '#EFF6FF' }
 const INDIGO = { color: '#4338CA', bg: '#EEF2FF' }
+const TEAL = { color: '#0F766E', bg: '#F0FDFA' }
 const VERDE = { color: '#15803D', bg: '#F0FDF4' }
 const GRIS = { color: '#6B7280', bg: '#F3F4F6' }
 const ROJO = { color: '#B91C1C', bg: '#FEF2F2' }
@@ -58,7 +60,10 @@ function estadoFoto(s: Solicitud): { label: string; tag?: string; grupo: GrupoEs
     case 'preparada':
       return { label: 'Preparada', tag: 'sin venta GN', grupo: 'enproceso', ...AZUL }
     case 'cargada':
-      return { label: 'Con venta GN', grupo: 'conventagn', ...INDIGO }
+      // Venta GN creada = SEPARADO; el retiro físico se marca aparte por origen.
+      return retiradoCompleto(s)
+        ? { label: 'Retirado', grupo: 'conventagn', ...TEAL }
+        : { label: 'Separado', tag: 'sin retirar', grupo: 'conventagn', ...INDIGO }
     case 'devuelta':
       return { label: 'Devuelta', tag: tieneVenta ? 'falta anular venta GN' : undefined, grupo: 'devuelta', ...VERDE }
     case 'cerrada':
@@ -131,6 +136,15 @@ export function origenesFuncion(perfil: Perfil | null): Origen[] {
 export function veTodo(perfil: Perfil | null): boolean {
   if (esAdmin(perfil) || tieneFuncion(perfil, 'direccion') || tieneFuncion(perfil, 'marketing') || tieneFuncion(perfil, 'administracion')) return true
   return origenesFuncion(perfil).length === 0 // sin función de sector → ve todo (compatibilidad)
+}
+
+/**
+ * ¿Puede marcar el retiro físico de un origen? Los que ven todo (admin/dirección/
+ * marketing/administración/sin función) pueden cualquiera; los de sector, solo su origen.
+ */
+export function puedeRetirar(perfil: Perfil | null, origen: Origen): boolean {
+  if (veTodo(perfil)) return true
+  return tieneFuncion(perfil, origen)
 }
 
 /** Filtra los resúmenes según la función: sector solo ve lo que tiene unidades de su origen. */

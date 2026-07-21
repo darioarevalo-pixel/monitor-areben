@@ -10,11 +10,16 @@ const foto = (over: Partial<Solicitud>): Solicitud => ({ id: 's', fecha: '2026-0
 const interna = (over: Partial<SolicitudInterna>): SolicitudInterna => ({ id: 'i', fecha: '2026-07-20', creado: 1, creadoPor: 'Ana', motivo: 'Muestra', tipo: 'retornable', descripcion: '', estado: 'aprobada', items: [], ...over })
 
 describe('solicitudes/overview — estado', () => {
-  it('foto con venta GN → "Con venta GN" (grupo conventagn)', () => {
-    const r = resumenFoto(foto({ estado: 'cargada', ventas: { deposito: { id: 1 } } }), 'bdi')
-    expect(r.estadoLabel).toBe('Con venta GN')
+  it('foto con venta GN sin retirar → "Separado" (grupo conventagn)', () => {
+    const r = resumenFoto(foto({ estado: 'cargada', items: [item({ origen: 'deposito' })], ventas: { deposito: { id: 1 } } }), 'bdi')
+    expect(r.estadoLabel).toBe('Separado')
+    expect(r.estadoTag).toBe('sin retirar')
     expect(r.grupo).toBe('conventagn')
     expect(r.tipo).toBe('foto')
+  })
+  it('foto con venta GN y todo retirado → "Retirado"', () => {
+    const r = resumenFoto(foto({ estado: 'cargada', items: [item({ origen: 'deposito' })], ventas: { deposito: { id: 1 } }, retirado: { deposito: true } }), 'bdi')
+    expect(r.estadoLabel).toBe('Retirado')
   })
   it('foto devuelta con venta sin anular → tag "falta anular venta GN"', () => {
     const r = resumenFoto(foto({ estado: 'devuelta', ventas: { local: { id: 2 } } }), 'bdi')
