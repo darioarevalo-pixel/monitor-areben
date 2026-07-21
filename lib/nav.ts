@@ -121,6 +121,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',
   cupones: 'Descuentos por cliente para el local (no toca la tienda online).',
   'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',
+  solicitudes: 'Estado unificado de todas las solicitudes (fotos + internas), filtrado por tu función.',
   clientes: 'Clientes mayoristas: ranking, seguimiento y banco de mensajes.',
   'fundas-modelo': 'Ranking y demanda de fundas por modelo de iPhone, con simulador de pedido.',
   ingresos: 'Importaciones de fundas por llegar: diseños, cantidades, proveedor y estado.',

@@ -346,6 +346,15 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "solicitudes",
+    "label": "📋 Solicitudes",
+    "info": "Vista unificada del ESTADO de todas las solicitudes (sesión de fotos + internas) de las marcas que ves, filtrada según tu función: Local ve lo que tiene retiro en local, Depósito lo de depósito, el resto ve todo. Solo lectura (para gestionar se entra a cada solicitud).",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "verif-ventas",
     "label": "🧾 Verificación de ventas",
     "info": "Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.",
@@ -424,6 +433,7 @@ export const NAV_CATS: NavCat[] = [
     "id": "local",
     "label": "🏪 Local",
     "keys": [
+      "solicitudes",
       "reposicion",
       "conteo",
       "conteo-estandar-zattia",

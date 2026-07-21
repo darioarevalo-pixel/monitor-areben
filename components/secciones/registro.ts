@@ -35,6 +35,7 @@ const Margenes = dynamic(() => import('@/components/margenes/Margenes').then((m)
 const Talles = dynamic(() => import('@/components/talles/Talles').then((m) => m.Talles), { loading: Cargando })
 const Colores = dynamic(() => import('@/components/colores/Colores').then((m) => m.Colores), { loading: Cargando })
 const SolicitudesInternas = dynamic(() => import('@/components/solicitudes-internas/SolicitudesInternas').then((m) => m.SolicitudesInternas), { loading: Cargando })
+const Solicitudes = dynamic(() => import('@/components/solicitudes/Solicitudes').then((m) => m.Solicitudes), { loading: Cargando })
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
@@ -227,6 +228,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // de payload OFFLINE byte-idéntica (cero venta de prueba) y contramedida
   // anti-duplicado. Rollback: mover esta línea de vuelta a SOMBRAS.
   'solicitudes-internas': SolicitudesInternas,
+  // Solicitudes (21-jul-2026, sección NUEVA Next-only): vista unificada READ-ONLY del
+  // estado de Sesión de fotos + Solicitudes internas (lee los dos KV, no migra),
+  // filtrada por la función del usuario. El detalle/gestión sigue en cada sección.
+  solicitudes: Solicitudes,
   // El flip de Tabla de talles (18-jul-2026, Tanda B #2): `/gen-talles` lo sirve el
   // shell. Generador de tablas (HTML byte-idéntico al legacy, paridad ejecutable) +
   // vincular a un producto de TN + guardar en el KV (kind `talles`, misma clave del
