@@ -9271,6 +9271,7 @@ const PERM_CAT = [
   { key: 'sesion-fotos', label: '📷 Sesión de fotos', info: 'Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.', brands: ['bdi', 'zattia'], subs: [
       { key: 'quitar-item', label: '🗑 Puede quitar ítems de una solicitud', info: 'Puede quitar variantes de una solicitud (queda registrado quién y por qué). Los admins pueden siempre. Sin este permiso, solo ve la solicitud.' },
       { key: 'editar-desc', label: '✏️ Puede editar la descripción', info: 'Puede cambiar el texto/descripción de una solicitud. Los admins pueden siempre.' },
+      { key: 'editar', label: '✏️ Puede editar la solicitud', info: 'Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre.' },
   ] },
   { key: 'comisiones', label: '💵 Comisiones y margen', info: 'Simulador de comisiones de vendedores y cálculo de markup/margen.', brands: ['bdi', 'zattia'] },
   { key: 'margenes', label: '📊 Margen por producto', info: 'Margen y markup de cada producto disponible, comparado con el objetivo.', brands: ['bdi', 'zattia'] },
@@ -9306,6 +9307,7 @@ const PERM_CAT = [
   ] },
   { key: 'solicitudes-internas', label: '📋 Solicitudes internas', info: 'Retiros de productos para uso interno (moldería, video, muestras, consumo). Retornable (vuelve, se repone) o consumo (no vuelve). Los consumos requieren aprobación de un gerente/admin.', brands: ['bdi', 'zattia'], subs: [
       { key: 'aprobar', label: '✅ Puede aprobar consumos', info: 'Puede APROBAR o rechazar las solicitudes de consumo (las que no vuelven). Los admins pueden siempre. Solo los aprobadores ven los pendientes.' },
+      { key: 'editar', label: '✏️ Puede editar la solicitud', info: 'Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre.' },
   ] },
   { key: 'solicitudes', label: '📋 Solicitudes', info: 'Vista unificada del ESTADO de todas las solicitudes (sesión de fotos + internas) de las marcas que ves, filtrada según tu función: Local ve lo que tiene retiro en local, Depósito lo de depósito, el resto ve todo. Solo lectura (para gestionar se entra a cada solicitud).', brands: ['bdi', 'zattia'] },
   { key: 'verif-ventas', label: '🧾 Verificación de ventas', info: 'Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.', brands: ['bdi', 'zattia'] },

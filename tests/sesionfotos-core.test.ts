@@ -205,7 +205,7 @@ describe('borrar y quitar-item (SF-4c)', () => {
       verif: { a: 1, b: 1 },
       devuelto: { a: 2 },
     })
-    const ns = sinItemSol(s, 'a', { por: 'ana', motivo: 'no había stock', fecha: '2026-07-18' })
+    const ns = sinItemSol(s, 'a', { por: 'ana', motivo: 'no había stock', fecha: '2026-07-18', ts: 111 })
     expect(ns.items.map((i) => i.vid)).toEqual(['b'])
     expect(ns.verif).toEqual({ b: 1 }) // borró a
     expect(ns.devuelto).toEqual({}) // borró a
@@ -216,7 +216,7 @@ describe('borrar y quitar-item (SF-4c)', () => {
 
   it('sinItemSol no crea verif/devuelto si no existían', () => {
     const s = sol({ items: [item({ vid: 'a' })] })
-    const ns = sinItemSol(s, 'a', { por: '', motivo: '', fecha: '2026-07-18' })
+    const ns = sinItemSol(s, 'a', { por: '', motivo: '', fecha: '2026-07-18', ts: 0 })
     expect(ns.verif).toBeUndefined()
     expect(ns.devuelto).toBeUndefined()
   })
@@ -297,5 +297,54 @@ describe('sesionfotos/core — separado vs retirado', () => {
     const out = conRetirado(lista, 'a', 'local', true)
     expect(out[0].retirado).toEqual({ local: true })
     expect(out[1].retirado).toBeUndefined()
+  })
+})
+
+import { agregarItemSol, bloqueoEdicion, cambiarCantidadSol, itemDeVariante } from '@/lib/sesionfotos/core'
+
+describe('sesionfotos/core — edición (Fase C)', () => {
+  it('bloqueoEdicion: solo bloquea si está cerrada', () => {
+    expect(bloqueoEdicion(sol({ estado: 'cargada', ventas: { deposito: { id: 1 } } }))).toBeNull()
+    expect(bloqueoEdicion(sol({ estado: 'devuelta' }))).toBeNull()
+    expect(bloqueoEdicion(sol({ estado: 'cerrada' }))).toMatch(/cerrada/)
+  })
+
+  it('agregarItemSol: appendea ítem + registra cambio; si el vid existe, suma', () => {
+    const base = sol({ items: [item({ vid: 'a', qty: 2 })] })
+    const nuevo = item({ vid: 'b', nombre: 'Buzo', variante: 'L', qty: 3 })
+    const s1 = agregarItemSol(base, nuevo, { por: 'ana', motivo: 'Cambio de Marketing', ts: 100 })
+    expect(s1.items.map((i) => i.vid)).toEqual(['a', 'b'])
+    expect(s1.cambios).toHaveLength(1)
+    expect(s1.cambios![0]).toMatchObject({ accion: 'agregó', por: 'ana', motivo: 'Cambio de Marketing' })
+    // vid repetido → suma qty, no duplica
+    const s2 = agregarItemSol(s1, item({ vid: 'a', qty: 5 }), { por: 'ana', motivo: 'Otro', ts: 101 })
+    expect(s2.items.find((i) => i.vid === 'a')!.qty).toBe(7)
+    expect(s2.items).toHaveLength(2)
+  })
+
+  it('cambiarCantidadSol: cambia qty, clampa verif/devuelto, registra cambio', () => {
+    const base = sol({ items: [item({ vid: 'a', qty: 5 })], verif: { a: 4 }, devuelto: { a: 3 } })
+    const s1 = cambiarCantidadSol(base, 'a', 2, { por: 'ana', motivo: 'Sin stock', ts: 100 })
+    expect(s1.items[0].qty).toBe(2)
+    expect(s1.verif).toEqual({ a: 2 }) // clampado
+    expect(s1.devuelto).toEqual({ a: 2 }) // clampado
+    expect(s1.cambios![0]).toMatchObject({ accion: 'cambió cantidad', detalle: expect.stringContaining('5 → 2') })
+    // sin cambio real → no toca nada
+    expect(cambiarCantidadSol(base, 'a', 5, { por: 'ana', motivo: 'x', ts: 1 })).toBe(base)
+  })
+
+  it('sinItemSol también registra el cambio "quitó"', () => {
+    const base = sol({ items: [item({ vid: 'a' }), item({ vid: 'b' })] })
+    const s1 = sinItemSol(base, 'a', { por: 'ana', motivo: 'Producto defectuoso', fecha: '2026-07-21', ts: 100 })
+    expect(s1.items.map((i) => i.vid)).toEqual(['b'])
+    expect(s1.cambios![0]).toMatchObject({ accion: 'quitó', motivo: 'Producto defectuoso' })
+    expect(s1.eliminados).toHaveLength(1)
+  })
+
+  it('itemDeVariante asigna origen por prioridad + fallback de stock', () => {
+    const v = { vid: '1_2', sid: '2', size: 'M', sku: 'X-M', local: 0, deposito: 5 }
+    expect(itemDeVariante(v, '1', 'Rem', 3, 'local').origen).toBe('deposito') // local no alcanza
+    expect(itemDeVariante({ ...v, local: 9 }, '1', 'Rem', 3, 'local').origen).toBe('local')
+    expect(itemDeVariante(v, '1', 'Rem', 1, 'local', 'local').origen).toBe('local') // origenManual gana
   })
 })

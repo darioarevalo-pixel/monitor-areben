@@ -46,17 +46,22 @@ import {
 } from '@/lib/sesionfotos/draft'
 import type { Producto, Variante } from '@/lib/etl/tipos'
 import {
+  agregarItemSol,
   bloqueoBorrado,
+  bloqueoEdicion,
+  cambiarCantidadSol,
   contarCerradas,
   faltantes,
   filaHistorial,
   historialVisible,
+  itemDeVariante,
   origenesConItems,
   retiradoDe,
   salio,
   sinItemSol,
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
+import { MOTIVOS_CAMBIO } from '@/lib/sesionfotos/tipos'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -228,7 +233,6 @@ function Contenido({
           solicitud={solViendo}
           prioridad={prioridad}
           admin={admin}
-          puedeQuitar={puedeQuitar}
           puedeEditarDesc={puedeEditarDesc}
           puedeRetiroDep={puedeRetiroDep}
           puedeRetiroLoc={puedeRetiroLoc}
@@ -237,6 +241,7 @@ function Contenido({
           crearVentasDe={crearVentasDe}
           mapaBc={mapaBc}
           catalogoListo={catalogoListo}
+          variantes={variantes}
           onVolver={() => setViendo(null)}
         />
       ) : (
@@ -507,7 +512,6 @@ function Detalle({
   solicitud: s0,
   prioridad,
   admin,
-  puedeQuitar,
   puedeEditarDesc,
   puedeRetiroDep,
   puedeRetiroLoc,
@@ -516,13 +520,13 @@ function Detalle({
   crearVentasDe,
   mapaBc,
   catalogoListo,
+  variantes,
   onVolver,
 }: {
   preset: PresetSolicitud
   solicitud: Solicitud
   prioridad: Origen
   admin: boolean
-  puedeQuitar: boolean
   puedeEditarDesc: boolean
   puedeRetiroDep: boolean
   puedeRetiroLoc: boolean
@@ -531,6 +535,7 @@ function Detalle({
   crearVentasDe: CrearVentasDe
   mapaBc: Record<string, string>
   catalogoListo: boolean
+  variantes: Variante[]
   onVolver: () => void
 }) {
   const { marca: marcaDetalle, perfil: perfilDetalle } = useSesion()
@@ -610,14 +615,36 @@ function Detalle({
     }
   }
 
-  // Quitar un ítem de la solicitud (solo admin/quitar-item, antes de crear ventas).
-  // Port de sfEliminarItem: confirm + prompt de motivo → queda en s.eliminados.
-  const onQuitarItem = (it: ItemSolicitud) => {
-    if (!confirm(`¿Quitar "${it.nombre} · ${it.variante}" de la solicitud?`)) return
-    const motivo = (prompt('Motivo (opcional): ¿por qué lo quitás? (ej: no había stock, estaba en otra tienda)') || '').trim()
-    const fecha = new Date().toISOString().slice(0, 10)
-    setWork((w) => sinItemSol(w, it.vid, { por: usuario, motivo, fecha }))
+  // ── Edición (Fase C): agregar / quitar / cambiar cantidad, con motivo predefinido + historial ──
+  const puedeEditar = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'editar')
+  const editable = puedeEditar && bloqueoEdicion(s) === null
+  // Picker de motivo: guarda la acción a ejecutar cuando el usuario elige el motivo.
+  const [pedirMotivo, setPedirMotivo] = useState<{ titulo: string; onOk: (motivo: string) => void } | null>(null)
+  const [agregando, setAgregando] = useState(false)
+  const [busqAgregar, setBusqAgregar] = useState('')
+  const conMotivo = (titulo: string, fn: (motivo: string) => void) => setPedirMotivo({ titulo, onOk: (m) => { setPedirMotivo(null); fn(m) } })
+
+  const onQuitarItem = (it: ItemSolicitud) =>
+    conMotivo(`Quitar "${it.nombre} · ${it.variante}"`, (motivo) =>
+      setWork((w) => sinItemSol(w, it.vid, { por: usuario, motivo, fecha: new Date().toISOString().slice(0, 10), ts: Date.now() })),
+    )
+  const onCambiarQty = (it: ItemSolicitud, nueva: number) => {
+    const q = Math.max(1, Number(nueva) || 1)
+    if (q === it.qty) return
+    conMotivo(`Cambiar cantidad de "${it.nombre} · ${it.variante}" (${it.qty} → ${q})`, (motivo) =>
+      setWork((w) => cambiarCantidadSol(w, it.vid, q, { por: usuario, motivo, ts: Date.now() })),
+    )
   }
+  const onAgregarVariante = (v: Variante) =>
+    conMotivo(`Agregar "${v.name} · ${v.size}"`, (motivo) =>
+      setWork((w) =>
+        agregarItemSol(
+          w,
+          itemDeVariante({ vid: v.id, sid: v.sid, size: v.size, sku: v.sku, local: v.local, deposito: v.deposito }, v.pid, v.name, 1, prioridad),
+          { por: usuario, motivo, ts: Date.now() },
+        ),
+      ),
+    )
 
   const grupo = (titulo: string, arr: ItemSolicitud[], origen: Origen) => {
     if (!arr.length) return null
@@ -687,8 +714,17 @@ function Detalle({
                       <>{c}/{i.qty}</>
                     )}
                   </td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right' }}>
-                    {puedeQuitar && !s.ventas ? (
+                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {editable && !i.manual ? (
+                      <button
+                        onClick={() => { const n = prompt(`Nueva cantidad de "${i.nombre} · ${i.variante}":`, String(i.qty)); if (n != null) onCambiarQty(i, parseInt(n, 10)) }}
+                        title="Cambiar cantidad"
+                        style={{ border: 'none', background: 'none', color: '#2563EB', fontSize: 13, cursor: 'pointer' }}
+                      >
+                        ✏
+                      </button>
+                    ) : null}
+                    {editable ? (
                       <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: '#DC2626', fontSize: 14, cursor: 'pointer' }}>
                         ✕
                       </button>
@@ -814,6 +850,43 @@ function Detalle({
       {origenVisible('deposito') && grupo('📦 Retirar de Depósito', dep, 'deposito')}
       {origenVisible('local') && grupo('🏪 Retirar de Local', loc, 'local')}
 
+      {/* Edición (Fase C): agregar productos. Quitar/cambiar cantidad van por ítem (✏/✕). */}
+      {editable ? (
+        <div style={{ margin: '4px 0 10px' }}>
+          {s.ventas ? (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 11px', fontSize: 12, color: '#92400E', marginBottom: 8 }}>
+              ⚠ Esta solicitud ya tiene venta en GN. Los cambios acá <b>no ajustan GN</b> — reconciliá el stock a mano en Gestión Nube.
+            </div>
+          ) : null}
+          {!agregando ? (
+            <button className="btn-sm" onClick={() => setAgregando(true)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>+ Agregar producto</button>
+          ) : (
+            <div style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', borderRadius: 9, padding: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="🔎 Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }} />
+                <button className="btn-sm" onClick={() => { setAgregando(false); setBusqAgregar('') }} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>Cerrar</button>
+              </div>
+              {busqAgregar.trim().length >= 2 ? (
+                <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {buscarProductos(variantes, busqAgregar, new Set<string>()).slice(0, 20).map((r) => (
+                    <div key={r.pid} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 7, padding: '6px 9px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</div>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                        {r.vars.map((vv) => (
+                          <button key={vv.vid} onClick={() => { const v = variantes.find((x) => x.id === vv.vid); if (v) onAgregarVariante(v) }} title={`Agregar ${vv.size}`} style={{ fontSize: 12, border: '1px solid #BFDBFE', background: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+                            + {vv.size} <span style={{ color: '#9CA3AF' }}>({vv.stock})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : <div style={{ fontSize: 12, color: '#9CA3AF' }}>Escribí al menos 2 letras.</div>}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {fase === 'devolucion' && salio(s) && falt.length > 0 ? (
         <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -836,7 +909,17 @@ function Detalle({
         </div>
       ) : null}
 
-      {s.eliminados && s.eliminados.length > 0 ? (
+      {/* Historial de cambios (Fase C). Fallback al panel viejo de "Quitados" para data sin `cambios`. */}
+      {s.cambios && s.cambios.length > 0 ? (
+        <div style={{ border: '1px dashed #C7D2FE', borderRadius: 9, padding: '9px 12px', marginTop: 6, background: '#F5F3FF' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#4338CA', marginBottom: 4 }}>📝 Historial de cambios ({s.cambios.length})</div>
+          {[...s.cambios].reverse().map((c, idx) => (
+            <div key={idx} style={{ fontSize: 12, color: '#3730A3', padding: '1px 0' }}>
+              • {fmtTs(c.ts)} · <b>{c.por || '—'}</b> {c.accion} {c.detalle}{c.motivo ? ` · "${c.motivo}"` : ''}
+            </div>
+          ))}
+        </div>
+      ) : s.eliminados && s.eliminados.length > 0 ? (
         <div style={{ border: '1px dashed #FCA5A5', borderRadius: 9, padding: '9px 12px', marginTop: 6, background: '#FEF2F2' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>
             🗑️ Quitados de la solicitud ({s.eliminados.length})
@@ -850,6 +933,40 @@ function Detalle({
           ))}
         </div>
       ) : null}
+
+      {pedirMotivo ? <MotivoModal titulo={pedirMotivo.titulo} onCancelar={() => setPedirMotivo(null)} onOk={pedirMotivo.onOk} /> : null}
+    </div>
+  )
+}
+
+/** Formatea un timestamp a "dd/mm HH:MM" (para el historial de cambios). */
+function fmtTs(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Modal para elegir el motivo predefinido de un cambio (+ nota opcional). */
+function MotivoModal({ titulo, onCancelar, onOk }: { titulo: string; onCancelar: () => void; onOk: (motivo: string) => void }) {
+  const [nota, setNota] = useState('')
+  const elegir = (m: string) => onOk(nota.trim() ? `${m} — ${nota.trim()}` : m)
+  return (
+    <div onClick={onCancelar} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{titulo}</div>
+        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Elegí el motivo del cambio (queda en el historial).</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {MOTIVOS_CAMBIO.map((m) => (
+            <button key={m} onClick={() => elegir(m)} style={{ textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', cursor: 'pointer' }}>
+              {m}
+            </button>
+          ))}
+        </div>
+        <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, marginTop: 10 }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>Cancelar</button>
+        </div>
+      </div>
     </div>
   )
 }

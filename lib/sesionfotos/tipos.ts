@@ -60,6 +60,21 @@ export type ItemSolicitud = {
   manual?: boolean
 }
 
+/** Motivos predefinidos de un cambio en la solicitud (edición). */
+export const MOTIVOS_CAMBIO = ['Sin stock', 'Error de selección', 'Cambio de Marketing', 'Producto defectuoso', 'Otro'] as const
+
+/**
+ * Una entrada del historial de cambios de la solicitud (edición: agregar/quitar/
+ * cambiar cantidad/editar). Lleva hora (`ts`), a diferencia de `eliminados` (fecha sola).
+ */
+export type Cambio = {
+  ts: number
+  por: string
+  accion: 'agregó' | 'quitó' | 'cambió cantidad' | 'editó'
+  detalle: string
+  motivo?: string
+}
+
 /** Registro de un ítem quitado de la solicitud antes de crear las ventas. */
 export type ItemEliminado = {
   vid: string
@@ -97,6 +112,8 @@ export type Solicitud = {
   /** Conteo de devolución por vid (fase devolución). */
   devuelto?: Record<string, number>
   eliminados?: ItemEliminado[]
+  /** Historial de cambios (edición): agregar/quitar/cambiar cantidad/editar, con hora y motivo. */
+  cambios?: Cambio[]
   /**
    * Capa de Solicitudes internas (opcional; ausente en las de fotos). Motivo del retiro,
    * tipo (retornable/consumo) y datos de aprobación de los consumos. Convergencia Fase A:

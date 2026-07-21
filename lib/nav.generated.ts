@@ -112,6 +112,11 @@ export const PERM_CAT: PermCat[] = [
         "key": "editar-desc",
         "label": "✏️ Puede editar la descripción",
         "info": "Puede cambiar el texto/descripción de una solicitud. Los admins pueden siempre."
+      },
+      {
+        "key": "editar",
+        "label": "✏️ Puede editar la solicitud",
+        "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
   },
@@ -342,6 +347,11 @@ export const PERM_CAT: PermCat[] = [
         "key": "aprobar",
         "label": "✅ Puede aprobar consumos",
         "info": "Puede APROBAR o rechazar las solicitudes de consumo (las que no vuelven). Los admins pueden siempre. Solo los aprobadores ven los pendientes."
+      },
+      {
+        "key": "editar",
+        "label": "✏️ Puede editar la solicitud",
+        "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
   },

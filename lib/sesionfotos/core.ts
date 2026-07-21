@@ -8,7 +8,7 @@
  * Cada función es un port literal; los números de línea apuntan al original.
  */
 
-import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
+import type { Cambio, EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** El mapa de conteo de la fase: `verif` para preparado, `devuelto` para la vuelta. */
 export function claveConteo(fase: Fase): 'verif' | 'devuelto' {
@@ -173,12 +173,55 @@ export function bloqueoQuitarItem(s: Solicitud): string | null {
   return s.ventas ? 'Ya se crearon las ventas de esta solicitud; no se puede quitar.' : null
 }
 
-export type DatosEliminacion = { por: string; motivo: string; fecha: string }
+/** ¿Se puede EDITAR la solicitud? Solo bloqueada si está cerrada (edición = solo monitor, no toca GN). */
+export function bloqueoEdicion(s: Solicitud): string | null {
+  return s.estado === 'cerrada' ? 'La solicitud está cerrada; no se puede editar.' : null
+}
+
+export type DatosEliminacion = { por: string; motivo: string; fecha: string; ts: number }
+export type DatosCambio = { por: string; motivo: string; ts: number }
+
+/** Appendea una entrada al historial de cambios de la solicitud. */
+export function registrarCambio(s: Solicitud, c: Cambio): Solicitud {
+  return { ...s, cambios: [...(s.cambios || []), c] }
+}
+
+/** Variante elegida al agregar (misma forma que devuelve `buscarProductos`). */
+export type VarElegida = { vid: string; sid: string | null; size: string; sku: string; local: number; deposito: number }
 
 /**
- * Quita un ítem de la solicitud dejando rastro en `eliminados` (con quién, cuándo y
- * por qué) y borrando su conteo de verif/devuelto. Port de sfEliminarItem
- * (index.html:9943). NO crea `verif`/`devuelto` si no existían (como el legacy).
+ * Construye el `ItemSolicitud` de una variante elegida, asignando el origen con la
+ * misma lógica que `procesarDraft` (prioridad + fallback por stock). Para "agregar producto".
+ */
+export function itemDeVariante(v: VarElegida, pid: string, nombre: string, qty: number, prioridad: Origen, origenManual?: Origen): ItemSolicitud {
+  const q = Math.max(1, Number(qty) || 1)
+  const origen: Origen = origenManual ? origenManual : prioridad === 'local' ? (v.local >= q ? 'local' : 'deposito') : v.deposito >= q ? 'deposito' : 'local'
+  return { vid: v.vid, pid, sid: v.sid, nombre, variante: v.size, sku: v.sku, qty: q, stockDep: v.deposito, stockLoc: v.local, origen }
+}
+
+/** Agrega un ítem a la solicitud + registra el cambio. Si el vid ya está, suma la cantidad. */
+export function agregarItemSol(s: Solicitud, item: ItemSolicitud, datos: DatosCambio): Solicitud {
+  const existe = (s.items || []).some((i) => i.vid === item.vid)
+  const items = existe ? (s.items || []).map((i) => (i.vid === item.vid ? { ...i, qty: i.qty + item.qty } : i)) : [...(s.items || []), item]
+  return registrarCambio({ ...s, items }, { ts: datos.ts, por: datos.por, accion: 'agregó', detalle: `${item.nombre} · ${item.variante} (${item.qty})`, motivo: datos.motivo })
+}
+
+/** Cambia la cantidad de un ítem + registra el cambio. Clampa verif/devuelto a la nueva qty. */
+export function cambiarCantidadSol(s: Solicitud, vid: string, nuevaQty: number, datos: DatosCambio): Solicitud {
+  const it = (s.items || []).find((i) => i.vid === vid)
+  if (!it) return s
+  const q = Math.max(1, Number(nuevaQty) || 1)
+  if (q === it.qty) return s
+  const ns: Solicitud = { ...s, items: s.items.map((i) => (i.vid === vid ? { ...i, qty: q } : i)) }
+  if (s.verif && (s.verif[vid] || 0) > q) ns.verif = { ...s.verif, [vid]: q }
+  if (s.devuelto && (s.devuelto[vid] || 0) > q) ns.devuelto = { ...s.devuelto, [vid]: q }
+  return registrarCambio(ns, { ts: datos.ts, por: datos.por, accion: 'cambió cantidad', detalle: `${it.nombre} · ${it.variante}: ${it.qty} → ${q}`, motivo: datos.motivo })
+}
+
+/**
+ * Quita un ítem de la solicitud dejando rastro en `eliminados` y en el historial de
+ * `cambios` (con quién, cuándo y por qué) y borrando su conteo de verif/devuelto. Port
+ * de sfEliminarItem (index.html:9943), + registro del cambio (Fase C).
  */
 export function sinItemSol(s: Solicitud, vid: string, datos: DatosEliminacion): Solicitud {
   const it = (s.items || []).find((i) => i.vid === vid)
@@ -201,5 +244,5 @@ export function sinItemSol(s: Solicitud, vid: string, datos: DatosEliminacion): 
     delete devuelto[vid]
     ns.devuelto = devuelto
   }
-  return ns
+  return registrarCambio(ns, { ts: datos.ts, por: datos.por, accion: 'quitó', detalle: `${it.nombre} · ${it.variante} (${it.qty})`, motivo: datos.motivo })
 }
