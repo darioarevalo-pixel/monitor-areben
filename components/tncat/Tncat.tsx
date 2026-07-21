@@ -7,6 +7,7 @@ import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
 import { AsignarCard } from './AsignarCard'
 import { AgotadosCard } from './AgotadosCard'
+import { VariantesSinStockCard } from './VariantesSinStockCard'
 
 /**
  * Tienda Nube (tncat): 4 herramientas de escritura sobre la tienda online, cada una
@@ -29,6 +30,7 @@ export function Tncat() {
       {verImg && <FotosCard marca={marca} />}
       {verAsig && <AsignarCard marca={marca} />}
       {verOcultar && <AgotadosCard marca={marca} />}
+      {verOcultar && <VariantesSinStockCard marca={marca} />}
     </div>
   )
 }
