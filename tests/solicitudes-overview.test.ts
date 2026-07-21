@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarPorFuncion, ordenarResumenes, resumenFoto, resumenInterna, veTodo } from '@/lib/solicitudes/overview'
+import { filtrarPorFuncion, ordenarResumenes, puedeRetirar, resumenFoto, resumenInterna, veTodo } from '@/lib/solicitudes/overview'
 import type { Perfil } from '@/lib/permisos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
@@ -54,6 +54,15 @@ describe('solicitudes/overview — visibilidad por función', () => {
   it('ve todo → no filtra', () => {
     const rs = [resumenFoto(foto({ id: 'a', items: [item({ origen: 'local' })] }), 'bdi')]
     expect(filtrarPorFuncion(rs, perfil({ admin: true }))).toHaveLength(1)
+  })
+
+  it('puedeRetirar: sector solo su origen; veTodo cualquiera', () => {
+    expect(puedeRetirar(perfil({ funcion: ['local'] }), 'local')).toBe(true)
+    expect(puedeRetirar(perfil({ funcion: ['local'] }), 'deposito')).toBe(false)
+    expect(puedeRetirar(perfil({ funcion: ['deposito'] }), 'deposito')).toBe(true)
+    expect(puedeRetirar(perfil({ admin: true }), 'deposito')).toBe(true)
+    expect(puedeRetirar(perfil({ funcion: ['marketing'] }), 'local')).toBe(true)
+    expect(puedeRetirar(perfil({}), 'local')).toBe(true) // sin función → ve todo
   })
 })
 

@@ -518,7 +518,12 @@ function Detalle({
 
   const dep = s.items.filter((i) => i.origen === 'deposito')
   const loc = s.items.filter((i) => i.origen === 'local')
-  const falt = faltantes(s)
+  // Vista por sector: un usuario Local ve solo lo de local, Depósito solo lo de depósito.
+  // `puedeRetiro*` = veTodo || tiene la función de ese origen (ver `puedeRetirar`).
+  const origenVisible = (o: Origen) => (o === 'deposito' ? puedeRetiroDep : puedeRetiroLoc)
+  // Solo quien ve TODOS los orígenes con ítems puede crear la venta GN (separa todo, es coordinación).
+  const veTodosLosItems = origenesConItems(s).every(origenVisible)
+  const falt = faltantes(s).filter((f) => origenVisible(f.origen))
   const hayVentables = s.items.some((i) => !i.nuevo)
 
   const onScan = (origen: Origen, code: string) => {
@@ -697,14 +702,14 @@ function Detalle({
           <div>
             ✅ <b>Separado</b> en GN:{' '}
             {(['deposito', 'local'] as Origen[])
-              .filter((o) => s.ventas?.[o])
+              .filter((o) => s.ventas?.[o] && origenVisible(o))
               .map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`)
               .join(' · ')}{' '}
             <span style={{ color: '#9CA3AF', fontSize: 11 }}>Se separó el stock (no es retiro). Para anular, hacelo en GN.</span>
           </div>
           {/* Retiro físico por sector: local retira lo suyo, depósito lo suyo. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-            {origenesConItems(s).map((o) => {
+            {origenesConItems(s).filter(origenVisible).map((o) => {
               const yaRet = retiradoDe(s, o)
               const et = o === 'deposito' ? '📦 Depósito' : '🏪 Local'
               return yaRet ? (
@@ -724,7 +729,7 @@ function Detalle({
             })}
           </div>
         </div>
-      ) : hayVentables ? (
+      ) : hayVentables && veTodosLosItems ? (
         <div style={{ marginBottom: 10 }}>
           <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
             {creando ? '⏳ Separando en GN…' : '🧾 Crear venta en GN (separar)'}
@@ -738,8 +743,8 @@ function Detalle({
         <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />
       </div>
 
-      {grupo('📦 Retirar de Depósito', dep, 'deposito')}
-      {grupo('🏪 Retirar de Local', loc, 'local')}
+      {origenVisible('deposito') && grupo('📦 Retirar de Depósito', dep, 'deposito')}
+      {origenVisible('local') && grupo('🏪 Retirar de Local', loc, 'local')}
 
       {fase === 'devolucion' && salio(s) && falt.length > 0 ? (
         <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
