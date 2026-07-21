@@ -2,9 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
+import { puedeSub } from '@/lib/permisos'
+import { pausarAnuncio, traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
 import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
+
+/** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
+type EstadoPausa = { status?: string; pending?: boolean; error?: string }
+type CtxPausa = {
+  puede: boolean
+  ov: Record<string, EstadoPausa>
+  onToggle: (adId: string, actual: string | null | undefined) => void
+}
 
 const RANGOS: { k: PresetMetaAds; label: string }[] = [
   { k: 'today', label: 'Hoy' },
@@ -58,8 +68,13 @@ function Badge({ txt, color, bg }: { txt: string; color: string; bg: string }) {
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
 export function MetaAds() {
+  const { perfil, marca } = useSesion()
+  const puedePausar = puedeSub(perfil, marca, 'meta-ads', 'pausar')
   const [preset, setPreset] = useState<PresetMetaAds>('last_30d')
   const [elegida, setElegida] = useState<string | null>(null)
+  // Estados optimistas de pausa/activación, keyeados por cuenta+rango: al cambiar de
+  // vista, `ovMap` vuelve a {} solo, sin efecto (evita setState-en-effect).
+  const [pausaOv, setPausaOv] = useState<{ key: string; map: Record<string, EstadoPausa> }>({ key: '', map: {} })
 
   const [ov, setOv] = useState<{ preset: PresetMetaAds; r: Cargable<CuentaMetaAds[]> } | null>(null)
   useEffect(() => {
@@ -87,7 +102,32 @@ export function MetaAds() {
     return () => { vivo = false }
   }, [activaId, preset])
 
-  const detEstado: Cargable<DetalleCuenta> = !activaId || !det || det.key !== `${activaId}|${preset}` ? { fase: 'cargando' } : det.r
+  const detKey = activaId ? `${activaId}|${preset}` : ''
+  const detEstado: Cargable<DetalleCuenta> = !activaId || !det || det.key !== detKey ? { fase: 'cargando' } : det.r
+
+  // Override activo solo si corresponde a la vista actual; al cambiar de cuenta/rango queda {}.
+  const ovMap = pausaOv.key === detKey ? pausaOv.map : {}
+
+  async function onToggle(adId: string, actual: string | null | undefined) {
+    const efectivo = ovMap[adId]?.status ?? actual
+    const activo = efectivo === 'ACTIVE'
+    const next: 'ACTIVE' | 'PAUSED' = activo ? 'PAUSED' : 'ACTIVE'
+    const ok = window.confirm(
+      activo
+        ? '¿Pausar este anuncio? Deja de mostrarse y de gastar hasta que lo reactives.'
+        : '¿Activar este anuncio? Vuelve a mostrarse y a consumir presupuesto.',
+    )
+    if (!ok) return
+    const set = (v: EstadoPausa) => setPausaOv((o) => {
+      const base = o.key === detKey ? o.map : {}
+      return { key: detKey, map: { ...base, [adId]: { ...base[adId], ...v } } }
+    })
+    set({ pending: true, error: undefined })
+    const r = await pausarAnuncio(adId, next)
+    set(r.ok ? { status: r.dato.status, pending: false } : { pending: false, error: r.motivo })
+  }
+
+  const pausa: CtxPausa = { puede: puedePausar, ov: ovMap, onToggle }
 
   return (
     <div>
@@ -128,7 +168,7 @@ export function MetaAds() {
         ) : detEstado.fase === 'error' ? (
           <div className="card" style={{ color: '#DC2626' }}>No se pudo traer el detalle: {detEstado.motivo}</div>
         ) : (
-          <Detalle d={detEstado.data} />
+          <Detalle d={detEstado.data} pausa={pausa} />
         )
       )}
     </div>
@@ -155,7 +195,7 @@ function ChipCuenta({ c, activa, onClick }: { c: CuentaMetaAds; activa: boolean;
   )
 }
 
-function Detalle({ d }: { d: DetalleCuenta }) {
+function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
   const moneda = d.cuenta.moneda
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -224,7 +264,7 @@ function Detalle({ d }: { d: DetalleCuenta }) {
         {d.campañas.length === 0 ? (
           <div style={{ fontSize: 13, color: '#9CA3AF' }}>No hay anuncios con gasto en este rango.</div>
         ) : (
-          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} />)
+          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} />)
         )}
       </div>
 
@@ -339,7 +379,7 @@ function Tile({ label, valor, destacado, color }: { label: string; valor: string
   )
 }
 
-function CampañaBloque({ c, moneda, accountId }: { c: Campaña; moneda: string; accountId: string }) {
+function CampañaBloque({ c, moneda, accountId, pausa }: { c: Campaña; moneda: string; accountId: string; pausa: CtxPausa }) {
   const [abierta, setAbierta] = useState(true)
   return (
     <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
@@ -366,7 +406,7 @@ function CampañaBloque({ c, moneda, accountId }: { c: Campaña; moneda: string;
               </tr>
             </thead>
             <tbody>
-              {c.ads.map((a) => <FilaAd key={a.ad_id} a={a} moneda={moneda} accountId={accountId} />)}
+              {c.ads.map((a) => <FilaAd key={a.ad_id} a={a} moneda={moneda} accountId={accountId} pausa={pausa} />)}
             </tbody>
           </table>
         </div>
@@ -387,8 +427,12 @@ function LinkAccion({ href, children }: { href: string; children: React.ReactNod
   )
 }
 
-function FilaAd({ a, moneda, accountId }: { a: AdRow; moneda: string; accountId: string }) {
-  const estado = rotuloEstado(a.status)
+function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; accountId: string; pausa: CtxPausa }) {
+  const ovAd = pausa.ov[a.ad_id]
+  const statusEfectivo = ovAd?.status ?? a.status
+  const estado = rotuloEstado(statusEfectivo)
+  const activo = statusEfectivo === 'ACTIVE'
+  const puedeToggle = pausa.puede && (activo || statusEfectivo === 'PAUSED') // solo si sabemos el estado real
   const rk = a.ranking
   const badges = [
     estado,
@@ -425,8 +469,27 @@ function FilaAd({ a, moneda, accountId }: { a: AdRow; moneda: string; accountId:
               </div>
             )}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+              {puedeToggle && (
+                <button
+                  onClick={() => pausa.onToggle(a.ad_id, statusEfectivo)}
+                  disabled={ovAd?.pending}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: ovAd?.pending ? '#9CA3AF' : activo ? '#B45309' : '#15803D',
+                    background: ovAd?.pending ? '#F3F4F6' : activo ? '#FFFBEB' : '#F0FDF4',
+                    border: `1px solid ${activo ? '#FDE68A' : '#BBF7D0'}`,
+                    borderRadius: 6,
+                    padding: '2px 9px',
+                    cursor: ovAd?.pending ? 'default' : 'pointer',
+                  }}
+                >
+                  {ovAd?.pending ? '…' : activo ? '⏸ Pausar' : '▶ Activar'}
+                </button>
+              )}
               <LinkAccion href={gestion}>Ads Manager ↗</LinkAccion>
               {a.permalink ? <LinkAccion href={a.permalink}>Ver aviso ↗</LinkAccion> : null}
+              {ovAd?.error ? <span style={{ fontSize: 11, color: '#DC2626' }}>No se pudo: {ovAd.error}</span> : null}
             </div>
           </div>
         </div>

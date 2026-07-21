@@ -61,3 +61,31 @@ export function traerDetalleCuenta(accountId: string, opts: OpcionesMetaAds): Pr
   qs.set('account', accountId)
   return pedir<DetalleCuenta>(qs)
 }
+
+/**
+ * Pausa o activa un anuncio (POST, escribe en Meta). Requiere token con
+ * ads_management y permiso (admin o `meta-ads.pausar`). Devuelve el nuevo status
+ * o el motivo del fallo (incluye el detalle real de Meta si lo hay).
+ */
+export async function pausarAnuncio(adId: string, status: 'ACTIVE' | 'PAUSED'): Promise<Lectura<{ status: string }>> {
+  try {
+    const r = await apiFetch('/api/meta-ads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ad_id: adId, status }),
+    })
+    let d: { ok?: boolean; status?: string; error?: unknown; detalle?: unknown } | null = null
+    try {
+      d = await r.json()
+    } catch {
+      return { ok: false, motivo: `respuesta no-JSON (HTTP ${r.status})` }
+    }
+    if (!r.ok || !d || d.ok !== true) {
+      const extra = d?.detalle ? ` — ${String(d.detalle).slice(0, 200)}` : ''
+      return { ok: false, motivo: `HTTP ${r.status}: ${String(d?.error ?? '').slice(0, 150)}${extra}` }
+    }
+    return { ok: true, dato: { status: String(d.status || status) } }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}

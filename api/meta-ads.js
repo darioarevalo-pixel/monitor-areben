@@ -60,16 +60,59 @@ async function insightsTodas(path) {
 }
 
 export default async function handler(req, res) {
-  if (soloMismoOrigen(req, res, 'GET, OPTIONS')) return;
-  if (req.method !== 'GET') return res.status(405).json({ error: 'método no permitido' });
+  if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
   if (!TOKEN) return res.status(500).json({ error: 'Meta Ads no configurado' });
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
+
+  // POST = mutación (pausar/activar un anuncio). Requiere ads_management en el token.
+  if (req.method === 'POST') return await accionAd(req, res, perfil);
 
   const q = req.query || {};
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
 
   return q.account ? await detalle(res, String(q.account), rango, rangoEco) : await overview(res, rango, rangoEco);
+}
+
+// ── Mutación: pausar o activar un anuncio ───────────────────────────────────────
+// Solo admin o quien tenga el sub-permiso `meta-ads.pausar` en alguna marca. Es una
+// escritura que afecta la entrega/gasto en vivo, pero reversible (se vuelve a activar).
+// El token debe tener scope ads_management; si es ads_read, Meta contesta con su error.
+function puedePausar(perfil) {
+  if (perfil && perfil.admin) return true;
+  const acc = (perfil && perfil.acceso) || {};
+  return Object.values(acc).some((m) => m && m['meta-ads.pausar']);
+}
+
+async function graphPost(path, params) {
+  const body = new URLSearchParams({ ...params, access_token: TOKEN });
+  try {
+    const r = await fetch(`${GRAPH}/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const d = await r.json().catch(() => null);
+    if (r.ok) return { ok: true, data: d };
+    return { ok: false, status: r.status, error: d && d.error };
+  } catch (e) {
+    return { ok: false, status: 0, error: { message: String((e && e.message) || e) } };
+  }
+}
+
+async function accionAd(req, res, perfil) {
+  if (!puedePausar(perfil)) return res.status(403).json({ error: 'No tenés permiso para pausar o activar anuncios.' });
+  const b = req.body || {};
+  const adId = String(b.ad_id || '').trim();
+  const status = String(b.status || '').trim().toUpperCase();
+  if (!/^\d+$/.test(adId)) return res.status(400).json({ error: 'ad_id inválido' });
+  if (status !== 'ACTIVE' && status !== 'PAUSED') return res.status(400).json({ error: 'status inválido (ACTIVE o PAUSED)' });
+
+  const r = await graphPost(adId, { status });
+  if (!r.ok) return res.status(502).json({ error: 'Meta rechazó el cambio', detalle: mensajeError(r) });
+  return res.status(200).json({ ok: true, status });
 }
 
 // ── Modo overview: las 3 cuentas con su total (para el selector) ────────────────
