@@ -12,14 +12,14 @@
  * El user sale de la sesión (localStorage) y la pass del cache de admin
  * (sessionStorage, la cachea el login). Cliente-only.
  *
- * Auto-recuperación: la sesión (localStorage) dura 30 días, pero la pass vive solo
- * en sessionStorage y se borra al cerrar el navegador. Al volver, el usuario PARECE
- * logueado (ve todo el Monitor) pero sin pass el header no sale y el endpoint tira
- * 403 "Necesitás estar logueado". Antes eso se veía como un error crudo en cada
- * sección de lectura (Meta Ads, conteos, inventario…). Ahora, si hay usuario pero
- * falta la pass, la re-pedimos una vez y seguimos. El single-flight evita abrir dos
- * prompts cuando varias requests salen a la vez (Meta Ads dispara overview + detalle
- * casi juntas). Mismo modelo que `obtenerPass()` de las secciones de escritura.
+ * Auto-recuperación (red de seguridad): si hay usuario logueado pero la pass no
+ * está cacheada, la re-pedimos una vez y seguimos, en vez de mandar la request sin
+ * header y comerse un 403 "Necesitás estar logueado" crudo (pasaba en Meta Ads,
+ * conteos, inventario, observaciones). Desde que la pass persiste en localStorage
+ * (ver guardarAdminPass en sesion.ts) esto casi no dispara — solo si la sesión de
+ * 30 días expiró o nunca se cacheó la pass en este navegador. El single-flight
+ * evita abrir dos prompts cuando salen varias requests a la vez (Meta Ads dispara
+ * overview + detalle casi juntas). Mismo modelo que `obtenerPass()` de escritura.
  */
 
 import { guardarAdminPass, leerAdminPass, leerSesion } from './sesion'

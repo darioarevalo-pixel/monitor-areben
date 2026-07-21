@@ -40,6 +40,8 @@ export function leerSesion(): Sesion | null {
     if (!s?.user) return null
     if (Date.now() - (s.ts || 0) > SESSION_TTL_MS) {
       localStorage.removeItem(SESSION_KEY)
+      try { localStorage.removeItem(ADMINPASS_KEY) } catch {}
+      try { sessionStorage.removeItem(ADMINPASS_KEY) } catch {}
       return null
     }
     return s
@@ -55,24 +57,36 @@ export function borrarSesion(): void {
   try {
     sessionStorage.removeItem(ADMINPASS_KEY)
   } catch {}
-}
-
-/**
- * La contraseña vive solo en sessionStorage porque el legacy la necesita para
- * autenticar los guardados que requieren admin (_getAdminPass, index.html:9331).
- * Es el modelo actual, no uno nuevo: la Fase S lo reemplaza junto con RLS.
- */
-export function guardarAdminPass(pass: string): void {
   try {
-    if (pass) sessionStorage.setItem(ADMINPASS_KEY, pass)
-    else sessionStorage.removeItem(ADMINPASS_KEY)
+    localStorage.removeItem(ADMINPASS_KEY)
   } catch {}
 }
 
-/** Lee la contraseña cacheada en sessionStorage (la deja el login). Port de la lectura de _getAdminPass. */
+/**
+ * La contraseña se cachea en localStorage (persiste al cerrar el navegador, igual
+ * que la sesión de 30 días) y se espeja en sessionStorage para que el legacy la
+ * lea dentro de la sesión (_getAdminPass, index.html:9365). Antes vivía solo en
+ * sessionStorage y se perdía al cerrar el navegador: la sesión seguía viva pero el
+ * header x-monitor-auth no salía y todo daba 403, con un re-pedido de pass molesto
+ * en cada vuelta. Persistirla acá lo elimina. Sigue siendo el modelo de pass en el
+ * cliente; la Fase S (Supabase Auth / token firmado) lo reemplaza junto con RLS.
+ */
+export function guardarAdminPass(pass: string): void {
+  try {
+    if (pass) {
+      localStorage.setItem(ADMINPASS_KEY, pass)
+      sessionStorage.setItem(ADMINPASS_KEY, pass)
+    } else {
+      localStorage.removeItem(ADMINPASS_KEY)
+      sessionStorage.removeItem(ADMINPASS_KEY)
+    }
+  } catch {}
+}
+
+/** Lee la pass cacheada: sessionStorage primero (lo que deja el legacy), luego localStorage (persistente). */
 export function leerAdminPass(): string {
   try {
-    return sessionStorage.getItem(ADMINPASS_KEY) || ''
+    return sessionStorage.getItem(ADMINPASS_KEY) || localStorage.getItem(ADMINPASS_KEY) || ''
   } catch {
     return ''
   }
