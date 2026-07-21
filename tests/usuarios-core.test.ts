@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { normalizar, nuevoUsuario, tienePermiso, togglePerm, validar } from '@/lib/usuarios/core'
+import { normalizar, nuevoUsuario, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 
 const base = (over: Partial<UsuarioConfig> = {}): UsuarioConfig => ({ name: 'Ana', pass: '1234', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, ...over })
 
 describe('usuarios/core — nuevoUsuario / normalizar', () => {
   it('nuevoUsuario arranca vacío y sin permisos', () => {
-    expect(nuevoUsuario()).toEqual({ name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} } })
+    expect(nuevoUsuario()).toEqual({ name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] })
   })
   it('normalizar rellena acceso.bdi/zattia si faltan', () => {
     const u = normalizar({ name: 'X', pass: 'y', admin: false, cuenta: null, acceso: {} as UsuarioConfig['acceso'] })
@@ -43,6 +43,26 @@ describe('usuarios/core — tienePermiso', () => {
     expect(tienePermiso(base({ admin: true }), 'bdi', 'lo-que-sea')).toBe(true)
     expect(tienePermiso(base({ acceso: { bdi: { productos: true }, zattia: {} } }), 'bdi', 'productos')).toBe(true)
     expect(tienePermiso(base(), 'bdi', 'productos')).toBe(false)
+  })
+})
+
+describe('usuarios/core — funcion', () => {
+  it('nuevoUsuario arranca con funcion vacía', () => {
+    expect(nuevoUsuario().funcion).toEqual([])
+  })
+  it('normalizar rellena funcion faltante a []', () => {
+    expect(normalizar(base()).funcion).toEqual([])
+  })
+  it('toggleFuncion agrega y quita sin duplicar', () => {
+    let u = base({ funcion: [] })
+    u = toggleFuncion(u, 'local', true)
+    expect(u.funcion).toEqual(['local'])
+    u = toggleFuncion(u, 'local', true) // idempotente
+    expect(u.funcion).toEqual(['local'])
+    u = toggleFuncion(u, 'deposito', true)
+    expect(u.funcion).toEqual(['local', 'deposito'])
+    u = toggleFuncion(u, 'local', false)
+    expect(u.funcion).toEqual(['deposito'])
   })
 })
 

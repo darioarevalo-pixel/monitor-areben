@@ -7,19 +7,27 @@
  */
 
 import { PERM_CAT, type Marca } from '@/lib/nav'
+import type { Funcion } from '@/lib/permisos'
 import type { UsuarioConfig } from './tipos'
 
-/** Un usuario nuevo, vacío (sin permisos). Port de usuAgregar. */
+/** Un usuario nuevo, vacío (sin permisos ni funciones). Port de usuAgregar. */
 export function nuevoUsuario(): UsuarioConfig {
-  return { name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} } }
+  return { name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] }
 }
 
-/** Asegura que `acceso.bdi` / `acceso.zattia` existan (el legacy los rellena al cargar). */
+/** Asegura que `acceso.bdi` / `acceso.zattia` y `funcion` existan (el legacy los rellena al cargar). */
 export function normalizar(u: UsuarioConfig): UsuarioConfig {
   const acceso = { ...(u.acceso || {}) }
   acceso.bdi = acceso.bdi || {}
   acceso.zattia = acceso.zattia || {}
-  return { ...u, acceso }
+  return { ...u, acceso, funcion: Array.isArray(u.funcion) ? u.funcion : [] }
+}
+
+/** Marca/desmarca una función del usuario (lista sin duplicados). Devuelve un usuario nuevo (inmutable). */
+export function toggleFuncion(u: UsuarioConfig, f: Funcion, val: boolean): UsuarioConfig {
+  const actual = Array.isArray(u.funcion) ? u.funcion : []
+  const funcion = val ? [...new Set([...actual, f])] : actual.filter((x) => x !== f)
+  return { ...u, funcion }
 }
 
 /**

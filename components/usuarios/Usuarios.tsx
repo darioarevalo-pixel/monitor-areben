@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esAdmin } from '@/lib/permisos'
+import { esAdmin, FUNCIONES, type Funcion } from '@/lib/permisos'
 import { guardarAdminPass, guardarConfigAdmin, leerAdminPass, traerConfigAdmin } from '@/lib/sesion'
 import { PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { normalizar, nuevoUsuario, tienePermiso, togglePerm, validar } from '@/lib/usuarios/core'
+import { normalizar, nuevoUsuario, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 
 /** Contraseña de admin: cacheada por el login, o se pide una vez. */
@@ -62,6 +62,7 @@ export function Usuarios() {
   const onAdmin = (i: number, val: boolean) => mut(i, (u) => ({ ...u, admin: val }))
   const onCuenta = (i: number, val: string) => mut(i, (u) => ({ ...u, cuenta: (val || null) as Marca | null }))
   const onPerm = (i: number, brand: Marca, key: string, val: boolean) => mut(i, (u) => togglePerm(u, brand, key, val))
+  const onFuncion = (i: number, f: Funcion, val: boolean) => mut(i, (u) => toggleFuncion(u, f, val))
   const agregar = () =>
     setUsers((prev) => {
       const next = [...(prev || []), nuevoUsuario()]
@@ -117,6 +118,7 @@ export function Usuarios() {
             onAdmin={onAdmin}
             onCuenta={onCuenta}
             onPerm={onPerm}
+            onFuncion={onFuncion}
             onEliminar={() => eliminar(i)}
           />
         ))
@@ -134,6 +136,7 @@ function UsuarioCard({
   onAdmin,
   onCuenta,
   onPerm,
+  onFuncion,
   onEliminar,
 }: {
   u: UsuarioConfig
@@ -144,6 +147,7 @@ function UsuarioCard({
   onAdmin: (i: number, val: boolean) => void
   onCuenta: (i: number, val: string) => void
   onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
+  onFuncion: (i: number, f: Funcion, val: boolean) => void
   onEliminar: () => void
 }) {
   return (
@@ -179,6 +183,25 @@ function UsuarioCard({
             <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
               <input type="checkbox" checked={u.admin} onChange={(e) => onAdmin(i, e.target.checked)} /> Administrador (ve todo)
             </label>
+          </div>
+
+          {/* Funciones (rol de flujo de trabajo): definen qué parte de las Solicitudes ve cada uno. */}
+          <div style={{ margin: '0 0 14px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', fontSize: 12, color: '#6B7280', marginBottom: 5 }}>
+              Función
+              <InfoPopover titulo="Función del usuario">
+                Rol de flujo de trabajo (además de los permisos). Define qué parte de una Solicitud ve cada uno:
+                Local ve lo de retirar en local, Depósito lo de preparar, Marketing la solicitud completa, Dirección
+                todo (su Inicio no arranca con las fotos para armar). Un usuario puede tener varias.
+              </InfoPopover>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {FUNCIONES.map((f) => (
+                <label key={f.key} style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 5 }} title={f.info}>
+                  <input type="checkbox" checked={!!u.funcion?.includes(f.key)} onChange={(e) => onFuncion(i, f.key, e.target.checked)} /> {f.label}
+                </label>
+              ))}
+            </div>
           </div>
 
           {u.admin ? (
