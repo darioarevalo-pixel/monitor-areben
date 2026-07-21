@@ -17,7 +17,7 @@
  */
 
 import { faseCompleta } from './core'
-import type { Origen, Solicitud, VentaGN } from './tipos'
+import type { ItemSolicitud, Origen, Solicitud, VentaGN } from './tipos'
 
 const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
 
@@ -33,6 +33,26 @@ export type PedidoVenta = {
   pass: string
 }
 
+/**
+ * Motor genérico de armado de pedidos, compartido con Solicitudes internas
+ * (convergencia Fase A). Difieren solo en el `comments` y en `incluir` (fotos excluye
+ * los ítems `nuevo`; internas los incluye a todos). La salida es byte-idéntica a la de
+ * antes (lo verifican los tests de ventas de los dos módulos).
+ */
+export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: string; incluir?: (i: ItemSolicitud) => boolean }): PedidoVenta[] {
+  const incluir = opts.incluir ?? (() => true)
+  const origenes = (['deposito', 'local'] as Origen[]).filter((o) => s.items.some((i) => i.origen === o && incluir(i)))
+  return origenes.map((origen) => ({
+    store: ctx.store,
+    origen,
+    items: s.items.filter((i) => i.origen === origen && incluir(i)).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: i.qty })),
+    comments: opts.comments,
+    solicitudId: s.id,
+    user: ctx.user,
+    pass: ctx.pass,
+  }))
+}
+
 /** Los orígenes con ítems VENDIBLES (no-nuevos). Port del filtro de sfCrearVentas @9690. */
 export function origenesVendibles(s: Solicitud): Origen[] {
   return (['deposito', 'local'] as Origen[]).filter((o) => s.items.some((i) => i.origen === o && !i.nuevo))
@@ -43,16 +63,7 @@ export function origenesVendibles(s: Solicitud): Origen[] {
  * sfCrearVentas @9694-9697: los ítems `nuevo` NO entran (no existen en GN).
  */
 export function construirPedidosVenta(s: Solicitud, ctx: CtxVenta): PedidoVenta[] {
-  const comments = `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`
-  return origenesVendibles(s).map((origen) => ({
-    store: ctx.store,
-    origen,
-    items: s.items.filter((i) => i.origen === origen && !i.nuevo).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: i.qty })),
-    comments,
-    solicitudId: s.id,
-    user: ctx.user,
-    pass: ctx.pass,
-  }))
+  return construirPedidos(s, ctx, { comments: `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`, incluir: (i) => !i.nuevo })
 }
 
 export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; error?: string }
@@ -79,9 +90,17 @@ export type ResultadoVentas = { ventas: Partial<Record<Origen, VentaGN>>; errore
  * No persiste ni re-lee: eso lo hace el llamador (que además chequea el duplicado).
  */
 export async function crearVentas(s: Solicitud, ctx: CtxVenta, enviar: EnviarVenta = enviarVentaFetch): Promise<ResultadoVentas> {
+  return enviarPedidos(construirPedidosVenta(s, ctx), enviar)
+}
+
+/**
+ * Envía una lista de pedidos SECUENCIALMENTE (dos POST en paralelo pueden descontar
+ * stock inconsistente) y arma el resultado. Compartido con Solicitudes internas.
+ */
+export async function enviarPedidos(pedidos: PedidoVenta[], enviar: EnviarVenta = enviarVentaFetch): Promise<ResultadoVentas> {
   const ventas: Partial<Record<Origen, VentaGN>> = {}
   const errores: string[] = []
-  for (const pedido of construirPedidosVenta(s, ctx)) {
+  for (const pedido of pedidos) {
     const r = await enviar(pedido)
     if (r.ok && r.venta) ventas[pedido.origen] = r.venta
     else errores.push(`${pedido.origen}: ${r.error || ''}`)
@@ -118,13 +137,32 @@ export type Consultar = (store: string, ventaId: number | string) => Promise<Est
  * inyectable para testear sin red.
  */
 export async function idsParaCerrar(sols: Solicitud[], store: string, consultar: Consultar = consultarEstadoGN): Promise<string[]> {
-  const pend = sols.filter((s) => s.estado !== 'cerrada' && s.ventas && (['deposito', 'local'] as Origen[]).some((o) => s.ventas![o]?.id))
+  return idsParaCerrarCon(sols, store, { requiereDevolucion: (s) => faseCompleta(s, 'devolucion') }, consultar)
+}
+
+/** Forma mínima que necesita `idsParaCerrarCon`. */
+type SolCerrable = { id: string; estado: string; ventas?: Partial<Record<Origen, VentaGN>> }
+
+/**
+ * Genérico de "qué solicitudes cerrar": las que pasan `incluir`, tienen ventas y TODAS
+ * están anuladas en GN, y (si se pide) completaron la devolución. Fotos pide devolución
+ * completa; internas filtra `retornable` y NO pide devolución. Compartido (Fase A).
+ */
+export async function idsParaCerrarCon<T extends SolCerrable>(
+  sols: T[],
+  store: string,
+  opts: { incluir?: (s: T) => boolean; requiereDevolucion?: (s: T) => boolean },
+  consultar: Consultar = consultarEstadoGN,
+): Promise<string[]> {
+  const incluir = opts.incluir ?? (() => true)
+  const pend = sols.filter((s) => incluir(s) && s.estado !== 'cerrada' && s.ventas && (['deposito', 'local'] as Origen[]).some((o) => s.ventas![o]?.id))
   const cerrar: string[] = []
   await Promise.all(
     pend.map(async (s) => {
       const ventas = (['deposito', 'local'] as Origen[]).map((o) => s.ventas![o]).filter((v): v is VentaGN => !!v && !!v.id)
       const res = await Promise.all(ventas.map((v) => consultar(store, v.id)))
-      if (res.length && res.every(ventaAnulada) && faseCompleta(s, 'devolucion')) cerrar.push(s.id)
+      const okDev = opts.requiereDevolucion ? opts.requiereDevolucion(s) : true
+      if (res.length && res.every(ventaAnulada) && okDev) cerrar.push(s.id)
     }),
   )
   return cerrar

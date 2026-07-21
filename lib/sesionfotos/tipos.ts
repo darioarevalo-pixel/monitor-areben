@@ -17,8 +17,16 @@ export type Origen = 'deposito' | 'local'
  * completar el escaneo de preparado → `preparada`; al crear las ventas en GN →
  * `cargada`; al completar la devolución → `devuelta`; cuando GN confirma que la
  * venta se anuló → `cerrada`.
+ *
+ * Es la UNIÓN de los ciclos de Sesión de fotos y Solicitudes internas (convergencia
+ * Fase A): fotos usa pendiente/preparada/cargada/devuelta/cerrada; internas suma
+ * `aprobada`/`retirada`(=cargada)/`rechazada`. Que sea un solo type deja a
+ * `SolicitudInterna` asignable a `Solicitud` para el motor/componente compartido.
  */
-export type EstadoSolicitud = 'pendiente' | 'preparada' | 'cargada' | 'devuelta' | 'cerrada'
+export type EstadoSolicitud = 'pendiente' | 'preparada' | 'cargada' | 'devuelta' | 'cerrada' | 'aprobada' | 'retirada' | 'rechazada'
+
+/** Retornable (vuelve, se repone) o consumo (baja definitiva). Solo aplica a solicitudes internas. */
+export type TipoSol = 'retornable' | 'consumo'
 
 /** Una venta creada en Gestión Nube por un origen de la solicitud. */
 export type VentaGN = {
@@ -89,6 +97,16 @@ export type Solicitud = {
   /** Conteo de devolución por vid (fase devolución). */
   devuelto?: Record<string, number>
   eliminados?: ItemEliminado[]
+  /**
+   * Capa de Solicitudes internas (opcional; ausente en las de fotos). Motivo del retiro,
+   * tipo (retornable/consumo) y datos de aprobación de los consumos. Convergencia Fase A:
+   * viven acá para que `Solicitud` sea el superset y el motor sea uno solo.
+   */
+  motivo?: string
+  tipo?: TipoSol
+  aprobadoPor?: string
+  aprobadoFecha?: string
+  rechazadoMotivo?: string
 }
 
 /** Fase de verificación por escaneo. */

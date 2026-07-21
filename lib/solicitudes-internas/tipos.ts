@@ -19,12 +19,11 @@
  * fase de "preparado", el retiro es directo).
  */
 
-import type { Origen, VentaGN } from '../sesionfotos/tipos'
+import type { Origen, TipoSol, VentaGN } from '../sesionfotos/tipos'
 
-export type { Origen, VentaGN }
-
-/** Retornable (vuelve, se repone) o consumo (no vuelve, baja definitiva). */
-export type TipoSol = 'retornable' | 'consumo'
+// Convergencia Fase A: `Origen`/`VentaGN`/`TipoSol` viven en el motor (sesionfotos/tipos)
+// y se re-exportan acá. Antes `TipoSol` estaba duplicado.
+export type { Origen, TipoSol, VentaGN }
 
 /**
  * El ciclo de vida. Un consumo arranca `pendiente` → `aprobada`/`rechazada`; un
