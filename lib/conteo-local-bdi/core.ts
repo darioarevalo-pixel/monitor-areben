@@ -21,9 +21,16 @@ export function normBc(b: unknown): string {
   return String(b || '').trim().toUpperCase()
 }
 
-/** Una funda se reconoce porque su nombre contiene "case". */
-export function esFunda(nombre: string): boolean {
-  return /case/i.test(String(nombre || ''))
+/**
+ * ¿Es una funda? Se cuenta como funda si el TALLE nombra un modelo de celular
+ * (todas las fundas tienen variantes por modelo) o si el nombre dice funda/case/cover.
+ * Antes solo miraba "case" en el nombre y dejaba afuera fundas como "ICONIC GREEN"
+ * o "ICONIC BLACK" (el color reemplaza a "Case" en el nombre), que igual tienen el
+ * talle = modelo. Medido en el Local de BDI: de 58 productos con talle de iPhone,
+ * los 58 son fundas → el talle-modelo no cuela cargadores/cables/vidrios.
+ */
+export function esFunda(nombre: string, sizeName: string): boolean {
+  return matchModelo(sizeName) != null || /case|funda|cover/i.test(String(nombre || ''))
 }
 
 /** Modelo de celular de una funda: `matchModelo(talle)` o el talle crudo si no matchea. */
@@ -45,7 +52,7 @@ export function agruparFundas(realMap: Record<string, FilaVivo>): {
 } {
   const vars: FundaVar[] = []
   Object.values(realMap).forEach((r) => {
-    if (!esFunda(r.product_name)) return
+    if (!esFunda(r.product_name, r.size_name)) return
     vars.push({
       vid: r.product_id + '_' + r.size_id,
       pid: String(r.product_id),

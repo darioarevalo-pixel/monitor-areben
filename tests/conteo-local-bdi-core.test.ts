@@ -23,14 +23,19 @@ const ROWS: FilaVivo[] = [
   fv({ product_id: '20', product_name: 'Funda Rígida Case', size_id: '1', size_name: 'iPhone 11 Blanco', barcode: 'B2', inventory_id: 501, available_quantity: 3 }),
   fv({ product_id: '10', product_name: 'Funda Silicona Case', size_id: '2', size_name: 'iPhone 12 Negro', barcode: 'B3', inventory_id: 502, available_quantity: 2 }),
   fv({ product_id: '40', product_name: 'Funda Case Basica', size_id: '1', size_name: 'Samsung A54', barcode: 'B4', inventory_id: 503, available_quantity: 4 }),
-  fv({ product_id: '30', product_name: 'Cargador USB-C', size_id: '1', size_name: 'iPhone 11 Negro', barcode: 'B5', inventory_id: 504, available_quantity: 9 }),
+  fv({ product_id: '30', product_name: 'Cargador USB-C', size_id: '1', size_name: 'Tipo C', barcode: 'B5', inventory_id: 504, available_quantity: 9 }),
 ]
 
 describe('esFunda / modeloDeFunda', () => {
-  it('funda = nombre con "case"', () => {
-    expect(esFunda('Funda Silicona Case')).toBe(true)
-    expect(esFunda('CASE transparente')).toBe(true)
-    expect(esFunda('Cargador USB-C')).toBe(false)
+  it('funda = talle de modelo de celular O nombre con case/funda/cover', () => {
+    // Por el nombre (aunque el talle no sea modelo)
+    expect(esFunda('Funda Silicona Case', 'Único')).toBe(true)
+    expect(esFunda('CASE transparente', 'Único')).toBe(true)
+    // Por el TALLE-modelo, aunque el nombre NO diga "case" (el caso "Iconic Green")
+    expect(esFunda('ICONIC GREEN', 'iPhone 11')).toBe(true)
+    expect(esFunda('ICONIC BLACK', 'iPhone 16 Pro Max')).toBe(true)
+    // Ni modelo ni case → no es funda
+    expect(esFunda('Cargador USB-C', 'Tipo C')).toBe(false)
   })
   it('modelo = matchModelo(talle), fallback al talle crudo', () => {
     expect(modeloDeFunda('iPhone 11 Negro')).toBe('iPhone 11')
