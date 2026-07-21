@@ -13,6 +13,14 @@ import { esAdmin, puedeVer } from '@/lib/permisos'
 
 /** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
 const DEFAULT_TAB = 'productos'
+/**
+ * Rescate cuando la sección no está permitida (o el default `productos` no lo ve este
+ * usuario). `inicio` no requiere permiso (KEYS_SIN_PERMISO) → visible para todos, así
+ * que nunca cae en blanco. Antes el guard `key !== DEFAULT_TAB` dejaba a un usuario sin
+ * `productos` (p.ej. función Local) en una página en blanco: caía en el default, que no
+ * podía ver, y no redirigía por ser el default.
+ */
+const FALLBACK_TAB = 'inicio'
 
 export default function Seccion() {
   const params = useParams()
@@ -31,7 +39,7 @@ export default function Seccion() {
     (key === 'usuarios' ? esAdmin(perfil) : key === 'inicio' || puedeVer(perfil, marca, key))
 
   useEffect(() => {
-    if (!cargando && perfil && !permitida && key !== DEFAULT_TAB) router.replace(`/${DEFAULT_TAB}`)
+    if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
   }, [cargando, perfil, permitida, key, router])
 
   if (cargando) return <div className="login-screen" />
