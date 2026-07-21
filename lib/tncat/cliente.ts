@@ -113,6 +113,16 @@ export async function vincularColor(store: Marca, product_id: string | number, i
   const j = await r.json().catch(() => ({}))
   return { ...j, ok: r.ok && j.ok }
 }
+/** Quita (desvincula) la foto de las variantes de un color: PUT image_id null en TN. ESCRIBE. Espejo de vincularColor. */
+export async function desvincularColor(store: Marca, product_id: string | number, color: string): Promise<SubirResp> {
+  const r = await fetch(imgUrl(store), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'unlink', product_id, color }),
+  })
+  const j = await r.json().catch(() => ({}))
+  return { ...j, ok: r.ok && j.ok }
+}
 
 // ── Revisar fotos por variante (card 3) ─────────────────────────────────────────
 /** Trae el estado de fotos por variante del audit. Port de fchkAbrir. */

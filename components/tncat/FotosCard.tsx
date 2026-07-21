@@ -2,11 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { auditVariantes, vincularColor } from '@/lib/tncat/cliente'
+import { auditVariantes, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
 import { coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import type { FiltroFchk, ProductoFchk } from '@/lib/tncat/tipos'
 
 const MAX = 150
+
+/** Acción pendiente de confirmar en el modal (con preview grande). Nada escribe hasta Aceptar. */
+type Accion = {
+  tipo: 'vincular' | 'quitar'
+  prodId: string | number
+  color: string
+  src: string | null // foto a mostrar en grande (candidata a vincular, o la actual a quitar)
+  imageId?: string | number // solo en 'vincular'
+  pending?: boolean
+  error?: string
+}
 
 /**
  * Revisar fotos por variante (card 3, fchk). Encuentra productos donde una foto se
@@ -18,6 +29,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState<FiltroFchk>('problema')
   const [busqueda, setBusqueda] = useState('')
+  const [accion, setAccion] = useState<Accion | null>(null)
 
   const cargar = async (refrescar = false) => {
     setCargando(true)
@@ -52,30 +64,44 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const nSinFoto = data.filter(sinFoto).length
   const lista = filtrar(data, filtro, busqueda)
 
-  const onVincular = async (prodId: string | number, imageId: string | number, color: string) => {
-    const p = data.find((x) => x.id === prodId)
-    if (!p) return
+  // Abren el modal de confirmación (con preview grande). NO escriben todavía.
+  const pedirVincular = (prodId: string | number, imageId: string | number, color: string, src: string | null) =>
+    setAccion({ tipo: 'vincular', prodId, imageId, color, src })
+  const pedirQuitar = (prodId: string | number, color: string, src: string | null) =>
+    setAccion({ tipo: 'quitar', prodId, color, src })
+
+  // Confirmación del modal: recién acá se escribe en TiendaNube.
+  const ejecutar = async () => {
+    if (!accion || accion.pending) return
+    const { tipo, prodId, color, imageId } = accion
+    setAccion((a) => (a ? { ...a, pending: true, error: undefined } : a))
     try {
-      const j = await vincularColor(marca, prodId, imageId, color)
-      if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (j.variantesAsignadas ?? 0) >= (j.variantesObjetivo ?? 0)) {
-        // Refleja el vínculo en memoria (como el legacy) sin re-pegar al server.
-        const src = (p.imagenes || []).find((im) => im.id === imageId)?.src ?? null
+      const j =
+        tipo === 'vincular'
+          ? await vincularColor(marca, prodId, imageId as string | number, color)
+          : await desvincularColor(marca, prodId, color)
+      const hechas = tipo === 'vincular' ? j.variantesAsignadas : j.variantesDesasignadas
+      if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (hechas ?? 0) >= (j.variantesObjetivo ?? 0)) {
+        // Refleja el cambio en memoria sin re-pegar al server. En 'quitar' la foto pasa a null.
+        const nuevaFoto = tipo === 'vincular' ? accion.src : null
         setData((prev) =>
           prev.map((x) =>
             x.id !== prodId
               ? x
               : {
                   ...x,
-                  variantes: (x.variantes || []).map((v) => (v.color === color ? { ...v, image_url: src } : v)),
-                  variantes_con_foto: (x.variantes || []).filter((v) => v.image_url || v.color === color).length,
+                  variantes: (x.variantes || []).map((v) => (v.color === color ? { ...v, image_url: nuevaFoto } : v)),
+                  variantes_con_foto: (x.variantes || []).filter((v) => (v.color === color ? nuevaFoto : v.image_url)).length,
                 },
           ),
         )
+        setAccion(null)
       } else {
-        alert('No se pudo vincular: ' + (j.error || ((j.variantesObjetivo ?? 0) === 0 ? `el color "${color}" no coincide con ninguna variante en TN` : `vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}`)))
+        const detalle = j.error || ((j.variantesObjetivo ?? 0) === 0 ? `el color "${color}" no coincide con ninguna variante en TN` : `${tipo === 'vincular' ? 'vinculó' : 'quitó'} ${hechas ?? 0}/${j.variantesObjetivo}`)
+        setAccion((a) => (a ? { ...a, pending: false, error: detalle } : a))
       }
     } catch {
-      alert('Error de conexión al vincular.')
+      setAccion((a) => (a ? { ...a, pending: false, error: 'Error de conexión.' } : a))
     }
   }
 
@@ -97,7 +123,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         </button>
       </div>
       <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px' }}>
-        Encontrá los productos donde una foto se cargó pero <b>no quedó pegada al color</b>, o que no tienen ninguna foto. Tocá una foto del producto para vincularla al color.
+        Encontrá los productos donde una foto se cargó pero <b>no quedó pegada al color</b>, o que no tienen ninguna foto. Tocá una foto para verla en grande y confirmar el cambio.
       </div>
 
       {cargando ? (
@@ -115,18 +141,69 @@ export function FotosCard({ marca }: { marca: Marca }) {
           ) : (
             <>
               {lista.slice(0, MAX).map((p) => (
-                <ProductoFila key={p.id} p={p} onVincular={onVincular} />
+                <ProductoFila key={p.id} p={p} onPedirVincular={pedirVincular} onPedirQuitar={pedirQuitar} />
               ))}
               {lista.length > MAX ? <div style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center', padding: 8 }}>Mostrando {MAX} de {lista.length}. Afiná con el buscador.</div> : null}
             </>
           )}
         </>
       )}
+
+      {accion && <ModalConfirmar accion={accion} onCancelar={() => setAccion(null)} onAceptar={ejecutar} />}
     </div>
   )
 }
 
-function ProductoFila({ p, onVincular }: { p: ProductoFchk; onVincular: (prodId: string | number, imageId: string | number, color: string) => void }) {
+/** Modal de confirmación con la foto en grande. Nada se escribe hasta Aceptar. */
+function ModalConfirmar({ accion, onCancelar, onAceptar }: { accion: Accion; onCancelar: () => void; onAceptar: () => void }) {
+  const quitar = accion.tipo === 'quitar'
+  return (
+    <div
+      onClick={accion.pending ? undefined : onCancelar}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 460, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+          {quitar ? 'Quitar foto del color ' : 'Vincular foto al color '}
+          <span style={{ color: '#378ADD' }}>{accion.color}</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+          {quitar ? 'La variante vuelve a quedar sin foto en TiendaNube.' : 'Se escribe en TiendaNube en vivo.'}
+        </div>
+        {accion.src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={accion.src} alt="" style={{ display: 'block', width: '100%', maxHeight: '55vh', objectFit: 'contain', borderRadius: 10, background: '#F3F4F6', border: '1px solid #E5E7EB' }} />
+        ) : (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', background: '#F3F4F6', borderRadius: 10 }}>Sin vista previa</div>
+        )}
+        {accion.error ? <div style={{ color: '#DC2626', fontSize: 12, marginTop: 10 }}>No se pudo: {accion.error}</div> : null}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+          <button className="btn-sm" onClick={onCancelar} disabled={accion.pending} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+            Cancelar
+          </button>
+          <button
+            className="btn-sm"
+            onClick={onAceptar}
+            disabled={accion.pending}
+            style={{ background: accion.pending ? '#93C5FD' : quitar ? '#DC2626' : '#378ADD', color: '#fff', border: 'none' }}
+          >
+            {accion.pending ? 'Guardando…' : quitar ? 'Quitar foto' : 'Aceptar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProductoFila({
+  p,
+  onPedirVincular,
+  onPedirQuitar,
+}: {
+  p: ProductoFchk
+  onPedirVincular: (prodId: string | number, imageId: string | number, color: string, src: string | null) => void
+  onPedirQuitar: (prodId: string | number, color: string, src: string | null) => void
+}) {
   if (sinFoto(p)) {
     return (
       <div style={{ border: '1px solid #FED7AA', background: '#FFF7ED', borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
@@ -153,10 +230,23 @@ function ProductoFila({ p, onVincular }: { p: ProductoFchk; onVincular: (prodId:
           foto ? (
             <div key={color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid #F1F5F9' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={foto} alt={color} style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 6, border: '2px solid #16A34A', flex: '0 0 auto' }} />
+              <img
+                src={foto}
+                alt={color}
+                onClick={() => onPedirQuitar(p.id, color, foto)}
+                title={`Ver en grande / quitar la foto de ${color}`}
+                style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 6, border: '2px solid #16A34A', flex: '0 0 auto', cursor: 'zoom-in' }}
+              />
               <div style={{ fontSize: 13 }}>
                 <b>{color}</b> <span style={{ color: '#16A34A' }}>✓ con foto</span>
               </div>
+              <button
+                onClick={() => onPedirQuitar(p.id, color, foto)}
+                title={`Quitar la foto de ${color}`}
+                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+              >
+                Quitar foto
+              </button>
             </div>
           ) : (
             <div key={color} style={{ padding: '5px 0', borderTop: '1px solid #F1F5F9' }}>
@@ -170,7 +260,7 @@ function ProductoFila({ p, onVincular }: { p: ProductoFchk; onVincular: (prodId:
                     <img
                       key={im.id}
                       src={im.src}
-                      onClick={() => onVincular(p.id, im.id, color)}
+                      onClick={() => onPedirVincular(p.id, im.id, color, im.src)}
                       title={`Vincular esta foto a ${color}`}
                       alt=""
                       style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: '2px solid #D1D5DB', cursor: 'pointer', flex: '0 0 auto' }}

@@ -60,8 +60,8 @@ export type GrupoImg = {
   portadaId?: number
 }
 
-/** Respuesta del endpoint al subir/vincular una imagen. */
-export type SubirResp = { ok?: boolean; image_id?: string | number; variantesObjetivo?: number; variantesAsignadas?: number; error?: string }
+/** Respuesta del endpoint al subir/vincular/desvincular una imagen. */
+export type SubirResp = { ok?: boolean; image_id?: string | number; variantesObjetivo?: number; variantesAsignadas?: number; variantesDesasignadas?: number; error?: string }
 
 // ── Revisar fotos por variante (card 3, fchk) ───────────────────────────────────
 export type VarianteFchk = { color?: string | null; image_url?: string | null }
