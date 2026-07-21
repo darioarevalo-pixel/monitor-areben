@@ -14,7 +14,7 @@
 
 import type { Producto, Variante } from '../etl/tipos'
 import { normBc, vidDeBarcode } from './escaneo'
-import type { ItemSolicitud, Origen, Solicitud } from './tipos'
+import type { ItemSolicitud, Origen, Solicitud, TipoSol } from './tipos'
 
 export type DraftVar = {
   vid: string
@@ -31,10 +31,18 @@ export type DraftVar = {
 export type DraftProd = { pid: string; name: string; cat: string; variantes: DraftVar[] }
 export type DraftPendiente = { barcode: string; qty: number; origenManual: Origen }
 export type DraftManual = { mid: string; desc: string; qty: number }
-export type Draft = { desc: string; prods: DraftProd[]; pendientes: DraftPendiente[]; manuales: DraftManual[] }
+export type Draft = {
+  desc: string
+  prods: DraftProd[]
+  pendientes: DraftPendiente[]
+  manuales: DraftManual[]
+  /** Capa de Solicitudes internas (opcional): motivo + tipo (retornable/consumo). Ausente en fotos. */
+  motivo?: string
+  tipo?: TipoSol
+}
 
-export function draftVacio(): Draft {
-  return { desc: '', prods: [], pendientes: [], manuales: [] }
+export function draftVacio(motivo?: string, tipo?: TipoSol): Draft {
+  return { desc: '', prods: [], pendientes: [], manuales: [], motivo, tipo }
 }
 
 const stockVar = (v: Variante) => (v.local || 0) + (v.deposito || 0)
@@ -220,7 +228,13 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
     items.push({ vid: 'man_' + mn.mid, pid: null, sid: null, nombre: desc, variante: '', sku: '', qty, origen: 'deposito', nuevo: true, manual: true })
   })
   if (!items.length) return null
-  return { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', estado: 'pendiente', items }
+  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items }
+  // Capa internas: si el borrador trae `tipo`, es una solicitud interna. El consumo nace
+  // `pendiente` (necesita aprobación); el retornable nace `aprobada`. Fotos: `pendiente`.
+  if (draft.tipo != null) {
+    return { ...base, motivo: draft.motivo || 'Otro', tipo: draft.tipo, estado: draft.tipo === 'consumo' ? 'pendiente' : 'aprobada', devuelto: {} }
+  }
+  return { ...base, estado: 'pendiente' }
 }
 
 // ── Actualizaciones inmutables pequeñas (para el estado de React) ────────────────
