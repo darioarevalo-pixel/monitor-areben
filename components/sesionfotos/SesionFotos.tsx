@@ -55,6 +55,7 @@ import {
 } from '@/lib/sesionfotos/core'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedeRetirar } from '@/lib/solicitudes/overview'
+import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
 import { tomarPuenteFotos, tomarVerSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 
@@ -680,6 +681,9 @@ function Detalle({
         <span style={{ color: '#9CA3AF', fontSize: 12 }}>{s.fecha}</span>
         <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s))} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
           🏷️ Etiqueta de bolsa
+        </button>
+        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s))} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+          🧾 Ticket 80mm
         </button>
         <label style={{ fontSize: 12, color: '#6B7280', marginLeft: 'auto' }}>
           Estado{' '}
