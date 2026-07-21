@@ -12,6 +12,9 @@ function label(key: string): string {
   return labelConEmoji(key)
 }
 
+/** Grupos homónimos con un solo destino: se muestran como ítem directo (sin doble clic). */
+const APLANAR = new Set(['inicio', 'clientes'])
+
 export function Sidebar({ activa }: { activa: string }) {
   const { perfil, marca, setMarca, salir } = useSesion()
   const [abierto, setAbierto] = useState<string | null>(null)
@@ -79,6 +82,20 @@ export function Sidebar({ activa }: { activa: string }) {
       <nav className="side-nav">
         <div className="nav-bar">
           {cats.map((cat) => {
+            // Grupo de un solo destino homónimo: un ítem que navega directo, sin expand.
+            if (APLANAR.has(cat.id) && cat.keys.length === 1) {
+              const k = cat.keys[0]
+              return (
+                <div key={cat.id} className="nav-group">
+                  <Link
+                    href={`/${k}`}
+                    className={`nav-cat${k === activa ? ' active' : ''}`}
+                  >
+                    {cat.label}
+                  </Link>
+                </div>
+              )
+            }
             const open = (abierto ?? grupoActivo) === cat.id
             return (
               <div key={cat.id} className={`nav-group${open ? ' open' : ''}`}>
