@@ -7,6 +7,8 @@ import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
 import { PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
+import { SI_MOTIVOS } from '@/lib/solicitudes-internas/tipos'
+import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
 import {
@@ -193,6 +195,7 @@ function Contenido({
     <div>
       {armando ? (
         <Draft
+          preset={preset}
           prioridad={prioridad}
           admin={admin}
           usuario={perfil?.name ?? ''}
@@ -221,6 +224,7 @@ function Contenido({
       ) : solViendo ? (
         <Detalle
           key={solViendo.id}
+          preset={preset}
           solicitud={solViendo}
           prioridad={prioridad}
           admin={admin}
@@ -237,6 +241,7 @@ function Contenido({
         />
       ) : (
         <Historial
+          preset={preset}
           data={data}
           admin={admin}
           puedeQuitar={puedeQuitar}
@@ -339,6 +344,7 @@ function Banner({ prioridad, admin }: { prioridad: Origen; admin: boolean }) {
 // ── Historial ───────────────────────────────────────────────────────────────────
 
 function Historial({
+  preset,
   data,
   admin,
   puedeQuitar,
@@ -352,6 +358,7 @@ function Historial({
   onToggleSel,
   onVerCombinada,
 }: {
+  preset: PresetSolicitud
   data: Solicitud[]
   admin: boolean
   puedeQuitar: boolean
@@ -365,9 +372,13 @@ function Historial({
   onToggleSel: (id: string, on: boolean) => void
   onVerCombinada: () => void
 }) {
+  const { marca: marcaHist, perfil: perfilHist } = useSesion()
   const cerradasN = useMemo(() => contarCerradas(data), [data])
   const visibles = useMemo(() => historialVisible(data, verCerradas), [data, verCerradas])
   const [chequeando, setChequeando] = useState(false)
+  // Internas: consumos pendientes de aprobación (para el aprobador).
+  const consumosPend = preset.conAprobacion ? data.filter((s) => s.tipo === 'consumo' && s.estado === 'pendiente') : []
+  const esAprobadorHist = admin || puedeSub(perfilHist, marcaHist, preset.seccionKey, 'aprobar')
   const verificarAnulaciones = async () => {
     setChequeando(true)
     try {
@@ -380,6 +391,11 @@ function Historial({
 
   return (
     <div>
+      {consumosPend.length > 0 && esAprobadorHist ? (
+        <div style={{ background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 10, padding: '9px 13px', marginBottom: 12, fontSize: 13, color: '#92400E' }}>
+          ⏳ <b>{consumosPend.length}</b> consumo(s) esperando tu aprobación. Abrí la solicitud para aprobar o rechazar.
+        </div>
+      ) : null}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <button className="btn-primary" onClick={onNueva}>
           + Nueva solicitud
@@ -487,6 +503,7 @@ async function correrSalida(fn: () => void | Promise<void>) {
 }
 
 function Detalle({
+  preset,
   solicitud: s0,
   prioridad,
   admin,
@@ -501,6 +518,7 @@ function Detalle({
   catalogoListo,
   onVolver,
 }: {
+  preset: PresetSolicitud
   solicitud: Solicitud
   prioridad: Origen
   admin: boolean
@@ -515,6 +533,7 @@ function Detalle({
   catalogoListo: boolean
   onVolver: () => void
 }) {
+  const { marca: marcaDetalle, perfil: perfilDetalle } = useSesion()
   const [creando, setCreando] = useState(false)
   // Copia de trabajo local (como sfData en memoria): todas las ediciones la mutan
   // al instante; un autosave con debounce la persiste con merge por-id.
@@ -554,6 +573,16 @@ function Detalle({
   const onRetirar = (origen: Origen, val: boolean) => setWork((w) => ({ ...w, retirado: { ...(w.retirado || {}), [origen]: val } }))
   const puedeRetiroDe = (o: Origen) => (o === 'deposito' ? puedeRetiroDep : puedeRetiroLoc)
 
+  // Capa internas (gateada por preset): aprobación de consumos + consumo sin devolución.
+  const esConsumo = s.tipo === 'consumo'
+  const necesitaAprobacion = preset.conAprobacion && s.estado === 'pendiente'
+  const esAprobador = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'aprobar')
+  const onAprobar = () => setWork((w) => ({ ...w, estado: 'aprobada', aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
+  const onRechazar = () => {
+    const m = prompt('Motivo del rechazo (opcional):')
+    setWork((w) => ({ ...w, estado: 'rechazada', rechazadoMotivo: (m || '').trim(), aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
+  }
+
   // Crear las ventas en GN (la única escritura IRREVERSIBLE). Pide la contraseña,
   // el hook re-lee fresco y aborta si ya hay ventas (anti-duplicado), y persiste.
   const onCrearVentas = async () => {
@@ -574,7 +603,7 @@ function Detalle({
         setWork((w) => ({ ...w, ventas: r.ventas, estado: r.estadoSol as EstadoSolicitud }))
         return
       }
-      if (Object.keys(r.ventas).length) setWork((w) => ({ ...w, ventas: { ...(w.ventas || {}), ...r.ventas }, estado: 'cargada' }))
+      if (Object.keys(r.ventas).length) setWork((w) => ({ ...w, ventas: { ...(w.ventas || {}), ...r.ventas }, estado: preset.estadoTrasVenta }))
       if (r.errores.length) alert('No se pudieron crear todas las ventas:\n' + r.errores.join('\n'))
     } finally {
       setCreando(false)
@@ -717,6 +746,25 @@ function Detalle({
 
       <Banner prioridad={prioridad} admin={admin} />
 
+      {/* Internas: capa de aprobación de consumos. */}
+      {preset.conAprobacion && s.tipo ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 13 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? '#B45309' : '#0F766E', background: esConsumo ? '#FFFBEB' : '#F0FDFA', border: `1px solid ${esConsumo ? '#FDE68A' : '#99F6E4'}`, borderRadius: 6, padding: '2px 8px' }}>
+            {esConsumo ? '🔥 Consumo (baja definitiva)' : '🔁 Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
+          </span>
+          {s.estado === 'rechazada' ? <span style={{ color: '#B91C1C' }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
+          {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: '#15803D' }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
+          {necesitaAprobacion && esAprobador ? (
+            <>
+              <button className="btn-sm" onClick={onAprobar} style={{ background: '#16A34A', color: '#fff' }}>✓ Aprobar</button>
+              <button className="btn-sm" onClick={onRechazar} style={{ background: '#fff', color: '#B91C1C', border: '1px solid #FCA5A5' }}>✗ Rechazar</button>
+            </>
+          ) : necesitaAprobacion ? (
+            <span style={{ color: '#B45309' }}>⏳ Esperando aprobación de un gerente.</span>
+          ) : null}
+        </div>
+      ) : null}
+
       {s.ventas ? (
         <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13 }}>
           <div>
@@ -749,18 +797,18 @@ function Detalle({
             })}
           </div>
         </div>
-      ) : hayVentables && veTodosLosItems ? (
+      ) : hayVentables && veTodosLosItems && (!preset.conAprobacion || s.estado === 'aprobada') ? (
         <div style={{ marginBottom: 10 }}>
           <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
-            {creando ? '⏳ Separando en GN…' : '🧾 Crear venta en GN (separar)'}
+            {creando ? '⏳ Separando en GN…' : esConsumo ? '🧾 Crear venta en GN (descontar)' : '🧾 Crear venta en GN (separar)'}
           </button>{' '}
-          <span style={{ color: '#9CA3AF', fontSize: 12 }}>Separa el stock con el cliente “Sesión de fotos” (no es retiro).</span>
+          <span style={{ color: '#9CA3AF', fontSize: 12 }}>{esConsumo ? 'Descuenta el stock (baja definitiva).' : 'Separa el stock con el cliente “Sesión de fotos” (no es retiro).'}</span>
         </div>
       ) : null}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="📤 Preparado" />
-        <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />
+        {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />}
       </div>
 
       {origenVisible('deposito') && grupo('📦 Retirar de Depósito', dep, 'deposito')}
@@ -955,6 +1003,7 @@ const nuevoMid = () => 'm' + Date.now() + '_' + Math.floor(Math.random() * 10000
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
 function Draft({
+  preset,
   prioridad,
   admin,
   usuario,
@@ -967,6 +1016,7 @@ function Draft({
   onCancelar,
   onCreada,
 }: {
+  preset: PresetSolicitud
   prioridad: Origen
   admin: boolean
   usuario: string
@@ -980,11 +1030,13 @@ function Draft({
   onCancelar: () => void
   onCreada: (id: string) => void
 }) {
+  // Internas: el borrador arranca con motivo + tipo (retornable). Fotos: sin ellos.
+  const draftInicial = () => (preset.pickerMotivoTipo ? draftVacio(SI_MOTIVOS[0], 'retornable') : draftVacio())
   // Con puente desde Marketing, arranca con esos productos expandidos (variantes con
   // stock, sin tildar) — el mismo estado que "Traer producto" de a uno. Inicializador
   // de useState: corre una sola vez.
   const [draft, setDraft] = useState<DraftT>(() =>
-    pidsIniciales?.length ? expandirProductos(draftVacio(), pidsIniciales, variantes, productos) : draftVacio(),
+    pidsIniciales?.length ? expandirProductos(draftInicial(), pidsIniciales, variantes, productos) : draftInicial(),
   )
   const [origenSel, setOrigenSel] = useState<Origen>(prioridad)
   const [busqueda, setBusqueda] = useState('')
@@ -1044,11 +1096,43 @@ function Draft({
 
   return (
     <div>
-      {/* Descripción de la sesión — el "nombre" del pedido (arriba). */}
+      {/* Internas: motivo + tipo (retornable/consumo). Fotos: no aplica. */}
+      {preset.pickerMotivoTipo && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          <label style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+            Motivo
+            <select
+              value={draft.motivo || SI_MOTIVOS[0]}
+              onChange={(e) => setDraft((d) => ({ ...d, motivo: e.target.value }))}
+              style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+            >
+              {SI_MOTIVOS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </label>
+          <span style={{ fontSize: 13, color: '#374151' }}>Tipo:</span>
+          {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setDraft((d) => ({ ...d, tipo: t }))}
+              style={{
+                border: `1px solid ${draft.tipo === t ? '#378ADD' : '#D1D5DB'}`,
+                background: draft.tipo === t ? '#378ADD' : '#fff',
+                color: draft.tipo === t ? '#fff' : '#374151',
+                borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {t === 'retornable' ? '🔁 Retornable' : '🔥 Consumo'}
+            </button>
+          ))}
+          {draft.tipo === 'consumo' ? <span style={{ fontSize: 12, color: '#B45309' }}>⚠ baja definitiva de stock · necesita aprobación</span> : null}
+        </div>
+      )}
+
+      {/* Descripción — el "nombre" del pedido (arriba). */}
       <input
         value={draft.desc}
         onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
-        placeholder="Descripción de la sesión (ej. Sesión otoño · jueves)"
+        placeholder={preset.pickerMotivoTipo ? '¿Para qué? (ej. molde falda otoño / video reel funda)' : 'Descripción de la sesión (ej. Sesión otoño · jueves)'}
         style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, marginBottom: 14 }}
       />
 
