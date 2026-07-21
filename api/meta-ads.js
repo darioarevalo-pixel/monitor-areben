@@ -107,8 +107,8 @@ async function detalle(res, account, rango, rangoEco) {
     graph(`${act}/insights?fields=spend,actions,action_values&breakdowns=publisher_platform,platform_position&${rango}&${attr}&limit=500`),
     // Diagnóstico de creativos + video por anuncio (call separada para no arriesgar la de anuncios).
     insightsTodas(`${act}/insights?level=ad&fields=ad_id,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,video_3_sec_watched_actions,video_thruplay_watched_actions&${filtroGasto}&${rango}&${attr}&limit=500`),
-    // Estado de entrega (activo/pausado/en aprendizaje) por anuncio.
-    graph(`${act}/ads?fields=id,effective_status&limit=500`),
+    // Estado de entrega (activo/pausado/en aprendizaje) + preview del creativo + links por anuncio.
+    graph(`${act}/ads?fields=id,effective_status,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url}&limit=500`),
     // Quién: edad × género. Dónde: región.
     graph(`${act}/insights?breakdowns=age,gender&fields=spend,impressions,actions,action_values&${rango}&${attr}&limit=500`),
     graph(`${act}/insights?breakdowns=region&fields=spend,actions,action_values&${rango}&${attr}&limit=500`),
@@ -126,7 +126,13 @@ async function detalle(res, account, rango, rangoEco) {
   if (extraRes.ok) for (const r of extraRes.rows) extraPorId.set(String(r.ad_id), r);
   const statusPorId = new Map();
   if (statusRes.ok && statusRes.data && Array.isArray(statusRes.data.data)) {
-    for (const a of statusRes.data.data) statusPorId.set(String(a.id), a.effective_status || null);
+    for (const a of statusRes.data.data) {
+      const cr = a.creative || {};
+      // Link al aviso publicado: permalink de IG si lo hay, si no la historia de FB (page_post).
+      const story = cr.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null;
+      const permalink = cr.instagram_permalink_url || story || null;
+      statusPorId.set(String(a.id), { status: a.effective_status || null, thumb: cr.thumbnail_url || null, permalink });
+    }
   }
 
   // Embudo (de los totales de cuenta) + video de cuenta (sumando las filas de extra).
@@ -157,9 +163,12 @@ async function detalle(res, account, rango, rangoEco) {
   const ads = adsRes.rows.map((row) => {
     const base = adDe(row);
     const ex = extraPorId.get(String(row.ad_id));
+    const st = statusPorId.get(String(row.ad_id)) || null;
     return {
       ...base,
-      status: statusPorId.get(String(row.ad_id)) || null,
+      status: st ? st.status : null,
+      thumb: st ? st.thumb : null,
+      permalink: st ? st.permalink : null,
       ranking: ex ? { quality: ex.quality_ranking || null, engagement: ex.engagement_rate_ranking || null, conversion: ex.conversion_rate_ranking || null } : null,
       video: ex ? videoDe(ex) : { plays3s: 0, thruplay: 0, hookRate: 0 },
     };

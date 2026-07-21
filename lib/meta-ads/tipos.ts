@@ -64,6 +64,10 @@ export type AdRow = Metricas & {
   campaign_name: string
   /** Enriquecimientos (pueden faltar si su call falló): estado, diagnóstico, video. */
   status?: EstadoAd
+  /** Miniatura del creativo (thumbnail_url de Meta), o null si no la trajo. */
+  thumb?: string | null
+  /** Link al aviso publicado (permalink de IG o historia de FB), o null. */
+  permalink?: string | null
   ranking?: RankingAd | null
   video?: VideoMetricas
 }

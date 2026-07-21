@@ -224,7 +224,7 @@ function Detalle({ d }: { d: DetalleCuenta }) {
         {d.campañas.length === 0 ? (
           <div style={{ fontSize: 13, color: '#9CA3AF' }}>No hay anuncios con gasto en este rango.</div>
         ) : (
-          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} />)
+          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} />)
         )}
       </div>
 
@@ -339,7 +339,7 @@ function Tile({ label, valor, destacado, color }: { label: string; valor: string
   )
 }
 
-function CampañaBloque({ c, moneda }: { c: Campaña; moneda: string }) {
+function CampañaBloque({ c, moneda, accountId }: { c: Campaña; moneda: string; accountId: string }) {
   const [abierta, setAbierta] = useState(true)
   return (
     <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
@@ -366,7 +366,7 @@ function CampañaBloque({ c, moneda }: { c: Campaña; moneda: string }) {
               </tr>
             </thead>
             <tbody>
-              {c.ads.map((a) => <FilaAd key={a.ad_id} a={a} moneda={moneda} />)}
+              {c.ads.map((a) => <FilaAd key={a.ad_id} a={a} moneda={moneda} accountId={accountId} />)}
             </tbody>
           </table>
         </div>
@@ -375,7 +375,19 @@ function CampañaBloque({ c, moneda }: { c: Campaña; moneda: string }) {
   )
 }
 
-function FilaAd({ a, moneda }: { a: AdRow; moneda: string }) {
+// Deep-link a Ads Manager con el anuncio ya seleccionado: ahí Bruno pausa/edita con su propio login.
+const adsManagerUrl = (accountId: string, adId: string) =>
+  `https://www.facebook.com/adsmanager/manage/ads?act=${accountId}&selected_ad_ids=${adId}`
+
+function LinkAccion({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+      {children}
+    </a>
+  )
+}
+
+function FilaAd({ a, moneda, accountId }: { a: AdRow; moneda: string; accountId: string }) {
   const estado = rotuloEstado(a.status)
   const rk = a.ranking
   const badges = [
@@ -383,17 +395,41 @@ function FilaAd({ a, moneda }: { a: AdRow; moneda: string }) {
     rk ? rotuloRanking(rk.quality) : null,
     rk ? rotuloRanking(rk.conversion) : null,
   ].filter((b): b is { txt: string; color: string; bg: string } => b !== null)
+  const gestion = adsManagerUrl(accountId, a.ad_id)
   return (
     <tr style={{ borderTop: '1px solid #F1F5F9' }}>
-      <td style={{ padding: '7px 10px', maxWidth: 300 }}>
-        <div style={{ fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ad_name}</div>
-        {a.adset_name ? <div style={{ fontSize: 11, color: '#9CA3AF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adset_name}</div> : null}
-        {(badges.length > 0 || (a.video && a.video.hookRate > 0)) && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
-            {badges.map((b, i) => <Badge key={i} {...b} />)}
-            {a.video && a.video.hookRate > 0 ? <span style={{ fontSize: 11, color: '#6B7280' }}>Hook {pct(a.video.hookRate)}</span> : null}
+      <td style={{ padding: '7px 10px', maxWidth: 340 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          {/* Preview del creativo → abre el aviso publicado (o Ads Manager si no hay permalink). */}
+          <a
+            href={a.permalink || gestion}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Ver el aviso"
+            style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 8, overflow: 'hidden', border: '1px solid #E5E7EB', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {a.thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={a.thumb} alt="" width={46} height={46} style={{ width: 46, height: 46, objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontSize: 18 }}>🖼️</span>
+            )}
+          </a>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ad_name}</div>
+            {a.adset_name ? <div style={{ fontSize: 11, color: '#9CA3AF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adset_name}</div> : null}
+            {(badges.length > 0 || (a.video && a.video.hookRate > 0)) && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+                {badges.map((b, i) => <Badge key={i} {...b} />)}
+                {a.video && a.video.hookRate > 0 ? <span style={{ fontSize: 11, color: '#6B7280' }}>Hook {pct(a.video.hookRate)}</span> : null}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+              <LinkAccion href={gestion}>Ads Manager ↗</LinkAccion>
+              {a.permalink ? <LinkAccion href={a.permalink}>Ver aviso ↗</LinkAccion> : null}
+            </div>
           </div>
-        )}
+        </div>
       </td>
       <Td>{money(a.spend, moneda)}</Td>
       <Td>{entero(a.purchases)}</Td>
