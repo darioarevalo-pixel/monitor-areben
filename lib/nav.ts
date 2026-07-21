@@ -127,7 +127,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
   reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
-  conteo: 'Conteo físico del local por escáner, contra el stock del sistema.',
+  conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
   'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
   'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',

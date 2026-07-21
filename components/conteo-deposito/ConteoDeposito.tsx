@@ -149,7 +149,13 @@ export function ConteoDeposito() {
     setVista('historial')
     setHist({ cargando: true, conteos: [], error: null })
     try {
-      setHist({ cargando: false, conteos: await leerHistorial(marca), error: null })
+      // Solo conteos de depósito: se filtran los de otras secciones (estándar del
+      // Local, fundas de BDI) que comparten la tabla por `store` con su propio `modo`.
+      const conteos = (await leerHistorial(marca)).filter((c) => {
+        const modo = ((c.resumen || {}) as { modo?: string }).modo
+        return !modo || modo === 'deposito'
+      })
+      setHist({ cargando: false, conteos, error: null })
     } catch (e) {
       setHist({ cargando: false, conteos: [], error: (e as Error).message })
     }

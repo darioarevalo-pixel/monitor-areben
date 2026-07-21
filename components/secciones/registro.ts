@@ -41,7 +41,7 @@ const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then(
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
-const Conteo = dynamic(() => import('@/components/conteo/Conteo').then((m) => m.Conteo), { loading: Cargando })
+const ConteoLocalBdi = dynamic(() => import('@/components/conteo-local-bdi/ConteoLocalBdi').then((m) => m.ConteoLocalBdi), { loading: Cargando })
 const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').then((m) => m.Reposicion), { loading: Cargando })
 const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), { loading: Cargando })
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
@@ -158,7 +158,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   'conteo-deposito': ConteoDeposito,
   'conteo-estandar-zattia': ConteoEstandar,
   'conteo-estandar-stunned': ConteoEstandar,
-  conteo: Conteo,
+  conteo: ConteoLocalBdi,
   'sesion-fotos': SesionFotos,
   // El flip de Resumen (18-jul-2026, 1er de la Tanda A): `/resumen` lo sirve el
   // shell. Read-only sobre el store del ETL (5 KPIs + estado de sync); KPIs con

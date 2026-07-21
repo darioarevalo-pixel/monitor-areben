@@ -32,11 +32,9 @@ import {
   setDeposito as ceSetDep,
   terminar as ceTerminar,
 } from '@/lib/conteo-estandar/core'
-import { completarExcel } from '@/lib/conteo/core'
 import { realMap } from '@/lib/inventario-vivo/core'
 import type { FilaVivo } from '@/lib/inventario-vivo/tipos'
 import type { CdepProducto } from '@/lib/conteo-deposito/tipos'
-import type { ConteoVar } from '@/lib/conteo/tipos'
 
 const HTML = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'), 'utf8')
 
@@ -182,80 +180,6 @@ describe('conteo-estandar · flujo completo → reusa el Excel de depósito', ()
       ['A', 6, 8],
       ['X', 10, 13],
     ])
-  })
-})
-
-type CompletarLegacy = (
-  aoa: unknown[][],
-  cUbi: number,
-  cBc: number,
-  cActual: number,
-  cNuevo: number,
-  byBc: Record<string, { vid: string; grupo: string }>,
-  listos: Set<string>,
-  conteoCount: Record<string, number>,
-) => { outRows: unknown[][]; enGrupos: number; ajustadas: number }
-
-/** El loop de completado del Excel de GN de conteoAjusteGN (index.html), motor del conteo BDI. */
-function extraerCompletarLegacy(): CompletarLegacy {
-  const fn = HTML.slice(HTML.indexOf('function conteoAjusteGN'))
-  const ini = fn.indexOf('const outRows = [aoa[0]];')
-  const fin = fn.indexOf('if (enGrupos === 0)')
-  if (ini < 0 || fin < 0) throw new Error('no se encontró el loop de completado en index.html')
-  const loop = fn.slice(ini, fin).trim()
-  const normBcLegacy = (b: unknown) => String(b || '').trim().toUpperCase() // === _conteoNormBc @11342
-  const raw = new Function(
-    'aoa', 'cUbi', 'cBc', 'cActual', 'cNuevo', 'byBc', 'listos', 'conteoCount', '_conteoNormBc',
-    `let enGrupos = 0, ajustadas = 0; ${loop} return { outRows, enGrupos, ajustadas };`,
-  ) as (...a: unknown[]) => { outRows: unknown[][]; enGrupos: number; ajustadas: number }
-  return (aoa, cUbi, cBc, cActual, cNuevo, byBc, listos, conteoCount) =>
-    raw(aoa, cUbi, cBc, cActual, cNuevo, byBc, listos, conteoCount, normBcLegacy)
-}
-
-describe('conteo (BDI) · completar Excel de GN — Next vs legacy extraído', () => {
-  const cv = (over: Partial<ConteoVar>): ConteoVar => ({ vid: '1_1', pid: '1', name: 'P', size: 'A', barcode: 'B1', grupo: 'G1', esperado: 0, ...over })
-  const vars: ConteoVar[] = [
-    cv({ vid: '1_1', barcode: 'B1', grupo: 'G1' }),
-    cv({ vid: '1_2', barcode: 'B2', grupo: 'G1' }),
-    cv({ vid: '9_1', barcode: 'B9', grupo: 'G2' }), // grupo NO marcado como listo
-  ]
-  const count = { '1_1': 8, '1_2': 3, '9_1': 5 }
-  const gruposListos = ['G1']
-  // Excel "Inventario Actual" de GN (una fila de depósito y una de grupo no contado se descartan).
-  const header = ['codigo_barras', 'ubicacion', 'stock_actual', 'nuevo_stock']
-  const aoa: unknown[][] = [
-    header,
-    ['B1', 'Local', 5, ''], // contado 8 ≠ 5 → ajusta
-    ['B2', 'Local', 3, ''], // contado 3 = 3 → no ajusta pero cuenta
-    ['B1', 'Deposito', 5, ''], // depósito → se descarta
-    ['B9', 'Local', 2, ''], // grupo G2 no listo → se descarta
-    ['BX', 'Local', 1, ''], // no está en el conteo → se descarta
-  ]
-  const clon = () => aoa.map((r) => [...r])
-
-  it('el Excel completado es idéntico al del legacy (mismas filas, mismo nuevo_stock)', () => {
-    const next = completarExcel(clon(), vars, count, gruposListos)
-    const byBc: Record<string, { vid: string; grupo: string }> = {}
-    vars.forEach((v) => { if (v.barcode) byBc[v.barcode] = v })
-    const leg = extraerCompletarLegacy()(clon(), 1, 0, 2, 3, byBc, new Set(gruposListos), count)
-    expect(next.ok).toBe(true)
-    if (!next.ok) return
-    expect(next.outRows).toEqual(leg.outRows)
-    expect(next.enGrupos).toBe(leg.enGrupos)
-    expect(next.ajustadas).toBe(leg.ajustadas)
-  })
-
-  it('completa nuevo_stock solo en el Local de los grupos contados', () => {
-    const r = completarExcel(clon(), vars, count, gruposListos)
-    expect(r.ok).toBe(true)
-    if (!r.ok) return
-    expect(r.outRows).toEqual([
-      header,
-      ['B1', 'Local', 5, 8], // nuevo_stock = contado
-      ['B2', 'Local', 3, 3],
-    ])
-    expect(r.enGrupos).toBe(2)
-    expect(r.ajustadas).toBe(1)
   })
 })
 

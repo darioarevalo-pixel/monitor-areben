@@ -254,10 +254,17 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "conteo",
-    "label": "🔢 Conteo de local",
-    "info": "Conteo físico del local por código de barras (una sola persona). Cuenta por modelo/categoría, compara contra el stock del sistema y muestra diferencias. Guarda el progreso. Exclusiva de BDI (en BDI el conteo del local es 100% por código de barras).",
+    "label": "🔢 Conteo de fundas",
+    "info": "Conteo de fundas del Local por escaneo, agrupado por modelo de celular. Escaneás un modelo completo y al cerrarlo compara contra el stock VIVO de GN (ubicación Local) y genera el Excel de ajuste + lo guarda en el historial con fecha. Exclusiva de BDI.",
     "brands": [
       "bdi"
+    ],
+    "subs": [
+      {
+        "key": "aplicar",
+        "label": "✅ Puede aplicar el ajuste",
+        "info": "Puede cerrar un modelo y generar el ajuste (no solo contar)."
+      }
     ]
   },
   {

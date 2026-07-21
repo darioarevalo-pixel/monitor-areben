@@ -228,6 +228,10 @@ export function ultimosPorProducto(conteos: ConteoHistorial[], products: CdepPro
   const porPid: Record<string, number> = {}
   const porNombre: Record<string, number> = {}
   conteos.forEach((c) => {
+    // Solo conteos de DEPÓSITO: los conteos de otras secciones (estándar del Local,
+    // fundas de BDI) comparten la misma tabla por `store` y traen un `modo` propio.
+    const modo = (c.resumen as { modo?: string } | undefined)?.modo
+    if (modo && modo !== 'deposito') return
     const ms = c.fecha_aplicado ? new Date(c.fecha_aplicado).getTime() : 0
     if (!ms) return
     const rr = c.resumen || {}
