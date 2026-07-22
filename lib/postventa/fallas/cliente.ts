@@ -63,6 +63,7 @@ export async function registrarVentaGN(
     solicitudId: `falla-${falla.id}`,
     user: ctx.user,
     pass: ctx.pass,
+    proposito: 'falla' as const, // → crear-venta usa el cliente "Falla" de GN (no el de fotos)
   }
   const r = await enviarVentaFetch(pedido)
   if (!r.ok) throw new Error(`No se pudo crear la venta en GN — ${r.error || ''}`)
