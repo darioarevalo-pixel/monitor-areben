@@ -55,6 +55,15 @@ export type PayloadCache = {
 export type EntradaCache = {
   timestamp: number
   data: PayloadCache
+  /**
+   * Marca a la que pertenece este payload. Se estampa al guardar y se valida al
+   * leer: si no coincide con la pedida (o falta, en entradas viejas sin sello), la
+   * entrada se descarta. Cierra un bug real —una entrada de BDI servida bajo la
+   * clave de Zattia mostraba el catálogo/stock equivocado— sin depender de que el
+   * refresco de fondo la pise. El legacy escribe `{timestamp,data}` sin este campo:
+   * esas entradas se rechazan (una vez) y se rebajan limpias.
+   */
+  marca?: Marca
 }
 
 /**
@@ -71,6 +80,9 @@ export function leerCache(marca: Marca, ignorarVencimiento = false): EntradaCach
     const raw = localStorage.getItem(claveCache(marca))
     if (!raw) return null
     const cached = JSON.parse(raw) as EntradaCache
+    // Sello de marca: una entrada de otra marca (o sin sello, escrita por el legacy o
+    // por una versión vieja) no es válida para esta marca, sin importar la edad.
+    if (cached.marca !== marca) return null
     if (!ignorarVencimiento) {
       const age = Date.now() - cached.timestamp
       if (age > TTL_MS) return null
@@ -88,7 +100,7 @@ export function leerCache(marca: Marca, ignorarVencimiento = false): EntradaCach
  */
 export function guardarCache(marca: Marca, data: PayloadCache, timestamp: number): void {
   try {
-    const payload = JSON.stringify({ timestamp, data })
+    const payload = JSON.stringify({ timestamp, data, marca })
     if (payload.length < LIMITE_BYTES) {
       localStorage.setItem(claveCache(marca), payload)
     }
