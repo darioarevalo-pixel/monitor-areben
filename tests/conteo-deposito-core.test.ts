@@ -10,6 +10,7 @@ import {
   detalleHistorial,
   HEADER_AJUSTE,
   setCount,
+  stockSistema,
   terminarProducto,
   ultimosPorProducto,
 } from '@/lib/conteo-deposito/core'
@@ -160,6 +161,25 @@ describe('aoaAjuste · Excel byte-fiel', () => {
   it('detalleHistorial mapea los campos de auditoría', () => {
     const rows = [{ inventory_id: 500, product_code: 'C10', producto: 'Cover', variante: 'A', ubicacion: 'D', barcode: 'B1', vivo: 6, dif: 3, nuevo: 9, sistema: 5, contado: 8 }]
     expect(detalleHistorial(rows)[0]).toEqual({ inventory_id: 500, barcode: 'B1', producto: 'Cover', variante: 'A', sistema: 5, contado: 8, diferencia: 3, vivo_aplicado: 6, nuevo_stock: 9 })
+  })
+})
+
+describe('stockSistema', () => {
+  const prod: CdepProducto = {
+    pid: '10',
+    name: 'Cover',
+    variants: [
+      { vid: '10_1', sid: '1', size: 'A', inventory_id: 100, esperado: 5 },
+      { vid: '10_2', sid: '2', size: 'B', inventory_id: 101, esperado: 3 },
+      { vid: '10_3', sid: '3', size: 'C', inventory_id: 102, esperado: 0 },
+    ],
+  }
+  it('suma el stock (esperado) de todas las variantes', () => {
+    expect(stockSistema(prod)).toBe(8)
+  })
+  it('usa el snap congelado si el producto ya se empezó a contar', () => {
+    const st = { estado: 'en_progreso' as const, contado: {}, snap: { '10_1': 2, '10_2': 3, '10_3': 0 }, dif: {} }
+    expect(stockSistema(prod, st)).toBe(5) // el snap de 10_1 (2) pisa su esperado (5)
   })
 })
 

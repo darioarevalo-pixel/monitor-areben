@@ -12,6 +12,7 @@ import {
   estadoDe,
   ordenarModelo,
   setCount,
+  stockSistema,
   terminarProducto,
   ultimoMs,
   volverSinTerminar,
@@ -21,7 +22,7 @@ import type { CdepProducto, CdepState, ConteoHistorial, EstadoProd, Preview } fr
 import { useConteoDeposito } from './useConteoDeposito'
 
 type Vista = 'lista' | 'foco' | 'preview' | 'historial'
-type Filtro = 'todos' | 'sin_previo' | 'contados' | 'en_progreso' | 'terminado'
+type Filtro = 'todos' | 'sin_previo' | 'sin_previo_stock' | 'contados' | 'en_progreso' | 'terminado'
 
 export function ConteoDeposito() {
   const { marca, perfil } = useSesion()
@@ -214,26 +215,34 @@ function Lista({ products, state, lastCount, stockTime, search, setSearch, filtr
   search: string; setSearch: (v: string) => void; filtro: Filtro; setFiltro: (f: Filtro) => void
   puedeAplicar: boolean; aplicando: boolean; onOpen: (pid: string) => void; onAplicar: () => void
 }) {
+  const [ordenarStock, setOrdenarStock] = useState(false)
   const term = products.filter((p) => estadoDe(state, p.pid) === 'terminado').length
   const prog = products.filter((p) => estadoDe(state, p.pid) === 'en_progreso').length
   const sinPrev = products.filter((p) => ultimoMs(state, lastCount, p.pid) === 0).length
+  const sinPrevStock = products.filter((p) => ultimoMs(state, lastCount, p.pid) === 0 && stockSistema(p, state[p.pid]) > 0).length
   const conteados = products.length - sinPrev
 
   const pasa = (p: CdepProducto) => {
     if (filtro === 'sin_previo') return ultimoMs(state, lastCount, p.pid) === 0
+    if (filtro === 'sin_previo_stock') return ultimoMs(state, lastCount, p.pid) === 0 && stockSistema(p, state[p.pid]) > 0
     if (filtro === 'contados') return ultimoMs(state, lastCount, p.pid) > 0
     if (filtro === 'en_progreso') return estadoDe(state, p.pid) === 'en_progreso'
     if (filtro === 'terminado') return estadoDe(state, p.pid) === 'terminado'
     return true
   }
   const q = search.trim().toLowerCase()
-  const lista = useMemo(() => products.filter((p) => (!q || p.name.toLowerCase().includes(q)) && pasa(p)), [products, q, filtro, state, lastCount]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lista = useMemo(() => {
+    const arr = products.filter((p) => (!q || p.name.toLowerCase().includes(q)) && pasa(p))
+    if (ordenarStock) arr.sort((a, b) => stockSistema(a, state[a.pid]) - stockSistema(b, state[b.pid]))
+    return arr
+  }, [products, q, filtro, state, lastCount, ordenarStock]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!products.length) return <div style={{ padding: 14, color: '#9CA3AF' }}>Sin productos en el depósito. Tocá &quot;Traer stock de GN&quot;.</div>
 
   const chips: [Filtro, string, number][] = [
     ['todos', 'Todos', products.length],
     ['sin_previo', '🔴 Sin conteo previo', sinPrev],
+    ['sin_previo_stock', '🎯 Falta contar (con stock)', sinPrevStock],
     ['contados', '📅 Ya contados', conteados],
     ['en_progreso', '✏️ En progreso', prog],
     ['terminado', '✅ Terminados', term],
@@ -258,10 +267,13 @@ function Lista({ products, state, lastCount, stockTime, search, setSearch, filtr
         </div>
       )}
       <div style={{ fontSize: 13, marginBottom: 8, color: '#374151' }}><b>{products.length}</b> productos · <b style={{ color: '#166534' }}>{term}</b> terminados · <b style={{ color: '#B45309' }}>{prog}</b> en progreso</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {chips.map(([f, label, n]) => (
           <button key={f} className="btn-sm" onClick={() => setFiltro(f)} style={{ background: filtro === f ? '#378ADD' : '#fff', color: filtro === f ? '#fff' : '#374151', border: `1px solid ${filtro === f ? '#378ADD' : '#D1D5DB'}`, fontWeight: filtro === f ? 700 : 500 }}>{label} <span style={{ opacity: 0.75 }}>({n})</span></button>
         ))}
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <button className="btn-sm" onClick={() => setOrdenarStock((v) => !v)} title="Ordena la lista por stock del sistema, de menor a mayor (los de poco stock son rápidos de contar)" style={{ background: ordenarStock ? '#378ADD' : '#fff', color: ordenarStock ? '#fff' : '#374151', border: '1px solid #D1D5DB' }}>↕ {ordenarStock ? 'Ordenado por stock (poco primero)' : 'Ordenar por stock'}</button>
       </div>
       {puedeAplicar && term > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -271,22 +283,24 @@ function Lista({ products, state, lastCount, stockTime, search, setSearch, filtr
       )}
       <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead><tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left', background: '#F9FAFB' }}><th style={{ padding: '7px 10px' }}>Producto</th><th style={{ textAlign: 'center', width: 90 }}>Variantes</th><th style={{ textAlign: 'center', width: 130 }}>Estado</th><th style={{ width: 110 }}></th></tr></thead>
+          <thead><tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left', background: '#F9FAFB' }}><th style={{ padding: '7px 10px' }}>Producto</th><th style={{ textAlign: 'center', width: 80 }}>Variantes</th><th style={{ textAlign: 'center', width: 80 }}>Stock sist.</th><th style={{ textAlign: 'center', width: 130 }}>Estado</th><th style={{ width: 110 }}></th></tr></thead>
           <tbody>
             {lista.slice(0, 400).map((p) => {
               const e = estadoDe(state, p.pid)
               const ult = ultimoMs(state, lastCount, p.pid)
+              const stk = stockSistema(p, state[p.pid])
               return (
                 <tr key={p.pid} style={{ borderTop: '1px solid #F3F4F6' }}>
                   <td style={{ padding: '7px 10px' }}>{p.name}</td>
                   <td style={{ textAlign: 'center', color: '#9CA3AF' }}>{p.variants.length}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 700, color: stk > 0 ? '#111827' : '#C4C4C4' }}>{stk}</td>
                   <td style={{ textAlign: 'center' }}><ChipEstado e={e} />{ult ? <div style={{ fontSize: 10.5, color: '#6B7280', marginTop: 3 }}>📅 Último: {fechaLabel(ult)}</div> : <div style={{ fontSize: 10.5, color: '#C4C4C4', marginTop: 3 }}>Sin conteo previo</div>}</td>
                   <td style={{ textAlign: 'right', paddingRight: 10 }}><button className="btn-sm" onClick={() => onOpen(p.pid)} style={{ background: e === 'sin_iniciar' ? '#378ADD' : '#fff', color: e === 'sin_iniciar' ? '#fff' : '#1D4ED8', border: '1px solid #378ADD' }}>{e === 'terminado' ? 'Ver / editar' : e === 'en_progreso' ? 'Seguir' : 'Contar'}</button></td>
                 </tr>
               )
             })}
-            {!lista.length && <tr><td colSpan={4} style={{ padding: 12, color: '#9CA3AF' }}>No hay productos que coincidan.</td></tr>}
-            {lista.length > 400 && <tr><td colSpan={4} style={{ padding: '8px 10px', color: '#9CA3AF', fontSize: 12 }}>Mostrando 400 de {lista.length}. Afiná la búsqueda.</td></tr>}
+            {!lista.length && <tr><td colSpan={5} style={{ padding: 12, color: '#9CA3AF' }}>No hay productos que coincidan.</td></tr>}
+            {lista.length > 400 && <tr><td colSpan={5} style={{ padding: '8px 10px', color: '#9CA3AF', fontSize: 12 }}>Mostrando 400 de {lista.length}. Afiná la búsqueda.</td></tr>}
           </tbody>
         </table>
       </div>

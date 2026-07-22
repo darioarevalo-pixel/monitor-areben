@@ -55,6 +55,16 @@ export function ultimoMs(state: CdepState, lastCount: Record<string, number>, pi
 }
 
 /**
+ * Stock del sistema de un producto = suma del stock de TODAS sus variantes en esa
+ * ubicación. Usa el `snap` congelado si el producto ya se empezó a contar, si no el
+ * `esperado` del vivo. Mismo criterio que la columna "Sistema" del Foco. Sirve para
+ * ver de un vistazo (en la lista) cuánto stock tiene sin entrar al producto.
+ */
+export function stockSistema(prod: CdepProducto, st?: EstadoDeProd): number {
+  return prod.variants.reduce((s, v) => s + (st?.snap && st.snap[v.vid] != null ? st.snap[v.vid] : v.esperado), 0)
+}
+
+/**
  * Abre un producto para contar: congela el `snap` (sistema) la primera vez y pasa a
  * `en_progreso`. Port de conteoDepOpen @11773-11783.
  */
