@@ -36,6 +36,11 @@ describe('esFunda / modeloDeFunda', () => {
     expect(esFunda('ICONIC BLACK', 'iPhone 16 Pro Max')).toBe(true)
     // Ni modelo ni case → no es funda
     expect(esFunda('Cargador USB-C', 'Tipo C')).toBe(false)
+    // Templados/vidrios: NO son fundas aunque tengan talle de modelo
+    expect(esFunda('TEMPLADO 9D', 'iPhone 13')).toBe(false)
+    expect(esFunda('VIDRIO TEMPLADO PREMIUM CON COLOCADOR', 'iPhone 13 Pro')).toBe(false)
+    // Pero "AG GLASS CASE" SÍ es funda (dorso de vidrio, dice "case")
+    expect(esFunda('AG GLASS CASE BLACK', 'iPhone 13')).toBe(true)
   })
   it('modelo = matchModelo(talle), fallback al talle crudo', () => {
     expect(modeloDeFunda('iPhone 11 Negro')).toBe('iPhone 11')

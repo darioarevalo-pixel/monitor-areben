@@ -30,7 +30,12 @@ export function normBc(b: unknown): string {
  * los 58 son fundas → el talle-modelo no cuela cargadores/cables/vidrios.
  */
 export function esFunda(nombre: string, sizeName: string): boolean {
-  return matchModelo(sizeName) != null || /case|funda|cover/i.test(String(nombre || ''))
+  const n = String(nombre || '')
+  // Templados y vidrios también son "por modelo", pero NO son fundas → se excluyen.
+  // (Ojo: "AG GLASS CASE" SÍ es funda —dorso de vidrio—, por eso se excluye por
+  // "templado/vidrio", no por "glass".)
+  if (/templado|vidrio/i.test(n)) return false
+  return matchModelo(sizeName) != null || /case|funda|cover/i.test(n)
 }
 
 /** Modelo de celular de una funda: `matchModelo(talle)` o el talle crudo si no matchea. */
