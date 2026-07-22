@@ -30,3 +30,8 @@ create table if not exists sku_map (
 
 create index if not exists idx_sku_map_store    on sku_map (store);
 create index if not exists idx_sku_map_validado on sku_map (store, validado);
+
+-- El resto de la base todavía no usa RLS (ver lib/cuentas.ts, Fase S pendiente). El endpoint
+-- api/sku-map.js ya gatea por login server-side. Se apaga RLS para que quede igual que las demás
+-- tablas (si el proyecto lo enciende por default, esto lo revierte). Idempotente.
+alter table sku_map disable row level security;

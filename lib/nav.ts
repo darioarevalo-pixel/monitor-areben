@@ -134,6 +134,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',
   'meta-ads': 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
+  integraciones: 'Mapeo de SKU entre Gestión Nube y Tienda Nube: la base del sync de stock y ventas.',
 }
 
 export function descripcionDe(key: string): string | undefined {

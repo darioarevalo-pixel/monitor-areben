@@ -407,6 +407,14 @@ export const PERM_CAT: PermCat[] = [
       "bdi",
       "zattia"
     ]
+  },
+  {
+    "key": "integraciones",
+    "label": "🔌 Integraciones",
+    "info": "Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.",
+    "brands": [
+      "zattia"
+    ]
   }
 ]
 
@@ -475,6 +483,13 @@ export const NAV_CATS: NavCat[] = [
       "meta-ads"
     ],
     "accent": "marketing"
+  },
+  {
+    "id": "integraciones",
+    "label": "🔌 Integraciones",
+    "keys": [
+      "integraciones"
+    ]
   },
   {
     "id": "compras",
