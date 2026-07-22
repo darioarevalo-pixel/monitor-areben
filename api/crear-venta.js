@@ -15,7 +15,7 @@ const SF_CFG = {
 // Cliente propio para las ventas de FALLAS (payload con proposito:'falla'), distinto del de Sesión
 // de fotos: así en GN cada venta técnica queda atribuida a su cliente correcto. Sin proposito, se usa
 // el client_id de SF_CFG (fotos), o sea el comportamiento de siempre (compatible hacia atrás).
-const FALLA_CLIENT = { zattia: 3805, bdi: 53 };
+const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
