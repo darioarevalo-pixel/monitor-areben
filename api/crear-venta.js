@@ -66,7 +66,12 @@ export default async function handler(req, res) {
 
   // ── Crear venta ── (GN no soporta anular/borrar por API: eso se hace a mano en la web de GN)
   if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
-  const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && (+it.quantity > 0)) : [];
+  // Reingreso (Cambios/Devoluciones): admite cantidad NEGATIVA para SUMAR stock. GN no tiene API de ingreso,
+  // así que se prueba con una "venta" de cantidad negativa + discount_inventory. SOLO esta acción admite
+  // negativos; el camino normal (fotos/solicitudes/fallas) sigue exigiendo quantity > 0.
+  const esReingreso = b.accion === 'reingreso';
+  const okQty = (it) => (esReingreso ? +it.quantity !== 0 : +it.quantity > 0);
+  const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && okQty(it)) : [];
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
 
   const store_id = cfg.store[b.origen];
