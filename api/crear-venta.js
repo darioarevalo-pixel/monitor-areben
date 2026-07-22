@@ -77,14 +77,29 @@ export default async function handler(req, res) {
   const store_id = cfg.store[b.origen];
   // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
   const clientId = (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] : cfg.client_id;
+  // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
+  // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock). El resto
+  // (fotos/fallas) va con precio 0 y sin descuento, idéntico a antes.
+  const lineItems = items.map(it => ({
+    product_id: parseInt(it.product_id, 10),
+    size_id: parseInt(it.size_id, 10),
+    quantity: parseInt(it.quantity, 10),
+    unit_price: esReingreso ? (Number(it.unit_price) || 0) : 0,
+    store_id,
+  }));
   const payload = {
     client_id: clientId, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
     store_id, discount_inventory: true,
     comments: String(b.comments || '').slice(0, 500),
     integration_source: 'monitor-sesion-fotos',
     integration_id: `${b.solicitudId || 'sf'}-${b.origen}`,
-    items: items.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: 0, store_id })),
+    items: lineItems,
   };
+  if (esReingreso) {
+    // discount a nivel venta = subtotal (negativo) → total 0. is_exchange marca el movimiento como cambio.
+    payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+    payload.is_exchange = true;
+  }
 
   try {
     const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
