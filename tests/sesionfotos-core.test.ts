@@ -300,7 +300,7 @@ describe('sesionfotos/core — separado vs retirado', () => {
   })
 })
 
-import { agregarItemSol, bloqueoEdicion, cambiarCantidadSol, itemDeVariante } from '@/lib/sesionfotos/core'
+import { agregarItemSol, asignarBolsa, bloqueoEdicion, bolsasDe, cambiarCantidadSol, contarBolsas, itemDeVariante, maxBolsa } from '@/lib/sesionfotos/core'
 
 describe('sesionfotos/core — edición (Fase C)', () => {
   it('bloqueoEdicion: solo bloquea si está cerrada', () => {
@@ -346,5 +346,58 @@ describe('sesionfotos/core — edición (Fase C)', () => {
     expect(itemDeVariante(v, '1', 'Rem', 3, 'local').origen).toBe('deposito') // local no alcanza
     expect(itemDeVariante({ ...v, local: 9 }, '1', 'Rem', 3, 'local').origen).toBe('local')
     expect(itemDeVariante(v, '1', 'Rem', 1, 'local', 'local').origen).toBe('local') // origenManual gana
+  })
+})
+
+describe('sesionfotos/core — bolsas numeradas (Fase C #3)', () => {
+  it('asignarBolsa: setea, normaliza (>=1, entero) y limpia con null', () => {
+    const base = sol({ items: [item({ vid: 'a' }), item({ vid: 'b' })] })
+    const s1 = asignarBolsa(base, 'a', 2)
+    expect(s1.items.find((i) => i.vid === 'a')!.bolsa).toBe(2)
+    expect(s1.items.find((i) => i.vid === 'b')!.bolsa).toBeUndefined()
+    // normaliza: 0 y decimales → piso, mínimo 1
+    expect(asignarBolsa(base, 'a', 0).items[0].bolsa).toBe(1)
+    expect(asignarBolsa(base, 'a', 3.7).items[0].bolsa).toBe(3)
+    // null limpia
+    expect(asignarBolsa(s1, 'a', null).items.find((i) => i.vid === 'a')!.bolsa).toBeUndefined()
+  })
+
+  it('bolsasDe: agrupa, ordena asc y manda "sin bolsa" al final', () => {
+    const s = sol({
+      items: [
+        item({ vid: 'a', bolsa: 2, qty: 1 }),
+        item({ vid: 'b', bolsa: 1, qty: 3 }),
+        item({ vid: 'c', qty: 2 }), // sin bolsa
+        item({ vid: 'd', bolsa: 1, qty: 1 }),
+      ],
+    })
+    const g = bolsasDe(s)
+    expect(g.map((x) => x.n)).toEqual([1, 2, null])
+    expect(g[0].items.map((i) => i.vid)).toEqual(['b', 'd'])
+    expect(g[0].totalU).toBe(4) // 3 + 1
+    expect(g[2].n).toBeNull()
+    expect(g[2].totalU).toBe(2)
+  })
+
+  it('bolsasDe: sin ítems con bolsa → un solo grupo null', () => {
+    const g = bolsasDe(sol({ items: [item({ vid: 'a' })] }))
+    expect(g).toHaveLength(1)
+    expect(g[0].n).toBeNull()
+  })
+
+  it('maxBolsa / contarBolsas', () => {
+    const s = sol({ items: [item({ vid: 'a', bolsa: 3 }), item({ vid: 'b', bolsa: 1 }), item({ vid: 'c' })] })
+    expect(maxBolsa(s)).toBe(3)
+    expect(contarBolsas(s)).toBe(2)
+    const vacio = sol({ items: [item({ vid: 'a' })] })
+    expect(maxBolsa(vacio)).toBe(0)
+    expect(contarBolsas(vacio)).toBe(0)
+  })
+
+  it('quitar un ítem no rompe la bolsa de los demás', () => {
+    const base = sol({ items: [item({ vid: 'a', bolsa: 1 }), item({ vid: 'b', bolsa: 1 })] })
+    const s1 = sinItemSol(base, 'a', { por: 'ana', motivo: 'Otro', fecha: '2026-07-21', ts: 1 })
+    expect(bolsasDe(s1).map((x) => x.n)).toEqual([1])
+    expect(s1.items[0].bolsa).toBe(1)
   })
 })

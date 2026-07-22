@@ -21,6 +21,8 @@ import {
 } from '@/lib/sesionfotos/escaneo'
 import {
   etiquetaBolsa,
+  etiquetasBolsas,
+  reporteBolsasPDF,
   reporteFaltantesPDF,
   reportePDF,
   textoReporteFaltantes,
@@ -47,10 +49,14 @@ import {
 import type { Producto, Variante } from '@/lib/etl/tipos'
 import {
   agregarItemSol,
+  asignarBolsa,
   bloqueoBorrado,
   bloqueoEdicion,
+  bolsasDe,
   cambiarCantidadSol,
+  contarBolsas,
   contarCerradas,
+  maxBolsa,
   faltantes,
   filaHistorial,
   historialVisible,
@@ -635,6 +641,11 @@ function Detalle({
       setWork((w) => cambiarCantidadSol(w, it.vid, q, { por: usuario, motivo, ts: Date.now() })),
     )
   }
+  // Asignar bolsa: organizativo (no toca GN/stock), sin motivo. n = null limpia.
+  const onAsignarBolsa = (it: ItemSolicitud, n: number | null) => setWork((w) => asignarBolsa(w, it.vid, n))
+  const grupos = bolsasDe(s)
+  const nBolsas = contarBolsas(s)
+  const proxBolsa = maxBolsa(s) + 1
   const onAgregarVariante = (v: Variante) =>
     conMotivo(`Agregar "${v.name} · ${v.size}"`, (motivo) =>
       setWork((w) =>
@@ -715,6 +726,19 @@ function Detalle({
                     )}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {editable ? (
+                      <input
+                        type="number"
+                        min={1}
+                        value={i.bolsa ?? ''}
+                        onChange={(e) => { const v = e.target.value.trim(); onAsignarBolsa(i, v === '' ? null : parseInt(v, 10)) }}
+                        title="Bolsa (dejá vacío para sacarla)"
+                        placeholder="👜"
+                        style={{ width: 38, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '1px 2px', fontSize: 12, marginRight: 6 }}
+                      />
+                    ) : typeof i.bolsa === 'number' ? (
+                      <span style={{ fontSize: 11, color: '#4338CA', marginRight: 6 }} title="Bolsa">👜{i.bolsa}</span>
+                    ) : null}
                     {editable && !i.manual ? (
                       <button
                         onClick={() => { const n = prompt(`Nueva cantidad de "${i.nombre} · ${i.variante}":`, String(i.qty)); if (n != null) onCambiarQty(i, parseInt(n, 10)) }}
@@ -766,6 +790,16 @@ function Detalle({
         <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s))} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
           🧾 Ticket 80mm
         </button>
+        {nBolsas > 0 ? (
+          <>
+            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s))} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              🏷️ Etiquetas de bolsas ({nBolsas})
+            </button>
+            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s))} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              📄 Reporte por bolsa
+            </button>
+          </>
+        ) : null}
         <label style={{ fontSize: 12, color: '#6B7280', marginLeft: 'auto' }}>
           Estado{' '}
           <select
@@ -884,6 +918,28 @@ function Detalle({
               ) : <div style={{ fontSize: 12, color: '#9CA3AF' }}>Escribí al menos 2 letras.</div>}
             </div>
           )}
+        </div>
+      ) : null}
+
+      {/* Bolsas (Fase C #3): resumen del armado por bolsa. Aparece si hay alguna asignada. */}
+      {nBolsas > 0 ? (
+        <div style={{ border: '1px solid #C7D2FE', borderRadius: 9, padding: '9px 12px', margin: '10px 0', background: '#EEF2FF' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#4338CA', marginBottom: 6 }}>👜 Bolsas ({nBolsas})</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {grupos.map((g) => (
+              <div key={g.n ?? 'sin'} style={{ border: `1px solid ${g.n != null ? '#C7D2FE' : '#E5E7EB'}`, background: '#fff', borderRadius: 8, padding: '6px 9px', minWidth: 150 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: g.n != null ? '#3730A3' : '#9CA3AF', marginBottom: 3 }}>
+                  {g.n != null ? `👜 Bolsa ${g.n}` : 'Sin bolsa'} <span style={{ fontWeight: 500, color: '#9CA3AF' }}>· {g.totalU} u.</span>
+                </div>
+                {g.items.map((i) => (
+                  <div key={i.vid} style={{ fontSize: 11, color: '#4B5563', padding: '1px 0' }}>
+                    • {i.nombre} · {i.variante} {i.qty > 1 ? `(x${i.qty})` : ''} {i.origen === 'local' ? '🏪' : '📦'}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          {editable ? <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>Asigná bolsas con el campo 👜 de cada ítem (próxima libre: {proxBolsa}).</div> : null}
         </div>
       ) : null}
 

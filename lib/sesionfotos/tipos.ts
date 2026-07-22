@@ -58,6 +58,12 @@ export type ItemSolicitud = {
   vinculado?: boolean
   /** Prenda sin código: control a mano, no genera venta ni toca stock. */
   manual?: boolean
+  /**
+   * Bolsa (1..N) a la que se asigna el ítem para el armado/packing de la sesión: se
+   * reparten los productos en bolsas numeradas, cada una un look/outfit. Ausente =
+   * sin asignar. Organizativo: no toca GN ni stock. Un ítem entero va a una bolsa.
+   */
+  bolsa?: number
 }
 
 /** Motivos predefinidos de un cambio en la solicitud (edición). */

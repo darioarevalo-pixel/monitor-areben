@@ -218,6 +218,49 @@ export function cambiarCantidadSol(s: Solicitud, vid: string, nuevaQty: number, 
   return registrarCambio(ns, { ts: datos.ts, por: datos.por, accion: 'cambió cantidad', detalle: `${it.nombre} · ${it.variante}: ${it.qty} → ${q}`, motivo: datos.motivo })
 }
 
+// ── Bolsas numeradas (armado/packing) ──────────────────────────────────────────
+// Repartir los ítems de una solicitud en bolsas numeradas (1..N), cada una un look.
+// Organizativo puro: no toca GN ni stock, solo el campo `bolsa` de cada ítem.
+
+/** Asigna (o limpia, con `n = null`) la bolsa de un ítem. */
+export function asignarBolsa(s: Solicitud, vid: string, n: number | null): Solicitud {
+  const bolsa = n == null ? undefined : Math.max(1, Math.floor(n))
+  return { ...s, items: (s.items || []).map((i) => (i.vid === vid ? { ...i, bolsa } : i)) }
+}
+
+/** Una bolsa derivada: su número, sus ítems y las unidades totales. */
+export type BolsaGrupo = { n: number | null; items: ItemSolicitud[]; totalU: number }
+
+/**
+ * Agrupa los ítems por bolsa, ordenadas ascendente; el grupo `n: null` (sin asignar)
+ * va al final. Solo devuelve grupos con ítems.
+ */
+export function bolsasDe(s: Solicitud): BolsaGrupo[] {
+  const mapa = new Map<number | null, ItemSolicitud[]>()
+  for (const i of s.items || []) {
+    const k = typeof i.bolsa === 'number' ? i.bolsa : null
+    const arr = mapa.get(k)
+    if (arr) arr.push(i)
+    else mapa.set(k, [i])
+  }
+  const nums = [...mapa.keys()].filter((k): k is number => k != null).sort((a, b) => a - b)
+  const orden: (number | null)[] = mapa.has(null) ? [...nums, null] : nums
+  return orden.map((n) => {
+    const items = mapa.get(n) || []
+    return { n, items, totalU: items.reduce((a, i) => a + i.qty, 0) }
+  })
+}
+
+/** La bolsa numerada más alta usada (0 si no hay ninguna). Para sugerir la próxima. */
+export function maxBolsa(s: Solicitud): number {
+  return (s.items || []).reduce((m, i) => (typeof i.bolsa === 'number' && i.bolsa > m ? i.bolsa : m), 0)
+}
+
+/** Cuántas bolsas numeradas distintas hay asignadas. */
+export function contarBolsas(s: Solicitud): number {
+  return new Set((s.items || []).map((i) => i.bolsa).filter((b): b is number => typeof b === 'number')).size
+}
+
 /**
  * Quita un ítem de la solicitud dejando rastro en `eliminados` y en el historial de
  * `cambios` (con quién, cuándo y por qué) y borrando su conteo de verif/devuelto. Port

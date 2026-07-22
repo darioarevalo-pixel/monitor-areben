@@ -56,7 +56,8 @@ export async function imprimirTicket80(s: Solicitud): Promise<void> {
     if (!arr.length) continue
     push(o === 'deposito' ? 'DEPOSITO' : 'LOCAL', 10.5, true, false, 2.4)
     for (const it of arr) {
-      push(`x${it.qty}   ${it.nombre}`, 9, true, false, 1.6)
+      const bt = typeof it.bolsa === 'number' ? `[B${it.bolsa}]  ` : ''
+      push(`x${it.qty}   ${bt}${it.nombre}`, 9, true, false, 1.6)
       const sub = [it.variante, it.sku].map((x) => String(x || '').trim()).filter(Boolean).join('   ·   ')
       if (sub) push(sub, 7.5, false, true, 0.3)
     }
