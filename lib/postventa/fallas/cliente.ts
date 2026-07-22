@@ -97,6 +97,17 @@ export async function cambiarEstadoFalla(store: Marca, id: number, estado: Falla
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo cambiar el estado.')
 }
 
+/** Elimina una falla del ledger (solo Administración). NO deshace la venta en GN. */
+export async function eliminarFalla(store: Marca, id: number): Promise<void> {
+  const r = await apiFetch('/api/fallas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, action: 'eliminar', id }),
+  })
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo eliminar la falla.')
+}
+
 export async function editarFalla(store: Marca, id: number, campos: Partial<FallaInput>): Promise<void> {
   const r = await apiFetch('/api/fallas', {
     method: 'POST',

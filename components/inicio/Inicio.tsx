@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
-import { esAdmin, puedeSub } from '@/lib/permisos'
+import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
 import { leerLista } from '@/lib/kv/cliente'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import { contarPendientes } from '@/lib/solicitudes-internas/core'
@@ -28,6 +28,8 @@ export function Inicio() {
   const [avisoSI, setAvisoSI] = useState(0)
 
   const esAprobador = esAdmin(perfil) || puedeSub(perfil, marca, 'solicitudes-internas', 'aprobar')
+  // Acceso directo a cargar una falla desde el Inicio (para el local, que la usa a diario).
+  const puedeCargarFalla = esAdmin(perfil) || puedeVer(perfil, marca, 'postventa-local')
 
   const cargar = useCallback(async () => {
     const marcas = marcasVisibles(perfil)
@@ -78,6 +80,17 @@ export function Inicio() {
           style={{ background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#92400E', cursor: 'pointer' }}
         >
           ⏳ Tenés <b>{avisoSI}</b> solicitud(es) interna(s) para aprobar. <span style={{ color: '#2563EB', textDecoration: 'underline' }}>Ver</span>
+        </div>
+      )}
+
+      {puedeCargarFalla && (
+        <div style={{ marginTop: avisoSI > 0 ? 14 : 0 }}>
+          <button
+            onClick={() => router.push('/postventa-local')}
+            style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 10, border: '1px solid #D97706', background: '#FFFBEB', color: '#B45309', cursor: 'pointer' }}
+          >
+            + Falla
+          </button>
         </div>
       )}
 

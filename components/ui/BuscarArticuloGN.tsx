@@ -49,10 +49,11 @@ export function BuscarArticuloGN({ marca, onSelect }: { marca: Marca; onSelect: 
     try {
       // Limpio caracteres que romperían la sintaxis or()/ilike de PostgREST.
       const like = encodeURIComponent(t.replace(/[%,()*]/g, ' '))
+      // Incluye barcode: el local carga escaneando (el escáner tipea el código + Enter).
       const inv = await sbFetch<FilaInv>(
         CUENTAS[marca],
         'inventario',
-        `select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity&or=(sku.ilike.*${like}*,product_name.ilike.*${like}*)&limit=60`,
+        `select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity&or=(sku.ilike.*${like}*,product_name.ilike.*${like}*,barcode.ilike.*${like}*)&limit=60`,
       )
       // Dedupe por variante (product_id+size_id), sumando el stock de las ubicaciones.
       const porVariante = new Map<string, ArticuloGN>()
@@ -119,7 +120,7 @@ export function BuscarArticuloGN({ marca, onSelect }: { marca: Marca; onSelect: 
         value={q}
         onChange={onChange}
         onFocus={() => q.trim().length >= 2 && setAbierto(true)}
-        placeholder="Buscar por SKU o nombre…"
+        placeholder="Buscar o escanear: SKU, nombre o código de barras…"
       />
       {abierto && (cargando || rows.length > 0) && (
         <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', maxHeight: 280, overflowY: 'auto' }}>

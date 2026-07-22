@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { cambiarEstadoFalla, confirmarFalla, crearFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
+import { cambiarEstadoFalla, confirmarFalla, crearFalla, eliminarFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow } from '@/lib/postventa/fallas/tipos'
 import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
@@ -215,10 +215,29 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
     }
   }, [marca, usuario])
 
-  const visibles = useMemo(
-    () => (filtro === 'todas' ? fallas : fallas.filter((f) => f.estado === filtro)),
-    [fallas, filtro],
-  )
+  const eliminar = useCallback(async (f: FallaRow) => {
+    const aviso = f.gn_venta_id
+      ? `Eliminar la falla de "${f.producto}" borra el registro del Monitor pero NO anula la venta ya hecha en GN (eso se anula a mano en GN si corresponde). ¿Eliminar?`
+      : `Eliminar la falla de "${f.producto}"? Esta acción no se puede deshacer.`
+    if (typeof window !== 'undefined' && !window.confirm(aviso)) return
+    setOcupada(f.id)
+    setError(null)
+    try {
+      await eliminarFalla(marca, f.id)
+      setFallas((fs) => fs.filter((x) => x.id !== f.id))
+      setMsg('Falla eliminada.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setOcupada(null)
+    }
+  }, [marca])
+
+  const visibles = useMemo(() => {
+    // Local ve SOLO lo pendiente de enviar a depósito (una vez que Admin la recibe, desaparece de su vista).
+    if (modo === 'local') return fallas.filter((f) => f.estado === 'cargada')
+    return filtro === 'todas' ? fallas : fallas.filter((f) => f.estado === filtro)
+  }, [fallas, filtro, modo])
 
   const totales = useMemo(() => {
     const act = fallas.filter((f) => ACTIVOS.includes(f.estado))
@@ -338,6 +357,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
                           <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void confirmar(f)} disabled={ocup} title="Valida los datos de la carga (no toca GN)">{ocup ? '…' : 'Confirmar'}</button>
                         )}
                         <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => setEditando(f)}>Editar</button>
+                        <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#DC2626', color: '#DC2626' }} onClick={() => void eliminar(f)} disabled={ocup}>Eliminar</button>
                         {(f.estado === 'confirmada' || f.estado === 'en_deposito') && (
                           <>
                             <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void cambiarEstado(f, 'vendida_feria')}>Vendida</button>
@@ -406,11 +426,17 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
           {bloqueMsg}
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            {(['todas', 'cargada', 'recibida', 'confirmada', 'vendida_feria', 'descartada'] as const).map((f) => (
-              <button key={f} style={tabBtn(filtro === f, true)} onClick={() => setFiltro(f)}>
-                {f === 'todas' ? 'Todas' : ESTADO_LABEL[f]}
-              </button>
-            ))}
+            {esAdmin ? (
+              (['todas', 'cargada', 'recibida', 'confirmada', 'vendida_feria', 'descartada'] as const).map((f) => (
+                <button key={f} style={tabBtn(filtro === f, true)} onClick={() => setFiltro(f)}>
+                  {f === 'todas' ? 'Todas' : ESTADO_LABEL[f]}
+                </button>
+              ))
+            ) : (
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                📦 Pendientes de enviar a depósito{visibles.length ? ` (${visibles.length})` : ''}
+              </div>
+            )}
             <button style={btn} onClick={() => void recargar()} disabled={cargando}>↻ Recargar</button>
           </div>
 

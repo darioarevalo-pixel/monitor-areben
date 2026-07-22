@@ -149,6 +149,13 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      if (action === 'eliminar') {
+        // Borra la falla del ledger. NO deshace la venta en GN (eso se anula a mano en GN).
+        const { error } = await supabase.from('fallas_deposito').delete().eq('id', id).eq('store', store);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
       if (action === 'editar') {
         const campos = camposDe(b);
         if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });

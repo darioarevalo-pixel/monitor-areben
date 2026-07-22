@@ -59,7 +59,7 @@ export type FallaInput = {
 }
 
 export const ESTADO_LABEL: Record<FallaEstado, string> = {
-  cargada: 'Cargada (local)',
+  cargada: 'Pendiente de envío',
   recibida: 'Recibida (depósito)',
   confirmada: 'Confirmada',
   en_deposito: 'En depósito',
