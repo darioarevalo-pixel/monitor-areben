@@ -137,6 +137,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   integraciones: 'Mapeo de SKU entre Gestión Nube y Tienda Nube: la base del sync de stock y ventas.',
   postventa: 'Post-venta (motor): recibe y confirma fallas, descuenta stock en GN, etiqueta. Valorizado.',
   'postventa-local': 'Cargá las prendas con falla que recibís del cliente. El motor está en Administración.',
+  'cambios-local': 'Iniciá un cambio: buscá la orden de TN, marcá qué devuelve y qué se lleva el cliente.',
 }
 
 export function descripcionDe(key: string): string | undefined {

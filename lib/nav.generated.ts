@@ -433,6 +433,15 @@ export const PERM_CAT: PermCat[] = [
       "bdi",
       "zattia"
     ]
+  },
+  {
+    "key": "cambios-local",
+    "label": "🔁 Cambios (iniciar)",
+    "info": "Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
   }
 ]
 
@@ -477,6 +486,7 @@ export const NAV_CATS: NavCat[] = [
       "cupones",
       "solicitudes-internas",
       "postventa-local",
+      "cambios-local",
       "etiquetas",
       "caducados",
       "ubicaciones",

@@ -22,6 +22,7 @@ export type ArticuloGN = {
   size_name: string | null
   available_quantity: number | null
   unit_cost: number | null
+  retailer_price: number | null
 }
 
 type FilaInv = {
@@ -33,7 +34,7 @@ type FilaInv = {
   barcode: string | null
   available_quantity: number | null
 }
-type FilaProd = { id: number | string; unit_cost: number | string | null }
+type FilaProd = { id: number | string; unit_cost: number | string | null; retailer_price: number | string | null }
 
 export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { marca: Marca; onSelect: (a: ArticuloGN) => void; mostrarCosto?: boolean }) {
   const [q, setQ] = useState('')
@@ -74,6 +75,7 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
             size_name: r.size_name ?? null,
             available_quantity: stock,
             unit_cost: null,
+            retailer_price: null,
           })
         }
       }
@@ -81,10 +83,14 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
       // Traigo el costo por producto (unit_cost vive en `productos`, no en `inventario`).
       const pids = [...new Set(arts.map((a) => a.product_id))]
       if (pids.length) {
-        const prods = await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,unit_cost&id=in.(${pids.join(',')})`)
+        const prods = await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,unit_cost,retailer_price&id=in.(${pids.join(',')})`)
         const costo = new Map<string, number | null>()
-        for (const p of prods) costo.set(String(p.id), p.unit_cost == null ? null : Number(p.unit_cost))
-        for (const a of arts) a.unit_cost = costo.get(a.product_id) ?? null
+        const precio = new Map<string, number | null>()
+        for (const p of prods) {
+          costo.set(String(p.id), p.unit_cost == null ? null : Number(p.unit_cost))
+          precio.set(String(p.id), p.retailer_price == null ? null : Number(p.retailer_price))
+        }
+        for (const a of arts) { a.unit_cost = costo.get(a.product_id) ?? null; a.retailer_price = precio.get(a.product_id) ?? null }
       }
       arts.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''))
       setRows(arts.slice(0, 40))

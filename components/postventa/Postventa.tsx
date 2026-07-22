@@ -19,11 +19,12 @@ import { cambiarEstadoFalla, confirmarFalla, crearFalla, eliminarFalla, leerFall
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow } from '@/lib/postventa/fallas/tipos'
 import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
+import { Cambios } from '@/components/cambios/Cambios'
 
 type Tab = 'fallas' | 'cambios' | 'devoluciones' | 'canjes'
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
   { key: 'fallas', label: 'Fallas', listo: true },
-  { key: 'cambios', label: 'Cambios', listo: false },
+  { key: 'cambios', label: 'Cambios', listo: true },
   { key: 'devoluciones', label: 'Devoluciones', listo: false },
   { key: 'canjes', label: 'Canjes', listo: false },
 ]
@@ -395,7 +396,9 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
         </div>
       )}
 
-      {esAdmin && tab !== 'fallas' ? (
+      {esAdmin && tab === 'cambios' ? (
+        <Cambios />
+      ) : esAdmin && tab !== 'fallas' ? (
         <div style={{ fontSize: 13, color: '#6B7280', padding: '28px 20px', border: '1px dashed #E5E7EB', borderRadius: 12, textAlign: 'center' }}>
           <b style={{ color: '#374151' }}>{TABS.find((t) => t.key === tab)?.label}</b> llega en una próxima tanda de Post-venta.
         </div>
