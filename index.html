@@ -9316,6 +9316,7 @@ const PERM_CAT = [
   { key: 'meta-ads', label: '💰 Meta Ads', info: 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.', brands: ['bdi', 'zattia'] },
   { key: 'gerencial', label: '🎯 Gerencial', info: 'Panel de decisiones: reúne de todas las marcas lo que requiere tu atención (capital parado, productos en declive, pendientes operativos, importaciones por llegar) con la acción recomendada y un acceso directo a la sección donde se ejecuta. Solo lectura.', brands: ['bdi', 'zattia'] },
   { key: 'integraciones', label: '🔌 Integraciones', info: 'Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.', brands: ['zattia'] },
+  { key: 'postventa', label: '🧾 Post-venta', info: 'Post-venta unificado (Administración): por ahora el DEPÓSITO DE FALLAS — ledger interno valorizado de prendas con falla que NO vuelven al stock oficial (siguen su flujo hacia feria). Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.', brands: ['bdi', 'zattia'] },
 ];
 // Agrupamiento de la navegación en menús desplegables.
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
@@ -9328,6 +9329,7 @@ const NAV_CATS = [
   { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos', 'meta-ads'], accent: 'marketing' },
   { id: 'integraciones', label: '🔌 Integraciones', keys: ['integraciones'] },
+  { id: 'administracion', label: '🗂️ Administración', keys: ['postventa'] },
   { id: 'compras',   label: '📦 Compras',   keys: ['fundas-modelo', 'ingresos', 'proveedores'] },
   { id: 'clientes',  label: '👥 Clientes',  keys: ['clientes'] },
   { id: 'config',    label: '⚙️ Config',    keys: ['usuarios'], adminOnly: true },

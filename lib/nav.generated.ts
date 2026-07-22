@@ -415,6 +415,15 @@ export const PERM_CAT: PermCat[] = [
     "brands": [
       "zattia"
     ]
+  },
+  {
+    "key": "postventa",
+    "label": "🧾 Post-venta",
+    "info": "Post-venta unificado (Administración): por ahora el DEPÓSITO DE FALLAS — ledger interno valorizado de prendas con falla que NO vuelven al stock oficial (siguen su flujo hacia feria). Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
   }
 ]
 
@@ -489,6 +498,13 @@ export const NAV_CATS: NavCat[] = [
     "label": "🔌 Integraciones",
     "keys": [
       "integraciones"
+    ]
+  },
+  {
+    "id": "administracion",
+    "label": "🗂️ Administración",
+    "keys": [
+      "postventa"
     ]
   },
   {

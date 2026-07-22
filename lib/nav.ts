@@ -135,6 +135,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'meta-ads': 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
   integraciones: 'Mapeo de SKU entre Gestión Nube y Tienda Nube: la base del sync de stock y ventas.',
+  postventa: 'Post-venta: depósito de fallas valorizado (a costo y a PVP de feria). No toca el stock oficial.',
 }
 
 export function descripcionDe(key: string): string | undefined {

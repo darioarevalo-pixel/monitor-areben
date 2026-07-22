@@ -51,6 +51,7 @@ const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m)
 const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) => m.MetaAds), { loading: Cargando })
 const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then((m) => m.Gerencial), { loading: Cargando })
 const Integraciones = dynamic(() => import('@/components/integraciones/Integraciones').then((m) => m.Integraciones), { loading: Cargando })
+const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -296,6 +297,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Escribe SOLO sku_map (correspondencias), NO stock ni ventas. Gateada por permiso `integraciones`
   // (solo Zattia por ahora). Rollback: comentar esta línea.
   integraciones: Integraciones,
+  // Post-venta (22-jul-2026, sección NUEVA — no existe en el legacy): `/postventa` lo sirve el shell.
+  // Fase 4 v1: depósito de FALLAS (tabla fallas_deposito, ledger valorizado por marca). NO toca stock
+  // oficial ni GN/TN. Gateada por permiso `postventa` (ambas marcas). Rollback: comentar esta línea.
+  postventa: Postventa,
 }
 
 /**
