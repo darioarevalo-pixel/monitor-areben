@@ -16,7 +16,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { cambiarEstadoCambio, confirmarCambio, crearCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarReingreso } from '@/lib/cambios/cliente'
-import { ESTADO_LABEL, VIA_LABEL, calcularDiferencia, type CambioItem, type CambioRow, type CambioVia, type OrdenTN } from '@/lib/cambios/tipos'
+import { DIAS_CAMBIO, ESTADO_LABEL, VIA_LABEL, calcularDiferencia, type CambioItem, type CambioRow, type CambioVia, type OrdenTN } from '@/lib/cambios/tipos'
 
 function obtenerPass(): string {
   let p = leerAdminPass()
@@ -57,7 +57,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [buscando, setBuscando] = useState(false)
   const [devueltos, setDevueltos] = useState<CambioItem[]>([])
   const [nuevos, setNuevos] = useState<CambioItem[]>([])
-  const [via, setVia] = useState<CambioVia>('local')
+  const [via, setVia] = useState<CambioVia>('andreani')
   const [guardando, setGuardando] = useState(false)
 
   const recargar = useCallback(async () => {
@@ -83,19 +83,24 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     } catch (e) { setError((e as Error).message) } finally { setBuscando(false) }
   }, [ordenNum, marca])
 
+  const prodDeLinea = (l: OrdenTN['products'][number]) => l.name || l.sku || 'Producto'
   const toggleDevuelto = (linea: OrdenTN['products'][number]) => {
-    const key = `${linea.product_id}-${linea.variant_id}-${linea.sku}`
+    const prod = prodDeLinea(linea)
     setDevueltos((ds) => {
-      const existe = ds.find((d) => `${d.product_id}-${d.size_id}-${d.sku}` === key)
-      if (existe) return ds.filter((d) => `${d.product_id}-${d.size_id}-${d.sku}` !== key)
-      return [...ds, { sku: linea.sku ?? null, producto: linea.name || linea.sku || 'Producto', precio: Number(linea.price) || 0, cantidad: linea.quantity || 1, product_id: null, size_id: null }]
+      const i = ds.findIndex((d) => (d.sku ?? '') === (linea.sku ?? '') && d.producto === prod)
+      if (i >= 0) return ds.filter((_, k) => k !== i)
+      return [...ds, { sku: linea.sku ?? null, producto: prod, precio: Number(linea.price) || 0, cantidad: Number(linea.quantity) || 1, product_id: null, size_id: null }]
     })
   }
+  const actualizarDevuelto = (idx: number, campo: 'precio' | 'cantidad', valor: number) =>
+    setDevueltos((ds) => ds.map((d, k) => (k === idx ? { ...d, [campo]: valor } : d)))
 
   const agregarNuevo = useCallback((a: ArticuloGN) => {
     setNuevos((ns) => [...ns, { sku: a.sku, product_id: a.product_id, size_id: a.size_id, producto: a.product_name || a.sku || 'Producto', precio: a.retailer_price ?? 0, cantidad: 1 }])
   }, [])
   const quitarNuevo = (i: number) => setNuevos((ns) => ns.filter((_, k) => k !== i))
+  const actualizarNuevo = (idx: number, campo: 'precio' | 'cantidad', valor: number) =>
+    setNuevos((ns) => ns.map((n, k) => (k === idx ? { ...n, [campo]: valor } : n)))
 
   const dif = useMemo(() => calcularDiferencia(devueltos, nuevos), [devueltos, nuevos])
 
@@ -105,7 +110,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     try {
       await crearCambio(marca, { orden_tn: ordenNum.trim() || null, cliente: orden?.cliente || null, via, items_devueltos: devueltos, items_nuevos: nuevos }, usuario)
       setMsg('Cambio iniciado.')
-      setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('local')
+      setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani')
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
   }, [marca, ordenNum, orden, via, devueltos, nuevos, usuario, recargar])
@@ -138,15 +143,27 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => c.estado === 'iniciado') : cambios), [cambios, modo])
   const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && c.estado !== 'iniciado' && c.estado !== 'anulado').length, [cambios])
 
-  const lineaSel = (l: OrdenTN['products'][number]) => devueltos.some((d) => d.sku === l.sku && d.producto === (l.name || l.sku || 'Producto'))
+  const lineaSel = (l: OrdenTN['products'][number]) => devueltos.some((d) => (d.sku ?? '') === (l.sku ?? '') && d.producto === prodDeLinea(l))
+  const idxDevuelto = (l: OrdenTN['products'][number]) => devueltos.findIndex((d) => (d.sku ?? '') === (l.sku ?? '') && d.producto === prodDeLinea(l))
+
+  // Ventana de cambio: 30 días desde la compra (+ ~15 de envío es la logística real).
+  const fechaOrden = orden?.fecha ? new Date(orden.fecha) : null
+  const vence = fechaOrden ? new Date(fechaOrden.getTime() + DIAS_CAMBIO * 86400000) : null
+  const vencido = vence ? new Date() > vence : false
+  const fmt = (d: Date | null) => (d ? d.toLocaleDateString('es-AR') : '—')
+
+  const inpN: React.CSSProperties = { ...inp, width: 90 }
+  const inpNs: React.CSSProperties = { ...inp, width: 56 }
+  const lblN: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6B7280' }
+  const sub = (i: { precio?: number | null; cantidad: number }) => (Number(i.precio) || 0) * (Number(i.cantidad) || 1)
 
   return (
     <div style={{ maxWidth: 1100 }}>
-      {!esAdmin && <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Iniciá el cambio con el cliente: buscá la orden, marcá lo que devuelve y elegí lo nuevo. Administración lo confirma.</div>}
+      {!esAdmin && <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y elegí lo nuevo. Administración lo confirma.</div>}
 
       {/* Nuevo cambio */}
       <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Nuevo cambio</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Nuevo cambio <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(por envío)</span></div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 220px' }}>
             <span style={{ fontSize: 11, color: '#6B7280' }}>Nº de orden de Tienda Nube</span>
@@ -156,32 +173,51 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           {orden && <span style={{ fontSize: 12, color: '#111827' }}>Orden #{String(orden.number)} · {orden.cliente || 's/cliente'}</span>}
         </div>
 
+        {orden && fechaOrden && (
+          <div style={{ fontSize: 12, marginBottom: 10, color: vencido ? '#991B1B' : '#6B7280' }}>
+            🗓️ Compra: <b>{fmt(fechaOrden)}</b> · cambio válido hasta <b>{fmt(vence)}</b> ({DIAS_CAMBIO} días){vencido ? ' — ⚠️ FUERA DE PLAZO' : ''}
+          </div>
+        )}
+
         {orden && (
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>Marcá lo que DEVUELVE el cliente:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {(orden.products || []).map((l, i) => (
-                <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={lineaSel(l)} onChange={() => toggleDevuelto(l)} />
-                  <span style={{ fontWeight: 600 }}>{l.name || l.sku}</span>
-                  <span style={{ color: '#6B7280', fontFamily: 'monospace' }}>{l.sku || ''}</span>
-                  <span style={{ color: '#6B7280' }}>×{l.quantity} · {money(Number(l.price) || 0)}</span>
-                </label>
-              ))}
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>Marcá lo que DEVUELVE el cliente (podés ajustar precio y cantidad):</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(orden.products || []).map((l, i) => {
+                const sel = lineaSel(l); const di = idxDevuelto(l); const d = di >= 0 ? devueltos[di] : null
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, flexWrap: 'wrap' }}>
+                    <input type="checkbox" checked={sel} onChange={() => toggleDevuelto(l)} />
+                    <span style={{ fontWeight: 600, minWidth: 150 }}>{l.name || l.sku}</span>
+                    <span style={{ color: '#6B7280', fontFamily: 'monospace' }}>{l.sku || ''}</span>
+                    {sel && d ? (
+                      <>
+                        <label style={lblN}>$ <input style={inpN} type="number" min={0} value={d.precio ?? 0} onChange={(e) => actualizarDevuelto(di, 'precio', Number(e.target.value))} /></label>
+                        <label style={lblN}>× <input style={inpNs} type="number" min={1} value={d.cantidad} onChange={(e) => actualizarDevuelto(di, 'cantidad', Number(e.target.value))} /></label>
+                        <span style={{ fontWeight: 600 }}>= {money(sub(d))}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: '#6B7280' }}>×{l.quantity} · {money(Number(l.price) || 0)}</span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
 
         <div style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }}>Producto(s) nuevo(s) que se lleva (de Gestión Nube)</span>
+          <span style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }}>Producto(s) nuevo(s) que se lleva (de Gestión Nube) — el buscador se limpia al agregar</span>
           <BuscarArticuloGN marca={marca} onSelect={agregarNuevo} mostrarCosto={false} />
           {nuevos.length > 0 && (
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {nuevos.map((n, i) => (
-                <div key={i} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600 }}>{n.producto}</span>
+                <div key={i} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600, minWidth: 150 }}>{n.producto}</span>
                   <span style={{ color: '#6B7280', fontFamily: 'monospace' }}>{n.sku}</span>
-                  <span>{money(n.precio)}</span>
+                  <label style={lblN}>$ <input style={inpN} type="number" min={0} value={n.precio ?? 0} onChange={(e) => actualizarNuevo(i, 'precio', Number(e.target.value))} /></label>
+                  <label style={lblN}>× <input style={inpNs} type="number" min={1} value={n.cantidad} onChange={(e) => actualizarNuevo(i, 'cantidad', Number(e.target.value))} /></label>
+                  <span style={{ fontWeight: 600 }}>= {money(sub(n))}</span>
                   <button style={{ ...btn, padding: '1px 8px', fontSize: 11, color: '#DC2626', borderColor: '#FCA5A5' }} onClick={() => quitarNuevo(i)}>quitar</button>
                 </div>
               ))}
@@ -189,18 +225,24 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           )}
         </div>
 
+        {/* Sumas */}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 10, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+          <span style={{ color: '#6B7280' }}>Devuelve: <b style={{ color: '#111827' }}>{money(dif.totalDevueltos)}</b></span>
+          <span style={{ color: '#6B7280' }}>Se lleva: <b style={{ color: '#111827' }}>{money(dif.totalNuevos)}</b></span>
+          <span style={{ color: DIF_LABEL[dif.estado].color, fontWeight: 700 }}>
+            Diferencia: {money(Math.abs(dif.diferencia))} ({DIF_LABEL[dif.estado].txt})
+          </span>
+        </div>
+
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 160px' }}>
-            <span style={{ fontSize: 11, color: '#6B7280' }}>Vía</span>
+            <span style={{ fontSize: 11, color: '#6B7280' }}>Vía de envío</span>
             <select style={inp} value={via} onChange={(e) => setVia(e.target.value as CambioVia)}>
-              <option value="local">Local (en el momento)</option>
-              <option value="correo">Correo</option>
               <option value="andreani">Andreani</option>
+              <option value="correo">Correo</option>
+              <option value="cadete">Cadete</option>
             </select>
           </label>
-          <div style={{ fontSize: 13, fontWeight: 700, color: DIF_LABEL[dif.estado].color }}>
-            Diferencia: {money(dif.diferencia)} <span style={{ fontWeight: 600 }}>({DIF_LABEL[dif.estado].txt})</span>
-          </div>
           <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void iniciar()} disabled={guardando}>{guardando ? 'Guardando…' : '+ Iniciar cambio'}</button>
         </div>
       </div>

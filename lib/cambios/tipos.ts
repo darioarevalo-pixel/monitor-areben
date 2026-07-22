@@ -7,7 +7,8 @@
 import type { Marca } from '@/lib/nav.generated'
 
 export type CambioEstado = 'iniciado' | 'confirmado' | 'en_transito' | 'recibido' | 'cerrado' | 'anulado'
-export type CambioVia = 'local' | 'correo' | 'andreani'
+// Cambios SOLO por envío (el físico se resuelve presencial sin tool). El quilombo es el envío.
+export type CambioVia = 'andreani' | 'correo' | 'cadete'
 export type DiferenciaEstado = 'parejo' | 'a_cobrar' | 'a_devolver' | 'saldado'
 export type ReingresoEstado = 'pendiente' | 'hecho'
 
@@ -67,6 +68,7 @@ export type OrdenTN = {
   cliente?: string | null
   total?: number | string | null
   envio?: string | null // shipping_option / método
+  fecha?: string | null // created_at (para la ventana de 30 días)
   products: OrdenTNLinea[]
 }
 
@@ -78,12 +80,21 @@ export const ESTADO_LABEL: Record<CambioEstado, string> = {
   cerrado: 'Cerrado',
   anulado: 'Anulado',
 }
-export const VIA_LABEL: Record<CambioVia, string> = { local: 'Local', correo: 'Correo', andreani: 'Andreani' }
+export const VIA_LABEL: Record<CambioVia, string> = { andreani: 'Andreani', correo: 'Correo', cadete: 'Cadete' }
+
+/** Días que el cliente tiene para cambiar desde la compra (regla del negocio). */
+export const DIAS_CAMBIO = 30
+
+/** Suma de una lista de ítems (precio × cantidad). */
+export function sumarItems(its: CambioItem[]): number {
+  return its.reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0)
+}
 
 /** Diferencia = Σ(nuevos) − Σ(devueltos). Positiva = el cliente paga; negativa = se le devuelve. */
-export function calcularDiferencia(devueltos: CambioItem[], nuevos: CambioItem[]): { diferencia: number; estado: DiferenciaEstado } {
-  const suma = (its: CambioItem[]) => its.reduce((s, i) => s + (Number(i.precio) || 0) * (i.cantidad || 1), 0)
-  const diferencia = suma(nuevos) - suma(devueltos)
+export function calcularDiferencia(devueltos: CambioItem[], nuevos: CambioItem[]): { diferencia: number; estado: DiferenciaEstado; totalDevueltos: number; totalNuevos: number } {
+  const totalDevueltos = sumarItems(devueltos)
+  const totalNuevos = sumarItems(nuevos)
+  const diferencia = totalNuevos - totalDevueltos
   const estado: DiferenciaEstado = diferencia === 0 ? 'parejo' : diferencia > 0 ? 'a_cobrar' : 'a_devolver'
-  return { diferencia, estado }
+  return { diferencia, estado, totalDevueltos, totalNuevos }
 }

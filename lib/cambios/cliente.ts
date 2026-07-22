@@ -46,7 +46,7 @@ export async function crearCambio(store: Marca, input: CambioInput, usuario?: st
 export async function confirmarCambio(store: Marca, cambio: CambioRow, ctx: { user: string; pass: string }): Promise<void> {
   const items = (cambio.items_nuevos || []).filter((i) => i.product_id && i.size_id)
   if (!items.length) throw new Error('Los productos nuevos no están linkeados a artículos de GN: no se puede descontar stock.')
-  const origen: Origen = cambio.via === 'local' ? 'local' : 'deposito'
+  const origen: Origen = 'deposito' // cambios son por envío → el producto nuevo sale del depósito
   const pedido = {
     store, origen,
     items: items.map((i) => ({ product_id: i.product_id ?? null, size_id: i.size_id ?? null, quantity: i.cantidad || 1 })),

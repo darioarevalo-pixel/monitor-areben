@@ -20,7 +20,8 @@ function cfgFor(store) {
 }
 
 const ESTADOS = ['iniciado', 'confirmado', 'en_transito', 'recibido', 'cerrado', 'anulado'];
-const VIAS = ['local', 'correo', 'andreani'];
+// Cambios SOLO por envío (el físico se hace presencial sin tool).
+const VIAS = ['andreani', 'correo', 'cadete'];
 const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, gn_venta_ida_id, gn_venta_ida_number, usuario, historial, created_at, updated_at';
 
 const sumaItems = (its) => (Array.isArray(its) ? its : []).reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0);
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
         const devueltos = Array.isArray(b.items_devueltos) ? b.items_devueltos : [];
         const nuevos = Array.isArray(b.items_nuevos) ? b.items_nuevos : [];
         if (!devueltos.length && !nuevos.length) return res.status(400).json({ error: 'faltan productos del cambio' });
-        const via = VIAS.includes(b.via) ? b.via : 'local';
+        const via = VIAS.includes(b.via) ? b.via : 'andreani';
         const usuario = b.usuario ? String(b.usuario) : null;
         const { diferencia, diferencia_estado } = diferenciaDe(devueltos, nuevos);
         const row = {
@@ -86,9 +87,10 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'falta id' });
 
       if (action === 'confirmar') {
-        // La venta de ida ya la creó el cliente. Estado: envío → en_transito; local → recibido (ítem en mano).
+        // La venta de ida ya la creó el cliente. Cambios son siempre por ENVÍO → queda 'en_transito'
+        // (el paquete de ida sale; el reingreso del devuelto se hace a mano cuando vuelve).
         const via = VIAS.includes(b.via) ? b.via : null;
-        const estado = via === 'correo' || via === 'andreani' ? 'en_transito' : 'recibido';
+        const estado = 'en_transito';
         const upd = { estado, updated_at: new Date().toISOString() };
         if (via) upd.via = via;
         if (b.gn_venta_ida_id != null && b.gn_venta_ida_id !== '') upd.gn_venta_ida_id = String(b.gn_venta_ida_id);

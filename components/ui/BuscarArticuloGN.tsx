@@ -113,7 +113,9 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
 
   const elegir = (a: ArticuloGN) => {
     onSelect(a)
-    setQ(a.sku ? `${a.sku} — ${a.product_name || ''}` : a.product_name || '')
+    // Se limpia el buscador para poder agregar el siguiente producto de una (útil en Cambios).
+    setQ('')
+    setRows([])
     setAbierto(false)
   }
 
