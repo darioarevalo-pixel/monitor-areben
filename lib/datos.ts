@@ -159,5 +159,15 @@ export async function traerDatos({ marca, rol, today, onProgress }: OpcionesFetc
     'detalles',
   )
 
-  return { productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, detalles, syncMeta }
+  // Excluir las ventas TÉCNICAS del Monitor (Sesión de Fotos y Fallas): precio 0, canal "Ninguno"
+  // (channel_id 12). No son ventas reales — solo descuentan stock — así que inflaban la analítica de
+  // rotación y KPIs. Se descartan la venta y sus detalles antes de pasar al ETL. El texto `channel`
+  // sirve cross-marca (Zattia no expone channel_id); el channel_id cubre BDI por las dudas.
+  const idsTecnicas = new Set(
+    ventas.filter((v) => v.channel === 'Ninguno' || Number(v.channel_id) === 12).map((v) => String(v.id)),
+  )
+  const ventasReales = idsTecnicas.size ? ventas.filter((v) => !idsTecnicas.has(String(v.id))) : ventas
+  const detallesReales = idsTecnicas.size ? detalles.filter((d) => !idsTecnicas.has(String(d.sale_id))) : detalles
+
+  return { productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas: ventasReales, detalles: detallesReales, syncMeta }
 }
