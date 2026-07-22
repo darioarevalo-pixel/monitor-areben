@@ -16,6 +16,8 @@ const SF_CFG = {
 // de fotos: así en GN cada venta técnica queda atribuida a su cliente correcto. Sin proposito, se usa
 // el client_id de SF_CFG (fotos), o sea el comportamiento de siempre (compatible hacia atrás).
 const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
+// Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
+const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -76,7 +78,10 @@ export default async function handler(req, res) {
 
   const store_id = cfg.store[b.origen];
   // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
-  const clientId = (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] : cfg.client_id;
+  const clientId =
+    (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] :
+    (b.proposito === 'cambio' && CAMBIO_CLIENT[store]) ? CAMBIO_CLIENT[store] :
+    cfg.client_id;
   // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
   // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock). El resto
   // (fotos/fallas) va con precio 0 y sin descuento, idéntico a antes.
