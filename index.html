@@ -9316,7 +9316,8 @@ const PERM_CAT = [
   { key: 'meta-ads', label: '💰 Meta Ads', info: 'Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.', brands: ['bdi', 'zattia'] },
   { key: 'gerencial', label: '🎯 Gerencial', info: 'Panel de decisiones: reúne de todas las marcas lo que requiere tu atención (capital parado, productos en declive, pendientes operativos, importaciones por llegar) con la acción recomendada y un acceso directo a la sección donde se ejecuta. Solo lectura.', brands: ['bdi', 'zattia'] },
   { key: 'integraciones', label: '🔌 Integraciones', info: 'Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.', brands: ['zattia'] },
-  { key: 'postventa', label: '🧾 Post-venta', info: 'Post-venta unificado (Administración): por ahora el DEPÓSITO DE FALLAS — ledger interno valorizado de prendas con falla que NO vuelven al stock oficial (siguen su flujo hacia feria). Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.', brands: ['bdi', 'zattia'] },
+  { key: 'postventa', label: '🧾 Post-venta', info: 'Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.', brands: ['bdi', 'zattia'] },
+  { key: 'postventa-local', label: '🧾 Fallas (carga)', info: 'Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.', brands: ['bdi', 'zattia'] },
 ];
 // Agrupamiento de la navegación en menús desplegables.
 // Las keys referencian PERM_CAT. 'resumen' NO va acá (es el panel #stats-overview).
@@ -9325,7 +9326,7 @@ const NAV_CATS = [
   { id: 'inicio',    label: '🏠 Inicio',    keys: ['inicio'] },
   { id: 'direccion', label: '🎯 Dirección', keys: ['gerencial'] },
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
-  { id: 'local',     label: '🏪 Local',     keys: ['solicitudes', 'reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
+  { id: 'local',     label: '🏪 Local',     keys: ['solicitudes', 'reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'postventa-local', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
   { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos', 'meta-ads'], accent: 'marketing' },
   { id: 'integraciones', label: '🔌 Integraciones', keys: ['integraciones'] },

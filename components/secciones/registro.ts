@@ -52,6 +52,7 @@ const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) =
 const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then((m) => m.Gerencial), { loading: Cargando })
 const Integraciones = dynamic(() => import('@/components/integraciones/Integraciones').then((m) => m.Integraciones), { loading: Cargando })
 const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
+const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -301,6 +302,9 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Fase 4 v1: depósito de FALLAS (tabla fallas_deposito, ledger valorizado por marca). NO toca stock
   // oficial ni GN/TN. Gateada por permiso `postventa` (ambas marcas). Rollback: comentar esta línea.
   postventa: Postventa,
+  // Post-venta (carga Local): mismo componente motor en modo 'local' (solo carga + vista). El motor
+  // completo es la key `postventa` (Administración). Gateada por permiso `postventa-local`.
+  'postventa-local': PostventaLocal,
 }
 
 /**

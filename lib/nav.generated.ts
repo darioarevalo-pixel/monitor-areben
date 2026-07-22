@@ -419,7 +419,16 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa",
     "label": "🧾 Post-venta",
-    "info": "Post-venta unificado (Administración): por ahora el DEPÓSITO DE FALLAS — ledger interno valorizado de prendas con falla que NO vuelven al stock oficial (siguen su flujo hacia feria). Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
+    "info": "Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
+    "key": "postventa-local",
+    "label": "🧾 Fallas (carga)",
+    "info": "Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.",
     "brands": [
       "bdi",
       "zattia"
@@ -467,6 +476,7 @@ export const NAV_CATS: NavCat[] = [
       "conteo-estandar-stunned",
       "cupones",
       "solicitudes-internas",
+      "postventa-local",
       "etiquetas",
       "caducados",
       "ubicaciones",

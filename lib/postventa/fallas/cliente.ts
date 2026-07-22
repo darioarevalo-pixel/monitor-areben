@@ -1,11 +1,15 @@
 /**
- * Cliente del depósito de fallas (`/api/fallas`, Supabase). Mismo patrón que
- * lib/sku-map/cliente.ts (apiFetch manda el header de auth). No toca stock ni GN/TN.
+ * Cliente del depósito de fallas (`/api/fallas`, Supabase). Mismo patrón que lib/sku-map/cliente.ts
+ * (apiFetch manda el header de auth). El ledger es interno; la ÚNICA superficie que toca stock real
+ * es `confirmarFalla`, que crea una venta en GN reusando `/api/crear-venta` (vía enviarVentaFetch) y
+ * después registra el resultado en la falla.
  */
 
 import { apiFetch } from '../../api-fetch'
+import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
+import type { Origen } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav.generated'
-import type { FallaEstado, FallaInput, FallaRow } from './tipos'
+import type { FallaInput, FallaRow } from './tipos'
 
 export async function leerFallas(store: Marca): Promise<FallaRow[]> {
   const r = await apiFetch(`/api/fallas?store=${store}&nc=${Date.now()}`)
@@ -14,7 +18,7 @@ export async function leerFallas(store: Marca): Promise<FallaRow[]> {
   return (d.fallas || []) as FallaRow[]
 }
 
-export async function crearFalla(store: Marca, falla: FallaInput, usuario?: string): Promise<number | undefined> {
+export async function crearFalla(store: Marca, falla: FallaInput, usuario?: string): Promise<{ id?: number; barcode?: string }> {
   const r = await apiFetch('/api/fallas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -22,10 +26,59 @@ export async function crearFalla(store: Marca, falla: FallaInput, usuario?: stri
   })
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo crear la falla.')
-  return d.id as number | undefined
+  return { id: d.id as number | undefined, barcode: d.barcode as string | undefined }
 }
 
-export async function cambiarEstadoFalla(store: Marca, id: number, estado: FallaEstado, usuario?: string, nota?: string): Promise<void> {
+/** Administración recibe la falla física: mueve la ubicación a depósito. */
+export async function recibirFalla(store: Marca, id: number, usuario?: string): Promise<void> {
+  const r = await apiFetch('/api/fallas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, action: 'recibir', id, usuario }),
+  })
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo recibir la falla.')
+}
+
+/**
+ * Confirma la falla: genera la venta en GN (descuenta la unidad de la variante) y registra el
+ * resultado. Requiere que la falla esté linkeada a un artículo de GN (product_id + size_id).
+ * La venta va al crear-venta de PROD (los tokens de ventas viven solo ahí), como Solicitudes.
+ */
+export async function confirmarFalla(store: Marca, falla: FallaRow, ctx: { user: string; pass: string }): Promise<void> {
+  if (!falla.product_id || !falla.size_id) {
+    throw new Error('La falla no está linkeada a un artículo de GN: elegí el artículo para poder descontar el stock.')
+  }
+  const origen: Origen = falla.ubicacion === 'deposito' ? 'deposito' : 'local'
+  const pedido = {
+    store,
+    origen,
+    items: [{ product_id: falla.product_id, size_id: falla.size_id, quantity: falla.cantidad || 1 }],
+    comments: `Falla ${falla.sku || ''} — ${falla.motivo || 'sin motivo'} — ${falla.barcode || ''} (Monitor)`.slice(0, 500),
+    solicitudId: `falla-${falla.id}`,
+    user: ctx.user,
+    pass: ctx.pass,
+  }
+  const r = await enviarVentaFetch(pedido)
+  if (!r.ok) throw new Error(`No se pudo crear la venta en GN — ${r.error || ''}`)
+
+  const resp = await apiFetch('/api/fallas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store,
+      action: 'confirmar',
+      id: falla.id,
+      gn_venta_id: r.venta?.id ?? null,
+      gn_venta_number: r.venta?.number ?? null,
+      usuario: ctx.user,
+    }),
+  })
+  const d = await resp.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar la confirmación.')
+}
+
+export async function cambiarEstadoFalla(store: Marca, id: number, estado: FallaRow['estado'], usuario?: string, nota?: string): Promise<void> {
   const r = await apiFetch('/api/fallas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

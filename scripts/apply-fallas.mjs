@@ -15,7 +15,8 @@ const env = Object.fromEntries(
     }),
 )
 
-const sql = readFileSync('sql/migrate-fallas.sql', 'utf8')
+// Aplica las dos migraciones en orden (ambas idempotentes): crea la tabla y luego la extiende.
+const sql = ['sql/migrate-fallas.sql', 'sql/migrate-fallas-2.sql'].map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
 // Parse robusto (la contraseña puede tener caracteres especiales sin encodear).
 function parse(raw) {
