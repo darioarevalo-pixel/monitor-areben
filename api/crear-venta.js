@@ -12,6 +12,10 @@ const SF_CFG = {
   zattia: { client_id: 312923, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 18210, local: 11780 } },
   bdi:    { client_id: 338755, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 13307, local: 18393 } },
 };
+// Cliente propio para las ventas de FALLAS (payload con proposito:'falla'), distinto del de Sesión
+// de fotos: así en GN cada venta técnica queda atribuida a su cliente correcto. Sin proposito, se usa
+// el client_id de SF_CFG (fotos), o sea el comportamiento de siempre (compatible hacia atrás).
+const FALLA_CLIENT = { zattia: 3805, bdi: 53 };
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -66,8 +70,10 @@ export default async function handler(req, res) {
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
 
   const store_id = cfg.store[b.origen];
+  // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
+  const clientId = (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] : cfg.client_id;
   const payload = {
-    client_id: cfg.client_id, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+    client_id: clientId, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
     store_id, discount_inventory: true,
     comments: String(b.comments || '').slice(0, 500),
     integration_source: 'monitor-sesion-fotos',
