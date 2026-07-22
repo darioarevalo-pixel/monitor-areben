@@ -41,11 +41,16 @@ export async function recibirFalla(store: Marca, id: number, usuario?: string): 
 }
 
 /**
- * Confirma la falla: genera la venta en GN (descuenta la unidad de la variante) y registra el
- * resultado. Requiere que la falla esté linkeada a un artículo de GN (product_id + size_id).
- * La venta va al crear-venta de PROD (los tokens de ventas viven solo ahí), como Solicitudes.
+ * Genera la venta en GN (precio 0, descuenta la unidad) al ENTREGAR la mercadería, y registra el
+ * resultado en la falla. Para falla local esto pasa al CARGAR (carga = entrega). Requiere artículo
+ * de GN linkeado (product_id + size_id). La venta va al crear-venta de PROD (los tokens de ventas
+ * viven solo ahí), como Solicitudes. `origen` = ubicación (por defecto 'local').
  */
-export async function confirmarFalla(store: Marca, falla: FallaRow, ctx: { user: string; pass: string }): Promise<void> {
+export async function registrarVentaGN(
+  store: Marca,
+  falla: Pick<FallaRow, 'id' | 'product_id' | 'size_id' | 'cantidad' | 'sku' | 'motivo' | 'barcode' | 'ubicacion'>,
+  ctx: { user: string; pass: string },
+): Promise<void> {
   if (!falla.product_id || !falla.size_id) {
     throw new Error('La falla no está linkeada a un artículo de GN: elegí el artículo para poder descontar el stock.')
   }
@@ -65,17 +70,21 @@ export async function confirmarFalla(store: Marca, falla: FallaRow, ctx: { user:
   const resp = await apiFetch('/api/fallas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      store,
-      action: 'confirmar',
-      id: falla.id,
-      gn_venta_id: r.venta?.id ?? null,
-      gn_venta_number: r.venta?.number ?? null,
-      usuario: ctx.user,
-    }),
+    body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, usuario: ctx.user }),
   })
   const d = await resp.json()
-  if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar la confirmación.')
+  if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar en la falla.')
+}
+
+/** Administración valida los datos de la carga (marca 'confirmada'). NO toca GN (la venta ya se hizo). */
+export async function confirmarFalla(store: Marca, id: number, usuario?: string): Promise<void> {
+  const r = await apiFetch('/api/fallas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, action: 'confirmar', id, usuario }),
+  })
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo confirmar la falla.')
 }
 
 export async function cambiarEstadoFalla(store: Marca, id: number, estado: FallaRow['estado'], usuario?: string, nota?: string): Promise<void> {

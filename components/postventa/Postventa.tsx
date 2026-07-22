@@ -15,9 +15,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { cambiarEstadoFalla, confirmarFalla, crearFalla, leerFallas, recibirFalla } from '@/lib/postventa/fallas/cliente'
+import { cambiarEstadoFalla, confirmarFalla, crearFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow } from '@/lib/postventa/fallas/tipos'
 import { EtiquetaFalla } from './EtiquetaFalla'
+import { EditarFalla } from './EditarFalla'
 
 type Tab = 'fallas' | 'cambios' | 'devoluciones' | 'canjes'
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
@@ -79,6 +80,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
   const [form, setForm] = useState({ ...FORM0 })
   const [filtro, setFiltro] = useState<'todas' | FallaEstado>('todas')
   const [etiqueta, setEtiqueta] = useState<FallaRow | null>(null)
+  const [editando, setEditando] = useState<FallaRow | null>(null)
 
   const recargar = useCallback(async () => {
     setCargando(true)
@@ -121,27 +123,51 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const agregar = useCallback(async () => {
     if (!form.producto.trim()) { setError('Elegí un artículo o escribí el producto.'); return }
+    // Snapshot antes de resetear el form (la venta lo necesita).
+    const snap = {
+      cantidad: Math.max(1, parseInt(form.cantidad, 10) || 1),
+      product_id: form.product_id || null,
+      size_id: form.size_id || null,
+      sku: form.sku.trim() || null,
+      motivo: form.motivo.trim() || null,
+    }
     setGuardando(true)
     setError(null)
     setMsg(null)
     try {
-      const { barcode } = await crearFalla(
+      const { id, barcode } = await crearFalla(
         marca,
         {
           producto: form.producto.trim(),
-          sku: form.sku.trim() || null,
-          cantidad: Math.max(1, parseInt(form.cantidad, 10) || 1),
-          motivo: form.motivo.trim() || null,
+          sku: snap.sku,
+          cantidad: snap.cantidad,
+          motivo: snap.motivo,
           valuacion_costo: form.valuacion_costo === '' ? null : Number(form.valuacion_costo),
           valuacion_pvp_feria: form.valuacion_pvp_feria === '' ? null : Number(form.valuacion_pvp_feria),
-          product_id: form.product_id || null,
-          size_id: form.size_id || null,
+          product_id: snap.product_id,
+          size_id: snap.size_id,
           ubicacion: 'local',
         },
         usuario,
       )
       setForm({ ...FORM0 })
-      setMsg(`Falla cargada${barcode ? ` — etiqueta ${barcode}` : ''}.`)
+      const etiq = barcode ? ` (etiqueta ${barcode})` : ''
+      // Carga = entrega: si hay artículo GN, disparo la venta $0 (baja de stock) de una.
+      if (snap.product_id && snap.size_id && id) {
+        const pass = obtenerPass()
+        if (!pass) {
+          setMsg(`Falla cargada${etiq}. Falta tu contraseña para descontar el stock en GN — se puede rehacer desde Administración.`)
+        } else {
+          try {
+            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: 'local' }, { user: usuario, pass })
+            setMsg(`Falla cargada${etiq} — venta $0 en GN, stock −1.`)
+          } catch (ve) {
+            setError(`Falla cargada${etiq}, pero la venta en GN falló: ${(ve as Error).message}`)
+          }
+        }
+      } else {
+        setMsg(`Falla cargada${etiq}.`)
+      }
       await recargar()
     } catch (e) {
       setError((e as Error).message)
@@ -163,18 +189,14 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
     }
   }, [marca, usuario, recargar])
 
+  // Administración valida los datos de la carga. La venta (baja de stock) ya se hizo al entregar (Local).
   const confirmar = useCallback(async (f: FallaRow) => {
-    if (!f.product_id) { setError('Esta falla no tiene artículo de GN linkeado: no se puede descontar stock.'); return }
-    const ubic = UBICACION_LABEL[f.ubicacion || 'local']
-    if (typeof window !== 'undefined' && !window.confirm(`Confirmar la falla de "${f.producto}" (${f.sku || 's/sku'}) genera una VENTA en Gestión Nube que descuenta 1 unidad de ${ubic}. ¿Seguir?`)) return
-    const pass = obtenerPass()
-    if (!pass) { setError('Necesito tu contraseña para escribir en GN.'); return }
     setOcupada(f.id)
     setError(null)
     setMsg(null)
     try {
-      await confirmarFalla(marca, f, { user: usuario, pass })
-      setMsg(`Falla confirmada: se descontó 1 unidad de ${f.sku || f.producto} en GN.`)
+      await confirmarFalla(marca, f.id, usuario)
+      setMsg('Datos de la falla confirmados.')
       await recargar()
     } catch (e) {
       setError((e as Error).message)
@@ -240,14 +262,18 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
           <span style={{ fontSize: 11, color: '#6B7280' }}>Cantidad</span>
           <input style={inp} type="number" min={1} value={form.cantidad} onChange={setF('cantidad')} />
         </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 120px' }}>
-          <span style={{ fontSize: 11, color: '#6B7280' }}>Costo unit.</span>
-          <input style={inp} type="number" min={0} value={form.valuacion_costo} onChange={setF('valuacion_costo')} placeholder="$" />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 120px' }}>
-          <span style={{ fontSize: 11, color: '#6B7280' }}>PVP feria unit.</span>
-          <input style={inp} type="number" min={0} value={form.valuacion_pvp_feria} onChange={setF('valuacion_pvp_feria')} placeholder="$" />
-        </label>
+        {esAdmin && (
+          <>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 120px' }}>
+              <span style={{ fontSize: 11, color: '#6B7280' }}>Costo unit.</span>
+              <input style={inp} type="number" min={0} value={form.valuacion_costo} onChange={setF('valuacion_costo')} placeholder="$" />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 120px' }}>
+              <span style={{ fontSize: 11, color: '#6B7280' }}>PVP feria unit.</span>
+              <input style={inp} type="number" min={0} value={form.valuacion_pvp_feria} onChange={setF('valuacion_pvp_feria')} placeholder="$" />
+            </label>
+          </>
+        )}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '2 1 200px' }}>
           <span style={{ fontSize: 11, color: '#6B7280' }}>Motivo</span>
           <input style={inp} value={form.motivo} onChange={setF('motivo')} placeholder="Mancha, costura, etc." />
@@ -276,7 +302,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
               <th style={{ ...th, textAlign: 'right' }}>Cant.</th>
               <th style={th}>Motivo</th>
               <th style={th}>Ubicación</th>
-              <th style={{ ...th, textAlign: 'right' }}>Costo</th>
+              {esAdmin && <th style={{ ...th, textAlign: 'right' }}>Costo</th>}
               <th style={th}>Estado</th>
               <th style={th}>Etiqueta</th>
               {esAdmin && <th style={th}>Acciones</th>}
@@ -293,7 +319,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
                   <td style={{ ...td, textAlign: 'right' }}>{f.cantidad}</td>
                   <td style={{ ...td, whiteSpace: 'normal', color: '#6B7280' }}>{f.motivo || '—'}</td>
                   <td style={td}>{f.ubicacion ? UBICACION_LABEL[f.ubicacion] : '—'}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{money(f.valuacion_costo)}</td>
+                  {esAdmin && <td style={{ ...td, textAlign: 'right' }}>{money(f.valuacion_costo)}</td>}
                   <td style={td}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: ec.color, background: ec.bg, borderRadius: 6, padding: '2px 8px' }}>{ESTADO_LABEL[f.estado]}</span>
                   </td>
@@ -309,8 +335,9 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
                           <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void recibir(f)} disabled={ocup}>{ocup ? '…' : 'Recibir'}</button>
                         )}
                         {(f.estado === 'cargada' || f.estado === 'recibida') && (
-                          <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void confirmar(f)} disabled={ocup || !f.product_id} title={f.product_id ? 'Genera venta en GN' : 'Sin artículo de GN linkeado'}>{ocup ? '…' : 'Confirmar'}</button>
+                          <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void confirmar(f)} disabled={ocup} title="Valida los datos de la carga (no toca GN)">{ocup ? '…' : 'Confirmar'}</button>
                         )}
+                        <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => setEditando(f)}>Editar</button>
                         {(f.estado === 'confirmada' || f.estado === 'en_deposito') && (
                           <>
                             <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void cambiarEstado(f, 'vendida_feria')}>Vendida</button>
@@ -335,6 +362,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
   return (
     <div style={{ maxWidth: 1100 }}>
       {etiqueta && <EtiquetaFalla falla={etiqueta} onClose={() => setEtiqueta(null)} />}
+      {editando && <EditarFalla marca={marca} falla={editando} onClose={() => setEditando(null)} onSaved={() => { setEditando(null); setMsg('Falla actualizada.'); void recargar() }} />}
 
       {/* Pestañas solo en el motor (Admin). En Local es directo la carga de fallas. */}
       {esAdmin && (

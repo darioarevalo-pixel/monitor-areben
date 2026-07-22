@@ -120,17 +120,22 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      if (action === 'confirmar') {
-        // La venta en GN ya la creó el cliente (POST a /api/crear-venta). Acá solo se REGISTRA.
-        const upd = {
-          estado: 'confirmada',
-          gn_integration_id: `falla-${id}`,
-          updated_at: new Date().toISOString(),
-        };
+      if (action === 'venta') {
+        // La venta en GN (precio 0, baja de stock) la dispara el CLIENTE al ENTREGAR (carga en Local).
+        // Acá solo se REGISTRA el resultado. No cambia el estado (sigue 'cargada').
+        const upd = { gn_integration_id: `falla-${id}`, updated_at: new Date().toISOString() };
         if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
         if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
-        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'confirmada', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.gn_venta_id ? `venta GN ${b.gn_venta_number || b.gn_venta_id}` : 'confirmada sin venta GN' });
+        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
         const { error } = await supabase.from('fallas_deposito').update(upd).eq('id', id).eq('store', store);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'confirmar') {
+        // Administración VALIDA los datos de la carga. NO toca GN (la venta ya se hizo al entregar).
+        const hist = await apilarHistorial(supabase, store, id, { estado: 'confirmada', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: 'datos confirmados' });
+        const { error } = await supabase.from('fallas_deposito').update({ estado: 'confirmada', historial: hist, updated_at: new Date().toISOString() }).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
       }
