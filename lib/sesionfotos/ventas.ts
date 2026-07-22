@@ -31,8 +31,8 @@ export type PedidoVenta = {
   solicitudId: string
   user: string
   pass: string
-  /** Marca la venta como técnica de fallas → crear-venta usa el cliente "Falla" de GN, no el de fotos. */
-  proposito?: 'falla'
+  /** Marca la venta como técnica del Monitor → crear-venta usa el cliente propio de GN (Falla/Cambio). */
+  proposito?: 'falla' | 'cambio'
 }
 
 /**
