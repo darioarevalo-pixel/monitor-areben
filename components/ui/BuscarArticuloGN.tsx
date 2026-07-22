@@ -35,7 +35,7 @@ type FilaInv = {
 }
 type FilaProd = { id: number | string; unit_cost: number | string | null }
 
-export function BuscarArticuloGN({ marca, onSelect }: { marca: Marca; onSelect: (a: ArticuloGN) => void }) {
+export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { marca: Marca; onSelect: (a: ArticuloGN) => void; mostrarCosto?: boolean }) {
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<ArticuloGN[]>([])
   const [cargando, setCargando] = useState(false)
@@ -137,7 +137,7 @@ export function BuscarArticuloGN({ marca, onSelect }: { marca: Marca; onSelect: 
               <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'monospace' }}>{a.sku || 's/sku'}</span>
                 <span>stock {a.available_quantity ?? 0}</span>
-                <span>{a.unit_cost != null ? `costo $${a.unit_cost.toLocaleString('es-AR')}` : 'sin costo'}</span>
+                {mostrarCosto && <span>{a.unit_cost != null ? `costo $${a.unit_cost.toLocaleString('es-AR')}` : 'sin costo'}</span>}
               </div>
             </button>
           ))}

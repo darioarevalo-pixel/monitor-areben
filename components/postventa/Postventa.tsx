@@ -269,7 +269,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
       <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Cargar falla</div>
       <div style={{ marginBottom: 10 }}>
         <span style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }}>Artículo de Gestión Nube (para descontar stock)</span>
-        <BuscarArticuloGN marca={marca} onSelect={elegirArticulo} />
+        <BuscarArticuloGN marca={marca} onSelect={elegirArticulo} mostrarCosto={esAdmin} />
         {form.product_id && <div style={{ fontSize: 11, color: '#15803D', marginTop: 4 }}>✓ Artículo linkeado ({form.sku || form.product_id}). Al confirmar se descuenta de GN.</div>}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
