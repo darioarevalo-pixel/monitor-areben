@@ -91,7 +91,8 @@ export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { use
     // Red de seguridad: si el crear-venta de prod aún no tiene el bloque `cambio_real` (no deployado),
     // cae al camino normal — `proposito:'cambio'` hace que igual use el cliente "Cambio" (no el de fotos).
     proposito: 'cambio',
-    comments: `Cambio orden ${cambio.orden_tn || ''} — ${cambio.cliente || ''} (Monitor)`.slice(0, 500),
+    // El EM (solicitud de envío) va en la NOTA del pedido en GN para identificar la etiqueta con el paquete.
+    comments: [`Cambio orden ${cambio.orden_tn || ''}`, cambio.solicitud_envio ? `EM ${cambio.solicitud_envio}` : '', cambio.cliente || '', '(Monitor)'].filter(Boolean).join(' · ').slice(0, 500),
     solicitudId: `cambio-${cambio.id}`, user: ctx.user, pass: ctx.pass,
   }
   const r = await fetch(CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

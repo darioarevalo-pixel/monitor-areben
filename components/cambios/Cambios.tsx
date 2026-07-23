@@ -103,6 +103,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [lineas, setLineas] = useState<Linea[]>([])
   const [via, setVia] = useState<CambioVia>('andreani')
   const [seguimiento, setSeguimiento] = useState('')
+  const [seguimientoVuelta, setSeguimientoVuelta] = useState('')
   const [envioCosto, setEnvioCosto] = useState('')
   const [envioPaga, setEnvioPaga] = useState<EnvioPaga>('cliente')
   const [formaPago, setFormaPago] = useState<FormaPago | ''>('')
@@ -169,19 +170,19 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const quitarLinea = (key: string) => setLineas((ls) => ls.filter((l) => l.key !== key))
 
   const limpiarForm = useCallback(() => {
-    setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setVia('andreani'); setSeguimiento('')
+    setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setVia('andreani'); setSeguimiento(''); setSeguimientoVuelta('')
     setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setSolicitudEnvio(''); setEditandoId(null)
   }, [])
 
   const buildInput = useCallback((): CambioInput => ({
     orden_tn: ordenNum.trim() || null,
     cliente: cliente.trim() || null,
-    via, seguimiento: seguimiento.trim() || null,
+    via, seguimiento: seguimiento.trim() || null, seguimiento_vuelta: seguimientoVuelta.trim() || null,
     items_devueltos: devueltos, items_nuevos: nuevos,
     envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
     forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
     solicitud_envio: solicitudEnvio.trim() || null,
-  }), [ordenNum, cliente, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio])
+  }), [ordenNum, cliente, via, seguimiento, seguimientoVuelta, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio])
 
   const guardarBorrador = useCallback(async () => {
     if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto (el que devuelve o el que se lleva).'); return }
@@ -247,6 +248,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     ])
     setVia(c.via || 'andreani')
     setSeguimiento(c.seguimiento || '')
+    setSeguimientoVuelta(c.seguimiento_vuelta || '')
     setEnvioCosto(c.envio_costo != null ? String(c.envio_costo) : '')
     setEnvioPaga(c.envio_paga || 'cliente')
     setFormaPago(c.forma_pago || '')
@@ -429,9 +431,14 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
             <Input value={solicitudEnvio} onChange={(e) => setSolicitudEnvio(e.target.value)} placeholder="EM1234" invalid={!solicitudEnvio.trim()} />
           </Field>
           {VIA_CON_TRACKING.includes(via) && (
-            <Field label="Seguimiento de ida (se puede cargar después)" width={230}>
-              <Input value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking de ida" />
-            </Field>
+            <>
+              <Field label="Seguimiento de ida (se puede cargar después)" width={200}>
+                <Input value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking de ida" />
+              </Field>
+              <Field label="Seguimiento de vuelta (se puede cargar después)" width={200}>
+                <Input value={seguimientoVuelta} onChange={(e) => setSeguimientoVuelta(e.target.value)} placeholder="tracking de vuelta" />
+              </Field>
+            </>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
             {editandoId != null && <Button variant="ghost" onClick={limpiarForm} disabled={guardando}>Cancelar</Button>}
