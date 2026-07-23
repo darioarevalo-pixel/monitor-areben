@@ -22,7 +22,7 @@ import {
   color, radius, font, weight, space,
 } from '@/components/ui'
 import {
-  cambiarEstadoCambio, crearCambio, editarCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarCobrado,
+  cambiarEstadoCambio, crearCambio, editarCambio, eliminarCambio, leerCambios, leerOrdenTN,
   marcarReingreso, procesarCambio,
 } from '@/lib/cambios/cliente'
 import {
@@ -265,12 +265,6 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca])
 
-  const cobrar = useCallback(async (c: CambioRow) => {
-    if (typeof window !== 'undefined' && !window.confirm('¿Ya cobraste la diferencia en GN? Se marca como cobrada.')) return
-    setOcupada(c.id); setError(null)
-    try { await marcarCobrado(marca, c.id, usuario); await recargar() } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
-  }, [marca, usuario, recargar])
-
   const reingreso = useCallback(async (c: CambioRow) => {
     if (typeof window !== 'undefined' && !window.confirm('¿Ya reingresaste el producto devuelto a mano en GN? Se marca como hecho.')) return
     setOcupada(c.id); setError(null)
@@ -290,7 +284,6 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const fmt = (d: Date | null) => (d ? d.toLocaleDateString('es-AR') : '—')
 
   const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && !['borrador', 'iniciado', 'anulado'].includes(c.estado)).length, [cambios])
-  const pendientesCobro = useMemo(() => cambios.filter((c) => c.cobro_estado === 'pendiente').length, [cambios])
 
   const visibles = useMemo(() => {
     const f = FILTROS.find((x) => x.key === filtro) || FILTROS[0]
@@ -436,7 +429,6 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
       {msg && <Notice tone="success" icon="✓" onClose={() => setMsg(null)}>{msg}</Notice>}
       {error && <Notice tone="danger" icon="⚠" onClose={() => setError(null)}>{error}</Notice>}
-      {esAdmin && pendientesCobro > 0 && <Notice tone="warning" icon="💵">{pendientesCobro} cambio(s) con diferencia pendiente de cobrar en GN.</Notice>}
       {esAdmin && pendientesReingreso > 0 && <Notice tone="warning" icon="⏳">{pendientesReingreso} cambio(s) con reingreso pendiente — reingresá el devuelto a mano en GN y marcalo.</Notice>}
 
       {/* ── Lista ────────────────────────────────────────────────────────── */}
@@ -471,8 +463,6 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                     <Td align="right" strong><MoneyText value={c.total != null ? c.total : c.diferencia} /></Td>
                     <Td>
                       <span style={{ fontSize: font.xs, fontWeight: weight.semibold, color: c.pagado ? color.success : color.warning }}>{c.pagado ? '✓ pagado' : 'sin pagar'}</span>
-                      {c.cobro_estado === 'pendiente' && <div style={{ fontSize: 10, color: color.warning }}>cobro pend.</div>}
-                      {c.cobro_estado === 'cobrado' && <div style={{ fontSize: 10, color: color.success }}>✓ cobrado</div>}
                     </Td>
                     <Td>{VIA_LABEL[c.via]}</Td>
                     <Td><Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}</Button></Td>
@@ -483,7 +473,6 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                         {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
                         {esBorrador && <Button size="sm" variant="solid" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca pagado y genera la venta en GN">Marcar pagado</Button>}
                         <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
-                        {c.cobro_estado === 'pendiente' && <Button size="sm" variant="outline" tone="warning" onClick={() => void cobrar(c)} disabled={ocup}>Cobrado</Button>}
                         {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}
                         {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <Button size="sm" variant="outline" tone="brand" onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</Button>}
                         {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}

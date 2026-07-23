@@ -129,13 +129,10 @@ export default async function handler(req, res) {
       }
 
       if (action === 'procesar') {
-        // Fase B.4: la venta REAL ya la creó el cliente (crear-venta, canal real + forma de pago) → acá se
-        // REGISTRA y el cambio pasa a 'en_transito' (el paquete del nuevo sale; el devuelto vuelve después).
-        // Si hay diferencia a cobrar (>0), el cobro real es manual en GN → cobro_estado 'pendiente'.
-        const { data: prev, error: e0 } = await supabase.from('cambios').select('diferencia').eq('id', id).eq('store', store).single();
-        if (e0) throw new Error(e0.message);
-        const cobro_estado = Number(prev?.diferencia) > 0 ? 'pendiente' : 'no_aplica';
-        const upd = { estado: 'en_transito', cobro_estado, updated_at: new Date().toISOString() };
+        // Se genera la venta REAL desde el botón "Marcar como pagado" → ya está cobrado al procesar.
+        // El cambio pasa a 'en_transito' (el paquete del nuevo sale; el devuelto vuelve después) y el
+        // cobro NO queda pendiente (el modelo viejo de "cobrar la diferencia después" se retiró).
+        const upd = { estado: 'en_transito', cobro_estado: 'no_aplica', updated_at: new Date().toISOString() };
         if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
         if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
         upd.historial = await apilarHistorial(supabase, store, id, { estado: 'en_transito', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.gn_venta_id ? `procesado · venta GN ${b.gn_venta_number || b.gn_venta_id}` : 'procesado' });
