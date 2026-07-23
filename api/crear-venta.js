@@ -43,22 +43,6 @@ async function gnFetch(url, opts, tries = 3) {
 // inventario-vivo y conteos-deposito exigen lo mismo. Devuelve el perfil o null en
 // vez de un booleano: el `if (!(await ...))` de abajo funciona igual.
 
-// GN aplica el descuento POR LÍNEA como MONTO (ignora el `discount` a nivel venta en el POST — verificado).
-// Reparte un descuento total entre las líneas prorrateando por subtotal; el remanente por redondeo va a la
-// última línea, y cada descuento se topea al subtotal de su línea. Muta lineItems (agrega it.discount).
-function repartirDescuento(lineItems, total) {
-  const D = Math.max(0, Math.round(Number(total) || 0));
-  if (!D || !lineItems.length) return;
-  const subs = lineItems.map(it => (it.quantity || 0) * (it.unit_price || 0));
-  const totalSub = subs.reduce((s, x) => s + x, 0) || 1;
-  let asignado = 0;
-  lineItems.forEach((it, i) => {
-    let d = i === lineItems.length - 1 ? D - asignado : Math.round(D * subs[i] / totalSub);
-    d = Math.min(Math.max(d, 0), subs[i]);
-    it.discount = d; asignado += d;
-  });
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -92,25 +76,6 @@ export default async function handler(req, res) {
 
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
 
-  // ── DIAGNÓSTICO TEMPORAL (borrar): buscar el campo de descuento A NIVEL VENTA que GN honra. NO toca stock. ──
-  // `extra` se mergea al payload de la venta; `item_extra` al ítem. Devuelve total_price/discount que guardó GN.
-  if (b.accion === 'probe2') {
-    if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
-    const store_id = cfg.store[b.origen];
-    const item = { product_id: parseInt(b.product_id, 10), size_id: parseInt(b.size_id, 10), quantity: 1, unit_price: Number(b.unit_price) || 0, store_id, ...(b.item_extra || {}) };
-    const payload = {
-      client_id: FALLA_CLIENT[store] || cfg.client_id, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
-      store_id, discount_inventory: false, comments: 'PROBE2 descuento venta (borrar)', integration_source: 'monitor-probe', integration_id: `probe2-${b.tag || '0'}`, items: [item],
-      ...(b.extra || {}),
-    };
-    try {
-      const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
-      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 400); }
-      const v = (d && d.data) ? d.data : d;
-      return res.status(200).json({ ok: r.ok, status: r.status, sentSale: b.extra || null, got: v ? { id: v.id, number: v.number, total_price: v.total_price, discount: v.discount, net_price: v.net_price } : d });
-    } catch (e) { return res.status(500).json({ error: e.message }); }
-  }
-
   // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
   // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá
   // solo se relaya al payload de GN. Baja stock del producto NUEVO (el devuelto se reingresa aparte, manual).
@@ -125,14 +90,14 @@ export default async function handler(req, res) {
     if (!its.length) return res.status(400).json({ error: 'items vacíos' });
     const store_id = cfg.store[b.origen];
     const lineItems = its.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: Number(it.unit_price) || 0, store_id }));
-    // Descuento del cambio (Σdevueltos + manual + forma) repartido POR LÍNEA (GN ignora el discount a nivel venta).
-    repartirDescuento(lineItems, Number(b.descuento) || 0);
     const payload = {
       client_id: CAMBIO_CLIENT[store] || cfg.client_id, channel_id: channel, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
       store_id, discount_inventory: true, payment_method_id: paymentId,
       comments: String(b.comments || '').slice(0, 500),
       integration_source: 'monitor-cambio', integration_id: `${b.solicitudId || 'cambio'}-real`,
       items: lineItems,
+      // Descuento del cambio (Σdevueltos + manual + forma) A NIVEL VENTA (campo GN `discount_amount`, verificado).
+      discount_amount: Math.max(0, Math.round(Number(b.descuento) || 0)),
     };
     // El ENVÍO NO va a la venta de GN (queda solo en Monitor): el total de la venta = cobro de productos.
     payload.is_exchange = true;
@@ -188,8 +153,8 @@ export default async function handler(req, res) {
     payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
     payload.is_exchange = true;
   } else if (esFalla) {
-    // 100% de descuento POR LÍNEA (GN lo aplica como monto por ítem): descuento = subtotal → total 0.
-    lineItems.forEach(it => { it.discount = it.quantity * it.unit_price; });
+    // 100% de descuento A NIVEL VENTA (`discount_amount` = subtotal) → total 0, mostrando el precio de lista.
+    payload.discount_amount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
   }
 
   try {
