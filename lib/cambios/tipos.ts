@@ -36,6 +36,7 @@ export type CambioRow = {
   diferencia?: number | null
   diferencia_estado?: DiferenciaEstado | null
   reingreso_estado: ReingresoEstado
+  seguimiento?: string | null
   gn_venta_ida_id?: string | null
   gn_venta_ida_number?: string | null
   usuario?: string | null
@@ -49,6 +50,7 @@ export type CambioInput = {
   orden_tn?: string | null
   cliente?: string | null
   via?: CambioVia
+  seguimiento?: string | null
   items_devueltos: CambioItem[]
   items_nuevos: CambioItem[]
 }

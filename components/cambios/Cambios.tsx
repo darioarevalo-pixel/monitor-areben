@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { cambiarEstadoCambio, confirmarCambio, crearCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarReingreso } from '@/lib/cambios/cliente'
+import { cambiarEstadoCambio, crearCambio, editarCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarReingreso, registrarVentaIda } from '@/lib/cambios/cliente'
 import { DIAS_CAMBIO, ESTADO_LABEL, VIA_LABEL, calcularDiferencia, type CambioItem, type CambioRow, type CambioVia, type OrdenTN } from '@/lib/cambios/tipos'
 
 function obtenerPass(): string {
@@ -58,6 +58,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [devueltos, setDevueltos] = useState<CambioItem[]>([])
   const [nuevos, setNuevos] = useState<CambioItem[]>([])
   const [via, setVia] = useState<CambioVia>('andreani')
+  const [seguimiento, setSeguimiento] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   const recargar = useCallback(async () => {
@@ -105,28 +106,58 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const dif = useMemo(() => calcularDiferencia(devueltos, nuevos), [devueltos, nuevos])
 
   const iniciar = useCallback(async () => {
-    if (!devueltos.length && !nuevos.length) { setError('Elegí al menos un producto devuelto o uno nuevo.'); return }
+    if (!nuevos.length) { setError('Elegí al menos un producto nuevo que se lleva el cliente.'); return }
+    // Snapshot (el form se resetea antes de la venta de ida).
+    const snap = { dev: devueltos, nue: nuevos, via, orden: ordenNum.trim(), cli: orden?.cliente || null, seg: seguimiento.trim() }
     setGuardando(true); setError(null); setMsg(null)
     try {
-      await crearCambio(marca, { orden_tn: ordenNum.trim() || null, cliente: orden?.cliente || null, via, items_devueltos: devueltos, items_nuevos: nuevos }, usuario)
-      setMsg('Cambio iniciado.')
-      setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani')
+      const { id } = await crearCambio(marca, { orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null, items_devueltos: snap.dev, items_nuevos: snap.nue }, usuario)
+      setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani'); setSeguimiento('')
+      // La venta de IDA se genera AL CREAR (el producto ya está separado), no al confirmar.
+      const conGN = snap.nue.some((n) => n.product_id && n.size_id)
+      if (id && conGN) {
+        const pass = obtenerPass()
+        if (!pass) {
+          setMsg('Cambio creado. Falta tu contraseña para la venta de ida en GN — se puede rehacer desde Administración.')
+        } else {
+          try {
+            await registrarVentaIda(marca, { id, store: marca, via: snap.via, orden_tn: snap.orden, cliente: snap.cli, items_nuevos: snap.nue, items_devueltos: snap.dev, estado: 'iniciado', reingreso_estado: 'pendiente' } as CambioRow, { user: usuario, pass })
+            setMsg('Cambio creado y venta de ida generada en GN (producto separado).')
+          } catch (ve) { setError(`Cambio creado, pero la venta de ida en GN falló: ${(ve as Error).message}`) }
+        }
+      } else {
+        setMsg('Cambio creado (sin artículo de GN linkeado, no se generó venta de ida).')
+      }
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [marca, ordenNum, orden, via, devueltos, nuevos, usuario, recargar])
+  }, [marca, ordenNum, orden, via, seguimiento, devueltos, nuevos, usuario, recargar])
 
-  const confirmar = useCallback(async (c: CambioRow) => {
+  // La venta de ida se genera al crear el cambio. Este botón es el "rehacer" si faltó (p. ej. sin contraseña).
+  const generarVenta = useCallback(async (c: CambioRow) => {
     if (!(c.items_nuevos || []).some((i) => i.product_id && i.size_id)) { setError('El cambio no tiene productos nuevos con artículo de GN.'); return }
-    if (typeof window !== 'undefined' && !window.confirm(`Confirmar genera la venta de ida en GN (baja stock del producto nuevo). ¿Seguir?`)) return
+    if (typeof window !== 'undefined' && !window.confirm('Generar la venta de ida en GN (baja stock del producto nuevo). ¿Seguir?')) return
     const pass = obtenerPass()
     if (!pass) { setError('Necesito tu contraseña para la venta en GN.'); return }
     setOcupada(c.id); setError(null); setMsg(null)
     try {
-      await confirmarCambio(marca, c, { user: usuario, pass })
-      setMsg('Cambio confirmado: venta de ida creada en GN.')
+      await registrarVentaIda(marca, c, { user: usuario, pass })
+      setMsg('Venta de ida creada en GN.')
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca, usuario, recargar])
+
+  // Cargar/editar el número de seguimiento del envío (en cualquier momento).
+  const cargarSeguimiento = useCallback(async (c: CambioRow) => {
+    const actual = c.seguimiento || ''
+    const s = typeof window !== 'undefined' ? window.prompt('Número de seguimiento del envío:', actual) : null
+    if (s === null) return
+    setOcupada(c.id); setError(null)
+    try {
+      await editarCambio(marca, c.id, { seguimiento: s.trim() || null })
+      setCambios((cs) => cs.map((x) => (x.id === c.id ? { ...x, seguimiento: s.trim() || null } : x)))
+      setMsg('Seguimiento actualizado.')
+    } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
+  }, [marca])
 
   const reingreso = useCallback(async (c: CambioRow) => {
     if (typeof window !== 'undefined' && !window.confirm('¿Ya reingresaste el producto devuelto a mano en GN? Se marca como hecho.')) return
@@ -140,7 +171,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     try { await eliminarCambio(marca, c.id); setCambios((cs) => cs.filter((x) => x.id !== c.id)); setMsg('Cambio eliminado.') } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca])
 
-  const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => c.estado === 'iniciado') : cambios), [cambios, modo])
+  const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => c.estado === 'iniciado' || c.estado === 'en_transito') : cambios), [cambios, modo])
   const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && c.estado !== 'iniciado' && c.estado !== 'anulado').length, [cambios])
 
   const lineaSel = (l: OrdenTN['products'][number]) => devueltos.some((d) => (d.sku ?? '') === (l.sku ?? '') && d.producto === prodDeLinea(l))
@@ -193,8 +224,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                     {sel && d ? (
                       <>
                         <label style={lblN}>$ <input style={inpN} type="number" min={0} value={d.precio ?? 0} onChange={(e) => actualizarDevuelto(di, 'precio', Number(e.target.value))} /></label>
-                        <label style={lblN}>× <input style={inpNs} type="number" min={1} value={d.cantidad} onChange={(e) => actualizarDevuelto(di, 'cantidad', Number(e.target.value))} /></label>
+                        <label style={lblN}>× <input style={inpNs} type="number" min={1} max={Number(l.quantity) || 1} value={d.cantidad} onChange={(e) => actualizarDevuelto(di, 'cantidad', Math.min(Math.max(Number(e.target.value) || 1, 1), Number(l.quantity) || 1))} /></label>
                         <span style={{ fontWeight: 600 }}>= {money(sub(d))}</span>
+                        <span style={{ fontSize: 10, color: '#9CA3AF' }}>(máx {l.quantity})</span>
                       </>
                     ) : (
                       <span style={{ color: '#6B7280' }}>×{l.quantity} · {money(Number(l.price) || 0)}</span>
@@ -235,13 +267,17 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
         </div>
 
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 160px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 150px' }}>
             <span style={{ fontSize: 11, color: '#6B7280' }}>Vía de envío</span>
             <select style={inp} value={via} onChange={(e) => setVia(e.target.value as CambioVia)}>
               <option value="andreani">Andreani</option>
               <option value="correo">Correo</option>
               <option value="cadete">Cadete</option>
             </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 1 200px' }}>
+            <span style={{ fontSize: 11, color: '#6B7280' }}>Nº seguimiento (opcional, se carga después)</span>
+            <input style={inp} value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking del envío" />
           </label>
           <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void iniciar()} disabled={guardando}>{guardando ? 'Guardando…' : '+ Iniciar cambio'}</button>
         </div>
@@ -276,6 +312,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                 <th style={th}>Se lleva</th>
                 <th style={{ ...th, textAlign: 'right' }}>Diferencia</th>
                 <th style={th}>Vía</th>
+                <th style={th}>Seguimiento</th>
                 <th style={th}>Estado</th>
                 <th style={th}>Reingreso</th>
                 {esAdmin && <th style={th}>Acciones</th>}
@@ -294,14 +331,23 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {money(c.diferencia)}<div style={{ fontSize: 10, fontWeight: 500 }}>{DIF_LABEL[c.diferencia_estado || 'parejo'].txt}</div>
                     </td>
                     <td style={td}>{VIA_LABEL[c.via]}</td>
+                    <td style={td}>
+                      {esAdmin ? (
+                        <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => void cargarSeguimiento(c)} disabled={ocup} title="Cargar / editar el número de seguimiento">
+                          {c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}
+                        </button>
+                      ) : (
+                        c.seguimiento || '—'
+                      )}
+                    </td>
                     <td style={td}><span style={{ fontSize: 11, fontWeight: 600 }}>{ESTADO_LABEL[c.estado]}</span></td>
                     <td style={td}>{c.reingreso_estado === 'hecho' ? <span style={{ color: '#15803D' }}>✓ hecho</span> : c.estado === 'iniciado' ? '—' : <span style={{ color: '#B45309' }}>pendiente</span>}</td>
                     {esAdmin && (
                       <td style={td}>
                         <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                          {c.estado === 'iniciado' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void confirmar(c)} disabled={ocup}>{ocup ? '…' : 'Confirmar'}</button>}
-                          {c.estado === 'en_transito' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)}>Volvió</button>}
-                          {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#D97706', color: '#B45309' }} onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</button>}
+                          {c.estado === 'iniciado' && !c.gn_venta_ida_id && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void generarVenta(c)} disabled={ocup} title="Rehacer la venta de ida si faltó al crear">{ocup ? '…' : 'Generar venta'}</button>}
+                          {c.estado === 'en_transito' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} title="Llegó el paquete devuelto">Volvió</button>}
+                          {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#D97706', color: '#B45309' }} onClick={() => void reingreso(c)} disabled={ocup} title="Ya sumaste el devuelto al stock de GN a mano">Reingresado</button>}
                           <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#DC2626', color: '#DC2626' }} onClick={() => void borrar(c)} disabled={ocup}>Eliminar</button>
                         </span>
                       </td>

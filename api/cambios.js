@@ -22,7 +22,7 @@ function cfgFor(store) {
 const ESTADOS = ['iniciado', 'confirmado', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 // Cambios SOLO por envío (el físico se hace presencial sin tool).
 const VIAS = ['andreani', 'correo', 'cadete'];
-const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, gn_venta_ida_id, gn_venta_ida_number, usuario, historial, created_at, updated_at';
+const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, seguimiento, gn_venta_ida_id, gn_venta_ida_number, usuario, historial, created_at, updated_at';
 
 const sumaItems = (its) => (Array.isArray(its) ? its : []).reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0);
 
@@ -76,6 +76,7 @@ export default async function handler(req, res) {
           store, orden_tn: b.orden_tn ? String(b.orden_tn) : null, cliente: b.cliente ? String(b.cliente) : null,
           via, estado: 'iniciado', items_devueltos: devueltos, items_nuevos: nuevos,
           diferencia, diferencia_estado, reingreso_estado: 'pendiente', usuario,
+          seguimiento: b.seguimiento ? String(b.seguimiento) : null,
           historial: [{ estado: 'iniciado', at: new Date().toISOString(), usuario, nota: 'iniciado' }],
         };
         const { data, error } = await supabase.from('cambios').insert(row).select('id').single();
@@ -126,6 +127,7 @@ export default async function handler(req, res) {
         if (b.orden_tn !== undefined) campos.orden_tn = b.orden_tn ? String(b.orden_tn) : null;
         if (b.cliente !== undefined) campos.cliente = b.cliente ? String(b.cliente) : null;
         if (b.via !== undefined && VIAS.includes(b.via)) campos.via = b.via;
+        if (b.seguimiento !== undefined) campos.seguimiento = b.seguimiento ? String(b.seguimiento) : null;
         if (b.diferencia_estado !== undefined) campos.diferencia_estado = b.diferencia_estado ? String(b.diferencia_estado) : null;
         if (Array.isArray(b.items_devueltos) || Array.isArray(b.items_nuevos)) {
           const devueltos = Array.isArray(b.items_devueltos) ? b.items_devueltos : undefined;

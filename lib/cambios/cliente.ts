@@ -39,11 +39,11 @@ export async function crearCambio(store: Marca, input: CambioInput, usuario?: st
 }
 
 /**
- * Confirma el cambio: crea la venta de IDA en GN (el producto NUEVO baja de stock, precio 0, cliente "Cambio")
- * y la registra. Estado: envío → en_transito; local → recibido. Requiere items_nuevos con artículo GN linkeado.
- * La venta va al crear-venta de PROD (los tokens de venta viven ahí), como Fallas/Solicitudes.
+ * Crea la venta de IDA en GN (el producto NUEVO baja de stock, precio 0, cliente "Cambio") y la registra.
+ * Se dispara AL GENERAR el cambio (el producto ya está separado), no al confirmar. Deja el cambio en
+ * `en_transito`. Requiere items_nuevos con artículo GN linkeado. Va al crear-venta de PROD, como Fallas.
  */
-export async function confirmarCambio(store: Marca, cambio: CambioRow, ctx: { user: string; pass: string }): Promise<void> {
+export async function registrarVentaIda(store: Marca, cambio: CambioRow, ctx: { user: string; pass: string }): Promise<void> {
   const items = (cambio.items_nuevos || []).filter((i) => i.product_id && i.size_id)
   if (!items.length) throw new Error('Los productos nuevos no están linkeados a artículos de GN: no se puede descontar stock.')
   const origen: Origen = 'deposito' // cambios son por envío → el producto nuevo sale del depósito
