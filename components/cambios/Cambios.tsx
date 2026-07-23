@@ -237,7 +237,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     keyRef.current += 1
     const base = keyRef.current
     setLineas([
-      ...(c.items_devueltos || []).map((i, k) => ({ key: `d-${base}-${k}`, tipo: 'devuelve' as const, sku: i.sku ?? null, product_id: i.product_id ?? null, size_id: i.size_id ?? null, producto: i.producto, variante: i.variante ?? null, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 1 })),
+      // La key del devuelto se reconstruye igual que lineaOrdenKey (`d-{sku}-{producto}`) para que el
+      // checkbox de la orden lo reconozca como ya marcado al editar (y toglee bien, sin duplicar).
+      ...(c.items_devueltos || []).map((i) => ({ key: `d-${i.sku ?? ''}-${i.producto}`, tipo: 'devuelve' as const, sku: i.sku ?? null, product_id: i.product_id ?? null, size_id: i.size_id ?? null, producto: i.producto, variante: i.variante ?? null, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 1 })),
       ...(c.items_nuevos || []).map((i, k) => ({ key: `l-${base}-${k}`, tipo: 'lleva' as const, sku: i.sku ?? null, product_id: i.product_id ?? null, size_id: i.size_id ?? null, producto: i.producto, variante: i.variante ?? null, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 1 })),
     ])
     setVia(c.via || 'andreani')
