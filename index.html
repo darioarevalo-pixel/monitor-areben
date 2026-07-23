@@ -9318,6 +9318,7 @@ const PERM_CAT = [
   { key: 'integraciones', label: '🔌 Integraciones', info: 'Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.', brands: ['zattia'] },
   { key: 'postventa', label: '🧾 Post-venta', info: 'Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.', brands: ['bdi', 'zattia'] },
   { key: 'postventa-local', label: '🧾 Fallas (carga)', info: 'Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.', brands: ['bdi', 'zattia'] },
+  { key: 'postventa-deposito', label: '🧾 Fallas (depósito)', info: 'Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Post-venta.', brands: ['bdi', 'zattia'] },
   { key: 'cambios-local', label: '🔁 Cambios (iniciar)', info: 'Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.', brands: ['bdi', 'zattia'] },
 ];
 // Agrupamiento de la navegación en menús desplegables.
@@ -9328,7 +9329,7 @@ const NAV_CATS = [
   { id: 'direccion', label: '🎯 Dirección', keys: ['gerencial'] },
   { id: 'analisis',  label: '📊 Análisis',  keys: ['productos', 'variantes', 'ventas-mensuales', 'verif-ventas', 'margenes', 'comisiones', 'colores', 'talles'] },
   { id: 'local',     label: '🏪 Local',     keys: ['solicitudes', 'reposicion', 'conteo', 'conteo-estandar-zattia', 'conteo-estandar-stunned', 'cupones', 'solicitudes-internas', 'postventa-local', 'cambios-local', 'etiquetas', 'caducados', 'ubicaciones', 'exhib'] },
-  { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito'] },
+  { id: 'deposito',  label: '📦 Depósito',  keys: ['conteo-deposito', 'postventa-deposito'] },
   { id: 'marketing', label: '📣 Marketing', keys: ['marketing', 'sesion-fotos', 'tncat', 'gen-talles', 'disenos', 'meta-ads'], accent: 'marketing' },
   { id: 'integraciones', label: '🔌 Integraciones', keys: ['integraciones'] },
   { id: 'administracion', label: '🗂️ Administración', keys: ['postventa'] },

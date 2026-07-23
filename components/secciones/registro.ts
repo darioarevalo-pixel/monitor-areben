@@ -53,6 +53,7 @@ const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then(
 const Integraciones = dynamic(() => import('@/components/integraciones/Integraciones').then((m) => m.Integraciones), { loading: Cargando })
 const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
 const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
+const PostventaDeposito = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaDeposito), { loading: Cargando })
 const CambiosLocal = dynamic(() => import('@/components/cambios/Cambios').then((m) => m.CambiosLocal), { loading: Cargando })
 
 /**
@@ -306,6 +307,8 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Post-venta (carga Local): mismo componente motor en modo 'local' (solo carga + vista). El motor
   // completo es la key `postventa` (Administración). Gateada por permiso `postventa-local`.
   'postventa-local': PostventaLocal,
+  // Post-venta (carga Depósito): mismo motor en modo 'deposito' (descuenta de depósito). Gateada por `postventa-deposito`.
+  'postventa-deposito': PostventaDeposito,
   // Cambios (inicio Local): mismo motor en modo 'local' (buscar orden + elegir productos). El motor
   // completo es la pestaña Cambios de `postventa` (Administración). Gateada por permiso `cambios-local`.
   'cambios-local': CambiosLocal,

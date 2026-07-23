@@ -19,7 +19,7 @@ export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: ()
       try {
         const JsBarcode = (await import('jsbarcode')).default
         if (vivo && canvasRef.current) {
-          JsBarcode(canvasRef.current, falla.barcode, { format: 'CODE128', displayValue: true, fontSize: 16, width: 2, height: 60, margin: 8 })
+          JsBarcode(canvasRef.current, falla.barcode, { format: 'CODE128', displayValue: true, fontSize: 26, width: 3, height: 100, margin: 10 })
         }
       } catch {
         /* si falla el render, queda el texto del barcode abajo */
@@ -31,14 +31,14 @@ export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: ()
   const imprimir = () => {
     const canvas = canvasRef.current
     const img = canvas ? canvas.toDataURL('image/png') : ''
-    const w = window.open('', '_blank', 'width=420,height=320')
+    const w = window.open('', '_blank', 'width=600,height=460')
     if (!w) return
     w.document.write(`
       <html><head><title>Etiqueta ${falla.barcode || ''}</title></head>
-      <body style="font-family:system-ui,sans-serif;margin:16px;text-align:center">
-        ${img ? `<img src="${img}" style="max-width:100%" />` : `<div style="font-family:monospace;font-size:20px">${falla.barcode || ''}</div>`}
-        <div style="font-size:13px;font-weight:600;margin-top:4px">${(falla.producto || '').replace(/</g, '')}</div>
-        <div style="font-size:12px;color:#555">${(falla.sku || '').replace(/</g, '')} · ${(falla.motivo || '').replace(/</g, '')}</div>
+      <body style="font-family:system-ui,sans-serif;margin:20px;text-align:center">
+        ${img ? `<img src="${img}" style="max-width:100%" />` : `<div style="font-family:monospace;font-size:32px">${falla.barcode || ''}</div>`}
+        <div style="font-size:22px;font-weight:700;margin-top:8px">${(falla.producto || '').replace(/</g, '')}</div>
+        <div style="font-size:16px;color:#555;margin-top:2px">${(falla.sku || '').replace(/</g, '')} · ${(falla.motivo || '').replace(/</g, '')}</div>
         <script>window.onload=function(){window.print()}</script>
       </body></html>`)
     w.document.close()

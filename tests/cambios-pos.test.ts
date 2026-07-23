@@ -82,18 +82,27 @@ describe('trackingUrl', () => {
   it('sin código → null', () => expect(trackingUrl('andreani', '')).toBeNull())
 })
 
-describe('detalleCambioTexto', () => {
-  it('arma el texto para el cliente con total', () => {
-    const txt = detalleCambioTexto({
-      id: 45, cliente: 'Juan',
-      items_devueltos: [item(19990, 1, { producto: 'Jean Torino' })],
-      items_nuevos: [item(19990, 2, { producto: 'Falda Honey' })],
-      forma_pago: 'transferencia', via: 'andreani', envio_costo: 2500, envio_paga: 'cliente',
-    })
-    expect(txt).toContain('*CAMBIO C-0045*')
-    expect(txt).toContain('Devolvés: 1× Jean Torino')
-    expect(txt).toContain('Te llevás: 2× Falda Honey')
-    expect(txt).toContain('Forma de pago: Transferencia (−10%)')
+describe('detalleCambioTexto (cuenta itemizada)', () => {
+  const txt = detalleCambioTexto({
+    id: 45, cliente: 'Juan',
+    items_devueltos: [item(19990, 1, { producto: 'Jean Torino' })],
+    items_nuevos: [item(19990, 2, { producto: 'Falda Honey' })],
+    forma_pago: 'transferencia', via: 'andreani', envio_costo: 2500, envio_paga: 'cliente',
+  })
+  it('encabezado con reclamo y cliente', () => {
+    expect(txt).toContain('*CAMBIO C-0045* · Juan')
+  })
+  it('lista devuelve y se lleva con subtotal por línea', () => {
+    expect(txt).toContain('Devolvés:')
+    expect(txt).toContain('1× Jean Torino')
+    expect(txt).toContain('Te llevás:')
+    expect(txt).toContain('2× Falda Honey')
+  })
+  it('cuenta: subtotal, descuento con monto, total productos, envío y total a pagar', () => {
+    expect(txt).toContain('Subtotal productos:')
+    expect(txt).toContain('Descuento Transferencia (−10%): −')
+    expect(txt).toContain('Total productos:')
+    expect(txt).toMatch(/Envío \(Andreani\):/)
     expect(txt).toMatch(/\*Total a pagar:/)
   })
 })

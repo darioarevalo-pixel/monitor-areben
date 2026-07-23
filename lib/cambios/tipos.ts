@@ -218,6 +218,13 @@ export function trackingUrl(via: CambioVia | null | undefined, codigo: string): 
   return null
 }
 
+/** Link al buscador/portal de seguimiento del correo (sin código — para el form). */
+export function trackingPortalUrl(via: CambioVia | null | undefined): string | null {
+  if (via === 'andreani') return 'https://www.andreani.com/#!/informacionEnvio'
+  if (via === 'correo') return 'https://www.correoargentino.com.ar/formularios/e-commerce'
+  return null
+}
+
 /**
  * Reparte lo que se carga en el input de seguimiento en ida/vuelta (Bruno):
  * 1 código → ida; 2 códigos → 1º ida, 2º vuelta; mismo código repetido → ambos iguales.
@@ -230,14 +237,9 @@ export function repartirSeguimiento(entrada: string): { ida: string | null; vuel
 }
 
 /**
- * Detalle del cambio en texto plano para pasarle al cliente (WhatsApp). Formato pedido por Bruno.
- * Ej.:  *CAMBIO C-0045*
- *       Devolvés: 1× Jean Torino
- *       Te llevás: 2× Falda Honey
- *       Envío: $2.500 (Andreani)
- *       Forma de pago: Transferencia (−10%)
- *       *Total a pagar: $35.991*
- *       Seguimiento: 12345
+ * Detalle del cambio para pasarle al cliente (WhatsApp): la CUENTA itemizada — cada concepto con su
+ * suma, subtotal de productos, descuentos con su MONTO (forma de pago y manual si aplica), total de
+ * productos, envío y total a pagar. Formato pedido por Bruno.
  */
 export function detalleCambioTexto(c: {
   id?: number | null
@@ -250,18 +252,25 @@ export function detalleCambioTexto(c: {
   envio_paga?: EnvioPaga | null
   descuento_manual?: number | null
   seguimiento?: string | null
+  seguimiento_vuelta?: string | null
 }): string {
   const money = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
-  const linea = (i: CambioItem) => `${i.cantidad}× ${i.producto}${i.variante ? ` (${i.variante})` : ''}`
+  const sub = (i: CambioItem) => (Number(i.precio) || 0) * (Number(i.cantidad) || 1)
+  const linea = (i: CambioItem) => `• ${i.cantidad}× ${i.producto}${i.variante ? ` (${i.variante})` : ''} — ${money(sub(i))}`
   const devueltos = c.items_devueltos || []
   const nuevos = c.items_nuevos || []
   const t = calcularTotalCambio({ devueltos, nuevos, forma: c.forma_pago || null, envioCosto: c.envio_costo, envioPaga: c.envio_paga, descuentoManual: c.descuento_manual })
   const out: string[] = [`*CAMBIO ${numeroReclamo(c.id)}*${c.cliente ? ` · ${c.cliente}` : ''}`]
-  if (devueltos.length) out.push(`Devolvés: ${devueltos.map(linea).join(', ')}`)
-  if (nuevos.length) out.push(`Te llevás: ${nuevos.map(linea).join(', ')}`)
-  if (t.envioACobrar > 0) out.push(`Envío: ${money(t.envioACobrar)}${c.via ? ` (${VIA_LABEL[c.via]})` : ''}`)
-  if (c.forma_pago) out.push(`Forma de pago: ${FORMA_PAGO_DEF[c.forma_pago].label}${FORMA_PAGO_DEF[c.forma_pago].descuento ? ` (−${FORMA_PAGO_DEF[c.forma_pago].descuento}%)` : ''}`)
+  if (devueltos.length) { out.push('Devolvés:'); devueltos.forEach((i) => out.push(linea(i))) }
+  if (nuevos.length) { out.push('Te llevás:'); nuevos.forEach((i) => out.push(linea(i))) }
+  out.push('———')
+  out.push(`Subtotal productos: ${money(t.diferencia)}`)
+  if (c.forma_pago && t.descuentoForma > 0) out.push(`Descuento ${FORMA_PAGO_DEF[c.forma_pago].label} (−${FORMA_PAGO_DEF[c.forma_pago].descuento}%): −${money(t.descuentoForma)}`)
+  if (t.descuentoManual > 0) out.push(`Descuento: −${money(t.descuentoManual)}`)
+  out.push(`Total productos: ${money(t.diferencia - t.descuento)}`)
+  if (t.envioACobrar > 0) out.push(`Envío${c.via ? ` (${VIA_LABEL[c.via]})` : ''}: ${money(t.envioACobrar)}`)
   out.push(`*Total a pagar: ${money(t.total)}*`)
-  if (c.seguimiento) out.push(`Seguimiento: ${c.seguimiento}`)
+  if (c.seguimiento) out.push(`Seguimiento ida: ${c.seguimiento}`)
+  if (c.seguimiento_vuelta) out.push(`Seguimiento vuelta: ${c.seguimiento_vuelta}`)
   return out.join('\n')
 }

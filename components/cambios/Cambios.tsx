@@ -27,10 +27,11 @@ import {
 } from '@/lib/cambios/cliente'
 import {
   DIAS_CAMBIO, ESTADO_LABEL, ESTADO_TONE, VIA_CON_TRACKING, VIA_LABEL, calcularTotalCambio, detalleCambioTexto,
-  faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingUrl,
+  faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingPortalUrl, trackingUrl,
   type CambioEstado, type CambioInput, type CambioItem, type CambioRow, type CambioVia, type EnvioPaga,
   type FormaPago, type OrdenTN, type OrdenTNLinea,
 } from '@/lib/cambios/tipos'
+import { ResumenCambio } from '@/components/cambios/ResumenCambio'
 
 function obtenerPass(): string {
   let p = leerAdminPass()
@@ -109,6 +110,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [formaPago, setFormaPago] = useState<FormaPago | ''>('')
   const [descManual, setDescManual] = useState('')
   const [solicitudEnvio, setSolicitudEnvio] = useState('')
+  const [pagado, setPagado] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const keyRef = useRef(0)
@@ -117,6 +119,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [filtro, setFiltro] = useState('todos')
   const [busqueda, setBusqueda] = useState('')
   const [expandido, setExpandido] = useState<number | null>(null) // fila con historial abierto
+  const [resumen, setResumen] = useState<CambioRow | null>(null) // fila con modal de resumen abierto
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
@@ -171,7 +174,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const limpiarForm = useCallback(() => {
     setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setVia('andreani'); setSeguimiento(''); setSeguimientoVuelta('')
-    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setSolicitudEnvio(''); setEditandoId(null)
+    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setSolicitudEnvio(''); setPagado(false); setEditandoId(null)
   }, [])
 
   const buildInput = useCallback((): CambioInput => ({
@@ -181,8 +184,8 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     items_devueltos: devueltos, items_nuevos: nuevos,
     envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
     forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
-    solicitud_envio: solicitudEnvio.trim() || null,
-  }), [ordenNum, cliente, via, seguimiento, seguimientoVuelta, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio])
+    solicitud_envio: solicitudEnvio.trim() || null, pagado,
+  }), [ordenNum, cliente, via, seguimiento, seguimientoVuelta, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio, pagado])
 
   const guardarBorrador = useCallback(async () => {
     if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto (el que devuelve o el que se lleva).'); return }
@@ -204,35 +207,56 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     return true
   }, [marca, usuario])
 
-  // Botón verde del form: guarda (crea/edita) como pagado y genera la venta.
+  // Paso 2 (form): "Marcar como pagado" — SOLO setea el flag pagado (persiste), NO genera la venta.
   const marcarPagadoForm = useCallback(async () => {
-    if (faltan.length) { setError(`Completá antes de generar la venta: ${faltan.join(', ')}.`); return }
+    if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto antes de marcar como pagado.'); return }
     setGuardando(true); setError(null); setMsg(null)
     try {
-      const input = buildInput()
+      const input = { ...buildInput(), pagado: true }
+      if (editandoId != null) await editarCambio(marca, editandoId, input)
+      else { const r = await crearCambio(marca, input, usuario); if (r.id != null) setEditandoId(r.id) }
+      setPagado(true)
+      setMsg('Cambio marcado como pagado. Ahora podés Crear Venta.')
+      await recargar()
+    } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
+  }, [devueltos, nuevos, buildInput, editandoId, marca, usuario, recargar])
+
+  // Paso 3 (form): "Crear Venta" — genera la venta real en GN. Requiere completo Y pagado.
+  const crearVentaForm = useCallback(async () => {
+    if (faltan.length) { setError(`Completá antes de crear la venta: ${faltan.join(', ')}.`); return }
+    if (!pagado) { setError('Marcá el cambio como pagado antes de crear la venta.'); return }
+    setGuardando(true); setError(null); setMsg(null)
+    try {
+      const input = { ...buildInput(), pagado: true }
       let id = editandoId
-      if (id != null) await editarCambio(marca, id, { ...input, pagado: true })
-      else { const r = await crearCambio(marca, { ...input, pagado: true }, usuario); id = r.id ?? null }
-      if (id == null) throw new Error('No se pudo guardar el cambio antes de generar la venta.')
-      const row: CambioRow = { id, store: marca, estado: 'borrador', reingreso_estado: 'pendiente', pagado: true, ...input, via }
+      if (id != null) await editarCambio(marca, id, input)
+      else { const r = await crearCambio(marca, input, usuario); id = r.id ?? null }
+      if (id == null) throw new Error('No se pudo guardar el cambio antes de crear la venta.')
+      const row: CambioRow = { id, store: marca, estado: 'borrador', reingreso_estado: 'pendiente', ...input, via }
       const ok = await confirmarYProcesar(row)
       if (ok) { setMsg(`Venta del cambio ${numeroReclamo(id)} creada en GN. Cambio en tránsito.`); limpiarForm() }
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [faltan, buildInput, editandoId, marca, usuario, via, confirmarYProcesar, limpiarForm, recargar])
+  }, [faltan, pagado, buildInput, editandoId, marca, usuario, via, confirmarYProcesar, limpiarForm, recargar])
 
-  // Botón "Marcar pagado" desde la lista (para un borrador ya completo).
+  // Lista: "Marcar pagado" (solo setea el flag).
   const marcarPagadoLista = useCallback(async (c: CambioRow) => {
+    setOcupada(c.id); setError(null); setMsg(null)
+    try { await editarCambio(marca, c.id, { pagado: true }); setMsg(`${numeroReclamo(c.id)} marcado como pagado.`); await recargar() } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
+  }, [marca, recargar])
+
+  // Lista: "Crear venta" (genera la venta; requiere completo Y pagado).
+  const crearVentaLista = useCallback(async (c: CambioRow) => {
     const f = faltantesParaVenta(c)
     if (f.length) { setError(`Al cambio ${numeroReclamo(c.id)} le falta: ${f.join(', ')}. Editalo y completalo.`); return }
+    if (!c.pagado) { setError(`Marcá ${numeroReclamo(c.id)} como pagado antes de crear la venta.`); return }
     setOcupada(c.id); setError(null); setMsg(null)
     try {
-      if (!c.pagado) await editarCambio(marca, c.id, { pagado: true })
       const ok = await confirmarYProcesar(c)
       if (ok) setMsg(`Venta del cambio ${numeroReclamo(c.id)} creada en GN.`)
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
-  }, [marca, confirmarYProcesar, recargar])
+  }, [confirmarYProcesar, recargar])
 
   const abrirEdicion = useCallback((c: CambioRow) => {
     setEditandoId(c.id)
@@ -254,6 +278,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     setFormaPago(c.forma_pago || '')
     setDescManual(c.descuento_manual != null ? String(c.descuento_manual) : '')
     setSolicitudEnvio(c.solicitud_envio || '')
+    setPagado(!!c.pagado)
     setError(null); setMsg(null)
     if (c.orden_tn) void leerOrdenTN(marca, c.orden_tn).then((o) => setOrden(o)).catch(() => setOrden(null))
     else setOrden(null)
@@ -314,20 +339,14 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   return (
     <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: space[5] }}>
-      {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y agregá lo que se lleva. Cuando esté todo, «Marcar como pagado» genera la venta.</div>}
+      {resumen && <ResumenCambio cambio={resumen} onClose={() => setResumen(null)} />}
+      {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y agregá lo que se lleva. Guardá el borrador, marcalo como pagado y cuando esté todo, «Crear Venta».</div>}
 
       {/* ── Form ─────────────────────────────────────────────────────────── */}
       <SectionCard
         title={editandoId != null ? `Editando ${numeroReclamo(editandoId)}` : 'Nuevo cambio'}
         subtitle={orden ? `${cliente || 's/cliente'} · orden #${String(orden.number)}` : 'Por envío · se guarda como borrador'}
-        actions={
-          <>
-            <CopyButton getText={detalleForm} label="Copiar detalle" share tone="neutral" variant="outline" />
-            <Button variant="solid" tone="success" iconLeft="✓" disabled={faltan.length > 0 || guardando} onClick={() => void marcarPagadoForm()} title={faltan.length ? `Falta: ${faltan.join(', ')}` : 'Marca pagado y genera la venta en GN'}>
-              Marcar como pagado
-            </Button>
-          </>
-        }
+        actions={<CopyButton getText={detalleForm} label="Copiar detalle" tone="neutral" variant="outline" />}
       >
         {/* Buscar orden */}
         <Toolbar gap={2} style={{ alignItems: 'flex-end', marginBottom: space[3] }}>
@@ -423,6 +442,13 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           </div>
           {totalRow('Total a pagar', <MoneyText value={t.total} strong />, { strong: true, sep: true })}
           <div style={{ fontSize: font.xs, color: color.mut2, textAlign: 'right', marginTop: 4 }}>Los productos van a la venta de GN; el envío queda solo en Monitor.</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: space[3] }}>
+            {pagado ? (
+              <StatusPill tone="success" label="✓ Pagado" />
+            ) : (
+              <Button variant="solid" tone="success" iconLeft="✓" onClick={() => void marcarPagadoForm()} disabled={guardando}>Marcar como pagado</Button>
+            )}
+          </div>
         </div>
 
         {/* Solicitud de envío (obligatoria) + tracking de ida + guardar */}
@@ -438,11 +464,15 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
               <Field label="Seguimiento de vuelta (se puede cargar después)" width={200}>
                 <Input value={seguimientoVuelta} onChange={(e) => setSeguimientoVuelta(e.target.value)} placeholder="tracking de vuelta" />
               </Field>
+              {trackingPortalUrl(via) && (
+                <a href={trackingPortalUrl(via) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.action, paddingBottom: 8, whiteSpace: 'nowrap' }}>🔎 Buscar seguimiento en {VIA_LABEL[via]}</a>
+              )}
             </>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
             {editandoId != null && <Button variant="ghost" onClick={limpiarForm} disabled={guardando}>Cancelar</Button>}
             <Button variant="outline" tone="brand" iconLeft="💾" onClick={() => void guardarBorrador()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? 'Guardar cambios' : 'Guardar borrador'}</Button>
+            <Button variant="solid" tone="action" iconLeft="🧾" onClick={() => void crearVentaForm()} disabled={guardando || faltan.length > 0 || !pagado} title={faltan.length ? `Falta: ${faltan.join(', ')}` : !pagado ? 'Marcá el cambio como pagado primero' : 'Genera la venta real en GN'}>Crear Venta</Button>
           </div>
         </div>
       </SectionCard>
@@ -508,7 +538,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <Td>
                         <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                           {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
-                          {esBorrador && <Button size="sm" variant="solid" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca pagado y genera la venta en GN">Marcar pagado</Button>}
+                          {esBorrador && !c.pagado && <Button size="sm" variant="soft" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca el cambio como pagado">✓ Marcar pagado</Button>}
+                          {esBorrador && c.pagado && faltantesParaVenta(c).length === 0 && <Button size="sm" variant="solid" tone="action" onClick={() => void crearVentaLista(c)} disabled={ocup} title="Genera la venta real en GN">🧾 Crear venta</Button>}
+                          <Button size="sm" variant="ghost" onClick={() => setResumen(c)} title="Ver resumen del cambio">📋 Resumen</Button>
                           <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
                           <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">🕘</Button>
                           {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}

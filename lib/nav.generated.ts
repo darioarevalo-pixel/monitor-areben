@@ -435,6 +435,15 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "postventa-deposito",
+    "label": "🧾 Fallas (depósito)",
+    "info": "Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Post-venta.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "cambios-local",
     "label": "🔁 Cambios (iniciar)",
     "info": "Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.",
@@ -497,7 +506,8 @@ export const NAV_CATS: NavCat[] = [
     "id": "deposito",
     "label": "📦 Depósito",
     "keys": [
-      "conteo-deposito"
+      "conteo-deposito",
+      "postventa-deposito"
     ]
   },
   {
