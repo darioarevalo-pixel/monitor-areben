@@ -184,10 +184,12 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     items_devueltos: devueltos, items_nuevos: nuevos,
     envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
     forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
-    solicitud_envio: solicitudEnvio.trim() || null, pagado,
+    // Cadetería no usa solicitud de envío → si está vacía se guarda "Cadetería" para dejar traza.
+    solicitud_envio: solicitudEnvio.trim() || (via === 'cadete' ? 'Cadetería' : null), pagado,
   }), [ordenNum, cliente, via, seguimiento, seguimientoVuelta, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio, pagado])
 
   const guardarBorrador = useCallback(async () => {
+    if (!orden && editandoId == null) { setError('Buscá y seleccioná la orden de venta antes de armar el cambio.'); return }
     if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto (el que devuelve o el que se lleva).'); return }
     setGuardando(true); setError(null); setMsg(null)
     try {
@@ -196,7 +198,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
       else { await crearCambio(marca, input, usuario); setMsg('Borrador guardado. Cuando esté todo, marcalo como pagado para generar la venta.') }
       limpiarForm(); await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [devueltos, nuevos, buildInput, editandoId, marca, usuario, limpiarForm, recargar])
+  }, [orden, devueltos, nuevos, buildInput, editandoId, marca, usuario, limpiarForm, recargar])
 
   // Confirma y genera la venta real en GN a partir de una fila ya guardada.
   const confirmarYProcesar = useCallback(async (row: CambioRow): Promise<boolean> => {
@@ -379,12 +381,16 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           </div>
         )}
 
-        {/* Buscar lo que se lleva */}
+        {/* Buscar lo que se lleva — solo con una orden de venta asociada (trazabilidad) */}
         <div style={{ marginBottom: space[4] }}>
           <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 6 }}>Agregá lo que el cliente SE LLEVA (de Gestión Nube):</div>
-          <div style={{ padding: space[3], background: color.brandBg, border: `1px solid ${color.brandBg2}`, borderRadius: radius.lg }}>
-            <BuscarArticuloGN marca={marca} onSelect={agregarLleva} mostrarCosto={false} />
-          </div>
+          {orden || editandoId != null ? (
+            <div style={{ padding: space[3], background: color.brandBg, border: `1px solid ${color.brandBg2}`, borderRadius: radius.lg }}>
+              <BuscarArticuloGN marca={marca} onSelect={agregarLleva} mostrarCosto={false} />
+            </div>
+          ) : (
+            <Notice tone="warning" icon="🔎">Buscá y seleccioná primero la orden de venta para poder agregar productos.</Notice>
+          )}
         </div>
 
         {/* Tabla unificada */}
@@ -453,8 +459,8 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
         {/* Solicitud de envío (obligatoria) + tracking de ida + guardar */}
         <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', marginTop: space[5], paddingTop: space[4], borderTop: `1px solid ${color.line}` }}>
-          <Field label="Solicitud de envío (EMXXXX)" required width={190} hint="obligatoria para generar la venta">
-            <Input value={solicitudEnvio} onChange={(e) => setSolicitudEnvio(e.target.value)} placeholder="EM1234" invalid={!solicitudEnvio.trim()} />
+          <Field label="Solicitud de envío (EMXXXX)" required={VIA_CON_TRACKING.includes(via)} width={190} hint={VIA_CON_TRACKING.includes(via) ? 'obligatoria para generar la venta' : 'opcional (cadetería)'}>
+            <Input value={solicitudEnvio} onChange={(e) => setSolicitudEnvio(e.target.value)} placeholder={VIA_CON_TRACKING.includes(via) ? 'EM1234' : 'Cadetería'} invalid={VIA_CON_TRACKING.includes(via) && !solicitudEnvio.trim()} />
           </Field>
           {VIA_CON_TRACKING.includes(via) && (
             <>

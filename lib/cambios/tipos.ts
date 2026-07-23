@@ -196,13 +196,14 @@ export function faltantesParaVenta(c: {
   const faltan: string[] = []
   const devueltos = c.items_devueltos || []
   const nuevos = c.items_nuevos || []
+  if (!c.orden_tn) faltan.push('orden de venta asociada')
   if (!devueltos.length) faltan.push('producto que devuelve')
   if (!nuevos.some((i) => i.product_id && i.size_id)) faltan.push('producto que se lleva (de GN)')
   if (!c.forma_pago) faltan.push('forma de pago')
   if (!c.via) faltan.push('vía de envío')
   if (!c.envio_paga) faltan.push('quién paga el envío')
-  if (!c.solicitud_envio) faltan.push('solicitud de envío (EMXXXX)')
-  if (!c.cliente && !c.orden_tn) faltan.push('cliente u orden')
+  // La solicitud de envío (EMXXXX) es del envío manual → solo obligatoria para Andreani/Correo (cadetería no).
+  if ((c.via === 'andreani' || c.via === 'correo') && !c.solicitud_envio) faltan.push('solicitud de envío (EMXXXX)')
   return faltan
 }
 

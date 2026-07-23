@@ -62,8 +62,14 @@ describe('faltantesParaVenta', () => {
   it('sin devuelto → falta', () => {
     expect(faltantesParaVenta({ ...completo, items_devueltos: [] })).toContain('producto que devuelve')
   })
-  it('sin solicitud de envío (EMXXXX) → falta', () => {
+  it('sin solicitud de envío (EMXXXX) con Andreani → falta', () => {
     expect(faltantesParaVenta({ ...completo, solicitud_envio: null })).toContain('solicitud de envío (EMXXXX)')
+  })
+  it('cadetería sin EMXXXX → NO falta (solo obligatoria para andreani/correo)', () => {
+    expect(faltantesParaVenta({ ...completo, via: 'cadete', solicitud_envio: null })).not.toContain('solicitud de envío (EMXXXX)')
+  })
+  it('sin orden asociada → falta', () => {
+    expect(faltantesParaVenta({ ...completo, orden_tn: null })).toContain('orden de venta asociada')
   })
 })
 
