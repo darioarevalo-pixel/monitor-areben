@@ -76,8 +76,8 @@ describe('repartirSeguimiento', () => {
 })
 
 describe('trackingUrl', () => {
-  it('andreani arma link con el código', () => expect(trackingUrl('andreani', '123')).toContain('123'))
-  it('correo arma link con el código', () => expect(trackingUrl('correo', '456')).toContain('456'))
+  it('andreani → portal de seguimiento', () => expect(trackingUrl('andreani', '123')).toContain('andreani.com/?tab=seguir-envio'))
+  it('correo arma link con el código', () => expect(trackingUrl('correo', '456')).toContain('e-commerce?id=456'))
   it('cadete no tiene tracking online', () => expect(trackingUrl('cadete', '789')).toBeNull())
   it('sin código → null', () => expect(trackingUrl('andreani', '')).toBeNull())
 })

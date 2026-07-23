@@ -142,7 +142,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
                         const editado = manual[it.vid] !== undefined && manual[it.vid] !== sug
                         return (
                           <tr key={it.vid} style={{ borderTop: '1px solid #F3F4F6' }}>
-                            <td style={{ padding: '6px 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.size || '—'}{it.sku && <span style={{ fontSize: 11, color: '#9CA3AF' }}> {it.sku}</span>}</td>
+                            <td style={{ padding: '6px 8px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{it.size || '—'}{it.sku && <span style={{ fontSize: 11, color: '#9CA3AF' }}> {it.sku}</span>}</td>
                             <td style={{ textAlign: 'center', color: it.local <= 1 ? '#DC2626' : '#374151', fontWeight: 600 }}>{it.local}</td>
                             <td style={{ textAlign: 'center' }}>{it.deposito}</td>
                             {verVentas && <td style={{ textAlign: 'center', color: '#1D9E75', fontWeight: 600 }}>{it.s7}</td>}

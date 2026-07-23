@@ -48,7 +48,10 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
   }
   header()
   filas.forEach((it, i) => {
-    if (y > 285) {
+    // Nombre COMPLETO en varias líneas (antes se truncaba a la 1ª con [0] → se perdía info).
+    const lineas = pdf.splitTextToSize(`${it.name} · ${it.size || '—'}`, X.dep - X.prod - 3)
+    const rowH = Math.max(6.6, lineas.length * 4 + 2.6)
+    if (y + rowH > 292) {
       pdf.addPage()
       y = 16
       header()
@@ -56,7 +59,7 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
     const mover = moverFinal(it, cfg, esBdi, manual)
     if (i % 2 === 1) {
       pdf.setFillColor(243, 244, 246)
-      pdf.rect(M, y - 4.2, RIGHT - M, 6.6, 'F')
+      pdf.rect(M, y - 4.2, RIGHT - M, rowH, 'F')
     }
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(9)
@@ -65,7 +68,7 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8.5)
     pdf.setTextColor(20)
-    pdf.text(pdf.splitTextToSize(`${it.name} · ${it.size || '—'}`, X.dep - X.prod - 3)[0], X.prod, y)
+    lineas.forEach((ln: string, k: number) => pdf.text(ln, X.prod, y + k * 4))
     pdf.setTextColor(165)
     pdf.text(String(it.deposito), X.dep, y)
     pdf.setTextColor(20)
@@ -77,7 +80,7 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
     pdf.setDrawColor(110)
     pdf.rect(X.pick + 3, y - 3.2, 4, 4)
     pdf.rect(X.nf + 9, y - 3.2, 4, 4)
-    y += 6.6
+    y += rowH
   })
   if (y > 250) {
     pdf.addPage()

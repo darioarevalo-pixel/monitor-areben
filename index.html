@@ -10017,8 +10017,9 @@ function sfBcVid(code) {
 function _sfFoco(id) { setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 30); }
 function sfFaseCompleta(s, fase) {
   const mk = fase === 'devolucion' ? 'devuelto' : 'verif';
-  const m = s[mk] || {};
-  return (s.items || []).length > 0 && s.items.every(i => (m[i.vid] || 0) >= i.qty);
+  const m = s[mk] || {}, v = s.verif || {};
+  const esperado = i => fase === 'devolucion' ? Math.min(v[i.vid] || 0, i.qty) : i.qty;
+  return (s.items || []).length > 0 && s.items.every(i => (m[i.vid] || 0) >= esperado(i));
 }
 function sfScan(id, origen, inputEl, fase) {
   const code = (inputEl.value || '').trim(); inputEl.value = '';
@@ -10173,7 +10174,7 @@ function sfDraftHtml() {
   </div>`;
 }
 // Faltantes de devolución: ítems que aún no volvieron (qty - devuelto > 0).
-function sfFaltantes(s) { const d = s.devuelto || {}; return (s.items || []).map(i => ({ ...i, falta: i.qty - (d[i.vid] || 0) })).filter(x => x.falta > 0); }
+function sfFaltantes(s) { const d = s.devuelto || {}, v = s.verif || {}; return (s.items || []).map(i => ({ ...i, falta: Math.min(v[i.vid] || 0, i.qty) - (d[i.vid] || 0) })).filter(x => x.falta > 0); }
 // ¿Ya salió físicamente? (hay venta creada, o hay ítems a mano y la solicitud dejó de estar 'pendiente') → habilita el control de devolución.
 function sfSalio(s) { return !!(s && s.ventas) || ((s.items || []).some(i => i.manual) && s.estado && s.estado !== 'pendiente'); }
 function sfReporteFaltantesCopiar(id) {

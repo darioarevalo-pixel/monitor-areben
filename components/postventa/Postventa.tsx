@@ -70,6 +70,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   const [guardando, setGuardando] = useState(false)
   const [ocupada, setOcupada] = useState<number | null>(null)
   const [form, setForm] = useState({ ...FORM0 })
+  const [fallaLibre, setFallaLibre] = useState(false) // Admin: cargar producto a mano (sin GN, sin descontar stock)
   const [filtro, setFiltro] = useState<'todas' | FallaEstado>('todas')
   const [etiqueta, setEtiqueta] = useState<FallaRow | null>(null)
   const [editando, setEditando] = useState<FallaRow | null>(null)
@@ -92,7 +93,9 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   }, [])
 
   const agregar = useCallback(async () => {
-    if (!form.producto.trim()) { setError('Elegí un artículo o escribí el producto.'); return }
+    if (!form.producto.trim()) { setError('Elegí un artículo del buscador.'); return }
+    // Producto solo por buscador (Local/Depósito y Admin normal). Solo la "falla libre" de Admin permite a mano.
+    if (!(modo === 'admin' && fallaLibre) && !form.product_id) { setError('Elegí un artículo del buscador. Para cargar a mano usá "Falla libre" (Administración).'); return }
     // Ubicación (de dónde descuenta): Depósito la fija por sección; Admin la elige; Local siempre 'local'.
     const ubic: FallaUbicacion = modo === 'deposito' ? 'deposito' : modo === 'admin' ? (form.ubicacion === 'deposito' ? 'deposito' : 'local') : 'local'
     const snap = {
@@ -126,7 +129,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
       } else { setMsg(`Falla cargada${etiq}.`) }
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [form, modo, marca, usuario, recargar])
+  }, [form, modo, fallaLibre, marca, usuario, recargar])
 
   const recibir = useCallback(async (f: FallaRow) => {
     setOcupada(f.id); setError(null)
@@ -153,7 +156,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   }, [marca])
 
   const visibles = useMemo(() => {
-    if (modo !== 'admin') return fallas.filter((f) => f.estado === 'cargada')
+    if (modo === 'local') return fallas.filter((f) => f.estado === 'cargada' && (f.ubicacion === 'local' || !f.ubicacion))
+    if (modo === 'deposito') return fallas.filter((f) => f.estado === 'cargada' && f.ubicacion === 'deposito')
     return filtro === 'todas' ? fallas : fallas.filter((f) => f.estado === filtro)
   }, [fallas, filtro, modo])
 
@@ -181,13 +185,20 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   const formCarga = (
     <SectionCard title="Cargar falla" style={{ marginBottom: space[4] }}>
       <div style={{ marginBottom: space[3] }}>
-        <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 4 }}>Artículo de Gestión Nube (para descontar stock)</div>
-        <BuscarArticuloGN marca={marca} onSelect={elegirArticulo} mostrarCosto={esAdmin} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: font.xs, color: color.mut }}>Artículo de Gestión Nube (para descontar stock)</span>
+          {esAdmin && <Button size="sm" variant={fallaLibre ? 'solid' : 'ghost'} tone="brand" onClick={() => setFallaLibre((v) => !v)} style={{ marginLeft: 'auto' }}>{fallaLibre ? '↩ Usar buscador' : '✎ Falla libre'}</Button>}
+        </div>
+        {!(esAdmin && fallaLibre) ? (
+          <BuscarArticuloGN marca={marca} onSelect={elegirArticulo} mostrarCosto={esAdmin} />
+        ) : (
+          <div style={{ fontSize: font.xs, color: color.warning }}>Falla libre: cargá el producto a mano abajo. No pasa por el sistema (no descuenta stock de GN).</div>
+        )}
         {form.product_id && <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>✓ Artículo linkeado ({form.sku || form.product_id}). Al confirmar se descuenta de GN.</div>}
       </div>
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Producto" required width={220} style={{ flex: '2 1 220px' }}>
-          <Input value={form.producto} onChange={(e) => setForm((s) => ({ ...s, producto: e.target.value }))} placeholder="Remera boxy negra" />
+          <Input value={form.producto} readOnly={!(esAdmin && fallaLibre)} onChange={(e) => setForm((s) => ({ ...s, producto: e.target.value }))} placeholder={esAdmin && fallaLibre ? 'Producto (a mano)' : 'Elegí un artículo del buscador'} style={!(esAdmin && fallaLibre) ? { background: color.bg2 } : undefined} />
         </Field>
         <Field label="Cantidad"><NumberField value={form.cantidad === '' ? '' : Number(form.cantidad)} onChange={setNum('cantidad')} min={1} width={90} /></Field>
         {esAdmin && (

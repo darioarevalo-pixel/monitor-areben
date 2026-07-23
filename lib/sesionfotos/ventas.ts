@@ -16,7 +16,7 @@
  *   endpoint ya manda, crear-venta.js:74).
  */
 
-import { faseCompleta } from './core'
+import { faseCompleta, preparado } from './core'
 import type { ItemSolicitud, Origen, Solicitud, VentaGN } from './tipos'
 
 const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
@@ -41,13 +41,14 @@ export type PedidoVenta = {
  * los ítems `nuevo`; internas los incluye a todos). La salida es byte-idéntica a la de
  * antes (lo verifican los tests de ventas de los dos módulos).
  */
-export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: string; incluir?: (i: ItemSolicitud) => boolean }): PedidoVenta[] {
+export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: string; incluir?: (i: ItemSolicitud) => boolean; cantidad?: (i: ItemSolicitud) => number }): PedidoVenta[] {
   const incluir = opts.incluir ?? (() => true)
+  const cantidad = opts.cantidad ?? ((i) => i.qty)
   const origenes = (['deposito', 'local'] as Origen[]).filter((o) => s.items.some((i) => i.origen === o && incluir(i)))
   return origenes.map((origen) => ({
     store: ctx.store,
     origen,
-    items: s.items.filter((i) => i.origen === origen && incluir(i)).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: i.qty })),
+    items: s.items.filter((i) => i.origen === origen && incluir(i)).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: cantidad(i) })),
     comments: opts.comments,
     solicitudId: s.id,
     user: ctx.user,
@@ -65,7 +66,13 @@ export function origenesVendibles(s: Solicitud): Origen[] {
  * sfCrearVentas @9694-9697: los ítems `nuevo` NO entran (no existen en GN).
  */
 export function construirPedidosVenta(s: Solicitud, ctx: CtxVenta): PedidoVenta[] {
-  return construirPedidos(s, ctx, { comments: `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`, incluir: (i) => !i.nuevo })
+  // Solo lo efectivamente PREPARADO por escaneo (verif): los no encontrados durante la separación NO
+  // entran a la venta (ni descuentan stock). Cantidad = lo preparado, no lo pedido. Decisión de Bruno.
+  return construirPedidos(s, ctx, {
+    comments: `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`,
+    incluir: (i) => !i.nuevo && preparado(s, i) > 0,
+    cantidad: (i) => preparado(s, i),
+  })
 }
 
 export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; error?: string }

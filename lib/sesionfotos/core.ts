@@ -15,14 +15,20 @@ export function claveConteo(fase: Fase): 'verif' | 'devuelto' {
   return fase === 'devolucion' ? 'devuelto' : 'verif'
 }
 
+/** Cantidad efectivamente PREPARADA/escaneada de un ítem (topeada a lo pedido). Base real de venta y devolución. */
+export function preparado(s: Solicitud, i: ItemSolicitud): number {
+  return Math.min((s.verif || {})[i.vid] || 0, i.qty)
+}
+
 /**
- * Faltantes de devolución: ítems que aún no volvieron (qty − devuelto > 0).
- * Port de sfFaltantes (index.html:10167).
+ * Faltantes de devolución: ítems que aún no volvieron. El "esperado a devolver" es lo que
+ * efectivamente SALIÓ (lo preparado por escaneo), NO lo pedido — así lo no encontrado durante la
+ * separación no aparece como pendiente de devolver ni genera correcciones manuales.
  */
 export function faltantes(s: Solicitud): Array<ItemSolicitud & { falta: number }> {
   const d = s.devuelto || {}
   return (s.items || [])
-    .map((i) => ({ ...i, falta: i.qty - (d[i.vid] || 0) }))
+    .map((i) => ({ ...i, falta: preparado(s, i) - (d[i.vid] || 0) }))
     .filter((x) => x.falta > 0)
 }
 
@@ -42,7 +48,10 @@ export function salio(s: Solicitud): boolean {
  */
 export function faseCompleta(s: Solicitud, fase: Fase): boolean {
   const m = s[claveConteo(fase)] || {}
-  return (s.items || []).length > 0 && s.items.every((i) => (m[i.vid] || 0) >= i.qty)
+  // Retiro: se completa cuando todo lo pedido está preparado. Devolución: cuando volvió todo lo que SALIÓ
+  // (lo preparado), para que los no encontrados no impidan cerrar ni exijan corrección manual.
+  const esperado = (i: ItemSolicitud) => (fase === 'devolucion' ? preparado(s, i) : i.qty)
+  return (s.items || []).length > 0 && s.items.every((i) => (m[i.vid] || 0) >= esperado(i))
 }
 
 /** Unidades pedidas de un origen. */

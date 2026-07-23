@@ -209,19 +209,19 @@ export function faltantesParaVenta(c: {
 /** Sólo correo/andreani tienen tracking online. Cadete no. */
 export const VIA_CON_TRACKING: CambioVia[] = ['andreani', 'correo']
 
-/** Link al buscador de seguimiento del correo (URLs públicas — a confirmar/ajustar por Bruno). */
+/** Link al buscador de seguimiento del correo. Correo acepta el código en la URL; Andreani es un portal. */
 export function trackingUrl(via: CambioVia | null | undefined, codigo: string): string | null {
   const c = (codigo || '').trim()
   if (!c) return null
-  if (via === 'andreani') return `https://www.andreani.com/#!/informacionEnvio/${encodeURIComponent(c)}`
-  if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?seguimiento=${encodeURIComponent(c)}`
+  if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio' // el portal no toma el code en la URL
+  if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?id=${encodeURIComponent(c)}`
   return null
 }
 
 /** Link al buscador/portal de seguimiento del correo (sin código — para el form). */
 export function trackingPortalUrl(via: CambioVia | null | undefined): string | null {
-  if (via === 'andreani') return 'https://www.andreani.com/#!/informacionEnvio'
-  if (via === 'correo') return 'https://www.correoargentino.com.ar/formularios/e-commerce'
+  if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio'
+  if (via === 'correo') return 'https://www.correoargentino.com.ar/formularios/e-commerce?id='
   return null
 }
 

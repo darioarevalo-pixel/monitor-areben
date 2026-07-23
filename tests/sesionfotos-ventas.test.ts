@@ -28,6 +28,8 @@ const S = sol({
     item({ vid: 'bc_9', pid: null, sid: null, qty: 5, origen: 'deposito', nuevo: true, pendiente: true }),
     item({ vid: 'man_1', pid: null, sid: null, qty: 4, origen: 'local', nuevo: true, manual: true }),
   ],
+  // Todo preparado por escaneo → la venta lleva la cantidad completa (verif) = qty.
+  verif: { a: 2, b: 1, c: 3 },
 })
 
 describe('paridad de payload con sfCrearVentas (OFFLINE, cero POST)', () => {
@@ -54,6 +56,24 @@ describe('paridad de payload con sfCrearVentas (OFFLINE, cero POST)', () => {
   it('origenesVendibles ignora un origen que solo tiene ítems nuevos', () => {
     const s = sol({ items: [item({ origen: 'deposito' }), item({ vid: 'n', origen: 'local', nuevo: true })] })
     expect(origenesVendibles(s)).toEqual(['deposito'])
+  })
+
+  it('la venta lleva SOLO lo preparado por escaneo (verif), con la cantidad escaneada', () => {
+    const conNoEncontrado = sol({
+      id: 's_np', descripcion: 'con no encontrado',
+      items: [
+        item({ vid: 'p', pid: '20', sid: '200', qty: 2, origen: 'deposito' }), // preparado 2
+        item({ vid: 'q', pid: '21', sid: '201', qty: 3, origen: 'deposito' }), // preparado 1 (2 no encontrados)
+        item({ vid: 'z', pid: '22', sid: '202', qty: 1, origen: 'local' }), // no encontrado (verif ausente)
+      ],
+      verif: { p: 2, q: 1 },
+    })
+    const pedidos = construirPedidosVenta(conNoEncontrado, { store: 'bdi', user: 'ana', pass: 'x' })
+    expect(pedidos.map((p) => p.origen)).toEqual(['deposito']) // local 'z' no se preparó → no hay pedido local
+    expect(pedidos[0].items).toEqual([
+      { product_id: '20', size_id: '200', quantity: 2 },
+      { product_id: '21', size_id: '201', quantity: 1 }, // 1 (lo escaneado), no 3 (lo pedido)
+    ])
   })
 })
 
@@ -93,11 +113,11 @@ describe('anulaciones · ventaAnulada e idsParaCerrar', () => {
   it('cierra solo si TODAS las ventas están anuladas Y la devolución está completa', async () => {
     const conVentaYDevuelta = sol({
       id: 'cerrable', estado: 'cargada', ventas: { deposito: { id: 1 } },
-      items: [item({ vid: 'a', qty: 1 })], devuelto: { a: 1 }, // devolución completa
+      items: [item({ vid: 'a', qty: 1 })], verif: { a: 1 }, devuelto: { a: 1 }, // preparado 1, devuelto 1 → completa
     })
     const anuladaPeroSinDevolver = sol({
       id: 'no', estado: 'cargada', ventas: { deposito: { id: 2 } },
-      items: [item({ vid: 'a', qty: 2 })], devuelto: { a: 1 }, // falta devolver
+      items: [item({ vid: 'a', qty: 2 })], verif: { a: 2 }, devuelto: { a: 1 }, // preparado 2, devuelto 1 → falta devolver
     })
     const consultar = vi.fn(async () => ({ ok: true, existe: false })) // todas anuladas
     const cerrar = await idsParaCerrar([conVentaYDevuelta, anuladaPeroSinDevolver], 'bdi', consultar)

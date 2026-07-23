@@ -117,6 +117,21 @@ describe('paridad con index.html · funciones puras', () => {
   })
 })
 
+describe('devolución solo con lo preparado (no-encontrados fuera)', () => {
+  it('faltantes: el esperado a devolver es lo preparado (verif), no lo pedido', () => {
+    const s = sol({ items: [item({ vid: 'a', qty: 3, origen: 'deposito' })], verif: { a: 1 }, devuelto: {} })
+    expect(faltantes(s).map((x) => ({ vid: x.vid, falta: x.falta }))).toEqual([{ vid: 'a', falta: 1 }]) // 1 preparado, no 3
+  })
+  it('faltantes: un ítem no encontrado (verif ausente) no aparece como pendiente de devolver', () => {
+    const s = sol({ items: [item({ vid: 'a', qty: 2 })], verif: {}, devuelto: {} })
+    expect(faltantes(s)).toEqual([])
+  })
+  it('faseCompleta devolución: se completa cuando volvió lo preparado (ignora lo no encontrado)', () => {
+    const s = sol({ items: [item({ vid: 'a', qty: 3 }), item({ vid: 'b', qty: 1, origen: 'local' })], verif: { a: 2 }, devuelto: { a: 2 } })
+    expect(faseCompleta(s, 'devolucion')).toBe(true) // a: preparó 2, devolvió 2; b: no se preparó → no cuenta
+  })
+})
+
 describe('derivaciones del historial', () => {
   it('cuenta unidades por origen', () => {
     const s = sol({ items: [item({ vid: 'a', qty: 3, origen: 'deposito' }), item({ vid: 'b', qty: 2, origen: 'local' }), item({ vid: 'c', qty: 4, origen: 'deposito' })] })
