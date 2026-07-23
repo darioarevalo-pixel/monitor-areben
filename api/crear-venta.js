@@ -12,6 +12,12 @@ const SF_CFG = {
   zattia: { client_id: 312923, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 18210, local: 11780 } },
   bdi:    { client_id: 338755, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 13307, local: 18393 } },
 };
+// Cliente propio para las ventas de FALLAS (payload con proposito:'falla'), distinto del de Sesión
+// de fotos: así en GN cada venta técnica queda atribuida a su cliente correcto. Sin proposito, se usa
+// el client_id de SF_CFG (fotos), o sea el comportamiento de siempre (compatible hacia atrás).
+const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
+// Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
+const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -62,18 +68,43 @@ export default async function handler(req, res) {
 
   // ── Crear venta ── (GN no soporta anular/borrar por API: eso se hace a mano en la web de GN)
   if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
-  const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && (+it.quantity > 0)) : [];
+  // Reingreso (Cambios/Devoluciones): admite cantidad NEGATIVA para SUMAR stock. GN no tiene API de ingreso,
+  // así que se prueba con una "venta" de cantidad negativa + discount_inventory. SOLO esta acción admite
+  // negativos; el camino normal (fotos/solicitudes/fallas) sigue exigiendo quantity > 0.
+  const esReingreso = b.accion === 'reingreso';
+  const okQty = (it) => (esReingreso ? +it.quantity !== 0 : +it.quantity > 0);
+  const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && okQty(it)) : [];
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
 
   const store_id = cfg.store[b.origen];
+  // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
+  const clientId =
+    (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] :
+    (b.proposito === 'cambio' && CAMBIO_CLIENT[store]) ? CAMBIO_CLIENT[store] :
+    cfg.client_id;
+  // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
+  // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock). El resto
+  // (fotos/fallas) va con precio 0 y sin descuento, idéntico a antes.
+  const lineItems = items.map(it => ({
+    product_id: parseInt(it.product_id, 10),
+    size_id: parseInt(it.size_id, 10),
+    quantity: parseInt(it.quantity, 10),
+    unit_price: esReingreso ? (Number(it.unit_price) || 0) : 0,
+    store_id,
+  }));
   const payload = {
-    client_id: cfg.client_id, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+    client_id: clientId, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
     store_id, discount_inventory: true,
     comments: String(b.comments || '').slice(0, 500),
     integration_source: 'monitor-sesion-fotos',
     integration_id: `${b.solicitudId || 'sf'}-${b.origen}`,
-    items: items.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: 0, store_id })),
+    items: lineItems,
   };
+  if (esReingreso) {
+    // discount a nivel venta = subtotal (negativo) → total 0. is_exchange marca el movimiento como cambio.
+    payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+    payload.is_exchange = true;
+  }
 
   try {
     const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });

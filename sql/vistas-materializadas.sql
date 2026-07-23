@@ -110,6 +110,7 @@ SELECT
 FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 WHERE v.date_sale IS NOT NULL
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
 GROUP BY mes, v.channel
 ORDER BY mes, v.channel;
 
@@ -135,6 +136,7 @@ FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 LEFT JOIN productos p ON p.id = d.product_id
 WHERE v.date_sale IS NOT NULL
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
 GROUP BY mes, categoria
 ORDER BY mes, categoria;
 
@@ -159,6 +161,7 @@ FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 LEFT JOIN productos p ON p.id = d.product_id
 WHERE v.date_sale IS NOT NULL
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
   AND upper(trim(p.category)) IN ('FUNDAS', 'MAYORISTA', 'MINORISTA')
   AND normalize_iphone_model(d.size) IS NOT NULL
 GROUP BY mes, modelo, d.product_id, d.product_name
