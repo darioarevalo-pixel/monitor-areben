@@ -76,6 +76,28 @@ export default async function handler(req, res) {
 
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
 
+  // ── DIAGNÓSTICO TEMPORAL (borrar): entender el formato del descuento de GN. NO descuenta stock. ──
+  // Prueba item_discount (por línea) y/o sale_discount (por venta), con discount_type opcional.
+  if (b.accion === 'probe') {
+    if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
+    const store_id = cfg.store[b.origen];
+    const item = { product_id: parseInt(b.product_id, 10), size_id: parseInt(b.size_id, 10), quantity: 1, unit_price: Number(b.unit_price) || 0, store_id };
+    if (b.item_discount != null) item.discount = Number(b.item_discount);
+    if (b.item_discount_type) item.discount_type = b.item_discount_type;
+    const payload = {
+      client_id: FALLA_CLIENT[store] || cfg.client_id, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+      store_id, discount_inventory: false, comments: 'PROBE descuento (borrar)', integration_source: 'monitor-probe', integration_id: `probe-${b.tag || '0'}`, items: [item],
+    };
+    if (b.sale_discount != null) payload.discount = Number(b.sale_discount);
+    if (b.sale_discount_type) payload.discount_type = b.sale_discount_type;
+    try {
+      const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
+      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
+      const v = (d && d.data) ? d.data : d;
+      return res.status(200).json({ ok: r.ok, status: r.status, sent: payload, got: { id: v && v.id, number: v && v.number, total_price: v && v.total_price, discount: v && v.discount, items: (v && v.items) || d } });
+    } catch (e) { return res.status(500).json({ error: e.message }); }
+  }
+
   // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
   // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá
   // solo se relaya al payload de GN. Baja stock del producto NUEVO (el devuelto se reingresa aparte, manual).
