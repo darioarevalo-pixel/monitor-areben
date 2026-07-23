@@ -97,8 +97,8 @@ export default async function handler(req, res) {
       integration_source: 'monitor-cambio', integration_id: `${b.solicitudId || 'cambio'}-real`,
       items: lineItems,
     };
-    if (b.descuento != null) payload.discount = Number(b.descuento) || 0;      // Σdevueltos + descuento por forma
-    if (b.shipping_cost != null) payload.shipping_cost = Number(b.shipping_cost) || 0; // envío si lo paga el cliente
+    if (b.descuento != null) payload.discount = Number(b.descuento) || 0;      // Σdevueltos + descuento manual + forma
+    // El ENVÍO NO va a la venta de GN (queda solo en Monitor): el total de la venta = cobro de productos.
     payload.is_exchange = true;
     try {
       const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
@@ -128,13 +128,15 @@ export default async function handler(req, res) {
     (b.proposito === 'cambio' && CAMBIO_CLIENT[store]) ? CAMBIO_CLIENT[store] :
     cfg.client_id;
   // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
-  // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock). El resto
-  // (fotos/fallas) va con precio 0 y sin descuento, idéntico a antes.
+  // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock).
+  // Falla (proposito:'falla'): precio de LISTA + 100% de descuento → total $0, pero valuada con el precio real.
+  // Fotos: precio 0 y sin descuento, idéntico a antes.
+  const esFalla = b.proposito === 'falla';
   const lineItems = items.map(it => ({
     product_id: parseInt(it.product_id, 10),
     size_id: parseInt(it.size_id, 10),
     quantity: parseInt(it.quantity, 10),
-    unit_price: esReingreso ? (Number(it.unit_price) || 0) : 0,
+    unit_price: (esReingreso || esFalla) ? (Number(it.unit_price) || 0) : 0,
     store_id,
   }));
   const payload = {
@@ -149,6 +151,9 @@ export default async function handler(req, res) {
     // discount a nivel venta = subtotal (negativo) → total 0. is_exchange marca el movimiento como cambio.
     payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
     payload.is_exchange = true;
+  } else if (esFalla) {
+    // 100% de descuento: el descuento a nivel venta iguala el subtotal (precio de lista × cantidad) → total 0.
+    payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
   }
 
   try {

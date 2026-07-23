@@ -26,7 +26,7 @@ const ESTADOS = ['borrador', 'iniciado', 'confirmado', 'en_transito', 'recibido'
 const VIAS = ['andreani', 'correo', 'cadete'];
 const FORMAS = { tarjeta: 0, transferencia: 10 }; // % de descuento sobre la diferencia (Bruno)
 const ENVIO_PAGA = ['nosotros', 'cliente'];
-const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, seguimiento, gn_venta_ida_id, gn_venta_ida_number, envio_costo, envio_paga, forma_pago, descuento_forma, descuento_manual, pagado, cobro_estado, total, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
+const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, seguimiento, seguimiento_vuelta, solicitud_envio, gn_venta_ida_id, gn_venta_ida_number, envio_costo, envio_paga, forma_pago, descuento_forma, descuento_manual, pagado, cobro_estado, total, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
 
 const sumaItems = (its) => (Array.isArray(its) ? its : []).reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0);
 
@@ -101,6 +101,8 @@ export default async function handler(req, res) {
           via, estado: 'borrador', items_devueltos: devueltos, items_nuevos: nuevos,
           diferencia, diferencia_estado, reingreso_estado: 'pendiente', usuario,
           seguimiento: b.seguimiento ? String(b.seguimiento) : null,
+          seguimiento_vuelta: b.seguimiento_vuelta ? String(b.seguimiento_vuelta) : null,
+          solicitud_envio: b.solicitud_envio ? String(b.solicitud_envio) : null,
           envio_costo, envio_paga, forma_pago: forma, descuento_forma, descuento_manual, total,
           pagado: b.pagado === true, cobro_estado: 'no_aplica',
           historial: [{ estado: 'borrador', at: new Date().toISOString(), usuario, nota: 'borrador' }],
@@ -175,6 +177,8 @@ export default async function handler(req, res) {
         if (b.cliente !== undefined) campos.cliente = b.cliente ? String(b.cliente) : null;
         if (b.via !== undefined && VIAS.includes(b.via)) campos.via = b.via;
         if (b.seguimiento !== undefined) campos.seguimiento = b.seguimiento ? String(b.seguimiento) : null;
+        if (b.seguimiento_vuelta !== undefined) campos.seguimiento_vuelta = b.seguimiento_vuelta ? String(b.seguimiento_vuelta) : null;
+        if (b.solicitud_envio !== undefined) campos.solicitud_envio = b.solicitud_envio ? String(b.solicitud_envio) : null;
         if (b.diferencia_estado !== undefined) campos.diferencia_estado = b.diferencia_estado ? String(b.diferencia_estado) : null;
         // Fase B.4 — envío / forma de pago / pagado
         if (b.envio_costo !== undefined) campos.envio_costo = b.envio_costo != null && b.envio_costo !== '' ? Number(b.envio_costo) : null;

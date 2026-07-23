@@ -82,10 +82,12 @@ export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { use
   // Descuento a nivel venta = Σdevueltos + descuentos del cambio (manual + forma) → el cliente paga solo el total.
   const descuento = sumarItems(devueltos) + t.descuento
   const origen: Origen = 'deposito' // cambios por envío → el nuevo sale del depósito
+  // La venta en GN refleja SOLO productos (a precio de lista, con el descuento del devuelto): el total de
+  // la venta = el cobro de productos. El ENVÍO queda solo en Monitor (NO se manda a GN). Decisión de Bruno.
   const body = {
     accion: 'cambio_real', store, origen,
     items: nuevos.map((i) => ({ product_id: i.product_id, size_id: i.size_id, quantity: i.cantidad || 1, unit_price: Number(i.precio) || 0 })),
-    descuento, shipping_cost: t.envioACobrar, forma_pago: cambio.forma_pago,
+    descuento, forma_pago: cambio.forma_pago,
     // Red de seguridad: si el crear-venta de prod aún no tiene el bloque `cambio_real` (no deployado),
     // cae al camino normal — `proposito:'cambio'` hace que igual use el cliente "Cambio" (no el de fotos).
     proposito: 'cambio',

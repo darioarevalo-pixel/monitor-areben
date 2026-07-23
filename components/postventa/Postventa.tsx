@@ -56,7 +56,7 @@ function obtenerPass(): string {
   return p
 }
 
-const FORM0 = { producto: '', sku: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', product_id: '', size_id: '' }
+const FORM0 = { producto: '', sku: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', product_id: '', size_id: '' }
 
 function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
@@ -88,7 +88,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
   }, [marca])
 
   const elegirArticulo = useCallback((a: ArticuloGN) => {
-    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '' }))
+    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '', precio_lista: a.retailer_price != null ? String(a.retailer_price) : '' }))
   }, [])
 
   const agregar = useCallback(async () => {
@@ -97,6 +97,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
       cantidad: Math.max(1, parseInt(form.cantidad, 10) || 1),
       product_id: form.product_id || null, size_id: form.size_id || null,
       sku: form.sku.trim() || null, motivo: form.motivo.trim() || null,
+      precio_lista: form.precio_lista === '' ? null : Number(form.precio_lista),
     }
     setGuardando(true); setError(null); setMsg(null)
     try {
@@ -104,6 +105,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
         producto: form.producto.trim(), sku: snap.sku, cantidad: snap.cantidad, motivo: snap.motivo,
         valuacion_costo: form.valuacion_costo === '' ? null : Number(form.valuacion_costo),
         valuacion_pvp_feria: form.valuacion_pvp_feria === '' ? null : Number(form.valuacion_pvp_feria),
+        precio_lista: snap.precio_lista,
         product_id: snap.product_id, size_id: snap.size_id, ubicacion: 'local',
       }, usuario)
       setForm({ ...FORM0 })
@@ -114,7 +116,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
           setMsg(`Falla cargada${etiq}. Falta tu contraseña para descontar el stock en GN — se puede rehacer desde Administración.`)
         } else {
           try {
-            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: 'local' }, { user: usuario, pass })
+            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: 'local', precio_lista: snap.precio_lista }, { user: usuario, pass })
             setMsg(`Falla cargada${etiq} — venta $0 en GN, stock −1.`)
           } catch (ve) { setError(`Falla cargada${etiq}, pero la venta en GN falló: ${(ve as Error).message}`) }
         }
@@ -163,7 +165,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
   }, [fallas])
 
   const esAdmin = modo === 'admin'
-  const setNum = (k: 'cantidad' | 'valuacion_costo' | 'valuacion_pvp_feria') => (n: number) => setForm((s) => ({ ...s, [k]: String(n) }))
+  const setNum = (k: 'cantidad' | 'valuacion_costo' | 'valuacion_pvp_feria' | 'precio_lista') => (n: number) => setForm((s) => ({ ...s, [k]: String(n) }))
 
   const avisos = (
     <>
@@ -187,6 +189,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' }) {
         <Field label="Cantidad"><NumberField value={form.cantidad === '' ? '' : Number(form.cantidad)} onChange={setNum('cantidad')} min={1} width={90} /></Field>
         {esAdmin && (
           <>
+            <Field label="Precio lista" hint="para la venta técnica"><NumberField value={form.precio_lista === '' ? '' : Number(form.precio_lista)} onChange={setNum('precio_lista')} min={0} prefix="$" width={120} /></Field>
             <Field label="Costo unit."><NumberField value={form.valuacion_costo === '' ? '' : Number(form.valuacion_costo)} onChange={setNum('valuacion_costo')} min={0} prefix="$" width={120} /></Field>
             <Field label="PVP feria unit."><NumberField value={form.valuacion_pvp_feria === '' ? '' : Number(form.valuacion_pvp_feria)} onChange={setNum('valuacion_pvp_feria')} min={0} prefix="$" width={120} /></Field>
           </>

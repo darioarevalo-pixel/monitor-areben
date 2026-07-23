@@ -30,7 +30,7 @@ function cfgFor(store) {
 }
 
 const ESTADOS = ['cargada', 'recibida', 'confirmada', 'en_deposito', 'vendida_feria', 'descartada'];
-const COLS = 'id, store, sku, producto, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
+const COLS = 'id, store, sku, producto, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, precio_lista, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
 
 // Espejo de lib/postventa/barcode.ts (una función .js de Vercel no importa un .ts; se mantiene igual).
 function generarBarcodeFalla(store, id) {
@@ -50,6 +50,7 @@ function camposDe(b) {
   if (b.size_id !== undefined) f.size_id = b.size_id ? String(b.size_id) : null;
   if (b.valuacion_costo !== undefined) f.valuacion_costo = b.valuacion_costo === '' || b.valuacion_costo == null ? null : Number(b.valuacion_costo);
   if (b.valuacion_pvp_feria !== undefined) f.valuacion_pvp_feria = b.valuacion_pvp_feria === '' || b.valuacion_pvp_feria == null ? null : Number(b.valuacion_pvp_feria);
+  if (b.precio_lista !== undefined) f.precio_lista = b.precio_lista === '' || b.precio_lista == null ? null : Number(b.precio_lista);
   return f;
 }
 

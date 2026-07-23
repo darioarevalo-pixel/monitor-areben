@@ -55,6 +55,9 @@ export type CambioRow = {
   pagado?: boolean | null
   cobro_estado?: CobroEstado | null
   total?: number | null
+  // Tanda 2 — solicitud de etiqueta (EMXXXX) + tracking ida/vuelta (seguimiento = ida)
+  solicitud_envio?: string | null
+  seguimiento_vuelta?: string | null
   gn_venta_id?: string | null
   gn_venta_number?: string | null
   usuario?: string | null
@@ -75,6 +78,8 @@ export type CambioInput = {
   envio_paga?: EnvioPaga | null
   forma_pago?: FormaPago | null
   descuento_manual?: number | null
+  solicitud_envio?: string | null
+  seguimiento_vuelta?: string | null
   pagado?: boolean | null
 }
 
@@ -186,6 +191,7 @@ export function faltantesParaVenta(c: {
   forma_pago?: FormaPago | null
   via?: CambioVia | null
   envio_paga?: EnvioPaga | null
+  solicitud_envio?: string | null
 }): string[] {
   const faltan: string[] = []
   const devueltos = c.items_devueltos || []
@@ -195,8 +201,32 @@ export function faltantesParaVenta(c: {
   if (!c.forma_pago) faltan.push('forma de pago')
   if (!c.via) faltan.push('vía de envío')
   if (!c.envio_paga) faltan.push('quién paga el envío')
+  if (!c.solicitud_envio) faltan.push('solicitud de envío (EMXXXX)')
   if (!c.cliente && !c.orden_tn) faltan.push('cliente u orden')
   return faltan
+}
+
+/** Sólo correo/andreani tienen tracking online. Cadete no. */
+export const VIA_CON_TRACKING: CambioVia[] = ['andreani', 'correo']
+
+/** Link al buscador de seguimiento del correo (URLs públicas — a confirmar/ajustar por Bruno). */
+export function trackingUrl(via: CambioVia | null | undefined, codigo: string): string | null {
+  const c = (codigo || '').trim()
+  if (!c) return null
+  if (via === 'andreani') return `https://www.andreani.com/#!/informacionEnvio/${encodeURIComponent(c)}`
+  if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?seguimiento=${encodeURIComponent(c)}`
+  return null
+}
+
+/**
+ * Reparte lo que se carga en el input de seguimiento en ida/vuelta (Bruno):
+ * 1 código → ida; 2 códigos → 1º ida, 2º vuelta; mismo código repetido → ambos iguales.
+ */
+export function repartirSeguimiento(entrada: string): { ida: string | null; vuelta: string | null } {
+  const parts = (entrada || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
+  if (parts.length === 0) return { ida: null, vuelta: null }
+  if (parts.length === 1) return { ida: parts[0], vuelta: null }
+  return { ida: parts[0], vuelta: parts[1] }
 }
 
 /**

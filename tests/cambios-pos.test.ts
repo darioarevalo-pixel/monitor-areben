@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularTotalCambio, detalleCambioTexto, faltantesParaVenta, numeroReclamo, type CambioItem } from '@/lib/cambios/tipos'
+import { calcularTotalCambio, detalleCambioTexto, faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingUrl, type CambioItem } from '@/lib/cambios/tipos'
 
 const item = (precio: number, cantidad = 1, extra: Partial<CambioItem> = {}): CambioItem => ({ producto: 'x', precio, cantidad, ...extra })
 
@@ -47,6 +47,7 @@ describe('faltantesParaVenta', () => {
     cliente: 'Juan', orden_tn: '1234',
     items_devueltos: [item(1000)], items_nuevos: [item(2000, 1, { product_id: 'p1', size_id: 's1' })],
     forma_pago: 'transferencia' as const, via: 'andreani' as const, envio_paga: 'cliente' as const,
+    solicitud_envio: 'EM1234',
   }
   it('completo → sin faltantes', () => {
     expect(faltantesParaVenta(completo)).toEqual([])
@@ -61,6 +62,24 @@ describe('faltantesParaVenta', () => {
   it('sin devuelto → falta', () => {
     expect(faltantesParaVenta({ ...completo, items_devueltos: [] })).toContain('producto que devuelve')
   })
+  it('sin solicitud de envío (EMXXXX) → falta', () => {
+    expect(faltantesParaVenta({ ...completo, solicitud_envio: null })).toContain('solicitud de envío (EMXXXX)')
+  })
+})
+
+describe('repartirSeguimiento', () => {
+  it('vacío → nada', () => expect(repartirSeguimiento('')).toEqual({ ida: null, vuelta: null }))
+  it('un código → ida', () => expect(repartirSeguimiento('ABC123')).toEqual({ ida: 'ABC123', vuelta: null }))
+  it('dos códigos → ida y vuelta', () => expect(repartirSeguimiento('AAA BBB')).toEqual({ ida: 'AAA', vuelta: 'BBB' }))
+  it('separador coma también', () => expect(repartirSeguimiento('AAA, BBB')).toEqual({ ida: 'AAA', vuelta: 'BBB' }))
+  it('mismo código repetido → ambos iguales', () => expect(repartirSeguimiento('X9 X9')).toEqual({ ida: 'X9', vuelta: 'X9' }))
+})
+
+describe('trackingUrl', () => {
+  it('andreani arma link con el código', () => expect(trackingUrl('andreani', '123')).toContain('123'))
+  it('correo arma link con el código', () => expect(trackingUrl('correo', '456')).toContain('456'))
+  it('cadete no tiene tracking online', () => expect(trackingUrl('cadete', '789')).toBeNull())
+  it('sin código → null', () => expect(trackingUrl('andreani', '')).toBeNull())
 })
 
 describe('detalleCambioTexto', () => {

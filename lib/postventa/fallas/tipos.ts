@@ -28,6 +28,7 @@ export type FallaRow = {
   motivo?: string | null
   valuacion_costo?: number | null
   valuacion_pvp_feria?: number | null
+  precio_lista?: number | null // retailer_price de GN — la venta técnica se arma a este precio + 100% off
   estado: FallaEstado
   ubicacion?: FallaUbicacion | null
   // Link a la variante de GN (para descontar stock al confirmar):
@@ -52,6 +53,7 @@ export type FallaInput = {
   motivo?: string | null
   valuacion_costo?: number | null
   valuacion_pvp_feria?: number | null
+  precio_lista?: number | null
   ubicacion?: FallaUbicacion
   // Del picker de artículo GN (si se cargó eligiendo un artículo):
   product_id?: string | null

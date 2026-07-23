@@ -48,17 +48,18 @@ export async function recibirFalla(store: Marca, id: number, usuario?: string): 
  */
 export async function registrarVentaGN(
   store: Marca,
-  falla: Pick<FallaRow, 'id' | 'product_id' | 'size_id' | 'cantidad' | 'sku' | 'motivo' | 'barcode' | 'ubicacion'>,
+  falla: Pick<FallaRow, 'id' | 'product_id' | 'size_id' | 'cantidad' | 'sku' | 'motivo' | 'barcode' | 'ubicacion' | 'precio_lista'>,
   ctx: { user: string; pass: string },
 ): Promise<void> {
   if (!falla.product_id || !falla.size_id) {
     throw new Error('La falla no está linkeada a un artículo de GN: elegí el artículo para poder descontar el stock.')
   }
   const origen: Origen = falla.ubicacion === 'deposito' ? 'deposito' : 'local'
+  // La venta técnica de la falla va a precio de LISTA + 100% de descuento (neto $0, valuada real).
   const pedido = {
     store,
     origen,
-    items: [{ product_id: falla.product_id, size_id: falla.size_id, quantity: falla.cantidad || 1 }],
+    items: [{ product_id: falla.product_id, size_id: falla.size_id, quantity: falla.cantidad || 1, unit_price: Number(falla.precio_lista) || 0 }],
     comments: `Falla ${falla.sku || ''} — ${falla.motivo || 'sin motivo'} — ${falla.barcode || ''} (Monitor)`.slice(0, 500),
     solicitudId: `falla-${falla.id}`,
     user: ctx.user,

@@ -26,7 +26,7 @@ export type CtxVenta = { store: string; user: string; pass: string }
 export type PedidoVenta = {
   store: string
   origen: Origen
-  items: { product_id: string | null; size_id: string | null; quantity: number }[]
+  items: { product_id: string | null; size_id: string | null; quantity: number; unit_price?: number | null }[]
   comments: string
   solicitudId: string
   user: string

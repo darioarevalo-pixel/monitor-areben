@@ -12,7 +12,7 @@
  * todos los datos obligatorios. El reingreso del devuelto sigue siendo MANUAL (GN no acepta venta negativa).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
@@ -26,8 +26,8 @@ import {
   marcarReingreso, procesarCambio,
 } from '@/lib/cambios/cliente'
 import {
-  DIAS_CAMBIO, ESTADO_LABEL, ESTADO_TONE, VIA_LABEL, calcularTotalCambio, detalleCambioTexto,
-  faltantesParaVenta, numeroReclamo,
+  DIAS_CAMBIO, ESTADO_LABEL, ESTADO_TONE, VIA_CON_TRACKING, VIA_LABEL, calcularTotalCambio, detalleCambioTexto,
+  faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingUrl,
   type CambioEstado, type CambioInput, type CambioItem, type CambioRow, type CambioVia, type EnvioPaga,
   type FormaPago, type OrdenTN, type OrdenTNLinea,
 } from '@/lib/cambios/tipos'
@@ -107,6 +107,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [envioPaga, setEnvioPaga] = useState<EnvioPaga>('cliente')
   const [formaPago, setFormaPago] = useState<FormaPago | ''>('')
   const [descManual, setDescManual] = useState('')
+  const [solicitudEnvio, setSolicitudEnvio] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const keyRef = useRef(0)
@@ -114,6 +115,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   // Lista
   const [filtro, setFiltro] = useState('todos')
   const [busqueda, setBusqueda] = useState('')
+  const [expandido, setExpandido] = useState<number | null>(null) // fila con historial abierto
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
@@ -146,8 +148,8 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     [devueltos, nuevos, formaPago, envioCosto, envioPaga, descManual],
   )
   const faltan = useMemo(
-    () => faltantesParaVenta({ cliente, orden_tn: ordenNum, items_devueltos: devueltos, items_nuevos: nuevos, forma_pago: formaPago || null, via, envio_paga: envioPaga }),
-    [cliente, ordenNum, devueltos, nuevos, formaPago, via, envioPaga],
+    () => faltantesParaVenta({ cliente, orden_tn: ordenNum, items_devueltos: devueltos, items_nuevos: nuevos, forma_pago: formaPago || null, via, envio_paga: envioPaga, solicitud_envio: solicitudEnvio.trim() || null }),
+    [cliente, ordenNum, devueltos, nuevos, formaPago, via, envioPaga, solicitudEnvio],
   )
 
   // ── Líneas de la tabla unificada ──────────────────────────────────────────
@@ -168,7 +170,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const limpiarForm = useCallback(() => {
     setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setVia('andreani'); setSeguimiento('')
-    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setEditandoId(null)
+    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setSolicitudEnvio(''); setEditandoId(null)
   }, [])
 
   const buildInput = useCallback((): CambioInput => ({
@@ -178,7 +180,8 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     items_devueltos: devueltos, items_nuevos: nuevos,
     envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
     forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
-  }), [ordenNum, cliente, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual])
+    solicitud_envio: solicitudEnvio.trim() || null,
+  }), [ordenNum, cliente, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio])
 
   const guardarBorrador = useCallback(async () => {
     if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto (el que devuelve o el que se lleva).'); return }
@@ -248,6 +251,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     setEnvioPaga(c.envio_paga || 'cliente')
     setFormaPago(c.forma_pago || '')
     setDescManual(c.descuento_manual != null ? String(c.descuento_manual) : '')
+    setSolicitudEnvio(c.solicitud_envio || '')
     setError(null); setMsg(null)
     if (c.orden_tn) void leerOrdenTN(marca, c.orden_tn).then((o) => setOrden(o)).catch(() => setOrden(null))
     else setOrden(null)
@@ -255,12 +259,14 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   }, [marca])
 
   const cargarSeguimiento = useCallback(async (c: CambioRow) => {
-    const s = typeof window !== 'undefined' ? window.prompt('Número de seguimiento del envío:', c.seguimiento || '') : null
+    const actual = [c.seguimiento, c.seguimiento_vuelta].filter(Boolean).join(' ')
+    const s = typeof window !== 'undefined' ? window.prompt('Código(s) de seguimiento — 1 = ida; 2 (separados por espacio) = ida y vuelta:', actual) : null
     if (s === null) return
+    const { ida, vuelta } = repartirSeguimiento(s)
     setOcupada(c.id); setError(null)
     try {
-      await editarCambio(marca, c.id, { seguimiento: s.trim() || null })
-      setCambios((cs) => cs.map((x) => (x.id === c.id ? { ...x, seguimiento: s.trim() || null } : x)))
+      await editarCambio(marca, c.id, { seguimiento: ida, seguimiento_vuelta: vuelta })
+      setCambios((cs) => cs.map((x) => (x.id === c.id ? { ...x, seguimiento: ida, seguimiento_vuelta: vuelta } : x)))
       setMsg('Seguimiento actualizado.')
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca])
@@ -389,17 +395,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           <EmptyState dashed icon="🧾" title="Sin renglones" hint="Marcá lo que devuelve (arriba) y agregá lo que se lleva." style={{ marginBottom: space[4] }} />
         )}
 
-        {/* Totales apilados */}
-        <div style={{ maxWidth: 460, marginLeft: 'auto' }}>
-          {totalRow('Subtotal', <MoneyText value={t.diferencia} tone={t.diferencia < 0 ? 'action' : undefined} strong />)}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0' }}>
-            <span style={{ color: color.mut, fontWeight: weight.medium }}>Envío</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Seg value={via} onChange={setVia} options={[{ v: 'andreani', label: 'Andreani' }, { v: 'correo', label: 'Correo' }, { v: 'cadete', label: 'Cadete' }]} />
-              <Seg value={envioPaga} onChange={setEnvioPaga} options={[{ v: 'cliente', label: 'Lo paga el cliente' }, { v: 'nosotros', label: 'Nosotros' }]} />
-              <NumberField value={envioCosto === '' ? '' : Number(envioCosto)} onChange={(n) => setEnvioCosto(String(n))} min={0} prefix="$" width={110} />
-            </div>
-          </div>
+        {/* Totales apilados — productos (van a GN) vs envío (queda en Monitor) */}
+        <div style={{ maxWidth: 480, marginLeft: 'auto' }}>
+          {totalRow('Subtotal productos', <MoneyText value={t.diferencia} tone={t.diferencia < 0 ? 'action' : undefined} />)}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0' }}>
             <span style={{ color: color.mut, fontWeight: weight.medium }}>Descuento</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -412,14 +410,29 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
             </div>
           </div>
           {t.descuento > 0 && totalRow(<span style={{ color: color.success }}>Descuento aplicado</span>, <MoneyText value={-t.descuento} tone="success" />)}
-          {totalRow('Total', <MoneyText value={t.total} strong />, { strong: true, sep: true })}
+          {totalRow('Total productos', <MoneyText value={t.diferencia - t.descuento} strong />, { sep: true })}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0' }}>
+            <span style={{ color: color.mut, fontWeight: weight.medium }}>Envío</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Seg value={via} onChange={setVia} options={[{ v: 'andreani', label: 'Andreani' }, { v: 'correo', label: 'Correo' }, { v: 'cadete', label: 'Cadete' }]} />
+              <Seg value={envioPaga} onChange={setEnvioPaga} options={[{ v: 'cliente', label: 'Lo paga el cliente' }, { v: 'nosotros', label: 'Nosotros' }]} />
+              <NumberField value={envioCosto === '' ? '' : Number(envioCosto)} onChange={(n) => setEnvioCosto(String(n))} min={0} prefix="$" width={110} />
+            </div>
+          </div>
+          {totalRow('Total a pagar', <MoneyText value={t.total} strong />, { strong: true, sep: true })}
+          <div style={{ fontSize: font.xs, color: color.mut2, textAlign: 'right', marginTop: 4 }}>Los productos van a la venta de GN; el envío queda solo en Monitor.</div>
         </div>
 
-        {/* Tracking + guardar */}
+        {/* Solicitud de envío (obligatoria) + tracking de ida + guardar */}
         <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', marginTop: space[5], paddingTop: space[4], borderTop: `1px solid ${color.line}` }}>
-          <Field label="Nº de seguimiento (opcional, se puede cargar después)" width={260}>
-            <Input value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking del envío" />
+          <Field label="Solicitud de envío (EMXXXX)" required width={190} hint="obligatoria para generar la venta">
+            <Input value={solicitudEnvio} onChange={(e) => setSolicitudEnvio(e.target.value)} placeholder="EM1234" invalid={!solicitudEnvio.trim()} />
           </Field>
+          {VIA_CON_TRACKING.includes(via) && (
+            <Field label="Seguimiento de ida (se puede cargar después)" width={230}>
+              <Input value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking de ida" />
+            </Field>
+          )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
             {editandoId != null && <Button variant="ghost" onClick={limpiarForm} disabled={guardando}>Cancelar</Button>}
             <Button variant="outline" tone="brand" iconLeft="💾" onClick={() => void guardarBorrador()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? 'Guardar cambios' : 'Guardar borrador'}</Button>
@@ -454,31 +467,65 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
               {visibles.map((c) => {
                 const ocup = ocupada === c.id
                 const esBorrador = c.estado === 'borrador' || c.estado === 'iniciado'
+                const conTracking = VIA_CON_TRACKING.includes(c.via)
+                const hist = c.historial || []
                 return (
-                  <Tr key={c.id}>
-                    <Td mono strong>{numeroReclamo(c.id)}</Td>
-                    <Td>{c.cliente || '—'}</Td>
-                    <Td>{c.orden_tn || '—'}</Td>
-                    <Td wrap style={{ maxWidth: 240, whiteSpace: 'normal' }}>{resumenItems(c)}</Td>
-                    <Td align="right" strong><MoneyText value={c.total != null ? c.total : c.diferencia} /></Td>
-                    <Td>
-                      <span style={{ fontSize: font.xs, fontWeight: weight.semibold, color: c.pagado ? color.success : color.warning }}>{c.pagado ? '✓ pagado' : 'sin pagar'}</span>
-                    </Td>
-                    <Td>{VIA_LABEL[c.via]}</Td>
-                    <Td><Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}</Button></Td>
-                    <Td><StatusPill tone={ESTADO_TONE[c.estado]} label={ESTADO_LABEL[c.estado]} /></Td>
-                    <Td>{c.reingreso_estado === 'hecho' ? <span style={{ color: color.success }}>✓ hecho</span> : esBorrador ? '—' : <span style={{ color: color.warning }}>pendiente</span>}</Td>
-                    <Td>
-                      <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                        {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
-                        {esBorrador && <Button size="sm" variant="solid" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca pagado y genera la venta en GN">Marcar pagado</Button>}
-                        <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
-                        {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}
-                        {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <Button size="sm" variant="outline" tone="brand" onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</Button>}
-                        {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}
-                      </div>
-                    </Td>
-                  </Tr>
+                  <Fragment key={c.id}>
+                    <Tr>
+                      <Td mono strong>{numeroReclamo(c.id)}</Td>
+                      <Td>{c.cliente || '—'}</Td>
+                      <Td>
+                        {c.orden_tn || '—'}
+                        {c.solicitud_envio && <div style={{ fontSize: 10, color: color.mut2 }}>📮 {c.solicitud_envio}</div>}
+                      </Td>
+                      <Td wrap style={{ maxWidth: 240, whiteSpace: 'normal' }}>{resumenItems(c)}</Td>
+                      <Td align="right" strong><MoneyText value={c.total != null ? c.total : c.diferencia} /></Td>
+                      <Td>
+                        <span style={{ fontSize: font.xs, fontWeight: weight.semibold, color: c.pagado ? color.success : color.warning }}>{c.pagado ? '✓ pagado' : 'sin pagar'}</span>
+                      </Td>
+                      <Td>{VIA_LABEL[c.via]}</Td>
+                      <Td>
+                        {conTracking ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                            {c.seguimiento && <a href={trackingUrl(c.via, c.seguimiento) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: color.action }}>↗ ida {c.seguimiento}</a>}
+                            {c.seguimiento_vuelta && <a href={trackingUrl(c.via, c.seguimiento_vuelta) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: color.action }}>↗ vuelta {c.seguimiento_vuelta}</a>}
+                            <Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento || c.seguimiento_vuelta ? '✎ editar' : '＋ cargar'}</Button>
+                          </div>
+                        ) : <span style={{ color: color.mut2 }}>—</span>}
+                      </Td>
+                      <Td>
+                        <StatusPill tone={ESTADO_TONE[c.estado]} label={ESTADO_LABEL[c.estado]} />
+                        {c.gn_venta_number && <div style={{ fontSize: 10, color: color.mut }}>venta GN #{c.gn_venta_number}</div>}
+                      </Td>
+                      <Td>{c.reingreso_estado === 'hecho' ? <span style={{ color: color.success }}>✓ hecho</span> : esBorrador ? '—' : <span style={{ color: color.warning }}>pendiente</span>}</Td>
+                      <Td>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
+                          {esBorrador && <Button size="sm" variant="solid" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca pagado y genera la venta en GN">Marcar pagado</Button>}
+                          <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
+                          <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">🕘</Button>
+                          {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}
+                          {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <Button size="sm" variant="outline" tone="brand" onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</Button>}
+                          {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}
+                        </div>
+                      </Td>
+                    </Tr>
+                    {expandido === c.id && (
+                      <tr>
+                        <td colSpan={11} style={{ padding: `${space[2]}px ${space[4]}px`, background: color.bg, borderBottom: `1px solid ${color.line}` }}>
+                          <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, marginBottom: 4 }}>Historial de estados</div>
+                          {hist.length ? hist.map((h, i) => (
+                            <div key={i} style={{ fontSize: font.xs, color: color.ink2, display: 'flex', gap: 8, flexWrap: 'wrap', padding: '1px 0' }}>
+                              <span style={{ color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{new Date(h.at).toLocaleString('es-AR')}</span>
+                              <span style={{ fontWeight: weight.semibold }}>{h.estado ? ESTADO_LABEL[h.estado] : '—'}</span>
+                              {h.usuario && <span style={{ color: color.mut }}>· {h.usuario}</span>}
+                              {h.nota && <span style={{ color: color.mut }}>· {h.nota}</span>}
+                            </div>
+                          )) : <div style={{ fontSize: font.xs, color: color.mut2 }}>Sin eventos.</div>}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 )
               })}
             </TBody>
