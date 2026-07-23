@@ -92,6 +92,25 @@ export default async function handler(req, res) {
 
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
 
+  // ── DIAGNÓSTICO TEMPORAL (borrar): buscar el campo de descuento A NIVEL VENTA que GN honra. NO toca stock. ──
+  // `extra` se mergea al payload de la venta; `item_extra` al ítem. Devuelve total_price/discount que guardó GN.
+  if (b.accion === 'probe2') {
+    if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
+    const store_id = cfg.store[b.origen];
+    const item = { product_id: parseInt(b.product_id, 10), size_id: parseInt(b.size_id, 10), quantity: 1, unit_price: Number(b.unit_price) || 0, store_id, ...(b.item_extra || {}) };
+    const payload = {
+      client_id: FALLA_CLIENT[store] || cfg.client_id, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+      store_id, discount_inventory: false, comments: 'PROBE2 descuento venta (borrar)', integration_source: 'monitor-probe', integration_id: `probe2-${b.tag || '0'}`, items: [item],
+      ...(b.extra || {}),
+    };
+    try {
+      const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
+      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 400); }
+      const v = (d && d.data) ? d.data : d;
+      return res.status(200).json({ ok: r.ok, status: r.status, sentSale: b.extra || null, got: v ? { id: v.id, number: v.number, total_price: v.total_price, discount: v.discount, net_price: v.net_price } : d });
+    } catch (e) { return res.status(500).json({ error: e.message }); }
+  }
+
   // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
   // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá
   // solo se relaya al payload de GN. Baja stock del producto NUEVO (el devuelto se reingresa aparte, manual).
