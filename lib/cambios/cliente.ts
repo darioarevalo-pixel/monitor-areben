@@ -8,7 +8,7 @@ import { apiFetch } from '../api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav.generated'
-import { FORMA_PAGO_DEF, calcularTotalCambio, sumarItems, type CambioInput, type CambioRow, type OrdenTN } from './tipos'
+import { calcularTotalCambio, sumarItems, type CambioInput, type CambioRow, type OrdenTN } from './tipos'
 
 const TN_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
@@ -78,10 +78,9 @@ export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { use
   if (!nuevos.length) throw new Error('Los productos nuevos no están linkeados a artículos de GN: no se puede generar la venta.')
   if (!cambio.forma_pago) throw new Error('Falta la forma de pago del cambio.')
   const devueltos = cambio.items_devueltos || []
-  const t = calcularTotalCambio({ devueltos, nuevos: cambio.items_nuevos || [], forma: cambio.forma_pago, envioCosto: cambio.envio_costo, envioPaga: cambio.envio_paga })
-  // Descuento a nivel venta = Σdevueltos + descuento por forma → total de productos = diferencia − descuento.
-  const descuentoForma = t.diferencia > 0 ? Math.round((t.diferencia * FORMA_PAGO_DEF[cambio.forma_pago].descuento) / 100) : 0
-  const descuento = sumarItems(devueltos) + descuentoForma
+  const t = calcularTotalCambio({ devueltos, nuevos: cambio.items_nuevos || [], forma: cambio.forma_pago, envioCosto: cambio.envio_costo, envioPaga: cambio.envio_paga, descuentoManual: cambio.descuento_manual })
+  // Descuento a nivel venta = Σdevueltos + descuentos del cambio (manual + forma) → el cliente paga solo el total.
+  const descuento = sumarItems(devueltos) + t.descuento
   const origen: Origen = 'deposito' // cambios por envío → el nuevo sale del depósito
   const body = {
     accion: 'cambio_real', store, origen,

@@ -1,23 +1,36 @@
 'use client'
 
 /**
- * Cambios (post-venta). Un motor con dos modos (como Fallas):
- *  - **local** (sección `cambios-local`, grupo Local): armar la SOLICITUD (borrador) — buscar la orden de TN,
- *    elegir qué devuelve el cliente y qué se lleva, ver diferencia + envío + forma de pago + total, y marcar
- *    si está pagado. Se guarda como borrador (editable); NO dispara venta al crear.
- *  - **admin** (pestaña Cambios del `postventa`, grupo Administración): el motor — PROCESAR (genera la venta
- *    REAL en GN: baja stock del nuevo, precio real, canal normal → cuenta en la analítica, con forma de pago
- *    y descuento), marcar cobro, marcar REINGRESO del devuelto (manual en GN), estados, editar, eliminar.
+ * Cambios (post-venta) — pantalla de venta tipo POS. Un motor, dos modos:
+ *  - **local** (`cambios-local`, grupo Local): arma la solicitud (borrador). Busca la orden de TN, marca lo
+ *    que el cliente DEVUELVE (entra a la tabla con cantidad negativa), agrega lo que SE LLEVA por el buscador
+ *    de artículos de GN (cantidad positiva), define envío / forma de pago / descuento. Guarda borrador.
+ *  - **admin** (pestaña Cambios de `postventa`): además ve la lista completa y las acciones del motor.
  *
- * El reingreso del devuelto es MANUAL (GN no acepta venta negativa por API): se traza `reingreso_estado`.
+ * Tabla unificada (una sola): lo que devuelve va NEGATIVO, lo que se lleva POSITIVO; el Subtotal es la suma.
+ * El botón verde "Marcar como pagado" genera la venta REAL en GN (habilitado a Local y Admin) cuando están
+ * todos los datos obligatorios. El reingreso del devuelto sigue siendo MANUAL (GN no acepta venta negativa).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { cambiarEstadoCambio, crearCambio, editarCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarCobrado, marcarReingreso, procesarCambio } from '@/lib/cambios/cliente'
-import { DIAS_CAMBIO, ESTADO_LABEL, FORMA_PAGO_DEF, VIA_LABEL, calcularTotalCambio, sumarItems, type CambioItem, type CambioRow, type CambioVia, type EnvioPaga, type FormaPago, type OrdenTN } from '@/lib/cambios/tipos'
+import {
+  Button, SectionCard, Card, StatusPill, Field, Input, NumberField, Select, Toolbar, Tabs, EmptyState,
+  TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Notice, CopyButton,
+  color, radius, font, weight, space,
+} from '@/components/ui'
+import {
+  cambiarEstadoCambio, crearCambio, editarCambio, eliminarCambio, leerCambios, leerOrdenTN, marcarCobrado,
+  marcarReingreso, procesarCambio,
+} from '@/lib/cambios/cliente'
+import {
+  DIAS_CAMBIO, ESTADO_LABEL, ESTADO_TONE, VIA_LABEL, calcularTotalCambio, detalleCambioTexto,
+  faltantesParaVenta, numeroReclamo,
+  type CambioEstado, type CambioInput, type CambioItem, type CambioRow, type CambioVia, type EnvioPaga,
+  type FormaPago, type OrdenTN, type OrdenTNLinea,
+} from '@/lib/cambios/tipos'
 
 function obtenerPass(): string {
   let p = leerAdminPass()
@@ -28,18 +41,48 @@ function obtenerPass(): string {
   return p
 }
 
-const money = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }))
-const btn: React.CSSProperties = { fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer' }
-const th: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7280', padding: '6px 8px', borderBottom: '1px solid #E5E7EB', whiteSpace: 'nowrap' }
-const td: React.CSSProperties = { fontSize: 12, padding: '6px 8px', borderBottom: '1px solid #F3F4F6', whiteSpace: 'nowrap' }
-const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: '1px solid #D1D5DB', outline: 'none' }
-
-const DIF_LABEL: Record<string, { txt: string; color: string }> = {
-  parejo: { txt: 'Parejo', color: '#6B7280' },
-  a_cobrar: { txt: 'A cobrar', color: '#B45309' },
-  a_devolver: { txt: 'A devolver', color: '#1D4ED8' },
-  saldado: { txt: 'Saldado', color: '#15803D' },
+// Línea de la tabla unificada (solo UI). `cantidad` es la magnitud (positiva); el signo lo da `tipo`.
+type Linea = {
+  key: string
+  tipo: 'devuelve' | 'lleva'
+  sku: string | null
+  product_id: string | null
+  size_id: string | null
+  producto: string
+  variante: string | null
+  precio: number
+  cantidad: number
+  max?: number // tope de cantidad (para devueltos que salen de la orden)
 }
+
+const toItem = (l: Linea): CambioItem => ({ sku: l.sku, product_id: l.product_id, size_id: l.size_id, producto: l.producto, variante: l.variante, precio: l.precio, cantidad: l.cantidad })
+
+// Segmented control chico (para vía de envío y quién paga).
+function Seg<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { v: T; label: string }[] }) {
+  return (
+    <div style={{ display: 'inline-flex', border: `1px solid ${color.line2}`, borderRadius: radius.lg, overflow: 'hidden' }}>
+      {options.map((o, i) => {
+        const on = value === o.v
+        return (
+          <button
+            key={o.v} onClick={() => onChange(o.v)}
+            style={{ fontSize: font.sm, fontWeight: weight.semibold, padding: '8px 12px', cursor: 'pointer', border: 'none', borderLeft: i ? `1px solid ${color.line2}` : 'none', background: on ? color.brandBg : color.surface, color: on ? color.brand : color.mut }}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+const FILTROS: { key: string; label: string; match: (e: CambioEstado) => boolean }[] = [
+  { key: 'todos', label: 'Todos', match: () => true },
+  { key: 'borrador', label: 'Borradores', match: (e) => e === 'borrador' || e === 'iniciado' },
+  { key: 'en_transito', label: 'En tránsito', match: (e) => e === 'en_transito' },
+  { key: 'recibido', label: 'Recibido', match: (e) => e === 'recibido' },
+  { key: 'cerrado', label: 'Cerrado', match: (e) => e === 'cerrado' },
+]
 
 function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
@@ -52,20 +95,25 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [ocupada, setOcupada] = useState<number | null>(null)
 
-  // Alta de cambio (borrador)
+  // Form (borrador)
   const [ordenNum, setOrdenNum] = useState('')
   const [orden, setOrden] = useState<OrdenTN | null>(null)
+  const [cliente, setCliente] = useState('')
   const [buscando, setBuscando] = useState(false)
-  const [devueltos, setDevueltos] = useState<CambioItem[]>([])
-  const [nuevos, setNuevos] = useState<CambioItem[]>([])
+  const [lineas, setLineas] = useState<Linea[]>([])
   const [via, setVia] = useState<CambioVia>('andreani')
   const [seguimiento, setSeguimiento] = useState('')
   const [envioCosto, setEnvioCosto] = useState('')
   const [envioPaga, setEnvioPaga] = useState<EnvioPaga>('cliente')
   const [formaPago, setFormaPago] = useState<FormaPago | ''>('')
-  const [pagado, setPagado] = useState(false)
+  const [descManual, setDescManual] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
+  const keyRef = useRef(0)
+
+  // Lista
+  const [filtro, setFiltro] = useState('todos')
+  const [busqueda, setBusqueda] = useState('')
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
@@ -82,119 +130,130 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const buscarOrden = useCallback(async () => {
     if (!ordenNum.trim()) return
-    setBuscando(true); setError(null); setOrden(null); setDevueltos([])
+    setBuscando(true); setError(null); setOrden(null)
     try {
       const o = await leerOrdenTN(marca, ordenNum.trim())
       if (!o) { setError('No se encontró la orden.'); return }
       setOrden(o)
+      if (o.cliente) setCliente(o.cliente)
     } catch (e) { setError((e as Error).message) } finally { setBuscando(false) }
   }, [ordenNum, marca])
 
-  const prodDeLinea = (l: OrdenTN['products'][number]) => l.name || l.sku || 'Producto'
-  const toggleDevuelto = (linea: OrdenTN['products'][number]) => {
-    const prod = prodDeLinea(linea)
-    setDevueltos((ds) => {
-      const i = ds.findIndex((d) => (d.sku ?? '') === (linea.sku ?? '') && d.producto === prod)
-      if (i >= 0) return ds.filter((_, k) => k !== i)
-      return [...ds, { sku: linea.sku ?? null, producto: prod, precio: Number(linea.price) || 0, cantidad: Number(linea.quantity) || 1, product_id: null, size_id: null }]
-    })
-  }
-  const actualizarDevuelto = (idx: number, campo: 'precio' | 'cantidad', valor: number) =>
-    setDevueltos((ds) => ds.map((d, k) => (k === idx ? { ...d, [campo]: valor } : d)))
-
-  const agregarNuevo = useCallback((a: ArticuloGN) => {
-    setNuevos((ns) => [...ns, { sku: a.sku, product_id: a.product_id, size_id: a.size_id, producto: a.product_name || a.sku || 'Producto', precio: a.retailer_price ?? 0, cantidad: 1 }])
-  }, [])
-  const quitarNuevo = (i: number) => setNuevos((ns) => ns.filter((_, k) => k !== i))
-  const actualizarNuevo = (idx: number, campo: 'precio' | 'cantidad', valor: number) =>
-    setNuevos((ns) => ns.map((n, k) => (k === idx ? { ...n, [campo]: valor } : n)))
-
+  const devueltos = useMemo(() => lineas.filter((l) => l.tipo === 'devuelve').map(toItem), [lineas])
+  const nuevos = useMemo(() => lineas.filter((l) => l.tipo === 'lleva').map(toItem), [lineas])
   const t = useMemo(
-    () => calcularTotalCambio({ devueltos, nuevos, forma: formaPago || null, envioCosto: Number(envioCosto) || 0, envioPaga }),
-    [devueltos, nuevos, formaPago, envioCosto, envioPaga],
+    () => calcularTotalCambio({ devueltos, nuevos, forma: formaPago || null, envioCosto: Number(envioCosto) || 0, envioPaga, descuentoManual: Number(descManual) || 0 }),
+    [devueltos, nuevos, formaPago, envioCosto, envioPaga, descManual],
   )
-  const totalDevueltos = useMemo(() => sumarItems(devueltos), [devueltos])
-  const totalNuevos = useMemo(() => sumarItems(nuevos), [nuevos])
+  const faltan = useMemo(
+    () => faltantesParaVenta({ cliente, orden_tn: ordenNum, items_devueltos: devueltos, items_nuevos: nuevos, forma_pago: formaPago || null, via, envio_paga: envioPaga }),
+    [cliente, ordenNum, devueltos, nuevos, formaPago, via, envioPaga],
+  )
+
+  // ── Líneas de la tabla unificada ──────────────────────────────────────────
+  const lineaOrdenKey = (l: OrdenTNLinea) => `d-${l.sku ?? ''}-${l.name || l.sku || 'Producto'}`
+  const toggleDevuelto = (l: OrdenTNLinea) => {
+    const key = lineaOrdenKey(l)
+    setLineas((ls) => ls.some((x) => x.key === key)
+      ? ls.filter((x) => x.key !== key)
+      : [...ls, { key, tipo: 'devuelve', sku: l.sku ?? null, product_id: null, size_id: null, producto: l.name || l.sku || 'Producto', variante: null, precio: Number(l.price) || 0, cantidad: Number(l.quantity) || 1, max: Number(l.quantity) || undefined }])
+  }
+  const agregarLleva = useCallback((a: ArticuloGN) => {
+    keyRef.current += 1
+    setLineas((ls) => [...ls, { key: `l-${a.product_id}-${a.size_id}-${keyRef.current}`, tipo: 'lleva', sku: a.sku, product_id: a.product_id, size_id: a.size_id, producto: a.product_name || a.sku || 'Producto', variante: a.size_name || null, precio: a.retailer_price ?? 0, cantidad: 1 }])
+  }, [])
+  const actualizarLinea = (key: string, campo: 'precio' | 'cantidad', valor: number) =>
+    setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, [campo]: valor } : l)))
+  const quitarLinea = (key: string) => setLineas((ls) => ls.filter((l) => l.key !== key))
 
   const limpiarForm = useCallback(() => {
-    setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani'); setSeguimiento('')
-    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setPagado(false); setEditandoId(null)
+    setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setVia('andreani'); setSeguimiento('')
+    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual(''); setEditandoId(null)
   }, [])
 
-  const iniciar = useCallback(async () => {
-    if (!nuevos.length) { setError('Elegí al menos un producto nuevo que se lleva el cliente.'); return }
-    const snap = {
-      dev: devueltos, nue: nuevos, via, orden: ordenNum.trim(), cli: orden?.cliente || null, seg: seguimiento.trim(),
-      envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga, forma: formaPago || null, pag: pagado,
-    }
+  const buildInput = useCallback((): CambioInput => ({
+    orden_tn: ordenNum.trim() || null,
+    cliente: cliente.trim() || null,
+    via, seguimiento: seguimiento.trim() || null,
+    items_devueltos: devueltos, items_nuevos: nuevos,
+    envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
+    forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
+  }), [ordenNum, cliente, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual])
+
+  const guardarBorrador = useCallback(async () => {
+    if (!devueltos.length && !nuevos.length) { setError('Agregá al menos un producto (el que devuelve o el que se lleva).'); return }
     setGuardando(true); setError(null); setMsg(null)
     try {
-      if (editandoId != null) {
-        // Editar un cambio existente (mismo endpoint editar: recalcula diferencia + total).
-        await editarCambio(marca, editandoId, {
-          orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null,
-          items_devueltos: snap.dev, items_nuevos: snap.nue,
-          envio_costo: snap.envio_costo, envio_paga: snap.envio_paga, forma_pago: snap.forma, pagado: snap.pag,
-        })
-        setMsg('Cambio actualizado.')
-      } else {
-        await crearCambio(marca, {
-          orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null,
-          items_devueltos: snap.dev, items_nuevos: snap.nue,
-          envio_costo: snap.envio_costo, envio_paga: snap.envio_paga, forma_pago: snap.forma, pagado: snap.pag,
-        }, usuario)
-        setMsg('Borrador de cambio guardado. Administración lo procesa (genera la venta) cuando esté pagado.')
-      }
-      limpiarForm()
+      const input = buildInput()
+      if (editandoId != null) { await editarCambio(marca, editandoId, { ...input }); setMsg('Cambio actualizado.') }
+      else { await crearCambio(marca, input, usuario); setMsg('Borrador guardado. Cuando esté todo, marcalo como pagado para generar la venta.') }
+      limpiarForm(); await recargar()
+    } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
+  }, [devueltos, nuevos, buildInput, editandoId, marca, usuario, limpiarForm, recargar])
+
+  // Confirma y genera la venta real en GN a partir de una fila ya guardada.
+  const confirmarYProcesar = useCallback(async (row: CambioRow): Promise<boolean> => {
+    if (typeof window !== 'undefined' && !window.confirm('Generar la venta REAL del cambio en GN (baja stock de lo que se lleva, cuenta en la analítica). ¿Seguir?')) return false
+    const pass = obtenerPass()
+    if (!pass) { setError('Necesito tu contraseña para la venta en GN.'); return false }
+    await procesarCambio(marca, { ...row, pagado: true }, { user: usuario, pass })
+    return true
+  }, [marca, usuario])
+
+  // Botón verde del form: guarda (crea/edita) como pagado y genera la venta.
+  const marcarPagadoForm = useCallback(async () => {
+    if (faltan.length) { setError(`Completá antes de generar la venta: ${faltan.join(', ')}.`); return }
+    setGuardando(true); setError(null); setMsg(null)
+    try {
+      const input = buildInput()
+      let id = editandoId
+      if (id != null) await editarCambio(marca, id, { ...input, pagado: true })
+      else { const r = await crearCambio(marca, { ...input, pagado: true }, usuario); id = r.id ?? null }
+      if (id == null) throw new Error('No se pudo guardar el cambio antes de generar la venta.')
+      const row: CambioRow = { id, store: marca, estado: 'borrador', reingreso_estado: 'pendiente', pagado: true, ...input, via }
+      const ok = await confirmarYProcesar(row)
+      if (ok) { setMsg(`Venta del cambio ${numeroReclamo(id)} creada en GN. Cambio en tránsito.`); limpiarForm() }
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [marca, ordenNum, orden, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, pagado, editandoId, usuario, recargar, limpiarForm])
+  }, [faltan, buildInput, editandoId, marca, usuario, via, confirmarYProcesar, limpiarForm, recargar])
 
-  // Reabrir un cambio en el form para editarlo (Local: solo borradores; Admin: cualquier estado).
+  // Botón "Marcar pagado" desde la lista (para un borrador ya completo).
+  const marcarPagadoLista = useCallback(async (c: CambioRow) => {
+    const f = faltantesParaVenta(c)
+    if (f.length) { setError(`Al cambio ${numeroReclamo(c.id)} le falta: ${f.join(', ')}. Editalo y completalo.`); return }
+    setOcupada(c.id); setError(null); setMsg(null)
+    try {
+      if (!c.pagado) await editarCambio(marca, c.id, { pagado: true })
+      const ok = await confirmarYProcesar(c)
+      if (ok) setMsg(`Venta del cambio ${numeroReclamo(c.id)} creada en GN.`)
+      await recargar()
+    } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
+  }, [marca, confirmarYProcesar, recargar])
+
   const abrirEdicion = useCallback((c: CambioRow) => {
     setEditandoId(c.id)
     setOrdenNum(c.orden_tn || '')
-    setDevueltos((c.items_devueltos || []).map((i) => ({ ...i })))
-    setNuevos((c.items_nuevos || []).map((i) => ({ ...i })))
+    setCliente(c.cliente || '')
+    keyRef.current += 1
+    const base = keyRef.current
+    setLineas([
+      ...(c.items_devueltos || []).map((i, k) => ({ key: `d-${base}-${k}`, tipo: 'devuelve' as const, sku: i.sku ?? null, product_id: i.product_id ?? null, size_id: i.size_id ?? null, producto: i.producto, variante: i.variante ?? null, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 1 })),
+      ...(c.items_nuevos || []).map((i, k) => ({ key: `l-${base}-${k}`, tipo: 'lleva' as const, sku: i.sku ?? null, product_id: i.product_id ?? null, size_id: i.size_id ?? null, producto: i.producto, variante: i.variante ?? null, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 1 })),
+    ])
     setVia(c.via || 'andreani')
     setSeguimiento(c.seguimiento || '')
     setEnvioCosto(c.envio_costo != null ? String(c.envio_costo) : '')
     setEnvioPaga(c.envio_paga || 'cliente')
     setFormaPago(c.forma_pago || '')
-    setPagado(!!c.pagado)
+    setDescManual(c.descuento_manual != null ? String(c.descuento_manual) : '')
     setError(null); setMsg(null)
-    // Traer la orden para poder tocar los renglones devueltos (si falla, se editan igual nuevos/envío/pago).
     if (c.orden_tn) void leerOrdenTN(marca, c.orden_tn).then((o) => setOrden(o)).catch(() => setOrden(null))
     else setOrden(null)
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [marca])
 
-  // Admin: PROCESAR → genera la venta REAL en GN (baja stock del nuevo, cuenta en la analítica) y pasa a en_transito.
-  const procesar = useCallback(async (c: CambioRow) => {
-    if (!(c.items_nuevos || []).some((i) => i.product_id && i.size_id)) { setError('El cambio no tiene productos nuevos con artículo de GN.'); return }
-    if (!c.forma_pago) { setError('Falta la forma de pago del cambio (editalo antes de procesar).'); return }
-    if (!c.pagado && typeof window !== 'undefined' && !window.confirm('El cambio NO está marcado como pagado. ¿Procesar igual (genera la venta real en GN)?')) return
-    if (typeof window !== 'undefined' && !window.confirm('Generar la venta REAL del cambio en GN (baja stock del nuevo, cuenta en la analítica). ¿Seguir?')) return
-    const pass = obtenerPass()
-    if (!pass) { setError('Necesito tu contraseña para la venta en GN.'); return }
-    setOcupada(c.id); setError(null); setMsg(null)
-    try {
-      await procesarCambio(marca, c, { user: usuario, pass })
-      setMsg('Venta del cambio creada en GN. Cambio en tránsito' + (Number(c.diferencia) > 0 ? ' — diferencia pendiente de cobrar.' : '.'))
-      await recargar()
-    } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
-  }, [marca, usuario, recargar])
-
-  const cobrar = useCallback(async (c: CambioRow) => {
-    if (typeof window !== 'undefined' && !window.confirm('¿Ya cobraste la diferencia en GN? Se marca como cobrada.')) return
-    setOcupada(c.id); setError(null)
-    try { await marcarCobrado(marca, c.id, usuario); await recargar() } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
-  }, [marca, usuario, recargar])
-
-  // Cargar/editar el número de seguimiento del envío (en cualquier momento).
   const cargarSeguimiento = useCallback(async (c: CambioRow) => {
-    const actual = c.seguimiento || ''
-    const s = typeof window !== 'undefined' ? window.prompt('Número de seguimiento del envío:', actual) : null
+    const s = typeof window !== 'undefined' ? window.prompt('Número de seguimiento del envío:', c.seguimiento || '') : null
     if (s === null) return
     setOcupada(c.id); setError(null)
     try {
@@ -204,6 +263,12 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca])
 
+  const cobrar = useCallback(async (c: CambioRow) => {
+    if (typeof window !== 'undefined' && !window.confirm('¿Ya cobraste la diferencia en GN? Se marca como cobrada.')) return
+    setOcupada(c.id); setError(null)
+    try { await marcarCobrado(marca, c.id, usuario); await recargar() } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
+  }, [marca, usuario, recargar])
+
   const reingreso = useCallback(async (c: CambioRow) => {
     if (typeof window !== 'undefined' && !window.confirm('¿Ya reingresaste el producto devuelto a mano en GN? Se marca como hecho.')) return
     setOcupada(c.id); setError(null)
@@ -211,247 +276,224 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   }, [marca, usuario, recargar])
 
   const borrar = useCallback(async (c: CambioRow) => {
-    if (typeof window !== 'undefined' && !window.confirm(`Eliminar el cambio de la orden ${c.orden_tn || c.id}? (no anula la venta ya hecha en GN)`)) return
+    if (typeof window !== 'undefined' && !window.confirm(`Eliminar el cambio ${numeroReclamo(c.id)}? (no anula la venta ya hecha en GN)`)) return
     setOcupada(c.id); setError(null)
     try { await eliminarCambio(marca, c.id); setCambios((cs) => cs.filter((x) => x.id !== c.id)); setMsg('Cambio eliminado.') } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }
   }, [marca])
 
-  // Local ve los borradores y los en tránsito; Admin ve todo.
-  const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => ['borrador', 'iniciado', 'en_transito', 'recibido'].includes(c.estado)) : cambios), [cambios, modo])
-  const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && c.estado !== 'borrador' && c.estado !== 'iniciado' && c.estado !== 'anulado').length, [cambios])
-  const pendientesCobro = useMemo(() => cambios.filter((c) => c.cobro_estado === 'pendiente').length, [cambios])
-
-  const lineaSel = (l: OrdenTN['products'][number]) => devueltos.some((d) => (d.sku ?? '') === (l.sku ?? '') && d.producto === prodDeLinea(l))
-  const idxDevuelto = (l: OrdenTN['products'][number]) => devueltos.findIndex((d) => (d.sku ?? '') === (l.sku ?? '') && d.producto === prodDeLinea(l))
-
-  // Ventana de cambio: 30 días desde la compra (+ ~15 de envío es la logística real).
+  // Ventana de cambio: 30 días desde la compra.
   const fechaOrden = orden?.fecha ? new Date(orden.fecha) : null
   const vence = fechaOrden ? new Date(fechaOrden.getTime() + DIAS_CAMBIO * 86400000) : null
   const vencido = vence ? new Date() > vence : false
   const fmt = (d: Date | null) => (d ? d.toLocaleDateString('es-AR') : '—')
 
-  const inpN: React.CSSProperties = { ...inp, width: 90 }
-  const inpNs: React.CSSProperties = { ...inp, width: 56 }
-  const lblN: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6B7280' }
-  const col: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 3 }
-  const cap: React.CSSProperties = { fontSize: 11, color: '#6B7280' }
-  const sub = (i: { precio?: number | null; cantidad: number }) => (Number(i.precio) || 0) * (Number(i.cantidad) || 1)
+  const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && !['borrador', 'iniciado', 'anulado'].includes(c.estado)).length, [cambios])
+  const pendientesCobro = useMemo(() => cambios.filter((c) => c.cobro_estado === 'pendiente').length, [cambios])
+
+  const visibles = useMemo(() => {
+    const f = FILTROS.find((x) => x.key === filtro) || FILTROS[0]
+    const q = busqueda.trim().toLowerCase()
+    return cambios
+      .filter((c) => (modo === 'local' ? ['borrador', 'iniciado', 'en_transito', 'recibido'].includes(c.estado) : true))
+      .filter((c) => f.match(c.estado))
+      .filter((c) => !q || numeroReclamo(c.id).toLowerCase().includes(q) || (c.cliente || '').toLowerCase().includes(q) || (c.orden_tn || '').toLowerCase().includes(q))
+  }, [cambios, filtro, busqueda, modo])
+
+  const detalleForm = () => detalleCambioTexto({ id: editandoId, cliente, items_devueltos: devueltos, items_nuevos: nuevos, forma_pago: formaPago || null, via, envio_costo: Number(envioCosto) || 0, envio_paga: envioPaga, descuento_manual: Number(descManual) || 0, seguimiento })
+  const resumenItems = (c: CambioRow) => [...(c.items_nuevos || []).map((i) => `${i.cantidad}× ${i.producto}`), ...(c.items_devueltos || []).map((i) => `↩ ${i.cantidad}× ${i.producto}`)].join(' · ') || '—'
+
+  const totalRow = (label: React.ReactNode, value: React.ReactNode, opts?: { strong?: boolean; sep?: boolean }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0', borderTop: opts?.sep ? `1px solid ${color.line}` : undefined, fontSize: opts?.strong ? font.xl : font.base }}>
+      <span style={{ color: opts?.strong ? color.ink : color.mut, fontWeight: opts?.strong ? weight.bold : weight.medium }}>{label}</span>
+      <span style={{ fontWeight: opts?.strong ? weight.bold : weight.semibold }}>{value}</span>
+    </div>
+  )
 
   return (
-    <div style={{ maxWidth: 1100 }}>
-      {!esAdmin && <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y elegí lo nuevo. Se guarda como borrador; Administración genera la venta al procesarlo.</div>}
+    <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: space[5] }}>
+      {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y agregá lo que se lleva. Cuando esté todo, «Marcar como pagado» genera la venta.</div>}
 
-      {/* Nuevo cambio (borrador) */}
-      <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>
-          {editandoId != null ? <>Editando cambio #{editandoId}</> : <>Nuevo cambio <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(por envío · se guarda como borrador)</span></>}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
-          <label style={{ ...col, flex: '0 1 220px' }}>
-            <span style={cap}>Nº de orden de Tienda Nube</span>
-            <input style={inp} value={ordenNum} onChange={(e) => setOrdenNum(e.target.value)} placeholder="ej. 1234" onKeyDown={(e) => e.key === 'Enter' && void buscarOrden()} />
-          </label>
-          <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void buscarOrden()} disabled={buscando}>{buscando ? 'Buscando…' : '🔎 Buscar orden'}</button>
-          {orden && <span style={{ fontSize: 12, color: '#111827' }}>Orden #{String(orden.number)} · {orden.cliente || 's/cliente'}</span>}
-        </div>
+      {/* ── Form ─────────────────────────────────────────────────────────── */}
+      <SectionCard
+        title={editandoId != null ? `Editando ${numeroReclamo(editandoId)}` : 'Nuevo cambio'}
+        subtitle={orden ? `${cliente || 's/cliente'} · orden #${String(orden.number)}` : 'Por envío · se guarda como borrador'}
+        actions={
+          <>
+            <CopyButton getText={detalleForm} label="Copiar detalle" share tone="neutral" variant="outline" />
+            <Button variant="solid" tone="success" iconLeft="✓" disabled={faltan.length > 0 || guardando} onClick={() => void marcarPagadoForm()} title={faltan.length ? `Falta: ${faltan.join(', ')}` : 'Marca pagado y genera la venta en GN'}>
+              Marcar como pagado
+            </Button>
+          </>
+        }
+      >
+        {/* Buscar orden */}
+        <Toolbar gap={2} style={{ alignItems: 'flex-end', marginBottom: space[3] }}>
+          <Field label="Nº de orden de Tienda Nube" width={220}>
+            <Input value={ordenNum} onChange={(e) => setOrdenNum(e.target.value)} placeholder="ej. 1234" onKeyDown={(e) => e.key === 'Enter' && void buscarOrden()} />
+          </Field>
+          <Button variant="soft" tone="brand" onClick={() => void buscarOrden()} disabled={buscando} iconLeft="🔎">{buscando ? 'Buscando…' : 'Buscar orden'}</Button>
+          {orden && fechaOrden && (
+            <StatusPill tone={vencido ? 'danger' : 'neutral'} label={`Compra ${fmt(fechaOrden)} · cambio hasta ${fmt(vence)}${vencido ? ' · FUERA DE PLAZO' : ''}`} dot={false} />
+          )}
+        </Toolbar>
 
-        {orden && fechaOrden && (
-          <div style={{ fontSize: 12, marginBottom: 10, color: vencido ? '#991B1B' : '#6B7280' }}>
-            🗓️ Compra: <b>{fmt(fechaOrden)}</b> · cambio válido hasta <b>{fmt(vence)}</b> ({DIAS_CAMBIO} días){vencido ? ' — ⚠️ FUERA DE PLAZO' : ''}
-          </div>
-        )}
-
+        {/* Líneas de la orden para marcar lo que devuelve */}
         {orden && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>Marcá lo que DEVUELVE el cliente (podés ajustar precio y cantidad):</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ marginBottom: space[3] }}>
+            <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 6 }}>Marcá lo que DEVUELVE el cliente (entra a la tabla en negativo):</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {(orden.products || []).map((l, i) => {
-                const sel = lineaSel(l); const di = idxDevuelto(l); const d = di >= 0 ? devueltos[di] : null
+                const on = lineas.some((x) => x.key === lineaOrdenKey(l))
                 return (
-                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, flexWrap: 'wrap' }}>
-                    <input type="checkbox" checked={sel} onChange={() => toggleDevuelto(l)} />
-                    <span style={{ fontWeight: 600, minWidth: 150 }}>{l.name || l.sku}</span>
-                    <span style={{ color: '#6B7280', fontFamily: 'monospace' }}>{l.sku || ''}</span>
-                    {sel && d ? (
-                      <>
-                        <label style={lblN}>$ <input style={inpN} type="number" min={0} value={d.precio ?? 0} onChange={(e) => actualizarDevuelto(di, 'precio', Number(e.target.value))} /></label>
-                        <label style={lblN}>× <input style={inpNs} type="number" min={1} max={Number(l.quantity) || 1} value={d.cantidad} onChange={(e) => actualizarDevuelto(di, 'cantidad', Math.min(Math.max(Number(e.target.value) || 1, 1), Number(l.quantity) || 1))} /></label>
-                        <span style={{ fontWeight: 600 }}>= {money(sub(d))}</span>
-                        <span style={{ fontSize: 10, color: '#9CA3AF' }}>(máx {l.quantity})</span>
-                      </>
-                    ) : (
-                      <span style={{ color: '#6B7280' }}>×{l.quantity} · {money(Number(l.price) || 0)}</span>
-                    )}
-                  </div>
+                  <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: font.sm, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={on} onChange={() => toggleDevuelto(l)} />
+                    <span style={{ fontWeight: weight.semibold, minWidth: 160 }}>{l.name || l.sku}</span>
+                    <span style={{ color: color.mut2, fontFamily: 'monospace' }}>{l.sku || ''}</span>
+                    <span style={{ color: color.mut }}>×{l.quantity} · {formatMoney(Number(l.price) || 0)}</span>
+                  </label>
                 )
               })}
             </div>
           </div>
         )}
 
-        <div style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }}>Producto(s) nuevo(s) que se lleva (de Gestión Nube) — el buscador se limpia al agregar</span>
-          <BuscarArticuloGN marca={marca} onSelect={agregarNuevo} mostrarCosto={false} />
-          {nuevos.length > 0 && (
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {nuevos.map((n, i) => (
-                <div key={i} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 600, minWidth: 150 }}>{n.producto}</span>
-                  <span style={{ color: '#6B7280', fontFamily: 'monospace' }}>{n.sku}</span>
-                  <label style={lblN}>$ <input style={inpN} type="number" min={0} value={n.precio ?? 0} onChange={(e) => actualizarNuevo(i, 'precio', Number(e.target.value))} /></label>
-                  <label style={lblN}>× <input style={inpNs} type="number" min={1} value={n.cantidad} onChange={(e) => actualizarNuevo(i, 'cantidad', Number(e.target.value))} /></label>
-                  <span style={{ fontWeight: 600 }}>= {money(sub(n))}</span>
-                  <button style={{ ...btn, padding: '1px 8px', fontSize: 11, color: '#DC2626', borderColor: '#FCA5A5' }} onClick={() => quitarNuevo(i)}>quitar</button>
-                </div>
-              ))}
+        {/* Buscar lo que se lleva */}
+        <div style={{ marginBottom: space[4] }}>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 6 }}>Agregá lo que el cliente SE LLEVA (de Gestión Nube):</div>
+          <div style={{ padding: space[3], background: color.brandBg, border: `1px solid ${color.brandBg2}`, borderRadius: radius.lg }}>
+            <BuscarArticuloGN marca={marca} onSelect={agregarLleva} mostrarCosto={false} />
+          </div>
+        </div>
+
+        {/* Tabla unificada */}
+        {lineas.length > 0 ? (
+          <TableWrap style={{ marginBottom: space[4] }}>
+            <THead><Tr>
+              <Th>Producto</Th><Th>Variante</Th><Th align="right">Cantidad</Th><Th align="right">Precio Unitario</Th><Th align="right">Subtotal</Th><Th />
+            </Tr></THead>
+            <TBody>
+              {lineas.map((l) => {
+                const signo = l.tipo === 'devuelve' ? -1 : 1
+                const sub = signo * (Number(l.precio) || 0) * (Number(l.cantidad) || 0)
+                return (
+                  <Tr key={l.key}>
+                    <Td strong>{l.producto}</Td>
+                    <Td style={{ color: color.mut }}>{l.variante || 'Variante única'}</Td>
+                    <Td align="right">
+                      <NumberField value={l.cantidad} onChange={(n) => actualizarLinea(l.key, 'cantidad', Math.max(1, l.max ? Math.min(n, l.max) : n))} min={1} max={l.max} prefix={l.tipo === 'devuelve' ? '−' : undefined} width={92} />
+                    </Td>
+                    <Td align="right"><NumberField value={l.precio} onChange={(n) => actualizarLinea(l.key, 'precio', n)} min={0} prefix="$" width={118} /></Td>
+                    <Td align="right" strong><MoneyText value={sub} tone={sub < 0 ? 'action' : undefined} /></Td>
+                    <Td align="right"><Button size="sm" variant="ghost" tone="danger" onClick={() => quitarLinea(l.key)}>Eliminar</Button></Td>
+                  </Tr>
+                )
+              })}
+            </TBody>
+          </TableWrap>
+        ) : (
+          <EmptyState dashed icon="🧾" title="Sin renglones" hint="Marcá lo que devuelve (arriba) y agregá lo que se lleva." style={{ marginBottom: space[4] }} />
+        )}
+
+        {/* Totales apilados */}
+        <div style={{ maxWidth: 460, marginLeft: 'auto' }}>
+          {totalRow('Subtotal', <MoneyText value={t.diferencia} tone={t.diferencia < 0 ? 'action' : undefined} strong />)}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0' }}>
+            <span style={{ color: color.mut, fontWeight: weight.medium }}>Envío</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Seg value={via} onChange={setVia} options={[{ v: 'andreani', label: 'Andreani' }, { v: 'correo', label: 'Correo' }, { v: 'cadete', label: 'Cadete' }]} />
+              <Seg value={envioPaga} onChange={setEnvioPaga} options={[{ v: 'cliente', label: 'Lo paga el cliente' }, { v: 'nosotros', label: 'Nosotros' }]} />
+              <NumberField value={envioCosto === '' ? '' : Number(envioCosto)} onChange={(n) => setEnvioCosto(String(n))} min={0} prefix="$" width={110} />
             </div>
-          )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '5px 0' }}>
+            <span style={{ color: color.mut, fontWeight: weight.medium }}>Descuento</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+              <Select value={formaPago} onChange={(e) => setFormaPago(e.target.value as FormaPago | '')} style={{ width: 180 }}>
+                <option value="">Forma de pago…</option>
+                <option value="tarjeta">Tarjeta (0%)</option>
+                <option value="transferencia">Transferencia (−10%)</option>
+              </Select>
+              <NumberField value={descManual === '' ? '' : Number(descManual)} onChange={(n) => setDescManual(String(n))} min={0} prefix="$" width={110} />
+            </div>
+          </div>
+          {t.descuento > 0 && totalRow(<span style={{ color: color.success }}>Descuento aplicado</span>, <MoneyText value={-t.descuento} tone="success" />)}
+          {totalRow('Total', <MoneyText value={t.total} strong />, { strong: true, sep: true })}
         </div>
 
-        {/* Envío + forma de pago */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
-          <label style={{ ...col, flex: '0 1 130px' }}>
-            <span style={cap}>Vía de envío</span>
-            <select style={inp} value={via} onChange={(e) => setVia(e.target.value as CambioVia)}>
-              <option value="andreani">Andreani</option>
-              <option value="correo">Correo</option>
-              <option value="cadete">Cadete</option>
-            </select>
-          </label>
-          <label style={{ ...col, flex: '0 1 110px' }}>
-            <span style={cap}>Costo del envío</span>
-            <input style={inp} type="number" min={0} value={envioCosto} onChange={(e) => setEnvioCosto(e.target.value)} placeholder="0" />
-          </label>
-          <label style={{ ...col, flex: '0 1 130px' }}>
-            <span style={cap}>Envío lo paga</span>
-            <select style={inp} value={envioPaga} onChange={(e) => setEnvioPaga(e.target.value as EnvioPaga)}>
-              <option value="cliente">El cliente</option>
-              <option value="nosotros">Nosotros</option>
-            </select>
-          </label>
-          <label style={{ ...col, flex: '0 1 160px' }}>
-            <span style={cap}>Forma de pago (diferencia)</span>
-            <select style={inp} value={formaPago} onChange={(e) => setFormaPago(e.target.value as FormaPago | '')}>
-              <option value="">— elegir —</option>
-              <option value="tarjeta">Tarjeta (0%)</option>
-              <option value="transferencia">Transferencia (−10%)</option>
-            </select>
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#374151', paddingBottom: 6 }}>
-            <input type="checkbox" checked={pagado} onChange={(e) => setPagado(e.target.checked)} /> Pagado
-          </label>
+        {/* Tracking + guardar */}
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', marginTop: space[5], paddingTop: space[4], borderTop: `1px solid ${color.line}` }}>
+          <Field label="Nº de seguimiento (opcional, se puede cargar después)" width={260}>
+            <Input value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking del envío" />
+          </Field>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
+            {editandoId != null && <Button variant="ghost" onClick={limpiarForm} disabled={guardando}>Cancelar</Button>}
+            <Button variant="outline" tone="brand" iconLeft="💾" onClick={() => void guardarBorrador()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? 'Guardar cambios' : 'Guardar borrador'}</Button>
+          </div>
         </div>
+      </SectionCard>
 
-        {/* Total desglosado */}
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 10, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
-          <span style={{ color: '#6B7280' }}>Devuelve: <b style={{ color: '#111827' }}>{money(totalDevueltos)}</b></span>
-          <span style={{ color: '#6B7280' }}>Se lleva: <b style={{ color: '#111827' }}>{money(totalNuevos)}</b></span>
-          <span style={{ color: DIF_LABEL[t.estado].color, fontWeight: 700 }}>Diferencia: {money(Math.abs(t.diferencia))} ({DIF_LABEL[t.estado].txt})</span>
-          {t.descuento > 0 && <span style={{ color: '#15803D' }}>Descuento: −{money(t.descuento)}</span>}
-          {t.envioACobrar > 0 && <span style={{ color: '#6B7280' }}>Envío: +{money(t.envioACobrar)}</span>}
-          <span style={{ color: '#111827', fontWeight: 700 }}>Total: {money(t.total)}</span>
-        </div>
+      {msg && <Notice tone="success" icon="✓" onClose={() => setMsg(null)}>{msg}</Notice>}
+      {error && <Notice tone="danger" icon="⚠" onClose={() => setError(null)}>{error}</Notice>}
+      {esAdmin && pendientesCobro > 0 && <Notice tone="warning" icon="💵">{pendientesCobro} cambio(s) con diferencia pendiente de cobrar en GN.</Notice>}
+      {esAdmin && pendientesReingreso > 0 && <Notice tone="warning" icon="⏳">{pendientesReingreso} cambio(s) con reingreso pendiente — reingresá el devuelto a mano en GN y marcalo.</Notice>}
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ ...col, flex: '0 1 200px' }}>
-            <span style={cap}>Nº seguimiento (opcional, se carga después)</span>
-            <input style={inp} value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking del envío" />
-          </label>
-          <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void iniciar()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? '💾 Guardar cambios' : '+ Guardar borrador'}</button>
-          {editandoId != null && <button style={btn} onClick={limpiarForm} disabled={guardando}>Cancelar</button>}
-        </div>
-      </div>
+      {/* ── Lista ────────────────────────────────────────────────────────── */}
+      <div>
+        <Toolbar justify="between" style={{ marginBottom: space[3] }}>
+          <Tabs variant="underline" value={filtro} onChange={setFiltro} items={FILTROS.map((f) => ({ key: f.key, label: f.label }))} />
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+            <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar reclamo / cliente / orden" style={{ width: 240 }} />
+            <Button variant="outline" onClick={() => void recargar()} disabled={cargando} iconLeft="↻">Recargar</Button>
+          </div>
+        </Toolbar>
 
-      {msg && <div style={{ fontSize: 12, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{msg}</div>}
-      {error && <div style={{ fontSize: 12, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{error}</div>}
-
-      {esAdmin && pendientesCobro > 0 && (
-        <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
-          💵 {pendientesCobro} cambio(s) con <b>diferencia pendiente de cobrar</b> en GN.
-        </div>
-      )}
-      {esAdmin && pendientesReingreso > 0 && (
-        <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
-          ⏳ {pendientesReingreso} cambio(s) con <b>reingreso pendiente</b> — hay que reingresar el producto devuelto a mano en GN y marcarlo.
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{esAdmin ? 'Cambios' : 'Cambios (borradores / en tránsito)'}{visibles.length ? ` (${visibles.length})` : ''}</div>
-        <button style={btn} onClick={() => void recargar()} disabled={cargando}>↻ Recargar</button>
-      </div>
-
-      {cargando ? (
-        <div style={{ fontSize: 13, color: '#6B7280', padding: 20 }}>Cargando…</div>
-      ) : visibles.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#6B7280', padding: 20 }}>No hay cambios.</div>
-      ) : (
-        <div style={{ overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 10 }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={th}>Orden</th>
-                <th style={th}>Cliente</th>
-                <th style={th}>Devuelve</th>
-                <th style={th}>Se lleva</th>
-                <th style={{ ...th, textAlign: 'right' }}>Total</th>
-                <th style={th}>Pago</th>
-                <th style={th}>Vía</th>
-                <th style={th}>Seguimiento</th>
-                <th style={th}>Estado</th>
-                <th style={th}>Reingreso</th>
-                <th style={th}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
+        {cargando ? (
+          <Card><div style={{ fontSize: font.sm, color: color.mut, padding: space[4] }}>Cargando…</div></Card>
+        ) : visibles.length === 0 ? (
+          <Card padding={4}><EmptyState icon="📭" title="No hay cambios" hint="Cuando armes un cambio, aparece acá." /></Card>
+        ) : (
+          <TableWrap>
+            <THead><Tr>
+              <Th>Reclamo</Th><Th>Cliente</Th><Th>Orden</Th><Th>Items</Th><Th align="right">Total</Th><Th>Pago</Th><Th>Vía</Th><Th>Seguimiento</Th><Th>Estado</Th><Th>Reingreso</Th><Th>Acciones</Th>
+            </Tr></THead>
+            <TBody>
               {visibles.map((c) => {
                 const ocup = ocupada === c.id
-                const difEstado = c.diferencia_estado || 'parejo'
+                const esBorrador = c.estado === 'borrador' || c.estado === 'iniciado'
                 return (
-                  <tr key={c.id}>
-                    <td style={{ ...td, fontWeight: 600 }}>{c.orden_tn || '—'}</td>
-                    <td style={td}>{c.cliente || '—'}</td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>{(c.items_devueltos || []).map((i) => i.producto).join(', ') || '—'}</td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>{(c.items_nuevos || []).map((i) => i.producto).join(', ') || '—'}</td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>
-                      {money(c.total != null ? c.total : c.diferencia)}
-                      <div style={{ fontSize: 10, fontWeight: 500, color: DIF_LABEL[difEstado].color }}>{DIF_LABEL[difEstado].txt}</div>
-                    </td>
-                    <td style={td}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: c.pagado ? '#15803D' : '#B45309' }}>{c.pagado ? '✓ pagado' : 'sin pagar'}</span>
-                      {c.forma_pago && <div style={{ fontSize: 10, color: '#6B7280' }}>{FORMA_PAGO_DEF[c.forma_pago].label}</div>}
-                      {c.cobro_estado === 'pendiente' && <div style={{ fontSize: 10, color: '#B45309' }}>cobro pend.</div>}
-                      {c.cobro_estado === 'cobrado' && <div style={{ fontSize: 10, color: '#15803D' }}>✓ cobrado</div>}
-                    </td>
-                    <td style={td}>{VIA_LABEL[c.via]}</td>
-                    <td style={td}>
-                      <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => void cargarSeguimiento(c)} disabled={ocup} title="Cargar / editar el número de seguimiento">
-                        {c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}
-                      </button>
-                    </td>
-                    <td style={td}><span style={{ fontSize: 11, fontWeight: 600 }}>{ESTADO_LABEL[c.estado]}</span></td>
-                    <td style={td}>{c.reingreso_estado === 'hecho' ? <span style={{ color: '#15803D' }}>✓ hecho</span> : (c.estado === 'borrador' || c.estado === 'iniciado') ? '—' : <span style={{ color: '#B45309' }}>pendiente</span>}</td>
-                    <td style={td}>
-                      <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                        {/* Editar: Local solo borradores; Admin en cualquier estado. */}
-                        {(esAdmin || c.estado === 'borrador') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => abrirEdicion(c)} disabled={ocup} title="Editar el cambio">✏️ Editar</button>}
-                        {/* Procesar: solo Admin (crea la venta real en GN). */}
-                        {esAdmin && c.estado === 'borrador' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void procesar(c)} disabled={ocup} title="Genera la venta real en GN (baja stock del nuevo)">{ocup ? '…' : 'Procesar'}</button>}
-                        {/* Cobrado: Local y Admin. */}
-                        {c.cobro_estado === 'pendiente' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#B45309', color: '#B45309' }} onClick={() => void cobrar(c)} disabled={ocup} title="Ya cobraste la diferencia en GN">Cobrado</button>}
-                        {/* Logística + reingreso + eliminar: solo Admin. */}
-                        {esAdmin && c.estado === 'en_transito' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} title="Llegó el paquete devuelto">Volvió</button>}
-                        {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#D97706', color: '#B45309' }} onClick={() => void reingreso(c)} disabled={ocup} title="Ya sumaste el devuelto al stock de GN a mano">Reingresado</button>}
-                        {esAdmin && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#DC2626', color: '#DC2626' }} onClick={() => void borrar(c)} disabled={ocup}>Eliminar</button>}
-                      </span>
-                    </td>
-                  </tr>
+                  <Tr key={c.id}>
+                    <Td mono strong>{numeroReclamo(c.id)}</Td>
+                    <Td>{c.cliente || '—'}</Td>
+                    <Td>{c.orden_tn || '—'}</Td>
+                    <Td wrap style={{ maxWidth: 240, whiteSpace: 'normal' }}>{resumenItems(c)}</Td>
+                    <Td align="right" strong><MoneyText value={c.total != null ? c.total : c.diferencia} /></Td>
+                    <Td>
+                      <span style={{ fontSize: font.xs, fontWeight: weight.semibold, color: c.pagado ? color.success : color.warning }}>{c.pagado ? '✓ pagado' : 'sin pagar'}</span>
+                      {c.cobro_estado === 'pendiente' && <div style={{ fontSize: 10, color: color.warning }}>cobro pend.</div>}
+                      {c.cobro_estado === 'cobrado' && <div style={{ fontSize: 10, color: color.success }}>✓ cobrado</div>}
+                    </Td>
+                    <Td>{VIA_LABEL[c.via]}</Td>
+                    <Td><Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}</Button></Td>
+                    <Td><StatusPill tone={ESTADO_TONE[c.estado]} label={ESTADO_LABEL[c.estado]} /></Td>
+                    <Td>{c.reingreso_estado === 'hecho' ? <span style={{ color: color.success }}>✓ hecho</span> : esBorrador ? '—' : <span style={{ color: color.warning }}>pendiente</span>}</Td>
+                    <Td>
+                      <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                        {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
+                        {esBorrador && <Button size="sm" variant="solid" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca pagado y genera la venta en GN">Marcar pagado</Button>}
+                        <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
+                        {c.cobro_estado === 'pendiente' && <Button size="sm" variant="outline" tone="warning" onClick={() => void cobrar(c)} disabled={ocup}>Cobrado</Button>}
+                        {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}
+                        {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <Button size="sm" variant="outline" tone="brand" onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</Button>}
+                        {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}
+                      </div>
+                    </Td>
+                  </Tr>
                 )
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </TBody>
+          </TableWrap>
+        )}
+      </div>
     </div>
   )
 }

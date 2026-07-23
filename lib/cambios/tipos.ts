@@ -24,6 +24,7 @@ export type CambioItem = {
   product_id?: string | null
   size_id?: string | null
   producto: string
+  variante?: string | null
   precio?: number | null
   cantidad: number
 }
@@ -50,6 +51,7 @@ export type CambioRow = {
   envio_paga?: EnvioPaga | null
   forma_pago?: FormaPago | null
   descuento_forma?: number | null
+  descuento_manual?: number | null
   pagado?: boolean | null
   cobro_estado?: CobroEstado | null
   total?: number | null
@@ -72,6 +74,7 @@ export type CambioInput = {
   envio_costo?: number | null
   envio_paga?: EnvioPaga | null
   forma_pago?: FormaPago | null
+  descuento_manual?: number | null
   pagado?: boolean | null
 }
 
@@ -129,9 +132,11 @@ export function calcularDiferencia(devueltos: CambioItem[], nuevos: CambioItem[]
 }
 
 /**
- * Total del cambio, desglosado (Fase B.4). El descuento por forma de pago aplica SOLO sobre la diferencia
- * de productos (nunca sobre el envío), y solo cuando hay diferencia a cobrar (>0). El envío se suma solo si
- * lo paga el cliente. `total = (diferencia − descuento) + envío_a_cobrar`.
+ * Total del cambio, desglosado. El "subtotal" del POS es la diferencia (Σnuevos − Σdevueltos). Los descuentos
+ * aplican SOLO sobre un subtotal a cobrar (>0): primero el descuento manual en $, luego el % por forma de pago
+ * sobre lo que queda. El envío se suma solo si lo paga el cliente.
+ *   descuento = descuentoManual + round(pct × max(subtotal − descuentoManual, 0))
+ *   total = subtotal − descuento + envío_a_cobrar
  */
 export function calcularTotalCambio(input: {
   devueltos: CambioItem[]
@@ -139,12 +144,94 @@ export function calcularTotalCambio(input: {
   forma?: FormaPago | null
   envioCosto?: number | null
   envioPaga?: EnvioPaga | null
-}): { diferencia: number; estado: DiferenciaEstado; descuento: number; envioACobrar: number; total: number } {
+  descuentoManual?: number | null
+}): { diferencia: number; estado: DiferenciaEstado; descuentoManual: number; descuentoForma: number; descuento: number; envioACobrar: number; total: number } {
   const { diferencia, estado } = calcularDiferencia(input.devueltos, input.nuevos)
   const pct = input.forma ? FORMA_PAGO_DEF[input.forma].descuento : 0
-  // Solo descontamos sobre una diferencia a cobrar (positiva); si al cliente se le devuelve, no hay descuento.
-  const descuento = diferencia > 0 ? Math.round((diferencia * pct) / 100) : 0
+  // Solo descontamos sobre un subtotal a cobrar (positivo); si al cliente se le devuelve, no hay descuento.
+  const descuentoManual = diferencia > 0 ? Math.min(Math.max(Number(input.descuentoManual) || 0, 0), diferencia) : 0
+  const base = Math.max(diferencia - descuentoManual, 0)
+  const descuentoForma = diferencia > 0 ? Math.round((base * pct) / 100) : 0
+  const descuento = descuentoManual + descuentoForma
   const envioACobrar = input.envioPaga === 'cliente' ? Number(input.envioCosto) || 0 : 0
   const total = diferencia - descuento + envioACobrar
-  return { diferencia, estado, descuento, envioACobrar, total }
+  return { diferencia, estado, descuentoManual, descuentoForma, descuento, envioACobrar, total }
+}
+
+/** Nº de reclamo del cambio: correlativo legible derivado del id (patrón generarBarcodeFalla). Ej. C-0045. */
+export function numeroReclamo(id: number | null | undefined): string {
+  return id ? `C-${String(id).padStart(4, '0')}` : 'nuevo'
+}
+
+/** Estados del cambio → tono semántico del kit (para StatusPill). */
+export const ESTADO_TONE: Record<CambioEstado, 'neutral' | 'brand' | 'action' | 'success' | 'warning' | 'danger'> = {
+  borrador: 'warning',
+  iniciado: 'warning',
+  confirmado: 'action',
+  en_transito: 'action',
+  recibido: 'brand',
+  cerrado: 'success',
+  anulado: 'neutral',
+}
+
+/**
+ * Campos obligatorios que faltan para poder GENERAR la venta (gate del botón "Marcar como pagado").
+ * Devuelve la lista de faltantes en texto; vacía = listo para generar. NO exige nada para guardar borrador.
+ */
+export function faltantesParaVenta(c: {
+  cliente?: string | null
+  orden_tn?: string | null
+  items_devueltos?: CambioItem[]
+  items_nuevos?: CambioItem[]
+  forma_pago?: FormaPago | null
+  via?: CambioVia | null
+  envio_paga?: EnvioPaga | null
+}): string[] {
+  const faltan: string[] = []
+  const devueltos = c.items_devueltos || []
+  const nuevos = c.items_nuevos || []
+  if (!devueltos.length) faltan.push('producto que devuelve')
+  if (!nuevos.some((i) => i.product_id && i.size_id)) faltan.push('producto que se lleva (de GN)')
+  if (!c.forma_pago) faltan.push('forma de pago')
+  if (!c.via) faltan.push('vía de envío')
+  if (!c.envio_paga) faltan.push('quién paga el envío')
+  if (!c.cliente && !c.orden_tn) faltan.push('cliente u orden')
+  return faltan
+}
+
+/**
+ * Detalle del cambio en texto plano para pasarle al cliente (WhatsApp). Formato pedido por Bruno.
+ * Ej.:  *CAMBIO C-0045*
+ *       Devolvés: 1× Jean Torino
+ *       Te llevás: 2× Falda Honey
+ *       Envío: $2.500 (Andreani)
+ *       Forma de pago: Transferencia (−10%)
+ *       *Total a pagar: $35.991*
+ *       Seguimiento: 12345
+ */
+export function detalleCambioTexto(c: {
+  id?: number | null
+  cliente?: string | null
+  items_devueltos?: CambioItem[]
+  items_nuevos?: CambioItem[]
+  forma_pago?: FormaPago | null
+  via?: CambioVia | null
+  envio_costo?: number | null
+  envio_paga?: EnvioPaga | null
+  descuento_manual?: number | null
+  seguimiento?: string | null
+}): string {
+  const money = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+  const linea = (i: CambioItem) => `${i.cantidad}× ${i.producto}${i.variante ? ` (${i.variante})` : ''}`
+  const devueltos = c.items_devueltos || []
+  const nuevos = c.items_nuevos || []
+  const t = calcularTotalCambio({ devueltos, nuevos, forma: c.forma_pago || null, envioCosto: c.envio_costo, envioPaga: c.envio_paga, descuentoManual: c.descuento_manual })
+  const out: string[] = [`*CAMBIO ${numeroReclamo(c.id)}*${c.cliente ? ` · ${c.cliente}` : ''}`]
+  if (devueltos.length) out.push(`Devolvés: ${devueltos.map(linea).join(', ')}`)
+  if (nuevos.length) out.push(`Te llevás: ${nuevos.map(linea).join(', ')}`)
+  if (t.envioACobrar > 0) out.push(`Envío: ${money(t.envioACobrar)}${c.via ? ` (${VIA_LABEL[c.via]})` : ''}`)
+  if (c.forma_pago) out.push(`Forma de pago: ${FORMA_PAGO_DEF[c.forma_pago].label}${FORMA_PAGO_DEF[c.forma_pago].descuento ? ` (−${FORMA_PAGO_DEF[c.forma_pago].descuento}%)` : ''}`)
+  out.push(`*Total a pagar: ${money(t.total)}*`)
+  if (c.seguimiento) out.push(`Seguimiento: ${c.seguimiento}`)
+  return out.join('\n')
 }
