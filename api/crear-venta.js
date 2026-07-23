@@ -19,12 +19,14 @@ const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
 // Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
 const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
 // Fase B.4 — venta REAL del cambio (accion:'cambio_real'): usa un canal NORMAL (para que CUENTE en la
-// analítica, NO el 12 "Ninguno") y la forma de pago real. Completar con lo que devuelva
-// `scripts/gn-formas-pago.mjs`. Mientras estén en null, la venta real se rechaza con un error claro.
-const CAMBIO_CHANNEL = { zattia: null, bdi: null }; // channel_id real por cuenta (p. ej. Tienda Nube)
+// analítica, NO el 12 "Ninguno") y la forma de pago real. IDs descubiertos escaneando ventas de GN
+// (Bruno eligió: canal "Otro Canal" 13; Tarjeta → MercadoPago 2; Transferencia → Transferencia Bancaria 5).
+// Son los IDs por defecto de GN (SF_CFG ya comparte el 12 "Ninguno" en las 2 cuentas) → mismos para ambas.
+// ⚠ Zattia sin verificar (su token de lectura estaba vencido): confirmar con 1 cambio de prueba en Zattia.
+const CAMBIO_CHANNEL = { zattia: 13, bdi: 13 };
 const CAMBIO_PAYMENT = {
-  zattia: { tarjeta: null, transferencia: null }, // payment_method_id por forma
-  bdi: { tarjeta: null, transferencia: null },
+  zattia: { tarjeta: 2, transferencia: 5 },
+  bdi: { tarjeta: 2, transferencia: 5 },
 };
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
