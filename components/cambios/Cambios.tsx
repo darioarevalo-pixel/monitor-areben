@@ -65,6 +65,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [formaPago, setFormaPago] = useState<FormaPago | ''>('')
   const [pagado, setPagado] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [editandoId, setEditandoId] = useState<number | null>(null)
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
@@ -115,6 +116,11 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   const totalDevueltos = useMemo(() => sumarItems(devueltos), [devueltos])
   const totalNuevos = useMemo(() => sumarItems(nuevos), [nuevos])
 
+  const limpiarForm = useCallback(() => {
+    setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani'); setSeguimiento('')
+    setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setPagado(false); setEditandoId(null)
+  }, [])
+
   const iniciar = useCallback(async () => {
     if (!nuevos.length) { setError('Elegí al menos un producto nuevo que se lleva el cliente.'); return }
     const snap = {
@@ -123,17 +129,45 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     }
     setGuardando(true); setError(null); setMsg(null)
     try {
-      await crearCambio(marca, {
-        orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null,
-        items_devueltos: snap.dev, items_nuevos: snap.nue,
-        envio_costo: snap.envio_costo, envio_paga: snap.envio_paga, forma_pago: snap.forma, pagado: snap.pag,
-      }, usuario)
-      setOrdenNum(''); setOrden(null); setDevueltos([]); setNuevos([]); setVia('andreani'); setSeguimiento('')
-      setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setPagado(false)
-      setMsg('Borrador de cambio guardado. Administración lo procesa (genera la venta) cuando esté pagado.')
+      if (editandoId != null) {
+        // Editar un cambio existente (mismo endpoint editar: recalcula diferencia + total).
+        await editarCambio(marca, editandoId, {
+          orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null,
+          items_devueltos: snap.dev, items_nuevos: snap.nue,
+          envio_costo: snap.envio_costo, envio_paga: snap.envio_paga, forma_pago: snap.forma, pagado: snap.pag,
+        })
+        setMsg('Cambio actualizado.')
+      } else {
+        await crearCambio(marca, {
+          orden_tn: snap.orden || null, cliente: snap.cli, via: snap.via, seguimiento: snap.seg || null,
+          items_devueltos: snap.dev, items_nuevos: snap.nue,
+          envio_costo: snap.envio_costo, envio_paga: snap.envio_paga, forma_pago: snap.forma, pagado: snap.pag,
+        }, usuario)
+        setMsg('Borrador de cambio guardado. Administración lo procesa (genera la venta) cuando esté pagado.')
+      }
+      limpiarForm()
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [marca, ordenNum, orden, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, pagado, usuario, recargar])
+  }, [marca, ordenNum, orden, via, seguimiento, devueltos, nuevos, envioCosto, envioPaga, formaPago, pagado, editandoId, usuario, recargar, limpiarForm])
+
+  // Reabrir un cambio en el form para editarlo (Local: solo borradores; Admin: cualquier estado).
+  const abrirEdicion = useCallback((c: CambioRow) => {
+    setEditandoId(c.id)
+    setOrdenNum(c.orden_tn || '')
+    setDevueltos((c.items_devueltos || []).map((i) => ({ ...i })))
+    setNuevos((c.items_nuevos || []).map((i) => ({ ...i })))
+    setVia(c.via || 'andreani')
+    setSeguimiento(c.seguimiento || '')
+    setEnvioCosto(c.envio_costo != null ? String(c.envio_costo) : '')
+    setEnvioPaga(c.envio_paga || 'cliente')
+    setFormaPago(c.forma_pago || '')
+    setPagado(!!c.pagado)
+    setError(null); setMsg(null)
+    // Traer la orden para poder tocar los renglones devueltos (si falla, se editan igual nuevos/envío/pago).
+    if (c.orden_tn) void leerOrdenTN(marca, c.orden_tn).then((o) => setOrden(o)).catch(() => setOrden(null))
+    else setOrden(null)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [marca])
 
   // Admin: PROCESAR → genera la venta REAL en GN (baja stock del nuevo, cuenta en la analítica) y pasa a en_transito.
   const procesar = useCallback(async (c: CambioRow) => {
@@ -183,7 +217,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   }, [marca])
 
   // Local ve los borradores y los en tránsito; Admin ve todo.
-  const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => c.estado === 'borrador' || c.estado === 'iniciado' || c.estado === 'en_transito') : cambios), [cambios, modo])
+  const visibles = useMemo(() => (modo === 'local' ? cambios.filter((c) => ['borrador', 'iniciado', 'en_transito', 'recibido'].includes(c.estado)) : cambios), [cambios, modo])
   const pendientesReingreso = useMemo(() => cambios.filter((c) => c.reingreso_estado === 'pendiente' && c.estado !== 'borrador' && c.estado !== 'iniciado' && c.estado !== 'anulado').length, [cambios])
   const pendientesCobro = useMemo(() => cambios.filter((c) => c.cobro_estado === 'pendiente').length, [cambios])
 
@@ -209,7 +243,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
       {/* Nuevo cambio (borrador) */}
       <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Nuevo cambio <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(por envío · se guarda como borrador)</span></div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>
+          {editandoId != null ? <>Editando cambio #{editandoId}</> : <>Nuevo cambio <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(por envío · se guarda como borrador)</span></>}
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
           <label style={{ ...col, flex: '0 1 220px' }}>
             <span style={cap}>Nº de orden de Tienda Nube</span>
@@ -321,7 +357,8 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
             <span style={cap}>Nº seguimiento (opcional, se carga después)</span>
             <input style={inp} value={seguimiento} onChange={(e) => setSeguimiento(e.target.value)} placeholder="tracking del envío" />
           </label>
-          <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void iniciar()} disabled={guardando}>{guardando ? 'Guardando…' : '+ Guardar borrador'}</button>
+          <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void iniciar()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? '💾 Guardar cambios' : '+ Guardar borrador'}</button>
+          {editandoId != null && <button style={btn} onClick={limpiarForm} disabled={guardando}>Cancelar</button>}
         </div>
       </div>
 
@@ -363,7 +400,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                 <th style={th}>Seguimiento</th>
                 <th style={th}>Estado</th>
                 <th style={th}>Reingreso</th>
-                {esAdmin && <th style={th}>Acciones</th>}
+                <th style={th}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -388,27 +425,26 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                     </td>
                     <td style={td}>{VIA_LABEL[c.via]}</td>
                     <td style={td}>
-                      {esAdmin ? (
-                        <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => void cargarSeguimiento(c)} disabled={ocup} title="Cargar / editar el número de seguimiento">
-                          {c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}
-                        </button>
-                      ) : (
-                        c.seguimiento || '—'
-                      )}
+                      <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => void cargarSeguimiento(c)} disabled={ocup} title="Cargar / editar el número de seguimiento">
+                        {c.seguimiento ? `📦 ${c.seguimiento}` : '＋ cargar'}
+                      </button>
                     </td>
                     <td style={td}><span style={{ fontSize: 11, fontWeight: 600 }}>{ESTADO_LABEL[c.estado]}</span></td>
                     <td style={td}>{c.reingreso_estado === 'hecho' ? <span style={{ color: '#15803D' }}>✓ hecho</span> : (c.estado === 'borrador' || c.estado === 'iniciado') ? '—' : <span style={{ color: '#B45309' }}>pendiente</span>}</td>
-                    {esAdmin && (
-                      <td style={td}>
-                        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                          {c.estado === 'borrador' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void procesar(c)} disabled={ocup} title="Genera la venta real en GN (baja stock del nuevo)">{ocup ? '…' : 'Procesar'}</button>}
-                          {c.cobro_estado === 'pendiente' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#B45309', color: '#B45309' }} onClick={() => void cobrar(c)} disabled={ocup} title="Ya cobraste la diferencia en GN">Cobrado</button>}
-                          {c.estado === 'en_transito' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} title="Llegó el paquete devuelto">Volvió</button>}
-                          {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#D97706', color: '#B45309' }} onClick={() => void reingreso(c)} disabled={ocup} title="Ya sumaste el devuelto al stock de GN a mano">Reingresado</button>}
-                          <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#DC2626', color: '#DC2626' }} onClick={() => void borrar(c)} disabled={ocup}>Eliminar</button>
-                        </span>
-                      </td>
-                    )}
+                    <td style={td}>
+                      <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                        {/* Editar: Local solo borradores; Admin en cualquier estado. */}
+                        {(esAdmin || c.estado === 'borrador') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11 }} onClick={() => abrirEdicion(c)} disabled={ocup} title="Editar el cambio">✏️ Editar</button>}
+                        {/* Procesar: solo Admin (crea la venta real en GN). */}
+                        {esAdmin && c.estado === 'borrador' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#15803D', color: '#15803D' }} onClick={() => void procesar(c)} disabled={ocup} title="Genera la venta real en GN (baja stock del nuevo)">{ocup ? '…' : 'Procesar'}</button>}
+                        {/* Cobrado: Local y Admin. */}
+                        {c.cobro_estado === 'pendiente' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#B45309', color: '#B45309' }} onClick={() => void cobrar(c)} disabled={ocup} title="Ya cobraste la diferencia en GN">Cobrado</button>}
+                        {/* Logística + reingreso + eliminar: solo Admin. */}
+                        {esAdmin && c.estado === 'en_transito' && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#1D4ED8', color: '#1D4ED8' }} onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} title="Llegó el paquete devuelto">Volvió</button>}
+                        {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#D97706', color: '#B45309' }} onClick={() => void reingreso(c)} disabled={ocup} title="Ya sumaste el devuelto al stock de GN a mano">Reingresado</button>}
+                        {esAdmin && <button style={{ ...btn, padding: '3px 8px', fontSize: 11, borderColor: '#DC2626', color: '#DC2626' }} onClick={() => void borrar(c)} disabled={ocup}>Eliminar</button>}
+                      </span>
+                    </td>
                   </tr>
                 )
               })}
