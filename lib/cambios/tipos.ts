@@ -6,11 +6,17 @@
 
 import type { Marca } from '@/lib/nav.generated'
 
-export type CambioEstado = 'iniciado' | 'confirmado' | 'en_transito' | 'recibido' | 'cerrado' | 'anulado'
+// El cambio nace como 'borrador' (solicitud incompleta) y se completa después. Al PROCESAR (pagado +
+// envío confirmado) se genera la venta REAL en GN → 'confirmado' → 'en_transito' → 'recibido' → 'cerrado'.
+export type CambioEstado = 'borrador' | 'iniciado' | 'confirmado' | 'en_transito' | 'recibido' | 'cerrado' | 'anulado'
 // Cambios SOLO por envío (el físico se resuelve presencial sin tool). El quilombo es el envío.
 export type CambioVia = 'andreani' | 'correo' | 'cadete'
 export type DiferenciaEstado = 'parejo' | 'a_cobrar' | 'a_devolver' | 'saldado'
 export type ReingresoEstado = 'pendiente' | 'hecho'
+// Solo 2 formas (Bruno): tarjeta paga la diferencia completa; transferencia lleva 10% de descuento.
+export type FormaPago = 'tarjeta' | 'transferencia'
+export type EnvioPaga = 'nosotros' | 'cliente'
+export type CobroEstado = 'no_aplica' | 'pendiente' | 'cobrado'
 
 /** Una línea del cambio (producto devuelto o nuevo). */
 export type CambioItem = {
@@ -39,13 +45,23 @@ export type CambioRow = {
   seguimiento?: string | null
   gn_venta_ida_id?: string | null
   gn_venta_ida_number?: string | null
+  // Fase B.4 — envío + forma de pago + venta real
+  envio_costo?: number | null
+  envio_paga?: EnvioPaga | null
+  forma_pago?: FormaPago | null
+  descuento_forma?: number | null
+  pagado?: boolean | null
+  cobro_estado?: CobroEstado | null
+  total?: number | null
+  gn_venta_id?: string | null
+  gn_venta_number?: string | null
   usuario?: string | null
   historial?: CambioEvento[]
   created_at?: string
   updated_at?: string
 }
 
-/** Lo que carga el Local al iniciar el cambio. */
+/** Lo que carga el Local al iniciar el cambio (borrador; todo lo de B.4 es opcional y se completa después). */
 export type CambioInput = {
   orden_tn?: string | null
   cliente?: string | null
@@ -53,6 +69,10 @@ export type CambioInput = {
   seguimiento?: string | null
   items_devueltos: CambioItem[]
   items_nuevos: CambioItem[]
+  envio_costo?: number | null
+  envio_paga?: EnvioPaga | null
+  forma_pago?: FormaPago | null
+  pagado?: boolean | null
 }
 
 // ── Orden de Tienda Nube (la lee bdi-catalogo, ver lib/cambios/cliente.ts) ──────────────
@@ -75,6 +95,7 @@ export type OrdenTN = {
 }
 
 export const ESTADO_LABEL: Record<CambioEstado, string> = {
+  borrador: 'Borrador',
   iniciado: 'Iniciado',
   confirmado: 'Confirmado',
   en_transito: 'En tránsito',
@@ -83,6 +104,12 @@ export const ESTADO_LABEL: Record<CambioEstado, string> = {
   anulado: 'Anulado',
 }
 export const VIA_LABEL: Record<CambioVia, string> = { andreani: 'Andreani', correo: 'Correo', cadete: 'Cadete' }
+
+// Formas de pago: solo 2 (Bruno). El descuento aplica SOLO sobre la diferencia de productos, NO sobre el envío.
+export const FORMA_PAGO_DEF: Record<FormaPago, { label: string; descuento: number }> = {
+  tarjeta: { label: 'Tarjeta', descuento: 0 },
+  transferencia: { label: 'Transferencia', descuento: 10 },
+}
 
 /** Días que el cliente tiene para cambiar desde la compra (regla del negocio). */
 export const DIAS_CAMBIO = 30
@@ -99,4 +126,25 @@ export function calcularDiferencia(devueltos: CambioItem[], nuevos: CambioItem[]
   const diferencia = totalNuevos - totalDevueltos
   const estado: DiferenciaEstado = diferencia === 0 ? 'parejo' : diferencia > 0 ? 'a_cobrar' : 'a_devolver'
   return { diferencia, estado, totalDevueltos, totalNuevos }
+}
+
+/**
+ * Total del cambio, desglosado (Fase B.4). El descuento por forma de pago aplica SOLO sobre la diferencia
+ * de productos (nunca sobre el envío), y solo cuando hay diferencia a cobrar (>0). El envío se suma solo si
+ * lo paga el cliente. `total = (diferencia − descuento) + envío_a_cobrar`.
+ */
+export function calcularTotalCambio(input: {
+  devueltos: CambioItem[]
+  nuevos: CambioItem[]
+  forma?: FormaPago | null
+  envioCosto?: number | null
+  envioPaga?: EnvioPaga | null
+}): { diferencia: number; estado: DiferenciaEstado; descuento: number; envioACobrar: number; total: number } {
+  const { diferencia, estado } = calcularDiferencia(input.devueltos, input.nuevos)
+  const pct = input.forma ? FORMA_PAGO_DEF[input.forma].descuento : 0
+  // Solo descontamos sobre una diferencia a cobrar (positiva); si al cliente se le devuelve, no hay descuento.
+  const descuento = diferencia > 0 ? Math.round((diferencia * pct) / 100) : 0
+  const envioACobrar = input.envioPaga === 'cliente' ? Number(input.envioCosto) || 0 : 0
+  const total = diferencia - descuento + envioACobrar
+  return { diferencia, estado, descuento, envioACobrar, total }
 }

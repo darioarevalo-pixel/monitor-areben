@@ -8,9 +8,10 @@ import { apiFetch } from '../api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav.generated'
-import type { CambioInput, CambioRow, OrdenTN } from './tipos'
+import { FORMA_PAGO_DEF, calcularTotalCambio, sumarItems, type CambioInput, type CambioRow, type OrdenTN } from './tipos'
 
 const TN_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+const CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
 
 /** Trae una orden de TN por número (endpoint `?orden=` de bdi-catalogo). Sin auth: es endpoint TN público. */
 export async function leerOrdenTN(store: Marca, numero: string): Promise<OrdenTN | null> {
@@ -64,6 +65,51 @@ export async function registrarVentaIda(store: Marca, cambio: CambioRow, ctx: { 
   })
   const d = await resp.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar el cambio.')
+}
+
+/**
+ * Fase B.4 — PROCESA el cambio: crea la venta REAL en GN (producto nuevo baja stock, precio real, canal
+ * normal → cuenta en la analítica, con forma de pago y descuento) y la registra. Deja el cambio en
+ * `en_transito` (y `cobro_estado='pendiente'` si hay diferencia a cobrar). El reingreso del devuelto sigue
+ * siendo manual/aparte. Requiere que el cambio esté pagado, con forma de pago y productos nuevos linkeados a GN.
+ */
+export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { user: string; pass: string }): Promise<void> {
+  const nuevos = (cambio.items_nuevos || []).filter((i) => i.product_id && i.size_id)
+  if (!nuevos.length) throw new Error('Los productos nuevos no están linkeados a artículos de GN: no se puede generar la venta.')
+  if (!cambio.forma_pago) throw new Error('Falta la forma de pago del cambio.')
+  const devueltos = cambio.items_devueltos || []
+  const t = calcularTotalCambio({ devueltos, nuevos: cambio.items_nuevos || [], forma: cambio.forma_pago, envioCosto: cambio.envio_costo, envioPaga: cambio.envio_paga })
+  // Descuento a nivel venta = Σdevueltos + descuento por forma → total de productos = diferencia − descuento.
+  const descuentoForma = t.diferencia > 0 ? Math.round((t.diferencia * FORMA_PAGO_DEF[cambio.forma_pago].descuento) / 100) : 0
+  const descuento = sumarItems(devueltos) + descuentoForma
+  const origen: Origen = 'deposito' // cambios por envío → el nuevo sale del depósito
+  const body = {
+    accion: 'cambio_real', store, origen,
+    items: nuevos.map((i) => ({ product_id: i.product_id, size_id: i.size_id, quantity: i.cantidad || 1, unit_price: Number(i.precio) || 0 })),
+    descuento, shipping_cost: t.envioACobrar, forma_pago: cambio.forma_pago,
+    comments: `Cambio orden ${cambio.orden_tn || ''} — ${cambio.cliente || ''} (Monitor)`.slice(0, 500),
+    solicitudId: `cambio-${cambio.id}`, user: ctx.user, pass: ctx.pass,
+  }
+  const r = await fetch(CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const d = await r.json().catch(() => null)
+  if (!d || !d.ok) throw new Error(`No se pudo crear la venta del cambio en GN — ${(d && (d.error || (d.detalle && JSON.stringify(d.detalle).slice(0, 200)))) || ''}`)
+
+  const resp = await apiFetch('/api/cambios', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, action: 'procesar', id: cambio.id, gn_venta_id: d.venta?.id ?? null, gn_venta_number: d.venta?.number ?? null, usuario: ctx.user }),
+  })
+  const dd = await resp.json()
+  if (!dd || !dd.ok) throw new Error((dd && dd.error) || 'La venta se creó en GN pero no se pudo registrar el cambio.')
+}
+
+/** Marca la diferencia como cobrada (el admin ya la cobró en GN). */
+export async function marcarCobrado(store: Marca, id: number, usuario?: string): Promise<void> {
+  const r = await apiFetch('/api/cambios', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, action: 'cobrado', id, usuario }),
+  })
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo marcar el cobro.')
 }
 
 /** Marca el reingreso del producto devuelto como HECHO (el admin ya lo cargó a mano en GN). */

@@ -4,7 +4,9 @@
 //
 //   GET  ?store=bdi|zattia[&reingreso=pendiente][&limit=]        → lista (opcional: solo pendientes de reingreso).
 //   POST { store, action:'crear', orden_tn?, cliente?, via?, items_devueltos, items_nuevos, usuario? } → crea.
-//   POST { store, action:'confirmar', id, gn_venta_ida_id?, gn_venta_ida_number?, via?, usuario? } → confirma.
+//   POST { store, action:'confirmar', id, gn_venta_ida_id?, gn_venta_ida_number?, via?, usuario? } → confirma (flujo viejo).
+//   POST { store, action:'procesar', id, gn_venta_id?, gn_venta_number?, usuario? } → registra la venta REAL (B.4) → en_transito.
+//   POST { store, action:'cobrado', id, usuario? }               → marca la diferencia como cobrada.
 //   POST { store, action:'estado', id, estado, usuario?, nota? }  → cambia estado.
 //   POST { store, action:'reingreso', id, usuario? }             → marca el reingreso como HECHO.
 //   POST { store, action:'editar', id, ...campos }               → edita.
@@ -19,10 +21,12 @@ function cfgFor(store) {
   return { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 
-const ESTADOS = ['iniciado', 'confirmado', 'en_transito', 'recibido', 'cerrado', 'anulado'];
+const ESTADOS = ['borrador', 'iniciado', 'confirmado', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 // Cambios SOLO por envío (el físico se hace presencial sin tool).
 const VIAS = ['andreani', 'correo', 'cadete'];
-const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, seguimiento, gn_venta_ida_id, gn_venta_ida_number, usuario, historial, created_at, updated_at';
+const FORMAS = { tarjeta: 0, transferencia: 10 }; // % de descuento sobre la diferencia (Bruno)
+const ENVIO_PAGA = ['nosotros', 'cliente'];
+const COLS = 'id, store, orden_tn, cliente, via, estado, items_devueltos, items_nuevos, diferencia, diferencia_estado, reingreso_estado, seguimiento, gn_venta_ida_id, gn_venta_ida_number, envio_costo, envio_paga, forma_pago, descuento_forma, pagado, cobro_estado, total, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
 
 const sumaItems = (its) => (Array.isArray(its) ? its : []).reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0);
 
@@ -30,6 +34,16 @@ function diferenciaDe(devueltos, nuevos) {
   const dif = sumaItems(nuevos) - sumaItems(devueltos);
   const estado = dif === 0 ? 'parejo' : dif > 0 ? 'a_cobrar' : 'a_devolver';
   return { diferencia: dif, diferencia_estado: estado };
+}
+
+// Total desglosado (mismo criterio que lib/cambios/tipos.ts calcularTotalCambio): el descuento por forma
+// aplica SOLO sobre la diferencia a cobrar; el envío se suma solo si lo paga el cliente.
+function totalDe(devueltos, nuevos, forma, envioCosto, envioPaga) {
+  const { diferencia } = diferenciaDe(devueltos, nuevos);
+  const pct = forma && FORMAS[forma] != null ? FORMAS[forma] : 0;
+  const descuento = diferencia > 0 ? Math.round((diferencia * pct) / 100) : 0;
+  const envioACobrar = envioPaga === 'cliente' ? Number(envioCosto) || 0 : 0;
+  return { diferencia, descuento_forma: pct, total: diferencia - descuento + envioACobrar };
 }
 
 async function apilarHistorial(supabase, store, id, evento) {
@@ -72,16 +86,23 @@ export default async function handler(req, res) {
         const via = VIAS.includes(b.via) ? b.via : 'andreani';
         const usuario = b.usuario ? String(b.usuario) : null;
         const { diferencia, diferencia_estado } = diferenciaDe(devueltos, nuevos);
+        // Fase B.4: nace como BORRADOR (solicitud editable); la venta real se dispara al PROCESAR.
+        const forma = FORMAS[b.forma_pago] != null ? b.forma_pago : null;
+        const envio_paga = ENVIO_PAGA.includes(b.envio_paga) ? b.envio_paga : null;
+        const envio_costo = b.envio_costo != null && b.envio_costo !== '' ? Number(b.envio_costo) : null;
+        const { descuento_forma, total } = totalDe(devueltos, nuevos, forma, envio_costo, envio_paga);
         const row = {
           store, orden_tn: b.orden_tn ? String(b.orden_tn) : null, cliente: b.cliente ? String(b.cliente) : null,
-          via, estado: 'iniciado', items_devueltos: devueltos, items_nuevos: nuevos,
+          via, estado: 'borrador', items_devueltos: devueltos, items_nuevos: nuevos,
           diferencia, diferencia_estado, reingreso_estado: 'pendiente', usuario,
           seguimiento: b.seguimiento ? String(b.seguimiento) : null,
-          historial: [{ estado: 'iniciado', at: new Date().toISOString(), usuario, nota: 'iniciado' }],
+          envio_costo, envio_paga, forma_pago: forma, descuento_forma, total,
+          pagado: b.pagado === true, cobro_estado: 'no_aplica',
+          historial: [{ estado: 'borrador', at: new Date().toISOString(), usuario, nota: 'borrador' }],
         };
         const { data, error } = await supabase.from('cambios').insert(row).select('id').single();
         if (error) throw new Error(error.message);
-        return res.status(200).json({ ok: true, id: data?.id, diferencia, diferencia_estado });
+        return res.status(200).json({ ok: true, id: data?.id, diferencia, diferencia_estado, total });
       }
 
       const id = parseInt(b.id, 10);
@@ -98,6 +119,30 @@ export default async function handler(req, res) {
         if (b.gn_venta_ida_number != null && b.gn_venta_ida_number !== '') upd.gn_venta_ida_number = String(b.gn_venta_ida_number);
         upd.historial = await apilarHistorial(supabase, store, id, { estado, at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.gn_venta_ida_id ? `confirmado · venta ida GN ${b.gn_venta_ida_number || b.gn_venta_ida_id}` : 'confirmado' });
         const { error } = await supabase.from('cambios').update(upd).eq('id', id).eq('store', store);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'procesar') {
+        // Fase B.4: la venta REAL ya la creó el cliente (crear-venta, canal real + forma de pago) → acá se
+        // REGISTRA y el cambio pasa a 'en_transito' (el paquete del nuevo sale; el devuelto vuelve después).
+        // Si hay diferencia a cobrar (>0), el cobro real es manual en GN → cobro_estado 'pendiente'.
+        const { data: prev, error: e0 } = await supabase.from('cambios').select('diferencia').eq('id', id).eq('store', store).single();
+        if (e0) throw new Error(e0.message);
+        const cobro_estado = Number(prev?.diferencia) > 0 ? 'pendiente' : 'no_aplica';
+        const upd = { estado: 'en_transito', cobro_estado, updated_at: new Date().toISOString() };
+        if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
+        if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
+        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'en_transito', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.gn_venta_id ? `procesado · venta GN ${b.gn_venta_number || b.gn_venta_id}` : 'procesado' });
+        const { error } = await supabase.from('cambios').update(upd).eq('id', id).eq('store', store);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'cobrado') {
+        // El admin ya cobró la diferencia en GN → marca el cobro hecho.
+        const hist = await apilarHistorial(supabase, store, id, { estado: null, at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: 'cobro marcado' });
+        const { error } = await supabase.from('cambios').update({ cobro_estado: 'cobrado', historial: hist, updated_at: new Date().toISOString() }).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
       }
@@ -129,18 +174,30 @@ export default async function handler(req, res) {
         if (b.via !== undefined && VIAS.includes(b.via)) campos.via = b.via;
         if (b.seguimiento !== undefined) campos.seguimiento = b.seguimiento ? String(b.seguimiento) : null;
         if (b.diferencia_estado !== undefined) campos.diferencia_estado = b.diferencia_estado ? String(b.diferencia_estado) : null;
-        if (Array.isArray(b.items_devueltos) || Array.isArray(b.items_nuevos)) {
+        // Fase B.4 — envío / forma de pago / pagado
+        if (b.envio_costo !== undefined) campos.envio_costo = b.envio_costo != null && b.envio_costo !== '' ? Number(b.envio_costo) : null;
+        if (b.envio_paga !== undefined) campos.envio_paga = ENVIO_PAGA.includes(b.envio_paga) ? b.envio_paga : null;
+        if (b.forma_pago !== undefined) campos.forma_pago = FORMAS[b.forma_pago] != null ? b.forma_pago : null;
+        if (b.pagado !== undefined) campos.pagado = b.pagado === true;
+        // Recalcular diferencia + total si cambió algo que los afecta (líneas, forma o envío).
+        const tocaTotal = Array.isArray(b.items_devueltos) || Array.isArray(b.items_nuevos) || b.forma_pago !== undefined || b.envio_costo !== undefined || b.envio_paga !== undefined;
+        if (tocaTotal) {
           const devueltos = Array.isArray(b.items_devueltos) ? b.items_devueltos : undefined;
           const nuevos = Array.isArray(b.items_nuevos) ? b.items_nuevos : undefined;
           if (devueltos) campos.items_devueltos = devueltos;
           if (nuevos) campos.items_nuevos = nuevos;
-          // Recalcular la diferencia si cambiaron las líneas (usa las nuevas o relee las viejas).
-          const { data: prev } = await supabase.from('cambios').select('items_devueltos, items_nuevos').eq('id', id).eq('store', store).single();
+          const { data: prev } = await supabase.from('cambios').select('items_devueltos, items_nuevos, forma_pago, envio_costo, envio_paga').eq('id', id).eq('store', store).single();
           const d = devueltos ?? prev?.items_devueltos ?? [];
           const n = nuevos ?? prev?.items_nuevos ?? [];
+          const forma = campos.forma_pago !== undefined ? campos.forma_pago : prev?.forma_pago;
+          const envioCosto = campos.envio_costo !== undefined ? campos.envio_costo : prev?.envio_costo;
+          const envioPaga = campos.envio_paga !== undefined ? campos.envio_paga : prev?.envio_paga;
           const dif = diferenciaDe(d, n);
+          const t = totalDe(d, n, forma, envioCosto, envioPaga);
           campos.diferencia = dif.diferencia;
           if (b.diferencia_estado === undefined) campos.diferencia_estado = dif.diferencia_estado;
+          campos.descuento_forma = t.descuento_forma;
+          campos.total = t.total;
         }
         if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });
         campos.updated_at = new Date().toISOString();

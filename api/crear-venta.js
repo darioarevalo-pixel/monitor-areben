@@ -18,6 +18,14 @@ const SF_CFG = {
 const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
 // Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
 const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
+// Fase B.4 — venta REAL del cambio (accion:'cambio_real'): usa un canal NORMAL (para que CUENTE en la
+// analítica, NO el 12 "Ninguno") y la forma de pago real. Completar con lo que devuelva
+// `scripts/gn-formas-pago.mjs`. Mientras estén en null, la venta real se rechaza con un error claro.
+const CAMBIO_CHANNEL = { zattia: null, bdi: null }; // channel_id real por cuenta (p. ej. Tienda Nube)
+const CAMBIO_PAYMENT = {
+  zattia: { tarjeta: null, transferencia: null }, // payment_method_id por forma
+  bdi: { tarjeta: null, transferencia: null },
+};
 const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -65,6 +73,41 @@ export default async function handler(req, res) {
   }
 
   if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
+
+  // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
+  // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá
+  // solo se relaya al payload de GN. Baja stock del producto NUEVO (el devuelto se reingresa aparte, manual).
+  if (b.accion === 'cambio_real') {
+    if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
+    const channel = CAMBIO_CHANNEL[store];
+    const forma = String(b.forma_pago || '');
+    const paymentId = (CAMBIO_PAYMENT[store] || {})[forma];
+    if (!channel) return res.status(400).json({ error: `Falta configurar el canal de venta real del cambio para ${store} (CAMBIO_CHANNEL). Corré scripts/gn-formas-pago.mjs y completá el id.` });
+    if (!paymentId) return res.status(400).json({ error: `Falta configurar la forma de pago "${forma || '—'}" del cambio para ${store} (CAMBIO_PAYMENT).` });
+    const its = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && +it.quantity > 0) : [];
+    if (!its.length) return res.status(400).json({ error: 'items vacíos' });
+    const store_id = cfg.store[b.origen];
+    const lineItems = its.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: Number(it.unit_price) || 0, store_id }));
+    const payload = {
+      client_id: CAMBIO_CLIENT[store] || cfg.client_id, channel_id: channel, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+      store_id, discount_inventory: true, payment_method_id: paymentId,
+      comments: String(b.comments || '').slice(0, 500),
+      integration_source: 'monitor-cambio', integration_id: `${b.solicitudId || 'cambio'}-real`,
+      items: lineItems,
+    };
+    if (b.descuento != null) payload.discount = Number(b.descuento) || 0;      // Σdevueltos + descuento por forma
+    if (b.shipping_cost != null) payload.shipping_cost = Number(b.shipping_cost) || 0; // envío si lo paga el cliente
+    payload.is_exchange = true;
+    try {
+      const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
+      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
+      if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta del cambio', status: r.status, detalle: d });
+      const v = (d && d.data) ? d.data : d;
+      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number } });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 
   // ── Crear venta ── (GN no soporta anular/borrar por API: eso se hace a mano en la web de GN)
   if (!['deposito', 'local'].includes(b.origen)) return res.status(400).json({ error: 'origen inválido' });
