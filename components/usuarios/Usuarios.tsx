@@ -2,12 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esAdmin, FUNCIONES, type Funcion } from '@/lib/permisos'
+import { esAdmin, funcionQueDa, FUNCIONES, type Funcion } from '@/lib/permisos'
 import { guardarAdminPass, guardarConfigAdmin, leerAdminPass, traerConfigAdmin } from '@/lib/sesion'
-import { PERM_CAT, type Marca } from '@/lib/nav'
+import { NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { normalizar, nuevoUsuario, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
+import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
+
+/**
+ * Las secciones agrupadas por ÁREA, en el orden del menú. La lista plana de 35 filas
+ * sin jerarquía era el reclamo concreto: no se sabía a qué sector correspondía cada
+ * permiso, así que dar de alta a alguien era ir tildando de memoria.
+ */
+const AREAS = NAV_CATS.map((c) => ({
+  id: c.id,
+  label: c.label,
+  secciones: PERM_CAT.filter((p) => p.area === c.id),
+})).filter((a) => a.secciones.length > 0)
 
 /** Contraseña de admin: cacheada por el login, o se pide una vez. */
 function obtenerPass(): string {
@@ -62,6 +73,9 @@ export function Usuarios() {
   const onAdmin = (i: number, val: boolean) => mut(i, (u) => ({ ...u, admin: val }))
   const onCuenta = (i: number, val: string) => mut(i, (u) => ({ ...u, cuenta: (val || null) as Marca | null }))
   const onPerm = (i: number, brand: Marca, key: string, val: boolean) => mut(i, (u) => togglePerm(u, brand, key, val))
+  const onPermArea = (i: number, brand: Marca, keys: string[], val: boolean) =>
+    mut(i, (u) => keys.reduce((acc, k) => togglePerm(acc, brand, k, val), u))
+  const onCopiar = (i: number, origen: Marca, destino: Marca) => mut(i, (u) => copiarPermisos(u, origen, destino))
   const onFuncion = (i: number, f: Funcion, val: boolean) => mut(i, (u) => toggleFuncion(u, f, val))
   const agregar = () =>
     setUsers((prev) => {
@@ -102,6 +116,13 @@ export function Usuarios() {
         {status && <span style={{ fontSize: 12, color: status.color }}>{status.msg}</span>}
       </div>
 
+      {/* Config aparece dentro de las dos marcas, pero la lista de usuarios es UNA sola:
+          el endpoint no recibe marca. Lo que sí es por marca son los permisos de cada uno. */}
+      <div style={{ fontSize: 12, color: '#6B7280', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', marginBottom: 12 }}>
+        Esta configuración es <b>única para las dos marcas</b>: entres desde BDI o desde Zattia, editás la misma
+        lista de usuarios. Lo que se define por marca son los permisos de cada uno (las columnas BDI y Zattia).
+      </div>
+
       {!users ? (
         <div style={{ padding: 16, color: error ? '#DC2626' : '#9CA3AF' }}>
           {error ? `No se pudo leer la configuración: ${error}` : 'Cargando configuración…'}
@@ -118,6 +139,8 @@ export function Usuarios() {
             onAdmin={onAdmin}
             onCuenta={onCuenta}
             onPerm={onPerm}
+            onPermArea={onPermArea}
+            onCopiar={onCopiar}
             onFuncion={onFuncion}
             onEliminar={() => eliminar(i)}
           />
@@ -136,6 +159,8 @@ function UsuarioCard({
   onAdmin,
   onCuenta,
   onPerm,
+  onPermArea,
+  onCopiar,
   onFuncion,
   onEliminar,
 }: {
@@ -147,6 +172,8 @@ function UsuarioCard({
   onAdmin: (i: number, val: boolean) => void
   onCuenta: (i: number, val: string) => void
   onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
+  onPermArea: (i: number, brand: Marca, keys: string[], val: boolean) => void
+  onCopiar: (i: number, origen: Marca, destino: Marca) => void
   onFuncion: (i: number, f: Funcion, val: boolean) => void
   onEliminar: () => void
 }) {
@@ -207,34 +234,37 @@ function UsuarioCard({
           {u.admin ? (
             <div style={{ fontSize: 12, color: '#6B7280', padding: '8px 0' }}>Es administrador: ve todas las secciones de las dos marcas y puede gestionar usuarios.</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ color: '#9CA3AF', fontSize: 11 }}>
-                  <th style={{ textAlign: 'left' }}>Sección</th>
-                  <th style={{ width: 60 }}>BDI</th>
-                  <th style={{ width: 60 }}>Zattia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {PERM_CAT.map((sec) => (
-                  <FilaPermiso key={sec.key} u={u} i={i} label={sec.label} info={sec.info} claveKey={sec.key} brands={sec.brands} onPerm={onPerm}>
-                    {(sec.subs || []).map((sub) => (
-                      <FilaPermiso
-                        key={sec.key + '.' + sub.key}
-                        u={u}
-                        i={i}
-                        label={'↳ ' + sub.label}
-                        info={sub.info}
-                        claveKey={sec.key + '.' + sub.key}
-                        brands={sub.brands || sec.brands}
-                        sub
-                        onPerm={onPerm}
-                      />
-                    ))}
-                  </FilaPermiso>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: '#6B7280' }}>Permisos por marca</span>
+                <InfoPopover titulo="Permisos, funciones y excepciones">
+                  Lo que trae puesto la <b>función</b> aparece tildado y en gris: no hace falta marcarlo, y una
+                  sección nueva de esa área la hereda sola. Si destildás algo que viene por función, queda como
+                  <b> excepción</b> (en rojo) para esa persona y esa marca. Los sub-permisos (aplicar un ajuste,
+                  crear cupones) nunca vienen por función: se tildan siempre a mano.
+                </InfoPopover>
+                <button className="btn-sm" onClick={() => onCopiar(i, 'bdi', 'zattia')} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
+                  Copiar BDI → Zattia
+                </button>
+                <button className="btn-sm" onClick={() => onCopiar(i, 'zattia', 'bdi')} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+                  Copiar Zattia → BDI
+                </button>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: '#9CA3AF', fontSize: 11 }}>
+                    <th style={{ textAlign: 'left' }}>Sección</th>
+                    <th style={{ width: 60 }}>BDI</th>
+                    <th style={{ width: 60 }}>Zattia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {AREAS.map((area) => (
+                    <Area key={area.id} area={area} u={u} i={i} onPerm={onPerm} onPermArea={onPermArea} />
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           <div style={{ marginTop: 12 }}>
@@ -243,6 +273,66 @@ function UsuarioCard({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Un área del menú con sus secciones. El tilde del encabezado marca/desmarca el área
+ * entera para esa marca — el alta de alguien pasa de 35 clics a uno por sector.
+ */
+function Area({
+  area,
+  u,
+  i,
+  onPerm,
+  onPermArea,
+}: {
+  area: (typeof AREAS)[number]
+  u: UsuarioConfig
+  i: number
+  onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
+  onPermArea: (i: number, brand: Marca, keys: string[], val: boolean) => void
+}) {
+  const celdaArea = (brand: Marca) => {
+    const keys = area.secciones.filter((s) => s.brands.includes(brand)).map((s) => s.key)
+    if (!keys.length) return <td key={brand} style={{ textAlign: 'center', color: '#D1D5DB' }}>—</td>
+    const todas = keys.every((k) => tienePermiso(u, brand, k))
+    return (
+      <td key={brand} style={{ textAlign: 'center' }}>
+        <input
+          type="checkbox"
+          checked={todas}
+          title={todas ? `Sacarle todo ${area.label}` : `Darle todo ${area.label}`}
+          onChange={(e) => onPermArea(i, brand, keys, e.target.checked)}
+        />
+      </td>
+    )
+  }
+  return (
+    <>
+      <tr style={{ background: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
+        <td style={{ padding: '6px 4px', fontSize: 12, fontWeight: 700, color: '#374151' }}>{area.label}</td>
+        {celdaArea('bdi')}
+        {celdaArea('zattia')}
+      </tr>
+      {area.secciones.map((sec) => (
+        <FilaPermiso key={sec.key} u={u} i={i} label={sec.label} info={sec.info} claveKey={sec.key} brands={sec.brands} onPerm={onPerm}>
+          {(sec.subs || []).map((sub) => (
+            <FilaPermiso
+              key={sec.key + '.' + sub.key}
+              u={u}
+              i={i}
+              label={'↳ ' + sub.label}
+              info={sub.info}
+              claveKey={sec.key + '.' + sub.key}
+              brands={sub.brands || sec.brands}
+              sub
+              onPerm={onPerm}
+            />
+          ))}
+        </FilaPermiso>
+      ))}
+    </>
   )
 }
 
@@ -267,14 +357,29 @@ function FilaPermiso({
   onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
   children?: React.ReactNode
 }) {
-  const celda = (brand: Marca) =>
-    brands.includes(brand) ? (
-      <td style={{ textAlign: 'center' }}>
-        <input type="checkbox" checked={tienePermiso(u, brand, claveKey)} disabled={u.admin} onChange={(e) => onPerm(i, brand, claveKey, e.target.checked)} />
+  const celda = (brand: Marca) => {
+    if (!brands.includes(brand)) return <td key={brand} style={{ textAlign: 'center', color: '#D1D5DB' }}>—</td>
+    const origen = origenPermiso(u, brand, claveKey)
+    const f = origen === 'funcion' ? funcionQueDa(u, claveKey) : null
+    const titulo =
+      origen === 'funcion'
+        ? `Lo trae la función ${FUNCIONES.find((x) => x.key === f)?.label ?? f}. Destildalo para hacerle una excepción.`
+        : origen === 'excluido'
+          ? `Su función se lo daría, pero se lo quitaron para ${brand === 'bdi' ? 'BDI' : 'Zattia'}.`
+          : undefined
+    return (
+      <td key={brand} style={{ textAlign: 'center' }}>
+        <input
+          type="checkbox"
+          checked={tienePermiso(u, brand, claveKey)}
+          disabled={u.admin}
+          title={titulo}
+          onChange={(e) => onPerm(i, brand, claveKey, e.target.checked)}
+          style={origen === 'funcion' ? { accentColor: '#9CA3AF' } : origen === 'excluido' ? { outline: '1.5px solid #FCA5A5', borderRadius: 3 } : undefined}
+        />
       </td>
-    ) : (
-      <td style={{ textAlign: 'center', color: '#D1D5DB' }}>—</td>
     )
+  }
   return (
     <>
       <tr style={sub ? { color: '#6B7280' } : { borderTop: '1px solid #F1F5F9' }}>

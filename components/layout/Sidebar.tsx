@@ -114,7 +114,7 @@ export function Sidebar({ activa }: { activa: string }) {
                   cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
                 }`}
               >
-                {label(k)}
+                {cat.labels?.[k] ?? label(k)}
               </Link>
             )
             return (

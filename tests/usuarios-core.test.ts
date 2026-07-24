@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { normalizar, nuevoUsuario, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
+import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
+import { marcaExcluir } from '@/lib/permisos'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 
 const base = (over: Partial<UsuarioConfig> = {}): UsuarioConfig => ({ name: 'Ana', pass: '1234', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, ...over })
@@ -63,6 +64,54 @@ describe('usuarios/core — funcion', () => {
     expect(u.funcion).toEqual(['local', 'deposito'])
     u = toggleFuncion(u, 'local', false)
     expect(u.funcion).toEqual(['deposito'])
+  })
+})
+
+describe('usuarios/core — permisos que vienen por función', () => {
+  const local = () => base({ funcion: ['local'] })
+
+  it('lo que da la función aparece tildado sin estar en acceso', () => {
+    const u = local()
+    expect(tienePermiso(u, 'bdi', 'cupones')).toBe(true)
+    expect(u.acceso.bdi?.['cupones']).toBeUndefined() // no se ensucia la config
+    expect(origenPermiso(u, 'bdi', 'cupones')).toBe('funcion')
+  })
+
+  it('destildar algo de la función deja una EXCEPCIÓN (no hay nada que borrar)', () => {
+    const u = togglePerm(local(), 'bdi', 'cupones', false)
+    expect(u.acceso.bdi?.[marcaExcluir('cupones')]).toBe(true)
+    expect(tienePermiso(u, 'bdi', 'cupones')).toBe(false)
+    expect(origenPermiso(u, 'bdi', 'cupones')).toBe('excluido')
+    expect(tienePermiso(u, 'zattia', 'cupones')).toBe(true) // la otra marca no se toca
+  })
+
+  it('volver a tildarlo saca la excepción sin dejar permiso redundante', () => {
+    let u = togglePerm(local(), 'bdi', 'cupones', false)
+    u = togglePerm(u, 'bdi', 'cupones', true)
+    expect(u.acceso.bdi?.[marcaExcluir('cupones')]).toBeUndefined()
+    expect(u.acceso.bdi?.['cupones']).toBeUndefined() // lo da la función: no hace falta tildarlo
+    expect(tienePermiso(u, 'bdi', 'cupones')).toBe(true)
+  })
+
+  it('un sub sí se tilda explícito, y no le pone padre redundante si la función ya lo da', () => {
+    const u = togglePerm(local(), 'bdi', 'cupones.crear', true)
+    expect(u.acceso.bdi?.['cupones.crear']).toBe(true)
+    expect(u.acceso.bdi?.['cupones']).toBeUndefined() // el padre viene por función
+  })
+
+  it('sin función, el sub sigue marcando al padre (comportamiento de siempre)', () => {
+    const u = togglePerm(base(), 'bdi', 'cupones.crear', true)
+    expect(u.acceso.bdi?.['cupones']).toBe(true)
+  })
+})
+
+describe('usuarios/core — copiarPermisos', () => {
+  it('copia una marca sobre la otra y no toca el origen', () => {
+    const u0 = base({ acceso: { bdi: { productos: true, etiquetas: true }, zattia: { colores: true } } })
+    const u1 = copiarPermisos(u0, 'bdi', 'zattia')
+    expect(u1.acceso.zattia).toEqual({ productos: true, etiquetas: true })
+    expect(u1.acceso.bdi).toEqual({ productos: true, etiquetas: true })
+    expect(u0.acceso.zattia).toEqual({ colores: true }) // inmutable
   })
 })
 

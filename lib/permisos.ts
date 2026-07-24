@@ -1,4 +1,4 @@
-import type { Marca } from './nav.datos'
+import { PERM_CAT, type Marca } from './nav.datos'
 
 /**
  * Función del usuario dentro del sistema (rol de flujo de trabajo, distinto de los
@@ -17,6 +17,66 @@ export const FUNCIONES: { key: Funcion; label: string; info: string }[] = [
   { key: 'deposito', label: 'Depósito', info: 'PREPARA los productos de depósito (ítems de origen depósito).' },
   { key: 'administracion', label: 'Administración', info: 'Rol de oficina/coordinación. Distinto de Dirección.' },
 ]
+
+/**
+ * Qué ve cada función, por ÁREA del menú (`PermCat.area`) — no por lista de secciones.
+ *
+ * Es la respuesta al problema real: hasta ahora cada sección nueva había que tildarla
+ * usuario por usuario y marca por marca, así que el alta de un módulo era una tarde de
+ * checkboxes y siempre quedaba alguien afuera. Al colgar el acceso del ÁREA, una
+ * sección nueva la hereda sola todo el que tenga esa función: se asigna una vez, al
+ * rol, cuando se define en qué área vive.
+ *
+ * Lo que la función NO da son los **sub-permisos** (`etiquetas.dep`, `conteo.aplicar`,
+ * `cupones.crear`, `sesion-fotos.quitar-item`): son justamente las acciones sensibles
+ * —aplicar un ajuste de stock, crear cupones— y se siguen tildando a mano.
+ */
+export const ACCESO_POR_FUNCION: Record<Funcion, { areas: string[]; keys?: string[] }> = {
+  // Gerencia: el panel de decisiones y toda la analítica.
+  direccion: { areas: ['direccion', 'analisis'] },
+  // Marketing usa el monitor como herramienta adicional: lo suyo + pedir productos.
+  marketing: { areas: ['marketing'], keys: ['solicitudes'] },
+  local: { areas: ['local'] },
+  deposito: { areas: ['deposito'], keys: ['solicitudes'] },
+  // Administración coordina: su área + las solicitudes de las dos marcas.
+  administracion: { areas: ['administracion'], keys: ['solicitudes'] },
+}
+
+/** Las secciones que trae puesta una función (expandiendo sus áreas con PERM_CAT). */
+export function seccionesDeFuncion(f: Funcion): string[] {
+  const { areas, keys = [] } = ACCESO_POR_FUNCION[f]
+  return [...PERM_CAT.filter((p) => areas.includes(p.area)).map((p) => p.key), ...keys]
+}
+
+const POR_FUNCION = new Map<Funcion, Set<string>>()
+function setDeFuncion(f: Funcion): Set<string> {
+  let s = POR_FUNCION.get(f)
+  if (!s) {
+    s = new Set(seccionesDeFuncion(f))
+    POR_FUNCION.set(f, s)
+  }
+  return s
+}
+
+/** La función por la que este perfil llega a `key` (para explicarlo en Config), o null. */
+export function funcionQueDa(perfil: Perfil | null, key: string): Funcion | null {
+  return (perfil?.funcion ?? []).find((f) => setDeFuncion(f).has(key)) ?? null
+}
+
+/**
+ * Excepción NEGATIVA: quitarle a alguien una sección que su función le daría.
+ *
+ * Viaja como una clave con guion adelante dentro del mismo `acceso` (`'-reposicion'`)
+ * en vez de un campo propio, y eso es a propósito: el login de `bdi-catalogo/api/usuarios`
+ * arma el perfil con una lista fija de campos (`name/admin/cuenta/acceso/funcion`), así
+ * que un campo nuevo se guardaría en el KV pero **nunca llegaría al navegador**. Ninguna
+ * key real empieza con guion, así que la convención no colisiona.
+ */
+export const marcaExcluir = (key: string) => `-${key}`
+
+export function estaExcluido(perfil: Perfil | null, marca: Marca, key: string): boolean {
+  return !!perfil?.acceso?.[marca]?.[marcaExcluir(key)]
+}
 
 /** Perfil tal como lo devuelve el KV (bdi-catalogo/api/usuarios) y lo guarda el legacy en USERS. */
 export type Perfil = {
@@ -40,12 +100,24 @@ export function tieneFuncion(perfil: Perfil | null, f: Funcion): boolean {
 }
 
 /**
- * Port literal de _puedeVer(brand, key) (index.html:9322).
- * El admin ve todo; el resto, solo lo que tenga marcado en acceso[marca][key].
+ * ¿Este perfil ve `key` en `marca`? Precedencia, de más fuerte a más débil:
+ *
+ *   1. admin           → ve todo.
+ *   2. excepción (-key) → no lo ve, aunque su función se lo dé.
+ *   3. permiso tildado  → lo ve (es lo que hacía el legacy, _puedeVer, index.html:9322).
+ *   4. su función       → lo ve si la sección está en un área de alguna de sus funciones.
+ *
+ * El orden importa para la compatibilidad: los permisos que ya tiene cada usuario
+ * siguen valiendo tal cual (paso 3), así que **nadie pierde acceso** al activar esto.
+ * La función SUMA. Si alguien queda viendo de más, se recorta con la excepción (paso 2)
+ * en vez de tener que destildar sección por sección.
  */
 export function puedeVer(perfil: Perfil | null, marca: Marca, key: string): boolean {
   if (esAdmin(perfil)) return true
-  return !!perfil?.acceso?.[marca]?.[key]
+  if (!perfil) return false
+  if (estaExcluido(perfil, marca, key)) return false
+  if (perfil.acceso?.[marca]?.[key]) return true
+  return (perfil.funcion ?? []).some((f) => setDeFuncion(f).has(key))
 }
 
 /**

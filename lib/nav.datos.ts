@@ -40,6 +40,13 @@ export type NavCat = {
   keys: string[]
   /** Subgrupos colapsables, después de las `keys` sueltas del grupo. */
   grupos?: NavGrupo[]
+  /**
+   * Rótulo propio de una sección DENTRO de este grupo, cuando el sector la llama de
+   * otra forma (ej. `solicitudes` es "Solicitudes de productos" para Marketing y
+   * "Solicitudes" para Administración). Es solo el nombre en el menú: la sección, la
+   * ruta y el permiso son los mismos.
+   */
+  labels?: Record<string, string>
   accent?: string
   adminOnly?: boolean
 }
@@ -286,7 +293,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "disenos",
-    "area": "marketing",
+    "area": "compras",
     "label": "🗳️ Diseños",
     "info": "Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).",
     "brands": [
@@ -305,7 +312,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "reposicion",
-    "area": "local",
+    "area": "administracion",
     "label": "🔁 Reposición",
     "info": "Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.",
     "brands": [
@@ -439,7 +446,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "caducados",
-    "area": "local",
+    "area": "administracion",
     "label": "🗑️ Productos caducados",
     "info": "Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.",
     "brands": [
@@ -561,18 +568,24 @@ export const NAV_CATS: NavCat[] = [
     "label": "🏪 Local",
     "keys": [
       "solicitudes",
-      "reposicion",
-      "conteo",
-      "conteo-estandar-zattia",
-      "conteo-estandar-stunned",
       "cupones",
       "solicitudes-internas",
       "postventa-local",
       "cambios-local",
       "etiquetas",
-      "caducados",
-      "ubicaciones",
-      "exhib"
+      "ubicaciones"
+    ],
+    "grupos": [
+      {
+        "id": "actividades",
+        "label": "🔢 Actividades",
+        "keys": [
+          "conteo-estandar-zattia",
+          "conteo-estandar-stunned",
+          "conteo",
+          "exhib"
+        ]
+      }
     ]
   },
   {
@@ -591,7 +604,6 @@ export const NAV_CATS: NavCat[] = [
       "sesion-fotos",
       "tncat",
       "gen-talles",
-      "disenos",
       "meta-ads"
     ],
     "accent": "marketing"
@@ -607,7 +619,9 @@ export const NAV_CATS: NavCat[] = [
     "id": "administracion",
     "label": "🗂️ Administración",
     "keys": [
-      "postventa"
+      "postventa",
+      "reposicion",
+      "caducados"
     ]
   },
   {
@@ -616,7 +630,8 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "fundas-modelo",
       "ingresos",
-      "proveedores"
+      "proveedores",
+      "disenos"
     ]
   },
   {

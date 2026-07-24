@@ -7,7 +7,7 @@
  */
 
 import { PERM_CAT, type Marca } from '@/lib/nav'
-import type { Funcion } from '@/lib/permisos'
+import { funcionQueDa, marcaExcluir, type Funcion } from '@/lib/permisos'
 import type { UsuarioConfig } from './tipos'
 
 /** Un usuario nuevo, vacío (sin permisos ni funciones). Port de usuAgregar. */
@@ -31,23 +31,70 @@ export function toggleFuncion(u: UsuarioConfig, f: Funcion, val: boolean): Usuar
 }
 
 /**
- * Marca/desmarca un permiso de un usuario en una marca. Port EXACTO de usuTogglePerm:
- * - al marcar un SUB (`key` con punto) se marca también el PADRE;
- * - al desmarcar un PADRE se borran todos sus subs.
- * Devuelve un usuario nuevo (inmutable, para el estado de React).
+ * De dónde le viene a este usuario el acceso a `key` en `brand`. Es lo que la pantalla
+ * de Config necesita mostrar para que se entienda por qué algo está tildado:
+ *
+ * - `admin`     → es administrador, ve todo.
+ * - `explicito` → se lo tildaron a él.
+ * - `funcion`   → lo trae su función (Local, Marketing, …). No hace falta tildarlo.
+ * - `excluido`  → su función se lo daría, pero se lo quitaron a propósito.
+ * - `no`        → no lo tiene.
+ */
+export type OrigenPermiso = 'admin' | 'explicito' | 'funcion' | 'excluido' | 'no'
+
+export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): OrigenPermiso {
+  if (u.admin) return 'admin'
+  const b = u.acceso?.[brand] || {}
+  const porFuncion = !!funcionQueDa(u, key)
+  if (b[marcaExcluir(key)]) return 'excluido'
+  if (b[key]) return 'explicito'
+  return porFuncion ? 'funcion' : 'no'
+}
+
+/**
+ * Marca/desmarca un permiso de un usuario en una marca. Mantiene el comportamiento del
+ * legacy (usuTogglePerm) —marcar un SUB marca el PADRE; desmarcar un PADRE borra sus
+ * subs— y le suma la capa de funciones:
+ *
+ * - destildar algo que **viene por función** no borra nada (no hay nada que borrar):
+ *   deja la EXCEPCIÓN `-key`, que es lo único que puede ganarle a la función;
+ * - volver a tildarlo saca la excepción, y solo agrega el permiso explícito si la
+ *   función no se lo daba ya (así la config no se llena de tildes redundantes).
  */
 export function togglePerm(u: UsuarioConfig, brand: Marca, key: string, val: boolean): UsuarioConfig {
   const b: Record<string, boolean> = { ...(u.acceso?.[brand] || {}) }
-  if (val) b[key] = true
-  else delete b[key]
+  const excl = marcaExcluir(key)
+  const porFuncion = !key.includes('.') && !!funcionQueDa(u, key)
+
+  if (val) {
+    delete b[excl]
+    if (!porFuncion) b[key] = true
+  } else {
+    delete b[key]
+    if (porFuncion) b[excl] = true
+  }
+
   const padre = key.split('.')[0]
   if (key.includes('.')) {
-    if (val) b[padre] = true
+    // Un sub no sirve sin su padre: si el padre no viene por función, se tilda.
+    if (val && !funcionQueDa(u, padre)) b[padre] = true
+    if (val) delete b[marcaExcluir(padre)]
   } else {
     const cat = PERM_CAT.find((c) => c.key === padre)
     if (cat?.subs && !val) cat.subs.forEach((s) => delete b[`${padre}.${s.key}`])
   }
   return { ...u, acceso: { ...u.acceso, [brand]: b } }
+}
+
+/**
+ * Copia los permisos de una marca a la otra (pisa lo que haya en destino).
+ *
+ * Existe porque el permiso es por marca y casi todo el mundo trabaja igual en las dos:
+ * sin esto, dar de alta a alguien es tildar la misma lista dos veces, y ahí es donde
+ * aparecen las diferencias que después nadie entiende ("en BDI lo ve y en Zattia no").
+ */
+export function copiarPermisos(u: UsuarioConfig, origen: Marca, destino: Marca): UsuarioConfig {
+  return { ...u, acceso: { ...u.acceso, [destino]: { ...(u.acceso?.[origen] || {}) } } }
 }
 
 /**
@@ -63,7 +110,8 @@ export function validar(users: UsuarioConfig[]): string | null {
   return null
 }
 
-/** ¿La checkbox de `key` está marcada para `brand`? (el admin ve todo → siempre marcada). */
+/** ¿La checkbox de `key` está marcada para `brand`? (admin y función también la marcan). */
 export function tienePermiso(u: UsuarioConfig, brand: Marca, key: string): boolean {
-  return !!u.admin || !!u.acceso?.[brand]?.[key]
+  const o = origenPermiso(u, brand, key)
+  return o === 'admin' || o === 'explicito' || o === 'funcion'
 }
