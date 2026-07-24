@@ -7,7 +7,8 @@ import { esAdmin, puedeVer, userRole, type Perfil } from '@/lib/permisos'
 import { leerCache, mapaColorManual } from '@/lib/cache'
 import { traerDatos } from '@/lib/datos'
 import { computarDatos } from '@/lib/etl/computar'
-import { leerIngresos, leerLista } from '@/lib/kv/cliente'
+import { leerIngresos } from '@/lib/kv/cliente'
+import { leerCajon } from '@/lib/solicitudes/cajon'
 import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
 import type { Marca } from '@/lib/nav.datos'
@@ -55,8 +56,8 @@ async function cargarMarca(marca: Marca, rol: 'admin' | 'marketing', today: Date
   const errores: string[] = []
   const [etlR, fotosR, internasR, ingresosR, tnR] = await Promise.allSettled([
     cargarETL(marca, rol, today),
-    leerLista<Solicitud>('sesionfotos', marca),
-    leerLista<SolicitudInterna>('solicitudesinternas', marca),
+    leerCajon<Solicitud>('sesionfotos', marca),
+    leerCajon<SolicitudInterna>('solicitudesinternas', marca),
     leerIngresos<Ingreso>(marca),
     asegurarTnPromo(marca),
   ])

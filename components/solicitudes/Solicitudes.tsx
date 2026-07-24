@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { CUENTAS } from '@/lib/cuentas'
-import { leerLista } from '@/lib/kv/cliente'
+import { leerCajon } from '@/lib/solicitudes/cajon'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
@@ -47,7 +47,7 @@ export function Solicitudes() {
   const cargar = useCallback(async () => {
     const partes = await Promise.all(
       marcas.map(async (m) => {
-        const [f, i] = await Promise.all([leerLista<Solicitud>('sesionfotos', m), leerLista<SolicitudInterna>('solicitudesinternas', m)])
+        const [f, i] = await Promise.all([leerCajon<Solicitud>('sesionfotos', m), leerCajon<SolicitudInterna>('solicitudesinternas', m)])
         const rf = f.ok ? f.dato.map((s) => resumenFoto(s, m)) : []
         const ri = i.ok ? i.dato.map((s) => resumenInterna(s, m)) : []
         return [...rf, ...ri]

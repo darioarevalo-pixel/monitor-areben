@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
-import { leerLista } from '@/lib/kv/cliente'
+import { leerCajon } from '@/lib/solicitudes/cajon'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import { contarPendientes } from '@/lib/solicitudes-internas/core'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
@@ -33,11 +33,11 @@ export function Inicio() {
 
   const cargar = useCallback(async () => {
     const marcas = marcasVisibles(perfil)
-    const results = await Promise.all(marcas.map((m) => leerLista<Solicitud>('sesionfotos', m)))
+    const results = await Promise.all(marcas.map((m) => leerCajon<Solicitud>('sesionfotos', m)))
     setPend(ordenar(results.flatMap((r, i) => (r.ok ? pendientesDeMarca(r.dato, marcas[i]) : []))))
     // Aviso de solicitudes internas para aprobar (marca actual).
     if (esAprobador) {
-      const r = await leerLista<SolicitudInterna>('solicitudesinternas', marca)
+      const r = await leerCajon<SolicitudInterna>('solicitudesinternas', marca)
       setAvisoSI(r.ok ? contarPendientes(r.dato) : 0)
     } else {
       setAvisoSI(0)

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
-import { guardarLista, leerLista, type KindLista } from '@/lib/kv/cliente'
+import type { KindLista } from '@/lib/kv/cliente'
+import { aplicarDiff, diffSolicitudes, leerCajon } from '@/lib/solicitudes/cajon'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
 
@@ -12,14 +13,19 @@ import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
  * gemelos byte por byte, `useSesionFotos`/`useSolicitudesInternas`). La disciplina es
  * la misma que documentaban esos dos:
  *
- * 1. **`cargado` hacia afuera**: sin él en true ningún guardado sale (evita que un POST
- *    de la lista entera borre el historial cuando el GET falló y la lista quedó en []).
- * 2. **Merge por-solicitud, no LWW**: cada guardado RE-LEE la lista fresca del KV y
+ * 1. **`cargado` hacia afuera**: sin él en true ningún guardado sale (evita que una
+ *    escritura sobre una lista vacía —porque el GET falló— borre el historial).
+ * 2. **Re-leer fresco antes de guardar**: cada guardado vuelve a leer la lista y
  *    re-aplica la misma mutación pura, así los cambios concurrentes de otras solicitudes
- *    (o del iframe legacy, que comparte la clave) sobreviven.
+ *    sobreviven.
  *
- * Lo único que varía entre los dos usos va en `opts`: el `kind` del KV, el estado
- * post-venta (`cargada` vs `retirada`) y qué `crearVentas`/`idsParaCerrar` (distinto
+ * Desde la Fase 2A el destino es la tabla `solicitudes` (`lib/solicitudes/cajon`) y no el
+ * KV: la mutación sigue siendo sobre el array entero —el motor no cambió— pero al guardar
+ * se escribe **solo lo que cambió** (`diffSolicitudes`), en vez de reescribir el historial
+ * completo de la marca.
+ *
+ * Lo único que varía entre los dos usos va en `opts`: el `kind` (qué preset/cajón), el
+ * estado post-venta (`cargada` vs `retirada`) y qué `crearVentas`/`idsParaCerrar` (distinto
  * `comments` de GN y gate de cierre).
  */
 
@@ -77,7 +83,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       setError(null)
       setData(null)
       setCargado(false)
-      const [lista, prio] = await Promise.all([leerLista<T>(kind, marca), leerPrioridadRetiro(marca)])
+      const [lista, prio] = await Promise.all([leerCajon<T>(kind, marca), leerPrioridadRetiro(marca)])
       if (!vivo) return
       setPrioridad(prio)
       if (lista.ok) {
@@ -103,13 +109,15 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       }
       const marcaAlGuardar = marcaRef.current
       setData((prev) => (prev ? mutar(prev) : prev)) // optimista
-      const fresca = await leerLista<T>(kind, marcaAlGuardar)
+      const fresca = await leerCajon<T>(kind, marcaAlGuardar)
       if (!fresca.ok) {
         alert('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
         return false
       }
       const merged = mutar(fresca.dato)
-      const r = await guardarLista({ kind, store: marcaAlGuardar, lista: merged, cargado: true })
+      // Solo lo que cambió respecto de lo que acabamos de leer: las demás solicitudes ni
+      // se tocan, así dos personas trabajando a la vez no se pisan.
+      const r = await aplicarDiff(kind, marcaAlGuardar, diffSolicitudes(fresca.dato, merged))
       if (!r.ok) {
         alert('No se pudo guardar: ' + r.motivo)
         return false
@@ -124,7 +132,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
     async (s: T, cred: { user: string; pass: string }): Promise<ResultadoCrearGen> => {
       if (!cargado) return { tipo: 'no-leido' }
       const marcaAhora = marcaRef.current
-      const fresca = await leerLista<T>(kind, marcaAhora)
+      const fresca = await leerCajon<T>(kind, marcaAhora)
       if (!fresca.ok) return { tipo: 'no-leido' }
       const fresh = fresca.dato.find((x) => x.id === s.id) ?? null
       if (fresh?.ventas && Object.keys(fresh.ventas).length) {
