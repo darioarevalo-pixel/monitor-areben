@@ -200,6 +200,50 @@ a {
   font-weight: 600;
 }
 
+/* ── Subgrupo (3er nivel: ej. Local > Actividades > Conteo Zattia) ──
+   Arranca cerrado: adentro va lo esporádico (conteos, chequeos), que no debe
+   competir en la vista con lo de todos los días. */
+.nav-sub {
+  padding-top: 2px;
+}
+
+.nav-sub-cat {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.nav-sub-cat:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.nav-sub-menu {
+  display: none;
+  padding-left: 8px;
+  margin-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.nav-sub.open .nav-sub-menu {
+  display: block;
+}
+
+.nav-sub.open > .nav-sub-cat .nav-caret {
+  transform: rotate(180deg);
+}
+
 .nav-accent-mkt {
   color: #fdba74;
 }

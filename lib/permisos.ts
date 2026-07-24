@@ -1,4 +1,4 @@
-import type { Marca } from './nav.generated'
+import type { Marca } from './nav.datos'
 
 /**
  * Función del usuario dentro del sistema (rol de flujo de trabajo, distinto de los

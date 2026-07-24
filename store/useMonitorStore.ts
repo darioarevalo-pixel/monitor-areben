@@ -18,7 +18,7 @@ import { create } from 'zustand'
 import { computarDatos } from '@/lib/etl/computar'
 import { guardarCache, leerCache, mapaColorManual } from '@/lib/cache'
 import { traerDatos } from '@/lib/datos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { DatosETL } from '@/lib/etl/tipos'
 
 export type EstadoCarga = 'vacio' | 'cargando' | 'listo' | 'error'

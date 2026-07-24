@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { leerRepoConfig } from '@/lib/reposicion/cfg'
 import { guardarRepoConfig, leerInventario, ventasLocal7d } from '@/lib/reposicion/cliente'
 import { repoCfgDefault, type RepoCfg } from '@/lib/reposicion/tipos'

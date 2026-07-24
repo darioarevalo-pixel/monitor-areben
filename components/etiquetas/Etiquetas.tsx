@@ -17,7 +17,7 @@ import {
 } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 const CAP = 500
 const FP_DEFAULT: LineaEtiqueta[] = [

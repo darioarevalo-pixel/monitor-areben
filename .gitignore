@@ -8,8 +8,8 @@ node_modules/
 next-env.d.ts
 tsconfig.tsbuildinfo
 
-# Copia del legacy que genera `npm run prebuild` desde index.html (la raíz manda).
-# No se commitea: son ~970KB duplicados.
+# Copia del legacy que servía el iframe. Ya no se genera (jul-2026: el shell sirve
+# todas las secciones); queda ignorada por si alguien tiene la carpeta vieja local.
 public/legacy/
 
 # Fixture del test de paridad del ETL: son ventas reales bajadas de Supabase.

@@ -5,7 +5,7 @@
  * guardarResueltas).
  */
 
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import type { VvtaData } from './tipos'
 
 const VVTA_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'

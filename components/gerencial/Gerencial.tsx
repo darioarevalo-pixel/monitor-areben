@@ -18,7 +18,7 @@ import {
   type ConsumoPendiente,
   type Severidad,
 } from '@/lib/gerencial/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 /**
  * Panel Gerencial (key `gerencial`): la vista de decisiones. Toma los accionables que

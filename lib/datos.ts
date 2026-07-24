@@ -9,7 +9,7 @@
 
 import { CUENTAS, GH_REPO, type Cuenta } from './cuentas'
 import { fetchAll, sbFetch } from './supabase/rest'
-import type { Marca } from './nav.generated'
+import type { Marca } from './nav.datos'
 import type {
   FilaColorManual,
   FilaDetalle,

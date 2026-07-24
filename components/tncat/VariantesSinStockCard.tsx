@@ -6,7 +6,7 @@ import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { variantesSinStockVisibles } from '@/lib/tncat/variantes-sin-stock'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 /**
  * Variantes sin stock (visibles en la tienda) — card read-only (tncat). Lista las

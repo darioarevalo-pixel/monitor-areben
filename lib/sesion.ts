@@ -1,4 +1,4 @@
-import type { Marca } from './nav.generated'
+import type { Marca } from './nav.datos'
 import type { Perfil } from './permisos'
 
 /**

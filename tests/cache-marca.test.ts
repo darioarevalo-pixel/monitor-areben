@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claveCache, guardarCache, leerCache, type PayloadCache } from '@/lib/cache'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 /**
  * El sello de marca del caché (lib/cache.ts). Cierra el bug de una entrada de una

@@ -34,7 +34,7 @@
  * `bdi-catalogo` exija auth, el cambio es este archivo y nada más.
  */
 
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 
 const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 

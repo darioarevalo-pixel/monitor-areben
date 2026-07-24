@@ -1,4 +1,4 @@
-import type { Marca } from './nav.generated'
+import type { Marca } from './nav.datos'
 
 /**
  * Las dos cuentas de Supabase. Port de CUENTAS (index.html:1899).

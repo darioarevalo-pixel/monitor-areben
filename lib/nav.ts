@@ -1,7 +1,16 @@
-import { NAV_CATS, PERM_CAT, type Marca, type NavCat, type PermCat } from './nav.generated'
+import { NAV_CATS, PERM_CAT, type Marca, type NavCat, type NavGrupo, type PermCat } from './nav.datos'
 
 export { NAV_CATS, PERM_CAT }
-export type { Marca, NavCat, PermCat }
+export type { Marca, NavCat, NavGrupo, PermCat }
+
+/**
+ * Todas las keys de un grupo del menú: las sueltas más las de sus subgrupos. Usarla
+ * siempre en vez de `cat.keys` a secas — si no, una sección que vive en un subgrupo
+ * (ej. `Local > Actividades`) queda invisible para el sidebar, el eyebrow y los tests.
+ */
+export function keysDeCat(cat: NavCat): string[] {
+  return cat.grupos?.length ? [...cat.keys, ...cat.grupos.flatMap((g) => g.keys)] : cat.keys
+}
 
 /**
  * El interruptor del strangler NO vive acá: vive en components/secciones/registro.ts,
@@ -80,7 +89,7 @@ export function tituloLimpio(key: string): string {
 }
 
 const CAT_POR_KEY = new Map<string, NavCat>()
-NAV_CATS.forEach((c) => c.keys.forEach((k) => CAT_POR_KEY.set(k, c)))
+NAV_CATS.forEach((c) => keysDeCat(c).forEach((k) => CAT_POR_KEY.set(k, c)))
 
 /**
  * La categoría (grupo del nav) de una key, en MAYÚSCULAS y sin emoji, para el eyebrow.

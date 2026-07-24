@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
 import { indexarTn, type IndiceTn, type TnProducto } from '@/lib/tn'
 import type { TablaGuardada } from '@/lib/gen-talles/plantillas'

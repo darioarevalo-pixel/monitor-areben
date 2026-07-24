@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
 import { agruparFundas, ultimosPorModelo } from '@/lib/conteo-local-bdi/core'

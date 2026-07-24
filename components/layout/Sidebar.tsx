@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, labelConEmoji, NAV_CATS, type Marca } from '@/lib/nav'
+import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 
@@ -24,18 +24,27 @@ export function Sidebar({ activa }: { activa: string }) {
 
   // Mismo criterio que aplicarVisibilidadTabs + renderNav del legacy: una sección
   // se ve si es de esta marca Y el perfil tiene permiso.
+  const visible = (k: string) => {
+    if (!esDeMarca(k, marca)) return false
+    if (k === 'usuarios') return esAdmin(perfil)
+    if (k === 'inicio') return true
+    return puedeVer(perfil, marca, k)
+  }
+
+  // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
+  // desaparece entero si no queda ninguna sección visible adentro.
   const cats = NAV_CATS.map((cat) => {
     if (cat.adminOnly && !esAdmin(perfil)) return null
-    const keys = cat.keys.filter((k) => {
-      if (!esDeMarca(k, marca)) return false
-      if (k === 'usuarios') return esAdmin(perfil)
-      if (k === 'inicio') return true
-      return puedeVer(perfil, marca, k)
-    })
-    return keys.length ? { ...cat, keys } : null
+    const keys = cat.keys.filter(visible)
+    const grupos = (cat.grupos ?? [])
+      .map((g) => ({ ...g, keys: g.keys.filter(visible) }))
+      .filter((g) => g.keys.length > 0)
+    return keys.length || grupos.length ? { ...cat, keys, grupos } : null
   }).filter((c): c is NonNullable<typeof c> => c !== null)
 
-  const grupoActivo = cats.find((c) => c.keys.includes(activa))?.id ?? null
+  const tieneActiva = (c: (typeof cats)[number]) =>
+    c.keys.includes(activa) || c.grupos.some((g) => g.keys.includes(activa))
+  const grupoActivo = cats.find(tieneActiva)?.id ?? null
 
   return (
     <aside className="sidebar">
@@ -97,26 +106,32 @@ export function Sidebar({ activa }: { activa: string }) {
               )
             }
             const open = (abierto ?? grupoActivo) === cat.id
+            const opt = (k: string) => (
+              <Link
+                key={k}
+                href={`/${k}`}
+                className={`nav-opt${k === activa ? ' active' : ''}${
+                  cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
+                }`}
+              >
+                {label(k)}
+              </Link>
+            )
             return (
               <div key={cat.id} className={`nav-group${open ? ' open' : ''}`}>
                 <button
-                  className={`nav-cat${cat.keys.includes(activa) ? ' active' : ''}`}
+                  className={`nav-cat${tieneActiva(cat) ? ' active' : ''}`}
                   onClick={() => setAbierto(open ? '' : cat.id)}
                 >
                   {cat.label}
                   <span className="nav-caret">▾</span>
                 </button>
                 <div className="nav-menu">
-                  {cat.keys.map((k) => (
-                    <Link
-                      key={k}
-                      href={`/${k}`}
-                      className={`nav-opt${k === activa ? ' active' : ''}${
-                        cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
-                      }`}
-                    >
-                      {label(k)}
-                    </Link>
+                  {cat.keys.map(opt)}
+                  {cat.grupos.map((g) => (
+                    <Subgrupo key={g.id} grupo={g} activa={activa}>
+                      {g.keys.map(opt)}
+                    </Subgrupo>
                   ))}
                 </div>
               </div>
@@ -139,5 +154,27 @@ export function Sidebar({ activa }: { activa: string }) {
         </div>
       </div>
     </aside>
+  )
+}
+
+/**
+ * Un subgrupo del menú (3er nivel). Arranca CERRADO salvo que la sección activa esté
+ * adentro: existe justamente para sacar de la vista lo esporádico —los conteos, el
+ * chequeo de exhibición— sin esconderlo. El estado es local al subgrupo, así abrir uno
+ * no cierra al otro.
+ */
+function Subgrupo({ grupo, activa, children }: { grupo: NavGrupo; activa: string; children: React.ReactNode }) {
+  const tieneActiva = grupo.keys.includes(activa)
+  const [abierto, setAbierto] = useState<boolean | null>(null)
+  const open = abierto ?? tieneActiva
+
+  return (
+    <div className={`nav-sub${open ? ' open' : ''}`}>
+      <button className="nav-sub-cat" onClick={() => setAbierto(!open)}>
+        {grupo.label}
+        <span className="nav-caret">▾</span>
+      </button>
+      <div className="nav-sub-menu">{children}</div>
+    </div>
   )
 }

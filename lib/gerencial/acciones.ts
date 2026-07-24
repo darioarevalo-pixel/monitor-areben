@@ -12,7 +12,7 @@
 import { guardarLista, leerLista, type Escritura } from '@/lib/kv/cliente'
 import { aprobar, rechazar } from '@/lib/solicitudes-internas/core'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 async function mutarConsumo(
   marca: Marca,

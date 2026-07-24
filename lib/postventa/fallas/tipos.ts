@@ -5,7 +5,7 @@
  * Después la unidad sigue su vida interna: 'vendida_feria' | 'descartada'. NO vuelve al stock oficial.
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 // 'en_deposito' se conserva de la v1 (filas viejas). El flujo nuevo usa cargada→recibida→confirmada.
 export type FallaEstado = 'cargada' | 'recibida' | 'confirmada' | 'en_deposito' | 'vendida_feria' | 'descartada'

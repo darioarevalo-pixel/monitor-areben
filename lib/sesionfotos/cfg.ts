@@ -8,7 +8,7 @@
  * (que deja `repoCfg` con su default ante error).
  */
 
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import type { Origen } from './tipos'
 
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'

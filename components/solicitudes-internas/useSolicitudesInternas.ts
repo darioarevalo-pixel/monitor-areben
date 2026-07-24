@@ -1,6 +1,6 @@
 'use client'
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { crearVentas, idsParaCerrar } from '@/lib/solicitudes-internas/ventas'
 import type { EstadoSI, Origen, SolicitudInterna, VentaGN } from '@/lib/solicitudes-internas/tipos'
 import { useHistorialSolicitudes, type HistorialSolicitudes } from '@/components/solicitudes/useHistorialSolicitudes'

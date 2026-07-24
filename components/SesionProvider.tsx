@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { Perfil } from '@/lib/permisos'
 import { marcaInicial } from '@/lib/permisos'
 import { borrarSesion, guardarSesion, leerSesion, traerPerfiles } from '@/lib/sesion'

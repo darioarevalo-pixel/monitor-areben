@@ -5,7 +5,7 @@
  */
 
 import type { DatosETL } from '@/lib/etl/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'
 

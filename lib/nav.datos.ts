@@ -1,16 +1,53 @@
-// GENERADO por scripts/gen/nav-from-legacy.mjs — NO editar a mano.
-// La fuente de verdad es PERM_CAT / NAV_CATS en index.html. Si tocás el menú del
-// legacy, corré: node scripts/gen/nav-from-legacy.mjs
+/**
+ * Estructura del monitor: qué secciones existen (PERM_CAT) y cómo se agrupan en el
+ * menú (NAV_CATS). **Fuente de verdad, editable a mano.**
+ *
+ * Hasta jul-2026 este archivo se GENERABA desde el `index.html` del legacy con
+ * `scripts/gen/nav-from-legacy.mjs`. Eso tenía sentido mientras el iframe legacy
+ * servía secciones y el menú tenía que coincidir byte a byte con el suyo. Cerrada la
+ * migración (19-jul-2026) el legacy ya no sirve ninguna sección, así que seguir
+ * atados a él solo impedía reordenar el menú: para mover una sección de grupo había
+ * que editar un HTML de 10k líneas que ya nadie ejecuta.
+ *
+ * Dos capacidades que el nav del legacy no tenía y acá sí:
+ *  - `NavCat.grupos`: subgrupos de 2º nivel (ej. `Local > Actividades > Conteo Zattia`),
+ *    para sacar de la vista lo esporádico sin esconderlo.
+ *  - `PermCat.area`: a qué área principal pertenece cada sección. Es lo que permite
+ *    ordenar los permisos por área en Config (antes eran una lista plana de 35 filas
+ *    sin agrupar) y asignarlos por función.
+ */
 
 export type Marca = 'bdi' | 'zattia'
 
 export type PermSub = { key: string; label: string; info?: string; brands?: Marca[] }
-export type PermCat = { key: string; label: string; info?: string; brands: Marca[]; subs?: PermSub[] }
-export type NavCat = { id: string; label: string; keys: string[]; accent?: string; adminOnly?: boolean }
+
+export type PermCat = {
+  key: string
+  /** Área principal (el `id` del NavCat que la contiene). Ordena los permisos en Config. */
+  area: string
+  label: string
+  info?: string
+  brands: Marca[]
+  subs?: PermSub[]
+}
+
+/** Un subgrupo del menú: 2º nivel dentro de un grupo (ej. Local > Actividades). */
+export type NavGrupo = { id: string; label: string; keys: string[] }
+
+export type NavCat = {
+  id: string
+  label: string
+  keys: string[]
+  /** Subgrupos colapsables, después de las `keys` sueltas del grupo. */
+  grupos?: NavGrupo[]
+  accent?: string
+  adminOnly?: boolean
+}
 
 export const PERM_CAT: PermCat[] = [
   {
     "key": "resumen",
+    "area": "analisis",
     "label": "📈 Resumen / KPIs",
     "info": "Panel principal con métricas y resumen general del negocio.",
     "brands": [
@@ -20,6 +57,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "productos",
+    "area": "analisis",
     "label": "📊 Por producto",
     "info": "Análisis por producto: ventas, vida útil, stock, estado y selección de outlet/sale.",
     "brands": [
@@ -29,6 +67,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "variantes",
+    "area": "analisis",
     "label": "🔠 Por variante",
     "info": "Ventas y stock por variante (talle / modelo / color).",
     "brands": [
@@ -38,6 +77,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "ventas-mensuales",
+    "area": "analisis",
     "label": "📅 Ventas mensuales",
     "info": "Evolución de las ventas mes a mes.",
     "brands": [
@@ -47,6 +87,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "fundas-modelo",
+    "area": "compras",
     "label": "Fundas por modelo",
     "info": "Demanda y simulación de pedidos de fundas por modelo de iPhone.",
     "brands": [
@@ -55,6 +96,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "clientes",
+    "area": "clientes",
     "label": "Clientes (CRM)",
     "info": "Clientes mayoristas: segmentos, contacto, historial de compras.",
     "brands": [
@@ -63,6 +105,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "proveedores",
+    "area": "compras",
     "label": "Proveedores",
     "info": "Análisis de ventas y stock por proveedor.",
     "brands": [
@@ -71,6 +114,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "colores",
+    "area": "analisis",
     "label": "Colores",
     "info": "Análisis de ventas por color de prenda.",
     "brands": [
@@ -79,6 +123,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "talles",
+    "area": "analisis",
     "label": "Talles",
     "info": "Análisis de ventas por talle.",
     "brands": [
@@ -87,6 +132,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "marketing",
+    "area": "marketing",
     "label": "📸 Marketing",
     "info": "Armado de publicaciones (fotos + textos) para redes y TiendaNube.",
     "brands": [
@@ -96,6 +142,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "sesion-fotos",
+    "area": "marketing",
     "label": "📷 Sesión de fotos",
     "info": "Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.",
     "brands": [
@@ -122,6 +169,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "comisiones",
+    "area": "analisis",
     "label": "💵 Comisiones y margen",
     "info": "Simulador de comisiones de vendedores y cálculo de markup/margen.",
     "brands": [
@@ -131,6 +179,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "margenes",
+    "area": "analisis",
     "label": "📊 Margen por producto",
     "info": "Margen y markup de cada producto disponible, comparado con el objetivo.",
     "brands": [
@@ -140,6 +189,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "etiquetas",
+    "area": "local",
     "label": "🏷️ Etiquetas",
     "info": "Impresión de etiquetas con código de barras.",
     "brands": [
@@ -171,6 +221,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "gen-talles",
+    "area": "marketing",
     "label": "📏 Tabla de talles",
     "info": "Generador de tablas de talles (HTML) para las descripciones de TiendaNube.",
     "brands": [
@@ -180,6 +231,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "exhib",
+    "area": "local",
     "label": "👕 Chequeo de exhibición",
     "info": "Recorrido con lector de código de barras para verificar qué está exhibido en el local.",
     "brands": [
@@ -188,6 +240,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "tncat",
+    "area": "marketing",
     "label": "🛍️ Tienda Nube",
     "info": "Herramientas de TiendaNube.",
     "brands": [
@@ -233,6 +286,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "disenos",
+    "area": "marketing",
     "label": "🗳️ Diseños",
     "info": "Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).",
     "brands": [
@@ -242,6 +296,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "ingresos",
+    "area": "compras",
     "label": "📦 Ingresos proyectados",
     "info": "Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.",
     "brands": [
@@ -250,6 +305,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "reposicion",
+    "area": "local",
     "label": "🔁 Reposición",
     "info": "Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.",
     "brands": [
@@ -259,6 +315,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "conteo",
+    "area": "local",
     "label": "🔢 Conteo de fundas",
     "info": "Conteo de fundas del Local por escaneo, agrupado por modelo de celular. Escaneás un modelo completo y al cerrarlo compara contra el stock VIVO de GN (ubicación Local) y genera el Excel de ajuste + lo guarda en el historial con fecha. Exclusiva de BDI.",
     "brands": [
@@ -274,6 +331,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "conteo-deposito",
+    "area": "deposito",
     "label": "🔢 Conteo",
     "info": "Conteo físico del depósito por producto (cargando cantidades a mano, no por escaneo). Buscás el producto, contás sus variantes y lo terminás. El ajuste a GN se calcula con stock vivo + diferencia, así las ventas durante el conteo no lo ensucian. Guarda historial de cada conteo aplicado.",
     "brands": [
@@ -290,6 +348,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "conteo-estandar-zattia",
+    "area": "local",
     "label": "🔢 Conteo Zattia",
     "info": "Conteo físico del LOCAL de ZATTIA (línea Zattia, SKU que NO empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.",
     "brands": [
@@ -305,6 +364,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "conteo-estandar-stunned",
+    "area": "local",
     "label": "👕 Conteo Stunned",
     "info": "Conteo físico del LOCAL de ZATTIA (línea STUNNED, SKU que empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.",
     "brands": [
@@ -320,6 +380,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "cupones",
+    "area": "local",
     "label": "🎟️ Cupones",
     "info": "Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.",
     "brands": [
@@ -336,6 +397,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "solicitudes-internas",
+    "area": "local",
     "label": "📋 Solicitudes internas",
     "info": "Retiros de productos para uso interno (moldería, video, muestras, consumo). Retornable (vuelve, se repone) o consumo (no vuelve). Los consumos requieren aprobación de un gerente/admin.",
     "brands": [
@@ -357,6 +419,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "solicitudes",
+    "area": "local",
     "label": "📋 Solicitudes",
     "info": "Vista unificada del ESTADO de todas las solicitudes (sesión de fotos + internas) de las marcas que ves, filtrada según tu función: Local ve lo que tiene retiro en local, Depósito lo de depósito, el resto ve todo. Solo lectura (para gestionar se entra a cada solicitud).",
     "brands": [
@@ -366,6 +429,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "verif-ventas",
+    "area": "analisis",
     "label": "🧾 Verificación de ventas",
     "info": "Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.",
     "brands": [
@@ -375,6 +439,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "caducados",
+    "area": "local",
     "label": "🗑️ Productos caducados",
     "info": "Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.",
     "brands": [
@@ -384,6 +449,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "ubicaciones",
+    "area": "local",
     "label": "📍 Ubicaciones",
     "info": "Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
     "brands": [
@@ -392,6 +458,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "meta-ads",
+    "area": "marketing",
     "label": "💰 Meta Ads",
     "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.",
     "brands": [
@@ -401,6 +468,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "gerencial",
+    "area": "direccion",
     "label": "🎯 Gerencial",
     "info": "Panel de decisiones: reúne de todas las marcas lo que requiere tu atención (capital parado, productos en declive, pendientes operativos, importaciones por llegar) con la acción recomendada y un acceso directo a la sección donde se ejecuta. Solo lectura.",
     "brands": [
@@ -410,6 +478,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "integraciones",
+    "area": "integraciones",
     "label": "🔌 Integraciones",
     "info": "Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.",
     "brands": [
@@ -418,6 +487,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "postventa",
+    "area": "administracion",
     "label": "🧾 Post-venta",
     "info": "Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
     "brands": [
@@ -427,6 +497,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "postventa-local",
+    "area": "local",
     "label": "🧾 Fallas (carga)",
     "info": "Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.",
     "brands": [
@@ -436,6 +507,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "postventa-deposito",
+    "area": "deposito",
     "label": "🧾 Fallas (depósito)",
     "info": "Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Post-venta.",
     "brands": [
@@ -445,6 +517,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "cambios-local",
+    "area": "local",
     "label": "🔁 Cambios (iniciar)",
     "info": "Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.",
     "brands": [

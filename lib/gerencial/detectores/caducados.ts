@@ -9,7 +9,7 @@
  * la baja real se hace en la sección Caducados, con su ventana ancha (~2 años).
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { Producto } from '@/lib/etl/tipos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'

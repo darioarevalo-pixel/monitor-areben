@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { canales, comDefault, comNormalizar } from '@/lib/comisiones/core'
 import { guardarConfigCompartida, leerConfigCompartida } from '@/lib/comisiones/kv'
 import type { ComCfg, ItemSale } from '@/lib/comisiones/tipos'

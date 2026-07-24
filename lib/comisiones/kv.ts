@@ -5,7 +5,7 @@
  * (index.html:6032/6043).
  */
 
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import type { ComCfg } from './tipos'
 
 const COM_API = 'https://bdi-catalogo.vercel.app/api/comisiones'

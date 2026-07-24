@@ -9,7 +9,7 @@
  *    Si el nombre no delata la marca, cae a 'bdi'. Es transparente y fácil de corregir.
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { Metricas } from '@/lib/meta-ads/tipos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'

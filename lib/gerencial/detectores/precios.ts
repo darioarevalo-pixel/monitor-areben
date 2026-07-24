@@ -5,7 +5,7 @@
  * Recibe las filas ya computadas (el hook resuelve el índice de TiendaNube por marca).
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { FilaMargen } from '@/lib/margenes'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'

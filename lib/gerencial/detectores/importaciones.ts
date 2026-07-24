@@ -4,7 +4,7 @@
  * de `estado` + `fecha` del ingreso; no toca el KV (lo lee el hook).
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { EstadoIngreso, Ingreso } from '@/lib/ingresos/tipos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'

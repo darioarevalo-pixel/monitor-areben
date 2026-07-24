@@ -2,12 +2,11 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { createElement, useEffect } from 'react'
-import { LegacyFrame } from '@/components/legacy/LegacyFrame'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { useSesion } from '@/components/SesionProvider'
-import { componenteDe, componenteSombraDe } from '@/components/secciones/registro'
+import { componenteDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida } from '@/lib/nav'
 import { esAdmin, puedeVer } from '@/lib/permisos'
 
@@ -46,39 +45,34 @@ export default function Seccion() {
   if (!perfil) return <LoginScreen />
   if (!permitida) return <div className="login-screen" />
 
-  // Estar en el registro ES el interruptor del strangler: si la sección tiene
-  // componente, la sirve el shell; si no, sigue viniendo del legacy embebido.
-  //
-  // `/<seccion>/next` es la ruta sombra: sirve la versión Next de una sección que
-  // todavía NO es el default, para poder abrir las dos y compararlas con los
-  // mismos datos. El guard de arriba usa partes[0], así que la sombra no lo toca.
-  //
-  // Es una sub-ruta y no `?next=1` porque esta página es 'use client' y
-  // useSearchParams rompe el prerender del build en Next 16 si no está bajo
-  // <Suspense>. La sombra es el mecanismo de seguridad de todo el Paso 6: si no
-  // compila, la presión es flipear antes de tiempo.
-  //
   // createElement y no <Seccion />: la regla "Cannot create components during
   // render" no puede saber que `componenteDe` devuelve una referencia estable de
   // un objeto de módulo y no un componente nuevo por render. Acá no hay ambigüedad.
-  const sombra = Array.isArray(partes) && partes[1] === 'next'
-  const seccion = sombra ? componenteSombraDe(key) : componenteDe(key)
+  //
+  // Hasta jul-2026, una key sin componente caía al iframe legacy. Cerrado el
+  // strangler, el legacy ya no existe: una key válida SIEMPRE tiene componente, así
+  // que un `null` acá es un bug de registro (key en el nav sin línea en SECCIONES) y
+  // se dice, en vez de quedar en blanco. El test `registro` lo cubre.
+  const seccion = componenteDe(key)
 
   return (
     <div className="shell">
       <Sidebar activa={key} />
       <div className="shell-main">
         <div className="shell-content">
-          {/* Las secciones flipeadas van con aire uniforme (.seccion-pad); el iframe
-              legacy queda full-bleed porque ya trae su propio padding interno. */}
-          {seccion ? (
-            <div className="seccion-pad">
-              <SeccionHeader seccion={key} />
-              {createElement(seccion)}
-            </div>
-          ) : (
-            <LegacyFrame tab={key} marca={marca} />
-          )}
+          <div className="seccion-pad">
+            {seccion ? (
+              <>
+                <SeccionHeader seccion={key} />
+                {createElement(seccion)}
+              </>
+            ) : (
+              <div className="card" style={{ color: '#B45309' }}>
+                La sección <b>{key}</b> está en el menú pero no tiene pantalla asociada. Avisá que
+                falta registrarla.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

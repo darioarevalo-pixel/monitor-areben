@@ -315,24 +315,14 @@ export const SECCIONES: Record<string, ComponentType> = {
 }
 
 /**
- * Las secciones que ya existen en Next pero **todavía no son el default**.
+ * ¿Qué componente sirve esta sección? `null` si la key no está registrada.
  *
- * Se ven solo en `/<seccion>/next`; `/<seccion>` sigue sirviendo el legacy
- * embebido para todo el equipo. Es lo que permite abrir las dos y compararlas con
- * los mismos datos antes de flipear.
- *
- * El flip es mover la key de SOMBRAS a SECCIONES: una línea.
+ * Hasta jul-2026 un `null` significaba "esta sección todavía la sirve el iframe
+ * legacy", y existía además un registro `SOMBRAS` con la ruta `/<key>/next` para
+ * abrir la versión Next al lado de la vieja y compararlas. Las dos cosas murieron
+ * con el legacy (Fase 0 de la reestructura): ya no hay contra qué comparar, y un
+ * `null` hoy solo puede ser una key mal escrita.
  */
-// Vacío: todas las secciones migradas ya están flipeadas. La ruta sombra `/<key>/next`
-// sigue disponible para la próxima migración (inicio/usuarios, si se hacen algún día).
-export const SOMBRAS: Record<string, ComponentType> = {}
-
-/** ¿Esta sección la sirve el shell? Si no, va al iframe. */
 export function componenteDe(key: string): ComponentType | null {
   return SECCIONES[key] ?? null
-}
-
-/** El componente de la ruta sombra `/<key>/next`, si existe. */
-export function componenteSombraDe(key: string): ComponentType | null {
-  return SOMBRAS[key] ?? null
 }

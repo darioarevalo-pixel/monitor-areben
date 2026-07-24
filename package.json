@@ -5,10 +5,9 @@
   "type": "module",
   "scripts": {
     "//NOTA": "Requiere el framework preset en Next.js. Con el preset en 'Other', Vercel usa public/ como output directory y la home queda en 404.",
-    "_copiar-legacy": "mkdir -p public/legacy && cp index.html public/legacy/index.html",
-    "prebuild": "npm run _copiar-legacy",
+    "//NOTA-LEGACY": "Hasta jul-2026 el build copiaba index.html a public/legacy para el iframe. El shell sirve todas las secciones: ya no se copia. index.html sigue en el repo SOLO como fuente de los tests de paridad (tests/legacy-*.ts).",
     "build": "next build",
-    "dev": "npm run _copiar-legacy && next dev",
+    "dev": "next dev",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

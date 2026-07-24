@@ -6,7 +6,7 @@
  */
 
 import { apiFetch } from '../api-fetch'
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import type { RespuestaVivo } from './tipos'
 
 export async function leerInventarioVivo(marca: Marca, loc?: 'local'): Promise<RespuestaVivo> {

@@ -6,7 +6,7 @@
  */
 
 import { CUENTAS } from '../cuentas'
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import { fetchAll } from '../supabase/rest'
 import type { RepoCfg } from './tipos'
 import type { FilaInvRepo } from './inventario'

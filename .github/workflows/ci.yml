@@ -51,8 +51,7 @@ jobs:
       - name: Tests que no necesitan datos reales
         run: npm test
 
-      # Va último porque es el más lento. `prebuild` copia index.html a
-      # public/legacy/, así que esto también verifica que el legacy siga en su lugar.
+      # Va último porque es el más lento.
       - name: Build
         run: npm run build
 

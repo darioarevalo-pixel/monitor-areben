@@ -10,7 +10,7 @@
  */
 
 import type { Producto, FilaVenta, FilaDetalle } from '../etl/tipos'
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import { indexarTn, matchTn, type TnProducto } from '../tn'
 
 /** El estado de la ficha en TN, en orden de prioridad (el primero que aplica gana). */

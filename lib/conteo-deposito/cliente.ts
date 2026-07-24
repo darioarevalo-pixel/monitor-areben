@@ -5,7 +5,7 @@
  */
 
 import { apiFetch } from '../api-fetch'
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import type { ConteoHistorial, ResumenAjuste } from './tipos'
 
 export async function leerHistorial(marca: Marca): Promise<ConteoHistorial[]> {

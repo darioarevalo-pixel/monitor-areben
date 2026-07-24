@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { guardarCupones, leerCupones } from '@/lib/kv/cliente'
 import type { Cupon } from '@/lib/cupones/tipos'
 

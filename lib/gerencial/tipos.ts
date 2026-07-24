@@ -9,7 +9,7 @@
  * fase 2 sumará acciones que se ejecutan en el panel.
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 export type Severidad = 'critico' | 'atencion' | 'oportunidad'
 export type Area = 'stock' | 'comercial' | 'operativo' | 'ads' | 'importaciones'

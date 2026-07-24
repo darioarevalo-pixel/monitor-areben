@@ -5,7 +5,7 @@
  */
 
 import type { DatosETL } from '@/lib/etl/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import { pendientesDeMarca } from '@/lib/inicio/core'

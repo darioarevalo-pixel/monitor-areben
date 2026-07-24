@@ -5,7 +5,7 @@
  * expone entera (Conteo necesita `catsOff`; Reposición, todo).
  */
 
-import type { Marca } from '../nav.generated'
+import type { Marca } from '../nav.datos'
 import { repoCfgDefault, type RepoCfg } from './tipos'
 
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'

@@ -4,7 +4,7 @@
  * `reingreso_estado='pendiente'` hasta que el admin lo carga a mano en GN.
  */
 
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 // El cambio nace como 'borrador' (solicitud incompleta) y se completa después. Al PROCESAR (pagado +
 // envío confirmado) se genera la venta REAL en GN → 'confirmado' → 'en_transito' → 'recibido' → 'cerrado'.

@@ -8,7 +8,7 @@
 import { apiFetch } from '../../api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import type { FallaInput, FallaRow } from './tipos'
 
 export async function leerFallas(store: Marca): Promise<FallaRow[]> {

@@ -16,7 +16,7 @@
  * (RSC, fetch cache, lo que sea) sin coordinar con nadie.
  */
 
-import type { Marca } from './nav.generated'
+import type { Marca } from './nav.datos'
 import type {
   FilaColorManual,
   FilaDetalle,

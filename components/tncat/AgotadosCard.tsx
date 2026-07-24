@@ -7,7 +7,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAOcultar } from '@/lib/tncat/agotados'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 /**
  * Ocultar agotados (card 5 de tncat): lista los productos sin stock (GN) que siguen

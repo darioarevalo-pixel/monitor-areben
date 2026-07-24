@@ -7,7 +7,7 @@
 import { apiFetch } from '../api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { calcularTotalCambio, sumarItems, type CambioInput, type CambioRow, type OrdenTN } from './tipos'
 
 const TN_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'

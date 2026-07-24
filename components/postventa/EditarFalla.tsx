@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { editarFalla } from '@/lib/postventa/fallas/cliente'
 import type { FallaRow, FallaUbicacion } from '@/lib/postventa/fallas/tipos'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 
 const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: '1px solid #D1D5DB', outline: 'none', width: '100%' }
 const lbl: React.CSSProperties = { fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }

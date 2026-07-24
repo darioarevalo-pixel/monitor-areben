@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav.generated'
+import type { Marca } from '@/lib/nav.datos'
 import { guardarLista, leerLista, type KindLista } from '@/lib/kv/cliente'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
