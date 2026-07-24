@@ -147,6 +147,38 @@ export function puedeRetirar(perfil: Perfil | null, origen: Origen): boolean {
   return tieneFuncion(perfil, origen)
 }
 
+/**
+ * ¿Quién puede PEDIR? Marketing (que es quien arma las sesiones y los contenidos),
+ * Administración (que coordina) y los admins.
+ *
+ * Local y Depósito **ejecutan**: ven lo que tienen que preparar o entregar, lo marcan y lo
+ * desarman, pero no piden. Antes alcanzaba con tener el permiso de la sección, así que
+ * cualquiera podía crear una solicitud — y una solicitud creada por quien la va a armar no
+ * tiene quién la valide.
+ *
+ * Sin función asignada se mantiene el comportamiento viejo (puede pedir), para no dejar
+ * gente afuera hasta que Config termine de asignar funciones.
+ */
+export function puedePedir(perfil: Perfil | null): boolean {
+  if (esAdmin(perfil)) return true
+  if (tieneFuncion(perfil, 'marketing') || tieneFuncion(perfil, 'administracion') || tieneFuncion(perfil, 'direccion')) return true
+  return origenesFuncion(perfil).length === 0 && !perfil?.funcion?.length
+}
+
+/**
+ * Qué marcas mira esta pantalla.
+ *
+ * Administración y Dirección trabajan para las dos marcas a la vez: ver las solicitudes
+ * juntas (con el chip de cada una) les evita cambiar de marca todo el tiempo. Local y
+ * Depósito, en cambio, están parados en UN local: ven solo la marca activa, porque mezclar
+ * les hace preparar cosas que no son suyas. Y quien tiene marca fija, solo esa.
+ */
+export function marcasQueVe(perfil: Perfil | null, marcaActiva: Marca, todas: Marca[]): Marca[] {
+  if (perfil?.cuenta) return [perfil.cuenta]
+  const multimarca = esAdmin(perfil) || tieneFuncion(perfil, 'administracion') || tieneFuncion(perfil, 'direccion')
+  return multimarca ? todas : [marcaActiva]
+}
+
 /** Filtra los resúmenes según la función: sector solo ve lo que tiene unidades de su origen. */
 export function filtrarPorFuncion(resumenes: ResumenSolicitud[], perfil: Perfil | null): ResumenSolicitud[] {
   if (veTodo(perfil)) return resumenes

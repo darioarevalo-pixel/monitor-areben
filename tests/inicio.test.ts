@@ -8,17 +8,22 @@ const sol = (over: Partial<Solicitud>): Solicitud => ({ id: 's1', fecha: '2026-0
 
 describe('inicio/core — marcasVisibles', () => {
   it('admin ve todas las marcas', () => {
-    expect(marcasVisibles(perfil({ admin: true })).sort()).toEqual(['bdi', 'zattia'])
+    expect(marcasVisibles(perfil({ admin: true }), 'bdi').sort()).toEqual(['bdi', 'zattia'])
   })
   it('cuenta fija: solo esa marca (si tiene permiso)', () => {
-    expect(marcasVisibles(perfil({ cuenta: 'zattia', acceso: { zattia: { 'sesion-fotos': true } } }))).toEqual(['zattia'])
+    expect(marcasVisibles(perfil({ cuenta: 'zattia', acceso: { zattia: { 'sesion-fotos': true } } }), 'bdi')).toEqual(['zattia'])
   })
   it('sin cuenta fija: solo las marcas donde puede ver sesión de fotos', () => {
-    expect(marcasVisibles(perfil({ acceso: { bdi: { 'sesion-fotos': true } } }))).toEqual(['bdi'])
+    expect(marcasVisibles(perfil({ acceso: { bdi: { 'sesion-fotos': true } } }), 'bdi')).toEqual(['bdi'])
   })
   it('sin permiso en ninguna → vacío', () => {
-    expect(marcasVisibles(perfil({}))).toEqual([])
-    expect(marcasVisibles(null)).toEqual([])
+    expect(marcasVisibles(perfil({}), 'bdi')).toEqual([])
+    expect(marcasVisibles(null, 'bdi')).toEqual([])
+  })
+  it('Local ve solo la marca activa; Administración, las dos', () => {
+    const acc = { bdi: { 'sesion-fotos': true }, zattia: { 'sesion-fotos': true } }
+    expect(marcasVisibles(perfil({ funcion: ['local'], acceso: acc }), 'zattia')).toEqual(['zattia'])
+    expect(marcasVisibles(perfil({ funcion: ['administracion'], acceso: acc }), 'zattia').sort()).toEqual(['bdi', 'zattia'])
   })
 })
 

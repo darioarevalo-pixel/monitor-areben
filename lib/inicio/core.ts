@@ -6,6 +6,7 @@
 
 import { CUENTAS } from '@/lib/cuentas'
 import { esAdmin, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
+import { marcasQueVe } from '@/lib/solicitudes/overview'
 import type { Marca } from '@/lib/nav'
 import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
@@ -51,10 +52,14 @@ export function origenesDe(perfil: Perfil | null): Origen[] {
  * Port de _inicioMarcasVisibles: si tiene cuenta fija, solo esa; si no, las que
  * pueda ver (admin ve todas).
  */
-export function marcasVisibles(perfil: Perfil | null): Marca[] {
+export function marcasVisibles(perfil: Perfil | null, marcaActiva: Marca): Marca[] {
   if (!perfil) return []
-  const todas = perfil.cuenta ? [perfil.cuenta] : (Object.keys(CUENTAS) as Marca[])
-  return todas.filter((m) => esAdmin(perfil) || puedeVer(perfil, m, 'sesion-fotos'))
+  // Misma regla que la pantalla de Solicitudes (`marcasQueVe`): Administración y Dirección
+  // ven las dos marcas juntas; Local, Depósito y Marketing, la marca en la que están
+  // parados. Antes el Inicio mezclaba siempre las dos, así que en el local aparecían
+  // pendientes de la otra marca.
+  const candidatas = marcasQueVe(perfil, marcaActiva, Object.keys(CUENTAS) as Marca[])
+  return candidatas.filter((m) => esAdmin(perfil) || puedeVer(perfil, m, 'sesion-fotos') || puedeVer(perfil, m, 'solicitudes'))
 }
 
 /** Suma las unidades de los ítems de una solicitud. */

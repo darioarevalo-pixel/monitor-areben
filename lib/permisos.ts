@@ -117,7 +117,21 @@ export function puedeVer(perfil: Perfil | null, marca: Marca, key: string): bool
   if (!perfil) return false
   if (estaExcluido(perfil, marca, key)) return false
   if (perfil.acceso?.[marca]?.[key]) return true
+  if ((ALIAS_COMPAT[key] ?? []).some((k) => perfil.acceso?.[marca]?.[k])) return true
   return (perfil.funcion ?? []).some((f) => setDeFuncion(f).has(key))
+}
+
+/**
+ * Secciones que absorbieron a otras: quien tenía permiso de la vieja entra a la nueva.
+ *
+ * `solicitudes` se comió las dos entradas de menú de Sesión de fotos y Solicitudes internas
+ * (Fase 2: pasaron a ser motivos de una misma cosa). Sin este alias, alguien de Marketing
+ * con `sesion-fotos` tildado y sin función asignada se quedaba sin ninguna entrada al día
+ * siguiente del deploy — el permiso viejo ya no apunta a nada del menú. Las rutas viejas
+ * siguen existiendo para los links directos.
+ */
+const ALIAS_COMPAT: Record<string, string[]> = {
+  solicitudes: ['sesion-fotos', 'solicitudes-internas'],
 }
 
 /**

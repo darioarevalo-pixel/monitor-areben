@@ -19,25 +19,38 @@ describe('estructura del nav', () => {
     }
   })
 
-  it('el área de una sección coincide con el grupo donde está en el menú', () => {
-    // `resumen` es la excepción conocida: tiene área (Análisis) pero no está en el
-    // menú — se llega por el Inicio. Si aparece en un grupo, tiene que ser el suyo.
+  it('el área de una sección es uno de los grupos donde aparece en el menú', () => {
+    // Una sección PUEDE colgar de varios sectores cuando es compartida — `solicitudes`
+    // aparece en Local, Depósito, Marketing y Administración, con el rótulo de cada uno.
+    // Lo que no puede es que su área no sea ninguno de esos lugares: el área es donde la
+    // busca Config y de quién la hereda por función.
+    const grupos = new Map<string, string[]>()
     for (const cat of NAV_CATS) {
       for (const key of keysDeCat(cat)) {
-        const p = PERM_CAT.find((x) => x.key === key)
-        if (!p) {
-          expect(KEYS_SIN_PERMISO.has(key), `'${key}' está en el nav sin permiso ni excepción`).toBe(true)
-          continue
-        }
-        expect(p.area, `'${key}' está en el grupo '${cat.id}' pero su área dice '${p.area}'`).toBe(cat.id)
+        grupos.set(key, [...(grupos.get(key) ?? []), cat.id])
       }
+    }
+    for (const [key, donde] of grupos) {
+      const p = PERM_CAT.find((x) => x.key === key)
+      if (!p) {
+        expect(KEYS_SIN_PERMISO.has(key), `'${key}' está en el nav sin permiso ni excepción`).toBe(true)
+        continue
+      }
+      expect(donde, `'${key}' cuelga de ${donde.join('/')} pero su área dice '${p.area}'`).toContain(p.area)
     }
   })
 
-  it('ninguna sección aparece en dos lugares del menú', () => {
-    const vistas: string[] = NAV_CATS.flatMap(keysDeCat)
-    const repetidas = vistas.filter((k, i) => vistas.indexOf(k) !== i)
-    expect(repetidas).toEqual([])
+  it('una sección repetida en varios grupos tiene rótulo propio donde no es su área', () => {
+    // Si `solicitudes` se llama igual en Marketing que en Administración, el sector no se
+    // reconoce en el menú: por eso `NavCat.labels`. Se exige donde la sección es "prestada".
+    const cuenta = NAV_CATS.flatMap(keysDeCat).reduce<Record<string, number>>((a, k) => ({ ...a, [k]: (a[k] || 0) + 1 }), {})
+    for (const cat of NAV_CATS) {
+      for (const key of keysDeCat(cat)) {
+        const p = PERM_CAT.find((x) => x.key === key)
+        if (!p || cuenta[key] < 2 || p.area === cat.id) continue
+        expect(cat.labels?.[key], `'${key}' cuelga de '${cat.id}' sin rótulo propio`).toBeTruthy()
+      }
+    }
   })
 
   it('las keys del menú son keys válidas', () => {

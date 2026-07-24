@@ -569,7 +569,6 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "solicitudes",
       "cupones",
-      "solicitudes-internas",
       "postventa-local",
       "cambios-local",
       "etiquetas",
@@ -592,20 +591,27 @@ export const NAV_CATS: NavCat[] = [
     "id": "deposito",
     "label": "📦 Depósito",
     "keys": [
+      "solicitudes",
       "conteo-deposito",
       "postventa-deposito"
-    ]
+    ],
+    "labels": {
+      "solicitudes": "📋 Solicitudes a preparar"
+    }
   },
   {
     "id": "marketing",
     "label": "📣 Marketing",
     "keys": [
       "marketing",
-      "sesion-fotos",
+      "solicitudes",
       "tncat",
       "gen-talles",
       "meta-ads"
     ],
+    "labels": {
+      "solicitudes": "📦 Solicitudes de productos"
+    },
     "accent": "marketing"
   },
   {
@@ -619,10 +625,14 @@ export const NAV_CATS: NavCat[] = [
     "id": "administracion",
     "label": "🗂️ Administración",
     "keys": [
+      "solicitudes",
       "postventa",
       "reposicion",
       "caducados"
-    ]
+    ],
+    "labels": {
+      "solicitudes": "📋 Solicitudes (todas las marcas)"
+    }
   },
   {
     "id": "compras",

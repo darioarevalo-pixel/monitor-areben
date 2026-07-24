@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { CUENTAS } from '@/lib/cuentas'
 import { leerCajon } from '@/lib/solicitudes/cajon'
-import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
-import type { Solicitud } from '@/lib/sesionfotos/tipos'
+import { ponerAltaSolicitud, ponerVerSolicitud } from '@/lib/sesionfotos/puente'
+import type { Solicitud, TipoSol } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { NuevaSolicitud } from './NuevaSolicitud'
+import { presetPorMotivo } from './preset'
 import type { Marca } from '@/lib/nav'
-import { filtrarPorFuncion, ordenarResumenes, resumenFoto, resumenInterna, veTodo, type GrupoEstado, type ResumenSolicitud } from '@/lib/solicitudes/overview'
+import { filtrarPorFuncion, marcasQueVe, ordenarResumenes, puedePedir, resumenFoto, resumenInterna, veTodo, type GrupoEstado, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 
 const POLL_MS = 180000
 
@@ -42,7 +44,11 @@ export function Solicitudes() {
   const [filtro, setFiltro] = useState<GrupoEstado | 'todas'>('todas')
   const [busqueda, setBusqueda] = useState('')
 
-  const marcas = useMemo<Marca[]>(() => (perfil?.cuenta ? [perfil.cuenta] : (Object.keys(CUENTAS) as Marca[])), [perfil])
+  const [pidiendo, setPidiendo] = useState(false)
+
+  // Local y Depósito ven SOLO la marca activa (están parados en un local); Administración
+  // y Dirección ven las dos juntas con chip, que es su forma real de trabajar.
+  const marcas = useMemo<Marca[]>(() => marcasQueVe(perfil, marca, Object.keys(CUENTAS) as Marca[]), [perfil, marca])
 
   const cargar = useCallback(async () => {
     const partes = await Promise.all(
@@ -76,19 +82,42 @@ export function Solicitudes() {
   }
 
   const sector = !veTodo(perfil)
+  const puedeCrear = puedePedir(perfil)
+
+  /**
+   * El alta: se eligen motivo y destino acá y se navega a la pantalla del cajón que
+   * corresponde, con el borrador ya abierto y configurado (puente `ponerAltaSolicitud`).
+   * El usuario no ve "secciones": pide una solicitud y sigue.
+   */
+  const crear = (a: { motivo: string; tipo: TipoSol }) => {
+    setPidiendo(false)
+    ponerAltaSolicitud(a)
+    router.push(presetPorMotivo(a.motivo).kind === 'sesionfotos' ? '/sesion-fotos' : '/solicitudes-internas')
+  }
 
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>📋 Solicitudes</div>
-        <InfoPopover titulo="Solicitudes (vista unificada)">
-          Estado de todas las solicitudes —Sesión de fotos e internas— de las marcas que ves. {sector ? 'Ves solo lo que tiene productos de tu sector.' : 'Ves todas.'} Es
-          solo lectura: para preparar, crear venta GN, devolver, etc., entrá a la solicitud (botón “Ver”).
+        <InfoPopover titulo="Solicitudes">
+          Todas las solicitudes de productos: cada una tiene un <b>motivo</b> (para qué sale — sesión de fotos,
+          video, muestra…) y un <b>destino</b> (si vuelve a la venta o se consume).{' '}
+          {sector
+            ? 'Ves lo que tiene productos de tu sector, en la marca en la que estás parado, para prepararlo y entregarlo.'
+            : 'Ves las de todas tus marcas.'}{' '}
+          Para preparar, crear la venta en GN o devolver, entrá con “Ver”.
         </InfoPopover>
+        {puedeCrear && (
+          <button className="btn-primary" onClick={() => setPidiendo(true)} style={{ marginLeft: 8 }}>
+            + Nueva solicitud
+          </button>
+        )}
         <button className="btn-sm" onClick={() => void cargar()} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
           🔄 Actualizar
         </button>
       </div>
+
+      {pidiendo && <NuevaSolicitud onCancelar={() => setPidiendo(false)} onOk={crear} />}
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         {FILTROS.map((f) => (

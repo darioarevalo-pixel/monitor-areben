@@ -47,3 +47,27 @@ export function tomarVerSolicitud(): string | null {
   verSolicitud = null
   return p
 }
+
+/**
+ * El tercer puente: Solicitudes → la ruta que corresponda, para CREAR una nueva.
+ *
+ * Desde la Fase 2 el alta empieza eligiendo motivo y destino en la pantalla de
+ * Solicitudes; el motivo decide en qué cajón se guarda (y por lo tanto a qué ruta hay que
+ * ir), así que la elección viaja acá y el borrador se abre ya configurado. Sin esto, el
+ * usuario elegiría el motivo dos veces: una para llegar y otra adentro.
+ */
+export type AltaSolicitud = { motivo: string; tipo: 'retornable' | 'consumo' }
+
+let alta: AltaSolicitud | null = null
+
+/** Solicitudes deja acá el motivo + destino elegidos y navega a la ruta del cajón. */
+export function ponerAltaSolicitud(a: AltaSolicitud): void {
+  alta = a
+}
+
+/** La sección toma (una sola vez) el alta pedida, o null si entraron directo por la ruta. */
+export function tomarAltaSolicitud(): AltaSolicitud | null {
+  const a = alta
+  alta = null
+  return a
+}

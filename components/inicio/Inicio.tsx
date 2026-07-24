@@ -32,7 +32,7 @@ export function Inicio() {
   const puedeCargarFalla = esAdmin(perfil) || puedeVer(perfil, marca, 'postventa-local')
 
   const cargar = useCallback(async () => {
-    const marcas = marcasVisibles(perfil)
+    const marcas = marcasVisibles(perfil, marca)
     const results = await Promise.all(marcas.map((m) => leerCajon<Solicitud>('sesionfotos', m)))
     setPend(ordenar(results.flatMap((r, i) => (r.ok ? pendientesDeMarca(r.dato, marcas[i]) : []))))
     // Aviso de solicitudes internas para aprobar (marca actual).

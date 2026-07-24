@@ -6,8 +6,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
-import { PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
-import { SI_MOTIVOS } from '@/lib/solicitudes-internas/tipos'
+import { AYUDA_DESTINO, DESTINO_DEFAULT, MOTIVO_DEFAULT, motivosDe, necesitaAprobacion, PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
@@ -69,9 +68,9 @@ import {
 } from '@/lib/sesionfotos/core'
 import { MOTIVOS_CAMBIO } from '@/lib/sesionfotos/tipos'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
-import { puedeRetirar } from '@/lib/solicitudes/overview'
+import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
-import { tomarPuenteFotos, tomarVerSolicitud } from '@/lib/sesionfotos/puente'
+import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
@@ -174,12 +173,15 @@ function Contenido({
   const [pidsPuente] = useState<string[] | null>(() => tomarPuenteFotos())
   // Puente desde Inicio: si venimos a ver una solicitud puntual, abrimos su detalle.
   const [verInicial] = useState<string | null>(() => tomarVerSolicitud())
+  // Puente desde Solicitudes: el alta ya eligió motivo + destino, así que el borrador se
+  // abre solo y con eso puesto (si no, se elegiría el motivo dos veces).
+  const [altaInicial] = useState<AltaSolicitud | null>(() => tomarAltaSolicitud())
 
   const [verCerradas, setVerCerradas] = useState(false)
   const [viendo, setViendo] = useState<string | null>(verInicial)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
-  const [armando, setArmando] = useState(!!pidsPuente?.length)
+  const [armando, setArmando] = useState(!!pidsPuente?.length || !!altaInicial)
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -216,6 +218,7 @@ function Contenido({
           variantes={variantes}
           productos={productos}
           pidsIniciales={pidsPuente}
+          alta={altaInicial}
           onCancelar={() => setArmando(false)}
           onCreada={(id) => {
             setArmando(false)
@@ -387,8 +390,9 @@ function Historial({
   const cerradasN = useMemo(() => contarCerradas(data), [data])
   const visibles = useMemo(() => historialVisible(data, verCerradas), [data, verCerradas])
   const [chequeando, setChequeando] = useState(false)
-  // Internas: consumos pendientes de aprobación (para el aprobador).
-  const consumosPend = preset.conAprobacion ? data.filter((s) => s.tipo === 'consumo' && s.estado === 'pendiente') : []
+  // Consumos pendientes de aprobación (para el aprobador). Lo define el DESTINO de cada
+  // solicitud, no la sección: una de sesión de fotos también puede ser consumo.
+  const consumosPend = data.filter((s) => necesitaAprobacion(s) && s.estado === 'pendiente')
   const esAprobadorHist = admin || puedeSub(perfilHist, marcaHist, preset.seccionKey, 'aprobar')
   const verificarAnulaciones = async () => {
     setChequeando(true)
@@ -408,9 +412,13 @@ function Historial({
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button className="btn-primary" onClick={onNueva}>
-          + Nueva solicitud
-        </button>
+        {/* Local y Depósito ejecutan, no piden: para ellos el botón no existe (ver
+            `puedePedir`). Piden Marketing, Administración y los admins. */}
+        {puedePedir(perfilHist) && (
+          <button className="btn-primary" onClick={onNueva}>
+            + Nueva solicitud
+          </button>
+        )}
         {seleccion.size >= 2 ? (
           <button
             className="btn-sm"
@@ -584,9 +592,10 @@ function Detalle({
   const onRetirar = (origen: Origen, val: boolean) => setWork((w) => ({ ...w, retirado: { ...(w.retirado || {}), [origen]: val } }))
   const puedeRetiroDe = (o: Origen) => (o === 'deposito' ? puedeRetiroDep : puedeRetiroLoc)
 
-  // Capa internas (gateada por preset): aprobación de consumos + consumo sin devolución.
+  // Aprobación: la pide el DESTINO (consumo = baja definitiva), no la sección por la que
+  // se entró. Un consumo sin aprobar no puede generar la venta en GN.
   const esConsumo = s.tipo === 'consumo'
-  const necesitaAprobacion = preset.conAprobacion && s.estado === 'pendiente'
+  const pendienteDeAprobar = necesitaAprobacion(s) && s.estado === 'pendiente'
   const esAprobador = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'aprobar')
   const onAprobar = () => setWork((w) => ({ ...w, estado: 'aprobada', aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
   const onRechazar = () => {
@@ -816,20 +825,20 @@ function Detalle({
 
       <Banner prioridad={prioridad} admin={admin} />
 
-      {/* Internas: capa de aprobación de consumos. */}
-      {preset.conAprobacion && s.tipo ? (
+      {/* Destino + aprobación. Toda solicitud tiene destino, así que siempre se muestra. */}
+      {s.tipo ? (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 13 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? '#B45309' : '#0F766E', background: esConsumo ? '#FFFBEB' : '#F0FDFA', border: `1px solid ${esConsumo ? '#FDE68A' : '#99F6E4'}`, borderRadius: 6, padding: '2px 8px' }}>
             {esConsumo ? '🔥 Consumo (baja definitiva)' : '🔁 Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
           </span>
           {s.estado === 'rechazada' ? <span style={{ color: '#B91C1C' }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
           {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: '#15803D' }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
-          {necesitaAprobacion && esAprobador ? (
+          {pendienteDeAprobar && esAprobador ? (
             <>
               <button className="btn-sm" onClick={onAprobar} style={{ background: '#16A34A', color: '#fff' }}>✓ Aprobar</button>
               <button className="btn-sm" onClick={onRechazar} style={{ background: '#fff', color: '#B91C1C', border: '1px solid #FCA5A5' }}>✗ Rechazar</button>
             </>
-          ) : necesitaAprobacion ? (
+          ) : pendienteDeAprobar ? (
             <span style={{ color: '#B45309' }}>⏳ Esperando aprobación de un gerente.</span>
           ) : null}
         </div>
@@ -867,7 +876,7 @@ function Detalle({
             })}
           </div>
         </div>
-      ) : hayVentables && veTodosLosItems && (!preset.conAprobacion || s.estado === 'aprobada') ? (
+      ) : hayVentables && veTodosLosItems && (!necesitaAprobacion(s) || s.estado === 'aprobada') ? (
         <div style={{ marginBottom: 10 }}>
           <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
             {creando ? '⏳ Separando en GN…' : esConsumo ? '🧾 Crear venta en GN (descontar)' : '🧾 Crear venta en GN (separar)'}
@@ -1189,6 +1198,7 @@ function Draft({
   variantes,
   productos,
   pidsIniciales,
+  alta,
   onCancelar,
   onCreada,
 }: {
@@ -1203,11 +1213,24 @@ function Draft({
   productos: Producto[]
   /** Ids de producto que llegan por el puente desde Marketing (borrador pre-cargado). */
   pidsIniciales?: string[] | null
+  /** Motivo + destino elegidos en Solicitudes al pedir el alta. */
+  alta?: AltaSolicitud | null
   onCancelar: () => void
   onCreada: (id: string) => void
 }) {
-  // Internas: el borrador arranca con motivo + tipo (retornable). Fotos: sin ellos.
-  const draftInicial = () => (preset.pickerMotivoTipo ? draftVacio(SI_MOTIVOS[0], 'retornable') : draftVacio())
+  /**
+   * Los motivos elegibles sin cambiar de cajón, más el actual si es uno viejo (el catálogo
+   * cambió en la Fase 2: existían "Consumo" y "Prueba"). Sin ese agregado, abrir una
+   * solicitud histórica le cambiaría el motivo solo por mirarla.
+   */
+  const motivosVisibles = (actual?: string) => {
+    const propios = motivosDe(preset)
+    return actual && !propios.includes(actual) ? [actual, ...propios] : propios
+  }
+
+  // Todo borrador nace con motivo y destino: son dos campos de la solicitud, no una capa
+  // de "las internas". Si el alta vino de Solicitudes, arranca con lo que se eligió ahí.
+  const draftInicial = () => draftVacio(alta?.motivo || motivosDe(preset)[0] || MOTIVO_DEFAULT, alta?.tipo || DESTINO_DEFAULT)
   // Con puente desde Marketing, arranca con esos productos expandidos (variantes con
   // stock, sin tildar) — el mismo estado que "Traer producto" de a uno. Inicializador
   // de useState: corre una sola vez.
@@ -1272,23 +1295,24 @@ function Draft({
 
   return (
     <div>
-      {/* Internas: motivo + tipo (retornable/consumo). Fotos: no aplica. */}
-      {preset.pickerMotivoTipo && (
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          <label style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
-            Motivo
-            <select
-              value={draft.motivo || SI_MOTIVOS[0]}
-              onChange={(e) => setDraft((d) => ({ ...d, motivo: e.target.value }))}
-              style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
-            >
-              {SI_MOTIVOS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
-          <span style={{ fontSize: 13, color: '#374151' }}>Tipo:</span>
-          {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
+      {/* Motivo (para qué sale) + destino (si vuelve). Dos ejes independientes: cualquier
+          motivo puede tener cualquier destino — la foto de una remera vuelve, la de un
+          vidrio templado no. Los dos botones están SIEMPRE visibles, con su explicación. */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <label style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Motivo
+          <select
+            value={draft.motivo || MOTIVO_DEFAULT}
+            onChange={(e) => setDraft((d) => ({ ...d, motivo: e.target.value }))}
+            style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+          >
+            {motivosVisibles(draft.motivo).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+        <span style={{ fontSize: 13, color: '#374151' }}>Destino:</span>
+        {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
+          <span key={t} style={{ display: 'inline-flex', alignItems: 'center' }}>
             <button
-              key={t}
               onClick={() => setDraft((d) => ({ ...d, tipo: t }))}
               style={{
                 border: `1px solid ${draft.tipo === t ? '#378ADD' : '#D1D5DB'}`,
@@ -1299,16 +1323,17 @@ function Draft({
             >
               {t === 'retornable' ? '🔁 Retornable' : '🔥 Consumo'}
             </button>
-          ))}
-          {draft.tipo === 'consumo' ? <span style={{ fontSize: 12, color: '#B45309' }}>⚠ baja definitiva de stock · necesita aprobación</span> : null}
-        </div>
-      )}
+            <InfoPopover titulo={t === 'retornable' ? 'Retornable' : 'Consumo'}>{AYUDA_DESTINO[t]}</InfoPopover>
+          </span>
+        ))}
+        {draft.tipo === 'consumo' ? <span style={{ fontSize: 12, color: '#B45309' }}>⚠ baja definitiva de stock · necesita aprobación</span> : null}
+      </div>
 
       {/* Descripción — el "nombre" del pedido (arriba). */}
       <input
         value={draft.desc}
         onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
-        placeholder={preset.pickerMotivoTipo ? '¿Para qué? (ej. molde falda otoño / video reel funda)' : 'Descripción de la sesión (ej. Sesión otoño · jueves)'}
+        placeholder={draft.motivo === 'Sesión de fotos' ? 'Descripción de la sesión (ej. Sesión otoño · jueves)' : '¿Para qué? (ej. molde falda otoño / video reel funda)'}
         style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, marginBottom: 14 }}
       />
 

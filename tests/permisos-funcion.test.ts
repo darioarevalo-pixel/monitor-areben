@@ -41,6 +41,14 @@ describe('permisos — precedencia de puedeVer', () => {
     expect(estaExcluido(u, 'bdi', 'cupones')).toBe(true)
   })
 
+  it('quien tenía Sesión de fotos entra a Solicitudes (la sección que la absorbió)', () => {
+    const u = perfil({ acceso: { bdi: { 'sesion-fotos': true }, zattia: {} } })
+    expect(puedeVer(u, 'bdi', 'solicitudes')).toBe(true)
+    expect(puedeVer(u, 'zattia', 'solicitudes')).toBe(false) // sigue siendo por marca
+    const i = perfil({ acceso: { bdi: {}, zattia: { 'solicitudes-internas': true } } })
+    expect(puedeVer(i, 'zattia', 'solicitudes')).toBe(true)
+  })
+
   it('sin función ni permiso, no ve nada', () => {
     expect(puedeVer(perfil(), 'bdi', 'cupones')).toBe(false)
     expect(puedeVer(null, 'bdi', 'cupones')).toBe(false)
