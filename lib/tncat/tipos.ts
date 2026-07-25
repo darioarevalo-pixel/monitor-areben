@@ -90,3 +90,14 @@ export type ProductoFchk = {
 }
 
 export type FiltroFchk = 'problema' | 'sinvincular' | 'sinfoto'
+
+// ── Explorar por categoría (card nueva) ─────────────────────────────────────────
+/** Un producto de la tienda con sus categorías, para asignarlas o quitarlas. */
+export type ProductoCat = {
+  id: string | number
+  name: string
+  sku?: string | null
+  published?: boolean
+  categories?: string[]
+  category_ids?: (string | number)[]
+}

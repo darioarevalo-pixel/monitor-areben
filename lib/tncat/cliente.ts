@@ -15,6 +15,7 @@ import type {
   CatAplicar,
   CatRecalc,
   Categoria,
+  ProductoCat,
   ProductoFchk,
   ProductoImg,
   SubirResp,
@@ -130,6 +131,16 @@ export async function auditVariantes(store: Marca, refrescar = false): Promise<P
   const r = await fetch(`${auditUrl(store)}&variantes=1${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
   const d = await r.json()
   return (d && d.products ? d.products : []) as ProductoFchk[]
+}
+
+/**
+ * Productos de la tienda con sus categorías (sin el detalle por variante, que pesa el doble).
+ * Es lo que permite recorrer la tienda POR categoría en vez de a ciegas.
+ */
+export async function auditProductos(store: Marca, refrescar = false): Promise<ProductoCat[]> {
+  const r = await fetch(`${auditUrl(store)}${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
+  const d = await r.json()
+  return (d && d.products ? d.products : []) as ProductoCat[]
 }
 
 /** Refresca el caché del audit de Marketing tras subir/publicar (así las fotos nuevas se ven ya). Port de _mktBustAudit. */

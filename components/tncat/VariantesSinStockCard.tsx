@@ -5,7 +5,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
-import { variantesSinStockVisibles } from '@/lib/tncat/variantes-sin-stock'
+import { agruparPorCategoria, variantesSinStockVisibles } from '@/lib/tncat/variantes-sin-stock'
 import type { Marca } from '@/lib/nav.datos'
 
 /**
@@ -46,6 +46,9 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
       )
     : grupos
   const totalVar = lista.reduce((n, g) => n + g.variantes.length, 0)
+  // Son cientos: agrupadas por categoría se puede recorrer de a partes en vez de tener una
+  // lista plana que nunca se termina.
+  const porCategoria = useMemo(() => agruparPorCategoria(lista), [lista])
 
   return (
     <div className="card">
@@ -78,8 +81,17 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {lista.map((g) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {porCategoria.map(({ categoria, grupos }) => (
+              <details key={categoria} open={porCategoria.length <= 3}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#374151', padding: '4px 0' }}>
+                  {categoria}{' '}
+                  <span style={{ fontWeight: 400, color: '#9CA3AF' }}>
+                    · {grupos.length === 1 ? '1 producto' : `${grupos.length} productos`}
+                  </span>
+                </summary>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                  {grupos.map((g) => (
               <div key={String(g.tnId)} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 12px' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{g.nombre}</div>
@@ -102,6 +114,9 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
                   ))}
                 </div>
               </div>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
         </>

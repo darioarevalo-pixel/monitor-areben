@@ -23,6 +23,8 @@ export type GrupoSinStock = {
   sku: string | null
   /** El producto entero está agotado (stock GN total = 0) → conviene usar "Ocultar agotados". */
   enteroAgotado: boolean
+  /** Categorías del producto en TN: son muchos productos y sin agruparlos la lista no se lee. */
+  categorias: string[]
   variantes: VarSinStock[]
 }
 
@@ -60,6 +62,7 @@ export function variantesSinStockVisibles(
         tnNombre: tn.name || p.name,
         sku: p.sku,
         enteroAgotado: p.stock === 0,
+        categorias: tn.categories || [],
         variantes: nuevas,
       })
     }
@@ -69,4 +72,26 @@ export function variantesSinStockVisibles(
   for (const g of out) g.variantes.sort((a, b) => a.label.localeCompare(b.label, 'es'))
   out.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   return out
+}
+
+/**
+ * Los grupos ordenados por categoría, para poder recorrer la lista de a partes.
+ *
+ * Son cientos de variantes: en una lista plana no se termina nunca y no se sabe por dónde
+ * empezar. Un producto puede estar en varias categorías (aparece en cada una) y los que no
+ * tienen ninguna van al final, juntos, en vez de desaparecer.
+ */
+export const SIN_CATEGORIA = '(sin categoría)'
+
+export function agruparPorCategoria(grupos: GrupoSinStock[]): { categoria: string; grupos: GrupoSinStock[] }[] {
+  const por = new Map<string, GrupoSinStock[]>()
+  for (const g of grupos) {
+    const cats = g.categorias.length ? g.categorias : [SIN_CATEGORIA]
+    for (const c of cats) por.set(c, [...(por.get(c) ?? []), g])
+  }
+  return [...por.entries()]
+    .map(([categoria, grupos]) => ({ categoria, grupos }))
+    .sort((a, b) =>
+      a.categoria === SIN_CATEGORIA ? 1 : b.categoria === SIN_CATEGORIA ? -1 : a.categoria.localeCompare(b.categoria, 'es'),
+    )
 }

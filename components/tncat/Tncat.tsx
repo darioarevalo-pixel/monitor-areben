@@ -8,6 +8,7 @@ import { CategoriasCard } from './CategoriasCard'
 import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
 import { AsignarCard } from './AsignarCard'
+import { ExplorarCategoriaCard } from './ExplorarCategoriaCard'
 import { AgotadosCard } from './AgotadosCard'
 import { ConStockCard } from './ConStockCard'
 import { VariantesSinStockCard } from './VariantesSinStockCard'
@@ -97,6 +98,7 @@ function Fotos({ marca }: { marca: Marca }) {
 function Categorias({ marca, verCat, verAsig }: { marca: Marca; verCat: boolean; verAsig: boolean }) {
   return (
     <>
+      <ExplorarCategoriaCard marca={marca} />
       {verCat && <CategoriasCard marca={marca} />}
       {verAsig && <AsignarCard marca={marca} />}
     </>
