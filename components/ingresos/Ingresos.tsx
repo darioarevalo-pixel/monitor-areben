@@ -180,7 +180,7 @@ export function Ingresos() {
       <div>
         {grupos.map((grp, i) => (
           <div key={i}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', margin: '14px 0 6px' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: paleta.mut2, letterSpacing: 0, margin: '14px 0 6px' }}>
               🗓️ {grp.mes}
             </div>
             {grp.items.map((g) =>
@@ -301,7 +301,7 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>📸 Galería del pedido</div>
+      <div style={{ fontSize: 11, color: paleta.mut2, letterSpacing: 0, marginBottom: 6 }}>📸 Galería del pedido</div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {items.map((it) => (
           <div key={it.id} style={{ position: 'relative' }}>
@@ -426,7 +426,7 @@ function BloqueEditar({
   return (
     <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '8px 10px', marginTop: 10, background: paleta.bg }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Bloque</span>
+        <span style={{ fontSize: 11, color: paleta.mut2, letterSpacing: 0 }}>Bloque</span>
         <input
           value={b.nombre}
           onChange={(e) => guardar((l) => setBloqueNombre(l, g.id, b.id, e.target.value))}
@@ -456,7 +456,7 @@ function BloqueEditar({
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => onDrop(e, d.id)}
                         tabIndex={0}
-                        title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá 📷 subir"
+                        title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá subir"
                         style={{ cursor: 'pointer', outline: sel ? `2px solid ${paleta.brandSolid}` : 'none', borderRadius: 8 }}
                       >
                         {d.img ? (
@@ -717,7 +717,7 @@ function IngresoEditar({
         </label>
       </div>
       <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>Bloques (por material) · modelos × diseños</div>
+        <div style={{ fontSize: 11, color: paleta.mut2, letterSpacing: 0, marginBottom: 4 }}>Bloques (por material) · modelos × diseños</div>
         {bloques.length ? null : <div style={{ fontSize: 12, color: paleta.mut2, margin: '8px 0' }}>Esta importación todavía no tiene bloques. Agregá uno (ej. IMD, Formas…). 👇</div>}
         {bloques.map((b) => (
           <BloqueEditar key={b.id} g={g} b={b} guardar={guardar} onPasteSel={onPasteSel} pasteTarget={pasteTarget} />

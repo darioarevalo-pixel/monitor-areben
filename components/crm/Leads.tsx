@@ -248,7 +248,7 @@ export function Leads() {
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${color.bg2}` }}>
                   <span style={{ color: color.mut2, fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
                   <span style={{ flex: 1 }}>{n.texto}</span>
-                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar la nota', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}>🗑️</Button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar la nota', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}></Button>
                 </div>
               ))}
               {!l.notas.length && <div style={{ fontSize: 12, color: color.mut2 }}>Sin notas.</div>}
@@ -265,24 +265,22 @@ export function Leads() {
                 variant="ghost"
                 tone="danger"
                 style={{ marginLeft: 'auto' }}
-                onClick={() =>
-                  void (async () => {
-                    // Irreversible: el KV no tiene papelera, y por eso el diálogo lo dice.
-                    const ok = await confirmar({
-                      titulo: 'Eliminar el lead',
-                      tono: 'danger',
-                      ok: 'Eliminar para siempre',
-                      mensaje: `Se borra ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
-                    })
-                    if (ok) {
-                      persistir(eliminar(leads, l.id))
-                      setAbierto(null)
-                    }
-                  })()
-                }
-              >
-                Eliminar
-              </Button>
+                onClick={() => void (async () => {
+ // Irreversible: el KV no tiene papelera, y por eso el diálogo lo dice.
+ const ok = await confirmar({
+ titulo: 'Eliminar el lead',
+ tono: 'danger',
+ ok: 'Eliminar para siempre',
+ mensaje: `Se borra ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
+ })
+ if (ok) {
+ persistir(eliminar(leads, l.id))
+ setAbierto(null)
+ }
+ })()
+ }
+ >
+ Eliminar</Button>
             </div>
           </div>
         </div>

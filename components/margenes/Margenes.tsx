@@ -123,7 +123,7 @@ export function Margenes() {
 function Dato({ label, valor, tono }: { label: string; valor: string; tono?: string }) {
   return (
     <div>
-      <div style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: font.xs, color: color.mut, letterSpacing: 0, fontWeight: 500 }}>{label}</div>
       <div style={{ fontSize: font.xl, fontWeight: 700, color: tono ?? color.ink, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{valor}</div>
     </div>
   )

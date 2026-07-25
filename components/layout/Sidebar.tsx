@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esDeMarca, estaEnVariosGrupos, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
@@ -29,11 +29,14 @@ const APLANAR = new Set(['inicio', 'clientes'])
 export function Sidebar({
   activa,
   sub,
+  grupoUrl,
   abierto: cajonAbierto,
   onNavegar,
 }: {
   activa: string
   sub?: string | null
+  /** El grupo del que se entró (`?g=`), para no marcar el sector equivocado. */
+  grupoUrl?: string | null
   /** Solo en móvil: el sidebar es un cajón y esto dice si está afuera. */
   abierto?: boolean
   /** Se llama al elegir una sección, para que el cajón se cierre solo. */
@@ -88,8 +91,12 @@ export function Sidebar({
    * grupo que la persona tiene ABIERTO; si no abrió ninguno, al primero que la contiene.
    */
   const grupoActivo = (() => {
+    // 1º el grupo del que se entró (viaja en `?g=`), 2º el que la persona tiene abierto,
+    // y recién ahí el primero que la contenga. Sin el paso 1, entrar a Solicitudes desde
+    // Depósito pintaba Local, que es el primero de la lista.
+    const delLink = grupoUrl ? cats.find((c) => c.id === grupoUrl && contieneActiva(c)) : null
     const abiertoConActiva = cats.find((c) => c.id === abierto && contieneActiva(c))
-    return (abiertoConActiva ?? cats.find(contieneActiva))?.id ?? null
+    return (delLink ?? abiertoConActiva ?? cats.find(contieneActiva))?.id ?? null
   })()
 
   return (
@@ -109,7 +116,6 @@ export function Sidebar({
               style={{
                 fontSize: 10,
                 color: color.mut2,
-                textTransform: 'uppercase',
                 letterSpacing: '.04em',
                 padding: '4px 10px 6px',
               }}
@@ -143,7 +149,7 @@ export function Sidebar({
               return (
                 <div key={cat.id} className="nav-group">
                   <Link
-                    href={`/${k}`}
+                    href={estaEnVariosGrupos(k) ? `/${k}?g=${cat.id}` : `/${k}`}
                     className={`nav-cat${k === activa ? ' active' : ''}`}
                     onClick={onNavegar}
                   >
@@ -156,7 +162,10 @@ export function Sidebar({
             const opt = (k: string) => (
               <Link
                 key={k}
-                href={`/${k}`}
+                // `?g=` solo donde hace falta: una sección que cuelga de varios sectores
+                // necesita decir de cuál se entró, o el encabezado muestra siempre el
+                // mismo (y era el de otro sector).
+                href={estaEnVariosGrupos(k) ? `/${k}?g=${cat.id}` : `/${k}`}
                 className={`nav-opt${k === activa ? ' active' : ''}${
                   cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
                 }`}

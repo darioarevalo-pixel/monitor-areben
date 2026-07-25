@@ -188,7 +188,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="🔎 Buscar por nombre o SKU…"
+              placeholder="Buscar por nombre o SKU…"
               style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7, marginBottom: 6 }}
             />
             {q.trim() === '' ? (

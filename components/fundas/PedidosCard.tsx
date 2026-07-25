@@ -59,7 +59,7 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
   return (
     <div className="card" style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>
           Pedidos del proveedor <span style={{ color: color.brandSolid }}>({pedidos.length})</span>
         </span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createElement, useEffect, useState } from 'react'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -10,7 +10,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
-import { esDeMarca, esKeyValida, tituloLimpio } from '@/lib/nav'
+import { esDeMarca, esKeyValida, tituloDesde } from '@/lib/nav'
 import { esAdmin, puedeVer } from '@/lib/permisos'
 
 /** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
@@ -27,6 +27,9 @@ const FALLBACK_TAB = 'inicio'
 export default function Seccion() {
   const params = useParams()
   const router = useRouter()
+  // De qué sector se entró. Una sección puede colgar de varios (Solicitudes cuelga de
+  // cuatro) y el encabezado tiene que decir el correcto, no el primero de la lista.
+  const grupo = useSearchParams().get('g')
   const { perfil, marca, cargando } = useSesion()
   // Cajón del sidebar en móvil. Vive acá porque lo abren dos lugares (el botón de la
   // topbar y la tapa oscura) y lo cierra un tercero (navegar a una sección).
@@ -68,6 +71,7 @@ export default function Seccion() {
           <Sidebar
             activa={key}
             sub={Array.isArray(partes) ? partes[1] : null}
+            grupoUrl={grupo}
             abierto={menuAbierto}
             onNavegar={() => setMenuAbierto(false)}
           />
@@ -80,13 +84,13 @@ export default function Seccion() {
                 ☰
               </button>
               <span className="shell-topbar-marca">Monitor</span>
-              <span className="shell-topbar-seccion">· {tituloLimpio(key)}</span>
+              <span className="shell-topbar-seccion">· {tituloDesde(key, grupo)}</span>
             </div>
             <div className="shell-content">
               <div className="seccion-pad">
                 {seccion ? (
                   <AccionesProvider>
-                    <SeccionHeader seccion={key} />
+                    <SeccionHeader seccion={key} grupo={grupo} />
                     {createElement(seccion)}
                   </AccionesProvider>
                 ) : (

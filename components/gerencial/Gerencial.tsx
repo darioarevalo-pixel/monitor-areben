@@ -83,12 +83,10 @@ export function Gerencial() {
         </InfoPopover>
         {nSilenciados > 0 && (
           <Button variant="ghost" onClick={() => setMostrarSil((v) => !v)}>
-            {mostrarSil ? '← Volver' : `🔕 ${nSilenciados} silenciado${nSilenciados === 1 ? '' : 's'}`}
+            {mostrarSil ? '← Volver' : ` ${nSilenciados} silenciado${nSilenciados === 1 ? '' : 's'}`}
           </Button>
         )}
-        <Button variant="outline" onClick={recargar}>
-          Actualizar
-        </Button>
+        <Button variant="outline" onClick={recargar}>Actualizar</Button>
       </HeaderAcciones>
 
       {/* Las pills de severidad y los chips de área son FILTROS: van juntos en una barra,
@@ -181,7 +179,7 @@ function CardAccionable({
     <Card padding={5} style={{ borderLeft: `4px solid ${c.punto}`, background: c.fondo }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
         <MarcaChip marca={a.marca} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: c.texto, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: c.texto, letterSpacing: 0 }}>
           {ETIQUETA_SEVERIDAD[a.severidad]}
         </span>
         <Badge tone="neutral" subtle>
@@ -204,13 +202,9 @@ function CardAccionable({
           <BotonAccion key={i} marca={a.marca} accion={ac} />
         ))}
         {silenciado ? (
-          <Button size="sm" variant="outline" onClick={onReactivar} style={{ marginLeft: 'auto' }}>
-            🔔 Reactivar
-          </Button>
+          <Button size="sm" variant="outline" onClick={onReactivar} style={{ marginLeft: 'auto' }}>Reactivar</Button>
         ) : (
-          <Button size="sm" variant="ghost" onClick={onSilenciar} title={`Ocultar por ${DIAS_SNOOZE} días`} style={{ marginLeft: 'auto' }}>
-            🔕 Silenciar
-          </Button>
+          <Button size="sm" variant="ghost" onClick={onSilenciar} title={`Ocultar por ${DIAS_SNOOZE} días`} style={{ marginLeft: 'auto' }}>Silenciar</Button>
         )}
       </div>
     </Card>
@@ -294,9 +288,7 @@ function BotonAccion({ marca, accion }: { marca: Marca; accion: Accion }) {
     router.push(`/${accion.seccion}`)
   }
   return (
-    <Button size="sm" variant="solid" tone="brand" onClick={ir}>
-      {accion.label} →
-    </Button>
+    <Button size="sm" variant="solid" tone="brand" onClick={ir}>{accion.label} →</Button>
   )
 }
 

@@ -52,9 +52,7 @@ export function DatosGate<T>({ datos, error, esqueleto = 'tabla', onReintentar, 
             No se pudieron cargar los datos: <b>{error}</b>
           </span>
           {onReintentar && (
-            <Button size="sm" variant="outline" tone="danger" onClick={onReintentar}>
-              Reintentar
-            </Button>
+            <Button size="sm" variant="outline" tone="danger" onClick={onReintentar}>Reintentar</Button>
           )}
         </div>
       </Notice>

@@ -25,11 +25,8 @@ export function ConfirmModal({ mensaje, onSi, onNo }: { mensaje: string; onSi: (
       titulo="¿Confirmás?"
       pie={
         <>
-          <Button variant="outline" onClick={onNo}>
-            Cancelar
-          </Button>
-          <Button variant="solid" tone="brand" onClick={onSi} data-foco>
-            Aceptar
+          <Button variant="outline" onClick={onNo}>Cancelar</Button>
+            <Button variant="solid" tone="brand" onClick={onSi} data-foco>Aceptar
           </Button>
         </>
       }
@@ -64,9 +61,7 @@ export function PromptModal({
       titulo="Completá el dato"
       pie={
         <>
-          <Button variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
           <Button variant="solid" tone="brand" onClick={() => onOk(valor)}>
             Aceptar
           </Button>

@@ -25,7 +25,7 @@ export function KpiCard({ label, value, sub, tone = 'neutral', info, onClick, st
       onClick={onClick}
       style={{ flex: '1 1 200px', minWidth: 160, borderColor: accent ? t.border : color.line, background: accent ? t.bg : color.surface, cursor: onClick ? 'pointer' : undefined, ...style }}
     >
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.xs, fontWeight: weight.medium, color: accent ? t.fg : color.mut, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.xs, fontWeight: weight.medium, color: accent ? t.fg : color.mut, letterSpacing: 0 }}>
         {label}
         {info}
       </div>

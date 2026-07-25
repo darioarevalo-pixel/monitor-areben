@@ -176,7 +176,7 @@ export function Proveedores() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
-        <div style={{ padding: '12px 16px 4px', fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        <div style={{ padding: '12px 16px 4px', fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>
           Productos más vendidos{dateLabel}
         </div>
         <table>
@@ -216,7 +216,7 @@ export function Proveedores() {
   )
 }
 
-const TITULO_MB12: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }
+const TITULO_MB12: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 12 }
 const TITULO_MB10: React.CSSProperties = { ...TITULO_MB12, marginBottom: 10 }
 
 function Stat({ label, value, mod }: { label: string; value: string; mod?: 'info' | 'success' }) {

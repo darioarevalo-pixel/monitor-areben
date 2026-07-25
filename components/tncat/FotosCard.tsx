@@ -259,7 +259,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
             {btn('problema', 'Todos con problema')}
             {btn('sinvincular', `Sin vincular al color (${nSinVinc})`)}
             {btn('sinfoto', `Sin ninguna foto (${nSinFoto})`)}
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔎 Buscar producto…" style={{ flex: 1, minWidth: 180, padding: '7px 9px', border: `1px solid ${paleta.line2}`, borderRadius: 7 }} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar producto…" style={{ flex: 1, minWidth: 180, padding: '7px 9px', border: `1px solid ${paleta.line2}`, borderRadius: 7 }} />
           </div>
 
           {!verIgnorados && nApartados > 0 && (

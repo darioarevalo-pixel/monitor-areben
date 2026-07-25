@@ -124,7 +124,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
         {/* Seguimiento */}
         <div style={{ background: color.bg, border: `1px solid ${color.line}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: color.mut, marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>📞 Seguimiento</div>
+          <div style={{ fontSize: 12, color: color.mut, marginBottom: 10, fontWeight: 600, letterSpacing: 0 }}>📞 Seguimiento</div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--mo-mayorista-fg)' }}>
             <input type="checkbox" checked={!!seg.es_mayorista} onChange={(e) => mutar((s) => setMayorista(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--mo-mayorista-fg)' }} />
@@ -232,7 +232,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
         </div>
 
         {/* Resumen de compras */}
-        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>🛒 Resumen de compras</div>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, letterSpacing: 0 }}>🛒 Resumen de compras</div>
         <div style={{ marginBottom: 16 }}>
           {errResumen ? (
             <div style={{ fontSize: 12, color: color.danger }}>No se pudo cargar el detalle de compras.</div>
@@ -269,7 +269,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
         </div>
 
         {/* Historial */}
-        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Historial de pedidos ({ventasOrden.length})</div>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, letterSpacing: 0 }}>Historial de pedidos ({ventasOrden.length})</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ fontSize: 12 }}>
             <thead><tr><th>Fecha</th><th>N°</th><th style={{ textAlign: 'right' }}>Total</th><th>Estado</th></tr></thead>

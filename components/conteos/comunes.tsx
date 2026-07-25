@@ -94,7 +94,7 @@ export function ResumenConteo({ total, terminados, enProgreso, label = 'Producto
 export function Dato({ label, valor, tono }: { label: string; valor: number; tono?: string }) {
   return (
     <div>
-      <div style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: font.xs, color: color.mut, letterSpacing: 0, fontWeight: 500 }}>{label}</div>
       <div style={{ fontSize: font.xl, fontWeight: 700, color: tono ?? color.ink, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{valor}</div>
     </div>
   )
@@ -210,7 +210,7 @@ function ConteoGuardado({ c, conVivo, unidad }: { c: ConteoHistorial; conVivo?: 
         </div>
 
         <div style={{ marginTop: space[3] }}>
-          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: space[1] }}>Líneas con diferencia</div>
+          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[1] }}>Líneas con diferencia</div>
           {difs.length === 0 ? (
             <Notice tone="success" icon="✓">
               Todo coincidió con el sistema, sin diferencias.

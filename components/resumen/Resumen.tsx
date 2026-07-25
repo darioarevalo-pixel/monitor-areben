@@ -30,9 +30,7 @@ export function Resumen() {
   return (
     <>
       <HeaderAcciones>
-        <Button variant="outline" onClick={refrescar} loading={refrescando} title="Trae los datos más nuevos de Supabase">
-          {refrescando ? 'Actualizando…' : '🔄 Actualizar datos'}
-        </Button>
+        <Button variant="outline" onClick={refrescar} loading={refrescando} title="Trae los datos más nuevos de Supabase">{refrescando ? 'Actualizando…' : ' Actualizar datos'}</Button>
       </HeaderAcciones>
 
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>

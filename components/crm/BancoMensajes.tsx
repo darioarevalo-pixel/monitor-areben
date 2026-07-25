@@ -123,7 +123,7 @@ export function BancoMensajes({ onCerrar }: Props) {
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                             <button className="btn-sm" onClick={() => copiar(m, id)}>{copiado === id ? '✓ Copiado' : '📋 Copiar'}</button>
                             <button className="btn-sm" onClick={() => { setEditando({ gi, mi }); setBorrador(m) }}>✏️ Editar</button>
-                            <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar el mensaje', tono: 'danger', ok: 'Borrar', mensaje: 'Se saca del banco compartido: no lo va a ver nadie más.' })) persistir(borrarMensaje(banco, gi, mi)) })()}>🗑️</Button>
+                            <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar el mensaje', tono: 'danger', ok: 'Borrar', mensaje: 'Se saca del banco compartido: no lo va a ver nadie más.' })) persistir(borrarMensaje(banco, gi, mi)) })()}></Button>
                           </div>
                         </>
                       )}

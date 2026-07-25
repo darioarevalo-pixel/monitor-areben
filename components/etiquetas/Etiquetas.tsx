@@ -312,7 +312,7 @@ function ModoPanel({
               void onScan()
             }
           }}
-          placeholder="🔫 Escaneá acá el código de barras…"
+          placeholder="Escaneá acá el código de barras…"
           style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${scanBorder}`, borderRadius: 8, boxSizing: 'border-box' }}
         />
         {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? color.success : color.danger }}>{feedback.html}</div>}
@@ -539,7 +539,7 @@ function LibreEditor() {
           <input type="number" value={copias} min={1} onChange={(e) => setCopias(e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 90 }} />
         </label>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Líneas de texto</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 6 }}>Líneas de texto</div>
       {lineas.map((l, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
           <input value={l.texto} placeholder={`Texto de la línea ${i + 1}`} onChange={(e) => setLinea(i, 'texto', e.target.value)} className="mo-input" style={{ flex: 1, minWidth: 160 }} />
@@ -564,7 +564,8 @@ function LibreEditor() {
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
         <Button variant="outline" onClick={preview}>Vista previa</Button>
-        <Button variant="solid" tone="brand" onClick={imprimir}>Imprimir</Button>
+          <Button variant="solid" tone="brand" onClick={imprimir}>Imprimir
+        </Button>
       </div>
     </Card>
   )

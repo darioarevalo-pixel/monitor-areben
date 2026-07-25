@@ -274,7 +274,7 @@ export function ConteoDeposito() {
               Reiniciar
             </Button>
             <Button variant="outline" onClick={() => void onHistorial()}>
-              🕘 Historial
+              Historial
             </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={cd.cargando}>
               Traer stock de GN
@@ -299,12 +299,11 @@ export function ConteoDeposito() {
             <Button
               variant="outline"
               onClick={() => {
-                setPreview(null)
-                setVista('lista')
-              }}
-            >
-              ← Volver
-            </Button>
+ setPreview(null)
+ setVista('lista')
+ }}
+ >
+ ← Volver</Button>
             {preview.rows.length ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
                 Generar Excel y guardar
@@ -444,9 +443,7 @@ function Lista({
             <span>
               Tenés <b>{term}</b> {term === 1 ? 'producto terminado' : 'productos terminados'}. Aplicar relee el stock vivo de GN y genera el Excel de ajuste.
             </span>
-            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>
-              {aplicando ? 'Leyendo stock vivo…' : 'Aplicar ajuste'}
-            </Button>
+            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>{aplicando ? 'Leyendo stock vivo…' : 'Aplicar ajuste'}</Button>
           </div>
         </Notice>
       )}
@@ -470,10 +467,9 @@ function Lista({
           variant={ordenarStock ? 'soft' : 'ghost'}
           tone={ordenarStock ? 'brand' : 'neutral'}
           onClick={() => setOrdenarStock((v) => !v)}
-          title="Ordena por stock del sistema, de menor a mayor: los de poco stock son rápidos de contar"
-        >
-          {ordenarStock ? '✓ Poco stock primero' : 'Ordenar por stock'}
-        </Button>
+ title="Ordena por stock del sistema, de menor a mayor: los de poco stock son rápidos de contar"
+ >
+ {ordenarStock ? '✓ Poco stock primero' : 'Ordenar por stock'}</Button>
       </FilterBar>
 
       {!lista.length ? (

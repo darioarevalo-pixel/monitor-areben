@@ -312,22 +312,18 @@ export function Ubicaciones() {
       <HeaderAcciones>
         {progreso && <ProgressInline hechos={progreso.hechos} total={progreso.total} label={reparando ? 'reparando' : 'guardando'} />}
         {syncLabel && <span style={{ fontSize: font.sm, color: color.mut }}>{syncLabel}</span>}
-        <Button variant="ghost" onClick={recargar} disabled={ocupado} title="Volver a leer la lista">
-          ↻
-        </Button>
-        <Button variant="outline" onClick={traerGN} loading={sincronizando} disabled={ocupado} title="Trae productos y stock nuevos de GN, y recarga la lista">
-          Traer de GN
+        <Button variant="ghost" onClick={recargar} disabled={ocupado} title="Volver a leer la lista">↻</Button>
+          <Button variant="outline" onClick={traerGN} loading={sincronizando} disabled={ocupado} title="Trae productos y stock nuevos de GN, y recarga la lista">Traer de GN
         </Button>
         <Button
           variant="outline"
           tone="warning"
           onClick={() => void reparar()}
-          loading={reparando}
-          disabled={ocupado || !cuentas.reparar}
-          title="Pisa TODAS las variantes con la ubicación dominante, en los productos con variantes desparejas"
-        >
-          Reparar{cuentas.reparar ? ` (${cuentas.reparar})` : ''}
-        </Button>
+ loading={reparando}
+ disabled={ocupado || !cuentas.reparar}
+ title="Pisa TODAS las variantes con la ubicación dominante, en los productos con variantes desparejas"
+ >
+ Reparar{cuentas.reparar ? ` (${cuentas.reparar})` : ''}</Button>
         <Button variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={ocupado || !pendientes.validos.length}>
           {pendientes.validos.length ? `Guardar ${pendientes.validos.length}` : 'Guardar'}
         </Button>

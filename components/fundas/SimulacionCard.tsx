@@ -188,7 +188,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       <datalist id="fm-sim-modelos">{FM_MODELOS.map((m) => <option key={m} value={m} />)}</datalist>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Simulación de pedido</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Simulación de pedido</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 12, color: color.mut }}>Total a pedir:</label>
           <input type="number" min={1} value={total} onChange={(e) => set({ total: e.target.value })} style={{ width: 90, textAlign: 'center', fontWeight: 600 }} />

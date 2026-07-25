@@ -238,7 +238,7 @@ export function ConteoLocalBdi() {
         {vista === 'lista' && (
           <>
             <Button variant="outline" onClick={() => void onHistorial()}>
-              🕘 Historial
+              Historial
             </Button>
             <Button variant="outline" onClick={() => void cf.traerStock(true)} loading={cf.cargando}>
               Traer stock de GN
@@ -250,12 +250,11 @@ export function ConteoLocalBdi() {
             <Button
               variant="outline"
               onClick={() => {
-                setModeloSel(null)
-                setVista('lista')
-              }}
-            >
-              ← Volver a modelos
-            </Button>
+ setModeloSel(null)
+ setVista('lista')
+ }}
+ >
+ ← Volver a modelos</Button>
             {puedeAplicar && (
               <Button variant="solid" tone="brand" onClick={() => void onCerrar()} loading={cerrando}>
                 {cerrando ? 'Leyendo stock vivo…' : `Cerrar conteo de ${grupoSel.modelo}`}
@@ -268,12 +267,11 @@ export function ConteoLocalBdi() {
             <Button
               variant="outline"
               onClick={() => {
-                setPreview(null)
-                setVista('foco')
-              }}
-            >
-              ← Volver
-            </Button>
+ setPreview(null)
+ setVista('foco')
+ }}
+ >
+ ← Volver</Button>
             <Button variant="solid" tone="brand" onClick={() => void onGenerar()}>
               {preview.rows.length ? 'Generar Excel y cerrar conteo' : 'Guardar el conteo igual'}
             </Button>
@@ -399,9 +397,7 @@ function ListaModelos({
                   {ult > 0 ? <> · contado {fmtDia(ult)}</> : <> · <span style={{ color: color.danger }}>sin conteo previo</span></>}
                 </div>
               </div>
-              <Button size="sm" variant="outline" tone="brand">
-                Contar →
-              </Button>
+              <Button size="sm" variant="outline" tone="brand">Contar →</Button>
             </Card>
           )
         })}
@@ -428,7 +424,7 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
         className="mo-input"
         type="text"
         autoComplete="off"
-        placeholder="🔫 Escaneá las fundas de este modelo…"
+        placeholder="Escaneá las fundas de este modelo…"
         aria-label="Código de barras a escanear"
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

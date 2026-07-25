@@ -187,7 +187,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
       <div style={{ marginBottom: space[3] }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ fontSize: font.xs, color: color.mut }}>Artículo de Gestión Nube (para descontar stock)</span>
-          {esAdmin && <Button size="sm" variant={fallaLibre ? 'solid' : 'ghost'} tone="brand" onClick={() => setFallaLibre((v) => !v)} style={{ marginLeft: 'auto' }}>{fallaLibre ? '↩ Usar buscador' : '✎ Falla libre'}</Button>}
+          {esAdmin && <Button size="sm" variant={fallaLibre ? 'solid' : 'ghost'} tone="brand" onClick={() => setFallaLibre((v) => !v)} style={{ marginLeft: 'auto' }}>{fallaLibre ? '↩ Usar buscador' : ' Falla libre'}</Button>}
         </div>
         {!(esAdmin && fallaLibre) ? (
           <BuscarArticuloGN marca={marca} onSelect={elegirArticulo} mostrarCosto={esAdmin} />
@@ -244,18 +244,20 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               <Td>{f.ubicacion ? UBICACION_LABEL[f.ubicacion] : '—'}</Td>
               {esAdmin && <Td align="right"><MoneyText value={f.valuacion_costo} /></Td>}
               <Td><StatusPill tone={ESTADO_TONE[f.estado]} label={ESTADO_LABEL[f.estado]} /></Td>
-              <Td>{f.barcode ? <Button size="sm" variant="ghost" onClick={() => setEtiqueta(f)}>🏷️ {f.barcode}</Button> : '—'}</Td>
+              <Td>{f.barcode ? <Button size="sm" variant="ghost" onClick={() => setEtiqueta(f)}> {f.barcode}</Button> : '—'}</Td>
               {esAdmin && (
                 <Td>
                   <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                     {f.estado === 'cargada' && <Button size="sm" variant="outline" tone="action" onClick={() => void recibir(f)} disabled={ocup}>{ocup ? '…' : 'Recibir'}</Button>}
                     {(f.estado === 'cargada' || f.estado === 'recibida') && <Button size="sm" variant="outline" tone="success" onClick={() => void confirmar(f)} disabled={ocup} title="Valida los datos de la carga (no toca GN)">{ocup ? '…' : 'Confirmar'}</Button>}
                     <Button size="sm" onClick={() => setEditando(f)}>Editar</Button>
-                    <Button size="sm" variant="outline" tone="danger" onClick={() => void eliminar(f)} disabled={ocup}>Eliminar</Button>
+                      <Button size="sm" variant="outline" tone="danger" onClick={() => void eliminar(f)} disabled={ocup}>Eliminar
+                    </Button>
                     {(f.estado === 'confirmada' || f.estado === 'en_deposito') && (
                       <>
                         <Button size="sm" variant="outline" tone="success" onClick={() => void cambiarEstado(f, 'vendida_feria')}>Vendida</Button>
-                        <Button size="sm" variant="ghost" onClick={() => void cambiarEstado(f, 'descartada')}>Descartar</Button>
+                          <Button size="sm" variant="ghost" onClick={() => void cambiarEstado(f, 'descartada')}>Descartar
+                        </Button>
                       </>
                     )}
                     {(f.estado === 'vendida_feria' || f.estado === 'descartada') && <Button size="sm" variant="outline" tone="brand" onClick={() => void cambiarEstado(f, 'confirmada')}>Reactivar</Button>}

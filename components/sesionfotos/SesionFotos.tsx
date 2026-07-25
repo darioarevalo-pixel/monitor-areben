@@ -458,7 +458,7 @@ function Historial({
           </label>
         )}
       </div>
-      <div style={{ fontSize: 12, color: color.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+      <div style={{ fontSize: 12, color: color.mut2, letterSpacing: 0, marginBottom: 6 }}>
         Historial
       </div>
       {visibles.length === 0 ? (
@@ -736,7 +736,7 @@ function Detalle({
                 <tr key={i.vid} style={ok ? { background: color.successBg } : undefined}>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {ok ? '✅' : '⬜'} {i.nombre}
-                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg={color.brand} bg={color.brandBg} /> : i.nuevo ? <EtiquetaMini texto="🆕 sin venta" fg={color.warningInk} bg={color.warningBg} /> : null}
+                    {i.manual ? <EtiquetaMini texto="a mano" fg={color.brand} bg={color.brandBg} /> : i.nuevo ? <EtiquetaMini texto="sin venta" fg={color.warningInk} bg={color.warningBg} /> : null}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {i.variante}
@@ -767,7 +767,7 @@ function Detalle({
                         value={i.bolsa ?? ''}
                         onChange={(e) => { const v = e.target.value.trim(); onAsignarBolsa(i, v === '' ? null : parseInt(v, 10)) }}
                         title="Bolsa (dejá vacío para sacarla)"
-                        placeholder="👜"
+                        placeholder=""
                         style={{ width: 38, textAlign: 'center', border: `1px solid ${color.line}`, borderRadius: 5, padding: '1px 2px', fontSize: 12, marginRight: 6 }}
                       />
                     ) : typeof i.bolsa === 'number' ? (
@@ -911,8 +911,8 @@ function Detalle({
       ) : null}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="📤 Preparado" />
-        {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />}
+        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
+        {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />}
       </div>
 
       {origenVisible('deposito') && grupo('📦 Retirar de Depósito', dep, 'deposito')}
@@ -931,7 +931,7 @@ function Detalle({
           ) : (
             <div style={{ border: `1px solid ${color.brandBorder}`, background: color.brandBg, borderRadius: 9, padding: 10 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="🔎 Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }} />
+                <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }} />
                 <button className="btn-sm" onClick={() => { setAgregando(false); setBusqAgregar('') }} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>Cerrar</button>
               </div>
               {busqAgregar.trim().length >= 2 ? (
@@ -1146,7 +1146,7 @@ function Combinada({
                 <tr key={i.manual ? `m_${i.solId}_${i.vid}` : i.vid} style={ok ? { background: color.successBg } : undefined}>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {ok ? '✅' : '⬜'} {i.nombre}
-                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg={color.brand} bg={color.brandBg} /> : null}
+                    {i.manual ? <EtiquetaMini texto="a mano" fg={color.brand} bg={color.brandBg} /> : null}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>{i.variante}</td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, color: color.mut }}>{i.sku || '—'}</td>
@@ -1197,8 +1197,8 @@ function Combinada({
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="📤 Preparado" />
-        <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="📥 Devolución (al volver)" />
+        <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
+        <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />
       </div>
       {grupo('📦 Depósito (todas)', 'deposito')}
       {grupo('🏪 Local (todas)', 'local')}
@@ -1370,7 +1370,7 @@ function Draft({
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           autoComplete="off"
-          placeholder="🔎 Buscá por nombre o SKU y tocá el que querés…"
+          placeholder="Buscá por nombre o SKU y tocá el que querés…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 14 }}
         />
         {busqueda.trim().length >= 2 && (

@@ -286,9 +286,7 @@ export function Integraciones() {
             <Button variant="outline" tone="success" onClick={() => void validarVerdes()} disabled={cargando}>
               Validar verdes
             </Button>
-            <Button variant="solid" tone="brand" onClick={proponer} loading={proponiendo}>
-              {proponiendo ? 'Proponiendo…' : 'Proponer / actualizar mapeo'}
-            </Button>
+            <Button variant="solid" tone="brand" onClick={proponer} loading={proponiendo}>{proponiendo ? 'Proponiendo…' : 'Proponer / actualizar mapeo'}</Button>
           </>
         ) : (
           <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading}>

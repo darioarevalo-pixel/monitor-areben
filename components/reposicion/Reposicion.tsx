@@ -118,7 +118,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
           Ver ventas del local (7d)
         </label>
         <Button variant="ghost" onClick={() => setConfigOpen(true)}>
-          ⚙️ Configurar mínimos
+          Configurar mínimos
         </Button>
         <Button variant="outline" onClick={() => void onActualizar()} loading={syncing}>
           {syncing ? syncLabel : 'Actualizar reporte'}
@@ -358,9 +358,7 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
       titulo="⚙️ Configurar mínimos"
       ancho="ancho"
       pie={
-        <Button variant="solid" tone="brand" onClick={onClose}>
-          Listo
-        </Button>
+        <Button variant="solid" tone="brand" onClick={onClose}>Listo</Button>
       }
     >
       <div>
@@ -431,4 +429,4 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
   )
 }
 
-const secTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: color.mut2, textTransform: 'uppercase', letterSpacing: '.04em', margin: '4px 0 6px' }
+const secTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: color.mut2, letterSpacing: 0, margin: '4px 0 6px' }

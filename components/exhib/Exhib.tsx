@@ -124,9 +124,7 @@ export function Exhib() {
             <Button variant="outline" onClick={() => void traerGN()} loading={!!syncLabel} title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista (~2-4 min)">
               {syncLabel || 'Traer de GN'}
             </Button>
-            <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length}>
-              Iniciar recorrido
-            </Button>
+            <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length}>Iniciar recorrido</Button>
           </>
         )}
         {fase === 'scan' && (
@@ -147,12 +145,11 @@ export function Exhib() {
             <Button
               variant="outline"
               onClick={() => {
-                setFase('scan')
-                foco()
-              }}
-            >
-              ← Volver a escanear
-            </Button>
+ setFase('scan')
+ foco()
+ }}
+ >
+ ← Volver a escanear</Button>
             <Button variant="solid" tone="brand" onClick={() => void generarPDF()}>
               Generar reporte PDF
             </Button>
@@ -206,9 +203,7 @@ export function Exhib() {
                 <span>
                   Hay un chequeo en curso con <b>{enCurso}</b> {enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}.
                 </span>
-                <Button size="sm" variant="outline" tone="brand" onClick={iniciar}>
-                  Retomar
-                </Button>
+                <Button size="sm" variant="outline" tone="brand" onClick={iniciar}>Retomar</Button>
               </div>
             </Notice>
           )}
@@ -241,15 +236,14 @@ export function Exhib() {
               tone="brand"
               size="lg"
               onClick={() => {
-                if (scanRef.current) {
-                  marcar(scanRef.current.value)
-                  scanRef.current.value = ''
-                  scanRef.current.focus()
-                }
-              }}
-            >
-              Marcar
-            </Button>
+ if (scanRef.current) {
+ marcar(scanRef.current.value)
+ scanRef.current.value = ''
+ scanRef.current.focus()
+ }
+ }}
+ >
+ Marcar</Button>
           </div>
 
           <div style={{ minHeight: 26, marginBottom: space[4] }}>
@@ -396,7 +390,7 @@ function Pasos({ fase, hechos, total, faltantes }: { fase: Fase; hechos: number;
 }
 
 function Subtitulo({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[2] }}>{children}</div>
+  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[2] }}>{children}</div>
 }
 
 function Fila({ it, triage, estado, onEstado, onPreview }: { it: ExhibItem; triage?: boolean; estado?: string; onEstado?: (id: string, e: 'solucionado' | 'una-unidad' | 'no-encuentra') => void; onPreview: (u: string) => void }) {

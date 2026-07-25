@@ -83,11 +83,13 @@ a {
   min-width: 0;
   flex: 1 1 320px;
 }
+/* Caja normal, no versalitas: el encabezado tenía tres capas de mayúsculas encimadas
+   (este rótulo, los mini-títulos de las cards y las cabeceras de tabla) y la pantalla
+   gritaba. Las versalitas quedan solo en las cabeceras de tabla. */
 .seccion-eyebrow {
-  font-size: var(--mo-fs-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-size: var(--mo-fs-sm);
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--mo-brand);
 }
 .seccion-titulo {
@@ -320,19 +322,13 @@ a {
   transform: rotate(180deg);
 }
 
-/* Marketing tenía un naranja suelto que no era de ninguna paleta. Ahora es el mismo
-   índigo apenas aclarado: sigue distinguiéndose sin salirse del sistema. */
+/* El grupo Marketing tenía sus secciones de otro color (naranja en el legacy, índigo
+   claro después). Se eliminó: ese color no significaba nada que el usuario pudiera
+   deducir mirándolo, así que se leía como un error. Todas las secciones iguales; el
+   único color del menú es el del activo. La clase se conserva vacía porque el nav la
+   sigue emitiendo desde `nav.datos.ts` (`accent: "marketing"`). */
 .nav-accent-mkt {
-  color: var(--mo-side-accent);
-}
-
-.nav-accent-mkt:hover {
-  color: var(--mo-side-accent-hover);
-}
-
-.nav-accent-mkt.active {
-  background: var(--mo-side-active-bg);
-  color: var(--mo-side-active-ink);
+  color: inherit;
 }
 
 /* ══ Switch de marca ══════════════════════════════════════════ */

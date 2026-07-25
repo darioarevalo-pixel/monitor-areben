@@ -87,7 +87,7 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
   return (
     <div className="card" style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Demanda por modelo (corregida)</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Demanda por modelo (corregida)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 12, color: color.mut }}>Diseños lanzados desde:</label>
           <input type="date" value={cutoff} onChange={(e) => setCutoff(e.target.value)} />

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { categoriaDe, descripcionDe, tituloLimpio } from '@/lib/nav'
+import { categoriaDesde, descripcionDe, tituloDesde } from '@/lib/nav'
 import { useRegistrarSlot } from '@/components/layout/acciones'
 
 /**
@@ -15,9 +15,11 @@ import { useRegistrarSlot } from '@/components/layout/acciones'
  *
  * Los datos salen de `lib/nav` (título/categoría del nav + mapa curado de descripciones).
  */
-export function SeccionHeader({ seccion }: { seccion: string }) {
-  const eyebrow = categoriaDe(seccion)
-  const titulo = tituloLimpio(seccion)
+export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: string | null }) {
+  // `grupo` viene de `?g=`: una sección que cuelga de varios sectores tiene que decir de
+  // cuál se entró, con el nombre que le da ESE sector.
+  const eyebrow = categoriaDesde(seccion, grupo)
+  const titulo = tituloDesde(seccion, grupo)
   const desc = descripcionDe(seccion)
   const registrar = useRegistrarSlot()
 

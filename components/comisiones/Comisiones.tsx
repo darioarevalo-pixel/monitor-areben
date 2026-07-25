@@ -128,7 +128,7 @@ export function Comisiones() {
       {/* PARTE 1: CONFIGURACIÓN */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>1 · Configuración</div>
+          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>1 · Configuración</div>
           <span style={{ fontSize: 11, color: com.shareStatus.color }}>{com.shareStatus.txt}</span>
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
@@ -197,7 +197,7 @@ export function Comisiones() {
 
       {/* PARTE 2: SIMULADOR */}
       <Card style={{ marginTop: space[4] }}>
-        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>2 · Simulador de margen por producto</div>
+        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>2 · Simulador de margen por producto</div>
         <BuscadorProducto
           productos={datos?.allProductos ?? []}
           tnIdx={tnIdx}
@@ -240,7 +240,7 @@ export function Comisiones() {
       {/* LISTA DE PRECIOS DE SALE */}
       <Card style={{ marginTop: space[4] }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>🏷️ Lista de precios de sale</div>
+          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>🏷️ Lista de precios de sale</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button size="sm" variant="outline" onClick={() => exportarSaleXLSX(com.saleList, marca).catch(() => toast.error('No se pudo exportar el Excel.'))} disabled={!com.saleList.length}>
               Excel (.xlsx)
@@ -248,9 +248,7 @@ export function Comisiones() {
             <Button size="sm" variant="outline" onClick={() => exportarSalePDF(com.saleList, marca).catch(() => toast.error('No se pudo exportar el PDF.'))} disabled={!com.saleList.length}>
               PDF
             </Button>
-            <Button size="sm" variant="ghost" tone="danger" onClick={com.vaciarSale} disabled={!com.saleList.length}>
-              Vaciar
-            </Button>
+            <Button size="sm" variant="ghost" tone="danger" onClick={com.vaciarSale} disabled={!com.saleList.length}>Vaciar</Button>
           </div>
         </div>
         <ListaSale saleList={com.saleList} onQuitar={com.quitarSale} />
@@ -258,7 +256,7 @@ export function Comisiones() {
 
       {/* PISO DE PRECIO */}
       <Card style={{ marginTop: space[4] }}>
-        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
+        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
         <div style={{ marginBottom: 12, fontSize: 12, color: color.mut }}>
           Usa el <b>Costo neto</b> de arriba. Margen objetivo %
           <input type="number" step={1} value={pisoObj} onChange={(e) => setPisoObj(e.target.value)} className="mo-input mo-input--num" style={{ width: 90, marginLeft: 6 }} />

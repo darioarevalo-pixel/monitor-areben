@@ -202,7 +202,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Totales */}
       <div className="card">
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Totales · {d.cuenta.nombre}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Totales · {d.cuenta.nombre}</div>
         <TilesTotales t={d.totales} moneda={moneda} hookRate={d.video?.hookRate} />
       </div>
 
@@ -210,7 +210,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       {d.funnel && d.funnel.some((p) => p.count > 0) && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Embudo de compra</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Embudo de compra</div>
             <InfoPopover titulo="Embudo de compra">
               De cada paso, cuántas personas lo hicieron y cuánto costó cada resultado (gasto ÷ cantidad).
               La barra muestra la caída respecto del primer paso. Sirve para ver <b>dónde se corta</b> el camino a la compra.
@@ -223,7 +223,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       {/* Quién (edad × género) */}
       {d.demografia && d.demografia.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Quién compra · edad y género</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Quién compra · edad y género</div>
           <TablaDemografia rows={d.demografia} moneda={moneda} />
         </div>
       )}
@@ -231,7 +231,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       {/* Dónde (región) */}
       {d.regiones && d.regiones.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Dónde · por región</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Dónde · por región</div>
           <TablaRegiones rows={d.regiones} moneda={moneda} />
         </div>
       )}
@@ -239,7 +239,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       {/* Evolución diaria */}
       {d.daily.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Evolución diaria</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Evolución diaria</div>
           <div style={{ width: '100%', height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={d.daily} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
@@ -261,7 +261,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
 
       {/* Anuncios por campaña */}
       <div className="card">
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Anuncios por campaña</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Anuncios por campaña</div>
         {d.campañas.length === 0 ? (
           <div style={{ fontSize: 13, color: paleta.mut2 }}>No hay anuncios con gasto en este rango.</div>
         ) : (
@@ -272,7 +272,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       {/* Placements */}
       {d.placements.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Por plataforma y ubicación</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Por plataforma y ubicación</div>
           <TablaPlacements rows={d.placements} moneda={moneda} />
         </div>
       )}
@@ -325,7 +325,7 @@ function TablaDemografia({ rows, moneda }: { rows: DemografiaFila[]; moneda: str
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, letterSpacing: '.03em' }}>
             <Th left>Género</Th><Th left>Edad</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
           </tr>
         </thead>
@@ -351,7 +351,7 @@ function TablaRegiones({ rows, moneda }: { rows: RegionFila[]; moneda: string })
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, letterSpacing: '.03em' }}>
             <Th left>Región</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
           </tr>
         </thead>
@@ -374,7 +374,7 @@ function TablaRegiones({ rows, moneda }: { rows: RegionFila[]; moneda: string })
 function Tile({ label, valor, destacado, color }: { label: string; valor: string; destacado?: boolean; color?: string }) {
   return (
     <div style={{ background: paleta.bg, border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '10px 12px' }}>
-      <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div style={{ fontSize: 11, color: paleta.mut2, letterSpacing: 0 }}>{label}</div>
       <div style={{ fontSize: destacado ? 19 : 16, fontWeight: 700, color: color ?? paleta.ink, marginTop: 2 }}>{valor}</div>
     </div>
   )
@@ -402,7 +402,7 @@ function CampañaBloque({ c, moneda, accountId, pausa }: { c: Campaña; moneda: 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+              <tr style={{ color: paleta.mut2, fontSize: 11, letterSpacing: '.03em' }}>
                 <Th left>Anuncio</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th><Th>CTR</Th><Th>CPC</Th><Th>Impr.</Th>
               </tr>
             </thead>
@@ -512,7 +512,7 @@ function TablaPlacements({ rows, moneda }: { rows: { platform: string; position:
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, letterSpacing: '.03em' }}>
             <Th left>Plataforma</Th><Th left>Ubicación</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th>
           </tr>
         </thead>

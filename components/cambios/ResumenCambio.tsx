@@ -44,10 +44,10 @@ export function ResumenCambio({ cambio, onClose }: { cambio: CambioRow; onClose:
           {cambio.cliente || 's/cliente'}{cambio.orden_tn ? ` · orden #${cambio.orden_tn}` : ''}{cambio.solicitud_envio ? ` · 📮 ${cambio.solicitud_envio}` : ''}
         </div>
 
-        <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Devuelve</div>
+        <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, letterSpacing: 0.4, marginBottom: 4 }}>Devuelve</div>
         {listaItems(dev)}
         <div style={{ height: space[3] }} />
-        <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Se lleva</div>
+        <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, letterSpacing: 0.4, marginBottom: 4 }}>Se lleva</div>
         {listaItems(nue)}
 
         <div style={{ marginTop: space[4] }}>

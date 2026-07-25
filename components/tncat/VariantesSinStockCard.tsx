@@ -74,7 +74,7 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
             <input
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="🔎 Buscar producto o SKU…"
+              placeholder="Buscar producto o SKU…"
               style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
             />
             <span style={{ fontSize: 13, color: color.mut }}>

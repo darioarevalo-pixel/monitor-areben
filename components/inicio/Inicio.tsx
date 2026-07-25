@@ -92,7 +92,7 @@ export function Inicio() {
     <>
       <HeaderAcciones>
         <Button variant="outline" onClick={() => void cargar()} title="Volver a leer las solicitudes">
-          🔄 Actualizar
+          Actualizar
         </Button>
       </HeaderAcciones>
 
@@ -121,9 +121,8 @@ export function Inicio() {
               tone={a.destacado ? 'brand' : 'neutral'}
               iconLeft={a.destacado ? '+' : undefined}
               onClick={() => router.push(a.ruta)}
-            >
-              {a.label}
-            </Button>
+ >
+ {a.label}</Button>
           ))}
         </div>
       )}
@@ -138,7 +137,7 @@ export function Inicio() {
               Ver solicitudes
             </Button>
             <Button size="sm" variant="outline" onClick={() => router.push('/gerencial')}>
-              🎯 Panel gerencial
+              Panel gerencial
             </Button>
           </div>
         </Card>

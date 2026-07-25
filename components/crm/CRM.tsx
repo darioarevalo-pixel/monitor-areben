@@ -17,7 +17,7 @@ import {
 import type { ClienteCRM, MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { BuscarInput, Button, KpiCard, Notice, Select, Tabs, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { BuscarInput, Button, KpiCard, Notice, Select, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
@@ -97,71 +97,84 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
   const ultNota = notas.length ? notas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0] : null
 
   return (
-    <tr style={{ cursor: 'pointer' }} onClick={() => onAbrir(c.id)}>
-      <td>
-        <div style={{ fontWeight: 600 }}>
+    <Tr onClick={() => onAbrir(c.id)}>
+      <Td tall>
+        <div style={{ fontWeight: 600, color: color.ink }}>
           {c.name}
           {esMayorista && (
             <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--mo-mayorista-fg)', background: 'var(--mo-mayorista-bg)', padding: '1px 6px', borderRadius: 10, verticalAlign: 'middle', marginLeft: 4 }}>MAYORISTA</span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: color.mut2 }}>#{c.id}</div>
-      </td>
-      <td onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>#{c.id}</div>
+      </Td>
+      <Td tall>
+        <span onClick={(e) => e.stopPropagation()}>
         {c.email && <div style={{ fontSize: 12 }}>{c.email}</div>}
         {c.phone && <div style={{ fontSize: 11, color: color.mut }}>{c.phone}</div>}
-        {!waPhone && <div style={{ fontSize: 10, color: color.danger, fontWeight: 600, marginTop: 2 }}>📵 Sin teléfono</div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-          <span style={{ fontSize: 12, lineHeight: 1 }}>📷</span>
+        {!waPhone && <div style={{ fontSize: font.xs, color: color.danger, fontWeight: 600, marginTop: 2 }}>Sin teléfono</div>}
           <input
+            className="mo-input"
             type="text"
             defaultValue={seg.pagina || ''}
             placeholder="@instagram"
             onBlur={(e) => { if (e.target.value.trim() !== (seg.pagina || '')) onPagina(c.id, e.target.value) }}
-            style={{ fontSize: 11, width: 120, padding: '2px 6px' }}
+            style={{ fontSize: font.xs, width: 130, height: 26, marginTop: 3 }}
           />
-        </div>
-      </td>
-      <td>{ciudad || <span style={{ color: color.mut2 }}>—</span>}</td>
-      <td style={{ textAlign: 'right' }}>{c.total_sales}</td>
-      <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMonto(c.total_amount)}</td>
-      <td style={{ textAlign: 'right' }}>{fmtMonto(c.avg_ticket)}</td>
-      <td style={{ textAlign: 'right' }}>
+        </span>
+      </Td>
+      <Td wrap>{ciudad || <span style={{ color: color.mut2 }}>—</span>}</Td>
+      <Td align="right">{c.total_sales}</Td>
+      <Td align="right" strong>{fmtMonto(c.total_amount)}</Td>
+      <Td align="right">{fmtMonto(c.avg_ticket)}</Td>
+      <Td align="right" tall>
         <div>{ult}</div>
-        <div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(c.last_sale)}</div>
-      </td>
-      <td><CeldaProximo c={c} /></td>
-      <td style={{ maxWidth: 240 }}>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>{fmtFecha(c.last_sale)}</div>
+      </Td>
+      <Td><CeldaProximo c={c} /></Td>
+      <Td tall style={{ maxWidth: 240 }}>
         {ultNota ? (
           <>
-            <div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(ultNota.fecha)}</div>
-            <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ultNota.texto}</div>
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>{fmtFecha(ultNota.fecha)}</div>
+            <div style={{ fontSize: font.sm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ultNota.texto}</div>
           </>
         ) : (
           <span style={{ color: color.mut2 }}>—</span>
         )}
-      </td>
-      <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+      </Td>
+      <Td align="center">
         <button
+          onClickCapture={(e) => e.stopPropagation()}
           onClick={() => onDifusion(c.id, !enDifusion)}
           title={enDifusion ? 'Está en el canal de difusión — tocá para sacarlo' : 'Todavía no está en el canal — tocá cuando ya lo hayas agregado'}
           style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? `1px solid ${color.success}` : `1px dashed ${color.line2}`, background: enDifusion ? color.successBg : 'transparent', color: enDifusion ? color.success : color.mut2 }}
         >
-          {enDifusion ? '📢 Sí' : '＋ Sumar'}
+          {enDifusion ? 'Sí' : '+ Sumar'}
         </button>
-      </td>
-      <td>
-        <span style={{ fontSize: 11, fontWeight: 600, color: SEG_COLOR[segm] }}>{SEG_LABEL[segm]}</span>
-      </td>
-      <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-        {waPhone && (
-          <a href={`https://web.whatsapp.com/send?phone=${waPhone}`} target="_blank" rel="noopener" className="btn-sm" title="Abrir WhatsApp" style={{ textDecoration: 'none', color: color.success }}>💬</a>
-        )}
-        {verDescartados && (
-          <button onClick={() => onDescartado(c.id, false)} title="Reactivar — vuelve al CRM" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, lineHeight: 1, verticalAlign: 'middle' }}>↩️</button>
-        )}
-      </td>
-    </tr>
+      </Td>
+      <Td>
+        <span style={{ fontSize: font.xs, fontWeight: 600, color: SEG_COLOR[segm] }}>{SEG_LABEL[segm]}</span>
+      </Td>
+      <Td>
+        <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          {waPhone && (
+            <a
+              href={`https://web.whatsapp.com/send?phone=${waPhone}`}
+              target="_blank"
+              rel="noopener"
+              title="Abrir WhatsApp"
+              style={{ fontSize: font.sm, fontWeight: 600, color: color.success }}
+            >
+              WhatsApp
+            </a>
+          )}
+          {verDescartados && (
+            <Button size="sm" variant="ghost" onClick={() => onDescartado(c.id, false)} title="Reactivar — vuelve al CRM">
+              ↩ Reactivar
+            </Button>
+          )}
+        </span>
+      </Td>
+    </Tr>
   )
 }
 
@@ -272,20 +285,16 @@ export function CRM() {
           <option value="10">Mayorista</option>
           <option value="all">Todos los canales</option>
         </Select>
-        <Button variant="ghost" onClick={recargar}>
-          Recalcular
-        </Button>
+        <Button variant="ghost" onClick={recargar}>Recalcular</Button>
         <Button variant="outline" onClick={() => setBanco(true)}>
-          💬 Banco de mensajes
+          Banco de mensajes
         </Button>
         <Button
           variant="outline"
           onClick={sugerirCadencias}
           disabled={!cargado}
           title={cargado ? 'Asigna cadencia automática por segmento' : 'El KV no se pudo leer: guardado bloqueado'}
-        >
-          Sugerir cadencias
-        </Button>
+        >Sugerir cadencias</Button>
         {/* Es un <label> porque abre un file picker; se le da la forma del botón primario. */}
         <label
           className="mo-btn mo-btn--md"
@@ -357,37 +366,46 @@ export function CRM() {
               <span style={{ fontSize: 12, color: color.mut2, marginLeft: 'auto' }}>{lista.length} cliente{lista.length === 1 ? '' : 's'}</span>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th onClick={() => ordenarPor('name')}>Cliente ↕</th>
-                    <th onClick={() => ordenarPor('contact')}>Contacto</th>
-                    <th onClick={() => ordenarPor('city')}>Ciudad</th>
-                    <th onClick={() => ordenarPor('total_sales')} style={{ textAlign: 'right' }}>Pedidos ↕</th>
-                    <th onClick={() => ordenarPor('total_amount')} style={{ textAlign: 'right' }}>Total comprado ↕</th>
-                    <th onClick={() => ordenarPor('avg_ticket')} style={{ textAlign: 'right' }}>Ticket prom. ↕</th>
-                    <th onClick={() => ordenarPor('last_sale')} style={{ textAlign: 'right' }}>Último pedido ↕</th>
-                    <th onClick={() => ordenarPor('proximo')}>Próximo contacto ↕</th>
-                    <th>Última nota</th>
-                    <th style={{ textAlign: 'center' }}>📢 Difusión</th>
-                    <th>Segmento</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {cargando ? (
-                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>Cargando…</td></tr>
-                  ) : !lista.length ? (
-                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>Sin clientes para este filtro</td></tr>
-                  ) : (
-                    lista.map((c) => (
-                      <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} />
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {/* La tabla va sobre una superficie blanca con cabecera pegajosa. Antes las
+                filas se apoyaban directo sobre el lienzo y la sección entera se leía
+                gris — "está todo en fondo gris", y es de las más importantes. */}
+            <TableWrap maxHeight={620}>
+              <THead>
+                <Tr>
+                  <Th onClick={() => ordenarPor('name')}>Cliente</Th>
+                  <Th onClick={() => ordenarPor('contact')}>Contacto</Th>
+                  <Th onClick={() => ordenarPor('city')}>Ciudad</Th>
+                  <Th align="right" onClick={() => ordenarPor('total_sales')}>Pedidos</Th>
+                  <Th align="right" onClick={() => ordenarPor('total_amount')}>Total comprado</Th>
+                  <Th align="right" onClick={() => ordenarPor('avg_ticket')}>Ticket prom.</Th>
+                  <Th align="right" onClick={() => ordenarPor('last_sale')}>Último pedido</Th>
+                  <Th onClick={() => ordenarPor('proximo')}>Próximo contacto</Th>
+                  <Th>Última nota</Th>
+                  <Th align="center">Difusión</Th>
+                  <Th>Segmento</Th>
+                  <Th />
+                </Tr>
+              </THead>
+              <TBody>
+                {cargando ? (
+                  <Tr>
+                    <Td colSpan={12} align="center" style={{ padding: 24, color: color.mut2 }}>
+                      Cargando…
+                    </Td>
+                  </Tr>
+                ) : !lista.length ? (
+                  <Tr>
+                    <Td colSpan={12} align="center" style={{ padding: 24, color: color.mut2 }}>
+                      Sin clientes para este filtro
+                    </Td>
+                  </Tr>
+                ) : (
+                  lista.map((c) => (
+                    <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} />
+                  ))
+                )}
+              </TBody>
+            </TableWrap>
 
             {!cargado && !cargando && (
               <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>El KV no se pudo leer: los guardados están bloqueados.</div>

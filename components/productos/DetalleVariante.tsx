@@ -61,7 +61,7 @@ export function DetalleVariante({
 
   return (
     <div style={{ padding: '10px 20px 14px' }} onClick={(e) => e.stopPropagation()}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: color.brand, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.brand, letterSpacing: 0, marginBottom: 8 }}>
         ▾ Desglose por variante
       </div>
       <table style={{ width: 'auto' }}>

@@ -355,7 +355,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           <Field label="Nº de orden de Tienda Nube" width={220}>
             <Input value={ordenNum} onChange={(e) => setOrdenNum(e.target.value)} placeholder="ej. 1234" onKeyDown={(e) => e.key === 'Enter' && void buscarOrden()} />
           </Field>
-          <Button variant="soft" tone="brand" onClick={() => void buscarOrden()} disabled={buscando} iconLeft="🔎">{buscando ? 'Buscando…' : 'Buscar orden'}</Button>
+          <Button variant="soft" tone="brand" onClick={() => void buscarOrden()} disabled={buscando} iconLeft="">{buscando ? 'Buscando…' : 'Buscar orden'}</Button>
           {orden && fechaOrden && (
             <StatusPill tone={vencido ? 'danger' : 'neutral'} label={`Compra ${fmt(fechaOrden)} · cambio hasta ${fmt(vence)}${vencido ? ' · FUERA DE PLAZO' : ''}`} dot={false} />
           )}
@@ -452,7 +452,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
             {pagado ? (
               <StatusPill tone="success" label="✓ Pagado" />
             ) : (
-              <Button variant="solid" tone="success" iconLeft="✓" onClick={() => void marcarPagadoForm()} disabled={guardando}>Marcar como pagado</Button>
+              <Button variant="solid" tone="success" onClick={() => void marcarPagadoForm()} disabled={guardando}>Marcar como pagado</Button>
             )}
           </div>
         </div>
@@ -477,8 +477,9 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
             {editandoId != null && <Button variant="ghost" onClick={limpiarForm} disabled={guardando}>Cancelar</Button>}
-            <Button variant="outline" tone="brand" iconLeft="💾" onClick={() => void guardarBorrador()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? 'Guardar cambios' : 'Guardar borrador'}</Button>
-            <Button variant="solid" tone="action" iconLeft="🧾" onClick={() => void crearVentaForm()} disabled={guardando || faltan.length > 0 || !pagado} title={faltan.length ? `Falta: ${faltan.join(', ')}` : !pagado ? 'Marcá el cambio como pagado primero' : 'Genera la venta real en GN'}>Crear Venta</Button>
+            <Button variant="outline" tone="brand" onClick={() => void guardarBorrador()} disabled={guardando}>{guardando ? 'Guardando…' : editandoId != null ? 'Guardar cambios' : 'Guardar borrador'}</Button>
+              <Button variant="solid" tone="action" onClick={() => void crearVentaForm()} disabled={guardando || faltan.length > 0 || !pagado} title={faltan.length ? `Falta: ${faltan.join(', ')}` : !pagado ? 'Marcá el cambio como pagado primero' : 'Genera la venta real en GN'}>Crear Venta
+            </Button>
           </div>
         </div>
       </SectionCard>
@@ -532,7 +533,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
                             {c.seguimiento && <a href={trackingUrl(c.via, c.seguimiento) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: color.action }}>↗ ida {c.seguimiento}</a>}
                             {c.seguimiento_vuelta && <a href={trackingUrl(c.via, c.seguimiento_vuelta) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: color.action }}>↗ vuelta {c.seguimiento_vuelta}</a>}
-                            <Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento || c.seguimiento_vuelta ? '✎ editar' : '＋ cargar'}</Button>
+                            <Button size="sm" variant="ghost" onClick={() => void cargarSeguimiento(c)} disabled={ocup}>{c.seguimiento || c.seguimiento_vuelta ? ' editar' : '＋ cargar'}</Button>
                           </div>
                         ) : <span style={{ color: color.mut2 }}>—</span>}
                       </Td>
@@ -543,12 +544,12 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <Td>{c.reingreso_estado === 'hecho' ? <span style={{ color: color.success }}>✓ hecho</span> : esBorrador ? '—' : <span style={{ color: color.warning }}>pendiente</span>}</Td>
                       <Td>
                         <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                          {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}>✏️ Editar</Button>}
+                          {(esAdmin || esBorrador) && <Button size="sm" onClick={() => abrirEdicion(c)} disabled={ocup}> Editar</Button>}
                           {esBorrador && !c.pagado && <Button size="sm" variant="soft" tone="success" onClick={() => void marcarPagadoLista(c)} disabled={ocup} title="Marca el cambio como pagado">✓ Marcar pagado</Button>}
-                          {esBorrador && c.pagado && faltantesParaVenta(c).length === 0 && <Button size="sm" variant="solid" tone="action" onClick={() => void crearVentaLista(c)} disabled={ocup} title="Genera la venta real en GN">🧾 Crear venta</Button>}
-                          <Button size="sm" variant="ghost" onClick={() => setResumen(c)} title="Ver resumen del cambio">📋 Resumen</Button>
+                          {esBorrador && c.pagado && faltantesParaVenta(c).length === 0 && <Button size="sm" variant="solid" tone="action" onClick={() => void crearVentaLista(c)} disabled={ocup} title="Genera la venta real en GN"> Crear venta</Button>}
+                          <Button size="sm" variant="ghost" onClick={() => setResumen(c)} title="Ver resumen del cambio"> Resumen</Button>
                           <CopyButton getText={() => detalleCambioTexto(c)} label="Copiar" tone="neutral" variant="ghost" />
-                          <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">🕘</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados"></Button>
                           {esAdmin && c.estado === 'en_transito' && <Button size="sm" variant="outline" tone="action" onClick={() => void cambiarEstadoCambio(marca, c.id, 'recibido', usuario).then(recargar)} disabled={ocup}>Volvió</Button>}
                           {esAdmin && c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && <Button size="sm" variant="outline" tone="brand" onClick={() => void reingreso(c)} disabled={ocup}>Reingresado</Button>}
                           {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}

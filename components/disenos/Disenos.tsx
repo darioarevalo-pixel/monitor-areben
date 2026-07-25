@@ -298,7 +298,7 @@ export function Disenos() {
           Cargar imágenes
         </Button>
         <Button variant="outline" onClick={() => void abrirQuick()}>
-          ⚡ Revisión rápida
+          Revisión rápida
         </Button>
         <Button variant="outline" onClick={() => reporteDecisiones(disenos)} disabled={!disenos.length}>
           Reporte PDF

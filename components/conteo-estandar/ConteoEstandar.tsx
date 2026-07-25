@@ -357,7 +357,7 @@ export function ConteoEstandar() {
               Reiniciar
             </Button>
             <Button variant="outline" onClick={() => void onHistorial()}>
-              🕘 Historial
+              Historial
             </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={ce.cargando}>
               Traer stock de GN
@@ -382,12 +382,11 @@ export function ConteoEstandar() {
             <Button
               variant="outline"
               onClick={() => {
-                setPreview(null)
-                setVista('lista')
-              }}
-            >
-              ← Volver
-            </Button>
+ setPreview(null)
+ setVista('lista')
+ }}
+ >
+ ← Volver</Button>
             {preview.rows.length ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
                 Generar Excel y guardar
@@ -482,7 +481,7 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
         className="mo-input"
         type="text"
         autoComplete="off"
-        placeholder="🔫 Escaneá lo EXHIBIDO (suma 1)…"
+        placeholder="Escaneá lo EXHIBIDO (suma 1)…"
         aria-label="Código de barras a escanear"
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -607,9 +606,7 @@ function Lista({
             <span>
               Tenés <b>{term}</b> {term === 1 ? 'producto terminado' : 'productos terminados'} de {lineaLabel(linea)}. Aplicar relee el stock vivo del Local y genera el Excel.
             </span>
-            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>
-              {aplicando ? 'Leyendo stock vivo…' : 'Aplicar ajuste'}
-            </Button>
+            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>{aplicando ? 'Leyendo stock vivo…' : 'Aplicar ajuste'}</Button>
           </div>
         </Notice>
       )}

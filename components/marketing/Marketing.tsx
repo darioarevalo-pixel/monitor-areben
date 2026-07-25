@@ -268,7 +268,7 @@ export function Marketing() {
               type="text"
               value={filtros.q}
               onChange={(e) => setFiltro('q', e.target.value)}
-              placeholder="🔍 Nombre o SKU..."
+              placeholder="Nombre o SKU..."
               style={inputStyle}
             />
           </Filtro>
@@ -678,7 +678,7 @@ function Detalle({
   const conVariantes = (tn.image_count || 0) > 0 && (tn.variantes_total || 0) > 1
 
   const titulo = (t: string) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: color.brand, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{t}</div>
+    <div style={{ fontSize: 11, fontWeight: 700, color: color.brand, letterSpacing: 0, marginBottom: 6 }}>{t}</div>
   )
 
   return (

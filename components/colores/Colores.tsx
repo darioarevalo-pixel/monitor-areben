@@ -126,7 +126,7 @@ function PanelVentas() {
 
       <Card padding={4} style={{ marginBottom: space[4] }}>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
-          <strong style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+          <strong style={{ fontSize: font.xs, color: color.mut, letterSpacing: 0 }}>
             Colores ({checked.size}/{colores.length})
           </strong>
           <Input value={colorSearch} onChange={(e) => setColorSearch(e.target.value)} placeholder="Buscar color…" style={{ flex: 1, minWidth: 140, maxWidth: 220 }} />
@@ -270,7 +270,7 @@ function TarjetaAgot({ prod }: { prod: Agotamiento }) {
     <Card padding={4}>
       <div style={{ fontWeight: 700, fontSize: font.md, color: color.ink }}>{prod.product_name}</div>
       <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>{prod.proveedor || 'Sin proveedor'}</div>
-      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2], textTransform: 'uppercase', letterSpacing: '.04em' }}>{refLabel}</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2], letterSpacing: 0 }}>{refLabel}</div>
 
       {colores.map((c) => (
         <div key={c.color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>

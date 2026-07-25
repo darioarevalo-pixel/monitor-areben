@@ -240,7 +240,7 @@ export function GenTalles() {
 }
 
 function Subtitulo({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[2] }}>{children}</div>
+  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[2] }}>{children}</div>
 }
 
 function VincularProducto({
@@ -279,12 +279,11 @@ function VincularProducto({
                 fullWidth
                 style={{ justifyContent: 'flex-start', marginBottom: 4 }}
                 onClick={() => {
-                  onElegir(p)
-                  setQ('')
-                }}
-              >
-                {p.name}{p.sku ? ' · ' + p.sku : ''}
-              </Button>
+ onElegir(p)
+ setQ('')
+ }}
+ >
+ {p.name}{p.sku ? ' · ' + p.sku : ''}</Button>
             ))
           ) : (
             <div style={{ fontSize: font.sm, color: color.mut2 }}>Sin resultados.</div>
@@ -298,9 +297,7 @@ function VincularProducto({
           </span>
           {tipoDetectado && <span style={{ color: color.successInk }}>· tipo detectado: {tipoDetectado}</span>}
           {tieneGuardada && (
-            <Button size="sm" variant="outline" onClick={onCargarGuardada}>
-              ↺ Cargar la guardada
-            </Button>
+            <Button size="sm" variant="outline" onClick={onCargarGuardada}>↺ Cargar la guardada</Button>
           )}
         </div>
       )}

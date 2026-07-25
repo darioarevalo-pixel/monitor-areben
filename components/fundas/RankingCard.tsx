@@ -11,7 +11,7 @@ import {
   type OrdenProd,
 } from '@/lib/fundas/ranking'
 import type { DatosRanking } from '@/lib/fundas/tipos'
-import { chartColor, color } from '@/components/ui'
+import { Button, TBody, THead, TableWrap, Td, Th, Tr, chartColor, color, font, space } from '@/components/ui'
 
 type Col = 'pos' | 'model' | 'qty' | 'pct'
 const TITULOS: Record<Col, string> = { pos: '#', model: 'Modelo', qty: 'Vendidas', pct: '% del total' }
@@ -159,7 +159,7 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
       {modelosOpen && (
         <div className="fm-models-panel">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: color.mut, textTransform: 'uppercase', letterSpacing: '.04em' }}>Modelos de iPhone</strong>
+            <strong style={{ fontSize: 11, color: color.mut, letterSpacing: 0 }}>Modelos de iPhone</strong>
             <input type="text" placeholder="Buscar..." value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
             <button className="btn-sm" onClick={() => setCheckedModels(new Set(def.modelos))}>Todos</button>
             <button className="btn-sm" onClick={() => setCheckedModels(new Set())}>Ninguno</button>
@@ -181,7 +181,7 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
       {prodsOpen && (
         <div className="fm-models-panel">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: color.mut, textTransform: 'uppercase', letterSpacing: '.04em' }}>Nombre de funda</strong>
+            <strong style={{ fontSize: 11, color: color.mut, letterSpacing: 0 }}>Nombre de funda</strong>
             <input type="text" placeholder="Buscar..." value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
             <select value={prodSort} onChange={(e) => setProdSort(e.target.value as OrdenProd)} style={{ fontSize: 12, padding: '3px 6px' }}>
               <option value="qty">Más vendidas</option>
@@ -222,52 +222,62 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Ranking por modelo</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11, color: '#aaa' }}>{totalTexto}</span>
-            <button
-              className="btn-sm"
-              onClick={() => onImportar?.(filasOrdenadas.map((f) => ({ model: f.model, pct: f.pct })))}
-              title="Lleva este ranking (en el orden actual) a la simulación"
-              style={{ fontSize: 11 }}
-            >
-              ↓ Importar a simulación
-            </button>
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              {(['pos', 'model', 'qty', 'pct'] as Col[]).map((c) => (
-                <th
-                  key={c}
-                  onClick={() => sort(c)}
-                  style={{ cursor: 'pointer', width: c === 'pos' ? 32 : undefined }}
-                >
-                  {TITULOS[c]}{sortCol === c ? (sortAsc ? ' ▲' : ' ▼') : ''}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filasOrdenadas.map((r) => (
-              <tr key={r.model}>
-                <td style={{ color: '#888', fontSize: 11, width: 32 }}>{r.pos}</td>
-                <td style={{ fontWeight: 500 }}>{r.model}</td>
-                <td style={{ fontWeight: 600 }}>{r.qty.toLocaleString('es-AR')}</td>
-                <td style={{ color: color.mut }}>
-                  {r.pct}%
-                  <div style={{ display: 'inline-block', width: 60, height: 4, background: color.bg2, borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
-                    <div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: color.brand, borderRadius: 2 }} />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[2] }}>
+        <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink }}>Ranking por modelo</h2>
+        <span style={{ fontSize: font.sm, color: color.mut }}>{totalTexto}</span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onImportar?.(filasOrdenadas.map((f) => ({ model: f.model, pct: f.pct })))}
+          title="Lleva este ranking (en el orden actual) a la simulación"
+          style={{ marginLeft: 'auto' }}
+        >
+          ↓ Importar a simulación
+        </Button>
       </div>
+
+      <TableWrap maxHeight={560}>
+        <THead>
+          <Tr>
+            {/* La posición tiene ancho propio y va a la derecha: pegada al borde
+                izquierdo quedaba encimada contra la línea de la tabla. */}
+            <Th align="right" width={44} onClick={() => sort('pos')} sort={sortCol === 'pos' ? (sortAsc ? 'asc' : 'desc') : null}>
+              {TITULOS.pos}
+            </Th>
+            {(['model', 'qty', 'pct'] as Col[]).map((c) => (
+              <Th
+                key={c}
+                align={c === 'qty' ? 'right' : 'left'}
+                onClick={() => sort(c)}
+                sort={sortCol === c ? (sortAsc ? 'asc' : 'desc') : null}
+              >
+                {TITULOS[c]}
+              </Th>
+            ))}
+          </Tr>
+        </THead>
+        <TBody>
+          {filasOrdenadas.map((r) => (
+            <Tr key={r.model}>
+              <Td align="right" style={{ color: color.mut2, fontVariantNumeric: 'tabular-nums', paddingRight: 14 }}>
+                {r.pos}
+              </Td>
+              <Td strong>{r.model}</Td>
+              <Td align="right" strong>
+                {r.qty.toLocaleString('es-AR')}
+              </Td>
+              <Td>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: color.mut }}>
+                  <span style={{ width: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.pct}%</span>
+                  <span style={{ display: 'inline-block', width: 70, height: 5, background: color.bg2, borderRadius: 3 }}>
+                    <span style={{ display: 'block', width: `${Math.min(100, r.pct)}%`, height: '100%', background: color.brandSolid, borderRadius: 3 }} />
+                  </span>
+                </span>
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
     </div>
   )
 }

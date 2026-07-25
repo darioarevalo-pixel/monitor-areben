@@ -107,6 +107,50 @@ export function categoriaDe(key: string): string | null {
 }
 
 /**
+ * ── Secciones que cuelgan de varios grupos ──
+ *
+ * `solicitudes` está en Local, Depósito, Marketing y Administración a propósito: cada
+ * sector la llama a su manera ("Solicitudes a preparar", "Solicitudes de productos"…).
+ * Pero `CAT_POR_KEY` es un Map que se llena recorriendo los grupos, así que la key se
+ * queda con **el último** que la registró: entrabas desde Depósito y el encabezado decía
+ * Administración, con el título canónico en vez del que habías tocado.
+ *
+ * Estas dos funciones toman el grupo de origen (viaja en la URL como `?g=`), y caen al
+ * comportamiento de siempre si no viene o si la key no está en ese grupo.
+ */
+const CAT_POR_ID = new Map(NAV_CATS.map((c) => [c.id, c]))
+
+/** ¿Esta key cuelga de más de un grupo? (define si hace falta el `?g=` en el link). */
+export function estaEnVariosGrupos(key: string): boolean {
+  return NAV_CATS.filter((c) => keysDeCat(c).includes(key)).length > 1
+}
+
+/**
+ * El eyebrow, respetando de qué grupo se entró.
+ *
+ * A diferencia de `categoriaDe`, devuelve el nombre **en su caja natural** ("Marketing",
+ * no "MARKETING"). El encabezado tenía tres capas de mayúsculas encimadas —el eyebrow,
+ * los mini-títulos de las cards y las cabeceras de tabla— y la pantalla gritaba. Quedan
+ * en versalitas solo las cabeceras de tabla, donde ayudan a la densidad.
+ */
+export function categoriaDesde(key: string, grupoId?: string | null): string | null {
+  const porGrupo = (grupoId && CAT_POR_ID.get(grupoId)) || null
+  const c = porGrupo && keysDeCat(porGrupo).includes(key) ? porGrupo : CAT_POR_KEY.get(key)
+  if (!c) return null
+  const cat = c.label.replace(RE_EMOJI_INICIAL, '').trim()
+  if (!cat || cat.toLowerCase() === tituloDesde(key, grupoId).toLowerCase()) return null
+  return cat
+}
+
+/** El título, con el nombre que le da ESE grupo si tiene uno propio. */
+export function tituloDesde(key: string, grupoId?: string | null): string {
+  const c = (grupoId && CAT_POR_ID.get(grupoId)) || null
+  const propio = c && keysDeCat(c).includes(key) ? c.labels?.[key] : undefined
+  if (!propio) return tituloLimpio(key)
+  return propio.replace(RE_EMOJI_INICIAL, '').trim() || propio
+}
+
+/**
  * Descripción curada (1 línea) por sección, para el encabezado. Condensada del `info`
  * del nav. El test `seccion-header` obliga a que TODA sección registrada tenga una.
  */
