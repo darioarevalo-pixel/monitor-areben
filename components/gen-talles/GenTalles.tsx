@@ -17,6 +17,8 @@ import {
 } from '@/lib/gen-talles/core'
 import { GEN_TALLES_PLANTILLAS, type TablaGuardada } from '@/lib/gen-talles/plantillas'
 import type { TnProducto } from '@/lib/tn'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Button, Card, Field, Input, Select, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 const PRIMER_TIPO = Object.keys(GEN_TALLES_PLANTILLAS)[0] // 'top', como la 1ª opción del legacy
 
@@ -24,13 +26,13 @@ export function GenTalles() {
   const { marca } = useSesion()
   const gt = useGenTalles(marca)
   const { datos } = useDatosMonitor()
+  const { confirmar, avisar } = useConfirmar()
+  const toast = useToast()
 
   const [tipo, setTipo] = useState<string>(PRIMER_TIPO)
   const [tallesStr, setTallesStr] = useState<string>(GEN_TALLES_PLANTILLAS[PRIMER_TIPO].talles.join(', '))
   const [gtData, setGtData] = useState<Record<string, string>>({})
   const [elegido, setElegido] = useState<TnProducto | null>(null)
-  const [copyMsg, setCopyMsg] = useState('')
-  const [tnMsg, setTnMsg] = useState('')
   const [cargandoTN, setCargandoTN] = useState(false)
 
   const plantilla = GEN_TALLES_PLANTILLAS[tipo]
@@ -65,16 +67,21 @@ export function GenTalles() {
     setGtData({ ...(s.gtData || {}) })
   }
 
-  const onImportar = () => {
+  const onImportar = async () => {
     if (!elegido) return
     const ext = extraerTabla(elegido.raw_desc)
     if (!ext) {
-      alert('No pude leer la tabla. Cargá los datos a mano desde la tabla de arriba.')
+      await avisar('No pude leer la tabla. Cargá los datos a mano desde la tabla de arriba.')
       return
     }
     setTallesStr(ext.talles.join(', '))
     setGtData(emparejarMedidas(ext.talles, ext.medidas, plantilla))
-    alert(`✓ Datos recuperados sobre el tipo "${plantilla.nombre}". Revisá que cada medida quedó en su columna antes de cargar en TN.`)
+    // Aviso y no Toast: hay que REVISAR antes de escribir en TN, así que conviene que
+    // pida un clic en vez de irse solo a los cinco segundos.
+    await avisar({
+      titulo: 'Datos recuperados',
+      mensaje: `Se cargaron sobre el tipo "${plantilla.nombre}". Revisá que cada medida haya quedado en su columna antes de mandarla a Tienda Nube.`,
+    })
   }
 
   const guardarActual = async (): Promise<boolean> => {
@@ -86,39 +93,53 @@ export function GenTalles() {
   const onCopiar = async () => {
     try {
       await navigator.clipboard.writeText(html)
-      setCopyMsg('✓ Copiado — pegalo en la descripción del producto')
-      setTimeout(() => setCopyMsg(''), 4000)
+      toast.ok('HTML copiado: pegalo en la descripción del producto')
     } catch {
-      alert('No se pudo copiar automáticamente.')
+      toast.error('No se pudo copiar automáticamente.')
     }
   }
 
   const onCargarEnTN = async () => {
     if (!elegido) {
-      alert('Elegí un producto primero.')
+      await avisar('Elegí un producto primero.')
       return
     }
-    if (!confirm(`Cargar esta tabla de talles en la descripción de "${elegido.name}" en Tienda Nube?\n\nNo se borra el resto de la descripción; si ya tenía una tabla nuestra, se reemplaza.`)) return
+    const ok = await confirmar({
+      titulo: 'Cargar la tabla en Tienda Nube',
+      tono: 'brand',
+      ok: 'Cargar en TN',
+      mensaje: `Se escribe en la descripción de "${elegido.name}". No se borra el resto de la descripción; si ya tenía una tabla nuestra, se reemplaza.`,
+    })
+    if (!ok) return
     setCargandoTN(true)
-    setTnMsg('')
     const r = await gt.cargarEnTN(elegido.id!, html)
     if (!r.ok) {
-      alert('No se pudo cargar en TN.\n' + (r.error || ''))
+      toast.error('No se pudo cargar en TN. ' + (r.error || ''))
       setCargandoTN(false)
       return
     }
     await guardarActual()
     const fresco = await gt.refrescarAudit(elegido.id)
     if (fresco) setElegido(fresco)
-    setTnMsg(r.accion === 'reemplazada' ? '✓ Tabla actualizada en TN' : '✓ Tabla cargada en TN')
-    setTimeout(() => setTnMsg(''), 5000)
+    toast.ok(r.accion === 'reemplazada' ? 'Tabla actualizada en Tienda Nube' : 'Tabla cargada en Tienda Nube')
     setCargandoTN(false)
   }
 
   const tablaActual = elegido ? tablaActualHtml(elegido.raw_desc) : null
 
   return (
-    <div>
+    <>
+      <HeaderAcciones>
+        <Button variant="outline" onClick={() => void onCopiar()}>
+          Copiar HTML
+        </Button>
+        {elegido && (
+          <Button variant="solid" tone="brand" onClick={() => void onCargarEnTN()} loading={cargandoTN}>
+            {cargandoTN ? 'Cargando…' : 'Cargar en TN'}
+          </Button>
+        )}
+      </HeaderAcciones>
+
       {marca === 'zattia' && (
         <PendientesCard
           productos={(datos?.allProductos ?? []) as { name?: string | null; sku?: string | null; stock?: number; ingresoMes?: string | null }[]}
@@ -129,28 +150,22 @@ export function GenTalles() {
         />
       )}
 
-      <div className="card">
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
-          <label style={{ fontSize: 12, color: '#666' }}>
-            Tipo de prenda
-            <br />
-            <select value={tipo} onChange={(e) => onTipo(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, minWidth: 160 }}>
+      <Card style={{ marginBottom: space[4] }}>
+        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[4] }}>
+          <Field label="Tipo de prenda" width={190}>
+            <Select value={tipo} onChange={(e) => onTipo(e.target.value)}>
               {Object.entries(GEN_TALLES_PLANTILLAS).map(([k, p]) => (
                 <option key={k} value={k}>{p.nombre}</option>
               ))}
-            </select>
-          </label>
-          <label style={{ fontSize: 12, color: '#666' }}>
-            Talles (separados por coma)
-            <br />
-            <input value={tallesStr} onChange={(e) => onTalles(e.target.value)} style={{ width: 260, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8 }} />
-          </label>
+            </Select>
+          </Field>
+          <Field label="Talles (separados por coma)" width={280}>
+            <Input value={tallesStr} onChange={(e) => onTalles(e.target.value)} />
+          </Field>
         </div>
 
-        <div style={{ borderTop: '1px solid #F1F5F9', margin: '6px 0 14px', paddingTop: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
-            Vincular a un producto de Tienda Nube (opcional)
-          </div>
+        <div style={{ borderTop: `1px solid ${color.line}`, margin: `${space[2]}px 0 ${space[4]}px`, paddingTop: space[3] }}>
+          <Subtitulo>Vincular a un producto de Tienda Nube (opcional)</Subtitulo>
           <VincularProducto
             productos={gt.tnProducts}
             elegido={elegido}
@@ -163,19 +178,23 @@ export function GenTalles() {
             <div style={{ marginTop: 10 }}>
               {tablaActual ? (
                 <>
-                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6 }}>Tabla actual del producto en TN:</div>
-                  <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: 10, overflowX: 'auto', background: '#fff' }} dangerouslySetInnerHTML={{ __html: tablaActual }} />
-                  <button className="btn-sm" onClick={onImportar} style={{ marginTop: 8 }}>⬇️ Recuperar datos de esta tabla</button>
-                  <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 8 }}>Si no se carga bien, copiá los números a mano desde la tabla de arriba.</span>
+                  <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>Tabla actual del producto en TN:</div>
+                  <div style={{ border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-md)', padding: 10, overflowX: 'auto', background: color.surface }} dangerouslySetInnerHTML={{ __html: tablaActual }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
+                    <Button size="sm" variant="outline" onClick={() => void onImportar()}>
+                      Recuperar datos de esta tabla
+                    </Button>
+                    <span style={{ fontSize: font.xs, color: color.mut2 }}>Si no se carga bien, copiá los números a mano desde la tabla de arriba.</span>
+                  </div>
                 </>
               ) : (
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>Este producto todavía no tiene tabla en su descripción.</div>
+                <div style={{ fontSize: font.sm, color: color.mut2 }}>Este producto todavía no tiene tabla en su descripción.</div>
               )}
             </div>
           )}
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Cargá las medidas</div>
+        <Subtitulo>Cargá las medidas</Subtitulo>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse' }}>
             <thead>
@@ -189,13 +208,16 @@ export function GenTalles() {
             <tbody>
               {talles.map((t) => (
                 <tr key={t}>
-                  <td style={{ padding: '6px 8px', border: '1px solid #E5E7EB', fontWeight: 600, textAlign: 'center', background: '#FAFAFA' }}>{t}</td>
+                  <td style={{ padding: '6px 8px', border: `1px solid ${color.line}`, fontWeight: 600, textAlign: 'center', background: color.bg }}>{t}</td>
                   {plantilla.medidas.map((m) => (
-                    <td key={m.letra} style={{ padding: 3, border: '1px solid #E5E7EB' }}>
+                    <td key={m.letra} style={{ padding: 3, border: `1px solid ${color.line}` }}>
                       <input
+                        className="mo-input"
+                        inputMode="decimal"
+                        aria-label={`${m.nombre} del talle ${t}`}
                         value={gtData[t + '|' + m.letra] || ''}
                         onChange={(e) => onCell(t, m.letra, e.target.value)}
-                        style={{ width: 62, textAlign: 'center', padding: '5px 4px', border: '1px solid #E5E7EB', borderRadius: 6 }}
+                        style={{ width: 68, textAlign: 'center', padding: '0 4px', height: 32 }}
                       />
                     </td>
                   ))}
@@ -204,28 +226,21 @@ export function GenTalles() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>
-            Vista previa <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 12 }}>(así se va a ver en Tienda Nube)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {tnMsg && <span style={{ fontSize: 12, color: '#16A34A' }}>{tnMsg}</span>}
-            {copyMsg && <span style={{ fontSize: 12, color: '#16A34A' }}>{copyMsg}</span>}
-            {elegido && (
-              <button className="btn-sm" onClick={onCargarEnTN} disabled={cargandoTN} style={{ background: '#0F766E', color: '#fff' }}>
-                {cargandoTN ? '⏳ Cargando…' : '📤 Cargar en TN'}
-              </button>
-            )}
-            <button className="btn-sm" onClick={onCopiar} style={{ background: '#1F2937', color: '#fff' }}>📋 Copiar HTML para TN</button>
-          </div>
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], marginBottom: space[3], flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Vista previa</h2>
+          <span style={{ color: color.mut2, fontSize: font.sm }}>así se va a ver en Tienda Nube</span>
         </div>
-        <div style={{ border: '1px dashed #E5E7EB', borderRadius: 10, padding: 16, background: '#fff' }} dangerouslySetInnerHTML={{ __html: html }} />
-      </div>
-    </div>
+        <div style={{ border: `1px dashed ${color.line2}`, borderRadius: 'var(--mo-r-lg)', padding: 16, background: color.surface }} dangerouslySetInnerHTML={{ __html: html }} />
+      </Card>
+    </>
   )
+}
+
+function Subtitulo({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[2] }}>{children}</div>
 }
 
 function VincularProducto({
@@ -252,39 +267,40 @@ function VincularProducto({
 
   return (
     <div>
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Buscar producto por nombre o SKU…"
-        style={{ width: '100%', maxWidth: 520, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8 }}
-      />
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto por nombre o SKU…" style={{ maxWidth: 520 }} />
       {q.trim().length >= 2 && (
         <div style={{ marginTop: 6 }}>
           {matches.length ? (
             matches.map((p) => (
-              <button
+              <Button
                 key={String(p.id)}
-                className="btn-sm"
-                style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }}
+                size="sm"
+                variant="outline"
+                fullWidth
+                style={{ justifyContent: 'flex-start', marginBottom: 4 }}
                 onClick={() => {
                   onElegir(p)
                   setQ('')
                 }}
               >
                 {p.name}{p.sku ? ' · ' + p.sku : ''}
-              </button>
+              </Button>
             ))
           ) : (
-            <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin resultados.</div>
+            <div style={{ fontSize: font.sm, color: color.mut2 }}>Sin resultados.</div>
           )}
         </div>
       )}
       {elegido && (
-        <div style={{ marginTop: 8, fontSize: 13 }}>
-          Producto: <strong>{elegido.name}</strong>
-          {tipoDetectado && <span style={{ color: '#0F766E' }}> · tipo detectado: {tipoDetectado}</span>}
+        <div style={{ marginTop: space[2], fontSize: font.base, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+          <span>
+            Producto: <strong style={{ color: color.ink }}>{elegido.name}</strong>
+          </span>
+          {tipoDetectado && <span style={{ color: color.successInk }}>· tipo detectado: {tipoDetectado}</span>}
           {tieneGuardada && (
-            <button className="btn-sm" onClick={onCargarGuardada} style={{ marginLeft: 8 }}>↺ Cargar la guardada</button>
+            <Button size="sm" variant="outline" onClick={onCargarGuardada}>
+              ↺ Cargar la guardada
+            </Button>
           )}
         </div>
       )}
@@ -316,42 +332,38 @@ function PendientesCard({
   const items = useMemo(() => filtrarPendientes(base, { estado, categoria, mes, soloStock }), [base, estado, categoria, mes, soloStock])
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+    <Card style={{ marginBottom: space[4] }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>📋 Pendientes de tabla de talles</div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>Productos sin nuestra tabla nueva (vieja o sin tabla). Elegí uno para actualizarlo abajo.</div>
+          <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink }}>Pendientes de tabla de talles</div>
+          <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>Productos sin nuestra tabla nueva (vieja o sin tabla). Elegí uno para actualizarlo abajo.</div>
         </div>
-        <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>{items.length} {items.length === 1 ? 'pendiente' : 'pendientes'}</span>
+        <span style={{ fontSize: font.sm, color: color.mut, whiteSpace: 'nowrap' }}>
+          {items.length} {items.length === 1 ? 'pendiente' : 'pendientes'}
+        </span>
       </div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
-        <label style={{ fontSize: 12, color: '#666' }}>
-          Estado
-          <br />
-          <select value={estado} onChange={(e) => setEstado(e.target.value as FiltrosPendientes['estado'])} style={selP}>
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[3] }}>
+        <Field label="Estado" width={170}>
+          <Select value={estado} onChange={(e) => setEstado(e.target.value as FiltrosPendientes['estado'])}>
             <option value="todas">A migrar (todas)</option>
             <option value="vieja">Tabla vieja</option>
             <option value="sin">Sin tabla</option>
-          </select>
-        </label>
-        <label style={{ fontSize: 12, color: '#666' }}>
-          Categoría
-          <br />
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={selP}>
+          </Select>
+        </Field>
+        <Field label="Categoría" width={190}>
+          <Select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             <option value="">Todas las categorías</option>
             {cats.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label style={{ fontSize: 12, color: '#666' }}>
-          Mes de ingreso
-          <br />
-          <select value={mes} onChange={(e) => setMes(e.target.value)} style={selP}>
+          </Select>
+        </Field>
+        <Field label="Mes de ingreso" width={170}>
+          <Select value={mes} onChange={(e) => setMes(e.target.value)}>
             <option value="">Todos los meses</option>
             {meses.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-        <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', paddingBottom: 7 }}>
-          <input type="checkbox" checked={soloStock} onChange={(e) => setSoloStock(e.target.checked)} /> Solo con stock
+          </Select>
+        </Field>
+        <label style={{ fontSize: font.sm, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', paddingBottom: 8 }}>
+          <input type="checkbox" checked={soloStock} onChange={(e) => setSoloStock(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} /> Solo con stock
         </label>
       </div>
       <div style={{ maxHeight: 320, overflowY: 'auto' }}>
@@ -360,24 +372,30 @@ function PendientesCard({
             const hl = elegidoId != null && x.tn.id === elegidoId
             const cat = x.categoriasTN[0] ? ' · ' + x.categoriasTN[0] : ''
             return (
-              <button
+              <Button
                 key={String(x.tn.id)}
-                className="btn-sm"
-                style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4, ...(hl ? { background: '#ECFDF5', borderColor: '#16A34A' } : {}) }}
+                size="sm"
+                variant={hl ? 'soft' : 'outline'}
+                tone={hl ? 'success' : 'neutral'}
+                fullWidth
+                style={{ justifyContent: 'flex-start', marginBottom: 4 }}
                 onClick={() => onElegir(x.tn)}
               >
-                {x.nombre} <span style={{ color: '#9CA3AF' }}>· stock {x.stock}{cat}</span>
-                {x.tablaVieja ? <span style={{ color: '#B45309', fontSize: 11 }}> · tabla vieja</span> : <span style={{ color: '#DC2626', fontSize: 11 }}> · sin tabla</span>}
-              </button>
+                {x.nombre} <span style={{ color: color.mut2 }}>· stock {x.stock}{cat}</span>
+                {x.tablaVieja ? (
+                  <span style={{ color: color.warningInk, fontSize: font.xs }}> · tabla vieja</span>
+                ) : (
+                  <span style={{ color: color.danger, fontSize: font.xs }}> · sin tabla</span>
+                )}
+              </Button>
             )
           })
         ) : (
-          <div style={{ fontSize: 12, color: '#9CA3AF' }}>No hay pendientes con esos filtros 🎉</div>
+          <div style={{ fontSize: font.sm, color: color.mut2 }}>No hay pendientes con esos filtros 🎉</div>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
-const thGrid: CSSProperties = { padding: '6px 8px', border: '1px solid #E5E7EB', background: '#F3F4F6', fontSize: 12, whiteSpace: 'nowrap' }
-const selP: CSSProperties = { padding: '6px 9px', border: '1px solid #D1D5DB', borderRadius: 8, minWidth: 150 }
+const thGrid: CSSProperties = { padding: '6px 8px', border: `1px solid ${color.line}`, background: color.bg2, fontSize: font.sm, whiteSpace: 'nowrap', color: color.mut }

@@ -18,6 +18,8 @@ import { sbFetch } from '@/lib/supabase/rest'
 import { guardarMapeo, leerMapeo, validarSkus } from '@/lib/sku-map/cliente'
 import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
 import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Badge as BadgeKit, Button, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space } from '@/components/ui'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acción 'stock'
@@ -41,22 +43,23 @@ type TnAuditProducto = {
 /** Una fila del dry-run de stock: qué haría el sync con esta variante. */
 type DryRow = { sku: string; nombre: string | null; tnProductId: string | null; tnVariantId: string | null; gn: number; tn: number | null; delta: number | null }
 
-const META: Record<MatchMetodo, { txt: string; color: string; bg: string }> = {
-  sku: { txt: 'SKU exacto', color: '#15803D', bg: '#F0FDF4' },
-  barcode: { txt: 'Código de barras', color: '#15803D', bg: '#F0FDF4' },
-  nombre: { txt: 'Nombre exacto', color: '#B45309', bg: '#FFFBEB' },
-  palabras: { txt: 'Por palabras (revisar)', color: '#B91C1C', bg: '#FEF2F2' },
-  manual: { txt: 'Manual', color: '#1D4ED8', bg: '#EFF6FF' },
+/** Qué tan confiable es cada forma de emparejar un SKU de GN con una variante de TN. */
+const META: Record<MatchMetodo, { txt: string; tone: 'success' | 'warning' | 'danger' | 'action' }> = {
+  sku: { txt: 'SKU exacto', tone: 'success' },
+  barcode: { txt: 'Código de barras', tone: 'success' },
+  nombre: { txt: 'Nombre exacto', tone: 'warning' },
+  palabras: { txt: 'Por palabras (revisar)', tone: 'danger' },
+  manual: { txt: 'Manual', tone: 'action' },
 }
 const esConfiable = (m?: MatchMetodo | null) => m === 'sku' || m === 'barcode'
 
 function Badge({ m }: { m?: MatchMetodo | null }) {
   const info = m ? META[m] : null
-  if (!info) return <span style={{ color: '#9CA3AF' }}>—</span>
+  if (!info) return <span style={{ color: color.mut2 }}>—</span>
   return (
-    <span style={{ fontSize: 11, fontWeight: 600, color: info.color, background: info.bg, borderRadius: 6, padding: '1px 7px', whiteSpace: 'nowrap' }}>
+    <BadgeKit tone={info.tone} subtle>
       {info.txt}
-    </span>
+    </BadgeKit>
   )
 }
 
@@ -272,149 +275,170 @@ export function Integraciones() {
     return { total: rows.length, validados: val, pendientes: rows.length - val }
   }, [rows])
 
-  const btn: React.CSSProperties = { fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer' }
-  const th: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7280', padding: '6px 8px', borderBottom: '1px solid #E5E7EB', whiteSpace: 'nowrap' }
-  const td: React.CSSProperties = { fontSize: 12, padding: '6px 8px', borderBottom: '1px solid #F3F4F6', whiteSpace: 'nowrap' }
-  const tabBtn = (activo: boolean): React.CSSProperties => ({
-    fontSize: 13,
-    fontWeight: 600,
-    padding: '7px 14px',
-    borderRadius: 8,
-    border: '1px solid ' + (activo ? '#D97706' : '#E5E7EB'),
-    background: activo ? '#FFFBEB' : '#fff',
-    color: activo ? '#B45309' : '#6B7280',
-    cursor: 'pointer',
-  })
-
   return (
-    <div style={{ maxWidth: 1100 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <button style={tabBtn(tab === 'mapeo')} onClick={() => setTab('mapeo')}>Mapeo</button>
-        <button style={tabBtn(tab === 'stock')} onClick={() => setTab('stock')}>Stock (dry-run)</button>
-      </div>
+    <>
+      <HeaderAcciones>
+        {tab === 'mapeo' ? (
+          <>
+            <Button variant="ghost" onClick={() => void recargar()} disabled={cargando}>
+              ↻ Recargar
+            </Button>
+            <Button variant="outline" tone="success" onClick={() => void validarVerdes()} disabled={cargando}>
+              Validar verdes
+            </Button>
+            <Button variant="solid" tone="brand" onClick={proponer} loading={proponiendo}>
+              {proponiendo ? 'Proponiendo…' : 'Proponer / actualizar mapeo'}
+            </Button>
+          </>
+        ) : (
+          <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading}>
+            {dryLoading ? 'Comparando…' : 'Correr dry-run'}
+          </Button>
+        )}
+      </HeaderAcciones>
+
+      <Tabs
+        items={[
+          { key: 'mapeo', label: 'Mapeo' },
+          { key: 'stock', label: 'Stock (dry-run)' },
+        ]}
+        value={tab}
+        onChange={(k) => setTab(k as typeof tab)}
+        style={{ marginBottom: space[4] }}
+      />
 
       {tab === 'mapeo' ? (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-            <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={proponer} disabled={proponiendo}>
-              {proponiendo ? 'Proponiendo…' : '🔎 Proponer / actualizar mapeo'}
-            </button>
-            <button style={{ ...btn, borderColor: '#15803D', color: '#15803D' }} onClick={() => void validarVerdes()} disabled={cargando}>
-              ✓ Validar verdes
-            </button>
-            <button style={btn} onClick={() => void recargar()} disabled={cargando}>↻ Recargar</button>
-            <span style={{ fontSize: 12, color: '#6B7280' }}>
-              {resumen.total} filas · <b style={{ color: '#15803D' }}>{resumen.validados} validadas</b> · {resumen.pendientes} pendientes
-            </span>
-          </div>
+          <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
+            {resumen.total} filas · <b style={{ color: color.successInk }}>{resumen.validados} validadas</b> · {resumen.pendientes} pendientes
+          </p>
 
-          {msg && <div style={{ fontSize: 12, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{msg}</div>}
-          {error && <div style={{ fontSize: 12, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{error}</div>}
+          {msg && (
+            <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
+              {msg}
+            </Notice>
+          )}
+          {error && (
+            <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
+              {error}
+            </Notice>
+          )}
 
           {cargando ? (
-            <div style={{ fontSize: 13, color: '#6B7280', padding: 20 }}>Cargando mapeo…</div>
+            <Esqueleto forma="tabla" filas={8} />
           ) : rows.length === 0 ? (
-            <div style={{ fontSize: 13, color: '#6B7280', padding: 20 }}>
-              No hay mapeo todavía. Apretá <b>Proponer / actualizar mapeo</b> para poblarlo desde GN (STU) × TN (Stunned).
-            </div>
+            <EmptyState icon="🔗" title="Todavía no hay mapeo" hint="Apretá “Proponer / actualizar mapeo” para poblarlo desde GN (STU) × TN (Stunned)." dashed />
           ) : (
-            <div style={{ overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 10 }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={th}>SKU</th>
-                    <th style={th}>GN product_id</th>
-                    <th style={th}>TN product_id</th>
-                    <th style={th}>TN variante (por talle)</th>
-                    <th style={th}>Método</th>
-                    <th style={th}>Validado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.sku} style={{ background: r.validado ? '#F8FEFB' : undefined }}>
-                      <td style={{ ...td, fontFamily: 'monospace', fontWeight: 600 }}>{r.sku}</td>
-                      <td style={{ ...td, color: '#6B7280' }}>{r.gn_product_id ?? '—'}</td>
-                      <td style={{ ...td, color: '#6B7280' }}>{r.tn_product_id ?? '—'}</td>
-                      <td style={{ ...td, color: '#111827', fontWeight: 600 }}>{r.tn_variant_id ?? '—'}</td>
-                      <td style={td}><Badge m={r.match_metodo} /></td>
-                      <td style={td}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                          <input type="checkbox" checked={!!r.validado} onChange={() => void toggleValidado(r)} />
-                        </label>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TableWrap maxHeight={620}>
+              <THead>
+                <Tr>
+                  <Th>SKU</Th>
+                  <Th>GN product_id</Th>
+                  <Th>TN product_id</Th>
+                  <Th>TN variante (por talle)</Th>
+                  <Th>Método</Th>
+                  <Th align="center" width={90}>
+                    Validado
+                  </Th>
+                </Tr>
+              </THead>
+              <TBody>
+                {rows.map((r) => (
+                  <Tr key={r.sku} style={r.validado ? { background: color.successBg } : undefined}>
+                    <Td mono strong>
+                      {r.sku}
+                    </Td>
+                    <Td style={{ color: color.mut }}>{r.gn_product_id ?? '—'}</Td>
+                    <Td style={{ color: color.mut }}>{r.tn_product_id ?? '—'}</Td>
+                    <Td strong>{r.tn_variant_id ?? '—'}</Td>
+                    <Td>
+                      <Badge m={r.match_metodo} />
+                    </Td>
+                    <Td align="center">
+                      <input
+                        type="checkbox"
+                        checked={!!r.validado}
+                        onChange={() => void toggleValidado(r)}
+                        aria-label={`Validar el mapeo de ${r.sku}`}
+                        style={{ accentColor: 'var(--mo-brand-solid)', cursor: 'pointer' }}
+                      />
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </TableWrap>
           )}
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <button style={{ ...btn, borderColor: '#D97706', color: '#B45309' }} onClick={() => void correrDryRun()} disabled={dryLoading}>
-              {dryLoading ? 'Comparando…' : '▶ Correr dry-run'}
-            </button>
-            <span style={{ fontSize: 12, color: '#6B7280' }}>Simulación de solo lectura: compara GN vs TN, no escribe.</span>
-          </div>
-          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>
-            Stock de GN = suma de todas las ubicaciones (Depósito + Local). El sync pondría TN = GN.
-          </div>
+          <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
+            Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar en una fila. El stock de GN es la suma de todas las
+            ubicaciones (Depósito + Local); el sync pondría TN = GN.
+          </Notice>
 
-          {dryMsg && <div style={{ fontSize: 12, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{dryMsg}</div>}
-          {dryError && <div style={{ fontSize: 12, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{dryError}</div>}
+          {dryMsg && (
+            <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
+              {dryMsg}
+            </Notice>
+          )}
+          {dryError && (
+            <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
+              {dryError}
+            </Notice>
+          )}
 
           {dryRows.length > 0 && (
-            <div style={{ overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 10 }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={th}>Producto</th>
-                    <th style={th}>SKU (talle)</th>
-                    <th style={{ ...th, textAlign: 'right' }}>Stock GN</th>
-                    <th style={{ ...th, textAlign: 'right' }}>Stock TN</th>
-                    <th style={th}>Qué haría el sync</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dryRows.map((r) => {
-                    const cambia = r.delta != null && r.delta !== 0
-                    return (
-                      <tr key={r.sku} style={{ background: cambia ? '#FFFBEB' : undefined }}>
-                        <td style={{ ...td, fontWeight: 600, color: '#111827' }}>{r.nombre ?? '—'}</td>
-                        <td style={{ ...td, fontFamily: 'monospace' }}>{r.sku}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{r.gn}</td>
-                        <td style={{ ...td, textAlign: 'right', color: '#6B7280' }}>{r.tn == null ? '—' : r.tn}</td>
-                        <td style={td}>
-                          {r.tn == null ? (
-                            <span style={{ color: '#9CA3AF' }}>TN sin stock gestionado</span>
-                          ) : cambia ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ color: '#B45309', fontWeight: 600 }}>TN {r.tn} → {r.gn}</span>
-                              {r.tnProductId && r.tnVariantId && (
-                                <button
-                                  style={{ ...btn, padding: '3px 10px', fontSize: 12, borderColor: '#15803D', color: '#15803D' }}
-                                  onClick={() => void aplicarUno(r)}
-                                  disabled={aplicando != null}
-                                >
-                                  {aplicando === r.sku ? 'Escribiendo…' : 'Aplicar'}
-                                </button>
-                              )}
+            <TableWrap maxHeight={620}>
+              <THead>
+                <Tr>
+                  <Th>Producto</Th>
+                  <Th>SKU (talle)</Th>
+                  <Th align="right">Stock GN</Th>
+                  <Th align="right">Stock TN</Th>
+                  <Th>Qué haría el sync</Th>
+                </Tr>
+              </THead>
+              <TBody>
+                {dryRows.map((r) => {
+                  const cambia = r.delta != null && r.delta !== 0
+                  return (
+                    <Tr key={r.sku} style={cambia ? { background: color.warningBg } : undefined}>
+                      <Td wrap strong>
+                        {r.nombre ?? '—'}
+                      </Td>
+                      <Td mono>{r.sku}</Td>
+                      <Td align="right" strong>
+                        {r.gn}
+                      </Td>
+                      <Td align="right" style={{ color: color.mut }}>
+                        {r.tn == null ? '—' : r.tn}
+                      </Td>
+                      <Td tall>
+                        {r.tn == null ? (
+                          <span style={{ color: color.mut2 }}>TN sin stock gestionado</span>
+                        ) : cambia ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+                            <span style={{ color: color.warningInk, fontWeight: 600 }}>
+                              TN {r.tn} → {r.gn}
                             </span>
-                          ) : (
-                            <span style={{ color: '#15803D' }}>ya coincide</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            {r.tnProductId && r.tnVariantId && (
+                              <Button size="sm" variant="outline" tone="success" onClick={() => void aplicarUno(r)} loading={aplicando === r.sku} disabled={aplicando != null}>
+                                {aplicando === r.sku ? 'Escribiendo…' : 'Aplicar'}
+                              </Button>
+                            )}
+                          </span>
+                        ) : (
+                          <span style={{ color: color.successInk }}>ya coincide</span>
+                        )}
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </TBody>
+            </TableWrap>
           )}
         </>
       )}
-    </div>
+    </>
   )
 }
