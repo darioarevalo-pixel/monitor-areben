@@ -28,7 +28,7 @@ import {
   ventasPorCanal,
 } from '@/lib/marketing/core'
 import { useMarketing } from './useMarketing'
-import { color, useConfirmar } from '@/components/ui'
+import { KpiCard, color, useConfirmar } from '@/components/ui'
 
 const STALE = 15 * 60 * 1000 // fotos "viejas" a partir de 15 min (salvaguarda del puente)
 const TOPE = 300 // la tabla muestra como mucho 300 filas (igual que el legacy)
@@ -232,29 +232,15 @@ export function Marketing() {
       </div>
 
       {/* KPIs */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 14 }}>
-        <div className="stat" style={{ cursor: 'pointer' }} onClick={() => toggleCalidadUnica('sin-foto')}>
-          <div className="stat-label">Sin foto en TN</div>
-          <div className="stat-value danger">{stats.sinFoto}</div>
-        </div>
-        <div className="stat" style={{ cursor: 'pointer' }} onClick={() => toggleCalidadUnica('sin-desc')}>
-          <div className="stat-label">Sin descripción</div>
-          <div className="stat-value warning">{stats.sinDesc}</div>
-        </div>
-        {talles && (
-          <div className="stat" style={{ cursor: 'pointer' }} onClick={() => toggleCalidadUnica('sin-tabla')}>
-            <div className="stat-label">📏 Le falta tabla de talles</div>
-            <div className="stat-value warning">{stats.sinTabla}</div>
-          </div>
-        )}
-        <div className="stat" style={{ cursor: 'pointer' }} onClick={() => toggleCalidadUnica('sin-foto-desc')}>
-          <div className="stat-label">❌ Sin foto ni descripción</div>
-          <div className="stat-value danger">{stats.sinAmbos}</div>
-        </div>
-        <div className="stat" style={{ cursor: 'pointer' }} onClick={() => toggleCalidadUnica('top-low-stock')}>
-          <div className="stat-label">⚠ Top ventas con stock bajo</div>
-          <div className="stat-value danger">{stats.topLow}</div>
-        </div>
+      {/* Son FILTROS, no números decorativos: tocar uno filtra la tabla de abajo. Antes
+          eran `.stat` del CSS legacy con una grilla fija de 4 columnas, así que el quinto
+          se caía de la fila; `mo-kpis` acomoda los que haya. */}
+      <div className="mo-kpis">
+        <KpiCard label="Sin foto en TN" value={stats.sinFoto} tone="danger" onClick={() => toggleCalidadUnica('sin-foto')} />
+        <KpiCard label="Sin descripción" value={stats.sinDesc} tone="warning" onClick={() => toggleCalidadUnica('sin-desc')} />
+        {talles && <KpiCard label="Le falta tabla de talles" value={stats.sinTabla} tone="warning" onClick={() => toggleCalidadUnica('sin-tabla')} />}
+        <KpiCard label="Sin foto ni descripción" value={stats.sinAmbos} tone="danger" onClick={() => toggleCalidadUnica('sin-foto-desc')} />
+        <KpiCard label="Top ventas con stock bajo" value={stats.topLow} tone="danger" onClick={() => toggleCalidadUnica('top-low-stock')} />
       </div>
 
       {/* Filtros */}

@@ -8,7 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAMostrar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
-import { color, useConfirmar } from '@/components/ui'
+import { Button, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
 /**
  * Mostrar con stock: productos **despublicados** en la tienda que hoy tienen stock en
@@ -130,43 +130,56 @@ export function ConStockCard({ marca }: { marca: Marca }) {
         <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>✅ No hay productos con stock ocultos en la tienda.</div>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-            <button className="btn-sm" onClick={toggleTodos} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[2] }}>
+            <Button size="sm" variant="outline" onClick={toggleTodos}>
               {todosSel ? 'Deseleccionar todos' : 'Seleccionar todos'}
-            </button>
-            <span style={{ fontSize: 13, color: color.mut }}>
+            </Button>
+            <span style={{ fontSize: font.base, color: color.mut }}>
               {lista.length === 1 ? '1 producto oculto con stock' : `${lista.length} productos ocultos con stock`}
               {nSel > 0 ? ` · ${nSel === 1 ? '1 seleccionado' : `${nSel} seleccionados`}` : ''}
             </span>
-            <button
-              className="btn-sm"
-              disabled={nSel === 0 || procesando}
-              onClick={() => void mostrar()}
-              style={{ background: nSel === 0 ? color.line : color.success, color: nSel === 0 ? color.mut2 : '#fff', border: 'none', marginLeft: 'auto' }}
-            >
-              {procesando ? 'Publicando…' : `👁️ Mostrar ${nSel || ''}`}
-            </button>
+            <Button variant="solid" tone="brand" disabled={nSel === 0} loading={procesando} onClick={() => void mostrar()} style={{ marginLeft: 'auto' }}>
+              {procesando ? 'Publicando…' : `Mostrar ${nSel || ''}`.trim()}
+            </Button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {lista.map((c) => {
-              const id = String(c.tnId)
-              return (
-                <label key={id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: 8, padding: '8px 11px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={sel.has(id)} onChange={() => toggle(id)} />
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{c.gnNombre}</div>
-                    <div style={{ fontSize: 12, color: color.mut2 }}>
-                      {c.sku ? `SKU ${c.sku} · ` : ''}en tienda: {c.tnNombre}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: color.success, background: color.successBg, borderRadius: 6, padding: '2px 8px' }}>
-                    {c.stock === 1 ? '1 unidad' : `${c.stock} unidades`}
-                  </span>
-                </label>
-              )
-            })}
-          </div>
+          {/* Una sola superficie con las filas separadas por línea. Antes cada producto
+              era una tarjeta suelta y entre una y otra se veía el lienzo: la lista se
+              leía como un montón de cajas flotando, no como una lista. */}
+          <TableWrap maxHeight={520}>
+            <THead>
+              <Tr>
+                <Th width={44} />
+                <Th>Producto</Th>
+                <Th align="right" width={110}>
+                  Stock
+                </Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {lista.map((c) => {
+                const id = String(c.tnId)
+                return (
+                  <Tr key={id} onClick={() => toggle(id)}>
+                    <Td align="center">
+                      <input type="checkbox" checked={sel.has(id)} onChange={() => toggle(id)} style={{ accentColor: 'var(--mo-brand-solid)', cursor: 'pointer' }} />
+                    </Td>
+                    <Td tall wrap>
+                      <div style={{ fontWeight: 600, color: color.ink }}>{c.gnNombre}</div>
+                      <div style={{ fontSize: font.sm, color: color.mut2 }}>
+                        {c.sku ? `SKU ${c.sku} · ` : ''}en tienda: {c.tnNombre}
+                      </div>
+                    </Td>
+                    <Td align="right">
+                      <span style={{ fontSize: font.xs, fontWeight: 700, color: color.successInk, background: color.successBg, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                        {c.stock === 1 ? '1 unidad' : `${c.stock} unidades`}
+                      </span>
+                    </Td>
+                  </Tr>
+                )
+              })}
+            </TBody>
+          </TableWrap>
         </>
       )}
     </div>

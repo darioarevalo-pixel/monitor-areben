@@ -8,7 +8,8 @@ import { NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
-import { color, useConfirmar } from '@/components/ui'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Button, color, font, useConfirmar } from '@/components/ui'
 
 /**
  * Las secciones agrupadas por ÁREA, en el orden del menú. La lista plana de 35 filas
@@ -117,13 +118,24 @@ export function Usuarios() {
   }
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-        <button className="btn-sm" onClick={agregar} style={{ background: color.brandSolid, color: '#fff' }}>+ Usuario</button>
-        <button className="btn-sm" onClick={guardar} disabled={guardando || !users} style={{ background: color.success, color: '#fff' }}>💾 Guardar cambios</button>
-        <button className="btn-sm" onClick={() => setTick((t) => t + 1)} style={{ background: '#fff', border: `1px solid ${color.line2}` }} title="Volver a leer la configuración">↻ Recargar</button>
-        {status && <span style={{ fontSize: 12, color: status.color }}>{status.msg}</span>}
-      </div>
+    <>
+      {/* Las acciones al header, como en el resto. Y UN solo primario: guardar es lo que
+          cierra el trabajo de esta pantalla, así que es el lleno; agregar un usuario es
+          el paso previo y queda secundario. Antes eran dos botones llenos —verde e
+          índigo— pegados, sin jerarquía entre ellos. */}
+      <HeaderAcciones>
+        {status && <span style={{ fontSize: font.sm, color: status.color }}>{status.msg}</span>}
+        <Button variant="ghost" onClick={() => setTick((t) => t + 1)} title="Volver a leer la configuración">
+          ↻ Recargar
+        </Button>
+        <Button variant="outline" onClick={agregar}>
+          + Usuario
+        </Button>
+        <Button variant="solid" tone="brand" onClick={guardar} loading={guardando} disabled={!users}>
+          Guardar cambios
+        </Button>
+      </HeaderAcciones>
+
 
       {/* Config aparece dentro de las dos marcas, pero la lista de usuarios es UNA sola:
           el endpoint no recibe marca. Lo que sí es por marca son los permisos de cada uno. */}
@@ -155,7 +167,7 @@ export function Usuarios() {
           />
         ))
       )}
-    </div>
+    </>
   )
 }
 

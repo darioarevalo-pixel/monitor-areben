@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { aplicarCategorias, recalcularCategorias } from '@/lib/tncat/cliente'
 import type { CatRecalc } from '@/lib/tncat/tipos'
-import { color, useConfirmar } from '@/components/ui'
+import { Button, color, space, useConfirmar } from '@/components/ui'
 
 /**
  * Categorías por modelo (card 1, BDI). Mantiene cada producto en las categorías de
@@ -94,9 +94,13 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
             Mantiene cada producto en las categorías de los modelos que <b>tienen stock</b>, y saca las de los modelos <b>sin stock</b>. Así el cliente ve solo lo disponible para su celular.
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-sm" onClick={recalcular}>🔄 Recalcular</button>
-          <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: color.success, color: '#fff' }}>✅ Aplicar cambios ahora</button>
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+          <Button variant="outline" onClick={recalcular}>
+            Recalcular
+          </Button>
+          <Button variant="solid" tone="brand" onClick={aplicar} loading={aplicando}>
+            Aplicar cambios ahora
+          </Button>
         </div>
       </div>
 

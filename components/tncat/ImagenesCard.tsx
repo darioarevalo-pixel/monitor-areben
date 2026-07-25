@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { bustAudit, publicar, subirImagen, traerProductosImg, vincularColor } from '@/lib/tncat/cliente'
 import { colorPorNombre, findProd, matchByFilename } from '@/lib/tncat/matching'
 import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
-import { color, useConfirmar, useToast } from '@/components/ui'
+import { Button, color, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Carga de imágenes a TN (card 2). Un bloque por producto con varias fotos: se
@@ -331,13 +331,23 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
         <input type="file" multiple accept="image/*" onChange={(e) => { autoCargar(e.target.files || []); e.currentTarget.value = '' }} style={{ display: 'none' }} />
       </label>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button className="btn-sm" onClick={() => subirTodo()} disabled={subibles === 0 || subiendo} style={{ background: color.success, color: '#fff' }}>⬆️ Subir todo a TN</button>
-        <button className="btn-sm" onClick={subirYPublicar} disabled={publicando || subiendo} title="Sube las fotos pendientes y además PUBLICA (hace visibles) los productos en TiendaNube" style={{ background: color.brand, color: '#fff' }}>🌐 Subir y publicar</button>
-        <button className="btn-sm" onClick={agregarGrupo}>+ Agregar producto a mano</button>
-        <button className="btn-sm" onClick={recargarProductos} disabled={recargando} title="Volvé a traer la lista de productos desde TiendaNube (usalo si importaste productos nuevos y no los reconoce)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-          {recargando ? '⏳ Cargando…' : '🔄 Recargar productos de TN'}
-        </button>
+      {/* UN solo primario. "Subir todo" y "Subir y publicar" eran dos botones llenos de
+          color distinto pegados: ninguno de los dos se leía como el principal. Subir es
+          lo que se hace siempre; publicar es la variante, y además hace visible el
+          producto en la tienda, así que queda como secundaria y lo dice el título. */}
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+        <Button variant="solid" tone="brand" onClick={() => subirTodo()} disabled={subibles === 0 || subiendo} loading={subiendo}>
+          Subir todo a TN
+        </Button>
+        <Button variant="outline" onClick={subirYPublicar} disabled={publicando || subiendo} loading={publicando} title="Sube las fotos pendientes y además PUBLICA (hace visibles) los productos en TiendaNube">
+          Subir y publicar
+        </Button>
+        <Button variant="outline" onClick={agregarGrupo}>
+          + Agregar producto a mano
+        </Button>
+        <Button variant="ghost" onClick={recargarProductos} loading={recargando} title="Volvé a traer la lista de productos desde TiendaNube (usalo si importaste productos nuevos y no los reconoce)">
+          {recargando ? 'Cargando…' : 'Recargar productos de TN'}
+        </Button>
         <span style={{ fontSize: 12, color: color.mut2 }}>
           {totalFotos ? (
             <>

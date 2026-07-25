@@ -13,7 +13,7 @@ import { AgotadosCard } from './AgotadosCard'
 import { ConStockCard } from './ConStockCard'
 import { VariantesSinStockCard } from './VariantesSinStockCard'
 import type { Marca } from '@/lib/nav'
-import { color } from '@/components/ui'
+import { color, font, space } from '@/components/ui'
 
 // La tabla de talles escribe descripciones en TiendaNube, así que es una herramienta más de
 // esta sección; se carga aparte (trae su propio peso) y solo cuando se abre esa pestaña.
@@ -51,10 +51,10 @@ export function Tncat() {
   const verTalles = admin || puedeVer(perfil, marca, 'gen-talles')
 
   const subs: { key: Sub; label: string; hint: string; ok: boolean }[] = [
-    { key: 'fotos', label: '📷 Fotos', hint: 'Subir fotos y revisar que estén pegadas al color', ok: verImg },
-    { key: 'categorias', label: '🗂️ Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
-    { key: 'visibilidad', label: '👁️ Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
-    { key: 'descripciones', label: '📏 Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
+    { key: 'fotos', label: 'Fotos', hint: 'Subir fotos y revisar que estén pegadas al color', ok: verImg },
+    { key: 'categorias', label: 'Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
+    { key: 'visibilidad', label: 'Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
+    { key: 'descripciones', label: 'Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
   ]
   const visibles = subs.filter((s) => s.ok)
 
@@ -70,12 +70,16 @@ export function Tncat() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Qué herramienta se está usando: el encabezado de la página dice "Tienda Nube" y
-          desde el sidebar no siempre queda claro en cuál de las cuatro caíste. */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: color.warningInk }}>
-        {subs.find((s) => s.key === activa)?.label}
-        <span style={{ fontWeight: 400, color: color.mut2, marginLeft: 8 }}>{subs.find((s) => s.key === activa)?.hint}</span>
-      </div>
+      {/* Qué herramienta se está usando. El encabezado de la página dice "Tienda Nube" y
+          desde el sidebar no siempre queda claro en cuál de las cuatro caíste.
+          Antes era una línea de color flotando sobre el lienzo, sin pertenecer a nada;
+          ahora es el encabezado del bloque que sigue, con su regla abajo. */}
+      <header style={{ borderBottom: `1px solid ${color.line}`, paddingBottom: space[3] }}>
+        <h2 style={{ fontSize: font.xl, fontWeight: 700, color: color.ink, letterSpacing: -0.2 }}>
+          {subs.find((s) => s.key === activa)?.label}
+        </h2>
+        <p style={{ fontSize: font.base, color: color.mut, marginTop: 2 }}>{subs.find((s) => s.key === activa)?.hint}</p>
+      </header>
 
       {activa === 'fotos' && <Fotos marca={marca} />}
       {activa === 'categorias' && <Categorias marca={marca} verCat={verCat} verAsig={verAsig} />}
