@@ -6,12 +6,42 @@ import { guardarResueltas, leerResueltas } from '@/lib/kv/cliente'
 import { mesDe, particionar, rango } from '@/lib/verif-ventas/core'
 import { verificarVentas } from '@/lib/verif-ventas/cliente'
 import type { Discrepancia, ResueltaEntry, Resueltas, VvtaData } from '@/lib/verif-ventas/tipos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  Button,
+  EmptyState,
+  Esqueleto,
+  KpiCard,
+  Notice,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  color,
+  font,
+  space,
+  useToast,
+} from '@/components/ui'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 const money = (n?: number) => (n == null ? '—' : '$' + Math.round(+n).toLocaleString('es-AR'))
 
+/**
+ * Verificación de ventas: pedidos cancelados en TiendaNube que siguen activos en Gestión
+ * Nube. GN no deja anular por API, así que la sección es un checklist: se anula a mano en
+ * GN y se tilda acá (el tilde vive en el KV de la marca).
+ *
+ * Rediseño jul-2026 (patrón Listado): el mes y Verificar van al header; los tres números
+ * del resumen eran cajitas de texto y pasan a KpiCard con tono (el "a revisar" en rojo
+ * solo si hay algo que revisar); los `alert()` de error al guardar el tilde pasan a Toast
+ * —eran los únicos avisos de que el checklist no se estaba guardando—; y la espera larga
+ * (consulta a dos APIs) muestra el esqueleto de la tabla en vez de un texto gris.
+ */
 export function VerifVentas() {
   const { marca, perfil } = useSesion()
+  const toast = useToast()
   const [mes, setMes] = useState(() => mesDe(new Date()))
   const [data, setData] = useState<VvtaData | null>(null)
   const [resueltas, setResueltas] = useState<Resueltas>({})
@@ -41,11 +71,11 @@ export function VerifVentas() {
     else delete next[tnOrder]
     setResueltas(next)
     if (!cargado) {
-      alert('No se pudo leer el checklist, así que no se guarda (guardar ahora lo borraría). Verificá de nuevo.')
+      toast.error('No se pudo leer el checklist, así que el tilde no se guarda (guardar ahora lo borraría). Verificá de nuevo.')
       return
     }
     const r = await guardarResueltas({ store: marca, resueltas: next, cargado: true })
-    if (!r.ok) alert('No se pudo guardar: ' + r.motivo)
+    if (!r.ok) toast.error('No se pudo guardar el tilde: ' + r.motivo)
   }
 
   const r = data?.resumen || {}
@@ -53,71 +83,119 @@ export function VerifVentas() {
   const { pend, res } = particionar(disc, resueltas)
   const scope403 = data?.tn_debug?.status === 403
 
-  const fila = (d: Discrepancia) => {
-    const ok = !!resueltas[String(d.tn_order)]
-    return (
-      <tr key={String(d.tn_order)} style={{ opacity: ok ? 0.55 : 1 }}>
-        <td style={td}><input type="checkbox" checked={ok} onChange={(e) => marcar(String(d.tn_order), e.target.checked)} title="Marcar como ya anulada en GN" style={{ width: 16, height: 16, cursor: 'pointer' }} /></td>
-        <td style={{ ...td, fontWeight: 600 }}>#{String(d.tn_order)}</td>
-        <td style={td}>{String(d.gn_number || d.gn_id || '—')}</td>
-        <td style={td}>{d.date_sale || '—'}</td>
-        <td style={td}>{d.client_name || '—'}</td>
-        <td style={{ ...td, textAlign: 'right' }}>{money(d.total_price)}</td>
-      </tr>
-    )
-  }
-  const tabla = (arr: Discrepancia[]) => (
-    <div style={{ overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead><tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}><th style={th}>✔</th><th style={th}>Pedido TN</th><th style={th}>Venta GN</th><th style={th}>Fecha</th><th style={th}>Cliente</th><th style={{ ...th, textAlign: 'right' }}>Monto</th></tr></thead>
-        <tbody>{arr.map(fila)}</tbody>
-      </table>
-    </div>
-  )
-
   return (
-    <div className="card">
-      <div style={{ marginTop: 0 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          <label style={{ fontSize: 13, color: '#374151' }}>Mes <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 7 }} /></label>
-          <button className="btn-primary" onClick={verificar} disabled={cargando}>{cargando ? '⏳ Verificando…' : '🔍 Verificar'}</button>
-        </div>
+    <>
+      <HeaderAcciones>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut }}>
+          Mes
+          <input className="mo-input" type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 150 }} />
+        </label>
+        <Button variant="solid" tone="brand" onClick={() => void verificar()} loading={cargando}>
+          {cargando ? 'Verificando…' : 'Verificar'}
+        </Button>
+      </HeaderAcciones>
 
-        {cargando ? (
-          <div style={{ padding: 16, color: '#9CA3AF' }}>Consultando TiendaNube y Gestión Nube… (puede tardar unos segundos)</div>
-        ) : !data ? (
-          <div style={{ padding: 16, color: '#9CA3AF' }}>Elegí el mes y tocá <b>Verificar</b>.</div>
-        ) : scope403 ? (
-          <div style={{ background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 9, padding: 12, color: '#92400E' }}>⚠ TiendaNube todavía no nos deja leer los pedidos: falta habilitar el permiso <b>read_orders</b> en la app de TiendaNube (y regenerar el token). Cuando esté, esto funciona solo.</div>
-        ) : data.error ? (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 9, padding: 12, color: '#991B1B' }}>{data.error}</div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-              <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 9, padding: '8px 14px', fontSize: 13 }}>Cancelados en TN: <b>{r.tn_cancelados ?? 0}</b></div>
-              <div style={{ background: pend.length ? '#FEF2F2' : '#ECFDF5', border: `1px solid ${pend.length ? '#FCA5A5' : '#A7F3D0'}`, borderRadius: 9, padding: '8px 14px', fontSize: 13 }}>A revisar (activas en GN): <b style={{ color: pend.length ? '#991B1B' : '#065F46' }}>{pend.length}</b></div>
-              {res.length > 0 && <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 9, padding: '8px 14px', fontSize: 13 }}>Resueltas: <b>{res.length}</b></div>}
-            </div>
-            {!disc.length ? (
-              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 9, padding: 14, color: '#065F46', textAlign: 'center' }}>✅ No hay ventas activas en GN que estén canceladas en TN para este mes.</div>
-            ) : (
-              <>
-                <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>GN no permite anular por API → anulá la venta en <b>Gestión Nube</b> a mano y después tildala acá.</div>
-                {pend.length ? tabla(pend) : <div style={{ color: '#065F46', fontSize: 13, padding: '8px 0' }}>✅ Todas las de este mes ya están resueltas.</div>}
-                {res.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <button className="btn-sm" onClick={() => setVerResueltas((v) => !v)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>{verResueltas ? 'Ocultar' : 'Ver'} resueltas ({res.length})</button>
-                    {verResueltas && tabla(res)}
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+      {cargando ? (
+        <>
+          <Notice tone="neutral" icon="⏳" style={{ marginBottom: space[3] }}>
+            Consultando TiendaNube y Gestión Nube… puede tardar unos segundos.
+          </Notice>
+          <Esqueleto forma="tabla" filas={6} />
+        </>
+      ) : !data ? (
+        <EmptyState icon="🔍" title="Elegí el mes y tocá Verificar" hint="Se comparan los pedidos cancelados en TiendaNube contra las ventas activas en Gestión Nube." dashed />
+      ) : scope403 ? (
+        <Notice tone="warning" icon="⚠">
+          TiendaNube todavía no nos deja leer los pedidos: falta habilitar el permiso <b>read_orders</b> en la app de TiendaNube (y regenerar el token). Cuando esté, esto funciona solo.
+        </Notice>
+      ) : data.error ? (
+        <Notice tone="danger" icon="⚠">
+          {data.error}
+        </Notice>
+      ) : (
+        <>
+          <div className="mo-kpis">
+            <KpiCard label="Cancelados en TN" value={r.tn_cancelados ?? 0} />
+            <KpiCard
+              label="A revisar (activas en GN)"
+              value={pend.length}
+              tone={pend.length ? 'danger' : 'success'}
+              sub={pend.length ? 'Hay que anularlas a mano en GN' : 'No queda ninguna'}
+            />
+            {res.length > 0 && <KpiCard label="Resueltas" value={res.length} />}
+          </div>
+
+          {!disc.length ? (
+            <EmptyState icon="✅" title="No hay nada que revisar en este mes" hint="Ninguna venta activa en GN está cancelada en TiendaNube." dashed />
+          ) : (
+            <>
+              <Notice tone="warning" icon="!" style={{ marginBottom: space[3] }}>
+                GN no permite anular por API: anulá la venta en <b>Gestión Nube</b> a mano y después tildala acá.
+              </Notice>
+
+              {pend.length ? (
+                <Tabla filas={pend} resueltas={resueltas} onMarcar={marcar} />
+              ) : (
+                <EmptyState icon="✅" title="Todas las de este mes ya están resueltas" dashed />
+              )}
+
+              {res.length > 0 && (
+                <div style={{ marginTop: space[4] }}>
+                  <Button size="sm" variant="outline" onClick={() => setVerResueltas((v) => !v)}>
+                    {verResueltas ? 'Ocultar' : 'Ver'} resueltas ({res.length})
+                  </Button>
+                  {verResueltas && (
+                    <div style={{ marginTop: space[2] }}>
+                      <Tabla filas={res} resueltas={resueltas} onMarcar={marcar} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
   )
 }
 
-const td = { padding: '5px 8px', borderTop: '1px solid #F1F5F9' } as const
-const th = { padding: '4px 8px' } as const
+function Tabla({ filas, resueltas, onMarcar }: { filas: Discrepancia[]; resueltas: Resueltas; onMarcar: (id: string, v: boolean) => void }) {
+  return (
+    <TableWrap maxHeight={560}>
+      <THead>
+        <Tr>
+          <Th width={44}>✔</Th>
+          <Th>Pedido TN</Th>
+          <Th>Venta GN</Th>
+          <Th>Fecha</Th>
+          <Th>Cliente</Th>
+          <Th align="right">Monto</Th>
+        </Tr>
+      </THead>
+      <TBody>
+        {filas.map((d) => {
+          const ok = !!resueltas[String(d.tn_order)]
+          return (
+            <Tr key={String(d.tn_order)} style={ok ? { opacity: 0.55 } : undefined}>
+              <Td>
+                <input
+                  type="checkbox"
+                  checked={ok}
+                  onChange={(e) => void onMarcar(String(d.tn_order), e.target.checked)}
+                  title="Marcar como ya anulada en GN"
+                  aria-label={`Marcar el pedido ${d.tn_order} como anulado en GN`}
+                  style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--mo-brand-solid)' }}
+                />
+              </Td>
+              <Td strong>#{String(d.tn_order)}</Td>
+              <Td>{String(d.gn_number || d.gn_id || '—')}</Td>
+              <Td>{d.date_sale || '—'}</Td>
+              <Td wrap>{d.client_name || '—'}</Td>
+              <Td align="right">{money(d.total_price)}</Td>
+            </Tr>
+          )
+        })}
+      </TBody>
+    </TableWrap>
+  )
+}

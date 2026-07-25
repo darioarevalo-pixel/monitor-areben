@@ -8,22 +8,31 @@ import { generarReporteExhib } from '@/lib/exhib/pdf'
 import { contarSinMarcar, exhibId, faltantes, filtrarPorCat, tnAdminUrl, agruparPDF } from '@/lib/exhib/core'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Button, Card, Field, Input, Notice, Select, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Fase = 'config' | 'scan' | 'triage'
 
 /**
- * "👕 Chequeo de exhibición" (key `exhib`) en Next — Tanda C (bajo riesgo).
+ * "👕 Chequeo de exhibición" (key `exhib`).
  *
- * Port de exhibInit/…/exhibGenerarPDF (index.html:7564-7945): recorrer el Local con
- * el lector físico confirmando que cada variante con stock está colgada; triage de
- * faltantes + reporte PDF + registro de categorías a corregir en TN. Read-only sobre
- * Supabase/TN; solo escribe localStorage (MISMAS claves del iframe → sin migración).
- * NO escribe stock ni GN → flip directo. La cámara ZXing del legacy era código muerto
- * (sin `<video>` ni llamador) → se porta el flujo de lector físico. Rollback: SOMBRAS.
+ * Recorrer el Local con el lector físico confirmando que cada variante con stock está
+ * colgada; después triage de faltantes + reporte PDF + registro de categorías a corregir
+ * en TN. Read-only sobre Supabase/TN; solo escribe localStorage (mismas claves que el
+ * legacy). No escribe stock ni GN.
+ *
+ * Rediseño jul-2026 (patrón Flujo operativo): las tres fases —configurar, recorrer,
+ * faltantes— existían pero no se veían; ahora hay una barra de pasos, así se sabe dónde
+ * estás y cuánto falta. El recorrido se hace caminando el local con el lector en la mano,
+ * así que es de las pantallas que más importaba llevar al teléfono: el campo de escaneo
+ * ocupa el ancho, y los botones de triage tienen tamaño de dedo. Los confirm/alert
+ * nativos pasan a diálogos y Toast del kit.
  */
 export function Exhib() {
   const { datos } = useDatosMonitor()
   const { marca, perfil } = useSesion()
+  const { confirmar } = useConfirmar()
+  const toast = useToast()
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
   const ex = useExhib(marca, productos)
 
@@ -62,25 +71,32 @@ export function Exhib() {
     ex.marcarErrorCat(pid, catSel)
     setFb(null)
   }
-  function terminar() {
-    setFase('triage')
-  }
-  function reiniciar() {
-    if ((Object.keys(ex.estados).length || Object.keys(ex.errores).length) && !confirm('¿Borrar el chequeo en curso y empezar de cero?')) return
+
+  async function reiniciar() {
+    if (Object.keys(ex.estados).length || Object.keys(ex.errores).length) {
+      const ok = await confirmar({
+        titulo: 'Reiniciar el chequeo',
+        tono: 'danger',
+        ok: 'Borrar y empezar',
+        mensaje: `Se borra el chequeo en curso (${enCurso} ${enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}) y se empieza de cero.`,
+      })
+      if (!ok) return
+    }
     ex.reiniciar()
     setFase('config')
   }
 
   async function traerGN() {
     if (syncLabel) return
-    setSyncLabel('⏳ Pidiendo a GN…')
+    setSyncLabel('Pidiendo a GN…')
     try {
       const done = await dispararSyncStock(marca, setSyncLabel)
-      setSyncLabel('↻ Recargando…')
+      setSyncLabel('Recargando…')
       await ex.recargar()
-      if (!done) alert('La sincronización con GN está tardando más de lo normal. Te muestro lo último disponible.')
+      if (!done) toast.aviso('La sincronización con GN está tardando más de lo normal. Te muestro lo último disponible.')
+      else toast.ok('Inventario actualizado')
     } catch (e) {
-      alert('Error al actualizar: ' + (e as Error).message)
+      toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncLabel(null)
     }
@@ -88,119 +104,248 @@ export function Exhib() {
 
   async function generarPDF() {
     const grupos = agruparPDF(lista, ex.estados)
-    if (grupos['sin-marcar'].length && !confirm(`Tenés ${grupos['sin-marcar'].length} faltante(s) SIN cargar estado.\n\nLo ideal es marcar cada uno (Solucionado / Una sola unidad / No se encuentra) antes de terminar.\n\n¿Generar el reporte igual?`)) return
+    if (grupos['sin-marcar'].length) {
+      const ok = await confirmar({
+        titulo: 'Hay faltantes sin estado',
+        tono: 'warning',
+        ok: 'Generar igual',
+        mensaje: `Tenés ${grupos['sin-marcar'].length} ${grupos['sin-marcar'].length === 1 ? 'faltante' : 'faltantes'} sin cargar estado. Lo ideal es marcar cada uno (Solucionado / Una sola unidad / No se encuentra) antes de terminar.`,
+      })
+      if (!ok) return
+    }
     await generarReporteExhib({ lista, persona: personaVal || '(sin nombre)', catLabel: catSel || 'Todas las categorías', estados: ex.estados, errores: ex.errores, marca })
   }
 
   return (
     <>
-      {/* ── Config ── */}
+      <HeaderAcciones>
+        {fase === 'config' && (
+          <>
+            <Button variant="outline" onClick={() => void traerGN()} loading={!!syncLabel} title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista (~2-4 min)">
+              {syncLabel || 'Traer de GN'}
+            </Button>
+            <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length}>
+              Iniciar recorrido
+            </Button>
+          </>
+        )}
+        {fase === 'scan' && (
+          <>
+            <Button variant="outline" onClick={() => setFase('config')}>
+              Cancelar
+            </Button>
+            <Button variant="solid" tone="brand" onClick={() => setFase('triage')}>
+              Terminar recorrido
+            </Button>
+          </>
+        )}
+        {fase === 'triage' && (
+          <>
+            <Button variant="ghost" onClick={() => void reiniciar()}>
+              Reiniciar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFase('scan')
+                foco()
+              }}
+            >
+              ← Volver a escanear
+            </Button>
+            <Button variant="solid" tone="brand" onClick={() => void generarPDF()}>
+              Generar reporte PDF
+            </Button>
+          </>
+        )}
+      </HeaderAcciones>
+
+      <Pasos fase={fase} hechos={hechos} total={lista.length} faltantes={faltas.length} />
+
+      {/* ── Configurar ── */}
       {fase === 'config' && (
-        <div className="card">
-          <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', margin: '0 0 14px' }}>
-            {ex.errorMsg ? <span style={{ color: '#DC2626' }}>Error cargando inventario: {ex.errorMsg}</span> : ex.cargando ? 'Cargando inventario…' : <>📅 <b>{ex.items.length}</b> variantes con stock en Local. Datos del último sync diario (pueden tener unas horas) — conviene chequear en momentos de baja venta.</>}
-          </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
-            <label style={{ fontSize: 13, color: '#374151' }}>
-              Persona
-              <br />
-              <input value={personaVal} onChange={(e) => setPersona(e.target.value)} style={{ width: 200, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, marginTop: 4 }} />
-            </label>
-            <label style={{ fontSize: 13, color: '#374151' }}>
-              Categoría a recorrer
-              <br />
-              <select value={catSel} onChange={(e) => setCatSel(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, minWidth: 200, marginTop: 4 }}>
-                <option value="">Todas las categorías</option>
-                {ex.cats.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-          </div>
-          <div style={{ fontSize: 13, color: '#374151', marginBottom: 12 }}>
-            Vas a chequear <b>{lista.length}</b> variantes{catSel ? ' de esta categoría' : ''}. Cada una debería estar colgada en el local.
-          </div>
-          <button className="btn-sm" onClick={iniciar} disabled={ex.cargando || !lista.length} style={{ background: '#378ADD', color: '#fff' }}>▶️ Iniciar recorrido</button>
-          <button className="btn-sm" onClick={traerGN} disabled={!!syncLabel} title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista (~2-4 min)" style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 6 }}>{syncLabel || '🔄 Traer de GN'}</button>
-          {enCurso > 0 && (
-            <div style={{ marginTop: 10, fontSize: 12, color: '#6B7280' }}>Hay un chequeo en curso con <b>{enCurso}</b> ítems marcados. <button className="btn-sm" onClick={iniciar} style={{ marginLeft: 6 }}>Retomar</button></div>
+        <Card>
+          {ex.errorMsg ? (
+            <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>
+              Error cargando inventario: {ex.errorMsg}
+            </Notice>
+          ) : ex.cargando ? (
+            <Notice tone="neutral" icon="⏳" style={{ marginBottom: space[4] }}>
+              Cargando inventario…
+            </Notice>
+          ) : (
+            <Notice tone="warning" icon="📅" style={{ marginBottom: space[4] }}>
+              <b>{ex.items.length}</b> variantes con stock en Local. Los datos son del último sync diario y pueden tener unas horas: conviene chequear en momentos de baja venta.
+            </Notice>
           )}
-        </div>
+
+          <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', marginBottom: space[4] }}>
+            <Field label="Persona" width={220}>
+              <Input value={personaVal} onChange={(e) => setPersona(e.target.value)} />
+            </Field>
+            <Field label="Categoría a recorrer" width={240}>
+              <Select value={catSel} onChange={(e) => setCatSel(e.target.value)}>
+                <option value="">Todas las categorías</option>
+                {ex.cats.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <p style={{ fontSize: font.base, color: color.ink2 }}>
+            Vas a chequear <b>{lista.length}</b> {lista.length === 1 ? 'variante' : 'variantes'}
+            {catSel ? ' de esta categoría' : ''}. Cada una debería estar colgada en el local.
+          </p>
+
+          {enCurso > 0 && (
+            <Notice tone="brand" icon="↩" style={{ marginTop: space[4] }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+                <span>
+                  Hay un chequeo en curso con <b>{enCurso}</b> {enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}.
+                </span>
+                <Button size="sm" variant="outline" tone="brand" onClick={iniciar}>
+                  Retomar
+                </Button>
+              </div>
+            </Notice>
+          )}
+        </Card>
       )}
 
-      {/* ── Scan ── */}
+      {/* ── Recorrer ── */}
       {fase === 'scan' && (
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{hechos} / {lista.length} escaneados</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-sm" onClick={terminar} style={{ background: '#16A34A', color: '#fff' }}>✓ Terminar recorrido</button>
-              <button className="btn-sm" onClick={() => setFase('config')}>Cancelar</button>
-            </div>
+        <Card>
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[3], flexWrap: 'wrap' }}>
+            <input
+              ref={scanRef}
+              className="mo-input"
+              type="text"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  marcar((e.target as HTMLInputElement).value)
+                  ;(e.target as HTMLInputElement).value = ''
+                }
+              }}
+              placeholder="código de barras"
+              aria-label="Código de barras"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              style={{ flex: '1 1 240px', maxWidth: 320, height: 46, fontSize: 17, textAlign: 'center', borderWidth: 2, borderColor: color.brandSolid }}
+            />
+            <Button
+              variant="solid"
+              tone="brand"
+              size="lg"
+              onClick={() => {
+                if (scanRef.current) {
+                  marcar(scanRef.current.value)
+                  scanRef.current.value = ''
+                  scanRef.current.focus()
+                }
+              }}
+            >
+              Marcar
+            </Button>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '12px 0' }}>
-            <input ref={scanRef} type="text" onKeyDown={(e) => { if (e.key === 'Enter') { marcar((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }} placeholder="código de barras" autoComplete="off" autoCapitalize="off" spellCheck={false} style={{ width: 260, padding: '11px 12px', fontSize: 16, border: '2px solid #378ADD', borderRadius: 10, textAlign: 'center' }} />
-            <button className="btn-sm" onClick={() => { if (scanRef.current) { marcar(scanRef.current.value); scanRef.current.value = ''; scanRef.current.focus() } }} style={{ background: '#378ADD', color: '#fff' }}>Marcar</button>
-          </div>
-          <div style={{ textAlign: 'center', fontSize: 14, minHeight: 22, margin: '10px 0 14px', fontWeight: 600 }}>
-            {fb?.tipo === 'no-encontrado' && <span style={{ color: '#DC2626' }}>✗ Ese código no está en la lista ({fb.code})</span>}
-            {fb?.tipo === 'ok' && <span style={{ color: '#16A34A' }}>✓ {fb.it.name} · {fb.it.size}</span>}
+
+          <div style={{ minHeight: 26, marginBottom: space[4] }}>
+            {fb?.tipo === 'no-encontrado' && (
+              <Notice tone="danger" icon="✗">
+                Ese código no está en la lista ({fb.code})
+              </Notice>
+            )}
+            {fb?.tipo === 'ok' && (
+              <Notice tone="success" icon="✓">
+                {fb.it.name} · {fb.it.size}
+              </Notice>
+            )}
             {fb?.tipo === 'cruce' && (
-              <div style={{ color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', textAlign: 'left', maxWidth: 480, margin: '0 auto' }}>
-                <div style={{ fontWeight: 700 }}>⚠ &quot;{fb.it.name}&quot; no es de «{fb.catSel}»</div>
-                <div style={{ fontSize: 12, margin: '2px 0 8px' }}>En TN figura en «{fb.it.cat}». ¿Qué hacés?</div>
+              <Notice tone="warning" icon="⚠">
+                <div style={{ fontWeight: 700 }}>&quot;{fb.it.name}&quot; no es de «{fb.catSel}»</div>
+                <div style={{ margin: '2px 0 8px' }}>En TN figura en «{fb.it.cat}». ¿Qué hacés?</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button onClick={() => vaAca(fb.it.productId)} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid #2563EB', background: '#2563EB', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Va acá → corregir TN</button>
-                  <button onClick={() => setFb(null)} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#374151', cursor: 'pointer' }}>Es de «{fb.it.cat}», mal colgado</button>
+                  <Button size="sm" variant="solid" tone="brand" onClick={() => vaAca(fb.it.productId)}>
+                    Va acá → corregir TN
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setFb(null)}>
+                    Es de «{fb.it.cat}», mal colgado
+                  </Button>
                 </div>
-              </div>
+              </Notice>
             )}
           </div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Pendientes de escanear ({pendientes.length})</div>
+
+          <Subtitulo>Pendientes de escanear ({pendientes.length})</Subtitulo>
           <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-            {pendientes.length ? pendientes.map((it) => <Fila key={exhibId(it)} it={it} onPreview={setPreview} />) : <div style={{ color: '#16A34A', padding: 14, textAlign: 'center' }}>¡Todo escaneado! 🎉 Tocá &quot;Terminar recorrido&quot;.</div>}
+            {pendientes.length ? (
+              pendientes.map((it) => <Fila key={exhibId(it)} it={it} onPreview={setPreview} />)
+            ) : (
+              <div style={{ color: color.successInk, padding: 14, textAlign: 'center', fontWeight: 600 }}>¡Todo escaneado! 🎉 Tocá &quot;Terminar recorrido&quot;.</div>
+            )}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* ── Triage ── */}
+      {/* ── Faltantes ── */}
       {fase === 'triage' && (
-        <div className="card">
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Faltantes: marcá qué pasó con cada uno</div>
+        <Card>
+          <Subtitulo>Faltantes: marcá qué pasó con cada uno</Subtitulo>
+
           {Object.keys(ex.errores).length > 0 && (
-            <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', marginBottom: 6 }}>⚠ Categorías a corregir en TN ({Object.keys(ex.errores).length})</div>
+            <Notice tone="warning" icon="⚠" style={{ margin: `${space[3]}px 0` }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Categorías a corregir en TN ({Object.keys(ex.errores).length})</div>
               {Object.entries(ex.errores).map(([pid, e]) => {
                 const url = tnAdminUrl(e.tnId, marca)
                 return (
-                  <div key={pid} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '6px 2px', borderBottom: '1px solid #FDE68A' }}>
+                  <div key={pid} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${color.warningBorder}` }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{e.name}</div>
-                      <div style={{ fontSize: 11.5, color: '#92400E' }}>SKU: {e.sku || '—'} · TN: «{e.catTN}» → debería: «{e.catCorrecta}»</div>
+                      <div style={{ fontWeight: 600 }}>{e.name}</div>
+                      <div style={{ fontSize: font.xs }}>
+                        SKU: {e.sku || '—'} · TN: «{e.catTN}» → debería: «{e.catCorrecta}»
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 'none' }}>
-                      {url && <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563EB', textDecoration: 'none', fontSize: 12, whiteSpace: 'nowrap' }}>Editar en TN ↗</a>}
-                      <button onClick={() => ex.quitarError(pid)} style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #D1D5DB', background: '#fff', borderRadius: 6, cursor: 'pointer', color: '#6B7280' }}>quitar</button>
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: color.brand, fontSize: font.sm, whiteSpace: 'nowrap', fontWeight: 600 }}>
+                          Editar en TN ↗
+                        </a>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => ex.quitarError(pid)}>
+                        quitar
+                      </Button>
                     </div>
                   </div>
                 )
               })}
-            </div>
+            </Notice>
           )}
-          <div style={{ maxHeight: 460, overflowY: 'auto', marginBottom: 10 }}>
-            {faltas.length ? faltas.map((it) => <Fila key={exhibId(it)} it={it} triage estado={ex.estados[exhibId(it)]} onEstado={ex.setEstado} onPreview={setPreview} />) : <div style={{ color: '#16A34A', padding: 14, textAlign: 'center' }}>No quedaron faltantes: todo escaneado/exhibido ✅</div>}
+
+          <div style={{ maxHeight: 460, overflowY: 'auto', marginBottom: space[3] }}>
+            {faltas.length ? (
+              faltas.map((it) => <Fila key={exhibId(it)} it={it} triage estado={ex.estados[exhibId(it)]} onEstado={ex.setEstado} onPreview={setPreview} />)
+            ) : (
+              <div style={{ color: color.successInk, padding: 14, textAlign: 'center', fontWeight: 600 }}>No quedaron faltantes: todo escaneado ✅</div>
+            )}
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, minHeight: 18 }}>
-            {sinMarcar ? <span style={{ color: '#D97706' }}>⚠️ Te faltan marcar <b>{sinMarcar}</b> de {faltas.length} faltantes antes de generar el reporte.</span> : faltas.length ? <span style={{ color: '#16A34A' }}>✓ Todos los faltantes tienen estado. Listo para el reporte.</span> : null}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-sm" onClick={generarPDF} style={{ background: '#DC2626', color: '#fff' }}>📄 Generar reporte PDF</button>
-            <button className="btn-sm" onClick={() => { setFase('scan'); foco() }}>← Volver a escanear</button>
-            <button className="btn-sm" onClick={reiniciar}>Reiniciar chequeo</button>
-          </div>
-        </div>
+
+          {sinMarcar ? (
+            <Notice tone="warning" icon="⚠">
+              Te faltan marcar <b>{sinMarcar}</b> de {faltas.length} faltantes antes de generar el reporte.
+            </Notice>
+          ) : faltas.length ? (
+            <Notice tone="success" icon="✓">
+              Todos los faltantes tienen estado. Listo para el reporte.
+            </Notice>
+          ) : null}
+        </Card>
       )}
 
       {preview && (
-        <div onClick={() => setPreview(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 20, cursor: 'zoom-out' }}>
+        <div onClick={() => setPreview(null)} className="mo-backdrop" style={{ cursor: 'zoom-out', background: 'rgba(16,24,40,.88)' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="" style={{ maxWidth: '96%', maxHeight: '96%', borderRadius: 8 }} />
         </div>
@@ -209,28 +354,79 @@ export function Exhib() {
   )
 }
 
+/** Las tres fases del recorrido, visibles. Antes existían pero no se anunciaban. */
+function Pasos({ fase, hechos, total, faltantes }: { fase: Fase; hechos: number; total: number; faltantes: number }) {
+  const pasos: { id: Fase; label: string; detalle?: string }[] = [
+    { id: 'config', label: 'Configurar', detalle: total ? `${total} variantes` : undefined },
+    { id: 'scan', label: 'Recorrer', detalle: fase !== 'config' ? `${hechos}/${total}` : undefined },
+    { id: 'triage', label: 'Faltantes', detalle: fase === 'triage' ? String(faltantes) : undefined },
+  ]
+  const idx = pasos.findIndex((p) => p.id === fase)
+  return (
+    <div style={{ display: 'flex', gap: space[2], marginBottom: space[4], flexWrap: 'wrap' }}>
+      {pasos.map((p, i) => {
+        const activo = i === idx
+        const hecho = i < idx
+        return (
+          <div
+            key={p.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 14px',
+              borderRadius: 999,
+              fontSize: font.sm,
+              fontWeight: 600,
+              color: activo ? '#fff' : hecho ? color.successInk : color.mut,
+              background: activo ? color.brandSolid : hecho ? color.successBg : color.bg2,
+              border: `1px solid ${activo ? color.brandSolid : hecho ? color.successBorder : color.line}`,
+            }}
+          >
+            <span aria-hidden style={{ opacity: 0.85 }}>
+              {hecho ? '✓' : i + 1}
+            </span>
+            {p.label}
+            {p.detalle && <span style={{ opacity: 0.8, fontWeight: 500 }}>· {p.detalle}</span>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Subtitulo({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[2] }}>{children}</div>
+}
+
 function Fila({ it, triage, estado, onEstado, onPreview }: { it: ExhibItem; triage?: boolean; estado?: string; onEstado?: (id: string, e: 'solucionado' | 'una-unidad' | 'no-encuentra') => void; onPreview: (u: string) => void }) {
   const id = exhibId(it)
-  const btn = (est: 'solucionado' | 'una-unidad' | 'no-encuentra', txt: string, col: string) => (
-    <button onClick={() => onEstado?.(id, est)} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: `1px solid ${estado === est ? col : '#D1D5DB'}`, background: estado === est ? col : '#fff', color: estado === est ? '#fff' : '#374151', cursor: 'pointer' }}>{txt}</button>
+  const btn = (est: 'solucionado' | 'una-unidad' | 'no-encuentra', txt: string, tone: 'action' | 'warning' | 'danger') => (
+    <Button size="sm" variant={estado === est ? 'solid' : 'outline'} tone={estado === est ? tone : 'neutral'} onClick={() => onEstado?.(id, est)}>
+      {txt}
+    </Button>
   )
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '7px 4px', borderBottom: '1px solid #F3F4F6' }}>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 4px', borderBottom: `1px solid ${color.line}`, flexWrap: 'wrap' }}>
       {it.img ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={it.img} loading="lazy" onClick={() => onPreview(it.img!)} title="Tocá para verla grande" alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6, background: '#F3F4F6', flex: 'none', cursor: 'zoom-in' }} />
+        <img src={it.img} loading="lazy" onClick={() => onPreview(it.img!)} title="Tocá para verla grande" alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6, background: color.bg2, flex: 'none', cursor: 'zoom-in' }} />
       ) : (
-        <div style={{ width: 46, height: 46, borderRadius: 6, background: '#F3F4F6', flex: 'none' }} />
+        <div style={{ width: 46, height: 46, borderRadius: 6, background: color.bg2, flex: 'none' }} />
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{it.name} · {it.size}</div>
-        <div style={{ fontSize: 11, color: '#6B7280' }}>SKU: {it.sku || '—'} · Local: {it.qty}</div>
+      <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: font.base, color: color.ink }}>
+          {it.name} · {it.size}
+        </div>
+        <div style={{ fontSize: font.xs, color: color.mut }}>
+          SKU: {it.sku || '—'} · Local: {it.qty}
+        </div>
       </div>
       {triage && (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 'none' }}>
-          {btn('solucionado', 'Solucionado', '#2563EB')}
-          {btn('una-unidad', 'Una sola unidad', '#D97706')}
-          {btn('no-encuentra', 'No se encuentra', '#DC2626')}
+          {btn('solucionado', 'Solucionado', 'action')}
+          {btn('una-unidad', 'Una sola unidad', 'warning')}
+          {btn('no-encuentra', 'No se encuentra', 'danger')}
         </div>
       )}
     </div>
