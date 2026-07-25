@@ -6,7 +6,7 @@
 
 import { CUENTAS } from '@/lib/cuentas'
 import { esAdmin, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
-import { marcasQueVe } from '@/lib/solicitudes/overview'
+import { marcasQueVe, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import type { Marca } from '@/lib/nav'
 import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
@@ -60,6 +60,31 @@ export function marcasVisibles(perfil: Perfil | null, marcaActiva: Marca): Marca
   // pendientes de la otra marca.
   const candidatas = marcasQueVe(perfil, marcaActiva, Object.keys(CUENTAS) as Marca[])
   return candidatas.filter((m) => esAdmin(perfil) || puedeVer(perfil, m, 'sesion-fotos') || puedeVer(perfil, m, 'solicitudes'))
+}
+
+/**
+ * Lo que está esperando trabajo de alguien: pendiente de preparar/aprobar, en proceso, o
+ * ya separado en GN pero sin retirar.
+ *
+ * Antes el Inicio listaba `estado === 'pendiente'` del cajón de fotos y nada más. Con las
+ * solicitudes unificadas eso mostraría la mitad del trabajo (las de otros motivos vivían en
+ * el otro cajón) y dejaría afuera lo que está separado esperando que alguien lo pase a
+ * buscar — que es exactamente lo que el local necesita ver a la mañana.
+ */
+export function pendientesDeTrabajo(resumenes: ResumenSolicitud[]): ResumenSolicitud[] {
+  return resumenes.filter(
+    (r) => r.grupo === 'pendiente' || r.grupo === 'enproceso' || (r.grupo === 'conventagn' && r.estadoTag === 'sin retirar'),
+  )
+}
+
+/** El título del listado según el sector, para que cada uno lea SU tarea y no "solicitudes". */
+export function tituloPendientes(origenes: Origen[]): string {
+  const soloLocal = origenes.length === 1 && origenes[0] === 'local'
+  const soloDep = origenes.length === 1 && origenes[0] === 'deposito'
+  if (soloLocal) return '🏪 Para preparar y entregar en el local'
+  if (soloDep) return '📦 Para preparar en el depósito'
+  if (origenes.length) return '📋 Tus tareas pendientes'
+  return '📋 Solicitudes en curso'
 }
 
 /** Suma las unidades de los ítems de una solicitud. */

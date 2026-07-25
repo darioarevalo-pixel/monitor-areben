@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarPorOrigen, horaLabel, marcasVisibles, modoInicio, ordenar, origenesDe, pendientesDeMarca, unidadesDe } from '@/lib/inicio/core'
+import { filtrarPorOrigen, horaLabel, marcasVisibles, modoInicio, ordenar, origenesDe, pendientesDeMarca, pendientesDeTrabajo, tituloPendientes, unidadesDe } from '@/lib/inicio/core'
+import { resumenFoto, resumenInterna } from '@/lib/solicitudes/overview'
+import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import type { Perfil } from '@/lib/permisos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 
@@ -100,5 +102,36 @@ describe('inicio/core — horaLabel', () => {
   })
   it('sin creado cae a la fecha', () => {
     expect(horaLabel(0, '2026-07-18', hoy)).toBe('2026-07-18')
+  })
+})
+
+
+/**
+ * El Inicio dejó de ser "las solicitudes de fotos pendientes" y pasó a ser el trabajo del
+ * día: de los DOS cajones y con lo que está separado esperando que alguien lo retire.
+ */
+describe('inicio/core — pendientes de trabajo', () => {
+  const foto = (estado: Solicitud['estado'], over: Partial<Solicitud> = {}) => resumenFoto(sol({ estado, ...over }), 'bdi')
+  const interna = (estado: SolicitudInterna['estado'], over: Partial<SolicitudInterna> = {}) =>
+    resumenInterna({ id: 'i1', fecha: '2026-07-24', creado: 1, creadoPor: 'Ana', motivo: 'Video/contenido', tipo: 'consumo', descripcion: 'Reel', estado, items: [], ...over }, 'bdi')
+
+  it('entra lo pendiente, lo en proceso y lo separado sin retirar', () => {
+    const r = pendientesDeTrabajo([foto('pendiente'), foto('preparada'), foto('cargada')])
+    expect(r).toHaveLength(3) // 'cargada' sin retiro completo = separado, sin retirar
+  })
+
+  it('NO entra lo devuelto ni lo cerrado (ya no es trabajo de nadie)', () => {
+    expect(pendientesDeTrabajo([foto('devuelta'), foto('cerrada')])).toEqual([])
+  })
+
+  it('las internas cuentan igual que las de fotos (el agujero que tenía el home viejo)', () => {
+    const r = pendientesDeTrabajo([interna('pendiente'), interna('aprobada'), interna('cerrada')])
+    expect(r).toHaveLength(2)
+  })
+
+  it('el título nombra la tarea del sector, no "solicitudes"', () => {
+    expect(tituloPendientes(['local'])).toContain('local')
+    expect(tituloPendientes(['deposito'])).toContain('depósito')
+    expect(tituloPendientes([])).toBe('📋 Solicitudes en curso')
   })
 })
