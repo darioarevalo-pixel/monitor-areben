@@ -6,12 +6,16 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import {
   chartMensual,
   colorMargen,
-  comparativa,
+  comparativaPeriodo,
   filtrarPorFecha,
   kpisProveedor,
+  mesesEnRango,
+  mesLabel,
   nombresProveedores,
   ranking,
+  statsPeriodo,
 } from '@/lib/proveedores'
+import { PedidosCard } from './PedidosCard'
 
 /**
  * "🏭 Por proveedor" (key `proveedores`, Zattia) en Next — Tanda A #7.
@@ -27,17 +31,24 @@ export function Proveedores() {
   const [prov, setProv] = useState('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
+  // Período de las MÉTRICAS (meses `YYYY-MM`), distinto del rango de "primera venta" de
+  // abajo, que solo elige qué productos entran al ranking.
+  const [mesDesde, setMesDesde] = useState('')
+  const [mesHasta, setMesHasta] = useState('')
 
   const data = useMemo(() => datos?.allProveedoresData ?? {}, [datos])
   const nombres = useMemo(() => nombresProveedores(data), [data])
-  const stats = useMemo(() => comparativa(data), [data])
-  const statsPorCompra = useMemo(() => [...stats].sort((a, b) => b.compra - a.compra), [stats])
+  const allMonths = useMemo(() => datos?.allMonths ?? [], [datos])
+  const meses = useMemo(() => mesesEnRango(allMonths, mesDesde, mesHasta), [allMonths, mesDesde, mesHasta])
+  const stats = useMemo(() => comparativaPeriodo(data, meses), [data, meses])
+  const statsPorCompra = useMemo(() => [...stats].sort((a, b) => b.compraPeriodo - a.compraPeriodo), [stats])
 
   // Proveedor efectivo: el elegido si sigue existiendo, si no el primero.
   const provSel = prov && data[prov] ? prov : nombres[0] || ''
   const products = useMemo(() => data[provSel]?.products ?? [], [data, provSel])
 
   const kpis = useMemo(() => kpisProveedor(products), [products])
+  const kpisPer = useMemo(() => statsPeriodo(products, meses), [products, meses])
   const chartDet = useMemo(() => chartMensual(products, datos?.allMonths ?? []), [products, datos])
   const filtered = useMemo(() => filtrarPorFecha(products, desde, hasta), [products, desde, hasta])
   const rank = useMemo(() => ranking(filtered), [filtered])
@@ -47,8 +58,9 @@ export function Proveedores() {
   }
   if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
 
-  const compChart = stats.map((s) => ({ prov: s.prov, totalSold: s.totalSold, avgMargin: parseFloat(s.avgMargin.toFixed(1)) }))
-  const compraChart = statsPorCompra.map((s) => ({ prov: s.prov, compra: Math.round(s.compra) }))
+  const compChart = stats.map((s) => ({ prov: s.prov, totalSold: s.vendidas, avgMargin: parseFloat(s.avgMargin.toFixed(1)) }))
+  const compraChart = statsPorCompra.map((s) => ({ prov: s.prov, compra: Math.round(s.compraPeriodo) }))
+  const periodoLabel = meses.length && meses.length < allMonths.length ? `${mesLabel(meses[0])} a ${mesLabel(meses[meses.length - 1])}` : 'todo el historial'
   const alturaCompra = Math.max(160, compraChart.length * 28 + 40)
 
   const dateLabel =
@@ -58,9 +70,38 @@ export function Proveedores() {
 
   return (
     <div>
+      {/* Período de las métricas. Va arriba de todo porque gobierna los números de abajo:
+          antes la pantalla mostraba acumulados de toda la vida y el filtro de fecha solo
+          elegía qué productos entraban, así que un proveedor con el que dejamos de trabajar
+          podía seguir liderando el ranking. */}
+      <div className="card">
+        <div className="toolbar" style={{ marginBottom: 0, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Período</span>
+          <select value={mesDesde} onChange={(e) => setMesDesde(e.target.value)}>
+            <option value="">Desde el principio</option>
+            {allMonths.map((m) => (
+              <option key={m} value={m}>{mesLabel(m)}</option>
+            ))}
+          </select>
+          <span style={{ fontSize: 12, color: '#666' }}>hasta</span>
+          <select value={mesHasta} onChange={(e) => setMesHasta(e.target.value)}>
+            <option value="">Último mes</option>
+            {allMonths.map((m) => (
+              <option key={m} value={m}>{mesLabel(m)}</option>
+            ))}
+          </select>
+          {(mesDesde || mesHasta) && (
+            <button className="btn-sm" onClick={() => { setMesDesde(''); setMesHasta('') }}>Todo el historial</button>
+          )}
+          <span style={{ fontSize: 12, color: '#9CA3AF', marginLeft: 'auto' }}>
+            Las unidades, la compra y la rentabilidad son de <b>{periodoLabel}</b>. El stock es de hoy.
+          </span>
+        </div>
+      </div>
+
       {/* Comparativa entre proveedores */}
       <div className="card">
-        <div style={TITULO_MB12}>Comparativa entre proveedores</div>
+        <div style={TITULO_MB12}>Comparativa entre proveedores <span style={{ fontSize: 12, fontWeight: 400, color: '#9CA3AF' }}>· {periodoLabel}</span></div>
         <div className="chart-wrap" style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={compChart} margin={{ left: 4, right: 4, top: 8, bottom: 8 }}>
@@ -92,6 +133,8 @@ export function Proveedores() {
         </div>
       </div>
 
+      <PedidosCard data={data} meses={meses} periodoLabel={periodoLabel} />
+
       {/* Detalle por proveedor */}
       <div className="card" style={{ marginTop: 4 }}>
         <div style={TITULO_MB10}>Detalle por proveedor</div>
@@ -110,10 +153,10 @@ export function Proveedores() {
       </div>
 
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 16 }}>
-        <Stat label="Stock total (unid.)" value={kpis.totalStock.toLocaleString('es-AR')} mod="info" />
-        <Stat label="Unidades vendidas" value={kpis.totalSold.toLocaleString('es-AR')} />
-        <Stat label="Rentabilidad prom." value={kpis.avgMargin !== null ? kpis.avgMargin.toFixed(1) + '%' : '—'} mod="success" />
-        <Stat label="Compra estimada" value={kpis.estimatedPurchase !== null ? '$' + Math.round(kpis.estimatedPurchase).toLocaleString('es-AR') : '—'} />
+        <Stat label="Stock hoy (unid.)" value={kpis.totalStock.toLocaleString('es-AR')} mod="info" />
+        <Stat label={`Vendidas · ${periodoLabel}`} value={kpisPer.vendidas.toLocaleString('es-AR')} />
+        <Stat label="Rentab. prom. (ponderada)" value={kpisPer.vendidas ? kpisPer.avgMargin.toFixed(1) + '%' : '—'} mod="success" />
+        <Stat label="Reponer lo vendido" value={'$' + Math.round(kpisPer.compraPeriodo).toLocaleString('es-AR')} />
       </div>
 
       <div className="card">
