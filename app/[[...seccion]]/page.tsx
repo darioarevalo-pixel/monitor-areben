@@ -57,7 +57,7 @@ export default function Seccion() {
 
   return (
     <div className="shell">
-      <Sidebar activa={key} />
+      <Sidebar activa={key} sub={Array.isArray(partes) ? partes[1] : null} />
       <div className="shell-main">
         <div className="shell-content">
           <div className="seccion-pad">

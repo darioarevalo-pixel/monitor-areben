@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, grupoParaSeccion, keysDeCat, labelConEmoji, NAV_CATS, type Marca, type NavGrupo } from '@/lib/nav'
-import { esAdmin, puedeCambiarMarca, puedeVer } from '@/lib/permisos'
+import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 
 /** Label del menú (con emoji): LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
@@ -12,10 +12,19 @@ function label(key: string): string {
   return labelConEmoji(key)
 }
 
+/**
+ * ¿Esta entrada de subárea es la que se está viendo? Se compara contra la ruta completa
+ * (`/tncat/visibilidad`), no solo la sección: si no, las cuatro herramientas de Tienda Nube
+ * se marcarían activas a la vez, que es el mismo error que tuvimos con Solicitudes.
+ */
+function rutaActiva(it: NavItem, activa: string, sub?: string | null): boolean {
+  return it.ruta === `/${activa}${sub ? `/${sub}` : ''}`
+}
+
 /** Grupos homónimos con un solo destino: se muestran como ítem directo (sin doble clic). */
 const APLANAR = new Set(['inicio', 'clientes'])
 
-export function Sidebar({ activa }: { activa: string }) {
+export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }) {
   const { perfil, marca, setMarca, salir } = useSesion()
   const [abierto, setAbierto] = useState<string | null>(null)
   const [menuMarca, setMenuMarca] = useState(false)
@@ -31,27 +40,42 @@ export function Sidebar({ activa }: { activa: string }) {
     return puedeVer(perfil, marca, k)
   }
 
-  // Una sección que cuelga de varios sectores (`solicitudes`) se muestra UNA sola vez, en
-  // el grupo que le corresponde a esta persona (ver `grupoParaSeccion`). Sin esto, quien ve
-  // todo la encontraba repetida en cuatro grupos y al abrirla se marcaban los cuatro.
-  const gruposDe = (k: string) => NAV_CATS.filter((c) => keysDeCat(c).includes(k)).map((c) => c.id)
-  const duenio = (k: string) => grupoParaSeccion(k, gruposDe(k), perfil.funcion ?? [])
-  const visibleEn = (k: string, catId: string) => visible(k) && duenio(k) === catId
-
   // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
   // desaparece entero si no queda ninguna sección visible adentro.
   const cats = NAV_CATS.map((cat) => {
     if (cat.adminOnly && !esAdmin(perfil)) return null
-    const keys = cat.keys.filter((k) => visibleEn(k, cat.id))
+    const keys = cat.keys.filter(visible)
     const grupos = (cat.grupos ?? [])
-      .map((g) => ({ ...g, keys: g.keys.filter((k) => visibleEn(k, cat.id)) }))
-      .filter((g) => g.keys.length > 0)
+      .map((g) => ({
+        ...g,
+        keys: g.keys.filter(visible),
+        items: (g.items ?? []).filter((it) => {
+          if (!visible(it.key)) return false
+          if (!it.sub) return true
+          // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
+          // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
+          const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
+          return esAdmin(perfil) || subs.some((s) => puedeSub(perfil, marca, it.key, s))
+        }),
+      }))
+      .filter((g) => g.keys.length > 0 || g.items.length > 0)
     return keys.length || grupos.length ? { ...cat, keys, grupos } : null
   }).filter((c): c is NonNullable<typeof c> => c !== null)
 
-  const tieneActiva = (c: (typeof cats)[number]) =>
-    c.keys.includes(activa) || c.grupos.some((g) => g.keys.includes(activa))
-  const grupoActivo = cats.find(tieneActiva)?.id ?? null
+  const contieneActiva = (c: (typeof cats)[number]) =>
+    c.keys.includes(activa) || c.grupos.some((g) => g.keys.includes(activa) || g.items.some((it) => it.key === activa))
+
+  /**
+   * UN grupo activo, no todos los que contengan la sección.
+   *
+   * `solicitudes` cuelga de cuatro sectores a propósito —cada uno la llama a su manera— y
+   * eso hacía que al abrirla se pintaran los cuatro en azul a la vez. El resaltado sigue al
+   * grupo que la persona tiene ABIERTO; si no abrió ninguno, al primero que la contiene.
+   */
+  const grupoActivo = (() => {
+    const abiertoConActiva = cats.find((c) => c.id === abierto && contieneActiva(c))
+    return (abiertoConActiva ?? cats.find(contieneActiva))?.id ?? null
+  })()
 
   return (
     <aside className="sidebar">
@@ -127,7 +151,7 @@ export function Sidebar({ activa }: { activa: string }) {
             return (
               <div key={cat.id} className={`nav-group${open ? ' open' : ''}`}>
                 <button
-                  className={`nav-cat${tieneActiva(cat) ? ' active' : ''}`}
+                  className={`nav-cat${grupoActivo === cat.id ? ' active' : ''}`}
                   onClick={() => setAbierto(open ? '' : cat.id)}
                 >
                   {cat.label}
@@ -136,8 +160,17 @@ export function Sidebar({ activa }: { activa: string }) {
                 <div className="nav-menu">
                   {cat.keys.map(opt)}
                   {cat.grupos.map((g) => (
-                    <Subgrupo key={g.id} grupo={g} activa={activa}>
+                    <Subgrupo key={g.id} grupo={g} activa={activa} sub={sub}>
                       {g.keys.map(opt)}
+                      {(g.items ?? []).map((it) => (
+                        <Link
+                          key={it.ruta + it.label}
+                          href={it.ruta}
+                          className={`nav-opt${rutaActiva(it, activa, sub) ? ' active' : ''}${cat.accent === 'marketing' ? ' nav-accent-mkt' : ''}`}
+                        >
+                          {it.label}
+                        </Link>
+                      ))}
                     </Subgrupo>
                   ))}
                 </div>
@@ -170,8 +203,8 @@ export function Sidebar({ activa }: { activa: string }) {
  * chequeo de exhibición— sin esconderlo. El estado es local al subgrupo, así abrir uno
  * no cierra al otro.
  */
-function Subgrupo({ grupo, activa, children }: { grupo: NavGrupo; activa: string; children: React.ReactNode }) {
-  const tieneActiva = grupo.keys.includes(activa)
+function Subgrupo({ grupo, activa, sub, children }: { grupo: NavGrupo; activa: string; sub?: string | null; children: React.ReactNode }) {
+  const tieneActiva = grupo.keys.includes(activa) || (grupo.items ?? []).some((it) => rutaActiva(it, activa, sub))
   const [abierto, setAbierto] = useState<boolean | null>(null)
   const open = abierto ?? tieneActiva
 

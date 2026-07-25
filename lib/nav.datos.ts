@@ -31,8 +31,25 @@ export type PermCat = {
   subs?: PermSub[]
 }
 
+/**
+ * Una entrada del menú que apunta a una SUBÁREA de una sección (`/tncat/visibilidad`).
+ *
+ * Tienda Nube son cuatro herramientas distintas —fotos, categorías, visibilidad,
+ * descripciones— que comparten sección, permiso y catálogo. Cada una es su propia entrada
+ * en el sidebar (así se ven todas de un vistazo), pero por debajo siguen siendo la misma
+ * sección: `key` es la del permiso, `sub` el sub-permiso que la habilita, y `ruta` el
+ * destino real.
+ */
+export type NavItem = {
+  ruta: string
+  label: string
+  key: string
+  /** Sub-permiso(s) que habilitan la entrada. Con varios, alcanza con tener uno. */
+  sub?: string | string[]
+}
+
 /** Un subgrupo del menú: 2º nivel dentro de un grupo (ej. Local > Actividades). */
-export type NavGrupo = { id: string; label: string; keys: string[] }
+export type NavGrupo = { id: string; label: string; keys: string[]; items?: NavItem[] }
 
 export type NavCat = {
   id: string
@@ -605,8 +622,20 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "marketing",
       "solicitudes",
-      "tncat",
       "meta-ads"
+    ],
+    "grupos": [
+      {
+        "id": "tienda-nube",
+        "label": "🛍️ Tienda Nube",
+        "keys": [],
+        "items": [
+          { "ruta": "/tncat/fotos", "label": "📷 Fotos", "key": "tncat", "sub": "imagenes" },
+          { "ruta": "/tncat/categorias", "label": "🗂️ Categorías", "key": "tncat", "sub": ["categorias", "asignar"] },
+          { "ruta": "/tncat/visibilidad", "label": "👁️ Visibilidad", "key": "tncat", "sub": "ocultar" },
+          { "ruta": "/tncat/descripciones", "label": "📏 Tabla de talles", "key": "gen-talles" }
+        ]
+      }
     ],
     "labels": {
       "solicitudes": "📦 Solicitudes de productos"

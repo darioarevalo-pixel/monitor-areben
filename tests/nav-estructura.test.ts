@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { grupoParaSeccion, keysDeCat, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { keysDeCat, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
 
 /**
  * Invariantes de la estructura del menú, ahora que `lib/nav.datos.ts` se edita a mano
@@ -66,33 +66,24 @@ describe('estructura del nav', () => {
     expect(keysDeCat({ id: 'z', label: 'Z', keys: ['a'] })).toEqual(['a'])
   })
 
-  /**
-   * Una sección compartida se muestra en UN grupo por persona. Sin esto, quien ve todo la
-   * encontraba repetida (cuatro "Solicitudes" en el menú) y al abrirla se pintaban activos
-   * los cuatro grupos a la vez — que es como se descubrió el bug.
-   */
-  describe('sección compartida: un solo lugar por persona', () => {
-    const CANDIDATOS = ['local', 'deposito', 'marketing', 'administracion']
-
-    it('gana el sector de la función de esa persona', () => {
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local'])).toBe('local')
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['deposito'])).toBe('deposito')
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['marketing'])).toBe('marketing')
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['administracion'])).toBe('administracion')
-    })
-
-    it('con varias funciones gana quien pide antes que quien ejecuta', () => {
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local', 'marketing'])).toBe('marketing')
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local', 'deposito'])).toBe('deposito')
-    })
-
-    it('sin función (admin) queda en el área propia de la sección', () => {
-      expect(grupoParaSeccion('solicitudes', CANDIDATOS, [])).toBe('local') // area de `solicitudes`
-    })
-
-    it('una sección de un solo grupo no cambia nada', () => {
-      expect(grupoParaSeccion('cupones', ['local'], ['marketing'])).toBe('local')
-      expect(grupoParaSeccion('inexistente', [], [])).toBeNull()
-    })
+  it('las subáreas del menú apuntan a una sección real y se gatean con un permiso real', () => {
+    // La ruta y el permiso pueden NO coincidir: "Tabla de talles" vive en `/tncat/descripciones`
+    // (la pantalla es de Tienda Nube) pero se habilita con el permiso `gen-talles`, que es el
+    // que el equipo ya tenía asignado. Lo que sí tiene que valer: las dos existen.
+    const validas = new Set(todasLasKeys())
+    for (const cat of NAV_CATS) {
+      for (const g of cat.grupos ?? []) {
+        for (const it of g.items ?? []) {
+          const destino = it.ruta.split('/')[1]
+          expect(validas.has(destino), `'${it.label}' apunta a /${destino}, que no es una sección`).toBe(true)
+          expect(validas.has(it.key), `'${it.label}' se gatea con '${it.key}', que no es una sección`).toBe(true)
+          const subs = it.sub ? (Array.isArray(it.sub) ? it.sub : [it.sub]) : []
+          for (const s of subs) {
+            const existe = (PERM_CAT.find((p) => p.key === it.key)?.subs ?? []).some((x) => x.key === s)
+            expect(existe, `'${it.label}' pide el sub-permiso '${it.key}.${s}', que no existe`).toBe(true)
+          }
+        }
+      }
+    }
   })
 })

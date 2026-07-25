@@ -1,10 +1,9 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
-import { Tabs } from '@/components/ui/Tabs'
 import { CategoriasCard } from './CategoriasCard'
 import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
@@ -28,20 +27,18 @@ const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then
  * permanente que la revisión de fotos, que son 200 y pico de productos. Ahora cada grupo de
  * trabajo es una pestaña.
  *
- * Son pestañas y no entradas del menú a propósito: las seis se alimentan del MISMO catálogo
- * (el audit de TiendaNube + los productos de Gestión Nube). Separadas en el sidebar, cada
- * una volvería a bajar todo al entrar; acá se baja una vez y cambiar de pestaña es
- * instantáneo.
+ * Cada subárea es una **entrada propia del sidebar** (`Marketing > Tienda Nube > …`), con su
+ * dirección (`/tncat/visibilidad`): se ven todas de un vistazo sin entrar a la sección, se
+ * puede compartir el link, y cada una aparece solo si la persona tiene ese sub-permiso. El
+ * costo de volver a bajar el catálogo al cambiar de herramienta lo cubre el caché del store.
  *
- * Cada pestaña tiene **dirección propia** (`/tncat/visibilidad`), así se puede entrar
- * derecho desde el Inicio o compartir el link, y aparece solo si la persona tiene ese
- * sub-permiso.
+ * Acá adentro no hay pestañas: la subárea sale de la URL y esta pantalla solo elige qué
+ * mostrar. Si la dirección no trae ninguna, cae en la primera que la persona pueda ver.
  */
 type Sub = 'fotos' | 'categorias' | 'visibilidad' | 'descripciones'
 
 export function Tncat() {
   const { marca, perfil } = useSesion()
-  const router = useRouter()
   const params = useParams()
 
   const admin = esAdmin(perfil)
@@ -71,13 +68,12 @@ export function Tncat() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {visibles.length > 1 && (
-        <Tabs
-          items={visibles.map((s) => ({ key: s.key, label: s.label, hint: s.hint }))}
-          value={activa ?? ''}
-          onChange={(k) => router.push(`/tncat/${k}`)}
-        />
-      )}
+      {/* Qué herramienta se está usando: el encabezado de la página dice "Tienda Nube" y
+          desde el sidebar no siempre queda claro en cuál de las cuatro caíste. */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#B45309' }}>
+        {subs.find((s) => s.key === activa)?.label}
+        <span style={{ fontWeight: 400, color: '#9CA3AF', marginLeft: 8 }}>{subs.find((s) => s.key === activa)?.hint}</span>
+      </div>
 
       {activa === 'fotos' && <Fotos marca={marca} />}
       {activa === 'categorias' && <Categorias marca={marca} verCat={verCat} verAsig={verAsig} />}
