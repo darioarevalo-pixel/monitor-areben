@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
@@ -18,6 +18,8 @@ import {
 import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Button, Card, Tabs, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
 const FP_DEFAULT: LineaEtiqueta[] = [
@@ -48,6 +50,7 @@ function lsSet(key: string, val: unknown) {
 }
 
 export function Etiquetas() {
+  const { confirmar, avisar } = useConfirmar()
   const { marca } = useSesion()
   const { datos } = useDatosMonitor()
   const tn = useEtiquetasTn(marca)
@@ -101,9 +104,15 @@ export function Etiquetas() {
       return { ...prev, [modo]: next }
     })
   }
-  const limpiar = (modo: ModoEtiqueta) => {
+  const limpiar = async (modo: ModoEtiqueta) => {
     if (!Object.keys(cant[modo]).length) return
-    if (!confirm('¿Borrar todas las cantidades cargadas?')) return
+    const ok = await confirmar({
+      titulo: 'Borrar las cantidades',
+      tono: 'danger',
+      ok: 'Borrar',
+      mensaje: 'Se borran todas las cantidades cargadas en esta pestaña. No afecta a las otras.',
+    })
+    if (!ok) return
     setCant((prev) => {
       lsSet(keyCant(modo, marca), {})
       return { ...prev, [modo]: {} }
@@ -127,19 +136,28 @@ export function Etiquetas() {
   const imprimir = async (modo: ModoEtiqueta, opts: { sep: boolean; conFP: boolean }) => {
     const grupos = agruparCantidades(cant[modo], varsById, modo)
     if (!grupos.length) {
-      alert(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.')
+      await avisar(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.')
       return
     }
     const labels = secuenciaLabels(grupos, opts)
     imprimirPdf(await buildEtiquetasPdf(labels, modo, ctx))
     setTimeout(() => {
-      const hacer = autoClear || confirm('Etiquetas enviadas a imprimir. ¿Borro las cantidades cargadas?')
-      if (hacer) {
-        setCant((prev) => {
-          lsSet(keyCant(modo, marca), {})
-          return { ...prev, [modo]: {} }
-        })
-      }
+      void (async () => {
+        const hacer =
+          autoClear ||
+          (await confirmar({
+            titulo: 'Etiquetas enviadas a imprimir',
+            ok: 'Borrar cantidades',
+            cancelar: 'Dejarlas',
+            mensaje: '¿Borro las cantidades cargadas? Si la impresión salió mal, dejalas para reintentar.',
+          }))
+        if (hacer) {
+          setCant((prev) => {
+            lsSet(keyCant(modo, marca), {})
+            return { ...prev, [modo]: {} }
+          })
+        }
+      })()
     }, 600)
   }
 
@@ -149,16 +167,22 @@ export function Etiquetas() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div className="tabs" style={{ marginBottom: 0 }}>
-          <SubBtn k="dep" sub={sub} set={setSub}>🏬 Depósito</SubBtn>
-          <SubBtn k="loc" sub={sub} set={setSub}>🏪 Local</SubBtn>
-          <SubBtn k="promo" sub={sub} set={setSub}>🔥 Promo</SubBtn>
-          <SubBtn k="sku" sub={sub} set={setSub}>🔢 SKU</SubBtn>
-          <SubBtn k="libre" sub={sub} set={setSub}>✏️ Libre</SubBtn>
-        </div>
+      <HeaderAcciones>
         <BotonActualizarInventario />
-      </div>
+      </HeaderAcciones>
+
+      <Tabs
+        items={[
+          { key: 'dep', label: '🏬 Depósito' },
+          { key: 'loc', label: '🏪 Local' },
+          { key: 'promo', label: '🔥 Promo' },
+          { key: 'sku', label: '🔢 SKU' },
+          { key: 'libre', label: '✏️ Libre' },
+        ]}
+        value={sub}
+        onChange={(k) => setSub(k as ModoEtiqueta | 'libre')}
+        style={{ marginBottom: space[4] }}
+      />
 
       {sub !== 'libre' ? (
         <ModoPanel
@@ -168,7 +192,7 @@ export function Etiquetas() {
           sinCodigo={sinCodigo}
           cant={cant[sub]}
           setCant={(id, val) => setCantModo(sub, id, val)}
-          limpiar={() => limpiar(sub)}
+          limpiar={() => void limpiar(sub)}
           autoClear={autoClear}
           setAutoClear={onAutoClear}
           precioDe={precioDe}
@@ -184,14 +208,6 @@ export function Etiquetas() {
         <LibreEditor />
       )}
     </div>
-  )
-}
-
-function SubBtn({ k, sub, set, children }: { k: ModoEtiqueta | 'libre'; sub: string; set: (s: ModoEtiqueta | 'libre') => void; children: ReactNode }) {
-  return (
-    <button className={`tab${sub === k ? ' active' : ''}`} onClick={() => set(k)}>
-      {children}
-    </button>
   )
 }
 
@@ -282,7 +298,7 @@ function ModoPanel({
 
   return (
     <div>
-      <div className="card" style={cardScanStyle}>
+      <Card style={cardScanStyle}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
         <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
           Escaneá el código de barras de un producto: imprime su etiqueta de <b>{modo === 'loc' ? 'local (con precio)' : modo === 'promo' ? 'promo (antes/ahora)' : modo === 'sku' ? 'solo SKU' : 'depósito (sin precio)'}</b> al instante.
@@ -300,19 +316,21 @@ function ModoPanel({
           style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${scanBorder}`, borderRadius: 8, boxSizing: 'border-box' }}
         />
         {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? '#16A34A' : '#DC2626' }}>{feedback.html}</div>}
-      </div>
+      </Card>
 
-      <div className="card">
+      <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{titulo(modo)}</div>
             <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{subtitulo(modo)}</div>
           </div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" style={{ width: 240, maxWidth: '100%', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" className="mo-input" style={{ width: 240, maxWidth: '100%' }} />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-          <button className="btn-sm" disabled={!total} onClick={() => onImprimir(modo, { sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })} style={{ background: '#1F2937', color: '#fff', opacity: total ? 1 : 0.5 }}>🖨️ Imprimir etiquetas</button>
+          <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir(modo, { sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })}>
+            Imprimir {total} {total === 1 ? 'etiqueta' : 'etiquetas'}
+          </Button>
           {(conPrecio || esPromo) && (
             <button
               className="btn-sm"
@@ -327,21 +345,21 @@ function ModoPanel({
               {refrescando ? '⏳ Actualizando precios…' : '🔄 Actualizar precios'}
             </button>
           )}
-          <button className="btn-sm" onClick={limpiar}>Limpiar cantidades</button>
+          <Button variant="ghost" tone="danger" onClick={limpiar}>Limpiar cantidades</Button>
           <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" checked={autoClear} onChange={(e) => setAutoClear(e.target.checked)} /> Borrar cantidades al imprimir
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={autoClear} onChange={(e) => setAutoClear(e.target.checked)} /> Borrar cantidades al imprimir
           </label>
           <span style={{ fontSize: 12, color: '#6B7280' }}>{total ? `${total} etiquetas en ${Object.keys(cant).length} variantes` : 'Cargá cantidades para imprimir'}</span>
         </div>
 
         {modo === 'dep' && (
           <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
-            <input type="checkbox" checked={sep} onChange={(e) => setSep(e.target.checked)} /> Dejar una etiqueta en blanco al cambiar de variante (para separar más fácil)
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={sep} onChange={(e) => setSep(e.target.checked)} /> Dejar una etiqueta en blanco al cambiar de variante (para separar más fácil)
           </label>
         )}
         {modo === 'loc' && (
           <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
-            <input type="checkbox" checked={conFP} onChange={(e) => setConFP(e.target.checked)} /> Imprimir también la etiqueta de <b>&nbsp;formas de pago</b>&nbsp; (1 después de cada precio)
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={conFP} onChange={(e) => setConFP(e.target.checked)} /> Imprimir también la etiqueta de <b>&nbsp;formas de pago</b>&nbsp; (1 después de cada precio)
           </label>
         )}
 
@@ -376,7 +394,7 @@ function ModoPanel({
                       {esPromo && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: '#DB2777' }}>{pr ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>}
                       <td style={{ ...tdC, textAlign: 'center', color: '#9CA3AF' }}>{v.stock || 0}</td>
                       <td style={{ ...tdC, textAlign: 'center' }}>
-                        <input type="number" min={0} value={cant[v.id] || ''} onChange={(e) => setCant(v.id, e.target.value)} style={{ width: 64, textAlign: 'center', padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }} />
+                        <input type="number" min={0} value={cant[v.id] || ''} onChange={(e) => setCant(v.id, e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 68, textAlign: 'center', padding: '0 6px', height: 32 }} />
                       </td>
                     </tr>
                   )
@@ -390,7 +408,7 @@ function ModoPanel({
           )}
           {lista.length > CAP && <div style={{ fontSize: 11, color: '#9CA3AF', padding: 8 }}>Mostrando {CAP} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
         </div>
-      </div>
+      </Card>
 
       {modo === 'loc' && <FPEditor fpLines={fpLines} guardarFP={guardarFP} catalogoListo={catalogoListo} />}
     </div>
@@ -418,6 +436,7 @@ function AvisoSinCodigo({ lista }: { lista: VarianteEti[] }) {
 // ── Editor de formas de pago ──
 const FP_TAM: [LineaEtiqueta['tam'], string][] = [['titulo', 'Título'], ['subtitulo', 'Subtítulo'], ['normal', 'Normal'], ['chico', 'Chico']]
 function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiqueta[]; guardarFP: (l: LineaEtiqueta[]) => void; catalogoListo: boolean }) {
+  const { avisar } = useConfirmar()
   const setLinea = (i: number, campo: keyof LineaEtiqueta, val: string | boolean) => guardarFP(fpLines.map((l, idx) => (idx === i ? { ...l, [campo]: val } : l)))
   const add = () => guardarFP([...fpLines, { texto: '', tam: 'normal', bold: false }])
   const del = (i: number) => {
@@ -426,7 +445,7 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
   }
   const imprimirSolo = async () => {
     if (!fpLines.filter((l) => l.texto.trim()).length) {
-      alert('La etiqueta de formas de pago está vacía.')
+      await avisar('La etiqueta de formas de pago está vacía.')
       return
     }
     const n = parseInt(prompt('¿Cuántas etiquetas de formas de pago querés imprimir?', '10') || '', 10)
@@ -436,22 +455,22 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
   }
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ fontSize: 14, fontWeight: 700 }}>💳 Etiqueta de formas de pago</div>
       <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px' }}>Diseñala una vez (queda guardada). Se imprime junto a las etiquetas de precio cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
       {fpLines.map((l, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-          <input value={l.texto} placeholder="Texto" onChange={(e) => setLinea(i, 'texto', e.target.value)} style={{ flex: 1, minWidth: 160, padding: '6px 9px', border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 13 }} />
-          <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} style={{ padding: 6, border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 12 }}>
+          <input value={l.texto} placeholder="Texto" onChange={(e) => setLinea(i, 'texto', e.target.value)} className="mo-input" style={{ flex: 1, minWidth: 160 }} />
+          <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} className="mo-select" style={{ width: 110 }}>
             {FP_TAM.map(([val, t]) => <option key={val} value={val}>{t}</option>)}
           </select>
           <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <input type="checkbox" checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
           <button onClick={() => del(i)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
-      <button className="btn-sm" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</button>
+      <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
         <div style={{ fontSize: 12, color: '#888' }}>Vista previa:</div>
         <div style={{ width: 200, height: 100, border: '1px solid #E5E7EB', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 6, background: '#fff' }}>
@@ -459,14 +478,15 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
             <div key={i} style={{ fontSize: l.tam === 'titulo' ? 13 : l.tam === 'subtitulo' ? 11 : l.tam === 'chico' ? 8 : 10, fontWeight: l.bold ? 700 : 400, lineHeight: 1.25 }}>{l.texto}</div>
           )) || <span style={{ color: '#CBD5E1', fontSize: 11 }}>(vacía)</span>}
         </div>
-        <button className="btn-sm" disabled={!catalogoListo} onClick={imprimirSolo}>🖨️ Imprimir solo formas de pago…</button>
+        <Button size="sm" variant="outline" disabled={!catalogoListo} onClick={imprimirSolo}>Imprimir solo formas de pago…</Button>
       </div>
-    </div>
+    </Card>
   )
 }
 
 // ── Editor de etiqueta libre ──
 function LibreEditor() {
+  const { avisar } = useConfirmar()
   const [lineas, setLineas] = useState<LineaEtiqueta[]>([{ texto: '', tam: 'titulo', bold: true }])
   const [grande, setGrande] = useState(false)
   const [copias, setCopias] = useState('1')
@@ -486,7 +506,7 @@ function LibreEditor() {
       lineas,
     })
     if (!pdf) {
-      alert('Cargá al menos una línea de texto, un código de barras o un precio.')
+      await avisar('Cargá al menos una línea de texto, un código de barras o un precio.')
       return null
     }
     return pdf
@@ -503,48 +523,48 @@ function LibreEditor() {
   }
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>✏️ Etiqueta libre (editor)</div>
       <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 14 }}>Armá una etiqueta a medida con texto, código de barras y/o precio. Ideal para cajas, bolsas y rótulos de envío.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
         <label style={{ fontSize: 12, color: '#666' }}>Tamaño<br />
-          <select value={grande ? 'grande' : 'chica'} onChange={(e) => setGrande(e.target.value === 'grande')} style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, minWidth: 150 }}>
+          <select value={grande ? 'grande' : 'chica'} onChange={(e) => setGrande(e.target.value === 'grande')} className="mo-select" style={{ minWidth: 150 }}>
             <option value="chica">5 × 2,5 cm (chica)</option>
             <option value="grande">10 × 15 cm (caja / rótulo)</option>
           </select>
         </label>
         <label style={{ fontSize: 12, color: '#666' }}>Copias<br />
-          <input type="number" value={copias} min={1} onChange={(e) => setCopias(e.target.value)} style={{ width: 80, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8 }} />
+          <input type="number" value={copias} min={1} onChange={(e) => setCopias(e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 90 }} />
         </label>
       </div>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Líneas de texto</div>
       {lineas.map((l, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-          <input value={l.texto} placeholder={`Texto de la línea ${i + 1}`} onChange={(e) => setLinea(i, 'texto', e.target.value)} style={{ flex: 1, minWidth: 160, padding: '6px 9px', border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 13 }} />
-          <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} style={{ padding: 6, border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 12 }}>
+          <input value={l.texto} placeholder={`Texto de la línea ${i + 1}`} onChange={(e) => setLinea(i, 'texto', e.target.value)} className="mo-input" style={{ flex: 1, minWidth: 160 }} />
+          <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} className="mo-select" style={{ width: 110 }}>
             {FP_TAM.map(([val, t]) => <option key={val} value={val}>{t}</option>)}
           </select>
           <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <input type="checkbox" checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
           <button onClick={() => del(i)} title="Quitar línea" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
-      <button className="btn-sm" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</button>
+      <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
       <div style={{ borderTop: '1px solid #EEF0F2', margin: '16px 0 12px' }} />
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label style={{ fontSize: 12, color: '#666' }}>Código de barras (opcional)<br />
-          <input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="número o texto a codificar" style={{ width: 240, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8 }} />
+          <input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="número o texto a codificar" className="mo-input" style={{ width: 240 }} />
         </label>
         <label style={{ fontSize: 12, color: '#666' }}>Precio (opcional)<br />
-          <input type="number" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="ej. 12990" style={{ width: 140, padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8 }} />
+          <input type="number" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="ej. 12990" className="mo-input mo-input--num" inputMode="numeric" style={{ width: 140 }} />
         </label>
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-        <button className="btn-sm" onClick={preview}>👁️ Vista previa</button>
-        <button className="btn-sm" onClick={imprimir} style={{ background: '#1F2937', color: '#fff' }}>🖨️ Imprimir</button>
+        <Button variant="outline" onClick={preview}>Vista previa</Button>
+        <Button variant="solid" tone="brand" onClick={imprimir}>Imprimir</Button>
       </div>
-    </div>
+    </Card>
   )
 }
 

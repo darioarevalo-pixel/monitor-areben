@@ -8,10 +8,13 @@ import { reporteDecisiones, reporteGaleria, reporteLimpio } from '@/lib/disenos/
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from '@/lib/disenos/tipos'
 import { borrarDiseno, guardarDisenos, leerDisenos, leerLocales, localesParaImportar } from '@/lib/disenos/persistencia'
 import { useSesion } from '@/components/SesionProvider'
+import { Button, Notice, space, useConfirmar, useToast } from '@/components/ui'
 let seq = 0
 const newId = () => 'd' + Date.now() + '_' + seq++
 
 export function Disenos() {
+  const { confirmar, avisar } = useConfirmar()
+  const toast = useToast()
   const { marca } = useSesion()
   // Lo que quedó en ESTE navegador y todavía no está arriba: se ofrece subirlo una vez.
   const [porImportar, setPorImportar] = useState<Diseno[]>([])
@@ -81,10 +84,10 @@ export function Disenos() {
         await guardarDisenos(marca, cambiados)
         for (const id of borrados) await borrarDiseno(marca, id)
       } catch (e) {
-        alert('No se pudo guardar el tablero: ' + (e instanceof Error ? e.message : String(e)))
+        toast.error('No se pudo guardar el tablero: ' + (e instanceof Error ? e.message : String(e)))
       }
     })()
-  }, [disenos, hidratado, marca])
+  }, [disenos, hidratado, marca, toast])
   useEffect(() => {
     if (hidratado) try { localStorage.setItem('monitor_db_view', view) } catch {}
   }, [view, hidratado])
@@ -99,24 +102,39 @@ export function Disenos() {
   const setCampo = (id: string, campo: 'name' | 'nota', val: string) => setDisenos((ds) => ds.map((d) => (d.id === id ? { ...d, [campo]: val } : d)))
   const votar = (id: string, tipo: 'up' | 'down') => setDisenos((ds) => ds.map((d) => (d.id === id ? { ...d, [tipo]: d[tipo] + 1 } : d)))
   const setEstado = (id: string, estado: EstadoDiseno) => setDisenos((ds) => ds.map((d) => (d.id === id ? { ...d, estado } : d)))
-  const quitar = (id: string) => {
-    if (!confirm('¿Quitar este diseño del tablero?')) return
+  const quitar = async (id: string) => {
+    const ok = await confirmar({ titulo: 'Quitar del tablero', tono: 'danger', ok: 'Quitar', mensaje: 'Se saca este diseño del tablero compartido, para todo el equipo.' })
+    if (!ok) return
     setDisenos((ds) => ds.filter((d) => d.id !== id))
   }
   const cargar = (files: FileList | null) => {
     const arr = [...(files || [])].filter((f) => /^image\//.test(f.type))
     arr.forEach((f) => imgAThumb(f, (url) => setDisenos((ds) => [...ds, { id: newId(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url, nota: '', up: 0, down: 0, estado: 'revisar' }]), 600))
   }
-  const limpiar = () => {
-    if (!disenos.length || !confirm('Esto vacía TODO el tablero (todos los diseños y votos). ¿Seguro?')) return
+  const limpiar = async () => {
+    if (!disenos.length) return
+    const ok = await confirmar({
+      titulo: 'Vaciar el tablero',
+      tono: 'danger',
+      ok: `Borrar los ${disenos.length}`,
+      mensaje: `Se borran los ${disenos.length} diseños y todos sus votos, para todo el equipo. No se puede deshacer.`,
+    })
+    if (!ok) return
     setDisenos([])
   }
-  const reiniciarVotos = () => {
-    if (!disenos.length || !confirm('Esto pone en 0 los votos 👍/👎 de TODOS los diseños. ¿Seguir?')) return
+  const reiniciarVotos = async () => {
+    if (!disenos.length) return
+    const ok = await confirmar({
+      titulo: 'Reiniciar los votos',
+      tono: 'warning',
+      ok: 'Poner en 0',
+      mensaje: 'Los votos 👍/👎 de todos los diseños vuelven a 0. Los diseños quedan.',
+    })
+    if (!ok) return
     setDisenos((ds) => ds.map((d) => ({ ...d, up: 0, down: 0 })))
   }
-  const exportar = () => {
-    if (!disenos.length) return alert('No hay diseños para exportar.')
+  const exportar = async () => {
+    if (!disenos.length) return avisar('No hay diseños para exportar.')
     const blob = new Blob([JSON.stringify(disenos)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -132,24 +150,46 @@ export function Disenos() {
     const reader = new FileReader()
     reader.onload = (e) => {
       let data: unknown
-      try {
-        data = JSON.parse(e.target?.result as string)
-      } catch {
-        return alert('El archivo no es válido (no es un respaldo del tablero).')
-      }
-      const limpio = sanearImportado(data, newId)
-      if (!limpio.length) return alert('El archivo no contiene diseños válidos.')
-      if (disenos.length && !confirm(`Esto reemplaza el tablero actual (${disenos.length} diseños) por el del archivo (${limpio.length}). ¿Seguir?`)) return
-      setDisenos(limpio)
-      alert(`✓ Importados ${limpio.length} diseños.`)
+      void (async () => {
+        try {
+          data = JSON.parse(e.target?.result as string)
+        } catch {
+          await avisar('El archivo no es válido: no es un respaldo del tablero.')
+          return
+        }
+        const limpio = sanearImportado(data, newId)
+        if (!limpio.length) {
+          await avisar('El archivo no contiene diseños válidos.')
+          return
+        }
+        if (disenos.length) {
+          const ok = await confirmar({
+            titulo: 'Reemplazar el tablero',
+            tono: 'danger',
+            ok: `Reemplazar por ${limpio.length}`,
+            mensaje: `El tablero actual tiene ${disenos.length} ${disenos.length === 1 ? 'diseño' : 'diseños'} y se reemplaza por los ${limpio.length} del archivo. Es para todo el equipo.`,
+          })
+          if (!ok) return
+        }
+        setDisenos(limpio)
+        toast.ok(`${limpio.length} ${limpio.length === 1 ? 'diseño importado' : 'diseños importados'}`)
+      })()
     }
     reader.readAsText(file)
   }
 
   // ── Votación online ──
   const crearVot = async () => {
-    if (!disenos.length) return alert('Cargá diseños primero.')
-    if (vot && !confirm('Esto crea una ronda NUEVA y el link anterior deja de sumar votos. ¿Seguir?')) return
+    if (!disenos.length) return avisar('Cargá diseños primero.')
+    if (vot) {
+      const ok = await confirmar({
+        titulo: 'Crear una ronda nueva',
+        tono: 'warning',
+        ok: 'Crear ronda nueva',
+        mensaje: 'El link anterior deja de sumar votos. Si hay gente votando ahora, esos votos se pierden.',
+      })
+      if (!ok) return
+    }
     setVotStatus('Creando ronda…')
     try {
       const id = await crearRonda(disenos.map((d) => ({ id: d.id, name: d.name })))
@@ -188,9 +228,9 @@ export function Disenos() {
     if (cola.length < 2) return
     setQuickIndex((i) => (i + 1) % cola.length)
   }
-  const abrirQuick = () => {
-    if (!disenos.length) return alert('Cargá diseños primero.')
-    if (!cola.length) return alert('No queda ningún diseño "por revisar".')
+  const abrirQuick = async () => {
+    if (!disenos.length) return avisar('Cargá diseños primero.')
+    if (!cola.length) return avisar('No queda ningún diseño "por revisar".')
     setQuickIndex(0)
     setQuickOn(true)
   }
@@ -215,15 +255,15 @@ export function Disenos() {
 
   const genLimpio = async (filtro: EstadoDiseno | 'todos') => {
     setRepChooser(false)
-    if (!(await reporteLimpio(disenos, orden, filtro))) alert('No hay diseños en esa categoría.')
+    if (!(await reporteLimpio(disenos, orden, filtro))) toast.aviso('No hay diseños en esa categoría.')
   }
 
   return (
     <div className="card">
       {errorCarga && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '9px 13px', fontSize: 13, color: '#B91C1C', marginBottom: 10 }}>
+        <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
           No se pudo leer el tablero compartido: {errorCarga}. Lo que cargues ahora podría no guardarse — recargá antes de seguir.
-        </div>
+        </Notice>
       )}
 
       {/* El tablero pasó a ser compartido: lo que quedó en este navegador de la época en que
@@ -250,21 +290,42 @@ export function Disenos() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-sm" onClick={() => fileRef.current?.click()} style={{ background: '#378ADD', color: '#fff' }}>📁 Cargar imágenes</button>
-          <button className="btn-sm" onClick={abrirQuick} style={{ background: '#7C3AED', color: '#fff' }}>⚡ Revisión rápida</button>
-          <button className="btn-sm" onClick={() => reporteDecisiones(disenos)} disabled={!disenos.length} style={{ background: '#16A34A', color: '#fff' }}>📄 Reporte PDF</button>
-          <button className="btn-sm" onClick={() => reporteGaleria(disenos, orden)} disabled={!disenos.length} style={{ background: '#0D9488', color: '#fff' }}>🖼️ Galería PDF</button>
-          <button className="btn-sm" onClick={() => disenos.length ? setRepChooser(true) : alert('Cargá diseños primero.')} style={{ background: '#334155', color: '#fff' }}>🖼️ Solo diseños</button>
-          <button className="btn-sm" onClick={() => disenos.length ? setVotOpen(true) : alert('Cargá diseños primero.')} style={{ background: '#0EA5E9', color: '#fff' }}>🌐 Votación online</button>
-          <button className="btn-sm" onClick={exportar} style={{ background: '#fff', color: '#374151', border: '1px solid #D1D5DB' }}>⬇️ Exportar</button>
-          <button className="btn-sm" onClick={() => importRef.current?.click()} style={{ background: '#fff', color: '#374151', border: '1px solid #D1D5DB' }}>⬆️ Importar</button>
-          <button className="btn-sm" onClick={reiniciarVotos} style={{ background: '#fff', color: '#374151', border: '1px solid #D1D5DB' }}>🔄 Reiniciar votos</button>
-          <button className="btn-sm" onClick={limpiar} style={{ background: '#fff', color: '#DC2626', border: '1px solid #FCA5A5' }}>Vaciar</button>
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { cargar(e.target.files); e.target.value = '' }} />
-          <input ref={importRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { importar(e.target.files?.[0]); e.target.value = '' }} />
-        </div>
+      {/* Jerarquía: cargar imágenes es lo que se hace todos los días; el resto son
+          herramientas. Vaciar el tablero —que borra para TODO el equipo— queda separada
+          y en rojo, no como un botón más de la fila. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
+        <Button variant="solid" tone="brand" onClick={() => fileRef.current?.click()}>
+          Cargar imágenes
+        </Button>
+        <Button variant="outline" onClick={() => void abrirQuick()}>
+          ⚡ Revisión rápida
+        </Button>
+        <Button variant="outline" onClick={() => reporteDecisiones(disenos)} disabled={!disenos.length}>
+          Reporte PDF
+        </Button>
+        <Button variant="outline" onClick={() => reporteGaleria(disenos, orden)} disabled={!disenos.length}>
+          Galería PDF
+        </Button>
+        <Button variant="outline" onClick={() => (disenos.length ? setRepChooser(true) : void avisar('Cargá diseños primero.'))}>
+          Solo diseños
+        </Button>
+        <Button variant="outline" onClick={() => (disenos.length ? setVotOpen(true) : void avisar('Cargá diseños primero.'))}>
+          Votación online
+        </Button>
+        <Button variant="ghost" onClick={() => void exportar()}>
+          Exportar
+        </Button>
+        <Button variant="ghost" onClick={() => importRef.current?.click()}>
+          Importar
+        </Button>
+        <Button variant="ghost" onClick={() => void reiniciarVotos()} disabled={!disenos.length}>
+          Reiniciar votos
+        </Button>
+        <Button variant="ghost" tone="danger" onClick={() => void limpiar()} disabled={!disenos.length} style={{ marginLeft: 'auto' }}>
+          Vaciar tablero
+        </Button>
+        <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { cargar(e.target.files); e.target.value = '' }} />
+        <input ref={importRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { importar(e.target.files?.[0]); e.target.value = '' }} />
       </div>
 
       <div onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = '#EFF6FF' }} onDragLeave={(e) => (e.currentTarget.style.background = '')} onDrop={(e) => { e.preventDefault(); e.currentTarget.style.background = ''; cargar(e.dataTransfer.files) }} onClick={() => fileRef.current?.click()} style={{ marginTop: 12, border: '2px dashed #CBD5E1', borderRadius: 10, padding: 14, textAlign: 'center', color: '#9CA3AF', fontSize: 13, cursor: 'pointer' }}>Arrastrá acá las imágenes de los diseños, o tocá para elegirlas 📥</div>
