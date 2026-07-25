@@ -669,59 +669,38 @@ a {
   margin-top: 8px;
 }
 
-/* ── Contenido de las secciones ──────────────────────────────────────────────
-   Copiado TEXTUAL del CSS global del legacy (index.html:22-156), con el mismo
-   criterio con el que la Fase 3 copió el sidebar: mientras convivan los dos
-   mundos, el usuario no tiene que notar dónde termina uno y empieza el otro.
+/* ══ Compatibilidad: lo último que queda del CSS del legacy ═══════════════════
+   Antes de esto había ~240 líneas copiadas textual de `index.html`, con su propia
+   paleta de hex. Cerrado el rediseño quedó solo lo que **todavía se usa** desde el
+   JSX, y reescrito sobre los tokens: no hay un solo color hardcodeado acá abajo.
+   Lo que ya nadie usaba —`.badge*`, `.mini-bar*`, `.pagination`, `.tabs/.tab`,
+   `.agot-*`, `.sf-shadow-note`— se borró.
 
-   Por qué esto y no Tailwind + el kit de areben-produccion, que era lo que el
-   plan pedía: la verificación de la sección migrada es ponerla AL LADO del
-   iframe y compararlas. Ese A/B es lo único que convierte "migrar la sección más
-   grande primero" de apuesta en experimento reversible. Si además se rediseña el
-   estilo, todo se ve distinto y el A/B pierde el poder de detección: no se puede
-   distinguir "cambió porque lo rediseñé" de "cambió porque el port está mal".
-   Sumado a que el preflight de Tailwind pelearía contra este mismo CSS en el
-   mismo documento.
+   Sigue en `@layer legacy` por una razón concreta y no por inercia: los selectores
+   de ELEMENTO scopeados por clase (`.shell-content button`, `input`, `table`…) tienen
+   más especificidad que las clases del kit, así que sin la capa le ganarían a
+   `.mo-btn` y compañía. La capa invierte esa prioridad: el CSS sin capa (el kit)
+   gana siempre. Mientras queden secciones con `<table>`/`<button>` crudos, esto es
+   lo que evita que se vean sin estilo.
 
-   El rediseño con el kit va después, como su propio cambio verificable, cuando
-   no quede iframe. Es lo que ya decía el comentario del principio de este archivo.
-
-   Dos ajustes, los únicos:
-
-   1. Los selectores de elemento (`button`, `input`, `select`, `table`, `th`, `td`)
-      van scopeados bajo `.shell-content`. En el legacy son globales porque ahí no
-      hay nada más; acá pisarían el login y el sidebar, que tienen su propio estilo.
-   2. `.section { display:none }` es el mecanismo de pestañas del legacy y acá el
-      router ya decide qué se muestra. Se copia igual, y la sección se renderiza con
-      `className="section visible"`: así el CSS queda textual y la animación de
-      entrada se mantiene.
-
-   ⛔ NO AGREGAR NADA ACÁ ADENTRO. Todo esto es transitorio: se vacía a medida que cada
-   sección pasa al kit (`components/ui/`) y desaparece con la última tanda del rediseño.
-
-   ── Por qué va en `@layer legacy` (rediseño jul-2026) ──
-   Los selectores de acá son de ELEMENTO scopeados por clase (`.shell-content button`,
-   especificidad 0,1,1) y le ganaban a las clases del kit (`.mo-btn`, 0,1,0). Eso es lo
-   que obligaba al kit a usar estilos inline —y sin CSS no hay `:hover`, `:focus-visible`
-   ni `@media`, o sea no hay responsive—. Metiendo este bloque en una capa se invierte la
-   prioridad sin tocar un solo selector: **el CSS sin capa (el kit) le gana siempre al
-   CSS en capa**, por débil que sea. Así el kit vuelve a ser CSS de verdad y las 20
-   secciones que todavía no migraron siguen viéndose igual que ayer.
-
-   El contenido quedó sin re-indentar a propósito: es código con fecha de vencimiento y
-   re-indentarlo ensuciaría el diff de cada tanda que lo va borrando. */
+   ⛔ NO AGREGAR NADA ACÁ. Se vacía sección por sección: cuando una deje de usar
+   estas clases, se borra su regla. Cuando no quede ninguna, se borra el bloque y
+   con él el último rastro del legacy. */
 
 @layer legacy {
 
+/* Superficie genérica. El equivalente del kit es <Card>. */
 .card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-2xl);
+  padding: var(--mo-card-pad, 20px);
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--mo-sh-sm);
 }
 
+/* Mecanismo de pestañas del legacy: acá el router ya decide qué se muestra, pero la
+   sección se sigue renderizando con `className="section visible"` en dos lugares. */
 .section { display: none; }
 .section.visible { display: block; animation: fadeUp 0.2s ease; }
 
@@ -729,200 +708,375 @@ a {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .section.visible { animation: none; }
+}
 
-/* Inputs & selects */
+/* ── Controles crudos de las secciones que todavía no usan Field/Input/Select ── */
 .shell-content input[type='text'],
 .shell-content input[type='date'],
 .shell-content input[type='number'] {
-  padding: 7px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 13px;
-  background: #fff;
+  padding: 0 10px;
+  height: var(--mo-ctl-h);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-md);
+  font-size: var(--mo-fs-base);
+  background: var(--mo-surface);
   outline: none;
   font-family: inherit;
-  transition: border-color 0.15s;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .shell-content input:focus,
-.shell-content select:focus { border-color: #111827; }
+.shell-content select:focus {
+  border-color: var(--mo-brand-solid);
+  box-shadow: 0 0 0 3px var(--mo-ring);
+}
 
 .shell-content select {
-  padding: 7px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 13px;
-  background: #fff;
+  padding: 0 10px;
+  height: var(--mo-ctl-h);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-md);
+  font-size: var(--mo-fs-base);
+  background: var(--mo-surface);
   outline: none;
   font-family: inherit;
-  transition: border-color 0.15s;
-}
-
-/* Buttons */
-.shell-content button {
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 13px;
   cursor: pointer;
-  font-family: inherit;
-  font-weight: 500;
-  transition: all 0.15s ease;
-  color: #374151;
 }
-.shell-content button:hover { background: #f9fafb; border-color: #9ca3af; color: #111827; }
-.shell-content button:active { background: #f3f4f6; }
 
-.btn-primary { background: #111827; color: #fff; border: none; font-weight: 600; }
-.btn-primary:hover { background: #1f2937; color: #fff; border: none; box-shadow: none; }
-.btn-sm { font-size: 12px; padding: 5px 12px; color: #6b7280; border-radius: 6px; }
-.btn-sm:hover { color: #111827; background: #f3f4f6; border-color: #d1d5db; }
+/* ── Botones crudos. El equivalente del kit es <Button>. ── */
+.shell-content button {
+  font-family: inherit;
+  font-size: var(--mo-fs-base);
+  font-weight: 600;
+  padding: 0 14px;
+  height: var(--mo-ctl-h);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-lg);
+  background: var(--mo-surface);
+  color: var(--mo-ink2);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.shell-content button:hover { background: var(--mo-bg2); }
+.shell-content button:active { transform: translateY(0.5px); }
+.shell-content button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--mo-ring); }
 
-/* Stats */
+.btn-primary {
+  background: var(--mo-brand-solid);
+  color: #fff;
+  border-color: var(--mo-brand-solid);
+}
+.btn-primary:hover { background: var(--mo-brand-solid-hover); color: #fff; }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-sm {
+  font-size: var(--mo-fs-xs);
+  padding: 0 10px;
+  height: 28px;
+  color: var(--mo-ink2);
+  border-radius: var(--mo-r-md);
+}
+.btn-sm:hover { background: var(--mo-bg2); }
+
+/* ── KPIs crudos. El equivalente del kit es <KpiCard>. ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
-
 .stat {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-2xl);
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.15s ease;
-  cursor: default;
+  box-shadow: var(--mo-sh-sm);
 }
-.stat:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+.stat:hover { box-shadow: var(--mo-sh-md); }
 .stat-label {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-bottom: 6px;
+  font-size: var(--mo-fs-xs);
+  font-weight: 500;
+  color: var(--mo-mut);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
+  letter-spacing: 0.3px;
 }
-.stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
-.stat-value.danger { color: #dc2626; }
-.stat-value.warning { color: #d97706; }
-.stat-value.success { color: #16a34a; }
-.stat-value.info { color: #111827; }
+.stat-value {
+  font-size: var(--mo-fs-xl);
+  font-weight: 700;
+  color: var(--mo-ink);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.danger { color: var(--mo-danger); }
+.stat-value.warning { color: var(--mo-warning); }
+.stat-value.success { color: var(--mo-success); }
+.stat-value.info { color: var(--mo-ink); }
 
-/* Toolbar */
+/* ── Fila de filtros cruda. El equivalente del kit es <FilterBar>. ── */
 .toolbar {
   display: flex;
-  gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
 }
-.toolbar input[type='text'] { width: 220px; }
+.toolbar input[type='text'] { width: 220px; max-width: 100%; }
 
-/* Table */
+/* ── Tablas crudas. El equivalente del kit es TableWrap/Th/Td (con cabecera
+      pegajosa, que esto no tiene). ── */
 .shell-content table { width: 100%; border-collapse: collapse; }
 .shell-content th {
-  font-size: 11px;
-  color: #9ca3af;
-  font-weight: 600;
   text-align: left;
-  padding: 10px 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0 var(--mo-cell-x);
+  height: 34px;
+  font-size: var(--mo-fs-xs);
+  font-weight: 600;
+  color: var(--mo-mut);
+  background: var(--mo-bg2);
+  border-bottom: 1px solid var(--mo-line);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
-.shell-content th:hover { color: #111827; }
+.shell-content th:hover { color: var(--mo-ink2); }
 .shell-content td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  font-size: 13px;
+  padding: 0 var(--mo-cell-x);
+  height: var(--mo-row-h);
+  border-bottom: 1px solid var(--mo-line);
+  font-size: var(--mo-fs-base);
+  color: var(--mo-ink2);
   vertical-align: middle;
 }
 .shell-content tr:last-child td { border-bottom: none; }
-.shell-content tr:hover td { background: #f9fafb; }
+.shell-content tr:hover td { background: var(--mo-bg); }
 
-/* Fundas por modelo — copiadas textual de index.html:170,209-211.
-   Son clases (no selectores de elemento), así que no se scopean bajo
-   .shell-content: no pisan login ni sidebar. */
+/* ── Fundas por modelo ── */
 .chart-wrap { position: relative; width: 100%; }
-.fm-model-label:hover { background: #f3f4f6; border-radius: 6px; }
-.fm-models-panel { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
-.fm-models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
+.fm-model-label:hover { background: var(--mo-bg2); border-radius: var(--mo-r-sm); }
+.fm-models-panel {
+  background: var(--mo-bg);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-lg);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.fm-models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
 
-/* Sesión de fotos (Next, ruta sombra): cartel de "solo lectura" mientras migra. */
-.sf-shadow-note { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; border-radius: 8px; padding: 7px 11px; font-size: 12px; margin-bottom: 12px; }
-.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-
-/* Productos / variantes — copiadas textual de index.html:158-188,242-268.
-   Clases (no elementos), así que no se scopean bajo .shell-content. */
-.badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 600; letter-spacing: .02em; }
-.badge-danger { background: #FEF2F2; color: #DC2626; }
-.badge-warning { background: #FFFBEB; color: #D97706; }
-.badge-success { background: #ECFDF5; color: #16A34A; }
-.badge-info { background: #F3F4F6; color: #111827; }
-.badge-gray { background: #F3F4F6; color: #6B7280; }
-.mini-bar { height: 4px; border-radius: 2px; background: #F3F4F6; margin-top: 4px; overflow: hidden; width: 60px; }
-.mini-bar-fill { height: 100%; border-radius: 2px; }
-.pagination { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 13px; color: #6B7280; }
-.pagination button { padding: 4px 10px; font-size: 12px; }
+/* ── Selector múltiple de Marketing. El equivalente del kit es <MenuMulti>. ── */
 .mkt-multi { position: relative; }
-.mkt-multi-btn { text-align: left; padding: 7px 10px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 13px; background: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 6px; box-sizing: border-box; }
-.mkt-multi-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; background: #fff; border: 1px solid #D1D5DB; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; max-height: 240px; overflow: auto; min-width: 190px; }
-.mkt-multi-panel label { display: flex; align-items: center; gap: 7px; padding: 5px 7px; font-size: 13px; border-radius: 6px; cursor: pointer; }
-.mkt-multi-panel label:hover { background: #F3F4F6; }
-/* Botón ⓘ + popover (components/ui/InfoPopover.tsx). Círculo ámbar; el panel va en
-   portal con position:fixed, así no lo recorta el overflow de las cards. */
-.info-dot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; border-radius: 50%; color: #9CA3AF; cursor: pointer; transition: color .15s, background .15s; vertical-align: middle; }
-.info-dot:hover { color: #B45309; background: #FEF3C7; }
-.info-dot.open { color: #B45309; background: #FDE68A; }
-.info-pop { z-index: 100; max-width: 92vw; background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.14); padding: 12px 13px; text-align: left; }
-.info-pop-title { font-size: 12.5px; font-weight: 700; color: #1F2937; margin-bottom: 4px; }
-.info-pop-body { font-size: 11.5px; line-height: 1.55; color: #6B7280; }
-.info-pop-body b { color: #374151; }
-.foto-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; cursor: zoom-in; background: #F3F4F6; border: 1px solid #E5E7EB; display: block; }
-.foto-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: #F3F4F6; border: 1px dashed #E5E7EB; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9CA3AF; text-align: center; line-height: 1.2; padding: 4px; }
-.foto-thumb:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-color: #378ADD; }
+.mkt-multi-btn {
+  text-align: left;
+  padding: 0 10px;
+  height: var(--mo-ctl-h);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-md);
+  font-size: var(--mo-fs-base);
+  background: var(--mo-surface);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.mkt-multi-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-lg);
+  box-shadow: var(--mo-sh-pop);
+  padding: 6px;
+  max-height: 240px;
+  overflow: auto;
+  min-width: 190px;
+}
+.mkt-multi-panel label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  font-size: var(--mo-fs-base);
+  border-radius: var(--mo-r-sm);
+  cursor: pointer;
+}
+.mkt-multi-panel label:hover { background: var(--mo-bg2); }
 
-/* Lightbox de fotos — copiado textual de index.html:271-292. */
-.lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 2000; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out; }
+/* ── Botón ⓘ + popover (components/ui/InfoPopover.tsx). El panel va en portal con
+      position:fixed, así no lo recorta el overflow de las cards. ── */
+.info-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border-radius: 50%;
+  color: var(--mo-mut2);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  vertical-align: middle;
+}
+.info-dot:hover,
+.info-dot.open { color: var(--mo-brand); background: var(--mo-brand-bg); }
+.info-pop {
+  z-index: 100;
+  max-width: 92vw;
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-lg);
+  box-shadow: var(--mo-sh-pop);
+  padding: 12px 13px;
+  text-align: left;
+}
+.info-pop-title { font-size: var(--mo-fs-sm); font-weight: 700; color: var(--mo-ink); margin-bottom: 4px; }
+.info-pop-body { font-size: var(--mo-fs-sm); line-height: 1.55; color: var(--mo-mut); }
+.info-pop-body b { color: var(--mo-ink2); }
+
+/* ── Miniatura de producto (60px: es el segundo identificador de una prenda) ── */
+.foto-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--mo-r-sm);
+  object-fit: cover;
+  cursor: zoom-in;
+  background: var(--mo-bg2);
+  border: 1px solid var(--mo-line);
+  display: block;
+}
+.foto-thumb:hover { box-shadow: var(--mo-sh-md); border-color: var(--mo-brand-border); }
+.foto-thumb-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--mo-r-sm);
+  background: var(--mo-bg2);
+  border: 1px dashed var(--mo-line2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--mo-mut2);
+  text-align: center;
+  line-height: 1.2;
+  padding: 4px;
+}
+
+/* ── Lightbox de fotos ── */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.9);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  cursor: zoom-out;
+}
 .lightbox-overlay.show { display: flex; }
-.lightbox-img { max-width: 90vw; max-height: 78vh; object-fit: contain; box-shadow: 0 10px 50px rgba(0,0,0,0.5); border-radius: 4px; }
-.lightbox-close { position: absolute; top: 16px; right: 20px; background: rgba(0,0,0,0.4); border: none; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; padding: 4px 12px; border-radius: 999px; }
-.lightbox-close:hover { background: rgba(0,0,0,0.7); }
-.lightbox-info { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; max-width: 90vw; text-align: center; }
-.lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; border: none; cursor: pointer; font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; z-index: 5; transition: background .2s; }
-.lightbox-nav:hover { background: rgba(0,0,0,0.75); }
+.lightbox-img {
+  max-width: 90vw;
+  max-height: 78vh;
+  object-fit: contain;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: none;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 12px;
+  border-radius: var(--mo-r-pill);
+}
+.lightbox-close:hover { background: rgba(0, 0, 0, 0.7); }
+.lightbox-info {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: var(--mo-fs-base);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 16px;
+  border-radius: 20px;
+  max-width: 90vw;
+  text-align: center;
+}
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.lightbox-nav:hover { background: rgba(0, 0, 0, 0.75); }
 .lightbox-nav.prev { left: 18px; }
 .lightbox-nav.next { right: 18px; }
-.lightbox-counter { position: absolute; top: 20px; left: 24px; color: #fff; font-size: 13px; background: rgba(0,0,0,0.45); padding: 5px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
-.lightbox-thumbs { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px 10px; background: rgba(0,0,0,0.4); border-radius: 8px; max-width: 90vw; overflow-x: auto; }
-.lightbox-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: 0.55; border: 2px solid transparent; transition: opacity .15s, border-color .15s; flex-shrink: 0; }
+.lightbox-counter {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  color: #fff;
+  font-size: var(--mo-fs-base);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 5px 12px;
+  border-radius: var(--mo-r-pill);
+  font-variant-numeric: tabular-nums;
+}
+.lightbox-thumbs {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: var(--mo-r-md);
+  max-width: 90vw;
+  overflow-x: auto;
+}
+.lightbox-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.55;
+  border: 2px solid transparent;
+  transition: opacity 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
 .lightbox-thumb:hover { opacity: 0.85; }
 .lightbox-thumb.active { opacity: 1; border-color: #fff; }
 
-/* Análisis de agotamiento (colores) — copiado textual de index.html:214-226. */
-.agot-card { background:#fff; border:1px solid #E5E7EB; border-radius:10px; padding:16px; margin-bottom:10px; }
-.agot-prod-name { font-size:13px; font-weight:600; margin-bottom:2px; }
-.agot-prov { font-size:11px; color:#9CA3AF; margin-bottom:10px; }
-.agot-color-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
-.agot-color-name { width:130px; font-size:12px; color:#374151; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.agot-bar-wrap { flex:1; height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden; }
-.agot-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
-.agot-pct { width:40px; text-align:right; font-size:12px; font-weight:600; color:#111827; flex-shrink:0; }
-.agot-units { width:72px; text-align:right; font-size:11px; color:#9CA3AF; flex-shrink:0; }
-.agot-footer { margin-top:10px; padding-top:8px; border-top:1px solid #F3F4F6; font-size:11px; color:#9CA3AF; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
-.agot-badge-agotado { background:#FEF2F2; color:#DC2626; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
-.agot-badge-curso { background:#F0FDF4; color:#16A34A; font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
-.agot-empty { text-align:center; padding:3rem; color:#9CA3AF; font-size:13px; }
-/* Sub-pestañas (colores: Ventas / Agotamiento) — de index.html .tabs/.tab. */
-.tabs { display:flex; gap:4px; border-bottom:1px solid #E5E7EB; }
-.tab { padding:8px 14px; font-size:13px; color:#6B7280; background:transparent; border:none; border-bottom:2px solid transparent; cursor:pointer; border-radius:0; }
-.tab:hover { color:#111827; background:transparent; }
-.tab.active { color:#111827; border-bottom-color:#111827; font-weight:600; }
-
-} /* fin de @layer legacy — todo lo de arriba se borra cuando la última sección migre */
+} /* fin de @layer legacy */
