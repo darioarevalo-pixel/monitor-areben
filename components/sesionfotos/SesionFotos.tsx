@@ -72,6 +72,7 @@ import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
 import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { useConfirmar, useToast } from '@/components/ui'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -160,6 +161,7 @@ function Contenido({
   variantes: Variante[]
   productos: Producto[]
 }) {
+  const { confirmar, avisar } = useConfirmar()
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
   const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'quitar-item')
@@ -188,13 +190,19 @@ function Contenido({
 
   // Borrar una solicitud (desde el historial). Port de sfBorrar: guarda de "ya salió",
   // confirm, y limpia la selección / la vista si apuntaban a ella.
-  const onBorrar = (s: Solicitud) => {
+  const onBorrar = async (s: Solicitud) => {
     const bloqueo = bloqueoBorrado(s, admin)
     if (bloqueo) {
-      alert(bloqueo)
+      await avisar({ titulo: 'No se puede borrar', mensaje: bloqueo })
       return
     }
-    if (!confirm('¿Eliminar esta solicitud del historial?')) return
+    const ok = await confirmar({
+      titulo: 'Eliminar del historial',
+      tono: 'danger',
+      ok: 'Eliminar',
+      mensaje: `Se borra la solicitud "${s.descripcion || s.id}" del historial compartido. No hay papelera.`,
+    })
+    if (!ok) return
     persistir((l) => sinSolicitud(l, s.id))
     if (viendo === s.id) setViendo(null)
     setSeleccion((sel) => {
@@ -386,6 +394,7 @@ function Historial({
   onToggleSel: (id: string, on: boolean) => void
   onVerCombinada: () => void
 }) {
+  const toast = useToast()
   const { marca: marcaHist, perfil: perfilHist } = useSesion()
   const cerradasN = useMemo(() => contarCerradas(data), [data])
   const visibles = useMemo(() => historialVisible(data, verCerradas), [data, verCerradas])
@@ -398,7 +407,8 @@ function Historial({
     setChequeando(true)
     try {
       const n = await cerrarAnuladas()
-      alert(n ? `✅ ${n} solicitud(es) cerrada(s) — su venta fue anulada en GN.` : 'Todavía ninguna venta fue anulada en GN.')
+      if (n) toast.ok(`${n} ${n === 1 ? 'solicitud cerrada' : 'solicitudes cerradas'}: su venta fue anulada en GN.`)
+      else toast.info('Todavía ninguna venta fue anulada en GN.')
     } finally {
       setChequeando(false)
     }
@@ -552,6 +562,8 @@ function Detalle({
   variantes: Variante[]
   onVolver: () => void
 }) {
+  const { avisar, pedirTexto } = useConfirmar()
+  const toast = useToast()
   const { marca: marcaDetalle, perfil: perfilDetalle } = useSesion()
   const [creando, setCreando] = useState(false)
   // Copia de trabajo local (como sfData en memoria): todas las ediciones la mutan
@@ -598,9 +610,10 @@ function Detalle({
   const pendienteDeAprobar = necesitaAprobacion(s) && s.estado === 'pendiente'
   const esAprobador = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'aprobar')
   const onAprobar = () => setWork((w) => ({ ...w, estado: 'aprobada', aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
-  const onRechazar = () => {
-    const m = prompt('Motivo del rechazo (opcional):')
-    setWork((w) => ({ ...w, estado: 'rechazada', rechazadoMotivo: (m || '').trim(), aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
+  const onRechazar = async () => {
+    const m = await pedirTexto('Motivo del rechazo (opcional)', '', { titulo: 'Rechazar la solicitud', ok: 'Rechazar' })
+    if (m === null) return // cancelar no debe rechazar: antes, cancelar el prompt rechazaba igual
+    setWork((w) => ({ ...w, estado: 'rechazada', rechazadoMotivo: m.trim(), aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
   }
 
   // Crear las ventas en GN (la única escritura IRREVERSIBLE). Pide la contraseña,
@@ -608,23 +621,35 @@ function Detalle({
   const onCrearVentas = async () => {
     const pass = obtenerPass()
     if (!pass) {
-      alert('Necesito tu contraseña para crear las ventas.')
+      await avisar('Necesito tu contraseña para crear las ventas.')
       return
     }
     setCreando(true)
     try {
       const r = await crearVentasDe(work, { user: usuario, pass })
       if (r.tipo === 'no-leido') {
-        alert('No se pudo leer el historial para crear las ventas de forma segura. Recargá y probá de nuevo.')
+        await avisar({
+          titulo: 'No se pudo crear',
+          tono: 'danger',
+          mensaje: 'No se pudo leer el historial para crear las ventas de forma segura, así que no se creó ninguna. Recargá y probá de nuevo.',
+        })
         return
       }
       if (r.tipo === 'ya-tenia') {
-        alert('Esta solicitud ya tiene ventas creadas en GN.')
+        await avisar({ titulo: 'Ya estaban creadas', mensaje: 'Esta solicitud ya tiene sus ventas creadas en GN. No se creó ninguna de nuevo.' })
         setWork((w) => ({ ...w, ventas: r.ventas, estado: r.estadoSol as EstadoSolicitud }))
         return
       }
       if (Object.keys(r.ventas).length) setWork((w) => ({ ...w, ventas: { ...(w.ventas || {}), ...r.ventas }, estado: preset.estadoTrasVenta }))
-      if (r.errores.length) alert('No se pudieron crear todas las ventas:\n' + r.errores.join('\n'))
+      if (r.errores.length) {
+        // Es la única escritura irreversible de la sección: un fallo parcial se cuenta
+        // con un diálogo que hay que cerrar a mano, no con un Toast que se va solo.
+        await avisar({
+          titulo: 'No se pudieron crear todas las ventas',
+          tono: 'danger',
+          mensaje: r.errores.join('\n'),
+        })
+      }
     } finally {
       setCreando(false)
     }
@@ -960,7 +985,7 @@ function Detalle({
               <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s))} style={{ background: '#16A34A', color: '#fff' }}>
                 📤 Enviar a Marketing
               </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s))} style={{ background: '#fff', border: '1px solid #FCA5A5', color: '#991B1B' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')))} style={{ background: '#fff', border: '1px solid #FCA5A5', color: '#991B1B' }}>
                 📋 Copiar
               </button>
               <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s))} style={{ background: '#1F2937', color: '#fff' }}>
@@ -1218,6 +1243,7 @@ function Draft({
   onCancelar: () => void
   onCreada: (id: string) => void
 }) {
+  const { avisar } = useConfirmar()
   /**
    * Los motivos elegibles sin cambiar de cajón, más el actual si es uno viejo (el catálogo
    * cambió en la Fase 2: existían "Consumo" y "Prueba"). Sin ese agregado, abrir una
@@ -1257,7 +1283,7 @@ function Draft({
   const addManual = () => {
     const desc = manDesc.trim()
     if (!desc) {
-      alert('Escribí una descripción (ej. Remera estampa X).')
+      void avisar('Escribí una descripción (ej. Remera estampa X).')
       return
     }
     setDraft((d) => agregarManual(d, nuevoMid(), desc, Math.max(1, parseInt(manQty) || 1)))
@@ -1267,7 +1293,7 @@ function Draft({
   const procesar = () => {
     const sol = procesarDraft(draft, prioridad, { id: nuevoId(), fecha: hoyISO(), creado: Date.now(), creadoPor: usuario })
     if (!sol) {
-      alert('Escaneá o tildá al menos un producto para procesar.')
+      void avisar('Escaneá o tildá al menos un producto para procesar.')
       return
     }
     persistir((l) => [sol, ...l])
@@ -1663,12 +1689,18 @@ function BotonFase({ activo, onClick, label }: { activo: boolean; onClick: () =>
   )
 }
 
-async function copiarReporte(s: Solicitud) {
+/**
+ * Copia el reporte al portapapeles. `onOk` lo pasa quien llama porque esto es una función
+ * de módulo y no puede usar el hook del Toast; el fallback sigue siendo el `prompt()` del
+ * navegador a propósito: es la única forma de que el texto quede seleccionable cuando el
+ * portapapeles está bloqueado (pasa en iOS sin gesto del usuario).
+ */
+async function copiarReporte(s: Solicitud, onOk?: () => void) {
   const msg = textoReporteFaltantes(s)
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try {
       await navigator.clipboard.writeText(msg)
-      alert('📋 Reporte copiado. Pegalo en WhatsApp.')
+      onOk?.()
       return
     } catch {
       /* cae al prompt */
