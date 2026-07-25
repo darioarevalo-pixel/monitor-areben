@@ -62,6 +62,23 @@ export const color = {
   warningInk: 'var(--mo-warning-ink)',
 } as const
 
+/**
+ * ⚠️ La ÚNICA excepción a "los colores son var()": los gráficos.
+ *
+ * Recharts pinta con atributos de presentación del SVG (`fill="…"`), y ahí `var()` no
+ * resuelve — quedaría todo negro. Estos hex tienen que espejar los de `app/tokens.css`:
+ * si se cambia la paleta, se cambian los dos.
+ */
+export const chartColor = {
+  brand: '#4F46E5',
+  brandSoft: 'rgba(79,70,229,0.10)',
+  grid: '#E4E7EC',
+  axis: '#98A2B3',
+  success: '#079455',
+  warning: '#DC6803',
+  danger: '#D92D20',
+} as const
+
 export const radius = { sm: 6, md: 8, lg: 10, xl: 12, '2xl': 14, pill: 999 } as const
 
 // Escala de espaciado (px). Claves numéricas = múltiplos de 4 (0.5 = 2px).

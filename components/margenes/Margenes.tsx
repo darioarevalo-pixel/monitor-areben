@@ -16,14 +16,31 @@ import {
   type OrdenMargen,
 } from '@/lib/margenes'
 import { indexarTn } from '@/lib/tn'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  BuscarInput,
+  DatosGate,
+  EmptyState,
+  FilterBar,
+  NumberField,
+  Select,
+  color,
+  font,
+  space,
+  useFiltroUrl,
+} from '@/components/ui'
 
 /**
- * "📊 Margen por producto" (key `margenes`, BDI + Zattia) en Next — Tanda A #5.
+ * "📊 Margen por producto" (key `margenes`, BDI + Zattia).
  *
- * Port de renderMargenes/renderMargenesGrid (index.html:8510-8624): grilla de
- * tarjetas con foto (TN), markup/margen y desfase vs un objetivo editable (default
- * 130%), sobre los productos disponibles. Read-only. La lógica en `lib/margenes.ts`;
- * el índice de TN (fotos + promo) vía `useTnPromo`. Flip directo.
+ * Grilla de tarjetas con foto (TN), markup/margen y desfase contra un objetivo editable
+ * (default 130%), sobre los productos disponibles. Read-only: la lógica vive en
+ * `lib/margenes.ts` y el índice de TN (fotos + promo) en `useTnPromo`.
+ *
+ * Rediseño jul-2026 (patrón Analítica): el resumen —cuántos productos, markup promedio,
+ * mediana, cuántos desfasados— era una línea de texto gris de 12px arriba de la grilla;
+ * ahora es la primera lectura de la pantalla. El buscador queda en la URL. La grilla se
+ * achica sola en el teléfono.
  */
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -33,98 +50,124 @@ export function Margenes() {
   const tnPromo = useTnPromo(marca)
 
   const [objetivo, setObjetivo] = useState(OBJETIVO_DEFAULT)
-  const [busqueda, setBusqueda] = useState('')
-  const [orden, setOrden] = useState<OrdenMargen>('markup-desc')
+  const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
+  const [orden, setOrden] = useFiltroUrl<OrdenMargen>('orden', 'markup-desc')
 
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
-  // Mientras TN no cargó, se usa un índice vacío: precio = minorista, sin foto (el
-  // legacy también renderiza sin promo/foto hasta que llega el payload).
+  // Mientras TN no cargó se usa un índice vacío: precio = minorista, sin foto.
   const idx = useMemo(() => tnPromo ?? indexarTn([]), [tnPromo])
   const filas = useMemo(() => computarFilas(productos, idx, objetivo), [productos, idx, objetivo])
   const lista = useMemo(() => ordenar(buscar(filas, busqueda), orden), [filas, busqueda, orden])
   const res = useMemo(() => resumen(lista), [lista])
 
-  if (error && !datos) {
-    return <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
-  }
-  if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
-
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 12, color: '#6B7280' }}>
-            Objetivo %
-            <input type="number" value={objetivo} step={5} onChange={(e) => setObjetivo(parseFloat(e.target.value) || OBJETIVO_DEFAULT)} style={{ width: 64, marginLeft: 4 }} />
-          </label>
-          <input type="text" placeholder="Buscar producto…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ width: 160 }} />
-          <select value={orden} onChange={(e) => setOrden(e.target.value as OrdenMargen)}>
-            <option value="markup-desc">Markup: mayor a menor (más desfasados primero)</option>
-            <option value="markup-asc">Markup: menor a mayor</option>
-            <option value="desfase-desc">Desfase vs objetivo: mayor primero</option>
-            <option value="name">Nombre (A-Z)</option>
-            <option value="pvp-desc">Precio: mayor a menor</option>
-            <option value="stock-desc">Stock: mayor a menor</option>
-          </select>
-        </div>
-      </div>
+    <>
+      <HeaderAcciones>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut }}>
+          Objetivo
+          <NumberField value={objetivo} onChange={(n) => setObjetivo(n || OBJETIVO_DEFAULT)} step={5} min={0} width={84} />
+          <span>%</span>
+        </label>
+      </HeaderAcciones>
 
-      <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>
-        {res ? (
+      <DatosGate datos={datos} error={error} esqueleto="tarjetas">
+        {() => (
           <>
-            <b>{res.count}</b> disponibles · markup promedio <b>{res.prom.toFixed(0)}%</b> · mediana <b>{res.mediana.toFixed(0)}%</b> · <b style={{ color: '#DC2626' }}>{res.desfasados}</b> por encima del objetivo (+15pts)
-          </>
-        ) : null}
-      </div>
+            {res && (
+              <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap', marginBottom: space[4] }}>
+                <Dato label="Disponibles" valor={res.count.toLocaleString('es-AR')} />
+                <Dato label="Markup promedio" valor={`${res.prom.toFixed(0)}%`} />
+                <Dato label="Mediana" valor={`${res.mediana.toFixed(0)}%`} />
+                <Dato
+                  label={`Por encima del objetivo (+15pts)`}
+                  valor={res.desfasados.toLocaleString('es-AR')}
+                  tono={res.desfasados > 0 ? color.danger : undefined}
+                />
+              </div>
+            )}
 
-      {lista.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 30, color: '#9CA3AF' }}>No hay productos disponibles que coincidan.</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 12 }}>
-          {lista.map((f) => (
-            <TarjetaMargen key={f.p.id} f={f} />
-          ))}
-        </div>
-      )}
+            <FilterBar>
+              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
+              <Select value={orden} onChange={(e) => setOrden(e.target.value as OrdenMargen)} style={{ width: 260 }} aria-label="Orden">
+                <option value="markup-desc">Markup: mayor a menor</option>
+                <option value="markup-asc">Markup: menor a mayor</option>
+                <option value="desfase-desc">Desfase vs objetivo: mayor primero</option>
+                <option value="name">Nombre (A-Z)</option>
+                <option value="pvp-desc">Precio: mayor a menor</option>
+                <option value="stock-desc">Stock: mayor a menor</option>
+              </Select>
+            </FilterBar>
+
+            {lista.length === 0 ? (
+              <EmptyState
+                icon="🔍"
+                title="No hay productos disponibles que coincidan"
+                hint={busqueda ? `Nada para "${busqueda}". Probá con menos palabras.` : 'Puede que no haya stock disponible en esta marca.'}
+                dashed
+              />
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: space[3] }}>
+                {lista.map((f) => (
+                  <TarjetaMargen key={f.p.id} f={f} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </DatosGate>
+    </>
+  )
+}
+
+/** Un número del resumen, con su etiqueta arriba. Reemplaza la línea de texto corrida. */
+function Dato({ label, valor, tono }: { label: string; valor: string; tono?: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: font.xl, fontWeight: 700, color: tono ?? color.ink, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{valor}</div>
     </div>
   )
 }
 
 function TarjetaMargen({ f }: { f: FilaMargen }) {
   const { p, foto, precio, esPromo, markup, margin, desfase } = f
-  const { color, bg } = colorDesfase(desfase)
+  const { color: c, bg } = colorDesfase(desfase)
   return (
-    <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+    <div className="mo-card mo-card--interactive" style={{ padding: 0, overflow: 'hidden' }}>
       {foto ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={foto} loading="lazy" alt={p.name} style={{ width: '100%', height: 150, objectFit: 'cover', background: '#F3F4F6' }} />
+        <img src={foto} loading="lazy" alt={p.name} style={{ width: '100%', height: 150, objectFit: 'cover', background: color.bg2, display: 'block' }} />
       ) : (
-        <div style={{ width: '100%', height: 150, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#CBD5E1', fontSize: 11 }}>sin foto</div>
+        <div style={{ width: '100%', height: 150, background: color.bg2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color.mut2, fontSize: font.xs }}>
+          sin foto
+        </div>
       )}
       <div style={{ padding: '10px 11px' }}>
-        <div style={{ fontWeight: 600, fontSize: 12, lineHeight: 1.3, marginBottom: 6, minHeight: 31 }} title={p.name}>{p.name}</div>
+        <div style={{ fontWeight: 600, fontSize: font.sm, lineHeight: 1.3, marginBottom: 6, minHeight: 31, color: color.ink }} title={p.name}>
+          {p.name}
+        </div>
         <div style={{ background: bg, borderRadius: 8, padding: '6px 9px', marginBottom: 7 }}>
-          <div style={{ color, fontWeight: 800, fontSize: 20, lineHeight: 1 }}>
-            {markup.toFixed(0)}% <span style={{ fontSize: 11, fontWeight: 600 }}>markup</span>
+          <div style={{ color: c, fontWeight: 800, fontSize: 20, lineHeight: 1 }}>
+            {markup.toFixed(0)}% <span style={{ fontSize: font.xs, fontWeight: 600 }}>markup</span>
           </div>
-          <div style={{ color, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{etiquetaDesfase(desfase)}</div>
+          <div style={{ color: c, fontSize: font.xs, fontWeight: 600, marginTop: 2 }}>{etiquetaDesfase(desfase)}</div>
         </div>
         <Linea label="Margen s/ venta" valor={`${margin.toFixed(0)}%`} />
         <Linea label="Costo" valor={fmt(p.unit_cost)} />
-        <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+        <div style={{ fontSize: font.xs, color: color.mut, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
           <span>Precio</span>
           {esPromo ? (
-            <span style={{ color: '#374151', fontWeight: 500 }}>
-              {fmt(precio)} <span style={{ color: '#16A34A', fontSize: 10, fontWeight: 600 }}>promo</span>{' '}
-              <span style={{ color: '#9CA3AF', textDecoration: 'line-through', fontWeight: 400 }}>{fmt(p.retailer_price)}</span>
+            <span style={{ color: color.ink2, fontWeight: 500 }}>
+              {fmt(precio)} <span style={{ color: color.success, fontSize: 10, fontWeight: 600 }}>promo</span>{' '}
+              <span style={{ color: color.mut2, textDecoration: 'line-through', fontWeight: 400 }}>{fmt(p.retailer_price)}</span>
             </span>
           ) : (
-            <span style={{ color: '#374151', fontWeight: 500 }}>{fmt(precio)}</span>
+            <span style={{ color: color.ink2, fontWeight: 500 }}>{fmt(precio)}</span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginTop: 3, borderTop: '1px solid #F3F4F6', paddingTop: 4 }}>
+        <div style={{ fontSize: font.xs, color: color.mut, display: 'flex', justifyContent: 'space-between', marginTop: 3, borderTop: `1px solid ${color.line}`, paddingTop: 4 }}>
           <span>Stock</span>
-          <span style={{ color: '#374151', fontWeight: 500 }}>{p.stock}</span>
+          <span style={{ color: color.ink2, fontWeight: 500 }}>{p.stock}</span>
         </div>
       </div>
     </div>
@@ -133,9 +176,9 @@ function TarjetaMargen({ f }: { f: FilaMargen }) {
 
 function Linea({ label, valor }: { label: string; valor: string }) {
   return (
-    <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
+    <div style={{ fontSize: font.xs, color: color.mut, display: 'flex', justifyContent: 'space-between' }}>
       <span>{label}</span>
-      <span style={{ color: '#374151', fontWeight: 500 }}>{valor}</span>
+      <span style={{ color: color.ink2, fontWeight: 500 }}>{valor}</span>
     </div>
   )
 }

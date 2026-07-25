@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import {
@@ -12,21 +12,62 @@ import {
   filtrarPeriodo,
   type Periodo,
 } from '@/lib/ventas-mensuales'
+import type { EstadisticaMensual } from '@/lib/etl/tipos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  Card,
+  DatosGate,
+  Select,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  chartColor,
+  color,
+  font,
+  space,
+  useFiltroUrl,
+} from '@/components/ui'
 
 /**
- * "📅 Ventas mensuales" (key `ventas-mensuales`, BDI + Zattia) en Next.
+ * "📅 Ventas mensuales" (key `ventas-mensuales`, BDI + Zattia).
  *
- * Port de renderVentasMensuales (index.html:2994-3070): selector de período +
- * gráfico de barras (items por mes) + tabla por categoría + tabla por canal.
- * Read-only puro sobre `allMonthlyStats` del store del ETL — Tanda A #2. La lógica
- * vive en `lib/ventas-mensuales.ts` con paridad contra el legacy; acá solo se
- * renderiza. El chart usa recharts (como Fundas), no Chart.js.
+ * Selector de período + gráfico de barras (items por mes) + tabla por categoría + tabla
+ * por canal. Read-only sobre `allMonthlyStats` del store del ETL; la lógica vive en
+ * `lib/ventas-mensuales.ts` con paridad contra el legacy y no se toca.
+ *
+ * Rediseño jul-2026 (patrón Analítica): el período va al header —es el control que manda
+ * sobre toda la pantalla— y **queda en la URL**, así refrescar no te devuelve a los 12
+ * meses de siempre. Las dos tablas son anchas (una columna por categoría / por canal), y
+ * ahora scrollean adentro de su propia caja con la cabecera y la columna del mes fijas:
+ * antes, al correrse a la derecha, no se sabía qué mes se estaba mirando.
  */
 export function VentasMensuales() {
   const { datos, error } = useDatosMonitor()
-  const [periodo, setPeriodo] = useState<Periodo>(12)
+  const [periodoStr, setPeriodo] = useFiltroUrl<string>('p', '12')
+  const periodo = (parseInt(periodoStr) || 12) as Periodo
 
-  const stats = useMemo(() => datos?.allMonthlyStats ?? [], [datos])
+  return (
+    <>
+      <HeaderAcciones>
+        <Select value={periodo} onChange={(e) => setPeriodo(e.target.value)} style={{ width: 190 }} aria-label="Período">
+          <option value={3}>Últimos 3 meses</option>
+          <option value={6}>Últimos 6 meses</option>
+          <option value={12}>Últimos 12 meses</option>
+          <option value={0}>Todos</option>
+        </Select>
+      </HeaderAcciones>
+
+      <DatosGate datos={datos} error={error} esqueleto="tabla">
+        {(d) => <Contenido stats={d.allMonthlyStats ?? []} periodo={periodo} />}
+      </DatosGate>
+    </>
+  )
+}
+
+function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: Periodo }) {
   const filtered = useMemo(() => filtrarPeriodo(stats, periodo), [stats, periodo])
   const cats = useMemo(() => categoriasOrdenadas(filtered), [filtered])
   const channels = useMemo(() => canalesOrdenados(filtered), [filtered])
@@ -34,111 +75,125 @@ export function VentasMensuales() {
   const filasCh = useMemo(() => filasCanal(filtered, channels), [filtered, channels])
   const chart = useMemo(() => datosChart(filtered), [filtered])
 
-  if (error && !datos) {
-    return <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
-  }
-  if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
-
   return (
-    <div>
-      <div className="toolbar">
-        <select value={periodo} onChange={(e) => setPeriodo(parseInt(e.target.value) as Periodo)}>
-          <option value={3}>Últimos 3 meses</option>
-          <option value={6}>Últimos 6 meses</option>
-          <option value={12}>Últimos 12 meses</option>
-          <option value={0}>Todos</option>
-        </select>
-      </div>
-
-      <div className="card">
-        <div className="chart-wrap" style={{ height: 280 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      <Card padding={4}>
+        <div style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart} margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
-              <CartesianGrid vertical={false} stroke="#f0f0f0" />
-              <XAxis dataKey="label" tick={{ fill: '#888', fontSize: 11 }} tickLine={false} axisLine={false} interval={0} angle={-40} textAnchor="end" height={48} />
-              <YAxis tick={{ fill: '#888', fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
+              <CartesianGrid vertical={false} stroke={chartColor.grid} />
+              <XAxis dataKey="label" tick={{ fill: chartColor.axis, fontSize: 11 }} tickLine={false} axisLine={false} interval={0} angle={-40} textAnchor="end" height={48} />
+              <YAxis tick={{ fill: chartColor.axis, fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
               <Tooltip
-                cursor={{ fill: 'rgba(55,138,221,0.08)' }}
+                cursor={{ fill: chartColor.brandSoft }}
                 formatter={(v: number) => [v.toLocaleString('es-AR'), 'Items']}
-                labelStyle={{ color: '#444', fontSize: 12 }}
-                contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E5E7EB' }}
+                labelStyle={{ color: '#344054', fontSize: 12 }}
+                contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${chartColor.grid}` }}
               />
-              <Bar dataKey="items" fill="#378ADD" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="items" fill={chartColor.brand} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </Card>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
-        <div style={TITULO}>Por categoría</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Mes</th>
-              <th>Total items</th>
-              <th>Prom./venta</th>
+      <Tabla titulo="Por categoría" nota={`${cats.length} ${cats.length === 1 ? 'categoría' : 'categorías'}`}>
+        <TableWrap maxHeight={480}>
+          <THead>
+            <Tr>
+              <Th style={COL_MES_TH}>Mes</Th>
+              <Th align="right">Total items</Th>
+              <Th align="right">Prom./venta</Th>
               {cats.map((c) => (
-                <th key={c}>{c}</th>
+                <Th key={c} align="right">
+                  {c}
+                </Th>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </Tr>
+          </THead>
+          <TBody>
             {filasCat.map((f) => (
-              <tr key={f.mes}>
-                <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{f.label}</td>
-                <td style={{ fontWeight: 600 }}>{f.items.toLocaleString('es-AR')}</td>
-                <td style={{ color: '#666' }}>{f.prom}</td>
+              <Tr key={f.mes}>
+                <Td strong style={COL_MES_TD}>
+                  {f.label}
+                </Td>
+                <Td align="right" strong>
+                  {f.items.toLocaleString('es-AR')}
+                </Td>
+                <Td align="right">{f.prom}</Td>
                 {f.cats.map((v, i) => (
-                  <td key={cats[i]} style={{ color: '#666' }}>{v != null ? v.toLocaleString('es-AR') : '—'}</td>
+                  <Td key={cats[i]} align="right" style={v == null ? { color: color.mut2 } : undefined}>
+                    {v != null ? v.toLocaleString('es-AR') : '—'}
+                  </Td>
                 ))}
-              </tr>
+              </Tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TBody>
+        </TableWrap>
+      </Tabla>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto', marginTop: 0 }}>
-        <div style={TITULO}>Por canal de venta</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Mes</th>
-              <th>Total ventas</th>
+      <Tabla titulo="Por canal de venta" nota={`${channels.length} ${channels.length === 1 ? 'canal' : 'canales'}`}>
+        <TableWrap maxHeight={480}>
+          <THead>
+            <Tr>
+              <Th style={COL_MES_TH}>Mes</Th>
+              <Th align="right">Total ventas</Th>
               {channels.map((c) => (
-                <th key={c}>{c}</th>
+                <Th key={c} align="right">
+                  {c}
+                </Th>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </Tr>
+          </THead>
+          <TBody>
             {filasCh.map((f) => (
-              <tr key={f.mes}>
-                <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{f.label}</td>
-                <td style={{ fontWeight: 600 }}>{f.ventas.toLocaleString('es-AR')}</td>
+              <Tr key={f.mes}>
+                <Td strong style={COL_MES_TD}>
+                  {f.label}
+                </Td>
+                <Td align="right" strong>
+                  {f.ventas.toLocaleString('es-AR')}
+                </Td>
                 {f.canales.map((c, i) => (
-                  <td key={channels[i]} style={{ color: '#666' }}>
+                  <Td key={channels[i]} align="right" style={!c.cnt ? { color: color.mut2 } : undefined}>
                     {c.cnt ? (
                       <>
-                        {c.cnt} <span style={{ fontSize: 10, color: '#aaa' }}>({c.pct}%)</span>
+                        {c.cnt} <span style={{ fontSize: font.xs, color: color.mut2 }}>({c.pct}%)</span>
                       </>
                     ) : (
                       '—'
                     )}
-                  </td>
+                  </Td>
                 ))}
-              </tr>
+              </Tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TBody>
+        </TableWrap>
+      </Tabla>
     </div>
   )
 }
 
-const TITULO: React.CSSProperties = {
-  padding: '12px 16px 4px',
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#888',
-  textTransform: 'uppercase',
-  letterSpacing: '.05em',
+/** Título de bloque + su tabla. El título va afuera de la caja para que la cabecera de la
+    tabla pueda quedar pegajosa contra el borde de arriba. */
+function Tabla({ titulo, nota, children }: { titulo: string; nota?: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], marginBottom: space[2] }}>
+        <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, letterSpacing: -0.2 }}>{titulo}</h2>
+        {nota && <span style={{ fontSize: font.sm, color: color.mut }}>{nota}</span>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/* La columna del mes queda fija al scrollear a la derecha: con una columna por categoría
+   la tabla se va muy lejos y sin esto no se sabe de qué mes es la fila que se mira. */
+const COL_MES_TH: React.CSSProperties = { position: 'sticky', left: 0, zIndex: 3 }
+const COL_MES_TD: React.CSSProperties = {
+  position: 'sticky',
+  left: 0,
+  zIndex: 1,
+  background: 'var(--mo-surface)',
+  boxShadow: '1px 0 0 var(--mo-line)',
 }
