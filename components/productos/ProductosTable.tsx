@@ -22,16 +22,44 @@ import {
 } from '@/lib/productos'
 import { imagenDe, imagenesDe, type IndiceTn } from '@/lib/tn'
 import { paginar, sortList, totalPaginas } from '@/lib/tabla'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  BuscarInput,
+  Button,
+  DatosGate,
+  EmptyState,
+  FaseBadge,
+  FilterBar,
+  MenuMulti,
+  MiniBar,
+  Paginacion,
+  Select,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  color,
+  font,
+  space,
+  useFiltroUrl,
+} from '@/components/ui'
 
 /**
- * "📊 Por producto" (key `productos`, BDI + Zattia) en Next — Tanda A #3, PASO 1.
+ * "📊 Por producto" (key `productos`, BDI + Zattia).
  *
- * Port read-only de renderProductos (index.html:2844-2891): filtros, selector de
- * vida útil, orden por columna, paginación (50) y badge de estado. La lógica de
- * dominio vive en `lib/productos.ts` (filtros/lifespan por modo/pills) y `lib/tabla.ts`
- * (orden/paginación), con paridad contra el fixture ETL. Sin fotos, sin detalle
- * expandible, sin selección de sale/PDF: esos son los Pasos 2 y 3. Por eso esto va
- * en la ruta sombra `/productos/next`, no flipeado.
+ * Filtros, selector de vida útil, orden por columna, paginado de a 50, foto de TN,
+ * detalle de variantes expandible y selección para el reporte de sale. La lógica de
+ * dominio vive en `lib/productos.ts` y `lib/tabla.ts`, con paridad contra el fixture ETL.
+ *
+ * Rediseño jul-2026 (patrón Listado): es la sección más cargada de filtros y estaban los
+ * siete en una sola fila corrida junto a las acciones, sin distinguir "qué filtro" de
+ * "qué hago". Ahora las acciones (generar sale, actualizar inventario) van al header y
+ * los filtros a la barra de abajo. La cabecera de la tabla es pegajosa, el orden se
+ * marca solo en la columna activa, y **la selección para el sale se ve siempre**: antes,
+ * como sobrevive a filtros y páginas, era fácil generar un PDF con productos que ya no
+ * estaban en pantalla sin darse cuenta.
  */
 
 type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifespan' | 'stock'
@@ -41,8 +69,8 @@ export function ProductosTable() {
   const { marca } = useSesion()
   const tnIdx = useTnImages(marca)
 
-  const [busqueda, setBusqueda] = useState('')
-  const [estado, setEstado] = useState('')
+  const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
+  const [estado, setEstado] = useFiltroUrl<string>('estado', '')
   const [proveedor, setProveedor] = useState('')
   const [ingresos, setIngresos] = useState<Set<string>>(new Set())
   const [ocultarSinStock, setOcultarSinStock] = useState(false)
@@ -50,7 +78,6 @@ export function ProductosTable() {
   const [col, setCol] = useState<ColOrden>('sales30')
   const [dir, setDir] = useState(-1)
   const [page, setPage] = useState(1)
-  const [ingresoOpen, setIngresoOpen] = useState(false)
   const [expandido, setExpandido] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ imagenes: string[]; nombre: string } | null>(null)
   const [outletSel, setOutletSel] = useState<Set<string>>(new Set())
@@ -60,12 +87,15 @@ export function ProductosTable() {
   const listaProv = useMemo(() => proveedores(productos), [productos])
   const meses = useMemo(() => mesesIngreso(productos), [productos])
 
-  // Volver a la página 1 cuando cambia el conjunto filtrado (index.html: pageState
-  // se resetea en cada handler de filtro). Un effect sobre la firma de los filtros.
+  // Volver a la página 1 cuando cambia el conjunto filtrado (el legacy resetea pageState
+  // en cada handler de filtro). Un effect sobre la firma de los filtros.
   const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}`
   const primeraRef = useRef(true)
   useEffect(() => {
-    if (primeraRef.current) { primeraRef.current = false; return }
+    if (primeraRef.current) {
+      primeraRef.current = false
+      return
+    }
     setPage(1)
   }, [firmaFiltros])
 
@@ -74,25 +104,17 @@ export function ProductosTable() {
     [productos, busqueda, estado, proveedor, ingresos, ocultarSinStock],
   )
 
-  // El legacy pisa `lifespan` con el valor del modo (sentinel 99999 si no hay dato)
-  // ANTES de ordenar (index.html:2852), así la columna "Vida útil" ordena por el modo
-  // elegido. Se replica sobre una copia con el campo pisado.
+  // El legacy pisa `lifespan` con el valor del modo (sentinel si no hay dato) ANTES de
+  // ordenar, así la columna "Vida útil" ordena por el modo elegido. Se replica sobre una
+  // copia con el campo pisado.
   const ordenada = useMemo(() => {
-    const conLifespan = filtrada.map((p) => ({
-      ...p,
-      lifespan: lifespanDaysByMode(p, modoVU) ?? LIFESPAN_SIN_DATO,
-    }))
+    const conLifespan = filtrada.map((p) => ({ ...p, lifespan: lifespanDaysByMode(p, modoVU) ?? LIFESPAN_SIN_DATO }))
     return sortList(conLifespan, col, dir)
   }, [filtrada, modoVU, col, dir])
 
   const paginas = totalPaginas(ordenada.length)
   const pageClamp = Math.min(page, Math.max(1, paginas))
   const slice = useMemo(() => paginar(ordenada, pageClamp), [ordenada, pageClamp])
-
-  if (error && !datos) {
-    return <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
-  }
-  if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
 
   function ordenar(c: ColOrden) {
     if (col === c) setDir((d) => d * -1)
@@ -101,15 +123,6 @@ export function ProductosTable() {
       setDir(-1)
     }
     setPage(1)
-  }
-
-  function toggleIngreso(m: string, on: boolean) {
-    setIngresos((s) => {
-      const n = new Set(s)
-      if (on) n.add(m)
-      else n.delete(m)
-      return n
-    })
   }
 
   function toggleOutlet(id: string, on: boolean) {
@@ -121,8 +134,8 @@ export function ProductosTable() {
     })
   }
 
-  // La selección persiste a través de páginas y filtros (index.html:2807 filtra
-  // sobre allProductos, no sobre la página). El precio promo se asegura al click.
+  // La selección persiste a través de páginas y filtros (el legacy filtra sobre
+  // allProductos, no sobre la página). El precio promo se asegura al click.
   async function generarSale() {
     if (!outletSel.size || generando) return
     setGenerando(true)
@@ -135,129 +148,135 @@ export function ProductosTable() {
     }
   }
 
-  const th = (c: ColOrden, label: string) => (
-    <th onClick={() => ordenar(c)}>
-      {label} {col === c ? (dir === -1 ? '↓' : '↑') : '↕'}
-    </th>
+  const th = (c: ColOrden, label: string, align?: 'right') => (
+    <Th align={align} onClick={() => ordenar(c)} sort={col === c ? (dir === -1 ? 'desc' : 'asc') : null}>
+      {label}
+    </Th>
   )
 
-  const ingresoLbl =
-    ingresos.size === 0 ? 'Todos los meses' : ingresos.size === 1 ? mesLabel([...ingresos][0]) : `${ingresos.size} meses`
-
   return (
-    <div>
-      <div className="toolbar">
-        <input
-          type="text"
-          placeholder="Buscar producto..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        <select value={estado} onChange={(e) => setEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="crecimiento">Crecimiento</option>
-          <option value="madurez">Madurez</option>
-          <option value="declive">Declive</option>
-          <option value="dormido">Dormido</option>
-          <option value="obsoleto">Obsoleto</option>
-        </select>
-        <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
-          <option value="">Todos los proveedores</option>
-          {listaProv.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        {meses.length > 0 && (
-          <div className="mkt-multi" style={{ minWidth: 180 }}>
-            <button type="button" className="mkt-multi-btn" onClick={() => setIngresoOpen((o) => !o)}>
-              <span style={ingresos.size ? { color: '#185fa5', fontWeight: 600 } : undefined}>{ingresoLbl}</span>
-              <span style={{ opacity: 0.5 }}>▾</span>
-            </button>
-            {ingresoOpen && (
-              <div className="mkt-multi-panel">
-                {meses.map(({ mes, cantidad }) => (
-                  <label key={mes}>
-                    <input type="checkbox" checked={ingresos.has(mes)} onChange={(e) => toggleIngreso(mes, e.target.checked)} />
-                    {mesLabel(mes)} <span style={{ opacity: 0.55 }}>({cantidad})</span>
-                  </label>
-                ))}
-                {ingresos.size > 0 && (
-                  <label style={{ borderTop: '1px solid #eee', marginTop: 4, paddingTop: 6, color: '#e24b4a' }} onClick={() => setIngresos(new Set())}>
-                    ✕ Limpiar selección
-                  </label>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-          <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} /> Ocultar sin stock
-        </label>
-        <select value={modoVU} onChange={(e) => setModoVU(e.target.value as ModoVidaUtil)}>
-          <option value="7d">Vida útil: últimos 7d</option>
-          <option value="15d">Vida útil: últimos 15d</option>
-          <option value="30d">Vida útil: últimos 30d</option>
-          <option value="firstSale">Vida útil: desde 1ª venta</option>
-        </select>
-        <button
-          className="btn-sm"
-          onClick={generarSale}
-          disabled={!outletSel.size || generando}
-          style={{ background: outletSel.size ? '#DB2777' : undefined, color: outletSel.size ? '#fff' : undefined }}
-        >
-          {generando ? 'Generando…' : `🏷️ Generar sale (${outletSel.size})`}
-        </button>
-        {outletSel.size > 0 && (
-          <button className="btn-sm" onClick={() => setOutletSel(new Set())}>Limpiar selección</button>
-        )}
-        <BotonActualizarInventario />
-      </div>
+    <DatosGate datos={datos} error={error} esqueleto="tabla">
+      {(d) => (
+        <>
+          <HeaderAcciones>
+            <BotonActualizarInventario />
+            <Button variant="solid" tone="brand" onClick={() => void generarSale()} loading={generando} disabled={!outletSel.size}>
+              Generar sale{outletSel.size ? ` (${outletSel.size})` : ''}
+            </Button>
+          </HeaderAcciones>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 30, textAlign: 'center', cursor: 'default' }} title="Marcar para sale / outlet">🏷️</th>
-              <th className="foto-col" style={{ width: 72, cursor: 'default' }}>Foto</th>
-              {th('name', 'Producto')}
-              {th('lastSale', 'Última venta')}
-              {th('sales7', 'Ventas 7d')}
-              {th('sales30', 'Ventas 30d')}
-              {th('sales90', 'Ventas 90d')}
-              {th('lifespan', 'Vida útil est.')}
-              {th('stock', 'Stock')}
-              <th style={{ cursor: 'default' }}>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {slice.map((p) => (
-              <FilaProducto
-                key={p.id}
-                p={p}
-                modoVU={modoVU}
-                tnIdx={tnIdx}
-                datos={datos}
-                marcado={outletSel.has(p.id)}
-                onMarcar={(on) => toggleOutlet(p.id, on)}
-                expandido={expandido === p.id}
-                onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
-                onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
+          <FilterBar>
+            <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
+            <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
+              <option value="">Todos los estados</option>
+              <option value="crecimiento">Crecimiento</option>
+              <option value="madurez">Madurez</option>
+              <option value="declive">Declive</option>
+              <option value="dormido">Dormido</option>
+              <option value="obsoleto">Obsoleto</option>
+            </Select>
+            <Select value={proveedor} onChange={(e) => setProveedor(e.target.value)} style={{ width: 190 }} aria-label="Proveedor">
+              <option value="">Todos los proveedores</option>
+              {listaProv.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+            {meses.length > 0 && (
+              <MenuMulti
+                opciones={meses.map(({ mes, cantidad }) => ({ key: mes, label: mesLabel(mes), n: cantidad }))}
+                seleccion={ingresos}
+                onCambiar={setIngresos}
+                vacio="Todos los meses"
+                etiqueta={(n, unico) => (n === 1 && unico ? unico : `${n} meses`)}
               />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            )}
+            <Select value={modoVU} onChange={(e) => setModoVU(e.target.value as ModoVidaUtil)} style={{ width: 210 }} aria-label="Modo de vida útil">
+              <option value="7d">Vida útil: últimos 7d</option>
+              <option value="15d">Vida útil: últimos 15d</option>
+              <option value="30d">Vida útil: últimos 30d</option>
+              <option value="firstSale">Vida útil: desde 1ª venta</option>
+            </Select>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+              <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
+              Ocultar sin stock
+            </label>
+          </FilterBar>
 
-      {paginas > 1 && (
-        <div className="pagination">
-          <button onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={pageClamp === 1}>←</button>
-          <span>Página {pageClamp} de {paginas} ({ordenada.length} registros)</span>
-          <button onClick={() => setPage((n) => Math.min(paginas, n + 1))} disabled={pageClamp === paginas}>→</button>
-        </div>
+          {/* La selección sobrevive a filtros y páginas: si no se dice, se termina
+              generando un PDF con productos que ya no están a la vista. */}
+          {outletSel.size > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: space[3],
+                flexWrap: 'wrap',
+                marginBottom: space[3],
+                padding: '8px 12px',
+                background: color.brandBg,
+                border: `1px solid ${color.brandBorder}`,
+                borderRadius: 'var(--mo-r-lg)',
+                fontSize: font.base,
+                color: color.brand,
+              }}
+            >
+              <span>
+                <b>{outletSel.size}</b> {outletSel.size === 1 ? 'producto marcado' : 'productos marcados'} para el sale
+                {outletSel.size > slice.filter((p) => outletSel.has(p.id)).length && <span style={{ opacity: 0.8 }}> (algunos fuera de esta página o del filtro)</span>}
+              </span>
+              <Button size="sm" variant="ghost" tone="brand" onClick={() => setOutletSel(new Set())} style={{ marginLeft: 'auto' }}>
+                Limpiar selección
+              </Button>
+            </div>
+          )}
+
+          {ordenada.length === 0 ? (
+            <EmptyState icon="🔍" title="Ningún producto coincide" hint={busqueda ? `Nada para "${busqueda}".` : 'Probá aflojando los filtros.'} dashed />
+          ) : (
+            <>
+              <TableWrap maxHeight={640}>
+                <THead>
+                  <Tr>
+                    <Th width={36} />
+                    <Th width={72}>Foto</Th>
+                    {th('name', 'Producto')}
+                    {th('lastSale', 'Última venta')}
+                    {th('sales7', 'Ventas 7d', 'right')}
+                    {th('sales30', 'Ventas 30d', 'right')}
+                    {th('sales90', 'Ventas 90d', 'right')}
+                    {th('lifespan', 'Vida útil est.')}
+                    {th('stock', 'Stock', 'right')}
+                    <Th>Estado</Th>
+                  </Tr>
+                </THead>
+                <TBody>
+                  {slice.map((p) => (
+                    <FilaProducto
+                      key={p.id}
+                      p={p}
+                      modoVU={modoVU}
+                      tnIdx={tnIdx}
+                      datos={d}
+                      marcado={outletSel.has(p.id)}
+                      onMarcar={(on) => toggleOutlet(p.id, on)}
+                      expandido={expandido === p.id}
+                      onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
+                      onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
+                    />
+                  ))}
+                </TBody>
+              </TableWrap>
+
+              <Paginacion pagina={pageClamp} paginas={paginas} total={ordenada.length} onCambiar={setPage} singular="producto" plural="productos" />
+            </>
+          )}
+
+          {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
+        </>
       )}
-
-      {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
-    </div>
+    </DatosGate>
   )
 }
 
@@ -287,53 +306,67 @@ function FilaProducto({
   const foto = tnIdx ? imagenDe(p, tnIdx) : null
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: 'pointer', ...(expandido ? { background: '#eef2ff' } : {}) }}>
-        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
-          <input type="checkbox" checked={marcado} onChange={(e) => onMarcar(e.target.checked)} title="Marcar para sale" />
-        </td>
-        <td className="foto-col" onClick={(e) => e.stopPropagation()}>
-          {foto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              className="foto-thumb"
-              src={foto}
-              loading="lazy"
-              alt={p.name}
-              onClick={() => onFoto(imagenesDe(p, tnIdx!))}
+      <Tr onClick={onToggle} style={expandido ? { background: color.brandBg } : undefined}>
+        <Td align="center" style={{ cursor: 'default' }}>
+          <span onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={marcado}
+              onChange={(e) => onMarcar(e.target.checked)}
+              title="Marcar para el reporte de sale"
+              aria-label={`Marcar ${p.name} para el sale`}
+              style={{ accentColor: 'var(--mo-brand-solid)', cursor: 'pointer' }}
             />
-          ) : (
-            <div className="foto-thumb-placeholder">Sin foto</div>
-          )}
-        </td>
-        <td style={{ fontWeight: 500, maxWidth: 200 }}>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-          {meta ? <div style={{ fontSize: 11, color: '#aaa', marginTop: 1 }}>{meta}</div> : null}
-        </td>
-        <td style={{ color: '#666' }}>
-          {p.lastSale || <span style={{ color: '#aaa' }}>Sin ventas</span>}
-          <br />
-          <span style={{ fontSize: 11, color: '#aaa' }}>{p.daysSinceLast < 999 ? p.daysSinceLast + 'd atrás' : ''}</span>
-        </td>
-        <td style={{ fontWeight: 600, color: '#1D9E75' }}>{p.sales7}</td>
-        <td style={{ fontWeight: 500 }}>{p.sales30}</td>
-        <td>{p.sales90}</td>
-        <td style={{ color: '#666', fontSize: 12 }}>{lsStr}</td>
-        <td>
+          </span>
+        </Td>
+        <Td tall>
+          <span onClick={(e) => e.stopPropagation()}>
+            {foto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={foto}
+                loading="lazy"
+                alt={p.name}
+                onClick={() => onFoto(imagenesDe(p, tnIdx!))}
+                style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, background: color.bg2, cursor: 'zoom-in', display: 'block' }}
+              />
+            ) : (
+              <span style={{ display: 'flex', width: 44, height: 44, borderRadius: 6, background: color.bg2, color: color.mut2, fontSize: 9, alignItems: 'center', justifyContent: 'center' }}>
+                sin foto
+              </span>
+            )}
+          </span>
+        </Td>
+        <Td tall style={{ maxWidth: 240 }}>
+          <div style={{ fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+          {meta ? <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 1 }}>{meta}</div> : null}
+        </Td>
+        <Td tall style={{ color: color.mut }}>
+          {p.lastSale || <span style={{ color: color.mut2 }}>Sin ventas</span>}
+          {p.daysSinceLast < 999 && <div style={{ fontSize: font.xs, color: color.mut2 }}>{p.daysSinceLast}d atrás</div>}
+        </Td>
+        <Td align="right" style={{ fontWeight: 600, color: color.success }}>
+          {p.sales7}
+        </Td>
+        <Td align="right" strong>
+          {p.sales30}
+        </Td>
+        <Td align="right">{p.sales90}</Td>
+        <Td style={{ color: color.mut, fontSize: font.sm }}>{lsStr}</Td>
+        <Td align="right" tall>
           {p.stock}
-          <div className="mini-bar">
-            <div className="mini-bar-fill" style={{ width: `${Math.min(100, p.stock / 2)}%`, background: colorStock(p.stock) }} />
-          </div>
-        </td>
-        <td>
-          <span className={`badge ${p.phase.cls}`}>{p.phase.label}</span>
-        </td>
-      </tr>
+          <MiniBar pct={p.stock / 2} tono={colorStock(p.stock)} derecha />
+        </Td>
+        <Td>
+          <FaseBadge fase={p.phase} />
+        </Td>
+      </Tr>
       {expandido && (
-        <tr>
-          <td colSpan={10} style={{ padding: 0, background: '#f8f9ff', borderBottom: '2px solid #d0dbf5' }}>
+        <Tr>
+          <Td colSpan={10} style={{ padding: 0, background: color.bg, height: 'auto' }}>
             <DetalleVariante allVvar={datos.allVvar} allVariantes={datos.allVariantes} pid={p.id} />
-          </td>
-        </tr>
+          </Td>
+        </Tr>
       )}
     </>
   )

@@ -7,20 +7,43 @@ import { useCaducadosData } from '@/components/caducados/useCaducadosData'
 import { generarReporteCaducados } from '@/components/caducados/reporteCaducados'
 import { candidatos, depositosOrdenados, diasDesde } from '@/lib/caducados'
 import { dispararSyncStock } from '@/lib/sync-gn'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  Button,
+  EmptyState,
+  Esqueleto,
+  NumberField,
+  Notice,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  color,
+  font,
+  space,
+  useToast,
+} from '@/components/ui'
 
 /**
- * "🗑️ Productos caducados" (key `caducados`, BDI + Zattia) en Next — Tanda A #10.
+ * "🗑️ Productos caducados" (key `caducados`, BDI + Zattia).
  *
- * Port de cadInit/cadRender/cadExportPDF (index.html:12409-12475): candidatos a
- * depurar (sin stock en ningún depósito + última venta hace más de N días), con
- * fetches propios (stock por depósito + ventas ~2 años). Read-only: no borra nada
- * (la baja se hace a mano en TN y GN). El botón "Traer stock de GN" sólo dispara el
- * sync. Lógica pura en `lib/caducados.ts`. Flip directo.
+ * Candidatos a depurar: sin stock en ningún depósito y última venta hace más de N días.
+ * Read-only —no borra nada: la baja se hace a mano en TN y GN—; el botón de GN solo
+ * dispara el sync. La lógica pura vive en `lib/caducados.ts`.
+ *
+ * Rediseño jul-2026 (patrón Listado): la advertencia de "verificá físicamente antes de
+ * eliminar" era gris de 11px abajo del contador, cuando es lo más importante de la
+ * pantalla —acá se decide dar de baja un producto—; ahora es un aviso con tono. El
+ * criterio (días sin venta) y las dos acciones van al header, y el stock por depósito se
+ * lee como una lista de etiquetas en vez de un renglón corrido.
  */
 export function Caducados() {
   const { datos } = useDatosMonitor()
   const { marca } = useSesion()
   const { datos: cad, cargando, recargar } = useCaducadosData(marca)
+  const toast = useToast()
 
   const [dias, setDias] = useState(30)
   const [syncLabel, setSyncLabel] = useState<string | null>(null)
@@ -34,95 +57,88 @@ export function Caducados() {
 
   async function traerStockGN() {
     if (syncLabel) return
-    setSyncLabel('⏳ Pidiendo stock a GN…')
+    setSyncLabel('Pidiendo stock a GN…')
     try {
       const done = await dispararSyncStock(marca, setSyncLabel)
-      setSyncLabel('↻ Recargando…')
+      setSyncLabel('Recargando…')
       await recargar()
-      if (!done) alert('La sincronización con GN tardó más de lo normal. Te muestro lo último disponible.')
+      if (!done) toast.aviso('La sincronización con GN tardó más de lo normal. Te muestro lo último disponible.')
+      else toast.ok('Stock actualizado')
     } catch (e) {
-      alert('Error: ' + (e as Error).message)
+      toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncLabel(null)
     }
   }
 
-  async function exportar() {
-    await generarReporteCaducados(cands, marca, Math.max(1, dias), new Date())
-  }
-
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 5 }}>
-            Días sin venta:
-            <input type="number" min={1} value={dias} onChange={(e) => setDias(parseInt(e.target.value) || 30)} style={{ width: 60, textAlign: 'center' }} />
-          </label>
-          <button className="btn-sm" onClick={traerStockGN} disabled={!!syncLabel} title="Traé el stock más nuevo de GN para verificar que estos productos están realmente en 0" style={{ background: '#378ADD', color: '#fff' }}>
-            {syncLabel || '🔄 Traer stock de GN'}
-          </button>
-          <button className="btn-sm" onClick={exportar} disabled={!cands.length} style={{ background: '#16A34A', color: '#fff' }}>📄 Exportar lista</button>
-        </div>
-      </div>
+    <>
+      <HeaderAcciones>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut }}>
+          Días sin venta
+          <NumberField value={dias} onChange={(n) => setDias(n || 30)} min={1} width={80} />
+        </label>
+        <Button variant="outline" onClick={() => void traerStockGN()} loading={!!syncLabel} title="Trae el stock más nuevo de GN para verificar que estos productos están realmente en 0">
+          {syncLabel || 'Traer stock de GN'}
+        </Button>
+        <Button variant="solid" tone="brand" onClick={() => void generarReporteCaducados(cands, marca, Math.max(1, dias), new Date())} disabled={!cands.length}>
+          Exportar lista
+        </Button>
+      </HeaderAcciones>
 
-      <div style={{ marginTop: 12 }}>
-        {cargando ? (
-          <div style={{ padding: 20, color: '#9CA3AF' }}>Cargando…</div>
-        ) : (
-          <>
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
-              <b>{cands.length}</b> producto(s) caducado(s): sin stock y última venta hace más de <b>{Math.max(1, dias)}</b> días.
-            </div>
-            {cands.length === 0 ? (
-              <div style={{ color: '#16A34A', padding: 10 }}>No hay productos para depurar con este criterio 🎉</div>
-            ) : (
-              <>
-                <div style={{ fontSize: 11.5, color: '#9CA3AF', marginBottom: 8 }}>
-                  ⚠️ Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite borrar por API).
-                </div>
-                <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, overflow: 'hidden', overflowX: 'auto' }}>
-                  <table style={{ tableLayout: 'fixed' }}>
-                    <colgroup>
-                      <col style={{ width: '34%' }} />
-                      <col style={{ width: '24%' }} />
-                      <col style={{ width: '16%' }} />
-                      <col style={{ width: '26%' }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th>Producto</th>
-                        <th>Categoría</th>
-                        <th>Última venta</th>
-                        <th>Stock por depósito</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cands.map((c) => (
-                        <tr key={c.id}>
-                          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
-                          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6B7280' }}>{c.cat}</td>
-                          <td style={{ color: '#B45309' }}>
-                            {c.last} <span style={{ color: '#9CA3AF' }}>({diasDesde(c.last, new Date())}d)</span>
-                          </td>
-                          <td style={{ fontSize: 11.5, color: '#6B7280' }}>
-                            {depositos.map((s, i) => (
-                              <span key={s}>
-                                {i > 0 ? ' · ' : ''}
-                                {s}: <b style={{ color: '#16A34A' }}>{c.stores[s] || 0}</b>
-                              </span>
-                            ))}
-                          </td>
-                        </tr>
+      {cargando ? (
+        <Esqueleto forma="tabla" filas={8} />
+      ) : cands.length === 0 ? (
+        <EmptyState icon="🎉" title="No hay productos para depurar con este criterio" hint={`Nada quedó sin stock y sin vender por más de ${Math.max(1, dias)} días.`} dashed />
+      ) : (
+        <>
+          <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
+            <b>{cands.length}</b> {cands.length === 1 ? 'producto caducado' : 'productos caducados'}: sin stock y con la última venta hace más de{' '}
+            <b>{Math.max(1, dias)}</b> días.
+          </p>
+
+          <Notice tone="warning" icon="⚠" style={{ marginBottom: space[3] }}>
+            Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite borrar por API).
+          </Notice>
+
+          <TableWrap maxHeight={620}>
+            <THead>
+              <Tr>
+                <Th>Producto</Th>
+                <Th>Categoría</Th>
+                <Th>Última venta</Th>
+                <Th>Stock por depósito</Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {cands.map((c) => (
+                <Tr key={c.id}>
+                  <Td strong style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {c.name}
+                  </Td>
+                  <Td style={{ color: color.mut }}>{c.cat}</Td>
+                  <Td>
+                    <span style={{ color: color.warningInk, fontWeight: 600 }}>{c.last}</span>{' '}
+                    <span style={{ color: color.mut2 }}>({diasDesde(c.last, new Date())}d)</span>
+                  </Td>
+                  <Td tall>
+                    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                      {depositos.map((s) => (
+                        <span
+                          key={s}
+                          style={{ fontSize: font.xs, color: color.mut, background: color.bg2, borderRadius: 6, padding: '2px 7px', whiteSpace: 'nowrap' }}
+                        >
+                          {s} <b style={{ color: color.ink2 }}>{c.stores[s] || 0}</b>
+                        </span>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+                    </span>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </TableWrap>
+        </>
+      )}
+    </>
   )
 }

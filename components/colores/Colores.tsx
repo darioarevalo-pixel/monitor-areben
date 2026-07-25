@@ -15,32 +15,64 @@ import {
   type FiltrosAgot,
 } from '@/lib/colores'
 import type { Agotamiento } from '@/lib/etl/tipos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  Badge,
+  BuscarInput,
+  Button,
+  Card,
+  DatosGate,
+  EmptyState,
+  FilterBar,
+  Input,
+  Select,
+  TBody,
+  THead,
+  TableWrap,
+  Tabs,
+  Td,
+  Th,
+  Tr,
+  chartColor,
+  color,
+  font,
+  space,
+  useFiltroUrl,
+} from '@/components/ui'
 
 /**
- * "🎨 Por color" (key `colores`, Zattia) en Next — Tanda A #8.
+ * "🎨 Por color" (key `colores`, Zattia).
  *
- * Port de renderColores/reloadColoresPanel (index.html:5713, 5688) y renderAgotamiento
- * (5808): dos sub-pestañas — Ventas por color (selección de colores + chart + tabla) y
- * Análisis de agotamiento (ratio por color congelado al primer sellout). Read-only
- * sobre `allColoresSales`/`allAgotamientoData`; lógica en `lib/colores.ts`. Flip directo.
+ * Dos sub-pestañas: Ventas por color (selección de colores + gráfico + tabla) y Análisis
+ * de agotamiento (ratio por color congelado al primer sellout). Read-only sobre
+ * `allColoresSales`/`allAgotamientoData`; la lógica vive en `lib/colores.ts`.
+ *
+ * Rediseño jul-2026 (patrón Analítica): las sub-pestañas van al header y quedan en la
+ * URL, así se puede compartir el link de "agotamiento". Se sacan las últimas clases del
+ * CSS legacy que usaba esta sección (`.tabs`, `.fm-models-grid`, `.agot-*`): las tarjetas
+ * de agotamiento pasan a Card y las barras de color al sistema.
  */
 export function Colores() {
   const { datos, error } = useDatosMonitor()
-  const [sub, setSub] = useState<'ventas' | 'agotamiento'>('ventas')
-
-  if (error && !datos) {
-    return <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
-  }
-  if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
+  const [sub, setSub] = useFiltroUrl<'ventas' | 'agotamiento'>('sub', 'ventas')
 
   return (
-    <div>
-      <div className="tabs" style={{ marginBottom: 16 }}>
-        <button className={`tab${sub === 'ventas' ? ' active' : ''}`} onClick={() => setSub('ventas')}>Ventas por color</button>
-        <button className={`tab${sub === 'agotamiento' ? ' active' : ''}`} onClick={() => setSub('agotamiento')}>Análisis de agotamiento</button>
-      </div>
-      {sub === 'ventas' ? <PanelVentas /> : <PanelAgotamiento data={datos.allAgotamientoData} />}
-    </div>
+    <>
+      <HeaderAcciones>
+        <Tabs
+          items={[
+            { key: 'ventas', label: 'Ventas por color' },
+            { key: 'agotamiento', label: 'Agotamiento' },
+          ]}
+          value={sub}
+          onChange={(k) => setSub(k as 'ventas' | 'agotamiento')}
+        />
+      </HeaderAcciones>
+
+      <DatosGate datos={datos} error={error} esqueleto="tabla">
+        {(d) => (sub === 'ventas' ? <PanelVentas /> : <PanelAgotamiento data={d.allAgotamientoData} />)}
+      </DatosGate>
+    </>
   )
 }
 
@@ -52,8 +84,8 @@ function PanelVentas() {
   const [search, setSearch] = useState('')
   const [periodo, setPeriodo] = useState(12)
   const [colorSearch, setColorSearch] = useState('')
-  // Colores DESTILDADOS. Al cambiar búsqueda/período se limpia (el legacy rearmaba
-  // los checkboxes todos tildados). Se hace en los handlers, no en un effect.
+  // Colores DESTILDADOS. Al cambiar búsqueda/período se limpia (el legacy rearmaba los
+  // checkboxes todos tildados). Se hace en los handlers, no en un effect.
   const [excluidos, setExcluidos] = useState<Set<string>>(new Set())
 
   const filtered = useMemo(() => filtrarVentas(sales, search, cutoffDe(periodo, months)), [sales, search, periodo, months])
@@ -61,95 +93,129 @@ function PanelVentas() {
   const checked = useMemo(() => new Set(colores.filter((c) => !excluidos.has(c))), [colores, excluidos])
   const { filas, total } = useMemo(() => ventasPorColor(filtered, checked), [filtered, checked])
 
-  function cambiarSearch(v: string) { setSearch(v); setExcluidos(new Set()) }
-  function cambiarPeriodo(v: number) { setPeriodo(v); setExcluidos(new Set()) }
+  function cambiarSearch(v: string) {
+    setSearch(v)
+    setExcluidos(new Set())
+  }
+  function cambiarPeriodo(v: number) {
+    setPeriodo(v)
+    setExcluidos(new Set())
+  }
   function toggleColor(c: string, on: boolean) {
-    setExcluidos((s) => { const n = new Set(s); if (on) n.delete(c); else n.add(c); return n })
+    setExcluidos((s) => {
+      const n = new Set(s)
+      if (on) n.delete(c)
+      else n.add(c)
+      return n
+    })
   }
 
   const alturaChart = Math.max(240, filas.length * 26 + 60)
 
   return (
-    <div>
-      <div className="toolbar">
-        <input type="text" placeholder="Buscar producto (ej: TOP)..." value={search} onChange={(e) => cambiarSearch(e.target.value)} style={{ width: 200 }} />
-        <select value={periodo} onChange={(e) => cambiarPeriodo(parseInt(e.target.value))}>
+    <>
+      <FilterBar>
+        <BuscarInput value={search} onChange={cambiarSearch} placeholder="Buscar producto (ej: TOP)…" />
+        <Select value={periodo} onChange={(e) => cambiarPeriodo(parseInt(e.target.value))} style={{ width: 180 }} aria-label="Período">
           <option value={3}>Últimos 3 meses</option>
           <option value={6}>Últimos 6 meses</option>
           <option value={12}>Últimos 12 meses</option>
           <option value={0}>Todos</option>
-        </select>
-      </div>
+        </Select>
+      </FilterBar>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-          <strong style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '.04em' }}>Colores</strong>
-          <input type="text" placeholder="Buscar color..." value={colorSearch} onChange={(e) => setColorSearch(e.target.value)} style={{ flex: 1, minWidth: 120, padding: '4px 8px', fontSize: 12 }} />
-          <button className="btn-sm" onClick={() => setExcluidos(new Set())}>Todos</button>
-          <button className="btn-sm" onClick={() => setExcluidos(new Set(colores))}>Ninguno</button>
+      <Card padding={4} style={{ marginBottom: space[4] }}>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+          <strong style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            Colores ({checked.size}/{colores.length})
+          </strong>
+          <Input value={colorSearch} onChange={(e) => setColorSearch(e.target.value)} placeholder="Buscar color…" style={{ flex: 1, minWidth: 140, maxWidth: 220 }} />
+          <Button size="sm" variant="outline" onClick={() => setExcluidos(new Set())}>
+            Todos
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setExcluidos(new Set(colores))}>
+            Ninguno
+          </Button>
         </div>
-        <div className="fm-models-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 2, maxHeight: 200, overflowY: 'auto' }}>
           {colores.map((c) => {
             const oculto = colorSearch && !c.toLowerCase().includes(colorSearch.toLowerCase())
             return (
-              <label key={c} className="fm-model-label" style={{ display: oculto ? 'none' : 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', padding: '3px 5px', borderRadius: 4 }}>
-                <input type="checkbox" checked={checked.has(c)} onChange={(e) => toggleColor(c, e.target.checked)} />
+              <label
+                key={c}
+                style={{
+                  display: oculto ? 'none' : 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: font.sm,
+                  color: color.ink2,
+                  cursor: 'pointer',
+                  padding: '4px 6px',
+                  borderRadius: 6,
+                }}
+              >
+                <input type="checkbox" checked={checked.has(c)} onChange={(e) => toggleColor(c, e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
                 {c}
               </label>
             )
           })}
         </div>
-      </div>
+      </Card>
 
-      <div className="card">
-        <div className="chart-wrap" style={{ height: alturaChart }}>
+      <Card padding={4} style={{ marginBottom: space[4] }}>
+        <div style={{ height: alturaChart }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={filas} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-              <CartesianGrid horizontal={false} stroke="#f0f0f0" />
-              <XAxis type="number" tick={{ fill: '#888', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="color" width={120} tick={{ fill: '#444', fontSize: 12 }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E5E7EB' }} />
-              <Bar dataKey="qty" fill="#D85A30" radius={[0, 4, 4, 0]} />
+              <CartesianGrid horizontal={false} stroke={chartColor.grid} />
+              <XAxis type="number" tick={{ fill: chartColor.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="color" width={120} tick={{ fill: '#344054', fontSize: 12 }} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ fill: chartColor.brandSoft }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${chartColor.grid}` }} />
+              <Bar dataKey="qty" fill={chartColor.brand} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </Card>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], marginBottom: space[2] }}>
+        <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink }}>Por color</h2>
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          {total.toLocaleString('es-AR')} {total === 1 ? 'unidad' : 'unidades'} · {filas.length} {filas.length === 1 ? 'color' : 'colores'}
+        </span>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
-        <div style={{ padding: '12px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Por color</span>
-          <span style={{ fontSize: 11, color: '#aaa' }}>{total.toLocaleString('es-AR')} unidades · {filas.length} colores</span>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 32 }}>#</th>
-              <th>Color</th>
-              <th>Vendidas</th>
-              <th>% del total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((f, i) => {
-              const pct = total > 0 ? (f.qty / total) * 100 : 0
-              return (
-                <tr key={f.color}>
-                  <td style={{ color: '#888', fontSize: 11, width: 32 }}>{i + 1}</td>
-                  <td style={{ fontWeight: 500 }}>{f.color}</td>
-                  <td style={{ fontWeight: 600 }}>{f.qty.toLocaleString('es-AR')}</td>
-                  <td style={{ color: '#666' }}>
-                    {pct.toFixed(1)}%
-                    <span style={{ display: 'inline-block', width: 60, height: 4, background: '#e5e5e5', borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
-                      <span style={{ display: 'block', width: `${Math.min(100, pct)}%`, height: '100%', background: '#D85A30', borderRadius: 2 }} />
+      <TableWrap maxHeight={520}>
+        <THead>
+          <Tr>
+            <Th width={40}>#</Th>
+            <Th>Color</Th>
+            <Th align="right">Vendidas</Th>
+            <Th>% del total</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {filas.map((f, i) => {
+            const pct = total > 0 ? (f.qty / total) * 100 : 0
+            return (
+              <Tr key={f.color}>
+                <Td style={{ color: color.mut2, fontSize: font.xs }}>{i + 1}</Td>
+                <Td strong>{f.color}</Td>
+                <Td align="right" strong>
+                  {f.qty.toLocaleString('es-AR')}
+                </Td>
+                <Td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: color.mut }}>
+                    <span style={{ width: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                    <span style={{ display: 'inline-block', width: 70, height: 5, background: color.bg2, borderRadius: 3 }}>
+                      <span style={{ display: 'block', width: `${Math.min(100, pct)}%`, height: '100%', background: color.brandSolid, borderRadius: 3 }} />
                     </span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                  </span>
+                </Td>
+              </Tr>
+            )
+          })}
+        </TBody>
+      </TableWrap>
+    </>
   )
 }
 
@@ -162,28 +228,38 @@ function PanelAgotamiento({ data }: { data: Agotamiento[] }) {
   const lista = useMemo(() => filtrarAgotamiento(data, { search, prov, estado }), [data, search, prov, estado])
 
   return (
-    <div>
-      <div className="toolbar" style={{ marginBottom: 16 }}>
-        <input type="text" placeholder="Buscar producto..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220 }} />
-        <select value={prov} onChange={(e) => setProv(e.target.value)}>
+    <>
+      <FilterBar>
+        <BuscarInput value={search} onChange={setSearch} placeholder="Buscar producto…" />
+        <Select value={prov} onChange={(e) => setProv(e.target.value)} style={{ width: 210 }} aria-label="Proveedor">
           <option value="">Todos los proveedores</option>
-          {provs.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={estado} onChange={(e) => setEstado(e.target.value as FiltrosAgot['estado'])}>
+          {provs.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </Select>
+        <Select value={estado} onChange={(e) => setEstado(e.target.value as FiltrosAgot['estado'])} style={{ width: 180 }} aria-label="Estado">
           <option value="">Todos</option>
           <option value="agotado">Con agotamiento</option>
           <option value="en_curso">En curso</option>
-        </select>
-      </div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.6 }}>
-        El porcentaje de cada color se congela en el momento en que se agota la primera variante, evitando el sesgo que genera continuar acumulando ventas del color sobreviviente.
-      </div>
+        </Select>
+      </FilterBar>
+
+      <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[4], lineHeight: 1.6, maxWidth: 760 }}>
+        El porcentaje de cada color se congela en el momento en que se agota la primera variante: así no se acumulan las ventas del color sobreviviente, que sesgarían la comparación.
+      </p>
+
       {lista.length === 0 ? (
-        <div className="agot-empty">No hay productos con múltiples colores para analizar.</div>
+        <EmptyState icon="🎨" title="No hay productos con varios colores para analizar" hint={search || prov || estado ? 'Probá aflojando los filtros.' : undefined} dashed />
       ) : (
-        lista.map((prod) => <TarjetaAgot key={prod.product_id} prod={prod} />)
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: space[3] }}>
+          {lista.map((prod) => (
+            <TarjetaAgot key={prod.product_id} prod={prod} />
+          ))}
+        </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -191,30 +267,54 @@ function TarjetaAgot({ prod }: { prod: Agotamiento }) {
   const colores = coloresDeAgotamiento(prod)
   const refLabel = prod.firstSelloutDate ? 'Ratio al momento del agotamiento' : 'Ratio acumulado actual'
   return (
-    <div className="agot-card">
-      <div className="agot-prod-name">{prod.product_name}</div>
-      <div className="agot-prov">{prod.proveedor ? prod.proveedor : 'Sin proveedor'}</div>
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>{refLabel}</div>
+    <Card padding={4}>
+      <div style={{ fontWeight: 700, fontSize: font.md, color: color.ink }}>{prod.product_name}</div>
+      <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>{prod.proveedor || 'Sin proveedor'}</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2], textTransform: 'uppercase', letterSpacing: '.04em' }}>{refLabel}</div>
+
       {colores.map((c) => (
-        <div key={c.color} className="agot-color-row">
-          <span className="agot-color-name" style={c.isSoldOut ? { color: '#DC2626', fontWeight: 600 } : undefined} title={c.color}>
-            {c.color}{c.isSoldOut ? ' ✗' : ''}
+        <div key={c.color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+          <span
+            style={{
+              width: 92,
+              flexShrink: 0,
+              fontSize: font.sm,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              ...(c.isSoldOut ? { color: color.danger, fontWeight: 600 } : { color: color.ink2 }),
+            }}
+            title={c.color}
+          >
+            {c.color}
+            {c.isSoldOut ? ' ✗' : ''}
           </span>
-          <div className="agot-bar-wrap"><div className="agot-bar-fill" style={{ width: `${Math.min(100, c.pct).toFixed(1)}%`, background: c.palette }} /></div>
-          <span className="agot-pct">{c.pct.toFixed(1)}%</span>
-          <span className="agot-units">{c.sold} / {c.initialStock} u</span>
+          <span style={{ flex: 1, height: 6, background: color.bg2, borderRadius: 3, overflow: 'hidden' }}>
+            <span style={{ display: 'block', height: '100%', borderRadius: 3, width: `${Math.min(100, c.pct).toFixed(1)}%`, background: c.palette, transition: 'width .3s' }} />
+          </span>
+          <span style={{ width: 44, textAlign: 'right', fontSize: font.sm, fontWeight: 600, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{c.pct.toFixed(1)}%</span>
+          <span style={{ width: 72, textAlign: 'right', fontSize: font.xs, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>
+            {c.sold} / {c.initialStock} u
+          </span>
         </div>
       ))}
-      <div className="agot-footer">
+
+      <div style={{ marginTop: space[3], paddingTop: space[2], borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut, display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'center' }}>
         {prod.firstSelloutDate ? (
-          <span className="agot-badge-agotado">Agotamiento {fmtDate(prod.firstSelloutDate)}</span>
+          <Badge tone="danger" subtle>
+            Agotamiento {fmtDate(prod.firstSelloutDate)}
+          </Badge>
         ) : (
-          <span className="agot-badge-curso">En curso</span>
+          <Badge tone="success" subtle>
+            En curso
+          </Badge>
         )}
         {prod.firstSelloutDate && prod.soldOutColors.length ? (
-          <span>Primer agotado: <strong>{prod.soldOutColors.join(', ')}</strong></span>
+          <span>
+            Primer agotado: <strong style={{ color: color.ink2 }}>{prod.soldOutColors.join(', ')}</strong>
+          </span>
         ) : null}
       </div>
-    </div>
+    </Card>
   )
 }
