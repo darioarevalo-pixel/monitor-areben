@@ -6,21 +6,16 @@ import { aplicarTally, contarPorEstado, ordenar, sanearImportado, tallyVotos } f
 import { crearRonda, subirImagen, traerBoletas, VOT_PAGE } from '@/lib/disenos/cliente'
 import { reporteDecisiones, reporteGaleria, reporteLimpio } from '@/lib/disenos/pdf'
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from '@/lib/disenos/tipos'
-
-const KEY = 'monitor_designboard_v1'
+import { borrarDiseno, guardarDisenos, leerDisenos, leerLocales, localesParaImportar } from '@/lib/disenos/persistencia'
+import { useSesion } from '@/components/SesionProvider'
 let seq = 0
 const newId = () => 'd' + Date.now() + '_' + seq++
 
-function lsGetArr(): Diseno[] {
-  try {
-    const r = localStorage.getItem(KEY)
-    return r ? (JSON.parse(r) as Diseno[]) : []
-  } catch {
-    return []
-  }
-}
-
 export function Disenos() {
+  const { marca } = useSesion()
+  // Lo que quedó en ESTE navegador y todavía no está arriba: se ofrece subirlo una vez.
+  const [porImportar, setPorImportar] = useState<Diseno[]>([])
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)
   const [disenos, setDisenos] = useState<Diseno[]>([])
   const [view, setView] = useState<'kanban' | 'galeria'>('kanban')
   const [orden, setOrden] = useState<OrdenDiseno>('carga')
@@ -37,11 +32,18 @@ export function Disenos() {
   const fileRef = useRef<HTMLInputElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
-  // Cargar de localStorage al montar (en effect, no en useState, por el SSR).
+  // El tablero se lee de la BASE (es compartido). Lo del navegador solo se mira para
+  // ofrecer subir lo que haya quedado de la época en que se guardaba local.
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      const d = lsGetArr()
+      let d: Diseno[] = []
+      try {
+        d = await leerDisenos(marca)
+        if (vivo) setPorImportar(localesParaImportar(leerLocales(), d))
+      } catch (e) {
+        if (vivo) setErrorCarga(e instanceof Error ? e.message : String(e))
+      }
       if (!vivo) return
       setDisenos(d)
       try {
@@ -56,17 +58,33 @@ export function Disenos() {
     return () => {
       vivo = false
     }
-  }, [])
+  }, [marca])
 
-  // Persistir (escribir localStorage ES el efecto).
+  /**
+   * Persistir en la base: SOLO lo que cambió.
+   *
+   * Se compara contra lo último guardado en vez de mandar el tablero entero (que con las
+   * fotos embebidas son megas por vuelta) y así dos personas trabajando a la vez no se
+   * pisan: cada una escribe sus diseños. Los borrados se mandan aparte.
+   */
+  const ultimo = useRef<Map<string, string>>(new Map())
   useEffect(() => {
     if (!hidratado) return
-    try {
-      localStorage.setItem(KEY, JSON.stringify(disenos))
-    } catch {
-      alert('No se pudo guardar: el navegador llegó al límite de almacenamiento. Generá el reporte y vaciá diseños ya decididos para liberar espacio.')
-    }
-  }, [disenos, hidratado])
+    const previo = ultimo.current
+    const ahora = new Map(disenos.map((d) => [String(d.id), JSON.stringify(d)]))
+    const cambiados = disenos.filter((d) => previo.get(String(d.id)) !== ahora.get(String(d.id)))
+    const borrados = [...previo.keys()].filter((id) => !ahora.has(id))
+    ultimo.current = ahora
+    if (!cambiados.length && !borrados.length) return
+    void (async () => {
+      try {
+        await guardarDisenos(marca, cambiados)
+        for (const id of borrados) await borrarDiseno(marca, id)
+      } catch (e) {
+        alert('No se pudo guardar el tablero: ' + (e instanceof Error ? e.message : String(e)))
+      }
+    })()
+  }, [disenos, hidratado, marca])
   useEffect(() => {
     if (hidratado) try { localStorage.setItem('monitor_db_view', view) } catch {}
   }, [view, hidratado])
@@ -202,6 +220,36 @@ export function Disenos() {
 
   return (
     <div className="card">
+      {errorCarga && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '9px 13px', fontSize: 13, color: '#B91C1C', marginBottom: 10 }}>
+          No se pudo leer el tablero compartido: {errorCarga}. Lo que cargues ahora podría no guardarse — recargá antes de seguir.
+        </div>
+      )}
+
+      {/* El tablero pasó a ser compartido: lo que quedó en este navegador de la época en que
+          se guardaba local se ofrece subir una vez. No se borra nada del navegador. */}
+      {porImportar.length > 0 && (
+        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9, padding: '9px 13px', fontSize: 13, color: '#92400E', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>
+            El tablero ahora es <b>compartido</b>. En esta computadora {porImportar.length === 1 ? 'quedó 1 diseño' : `quedaron ${porImportar.length} diseños`} que
+            todavía no están arriba.
+          </span>
+          <button
+            className="btn-sm"
+            style={{ background: '#B45309', color: '#fff', border: 'none', marginLeft: 'auto' }}
+            onClick={() => {
+              setDisenos((prev) => [...porImportar, ...prev])
+              setPorImportar([])
+            }}
+          >
+            ⬆ Subirlos
+          </button>
+          <button className="btn-sm" style={{ background: '#fff', border: '1px solid #D1D5DB' }} onClick={() => setPorImportar([])}>
+            Ahora no
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn-sm" onClick={() => fileRef.current?.click()} style={{ background: '#378ADD', color: '#fff' }}>📁 Cargar imágenes</button>

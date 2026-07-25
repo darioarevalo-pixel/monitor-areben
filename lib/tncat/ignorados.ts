@@ -10,7 +10,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
 
-const API = '/api/tienda?recurso=ignorados'
+const API = '/api/datos?recurso=ignorados'
 
 export type Ignorado = { tn_id: string; nombre: string | null; motivo: string | null }
 
