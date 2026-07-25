@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { agregarMensaje, borrarMensaje, editarMensaje, semillaFresca, type GrupoMensajes } from '@/lib/crm/banco'
 import { guardarBanco, leerBanco } from '@/lib/kv/cliente'
+import { Button, useConfirmar } from '@/components/ui'
 
 /**
  * Banco de mensajes. Port de index.html:14293-14360.
@@ -21,6 +22,7 @@ import { guardarBanco, leerBanco } from '@/lib/kv/cliente'
 type Props = { onCerrar: () => void }
 
 export function BancoMensajes({ onCerrar }: Props) {
+  const { confirmar } = useConfirmar()
   const [banco, setBanco] = useState<GrupoMensajes[] | null>(null)
   const [cargado, setCargado] = useState(false)
   const [editando, setEditando] = useState<{ gi: number; mi: number } | null>(null)
@@ -121,7 +123,7 @@ export function BancoMensajes({ onCerrar }: Props) {
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                             <button className="btn-sm" onClick={() => copiar(m, id)}>{copiado === id ? '✓ Copiado' : '📋 Copiar'}</button>
                             <button className="btn-sm" onClick={() => { setEditando({ gi, mi }); setBorrador(m) }}>✏️ Editar</button>
-                            <button className="btn-sm" onClick={() => { if (confirm('¿Borrar este mensaje?')) persistir(borrarMensaje(banco, gi, mi)) }}>🗑️</button>
+                            <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar el mensaje', tono: 'danger', ok: 'Borrar', mensaje: 'Se saca del banco compartido: no lo va a ver nadie más.' })) persistir(borrarMensaje(banco, gi, mi)) })()}>🗑️</Button>
                           </div>
                         </>
                       )}

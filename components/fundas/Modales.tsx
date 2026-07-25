@@ -1,33 +1,45 @@
 'use client'
 
+/**
+ * Los diálogos de Fundas.
+ *
+ * Nacieron acá porque el kit todavía no tenía modal y el legacy usaba `confirm()`/
+ * `prompt()`. Con el rediseño jul-2026 pasan a apoyarse en `Modal` del kit: misma API
+ * para quien los usa (Fundas no cambia), pero heredan lo que estos no hacían —cerrar con
+ * Escape, bloquear el scroll del fondo, devolver el foco, y en el teléfono apoyarse abajo
+ * para que llegue el pulgar.
+ *
+ * Para código nuevo, el camino es `useConfirmar()` (async) y no estos componentes: se
+ * mantienen porque Fundas maneja su apertura con estado propio.
+ */
 import { useEffect, useRef, useState } from 'react'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 
-const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex',
-  alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16,
-}
-const card: React.CSSProperties = {
-  background: '#fff', borderRadius: 14, padding: '22px 24px', width: '100%', maxWidth: 380,
-  boxShadow: '0 12px 40px rgba(0,0,0,.18)',
-}
-const botones: React.CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }
-
-/** Confirmación con dos botones. Reemplaza `confirm()` del legacy. */
+/** Confirmación con dos botones. */
 export function ConfirmModal({ mensaje, onSi, onNo }: { mensaje: string; onSi: () => void; onNo: () => void }) {
   return (
-    <div style={overlay} onClick={onNo}>
-      <div style={card} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontSize: 14, color: '#374151', whiteSpace: 'pre-line', lineHeight: 1.5 }}>{mensaje}</div>
-        <div style={botones}>
-          <button className="btn-sm" onClick={onNo}>Cancelar</button>
-          <button className="btn-sm" onClick={onSi} style={{ background: '#378ADD', color: '#fff' }}>Aceptar</button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      abierto
+      onCerrar={onNo}
+      titulo="¿Confirmás?"
+      pie={
+        <>
+          <Button variant="outline" onClick={onNo}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" onClick={onSi} data-foco>
+            Aceptar
+          </Button>
+        </>
+      }
+    >
+      <div style={{ whiteSpace: 'pre-line' }}>{mensaje}</div>
+    </Modal>
   )
 }
 
-/** Pide un texto con un input. Reemplaza `prompt()` del legacy. */
+/** Pide un texto con un input. */
 export function PromptModal({
   mensaje,
   valorInicial,
@@ -41,23 +53,38 @@ export function PromptModal({
 }) {
   const [valor, setValor] = useState(valorInicial)
   const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => { ref.current?.select() }, [])
+  useEffect(() => {
+    ref.current?.select()
+  }, [])
   return (
-    <div style={overlay} onClick={onCancel}>
-      <div style={card} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontSize: 14, color: '#374151', whiteSpace: 'pre-line', lineHeight: 1.5, marginBottom: 10 }}>{mensaje}</div>
-        <input
-          ref={ref}
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onOk(valor); if (e.key === 'Escape') onCancel() }}
-          style={{ width: '100%' }}
-        />
-        <div style={botones}>
-          <button className="btn-sm" onClick={onCancel}>Cancelar</button>
-          <button className="btn-sm" onClick={() => onOk(valor)} style={{ background: '#378ADD', color: '#fff' }}>Aceptar</button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      abierto
+      onCerrar={onCancel}
+      cerrarConFondo={false} // hay algo tipeado: perderlo por un clic afuera duele
+      titulo="Completá el dato"
+      pie={
+        <>
+          <Button variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" onClick={() => onOk(valor)}>
+            Aceptar
+          </Button>
+        </>
+      }
+    >
+      <div style={{ whiteSpace: 'pre-line', marginBottom: 10 }}>{mensaje}</div>
+      <input
+        ref={ref}
+        className="mo-input"
+        data-foco
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onOk(valor)
+          if (e.key === 'Escape') onCancel()
+        }}
+      />
+    </Modal>
   )
 }

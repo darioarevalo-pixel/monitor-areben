@@ -22,6 +22,7 @@ import {
 import { exportarSalePDF, exportarSaleXLSX } from '@/lib/comisiones/export'
 import type { Celda, ComCfg, ResultadoMargen } from '@/lib/comisiones/tipos'
 import type { Producto } from '@/lib/etl/tipos'
+import { Button, Card, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 function obtenerPass(): string {
   let p = leerAdminPass()
@@ -36,6 +37,8 @@ const CELDA_DEF: Celda = { comision: 0, finan: 0, dias: 0, descuento: 0, aplicaI
 const num = (s: string) => parseFloat(s) || 0
 
 export function Comisiones() {
+  const { avisar } = useConfirmar()
+  const toast = useToast()
   const { marca, perfil } = useSesion()
   const admin = esAdminFn(perfil)
   const { datos } = useDatosMonitor()
@@ -117,31 +120,31 @@ export function Comisiones() {
   return (
     <div>
       {/* PARTE 1: CONFIGURACIÓN */}
-      <div className="card">
+      <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>1 · Configuración</div>
+          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>1 · Configuración</div>
           <span style={{ fontSize: 11, color: com.shareStatus.color }}>{com.shareStatus.txt}</span>
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           {(['iva', 'iibb', 'drei', 'ganancias'] as const).map((k) => (
             <label key={k} style={lbl}>
               {k === 'ganancias' ? 'Ganancias' : k.toUpperCase()} %<br />
-              <input type="number" step={0.1} value={cfg.imp[k]} onChange={(e) => setImp(k, e.target.value)} style={{ width: 80, ...inp }} />
+              <input type="number" step={0.1} value={cfg.imp[k]} onChange={(e) => setImp(k, e.target.value)} className="mo-input mo-input--num" style={{ width: 80 }} />
             </label>
           ))}
           <label style={{ fontSize: 12, color: '#444', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: '#F3F4F6', borderRadius: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={cfg.saldoIva} onChange={(e) => setSaldo(e.target.checked)} /> Saldo IVA a favor <b>{cfg.saldoIva ? 'ACTIVO' : 'AGOTADO'}</b>
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={cfg.saldoIva} onChange={(e) => setSaldo(e.target.checked)} /> Saldo IVA a favor <b>{cfg.saldoIva ? 'ACTIVO' : 'AGOTADO'}</b>
           </label>
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10, borderTop: '1px solid #EEF0F2', paddingTop: 12 }}>
           <label style={lbl}>Canal<br />
-            <select value={canal} onChange={(e) => setCanalSel(e.target.value)} style={{ minWidth: 130, ...inp }}>
+            <select value={canal} onChange={(e) => setCanalSel(e.target.value)} className="mo-select" style={{ minWidth: 140 }}>
               {cans.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
           <label style={lbl}>Costo de canal por venta<br />
-            <input type="number" step={0.01} value={cfg.costoCanal[canal]?.valor ?? 0} onChange={(e) => setCostoCanal({ valor: num(e.target.value) })} style={{ width: 90, ...inp }} />
-            <select value={cfg.costoCanal[canal]?.tipo ?? '$'} onChange={(e) => setCostoCanal({ tipo: e.target.value as '$' | '%' })} style={{ padding: 6, border: '1px solid #D1D5DB', borderRadius: 8, marginLeft: 4 }}>
+            <input type="number" step={0.01} value={cfg.costoCanal[canal]?.valor ?? 0} onChange={(e) => setCostoCanal({ valor: num(e.target.value) })} className="mo-input mo-input--num" style={{ width: 90 }} />
+            <select value={cfg.costoCanal[canal]?.tipo ?? '$'} onChange={(e) => setCostoCanal({ tipo: e.target.value as '$' | '%' })} className="mo-select" style={{ width: 110, marginLeft: 4 }}>
               <option value="$">$</option>
               <option value="%">% del PVP</option>
             </select>
@@ -164,7 +167,7 @@ export function Comisiones() {
               {cfg.formas.map((f) => {
                 const m = cfg.matriz[canal]?.[f] || CELDA_DEF
                 const cellInp = (campo: keyof Celda, v: number) => (
-                  <input type="number" step={0.01} value={v} onChange={(e) => setCelda(f, campo, num(e.target.value))} style={{ width: 90, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 6px' }} />
+                  <input type="number" step={0.01} value={v} onChange={(e) => setCelda(f, campo, num(e.target.value))} className="mo-input mo-input--num" style={{ width: 90, textAlign: 'center', height: 32, padding: '0 6px' }} />
                 )
                 return (
                   <tr key={f}>
@@ -172,7 +175,7 @@ export function Comisiones() {
                     <td style={{ textAlign: 'center' }}>{cellInp('comision', m.comision)}</td>
                     <td style={{ textAlign: 'center' }}>{cellInp('finan', m.finan)}</td>
                     <td style={{ textAlign: 'center' }}>{cellInp('descuento', m.descuento || 0)}</td>
-                    <td style={{ textAlign: 'center' }}><input type="checkbox" checked={m.aplicaImp} onChange={(e) => setCelda(f, 'aplicaImp', e.target.checked)} title="Aplica IVA / IIBB / DREI" /></td>
+                    <td style={{ textAlign: 'center' }}><input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={m.aplicaImp} onChange={(e) => setCelda(f, 'aplicaImp', e.target.checked)} title="Aplica IVA / IIBB / DREI" /></td>
                     <td style={{ textAlign: 'center' }}>{cellInp('dias', m.dias)}</td>
                     <td style={{ textAlign: 'center' }}><button onClick={() => removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 15 }}>×</button></td>
                   </tr>
@@ -181,12 +184,14 @@ export function Comisiones() {
             </tbody>
           </table>
         </div>
-        <button className="btn-sm" onClick={addForma} style={{ marginTop: 8 }}>+ Agregar forma de pago</button>
-      </div>
+        <Button size="sm" variant="outline" onClick={addForma} style={{ marginTop: 8 }}>
+          + Agregar forma de pago
+        </Button>
+      </Card>
 
       {/* PARTE 2: SIMULADOR */}
-      <div className="card" style={{ marginTop: 4 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>2 · Simulador de margen por producto</div>
+      <Card style={{ marginTop: space[4] }}>
+        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>2 · Simulador de margen por producto</div>
         <BuscadorProducto
           productos={datos?.allProductos ?? []}
           tnIdx={tnIdx}
@@ -198,10 +203,10 @@ export function Comisiones() {
           }}
           onSimular={simularPrecio}
           onAgregarSale={() => {
-            if (!prodSel) return alert('Primero traé un producto.')
+            if (!prodSel) return void avisar('Primero traé un producto.')
             const sale = parseFloat(pvp)
             const c = num(costo)
-            if (!sale || sale <= 0) return alert('Definí un precio de sale (poné un % de descuento o el precio).')
+            if (!sale || sale <= 0) return void avisar('Definí un precio de sale: poné un % de descuento, o el precio.')
             const tn = tnIdx ? matchTn(prodSel, tnIdx) : null
             const actual = tn && (tn.price || 0) > 0 ? tn.price! : prodSel.retailer_price || 0
             com.agregarSale(armarItemSale(prodSel, sale, c, actual))
@@ -209,9 +214,9 @@ export function Comisiones() {
         />
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', margin: '12px 0' }}>
-          <label style={lbl}>Costo neto (sin IVA) $<br /><input type="number" step={0.01} value={costo} onChange={(e) => onCosto(e.target.value)} style={{ width: 120, ...inp }} /></label>
-          <label style={lbl}>Markup % (s/ costo)<br /><input type="number" step={1} value={markup} onChange={(e) => onMarkup(e.target.value)} placeholder="ej. 130" style={{ width: 110, ...inp }} /></label>
-          <label style={lbl}>PVP (IVA incluido) $<br /><input type="number" step={0.01} value={pvp} onChange={(e) => onPvp(e.target.value)} style={{ width: 120, ...inp }} /></label>
+          <label style={lbl}>Costo neto (sin IVA) $<br /><input type="number" step={0.01} value={costo} onChange={(e) => onCosto(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
+          <label style={lbl}>Markup % (s/ costo)<br /><input type="number" step={1} value={markup} onChange={(e) => onMarkup(e.target.value)} placeholder="ej. 130" className="mo-input mo-input--num" style={{ width: 110 }} /></label>
+          <label style={lbl}>PVP (IVA incluido) $<br /><input type="number" step={0.01} value={pvp} onChange={(e) => onPvp(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
         </div>
         <div style={{ fontSize: 11, color: '#9CA3AF', margin: '-4px 0 12px' }}>Cargá <b>costo</b> y luego el <b>markup</b> (se calcula el PVP) o el <b>PVP</b> (se calcula el markup). Son intercambiables.</div>
 
@@ -222,32 +227,38 @@ export function Comisiones() {
             {detalle && <Detalle cfg={cfg} costo={costoN} pvp={pvpN} forma={detalle.forma} canal={detalle.canal} onCerrar={() => setDetalle(null)} />}
           </>
         ) : (
-          <div style={{ color: '#9CA3AF', fontSize: 13, padding: 10 }}>Cargá el costo neto y el markup (o el PVP) para ver el margen.</div>
+          <div style={{ color: color.mut2, fontSize: font.base, padding: 10 }}>Cargá el costo neto y el markup (o el PVP) para ver el margen.</div>
         )}
-      </div>
+      </Card>
 
       {/* LISTA DE PRECIOS DE SALE */}
-      <div className="card" style={{ marginTop: 4 }}>
+      <Card style={{ marginTop: space[4] }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>🏷️ Lista de precios de sale</div>
+          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>🏷️ Lista de precios de sale</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-sm" onClick={() => exportarSaleXLSX(com.saleList, marca).catch(() => alert('No se pudo exportar el Excel.'))} style={{ background: '#107C41', color: '#fff' }}>⬇️ Excel (.xlsx)</button>
-            <button className="btn-sm" onClick={() => exportarSalePDF(com.saleList, marca).catch(() => alert('No se pudo exportar el PDF.'))} style={{ background: '#16A34A', color: '#fff' }}>📄 PDF</button>
-            <button className="btn-sm" onClick={com.vaciarSale} style={{ background: '#fff', border: '1px solid #FCA5A5', color: '#DC2626' }}>Vaciar</button>
+            <Button size="sm" variant="outline" onClick={() => exportarSaleXLSX(com.saleList, marca).catch(() => toast.error('No se pudo exportar el Excel.'))} disabled={!com.saleList.length}>
+              Excel (.xlsx)
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => exportarSalePDF(com.saleList, marca).catch(() => toast.error('No se pudo exportar el PDF.'))} disabled={!com.saleList.length}>
+              PDF
+            </Button>
+            <Button size="sm" variant="ghost" tone="danger" onClick={com.vaciarSale} disabled={!com.saleList.length}>
+              Vaciar
+            </Button>
           </div>
         </div>
         <ListaSale saleList={com.saleList} onQuitar={com.quitarSale} />
-      </div>
+      </Card>
 
       {/* PISO DE PRECIO */}
-      <div className="card" style={{ marginTop: 4 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
+      <Card style={{ marginTop: space[4] }}>
+        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
         <div style={{ marginBottom: 12, fontSize: 12, color: '#666' }}>
           Usa el <b>Costo neto</b> de arriba. Margen objetivo %
-          <input type="number" step={1} value={pisoObj} onChange={(e) => setPisoObj(e.target.value)} style={{ width: 80, marginLeft: 6, ...inp }} />
+          <input type="number" step={1} value={pisoObj} onChange={(e) => setPisoObj(e.target.value)} className="mo-input mo-input--num" style={{ width: 90, marginLeft: 6 }} />
         </div>
         <Piso cfg={cfg} cans={cans} costo={costoN} objetivo={num(pisoObj) / 100} />
-      </div>
+      </Card>
     </div>
   )
 }
@@ -294,7 +305,7 @@ function BuscadorProducto({
     <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 9, padding: '10px 12px' }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#0369A1', marginBottom: 8 }}>🔎 Traer un producto real (en vez de simular a mano)</div>
       <label style={lbl}>Producto
-        <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} autoComplete="off" placeholder="Buscá por nombre o SKU…" style={{ display: 'block', width: 300, maxWidth: '100%', marginTop: 3, ...inp }} />
+        <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} autoComplete="off" placeholder="Buscá por nombre o SKU…" className="mo-input" style={{ display: 'block', width: 300, maxWidth: '100%', marginTop: 3 }} />
       </label>
       {!sel && q.trim().length >= 2 && (
         <div style={{ marginTop: 4, maxWidth: 340 }}>
@@ -337,8 +348,8 @@ function BuscadorProducto({
                     setPrecioNuevo(String(nuevo))
                     onSimular(nuevo)
                   }
-                }} style={{ width: 80, ...inp }} /></label>
-                <label style={lbl}>Precio sale (termina en 90)<br /><input type="number" value={precioNuevo} placeholder="$" onChange={(e) => setPrecioNuevo(e.target.value)} style={{ width: 120, ...inp }} /></label>
+                }} className="mo-input mo-input--num" style={{ width: 80 }} /></label>
+                <label style={lbl}>Precio sale (termina en 90)<br /><input type="number" value={precioNuevo} placeholder="$" onChange={(e) => setPrecioNuevo(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
                 <button onClick={() => { const v = parseFloat(precioNuevo); if (!v || v <= 0) return alert('Cargá el precio de sale (o un % de descuento).'); onSimular(v) }} style={{ ...simBtn('#DB2777'), padding: '7px 11px' }}>Simular</button>
                 <button onClick={onAgregarSale} style={{ ...simBtn('#111827'), padding: '7px 11px' }}>➕ Agregar a la lista</button>
               </div>
@@ -514,9 +525,10 @@ function ListaSale({ saleList, onQuitar }: { saleList: import('@/lib/comisiones/
   )
 }
 
-const lbl: CSSProperties = { fontSize: 12, color: '#666' }
-const inp: CSSProperties = { padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 8 }
-const thc: CSSProperties = { padding: '6px' }
+/* La etiqueta de cada control de la configuración. Los inputs usan la clase `mo-input`
+   del kit, así heredan foco, densidad y estados sin repetir bordes. */
+const lbl: CSSProperties = { fontSize: font.sm, color: color.mut }
+const thc: CSSProperties = { padding: '6px', color: color.mut, fontWeight: 600 }
 function simBtn(bg: string): CSSProperties {
   return { background: bg, color: '#fff', border: 'none', borderRadius: 6, padding: '4px 9px', fontSize: 12, cursor: 'pointer' }
 }

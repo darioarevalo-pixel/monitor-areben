@@ -21,6 +21,7 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { normalizeArgPhone } from '@/lib/crm/core'
+import { Button, useConfirmar } from '@/components/ui'
 
 /**
  * Vista de Leads. Port de index.html:13936-14247.
@@ -51,6 +52,7 @@ const fmtFecha = (d: string | null) => {
 }
 
 export function Leads() {
+  const { confirmar } = useConfirmar()
   const [leads, setLeads] = useState<MapaLeads>({})
   const [cargado, setCargado] = useState(false)
   const [cargando, setCargando] = useState(true)
@@ -246,7 +248,7 @@ export function Leads() {
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
                   <span style={{ color: '#9CA3AF', fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
                   <span style={{ flex: 1 }}>{n.texto}</span>
-                  <button className="btn-sm" onClick={() => { if (confirm('¿Borrar esta nota?')) persistir(borrarNota(leads, l.id, i)) }}>🗑️</button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar la nota', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}>🗑️</Button>
                 </div>
               ))}
               {!l.notas.length && <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin notas.</div>}
@@ -258,19 +260,29 @@ export function Leads() {
                   {LEAD_ESTADO_LABEL[e]}
                 </button>
               ))}
-              <button
-                className="btn-sm"
-                style={{ marginLeft: 'auto', color: '#DC2626' }}
-                onClick={() => {
-                  // Irreversible: el KV no tiene papelera.
-                  if (confirm('¿Eliminar este lead para siempre? No se puede deshacer.')) {
-                    persistir(eliminar(leads, l.id))
-                    setAbierto(null)
-                  }
-                }}
+              <Button
+                size="sm"
+                variant="ghost"
+                tone="danger"
+                style={{ marginLeft: 'auto' }}
+                onClick={() =>
+                  void (async () => {
+                    // Irreversible: el KV no tiene papelera, y por eso el diálogo lo dice.
+                    const ok = await confirmar({
+                      titulo: 'Eliminar el lead',
+                      tono: 'danger',
+                      ok: 'Eliminar para siempre',
+                      mensaje: `Se borra ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
+                    })
+                    if (ok) {
+                      persistir(eliminar(leads, l.id))
+                      setAbierto(null)
+                    }
+                  })()
+                }
               >
-                🗑️ Eliminar
-              </button>
+                Eliminar
+              </Button>
             </div>
           </div>
         </div>

@@ -12,6 +12,7 @@ import { ConfirmModal, PromptModal } from './Modales'
 import { computeFrom, varActivo } from '@/lib/fundas/simulacion'
 import { guardarEstado, guardarPedidos, leerEstado, leerPedidos } from '@/lib/fundas/persistencia'
 import type { SimBloque } from '@/lib/fundas/tipos'
+import { Esqueleto, Notice, space, useConfirmar } from '@/components/ui'
 
 const EDITOR_VACIO: EditorSim = { total: '100', rows: [], vars: [], varOn: false, img: null, editando: null }
 
@@ -29,6 +30,7 @@ const scrollSim = () => document.getElementById('fm-sim-card')?.scrollIntoView({
  * puentes ("Importar a simulación" / "Usar los elegidos").
  */
 export function FundasModelo() {
+  const { avisar } = useConfirmar()
   const { marca } = useSesion()
   const { datos, estado, error } = useDatosMonitor()
   // La ruta sombra `/fundas-modelo/next` usa claves namespaceadas (`_next_`) para
@@ -88,7 +90,10 @@ export function FundasModelo() {
   // ── Acciones de pedidos ──
   const guardarPedido = () => {
     const computed = computeFrom(parseFloat(editor.total) || 0, editor.rows, editor.vars, varActivo(editor.vars, editor.varOn))
-    if (!computed.length) { alert('Cargá al menos un modelo antes de guardar el pedido.'); return }
+    if (!computed.length) {
+      void avisar('Cargá al menos un modelo antes de guardar el pedido.')
+      return
+    }
     if (editor.editando) {
       const idx = pedidos.findIndex((b) => b.id === editor.editando)
       if (idx >= 0) {
@@ -157,22 +162,28 @@ export function FundasModelo() {
     )
   }
   const usarDemanda = (rows: { model: string; pct: number }[]) => {
-    if (!rows.length) { alert('Elegí al menos un modelo (con la tilde) para llevar a la simulación.'); return }
+    if (!rows.length) {
+      void avisar('Elegí al menos un modelo (con la tilde) para llevar a la simulación.')
+      return
+    }
     aplicarRows(rows, 'Esto reemplaza los modelos y porcentajes de la simulación actual con los elegidos.\n\n¿Seguir?')
   }
 
   return (
     <div className="section visible">
       {avisoCuota && (
-        <div className="card" style={{ color: '#B45309', background: '#FFFBEB', borderColor: '#FCD34D' }}>
-          El navegador llegó al límite de almacenamiento: el último cambio de la simulación no se guardó. Vaciá pedidos ya decididos o sacá fotos pesadas para liberar espacio.
-        </div>
+        <Notice tone="warning" icon="⚠" style={{ marginBottom: space[4] }}>
+          El navegador llegó al límite de almacenamiento: <b>el último cambio de la simulación no se guardó</b>. Vaciá pedidos ya decididos o sacá fotos pesadas para
+          liberar espacio.
+        </Notice>
       )}
 
       {estado === 'error' ? (
-        <div className="card" style={{ color: '#DC2626' }}>No se pudieron cargar los datos del monitor{error ? `: ${error}` : '.'}</div>
+        <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>
+          No se pudieron cargar los datos del monitor{error ? `: ${error}` : '.'}
+        </Notice>
       ) : !datos ? (
-        <div className="card" style={{ color: '#9CA3AF' }}>Cargando datos…</div>
+        <Esqueleto forma="tabla" filas={6} />
       ) : (
         <>
           <RankingCard datos={datos} onImportar={importarRanking} />

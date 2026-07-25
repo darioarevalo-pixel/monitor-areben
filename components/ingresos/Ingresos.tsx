@@ -44,6 +44,7 @@ import {
 } from '@/lib/ingresos/core'
 import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos/tipos'
 import { nuevoId, useIngresos } from './useIngresos'
+import { Card, useConfirmar } from '@/components/ui'
 
 const VISTA_KEY = 'monitor_ing_vista'
 
@@ -133,12 +134,12 @@ export function Ingresos() {
 
   if (!data) {
     return (
-      <div className="card">
+      <Card>
         <Header estado={st.estadoGuardado} admin={admin} vistaEditar={false} onRefrescar={st.recargar} onAgregar={agregarIng} />
         <div style={{ fontSize: 13, color: st.error ? '#DC2626' : '#9CA3AF', marginTop: 12 }}>
           {st.error ? `No se pudieron leer los ingresos: ${st.error}` : 'Cargando ingresos…'}
         </div>
-      </div>
+      </Card>
     )
   }
 
@@ -155,7 +156,7 @@ export function Ingresos() {
   })
 
   return (
-    <div className="card">
+    <Card>
       <Header
         estado={st.estadoGuardado}
         admin={admin}
@@ -202,7 +203,7 @@ export function Ingresos() {
       </datalist>
 
       {media && <MediaModal media={media} onClose={() => setMedia(null)} />}
-    </div>
+    </Card>
   )
 }
 
@@ -281,6 +282,7 @@ function thumbBg(it: GalleryItem): React.CSSProperties {
 }
 
 function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: boolean; guardar: (m: (l: Ingreso[]) => Ingreso[]) => void; onMedia: (m: Media) => void }) {
+  const { pedirTexto } = useConfirmar()
   const items = g.gallery || []
   if (!items.length && !editable) return null
 
@@ -290,10 +292,10 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
       subirFotoIngreso(f, (url) => guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: 'img', url, nombre: f.name || '' })), 520),
     )
   }
-  const onLink = () => {
-    const url = (prompt('Pegá el link de la foto o video (YouTube, Google Drive, etc.):') || '').trim()
+  const onLink = async () => {
+    const url = (await pedirTexto('Pegá el link de la foto o video (YouTube, Google Drive, etc.)', '', { titulo: 'Agregar por link', ok: 'Siguiente' }))?.trim()
     if (!url) return
-    const nombre = (prompt('Nombre o descripción (opcional):') || '').trim()
+    const nombre = (await pedirTexto('Nombre o descripción (opcional)', '', { titulo: 'Agregar por link', ok: 'Agregar' }))?.trim() || ''
     guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: esVideoUrl(url) ? 'video' : 'img', url, nombre }))
   }
 
@@ -384,6 +386,7 @@ function BloqueEditar({
   onPasteSel: (t: { gid: string; bid: string; did: string }) => void
   pasteTarget: { gid: string; bid: string; did: string } | null
 }) {
+  const { avisar, confirmar, pedirTexto } = useConfirmar()
   const disenos = b.disenos || []
   const modelos = b.modelos || []
   const grand = bloqueU(b)
@@ -397,20 +400,24 @@ function BloqueEditar({
     const f = Array.from(e.dataTransfer?.files || []).find((x) => /^image\//.test(x.type))
     if (f) subirFotoIngreso(f, (url) => guardar((l) => setDisenoImg(l, g.id, b.id, did, url)), 480)
   }
-  const igualarFila = (mid: string) => {
+  const igualarFila = async (mid: string) => {
     const next = filaIgualar([g], g.id, b.id, mid) // opera sobre este ingreso; si null, no había cantidad
     if (!next) {
-      alert('Cargá una cantidad en algún diseño de esa fila y después tocá ⎘ para copiarla al resto.')
+      await avisar('Cargá una cantidad en algún diseño de esa fila y después tocá ⎘ para copiarla al resto.')
       return
     }
     guardar((l) => filaIgualar(l, g.id, b.id, mid) ?? l)
   }
-  const igualarBloque = () => {
+  const igualarBloque = async () => {
     if (!modelos.length || !disenos.length) {
-      alert('Agregá modelos y diseños primero.')
+      await avisar('Agregá modelos y diseños primero.')
       return
     }
-    const raw = prompt('Misma cantidad para TODO este bloque (todos los modelos y diseños):', '')
+    const raw = await pedirTexto('Misma cantidad para TODO el bloque: todos los modelos y todos los diseños.', '', {
+      titulo: 'Igualar el bloque',
+      ok: 'Aplicar a todo',
+      placeholder: 'ej. 12',
+    })
     if (raw === null) return
     const n = Math.max(0, parseInt(raw) || 0)
     guardar((l) => bloqueIgualar(l, g.id, b.id, n))
@@ -427,7 +434,7 @@ function BloqueEditar({
           style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600, border: 'none', borderBottom: '1px solid #E5E7EB', padding: '3px 0' }}
         />
         <span style={{ fontSize: 12, color: '#374151' }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
-        <button onClick={() => { if (confirm('¿Quitar este bloque y todas sus cantidades e imágenes?')) guardar((l) => quitarBloque(l, g.id, b.id)) }} title="Quitar bloque" style={{ border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el bloque', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra el bloque con todas sus cantidades e imágenes.' })) guardar((l) => quitarBloque(l, g.id, b.id)) })()} title="Quitar bloque" style={{ border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
           🗑 bloque
         </button>
       </div>
@@ -472,7 +479,7 @@ function BloqueEditar({
                           📷 subir
                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { onImg(d.id, e.target.files); e.currentTarget.value = '' }} />
                         </label>
-                        <button onClick={() => { if (confirm('¿Quitar este diseño (columna) y sus cantidades?')) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) }} title="Quitar diseño" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 11 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el diseño', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la columna y las cantidades cargadas en ella.' })) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) })()} title="Quitar diseño" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 11 }}>
                           ✕
                         </button>
                       </div>
@@ -499,7 +506,7 @@ function BloqueEditar({
                         <button onClick={() => igualarFila(m.id)} title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style={{ border: 'none', background: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 13 }}>
                           ⎘
                         </button>
-                        <button onClick={() => { if (confirm('¿Quitar este modelo (fila) y sus cantidades?')) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) }} title="Quitar modelo" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el modelo', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la fila y las cantidades cargadas en ella.' })) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) })()} title="Quitar modelo" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
                           ×
                         </button>
                       </div>
@@ -671,12 +678,15 @@ function IngresoEditar({
   pasteTarget: { gid: string; bid: string; did: string } | null
   onPasteSel: (t: { gid: string; bid: string; did: string }) => void
 }) {
+  const { confirmar, pedirTexto } = useConfirmar()
   const e = estadoDe(g.estado)
   const bloques = g.bloques || []
-  const addBloque = () => {
-    const nombre = prompt('Nombre del bloque (ej. IMD, Formas, Silicona…):', '')
+  const addBloque = async () => {
+    const nombre = await pedirTexto('Nombre del bloque', '', { titulo: 'Nuevo bloque', ok: 'Siguiente', placeholder: 'ej. IMD, Formas, Silicona…' })
     if (nombre === null) return
-    let n = parseInt(prompt('¿Cuántos diseños tiene este bloque?', '10') || '', 10)
+    const cuantos = await pedirTexto('¿Cuántos diseños tiene este bloque?', '10', { titulo: 'Nuevo bloque', ok: 'Crear bloque' })
+    if (cuantos === null) return
+    let n = parseInt(cuantos, 10)
     if (!Number.isFinite(n) || n < 0) n = 0
     if (n > 60) n = 60
     guardar((l) => agregarBloque(l, g.id, nuevoBloque(nuevoId, nombre.trim(), n)))
@@ -690,7 +700,7 @@ function IngresoEditar({
             <option key={s.k} value={s.k}>{s.lbl}</option>
           ))}
         </select>
-        <button onClick={() => { if (confirm('¿Eliminar este ingreso?')) guardar((l) => quitarIngreso(l, g.id)) }} title="Eliminar ingreso" style={{ padding: '5px 9px', border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el ingreso', tono: 'danger', ok: 'Eliminar', mensaje: `Se borra "${g.desc || 'este ingreso'}" con todos sus bloques, cantidades e imágenes.` })) guardar((l) => quitarIngreso(l, g.id)) })()} title="Eliminar ingreso" style={{ padding: '5px 9px', border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
           🗑
         </button>
       </div>

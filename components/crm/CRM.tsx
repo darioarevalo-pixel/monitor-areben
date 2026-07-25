@@ -16,6 +16,8 @@ import {
 } from '@/lib/crm/seguimiento'
 import type { ClienteCRM, MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { BuscarInput, Button, KpiCard, Notice, Select, Tabs, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
@@ -164,6 +166,8 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
 }
 
 export function CRM() {
+  const { confirmar, avisar } = useConfirmar()
+  const toast = useToast()
   const [modo, setModo] = useState<ModoCanal>('10')
   const [q, setQ] = useState('')
   const [seg, setSeg] = useState('todos')
@@ -193,16 +197,40 @@ export function CRM() {
 
   const sugerirCadencias = async () => {
     const { plan, omitidos, nSem, nMen } = planSugerirCadencias(agregado.activos, crmSeg)
-    if (!plan.length) { alert('No había clientes nuevos para sugerir (ya tienen un recontacto programado).'); return }
-    if (!confirm(`Se va a programar el recontacto de ${plan.length} clientes:\n• ${nSem} mejores por monto → cada semana\n• ${nMen} activos recurrentes → cada mes\n\nNo se tocan los ${omitidos} que ya tenían uno. ¿Confirmás?`)) return
+    if (!plan.length) {
+      await avisar('No había clientes nuevos para sugerir: los que corresponden ya tienen un recontacto programado.')
+      return
+    }
+    const ok = await confirmar({
+      titulo: 'Programar recontactos',
+      ok: `Programar ${plan.length}`,
+      mensaje: (
+        <>
+          <p>Se asigna una cadencia automática por segmento:</p>
+          <ul style={{ margin: '8px 0 0 18px' }}>
+            <li>
+              <b>{nSem}</b> mejores por monto → cada semana
+            </li>
+            <li>
+              <b>{nMen}</b> activos recurrentes → cada mes
+            </li>
+          </ul>
+          <p style={{ marginTop: 8 }}>No se tocan los {omitidos} que ya tenían uno.</p>
+        </>
+      ),
+    })
+    if (!ok) return
     if (await guardarSeg(aplicarSugerencias(crmSeg, plan))) {
-      alert(`✅ Listo. Recontacto programado para ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada cliente.`)
+      toast.ok(`Recontacto programado para ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada uno.`)
     }
   }
 
   const cargarTelefonos = async (file: File | undefined) => {
     if (!file) return
-    if (!agregado.activos.length) { alert('Primero esperá a que cargue la lista de clientes.'); return }
+    if (!agregado.activos.length) {
+      await avisar('Primero esperá a que cargue la lista de clientes.')
+      return
+    }
     try {
       const XLSX = await import('xlsx')
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
@@ -210,14 +238,17 @@ export function CRM() {
       const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as unknown[][]
       const idsCRM = new Set(agregado.activos.map((c) => String(c.id)))
       const res = parsearTelefonos(aoa, idsCRM, normalizeArgPhone)
-      if (!res.ok) { alert(res.motivo); return }
+      if (!res.ok) {
+        toast.error(res.motivo)
+        return
+      }
       // El merge acumula sobre lo ya cargado (crmTelOverride es el único mapa sin
       // otra copia); guardarTel exige `cargado`, así un GET fallido no lo vacía.
       if (await guardarTel({ ...crmTelOverride, ...res.map })) {
-        alert(`✅ Listo. Se vincularon ${res.vinculados} teléfonos a clientes del CRM (match por ID). Los botones de WhatsApp ya funcionan.`)
+        toast.ok(`Se vincularon ${res.vinculados} teléfonos a clientes del CRM (match por ID). Los botones de WhatsApp ya funcionan.`)
       }
     } catch (err) {
-      alert('No pude leer el Excel: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('No pude leer el Excel: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
 
@@ -235,67 +266,92 @@ export function CRM() {
   const clienteModal = modalId != null ? [...agregado.activos, ...agregado.descartados].find((c) => c.id === modalId) : null
 
   return (
-    <div className="section visible">
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 12, color: '#6B7280' }}>Canal:</label>
-            <select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)}>
-              <option value="10">Mayorista</option>
-              <option value="all">Todos los canales</option>
-            </select>
-            <button className="btn-sm" onClick={recargar}>Recalcular</button>
-            <label className="btn-sm" style={{ cursor: cargado ? 'pointer' : 'not-allowed', opacity: cargado ? 1 : 0.5 }} title={cargado ? 'Importar teléfonos del export de clientes de GN' : 'El KV no se pudo leer: guardado bloqueado'}>
-              📱 Cargar teléfonos
-              <input type="file" accept=".xlsx,.xls,.csv" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
-            </label>
-            <button className="btn-sm" onClick={sugerirCadencias} disabled={!cargado} title={cargado ? 'Asigna cadencia automática por segmento' : 'El KV no se pudo leer: guardado bloqueado'}>🗓️ Sugerir cadencias</button>
-            <button className="btn-sm" onClick={() => setBanco(true)}>💬 Banco de mensajes</button>
-          </div>
-        </div>
+    <>
+      <HeaderAcciones>
+        <Select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)} style={{ width: 170 }} aria-label="Canal">
+          <option value="10">Mayorista</option>
+          <option value="all">Todos los canales</option>
+        </Select>
+        <Button variant="ghost" onClick={recargar}>
+          Recalcular
+        </Button>
+        <Button variant="outline" onClick={() => setBanco(true)}>
+          💬 Banco de mensajes
+        </Button>
+        <Button
+          variant="outline"
+          onClick={sugerirCadencias}
+          disabled={!cargado}
+          title={cargado ? 'Asigna cadencia automática por segmento' : 'El KV no se pudo leer: guardado bloqueado'}
+        >
+          Sugerir cadencias
+        </Button>
+        {/* Es un <label> porque abre un file picker; se le da la forma del botón primario. */}
+        <label
+          className="mo-btn mo-btn--md"
+          style={{
+            '--_bg': color.brandSolid,
+            '--_fg': '#fff',
+            '--_bd': color.brandSolid,
+            '--_bg-hover': 'var(--mo-brand-solid-hover)',
+            cursor: cargado ? 'pointer' : 'not-allowed',
+            opacity: cargado ? 1 : 0.55,
+          } as React.CSSProperties}
+          title={cargado ? 'Importar teléfonos del export de clientes de GN' : 'El KV no se pudo leer: guardado bloqueado'}
+        >
+          Cargar teléfonos
+          <input type="file" accept=".xlsx,.xls,.csv" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
+        </label>
+      </HeaderAcciones>
 
-        <div style={{ background: '#EFF6FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '7px 11px', marginBottom: 14, fontSize: 12, color: '#075985' }}>
-          👀 Versión nueva. Los números tienen que dar igual que en la de siempre. Tocá un cliente para abrir su ficha y editar el seguimiento.
-        </div>
-
-        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
-          {(['clientes', 'leads'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setVista(v)}
-              style={{ padding: '9px 16px', background: 'none', border: 'none', borderBottom: vista === v ? '2px solid #2563EB' : '2px solid transparent', color: vista === v ? '#111827' : '#6B7280', fontWeight: vista === v ? 700 : 500 }}
-            >
-              {v === 'clientes' ? 'Clientes' : 'Leads'}
-            </button>
-          ))}
-        </div>
+      <div>
+        <Tabs
+          items={[
+            { key: 'clientes', label: 'Clientes' },
+            { key: 'leads', label: 'Leads' },
+          ]}
+          value={vista}
+          onChange={(k) => setVista(k as 'clientes' | 'leads')}
+          style={{ marginBottom: space[4] }}
+        />
 
         {vista === 'leads' ? (
           <Leads />
         ) : (
           <>
             {error && (
-              <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 11px', marginBottom: 14, fontSize: 12, color: '#991B1B' }}>⚠️ {error}</div>
+              <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>
+                {error}
+              </Notice>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
+            {/* Las tarjetas son FILTROS, no adornos: tocar una filtra la tabla de abajo.
+                Antes eran `.stat` idénticas a las de un tablero, así que no se notaba. */}
+            <div className="mo-kpis">
               {tarjetas.map((t) => (
-                <div className="stat" key={t.key} style={{ cursor: 'pointer' }} onClick={() => { setVerDescartados(false); setSeg(t.key) }}>
-                  <div className="stat-label">{t.label}</div>
-                  <div className="stat-value">{t.n}</div>
-                </div>
+                <KpiCard
+                  key={t.key}
+                  label={t.label}
+                  value={t.n}
+                  tone={seg === t.key && !verDescartados ? 'brand' : 'neutral'}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    setVerDescartados(false)
+                    setSeg(t.key)
+                  }}
+                />
               ))}
             </div>
 
-            <div className="toolbar">
-              <input type="text" placeholder="Buscar nombre, email o teléfono..." value={q} onChange={(e) => setQ(e.target.value)} />
-              <select value={seg} onChange={(e) => setSeg(e.target.value)} disabled={verDescartados}>
+            <div className="mo-filterbar">
+              <BuscarInput value={q} onChange={setQ} placeholder="Buscar nombre, email o teléfono…" />
+              <Select value={seg} onChange={(e) => setSeg(e.target.value)} disabled={verDescartados} style={{ width: 210 }} aria-label="Segmento">
                 {SEGMENTOS.map((s) => (
                   <option value={s.v} key={s.v}>{s.t}</option>
                 ))}
-              </select>
-              <label style={{ fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" checked={verDescartados} onChange={(e) => setVerDescartados(e.target.checked)} />
+              </Select>
+              <label style={{ fontSize: font.sm, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={verDescartados} onChange={(e) => setVerDescartados(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
                 Ver descartados
               </label>
               <span style={{ fontSize: 12, color: '#9CA3AF', marginLeft: 'auto' }}>{lista.length} cliente{lista.length === 1 ? '' : 's'}</span>
@@ -342,6 +398,6 @@ export function CRM() {
 
       {clienteModal && <ClienteModal key={clienteModal.id} cliente={clienteModal} crmSeg={crmSeg} mutar={mutar} onCerrar={() => setModalId(null)} />}
       {banco && <BancoMensajes onCerrar={() => setBanco(false)} />}
-    </div>
+    </>
   )
 }

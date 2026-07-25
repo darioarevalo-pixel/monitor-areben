@@ -10,14 +10,21 @@ export type KpiCardProps = {
   sub?: React.ReactNode
   tone?: Tone
   info?: React.ReactNode
+  /** Cuando la tarjeta ES un filtro (ej. los segmentos del CRM), no solo un número. */
+  onClick?: () => void
   style?: React.CSSProperties
 }
 
-export function KpiCard({ label, value, sub, tone = 'neutral', info, style }: KpiCardProps) {
+export function KpiCard({ label, value, sub, tone = 'neutral', info, onClick, style }: KpiCardProps) {
   const t = toneTokens[tone]
   const accent = tone !== 'neutral'
   return (
-    <Card padding={4} style={{ flex: '1 1 200px', minWidth: 160, borderColor: accent ? t.border : color.line, background: accent ? t.bg : color.surface, ...style }}>
+    <Card
+      padding={4}
+      interactive={!!onClick}
+      onClick={onClick}
+      style={{ flex: '1 1 200px', minWidth: 160, borderColor: accent ? t.border : color.line, background: accent ? t.bg : color.surface, cursor: onClick ? 'pointer' : undefined, ...style }}
+    >
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.xs, fontWeight: weight.medium, color: accent ? t.fg : color.mut, textTransform: 'uppercase', letterSpacing: 0.3 }}>
         {label}
         {info}
