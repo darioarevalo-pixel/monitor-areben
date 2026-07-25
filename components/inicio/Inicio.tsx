@@ -12,7 +12,7 @@ import type { Marca } from '@/lib/nav'
 import { filtrarPorFuncion, ordenarResumenes, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { horaLabel, marcasVisibles, modoInicio, origenesDe, pendientesDeTrabajo, tituloPendientes } from '@/lib/inicio/core'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Badge, Button, Card, EmptyState, Esqueleto, Notice, color, font, space } from '@/components/ui'
+import { Button, Card, EmptyState, Esqueleto, MarcaChip, Notice, color, font, space } from '@/components/ui'
 
 const POLL_MS = 180000 // refresco automático cada 3 min (como el legacy)
 
@@ -196,12 +196,4 @@ function unidadesDe(r: ResumenSolicitud, origenes: ReturnType<typeof origenesDe>
   const n = origenes.length ? origenes.reduce((a, o) => a + (o === 'local' ? r.uLocal : r.uDeposito), 0) : r.unidades
   const sufijo = origenes.length ? ' en tu sector' : ''
   return `${n} ${n === 1 ? 'unidad' : 'unidades'}${sufijo}`
-}
-
-function MarcaChip({ marca }: { marca: Marca }) {
-  return (
-    <Badge tone={marca === 'zattia' ? 'brand' : 'action'} subtle>
-      {marca === 'zattia' ? 'Zattia' : 'BDI'}
-    </Badge>
-  )
 }

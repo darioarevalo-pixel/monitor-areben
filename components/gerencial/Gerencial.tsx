@@ -19,7 +19,8 @@ import {
   type Severidad,
 } from '@/lib/gerencial/tipos'
 import type { Marca } from '@/lib/nav.datos'
-import { useConfirmar, useToast } from '@/components/ui'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Badge, Button, Card, EmptyState, Esqueleto, MarcaChip, Notice, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Panel Gerencial (key `gerencial`): la vista de decisiones. Toma los accionables que
@@ -29,9 +30,9 @@ import { useConfirmar, useToast } from '@/components/ui'
  */
 
 const COLOR_SEVERIDAD: Record<Severidad, { fondo: string; texto: string; punto: string }> = {
-  critico: { fondo: '#FEF2F2', texto: '#B91C1C', punto: '#DC2626' },
-  atencion: { fondo: '#FFFBEB', texto: '#B45309', punto: '#F59E0B' },
-  oportunidad: { fondo: '#F0FDF4', texto: '#15803D', punto: '#22C55E' },
+  critico: { fondo: 'var(--mo-danger-bg)', texto: 'var(--mo-danger-ink)', punto: 'var(--mo-danger)' },
+  atencion: { fondo: 'var(--mo-warning-bg)', texto: 'var(--mo-warning-ink)', punto: 'var(--mo-warning-solid)' },
+  oportunidad: { fondo: 'var(--mo-success-bg)', texto: 'var(--mo-success-ink)', punto: 'var(--mo-success)' },
 }
 
 const AREAS: Area[] = ['comercial', 'ads', 'stock', 'operativo', 'importaciones']
@@ -73,85 +74,78 @@ export function Gerencial() {
   const filtrando = fSev !== 'todas' || fArea !== 'todas'
 
   return (
-    <div>
-      {/* Resumen por severidad + acciones */}
-      <div className="card" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        {SEVERIDADES.map((s) => (
-          <PillSeveridad
-            key={s}
-            sev={s}
-            n={conteoSev(s)}
-            activo={fSev === s}
-            onClick={() => setFSev(fSev === s ? 'todas' : s)}
-          />
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <InfoPopover titulo="Panel Gerencial">
-            Reúne, de todas tus marcas, lo que requiere una decisión: capital parado, precios fuera de
-            objetivo, stock a depurar, Ads con mal retorno, pendientes operativos e importaciones. Podés
-            silenciar lo que no aplica y aprobar consumos internos desde acá.
-          </InfoPopover>
-          <button
-            className="btn-sm"
-            onClick={recargar}
-            style={{ background: '#fff', border: '1px solid #D1D5DB' }}
-          >
-            🔄 Actualizar
-          </button>
-        </div>
-      </div>
+    <>
+      <HeaderAcciones>
+        <InfoPopover titulo="Panel Gerencial">
+          Reúne, de todas tus marcas, lo que requiere una decisión: capital parado, precios fuera de
+          objetivo, stock a depurar, Ads con mal retorno, pendientes operativos e importaciones. Podés
+          silenciar lo que no aplica y aprobar consumos internos desde acá.
+        </InfoPopover>
+        {nSilenciados > 0 && (
+          <Button variant="ghost" onClick={() => setMostrarSil((v) => !v)}>
+            {mostrarSil ? '← Volver' : `🔕 ${nSilenciados} silenciado${nSilenciados === 1 ? '' : 's'}`}
+          </Button>
+        )}
+        <Button variant="outline" onClick={recargar}>
+          Actualizar
+        </Button>
+      </HeaderAcciones>
 
-      {/* Filtro por área + silenciados */}
-      {(areasPresentes.length > 1 || nSilenciados > 0) && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 2px', alignItems: 'center' }}>
-          {areasPresentes.length > 1 && (
-            <>
-              <Chip label="Todas las áreas" activo={fArea === 'todas'} onClick={() => setFArea('todas')} />
-              {areasPresentes.map((ar) => (
-                <Chip
-                  key={ar}
-                  label={ETIQUETA_AREA[ar]}
-                  activo={fArea === ar}
-                  onClick={() => setFArea(fArea === ar ? 'todas' : ar)}
-                />
-              ))}
-            </>
-          )}
-          {nSilenciados > 0 && (
-            <button
-              className="btn-sm"
-              onClick={() => setMostrarSil((v) => !v)}
-              style={{ marginLeft: 'auto', background: '#fff', border: '1px solid #D1D5DB', color: '#6B7280' }}
-            >
-              {mostrarSil ? '← Volver' : `🔕 ${nSilenciados} silenciado(s)`}
-            </button>
-          )}
+      {/* Las pills de severidad y los chips de área son FILTROS: van juntos en una barra,
+          no sueltos sobre el lienzo. Antes flotaban sin contenedor y la pantalla se veía
+          sin forma. */}
+      <Card padding={4} style={{ marginBottom: space[4] }}>
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+          {SEVERIDADES.map((s) => (
+            <PillSeveridad
+              key={s}
+              sev={s}
+              n={conteoSev(s)}
+              activo={fSev === s}
+              onClick={() => setFSev(fSev === s ? 'todas' : s)}
+            />
+          ))}
         </div>
-      )}
+        {areasPresentes.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+            <Chip label="Todas las áreas" activo={fArea === 'todas'} onClick={() => setFArea('todas')} />
+            {areasPresentes.map((ar) => (
+              <Chip
+                key={ar}
+                label={ETIQUETA_AREA[ar]}
+                activo={fArea === ar}
+                onClick={() => setFArea(fArea === ar ? 'todas' : ar)}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
 
       {errores.length > 0 && (
-        <div
-          className="card"
-          style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: 13 }}
-        >
-          ⚠️ Algunos datos no cargaron ({errores.join(' · ')}). El panel muestra el resto.
-        </div>
+        <Notice tone="warning" icon="⚠" style={{ marginBottom: space[4] }}>
+          Algunos datos no cargaron ({errores.join(' · ')}). El panel muestra el resto.
+        </Notice>
       )}
 
       {cargando && accionables.length === 0 ? (
-        <div className="card" style={{ color: '#9CA3AF' }}>Analizando el negocio…</div>
+        <Esqueleto forma="tabla" filas={5} />
       ) : visibles.length === 0 ? (
-        <div className="card" style={{ color: '#059669', fontSize: 14 }}>
-          {mostrarSil
-            ? 'No hay accionables silenciados con estos filtros.'
-            : filtrando
-              ? '✅ No hay accionables con estos filtros.'
-              : '✅ No hay accionables pendientes. Todo en orden.'}
-        </div>
+        <EmptyState
+          icon="✅"
+          title={
+            mostrarSil
+              ? 'No hay accionables silenciados con estos filtros'
+              : filtrando
+                ? 'No hay accionables con estos filtros'
+                : 'No hay accionables pendientes'
+          }
+          hint={!mostrarSil && !filtrando ? 'Todo en orden.' : undefined}
+          dashed
+        />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
           {cargando && (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '0 2px' }}>Actualizando…</div>
+            <div style={{ fontSize: font.sm, color: color.mut2, padding: '0 2px' }}>Actualizando…</div>
           )}
           {visibles.map((a) => (
             <CardAccionable
@@ -165,7 +159,7 @@ export function Gerencial() {
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -184,28 +178,19 @@ function CardAccionable({
 }) {
   const c = COLOR_SEVERIDAD[a.severidad]
   return (
-    <div className="card" style={{ borderLeft: `4px solid ${c.punto}`, background: c.fondo }}>
+    <Card padding={5} style={{ borderLeft: `4px solid ${c.punto}`, background: c.fondo }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
         <MarcaChip marca={a.marca} />
         <span style={{ fontSize: 11, fontWeight: 700, color: c.texto, textTransform: 'uppercase', letterSpacing: 0.3 }}>
           {ETIQUETA_SEVERIDAD[a.severidad]}
         </span>
-        <span
-          style={{
-            fontSize: 11,
-            color: '#6B7280',
-            background: '#fff',
-            border: '1px solid #E5E7EB',
-            borderRadius: 6,
-            padding: '1px 7px',
-          }}
-        >
+        <Badge tone="neutral" subtle>
           {ETIQUETA_AREA[a.area]}
-        </span>
+        </Badge>
       </div>
-      <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>{a.titulo}</div>
-      <div style={{ fontSize: 13, color: '#4B5563', marginTop: 3 }}>{a.detalle}</div>
-      <div style={{ fontSize: 13, color: '#111827', marginTop: 8, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+      <div style={{ fontWeight: 700, fontSize: font.lg, color: color.ink }}>{a.titulo}</div>
+      <div style={{ fontSize: font.base, color: color.ink2, marginTop: 3 }}>{a.detalle}</div>
+      <div style={{ fontSize: font.base, color: color.ink, marginTop: 8, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
         <span aria-hidden>💡</span>
         <span>
           <b>Qué hacer:</b> {a.recomendacion}
@@ -219,21 +204,16 @@ function CardAccionable({
           <BotonAccion key={i} marca={a.marca} accion={ac} />
         ))}
         {silenciado ? (
-          <button className="btn-sm" onClick={onReactivar} style={{ background: '#fff', border: '1px solid #D1D5DB', color: '#6B7280', marginLeft: 'auto' }}>
+          <Button size="sm" variant="outline" onClick={onReactivar} style={{ marginLeft: 'auto' }}>
             🔔 Reactivar
-          </button>
+          </Button>
         ) : (
-          <button
-            className="btn-sm"
-            onClick={onSilenciar}
-            title={`Ocultar por ${DIAS_SNOOZE} días`}
-            style={{ background: 'transparent', border: 'none', color: '#9CA3AF', marginLeft: 'auto' }}
-          >
+          <Button size="sm" variant="ghost" onClick={onSilenciar} title={`Ocultar por ${DIAS_SNOOZE} días`} style={{ marginLeft: 'auto' }}>
             🔕 Silenciar
-          </button>
+          </Button>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -277,50 +257,28 @@ function Aprobaciones({ consumos, onCambio }: { consumos: ConsumoPendiente[]; on
 
   return (
     <div style={{ marginTop: 10 }}>
-      <button
-        className="btn-sm"
-        onClick={() => setAbierto((v) => !v)}
-        style={{ background: '#fff', border: '1px solid #D1D5DB' }}
-      >
+      <Button size="sm" variant="outline" onClick={() => setAbierto((v) => !v)}>
         {abierto ? '▾ Ocultar' : `▸ Revisar ${consumos.length} para aprobar acá`}
-      </button>
+      </Button>
       {abierto && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {consumos.map((c) => (
-            <div
+            <Card
               key={c.id}
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                border: '1px solid #E5E7EB',
-                background: '#fff',
-                borderRadius: 8,
-                padding: '7px 10px',
-              }}
+              padding={3}
+              style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}
             >
               <div style={{ flex: 1, minWidth: 160 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{c.texto}</div>
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{c.sub}</div>
+                <div style={{ fontSize: font.base, fontWeight: 600, color: color.ink }}>{c.texto}</div>
+                <div style={{ fontSize: font.sm, color: color.mut }}>{c.sub}</div>
               </div>
-              <button
-                className="btn-sm"
-                disabled={procesando === c.id}
-                onClick={() => void correr(c, 'aprobar')}
-                style={{ background: '#16A34A', color: '#fff', border: 'none', opacity: procesando === c.id ? 0.6 : 1 }}
-              >
-                {procesando === c.id ? '…' : '✓ Aprobar'}
-              </button>
-              <button
-                className="btn-sm"
-                disabled={procesando === c.id}
-                onClick={() => void correr(c, 'rechazar')}
-                style={{ background: '#fff', color: '#B91C1C', border: '1px solid #FCA5A5', opacity: procesando === c.id ? 0.6 : 1 }}
-              >
+              <Button size="sm" variant="solid" tone="success" loading={procesando === c.id} onClick={() => void correr(c, 'aprobar')}>
+                Aprobar
+              </Button>
+              <Button size="sm" variant="outline" tone="danger" disabled={procesando === c.id} onClick={() => void correr(c, 'rechazar')}>
                 Rechazar
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
         </div>
       )}
@@ -336,9 +294,9 @@ function BotonAccion({ marca, accion }: { marca: Marca; accion: Accion }) {
     router.push(`/${accion.seccion}`)
   }
   return (
-    <button className="btn-sm" onClick={ir} style={{ background: '#111827', color: '#fff', border: 'none' }}>
+    <Button size="sm" variant="solid" tone="brand" onClick={ir}>
       {accion.label} →
-    </button>
+    </Button>
   )
 }
 
@@ -351,45 +309,25 @@ function PillSeveridad({ sev, n, activo, onClick }: { sev: Severidad; n: number;
         display: 'flex',
         alignItems: 'center',
         gap: 7,
-        border: `1px solid ${activo ? c.punto : '#E5E7EB'}`,
-        background: activo ? c.fondo : '#fff',
+        border: `1px solid ${activo ? c.punto : color.line}`,
+        background: activo ? c.fondo : color.surface,
         borderRadius: 9,
         padding: '6px 11px',
         cursor: 'pointer',
-        fontSize: 13,
+        fontSize: font.base,
       }}
     >
       <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.punto, display: 'inline-block' }} />
-      <span style={{ fontWeight: 700, color: '#111827' }}>{n}</span>
-      <span style={{ color: '#6B7280' }}>{ETIQUETA_SEVERIDAD[sev]}</span>
+      <span style={{ fontWeight: 700, color: color.ink }}>{n}</span>
+      <span style={{ color: color.mut }}>{ETIQUETA_SEVERIDAD[sev]}</span>
     </button>
   )
 }
 
 function Chip({ label, activo, onClick }: { label: string; activo: boolean; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="btn-sm"
-      style={{
-        background: activo ? '#111827' : '#fff',
-        color: activo ? '#fff' : '#374151',
-        border: `1px solid ${activo ? '#111827' : '#D1D5DB'}`,
-      }}
-    >
+    <button type="button" className="mo-chip" aria-pressed={activo} onClick={onClick}>
       {label}
     </button>
-  )
-}
-
-function MarcaChip({ marca }: { marca: Marca }) {
-  return marca === 'zattia' ? (
-    <span style={{ background: '#EDE9FE', color: '#5B21B6', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>
-      Zattia
-    </span>
-  ) : (
-    <span style={{ background: '#DBEAFE', color: '#1E40AF', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>
-      BDI
-    </span>
   )
 }

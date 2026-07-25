@@ -28,3 +28,4 @@ export { FilterBar, BuscarInput, Chips, ContadorFiltro, useFiltroUrl, type ChipO
 export { Paginacion, MiniBar } from '@/components/ui/Paginacion'
 export { MenuMulti, type OpcionMulti } from '@/components/ui/MenuMulti'
 export { FaseBadge, toneDeFase } from '@/components/ui/FaseBadge'
+export { MarcaChip } from '@/components/ui/MarcaChip'

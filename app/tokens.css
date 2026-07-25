@@ -23,10 +23,22 @@
 
   /* ── Superficies y bordes ──────────────────────────────── */
   --mo-surface: #ffffff;
-  --mo-bg: #f8fafc; /* lienzo de página */
-  --mo-bg2: #f1f5f9; /* zebra, hover de fila, chips apagados */
-  --mo-line: #e4e7ec; /* borde de cards y tablas */
-  --mo-line2: #d0d5dd; /* borde de inputs */
+  /**
+   * ⚠️ `--mo-canvas` y `--mo-bg` son distintos a propósito, y confundirlos fue el bug.
+   *
+   * `--mo-canvas` es el FONDO DE LA PÁGINA, lo que está detrás de las cards. Arrancó en
+   * #f8fafc —un blanco roto— y contra cards blancas no se recortaba nada: las pantallas
+   * se veían sin forma, "como que se ve el fondo blanco". Ahora es un gris que se nota.
+   *
+   * `--mo-bg` es el gris sutil que va ADENTRO de una superficie blanca: hover de fila,
+   * estado vacío, fondo de un bloque secundario. Ese tiene que seguir siendo casi
+   * imperceptible; si le pongo el gris del lienzo, las tablas quedan sucias.
+   */
+  --mo-canvas: #eaeff5;
+  --mo-bg: #f8fafc; /* tinte sutil DENTRO de una card */
+  --mo-bg2: #eff3f8; /* zebra, hover de fila, chips apagados */
+  --mo-line: #dfe5ec; /* borde de cards y tablas */
+  --mo-line2: #cbd4df; /* borde de inputs */
 
   /* ── Acento de firma: ÍNDIGO ───────────────────────────── */
   --mo-brand: #4338ca; /* texto/ícono sobre claro */
@@ -60,6 +72,18 @@
   --mo-success-bg: #ecfdf3;
   --mo-success-border: #abefc6;
   --mo-success-ink: #067647;
+
+  /**
+   * ── Identidad de marca (BDI / Zattia) ──
+   * NO son colores del sistema: son etiquetas de identidad. Aparecen en las listas que
+   * mezclan las dos marcas, donde su única función es distinguirlas de un golpe de vista,
+   * así que tienen que diferenciarse ENTRE SÍ. Si las pintáramos con el acento de la app
+   * —las dos índigo— dejarían de servir para lo único que existen.
+   */
+  --mo-marca-bdi-fg: #1e40af;
+  --mo-marca-bdi-bg: #dbeafe;
+  --mo-marca-zattia-fg: #6d28d9;
+  --mo-marca-zattia-bg: #ede9fe;
 
   /* ── Sidebar (oscuro) ──────────────────────────────────── */
   --mo-side-bg: #0f1729;

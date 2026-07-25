@@ -9,6 +9,8 @@ import { ponerAltaSolicitud, ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import type { Solicitud, TipoSol } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { Badge, BuscarInput, Button, Card, Chips, EmptyState, Esqueleto, FilterBar, MarcaChip, color, font, space, useFiltroUrl } from '@/components/ui'
 import { NuevaSolicitud } from './NuevaSolicitud'
 import { presetPorMotivo } from './preset'
 import type { Marca } from '@/lib/nav'
@@ -41,8 +43,8 @@ export function Solicitudes() {
   const { perfil, marca, setMarca } = useSesion()
   const router = useRouter()
   const [datos, setDatos] = useState<ResumenSolicitud[] | null>(null)
-  const [filtro, setFiltro] = useState<GrupoEstado | 'todas'>('todas')
-  const [busqueda, setBusqueda] = useState('')
+  const [filtro, setFiltro] = useFiltroUrl<GrupoEstado | 'todas'>('f', 'todas')
+  const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
 
   const [pidiendo, setPidiendo] = useState(false)
 
@@ -75,6 +77,17 @@ export function Solicitudes() {
     (r) => (filtro === 'todas' || r.grupo === filtro) && (!q || r.titulo.toLowerCase().includes(q) || r.subtitulo.toLowerCase().includes(q) || (r.creadoPor || '').toLowerCase().includes(q)),
   )
 
+  // Los chips llevan el contador: la pregunta de esta pantalla es "cuántas hay en cada
+  // estado", y antes había que filtrar uno por uno para saberlo.
+  const cuentaPorGrupo = useMemo(() => {
+    const base = datos ?? []
+    const m: Record<string, number> = { todas: base.length }
+    FILTROS.forEach((f) => {
+      if (f.k !== 'todas') m[f.k] = base.filter((r) => r.grupo === f.k).length
+    })
+    return m
+  }, [datos])
+
   const ver = (r: ResumenSolicitud) => {
     if (marca !== r.marca) setMarca(r.marca)
     if (r.seccion === 'sesion-fotos') ponerVerSolicitud(r.id)
@@ -96,9 +109,8 @@ export function Solicitudes() {
   }
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>📋 Solicitudes</div>
+    <>
+      <HeaderAcciones>
         <InfoPopover titulo="Solicitudes">
           Todas las solicitudes de productos: cada una tiene un <b>motivo</b> (para qué sale — sesión de fotos,
           video, muestra…) y un <b>destino</b> (si vuelve a la venta o se consume).{' '}
@@ -107,66 +119,64 @@ export function Solicitudes() {
             : 'Ves las de todas tus marcas.'}{' '}
           Para preparar, crear la venta en GN o devolver, entrá con “Ver”.
         </InfoPopover>
+        <Button variant="outline" onClick={() => void cargar()}>
+          Actualizar
+        </Button>
         {puedeCrear && (
-          <button className="btn-primary" onClick={() => setPidiendo(true)} style={{ marginLeft: 8 }}>
+          <Button variant="solid" tone="brand" onClick={() => setPidiendo(true)}>
             + Nueva solicitud
-          </button>
+          </Button>
         )}
-        <button className="btn-sm" onClick={() => void cargar()} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
-          🔄 Actualizar
-        </button>
-      </div>
+      </HeaderAcciones>
 
       {pidiendo && <NuevaSolicitud onCancelar={() => setPidiendo(false)} onOk={crear} />}
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        {FILTROS.map((f) => (
-          <button
-            key={f.k}
-            onClick={() => setFiltro(f.k)}
-            style={{ border: `1px solid ${filtro === f.k ? '#378ADD' : '#D1D5DB'}`, background: filtro === f.k ? '#378ADD' : '#fff', color: filtro === f.k ? '#fff' : '#374151', borderRadius: 8, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
-          >
-            {f.label}
-          </button>
-        ))}
-        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔎 Buscar…" style={{ flex: 1, minWidth: 160, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }} />
-      </div>
+      <FilterBar>
+        <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar solicitud, producto o quién la pidió…" />
+        <Chips<GrupoEstado | 'todas'>
+          value={filtro}
+          onChange={setFiltro}
+          opciones={FILTROS.map((f) => ({ key: f.k, label: f.label, n: cuentaPorGrupo[f.k] }))}
+        />
+      </FilterBar>
 
       {datos === null ? (
-        <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando solicitudes…</div>
+        <Esqueleto forma="tabla" filas={6} />
       ) : lista.length === 0 ? (
-        <div style={{ color: '#059669', fontSize: 14, padding: '14px 4px' }}>✅ No hay solicitudes en este filtro.</div>
+        <EmptyState icon="✅" title="No hay solicitudes en este filtro" dashed />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
           {lista.map((r) => (
-            <div key={`${r.seccion}-${r.marca}-${r.id}`} style={{ display: 'flex', gap: 10, alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 11px', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200, cursor: 'pointer' }} onClick={() => ver(r)}>
+            <Card
+              key={`${r.seccion}-${r.marca}-${r.id}`}
+              interactive
+              padding={3}
+              onClick={() => ver(r)}
+              style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer' }}
+            >
+              <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <MarcaChip marca={r.marca} />
-                  <span style={{ fontWeight: 600 }}>{r.titulo}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: r.color, background: r.bg, borderRadius: 6, padding: '1px 7px' }}>{r.estadoLabel}</span>
-                  {r.estadoTag ? <span style={{ fontSize: 11, fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', borderRadius: 6, padding: '1px 7px' }}>⚠ {r.estadoTag}</span> : null}
+                  <span style={{ fontWeight: 600, color: color.ink }}>{r.titulo}</span>
+                  <span style={{ fontSize: font.xs, fontWeight: 700, color: r.color, background: r.bg, borderRadius: 6, padding: '1px 7px' }}>{r.estadoLabel}</span>
+                  {r.estadoTag ? (
+                    <Badge tone="danger" subtle>
+                      ⚠ {r.estadoTag}
+                    </Badge>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
+                <div style={{ fontSize: font.sm, color: color.mut, marginTop: 3 }}>
                   {r.subtitulo} · {r.unidades} u.
                   {sector ? ` (local ${r.uLocal} · dep ${r.uDeposito})` : ''} · creada por {r.creadoPor || '—'} · {horaCorta(r.creado, r.fecha)}
                 </div>
               </div>
-              <button className="btn-sm" onClick={() => ver(r)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
-                Ver
-              </button>
-            </div>
+              <span aria-hidden style={{ color: color.mut2, fontSize: font.lg }}>
+                ›
+              </span>
+            </Card>
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function MarcaChip({ marca }: { marca: Marca }) {
-  return marca === 'zattia' ? (
-    <span style={{ background: '#EDE9FE', color: '#5B21B6', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>Zattia</span>
-  ) : (
-    <span style={{ background: '#DBEAFE', color: '#1E40AF', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>BDI</span>
+    </>
   )
 }

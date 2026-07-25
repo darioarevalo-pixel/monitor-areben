@@ -23,7 +23,7 @@
 
 body {
   font-family: var(--mo-font);
-  background: var(--mo-bg);
+  background: var(--mo-canvas);
   color: var(--mo-ink);
   font-size: var(--mo-fs-md);
   -webkit-font-smoothing: antialiased;
@@ -55,7 +55,7 @@ a {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: var(--mo-bg);
+  background: var(--mo-canvas);
 }
 
 /* Aire de página. Un solo lugar donde se define, y se recorta en móvil (donde el ancho
@@ -574,7 +574,7 @@ a {
   /* Un fondo con una insinuación del índigo de firma: es la primera pantalla del día. */
   background:
     radial-gradient(60% 55% at 50% 0%, var(--mo-brand-bg) 0%, transparent 100%),
-    var(--mo-bg);
+    var(--mo-canvas);
 }
 
 .login-card {

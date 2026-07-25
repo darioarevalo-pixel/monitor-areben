@@ -7,7 +7,8 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { useCupones } from './useCupones'
 import { crearCupon, descuento, dias, editarCupon, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
 import type { Cupon, EstadoCupon, FiltroCupon, TipoDescuento } from '@/lib/cupones/tipos'
-import { useConfirmar, useToast } from '@/components/ui'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import { BuscarInput, Button, Chips, EmptyState, FilterBar, TBody, THead, TableWrap, Td, Th, Tr, color, font, useConfirmar, useToast } from '@/components/ui'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 const nuevoId = () => 'c' + Date.now() + '_' + Math.floor(Math.random() * 100000)
@@ -94,74 +95,76 @@ export function Cupones() {
   }
 
   return (
-    <div className="card">
-      <div style={{ marginTop: 0 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-          {puedeCrear ? (
-            <button className="btn-primary" onClick={() => setForm((v) => (v === 'nuevo' ? null : 'nuevo'))}>➕ Generar cupón</button>
-          ) : (
-            <span style={{ fontSize: 12, color: '#9CA3AF' }}>Buscá el cupón del cliente y confirmá el uso. (Generar cupones: solo con permiso.)</span>
-          )}
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar por nombre o código…"
-            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
-          />
-        </div>
+    <>
+      <HeaderAcciones>
+        {puedeCrear ? (
+          <Button variant="solid" tone="brand" onClick={() => setForm((v) => (v === 'nuevo' ? null : 'nuevo'))}>
+            Generar cupón
+          </Button>
+        ) : (
+          <span style={{ fontSize: font.sm, color: color.mut2 }}>Generar cupones: solo con permiso.</span>
+        )}
+      </HeaderAcciones>
 
+      <div>
         {form && puedeCrear && (
           <FormCupon usuario={usuario} cuponInicial={form === 'nuevo' ? undefined : form} onGuardar={onGuardar} onCancelar={() => setForm(null)} />
         )}
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          <FiltroBtn f="vigentes" actual={filtro} onClick={setFiltro}>Vigentes</FiltroBtn>
-          <FiltroBtn f="porvencer" actual={filtro} onClick={setFiltro}>Por vencer{porVencerN ? ` (${porVencerN})` : ''}</FiltroBtn>
-          <FiltroBtn f="usados" actual={filtro} onClick={setFiltro}>Usados</FiltroBtn>
-          <FiltroBtn f="vencidos" actual={filtro} onClick={setFiltro}>Vencidos</FiltroBtn>
-          <FiltroBtn f="todos" actual={filtro} onClick={setFiltro}>Todos</FiltroBtn>
-        </div>
+        <FilterBar>
+          <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por nombre o código…" />
+          <Chips<FiltroCupon>
+            value={filtro}
+            onChange={setFiltro}
+            opciones={[
+              { key: 'vigentes', label: 'Vigentes' },
+              { key: 'porvencer', label: 'Por vencer', n: porVencerN || undefined },
+              { key: 'usados', label: 'Usados' },
+              { key: 'vencidos', label: 'Vencidos' },
+              { key: 'todos', label: 'Todos' },
+            ]}
+          />
+        </FilterBar>
 
         {lista.length ? (
-          <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left', background: '#F9FAFB' }}>
-                  <th style={th}>Cliente</th>
-                  <th style={th}>Descuento</th>
-                  <th style={th}>Vence</th>
-                  <th style={th}>Estado</th>
-                  <th style={th}>Motivo / código</th>
-                  <th style={th}>Generó</th>
-                  <th style={th}></th>
-                </tr>
-              </thead>
-              <tbody>
+          <TableWrap maxHeight={620}>
+            <THead>
+              <Tr>
+                <Th>Cliente</Th>
+                <Th>Descuento</Th>
+                <Th>Vence</Th>
+                <Th>Estado</Th>
+                <Th>Motivo / código</Th>
+                <Th>Generó</Th>
+                <Th />
+              </Tr>
+            </THead>
+            <TBody>
                 {lista.map(({ c, e }) => {
                   const venceTxt = c.vence ? c.vence.split('-').reverse().join('/') : '—'
                   const d = dias(c.vence, hoy)
                   return (
-                    <tr key={c.id} style={{ background: e === 'porvencer' ? '#FFFBEB' : undefined }}>
-                      <td style={{ ...td, fontWeight: 600 }}>
+                    <Tr key={c.id} style={e === 'porvencer' ? { background: color.warningBg } : undefined}>
+                      <Td tall strong>
                         {c.nombre}
-                        {c.telefono && <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>{c.telefono}</div>}
-                      </td>
-                      <td style={{ ...td, fontWeight: 700 }}>
+                        {c.telefono && <div style={{ fontSize: font.xs, color: color.mut2, fontWeight: 400 }}>{c.telefono}</div>}
+                      </Td>
+                      <Td tall style={{ fontWeight: 700, color: color.ink }}>
                         {descuento(c)}
-                        {(+(c.minimo || 0) > 0) && <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>desde ${Math.round(+(c.minimo || 0)).toLocaleString('es-AR')}</div>}
-                      </td>
-                      <td style={td}>
+                        {(+(c.minimo || 0) > 0) && <div style={{ fontSize: font.xs, color: color.mut2, fontWeight: 400 }}>desde ${Math.round(+(c.minimo || 0)).toLocaleString('es-AR')}</div>}
+                      </Td>
+                      <Td tall>
                         {venceTxt}
-                        {e === 'porvencer' && d != null && <div style={{ fontSize: 11, color: '#B45309' }}>{d <= 0 ? 'vence hoy' : `en ${d}d`}</div>}
-                      </td>
-                      <td style={td}><Badge e={e} /></td>
-                      <td style={{ ...td, color: '#6B7280' }}>
+                        {e === 'porvencer' && d != null && <div style={{ fontSize: font.xs, color: color.warningInk }}>{d <= 0 ? 'vence hoy' : `en ${d}d`}</div>}
+                      </Td>
+                      <Td><Badge e={e} /></Td>
+                      <Td wrap style={{ color: color.mut }}>
                         {c.motivo || '—'}
-                        {c.codigo && <span style={{ color: '#9CA3AF' }}> · {c.codigo}</span>}
-                        {!c.unSoloUso && <span style={{ color: '#9CA3AF' }}> · reutilizable</span>}
-                      </td>
-                      <td style={{ ...td, color: '#9CA3AF', fontSize: 11 }}>{c.creadoPor || '—'}</td>
-                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {c.codigo && <span style={{ color: color.mut2 }}> · {c.codigo}</span>}
+                        {!c.unSoloUso && <span style={{ color: color.mut2 }}> · reutilizable</span>}
+                      </Td>
+                      <Td style={{ color: color.mut2, fontSize: font.xs }}>{c.creadoPor || '—'}</Td>
+                      <Td align="right">
                         <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                           {c.unSoloUso && (e === 'vigente' || e === 'porvencer') && (
                             <button onClick={() => onMarcarUsado(c.id)} title="Marcar como usado" style={btnUsado}>✔ Usado</button>
@@ -182,20 +185,17 @@ export function Cupones() {
                             <button onClick={() => onBorrar(c.id)} title="Borrar (solo admin)" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 14 }}>🗑</button>
                           )}
                         </span>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
+            </TBody>
+          </TableWrap>
         ) : (
-          <div style={{ color: '#9CA3AF', fontSize: 13, padding: 16, textAlign: 'center' }}>
-            No hay cupones en este filtro. Tocá &quot;➕ Generar cupón&quot; para crear uno.
-          </div>
+          <EmptyState icon="🎟️" title="No hay cupones en este filtro" hint={puedeCrear ? 'Tocá “Generar cupón” para crear uno.' : undefined} dashed />
         )}
       </div>
-    </div>
+    </>
   )
 }
 
@@ -297,7 +297,13 @@ function TipoBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
   return (
     <button
       onClick={onClick}
-      style={{ border: `1px solid ${on ? '#378ADD' : '#D1D5DB'}`, background: on ? '#378ADD' : '#fff', color: on ? '#fff' : '#374151', borderRadius: 7, padding: '7px 13px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+      className="mo-btn mo-btn--md"
+      style={{
+        '--_bg': on ? color.brandSolid : color.surface,
+        '--_fg': on ? '#fff' : color.ink2,
+        '--_bd': on ? color.brandSolid : color.line2,
+        '--_bg-hover': on ? 'var(--mo-brand-solid-hover)' : color.bg2,
+      } as CSSProperties}
     >
       {children}
     </button>
@@ -309,20 +315,6 @@ function Badge({ e }: { e: EstadoCupon }) {
   return <span style={{ background: bg, color: col, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{txt}</span>
 }
 
-function FiltroBtn({ f, actual, onClick, children }: { f: FiltroCupon; actual: FiltroCupon; onClick: (f: FiltroCupon) => void; children: ReactNode }) {
-  const on = actual === f
-  return (
-    <button
-      onClick={() => onClick(f)}
-      style={{ border: `1px solid ${on ? '#378ADD' : '#D1D5DB'}`, background: on ? '#378ADD' : '#fff', color: on ? '#fff' : '#374151', borderRadius: 8, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
-    >
-      {children}
-    </button>
-  )
-}
-
-const th: CSSProperties = { padding: '6px 8px' }
-const td: CSSProperties = { padding: '6px 8px', borderTop: '1px solid #F1F5F9' }
 const lbl: CSSProperties = { fontSize: 12, color: '#374151' }
 const inp: CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 6, marginTop: 2, boxSizing: 'border-box' }
 const btnUsado: CSSProperties = { border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#065F46', borderRadius: 6, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }
