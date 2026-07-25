@@ -6,20 +6,28 @@
  */
 
 import { apiFetch } from '../../api-fetch'
+
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import type { FallaInput, FallaRow } from './tipos'
 
+/**
+ * Los tres recursos de post-venta entran por `/api/postventa` (ver el comentario de
+ * api/postventa.js: el plan Hobby de Vercel admite 12 funciones por deploy y un archivo
+ * más en `api/` frenaba TODOS los deploys). El contrato del handler no cambió.
+ */
+const API = '/api/postventa?recurso=fallas'
+
 export async function leerFallas(store: Marca): Promise<FallaRow[]> {
-  const r = await apiFetch(`/api/fallas?store=${store}&nc=${Date.now()}`)
+  const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer las fallas.')
   return (d.fallas || []) as FallaRow[]
 }
 
 export async function crearFalla(store: Marca, falla: FallaInput, usuario?: string): Promise<{ id?: number; barcode?: string }> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'crear', usuario, ...falla }),
@@ -31,7 +39,7 @@ export async function crearFalla(store: Marca, falla: FallaInput, usuario?: stri
 
 /** Administración recibe la falla física: mueve la ubicación a depósito. */
 export async function recibirFalla(store: Marca, id: number, usuario?: string): Promise<void> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'recibir', id, usuario }),
@@ -69,7 +77,7 @@ export async function registrarVentaGN(
   const r = await enviarVentaFetch(pedido)
   if (!r.ok) throw new Error(`No se pudo crear la venta en GN — ${r.error || ''}`)
 
-  const resp = await apiFetch('/api/fallas', {
+  const resp = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, usuario: ctx.user }),
@@ -80,7 +88,7 @@ export async function registrarVentaGN(
 
 /** Administración valida los datos de la carga (marca 'confirmada'). NO toca GN (la venta ya se hizo). */
 export async function confirmarFalla(store: Marca, id: number, usuario?: string): Promise<void> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'confirmar', id, usuario }),
@@ -90,7 +98,7 @@ export async function confirmarFalla(store: Marca, id: number, usuario?: string)
 }
 
 export async function cambiarEstadoFalla(store: Marca, id: number, estado: FallaRow['estado'], usuario?: string, nota?: string): Promise<void> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'estado', id, estado, usuario, nota }),
@@ -101,7 +109,7 @@ export async function cambiarEstadoFalla(store: Marca, id: number, estado: Falla
 
 /** Elimina una falla del ledger (solo Administración). NO deshace la venta en GN. */
 export async function eliminarFalla(store: Marca, id: number): Promise<void> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'eliminar', id }),
@@ -111,7 +119,7 @@ export async function eliminarFalla(store: Marca, id: number): Promise<void> {
 }
 
 export async function editarFalla(store: Marca, id: number, campos: Partial<FallaInput>): Promise<void> {
-  const r = await apiFetch('/api/fallas', {
+  const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'editar', id, ...campos }),

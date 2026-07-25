@@ -1,7 +1,8 @@
 /**
- * Cliente de Cambios (`/api/cambios`, Supabase) + lectura de la orden de TN (bdi-catalogo).
- * La venta de IDA (producto nuevo, baja de stock) reusa `/api/crear-venta` (como Fallas). El reingreso
- * del devuelto es MANUAL (GN no acepta venta negativa por API) → se traza `reingreso_estado`.
+ * Cliente de Cambios (`/api/postventa?recurso=cambios`, Supabase) + lectura de la orden de TN
+ * (bdi-catalogo). La venta de IDA (producto nuevo, baja de stock) reusa `/api/crear-venta`
+ * (como Fallas). El reingreso del devuelto es MANUAL (GN no acepta venta negativa por API)
+ * → se traza `reingreso_estado`.
  */
 
 import { apiFetch } from '../api-fetch'
@@ -13,6 +14,9 @@ import { calcularTotalCambio, sumarItems, type CambioInput, type CambioRow, type
 const TN_AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
 
+/** Ver api/postventa.js: los tres recursos comparten una función por el límite del plan. */
+const API = '/api/postventa?recurso=cambios'
+
 /** Trae una orden de TN por número (endpoint `?orden=` de bdi-catalogo). Sin auth: es endpoint TN público. */
 export async function leerOrdenTN(store: Marca, numero: string): Promise<OrdenTN | null> {
   const r = await fetch(`${TN_AUDIT}?orden=${encodeURIComponent(numero)}&store=${store}&nc=${Date.now()}`).then((x) => x.json()).catch(() => null)
@@ -21,16 +25,16 @@ export async function leerOrdenTN(store: Marca, numero: string): Promise<OrdenTN
 }
 
 export async function leerCambios(store: Marca, opts?: { soloPendienteReingreso?: boolean }): Promise<CambioRow[]> {
-  const qs = new URLSearchParams({ store, nc: String(Date.now()) })
+  const qs = new URLSearchParams({ recurso: 'cambios', store, nc: String(Date.now()) })
   if (opts?.soloPendienteReingreso) qs.set('reingreso', 'pendiente')
-  const r = await apiFetch(`/api/cambios?${qs.toString()}`)
+  const r = await apiFetch(`/api/postventa?${qs.toString()}`)
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer los cambios.')
   return (d.cambios || []) as CambioRow[]
 }
 
 export async function crearCambio(store: Marca, input: CambioInput, usuario?: string): Promise<{ id?: number; diferencia?: number }> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'crear', usuario, ...input }),
   })
@@ -59,7 +63,7 @@ export async function registrarVentaIda(store: Marca, cambio: CambioRow, ctx: { 
   const r = await enviarVentaFetch(pedido)
   if (!r.ok) throw new Error(`No se pudo crear la venta de ida en GN — ${r.error || ''}`)
 
-  const resp = await apiFetch('/api/cambios', {
+  const resp = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'confirmar', id: cambio.id, via: cambio.via, gn_venta_ida_id: r.venta?.id ?? null, gn_venta_ida_number: r.venta?.number ?? null, usuario: ctx.user }),
   })
@@ -99,7 +103,7 @@ export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { use
   const d = await r.json().catch(() => null)
   if (!d || !d.ok) throw new Error(`No se pudo crear la venta del cambio en GN — ${(d && (d.error || (d.detalle && JSON.stringify(d.detalle).slice(0, 200)))) || ''}`)
 
-  const resp = await apiFetch('/api/cambios', {
+  const resp = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'procesar', id: cambio.id, gn_venta_id: d.venta?.id ?? null, gn_venta_number: d.venta?.number ?? null, usuario: ctx.user }),
   })
@@ -109,7 +113,7 @@ export async function procesarCambio(store: Marca, cambio: CambioRow, ctx: { use
 
 /** Marca la diferencia como cobrada (el admin ya la cobró en GN). */
 export async function marcarCobrado(store: Marca, id: number, usuario?: string): Promise<void> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'cobrado', id, usuario }),
   })
@@ -119,7 +123,7 @@ export async function marcarCobrado(store: Marca, id: number, usuario?: string):
 
 /** Marca el reingreso del producto devuelto como HECHO (el admin ya lo cargó a mano en GN). */
 export async function marcarReingreso(store: Marca, id: number, usuario?: string): Promise<void> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'reingreso', id, usuario }),
   })
@@ -128,7 +132,7 @@ export async function marcarReingreso(store: Marca, id: number, usuario?: string
 }
 
 export async function cambiarEstadoCambio(store: Marca, id: number, estado: CambioRow['estado'], usuario?: string, nota?: string): Promise<void> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'estado', id, estado, usuario, nota }),
   })
@@ -137,7 +141,7 @@ export async function cambiarEstadoCambio(store: Marca, id: number, estado: Camb
 }
 
 export async function editarCambio(store: Marca, id: number, campos: Record<string, unknown>): Promise<void> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'editar', id, ...campos }),
   })
@@ -146,7 +150,7 @@ export async function editarCambio(store: Marca, id: number, campos: Record<stri
 }
 
 export async function eliminarCambio(store: Marca, id: number): Promise<void> {
-  const r = await apiFetch('/api/cambios', {
+  const r = await apiFetch(API, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, action: 'eliminar', id }),
   })

@@ -4,7 +4,7 @@
  * Antes eran dos claves del KV de bdi-catalogo (`sesionfotos:<marca>` y
  * `solicitudesinternas:<marca>`), cada una con el historial completo en un JSON que se
  * reescribía entero en cada guardado. Ahora la fuente de verdad es la tabla `solicitudes`
- * del propio monitor (`/api/solicitudes`), una fila por solicitud.
+ * del propio monitor (API), una fila por solicitud.
  *
  * ── Convivencia (a propósito, y temporal) ──────────────────────────────────────────
  * Durante la migración se LEEN los dos lugares y se fusionan por id **ganando la tabla**,
@@ -17,6 +17,9 @@
 import { apiFetch } from '@/lib/api-fetch'
 import { leerLista, type KindLista } from '@/lib/kv/cliente'
 import type { Marca } from '@/lib/nav.datos'
+
+/** Ver api/postventa.js: los tres recursos comparten una función por el límite del plan. */
+const API = '/api/postventa?recurso=solicitudes'
 
 /**
  * ¿Ya se puede dejar de leer el KV viejo? Se prende cuando la migración esté verificada
@@ -31,7 +34,7 @@ export type LecturaCajon<T> = { ok: true; dato: T[] } | { ok: false; motivo: str
 
 async function leerTabla<T>(kind: KindLista, store: Marca): Promise<LecturaCajon<T>> {
   try {
-    const r = await apiFetch(`/api/solicitudes?store=${store}&kind=${kind}&nc=${Date.now()}`)
+    const r = await apiFetch(`${API}&store=${store}&kind=${kind}&nc=${Date.now()}`)
     const d = await r.json().catch(() => null)
     if (!r.ok || !d?.ok) return { ok: false, motivo: (d && d.error) || `HTTP ${r.status}` }
     return { ok: true, dato: (d.list || []) as T[] }
@@ -66,7 +69,7 @@ export async function leerCajon<T extends ConId>(kind: KindLista, store: Marca):
 /** Guarda (upsert) una sola solicitud. */
 export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: Marca, solicitud: T): Promise<{ ok: boolean; motivo?: string }> {
   try {
-    const r = await apiFetch('/api/solicitudes', {
+    const r = await apiFetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ store, kind, solicitud }),
@@ -81,7 +84,7 @@ export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: 
 
 async function borrarSolicitud(store: Marca, id: string): Promise<{ ok: boolean; motivo?: string }> {
   try {
-    const r = await apiFetch('/api/solicitudes', {
+    const r = await apiFetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ store, action: 'borrar', id }),
