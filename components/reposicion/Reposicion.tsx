@@ -13,16 +13,36 @@ import { reposicionPDF } from '@/lib/reposicion/pdf'
 import type { RepoCfg, RepoItem } from '@/lib/reposicion/tipos'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
+import { HeaderAcciones } from '@/components/layout/acciones'
+import {
+  Button,
+  EmptyState,
+  Esqueleto,
+  Modal,
+  Notice,
+  Select,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  color,
+  font,
+  space,
+  useToast,
+} from '@/components/ui'
 
 export function Reposicion() {
   const { marca } = useSesion()
   const { datos } = useDatosMonitor()
-  if (!datos) return <div className="card"><div style={{ padding: 20, color: '#9CA3AF' }}>Cargando…</div></div>
+  if (!datos) return <Esqueleto forma="tabla" filas={8} />
   return <Contenido key={marca} allProductos={datos.allProductos ?? []} />
 }
 
 function Contenido({ allProductos }: { allProductos: Producto[] }) {
   const { marca } = useSesion()
+  const toast = useToast()
   const esBdi = marca === 'bdi'
   const tnIdx = useTnPromo(marca)
   const rep = useReposicion(marca)
@@ -65,7 +85,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
       await rep.traer()
       setManual({})
     } catch (e) {
-      alert('Error: ' + (e as Error).message)
+      toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncing(false)
       setSyncLabel('🔄 Actualizar reporte')
@@ -74,7 +94,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
 
   const onPDF = async () => {
     const ok = await reposicionPDF(inv, cfg, marca, manual)
-    if (!ok) alert('No hay unidades para mover (todas en 0).')
+    if (!ok) toast.aviso('No hay unidades para mover: están todas en 0.')
   }
 
   // Reporte agrupado por producto, ordenado por ubicación física.
@@ -91,83 +111,169 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
   const hayEdit = Object.keys(manual).length > 0
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" checked={verVentas} onChange={(e) => setVerVentas(e.target.checked)} /> Ver ventas del local (7d)</label>
-          <button className="btn-sm" onClick={onActualizar} disabled={syncing} style={{ background: '#378ADD', color: '#fff' }}>{syncLabel}</button>
-          <button className="btn-sm" onClick={onPDF} style={{ background: '#16A34A', color: '#fff' }}>📄 Exportar reposición</button>
-        </div>
-      </div>
+    <>
+      <HeaderAcciones>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}>
+          <input type="checkbox" checked={verVentas} onChange={(e) => setVerVentas(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
+          Ver ventas del local (7d)
+        </label>
+        <Button variant="ghost" onClick={() => setConfigOpen(true)}>
+          ⚙️ Configurar mínimos
+        </Button>
+        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing}>
+          {syncing ? syncLabel : 'Actualizar reporte'}
+        </Button>
+        <Button variant="solid" tone="brand" onClick={() => void onPDF()} disabled={!report.length}>
+          Exportar reposición
+        </Button>
+      </HeaderAcciones>
 
       {rep.cargando && !rep.rawInv.length ? (
-        <div style={{ padding: 20, color: '#9CA3AF' }}>Cargando reposición…</div>
+        <Esqueleto forma="tabla" filas={8} />
       ) : rep.error ? (
-        <div style={{ padding: 16, color: '#B91C1C' }}>No pude cargar: {rep.error} <button className="btn-sm" style={{ marginTop: 10 }} onClick={() => void rep.traer()}>Reintentar</button></div>
+        <Notice tone="danger" icon="⚠">
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+            <span>No pude cargar la reposición: {rep.error}</span>
+            <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer()}>
+              Reintentar
+            </Button>
+          </div>
+        </Notice>
       ) : (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-            <div style={{ fontSize: 12, color: '#6B7280' }}>🕒 Reporte actualizado: <b>{rep.lastUpdate ? rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</b></div>
-            <button onClick={() => setConfigOpen(true)} style={{ border: '1px solid #D1D5DB', background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙️ Configurar mínimos</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
+            <span style={{ fontSize: font.md, color: color.ink2 }}>
+              <b>{report.length}</b> {report.length === 1 ? 'variante' : 'variantes'} para reponer en <b>{prodKeys.length}</b>{' '}
+              {prodKeys.length === 1 ? 'producto' : 'productos'} · <b>{totalMover}</b> u. a mover
+            </span>
+            {hayEdit && (
+              <Button size="sm" variant="ghost" onClick={() => setManual({})}>
+                ↺ Volver a sugeridos
+              </Button>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: font.sm, color: color.mut2 }}>
+              Actualizado: {rep.lastUpdate ? rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            </span>
           </div>
 
-          <div style={{ fontSize: 13, margin: '4px 0 8px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span><b>{report.length}</b> variantes para reponer en <b>{prodKeys.length}</b> producto(s) · <b>{totalMover}</b> u. a mover</span>
-            {hayEdit && <button onClick={() => setManual({})} style={{ border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, padding: '2px 9px', fontSize: 11, cursor: 'pointer', color: '#6B7280' }}>↺ Volver a sugeridos</button>}
-          </div>
-          {report.length > 0 && <div style={{ fontSize: 11.5, color: '#9CA3AF', margin: '-2px 0 8px' }}>✏️ Podés ajustar a mano la cantidad a mover. El PDF usa esos valores (omite las que dejes en 0).</div>}
-          {!report.length && <div style={{ color: '#16A34A', padding: 14 }}>Nada para reponer 🎉 (todo por encima del mínimo, o sin stock en depósito).</div>}
+          {report.length > 0 && (
+            <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+              Podés ajustar a mano la cantidad a mover: el PDF usa esos valores y omite las que dejes en 0.
+            </p>
+          )}
+          {!report.length && <EmptyState icon="🎉" title="Nada para reponer" hint="Todo está por encima del mínimo, o no hay stock en depósito." dashed />}
 
           {prodKeys.map((pid) => {
             const g = porProd[pid]
             const items = g.items.slice().sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }))
             return (
-              <div key={pid}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', margin: '14px 0 6px' }}>
-                  {g.ubic
-                    ? <span style={{ display: 'inline-block', background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', fontWeight: 700, borderRadius: 6, padding: '1px 7px', marginRight: 7, fontSize: 12 }}>📍 {g.ubic}</span>
-                    : <span style={{ display: 'inline-block', color: '#D1D5DB', marginRight: 7, fontSize: 12 }}>📍 —</span>}
-                  {g.name} <span style={{ color: '#9CA3AF', fontWeight: 400 }}>· {g.cat} · {items.length}</span>
+              <div key={pid} style={{ marginBottom: space[4] }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', margin: `${space[4]}px 0 ${space[2]}px` }}>
+                  {/* La ubicación va primero y destacada: el reporte se recorre caminando el
+                      depósito, y el orden de la lista es justamente el orden físico. */}
+                  {g.ubic ? (
+                    <span style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, color: color.brand, fontWeight: 700, borderRadius: 6, padding: '2px 8px', fontSize: font.sm }}>📍 {g.ubic}</span>
+                  ) : (
+                    <span style={{ color: color.mut2, fontSize: font.sm }}>📍 —</span>
+                  )}
+                  <b style={{ fontSize: font.md, color: color.ink }}>{g.name}</b>
+                  <span style={{ color: color.mut2, fontSize: font.sm }}>
+                    · {g.cat} · {items.length}
+                  </span>
                 </div>
-                <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
-                    <colgroup><col /><col style={{ width: 58 }} /><col style={{ width: 62 }} />{verVentas && <col style={{ width: 64 }} />}<col style={{ width: 50 }} /><col style={{ width: 72 }} /></colgroup>
-                    <thead><tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left', background: '#F9FAFB' }}><th style={{ padding: '6px 8px' }}>Variante</th><th style={{ textAlign: 'center' }}>Local</th><th style={{ textAlign: 'center' }}>Depós.</th>{verVentas && <th style={{ textAlign: 'center' }}>7d local</th>}<th style={{ textAlign: 'center' }}>Mín</th><th style={{ textAlign: 'center' }}>Mover</th></tr></thead>
-                    <tbody>
-                      {items.map((it) => {
-                        const obj = objetivo(it, cfg)
-                        const topeado = cfg.topes[String(it.pid)] != null && cfg.topes[String(it.pid)] < minimo(it, cfg)
-                        const sug = sugerido(it, cfg, esBdi)
-                        const mover = moverFinal(it, cfg, esBdi, manual)
-                        const editado = manual[it.vid] !== undefined && manual[it.vid] !== sug
-                        return (
-                          <tr key={it.vid} style={{ borderTop: '1px solid #F3F4F6' }}>
-                            <td style={{ padding: '6px 8px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{it.size || '—'}{it.sku && <span style={{ fontSize: 11, color: '#9CA3AF' }}> {it.sku}</span>}</td>
-                            <td style={{ textAlign: 'center', color: it.local <= 1 ? '#DC2626' : '#374151', fontWeight: 600 }}>{it.local}</td>
-                            <td style={{ textAlign: 'center' }}>{it.deposito}</td>
-                            {verVentas && <td style={{ textAlign: 'center', color: '#1D9E75', fontWeight: 600 }}>{it.s7}</td>}
-                            <td style={{ textAlign: 'center', color: topeado ? '#378ADD' : '#9CA3AF', fontWeight: topeado ? 700 : undefined }} title={topeado ? 'Topeado por diseño' : 'Mínimo del modelo/categoría'}>{obj}</td>
-                            <td style={{ textAlign: 'center' }}><input type="number" min={0} max={it.deposito} value={mover} onChange={(e) => setMover(it.vid, e.target.value)} title={`Sugerido: ${sug} · Máx en depósito: ${it.deposito}`} style={{ width: 46, padding: '3px 4px', border: `1px solid ${editado ? '#378ADD' : '#E5E7EB'}`, background: editado ? '#EFF6FF' : undefined, borderRadius: 6, textAlign: 'center', fontWeight: 700, color: mover === 0 ? '#9CA3AF' : '#111827' }} /></td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <TableWrap>
+                  <THead>
+                    <Tr>
+                      <Th>Variante</Th>
+                      <Th align="center" width={64}>
+                        Local
+                      </Th>
+                      <Th align="center" width={68}>
+                        Depós.
+                      </Th>
+                      {verVentas && (
+                        <Th align="center" width={70}>
+                          7d local
+                        </Th>
+                      )}
+                      <Th align="center" width={56}>
+                        Mín
+                      </Th>
+                      <Th align="center" width={84}>
+                        Mover
+                      </Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {items.map((it) => {
+                      const obj = objetivo(it, cfg)
+                      const topeado = cfg.topes[String(it.pid)] != null && cfg.topes[String(it.pid)] < minimo(it, cfg)
+                      const sug = sugerido(it, cfg, esBdi)
+                      const mover = moverFinal(it, cfg, esBdi, manual)
+                      const editado = manual[it.vid] !== undefined && manual[it.vid] !== sug
+                      return (
+                        <Tr key={it.vid}>
+                          <Td wrap>
+                            {it.size || '—'}
+                            {it.sku && <span style={{ fontSize: font.xs, color: color.mut2 }}> {it.sku}</span>}
+                          </Td>
+                          <Td align="center" style={{ color: it.local <= 1 ? color.danger : color.ink2, fontWeight: 600 }}>
+                            {it.local}
+                          </Td>
+                          <Td align="center">{it.deposito}</Td>
+                          {verVentas && (
+                            <Td align="center" style={{ color: color.success, fontWeight: 600 }}>
+                              {it.s7}
+                            </Td>
+                          )}
+                          <Td align="center" style={{ color: topeado ? color.brand : color.mut2, fontWeight: topeado ? 700 : undefined }} title={topeado ? 'Topeado por diseño' : 'Mínimo del modelo/categoría'}>
+                            {obj}
+                          </Td>
+                          <Td align="center" tall>
+                            <input
+                              className="mo-input mo-input--num"
+                              type="number"
+                              min={0}
+                              max={it.deposito}
+                              inputMode="numeric"
+                              value={mover}
+                              onChange={(e) => setMover(it.vid, e.target.value)}
+                              title={`Sugerido: ${sug} · Máx en depósito: ${it.deposito}`}
+                              aria-label={`Unidades a mover de ${it.size || it.sku || 'la variante'}`}
+                              style={{
+                                width: 64,
+                                textAlign: 'center',
+                                padding: '0 6px',
+                                fontWeight: 700,
+                                color: mover === 0 ? color.mut2 : color.ink,
+                                ...(editado ? { borderColor: color.brandSolid, background: color.brandBg } : null),
+                              }}
+                            />
+                          </Td>
+                        </Tr>
+                      )
+                    })}
+                  </TBody>
+                </TableWrap>
               </div>
             )
           })}
-          {cfg.apagados.length > 0 && <div style={{ marginTop: 16, fontSize: 12, color: '#9CA3AF' }}>🔌 {cfg.apagados.length} producto(s) apagado(s) — gestionalos en <b>⚙️ Configurar mínimos</b>.</div>}
+          {cfg.apagados.length > 0 && (
+            <p style={{ marginTop: space[4], fontSize: font.sm, color: color.mut }}>
+              🔌 {cfg.apagados.length} {cfg.apagados.length === 1 ? 'producto apagado' : 'productos apagados'} — se gestionan en <b>Configurar mínimos</b>.
+            </p>
+          )}
         </div>
       )}
 
-      {configOpen && <ConfigModal inv={inv} cfg={cfg} esBdi={esBdi} shareStatus={rep.shareStatus} guardarCfg={rep.guardarCfg} onClose={() => setConfigOpen(false)} />}
-    </div>
+      <ConfigModal abierto={configOpen} inv={inv} cfg={cfg} esBdi={esBdi} shareStatus={rep.shareStatus} guardarCfg={rep.guardarCfg} onClose={() => setConfigOpen(false)} />
+    </>
   )
 }
 
 // ── Modal de configuración ──
-function ConfigModal({ inv, cfg, esBdi, shareStatus, guardarCfg, onClose }: {
+function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClose }: {
+  abierto: boolean
   inv: RepoItem[]; cfg: RepoCfg; esBdi: boolean; shareStatus: { txt: string; color: string }
   guardarCfg: (c: RepoCfg) => void; onClose: () => void
 }) {
@@ -246,13 +352,18 @@ function ConfigModal({ inv, cfg, esBdi, shareStatus, guardarCfg, onClose }: {
   )
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 3000, padding: 16, overflow: 'auto' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 720, width: '100%', marginTop: 30, boxShadow: '0 10px 40px rgba(0,0,0,.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <b style={{ fontSize: 15 }}>⚙️ Configurar mínimos</b>
-          <button onClick={onClose} className="btn-sm" style={{ background: '#111827', color: '#fff' }}>Listo</button>
-        </div>
-
+    <Modal
+      abierto={abierto}
+      onCerrar={onClose}
+      titulo="⚙️ Configurar mínimos"
+      ancho="ancho"
+      pie={
+        <Button variant="solid" tone="brand" onClick={onClose}>
+          Listo
+        </Button>
+      }
+    >
+      <div>
         <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
           Definí cuántas unidades mantener en Local por categoría/modelo. El &quot;tope local&quot; (por producto) puede bajar este número para un producto puntual. <span style={{ fontSize: 11, marginLeft: 6, color: shareStatus.color }}>{shareStatus.txt}</span>
         </div>
@@ -292,11 +403,11 @@ function ConfigModal({ inv, cfg, esBdi, shareStatus, guardarCfg, onClose }: {
         <div style={{ marginTop: 16, borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Topes y apagados por producto <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 12 }}>(tope = máximo en Local; 🔌 = no reponer)</span></div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <select value={topeCat} onChange={(e) => setTopeCat(e.target.value)} style={{ ...selStyle, flex: 1, minWidth: 160 }}><option value="">Todas las categorías</option>{topeCats.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-            <select value={topeDeposito} onChange={(e) => setTopeDeposito(e.target.value as typeof topeDeposito)} style={selStyle}><option value="con">Con stock en depósito</option><option value="">Depósito: todos</option><option value="sin">Sin stock en depósito</option></select>
-            <select value={topeEstado} onChange={(e) => setTopeEstado(e.target.value as typeof topeEstado)} style={selStyle}><option value="">Todos</option><option value="sin">Sin tope asignado</option><option value="con">Con tope</option><option value="apagados">🔌 Apagados</option></select>
+            <Select value={topeCat} onChange={(e) => setTopeCat(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="Categoría"><option value="">Todas las categorías</option>{topeCats.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
+            <Select value={topeDeposito} onChange={(e) => setTopeDeposito(e.target.value as typeof topeDeposito)} style={{ width: 190 }} aria-label="Stock en depósito"><option value="con">Con stock en depósito</option><option value="">Depósito: todos</option><option value="sin">Sin stock en depósito</option></Select>
+            <Select value={topeEstado} onChange={(e) => setTopeEstado(e.target.value as typeof topeEstado)} style={{ width: 170 }} aria-label="Estado del tope"><option value="">Todos</option><option value="sin">Sin tope asignado</option><option value="con">Con tope</option><option value="apagados">🔌 Apagados</option></Select>
           </div>
-          <input value={topeSearch} onChange={(e) => setTopeSearch(e.target.value)} placeholder="Buscar producto o categoría…" style={{ width: '100%', padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
+          <input className="mo-input" value={topeSearch} onChange={(e) => setTopeSearch(e.target.value)} placeholder="Buscar producto o categoría…" style={{ marginBottom: 8 }} />
           <div style={{ maxHeight: 340, overflow: 'auto' }}>
             <div style={{ fontSize: 11, color: '#9CA3AF', margin: '0 0 6px' }}>{topesList.length} producto(s){topesList.length > 250 ? ' · mostrando 250, afiná la búsqueda' : ''}</div>
             {topesShown.map((p) => {
@@ -316,9 +427,8 @@ function ConfigModal({ inv, cfg, esBdi, shareStatus, guardarCfg, onClose }: {
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
 const secTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', margin: '4px 0 6px' }
-const selStyle: CSSProperties = { padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 12.5 }

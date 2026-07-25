@@ -74,13 +74,16 @@ export type TdProps = {
   /** Alto libre: para celdas que hospedan un input o dos líneas de texto. */
   tall?: boolean
   colSpan?: number
+  /** Tooltip nativo: algunas celdas explican de dónde sale el número. */
+  title?: string
   style?: React.CSSProperties
 }
 
-export function Td({ children, align = 'left', mono, wrap, strong, tall, colSpan, style }: TdProps) {
+export function Td({ children, align = 'left', mono, wrap, strong, tall, colSpan, title, style }: TdProps) {
   return (
     <td
       colSpan={colSpan}
+      title={title}
       className={[align === 'right' ? 'mo-td--num' : '', strong ? 'mo-td--strong' : '', wrap ? 'mo-td--wrap' : '', tall ? 'mo-td--tall' : '']
         .filter(Boolean)
         .join(' ')}
