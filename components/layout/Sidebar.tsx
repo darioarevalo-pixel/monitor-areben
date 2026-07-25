@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo } from '@/lib/nav'
+import { esDeMarca, grupoParaSeccion, keysDeCat, labelConEmoji, NAV_CATS, type Marca, type NavGrupo } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 
@@ -31,13 +31,20 @@ export function Sidebar({ activa }: { activa: string }) {
     return puedeVer(perfil, marca, k)
   }
 
+  // Una sección que cuelga de varios sectores (`solicitudes`) se muestra UNA sola vez, en
+  // el grupo que le corresponde a esta persona (ver `grupoParaSeccion`). Sin esto, quien ve
+  // todo la encontraba repetida en cuatro grupos y al abrirla se marcaban los cuatro.
+  const gruposDe = (k: string) => NAV_CATS.filter((c) => keysDeCat(c).includes(k)).map((c) => c.id)
+  const duenio = (k: string) => grupoParaSeccion(k, gruposDe(k), perfil.funcion ?? [])
+  const visibleEn = (k: string, catId: string) => visible(k) && duenio(k) === catId
+
   // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
   // desaparece entero si no queda ninguna sección visible adentro.
   const cats = NAV_CATS.map((cat) => {
     if (cat.adminOnly && !esAdmin(perfil)) return null
-    const keys = cat.keys.filter(visible)
+    const keys = cat.keys.filter((k) => visibleEn(k, cat.id))
     const grupos = (cat.grupos ?? [])
-      .map((g) => ({ ...g, keys: g.keys.filter(visible) }))
+      .map((g) => ({ ...g, keys: g.keys.filter((k) => visibleEn(k, cat.id)) }))
       .filter((g) => g.keys.length > 0)
     return keys.length || grupos.length ? { ...cat, keys, grupos } : null
   }).filter((c): c is NonNullable<typeof c> => c !== null)

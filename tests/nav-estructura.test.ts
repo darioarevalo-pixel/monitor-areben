@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { keysDeCat, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { grupoParaSeccion, keysDeCat, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
 
 /**
  * Invariantes de la estructura del menú, ahora que `lib/nav.datos.ts` se edita a mano
@@ -64,5 +64,35 @@ describe('estructura del nav', () => {
     const cat = { id: 'x', label: 'X', keys: ['a'], grupos: [{ id: 'y', label: 'Y', keys: ['b', 'c'] }] }
     expect(keysDeCat(cat)).toEqual(['a', 'b', 'c'])
     expect(keysDeCat({ id: 'z', label: 'Z', keys: ['a'] })).toEqual(['a'])
+  })
+
+  /**
+   * Una sección compartida se muestra en UN grupo por persona. Sin esto, quien ve todo la
+   * encontraba repetida (cuatro "Solicitudes" en el menú) y al abrirla se pintaban activos
+   * los cuatro grupos a la vez — que es como se descubrió el bug.
+   */
+  describe('sección compartida: un solo lugar por persona', () => {
+    const CANDIDATOS = ['local', 'deposito', 'marketing', 'administracion']
+
+    it('gana el sector de la función de esa persona', () => {
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local'])).toBe('local')
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['deposito'])).toBe('deposito')
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['marketing'])).toBe('marketing')
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['administracion'])).toBe('administracion')
+    })
+
+    it('con varias funciones gana quien pide antes que quien ejecuta', () => {
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local', 'marketing'])).toBe('marketing')
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, ['local', 'deposito'])).toBe('deposito')
+    })
+
+    it('sin función (admin) queda en el área propia de la sección', () => {
+      expect(grupoParaSeccion('solicitudes', CANDIDATOS, [])).toBe('local') // area de `solicitudes`
+    })
+
+    it('una sección de un solo grupo no cambia nada', () => {
+      expect(grupoParaSeccion('cupones', ['local'], ['marketing'])).toBe('local')
+      expect(grupoParaSeccion('inexistente', [], [])).toBeNull()
+    })
   })
 })

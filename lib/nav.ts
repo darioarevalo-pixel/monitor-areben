@@ -13,6 +13,32 @@ export function keysDeCat(cat: NavCat): string[] {
 }
 
 /**
+ * Una sección compartida cuelga de varios sectores para que cada uno la vea con SU nombre
+ * (`solicitudes` es "Solicitudes de productos" en Marketing y "a preparar" en Depósito).
+ * Pero a una misma persona hay que mostrársela **una sola vez**: quien ve todo (un admin)
+ * la encontraba repetida en cuatro grupos, y al abrirla se pintaban los cuatro como activos.
+ *
+ * Cuál gana: el sector desde el que esa persona trabaja. Se resuelve por función, en orden
+ * de "dueño del flujo" — quien pide antes que quien ejecuta. Si no tiene ninguna función de
+ * las candidatas (típico admin), queda el área propia de la sección, y si tampoco, el
+ * primer grupo donde aparezca.
+ */
+const ORDEN_SECTOR: [string, string][] = [
+  ['marketing', 'marketing'],
+  ['administracion', 'administracion'],
+  ['deposito', 'deposito'],
+  ['local', 'local'],
+]
+
+export function grupoParaSeccion(key: string, candidatos: string[], funciones: string[]): string | null {
+  if (candidatos.length <= 1) return candidatos[0] ?? null
+  const porFuncion = ORDEN_SECTOR.find(([f, grupo]) => funciones.includes(f) && candidatos.includes(grupo))
+  if (porFuncion) return porFuncion[1]
+  const area = permDe(key)?.area
+  return area && candidatos.includes(area) ? area : candidatos[0]
+}
+
+/**
  * El interruptor del strangler NO vive acá: vive en components/secciones/registro.ts,
  * donde estar en el registro ES estar migrada.
  *
