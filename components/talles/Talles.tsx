@@ -35,7 +35,7 @@ import {
  * sistema.
  */
 export function Talles() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
 
   const categorias = useMemo(() => datos?.allTallesCategories ?? [], [datos])
   const meses = useMemo(() => datos?.allMonths ?? [], [datos])
@@ -75,7 +75,7 @@ export function Talles() {
         </Select>
       </HeaderAcciones>
 
-      <DatosGate datos={datos} error={error} esqueleto="tabla">
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
         {() => (
           <>
             <Card padding={4} style={{ marginBottom: space[4] }}>

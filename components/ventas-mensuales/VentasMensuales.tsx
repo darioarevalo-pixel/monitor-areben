@@ -45,7 +45,7 @@ import {
  * antes, al correrse a la derecha, no se sabía qué mes se estaba mirando.
  */
 export function VentasMensuales() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
   const [periodoStr, setPeriodo] = useFiltroUrl<string>('p', '12')
   const periodo = (parseInt(periodoStr) || 12) as Periodo
 
@@ -60,7 +60,7 @@ export function VentasMensuales() {
         </Select>
       </HeaderAcciones>
 
-      <DatosGate datos={datos} error={error} esqueleto="tabla">
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
         {(d) => <Contenido stats={d.allMonthlyStats ?? []} periodo={periodo} />}
       </DatosGate>
     </>

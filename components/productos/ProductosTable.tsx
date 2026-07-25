@@ -65,7 +65,7 @@ import {
 type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifespan' | 'stock'
 
 export function ProductosTable() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
   const { marca } = useSesion()
   const tnIdx = useTnImages(marca)
 
@@ -155,7 +155,7 @@ export function ProductosTable() {
   )
 
   return (
-    <DatosGate datos={datos} error={error} esqueleto="tabla">
+    <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
       {(d) => (
         <>
           <HeaderAcciones>
@@ -240,7 +240,7 @@ export function ProductosTable() {
                 <THead>
                   <Tr>
                     <Th width={36} />
-                    <Th width={72}>Foto</Th>
+                    <Th width={78}>Foto</Th>
                     {th('name', 'Producto')}
                     {th('lastSale', 'Última venta')}
                     {th('sales7', 'Ventas 7d', 'right')}
@@ -328,10 +328,23 @@ function FilaProducto({
                 loading="lazy"
                 alt={p.name}
                 onClick={() => onFoto(imagenesDe(p, tnIdx!))}
-                style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, background: color.bg2, cursor: 'zoom-in', display: 'block' }}
+                style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, background: color.bg2, border: `1px solid ${color.line}`, cursor: 'zoom-in', display: 'block' }}
               />
             ) : (
-              <span style={{ display: 'flex', width: 44, height: 44, borderRadius: 6, background: color.bg2, color: color.mut2, fontSize: 9, alignItems: 'center', justifyContent: 'center' }}>
+              <span
+                style={{
+                  display: 'flex',
+                  width: 60,
+                  height: 60,
+                  borderRadius: 6,
+                  background: color.bg2,
+                  border: `1px dashed ${color.line2}`,
+                  color: color.mut2,
+                  fontSize: 9,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 sin foto
               </span>
             )}

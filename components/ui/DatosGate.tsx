@@ -30,10 +30,17 @@ export type DatosGateProps<T> = {
   esqueleto?: 'tabla' | 'kpis' | 'tarjetas'
   /** Si la sección sabe recargar (ej. `cargar(marca, rol, true)`), el error ofrece el botón. */
   onReintentar?: () => void
+  /**
+   * Qué está bajando ahora mismo (lo publica el store del ETL). Una primera carga sin
+   * caché tarda ~20 segundos: sin esto la pantalla no dice una palabra en todo ese rato.
+   */
+  progreso?: string | null
+  /** De dónde salieron los datos: caché de hace X minutos (y si se está refrescando) o red. */
+  origen?: { tipo: 'cache'; edadMin: number; refrescando: boolean } | { tipo: 'red' } | null
   children: (datos: T) => React.ReactNode
 }
 
-export function DatosGate<T>({ datos, error, esqueleto = 'tabla', onReintentar, children }: DatosGateProps<T>) {
+export function DatosGate<T>({ datos, error, esqueleto = 'tabla', onReintentar, progreso, origen, children }: DatosGateProps<T>) {
   if (error && !datos) {
     return (
       <Notice
@@ -53,8 +60,53 @@ export function DatosGate<T>({ datos, error, esqueleto = 'tabla', onReintentar, 
       </Notice>
     )
   }
-  if (datos == null) return <Esqueleto forma={esqueleto} />
-  return <>{children(datos)}</>
+  if (datos == null) {
+    return (
+      <>
+        <CargandoDatos progreso={progreso} />
+        <Esqueleto forma={esqueleto} />
+      </>
+    )
+  }
+  return (
+    <>
+      {origen?.tipo === 'cache' && origen.refrescando && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+          <span className="mo-skel" style={{ width: 8, height: 8, borderRadius: 999 }} />
+          Mostrando datos de hace {edad(origen.edadMin)} mientras se actualizan.
+        </div>
+      )}
+      {children(datos)}
+    </>
+  )
+}
+
+/**
+ * Qué está pasando durante la espera. La primera carga de una marca en un navegador
+ * nuevo baja el dataset entero (no hay caché) y tarda ~20 segundos: decir qué tabla está
+ * bajando es la diferencia entre "está trabajando" y "se colgó".
+ */
+function CargandoDatos({ progreso }: { progreso?: string | null }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut, marginBottom: space[3] }} role="status">
+      <span className="mo-skel" style={{ width: 8, height: 8, borderRadius: 999 }} />
+      {progreso ? (
+        <>
+          Bajando datos: <b style={{ color: color.ink2 }}>{progreso}</b>
+        </>
+      ) : (
+        'Cargando datos…'
+      )}
+      <span style={{ color: color.mut2 }}>· la primera vez en este navegador tarda un rato; después queda en caché</span>
+    </div>
+  )
+}
+
+function edad(min: number): string {
+  if (min < 1) return 'un momento'
+  if (min < 60) return `${min} ${min === 1 ? 'minuto' : 'minutos'}`
+  const h = Math.round(min / 60)
+  return `${h} ${h === 1 ? 'hora' : 'horas'}`
 }
 
 /** Esqueleto de carga: la forma de lo que viene, para que la espera no parezca vacío. */

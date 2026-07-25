@@ -22,7 +22,7 @@ import { Button, DatosGate, KpiCard, Notice, color, font, space } from '@/compon
  */
 export function Resumen() {
   const { perfil, marca } = useSesion()
-  const { datos, estado, error } = useDatosMonitor()
+  const { datos, estado, error, progreso, origen } = useDatosMonitor()
   const cargar = useMonitorStore((s) => s.cargar)
   const refrescar = () => cargar(marca, userRole(perfil), true)
   const refrescando = estado === 'cargando'
@@ -35,7 +35,7 @@ export function Resumen() {
         </Button>
       </HeaderAcciones>
 
-      <DatosGate datos={datos} error={error} esqueleto="kpis" onReintentar={refrescar}>
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>
         {(d) => {
           const kpis = computarKpis(d)
           const sync = estadoSync(d.syncMeta, new Date())

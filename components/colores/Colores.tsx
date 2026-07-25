@@ -53,7 +53,7 @@ import {
  * de agotamiento pasan a Card y las barras de color al sistema.
  */
 export function Colores() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
   const [sub, setSub] = useFiltroUrl<'ventas' | 'agotamiento'>('sub', 'ventas')
 
   return (
@@ -69,7 +69,7 @@ export function Colores() {
         />
       </HeaderAcciones>
 
-      <DatosGate datos={datos} error={error} esqueleto="tabla">
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
         {(d) => (sub === 'ventas' ? <PanelVentas /> : <PanelAgotamiento data={d.allAgotamientoData} />)}
       </DatosGate>
     </>

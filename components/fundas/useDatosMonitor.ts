@@ -5,7 +5,7 @@ import { useMonitorStore } from '@/store/useMonitorStore'
 import { useSesion } from '@/components/SesionProvider'
 import { userRole } from '@/lib/permisos'
 import type { DatosETL } from '@/lib/etl/tipos'
-import type { EstadoCarga } from '@/store/useMonitorStore'
+import type { EstadoCarga, Origen } from '@/store/useMonitorStore'
 
 /**
  * El hook que conecta una sección al store del ETL. Dispara la carga de la marca
@@ -23,12 +23,20 @@ import type { EstadoCarga } from '@/store/useMonitorStore'
  * cambia de marca podría tener los datos de la anterior, y una tabla con esos
  * números sería un A/B falso.
  */
-export function useDatosMonitor(): { datos: DatosETL | null; estado: EstadoCarga; error: string | null } {
+export function useDatosMonitor(): {
+  datos: DatosETL | null
+  estado: EstadoCarga
+  error: string | null
+  progreso: string | null
+  origen: Origen | null
+} {
   const { perfil, marca } = useSesion()
   const cargar = useMonitorStore((s) => s.cargar)
   const datos = useMonitorStore((s) => s.datos)
   const estado = useMonitorStore((s) => s.estado)
   const error = useMonitorStore((s) => s.error)
+  const progreso = useMonitorStore((s) => s.progreso)
+  const origen = useMonitorStore((s) => s.origen)
   const marcaCargada = useMonitorStore((s) => s.marca)
 
   useEffect(() => {
@@ -36,5 +44,9 @@ export function useDatosMonitor(): { datos: DatosETL | null; estado: EstadoCarga
   }, [marca, perfil, cargar])
 
   const listoParaEstaMarca = estado === 'listo' && marcaCargada === marca
-  return { datos: listoParaEstaMarca ? datos : null, estado, error }
+  // `progreso` y `origen` se exponen porque el store los venía publicando y NADIE los
+  // mostraba: el legacy los pintaba en #status y #progress-bar, y al migrar se perdió el
+  // consumidor. En una primera carga sin caché la bajada tarda ~20s y la pantalla no
+  // decía una palabra. Los consume `DatosGate`.
+  return { datos: listoParaEstaMarca ? datos : null, estado, error, progreso, origen }
 }

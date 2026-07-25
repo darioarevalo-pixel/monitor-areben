@@ -45,7 +45,7 @@ import {
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 export function Margenes() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
   const { marca } = useSesion()
   const tnPromo = useTnPromo(marca)
 
@@ -70,7 +70,7 @@ export function Margenes() {
         </label>
       </HeaderAcciones>
 
-      <DatosGate datos={datos} error={error} esqueleto="tarjetas">
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tarjetas">
         {() => (
           <>
             {res && (

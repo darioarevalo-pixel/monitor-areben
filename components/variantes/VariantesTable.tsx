@@ -43,7 +43,7 @@ import {
 type ColOrden = 'name' | 'size' | 'lastSale' | 'sales7' | 'sales30' | 'lifespan' | 'stock'
 
 export function VariantesTable() {
-  const { datos, error } = useDatosMonitor()
+  const { datos, error, progreso, origen } = useDatosMonitor()
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
@@ -86,7 +86,7 @@ export function VariantesTable() {
   )
 
   return (
-    <DatosGate datos={datos} error={error} esqueleto="tabla">
+    <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
       {() => (
         <>
           <FilterBar>
