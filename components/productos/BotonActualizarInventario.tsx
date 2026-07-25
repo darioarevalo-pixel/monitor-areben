@@ -5,7 +5,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { userRole } from '@/lib/permisos'
 import { dispararSyncStock } from '@/lib/sync-gn'
-import { useToast } from '@/components/ui'
+import { color, useToast } from '@/components/ui'
 
 /**
  * "🔄 Actualizar inventario": dispara el sync rápido de stock en GN, espera a que
@@ -46,7 +46,7 @@ export function BotonActualizarInventario() {
       onClick={actualizar}
       disabled={syncing}
       title="Trae el stock más nuevo desde Gestión Nube (~2 min)"
-      style={{ background: '#fff', border: '1px solid #D1D5DB', whiteSpace: 'nowrap' }}
+      style={{ background: '#fff', border: `1px solid ${color.line2}`, whiteSpace: 'nowrap' }}
     >
       {label}
     </button>

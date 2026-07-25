@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { pedidoATexto, pedidosPorProveedor, type DatosProveedores } from '@/lib/proveedores'
-import { useToast } from '@/components/ui'
+import { color, useToast } from '@/components/ui'
 
 /**
  * Qué hay que pedirle a cada proveedor: lo que se vendió en el período y hoy está en cero.
@@ -44,30 +44,30 @@ export function PedidosCard({ data, meses, periodoLabel }: { data: DatosProveedo
           vendido (unidades × costo unitario): sirve de referencia para decidir cuánto pedir, no es un
           presupuesto.
         </InfoPopover>
-        <label style={{ fontSize: 12.5, color: '#374151', display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+        <label style={{ fontSize: 12.5, color: color.ink2, display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
           Mínimo vendidas
           <input
             type="number"
             min={1}
             value={minimo}
             onChange={(e) => setMinimo(Math.max(1, parseInt(e.target.value, 10) || 1))}
-            style={{ width: 64, padding: '5px 8px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+            style={{ width: 64, padding: '5px 8px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
           />
         </label>
       </div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>Según las ventas de {periodoLabel}.</div>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 10 }}>Según las ventas de {periodoLabel}.</div>
 
       {pedidos.length === 0 ? (
-        <div style={{ color: '#059669', fontSize: 14, padding: '10px 2px' }}>
+        <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
           ✅ No hay productos vendidos en el período que estén sin stock.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {pedidos.map((p) => (
-            <details key={p.prov} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 12px' }}>
+            <details key={p.prov} style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 12px' }}>
               <summary style={{ cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{p.prov}</span>
-                <span style={{ fontSize: 12.5, color: '#6B7280' }}>
+                <span style={{ fontSize: 12.5, color: color.mut }}>
                   {p.items.length === 1 ? '1 producto' : `${p.items.length} productos`} · {p.unidades === 1 ? '1 unidad vendida' : `${p.unidades} unidades vendidas`} ·
                   ~${Math.round(p.costoEstimado).toLocaleString('es-AR')}
                 </span>
@@ -77,14 +77,14 @@ export function PedidosCard({ data, meses, periodoLabel }: { data: DatosProveedo
                     void copiar(p.prov, pedidoATexto(p, periodoLabel))
                   }}
                   className="btn-sm"
-                  style={{ marginLeft: 'auto', background: '#fff', border: '1px solid #D1D5DB' }}
+                  style={{ marginLeft: 'auto', background: '#fff', border: `1px solid ${color.line2}` }}
                 >
                   {copiado === p.prov ? '✓ Copiado' : '📋 Copiar pedido'}
                 </button>
               </summary>
               <table style={{ width: '100%', marginTop: 8, fontSize: 12.5, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'left' }}>
+                  <tr style={{ color: color.mut2, fontSize: 11, textAlign: 'left' }}>
                     <th>Producto</th>
                     <th style={{ width: 90, textAlign: 'right' }}>Vendidas</th>
                     <th style={{ width: 90, textAlign: 'right' }}>Rentab.</th>
@@ -92,10 +92,10 @@ export function PedidosCard({ data, meses, periodoLabel }: { data: DatosProveedo
                 </thead>
                 <tbody>
                   {p.items.map((i) => (
-                    <tr key={i.id} style={{ borderTop: '1px solid #F1F5F9' }}>
+                    <tr key={i.id} style={{ borderTop: `1px solid ${color.bg2}` }}>
                       <td style={{ padding: '4px 0' }}>{i.name}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{i.vendidas}</td>
-                      <td style={{ textAlign: 'right', color: '#6B7280' }}>{i.margin !== null ? i.margin.toFixed(0) + '%' : '—'}</td>
+                      <td style={{ textAlign: 'right', color: color.mut }}>{i.margin !== null ? i.margin.toFixed(0) + '%' : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

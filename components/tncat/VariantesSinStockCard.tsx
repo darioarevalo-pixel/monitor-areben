@@ -7,6 +7,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { agruparPorCategoria, variantesSinStockVisibles } from '@/lib/tncat/variantes-sin-stock'
 import type { Marca } from '@/lib/nav.datos'
+import { color } from '@/components/ui'
 
 /**
  * Variantes sin stock (visibles en la tienda) — card read-only (tncat). Lista las
@@ -62,9 +63,9 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
       </div>
 
       {cargando ? (
-        <div style={{ color: '#9CA3AF', padding: '10px 2px' }}>Cargando productos y tienda…</div>
+        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
       ) : grupos.length === 0 ? (
-        <div style={{ color: '#059669', fontSize: 14, padding: '10px 2px' }}>
+        <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
           ✅ No hay variantes sin stock visibles en la tienda.
         </div>
       ) : (
@@ -74,9 +75,9 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="🔎 Buscar producto o SKU…"
-              style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+              style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
             />
-            <span style={{ fontSize: 13, color: '#6B7280' }}>
+            <span style={{ fontSize: 13, color: color.mut }}>
               {lista.length} producto(s) · {totalVar} variante(s)
             </span>
           </div>
@@ -84,20 +85,20 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {porCategoria.map(({ categoria, grupos }) => (
               <details key={categoria} open={porCategoria.length <= 3}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#374151', padding: '4px 0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: color.ink2, padding: '4px 0' }}>
                   {categoria}{' '}
-                  <span style={{ fontWeight: 400, color: '#9CA3AF' }}>
+                  <span style={{ fontWeight: 400, color: color.mut2 }}>
                     · {grupos.length === 1 ? '1 producto' : `${grupos.length} productos`}
                   </span>
                 </summary>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
                   {grupos.map((g) => (
-              <div key={String(g.tnId)} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 12px' }}>
+              <div key={String(g.tnId)} style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 12px' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{g.nombre}</div>
-                  {g.sku ? <span style={{ fontSize: 12, color: '#9CA3AF' }}>SKU {g.sku}</span> : null}
+                  <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{g.nombre}</div>
+                  {g.sku ? <span style={{ fontSize: 12, color: color.mut2 }}>SKU {g.sku}</span> : null}
                   {g.enteroAgotado ? (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 8px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 6, padding: '2px 8px' }}>
                       producto entero agotado — usá 🙈 Ocultar agotados
                     </span>
                   ) : null}
@@ -107,7 +108,7 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
                     <span
                       key={v.vid}
                       title={`SKU ${v.sku}`}
-                      style={{ fontSize: 12, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, padding: '2px 8px' }}
+                      style={{ fontSize: 12, color: color.dangerInk, background: color.dangerBg, border: `1px solid ${color.dangerBorder}`, borderRadius: 6, padding: '2px 8px' }}
                     >
                       {v.label}
                     </span>

@@ -14,11 +14,11 @@ const hoyISO = () => new Date().toISOString().slice(0, 10)
 const nuevoId = () => 'c' + Date.now() + '_' + Math.floor(Math.random() * 100000)
 
 const BADGES: Record<EstadoCupon, [string, string, string]> = {
-  vigente: ['#065F46', '#D1FAE5', 'Vigente'],
-  porvencer: ['#92400E', '#FEF3C7', 'Por vencer'],
-  vencido: ['#991B1B', '#FEE2E2', 'Vencido'],
-  usado: ['#374151', '#E5E7EB', 'Usado'],
-  anulado: ['#6B7280', '#F3F4F6', 'Anulado'],
+  vigente: [color.successInk, color.successBg, 'Vigente'],
+  porvencer: [color.warningInk, color.warningBg, 'Por vencer'],
+  vencido: [color.dangerInk, color.dangerBg, 'Vencido'],
+  usado: [color.ink2, color.line, 'Usado'],
+  anulado: [color.mut, color.bg2, 'Anulado'],
 }
 
 export function Cupones() {
@@ -180,9 +180,9 @@ export function Cupones() {
                           )}
                           {puedeCrear && (c.anulado
                             ? <button onClick={() => onReactivar(c.id)} title="Reactivar" style={btnGris}>Reactivar</button>
-                            : <button onClick={() => onAnular(c.id)} title="Anular" style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 13 }}>✕</button>)}
+                            : <button onClick={() => onAnular(c.id)} title="Anular" style={{ border: 'none', background: 'none', color: color.danger, cursor: 'pointer', fontSize: 13 }}>✕</button>)}
                           {admin && (
-                            <button onClick={() => onBorrar(c.id)} title="Borrar (solo admin)" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 14 }}>🗑</button>
+                            <button onClick={() => onBorrar(c.id)} title="Borrar (solo admin)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 14 }}>🗑</button>
                           )}
                         </span>
                       </Td>
@@ -216,9 +216,9 @@ function FormCupon({ usuario, cuponInicial, onGuardar, onCancelar }: { usuario: 
   const guardar = () => onGuardar({ nombre, telefono, tipo, valor, codigo, minimo, motivo, unSoloUso: !reutilizable, vence, creadoPor: por })
 
   return (
-    <div style={{ border: '1px solid #E5E7EB', background: '#FAFBFC', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+    <div style={{ border: `1px solid ${color.line}`, background: color.bg, borderRadius: 10, padding: 14, marginBottom: 12 }}>
       <div style={{ fontWeight: 700 }}>{editando ? 'Editar cupón' : 'Nuevo cupón'}</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 14px' }}>Descuento para clientes del <b>local</b> — no toca la tienda online.</div>
+      <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 14px' }}>Descuento para clientes del <b>local</b> — no toca la tienda online.</div>
 
       {/* Cliente */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
@@ -234,8 +234,8 @@ function FormCupon({ usuario, cuponInicial, onGuardar, onCancelar }: { usuario: 
             <TipoBtn on={tipo === 'porcentaje'} onClick={() => setTipo('porcentaje')}>% Porcentaje</TipoBtn>
             <TipoBtn on={tipo === 'monto'} onClick={() => setTipo('monto')}>$ Monto</TipoBtn>
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 7, background: '#fff', overflow: 'hidden' }}>
-            {tipo === 'monto' && <span style={{ padding: '0 4px 0 9px', color: '#6B7280', fontSize: 14 }}>$</span>}
+          <div style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${color.line2}`, borderRadius: 7, background: '#fff', overflow: 'hidden' }}>
+            {tipo === 'monto' && <span style={{ padding: '0 4px 0 9px', color: color.mut, fontSize: 14 }}>$</span>}
             <input
               value={valor}
               onChange={(e) => setValor(e.target.value)}
@@ -245,7 +245,7 @@ function FormCupon({ usuario, cuponInicial, onGuardar, onCancelar }: { usuario: 
               placeholder={tipo === 'porcentaje' ? '15' : '1500'}
               style={{ width: 96, padding: '8px 8px', border: 'none', outline: 'none', textAlign: 'right', fontSize: 14 }}
             />
-            {tipo === 'porcentaje' && <span style={{ padding: '0 9px 0 4px', color: '#6B7280', fontSize: 14 }}>%</span>}
+            {tipo === 'porcentaje' && <span style={{ padding: '0 9px 0 4px', color: color.mut, fontSize: 14 }}>%</span>}
           </div>
         </div>
       </div>
@@ -258,8 +258,8 @@ function FormCupon({ usuario, cuponInicial, onGuardar, onCancelar }: { usuario: 
             Compra mínima (opcional)
             <InfoPopover titulo="Compra mínima">El cupón solo aplica si la compra supera este monto. Dejalo vacío o en 0 para que aplique siempre.</InfoPopover>
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, marginTop: 2, background: '#fff', boxSizing: 'border-box', width: '100%' }}>
-            <span style={{ padding: '0 4px 0 8px', color: '#6B7280' }}>$</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${color.line2}`, borderRadius: 6, marginTop: 2, background: '#fff', boxSizing: 'border-box', width: '100%' }}>
+            <span style={{ padding: '0 4px 0 8px', color: color.mut }}>$</span>
             <input value={minimo} onChange={(e) => setMinimo(e.target.value)} type="number" min={0} placeholder="0" style={{ flex: 1, minWidth: 0, padding: '6px 8px 6px 4px', border: 'none', outline: 'none' }} />
           </span>
         </div>
@@ -315,7 +315,7 @@ function Badge({ e }: { e: EstadoCupon }) {
   return <span style={{ background: bg, color: col, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{txt}</span>
 }
 
-const lbl: CSSProperties = { fontSize: 12, color: '#374151' }
-const inp: CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 6, marginTop: 2, boxSizing: 'border-box' }
-const btnUsado: CSSProperties = { border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#065F46', borderRadius: 6, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }
-const btnGris: CSSProperties = { border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', borderRadius: 6, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }
+const lbl: CSSProperties = { fontSize: 12, color: color.ink2 }
+const inp: CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${color.line2}`, borderRadius: 6, marginTop: 2, boxSizing: 'border-box' }
+const btnUsado: CSSProperties = { border: `1px solid ${color.successBorder}`, background: color.successBg, color: color.successInk, borderRadius: 6, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }
+const btnGris: CSSProperties = { border: `1px solid ${color.line2}`, background: '#fff', color: color.mut, borderRadius: 6, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { AYUDA_DESTINO, DESTINO_DEFAULT, MOTIVO_DEFAULT, MOTIVOS } from './preset'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
+import { color } from '@/components/ui'
 
 /**
  * El alta de una solicitud empieza acá: **motivo** (para qué sale) y **destino** (si
@@ -26,14 +27,14 @@ export function NuevaSolicitud({ onCancelar, onOk }: { onCancelar: () => void; o
     >
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 480, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>Nueva solicitud</div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 14 }}>Después elegís los productos.</div>
+        <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>Después elegís los productos.</div>
 
-        <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 14 }}>
+        <label style={{ display: 'block', fontSize: 13, color: color.ink2, marginBottom: 14 }}>
           ¿Para qué la pedís?
           <select
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
-            style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 5, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+            style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 5, padding: '8px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
           >
             {MOTIVOS.map((m) => (
               <option key={m} value={m}>{m}</option>
@@ -41,16 +42,16 @@ export function NuevaSolicitud({ onCancelar, onOk }: { onCancelar: () => void; o
           </select>
         </label>
 
-        <div style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>¿El producto vuelve a la venta?</div>
+        <div style={{ fontSize: 13, color: color.ink2, marginBottom: 6 }}>¿El producto vuelve a la venta?</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
           {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
             <span key={t} style={{ display: 'inline-flex', alignItems: 'center' }}>
               <button
                 onClick={() => setTipo(t)}
                 style={{
-                  border: `1px solid ${tipo === t ? '#378ADD' : '#D1D5DB'}`,
-                  background: tipo === t ? '#378ADD' : '#fff',
-                  color: tipo === t ? '#fff' : '#374151',
+                  border: `1px solid ${tipo === t ? color.brandSolid : color.line2}`,
+                  background: tipo === t ? color.brandSolid : '#fff',
+                  color: tipo === t ? '#fff' : color.ink2,
                   borderRadius: 8, padding: '7px 13px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 }}
               >
@@ -60,15 +61,15 @@ export function NuevaSolicitud({ onCancelar, onOk }: { onCancelar: () => void; o
             </span>
           ))}
         </div>
-        <div style={{ fontSize: 12, color: tipo === 'consumo' ? '#B45309' : '#6B7280', minHeight: 34 }}>
+        <div style={{ fontSize: 12, color: tipo === 'consumo' ? color.warningInk : color.mut, minHeight: 34 }}>
           {tipo === 'consumo' ? '⚠ Baja definitiva de stock: la va a tener que aprobar un gerente.' : 'Al devolverla hay que anular la venta en Gestión Nube para reponer el stock.'}
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
             Cancelar
           </button>
-          <button className="btn-sm" onClick={() => onOk({ motivo, tipo })} style={{ background: '#378ADD', color: '#fff', border: 'none' }}>
+          <button className="btn-sm" onClick={() => onOk({ motivo, tipo })} style={{ background: color.brandSolid, color: '#fff', border: 'none' }}>
             Elegir productos →
           </button>
         </div>

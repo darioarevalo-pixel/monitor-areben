@@ -43,7 +43,7 @@ const SEGMENTOS = [
 ]
 
 const SEG_LABEL: Record<string, string> = { activos: '🔥 Activo', riesgo: '⚠️ Riesgo', dormidos: '🥶 Dormido', nuevos: '🆕 Nuevo', otros: '·' }
-const SEG_COLOR: Record<string, string> = { activos: '#16A34A', riesgo: '#D97706', dormidos: '#DC2626', nuevos: '#0EA5E9', otros: '#9CA3AF' }
+const SEG_COLOR: Record<string, string> = { activos: color.success, riesgo: color.warning, dormidos: color.danger, nuevos: color.brandSolid, otros: color.mut2 }
 
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 function fmtFecha(d: string | null): string {
@@ -53,12 +53,12 @@ function fmtFecha(d: string | null): string {
 }
 
 function CeldaProximo({ c }: { c: ClienteCRM }) {
-  if (c.seg_estado === 'none') return <span style={{ color: '#9CA3AF' }}>—</span>
+  if (c.seg_estado === 'none') return <span style={{ color: color.mut2 }}>—</span>
   const cfg = {
-    pendiente: { txt: 'A contactar', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
-    vencido: { txt: 'Vencido', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
-    semana: { txt: 'Esta semana', col: '#B45309', bg: '#FEF3C7', dot: '🟡' },
-    aldia: { txt: 'Al día', col: '#15803D', bg: '#DCFCE7', dot: '🟢' },
+    pendiente: { txt: 'A contactar', col: color.danger, bg: color.dangerBg, dot: '🔴' },
+    vencido: { txt: 'Vencido', col: color.danger, bg: color.dangerBg, dot: '🔴' },
+    semana: { txt: 'Esta semana', col: color.warningInk, bg: color.warningBg, dot: '🟡' },
+    aldia: { txt: 'Al día', col: color.success, bg: color.successBg, dot: '🟢' },
   }[c.seg_estado]
   let sub: string
   if (c.seg_estado === 'pendiente') sub = 'Sin primer contacto'
@@ -71,7 +71,7 @@ function CeldaProximo({ c }: { c: ClienteCRM }) {
       <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: cfg.col, background: cfg.bg, padding: '1px 7px', borderRadius: 999 }}>
         {cfg.dot} {cfg.txt}
       </span>
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{sub}</div>
+      <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>{sub}</div>
     </>
   )
 }
@@ -102,15 +102,15 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
         <div style={{ fontWeight: 600 }}>
           {c.name}
           {esMayorista && (
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', background: '#F3E8FF', padding: '1px 6px', borderRadius: 10, verticalAlign: 'middle', marginLeft: 4 }}>MAYORISTA</span>
+            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--mo-mayorista-fg)', background: 'var(--mo-mayorista-bg)', padding: '1px 6px', borderRadius: 10, verticalAlign: 'middle', marginLeft: 4 }}>MAYORISTA</span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>#{c.id}</div>
+        <div style={{ fontSize: 11, color: color.mut2 }}>#{c.id}</div>
       </td>
       <td onClick={(e) => e.stopPropagation()}>
         {c.email && <div style={{ fontSize: 12 }}>{c.email}</div>}
-        {c.phone && <div style={{ fontSize: 11, color: '#6B7280' }}>{c.phone}</div>}
-        {!waPhone && <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600, marginTop: 2 }}>📵 Sin teléfono</div>}
+        {c.phone && <div style={{ fontSize: 11, color: color.mut }}>{c.phone}</div>}
+        {!waPhone && <div style={{ fontSize: 10, color: color.danger, fontWeight: 600, marginTop: 2 }}>📵 Sin teléfono</div>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
           <span style={{ fontSize: 12, lineHeight: 1 }}>📷</span>
           <input
@@ -122,30 +122,30 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
           />
         </div>
       </td>
-      <td>{ciudad || <span style={{ color: '#9CA3AF' }}>—</span>}</td>
+      <td>{ciudad || <span style={{ color: color.mut2 }}>—</span>}</td>
       <td style={{ textAlign: 'right' }}>{c.total_sales}</td>
       <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMonto(c.total_amount)}</td>
       <td style={{ textAlign: 'right' }}>{fmtMonto(c.avg_ticket)}</td>
       <td style={{ textAlign: 'right' }}>
         <div>{ult}</div>
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFecha(c.last_sale)}</div>
+        <div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(c.last_sale)}</div>
       </td>
       <td><CeldaProximo c={c} /></td>
       <td style={{ maxWidth: 240 }}>
         {ultNota ? (
           <>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFecha(ultNota.fecha)}</div>
+            <div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(ultNota.fecha)}</div>
             <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ultNota.texto}</div>
           </>
         ) : (
-          <span style={{ color: '#9CA3AF' }}>—</span>
+          <span style={{ color: color.mut2 }}>—</span>
         )}
       </td>
       <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
         <button
           onClick={() => onDifusion(c.id, !enDifusion)}
           title={enDifusion ? 'Está en el canal de difusión — tocá para sacarlo' : 'Todavía no está en el canal — tocá cuando ya lo hayas agregado'}
-          style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? '1px solid #16A34A' : '1px dashed #D1D5DB', background: enDifusion ? '#DCFCE7' : 'transparent', color: enDifusion ? '#15803D' : '#9CA3AF' }}
+          style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? `1px solid ${color.success}` : `1px dashed ${color.line2}`, background: enDifusion ? color.successBg : 'transparent', color: enDifusion ? color.success : color.mut2 }}
         >
           {enDifusion ? '📢 Sí' : '＋ Sumar'}
         </button>
@@ -155,7 +155,7 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
       </td>
       <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
         {waPhone && (
-          <a href={`https://web.whatsapp.com/send?phone=${waPhone}`} target="_blank" rel="noopener" className="btn-sm" title="Abrir WhatsApp" style={{ textDecoration: 'none', color: '#16A34A' }}>💬</a>
+          <a href={`https://web.whatsapp.com/send?phone=${waPhone}`} target="_blank" rel="noopener" className="btn-sm" title="Abrir WhatsApp" style={{ textDecoration: 'none', color: color.success }}>💬</a>
         )}
         {verDescartados && (
           <button onClick={() => onDescartado(c.id, false)} title="Reactivar — vuelve al CRM" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, lineHeight: 1, verticalAlign: 'middle' }}>↩️</button>
@@ -354,7 +354,7 @@ export function CRM() {
                 <input type="checkbox" checked={verDescartados} onChange={(e) => setVerDescartados(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
                 Ver descartados
               </label>
-              <span style={{ fontSize: 12, color: '#9CA3AF', marginLeft: 'auto' }}>{lista.length} cliente{lista.length === 1 ? '' : 's'}</span>
+              <span style={{ fontSize: 12, color: color.mut2, marginLeft: 'auto' }}>{lista.length} cliente{lista.length === 1 ? '' : 's'}</span>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -377,9 +377,9 @@ export function CRM() {
                 </thead>
                 <tbody>
                   {cargando ? (
-                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Cargando…</td></tr>
+                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>Cargando…</td></tr>
                   ) : !lista.length ? (
-                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Sin clientes para este filtro</td></tr>
+                    <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>Sin clientes para este filtro</td></tr>
                   ) : (
                     lista.map((c) => (
                       <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} />
@@ -390,7 +390,7 @@ export function CRM() {
             </div>
 
             {!cargado && !cargando && (
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>El KV no se pudo leer: los guardados están bloqueados.</div>
+              <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>El KV no se pudo leer: los guardados están bloqueados.</div>
             )}
           </>
         )}

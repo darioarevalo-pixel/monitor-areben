@@ -19,7 +19,7 @@ import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from 
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, Card, Tabs, space, useConfirmar } from '@/components/ui'
+import { Button, Card, Tabs, color, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
 const FP_DEFAULT: LineaEtiqueta[] = [
@@ -291,16 +291,16 @@ function ModoPanel({
     inp.focus()
   }
 
-  const scanBorder = esPromo ? '#DB2777' : '#378ADD'
+  const scanBorder = esPromo ? color.brand : color.brandSolid
   const cardScanStyle: CSSProperties = esPromo
-    ? { border: '1px solid #FBCFE8', background: '#FDF2F8' }
-    : { border: '1px solid #BFDBFE', background: '#F0F7FF' }
+    ? { border: `1px solid ${color.brandBorder}`, background: color.brandBg }
+    : { border: `1px solid ${color.brandBorder}`, background: color.brandBg }
 
   return (
     <div>
       <Card style={cardScanStyle}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
           Escaneá el código de barras de un producto: imprime su etiqueta de <b>{modo === 'loc' ? 'local (con precio)' : modo === 'promo' ? 'promo (antes/ahora)' : modo === 'sku' ? 'solo SKU' : 'depósito (sin precio)'}</b> al instante.
         </div>
         <input
@@ -315,14 +315,14 @@ function ModoPanel({
           placeholder="🔫 Escaneá acá el código de barras…"
           style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${scanBorder}`, borderRadius: 8, boxSizing: 'border-box' }}
         />
-        {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? '#16A34A' : '#DC2626' }}>{feedback.html}</div>}
+        {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? color.success : color.danger }}>{feedback.html}</div>}
       </Card>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{titulo(modo)}</div>
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{subtitulo(modo)}</div>
+            <div style={{ fontSize: 12, color: color.mut2, marginTop: 2 }}>{subtitulo(modo)}</div>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" className="mo-input" style={{ width: 240, maxWidth: '100%' }} />
         </div>
@@ -340,25 +340,25 @@ function ModoPanel({
                 await onRefrescarPrecios()
                 setRefrescando(false)
               }}
-              style={{ background: '#fff', border: '1px solid #D1D5DB' }}
+              style={{ background: '#fff', border: `1px solid ${color.line2}` }}
             >
               {refrescando ? '⏳ Actualizando precios…' : '🔄 Actualizar precios'}
             </button>
           )}
           <Button variant="ghost" tone="danger" onClick={limpiar}>Limpiar cantidades</Button>
-          <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={autoClear} onChange={(e) => setAutoClear(e.target.checked)} /> Borrar cantidades al imprimir
           </label>
-          <span style={{ fontSize: 12, color: '#6B7280' }}>{total ? `${total} etiquetas en ${Object.keys(cant).length} variantes` : 'Cargá cantidades para imprimir'}</span>
+          <span style={{ fontSize: 12, color: color.mut }}>{total ? `${total} etiquetas en ${Object.keys(cant).length} variantes` : 'Cargá cantidades para imprimir'}</span>
         </div>
 
         {modo === 'dep' && (
-          <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={sep} onChange={(e) => setSep(e.target.checked)} /> Dejar una etiqueta en blanco al cambiar de variante (para separar más fácil)
           </label>
         )}
         {modo === 'loc' && (
-          <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={conFP} onChange={(e) => setConFP(e.target.checked)} /> Imprimir también la etiqueta de <b>&nbsp;formas de pago</b>&nbsp; (1 después de cada precio)
           </label>
         )}
@@ -384,15 +384,15 @@ function ModoPanel({
                 {shown.map((v) => {
                   const pr = esPromo ? promoDe(v) : null
                   return (
-                    <tr key={v.id} style={{ borderTop: '1px solid #EEF0F2' }}>
+                    <tr key={v.id} style={{ borderTop: `1px solid ${color.line}` }}>
                       <td style={tdC}>{v.name || '—'}</td>
                       <td style={tdC}>{v.size || '—'}</td>
-                      <td style={{ ...tdC, color: '#666' }}>{v.sku || '—'}</td>
-                      <td style={{ ...tdC, color: '#666', fontFamily: 'monospace', fontSize: 12 }}>{v.barcode}</td>
+                      <td style={{ ...tdC, color: color.mut }}>{v.sku || '—'}</td>
+                      <td style={{ ...tdC, color: color.mut, fontFamily: 'monospace', fontSize: 12 }}>{v.barcode}</td>
                       {conPrecio && <td style={{ ...tdC, textAlign: 'right', fontWeight: 600 }}>{precioDe(v) ? '$' + Math.round(precioDe(v)).toLocaleString('es-AR') : '—'}</td>}
-                      {esPromo && <td style={{ ...tdC, textAlign: 'right', color: '#9CA3AF', textDecoration: 'line-through' }}>{pr ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td>}
-                      {esPromo && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: '#DB2777' }}>{pr ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>}
-                      <td style={{ ...tdC, textAlign: 'center', color: '#9CA3AF' }}>{v.stock || 0}</td>
+                      {esPromo && <td style={{ ...tdC, textAlign: 'right', color: color.mut2, textDecoration: 'line-through' }}>{pr ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td>}
+                      {esPromo && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: color.brand }}>{pr ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>}
+                      <td style={{ ...tdC, textAlign: 'center', color: color.mut2 }}>{v.stock || 0}</td>
                       <td style={{ ...tdC, textAlign: 'center' }}>
                         <input type="number" min={0} value={cant[v.id] || ''} onChange={(e) => setCant(v.id, e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 68, textAlign: 'center', padding: '0 6px', height: 32 }} />
                       </td>
@@ -402,11 +402,11 @@ function ModoPanel({
               </tbody>
             </table>
           ) : (
-            <div style={{ color: '#9CA3AF', padding: 24, textAlign: 'center' }}>
+            <div style={{ color: color.mut2, padding: 24, textAlign: 'center' }}>
               {esPromo ? 'No hay productos en promoción (con código de barras) que coincidan.' : 'No hay variantes con código de barras que coincidan.'}
             </div>
           )}
-          {lista.length > CAP && <div style={{ fontSize: 11, color: '#9CA3AF', padding: 8 }}>Mostrando {CAP} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
+          {lista.length > CAP && <div style={{ fontSize: 11, color: color.mut2, padding: 8 }}>Mostrando {CAP} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
         </div>
       </Card>
 
@@ -418,16 +418,16 @@ function ModoPanel({
 function AvisoSinCodigo({ lista }: { lista: VarianteEti[] }) {
   const items = lista.slice(0, 80)
   return (
-    <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#92400E' }}>
+    <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: color.warningInk }}>
       ⚠️ <b>{lista.length} producto(s) con stock SIN código de barras.</b> No se pueden etiquetar hasta tener el código (cargalo en GN; a veces GN tarda en sincronizarlo).
       <details style={{ marginTop: 4 }}>
         <summary style={{ cursor: 'pointer' }}>Ver cuáles</summary>
         {items.map((v, i) => (
           <div key={i} style={{ marginTop: 2 }}>
-            • {v.name || '—'}{v.size && v.size !== '—' ? ' · ' + v.size : ''}{v.sku ? ' · ' + v.sku : ''} <span style={{ color: '#B45309' }}>(stock {v.stock || 0})</span>
+            • {v.name || '—'}{v.size && v.size !== '—' ? ' · ' + v.size : ''}{v.sku ? ' · ' + v.sku : ''} <span style={{ color: color.warningInk }}>(stock {v.stock || 0})</span>
           </div>
         ))}
-        {lista.length > 80 && <div style={{ marginTop: 2, color: '#9CA3AF' }}>…y {lista.length - 80} más</div>}
+        {lista.length > 80 && <div style={{ marginTop: 2, color: color.mut2 }}>…y {lista.length - 80} más</div>}
       </details>
     </div>
   )
@@ -459,26 +459,26 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
   return (
     <Card>
       <div style={{ fontSize: 14, fontWeight: 700 }}>💳 Etiqueta de formas de pago</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px' }}>Diseñala una vez (queda guardada). Se imprime junto a las etiquetas de precio cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
+      <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>Diseñala una vez (queda guardada). Se imprime junto a las etiquetas de precio cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
       {fpLines.map((l, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
           <input value={l.texto} placeholder="Texto" onChange={(e) => setLinea(i, 'texto', e.target.value)} className="mo-input" style={{ flex: 1, minWidth: 160 }} />
           <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} className="mo-select" style={{ width: 110 }}>
             {FP_TAM.map(([val, t]) => <option key={val} value={val}>{t}</option>)}
           </select>
-          <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 3 }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
-          <button onClick={() => del(i)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+          <button onClick={() => del(i)} title="Quitar" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
         <div style={{ fontSize: 12, color: '#888' }}>Vista previa:</div>
-        <div style={{ width: 200, height: 100, border: '1px solid #E5E7EB', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 6, background: '#fff' }}>
+        <div style={{ width: 200, height: 100, border: `1px solid ${color.line}`, borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 6, background: '#fff' }}>
           {fpLines.filter((l) => l.texto.trim()).map((l, i) => (
             <div key={i} style={{ fontSize: l.tam === 'titulo' ? 13 : l.tam === 'subtitulo' ? 11 : l.tam === 'chico' ? 8 : 10, fontWeight: l.bold ? 700 : 400, lineHeight: 1.25 }}>{l.texto}</div>
-          )) || <span style={{ color: '#CBD5E1', fontSize: 11 }}>(vacía)</span>}
+          )) || <span style={{ color: color.mut2, fontSize: 11 }}>(vacía)</span>}
         </div>
         <Button size="sm" variant="outline" disabled={!catalogoListo} onClick={imprimirSolo}>Imprimir solo formas de pago…</Button>
       </div>
@@ -527,15 +527,15 @@ function LibreEditor() {
   return (
     <Card>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>✏️ Etiqueta libre (editor)</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 14 }}>Armá una etiqueta a medida con texto, código de barras y/o precio. Ideal para cajas, bolsas y rótulos de envío.</div>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>Armá una etiqueta a medida con texto, código de barras y/o precio. Ideal para cajas, bolsas y rótulos de envío.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
-        <label style={{ fontSize: 12, color: '#666' }}>Tamaño<br />
+        <label style={{ fontSize: 12, color: color.mut }}>Tamaño<br />
           <select value={grande ? 'grande' : 'chica'} onChange={(e) => setGrande(e.target.value === 'grande')} className="mo-select" style={{ minWidth: 150 }}>
             <option value="chica">5 × 2,5 cm (chica)</option>
             <option value="grande">10 × 15 cm (caja / rótulo)</option>
           </select>
         </label>
-        <label style={{ fontSize: 12, color: '#666' }}>Copias<br />
+        <label style={{ fontSize: 12, color: color.mut }}>Copias<br />
           <input type="number" value={copias} min={1} onChange={(e) => setCopias(e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 90 }} />
         </label>
       </div>
@@ -546,19 +546,19 @@ function LibreEditor() {
           <select value={l.tam} onChange={(e) => setLinea(i, 'tam', e.target.value)} className="mo-select" style={{ width: 110 }}>
             {FP_TAM.map(([val, t]) => <option key={val} value={val}>{t}</option>)}
           </select>
-          <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 3 }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
-          <button onClick={() => del(i)} title="Quitar línea" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+          <button onClick={() => del(i)} title="Quitar línea" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
-      <div style={{ borderTop: '1px solid #EEF0F2', margin: '16px 0 12px' }} />
+      <div style={{ borderTop: `1px solid ${color.line}`, margin: '16px 0 12px' }} />
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label style={{ fontSize: 12, color: '#666' }}>Código de barras (opcional)<br />
+        <label style={{ fontSize: 12, color: color.mut }}>Código de barras (opcional)<br />
           <input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="número o texto a codificar" className="mo-input" style={{ width: 240 }} />
         </label>
-        <label style={{ fontSize: 12, color: '#666' }}>Precio (opcional)<br />
+        <label style={{ fontSize: 12, color: color.mut }}>Precio (opcional)<br />
           <input type="number" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="ej. 12990" className="mo-input mo-input--num" inputMode="numeric" style={{ width: 140 }} />
         </label>
       </div>
@@ -583,7 +583,7 @@ function subtitulo(modo: ModoEtiqueta): string {
         : 'Etiquetas 5 × 2,5 cm: nombre, variante, SKU y código de barras (Code 128). Sin precio.'
 }
 
-const thStyle: CSSProperties = { padding: '6px 10px', position: 'sticky', top: 0, background: '#F3F4F6' }
+const thStyle: CSSProperties = { padding: '6px 10px', position: 'sticky', top: 0, background: color.bg2 }
 function th(t: string, align: 'left' | 'right' | 'center' = 'left') {
   return <th style={{ ...thStyle, textAlign: align }}>{t}</th>
 }

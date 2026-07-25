@@ -8,6 +8,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
+import { color } from '@/components/ui'
 
 export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -47,12 +48,12 @@ export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: ()
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 20, minWidth: 320, textAlign: 'center' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>{falla.producto}</div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>{falla.sku || 's/sku'} · {falla.motivo || 'sin motivo'}</div>
-        {falla.barcode ? <canvas ref={canvasRef} /> : <div style={{ fontSize: 13, color: '#9CA3AF' }}>Sin código de barras.</div>}
+        <div style={{ fontSize: 14, fontWeight: 700, color: color.ink, marginBottom: 4 }}>{falla.producto}</div>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 12 }}>{falla.sku || 's/sku'} · {falla.motivo || 'sin motivo'}</div>
+        {falla.barcode ? <canvas ref={canvasRef} /> : <div style={{ fontSize: 13, color: color.mut2 }}>Sin código de barras.</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
-          <button onClick={imprimir} disabled={!falla.barcode} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #D97706', color: '#B45309', background: '#FFFBEB', cursor: 'pointer' }}>🖨️ Imprimir</button>
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer' }}>Cerrar</button>
+          <button onClick={imprimir} disabled={!falla.barcode} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.warning}`, color: color.warningInk, background: color.warningBg, cursor: 'pointer' }}>🖨️ Imprimir</button>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.line}`, background: '#fff', cursor: 'pointer' }}>Cerrar</button>
         </div>
       </div>
     </div>

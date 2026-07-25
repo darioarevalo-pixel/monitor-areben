@@ -12,7 +12,7 @@ import { stockPorProductoTn } from '@/lib/tncat/agotados'
 import { aplicarRecortes, categoriasDe, coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
 import type { FiltroFchk, ProductoFchk } from '@/lib/tncat/tipos'
-import { useConfirmar, useToast } from '@/components/ui'
+import { color as paleta, useConfirmar, useToast } from '@/components/ui'
 
 const MAX = 150
 
@@ -194,7 +194,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const btn = (k: FiltroFchk, t: string) => (
     <button
       onClick={() => setFiltro(k)}
-      style={{ border: `1px solid ${filtro === k ? '#378ADD' : '#D1D5DB'}`, background: filtro === k ? '#378ADD' : '#fff', color: filtro === k ? '#fff' : '#374151', borderRadius: 8, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+      style={{ border: `1px solid ${filtro === k ? paleta.brandSolid : paleta.line2}`, background: filtro === k ? paleta.brandSolid : '#fff', color: filtro === k ? '#fff' : paleta.ink2, borderRadius: 8, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
     >
       {t}
     </button>
@@ -204,22 +204,22 @@ export function FotosCard({ marca }: { marca: Marca }) {
     <div className="card">
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>🔎 Revisar fotos por variante</div>
-        <button className="btn-sm" onClick={() => cargar(true)} title="Volvé a traer el estado real desde TiendaNube" style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
+        <button className="btn-sm" onClick={() => cargar(true)} title="Volvé a traer el estado real desde TiendaNube" style={{ background: '#fff', border: `1px solid ${paleta.line2}`, marginLeft: 'auto' }}>
           🔄 Actualizar
         </button>
       </div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px' }}>
+      <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px' }}>
         Encontrá los productos donde una foto se cargó pero <b>no quedó pegada al color</b>, o que no tienen ninguna foto. Tocá una foto para verla en grande y confirmar el cambio.
       </div>
 
       {cargando ? (
-        <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando estado de fotos…</div>
+        <div style={{ padding: 16, color: paleta.mut2 }}>Cargando estado de fotos…</div>
       ) : (
         <>
           {/* Recortes: qué parte del catálogo se está mirando. Van arriba de los filtros de
               problema porque decidir "sobre qué" es anterior a decidir "qué buscar". */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
-            <label style={{ fontSize: 12.5, color: '#374151', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${paleta.bg2}` }}>
+            <label style={{ fontSize: 12.5, color: paleta.ink2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <input type="checkbox" checked={soloConStock} disabled={verIgnorados} onChange={(e) => setSoloConStock(e.target.checked)} />
               Solo con stock
             </label>
@@ -230,13 +230,13 @@ export function FotosCard({ marca }: { marca: Marca }) {
             </InfoPopover>
 
             {categorias.length > 0 && (
-              <label style={{ fontSize: 12.5, color: '#374151', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <label style={{ fontSize: 12.5, color: paleta.ink2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 Categoría
                 <select
                   value={categoria}
                   disabled={verIgnorados}
                   onChange={(e) => setCategoria(e.target.value)}
-                  style={{ padding: '5px 8px', border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 12.5, cursor: 'pointer', maxWidth: 220 }}
+                  style={{ padding: '5px 8px', border: `1px solid ${paleta.line2}`, borderRadius: 7, fontSize: 12.5, cursor: 'pointer', maxWidth: 220 }}
                 >
                   <option value="">Todas</option>
                   {categorias.map((c) => (
@@ -249,7 +249,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
             <button
               className="btn-sm"
               onClick={() => setVerIgnorados((v) => !v)}
-              style={{ background: verIgnorados ? '#EEF2FF' : '#fff', border: `1px solid ${verIgnorados ? '#C7D2FE' : '#D1D5DB'}`, color: verIgnorados ? '#3730A3' : '#374151', marginLeft: 'auto' }}
+              style={{ background: verIgnorados ? paleta.brandBg : '#fff', border: `1px solid ${verIgnorados ? paleta.brandBorder : paleta.line2}`, color: verIgnorados ? paleta.brand : paleta.ink2, marginLeft: 'auto' }}
             >
               {verIgnorados ? '← Volver a la revisión' : `🚫 Ignorados (${ignorados.size})`}
             </button>
@@ -259,17 +259,17 @@ export function FotosCard({ marca }: { marca: Marca }) {
             {btn('problema', 'Todos con problema')}
             {btn('sinvincular', `Sin vincular al color (${nSinVinc})`)}
             {btn('sinfoto', `Sin ninguna foto (${nSinFoto})`)}
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔎 Buscar producto…" style={{ flex: 1, minWidth: 180, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔎 Buscar producto…" style={{ flex: 1, minWidth: 180, padding: '7px 9px', border: `1px solid ${paleta.line2}`, borderRadius: 7 }} />
           </div>
 
           {!verIgnorados && nApartados > 0 && (
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: paleta.mut2, marginBottom: 8 }}>
               {nApartados === 1 ? 'Hay 1 producto fuera de esta vista' : `Hay ${nApartados} productos fuera de esta vista`} por los recortes de arriba.
             </div>
           )}
 
           {lista.length === 0 ? (
-            <div style={{ color: '#9CA3AF', fontSize: 13, padding: 16, textAlign: 'center' }}>
+            <div style={{ color: paleta.mut2, fontSize: 13, padding: 16, textAlign: 'center' }}>
               {verIgnorados ? 'No hay productos apartados de la revisión.' : '✅ No hay productos con problema en este filtro.'}
             </div>
           ) : (
@@ -285,7 +285,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
                   onRestaurar={() => void restaurar(p)}
                 />
               ))}
-              {lista.length > MAX ? <div style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center', padding: 8 }}>Mostrando {MAX} de {lista.length}. Afiná con el buscador.</div> : null}
+              {lista.length > MAX ? <div style={{ color: paleta.mut2, fontSize: 12, textAlign: 'center', padding: 8 }}>Mostrando {MAX} de {lista.length}. Afiná con el buscador.</div> : null}
             </>
           )}
         </>
@@ -307,27 +307,27 @@ function ModalConfirmar({ accion, onCancelar, onAceptar }: { accion: Accion; onC
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 460, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
           {quitar ? 'Quitar foto del color ' : 'Vincular foto al color '}
-          <span style={{ color: '#378ADD' }}>{accion.color}</span>
+          <span style={{ color: paleta.brandSolid }}>{accion.color}</span>
         </div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: paleta.mut2, marginBottom: 12 }}>
           {quitar ? 'La variante vuelve a quedar sin foto en TiendaNube.' : 'Se escribe en TiendaNube en vivo.'}
         </div>
         {accion.src ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={accion.src} alt="" style={{ display: 'block', width: '100%', maxHeight: '55vh', objectFit: 'contain', borderRadius: 10, background: '#F3F4F6', border: '1px solid #E5E7EB' }} />
+          <img src={accion.src} alt="" style={{ display: 'block', width: '100%', maxHeight: '55vh', objectFit: 'contain', borderRadius: 10, background: paleta.bg2, border: `1px solid ${paleta.line}` }} />
         ) : (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', background: '#F3F4F6', borderRadius: 10 }}>Sin vista previa</div>
+          <div style={{ padding: 24, textAlign: 'center', color: paleta.mut2, background: paleta.bg2, borderRadius: 10 }}>Sin vista previa</div>
         )}
-        {accion.error ? <div style={{ color: '#DC2626', fontSize: 12, marginTop: 10 }}>No se pudo: {accion.error}</div> : null}
+        {accion.error ? <div style={{ color: paleta.danger, fontSize: 12, marginTop: 10 }}>No se pudo: {accion.error}</div> : null}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button className="btn-sm" onClick={onCancelar} disabled={accion.pending} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+          <button className="btn-sm" onClick={onCancelar} disabled={accion.pending} style={{ background: '#fff', border: `1px solid ${paleta.line2}` }}>
             Cancelar
           </button>
           <button
             className="btn-sm"
             onClick={onAceptar}
             disabled={accion.pending}
-            style={{ background: accion.pending ? '#93C5FD' : quitar ? '#DC2626' : '#378ADD', color: '#fff', border: 'none' }}
+            style={{ background: accion.pending ? paleta.brandBorder : quitar ? paleta.danger : paleta.brandSolid, color: '#fff', border: 'none' }}
           >
             {accion.pending ? 'Guardando…' : quitar ? 'Quitar foto' : 'Aceptar'}
           </button>
@@ -366,14 +366,14 @@ function ProductoFila({
 
   if (sinFoto(p)) {
     return (
-      <div style={{ border: '1px solid #FED7AA', background: '#FFF7ED', borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
+      <div style={{ border: `1px solid ${paleta.warningBorder}`, background: paleta.warningBg, borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>
-            {p.name} <span style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>sin ninguna foto</span>
+            {p.name} <span style={{ background: paleta.dangerBg, color: paleta.dangerInk, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>sin ninguna foto</span>
           </div>
           {botonApartar}
         </div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 3 }}>
+        <div style={{ fontSize: 12, color: paleta.mut2, marginTop: 3 }}>
           Subí las fotos en <b>📷 Carga de imágenes</b> (arriba). Acá no hay nada para vincular todavía.
         </div>
       </div>
@@ -384,40 +384,40 @@ function ProductoFila({
   const nSin = colores.length - conFoto
   const imgs = p.imagenes || []
   return (
-    <div style={{ border: `1px solid ${nSin ? '#FCA5A5' : '#E5E7EB'}`, background: nSin ? '#FEF2F2' : '#fff', borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
+    <div style={{ border: `1px solid ${nSin ? paleta.dangerBorder : paleta.line}`, background: nSin ? paleta.dangerBg : '#fff', borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>
-          {p.name} <span style={{ color: '#9CA3AF', fontSize: 12, fontWeight: 400 }}>· {conFoto}/{colores.length} colores con foto{nSin ? ` · ${nSin} sin vincular` : ''}</span>
+          {p.name} <span style={{ color: paleta.mut2, fontSize: 12, fontWeight: 400 }}>· {conFoto}/{colores.length} colores con foto{nSin ? ` · ${nSin} sin vincular` : ''}</span>
         </div>
         {botonApartar}
       </div>
       <div style={{ marginTop: 4 }}>
         {colores.map(({ color, foto }) =>
           foto ? (
-            <div key={color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid #F1F5F9' }}>
+            <div key={color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: `1px solid ${paleta.bg2}` }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={foto}
                 alt={color}
                 onClick={() => onPedirQuitar(p.id, color, foto)}
                 title={`Ver en grande / quitar la foto de ${color}`}
-                style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 6, border: '2px solid #16A34A', flex: '0 0 auto', cursor: 'zoom-in' }}
+                style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.success}`, flex: '0 0 auto', cursor: 'zoom-in' }}
               />
               <div style={{ fontSize: 13 }}>
-                <b>{color}</b> <span style={{ color: '#16A34A' }}>✓ con foto</span>
+                <b>{color}</b> <span style={{ color: paleta.success }}>✓ con foto</span>
               </div>
               <button
                 onClick={() => onPedirQuitar(p.id, color, foto)}
                 title={`Quitar la foto de ${color}`}
-                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: paleta.dangerInk, background: paleta.dangerBg, border: `1px solid ${paleta.dangerBorder}`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
               >
                 Quitar foto
               </button>
             </div>
           ) : (
-            <div key={color} style={{ padding: '5px 0', borderTop: '1px solid #F1F5F9' }}>
+            <div key={color} style={{ padding: '5px 0', borderTop: `1px solid ${paleta.bg2}` }}>
               <div style={{ fontSize: 13 }}>
-                <b>{color}</b> <span style={{ color: '#DC2626' }}>⚠ sin foto</span> <span style={{ color: '#9CA3AF', fontSize: 11 }}>— tocá una foto para vincularla:</span>
+                <b>{color}</b> <span style={{ color: paleta.danger }}>⚠ sin foto</span> <span style={{ color: paleta.mut2, fontSize: 11 }}>— tocá una foto para vincularla:</span>
               </div>
               {imgs.length ? (
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
@@ -429,7 +429,7 @@ function ProductoFila({
                       onClick={() => onPedirVincular(p.id, im.id, color, im.src)}
                       title={`Vincular esta foto a ${color}`}
                       alt=""
-                      style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: '2px solid #D1D5DB', cursor: 'pointer', flex: '0 0 auto' }}
+                      style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.line2}`, cursor: 'pointer', flex: '0 0 auto' }}
                     />
                   ))}
                 </div>
@@ -445,9 +445,9 @@ function ProductoFila({
 const estiloApartar: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
-  color: '#6B7280',
+  color: paleta.mut,
   background: '#fff',
-  border: '1px solid #E5E7EB',
+  border: `1px solid ${paleta.line}`,
   borderRadius: 6,
   padding: '3px 9px',
   cursor: 'pointer',

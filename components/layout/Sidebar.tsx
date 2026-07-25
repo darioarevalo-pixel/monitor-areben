@@ -7,6 +7,7 @@ import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type Nav
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
+import { color } from '@/components/ui/tokens'
 
 /** Label del menú (con emoji): LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
@@ -107,7 +108,7 @@ export function Sidebar({
             <div
               style={{
                 fontSize: 10,
-                color: '#9CA3AF',
+                color: color.mut2,
                 textTransform: 'uppercase',
                 letterSpacing: '.04em',
                 padding: '4px 10px 6px',

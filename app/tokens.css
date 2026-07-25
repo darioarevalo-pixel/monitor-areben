@@ -84,6 +84,10 @@
   --mo-marca-bdi-bg: #dbeafe;
   --mo-marca-zattia-fg: #6d28d9;
   --mo-marca-zattia-bg: #ede9fe;
+  /* Mayorista (CRM): mismo criterio, es una etiqueta de identidad y tiene que
+     distinguirse del acento de la app para leerse como categoría de cliente. */
+  --mo-mayorista-fg: #6d28d9;
+  --mo-mayorista-bg: #f3e8ff;
 
   /* ── Sidebar (oscuro) ──────────────────────────────────── */
   --mo-side-bg: #0f1729;

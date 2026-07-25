@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { bustAudit, publicar, subirImagen, traerProductosImg, vincularColor } from '@/lib/tncat/cliente'
 import { colorPorNombre, findProd, matchByFilename } from '@/lib/tncat/matching'
 import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
-import { useConfirmar, useToast } from '@/components/ui'
+import { color, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Carga de imágenes a TN (card 2). Un bloque por producto con varias fotos: se
@@ -251,9 +251,9 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     setSubiendo(false)
     setInfo(
       <>
-        <span style={{ color: '#16A34A' }}>✅ {ok} subidas</span>
-        {sinVincular ? <span style={{ color: '#D97706' }}> · ⚠ {sinVincular} sin vincular color (tocá 🔗 Revincular)</span> : null}
-        {err ? <span style={{ color: '#DC2626' }}> · {err} con error: {[...new Set(errMsgs)].slice(0, 2).join(' / ')}</span> : null}
+        <span style={{ color: color.success }}>✅ {ok} subidas</span>
+        {sinVincular ? <span style={{ color: color.warning }}> · ⚠ {sinVincular} sin vincular color (tocá 🔗 Revincular)</span> : null}
+        {err ? <span style={{ color: color.danger }}> · {err} con error: {[...new Set(errMsgs)].slice(0, 2).join(' / ')}</span> : null}
       </>,
     )
     if (ok) bustAudit(marca)
@@ -269,11 +269,11 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
       const j = await vincularColor(marca, g.productId!, ft.imageId, ft.color)
       if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (j.variantesAsignadas ?? 0) >= (j.variantesObjetivo ?? 0)) {
         actualizarFoto(gid, fid, { avisoColor: null })
-        setInfo(<span style={{ color: '#16A34A' }}>✅ Color vinculado.</span>)
+        setInfo(<span style={{ color: color.success }}>✅ Color vinculado.</span>)
       } else {
         const aviso = j.variantesObjetivo ? `Se vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}` : `El color "${ft.color}" no coincide con ninguna variante`
         actualizarFoto(gid, fid, { avisoColor: aviso })
-        setInfo(<span style={{ color: '#D97706' }}>⚠ {aviso}</span>)
+        setInfo(<span style={{ color: color.warning }}>⚠ {aviso}</span>)
       }
     } catch {
       setInfo('Error al revincular.')
@@ -299,7 +299,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     try {
       const d = await publicar(marca, ids)
       if (d.ok) {
-        setInfo(<><span style={{ color: '#16A34A' }}>✅ {d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: '#DC2626' }}> · {d.errores.length} con error</span> : null}</>)
+        setInfo(<><span style={{ color: color.success }}>✅ {d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: color.danger }}> · {d.errores.length} con error</span> : null}</>)
         bustAudit(marca)
       } else {
         toast.error('No se pudo publicar: ' + (d.error || 'error desconocido'))
@@ -318,31 +318,31 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   return (
     <div className="card">
       <div style={{ fontSize: 16, fontWeight: 700 }}>📷 Carga de imágenes</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px' }}>
+      <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>
         Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.
       </div>
 
       <label
         onDragOver={(e) => { e.preventDefault() }}
         onDrop={(e) => { e.preventDefault(); autoCargar(e.dataTransfer.files) }}
-        style={{ display: 'block', border: '2px dashed #378ADD', borderRadius: 10, padding: 20, textAlign: 'center', background: '#EFF6FF', cursor: 'pointer', marginBottom: 12, color: '#185fa5', fontSize: 13, fontWeight: 600 }}
+        style={{ display: 'block', border: `2px dashed ${color.brandSolid}`, borderRadius: 10, padding: 20, textAlign: 'center', background: color.brandBg, cursor: 'pointer', marginBottom: 12, color: color.brand, fontSize: 13, fontWeight: 600 }}
       >
         📂 Soltá acá TODAS las fotos (o tocá para elegir) — se asignan solas por el <b>nombre del archivo</b>
         <input type="file" multiple accept="image/*" onChange={(e) => { autoCargar(e.target.files || []); e.currentTarget.value = '' }} style={{ display: 'none' }} />
       </label>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button className="btn-sm" onClick={() => subirTodo()} disabled={subibles === 0 || subiendo} style={{ background: '#16A34A', color: '#fff' }}>⬆️ Subir todo a TN</button>
-        <button className="btn-sm" onClick={subirYPublicar} disabled={publicando || subiendo} title="Sube las fotos pendientes y además PUBLICA (hace visibles) los productos en TiendaNube" style={{ background: '#7C3AED', color: '#fff' }}>🌐 Subir y publicar</button>
+        <button className="btn-sm" onClick={() => subirTodo()} disabled={subibles === 0 || subiendo} style={{ background: color.success, color: '#fff' }}>⬆️ Subir todo a TN</button>
+        <button className="btn-sm" onClick={subirYPublicar} disabled={publicando || subiendo} title="Sube las fotos pendientes y además PUBLICA (hace visibles) los productos en TiendaNube" style={{ background: color.brand, color: '#fff' }}>🌐 Subir y publicar</button>
         <button className="btn-sm" onClick={agregarGrupo}>+ Agregar producto a mano</button>
-        <button className="btn-sm" onClick={recargarProductos} disabled={recargando} title="Volvé a traer la lista de productos desde TiendaNube (usalo si importaste productos nuevos y no los reconoce)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+        <button className="btn-sm" onClick={recargarProductos} disabled={recargando} title="Volvé a traer la lista de productos desde TiendaNube (usalo si importaste productos nuevos y no los reconoce)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           {recargando ? '⏳ Cargando…' : '🔄 Recargar productos de TN'}
         </button>
-        <span style={{ fontSize: 12, color: '#9CA3AF' }}>
+        <span style={{ fontSize: 12, color: color.mut2 }}>
           {totalFotos ? (
             <>
               {grupos.filter((g) => g.productId).length} productos · {totalFotos} fotos
-              {sinAsig ? <b style={{ color: '#D97706' }}> · {sinAsig} sin reconocer (asignalas a mano)</b> : <span style={{ color: '#16A34A' }}> · todas reconocidas ✓</span>}
+              {sinAsig ? <b style={{ color: color.warning }}> · {sinAsig} sin reconocer (asignalas a mano)</b> : <span style={{ color: color.success }}> · todas reconocidas ✓</span>}
             </>
           ) : null}{' '}
           {info}
@@ -356,7 +356,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
           const tieneColores = !!(prod && prod.colores && prod.colores.length)
           const portadaId = g.fotos.some((f) => f.id === g.portadaId) ? g.portadaId : g.fotos[0]?.id
           return (
-            <div key={g.id} style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div key={g.id} style={{ border: `1px solid ${color.line}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
                 <input
                   key={String(g.productId)}
@@ -364,17 +364,17 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                   placeholder="Buscar producto…"
                   defaultValue={prod ? prod.name : ''}
                   onBlur={(e) => setProd(g.id, e.target.value)}
-                  style={{ flex: 1, minWidth: 200, padding: '7px 10px', border: `1px solid ${prod ? '#16A34A' : '#D1D5DB'}`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+                  style={{ flex: 1, minWidth: 200, padding: '7px 10px', border: `1px solid ${prod ? color.success : color.line2}`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}
                 />
-                {prod ? <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 600, whiteSpace: 'nowrap' }}>✓ vinculado</span> : <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600, whiteSpace: 'nowrap' }}>⚠️ sin producto</span>}
-                {tieneColores ? <span style={{ fontSize: 11, color: '#9CA3AF' }}>↓ elegí el color de cada foto</span> : null}
-                <button onClick={() => quitarGrupo(g.id)} title="Quitar este producto" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 18 }}>×</button>
+                {prod ? <span style={{ fontSize: 11, color: color.success, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ vinculado</span> : <span style={{ fontSize: 11, color: color.danger, fontWeight: 600, whiteSpace: 'nowrap' }}>⚠️ sin producto</span>}
+                {tieneColores ? <span style={{ fontSize: 11, color: color.mut2 }}>↓ elegí el color de cada foto</span> : null}
+                <button onClick={() => quitarGrupo(g.id)} title="Quitar este producto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18 }}>×</button>
               </div>
               <div
                 onClick={() => setActivo(g.id)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { if (e.dataTransfer.files?.length) { e.preventDefault(); grupoFotos(g.id, e.dataTransfer.files) } }}
-                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', border: `1.5px ${esActivo ? 'solid #378ADD' : 'dashed #CBD5E1'}`, borderRadius: 8, padding: 10, background: esActivo ? '#EFF6FF' : '#FAFAFA', cursor: 'pointer' }}
+                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', border: `1.5px ${esActivo ? `solid ${color.brandSolid}` : `dashed ${color.mut2}`}`, borderRadius: 8, padding: 10, background: esActivo ? color.brandBg : color.bg, cursor: 'pointer' }}
               >
                 {g.fotos.map((ft) => {
                   const esPortada = ft.id === portadaId
@@ -382,17 +382,17 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                     <div key={ft.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 'none' }}>
                       <div draggable onDragStart={() => (dragRef.current = { gid: g.id, fid: ft.id })} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.stopPropagation(); onDrop(g.id, ft.id) }} style={{ position: 'relative' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={ft.url || ''} onClick={(e) => { e.stopPropagation(); if (ft.url) setPreview(ft.url) }} title="Tocá para verla grande · arrastrá para ordenar" alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 7, background: '#F3F4F6', border: `2px solid ${esPortada ? '#F59E0B' : ft.subida ? '#16A34A' : '#E5E7EB'}`, cursor: 'zoom-in' }} />
-                        <button onClick={(e) => { e.stopPropagation(); setPortada(g.id, ft.id) }} title={esPortada ? 'Es la portada' : 'Marcar como portada'} style={{ position: 'absolute', top: -7, left: -7, background: esPortada ? '#F59E0B' : '#fff', color: esPortada ? '#fff' : '#CBD5E1', border: `1px solid ${esPortada ? '#F59E0B' : '#D1D5DB'}`, borderRadius: '50%', width: 18, height: 18, padding: 0, fontSize: 11, cursor: 'pointer', lineHeight: '16px', textAlign: 'center' }}>★</button>
+                        <img src={ft.url || ''} onClick={(e) => { e.stopPropagation(); if (ft.url) setPreview(ft.url) }} title="Tocá para verla grande · arrastrá para ordenar" alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 7, background: color.bg2, border: `2px solid ${esPortada ? color.warning : ft.subida ? color.success : color.line}`, cursor: 'zoom-in' }} />
+                        <button onClick={(e) => { e.stopPropagation(); setPortada(g.id, ft.id) }} title={esPortada ? 'Es la portada' : 'Marcar como portada'} style={{ position: 'absolute', top: -7, left: -7, background: esPortada ? color.warning : '#fff', color: esPortada ? '#fff' : color.mut2, border: `1px solid ${esPortada ? color.warning : color.line2}`, borderRadius: '50%', width: 18, height: 18, padding: 0, fontSize: 11, cursor: 'pointer', lineHeight: '16px', textAlign: 'center' }}>★</button>
                         {ft.subida ? (
-                          <span style={{ position: 'absolute', top: -6, right: -6, background: '#16A34A', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
+                          <span style={{ position: 'absolute', top: -6, right: -6, background: color.success, color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
                         ) : (
-                          <button onClick={(e) => { e.stopPropagation(); quitarFoto(g.id, ft.id) }} style={{ position: 'absolute', top: -6, right: -6, background: '#DC2626', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, padding: 0, fontSize: 12, cursor: 'pointer', lineHeight: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                          <button onClick={(e) => { e.stopPropagation(); quitarFoto(g.id, ft.id) }} style={{ position: 'absolute', top: -6, right: -6, background: color.danger, color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, padding: 0, fontSize: 12, cursor: 'pointer', lineHeight: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                         )}
                       </div>
-                      <div title={ft.fn} style={{ fontSize: 9, color: '#9CA3AF', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2, textAlign: 'center' }}>{ft.fn}</div>
+                      <div title={ft.fn} style={{ fontSize: 9, color: color.mut2, maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2, textAlign: 'center' }}>{ft.fn}</div>
                       {tieneColores && (
-                        <select onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} value={ft.color} onChange={(e) => setColor(g.id, ft.id, e.target.value)} title="Color de esta foto" style={{ marginTop: 3, width: 72, padding: 3, border: `1px solid ${ft.color ? '#378ADD' : '#D1D5DB'}`, borderRadius: 6, fontSize: 11 }}>
+                        <select onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} value={ft.color} onChange={(e) => setColor(g.id, ft.id, e.target.value)} title="Color de esta foto" style={{ marginTop: 3, width: 72, padding: 3, border: `1px solid ${ft.color ? color.brandSolid : color.line2}`, borderRadius: 6, fontSize: 11 }}>
                           <option value="">galería</option>
                           {prod!.colores!.map((c) => (
                             <option key={c} value={c}>{c}</option>
@@ -400,16 +400,16 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                         </select>
                       )}
                       {ft.avisoColor ? (
-                        <button onClick={(e) => { e.stopPropagation(); revincular(g.id, ft.id) }} title={ft.avisoColor} style={{ fontSize: 10, marginTop: 3, border: '1px solid #F59E0B', background: '#FFFBEB', color: '#92400E', borderRadius: 5, padding: '1px 6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>🔗 Revincular</button>
+                        <button onClick={(e) => { e.stopPropagation(); revincular(g.id, ft.id) }} title={ft.avisoColor} style={{ fontSize: 10, marginTop: 3, border: `1px solid ${color.warning}`, background: color.warningBg, color: color.warningInk, borderRadius: 5, padding: '1px 6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>🔗 Revincular</button>
                       ) : null}
                     </div>
                   )
                 })}
-                <label onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, border: '1px solid #CBD5E1', borderRadius: 7, color: '#6B7280', fontSize: 11, background: '#fff' }}>
+                <label onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, border: `1px solid ${color.mut2}`, borderRadius: 7, color: color.mut, fontSize: 11, background: '#fff' }}>
                   + fotos
                   <input type="file" accept="image/*" multiple onChange={(e) => { grupoFotos(g.id, e.target.files || []); e.currentTarget.value = '' }} style={{ display: 'none' }} />
                 </label>
-                <span style={{ fontSize: 12, color: esActivo ? '#378ADD' : '#9CA3AF' }}>{esActivo ? '📋 Pegá acá (Cmd/Ctrl+V), arrastrá o tocá "+ fotos"' : g.fotos.length ? '' : 'Tocá acá para pegar/arrastrar fotos'}</span>
+                <span style={{ fontSize: 12, color: esActivo ? color.brandSolid : color.mut2 }}>{esActivo ? '📋 Pegá acá (Cmd/Ctrl+V), arrastrá o tocá "+ fotos"' : g.fotos.length ? '' : 'Tocá acá para pegar/arrastrar fotos'}</span>
               </div>
             </div>
           )

@@ -8,7 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAOcultar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
-import { useConfirmar } from '@/components/ui'
+import { color, useConfirmar } from '@/components/ui'
 
 /**
  * Ocultar agotados (card 5 de tncat): lista los productos sin stock (GN) que siguen
@@ -115,10 +115,10 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
       </div>
 
       {msg && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>
           <span>{msg}</span>
           {ultimoLote.length > 0 && (
-            <button className="btn-sm" disabled={procesando} onClick={() => void deshacer()} style={{ background: '#fff', border: '1px solid #D1D5DB', marginLeft: 'auto' }}>
+            <button className="btn-sm" disabled={procesando} onClick={() => void deshacer()} style={{ background: '#fff', border: `1px solid ${color.line2}`, marginLeft: 'auto' }}>
               ↩️ Deshacer
             </button>
           )}
@@ -126,25 +126,25 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
       )}
 
       {cargando ? (
-        <div style={{ color: '#9CA3AF', padding: '10px 2px' }}>Cargando productos y tienda…</div>
+        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
       ) : lista.length === 0 ? (
-        <div style={{ color: '#059669', fontSize: 14, padding: '10px 2px' }}>
+        <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
           ✅ No hay productos agotados publicados en la tienda.
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-            <button className="btn-sm" onClick={toggleTodos} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+            <button className="btn-sm" onClick={toggleTodos} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
               {todosSel ? 'Deseleccionar todos' : 'Seleccionar todos'}
             </button>
-            <span style={{ fontSize: 13, color: '#6B7280' }}>
+            <span style={{ fontSize: 13, color: color.mut }}>
               {lista.length} agotado(s) publicado(s){nSel > 0 ? ` · ${nSel} seleccionado(s)` : ''}
             </span>
             <button
               className="btn-sm"
               disabled={nSel === 0 || procesando}
               onClick={() => void ocultar()}
-              style={{ background: nSel === 0 ? '#E5E7EB' : '#111827', color: nSel === 0 ? '#9CA3AF' : '#fff', border: 'none', marginLeft: 'auto' }}
+              style={{ background: nSel === 0 ? color.line : color.ink, color: nSel === 0 ? color.mut2 : '#fff', border: 'none', marginLeft: 'auto' }}
             >
               {procesando ? 'Ocultando…' : `🙈 Ocultar ${nSel || ''}`}
             </button>
@@ -156,16 +156,16 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
               return (
                 <label
                   key={id}
-                  style={{ display: 'flex', gap: 10, alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', cursor: 'pointer' }}
+                  style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: 8, padding: '8px 11px', cursor: 'pointer' }}
                 >
                   <input type="checkbox" checked={sel.has(id)} onChange={() => toggle(id)} />
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{c.gnNombre}</div>
-                    <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{c.gnNombre}</div>
+                    <div style={{ fontSize: 12, color: color.mut2 }}>
                       {c.sku ? `SKU ${c.sku} · ` : ''}en tienda: {c.tnNombre}
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', borderRadius: 6, padding: '2px 8px' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: color.dangerInk, background: color.dangerBg, borderRadius: 6, padding: '2px 8px' }}>
                     sin stock
                   </span>
                 </label>

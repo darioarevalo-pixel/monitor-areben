@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { agregarMensaje, borrarMensaje, editarMensaje, semillaFresca, type GrupoMensajes } from '@/lib/crm/banco'
 import { guardarBanco, leerBanco } from '@/lib/kv/cliente'
-import { Button, useConfirmar } from '@/components/ui'
+import { Button, color, useConfirmar } from '@/components/ui'
 
 /**
  * Banco de mensajes. Port de index.html:14293-14360.
@@ -77,37 +77,37 @@ export function BancoMensajes({ onCerrar }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 12, width: 'min(720px,100%)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${color.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>💬 Banco de mensajes</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Clic en un mensaje para copiarlo. Editalo y se guarda solo.</div>
+            <div style={{ fontSize: 11, color: color.mut2 }}>Clic en un mensaje para copiarlo. Editalo y se guarda solo.</div>
           </div>
           <button className="btn-sm" onClick={onCerrar}>Cerrar</button>
         </div>
 
         {error && (
-          <div style={{ background: '#FEE2E2', padding: '7px 20px', fontSize: 12, color: '#991B1B' }}>⚠️ {error}</div>
+          <div style={{ background: color.dangerBg, padding: '7px 20px', fontSize: 12, color: color.dangerInk }}>⚠️ {error}</div>
         )}
 
         <div style={{ padding: '4px 20px 18px', overflowY: 'auto', flex: 1 }}>
           {!banco ? (
-            <div style={{ padding: 24, color: '#9CA3AF', fontSize: 13 }}>Cargando…</div>
+            <div style={{ padding: 24, color: color.mut2, fontSize: 13 }}>Cargando…</div>
           ) : (
             banco.map((g, gi) => (
               <div key={g.grupo}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: '14px 0 8px' }}>{g.grupo}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: color.ink, margin: '14px 0 8px' }}>{g.grupo}</div>
                 {g.mensajes.map((m, mi) => {
                   const enEdicion = editando?.gi === gi && editando?.mi === mi
                   const id = `${gi}-${mi}`
                   return (
-                    <div key={id} style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: 10, marginBottom: 6, background: '#FAFAFA' }}>
+                    <div key={id} style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: 10, marginBottom: 6, background: color.bg }}>
                       {enEdicion ? (
                         <>
                           <textarea
                             value={borrador}
                             onChange={(e) => setBorrador(e.target.value)}
                             autoFocus
-                            style={{ width: '100%', minHeight: 60, fontSize: 12, fontFamily: 'inherit', padding: 6, border: '1px solid #D1D5DB', borderRadius: 6 }}
+                            style={{ width: '100%', minHeight: 60, fontSize: 12, fontFamily: 'inherit', padding: 6, border: `1px solid ${color.line2}`, borderRadius: 6 }}
                           />
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                             <button className="btn-sm btn-primary" onClick={() => guardarEdicion(gi, mi)}>Guardar</button>
@@ -118,7 +118,7 @@ export function BancoMensajes({ onCerrar }: Props) {
                       ) : (
                         <>
                           <div style={{ fontSize: 12, whiteSpace: 'pre-wrap', cursor: 'pointer' }} onClick={() => copiar(m, id)} title="Clic para copiar">
-                            {m || <span style={{ color: '#9CA3AF' }}>(vacío)</span>}
+                            {m || <span style={{ color: color.mut2 }}>(vacío)</span>}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                             <button className="btn-sm" onClick={() => copiar(m, id)}>{copiado === id ? '✓ Copiado' : '📋 Copiar'}</button>

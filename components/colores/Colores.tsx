@@ -168,7 +168,7 @@ function PanelVentas() {
             <BarChart data={filas} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
               <CartesianGrid horizontal={false} stroke={chartColor.grid} />
               <XAxis type="number" tick={{ fill: chartColor.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="color" width={120} tick={{ fill: '#344054', fontSize: 12 }} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="color" width={120} tick={{ fill: color.ink2, fontSize: 12 }} tickLine={false} axisLine={false} />
               <Tooltip cursor={{ fill: chartColor.brandSoft }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${chartColor.grid}` }} />
               <Bar dataKey="qty" fill={chartColor.brand} radius={[0, 4, 4, 0]} />
             </BarChart>

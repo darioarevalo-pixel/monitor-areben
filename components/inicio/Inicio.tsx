@@ -8,7 +8,7 @@ import { leerCajon } from '@/lib/solicitudes/cajon'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
-import type { Marca } from '@/lib/nav'
+
 import { filtrarPorFuncion, ordenarResumenes, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { horaLabel, marcasVisibles, modoInicio, origenesDe, pendientesDeTrabajo, tituloPendientes } from '@/lib/inicio/core'
 import { HeaderAcciones } from '@/components/layout/acciones'

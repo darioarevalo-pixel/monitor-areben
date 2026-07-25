@@ -112,7 +112,7 @@ export function Talles() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filas} margin={{ left: 4, right: 8, top: 8, bottom: 8 }}>
                     <CartesianGrid vertical={false} stroke={chartColor.grid} />
-                    <XAxis dataKey="size" tick={{ fill: '#344054', fontSize: 13, fontWeight: 500 }} tickLine={false} axisLine={false} interval={0} />
+                    <XAxis dataKey="size" tick={{ fill: color.ink2, fontSize: 13, fontWeight: 500 }} tickLine={false} axisLine={false} interval={0} />
                     <YAxis tick={{ fill: chartColor.axis, fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
                     <Tooltip cursor={{ fill: chartColor.brandSoft }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${chartColor.grid}` }} />
                     <Bar dataKey="qty" name={catEfectiva} fill={chartColor.brand} radius={[4, 4, 0, 0]} />

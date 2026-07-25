@@ -44,7 +44,7 @@ import {
 } from '@/lib/ingresos/core'
 import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos/tipos'
 import { nuevoId, useIngresos } from './useIngresos'
-import { Card, useConfirmar } from '@/components/ui'
+import { Card, color as paleta, useConfirmar } from '@/components/ui'
 
 const VISTA_KEY = 'monitor_ing_vista'
 
@@ -136,7 +136,7 @@ export function Ingresos() {
     return (
       <Card>
         <Header estado={st.estadoGuardado} admin={admin} vistaEditar={false} onRefrescar={st.recargar} onAgregar={agregarIng} />
-        <div style={{ fontSize: 13, color: st.error ? '#DC2626' : '#9CA3AF', marginTop: 12 }}>
+        <div style={{ fontSize: 13, color: st.error ? paleta.danger : paleta.mut2, marginTop: 12 }}>
           {st.error ? `No se pudieron leer los ingresos: ${st.error}` : 'Cargando ingresos…'}
         </div>
       </Card>
@@ -171,7 +171,7 @@ export function Ingresos() {
         </div>
       )}
 
-      <div style={{ fontSize: 13, color: '#374151', margin: '12px 0' }}>
+      <div style={{ fontSize: 13, color: paleta.ink2, margin: '12px 0' }}>
         {data.length
           ? <>📦 <b>{res.enCamino}</b> en camino · <b>{res.unidades.toLocaleString('es-AR')}</b> unidades</>
           : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦'}
@@ -180,7 +180,7 @@ export function Ingresos() {
       <div>
         {grupos.map((grp, i) => (
           <div key={i}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', margin: '14px 0 6px' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', margin: '14px 0 6px' }}>
               🗓️ {grp.mes}
             </div>
             {grp.items.map((g) =>
@@ -222,16 +222,16 @@ function Header({
   onAgregar: () => void
 }) {
   const txt = estado === 'guardando' ? 'Guardando…' : estado === 'ok' ? '✓ Guardado (lo ven todos)' : estado === 'error' ? 'Error al guardar.' : ''
-  const color = estado === 'ok' ? '#16A34A' : estado === 'error' ? '#DC2626' : '#6B7280'
+  const color = estado === 'ok' ? paleta.success : estado === 'error' ? paleta.danger : paleta.mut
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color }}>{txt}</span>
-        <button onClick={onRefrescar} title="Actualizar" style={{ background: '#fff', border: '1px solid #D1D5DB', borderRadius: 6, padding: '5px 9px', cursor: 'pointer' }}>
+        <button onClick={onRefrescar} title="Actualizar" style={{ background: '#fff', border: `1px solid ${paleta.line2}`, borderRadius: 6, padding: '5px 9px', cursor: 'pointer' }}>
           🔄
         </button>
         {admin && vistaEditar && (
-          <button onClick={onAgregar} style={{ background: '#378ADD', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 11px', cursor: 'pointer', fontWeight: 600 }}>
+          <button onClick={onAgregar} style={{ background: paleta.brandSolid, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 11px', cursor: 'pointer', fontWeight: 600 }}>
             + Agregar ingreso
           </button>
         )}
@@ -247,9 +247,9 @@ function VistaSel({ vista, admin, onVista }: { vista: VistaIngresos; admin: bool
       <button
         onClick={() => onVista(k)}
         style={{
-          border: `1px solid ${on ? '#378ADD' : '#D1D5DB'}`,
-          background: on ? '#378ADD' : '#fff',
-          color: on ? '#fff' : '#374151',
+          border: `1px solid ${on ? paleta.brandSolid : paleta.line2}`,
+          background: on ? paleta.brandSolid : '#fff',
+          color: on ? '#fff' : paleta.ink2,
           borderRadius: 8,
           padding: '6px 12px',
           fontSize: 12,
@@ -276,7 +276,7 @@ function thumbBg(it: GalleryItem): React.CSSProperties {
     const yt = ytId(it.url)
     return yt
       ? { backgroundImage: `url('https://img.youtube.com/vi/${yt}/mqdefault.jpg')`, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : { background: '#1F2937' }
+      : { background: paleta.ink }
   }
   return {}
 }
@@ -301,28 +301,28 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>📸 Galería del pedido</div>
+      <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>📸 Galería del pedido</div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {items.map((it) => (
           <div key={it.id} style={{ position: 'relative' }}>
             <div onClick={() => onMedia({ tipo: it.tipo, url: it.url, nombre: it.nombre })} style={{ cursor: 'pointer' }} title="Ver">
               {it.tipo === 'video' ? (
-                <div style={{ width: 84, height: 84, borderRadius: 8, ...thumbBg(it), display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E5E7EB' }}>
+                <div style={{ width: 84, height: 84, borderRadius: 8, ...thumbBg(it), display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${paleta.line}` }}>
                   <span style={{ fontSize: 26, color: '#fff', textShadow: '0 1px 5px rgba(0,0,0,.7)' }}>▶</span>
                 </div>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.url} alt={it.nombre} style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB' }} />
+                <img src={it.url} alt={it.nombre} style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8, border: `1px solid ${paleta.line}` }} />
               )}
             </div>
             {it.nombre ? (
-              <div style={{ fontSize: 10, color: '#6B7280', textAlign: 'center', maxWidth: 84, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</div>
+              <div style={{ fontSize: 10, color: paleta.mut, textAlign: 'center', maxWidth: 84, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</div>
             ) : null}
             {editable && (
               <button
                 onClick={() => guardar((l) => quitarGaleria(l, g.id, it.id))}
                 title="Quitar"
-                style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 12, color: '#DC2626', lineHeight: 1 }}
+                style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 12, color: paleta.danger, lineHeight: 1 }}
               >
                 ×
               </button>
@@ -331,11 +331,11 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
         ))}
         {editable && (
           <>
-            <label style={{ width: 84, height: 84, border: '1px dashed #CBD5E1', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8', fontSize: 11, textAlign: 'center', background: '#F8FAFC' }}>
+            <label style={{ width: 84, height: 84, border: `1px dashed ${paleta.mut2}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: paleta.mut2, fontSize: 11, textAlign: 'center', background: paleta.bg }}>
               + foto
               <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { onFotos(e.target.files); e.currentTarget.value = '' }} />
             </label>
-            <button onClick={onLink} style={{ width: 84, height: 84, border: '1px dashed #CBD5E1', borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 11, background: '#F8FAFC', lineHeight: 1.3 }}>
+            <button onClick={onLink} style={{ width: 84, height: 84, border: `1px dashed ${paleta.mut2}`, borderRadius: 8, cursor: 'pointer', color: paleta.mut2, fontSize: 11, background: paleta.bg, lineHeight: 1.3 }}>
               + link
               <br />
               (video)
@@ -424,29 +424,29 @@ function BloqueEditar({
   }
 
   return (
-    <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, padding: '8px 10px', marginTop: 10, background: '#FCFDFE' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '8px 10px', marginTop: 10, background: paleta.bg }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em' }}>Bloque</span>
+        <span style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Bloque</span>
         <input
           value={b.nombre}
           onChange={(e) => guardar((l) => setBloqueNombre(l, g.id, b.id, e.target.value))}
           placeholder="Nombre del bloque (ej. IMD, Formas…)"
-          style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600, border: 'none', borderBottom: '1px solid #E5E7EB', padding: '3px 0' }}
+          style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600, border: 'none', borderBottom: `1px solid ${paleta.line}`, padding: '3px 0' }}
         />
-        <span style={{ fontSize: 12, color: '#374151' }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
-        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el bloque', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra el bloque con todas sus cantidades e imágenes.' })) guardar((l) => quitarBloque(l, g.id, b.id)) })()} title="Quitar bloque" style={{ border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
+        <span style={{ fontSize: 12, color: paleta.ink2 }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el bloque', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra el bloque con todas sus cantidades e imágenes.' })) guardar((l) => quitarBloque(l, g.id, b.id)) })()} title="Quitar bloque" style={{ border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
           🗑 bloque
         </button>
       </div>
 
       {!modelos.length && !disenos.length ? (
-        <div style={{ fontSize: 12, color: '#9CA3AF', margin: '8px 0' }}>Agregá modelos (filas) y diseños (columnas). 👇</div>
+        <div style={{ fontSize: 12, color: paleta.mut2, margin: '8px 0' }}>Agregá modelos (filas) y diseños (columnas). 👇</div>
       ) : (
         <div style={{ overflowX: 'auto', marginTop: 6 }}>
           <table style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={{ position: 'sticky', left: 0, background: '#FCFDFE', zIndex: 2, textAlign: 'left', fontSize: 11, color: '#9CA3AF', padding: 4, verticalAlign: 'bottom' }}>Modelo \ Diseño</th>
+                <th style={{ position: 'sticky', left: 0, background: paleta.bg, zIndex: 2, textAlign: 'left', fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Modelo \ Diseño</th>
                 {disenos.map((d) => {
                   const sel = pasteTarget?.gid === g.id && pasteTarget?.bid === b.id && pasteTarget?.did === d.id
                   return (
@@ -457,13 +457,13 @@ function BloqueEditar({
                         onDrop={(e) => onDrop(e, d.id)}
                         tabIndex={0}
                         title="Tocá el recuadro y pegá con Ctrl/Cmd+V, arrastrá una imagen, o usá 📷 subir"
-                        style={{ cursor: 'pointer', outline: sel ? '2px solid #378ADD' : 'none', borderRadius: 8 }}
+                        style={{ cursor: 'pointer', outline: sel ? `2px solid ${paleta.brandSolid}` : 'none', borderRadius: 8 }}
                       >
                         {d.img ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={d.img} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB', display: 'block', margin: '0 auto 4px', pointerEvents: 'none' }} />
+                          <img src={d.img} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: `1px solid ${paleta.line}`, display: 'block', margin: '0 auto 4px', pointerEvents: 'none' }} />
                         ) : (
-                          <div style={{ width: 64, height: 64, borderRadius: 8, border: '1px dashed #CBD5E1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: 9, textAlign: 'center', margin: '0 auto 4px', background: '#F8FAFC', lineHeight: 1.2, pointerEvents: 'none' }}>
+                          <div style={{ width: 64, height: 64, borderRadius: 8, border: `1px dashed ${paleta.mut2}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: paleta.mut2, fontSize: 9, textAlign: 'center', margin: '0 auto 4px', background: paleta.bg, lineHeight: 1.2, pointerEvents: 'none' }}>
                             📷<span>pegá o<br />subí</span>
                           </div>
                         )}
@@ -472,21 +472,21 @@ function BloqueEditar({
                         value={d.nombre}
                         onChange={(e) => guardar((l) => setDisenoNombre(l, g.id, b.id, d.id, e.target.value))}
                         placeholder="Diseño"
-                        style={{ width: 88, fontSize: 12, fontWeight: 600, textAlign: 'center', border: 'none', borderBottom: '1px solid #F1F5F9', padding: 2 }}
+                        style={{ width: 88, fontSize: 12, fontWeight: 600, textAlign: 'center', border: 'none', borderBottom: `1px solid ${paleta.bg2}`, padding: 2 }}
                       />
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
-                        <label style={{ cursor: 'pointer', color: '#378ADD', fontSize: 10 }} title="Subir desde archivo">
+                        <label style={{ cursor: 'pointer', color: paleta.brandSolid, fontSize: 10 }} title="Subir desde archivo">
                           📷 subir
                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { onImg(d.id, e.target.files); e.currentTarget.value = '' }} />
                         </label>
-                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el diseño', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la columna y las cantidades cargadas en ella.' })) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) })()} title="Quitar diseño" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 11 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el diseño', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la columna y las cantidades cargadas en ella.' })) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) })()} title="Quitar diseño" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 11 }}>
                           ✕
                         </button>
                       </div>
                     </th>
                   )
                 })}
-                <th style={{ fontSize: 11, color: '#9CA3AF', padding: 4, verticalAlign: 'bottom' }}>Total</th>
+                <th style={{ fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -494,19 +494,19 @@ function BloqueEditar({
                 const rowTot = totalModelo(b, m.id)
                 return (
                   <tr key={m.id}>
-                    <th style={{ textAlign: 'left', padding: '2px 4px', position: 'sticky', left: 0, background: '#FCFDFE', zIndex: 1 }}>
+                    <th style={{ textAlign: 'left', padding: '2px 4px', position: 'sticky', left: 0, background: paleta.bg, zIndex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <input
                           list="ing-modelos"
                           value={m.model}
                           onChange={(e) => guardar((l) => setModelo(l, g.id, b.id, m.id, e.target.value))}
                           placeholder="Modelo"
-                          style={{ width: 128, fontSize: 13, border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 6px' }}
+                          style={{ width: 128, fontSize: 13, border: `1px solid ${paleta.line}`, borderRadius: 6, padding: '4px 6px' }}
                         />
-                        <button onClick={() => igualarFila(m.id)} title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style={{ border: 'none', background: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 13 }}>
+                        <button onClick={() => igualarFila(m.id)} title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 13 }}>
                           ⎘
                         </button>
-                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el modelo', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la fila y las cantidades cargadas en ella.' })) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) })()} title="Quitar modelo" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el modelo', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la fila y las cantidades cargadas en ella.' })) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) })()} title="Quitar modelo" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 15 }}>
                           ×
                         </button>
                       </div>
@@ -523,23 +523,23 @@ function BloqueEditar({
                           data-d={d.id}
                           onKeyDown={celdaKeyNav}
                           onChange={(e) => guardar((l) => setCelda(l, g.id, b.id, m.id, d.id, e.target.value))}
-                          style={{ width: 64, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 6, padding: 4, fontSize: 13 }}
+                          style={{ width: 64, textAlign: 'center', border: `1px solid ${paleta.line}`, borderRadius: 6, padding: 4, fontSize: 13 }}
                         />
                       </td>
                     ))}
-                    <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13, color: '#374151', padding: '2px 8px', background: '#F9FAFB' }}>{rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13, color: paleta.ink2, padding: '2px 8px', background: paleta.bg }}>{rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
                   </tr>
                 )
               })}
               <tr>
-                <th style={{ textAlign: 'right', fontSize: 12, color: '#6B7280', padding: '5px 8px 5px 4px', position: 'sticky', left: 0, background: '#F9FAFB', zIndex: 1 }}>Total</th>
+                <th style={{ textAlign: 'right', fontSize: 12, color: paleta.mut, padding: '5px 8px 5px 4px', position: 'sticky', left: 0, background: paleta.bg, zIndex: 1 }}>Total</th>
                 {disenos.map((d) => {
                   const t = totalDiseno(b, d.id)
                   return (
-                    <td key={d.id} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, color: '#6B7280', padding: '5px 2px', background: '#F9FAFB' }}>{t ? t.toLocaleString('es-AR') : '—'}</td>
+                    <td key={d.id} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, color: paleta.mut, padding: '5px 2px', background: paleta.bg }}>{t ? t.toLocaleString('es-AR') : '—'}</td>
                   )
                 })}
-                <td style={{ textAlign: 'center', fontWeight: 800, fontSize: 14, color: '#111827', padding: '5px 8px', background: '#F3F4F6' }}>{grand ? grand.toLocaleString('es-AR') : '—'}</td>
+                <td style={{ textAlign: 'center', fontWeight: 800, fontSize: 14, color: paleta.ink, padding: '5px 8px', background: paleta.bg2 }}>{grand ? grand.toLocaleString('es-AR') : '—'}</td>
               </tr>
             </tbody>
           </table>
@@ -549,14 +549,14 @@ function BloqueEditar({
       <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
         <button onClick={() => guardar((l) => agregarModelo(l, g.id, b.id, nuevoId()))} style={linkBtn}>+ Agregar modelo</button>
         <button onClick={() => guardar((l) => agregarDiseno(l, g.id, b.id, nuevoId()))} style={linkBtn}>+ Agregar diseño</button>
-        <button onClick={() => guardar((l) => cargarBase(l, g.id, b.id, nuevoId))} title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style={{ ...linkBtn, color: '#6B7280' }}>↺ Cargar modelos base</button>
-        <button onClick={igualarBloque} title="Misma cantidad en todo este bloque" style={{ ...linkBtn, color: '#6B7280' }}>= Misma cantidad (bloque)</button>
+        <button onClick={() => guardar((l) => cargarBase(l, g.id, b.id, nuevoId))} title="Trae los modelos base que falten (iPhone 13 → 17 Pro Max)" style={{ ...linkBtn, color: paleta.mut }}>↺ Cargar modelos base</button>
+        <button onClick={igualarBloque} title="Misma cantidad en todo este bloque" style={{ ...linkBtn, color: paleta.mut }}>= Misma cantidad (bloque)</button>
       </div>
     </div>
   )
 }
 
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: paleta.brandSolid, cursor: 'pointer', fontSize: 12, padding: 0 }
 
 // ── Bloque de solo lectura ──────────────────────────────────────────────────────
 function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }) {
@@ -564,29 +564,29 @@ function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }
   const modelos = b.modelos || []
   const grand = bloqueU(b)
   return (
-    <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, padding: '8px 10px', marginTop: 10, background: '#FCFDFE' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '8px 10px', marginTop: 10, background: paleta.bg }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{b.nombre || 'Bloque'}</div>
-        <span style={{ fontSize: 12, color: '#374151' }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
+        <div style={{ fontSize: 13, fontWeight: 600, color: paleta.ink2 }}>{b.nombre || 'Bloque'}</div>
+        <span style={{ fontSize: 12, color: paleta.ink2 }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
       </div>
       {(modelos.length || disenos.length) && (
         <div style={{ overflowX: 'auto', marginTop: 6 }}>
           <table style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={{ position: 'sticky', left: 0, background: '#FCFDFE', textAlign: 'left', fontSize: 11, color: '#9CA3AF', padding: 4, verticalAlign: 'bottom' }}>Modelo \ Diseño</th>
+                <th style={{ position: 'sticky', left: 0, background: paleta.bg, textAlign: 'left', fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Modelo \ Diseño</th>
                 {disenos.map((d) => (
-                  <th key={d.id} style={{ padding: '6px 6px', minWidth: 128, verticalAlign: 'bottom', fontWeight: 600, fontSize: 12, color: '#374151' }}>
+                  <th key={d.id} style={{ padding: '6px 6px', minWidth: 128, verticalAlign: 'bottom', fontWeight: 600, fontSize: 12, color: paleta.ink2 }}>
                     {d.img ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={d.img} onClick={() => onMedia({ tipo: 'img', url: d.img, nombre: d.nombre })} title="Ampliar" alt={d.nombre} style={{ width: 120, height: 68, objectFit: 'contain', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E5E7EB', display: 'block', margin: '0 auto 5px', cursor: 'zoom-in' }} />
+                      <img src={d.img} onClick={() => onMedia({ tipo: 'img', url: d.img, nombre: d.nombre })} title="Ampliar" alt={d.nombre} style={{ width: 120, height: 68, objectFit: 'contain', background: paleta.bg, borderRadius: 10, border: `1px solid ${paleta.line}`, display: 'block', margin: '0 auto 5px', cursor: 'zoom-in' }} />
                     ) : (
-                      <div style={{ width: 120, height: 68, borderRadius: 10, border: '1px dashed #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#CBD5E1', margin: '0 auto 5px', background: '#F8FAFC' }}>—</div>
+                      <div style={{ width: 120, height: 68, borderRadius: 10, border: `1px dashed ${paleta.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: paleta.mut2, margin: '0 auto 5px', background: paleta.bg }}>—</div>
                     )}
                     {d.nombre || '—'}
                   </th>
                 ))}
-                <th style={{ fontSize: 11, color: '#9CA3AF', padding: 4, verticalAlign: 'bottom' }}>Total</th>
+                <th style={{ fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -594,26 +594,26 @@ function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }
                 const rowTot = totalModelo(b, m.id)
                 return (
                   <tr key={m.id}>
-                    <th style={{ textAlign: 'left', fontSize: 13, fontWeight: 600, padding: '3px 8px 3px 4px', borderTop: '1px solid #F1F5F9', position: 'sticky', left: 0, background: '#FCFDFE' }}>{m.model || '—'}</th>
+                    <th style={{ textAlign: 'left', fontSize: 13, fontWeight: 600, padding: '3px 8px 3px 4px', borderTop: `1px solid ${paleta.bg2}`, position: 'sticky', left: 0, background: paleta.bg }}>{m.model || '—'}</th>
                     {disenos.map((d) => {
                       const v = celdaGet(b, m.id, d.id)
                       return (
-                        <td key={d.id} style={{ textAlign: 'center', fontSize: 13, padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>{v ? v.toLocaleString('es-AR') : '·'}</td>
+                        <td key={d.id} style={{ textAlign: 'center', fontSize: 13, padding: '3px 6px', borderTop: `1px solid ${paleta.bg2}` }}>{v ? v.toLocaleString('es-AR') : '·'}</td>
                       )
                     })}
-                    <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13, padding: '3px 8px', borderTop: '1px solid #F1F5F9', background: '#F9FAFB' }}>{rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13, padding: '3px 8px', borderTop: `1px solid ${paleta.bg2}`, background: paleta.bg }}>{rowTot ? rowTot.toLocaleString('es-AR') : '—'}</td>
                   </tr>
                 )
               })}
               <tr>
-                <th style={{ textAlign: 'right', fontSize: 12, color: '#6B7280', padding: '5px 8px', position: 'sticky', left: 0, background: '#F9FAFB' }}>Total</th>
+                <th style={{ textAlign: 'right', fontSize: 12, color: paleta.mut, padding: '5px 8px', position: 'sticky', left: 0, background: paleta.bg }}>Total</th>
                 {disenos.map((d) => {
                   const t = totalDiseno(b, d.id)
                   return (
-                    <td key={d.id} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, color: '#6B7280', padding: '4px 6px', background: '#F9FAFB' }}>{t ? t.toLocaleString('es-AR') : '—'}</td>
+                    <td key={d.id} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, color: paleta.mut, padding: '4px 6px', background: paleta.bg }}>{t ? t.toLocaleString('es-AR') : '—'}</td>
                   )
                 })}
-                <td style={{ textAlign: 'center', fontWeight: 800, fontSize: 14, color: '#111827', padding: '5px 8px', background: '#F3F4F6' }}>{grand ? grand.toLocaleString('es-AR') : '—'}</td>
+                <td style={{ textAlign: 'center', fontWeight: 800, fontSize: 14, color: paleta.ink, padding: '5px 8px', background: paleta.bg2 }}>{grand ? grand.toLocaleString('es-AR') : '—'}</td>
               </tr>
             </tbody>
           </table>
@@ -627,10 +627,10 @@ function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }
 function BloqueResumen({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }) {
   const conTot = (b.disenos || []).map((d) => ({ d, t: totalDiseno(b, d.id) })).sort((a, c) => c.t - a.t)
   return (
-    <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, padding: '10px 12px', marginTop: 10, background: '#FCFDFE' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '10px 12px', marginTop: 10, background: paleta.bg }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{b.nombre || 'Bloque'}</div>
-        <span style={{ fontSize: 12, color: '#374151' }}>Total bloque: <b>{bloqueU(b).toLocaleString('es-AR')}</b> u.</span>
+        <div style={{ fontSize: 13, fontWeight: 700, color: paleta.ink2 }}>{b.nombre || 'Bloque'}</div>
+        <span style={{ fontSize: 12, color: paleta.ink2 }}>Total bloque: <b>{bloqueU(b).toLocaleString('es-AR')}</b> u.</span>
       </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         {conTot.length ? (
@@ -638,18 +638,18 @@ function BloqueResumen({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void 
             <div key={d.id} style={{ width: 200, textAlign: 'center' }}>
               {d.img ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={d.img} onClick={() => onMedia({ tipo: 'img', url: d.img, nombre: d.nombre })} title="Ampliar" alt={d.nombre} style={{ width: 200, height: 112, objectFit: 'contain', background: '#F8FAFC', borderRadius: 12, border: '1px solid #E5E7EB', display: 'block', cursor: 'zoom-in' }} />
+                <img src={d.img} onClick={() => onMedia({ tipo: 'img', url: d.img, nombre: d.nombre })} title="Ampliar" alt={d.nombre} style={{ width: 200, height: 112, objectFit: 'contain', background: paleta.bg, borderRadius: 12, border: `1px solid ${paleta.line}`, display: 'block', cursor: 'zoom-in' }} />
               ) : (
-                <div style={{ width: 200, height: 112, borderRadius: 12, border: '1px dashed #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#CBD5E1', fontSize: 11, background: '#F8FAFC' }}>sin foto</div>
+                <div style={{ width: 200, height: 112, borderRadius: 12, border: `1px dashed ${paleta.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: paleta.mut2, fontSize: 11, background: paleta.bg }}>sin foto</div>
               )}
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginTop: 5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre || '—'}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>
-                {t.toLocaleString('es-AR')} <span style={{ fontSize: 11, fontWeight: 500, color: '#9CA3AF' }}>u.</span>
+              <div style={{ fontSize: 12, fontWeight: 600, color: paleta.ink2, marginTop: 5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre || '—'}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: paleta.ink }}>
+                {t.toLocaleString('es-AR')} <span style={{ fontSize: 11, fontWeight: 500, color: paleta.mut2 }}>u.</span>
               </div>
             </div>
           ))
         ) : (
-          <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin diseños.</div>
+          <div style={{ fontSize: 12, color: paleta.mut2 }}>Sin diseños.</div>
         )}
       </div>
     </div>
@@ -692,43 +692,43 @@ function IngresoEditar({
     guardar((l) => agregarBloque(l, g.id, nuevoBloque(nuevoId, nombre.trim(), n)))
   }
   return (
-    <div style={{ border: '1px solid #E5E7EB', borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={g.desc} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'desc', ev.target.value))} placeholder="Descripción (ej. Pedido fundas China #1)" style={{ flex: 2, minWidth: 200, fontSize: 14, fontWeight: 600, border: 'none', borderBottom: '1px solid #F1F5F9', padding: '4px 0' }} />
+        <input value={g.desc} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'desc', ev.target.value))} placeholder="Descripción (ej. Pedido fundas China #1)" style={{ flex: 2, minWidth: 200, fontSize: 14, fontWeight: 600, border: 'none', borderBottom: `1px solid ${paleta.bg2}`, padding: '4px 0' }} />
         <select value={g.estado} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'estado', ev.target.value))} style={{ fontSize: 12, padding: '6px 8px', border: `1px solid ${e.color}`, color: e.color, borderRadius: 7, background: e.bg, fontWeight: 600, cursor: 'pointer' }}>
           {ESTADOS.map((s) => (
             <option key={s.k} value={s.k}>{s.lbl}</option>
           ))}
         </select>
-        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el ingreso', tono: 'danger', ok: 'Eliminar', mensaje: `Se borra "${g.desc || 'este ingreso'}" con todos sus bloques, cantidades e imágenes.` })) guardar((l) => quitarIngreso(l, g.id)) })()} title="Eliminar ingreso" style={{ padding: '5px 9px', border: '1px solid #E5E7EB', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el ingreso', tono: 'danger', ok: 'Eliminar', mensaje: `Se borra "${g.desc || 'este ingreso'}" con todos sus bloques, cantidades e imágenes.` })) guardar((l) => quitarIngreso(l, g.id)) })()} title="Eliminar ingreso" style={{ padding: '5px 9px', border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
           🗑
         </button>
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 9 }}>
-        <label style={{ fontSize: 11, color: '#9CA3AF' }}>
+        <label style={{ fontSize: 11, color: paleta.mut2 }}>
           Proveedor
           <br />
-          <input value={g.proveedor} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'proveedor', ev.target.value))} style={{ padding: '5px 7px', border: '1px solid #D1D5DB', borderRadius: 6, width: 160 }} />
+          <input value={g.proveedor} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'proveedor', ev.target.value))} style={{ padding: '5px 7px', border: `1px solid ${paleta.line2}`, borderRadius: 6, width: 160 }} />
         </label>
-        <label style={{ fontSize: 11, color: '#9CA3AF' }}>
+        <label style={{ fontSize: 11, color: paleta.mut2 }}>
           Llegada estimada
           <br />
-          <input type="date" value={g.fecha || ''} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'fecha', ev.target.value))} style={{ padding: '5px 7px', border: '1px solid #D1D5DB', borderRadius: 6 }} />
+          <input type="date" value={g.fecha || ''} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'fecha', ev.target.value))} style={{ padding: '5px 7px', border: `1px solid ${paleta.line2}`, borderRadius: 6 }} />
         </label>
       </div>
       <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>Bloques (por material) · modelos × diseños</div>
-        {bloques.length ? null : <div style={{ fontSize: 12, color: '#9CA3AF', margin: '8px 0' }}>Esta importación todavía no tiene bloques. Agregá uno (ej. IMD, Formas…). 👇</div>}
+        <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>Bloques (por material) · modelos × diseños</div>
+        {bloques.length ? null : <div style={{ fontSize: 12, color: paleta.mut2, margin: '8px 0' }}>Esta importación todavía no tiene bloques. Agregá uno (ej. IMD, Formas…). 👇</div>}
         {bloques.map((b) => (
           <BloqueEditar key={b.id} g={g} b={b} guardar={guardar} onPasteSel={onPasteSel} pasteTarget={pasteTarget} />
         ))}
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-          <button onClick={addBloque} style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', cursor: 'pointer', fontSize: 12, padding: '5px 10px', borderRadius: 7 }}>+ Agregar bloque</button>
-          <span style={{ fontSize: 13, color: '#111827', marginLeft: 'auto' }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</span>
+          <button onClick={addBloque} style={{ background: paleta.brandBg, border: `1px solid ${paleta.brandBorder}`, color: paleta.brand, cursor: 'pointer', fontSize: 12, padding: '5px 10px', borderRadius: 7 }}>+ Agregar bloque</button>
+          <span style={{ fontSize: 13, color: paleta.ink, marginLeft: 'auto' }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</span>
         </div>
       </div>
       <Galeria g={g} editable guardar={guardar} onMedia={onMedia} />
-      <input value={g.nota} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'nota', ev.target.value))} placeholder="Nota general del pedido…" style={{ width: '100%', marginTop: 10, fontSize: 12, border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} />
+      <input value={g.nota} onChange={(ev) => guardar((l) => setCampo(l, g.id, 'nota', ev.target.value))} placeholder="Nota general del pedido…" style={{ width: '100%', marginTop: 10, fontSize: 12, border: `1px solid ${paleta.line}`, borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} />
     </div>
   )
 }
@@ -739,18 +739,18 @@ function IngresoLector({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => void
   const bloques = g.bloques || []
   const noop = () => {}
   return (
-    <div style={{ border: '1px solid #E5E7EB', borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
         <EstadoBadge g={g} />
       </div>
-      {meta ? <div style={{ fontSize: 12, color: '#6B7280', marginTop: 5 }}>{meta}</div> : null}
+      {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {bloques.map((b) => (
         <BloqueLector key={b.id} b={b} onMedia={onMedia} />
       ))}
-      {bloques.length > 1 ? <div style={{ textAlign: 'right', fontSize: 13, color: '#111827', marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div> : null}
+      {bloques.length > 1 ? <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div> : null}
       <Galeria g={g} editable={false} guardar={noop} onMedia={onMedia} />
-      {g.nota ? <div style={{ fontSize: 12, color: '#374151', marginTop: 6 }}>📝 {g.nota}</div> : null}
+      {g.nota ? <div style={{ fontSize: 12, color: paleta.ink2, marginTop: 6 }}>📝 {g.nota}</div> : null}
     </div>
   )
 }
@@ -759,16 +759,16 @@ function IngresoResumen({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => voi
   const e = estadoDe(g.estado)
   const meta = metaDe(g)
   return (
-    <div style={{ border: '1px solid #E5E7EB', borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
         <EstadoBadge g={g} />
       </div>
-      {meta ? <div style={{ fontSize: 12, color: '#6B7280', marginTop: 5 }}>{meta}</div> : null}
+      {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {(g.bloques || []).map((b) => (
         <BloqueResumen key={b.id} b={b} onMedia={onMedia} />
       ))}
-      <div style={{ textAlign: 'right', fontSize: 13, color: '#111827', marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div>
+      <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div>
     </div>
   )
 }

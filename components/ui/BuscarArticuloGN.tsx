@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import type { Marca } from '@/lib/nav.datos'
+import { color } from '@/components/ui'
 
 export type ArticuloGN = {
   product_id: string
@@ -119,7 +120,7 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
     setAbierto(false)
   }
 
-  const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: '1px solid #D1D5DB', outline: 'none', width: '100%' }
+  const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: `1px solid ${color.line2}`, outline: 'none', width: '100%' }
 
   return (
     <div style={{ position: 'relative' }}>
@@ -131,18 +132,18 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
         placeholder="Buscar o escanear: SKU, nombre o código de barras…"
       />
       {abierto && (cargando || rows.length > 0) && (
-        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', maxHeight: 280, overflowY: 'auto' }}>
-          {cargando && <div style={{ fontSize: 12, color: '#6B7280', padding: '8px 10px' }}>Buscando…</div>}
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: `1px solid ${color.line}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', maxHeight: 280, overflowY: 'auto' }}>
+          {cargando && <div style={{ fontSize: 12, color: color.mut, padding: '8px 10px' }}>Buscando…</div>}
           {!cargando && rows.map((a) => (
             <button
               key={`${a.product_id}-${a.size_id}`}
               onClick={() => elegir(a)}
-              style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid #F3F4F6', background: '#fff', padding: '7px 10px', cursor: 'pointer' }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: `1px solid ${color.bg2}`, background: '#fff', padding: '7px 10px', cursor: 'pointer' }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>
-                {a.product_name || '—'} <span style={{ color: '#6B7280', fontWeight: 400 }}>· {a.size_name || a.size_id}</span>
+              <div style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>
+                {a.product_name || '—'} <span style={{ color: color.mut, fontWeight: 400 }}>· {a.size_name || a.size_id}</span>
               </div>
-              <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, color: color.mut, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'monospace' }}>{a.sku || 's/sku'}</span>
                 <span>stock {a.available_quantity ?? 0}</span>
                 {mostrarCosto && <span>{a.unit_cost != null ? `costo $${a.unit_cost.toLocaleString('es-AR')}` : 'sin costo'}</span>}

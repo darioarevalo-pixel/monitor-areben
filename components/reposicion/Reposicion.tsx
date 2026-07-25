@@ -345,9 +345,9 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
   const topesShown = topesList.slice(0, 250)
 
   const minInput = (c: string, small = false) => (
-    <label key={c} style={{ fontSize: 12, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #F1F5F9', borderRadius: small ? 6 : 7, padding: small ? '3px 8px' : '5px 8px', marginBottom: small ? 5 : 0, breakInside: 'avoid' }}>
+    <label key={c} style={{ fontSize: 12, color: color.ink2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${color.bg2}`, borderRadius: small ? 6 : 7, padding: small ? '3px 8px' : '5px 8px', marginBottom: small ? 5 : 0, breakInside: 'avoid' }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c}</span>
-      <input type="number" min={0} defaultValue={cfg.mins[c] ?? ''} placeholder={String(cfg.defaultMin)} onChange={(e) => setMin(c, e.target.value)} onFocus={(e) => e.target.select()} style={{ width: small ? 54 : 60, padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6, textAlign: 'center', flex: 'none' }} />
+      <input type="number" min={0} defaultValue={cfg.mins[c] ?? ''} placeholder={String(cfg.defaultMin)} onChange={(e) => setMin(c, e.target.value)} onFocus={(e) => e.target.select()} style={{ width: small ? 54 : 60, padding: '4px 6px', border: `1px solid ${color.line2}`, borderRadius: 6, textAlign: 'center', flex: 'none' }} />
     </label>
   )
 
@@ -364,15 +364,15 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
       }
     >
       <div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
           Definí cuántas unidades mantener en Local por categoría/modelo. El &quot;tope local&quot; (por producto) puede bajar este número para un producto puntual. <span style={{ fontSize: 11, marginLeft: 6, color: shareStatus.color }}>{shareStatus.txt}</span>
         </div>
-        <label style={{ fontSize: 12, color: '#6B7280', display: 'inline-block', marginBottom: 10 }}>Mínimo general (default): <input type="number" min={0} defaultValue={cfg.defaultMin} onChange={(e) => setDefault(e.target.value)} style={{ width: 70, padding: '5px 7px', border: '1px solid #D1D5DB', borderRadius: 7 }} /></label>
+        <label style={{ fontSize: 12, color: color.mut, display: 'inline-block', marginBottom: 10 }}>Mínimo general (default): <input type="number" min={0} defaultValue={cfg.defaultMin} onChange={(e) => setDefault(e.target.value)} style={{ width: 70, padding: '5px 7px', border: `1px solid ${color.line2}`, borderRadius: 7 }} /></label>
 
-        <div style={{ background: '#FFF7FB', border: '1px solid #FBCFE8', borderRadius: 8, padding: '9px 11px', marginBottom: 12, fontSize: 12, color: '#9D174D' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>🛡️ <b>Prioridad venta online:</b> reservar siempre <input type="number" min={0} defaultValue={cfg.reservaDeposito ?? 1} onChange={(e) => setReserva(e.target.value)} style={{ width: 56, padding: '4px 6px', border: '1px solid #FBCFE8', borderRadius: 6, textAlign: 'center' }} /> u. en depósito.</div>
-          <div style={{ color: '#9CA3AF', marginTop: 4 }}>Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</div>
-          {esBdi && <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, color: '#374151', cursor: 'pointer', fontWeight: 600 }}><input type="checkbox" checked={cfg.reservaTodos} onChange={(e) => setReservaTodos(e.target.checked)} /> Aplicar a <u>todos los productos</u> (no solo fundas)</label>}
+        <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: 8, padding: '9px 11px', marginBottom: 12, fontSize: 12, color: color.brand }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>🛡️ <b>Prioridad venta online:</b> reservar siempre <input type="number" min={0} defaultValue={cfg.reservaDeposito ?? 1} onChange={(e) => setReserva(e.target.value)} style={{ width: 56, padding: '4px 6px', border: `1px solid ${color.brandBorder}`, borderRadius: 6, textAlign: 'center' }} /> u. en depósito.</div>
+          <div style={{ color: color.mut2, marginTop: 4 }}>Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</div>
+          {esBdi && <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, color: color.ink2, cursor: 'pointer', fontWeight: 600 }}><input type="checkbox" checked={cfg.reservaTodos} onChange={(e) => setReservaTodos(e.target.checked)} /> Aplicar a <u>todos los productos</u> (no solo fundas)</label>}
         </div>
 
         {minKeys.cats.length > 0 && <>
@@ -380,28 +380,28 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>{minKeys.cats.map((c) => minInput(c))}</div>
         </>}
         {minKeys.modelos.length > 0 && <>
-          <div onClick={() => setFundasOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginTop: 12, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', fontWeight: 600, fontSize: 13 }}>
-            <span>🛡️ Fundas — objetivo por modelo <span style={{ color: '#9CA3AF', fontWeight: 400 }}>({minKeys.modelos.length} modelos)</span></span>
-            <span style={{ color: '#9CA3AF' }}>{fundasOpen ? '▴ ocultar' : '▾ definir'}</span>
+          <div onClick={() => setFundasOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginTop: 12, background: '#fff', border: `1px solid ${color.line}`, borderRadius: 8, padding: '9px 12px', fontWeight: 600, fontSize: 13 }}>
+            <span>🛡️ Fundas — objetivo por modelo <span style={{ color: color.mut2, fontWeight: 400 }}>({minKeys.modelos.length} modelos)</span></span>
+            <span style={{ color: color.mut2 }}>{fundasOpen ? '▴ ocultar' : '▾ definir'}</span>
           </div>
           {fundasOpen && <div style={{ columnWidth: 215, columnGap: 14, marginTop: 8 }}>{minKeys.modelos.map((c) => minInput(c, true))}</div>}
         </>}
 
         {catsDisp.length > 0 && (
-          <div style={{ marginTop: 16, borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
+          <div style={{ marginTop: 16, borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Categorías a ignorar al agrupar</div>
-            <div style={{ fontSize: 11.5, color: '#9CA3AF', marginBottom: 8 }}>Si un producto tiene varias categorías en TN, apagá las raras para que agrupe por la correcta. Las de promo ya se ignoran solas.</div>
+            <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>Si un producto tiene varias categorías en TN, apagá las raras para que agrupe por la correcta. Las de promo ya se ignoran solas.</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {catsDisp.map((c) => {
                 const off = offSet.has(c.toLowerCase())
-                return <button key={c} onClick={() => toggleCatOff(c)} style={{ fontSize: 12, border: `1px solid ${off ? '#FCA5A5' : '#BBF7D0'}`, background: off ? '#FEF2F2' : '#F0FDF4', color: off ? '#B91C1C' : '#166534', borderRadius: 14, padding: '3px 10px', cursor: 'pointer', textDecoration: off ? 'line-through' : 'none' }}>{c}</button>
+                return <button key={c} onClick={() => toggleCatOff(c)} style={{ fontSize: 12, border: `1px solid ${off ? color.dangerBorder : color.successBorder}`, background: off ? color.dangerBg : color.successBg, color: off ? color.dangerInk : color.successInk, borderRadius: 14, padding: '3px 10px', cursor: 'pointer', textDecoration: off ? 'line-through' : 'none' }}>{c}</button>
               })}
             </div>
           </div>
         )}
 
-        <div style={{ marginTop: 16, borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Topes y apagados por producto <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 12 }}>(tope = máximo en Local; 🔌 = no reponer)</span></div>
+        <div style={{ marginTop: 16, borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Topes y apagados por producto <span style={{ fontWeight: 400, color: color.mut2, fontSize: 12 }}>(tope = máximo en Local; 🔌 = no reponer)</span></div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <Select value={topeCat} onChange={(e) => setTopeCat(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="Categoría"><option value="">Todas las categorías</option>{topeCats.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
             <Select value={topeDeposito} onChange={(e) => setTopeDeposito(e.target.value as typeof topeDeposito)} style={{ width: 190 }} aria-label="Stock en depósito"><option value="con">Con stock en depósito</option><option value="">Depósito: todos</option><option value="sin">Sin stock en depósito</option></Select>
@@ -409,21 +409,21 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
           </div>
           <input className="mo-input" value={topeSearch} onChange={(e) => setTopeSearch(e.target.value)} placeholder="Buscar producto o categoría…" style={{ marginBottom: 8 }} />
           <div style={{ maxHeight: 340, overflow: 'auto' }}>
-            <div style={{ fontSize: 11, color: '#9CA3AF', margin: '0 0 6px' }}>{topesList.length} producto(s){topesList.length > 250 ? ' · mostrando 250, afiná la búsqueda' : ''}</div>
+            <div style={{ fontSize: 11, color: color.mut2, margin: '0 0 6px' }}>{topesList.length} producto(s){topesList.length > 250 ? ' · mostrando 250, afiná la búsqueda' : ''}</div>
             {topesShown.map((p) => {
               const t = cfg.topes[String(p.pid)]
               const off = cfg.apagados.includes(String(p.pid))
               return (
-                <div key={p.pid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 8px', border: '1px solid #F1F5F9', borderRadius: 6, marginBottom: 4, background: '#fff', opacity: off ? 0.6 : 1 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: off ? 'line-through' : 'none' }}>{p.name} <span style={{ color: '#9CA3AF' }}>· {p.cat} · Local {p.local} · <b style={{ color: '#6B7280' }}>Dep {p.dep}</b></span></span>
+                <div key={p.pid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 8px', border: `1px solid ${color.bg2}`, borderRadius: 6, marginBottom: 4, background: '#fff', opacity: off ? 0.6 : 1 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: off ? 'line-through' : 'none' }}>{p.name} <span style={{ color: color.mut2 }}>· {p.cat} · Local {p.local} · <b style={{ color: color.mut }}>Dep {p.dep}</b></span></span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-                    <input type="number" min={0} defaultValue={t ?? ''} placeholder="—" disabled={off} onChange={(e) => setTope(String(p.pid), e.target.value)} onFocus={(e) => e.target.select()} title="Tope: máximo en Local por variante" style={{ width: 46, padding: '2px 4px', border: `1px solid ${t != null ? '#378ADD' : '#E5E7EB'}`, background: t != null ? '#EFF6FF' : undefined, fontWeight: t != null ? 700 : undefined, borderRadius: 5, textAlign: 'center' }} />
-                    <button onClick={() => toggleApagar(String(p.pid))} title={off ? 'Reactivar' : 'Apagar (no reponer)'} style={{ border: `1px solid ${off ? '#DC2626' : '#E5E7EB'}`, background: off ? '#FEF2F2' : '#fff', color: off ? '#DC2626' : '#9CA3AF', borderRadius: 6, padding: '2px 7px', fontSize: 12, cursor: 'pointer' }}>🔌</button>
+                    <input type="number" min={0} defaultValue={t ?? ''} placeholder="—" disabled={off} onChange={(e) => setTope(String(p.pid), e.target.value)} onFocus={(e) => e.target.select()} title="Tope: máximo en Local por variante" style={{ width: 46, padding: '2px 4px', border: `1px solid ${t != null ? color.brandSolid : color.line}`, background: t != null ? color.brandBg : undefined, fontWeight: t != null ? 700 : undefined, borderRadius: 5, textAlign: 'center' }} />
+                    <button onClick={() => toggleApagar(String(p.pid))} title={off ? 'Reactivar' : 'Apagar (no reponer)'} style={{ border: `1px solid ${off ? color.danger : color.line}`, background: off ? color.dangerBg : '#fff', color: off ? color.danger : color.mut2, borderRadius: 6, padding: '2px 7px', fontSize: 12, cursor: 'pointer' }}>🔌</button>
                   </span>
                 </div>
               )
             })}
-            {!topesShown.length && <div style={{ color: '#9CA3AF', fontSize: 12, padding: 8 }}>Sin resultados.</div>}
+            {!topesShown.length && <div style={{ color: color.mut2, fontSize: 12, padding: 8 }}>Sin resultados.</div>}
           </div>
         </div>
       </div>
@@ -431,4 +431,4 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
   )
 }
 
-const secTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', margin: '4px 0 6px' }
+const secTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: color.mut2, textTransform: 'uppercase', letterSpacing: '.04em', margin: '4px 0 6px' }

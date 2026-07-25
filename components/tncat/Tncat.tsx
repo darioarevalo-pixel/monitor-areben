@@ -13,11 +13,12 @@ import { AgotadosCard } from './AgotadosCard'
 import { ConStockCard } from './ConStockCard'
 import { VariantesSinStockCard } from './VariantesSinStockCard'
 import type { Marca } from '@/lib/nav'
+import { color } from '@/components/ui'
 
 // La tabla de talles escribe descripciones en TiendaNube, así que es una herramienta más de
 // esta sección; se carga aparte (trae su propio peso) y solo cuando se abre esa pestaña.
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), {
-  loading: () => <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>,
+  loading: () => <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>,
 })
 
 /**
@@ -64,16 +65,16 @@ export function Tncat() {
   const activa: Sub | null = visibles.find((s) => s.key === pedida)?.key ?? visibles[0]?.key ?? null
 
   if (!visibles.length) {
-    return <div style={{ padding: 16, color: '#9CA3AF' }}>No tenés habilitada ninguna herramienta de Tienda Nube.</div>
+    return <div style={{ padding: 16, color: color.mut2 }}>No tenés habilitada ninguna herramienta de Tienda Nube.</div>
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Qué herramienta se está usando: el encabezado de la página dice "Tienda Nube" y
           desde el sidebar no siempre queda claro en cuál de las cuatro caíste. */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#B45309' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: color.warningInk }}>
         {subs.find((s) => s.key === activa)?.label}
-        <span style={{ fontWeight: 400, color: '#9CA3AF', marginLeft: 8 }}>{subs.find((s) => s.key === activa)?.hint}</span>
+        <span style={{ fontWeight: 400, color: color.mut2, marginLeft: 8 }}>{subs.find((s) => s.key === activa)?.hint}</span>
       </div>
 
       {activa === 'fotos' && <Fotos marca={marca} />}

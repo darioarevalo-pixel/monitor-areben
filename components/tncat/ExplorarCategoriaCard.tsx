@@ -6,7 +6,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
 import { buscar, enCategoria, itemsParaAplicar } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
-import { useConfirmar } from '@/components/ui'
+import { color, useConfirmar } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -108,13 +108,13 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   }
 
   const fila = (p: ProductoCat, marcado: boolean, onToggle: () => void) => (
-    <label key={String(p.id)} style={{ display: 'flex', gap: 9, alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+    <label key={String(p.id)} style={{ display: 'flex', gap: 9, alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
       <input type="checkbox" checked={marcado} onChange={onToggle} />
       <div style={{ flex: 1, minWidth: 140 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{p.name}</div>
-        {p.sku ? <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>SKU {p.sku}</div> : null}
+        <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{p.name}</div>
+        {p.sku ? <div style={{ fontSize: 11.5, color: color.mut2 }}>SKU {p.sku}</div> : null}
       </div>
-      {p.published === false ? <span style={{ fontSize: 11, color: '#B45309', background: '#FFFBEB', borderRadius: 6, padding: '1px 7px' }}>oculto</span> : null}
+      {p.published === false ? <span style={{ fontSize: 11, color: color.warningInk, background: color.warningBg, borderRadius: 6, padding: '1px 7px' }}>oculto</span> : null}
     </label>
   )
 
@@ -138,7 +138,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
           setSumar(new Set())
           setMsg(null)
         }}
-        style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, minWidth: 240, marginBottom: 10 }}
+        style={{ padding: '7px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, minWidth: 240, marginBottom: 10 }}
       >
         {categorias === null ? (
           <option value="">Cargando categorías…</option>
@@ -152,10 +152,10 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
         )}
       </select>
 
-      {msg && <div style={{ fontSize: 13, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 13, background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>{msg}</div>}
 
       {!catId ? null : productos === null ? (
-        <div style={{ color: '#9CA3AF', padding: '10px 2px' }}>Cargando productos de la tienda…</div>
+        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos de la tienda…</div>
       ) : (
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
           {/* Lo que está adentro hoy → sacar */}
@@ -164,7 +164,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
               En “{catNombre}” ({dentro.length})
             </div>
             {dentro.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#9CA3AF', padding: '8px 2px' }}>La categoría está vacía.</div>
+              <div style={{ fontSize: 13, color: color.mut2, padding: '8px 2px' }}>La categoría está vacía.</div>
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflow: 'auto' }}>
@@ -174,7 +174,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
                   className="btn-sm"
                   disabled={sacar.size === 0 || aplicando}
                   onClick={() => void aplicar('quitar')}
-                  style={{ marginTop: 8, background: sacar.size ? '#DC2626' : '#E5E7EB', color: sacar.size ? '#fff' : '#9CA3AF', border: 'none' }}
+                  style={{ marginTop: 8, background: sacar.size ? color.danger : color.line, color: sacar.size ? '#fff' : color.mut2, border: 'none' }}
                 >
                   {aplicando ? 'Aplicando…' : `Sacar de la categoría ${sacar.size || ''}`}
                 </button>
@@ -189,23 +189,23 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="🔎 Buscar por nombre o SKU…"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7, marginBottom: 6 }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7, marginBottom: 6 }}
             />
             {q.trim() === '' ? (
-              <div style={{ fontSize: 12.5, color: '#9CA3AF', padding: '8px 2px' }}>
+              <div style={{ fontSize: 12.5, color: color.mut2, padding: '8px 2px' }}>
                 Buscá y tildá los que quieras sumar. Podés hacer varias búsquedas: lo tildado se acumula hasta que aplicás.
               </div>
             ) : candidatos.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#9CA3AF', padding: '8px 2px' }}>Sin resultados fuera de la categoría.</div>
+              <div style={{ fontSize: 13, color: color.mut2, padding: '8px 2px' }}>Sin resultados fuera de la categoría.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflow: 'auto' }}>
                 {candidatos.map((p) => fila(p, sumar.has(String(p.id)), () => toggle(sumar, setSumar, String(p.id))))}
               </div>
             )}
             {sumar.size > 0 && (
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: color.mut, marginTop: 6 }}>
                 {sumar.size === 1 ? '1 producto tildado' : `${sumar.size} productos tildados`} (se mantienen aunque cambies la búsqueda).{' '}
-                <button onClick={() => setSumar(new Set())} style={{ background: 'none', border: 'none', color: '#2563EB', cursor: 'pointer', padding: 0, fontSize: 12, textDecoration: 'underline' }}>
+                <button onClick={() => setSumar(new Set())} style={{ background: 'none', border: 'none', color: color.brandSolid, cursor: 'pointer', padding: 0, fontSize: 12, textDecoration: 'underline' }}>
                   Limpiar
                 </button>
               </div>
@@ -214,7 +214,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
               className="btn-sm"
               disabled={sumar.size === 0 || aplicando}
               onClick={() => void aplicar('agregar')}
-              style={{ marginTop: 8, background: sumar.size ? '#16A34A' : '#E5E7EB', color: sumar.size ? '#fff' : '#9CA3AF', border: 'none' }}
+              style={{ marginTop: 8, background: sumar.size ? color.success : color.line, color: sumar.size ? '#fff' : color.mut2, border: 'none' }}
             >
               {aplicando ? 'Aplicando…' : `Agregar a la categoría ${sumar.size || ''}`}
             </button>

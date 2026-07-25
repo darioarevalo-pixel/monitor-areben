@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib/tncat/cliente'
 import { nombresDeFilas } from '@/lib/tncat/excel'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
-import { useConfirmar, useToast } from '@/components/ui'
+import { color as paleta, useConfirmar, useToast } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -71,15 +71,15 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     }
     if (!categoriaId) {
       setPreview(null)
-      setPrevMsg(<div style={{ fontSize: 13, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: 10 }}>Elegí una categoría para previsualizar.</div>)
+      setPrevMsg(<div style={{ fontSize: 13, color: paleta.warningInk, background: paleta.warningBg, border: `1px solid ${paleta.warningBorder}`, borderRadius: 8, padding: 10 }}>Elegí una categoría para previsualizar.</div>)
       return
     }
-    setPrevMsg(<div style={{ color: '#9CA3AF', fontSize: 13, padding: 8 }}>Cruzando con TiendaNube…</div>)
+    setPrevMsg(<div style={{ color: paleta.mut2, fontSize: 13, padding: 8 }}>Cruzando con TiendaNube…</div>)
     try {
       const d = await previsualizarAsignar(marca, categoriaId, nn)
       if (!d.ok) {
         setPreview(null)
-        setPrevMsg(<div style={{ color: '#DC2626', fontSize: 13 }}>Error: {d.error || 'desconocido'}</div>)
+        setPrevMsg(<div style={{ color: paleta.danger, fontSize: 13 }}>Error: {d.error || 'desconocido'}</div>)
         return
       }
       setMatched(d.matched || [])
@@ -88,7 +88,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       setPrevMsg(null)
     } catch (e) {
       setPreview(null)
-      setPrevMsg(<div style={{ color: '#DC2626', fontSize: 13 }}>Error: {e instanceof Error ? e.message : String(e)}</div>)
+      setPrevMsg(<div style={{ color: paleta.danger, fontSize: 13 }}>Error: {e instanceof Error ? e.message : String(e)}</div>)
     }
   }
 
@@ -127,16 +127,16 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       setProgreso(null)
       setResultado(
         <div>
-          <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: 12, marginTop: 6 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#047857' }}>✅ Listo</div>
-            <div style={{ fontSize: 13, color: '#065F46', marginTop: 3 }}>
+          <div style={{ background: paleta.successBg, border: `1px solid ${paleta.successBorder}`, borderRadius: 10, padding: 12, marginTop: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: paleta.successInk }}>✅ Listo</div>
+            <div style={{ fontSize: 13, color: paleta.successInk, marginTop: 3 }}>
               Se agregó <b>{catName}</b> a <b>{aplicados}</b> producto(s).{errores.length ? ` ${errores.length} con error.` : ''}
             </div>
           </div>
           {errores.length ? (
             <details style={{ marginTop: 6 }}>
-              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: '#B91C1C', fontWeight: 600 }}>❌ Errores ({errores.length})</summary>
-              <div style={{ fontSize: 12, color: '#374151', maxHeight: 180, overflow: 'auto', marginTop: 4, paddingLeft: 6 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: paleta.dangerInk, fontWeight: 600 }}>❌ Errores ({errores.length})</summary>
+              <div style={{ fontSize: 12, color: paleta.ink2, maxHeight: 180, overflow: 'auto', marginTop: 4, paddingLeft: 6 }}>
                 {errores.map((e, i) => (
                   <div key={i}>{(e.nombre || '') + ': ' + (e.msg || e.status || '')}</div>
                 ))}
@@ -148,7 +148,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       setMatched([])
     } catch (e) {
       setProgreso(null)
-      setResultado(<div style={{ color: '#DC2626', fontSize: 13 }}>Error: {e instanceof Error ? e.message : String(e)} — aplicados {aplicados}/{total}.</div>)
+      setResultado(<div style={{ color: paleta.danger, fontSize: 13 }}>Error: {e instanceof Error ? e.message : String(e)} — aplicados {aplicados}/{total}.</div>)
     } finally {
       setAplicando(false)
     }
@@ -158,7 +158,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     arr.length ? (
       <details style={{ marginTop: 6 }}>
         <summary style={{ cursor: 'pointer', fontSize: 12.5, color, fontWeight: 600 }}>{titulo} ({arr.length})</summary>
-        <div style={{ fontSize: 12, color: '#374151', maxHeight: 180, overflow: 'auto', marginTop: 4, paddingLeft: 6 }}>
+        <div style={{ fontSize: 12, color: paleta.ink2, maxHeight: 180, overflow: 'auto', marginTop: 4, paddingLeft: 6 }}>
           {arr.map((n, i) => (
             <div key={i}>{n}</div>
           ))}
@@ -169,11 +169,11 @@ export function AsignarCard({ marca }: { marca: Marca }) {
   return (
     <div className="card">
       <div style={{ fontSize: 16, fontWeight: 700 }}>🗂️ Asignar categoría (Excel)</div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 12px', maxWidth: 680 }}>
+      <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px', maxWidth: 680 }}>
         Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-        <select value={catId} onChange={(e) => onCat(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, minWidth: 220 }}>
+        <select value={catId} onChange={(e) => onCat(e.target.value)} style={{ padding: '7px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, minWidth: 220 }}>
           {categorias === null ? (
             <option value="">Cargando categorías…</option>
           ) : (
@@ -185,21 +185,21 @@ export function AsignarCard({ marca }: { marca: Marca }) {
             </>
           )}
         </select>
-        <label className="btn-sm" style={{ background: '#378ADD', color: '#fff', cursor: 'pointer' }}>
+        <label className="btn-sm" style={{ background: paleta.brandSolid, color: '#fff', cursor: 'pointer' }}>
           📁 Subir Excel
           <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { onArchivo(e.target.files?.[0]); e.currentTarget.value = '' }} style={{ display: 'none' }} />
         </label>
-        <span style={{ fontSize: 12, color: '#9CA3AF' }}>{info}</span>
+        <span style={{ fontSize: 12, color: paleta.mut2 }}>{info}</span>
       </div>
 
       <div>
         {resultado}
         {progreso !== null && (
           <div style={{ margin: '8px 0' }}>
-            <div style={{ background: '#E5E7EB', borderRadius: 8, height: 14, overflow: 'hidden' }}>
-              <div style={{ background: '#16A34A', height: '100%', width: `${progreso}%`, transition: 'width .2s' }} />
+            <div style={{ background: paleta.line, borderRadius: 8, height: 14, overflow: 'hidden' }}>
+              <div style={{ background: paleta.success, height: '100%', width: `${progreso}%`, transition: 'width .2s' }} />
             </div>
-            <div style={{ fontSize: 12, color: '#374151', marginTop: 4 }}>Aplicando en TiendaNube… {progreso}%</div>
+            <div style={{ fontSize: 12, color: paleta.ink2, marginTop: 4 }}>Aplicando en TiendaNube… {progreso}%</div>
           </div>
         )}
         {prevMsg}
@@ -209,20 +209,20 @@ export function AsignarCard({ marca }: { marca: Marca }) {
               Categoría: <b>{preview.categoria}</b> · <b>{matched.length}</b> se van a asignar de {preview.total} nombre(s).
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
-              <span style={{ background: '#ECFDF5', color: '#047857', borderRadius: 14, padding: '3px 10px' }}>✓ Matchean: {matched.length}</span>
-              <span style={{ background: '#F3F4F6', color: '#6B7280', borderRadius: 14, padding: '3px 10px' }}>Ya la tenían: {preview.yaTenian.length}</span>
-              <span style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: 14, padding: '3px 10px' }}>No encontrados: {preview.noEncontrados.length}</span>
+              <span style={{ background: paleta.successBg, color: paleta.successInk, borderRadius: 14, padding: '3px 10px' }}>✓ Matchean: {matched.length}</span>
+              <span style={{ background: paleta.bg2, color: paleta.mut, borderRadius: 14, padding: '3px 10px' }}>Ya la tenían: {preview.yaTenian.length}</span>
+              <span style={{ background: paleta.dangerBg, color: paleta.dangerInk, borderRadius: 14, padding: '3px 10px' }}>No encontrados: {preview.noEncontrados.length}</span>
             </div>
-            {lista('✓ Se van a asignar', '#047857', matched.map((m) => m.nombre))}
-            {lista('Ya tenían la categoría', '#6B7280', preview.yaTenian)}
-            {lista('⚠️ No encontrados en TiendaNube (revisá el nombre)', '#B91C1C', preview.noEncontrados)}
+            {lista('✓ Se van a asignar', paleta.successInk, matched.map((m) => m.nombre))}
+            {lista('Ya tenían la categoría', paleta.mut, preview.yaTenian)}
+            {lista('⚠️ No encontrados en TiendaNube (revisá el nombre)', paleta.dangerInk, preview.noEncontrados)}
           </div>
         )}
       </div>
 
       {matched.length > 0 && !resultado && progreso === null && (
         <div style={{ marginTop: 12 }}>
-          <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: '#16A34A', color: '#fff' }}>
+          <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: paleta.success, color: '#fff' }}>
             ✅ Aplicar en TiendaNube
           </button>
         </div>

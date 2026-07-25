@@ -138,11 +138,11 @@ export function Comisiones() {
               <input type="number" step={0.1} value={cfg.imp[k]} onChange={(e) => setImp(k, e.target.value)} className="mo-input mo-input--num" style={{ width: 80 }} />
             </label>
           ))}
-          <label style={{ fontSize: 12, color: '#444', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: '#F3F4F6', borderRadius: 8, cursor: 'pointer' }}>
+          <label style={{ fontSize: 12, color: '#444', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: color.bg2, borderRadius: 8, cursor: 'pointer' }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={cfg.saldoIva} onChange={(e) => setSaldo(e.target.checked)} /> Saldo IVA a favor <b>{cfg.saldoIva ? 'ACTIVO' : 'AGOTADO'}</b>
           </label>
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10, borderTop: '1px solid #EEF0F2', paddingTop: 12 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10, borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
           <label style={lbl}>Canal<br />
             <select value={canal} onChange={(e) => setCanalSel(e.target.value)} className="mo-select" style={{ minWidth: 140 }}>
               {cans.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -159,7 +159,7 @@ export function Comisiones() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: '#6B7280', fontSize: 12 }}>
+              <tr style={{ textAlign: 'left', color: color.mut, fontSize: 12 }}>
                 <th style={thc}>Forma de pago</th>
                 <th style={{ ...thc, textAlign: 'center' }}>Comisión %</th>
                 <th style={{ ...thc, textAlign: 'center' }}>Costo financiero %</th>
@@ -183,7 +183,7 @@ export function Comisiones() {
                     <td style={{ textAlign: 'center' }}>{cellInp('descuento', m.descuento || 0)}</td>
                     <td style={{ textAlign: 'center' }}><input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={m.aplicaImp} onChange={(e) => setCelda(f, 'aplicaImp', e.target.checked)} title="Aplica IVA / IIBB / DREI" /></td>
                     <td style={{ textAlign: 'center' }}>{cellInp('dias', m.dias)}</td>
-                    <td style={{ textAlign: 'center' }}><button onClick={() => void removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 15 }}>×</button></td>
+                    <td style={{ textAlign: 'center' }}><button onClick={() => void removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
                   </tr>
                 )
               })}
@@ -224,7 +224,7 @@ export function Comisiones() {
           <label style={lbl}>Markup % (s/ costo)<br /><input type="number" step={1} value={markup} onChange={(e) => onMarkup(e.target.value)} placeholder="ej. 130" className="mo-input mo-input--num" style={{ width: 110 }} /></label>
           <label style={lbl}>PVP (IVA incluido) $<br /><input type="number" step={0.01} value={pvp} onChange={(e) => onPvp(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
         </div>
-        <div style={{ fontSize: 11, color: '#9CA3AF', margin: '-4px 0 12px' }}>Cargá <b>costo</b> y luego el <b>markup</b> (se calcula el PVP) o el <b>PVP</b> (se calcula el markup). Son intercambiables.</div>
+        <div style={{ fontSize: 11, color: color.mut2, margin: '-4px 0 12px' }}>Cargá <b>costo</b> y luego el <b>markup</b> (se calcula el PVP) o el <b>PVP</b> (se calcula el markup). Son intercambiables.</div>
 
         {simListo ? (
           <>
@@ -259,7 +259,7 @@ export function Comisiones() {
       {/* PISO DE PRECIO */}
       <Card style={{ marginTop: space[4] }}>
         <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: space[3] }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
-        <div style={{ marginBottom: 12, fontSize: 12, color: '#666' }}>
+        <div style={{ marginBottom: 12, fontSize: 12, color: color.mut }}>
           Usa el <b>Costo neto</b> de arriba. Margen objetivo %
           <input type="number" step={1} value={pisoObj} onChange={(e) => setPisoObj(e.target.value)} className="mo-input mo-input--num" style={{ width: 90, marginLeft: 6 }} />
         </div>
@@ -309,24 +309,24 @@ function BuscadorProducto({
   }
 
   return (
-    <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 9, padding: '10px 12px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#0369A1', marginBottom: 8 }}>🔎 Traer un producto real (en vez de simular a mano)</div>
+    <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: 9, padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: color.brand, marginBottom: 8 }}>🔎 Traer un producto real (en vez de simular a mano)</div>
       <label style={lbl}>Producto
         <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} autoComplete="off" placeholder="Buscá por nombre o SKU…" className="mo-input" style={{ display: 'block', width: 300, maxWidth: '100%', marginTop: 3 }} />
       </label>
       {!sel && q.trim().length >= 2 && (
         <div style={{ marginTop: 4, maxWidth: 340 }}>
           {res.length ? (
-            <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, maxHeight: 240, overflow: 'auto', background: '#fff' }}>
+            <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, maxHeight: 240, overflow: 'auto', background: '#fff' }}>
               {res.map((p) => (
-                <div key={p.id} onClick={() => elegir(p)} style={{ padding: '7px 10px', borderTop: '1px solid #F1F5F9', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <div key={p.id} onClick={() => elegir(p)} style={{ padding: '7px 10px', borderTop: `1px solid ${color.bg2}`, cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span>{p.name || '—'}</span>
-                  {p.sku && <span style={{ color: '#9CA3AF', fontSize: 11, whiteSpace: 'nowrap' }}>{p.sku}</span>}
+                  {p.sku && <span style={{ color: color.mut2, fontSize: 11, whiteSpace: 'nowrap' }}>{p.sku}</span>}
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '4px 2px' }}>Sin resultados.</div>
+            <div style={{ fontSize: 12, color: color.mut2, padding: '4px 2px' }}>Sin resultados.</div>
           )}
         </div>
       )}
@@ -334,18 +334,18 @@ function BuscadorProducto({
         <div style={{ marginTop: 10, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           {foto ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto} alt="" style={{ width: 66, height: 66, objectFit: 'cover', borderRadius: 8, background: '#F3F4F6', flex: 'none', border: '1px solid #E5E7EB' }} />
+            <img src={foto} alt="" style={{ width: 66, height: 66, objectFit: 'cover', borderRadius: 8, background: color.bg2, flex: 'none', border: `1px solid ${color.line}` }} />
           ) : (
-            <div style={{ width: 66, height: 66, borderRadius: 8, background: '#F3F4F6', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#9CA3AF' }}>Sin foto</div>
+            <div style={{ width: 66, height: 66, borderRadius: 8, background: color.bg2, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: color.mut2 }}>Sin foto</div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}><b>{sel.name}</b>{sel.sku ? ' · ' : ''}{sel.sku && <span style={{ color: '#9CA3AF' }}>{sel.sku}</span>} · Costo: <b>{sel.unit_cost ? fmt(sel.unit_cost) : '—'}</b></div>
+            <div style={{ fontSize: 13, color: color.ink2, marginBottom: 8 }}><b>{sel.name}</b>{sel.sku ? ' · ' : ''}{sel.sku && <span style={{ color: color.mut2 }}>{sel.sku}</span>} · Costo: <b>{sel.unit_cost ? fmt(sel.unit_cost) : '—'}</b></div>
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div style={{ fontSize: 12, color: '#666' }}>Precio normal TN<br /><div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}><b style={{ fontSize: 14 }}>{normal ? fmt(normal) : '—'}</b>{normal > 0 && <button onClick={() => onSimular(normal)} style={simBtn('#378ADD')}>Simular</button>}</div></div>
-              <div style={{ fontSize: 12, color: '#666' }}>Precio promo TN<br /><div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}><b style={{ fontSize: 14, color: '#16A34A' }}>{promo ? fmt(promo) : '—'}</b>{promo && promo > 0 && <button onClick={() => onSimular(promo)} style={simBtn('#16A34A')}>Simular</button>}</div></div>
+              <div style={{ fontSize: 12, color: color.mut }}>Precio normal TN<br /><div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}><b style={{ fontSize: 14 }}>{normal ? fmt(normal) : '—'}</b>{normal > 0 && <button onClick={() => onSimular(normal)} style={simBtn(color.brandSolid)}>Simular</button>}</div></div>
+              <div style={{ fontSize: 12, color: color.mut }}>Precio promo TN<br /><div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}><b style={{ fontSize: 14, color: color.success }}>{promo ? fmt(promo) : '—'}</b>{promo && promo > 0 && <button onClick={() => onSimular(promo)} style={simBtn(color.success)}>Simular</button>}</div></div>
             </div>
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #E5E7EB' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#DB2777', marginBottom: 6 }}>🏷️ Definir precio de sale</div>
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${color.line}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>🏷️ Definir precio de sale</div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <label style={lbl}>% descuento<br /><input type="number" value={descPct} placeholder="ej. 20" onChange={(e) => {
                   setDescPct(e.target.value)
@@ -357,8 +357,8 @@ function BuscadorProducto({
                   }
                 }} className="mo-input mo-input--num" style={{ width: 80 }} /></label>
                 <label style={lbl}>Precio sale (termina en 90)<br /><input type="number" value={precioNuevo} placeholder="$" onChange={(e) => setPrecioNuevo(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
-                <button onClick={() => { const v = parseFloat(precioNuevo); if (!v || v <= 0) return void avisar('Cargá el precio de sale, o un % de descuento.'); onSimular(v) }} style={{ ...simBtn('#DB2777'), padding: '7px 11px' }}>Simular</button>
-                <button onClick={onAgregarSale} style={{ ...simBtn('#111827'), padding: '7px 11px' }}>➕ Agregar a la lista</button>
+                <button onClick={() => { const v = parseFloat(precioNuevo); if (!v || v <= 0) return void avisar('Cargá el precio de sale, o un % de descuento.'); onSimular(v) }} style={{ ...simBtn(color.brand), padding: '7px 11px' }}>Simular</button>
+                <button onClick={onAgregarSale} style={{ ...simBtn(color.ink), padding: '7px 11px' }}>➕ Agregar a la lista</button>
               </div>
             </div>
           </div>
@@ -379,20 +379,20 @@ function MatrizSim({ cfg, cans, costo, pvp, onCelda }: { cfg: ComCfg; cans: stri
         <tbody>
           {cfg.formas.map((f) => (
             <tr key={f}>
-              <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: '1px solid #EEF0F2' }}>{f}</td>
+              <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: `1px solid ${color.line}` }}>{f}</td>
               {cans.map((c) => {
                 const r = calcular(cfg, costo, pvp, f, c)
-                const bg = best && best.f === f && best.c === c ? '#DCFCE7' : worst && worst.f === f && worst.c === c ? '#FEE2E2' : undefined
+                const bg = best && best.f === f && best.c === c ? color.successBg : worst && worst.f === f && worst.c === c ? color.dangerBg : undefined
                 const cel = cfg.matriz[c]?.[f]
                 const tags: string[] = []
                 if (r.desc > 0) tags.push(`−${r.desc}%`)
                 if (cel && cel.aplicaImp === false) tags.push('s/imp')
                 return (
-                  <td key={c} onClick={() => onCelda(f, c)} title="Ver detalle" style={{ textAlign: 'center', padding: '6px 10px', borderTop: '1px solid #EEF0F2', cursor: 'pointer', background: bg }}>
-                    <div style={{ fontWeight: 700, color: r.margen < 0 ? '#DC2626' : '#111' }}>{comFmt(r.margen)}</div>
-                    <div style={{ fontSize: 11, color: '#666' }}>{r.margenPct.toFixed(1)}% · {r.dias}d</div>
-                    {tags.length > 0 && <div style={{ fontSize: 10, color: '#9333EA' }}>{tags.join(' · ')}</div>}
-                    {cfg.saldoIva && <div style={{ fontSize: 10, color: '#2563EB' }}>IVA recup. {comFmt(r.ivaRecuperado)}</div>}
+                  <td key={c} onClick={() => onCelda(f, c)} title="Ver detalle" style={{ textAlign: 'center', padding: '6px 10px', borderTop: `1px solid ${color.line}`, cursor: 'pointer', background: bg }}>
+                    <div style={{ fontWeight: 700, color: r.margen < 0 ? color.danger : '#111' }}>{comFmt(r.margen)}</div>
+                    <div style={{ fontSize: 11, color: color.mut }}>{r.margenPct.toFixed(1)}% · {r.dias}d</div>
+                    {tags.length > 0 && <div style={{ fontSize: 10, color: color.brand }}>{tags.join(' · ')}</div>}
+                    {cfg.saldoIva && <div style={{ fontSize: 10, color: color.brandSolid }}>IVA recup. {comFmt(r.ivaRecuperado)}</div>}
                   </td>
                 )
               })}
@@ -400,7 +400,7 @@ function MatrizSim({ cfg, cans, costo, pvp, onCelda }: { cfg: ComCfg; cans: stri
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · &quot;d&quot; = días de acreditación{cfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>
+      <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · &quot;d&quot; = días de acreditación{cfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>
     </div>
   )
 }
@@ -414,26 +414,26 @@ function Breakeven({ cfg, cans, costo, markup }: { cfg: ComCfg; cans: string[]; 
   const peor = conBe.length ? conBe.reduce((a, b) => (b.be > a.be ? b : a)) : null
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '12px 14px', background: '#FAFAFA' }}>
+      <div style={{ border: `1px solid ${color.line}`, borderRadius: 10, padding: '12px 14px', background: color.bg }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>⚖️ Markup de equilibrio (breakeven)</div>
-        <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>Markup mínimo sobre el costo para no perder. Por <b>debajo</b> de este %, esa venta da pérdida.{hayMk ? ' 🟢 = tu markup zafa · 🔴 = estás por debajo (pérdida).' : ''}</div>
+        <div style={{ fontSize: 11, color: color.mut2, marginBottom: 10 }}>Markup mínimo sobre el costo para no perder. Por <b>debajo</b> de este %, esa venta da pérdida.{hayMk ? ' 🟢 = tu markup zafa · 🔴 = estás por debajo (pérdida).' : ''}</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={{ textAlign: 'left', padding: '6px 10px' }}>Forma de pago</th>{cans.map((c) => <th key={c} style={{ textAlign: 'center', padding: '6px 10px', fontSize: 12 }}>{c}</th>)}</tr></thead>
           <tbody>
             {filas.map(({ f, celdas }) => (
               <tr key={f}>
-                <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: '1px solid #EEF0F2' }}>{f}</td>
+                <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: `1px solid ${color.line}` }}>{f}</td>
                 {celdas.map(({ c, be }) => {
                   let bg: string | undefined, col: string | undefined
-                  if (be != null && hayMk) { const ok = mkActual >= be; bg = ok ? '#DCFCE7' : '#FEE2E2'; col = ok ? '#16A34A' : '#DC2626' }
-                  return <td key={c} style={{ textAlign: 'center', padding: '6px 10px', borderTop: '1px solid #EEF0F2', fontWeight: 600, background: bg, color: col }}>{be == null ? <span style={{ color: '#9CA3AF' }}>—</span> : be.toFixed(0) + '%'}</td>
+                  if (be != null && hayMk) { const ok = mkActual >= be; bg = ok ? color.successBg : color.dangerBg; col = ok ? color.success : color.danger }
+                  return <td key={c} style={{ textAlign: 'center', padding: '6px 10px', borderTop: `1px solid ${color.line}`, fontWeight: 600, background: bg, color: col }}>{be == null ? <span style={{ color: color.mut2 }}>—</span> : be.toFixed(0) + '%'}</td>
                 })}
               </tr>
             ))}
           </tbody>
         </table>
         {peor && <div style={{ fontSize: 12, color: '#444', marginTop: 8 }}>Para estar a salvo en <b>todas</b> las formas/canales, el markup tiene que superar <b>{peor.be.toFixed(0)}%</b> (lo exige <b>{peor.f} · {peor.c}</b>).</div>}
-        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>⚠️ Este equilibrio cubre impuestos y comisiones, <b>no</b> los gastos fijos de estructura (alquiler, sueldos, tiempo de venta). El piso real es más alto.</div>
+        <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>⚠️ Este equilibrio cubre impuestos y comisiones, <b>no</b> los gastos fijos de estructura (alquiler, sueldos, tiempo de venta). El piso real es más alto.</div>
       </div>
     </div>
   )
@@ -443,9 +443,9 @@ function Detalle({ cfg, costo, pvp, forma, canal, onCerrar }: { cfg: ComCfg; cos
   const r: ResultadoMargen = calcular(cfg, costo, pvp, forma, canal)
   const fila = (lbl: string, val: number, o: { signo?: boolean; tot?: boolean; col?: string } = {}) => {
     const monto = o.signo ? '−' + comFmt(Math.abs(val)) : comFmt(val)
-    const c = o.col || (o.signo ? '#DC2626' : val < 0 ? '#DC2626' : '#111')
+    const c = o.col || (o.signo ? color.danger : val < 0 ? color.danger : '#111')
     return (
-      <tr style={{ borderTop: o.tot ? '1px solid #D1D5DB' : undefined }}>
+      <tr style={{ borderTop: o.tot ? `1px solid ${color.line2}` : undefined }}>
         <td style={{ padding: '3px 0', fontWeight: o.tot ? 700 : undefined, color: '#444' }}>{lbl}</td>
         <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: o.tot ? 700 : 500, color: c }}>{monto}</td>
       </tr>
@@ -453,15 +453,15 @@ function Detalle({ cfg, costo, pvp, forma, canal, onCerrar }: { cfg: ComCfg; cos
   }
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 16px', background: '#FAFAFA', maxWidth: 480 }}>
+      <div style={{ border: `1px solid ${color.line}`, borderRadius: 10, padding: '14px 16px', background: color.bg, maxWidth: 480 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>Detalle — {forma} · {canal}</div>
-          <button onClick={onCerrar} title="Cerrar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+          <button onClick={onCerrar} title="Cerrar" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
         <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
           <tbody>
             {fila('Precio de lista (PVP)', r.pvp)}
-            {r.desc > 0 && fila(`Descuento (${r.desc}%)`, r.pvp - r.pvpEf, { signo: true, col: '#9333EA' })}
+            {r.desc > 0 && fila(`Descuento (${r.desc}%)`, r.pvp - r.pvpEf, { signo: true, col: color.brand })}
             {fila('Precio que cobrás', r.pvpEf, { tot: true })}
             {fila(r.aplicaImp ? 'Precio neto (sin IVA)' : 'Precio (sin impuestos)', r.precioNeto)}
             {fila('Costo del producto', r.costoNeto, { signo: true })}
@@ -473,10 +473,10 @@ function Detalle({ cfg, costo, pvp, forma, canal, onCerrar }: { cfg: ComCfg; cos
             {r.aplicaImp && !cfg.saldoIva && fila('IVA a pagar', r.ivaPagar, { signo: true })}
             {fila('= Contribución', r.contrib, { tot: true })}
             {fila(`Impuesto a las Ganancias (${cfg.imp.ganancias}%)`, r.ganancias, { signo: true })}
-            {fila('= MARGEN NETO FINAL', r.margen, { tot: true, col: r.margen < 0 ? '#DC2626' : '#16A34A' })}
+            {fila('= MARGEN NETO FINAL', r.margen, { tot: true, col: r.margen < 0 ? color.danger : color.success })}
           </tbody>
         </table>
-        <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: color.mut, marginTop: 8 }}>
           Margen <b>{r.margenPct.toFixed(1)}%</b> · acreditación <b>{r.dias} días</b>
           {r.aplicaImp && cfg.saldoIva ? <> · IVA recuperado (saldo a favor, no es costo): <b>{comFmt(r.ivaPagar)}</b></> : null}
           {!r.aplicaImp ? ' · sin IVA/IIBB/DREI' : ''}
@@ -487,7 +487,7 @@ function Detalle({ cfg, costo, pvp, forma, canal, onCerrar }: { cfg: ComCfg; cos
 }
 
 function Piso({ cfg, cans, costo, objetivo }: { cfg: ComCfg; cans: string[]; costo: number; objetivo: number }) {
-  if (!(costo >= 0)) return <div style={{ color: '#9CA3AF', fontSize: 13, padding: 10 }}>Cargá el costo neto (en el simulador de arriba).</div>
+  if (!(costo >= 0)) return <div style={{ color: color.mut2, fontSize: 13, padding: 10 }}>Cargá el costo neto (en el simulador de arriba).</div>
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -495,36 +495,36 @@ function Piso({ cfg, cans, costo, objetivo }: { cfg: ComCfg; cans: string[]; cos
         <tbody>
           {cfg.formas.map((f) => (
             <tr key={f}>
-              <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: '1px solid #EEF0F2' }}>{f}</td>
+              <td style={{ padding: '6px 10px', fontWeight: 500, borderTop: `1px solid ${color.line}` }}>{f}</td>
               {cans.map((c) => {
                 const p = pisoPvp(cfg, costo, objetivo, f, c)
-                return <td key={c} style={{ textAlign: 'center', padding: '6px 10px', borderTop: '1px solid #EEF0F2', fontWeight: 600 }}>{p == null ? <span style={{ color: '#9CA3AF' }}>—</span> : comFmt(p)}</td>
+                return <td key={c} style={{ textAlign: 'center', padding: '6px 10px', borderTop: `1px solid ${color.line}`, fontWeight: 600 }}>{p == null ? <span style={{ color: color.mut2 }}>—</span> : comFmt(p)}</td>
               })}
             </tr>
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>PVP mínimo (IVA incluido) para ese margen objetivo. &quot;—&quot; = inalcanzable con esa configuración.</div>
+      <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>PVP mínimo (IVA incluido) para ese margen objetivo. &quot;—&quot; = inalcanzable con esa configuración.</div>
     </div>
   )
 }
 
 function ListaSale({ saleList, onQuitar }: { saleList: import('@/lib/comisiones/tipos').ItemSale[]; onQuitar: (pid: string) => void }) {
-  if (!saleList.length) return <div style={{ fontSize: 12, color: '#9CA3AF', padding: '8px 0' }}>Todavía no agregaste productos. Traé un producto, definí el sale (% o precio) y tocá &quot;➕ Agregar a la lista&quot;.</div>
+  if (!saleList.length) return <div style={{ fontSize: 12, color: color.mut2, padding: '8px 0' }}>Todavía no agregaste productos. Traé un producto, definí el sale (% o precio) y tocá &quot;➕ Agregar a la lista&quot;.</div>
   const fmt = (v: number | null) => (v == null ? '—' : '$' + Math.round(v).toLocaleString('es-AR'))
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-      <thead><tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}><th style={{ padding: '5px 6px' }}>Producto</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Sale</th><th style={{ textAlign: 'center' }}>% desc</th><th style={{ textAlign: 'center' }}>Markup</th><th style={{ textAlign: 'center' }}>Margen</th><th></th></tr></thead>
+      <thead><tr style={{ fontSize: 11, color: color.mut2, textAlign: 'left' }}><th style={{ padding: '5px 6px' }}>Producto</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Sale</th><th style={{ textAlign: 'center' }}>% desc</th><th style={{ textAlign: 'center' }}>Markup</th><th style={{ textAlign: 'center' }}>Margen</th><th></th></tr></thead>
       <tbody>
         {saleList.map((x) => (
-          <tr key={x.pid} style={{ borderTop: '1px solid #F3F4F6' }}>
-            <td style={{ padding: '5px 6px', fontWeight: 500 }}>{x.name}{x.sku && <span style={{ fontSize: 11, color: '#9CA3AF' }}> {x.sku}</span>}</td>
-            <td style={{ textAlign: 'right', color: '#9CA3AF' }}>{fmt(x.actual)}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700, color: '#DB2777' }}>{fmt(x.sale)}</td>
+          <tr key={x.pid} style={{ borderTop: `1px solid ${color.bg2}` }}>
+            <td style={{ padding: '5px 6px', fontWeight: 500 }}>{x.name}{x.sku && <span style={{ fontSize: 11, color: color.mut2 }}> {x.sku}</span>}</td>
+            <td style={{ textAlign: 'right', color: color.mut2 }}>{fmt(x.actual)}</td>
+            <td style={{ textAlign: 'right', fontWeight: 700, color: color.brand }}>{fmt(x.sale)}</td>
             <td style={{ textAlign: 'center' }}>{x.desc}%</td>
             <td style={{ textAlign: 'center' }}>{x.markup != null ? Math.round(x.markup) + '%' : '—'}</td>
-            <td style={{ textAlign: 'center', color: x.margin != null && x.margin < 0 ? '#DC2626' : '#16A34A', fontWeight: 600 }}>{x.margin != null ? Math.round(x.margin) + '%' : '—'}</td>
-            <td style={{ textAlign: 'right' }}><button onClick={() => onQuitar(String(x.pid))} title="Quitar" style={{ border: 'none', background: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 15 }}>×</button></td>
+            <td style={{ textAlign: 'center', color: x.margin != null && x.margin < 0 ? color.danger : color.success, fontWeight: 600 }}>{x.margin != null ? Math.round(x.margin) + '%' : '—'}</td>
+            <td style={{ textAlign: 'right' }}><button onClick={() => onQuitar(String(x.pid))} title="Quitar" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
           </tr>
         ))}
       </tbody>

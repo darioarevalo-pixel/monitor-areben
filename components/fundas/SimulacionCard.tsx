@@ -7,7 +7,7 @@ import { iphoneModelSort } from '@/lib/fundas/ranking'
 import { bloqueToCanvas, copiarOdescargarPNG } from '@/lib/fundas/export'
 import { imgAThumbYSubir } from '@/lib/imagenes'
 import type { SimVar } from '@/lib/fundas/tipos'
-import { useToast } from '@/components/ui'
+import { color, useToast } from '@/components/ui'
 
 /** El estado del editor de simulación, propiedad del shell (FundasModelo). */
 export type EditorSim = {
@@ -190,9 +190,9 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Simulación de pedido</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 12, color: '#666' }}>Total a pedir:</label>
+          <label style={{ fontSize: 12, color: color.mut }}>Total a pedir:</label>
           <input type="number" min={1} value={total} onChange={(e) => set({ total: e.target.value })} style={{ width: 90, textAlign: 'center', fontWeight: 600 }} />
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>unidades</span>
+          <span style={{ fontSize: 12, color: color.mut2 }}>unidades</span>
         </div>
       </div>
 
@@ -201,49 +201,49 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
         <label title="Foto del pedido (opcional)" style={{ cursor: 'pointer', flex: 'none' }}>
           <input type="file" accept="image/*" onChange={(e) => subirFoto(e.target.files?.[0], 'pedido', (url) => set({ img: url }))} style={{ display: 'none' }} />
           {img ? (
-            <img src={img} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #E5E7EB', display: 'block', opacity: subiendo.has('pedido') ? 0.5 : 1 }} />
+            <img src={img} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: `1px solid ${color.line}`, display: 'block', opacity: subiendo.has('pedido') ? 0.5 : 1 }} />
           ) : (
-            <span style={{ display: 'flex', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', border: '1px dashed #CBD5E1', borderRadius: 8, color: '#9CA3AF', fontSize: 18 }}>📷</span>
+            <span style={{ display: 'flex', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 8, color: color.mut2, fontSize: 18 }}>📷</span>
           )}
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <span style={{ fontSize: 12, color: '#666' }}>Foto del pedido <span style={{ color: '#9CA3AF' }}>(opcional)</span></span>
-          <span style={{ fontSize: 11, color: '#9CA3AF' }}>Aparece arriba en la imagen y el PDF. Ideal si todo el pedido es del mismo diseño.</span>
+          <span style={{ fontSize: 12, color: color.mut }}>Foto del pedido <span style={{ color: color.mut2 }}>(opcional)</span></span>
+          <span style={{ fontSize: 11, color: color.mut2 }}>Aparece arriba en la imagen y el PDF. Ideal si todo el pedido es del mismo diseño.</span>
         </div>
-        {img && <button onClick={() => set({ img: null })} style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 11 }}>quitar</button>}
+        {img && <button onClick={() => set({ img: null })} style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11 }}>quitar</button>}
       </div>
 
       {/* Variantes */}
-      <div style={{ marginBottom: 14, padding: '10px 12px', background: '#F9FAFB', border: '1px solid #EEF0F2', borderRadius: 10 }}>
+      <div style={{ marginBottom: 14, padding: '10px 12px', background: color.bg, border: `1px solid ${color.line}`, borderRadius: 10 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#444', cursor: 'pointer' }}>
           <input type="checkbox" checked={varOn} onChange={(e) => toggleVar(e.target.checked)} />
           Separar cada modelo por variantes (color o diseño)
         </label>
         {varOn && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8 }}>Definí las variantes y qué % del pedido va a cada una. Tienen que sumar 100%.</div>
+            <div style={{ fontSize: 11, color: color.mut2, marginBottom: 8 }}>Definí las variantes y qué % del pedido va a cada una. Tienen que sumar 100%.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {vars.map((v, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <label title="Foto (opcional)" style={{ cursor: 'pointer', flex: 'none' }}>
                     <input type="file" accept="image/*" onChange={(e) => subirFoto(e.target.files?.[0], `var-${i}`, (url) => setVarCampo(i, { img: url }))} style={{ display: 'none' }} />
                     {v.img ? (
-                      <img src={v.img} alt="" style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: '1px solid #E5E7EB', display: 'block', opacity: subiendo.has(`var-${i}`) ? 0.5 : 1 }} />
+                      <img src={v.img} alt="" style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}`, display: 'block', opacity: subiendo.has(`var-${i}`) ? 0.5 : 1 }} />
                     ) : (
-                      <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: '1px dashed #CBD5E1', borderRadius: 6, color: '#9CA3AF', fontSize: 16 }}>📷</span>
+                      <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 6, color: color.mut2, fontSize: 16 }}>📷</span>
                     )}
                   </label>
-                  {v.img && <button onClick={() => setVarCampo(i, { img: null })} title="Quitar foto" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 11, padding: 0 }}>quitar</button>}
+                  {v.img && <button onClick={() => setVarCampo(i, { img: null })} title="Quitar foto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11, padding: 0 }}>quitar</button>}
                   <input value={v.name} placeholder={`Variante ${i + 1} (ej: Negro, Serpiente...)`} onChange={(e) => setVarCampo(i, { name: e.target.value })} style={{ flex: 1, maxWidth: 240, padding: '5px 8px', fontSize: 13 }} />
                   <input type="number" min={0} max={100} step={0.1} value={v.pct} onChange={(e) => setVarCampo(i, { pct: parseFloat(e.target.value) || 0 })} style={{ width: 70, textAlign: 'center', padding: '5px 6px', fontSize: 13 }} />
                   <span style={{ fontSize: 12, color: '#888' }}>%</span>
-                  <button onClick={() => eliminarVar(i)} style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  <button onClick={() => eliminarVar(i)} style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                 </div>
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
-              <button onClick={agregarVar} style={{ background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }}>+ Agregar variante</button>
-              <span style={{ fontSize: 12, fontWeight: 600, color: sumaVok ? '#16A34A' : '#DC2626' }}>
+              <button onClick={agregarVar} style={{ background: 'none', border: 'none', color: color.brandSolid, cursor: 'pointer', fontSize: 12, padding: 0 }}>+ Agregar variante</button>
+              <span style={{ fontSize: 12, fontWeight: 600, color: sumaVok ? color.success : color.danger }}>
                 Σ {sumaV.toFixed(1)}%{sumaVok ? ' ✓' : sumaV < 100 ? ` — falta ${(100 - sumaV).toFixed(1)}%` : ` — sobra ${(sumaV - 100).toFixed(1)}%`}
               </span>
             </div>
@@ -258,13 +258,13 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
             <th onClick={() => ordenar('pct')} style={{ width: activo ? 88 : 110, textAlign: 'center', cursor: 'pointer' }}>{activo ? '% pedido' : '% del pedido'}{arrow('pct')}</th>
             <th style={{ width: activo ? 64 : 110, textAlign: 'center' }}>
               {activo ? 'Cant. ' : 'Cantidad '}
-              <span onClick={() => copiarColumna(activo ? 'total' : 'cant')} title="Copiar modelos con su cantidad" style={{ cursor: 'pointer', color: '#9CA3AF', fontSize: 11 }}>{copyIcon(activo ? 'col-total' : 'col-cant')}</span>
+              <span onClick={() => copiarColumna(activo ? 'total' : 'cant')} title="Copiar modelos con su cantidad" style={{ cursor: 'pointer', color: color.mut2, fontSize: 11 }}>{copyIcon(activo ? 'col-total' : 'col-cant')}</span>
             </th>
             {activo && vars.map((v, j) => (
               <th key={j} style={{ textAlign: 'center', minWidth: 62 }}>
                 {v.img && <img src={v.img} alt="" style={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 4, display: 'block', margin: '0 auto 3px' }} />}
                 {v.name || 'Var ' + (j + 1)}<br />
-                <span onClick={() => copiarColumna(j)} title="Copiar esta variante" style={{ cursor: 'pointer', color: '#9CA3AF', fontSize: 11 }}>{copyIcon('col-' + j)}</span>
+                <span onClick={() => copiarColumna(j)} title="Copiar esta variante" style={{ cursor: 'pointer', color: color.mut2, fontSize: 11 }}>{copyIcon('col-' + j)}</span>
               </th>
             ))}
             <th style={{ width: activo ? 36 : 40 }} />
@@ -279,20 +279,20 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
                 <td><input list="fm-sim-modelos" value={r.model} onChange={(e) => setRows((rr) => rr.map((x, j) => (j === i ? { ...x, model: e.target.value } : x)))} style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 13, padding: '4px 0' }} /></td>
                 <td style={{ textAlign: 'center' }}><input type="number" value={r.pct} min={0} max={100} step={0.1} onChange={(e) => setRows((rr) => rr.map((x, j) => (j === i ? { ...x, pct: parseFloat(e.target.value) || 0 } : x)))} style={{ width: 75, textAlign: 'center', padding: '4px 6px', fontSize: 13 }} /></td>
                 <td style={{ textAlign: 'center', fontWeight: 600, fontSize: 13 }}>{qty}</td>
-                {activo && parts?.map((q, j) => <td key={j} style={{ textAlign: 'center', fontSize: 13, color: '#1F4E78' }}>{q}</td>)}
+                {activo && parts?.map((q, j) => <td key={j} style={{ textAlign: 'center', fontSize: 13, color: color.ink }}>{q}</td>)}
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  {activo && <button onClick={() => copiarFila(i)} title="Copiar este modelo con sus variantes" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 13, marginRight: 4 }}>{copyIcon('fila-' + i)}</button>}
-                  <button onClick={() => eliminarFila(i)} title="Eliminar fila" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  {activo && <button onClick={() => copiarFila(i)} title="Copiar este modelo con sus variantes" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 13, marginRight: 4 }}>{copyIcon('fila-' + i)}</button>}
+                  <button onClick={() => eliminarFila(i)} title="Eliminar fila" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                 </td>
               </tr>
             )
           })}
         </tbody>
         <tfoot>
-          <tr style={{ background: '#F9FAFB' }}>
+          <tr style={{ background: color.bg }}>
             <td style={{ fontWeight: 600, fontSize: 12, padding: '8px 12px' }}>
-              <button onClick={agregarFila} style={{ background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }}>+ Agregar modelo</button>
-              <button onClick={agregarLinea18} style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: 12, padding: 0, marginLeft: 12 }}>+ Línea 18</button>
+              <button onClick={agregarFila} style={{ background: 'none', border: 'none', color: color.brandSolid, cursor: 'pointer', fontSize: 12, padding: 0 }}>+ Agregar modelo</button>
+              <button onClick={agregarLinea18} style={{ background: 'none', border: 'none', color: color.brand, cursor: 'pointer', fontSize: 12, padding: 0, marginLeft: 12 }}>+ Línea 18</button>
             </td>
             <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13 }}>{sumPct.toFixed(1)}%</td>
             <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 13 }}>{sumQty}</td>
@@ -303,14 +303,15 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       </table>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>Los porcentajes y modelos son editables. <b>Tip:</b> tocá <b>⎘</b> en una columna para copiar esa línea lista para tipear en la tienda.</div>
+        <div style={{ fontSize: 11, color: color.mut2 }}>Los porcentajes y modelos son editables. <b>Tip:</b> tocá <b>⎘</b> en una columna para copiar esa línea lista para tipear en la tienda.</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-sm" onClick={onGuardar} title="Guarda este pedido en la lista de abajo" style={{ background: '#378ADD', color: '#fff' }}>💾 Guardar pedido</button>
+          <button className="btn-sm" onClick={onGuardar} title="Guarda este pedido en la lista de abajo" style={{ background: color.brandSolid, color: '#fff' }}>💾 Guardar pedido</button>
           <button className="btn-sm" onClick={onNuevo} title="Vacía el editor para armar otro pedido">➕ Nuevo</button>
-          <button className="btn-sm" onClick={onVaciar} title="Borra todo y empieza de cero" style={{ color: '#DC2626' }}>🗑 Vaciar</button>
+          <button className="btn-sm" onClick={onVaciar} title="Borra todo y empieza de cero" style={{ color: color.danger }}>🗑 Vaciar</button>
           <button className="btn-sm" onClick={() => copiarTabla('ambos')} title="Copia modelo y cantidad separados por tabulación">{copiado === 'tabla-ambos' ? '✓ Copiado' : '⎘ Modelo + Cantidad'}</button>
           <button className="btn-sm" onClick={() => copiarTabla('cantidad')} title="Copia solo las cantidades">{copiado === 'tabla-cantidad' ? '✓ Copiado' : '⎘ Solo cantidad'}</button>
-          <button className="btn-sm" onClick={copiarImagen} disabled={imgMsg === 'Generando...'} title="Copia la tabla como imagen para pegar en WhatsApp" style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen'}</button>
+          <button className="btn-sm" onClick={copiarImagen} disabled={imgMsg === 'Generando...'} title="Copia la tabla como imagen para pegar en WhatsApp" /* El verde es el de WhatsApp: identidad ajena, no del sistema. */
+            style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen'}</button>
         </div>
       </div>
     </div>

@@ -21,7 +21,7 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { normalizeArgPhone } from '@/lib/crm/core'
-import { Button, useConfirmar } from '@/components/ui'
+import { Button, color, useConfirmar } from '@/components/ui'
 
 /**
  * Vista de Leads. Port de index.html:13936-14247.
@@ -39,10 +39,10 @@ import { Button, useConfirmar } from '@/components/ui'
  */
 
 const CHIP = {
-  pendiente: { txt: 'A contactar', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
-  vencido: { txt: 'Vencido', col: '#DC2626', bg: '#FEE2E2', dot: '🔴' },
-  semana: { txt: 'Esta semana', col: '#B45309', bg: '#FEF3C7', dot: '🟡' },
-  aldia: { txt: 'Al día', col: '#15803D', bg: '#DCFCE7', dot: '🟢' },
+  pendiente: { txt: 'A contactar', col: color.danger, bg: color.dangerBg, dot: '🔴' },
+  vencido: { txt: 'Vencido', col: color.danger, bg: color.dangerBg, dot: '🔴' },
+  semana: { txt: 'Esta semana', col: color.warningInk, bg: color.warningBg, dot: '🟡' },
+  aldia: { txt: 'Al día', col: color.success, bg: color.successBg, dot: '🟢' },
 } as const
 
 const fmtFecha = (d: string | null) => {
@@ -93,12 +93,12 @@ export function Leads() {
 
   return (
     <>
-      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 12 }}>
         Prospectos con local a los que les hablás pero todavía no compraron.
       </div>
 
       {error && (
-        <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 11px', marginBottom: 12, fontSize: 12, color: '#991B1B' }}>
+        <div style={{ background: color.dangerBg, border: `1px solid ${color.dangerBorder}`, borderRadius: 8, padding: '7px 11px', marginBottom: 12, fontSize: 12, color: color.dangerInk }}>
           ⚠️ {error}
         </div>
       )}
@@ -106,7 +106,7 @@ export function Leads() {
       <div className="toolbar" style={{ marginBottom: 14 }}>
         <button
           className="btn-sm"
-          style={{ background: '#2563EB', color: '#fff' }}
+          style={{ background: color.brandSolid, color: '#fff' }}
           disabled={!cargado}
           title={cargado ? '' : 'El KV no se pudo leer'}
           onClick={() => {
@@ -118,11 +118,11 @@ export function Leads() {
           ➕ Nuevo lead
         </button>
         <input type="text" placeholder="Buscar nombre, teléfono o Instagram..." value={q} onChange={(e) => setQ(e.target.value)} />
-        <label style={{ fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={verArchivados} onChange={(e) => setVerArchivados(e.target.checked)} />
           Ver archivados
         </label>
-        <span style={{ fontSize: 12, color: '#9CA3AF', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 12, color: color.mut2, marginLeft: 'auto' }}>
           {lista.length} lead{lista.length === 1 ? '' : 's'}
           {verArchivados ? ' archivados' : ''}
         </span>
@@ -142,9 +142,9 @@ export function Leads() {
           </thead>
           <tbody>
             {cargando ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>Cargando…</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>Cargando…</td></tr>
             ) : !lista.length ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>{verArchivados ? 'No hay leads archivados.' : 'Todavía no hay leads.'}</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: color.mut2 }}>{verArchivados ? 'No hay leads archivados.' : 'Todavía no hay leads.'}</td></tr>
             ) : (
               lista.map((x) => {
                 const wa = normalizeArgPhone(x.telefono)
@@ -154,43 +154,43 @@ export function Leads() {
                 const ultNota = x.notas[0]
                 return (
                   <tr key={x.id} style={{ cursor: 'pointer' }} onClick={() => setAbierto(x.id)}>
-                    <td><div style={{ fontWeight: 600 }}>{x.nombre || <span style={{ color: '#9CA3AF' }}>(sin nombre)</span>}</div></td>
+                    <td><div style={{ fontWeight: 600 }}>{x.nombre || <span style={{ color: color.mut2 }}>(sin nombre)</span>}</div></td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {x.telefono && <div style={{ fontSize: 12 }}>{x.telefono}</div>}
                       {insta && (
                         <div style={{ fontSize: 11 }}>
-                          <a href={insta} target="_blank" rel="noopener noreferrer" style={{ color: '#DB2777' }}>{x.instagram}</a>
+                          <a href={insta} target="_blank" rel="noopener noreferrer" style={{ color: color.brand }}>{x.instagram}</a>
                         </div>
                       )}
                       {wa && (
-                        <a href={`https://web.whatsapp.com/send?phone=${wa}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#16A34A' }}>
+                        <a href={`https://web.whatsapp.com/send?phone=${wa}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: color.success }}>
                           WhatsApp
                         </a>
                       )}
                     </td>
-                    <td>{x.ciudad || <span style={{ color: '#9CA3AF' }}>—</span>}</td>
+                    <td>{x.ciudad || <span style={{ color: color.mut2 }}>—</span>}</td>
                     <td>
                       {chip ? (
                         <>
                           <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: chip.col, background: chip.bg, padding: '1px 7px', borderRadius: 999 }}>
                             {chip.dot} {chip.txt}
                           </span>
-                          <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>
                             {x._seg.estado === 'pendiente' ? 'Sin primer contacto' : `${fmtFecha(x._seg.proximo)} · ${x._seg.dias === 0 ? 'hoy' : (x._seg.dias as number) < 0 ? `hace ${-(x._seg.dias as number)}d` : `en ${x._seg.dias}d`}`}
                           </div>
                         </>
                       ) : (
-                        <span style={{ color: '#9CA3AF' }}>—</span>
+                        <span style={{ color: color.mut2 }}>—</span>
                       )}
                     </td>
                     <td style={{ maxWidth: 220 }}>
                       {ultNota ? (
                         <>
-                          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFecha(ultNota.fecha)}</div>
+                          <div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(ultNota.fecha)}</div>
                           <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ultNota.texto}</div>
                         </>
                       ) : (
-                        <span style={{ color: '#9CA3AF' }}>—</span>
+                        <span style={{ color: color.mut2 }}>—</span>
                       )}
                     </td>
                     <td><span style={{ fontSize: 11 }}>{LEAD_ESTADO_LABEL[x.estado] || x.estado}</span></td>
@@ -212,7 +212,7 @@ export function Leads() {
 
             <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
               {(['nombre', 'telefono', 'instagram', 'ciudad'] as const).map((campo) => (
-                <label key={campo} style={{ fontSize: 12, color: '#6B7280' }}>
+                <label key={campo} style={{ fontSize: 12, color: color.mut }}>
                   {campo[0].toUpperCase() + campo.slice(1)}
                   <input
                     type="text"
@@ -226,7 +226,7 @@ export function Leads() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 12, color: '#6B7280' }}>Cadencia:</label>
+              <label style={{ fontSize: 12, color: color.mut }}>Cadencia:</label>
               <select value={l.cadencia} onChange={(e) => persistir(setCadencia(leads, l.id, e.target.value))}>
                 <option value="">Sin cadencia</option>
                 <option value="semanal">Semanal</option>
@@ -234,7 +234,7 @@ export function Leads() {
                 <option value="mensual">Mensual</option>
               </select>
               <button className="btn-sm" onClick={() => persistir(hableHoy(leads, l.id))}>✅ Hablé hoy</button>
-              <label style={{ fontSize: 12, color: '#6B7280' }}>Próximo:</label>
+              <label style={{ fontSize: 12, color: color.mut }}>Próximo:</label>
               <input type="date" value={l.proximo_manual || ''} onChange={(e) => persistir(setProximoManual(leads, l.id, e.target.value))} />
             </div>
 
@@ -245,18 +245,18 @@ export function Leads() {
                 <button className="btn-sm" onClick={() => { persistir(agregarNota(leads, l.id, nota)); setNota('') }}>Agregar</button>
               </div>
               {l.notas.map((n, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
-                  <span style={{ color: '#9CA3AF', fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${color.bg2}` }}>
+                  <span style={{ color: color.mut2, fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
                   <span style={{ flex: 1 }}>{n.texto}</span>
                   <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar la nota', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}>🗑️</Button>
                 </div>
               ))}
-              {!l.notas.length && <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin notas.</div>}
+              {!l.notas.length && <div style={{ fontSize: 12, color: color.mut2 }}>Sin notas.</div>}
             </div>
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
               {(['activo', 'comprado', 'descartado'] as EstadoLead[]).map((e) => (
-                <button key={e} className="btn-sm" style={l.estado === e ? { background: '#111827', color: '#fff' } : undefined} onClick={() => persistir(setEstado(leads, l.id, e))}>
+                <button key={e} className="btn-sm" style={l.estado === e ? { background: color.ink, color: '#fff' } : undefined} onClick={() => persistir(setEstado(leads, l.id, e))}>
                   {LEAD_ESTADO_LABEL[e]}
                 </button>
               ))}

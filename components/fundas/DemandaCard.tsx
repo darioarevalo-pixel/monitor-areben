@@ -5,6 +5,7 @@ import { combinarDemanda, demandaPorModelo } from '@/lib/fundas/demanda'
 import { iphoneModelSort } from '@/lib/fundas/ranking'
 import type { DatosDemanda, FilaDemandaComb } from '@/lib/fundas/tipos'
 import type { DatosETL } from '@/lib/etl/tipos'
+import { color } from '@/components/ui'
 
 type ColDem = 'model' | 'pMin' | 'pMay' | 'pComb'
 
@@ -88,7 +89,7 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Demanda por modelo (corregida)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 12, color: '#666' }}>Diseños lanzados desde:</label>
+          <label style={{ fontSize: 12, color: color.mut }}>Diseños lanzados desde:</label>
           <input type="date" value={cutoff} onChange={(e) => setCutoff(e.target.value)} />
         </div>
       </div>
@@ -98,41 +99,41 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
           <>
             Del total de fundas (desde {cutoff}): <b>{Math.round((calc.totMin / totalU) * 100)}% minorista</b> ·{' '}
             <b>{Math.round((calc.totMay / totalU) * 100)}% mayorista</b>{' '}
-            <span style={{ color: '#9CA3AF' }}>({calc.totMin.toLocaleString('es-AR')} / {calc.totMay.toLocaleString('es-AR')} unid.)</span>
+            <span style={{ color: color.mut2 }}>({calc.totMin.toLocaleString('es-AR')} / {calc.totMay.toLocaleString('es-AR')} unid.)</span>
           </>
         ) : (
           'No hay ventas de fundas en el período elegido.'
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10, flexWrap: 'wrap', fontSize: 12, color: '#666' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10, flexWrap: 'wrap', fontSize: 12, color: color.mut }}>
         <span>Método:</span>
         <label style={{ cursor: 'pointer' }}>
-          <input type="radio" name="fm-dem-metric" value="aj" checked={metric === 'aj'} onChange={() => setMetric('aj')} /> Ajustado por agotamiento <span style={{ color: '#9CA3AF' }}>(recomendado)</span>
+          <input type="radio" name="fm-dem-metric" value="aj" checked={metric === 'aj'} onChange={() => setMetric('aj')} /> Ajustado por agotamiento <span style={{ color: color.mut2 }}>(recomendado)</span>
         </label>
         <label style={{ cursor: 'pointer' }}>
-          <input type="radio" name="fm-dem-metric" value="vol" checked={metric === 'vol'} onChange={() => setMetric('vol')} /> Volumen <span style={{ color: '#9CA3AF' }}>(crudo)</span>
+          <input type="radio" name="fm-dem-metric" value="vol" checked={metric === 'vol'} onChange={() => setMetric('vol')} /> Volumen <span style={{ color: color.mut2 }}>(crudo)</span>
         </label>
         {metric === 'aj' && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: '#9CA3AF' }}>·</span> Tope del empujón ×
+            <span style={{ color: color.mut2 }}>·</span> Tope del empujón ×
             <input type="number" value={capK} min={1} max={5} step={0.5} onChange={(e) => setCapK(parseFloat(e.target.value) || 2.5)} style={{ width: 54, textAlign: 'center', padding: '3px 5px', fontSize: 12 }} />
           </span>
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap', fontSize: 12, color: '#666' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap', fontSize: 12, color: color.mut }}>
         <label style={{ cursor: 'pointer' }}>
           <input type="checkbox" checked={corteOn} onChange={(e) => setCorteOn(e.target.checked)} /> Cortar la ventana de cada diseño
         </label>
-        <span style={{ color: '#9CA3AF' }}>— mido hasta lo que pase primero:</span>
+        <span style={{ color: color.mut2 }}>— mido hasta lo que pase primero:</span>
         al mes{' '}
         <input type="number" value={corteDias} min={7} max={180} step={1} onChange={(e) => setCorteDias(parseInt(e.target.value) || 30)} style={{ width: 54, textAlign: 'center', padding: '3px 5px', fontSize: 12 }} /> días, o al agotarse{' '}
         <input type="number" value={corteMod} min={1} max={20} step={1} onChange={(e) => setCorteMod(parseInt(e.target.value) || 5)} style={{ width: 48, textAlign: 'center', padding: '3px 5px', fontSize: 12 }} /> modelos
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: '#666' }}>Peso de cada canal en la combinada:</span>
+        <span style={{ fontSize: 12, color: color.mut }}>Peso de cada canal en la combinada:</span>
         <input
           type="range"
           min={0}
@@ -141,7 +142,7 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
           onChange={(e) => { setWminTouched(true); setWminManual(parseFloat(e.target.value) || 0) }}
           style={{ width: 160 }}
         />
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#378ADD' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.brandSolid }}>
           Minorista {Math.round(wMin * 100)}% · Mayorista {Math.round((1 - wMin) * 100)}%
         </span>
       </div>
@@ -173,24 +174,24 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
                   <td style={{ textAlign: 'center', fontWeight: 700 }}>
                     {r.pComb.toFixed(1)}%
                     <div style={{ display: 'inline-block', width: 48, height: 4, background: '#eee', borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
-                      <div style={{ width: `${Math.min(100, r.pComb)}%`, height: '100%', background: '#7F77DD', borderRadius: 2 }} />
+                      <div style={{ width: `${Math.min(100, r.pComb)}%`, height: '100%', background: color.brand, borderRadius: 2 }} />
                     </div>
                   </td>
                 </tr>
               )
             })
           ) : (
-            <tr><td colSpan={5} style={{ textAlign: 'center', color: '#9CA3AF', padding: 16 }}>Sin datos de fundas en el período.</td></tr>
+            <tr><td colSpan={5} style={{ textAlign: 'center', color: color.mut2, padding: 16 }}>Sin datos de fundas en el período.</td></tr>
           )}
         </tbody>
       </table>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 11, color: '#9CA3AF', maxWidth: '58%' }}>
+        <div style={{ fontSize: 11, color: color.mut2, maxWidth: '58%' }}>
           <b>Ajustado</b>: volumen + empujón a los modelos agotados (capado por el tope). <b>Volumen</b>: unidades crudas. <b>Corte</b>: mide cada diseño en su ventana pareja (1 mes o hasta agotarse N modelos), para que los diseños viejos no acumulen ventaja por tener más tiempo. Agotamiento = Deposito Minorista en 0. Solo diseños lanzados desde la fecha elegida.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: '#6B7280' }}>{selCount} de {rowsSorted.length} modelos</span>
+          <span style={{ fontSize: 11, color: color.mut }}>{selCount} de {rowsSorted.length} modelos</span>
           <button
             className="btn-sm"
             onClick={() => {
@@ -200,7 +201,7 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
               onUsar?.(suma > 0 ? sel.map((r) => ({ model: r.model, pct: +((r.pComb / suma) * 100).toFixed(1) })) : [])
             }}
             title="Lleva los modelos tildados a la simulación (renormalizados a 100%)"
-            style={{ background: '#378ADD', color: '#fff' }}
+            style={{ background: color.brandSolid, color: '#fff' }}
           >
             ↓ Usar los elegidos en la simulación
           </button>

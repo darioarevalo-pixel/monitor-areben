@@ -9,9 +9,10 @@ import { useState } from 'react'
 import { editarFalla } from '@/lib/postventa/fallas/cliente'
 import type { FallaRow, FallaUbicacion } from '@/lib/postventa/fallas/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import { color } from '@/components/ui'
 
-const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: '1px solid #D1D5DB', outline: 'none', width: '100%' }
-const lbl: React.CSSProperties = { fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 3 }
+const inp: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 8, border: `1px solid ${color.line2}`, outline: 'none', width: '100%' }
+const lbl: React.CSSProperties = { fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }
 
 export function EditarFalla({ marca, falla, onClose, onSaved }: { marca: Marca; falla: FallaRow; onClose: () => void; onSaved: () => void }) {
   const [producto, setProducto] = useState(falla.producto || '')
@@ -46,7 +47,7 @@ export function EditarFalla({ marca, falla, onClose, onSaved }: { marca: Marca; 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 20, minWidth: 340, maxWidth: 420, width: '90%' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Editar falla</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: color.ink, marginBottom: 12 }}>Editar falla</div>
         <div style={{ display: 'grid', gap: 10 }}>
           <div><span style={lbl}>Producto</span><input style={inp} value={producto} onChange={(e) => setProducto(e.target.value)} /></div>
           <div><span style={lbl}>Motivo</span><input style={inp} value={motivo} onChange={(e) => setMotivo(e.target.value)} /></div>
@@ -65,10 +66,10 @@ export function EditarFalla({ marca, falla, onClose, onSaved }: { marca: Marca; 
             <div style={{ flex: 1 }}><span style={lbl}>PVP feria unit.</span><input style={inp} type="number" min={0} value={pvp} onChange={(e) => setPvp(e.target.value)} /></div>
           </div>
         </div>
-        {error && <div style={{ fontSize: 12, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 10px', marginTop: 10 }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: color.dangerInk, background: color.dangerBg, border: `1px solid ${color.dangerBorder}`, borderRadius: 8, padding: '8px 10px', marginTop: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={() => void guardar()} disabled={guardando} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: '1px solid #D97706', color: '#B45309', background: '#FFFBEB', cursor: 'pointer' }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.line}`, background: '#fff', cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={() => void guardar()} disabled={guardando} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.warning}`, color: color.warningInk, background: color.warningBg, cursor: 'pointer' }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </div>

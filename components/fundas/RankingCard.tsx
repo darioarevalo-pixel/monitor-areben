@@ -11,6 +11,7 @@ import {
   type OrdenProd,
 } from '@/lib/fundas/ranking'
 import type { DatosRanking } from '@/lib/fundas/tipos'
+import { chartColor, color } from '@/components/ui'
 
 type Col = 'pos' | 'model' | 'qty' | 'pct'
 const TITULOS: Record<Col, string> = { pos: '#', model: 'Modelo', qty: 'Vendidas', pct: '% del total' }
@@ -119,13 +120,13 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
   return (
     <div>
       <div className="toolbar">
-        <label style={{ fontSize: 12, color: '#666' }}>Desde</label>
+        <label style={{ fontSize: 12, color: color.mut }}>Desde</label>
         <select value={rangeStart} onChange={(e) => setRangeStart(e.target.value)}>
           {meses.map((m) => (
             <option key={m} value={m}>{fmMonthLabel(m)}</option>
           ))}
         </select>
-        <label style={{ fontSize: 12, color: '#666' }}>Hasta</label>
+        <label style={{ fontSize: 12, color: color.mut }}>Hasta</label>
         <select value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}>
           {meses.map((m) => (
             <option key={m} value={m}>{fmMonthLabel(m)}</option>
@@ -133,15 +134,15 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
         </select>
         <button className="btn-sm" onClick={() => { setModelosOpen((o) => !o); setProdsOpen(false) }}>Modelos ▾</button>
         <button className="btn-sm" onClick={() => { setProdsOpen((o) => !o); setModelosOpen(false) }}>Fundas ▾</button>
-        <span style={{ borderLeft: '1.5px solid #E5E7EB', height: 20, margin: '0 2px' }} />
-        <label style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        <span style={{ borderLeft: `1.5px solid ${color.line}`, height: 20, margin: '0 2px' }} />
+        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           <input type="checkbox" checked={corteEnabled} onChange={(e) => setCorteEnabled(e.target.checked)} />
           Cortar al agotarse
         </label>
         <select value={corteN} onChange={(e) => setCorteN(parseInt(e.target.value))} style={{ width: 48 }}>
           {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: '#666' }}>modelos de</span>
+        <span style={{ fontSize: 12, color: color.mut }}>modelos de</span>
         <select
           value={corteDiseno ?? ''}
           onChange={(e) => setCorteDisenoSel(e.target.value)}
@@ -158,7 +159,7 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
       {modelosOpen && (
         <div className="fm-models-panel">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '.04em' }}>Modelos de iPhone</strong>
+            <strong style={{ fontSize: 11, color: color.mut, textTransform: 'uppercase', letterSpacing: '.04em' }}>Modelos de iPhone</strong>
             <input type="text" placeholder="Buscar..." value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
             <button className="btn-sm" onClick={() => setCheckedModels(new Set(def.modelos))}>Todos</button>
             <button className="btn-sm" onClick={() => setCheckedModels(new Set())}>Ninguno</button>
@@ -180,7 +181,7 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
       {prodsOpen && (
         <div className="fm-models-panel">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '.04em' }}>Nombre de funda</strong>
+            <strong style={{ fontSize: 11, color: color.mut, textTransform: 'uppercase', letterSpacing: '.04em' }}>Nombre de funda</strong>
             <input type="text" placeholder="Buscar..." value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
             <select value={prodSort} onChange={(e) => setProdSort(e.target.value as OrdenProd)} style={{ fontSize: 12, padding: '3px 6px' }}>
               <option value="qty">Más vendidas</option>
@@ -212,10 +213,10 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
           <div style={{ textAlign: 'center', fontSize: 11, color: '#888', marginBottom: 4 }}>{rangeLabel}</div>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 0, bottom: 8 }}>
-              <CartesianGrid horizontal={false} stroke="#f0f0f0" />
+              <CartesianGrid horizontal={false} stroke={chartColor.grid} />
               <XAxis type="number" tick={{ fill: '#888', fontSize: 11 }} />
               <YAxis type="category" dataKey="model" width={140} tick={{ fill: '#444', fontSize: 12 }} />
-              <Bar dataKey="qty" fill="#7F77DD" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="qty" fill={chartColor.brand} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -256,10 +257,10 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
                 <td style={{ color: '#888', fontSize: 11, width: 32 }}>{r.pos}</td>
                 <td style={{ fontWeight: 500 }}>{r.model}</td>
                 <td style={{ fontWeight: 600 }}>{r.qty.toLocaleString('es-AR')}</td>
-                <td style={{ color: '#666' }}>
+                <td style={{ color: color.mut }}>
                   {r.pct}%
-                  <div style={{ display: 'inline-block', width: 60, height: 4, background: '#e5e5e5', borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
-                    <div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: '#7F77DD', borderRadius: 2 }} />
+                  <div style={{ display: 'inline-block', width: 60, height: 4, background: color.bg2, borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
+                    <div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: color.brand, borderRadius: 2 }} />
                   </div>
                 </td>
               </tr>

@@ -74,6 +74,7 @@ export const chartColor = {
   brandSoft: 'rgba(79,70,229,0.10)',
   grid: '#E4E7EC',
   axis: '#98A2B3',
+  axisFuerte: '#344054',
   success: '#079455',
   warning: '#DC6803',
   danger: '#D92D20',

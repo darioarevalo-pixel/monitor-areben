@@ -72,7 +72,7 @@ import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
 import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { useConfirmar, useToast } from '@/components/ui'
+import { color, useConfirmar, useToast } from '@/components/ui'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -112,12 +112,12 @@ export function SolicitudesInner({ sf, preset }: { sf: HistorialSolicitudes<Soli
 
   if (sf.error && !sf.data) {
     return (
-      <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>
+      <div style={{ padding: 16, color: color.dangerInk, fontSize: 13 }}>
         No se pudo leer el historial de {preset.etiqueta}: {sf.error}
       </div>
     )
   }
-  if (!sf.data) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
+  if (!sf.data) return <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>
 
   // key={marca}: al cambiar de cuenta, el estado de UI (qué solicitud se ve, la
   // selección) se resetea remontando, sin setState en effects.
@@ -327,13 +327,13 @@ function Banner({ prioridad, admin }: { prioridad: Origen; admin: boolean }) {
   return (
     <div
       style={{
-        background: '#F0F9FF',
-        border: '1px solid #BAE6FD',
+        background: color.brandBg,
+        border: `1px solid ${color.brandBorder}`,
         borderRadius: 9,
         padding: '8px 11px',
         marginBottom: 10,
         fontSize: 12,
-        color: '#075985',
+        color: color.brand,
         display: 'flex',
         alignItems: 'center',
         gap: 10,
@@ -352,11 +352,11 @@ function Banner({ prioridad, admin }: { prioridad: Origen; admin: boolean }) {
       )}
       {admin && (
         <>
-          <select value={prioridad} disabled title={DISABLED_TITLE} style={{ padding: '4px 6px', border: '1px solid #BAE6FD', borderRadius: 6, background: '#fff' }}>
+          <select value={prioridad} disabled title={DISABLED_TITLE} style={{ padding: '4px 6px', border: `1px solid ${color.brandBorder}`, borderRadius: 6, background: '#fff' }}>
             <option value="deposito">Depósito primero</option>
             <option value="local">Local primero</option>
           </select>
-          <span style={{ color: '#9CA3AF' }}>(solo admin)</span>
+          <span style={{ color: color.mut2 }}>(solo admin)</span>
         </>
       )}
     </div>
@@ -417,7 +417,7 @@ function Historial({
   return (
     <div>
       {consumosPend.length > 0 && esAprobadorHist ? (
-        <div style={{ background: '#FFFBEB', border: '1px solid #FBBF24', borderRadius: 10, padding: '9px 13px', marginBottom: 12, fontSize: 13, color: '#92400E' }}>
+        <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 10, padding: '9px 13px', marginBottom: 12, fontSize: 13, color: color.warningInk }}>
           ⏳ <b>{consumosPend.length}</b> consumo(s) esperando tu aprobación. Abrí la solicitud para aprobar o rechazar.
         </div>
       ) : null}
@@ -433,12 +433,12 @@ function Historial({
           <button
             className="btn-sm"
             onClick={onVerCombinada}
-            style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730A3', fontWeight: 600 }}
+            style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, color: color.brand, fontWeight: 600 }}
           >
             🔗 Ver combinadas ({seleccion.size})
           </button>
         ) : seleccion.size === 1 ? (
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Tildá otra solicitud para combinarlas.</span>
+          <span style={{ fontSize: 12, color: color.mut2 }}>Tildá otra solicitud para combinarlas.</span>
         ) : null}
         {admin && (
           <button
@@ -446,23 +446,23 @@ function Historial({
             onClick={verificarAnulaciones}
             disabled={chequeando}
             title="Consulta en GN si las ventas ya se anularon y cierra esas solicitudes"
-            style={{ background: '#fff', border: '1px solid #D1D5DB' }}
+            style={{ background: '#fff', border: `1px solid ${color.line2}` }}
           >
             {chequeando ? '⏳ verificando en GN…' : '🔄 Verificar anulaciones en GN'}
           </button>
         )}
         {cerradasN > 0 && (
-          <label style={{ fontSize: 12, color: '#6B7280', marginLeft: 'auto', cursor: 'pointer' }}>
+          <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto', cursor: 'pointer' }}>
             <input type="checkbox" checked={verCerradas} onChange={(e) => onToggleCerradas(e.target.checked)} style={{ verticalAlign: 'middle', marginRight: 4 }} />
             Ver cerradas ({cerradasN})
           </label>
         )}
       </div>
-      <div style={{ fontSize: 12, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+      <div style={{ fontSize: 12, color: color.mut2, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
         Historial
       </div>
       {visibles.length === 0 ? (
-        <div style={{ color: '#9CA3AF', fontSize: 13 }}>Todavía no hay solicitudes.</div>
+        <div style={{ color: color.mut2, fontSize: 13 }}>Todavía no hay solicitudes.</div>
       ) : (
         visibles.map((s) => {
           const f = filaHistorial(s)
@@ -473,12 +473,12 @@ function Historial({
                 display: 'flex',
                 gap: 10,
                 alignItems: 'center',
-                border: `1px solid ${f.porDevolver ? '#FCA5A5' : '#E5E7EB'}`,
+                border: `1px solid ${f.porDevolver ? color.dangerBorder : color.line}`,
                 borderRadius: 9,
                 padding: '9px 11px',
                 marginBottom: 7,
                 flexWrap: 'wrap',
-                ...(f.cerrada ? { opacity: 0.6, background: '#F9FAFB' } : f.porDevolver ? { background: '#FEF2F2' } : {}),
+                ...(f.cerrada ? { opacity: 0.6, background: color.bg } : f.porDevolver ? { background: color.dangerBg } : {}),
               }}
             >
               <input
@@ -493,20 +493,20 @@ function Historial({
                   {f.cerrada ? '✅ ' : ''}
                   {f.descripcion || '(sin descripción)'}
                   {f.porDevolver ? (
-                    <span style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>
+                    <span style={{ background: color.dangerBg, color: color.dangerInk, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>
                       ⏳ {f.porDevolver} por devolver
                     </span>
                   ) : null}
                 </div>
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                <div style={{ fontSize: 12, color: color.mut2 }}>
                   {f.fecha} · 📦 {f.dep} · 🏪 {f.loc} · {f.estado}
                 </div>
               </div>
-              <button className="btn-sm" onClick={() => onVer(s.id)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              <button className="btn-sm" onClick={() => onVer(s.id)} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
                 Ver
               </button>
               {puedeQuitar && (
-                <button onClick={() => onBorrar(s)} title="Eliminar solicitud" style={{ border: 'none', background: 'none', color: '#CBD5E1', fontSize: 15, cursor: 'pointer' }}>
+                <button onClick={() => onBorrar(s)} title="Eliminar solicitud" style={{ border: 'none', background: 'none', color: color.mut2, fontSize: 15, cursor: 'pointer' }}>
                   🗑
                 </button>
               )}
@@ -700,13 +700,13 @@ function Detalle({
     const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado'
     const fbKey = `${origen}-${fase}`
     return (
-      <div style={{ border: `1px solid ${completo ? '#A7F3D0' : '#E5E7EB'}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
+      <div style={{ border: `1px solid ${completo ? color.successBorder : color.line}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ fontWeight: 700 }}>
-            {titulo} <span style={{ color: '#9CA3AF', fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
-            {completo ? <span style={{ color: '#16A34A', fontWeight: 700 }}> ✓ completo</span> : null}
+            {titulo} <span style={{ color: color.mut2, fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
+            {completo ? <span style={{ color: color.success, fontWeight: 700 }}> ✓ completo</span> : null}
           </div>
-          <button className="btn-sm" onClick={() => correrSalida(() => reportePDF(s, origen))} style={{ background: '#1F2937', color: '#fff' }}>
+          <button className="btn-sm" onClick={() => correrSalida(() => reportePDF(s, origen))} style={{ background: color.ink, color: '#fff' }}>
             📄 Reporte
           </button>
         </div>
@@ -720,7 +720,7 @@ function Detalle({
         {fb && fb.key === fbKey ? <div style={{ fontSize: 13, marginBottom: 6 }}>{fbTexto(fb.r)}</div> : null}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}>
+            <tr style={{ fontSize: 11, color: color.mut2, textAlign: 'left' }}>
               <th style={{ padding: '3px 6px' }}>Producto</th>
               <th style={{ padding: '3px 6px' }}>Variante</th>
               <th style={{ padding: '3px 6px' }}>SKU</th>
@@ -733,22 +733,22 @@ function Detalle({
               const c = conf(i)
               const ok = c >= i.qty
               return (
-                <tr key={i.vid} style={ok ? { background: '#F0FDF4' } : undefined}>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>
+                <tr key={i.vid} style={ok ? { background: color.successBg } : undefined}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {ok ? '✅' : '⬜'} {i.nombre}
-                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg="#5B21B6" bg="#EDE9FE" /> : i.nuevo ? <EtiquetaMini texto="🆕 sin venta" fg="#92400E" bg="#FEF3C7" /> : null}
+                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg={color.brand} bg={color.brandBg} /> : i.nuevo ? <EtiquetaMini texto="🆕 sin venta" fg={color.warningInk} bg={color.warningBg} /> : null}
                   </td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {i.variante}
                     {i.nuevo && i.barcode ? (
-                      <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: 11, color: color.mut2, fontFamily: 'monospace' }}>
                         {i.barcode}
                         {i.pendiente ? ' · pendiente en GN' : ''}
                       </div>
                     ) : null}
                   </td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', color: '#6B7280' }}>{i.sku || '—'}</td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, color: color.mut }}>{i.sku || '—'}</td>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {i.manual ? (
                       <>
                         <BotonMini label="−" onClick={() => setWork((w) => ajustarManualSol(w, fase, i.vid, -1))} />
@@ -759,7 +759,7 @@ function Detalle({
                       <>{c}/{i.qty}</>
                     )}
                   </td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {editable ? (
                       <input
                         type="number"
@@ -768,22 +768,22 @@ function Detalle({
                         onChange={(e) => { const v = e.target.value.trim(); onAsignarBolsa(i, v === '' ? null : parseInt(v, 10)) }}
                         title="Bolsa (dejá vacío para sacarla)"
                         placeholder="👜"
-                        style={{ width: 38, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '1px 2px', fontSize: 12, marginRight: 6 }}
+                        style={{ width: 38, textAlign: 'center', border: `1px solid ${color.line}`, borderRadius: 5, padding: '1px 2px', fontSize: 12, marginRight: 6 }}
                       />
                     ) : typeof i.bolsa === 'number' ? (
-                      <span style={{ fontSize: 11, color: '#4338CA', marginRight: 6 }} title="Bolsa">👜{i.bolsa}</span>
+                      <span style={{ fontSize: 11, color: color.brand, marginRight: 6 }} title="Bolsa">👜{i.bolsa}</span>
                     ) : null}
                     {editable && !i.manual ? (
                       <button
                         onClick={() => { const n = prompt(`Nueva cantidad de "${i.nombre} · ${i.variante}":`, String(i.qty)); if (n != null) onCambiarQty(i, parseInt(n, 10)) }}
                         title="Cambiar cantidad"
-                        style={{ border: 'none', background: 'none', color: '#2563EB', fontSize: 13, cursor: 'pointer' }}
+                        style={{ border: 'none', background: 'none', color: color.brandSolid, fontSize: 13, cursor: 'pointer' }}
                       >
                         ✏
                       </button>
                     ) : null}
                     {editable ? (
-                      <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: '#DC2626', fontSize: 14, cursor: 'pointer' }}>
+                      <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: color.danger, fontSize: 14, cursor: 'pointer' }}>
                         ✕
                       </button>
                     ) : null}
@@ -800,7 +800,7 @@ function Detalle({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           ← Volver
         </button>
         {puedeEditarDesc ? (
@@ -812,34 +812,34 @@ function Detalle({
             }}
             placeholder="Descripción"
             title="Editar descripción de la solicitud"
-            style={{ fontWeight: 700, fontSize: 15, border: 'none', borderBottom: '1px solid #E5E7EB', padding: '2px 0', minWidth: 200, flex: 1, background: 'transparent' }}
+            style={{ fontWeight: 700, fontSize: 15, border: 'none', borderBottom: `1px solid ${color.line}`, padding: '2px 0', minWidth: 200, flex: 1, background: 'transparent' }}
           />
         ) : (
           <div style={{ fontWeight: 700, fontSize: 15 }}>{s.descripcion || 'Solicitud'}</div>
         )}
-        <span style={{ color: '#9CA3AF', fontSize: 12 }}>{s.fecha}</span>
-        <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s))} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+        <span style={{ color: color.mut2, fontSize: 12 }}>{s.fecha}</span>
+        <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s))} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           🏷️ Etiqueta de bolsa
         </button>
-        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s))} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s))} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           🧾 Ticket 80mm
         </button>
         {nBolsas > 0 ? (
           <>
-            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s))} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s))} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
               🏷️ Etiquetas de bolsas ({nBolsas})
             </button>
-            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s))} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s))} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
               📄 Reporte por bolsa
             </button>
           </>
         ) : null}
-        <label style={{ fontSize: 12, color: '#6B7280', marginLeft: 'auto' }}>
+        <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto' }}>
           Estado{' '}
           <select
             value={s.estado}
             onChange={(e) => setWork((w) => ({ ...w, estado: e.target.value as EstadoSolicitud }))}
-            style={{ padding: '4px 6px', border: '1px solid #D1D5DB', borderRadius: 6 }}
+            style={{ padding: '4px 6px', border: `1px solid ${color.line2}`, borderRadius: 6 }}
           >
             {(['pendiente', 'preparada', 'cargada', 'devuelta', 'cerrada'] as const).map((e) => (
               <option key={e} value={e}>{e === 'cargada' ? 'separado' : e}</option>
@@ -853,31 +853,31 @@ function Detalle({
       {/* Destino + aprobación. Toda solicitud tiene destino, así que siempre se muestra. */}
       {s.tipo ? (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 13 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? '#B45309' : '#0F766E', background: esConsumo ? '#FFFBEB' : '#F0FDFA', border: `1px solid ${esConsumo ? '#FDE68A' : '#99F6E4'}`, borderRadius: 6, padding: '2px 8px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? color.warningInk : color.successInk, background: esConsumo ? color.warningBg : color.successBg, border: `1px solid ${esConsumo ? color.warningBorder : color.successBorder}`, borderRadius: 6, padding: '2px 8px' }}>
             {esConsumo ? '🔥 Consumo (baja definitiva)' : '🔁 Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
           </span>
-          {s.estado === 'rechazada' ? <span style={{ color: '#B91C1C' }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
-          {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: '#15803D' }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
+          {s.estado === 'rechazada' ? <span style={{ color: color.dangerInk }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
+          {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: color.success }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
           {pendienteDeAprobar && esAprobador ? (
             <>
-              <button className="btn-sm" onClick={onAprobar} style={{ background: '#16A34A', color: '#fff' }}>✓ Aprobar</button>
-              <button className="btn-sm" onClick={onRechazar} style={{ background: '#fff', color: '#B91C1C', border: '1px solid #FCA5A5' }}>✗ Rechazar</button>
+              <button className="btn-sm" onClick={onAprobar} style={{ background: color.success, color: '#fff' }}>✓ Aprobar</button>
+              <button className="btn-sm" onClick={onRechazar} style={{ background: '#fff', color: color.dangerInk, border: `1px solid ${color.dangerBorder}` }}>✗ Rechazar</button>
             </>
           ) : pendienteDeAprobar ? (
-            <span style={{ color: '#B45309' }}>⏳ Esperando aprobación de un gerente.</span>
+            <span style={{ color: color.warningInk }}>⏳ Esperando aprobación de un gerente.</span>
           ) : null}
         </div>
       ) : null}
 
       {s.ventas ? (
-        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13 }}>
+        <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13 }}>
           <div>
             ✅ <b>Separado</b> en GN:{' '}
             {(['deposito', 'local'] as Origen[])
               .filter((o) => s.ventas?.[o] && origenVisible(o))
               .map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`)
               .join(' · ')}{' '}
-            <span style={{ color: '#9CA3AF', fontSize: 11 }}>Se separó el stock (no es retiro). Para anular, hacelo en GN.</span>
+            <span style={{ color: color.mut2, fontSize: 11 }}>Se separó el stock (no es retiro). Para anular, hacelo en GN.</span>
           </div>
           {/* Retiro físico por sector: local retira lo suyo, depósito lo suyo. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
@@ -885,18 +885,18 @@ function Detalle({
               const yaRet = retiradoDe(s, o)
               const et = o === 'deposito' ? '📦 Depósito' : '🏪 Local'
               return yaRet ? (
-                <span key={o} style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 7, padding: '3px 9px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span key={o} style={{ fontSize: 12, fontWeight: 700, color: color.successInk, background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 7, padding: '3px 9px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   ✅ {et} retirado
                   {puedeRetiroDe(o) ? (
-                    <button onClick={() => onRetirar(o, false)} title="Deshacer" style={{ background: 'none', border: 'none', color: '#0F766E', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>deshacer</button>
+                    <button onClick={() => onRetirar(o, false)} title="Deshacer" style={{ background: 'none', border: 'none', color: color.successInk, cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>deshacer</button>
                   ) : null}
                 </span>
               ) : puedeRetiroDe(o) ? (
-                <button key={o} onClick={() => onRetirar(o, true)} style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
+                <button key={o} onClick={() => onRetirar(o, true)} style={{ fontSize: 12, fontWeight: 600, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
                   Marcar retirado de {et}
                 </button>
               ) : (
-                <span key={o} style={{ fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB', borderRadius: 7, padding: '3px 9px' }}>{et}: sin retirar</span>
+                <span key={o} style={{ fontSize: 12, color: color.mut2, border: `1px solid ${color.line}`, borderRadius: 7, padding: '3px 9px' }}>{et}: sin retirar</span>
               )
             })}
           </div>
@@ -906,7 +906,7 @@ function Detalle({
           <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
             {creando ? '⏳ Separando en GN…' : esConsumo ? '🧾 Crear venta en GN (descontar)' : '🧾 Crear venta en GN (separar)'}
           </button>{' '}
-          <span style={{ color: '#9CA3AF', fontSize: 12 }}>{esConsumo ? 'Descuenta el stock (baja definitiva).' : 'Separa el stock con el cliente “Sesión de fotos” (no es retiro).'}</span>
+          <span style={{ color: color.mut2, fontSize: 12 }}>{esConsumo ? 'Descuenta el stock (baja definitiva).' : 'Separa el stock con el cliente “Sesión de fotos” (no es retiro).'}</span>
         </div>
       ) : null}
 
@@ -922,34 +922,34 @@ function Detalle({
       {editable ? (
         <div style={{ margin: '4px 0 10px' }}>
           {s.ventas ? (
-            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 11px', fontSize: 12, color: '#92400E', marginBottom: 8 }}>
+            <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '7px 11px', fontSize: 12, color: color.warningInk, marginBottom: 8 }}>
               ⚠ Esta solicitud ya tiene venta en GN. Los cambios acá <b>no ajustan GN</b> — reconciliá el stock a mano en Gestión Nube.
             </div>
           ) : null}
           {!agregando ? (
-            <button className="btn-sm" onClick={() => setAgregando(true)} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>+ Agregar producto</button>
+            <button className="btn-sm" onClick={() => setAgregando(true)} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>+ Agregar producto</button>
           ) : (
-            <div style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', borderRadius: 9, padding: 10 }}>
+            <div style={{ border: `1px solid ${color.brandBorder}`, background: color.brandBg, borderRadius: 9, padding: 10 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="🔎 Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }} />
-                <button className="btn-sm" onClick={() => { setAgregando(false); setBusqAgregar('') }} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>Cerrar</button>
+                <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="🔎 Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }} />
+                <button className="btn-sm" onClick={() => { setAgregando(false); setBusqAgregar('') }} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>Cerrar</button>
               </div>
               {busqAgregar.trim().length >= 2 ? (
                 <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {buscarProductos(variantes, busqAgregar, new Set<string>()).slice(0, 20).map((r) => (
-                    <div key={r.pid} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 7, padding: '6px 9px' }}>
+                    <div key={r.pid} style={{ background: '#fff', border: `1px solid ${color.line}`, borderRadius: 7, padding: '6px 9px' }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</div>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
                         {r.vars.map((vv) => (
-                          <button key={vv.vid} onClick={() => { const v = variantes.find((x) => x.id === vv.vid); if (v) onAgregarVariante(v) }} title={`Agregar ${vv.size}`} style={{ fontSize: 12, border: '1px solid #BFDBFE', background: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
-                            + {vv.size} <span style={{ color: '#9CA3AF' }}>({vv.stock})</span>
+                          <button key={vv.vid} onClick={() => { const v = variantes.find((x) => x.id === vv.vid); if (v) onAgregarVariante(v) }} title={`Agregar ${vv.size}`} style={{ fontSize: 12, border: `1px solid ${color.brandBorder}`, background: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+                            + {vv.size} <span style={{ color: color.mut2 }}>({vv.stock})</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : <div style={{ fontSize: 12, color: '#9CA3AF' }}>Escribí al menos 2 letras.</div>}
+              ) : <div style={{ fontSize: 12, color: color.mut2 }}>Escribí al menos 2 letras.</div>}
             </div>
           )}
         </div>
@@ -957,44 +957,44 @@ function Detalle({
 
       {/* Bolsas (Fase C #3): resumen del armado por bolsa. Aparece si hay alguna asignada. */}
       {nBolsas > 0 ? (
-        <div style={{ border: '1px solid #C7D2FE', borderRadius: 9, padding: '9px 12px', margin: '10px 0', background: '#EEF2FF' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#4338CA', marginBottom: 6 }}>👜 Bolsas ({nBolsas})</div>
+        <div style={{ border: `1px solid ${color.brandBorder}`, borderRadius: 9, padding: '9px 12px', margin: '10px 0', background: color.brandBg }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>👜 Bolsas ({nBolsas})</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {grupos.map((g) => (
-              <div key={g.n ?? 'sin'} style={{ border: `1px solid ${g.n != null ? '#C7D2FE' : '#E5E7EB'}`, background: '#fff', borderRadius: 8, padding: '6px 9px', minWidth: 150 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: g.n != null ? '#3730A3' : '#9CA3AF', marginBottom: 3 }}>
-                  {g.n != null ? `👜 Bolsa ${g.n}` : 'Sin bolsa'} <span style={{ fontWeight: 500, color: '#9CA3AF' }}>· {g.totalU} u.</span>
+              <div key={g.n ?? 'sin'} style={{ border: `1px solid ${g.n != null ? color.brandBorder : color.line}`, background: '#fff', borderRadius: 8, padding: '6px 9px', minWidth: 150 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: g.n != null ? color.brand : color.mut2, marginBottom: 3 }}>
+                  {g.n != null ? `👜 Bolsa ${g.n}` : 'Sin bolsa'} <span style={{ fontWeight: 500, color: color.mut2 }}>· {g.totalU} u.</span>
                 </div>
                 {g.items.map((i) => (
-                  <div key={i.vid} style={{ fontSize: 11, color: '#4B5563', padding: '1px 0' }}>
+                  <div key={i.vid} style={{ fontSize: 11, color: color.ink2, padding: '1px 0' }}>
                     • {i.nombre} · {i.variante} {i.qty > 1 ? `(x${i.qty})` : ''} {i.origen === 'local' ? '🏪' : '📦'}
                   </div>
                 ))}
               </div>
             ))}
           </div>
-          {editable ? <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>Asigná bolsas con el campo 👜 de cada ítem (próxima libre: {proxBolsa}).</div> : null}
+          {editable ? <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>Asigná bolsas con el campo 👜 de cada ítem (próxima libre: {proxBolsa}).</div> : null}
         </div>
       ) : null}
 
       {!esConsumo && salio(s) && falt.length > 0 && (fase === 'devolucion' || (s.devuelto && Object.keys(s.devuelto).length > 0)) ? (
-        <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
+        <div style={{ border: `1px solid ${color.dangerBorder}`, background: color.dangerBg, borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, color: '#991B1B' }}>📋 Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
+            <div style={{ fontWeight: 700, color: color.dangerInk }}>📋 Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s))} style={{ background: '#16A34A', color: '#fff' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s))} style={{ background: color.success, color: '#fff' }}>
                 📤 Enviar a Marketing
               </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')))} style={{ background: '#fff', border: '1px solid #FCA5A5', color: '#991B1B' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')))} style={{ background: '#fff', border: `1px solid ${color.dangerBorder}`, color: color.dangerInk }}>
                 📋 Copiar
               </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s))} style={{ background: '#1F2937', color: '#fff' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s))} style={{ background: color.ink, color: '#fff' }}>
                 📄 PDF
               </button>
             </div>
           </div>
           {falt.map((f) => (
-            <div key={f.vid} style={{ fontSize: 13, color: '#7F1D1D', padding: '2px 0' }}>
+            <div key={f.vid} style={{ fontSize: 13, color: color.dangerInk, padding: '2px 0' }}>
               • {f.nombre} · {f.variante}
               {f.sku ? ` · ${f.sku}` : ''} — <b>faltan {f.falta} de {f.qty}</b> {f.origen === 'local' ? '🏪' : '📦'}
             </div>
@@ -1004,21 +1004,21 @@ function Detalle({
 
       {/* Historial de cambios (Fase C). Fallback al panel viejo de "Quitados" para data sin `cambios`. */}
       {s.cambios && s.cambios.length > 0 ? (
-        <div style={{ border: '1px dashed #C7D2FE', borderRadius: 9, padding: '9px 12px', marginTop: 6, background: '#F5F3FF' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#4338CA', marginBottom: 4 }}>📝 Historial de cambios ({s.cambios.length})</div>
+        <div style={{ border: `1px dashed ${color.brandBorder}`, borderRadius: 9, padding: '9px 12px', marginTop: 6, background: color.brandBg }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 4 }}>📝 Historial de cambios ({s.cambios.length})</div>
           {[...s.cambios].reverse().map((c, idx) => (
-            <div key={idx} style={{ fontSize: 12, color: '#3730A3', padding: '1px 0' }}>
+            <div key={idx} style={{ fontSize: 12, color: color.brand, padding: '1px 0' }}>
               • {fmtTs(c.ts)} · <b>{c.por || '—'}</b> {c.accion} {c.detalle}{c.motivo ? ` · "${c.motivo}"` : ''}
             </div>
           ))}
         </div>
       ) : s.eliminados && s.eliminados.length > 0 ? (
-        <div style={{ border: '1px dashed #FCA5A5', borderRadius: 9, padding: '9px 12px', marginTop: 6, background: '#FEF2F2' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>
+        <div style={{ border: `1px dashed ${color.dangerBorder}`, borderRadius: 9, padding: '9px 12px', marginTop: 6, background: color.dangerBg }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.dangerInk, marginBottom: 4 }}>
             🗑️ Quitados de la solicitud ({s.eliminados.length})
           </div>
           {s.eliminados.map((e, idx) => (
-            <div key={`${e.vid}-${idx}`} style={{ fontSize: 12, color: '#7F1D1D' }}>
+            <div key={`${e.vid}-${idx}`} style={{ fontSize: 12, color: color.dangerInk }}>
               • {e.nombre} · {e.variante} ({e.qty}) — {e.origen === 'deposito' ? '📦' : '🏪'} · {e.fecha}
               {e.por ? ` · ${e.por}` : ''}
               {e.motivo ? ` · "${e.motivo}"` : ''}
@@ -1047,17 +1047,17 @@ function MotivoModal({ titulo, onCancelar, onOk }: { titulo: string; onCancelar:
     <div onClick={onCancelar} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{titulo}</div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Elegí el motivo del cambio (queda en el historial).</div>
+        <div style={{ fontSize: 12, color: color.mut2, marginBottom: 12 }}>Elegí el motivo del cambio (queda en el historial).</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {MOTIVOS_CAMBIO.map((m) => (
-            <button key={m} onClick={() => elegir(m)} style={{ textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', cursor: 'pointer' }}>
+            <button key={m} onClick={() => elegir(m)} style={{ textAlign: 'left', fontSize: 13, fontWeight: 600, color: color.ink2, background: color.bg, border: `1px solid ${color.line}`, borderRadius: 8, padding: '9px 12px', cursor: 'pointer' }}>
               {m}
             </button>
           ))}
         </div>
-        <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, marginTop: 10 }} />
+        <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, marginTop: 10 }} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>Cancelar</button>
+          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -1117,10 +1117,10 @@ function Combinada({
     const accionV = fase === 'devolucion' ? 'la devolución' : 'el preparado'
     const fbKey = `combi-${origen}-${fase}`
     return (
-      <div style={{ border: `1px solid ${completo ? '#A7F3D0' : '#E5E7EB'}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
+      <div style={{ border: `1px solid ${completo ? color.successBorder : color.line}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10 }}>
         <div style={{ fontWeight: 700 }}>
-          {titulo} <span style={{ color: '#9CA3AF', fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
-          {completo ? <span style={{ color: '#16A34A', fontWeight: 700 }}> ✓ completo</span> : null}
+          {titulo} <span style={{ color: color.mut2, fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
+          {completo ? <span style={{ color: color.success, fontWeight: 700 }}> ✓ completo</span> : null}
         </div>
         <div style={{ margin: '8px 0' }}>
           <ScanInput
@@ -1132,7 +1132,7 @@ function Combinada({
         {fb && fb.key === fbKey ? <div style={{ fontSize: 13, marginBottom: 6 }}>{fbTextoCombi(fb.r)}</div> : null}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'left' }}>
+            <tr style={{ fontSize: 11, color: color.mut2, textAlign: 'left' }}>
               <th style={{ padding: '3px 6px' }}>Producto</th>
               <th style={{ padding: '3px 6px' }}>Variante</th>
               <th style={{ padding: '3px 6px' }}>SKU</th>
@@ -1143,14 +1143,14 @@ function Combinada({
             {items.map((i: ItemCombinado) => {
               const ok = i.conf >= i.ped
               return (
-                <tr key={i.manual ? `m_${i.solId}_${i.vid}` : i.vid} style={ok ? { background: '#F0FDF4' } : undefined}>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>
+                <tr key={i.manual ? `m_${i.solId}_${i.vid}` : i.vid} style={ok ? { background: color.successBg } : undefined}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
                     {ok ? '✅' : '⬜'} {i.nombre}
-                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg="#5B21B6" bg="#EDE9FE" /> : null}
+                    {i.manual ? <EtiquetaMini texto="✍️ a mano" fg={color.brand} bg={color.brandBg} /> : null}
                   </td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9' }}>{i.variante}</td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', color: '#6B7280' }}>{i.sku || '—'}</td>
-                  <td style={{ padding: '3px 6px', borderTop: '1px solid #F1F5F9', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>{i.variante}</td>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, color: color.mut }}>{i.sku || '—'}</td>
+                  <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {i.manual && i.solId ? (
                       <>
                         <BotonMini label="−" onClick={() => setWorks((ws) => ws.map((s) => (s.id === i.solId ? ajustarManualSol(s, fase, i.vid, -1) : s)))} />
@@ -1173,22 +1173,22 @@ function Combinada({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           ← Volver
         </button>
         <div style={{ fontWeight: 700, fontSize: 15 }}>🔗 Vista combinada — {works.length} solicitudes</div>
       </div>
-      <div style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 12px', marginBottom: 10, background: '#F9FAFB' }}>
+      <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 12px', marginBottom: 10, background: color.bg }}>
         {works.map((s) => (
-          <div key={s.id} style={{ fontSize: 12, color: '#374151' }}>
-            • <b>{s.descripcion || '(sin descripción)'}</b> <span style={{ color: '#9CA3AF' }}>· {s.fecha} · {s.estado}</span>
-            {nventa(s) ? <span style={{ color: '#065F46' }}> · {nventa(s)}</span> : null}
+          <div key={s.id} style={{ fontSize: 12, color: color.ink2 }}>
+            • <b>{s.descripcion || '(sin descripción)'}</b> <span style={{ color: color.mut2 }}>· {s.fecha} · {s.estado}</span>
+            {nventa(s) ? <span style={{ color: color.successInk }}> · {nventa(s)}</span> : null}
           </div>
         ))}
       </div>
       <Banner prioridad={prioridad} admin={admin} />
       {completa ? (
-        <div style={{ background: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 13, color: '#065F46' }}>
+        <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 13, color: color.successInk }}>
           {fase === 'devolucion' ? (
             <>✅ <b>Devolución completa</b> de las {works.length} solicitudes.</>
           ) : (
@@ -1305,9 +1305,9 @@ function Draft({
       key={o}
       onClick={() => setOrigenSel(o)}
       style={{
-        border: `1px solid ${origenSel === o ? '#378ADD' : '#D1D5DB'}`,
-        background: origenSel === o ? '#378ADD' : '#fff',
-        color: origenSel === o ? '#fff' : '#374151',
+        border: `1px solid ${origenSel === o ? color.brandSolid : color.line2}`,
+        background: origenSel === o ? color.brandSolid : '#fff',
+        color: origenSel === o ? '#fff' : color.ink2,
         borderRadius: 8,
         padding: '5px 12px',
         fontSize: 13,
@@ -1325,25 +1325,25 @@ function Draft({
           motivo puede tener cualquier destino — la foto de una remera vuelve, la de un
           vidrio templado no. Los dos botones están SIEMPRE visibles, con su explicación. */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 13, color: color.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
           Motivo
           <select
             value={draft.motivo || MOTIVO_DEFAULT}
             onChange={(e) => setDraft((d) => ({ ...d, motivo: e.target.value }))}
-            style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+            style={{ padding: '7px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
           >
             {motivosVisibles(draft.motivo).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
-        <span style={{ fontSize: 13, color: '#374151' }}>Destino:</span>
+        <span style={{ fontSize: 13, color: color.ink2 }}>Destino:</span>
         {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
           <span key={t} style={{ display: 'inline-flex', alignItems: 'center' }}>
             <button
               onClick={() => setDraft((d) => ({ ...d, tipo: t }))}
               style={{
-                border: `1px solid ${draft.tipo === t ? '#378ADD' : '#D1D5DB'}`,
-                background: draft.tipo === t ? '#378ADD' : '#fff',
-                color: draft.tipo === t ? '#fff' : '#374151',
+                border: `1px solid ${draft.tipo === t ? color.brandSolid : color.line2}`,
+                background: draft.tipo === t ? color.brandSolid : '#fff',
+                color: draft.tipo === t ? '#fff' : color.ink2,
                 borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}
             >
@@ -1352,7 +1352,7 @@ function Draft({
             <InfoPopover titulo={t === 'retornable' ? 'Retornable' : 'Consumo'}>{AYUDA_DESTINO[t]}</InfoPopover>
           </span>
         ))}
-        {draft.tipo === 'consumo' ? <span style={{ fontSize: 12, color: '#B45309' }}>⚠ baja definitiva de stock · necesita aprobación</span> : null}
+        {draft.tipo === 'consumo' ? <span style={{ fontSize: 12, color: color.warningInk }}>⚠ baja definitiva de stock · necesita aprobación</span> : null}
       </div>
 
       {/* Descripción — el "nombre" del pedido (arriba). */}
@@ -1360,35 +1360,35 @@ function Draft({
         value={draft.desc}
         onChange={(e) => setDraft((d) => ({ ...d, desc: e.target.value }))}
         placeholder={draft.motivo === 'Sesión de fotos' ? 'Descripción de la sesión (ej. Sesión otoño · jueves)' : '¿Para qué? (ej. molde falda otoño / video reel funda)'}
-        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, marginBottom: 14 }}
+        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 14, marginBottom: 14 }}
       />
 
       {/* Agregar producto — la forma PRINCIPAL de pedir. */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Agregar producto</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: color.ink2, marginBottom: 6 }}>Agregar producto</div>
         <input
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           autoComplete="off"
           placeholder="🔎 Buscá por nombre o SKU y tocá el que querés…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14 }}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 14 }}
         />
         {busqueda.trim().length >= 2 && (
           <div style={{ marginTop: 4 }}>
             {resultados.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '4px 2px' }}>Sin resultados con stock.</div>
+              <div style={{ fontSize: 12, color: color.mut2, padding: '4px 2px' }}>Sin resultados con stock.</div>
             ) : (
-              <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, maxHeight: 280, overflow: 'auto' }}>
+              <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, maxHeight: 280, overflow: 'auto' }}>
                 {resultados.map((r) => (
-                  <div key={r.pid} style={{ padding: '7px 10px', borderTop: '1px solid #F1F5F9' }}>
+                  <div key={r.pid} style={{ padding: '7px 10px', borderTop: `1px solid ${color.bg2}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                       <span style={{ fontWeight: 600, fontSize: 13 }}>
                         {r.name}
-                        {r.yaEsta ? <span style={{ color: '#16A34A', fontSize: 11 }}> ✓ ya está</span> : null}
+                        {r.yaEsta ? <span style={{ color: color.success, fontSize: 11 }}> ✓ ya está</span> : null}
                       </span>
                       <button
                         onClick={() => setDraft((d) => traerProducto(d, r.pid, variantes, productos))}
-                        style={{ border: '1px solid #D1D5DB', background: '#fff', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ border: `1px solid ${color.line2}`, background: '#fff', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
                         Traer producto
                       </button>
@@ -1399,9 +1399,9 @@ function Draft({
                           key={v.vid}
                           onClick={() => setDraft((d) => traerVariante(d, r.pid, v.vid, variantes, productos))}
                           title={v.sku}
-                          style={{ border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#3730A3', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+                          style={{ border: `1px solid ${color.brandBorder}`, background: color.brandBg, color: color.brand, borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
                         >
-                          {v.size} <span style={{ color: '#6366F1' }}>({v.stock})</span>
+                          {v.size} <span style={{ color: color.brand }}>({v.stock})</span>
                         </button>
                       ))}
                     </div>
@@ -1414,14 +1414,14 @@ function Draft({
       </div>
 
       {/* Escáner — secundario: para cuando ya separaste los productos físicamente. */}
-      <div style={{ border: '1px solid #E5E7EB', background: '#FAFBFC', borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
+      <div style={{ border: `1px solid ${color.line}`, background: color.bg, borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#374151' }}>¿Ya los separaste? Escaneálos</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: color.ink2 }}>¿Ya los separaste? Escaneálos</span>
           <InfoPopover titulo="Cargar por escáner">
             Si ya separaste los productos físicamente, escaneá el código de barras: se agregan solos con la ubicación elegida. Es una alternativa al buscador.
           </InfoPopover>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#6B7280' }}>Sacás de:</span>
+            <span style={{ fontSize: 12, color: color.mut }}>Sacás de:</span>
             {chipOrigen('deposito')}
             {chipOrigen('local')}
           </span>
@@ -1435,9 +1435,9 @@ function Draft({
       </div>
 
       {/* Producto sin código — alternativo (neutro, no protagonista, sin fondo violeta). */}
-      <div style={{ border: '1px dashed #D1D5DB', borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
+      <div style={{ border: `1px dashed ${color.line2}`, borderRadius: 9, padding: '9px 11px', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-          <span style={{ fontWeight: 600, fontSize: 12.5, color: '#374151' }}>¿No lo encontrás? Cargalo sin código</span>
+          <span style={{ fontWeight: 600, fontSize: 12.5, color: color.ink2 }}>¿No lo encontrás? Cargalo sin código</span>
           <InfoPopover titulo="Producto sin código de barra">
             Para prendas que todavía no tienen código de barras. No genera venta: solo se controla que salga y vuelva.
           </InfoPopover>
@@ -1453,7 +1453,7 @@ function Draft({
               }
             }}
             placeholder="Descripción (ej. Remera estampa X)"
-            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+            style={{ flex: 1, minWidth: 200, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
           />
           <input
             type="number"
@@ -1461,46 +1461,46 @@ function Draft({
             value={manQty}
             onChange={(e) => setManQty(e.target.value)}
             title="Cantidad"
-            style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: '1px solid #D1D5DB', borderRadius: 7 }}
+            style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
           />
-          <button className="btn-sm" onClick={addManual} style={{ background: '#fff', color: '#374151', border: '1px solid #D1D5DB' }}>
+          <button className="btn-sm" onClick={addManual} style={{ background: '#fff', color: color.ink2, border: `1px solid ${color.line2}` }}>
             + Agregar
           </button>
         </div>
       </div>
 
       {/* Agregados — lo que llevás pedido en esta sesión. */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: color.ink2, marginBottom: 6 }}>
         Agregados{total ? ` · ${total} u.` : ''}
       </div>
       {vacio ? (
-        <div style={{ color: '#9CA3AF', fontSize: 13, padding: '10px 0 4px' }}>
+        <div style={{ color: color.mut2, fontSize: 13, padding: '10px 0 4px' }}>
           Todavía no agregaste nada. Buscá un producto arriba para empezar a pedir.
         </div>
       ) : (
         <>
           {draft.prods.map((p) => (
-            <div key={p.pid} style={{ border: '1px solid #E5E7EB', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+            <div key={p.pid} style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
-                <button onClick={() => setDraft((d) => quitarProd(d, p.pid))} title="Quitar producto" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                <button onClick={() => setDraft((d) => quitarProd(d, p.pid))} title="Quitar producto" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                   ×
                 </button>
               </div>
               <div style={{ marginTop: 4 }}>
                 {p.variantes.length === 0 ? (
-                  <span style={{ color: '#9CA3AF', fontSize: 12 }}>sin variantes con stock</span>
+                  <span style={{ color: color.mut2, fontSize: 12 }}>sin variantes con stock</span>
                 ) : (
                   p.variantes.map((v) => (
                     <label
                       key={v.vid}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 2px', fontSize: 13, borderTop: '1px solid #F1F5F9', cursor: 'pointer', fontWeight: v.sel ? 600 : 400 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 2px', fontSize: 13, borderTop: `1px solid ${color.bg2}`, cursor: 'pointer', fontWeight: v.sel ? 600 : 400 }}
                     >
                       <input type="checkbox" checked={v.sel} onChange={(e) => setDraft((d) => toggleVar(d, p.pid, v.vid, e.target.checked))} style={{ flex: '0 0 auto' }} />
                       <span style={{ flex: 1, minWidth: 0 }}>
                         {v.size}
                         {v.origenManual ? <span title="Ubicación fijada por escaneo" style={{ fontSize: 11 }}> {v.origenManual === 'local' ? '🏪' : '📦'}</span> : null}{' '}
-                        <span style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 400 }}>(stock {v.local + v.deposito}{v.sku ? ' · ' + v.sku : ''})</span>
+                        <span style={{ color: color.mut2, fontSize: 11, fontWeight: 400 }}>(stock {v.local + v.deposito}{v.sku ? ' · ' + v.sku : ''})</span>
                       </span>
                       {v.sel ? (
                         <input
@@ -1509,7 +1509,7 @@ function Draft({
                           value={v.qty}
                           onChange={(e) => setDraft((d) => setVarQty(d, p.pid, v.vid, e.target.value))}
                           title="Cantidad"
-                          style={{ width: 56, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
+                          style={{ width: 56, textAlign: 'center', border: `1px solid ${color.line}`, borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
                         />
                       ) : null}
                     </label>
@@ -1520,28 +1520,28 @@ function Draft({
           ))}
 
           {draft.pendientes.length > 0 && (
-            <div style={{ border: '1px dashed #FBBF24', background: '#FFFBEB', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', marginBottom: 4 }}>🆕 Nuevos escaneados (aún no en GN)</div>
+            <div style={{ border: `1px dashed ${color.warningBorder}`, background: color.warningBg, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: color.warningInk, marginBottom: 4 }}>🆕 Nuevos escaneados (aún no en GN)</div>
               {draft.pendientes.map((pn) => (
-                <div key={pn.barcode} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid #FDE68A' }}>
+                <div key={pn.barcode} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: `1px solid ${color.warningBorder}` }}>
                   <span style={{ flex: 1, fontFamily: 'monospace' }}>
                     {pn.barcode} <span style={{ fontSize: 11, fontFamily: 'inherit' }}>{pn.origenManual === 'local' ? '🏪' : '📦'}</span>
                   </span>
-                  <span style={{ color: '#92400E', fontWeight: 600 }}>x{pn.qty}</span>
-                  <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Quitar (mal escaneo)" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                  <span style={{ color: color.warningInk, fontWeight: 600 }}>x{pn.qty}</span>
+                  <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Quitar (mal escaneo)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                     ×
                   </button>
                 </div>
               ))}
-              <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>Se guardan por código de barras. Cuando el producto se cargue en GN, se vinculan solos.</div>
+              <div style={{ fontSize: 11, color: color.warningInk, marginTop: 4 }}>Se guardan por código de barras. Cuando el producto se cargue en GN, se vinculan solos.</div>
             </div>
           )}
 
           {draft.manuales.length > 0 && (
-            <div style={{ border: '1px dashed #C4B5FD', background: '#F5F3FF', borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#5B21B6', marginBottom: 4 }}>✍️ Sin código (control a mano)</div>
+            <div style={{ border: `1px dashed ${color.brandBorder}`, background: color.brandBg, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: color.brand, marginBottom: 4 }}>✍️ Sin código (control a mano)</div>
               {draft.manuales.map((m) => (
-                <div key={m.mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid #DDD6FE' }}>
+                <div key={m.mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: `1px solid ${color.brandBorder}` }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     {m.desc} <span style={{ fontSize: 11 }} title="Sale de Depósito">📦</span>
                   </span>
@@ -1551,22 +1551,22 @@ function Draft({
                     value={m.qty}
                     onChange={(e) => setDraft((d) => setManualQty(d, m.mid, e.target.value))}
                     title="Cantidad"
-                    style={{ width: 56, textAlign: 'center', border: '1px solid #DDD6FE', borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
+                    style={{ width: 56, textAlign: 'center', border: `1px solid ${color.brandBorder}`, borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
                   />
-                  <button onClick={() => setDraft((d) => quitarManual(d, m.mid))} title="Quitar" style={{ border: 'none', background: 'none', color: '#CBD5E1', cursor: 'pointer', fontSize: 15 }}>
+                  <button onClick={() => setDraft((d) => quitarManual(d, m.mid))} title="Quitar" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                     ×
                   </button>
                 </div>
               ))}
-              <div style={{ fontSize: 11, color: '#7C3AED', marginTop: 4 }}>No generan venta ni tocan stock. Se retiran de 📦 Depósito y se controla su devolución a mano.</div>
+              <div style={{ fontSize: 11, color: color.brand, marginTop: 4 }}>No generan venta ni tocan stock. Se retiran de 📦 Depósito y se controla su devolución a mano.</div>
             </div>
           )}
         </>
       )}
 
       {/* Prioridad de retiro — config de lógica: abajo, sin color. */}
-      <div style={{ fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 5, margin: '16px 0 12px' }}>
-        🏷️ Prioridad de retiro: <b style={{ color: '#374151' }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
+      <div style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5, margin: '16px 0 12px' }}>
+        🏷️ Prioridad de retiro: <b style={{ color: color.ink2 }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
         <InfoPopover titulo="Prioridad de retiro">
           De dónde se retira cada producto: <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b> (si no hay stock, del otro depósito). Lo escaneado respeta la ubicación que elijas; lo agregado a mano se asigna solo.{admin ? ' Se configura al completar la migración.' : ''}
         </InfoPopover>
@@ -1584,13 +1584,13 @@ function Draft({
 function fbDraft(r: ResultadoDraftScan) {
   if (r.tipo === 'nuevo') {
     return (
-      <span style={{ color: '#16A34A' }}>
+      <span style={{ color: color.success }}>
         🆕 Nuevo (sin cargar): <b>{r.barcode}</b> (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
       </span>
     )
   }
   return (
-    <span style={{ color: '#16A34A' }}>
+    <span style={{ color: color.success }}>
       ✓ Agregado: <b>{r.nombre}</b> · {r.size} (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
     </span>
   )
@@ -1600,16 +1600,16 @@ function fbDraft(r: ResultadoDraftScan) {
 
 /** Feedback de un escaneo en el detalle. */
 function fbTexto(r: ResultadoEscaneo) {
-  if (r.tipo === 'no-encontrado') return <span style={{ color: '#DC2626' }}>✗ &quot;{r.code}&quot; no está en esta lista (producto o talle equivocado).</span>
-  if (r.tipo === 'ya-completo') return <span style={{ color: '#D97706' }}>⚠ {r.nombre} · {r.variante} ya estaba completo ({r.qty}).</span>
-  return <span style={{ color: '#16A34A' }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
+  if (r.tipo === 'no-encontrado') return <span style={{ color: color.danger }}>✗ &quot;{r.code}&quot; no está en esta lista (producto o talle equivocado).</span>
+  if (r.tipo === 'ya-completo') return <span style={{ color: color.warning }}>⚠ {r.nombre} · {r.variante} ya estaba completo ({r.qty}).</span>
+  return <span style={{ color: color.success }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
 }
 
 /** Feedback de un escaneo en la vista combinada. */
 function fbTextoCombi(r: ResultadoCombi) {
-  if (r.tipo === 'no-encontrado') return <span style={{ color: '#DC2626' }}>✗ &quot;{r.code}&quot; no está en estas solicitudes (producto o talle equivocado).</span>
-  if (r.tipo === 'ya-completo') return <span style={{ color: '#D97706' }}>⚠ {r.nombre} · {r.variante} ya está completo en las solicitudes.</span>
-  return <span style={{ color: '#16A34A' }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
+  if (r.tipo === 'no-encontrado') return <span style={{ color: color.danger }}>✗ &quot;{r.code}&quot; no está en estas solicitudes (producto o talle equivocado).</span>
+  if (r.tipo === 'ya-completo') return <span style={{ color: color.warning }}>⚠ {r.nombre} · {r.variante} ya está completo en las solicitudes.</span>
+  return <span style={{ color: color.success }}>✓ {r.nombre} · {r.variante} ({r.done}/{r.qty})</span>
 }
 
 /** Input de escaneo: al Enter dispara onScan con el valor y limpia el campo. */
@@ -1629,11 +1629,11 @@ function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; place
       style={{
         width: '100%',
         padding: '8px 10px',
-        border: `2px solid ${disabled ? '#E5E7EB' : '#378ADD'}`,
+        border: `2px solid ${disabled ? color.line : color.brandSolid}`,
         borderRadius: 8,
         fontSize: 14,
         boxSizing: 'border-box',
-        background: disabled ? '#F9FAFB' : '#fff',
+        background: disabled ? color.bg : '#fff',
       }}
     />
   )
@@ -1652,9 +1652,9 @@ function BotonMini({ label, acento, onClick }: { label: string; acento?: boolean
     <button
       onClick={onClick}
       style={{
-        border: `1px solid ${acento ? '#7C3AED' : '#DDD6FE'}`,
-        background: acento ? '#7C3AED' : '#fff',
-        color: acento ? '#fff' : '#5B21B6',
+        border: `1px solid ${acento ? color.brand : color.brandBorder}`,
+        background: acento ? color.brand : '#fff',
+        color: acento ? '#fff' : color.brand,
         borderRadius: 6,
         width: 24,
         height: 24,
@@ -1674,9 +1674,9 @@ function BotonFase({ activo, onClick, label }: { activo: boolean; onClick: () =>
     <button
       onClick={onClick}
       style={{
-        border: `1px solid ${activo ? '#378ADD' : '#D1D5DB'}`,
-        background: activo ? '#378ADD' : '#fff',
-        color: activo ? '#fff' : '#374151',
+        border: `1px solid ${activo ? color.brandSolid : color.line2}`,
+        background: activo ? color.brandSolid : '#fff',
+        color: activo ? '#fff' : color.ink2,
         borderRadius: 8,
         padding: '6px 12px',
         fontSize: 12,

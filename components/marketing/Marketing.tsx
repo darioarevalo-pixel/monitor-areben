@@ -28,7 +28,7 @@ import {
   ventasPorCanal,
 } from '@/lib/marketing/core'
 import { useMarketing } from './useMarketing'
-import { useConfirmar } from '@/components/ui'
+import { color, useConfirmar } from '@/components/ui'
 
 const STALE = 15 * 60 * 1000 // fotos "viejas" a partir de 15 min (salvaguarda del puente)
 const TOPE = 300 // la tabla muestra como mucho 300 filas (igual que el legacy)
@@ -184,7 +184,7 @@ export function Marketing() {
       <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {audit.data?.cachedAt ? (
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+            <div style={{ fontSize: 11, color: color.mut2 }}>
               TN actualizado: {new Date(audit.data.cachedAt).toLocaleDateString('es-AR')}{' '}
               {new Date(audit.data.cachedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
             </div>
@@ -194,7 +194,7 @@ export function Marketing() {
             onClick={refrescarFotos}
             disabled={refrescando}
             title="Trae las fotos y datos más nuevos de TiendaNube (bypassa el cache). Tocalo si cargaste fotos recién."
-            style={{ background: '#fff', border: '1px solid #D1D5DB' }}
+            style={{ background: '#fff', border: `1px solid ${color.line2}` }}
           >
             {refrescando ? '⏳ Actualizando fotos…' : '🔄 Actualizar fotos'}
           </button>
@@ -203,17 +203,17 @@ export function Marketing() {
               className="btn-sm"
               onClick={filtroTablasPendientes}
               title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes."
-              style={{ background: '#0F766E', color: '#fff' }}
+              style={{ background: color.successInk, color: '#fff' }}
             >
               📏 Pendientes de tabla (con stock)
             </button>
           )}
           {selMode ? (
             <>
-              <button className="btn-sm" onClick={mandarSel} style={{ background: '#7C3AED', color: '#fff' }}>
+              <button className="btn-sm" onClick={mandarSel} style={{ background: color.brandSolid, color: '#fff' }}>
                 📷 Mandar a sesión de fotos ({sel.size})
               </button>
-              <button className="btn-sm" onClick={cancelarSel} style={{ background: '#fff', border: '1px solid #D1D5DB' }}>
+              <button className="btn-sm" onClick={cancelarSel} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
                 Cancelar
               </button>
             </>
@@ -223,7 +223,7 @@ export function Marketing() {
               onClick={entrarSel}
               disabled={refrescando}
               title="Elegí productos para mandarlos a Sesión de fotos"
-              style={{ background: '#7C3AED', color: '#fff' }}
+              style={{ background: color.brandSolid, color: '#fff' }}
             >
               📷 Productos para sesión de fotos
             </button>
@@ -400,13 +400,13 @@ export function Marketing() {
           <tbody>
             {!listo ? (
               <tr>
-                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: '#9CA3AF' }}>
+                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: color.mut2 }}>
                   {audit.error ? `Error: ${audit.error}` : 'Cargando datos de TiendaNube y cruzando con stock/ventas…'}
                 </td>
               </tr>
             ) : visibles.length === 0 ? (
               <tr>
-                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: '#9CA3AF' }}>
+                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: color.mut2 }}>
                   Sin resultados con los filtros actuales
                 </td>
               </tr>
@@ -435,7 +435,7 @@ export function Marketing() {
       </div>
 
       {listo && lista.length > 0 && (
-        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, textAlign: 'right' }}>
+        <div style={{ fontSize: 12, color: color.mut2, marginTop: 8, textAlign: 'right' }}>
           {selMode ? (
             <>
               <b>{sel.size}</b> elegidos ·{' '}
@@ -453,7 +453,7 @@ export function Marketing() {
 
 const inputStyle: React.CSSProperties = {
   padding: '7px 10px',
-  border: '1px solid #D1D5DB',
+  border: `1px solid ${color.line2}`,
   borderRadius: 8,
   fontSize: 13,
   outline: 'none',
@@ -465,7 +465,7 @@ const inputStyle: React.CSSProperties = {
 function Filtro({ label, info, children }: { label: string; info: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center' }}>
+      <div style={{ fontSize: 12, color: color.mut, fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center' }}>
         {label}
         <InfoPopover titulo={label}>{info}</InfoPopover>
       </div>
@@ -505,13 +505,13 @@ function MultiSelect({
   return (
     <div className="mkt-multi">
       <button type="button" className="mkt-multi-btn" onClick={onToggle}>
-        <span style={activo ? { color: '#185fa5', fontWeight: 600 } : undefined}>{texto}</span>
+        <span style={activo ? { color: color.brand, fontWeight: 600 } : undefined}>{texto}</span>
         <span style={{ opacity: 0.5 }}>▾</span>
       </button>
       {open && (
         <div className="mkt-multi-panel">
           {opciones.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: 6 }}>Sin opciones</div>
+            <div style={{ fontSize: 12, color: color.mut2, padding: 6 }}>Sin opciones</div>
           ) : (
             opciones.map((o) => (
               <label key={o.v}>
@@ -559,7 +559,7 @@ function Fila({
   const fotoUrl = x.tn.images?.[0] || null
   const cohorteLabel = x.ingresoMes ? mesLabelCorto(x.ingresoMes) : ''
   const meta = [x.gn.category, cohorteLabel].filter(Boolean).join(' · ')
-  const stockColor = x.stock === 0 ? '#DC2626' : x.stock <= 5 ? '#D97706' : x.topLowStock ? '#DC2626' : '#111'
+  const stockColor = x.stock === 0 ? color.danger : x.stock <= 5 ? color.warning : x.topLowStock ? color.danger : '#111'
 
   const handle = x.tn.handle || ''
   const tnId = x.tn.id || ''
@@ -590,30 +590,30 @@ function Fila({
           <div style={{ fontWeight: 500 }}>
             {abierto ? '▾' : '▸'} {x.gn.name}
           </div>
-          {meta ? <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{meta}</div> : null}
+          {meta ? <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>{meta}</div> : null}
         </td>
-        <td style={{ fontSize: 12, color: '#666' }}>{x.categoriasTNStr || '—'}</td>
+        <td style={{ fontSize: 12, color: color.mut }}>{x.categoriasTNStr || '—'}</td>
         <td style={{ textAlign: 'center' }}>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-            <span title={img === 0 ? 'Sin foto' : img <= 2 ? 'Pocas fotos' : 'OK'} style={{ color: img === 0 ? '#DC2626' : img <= 2 ? '#D97706' : '#16A34A' }}>
+            <span title={img === 0 ? 'Sin foto' : img <= 2 ? 'Pocas fotos' : 'OK'} style={{ color: img === 0 ? color.danger : img <= 2 ? color.warning : color.success }}>
               📷 {img}
             </span>
-            <span title={x.tn.has_desc ? 'OK' : 'Sin descripción'} style={{ color: x.tn.has_desc ? '#16A34A' : '#DC2626' }}>
+            <span title={x.tn.has_desc ? 'OK' : 'Sin descripción'} style={{ color: x.tn.has_desc ? color.success : color.danger }}>
               📝 {x.tn.has_desc ? '✓' : '✗'}
             </span>
             {talles && x.tn.has_desc ? (
               tieneTabla(x.tn) ? (
-                <span title="Con tabla de talles" style={{ color: '#16A34A' }}>
+                <span title="Con tabla de talles" style={{ color: color.success }}>
                   📏 ✓
                 </span>
               ) : (
-                <span title="Le falta la tabla de talles" style={{ color: '#D97706' }}>
+                <span title="Le falta la tabla de talles" style={{ color: color.warning }}>
                   📏 ✗
                 </span>
               )
             ) : null}
             {!x.tn.published ? (
-              <span title="Oculto" style={{ color: '#DC2626' }}>
+              <span title="Oculto" style={{ color: color.danger }}>
                 ●
               </span>
             ) : null}
@@ -621,22 +621,22 @@ function Fila({
         </td>
         <td style={{ textAlign: 'right', fontWeight: 500 }}>
           {x.topLowStock ? (
-            <strong style={{ color: '#DC2626' }}>⚠ {x.stock}</strong>
+            <strong style={{ color: color.danger }}>⚠ {x.stock}</strong>
           ) : (
             <span style={{ color: stockColor }}>{x.stock}</span>
           )}
         </td>
-        <td onClick={onExpand} style={{ textAlign: 'right', fontWeight: 500, cursor: 'pointer', color: '#378ADD' }} title="Ver Local vs Tienda online">
+        <td onClick={onExpand} style={{ textAlign: 'right', fontWeight: 500, cursor: 'pointer', color: color.brandSolid }} title="Ver Local vs Tienda online">
           {x.sales30}
         </td>
         <td style={{ textAlign: 'center', fontSize: 18 }}>
           {handle ? (
-            <a href={`${tiendaBaseUrl(marca)}/productos/${handle}`} target="_blank" rel="noreferrer" title="Ver en tienda" style={{ color: '#378ADD', textDecoration: 'none' }}>
+            <a href={`${tiendaBaseUrl(marca)}/productos/${handle}`} target="_blank" rel="noreferrer" title="Ver en tienda" style={{ color: color.brandSolid, textDecoration: 'none' }}>
               🌐
             </a>
           ) : null}{' '}
           {tnId ? (
-            <a href={`${adminBaseUrl(marca)}/${tnId}`} target="_blank" rel="noreferrer" title="Editar en TN admin" style={{ color: '#6366F1', textDecoration: 'none' }}>
+            <a href={`${adminBaseUrl(marca)}/${tnId}`} target="_blank" rel="noreferrer" title="Editar en TN admin" style={{ color: color.brand, textDecoration: 'none' }}>
               ✏️
             </a>
           ) : null}
@@ -678,12 +678,12 @@ function Detalle({
   const conVariantes = (tn.image_count || 0) > 0 && (tn.variantes_total || 0) > 1
 
   const titulo = (t: string) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: '#7F77DD', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{t}</div>
+    <div style={{ fontSize: 11, fontWeight: 700, color: color.brand, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{t}</div>
   )
 
   return (
     <tr>
-      <td colSpan={colspan} style={{ background: '#F9FAFB', padding: '14px 22px', borderBottom: '1px solid #E5E7EB' }}>
+      <td colSpan={colspan} style={{ background: color.bg, padding: '14px 22px', borderBottom: `1px solid ${color.line}` }}>
         <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
           <div>
             {titulo('Stock completo')}
@@ -693,17 +693,17 @@ function Detalle({
                   {vars.map((v, i) => (
                     <tr key={i}>
                       <td style={{ padding: '2px 18px 2px 0', color: '#555' }}>{v.size || '—'}</td>
-                      <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 600, color: v.stock <= 0 ? '#DC2626' : v.stock <= 5 ? '#D97706' : '#111' }}>{v.stock}</td>
+                      <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 600, color: v.stock <= 0 ? color.danger : v.stock <= 5 ? color.warning : '#111' }}>{v.stock}</td>
                     </tr>
                   ))}
-                  <tr style={{ borderTop: '1px solid #E5E7EB' }}>
+                  <tr style={{ borderTop: `1px solid ${color.line}` }}>
                     <td style={{ padding: '5px 18px 2px 0', fontWeight: 700 }}>Total</td>
                     <td style={{ padding: '5px 0', textAlign: 'right', fontWeight: 700 }}>{totalStock}</td>
                   </tr>
                 </tbody>
               </table>
             ) : (
-              <span style={{ color: '#9CA3AF', fontSize: 12 }}>Sin variantes con stock</span>
+              <span style={{ color: color.mut2, fontSize: 12 }}>Sin variantes con stock</span>
             )}
           </div>
           <div>
@@ -715,7 +715,7 @@ function Detalle({
               <div>
                 🌐 <b>Tienda online:</b> {canal.online} u
               </div>
-              <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4 }}>ventas de los últimos 30 días</div>
+              <div style={{ color: color.mut2, fontSize: 11, marginTop: 4 }}>ventas de los últimos 30 días</div>
             </div>
           </div>
           <div>
@@ -726,17 +726,17 @@ function Detalle({
                   <b>{tn.variantes_con_foto || 0}</b> de {tn.variantes_total} variantes con foto propia
                 </div>
                 {sinFotoVar.length ? (
-                  <div style={{ color: '#DC2626', marginTop: 3 }}>
+                  <div style={{ color: color.danger, marginTop: 3 }}>
                     Sin foto propia (usan la principal):
                     <br />
                     <b>{sinFotoVar.join(' · ')}</b>
                   </div>
                 ) : (
-                  <div style={{ color: '#16A34A', marginTop: 3 }}>✓ Todas las variantes tienen foto propia</div>
+                  <div style={{ color: color.success, marginTop: 3 }}>✓ Todas las variantes tienen foto propia</div>
                 )}
               </div>
             ) : (
-              <div style={{ color: '#9CA3AF', fontSize: 12 }}>Una sola variante o sin fotos en TN.</div>
+              <div style={{ color: color.mut2, fontSize: 12 }}>Una sola variante o sin fotos en TN.</div>
             )}
           </div>
         </div>

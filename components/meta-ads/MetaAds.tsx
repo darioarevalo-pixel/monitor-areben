@@ -7,6 +7,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { puedeSub } from '@/lib/permisos'
 import { pausarAnuncio, traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
 import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
+import { chartColor, color as paleta } from '@/components/ui'
 
 /** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
 type EstadoPausa = { status?: string; pending?: boolean; error?: string }
@@ -44,19 +45,19 @@ const diaCorto = (iso: string) => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7
 // Rótulo + color de un ranking de Meta (ABOVE_AVERAGE / AVERAGE / BELOW_AVERAGE_* / UNKNOWN).
 function rotuloRanking(r?: string | null): { txt: string; color: string; bg: string } | null {
   if (!r || r === 'UNKNOWN') return null
-  if (r === 'ABOVE_AVERAGE') return { txt: 'Arriba del promedio', color: '#15803D', bg: '#F0FDF4' }
-  if (r === 'AVERAGE') return { txt: 'En el promedio', color: '#6B7280', bg: '#F3F4F6' }
-  return { txt: 'Debajo del promedio', color: '#B91C1C', bg: '#FEF2F2' } // BELOW_AVERAGE_10/20/35
+  if (r === 'ABOVE_AVERAGE') return { txt: 'Arriba del promedio', color: paleta.success, bg: paleta.successBg }
+  if (r === 'AVERAGE') return { txt: 'En el promedio', color: paleta.mut, bg: paleta.bg2 }
+  return { txt: 'Debajo del promedio', color: paleta.dangerInk, bg: paleta.dangerBg } // BELOW_AVERAGE_10/20/35
 }
 
 // Rótulo + color del estado de entrega (effective_status).
 function rotuloEstado(s?: string | null): { txt: string; color: string; bg: string } | null {
   if (!s) return null
-  if (s === 'ACTIVE') return { txt: 'Activo', color: '#15803D', bg: '#F0FDF4' }
-  if (s === 'PAUSED' || s === 'ADSET_PAUSED' || s === 'CAMPAIGN_PAUSED') return { txt: 'Pausado', color: '#6B7280', bg: '#F3F4F6' }
-  if (s === 'PENDING_REVIEW' || s === 'IN_PROCESS' || s === 'PENDING_PROCESSING') return { txt: 'En revisión', color: '#B45309', bg: '#FFFBEB' }
-  if (s === 'DISAPPROVED' || s === 'WITH_ISSUES') return { txt: 'Con problemas', color: '#B91C1C', bg: '#FEF2F2' }
-  return { txt: s.toLowerCase().replace(/_/g, ' '), color: '#6B7280', bg: '#F3F4F6' }
+  if (s === 'ACTIVE') return { txt: 'Activo', color: paleta.success, bg: paleta.successBg }
+  if (s === 'PAUSED' || s === 'ADSET_PAUSED' || s === 'CAMPAIGN_PAUSED') return { txt: 'Pausado', color: paleta.mut, bg: paleta.bg2 }
+  if (s === 'PENDING_REVIEW' || s === 'IN_PROCESS' || s === 'PENDING_PROCESSING') return { txt: 'En revisión', color: paleta.warningInk, bg: paleta.warningBg }
+  if (s === 'DISAPPROVED' || s === 'WITH_ISSUES') return { txt: 'Con problemas', color: paleta.dangerInk, bg: paleta.dangerBg }
+  return { txt: s.toLowerCase().replace(/_/g, ' '), color: paleta.mut, bg: paleta.bg2 }
 }
 
 const genero = (g: string) => (g === 'male' ? 'Hombres' : g === 'female' ? 'Mujeres' : g === 'unknown' ? 'Sin dato' : g || '—')
@@ -133,9 +134,9 @@ export function MetaAds() {
     <div>
       {/* Rango + info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 13, color: paleta.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
           Rango:
-          <select value={preset} onChange={(e) => setPreset(e.target.value as PresetMetaAds)} style={{ padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
+          <select value={preset} onChange={(e) => setPreset(e.target.value as PresetMetaAds)} style={{ padding: '6px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
             {RANGOS.map((r) => <option key={r.k} value={r.k}>{r.label}</option>)}
           </select>
         </label>
@@ -147,14 +148,14 @@ export function MetaAds() {
 
       {/* Selector de cuenta (chips) */}
       {ovEstado.fase === 'error' ? (
-        <div className="card" style={{ color: '#DC2626' }}>
+        <div className="card" style={{ color: paleta.danger }}>
           No se pudieron traer las cuentas de Meta: {ovEstado.motivo}
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>Si dice &quot;Meta Ads no configurado&quot;, falta <code>META_ADS_TOKEN</code> en el servidor.</div>
+          <div style={{ fontSize: 12, color: paleta.mut2, marginTop: 6 }}>Si dice &quot;Meta Ads no configurado&quot;, falta <code>META_ADS_TOKEN</code> en el servidor.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
           {ovEstado.fase === 'cargando' ? (
-            <span style={{ fontSize: 13, color: '#9CA3AF' }}>Cargando cuentas…</span>
+            <span style={{ fontSize: 13, color: paleta.mut2 }}>Cargando cuentas…</span>
           ) : (
             cuentas.map((c) => <ChipCuenta key={c.id} c={c} activa={c.id === activaId} onClick={() => setElegida(c.id)} />)
           )}
@@ -164,9 +165,9 @@ export function MetaAds() {
       {/* Detalle de la cuenta activa */}
       {activaId && (
         detEstado.fase === 'cargando' ? (
-          <div className="card" style={{ color: '#9CA3AF' }}>Cargando anuncios, evolución y placements…</div>
+          <div className="card" style={{ color: paleta.mut2 }}>Cargando anuncios, evolución y placements…</div>
         ) : detEstado.fase === 'error' ? (
-          <div className="card" style={{ color: '#DC2626' }}>No se pudo traer el detalle: {detEstado.motivo}</div>
+          <div className="card" style={{ color: paleta.danger }}>No se pudo traer el detalle: {detEstado.motivo}</div>
         ) : (
           <Detalle d={detEstado.data} pausa={pausa} />
         )
@@ -180,8 +181,8 @@ function ChipCuenta({ c, activa, onClick }: { c: CuentaMetaAds; activa: boolean;
     <button
       onClick={onClick}
       style={{
-        border: `1px solid ${activa ? '#378ADD' : '#D1D5DB'}`,
-        background: activa ? '#EFF6FF' : '#fff',
+        border: `1px solid ${activa ? paleta.brandSolid : paleta.line2}`,
+        background: activa ? paleta.brandBg : '#fff',
         borderRadius: 10,
         padding: '8px 12px',
         cursor: 'pointer',
@@ -189,8 +190,8 @@ function ChipCuenta({ c, activa, onClick }: { c: CuentaMetaAds; activa: boolean;
         minWidth: 140,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, color: activa ? '#1D4ED8' : '#374151' }}>{c.nombre}</div>
-      <div style={{ fontSize: 12, color: '#6B7280' }}>{c.error ? 'error' : c.sinDatos ? 'sin datos' : money(c.spend, c.moneda)}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: activa ? paleta.brand : paleta.ink2 }}>{c.nombre}</div>
+      <div style={{ fontSize: 12, color: paleta.mut }}>{c.error ? 'error' : c.sinDatos ? 'sin datos' : money(c.spend, c.moneda)}</div>
     </button>
   )
 }
@@ -242,16 +243,16 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
           <div style={{ width: '100%', height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={d.daily} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEF0F2" />
-                <XAxis dataKey="date" tickFormatter={diaCorto} tick={{ fontSize: 11, fill: '#9CA3AF' }} />
-                <YAxis yAxisId="l" tick={{ fontSize: 11, fill: '#9CA3AF' }} width={48} />
-                <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: '#9CA3AF' }} width={48} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColor.grid} />
+                <XAxis dataKey="date" tickFormatter={diaCorto} tick={{ fontSize: 11, fill: paleta.mut2 }} />
+                <YAxis yAxisId="l" tick={{ fontSize: 11, fill: paleta.mut2 }} width={48} />
+                <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: paleta.mut2 }} width={48} />
                 <Tooltip
                   labelFormatter={(v) => diaCorto(String(v))}
                   formatter={(val: number, name) => [name === 'Gasto' || name === 'Ingresos' ? money(val, moneda) : entero(val), name]}
                 />
-                <Bar yAxisId="l" dataKey="spend" name="Gasto" fill="#93C5FD" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="r" dataKey="revenue" name="Ingresos" stroke="#16A34A" strokeWidth={2} dot={false} />
+                <Bar yAxisId="l" dataKey="spend" name="Gasto" fill={chartColor.brand} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="r" dataKey="revenue" name="Ingresos" stroke={chartColor.success} strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -262,7 +263,7 @@ function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
       <div className="card">
         <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Anuncios por campaña</div>
         {d.campañas.length === 0 ? (
-          <div style={{ fontSize: 13, color: '#9CA3AF' }}>No hay anuncios con gasto en este rango.</div>
+          <div style={{ fontSize: 13, color: paleta.mut2 }}>No hay anuncios con gasto en este rango.</div>
         ) : (
           d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} />)
         )}
@@ -284,8 +285,8 @@ function TilesTotales({ t, moneda, hookRate }: { t: Metricas; moneda: string; ho
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: 10 }}>
       <Tile label="Gasto" valor={money(t.spend, moneda)} destacado />
       <Tile label="Compras" valor={entero(t.purchases)} />
-      <Tile label="Ingresos" valor={money(t.revenue, moneda)} destacado color="#16A34A" />
-      <Tile label="ROAS" valor={roas(t.roas)} destacado color="#16A34A" />
+      <Tile label="Ingresos" valor={money(t.revenue, moneda)} destacado color={paleta.success} />
+      <Tile label="ROAS" valor={roas(t.roas)} destacado color={paleta.success} />
       <Tile label="Impresiones" valor={entero(t.impressions)} />
       <Tile label="Alcance" valor={entero(t.reach)} />
       <Tile label="CTR" valor={pct(t.ctr)} />
@@ -304,12 +305,12 @@ function Embudo({ pasos, moneda }: { pasos: FunnelPaso[]; moneda: string }) {
         const pctBar = base ? Math.max(2, (p.count / base) * 100) : 0
         return (
           <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ width: 130, fontSize: 13, color: '#374151' }}>{p.label}</div>
-            <div style={{ flex: 1, minWidth: 120, background: '#F1F5F9', borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ width: `${pctBar}%`, background: '#93C5FD', height: '100%', borderRadius: 6 }} />
-              <span style={{ position: 'absolute', left: 8, top: 0, lineHeight: '22px', fontSize: 12, fontWeight: 600, color: '#1E3A8A' }}>{entero(p.count)}</span>
+            <div style={{ width: 130, fontSize: 13, color: paleta.ink2 }}>{p.label}</div>
+            <div style={{ flex: 1, minWidth: 120, background: paleta.bg2, borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ width: `${pctBar}%`, background: paleta.brandBorder, height: '100%', borderRadius: 6 }} />
+              <span style={{ position: 'absolute', left: 8, top: 0, lineHeight: '22px', fontSize: 12, fontWeight: 600, color: paleta.brand }}>{entero(p.count)}</span>
             </div>
-            <div style={{ width: 130, textAlign: 'right', fontSize: 12, color: '#6B7280' }}>
+            <div style={{ width: 130, textAlign: 'right', fontSize: 12, color: paleta.mut }}>
               {p.count ? `${money(p.costo, moneda)} c/u` : '—'}
             </div>
           </div>
@@ -324,19 +325,19 @@ function TablaDemografia({ rows, moneda }: { rows: DemografiaFila[]; moneda: str
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
             <Th left>Género</Th><Th left>Edad</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} style={{ borderTop: '1px solid #F1F5F9' }}>
+            <tr key={i} style={{ borderTop: `1px solid ${paleta.bg2}` }}>
               <td style={{ padding: '7px 10px', fontWeight: 500 }}>{genero(r.gender)}</td>
-              <td style={{ padding: '7px 10px', color: '#6B7280' }}>{r.age || '—'}</td>
+              <td style={{ padding: '7px 10px', color: paleta.mut }}>{r.age || '—'}</td>
               <Td>{money(r.spend, moneda)}</Td>
               <Td>{entero(r.purchases)}</Td>
               <Td>{money(r.revenue, moneda)}</Td>
-              <Td color={r.spend && r.revenue ? '#16A34A' : '#9CA3AF'}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
+              <Td color={r.spend && r.revenue ? paleta.success : paleta.mut2}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
             </tr>
           ))}
         </tbody>
@@ -350,18 +351,18 @@ function TablaRegiones({ rows, moneda }: { rows: RegionFila[]; moneda: string })
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
             <Th left>Región</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} style={{ borderTop: '1px solid #F1F5F9' }}>
+            <tr key={i} style={{ borderTop: `1px solid ${paleta.bg2}` }}>
               <td style={{ padding: '7px 10px', fontWeight: 500 }}>{r.region}</td>
               <Td>{money(r.spend, moneda)}</Td>
               <Td>{entero(r.purchases)}</Td>
               <Td>{money(r.revenue, moneda)}</Td>
-              <Td color={r.spend && r.revenue ? '#16A34A' : '#9CA3AF'}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
+              <Td color={r.spend && r.revenue ? paleta.success : paleta.mut2}>{roas(r.spend ? r.revenue / r.spend : 0)}</Td>
             </tr>
           ))}
         </tbody>
@@ -372,9 +373,9 @@ function TablaRegiones({ rows, moneda }: { rows: RegionFila[]; moneda: string })
 
 function Tile({ label, valor, destacado, color }: { label: string; valor: string; destacado?: boolean; color?: string }) {
   return (
-    <div style={{ background: '#F9FAFB', border: '1px solid #EEF0F2', borderRadius: 10, padding: '10px 12px' }}>
-      <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: destacado ? 19 : 16, fontWeight: 700, color: color ?? (destacado ? '#1F4E78' : '#111827'), marginTop: 2 }}>{valor}</div>
+    <div style={{ background: paleta.bg, border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 11, color: paleta.mut2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div style={{ fontSize: destacado ? 19 : 16, fontWeight: 700, color: color ?? paleta.ink, marginTop: 2 }}>{valor}</div>
     </div>
   )
 }
@@ -382,26 +383,26 @@ function Tile({ label, valor, destacado, color }: { label: string; valor: string
 function CampañaBloque({ c, moneda, accountId, pausa }: { c: Campaña; moneda: string; accountId: string; pausa: CtxPausa }) {
   const [abierta, setAbierta] = useState(true)
   return (
-    <div style={{ border: '1px solid #EEF2F7', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+    <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
       <button
         onClick={() => setAbierta((v) => !v)}
-        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#FCFDFE', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 12px', background: paleta.bg, border: 'none', cursor: 'pointer', textAlign: 'left' }}
       >
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
-          <span style={{ color: '#9CA3AF', marginRight: 6 }}>{abierta ? '▾' : '▸'}</span>{c.nombre}
-          <span style={{ color: '#9CA3AF', fontWeight: 400 }}> · {c.ads.length} anuncio{c.ads.length === 1 ? '' : 's'}</span>
+        <div style={{ fontSize: 13, fontWeight: 600, color: paleta.ink }}>
+          <span style={{ color: paleta.mut2, marginRight: 6 }}>{abierta ? '▾' : '▸'}</span>{c.nombre}
+          <span style={{ color: paleta.mut2, fontWeight: 400 }}> · {c.ads.length} anuncio{c.ads.length === 1 ? '' : 's'}</span>
         </div>
-        <div style={{ fontSize: 12, color: '#374151', display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div style={{ fontSize: 12, color: paleta.ink2, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <span>Gasto <b>{money(c.totales.spend, moneda)}</b></span>
           <span>Compras <b>{entero(c.totales.purchases)}</b></span>
-          <span style={{ color: '#16A34A' }}>ROAS <b>{roas(c.totales.roas)}</b></span>
+          <span style={{ color: paleta.success }}>ROAS <b>{roas(c.totales.roas)}</b></span>
         </div>
       </button>
       {abierta && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+              <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
                 <Th left>Anuncio</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th><Th>ROAS</Th><Th>CTR</Th><Th>CPC</Th><Th>Impr.</Th>
               </tr>
             </thead>
@@ -421,7 +422,7 @@ const adsManagerUrl = (accountId: string, adId: string) =>
 
 function LinkAccion({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: paleta.brandSolid, textDecoration: 'none', fontWeight: 500 }}>
       {children}
     </a>
   )
@@ -441,7 +442,7 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
   ].filter((b): b is { txt: string; color: string; bg: string } => b !== null)
   const gestion = adsManagerUrl(accountId, a.ad_id)
   return (
-    <tr style={{ borderTop: '1px solid #F1F5F9' }}>
+    <tr style={{ borderTop: `1px solid ${paleta.bg2}` }}>
       <td style={{ padding: '7px 10px', maxWidth: 340 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           {/* Preview del creativo → abre el aviso publicado (o Ads Manager si no hay permalink). */}
@@ -450,7 +451,7 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
             target="_blank"
             rel="noopener noreferrer"
             title="Ver el aviso"
-            style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 8, overflow: 'hidden', border: '1px solid #E5E7EB', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 8, overflow: 'hidden', border: `1px solid ${paleta.line}`, background: paleta.bg2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             {a.thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -460,12 +461,12 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
             )}
           </a>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ad_name}</div>
-            {a.adset_name ? <div style={{ fontSize: 11, color: '#9CA3AF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adset_name}</div> : null}
+            <div style={{ fontWeight: 500, color: paleta.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ad_name}</div>
+            {a.adset_name ? <div style={{ fontSize: 11, color: paleta.mut2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adset_name}</div> : null}
             {(badges.length > 0 || (a.video && a.video.hookRate > 0)) && (
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
                 {badges.map((b, i) => <Badge key={i} {...b} />)}
-                {a.video && a.video.hookRate > 0 ? <span style={{ fontSize: 11, color: '#6B7280' }}>Hook {pct(a.video.hookRate)}</span> : null}
+                {a.video && a.video.hookRate > 0 ? <span style={{ fontSize: 11, color: paleta.mut }}>Hook {pct(a.video.hookRate)}</span> : null}
               </div>
             )}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
@@ -476,9 +477,9 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
                   style={{
                     fontSize: 11,
                     fontWeight: 600,
-                    color: ovAd?.pending ? '#9CA3AF' : activo ? '#B45309' : '#15803D',
-                    background: ovAd?.pending ? '#F3F4F6' : activo ? '#FFFBEB' : '#F0FDF4',
-                    border: `1px solid ${activo ? '#FDE68A' : '#BBF7D0'}`,
+                    color: ovAd?.pending ? paleta.mut2 : activo ? paleta.warningInk : paleta.success,
+                    background: ovAd?.pending ? paleta.bg2 : activo ? paleta.warningBg : paleta.successBg,
+                    border: `1px solid ${activo ? paleta.warningBorder : paleta.successBorder}`,
                     borderRadius: 6,
                     padding: '2px 9px',
                     cursor: ovAd?.pending ? 'default' : 'pointer',
@@ -489,7 +490,7 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
               )}
               <LinkAccion href={gestion}>Ads Manager ↗</LinkAccion>
               {a.permalink ? <LinkAccion href={a.permalink}>Ver aviso ↗</LinkAccion> : null}
-              {ovAd?.error ? <span style={{ fontSize: 11, color: '#DC2626' }}>No se pudo: {ovAd.error}</span> : null}
+              {ovAd?.error ? <span style={{ fontSize: 11, color: paleta.danger }}>No se pudo: {ovAd.error}</span> : null}
             </div>
           </div>
         </div>
@@ -497,7 +498,7 @@ function FilaAd({ a, moneda, accountId, pausa }: { a: AdRow; moneda: string; acc
       <Td>{money(a.spend, moneda)}</Td>
       <Td>{entero(a.purchases)}</Td>
       <Td>{money(a.revenue, moneda)}</Td>
-      <Td color={a.roas ? '#16A34A' : '#9CA3AF'}>{roas(a.roas)}</Td>
+      <Td color={a.roas ? paleta.success : paleta.mut2}>{roas(a.roas)}</Td>
       <Td>{nf1.format(a.ctr)}%</Td>
       <Td>{money(a.cpc, moneda)}</Td>
       <Td>{entero(a.impressions)}</Td>
@@ -511,15 +512,15 @@ function TablaPlacements({ rows, moneda }: { rows: { platform: string; position:
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          <tr style={{ color: paleta.mut2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em' }}>
             <Th left>Plataforma</Th><Th left>Ubicación</Th><Th>Gasto</Th><Th>Compras</Th><Th>Ingresos</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p, i) => (
-            <tr key={i} style={{ borderTop: '1px solid #F1F5F9' }}>
+            <tr key={i} style={{ borderTop: `1px solid ${paleta.bg2}` }}>
               <td style={{ padding: '7px 10px', fontWeight: 500 }}>{nombrePlat(p.platform)}</td>
-              <td style={{ padding: '7px 10px', color: '#6B7280' }}>{p.position || '—'}</td>
+              <td style={{ padding: '7px 10px', color: paleta.mut }}>{p.position || '—'}</td>
               <Td>{money(p.spend, moneda)}</Td>
               <Td>{entero(p.purchases)}</Td>
               <Td>{money(p.revenue, moneda)}</Td>
@@ -535,5 +536,5 @@ function Th({ children, left }: { children?: React.ReactNode; left?: boolean }) 
   return <th style={{ padding: '4px 10px', textAlign: left ? 'left' : 'right', fontWeight: 600 }}>{children}</th>
 }
 function Td({ children, color }: { children?: React.ReactNode; color?: string }) {
-  return <td style={{ padding: '7px 10px', textAlign: 'right', color: color ?? '#374151' }}>{children}</td>
+  return <td style={{ padding: '7px 10px', textAlign: 'right', color: color ?? paleta.ink2 }}>{children}</td>
 }

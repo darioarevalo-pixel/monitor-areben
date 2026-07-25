@@ -16,6 +16,7 @@ import {
   statsPeriodo,
 } from '@/lib/proveedores'
 import { PedidosCard } from './PedidosCard'
+import { chartColor, color } from '@/components/ui'
 
 /**
  * "🏭 Por proveedor" (key `proveedores`, Zattia) en Next — Tanda A #7.
@@ -54,9 +55,9 @@ export function Proveedores() {
   const rank = useMemo(() => ranking(filtered), [filtered])
 
   if (error && !datos) {
-    return <div style={{ padding: 16, color: '#B91C1C', fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
+    return <div style={{ padding: 16, color: color.dangerInk, fontSize: 13 }}>No se pudieron cargar los datos: {error}</div>
   }
-  if (!datos) return <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>
+  if (!datos) return <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>
 
   const compChart = stats.map((s) => ({ prov: s.prov, totalSold: s.vendidas, avgMargin: parseFloat(s.avgMargin.toFixed(1)) }))
   const compraChart = statsPorCompra.map((s) => ({ prov: s.prov, compra: Math.round(s.compraPeriodo) }))
@@ -83,7 +84,7 @@ export function Proveedores() {
               <option key={m} value={m}>{mesLabel(m)}</option>
             ))}
           </select>
-          <span style={{ fontSize: 12, color: '#666' }}>hasta</span>
+          <span style={{ fontSize: 12, color: color.mut }}>hasta</span>
           <select value={mesHasta} onChange={(e) => setMesHasta(e.target.value)}>
             <option value="">Último mes</option>
             {allMonths.map((m) => (
@@ -93,7 +94,7 @@ export function Proveedores() {
           {(mesDesde || mesHasta) && (
             <button className="btn-sm" onClick={() => { setMesDesde(''); setMesHasta('') }}>Todo el historial</button>
           )}
-          <span style={{ fontSize: 12, color: '#9CA3AF', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 12, color: color.mut2, marginLeft: 'auto' }}>
             Las unidades, la compra y la rentabilidad son de <b>{periodoLabel}</b>. El stock es de hoy.
           </span>
         </div>
@@ -101,18 +102,18 @@ export function Proveedores() {
 
       {/* Comparativa entre proveedores */}
       <div className="card">
-        <div style={TITULO_MB12}>Comparativa entre proveedores <span style={{ fontSize: 12, fontWeight: 400, color: '#9CA3AF' }}>· {periodoLabel}</span></div>
+        <div style={TITULO_MB12}>Comparativa entre proveedores <span style={{ fontSize: 12, fontWeight: 400, color: color.mut2 }}>· {periodoLabel}</span></div>
         <div className="chart-wrap" style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={compChart} margin={{ left: 4, right: 4, top: 8, bottom: 8 }}>
-              <CartesianGrid vertical={false} stroke="#f0f0f0" />
+              <CartesianGrid vertical={false} stroke={chartColor.grid} />
               <XAxis dataKey="prov" tick={{ fill: '#555', fontSize: 11 }} tickLine={false} axisLine={false} interval={0} angle={-25} textAnchor="end" height={54} />
-              <YAxis yAxisId="left" tick={{ fill: '#378ADD', fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: '#1D9E75', fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => v + '%'} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E5E7EB' }} />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#666' }} />
-              <Bar yAxisId="left" dataKey="totalSold" name="Unidades vendidas" fill="#378ADD" radius={[3, 3, 0, 0]} />
-              <Bar yAxisId="right" dataKey="avgMargin" name="Rentabilidad %" fill="#1D9E75" radius={[3, 3, 0, 0]} />
+              <YAxis yAxisId="left" tick={{ fill: color.brandSolid, fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fill: color.success, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => v + '%'} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: `1px solid ${color.line}` }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: color.mut }} />
+              <Bar yAxisId="left" dataKey="totalSold" name="Unidades vendidas" fill={chartColor.brand} radius={[3, 3, 0, 0]} />
+              <Bar yAxisId="right" dataKey="avgMargin" name="Rentabilidad %" fill={chartColor.success} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -123,11 +124,11 @@ export function Proveedores() {
         <div className="chart-wrap" style={{ height: alturaCompra }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={compraChart} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-              <CartesianGrid horizontal={false} stroke="#f0f0f0" />
+              <CartesianGrid horizontal={false} stroke={chartColor.grid} />
               <XAxis type="number" tick={{ fill: '#888', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => '$' + (v / 1000).toFixed(0) + 'k'} />
               <YAxis type="category" dataKey="prov" width={120} tick={{ fill: '#444', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => ['$' + v.toLocaleString('es-AR'), 'Compra estimada']} contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E5E7EB' }} />
-              <Bar dataKey="compra" fill="#7F77DD" radius={[0, 3, 3, 0]} />
+              <Tooltip formatter={(v: number) => ['$' + v.toLocaleString('es-AR'), 'Compra estimada']} contentStyle={{ fontSize: 12, borderRadius: 6, border: `1px solid ${color.line}` }} />
+              <Bar dataKey="compra" fill={chartColor.brand} radius={[0, 3, 3, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -144,9 +145,9 @@ export function Proveedores() {
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <label style={{ fontSize: 12, color: '#666' }}>Primera venta desde</label>
+          <label style={{ fontSize: 12, color: color.mut }}>Primera venta desde</label>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-          <label style={{ fontSize: 12, color: '#666' }}>hasta</label>
+          <label style={{ fontSize: 12, color: color.mut }}>hasta</label>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
           <button className="btn-sm" onClick={() => { setDesde(''); setHasta('') }}>Limpiar</button>
         </div>
@@ -164,11 +165,11 @@ export function Proveedores() {
         <div className="chart-wrap" style={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartDet} margin={{ left: 4, right: 8, top: 8, bottom: 8 }}>
-              <CartesianGrid vertical={false} stroke="#f0f0f0" />
+              <CartesianGrid vertical={false} stroke={chartColor.grid} />
               <XAxis dataKey="label" tick={{ fill: '#888', fontSize: 11 }} tickLine={false} axisLine={false} interval={0} angle={-40} textAnchor="end" height={44} />
               <YAxis tick={{ fill: '#888', fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E5E7EB' }} />
-              <Bar dataKey="value" name={provSel} fill="#1D9E75" radius={[4, 4, 0, 0]} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: `1px solid ${color.line}` }} />
+              <Bar dataKey="value" name={provSel} fill={chartColor.success} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

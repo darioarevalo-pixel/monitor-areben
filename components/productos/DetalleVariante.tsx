@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { desglosePorVariante, type ColDetalle } from '@/lib/productos-detalle'
 import type { VentasVariante, Variante } from '@/lib/etl/tipos'
+import { color } from '@/components/ui'
 
 /**
  * "▾ Desglose por variante": la fila que se despliega al abrir un producto. Port de
@@ -60,7 +61,7 @@ export function DetalleVariante({
 
   return (
     <div style={{ padding: '10px 20px 14px' }} onClick={(e) => e.stopPropagation()}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#7F77DD', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.brand, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
         ▾ Desglose por variante
       </div>
       <table style={{ width: 'auto' }}>
@@ -76,7 +77,7 @@ export function DetalleVariante({
         <tbody>
           {items.map((v) => {
             const pct = totalVendido > 0 ? Math.round((v.total / totalVendido) * 100) : 0
-            const colStock = v.stock < 3 ? '#e24b4a' : v.stock < 10 ? '#ba7517' : '#666'
+            const colStock = v.stock < 3 ? color.danger : v.stock < 10 ? color.warning : color.mut
             return (
               <tr key={v.sid}>
                 <td style={{ padding: '5px 16px 5px 0', fontSize: 13, color: '#333', fontWeight: 500 }}>{v.size || '—'}</td>
@@ -84,8 +85,8 @@ export function DetalleVariante({
                   {v.total.toLocaleString('es-AR')}
                   {totalVendido > 0 && <span style={{ fontSize: 10, color: '#aaa', marginLeft: 4 }}>{pct}%</span>}
                 </td>
-                <td style={{ padding: '5px 16px 5px 0', fontSize: 13, color: '#1D9E75', fontWeight: 600 }}>{v.s7.toLocaleString('es-AR')}</td>
-                <td style={{ padding: '5px 16px 5px 0', fontSize: 13, color: '#666' }}>{v.s30.toLocaleString('es-AR')}</td>
+                <td style={{ padding: '5px 16px 5px 0', fontSize: 13, color: color.success, fontWeight: 600 }}>{v.s7.toLocaleString('es-AR')}</td>
+                <td style={{ padding: '5px 16px 5px 0', fontSize: 13, color: color.mut }}>{v.s30.toLocaleString('es-AR')}</td>
                 <td style={{ padding: '5px 0', fontSize: 13, color: colStock }}>{v.stock.toLocaleString('es-AR')}</td>
               </tr>
             )

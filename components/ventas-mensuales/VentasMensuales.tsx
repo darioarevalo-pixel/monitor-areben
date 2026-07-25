@@ -87,7 +87,7 @@ function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: P
               <Tooltip
                 cursor={{ fill: chartColor.brandSoft }}
                 formatter={(v: number) => [v.toLocaleString('es-AR'), 'Items']}
-                labelStyle={{ color: '#344054', fontSize: 12 }}
+                labelStyle={{ color: color.ink2, fontSize: 12 }}
                 contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${chartColor.grid}` }}
               />
               <Bar dataKey="items" fill={chartColor.brand} radius={[4, 4, 0, 0]} />
