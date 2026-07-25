@@ -109,6 +109,21 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
 
     return () => {
       vivo = false
+      // ⚠️ El guard TAMBIÉN se suelta acá, no solo en el `finally`.
+      //
+      // Sin esto, la sección quedaba en "Cargando…" para siempre. En desarrollo React
+      // monta, desmonta y vuelve a montar cada componente (StrictMode): la 1ª pasada
+      // toma el guard y arranca la carga, el desmonte la deja inerte (`vivo = false`,
+      // así que ya no puede apagar `cargando`), y la 2ª pasada se encuentra el guard
+      // tomado y se va sin cargar nada. Nadie apaga el spinner.
+      //
+      // En producción no hay doble montaje, pero el mismo agujero se abre al cambiar de
+      // canal mientras una carga está en vuelo: la carga nueva se saltea en silencio y
+      // la pantalla se queda con los datos del canal anterior.
+      //
+      // Soltarlo en la limpieza es correcto: la corrida que se está abandonando ya no
+      // puede escribir estado, así que no hay dos cargas compitiendo por la pantalla.
+      enCurso.current = false
     }
   }, [modo, tick])
 
