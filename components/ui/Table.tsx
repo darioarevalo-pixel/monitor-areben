@@ -1,18 +1,31 @@
 'use client'
 
-/** Table — primitivas componibles de tabla (look SaaS: bordes sutiles, tabular-nums, hover de fila). */
-import { color, radius, font, weight, space } from '@/components/ui/tokens'
+/**
+ * Table — primitivas componibles de tabla.
+ *
+ * La forma vive en `.mo-table` (kit.css), que es lo que permite lo que antes no se podía
+ * con estilos inline: **cabecera pegajosa** (`position: sticky` sobre el scroll del
+ * wrapper) y densidad por token (`--mo-row-h`: 38px en compu, 44px en móvil). Con
+ * planillas de 500 filas, perder los nombres de columna al scrollear era el defecto más
+ * caro de la app.
+ *
+ * `maxHeight` en TableWrap activa el scroll interno; sin él la tabla crece y el sticky
+ * se apoya en el scroll de la página.
+ */
 
-export function TableWrap({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function TableWrap({ children, maxHeight, style }: { children: React.ReactNode; maxHeight?: number | string; style?: React.CSSProperties }) {
   return (
-    <div style={{ overflowX: 'auto', border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.surface, ...style }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>{children}</table>
+    <div
+      className="mo-tablewrap"
+      style={{ ...(maxHeight != null ? ({ '--mo-table-max': typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight } as React.CSSProperties) : null), ...style }}
+    >
+      <table className="mo-table">{children}</table>
     </div>
   )
 }
 
 export function THead({ children }: { children: React.ReactNode }) {
-  return <thead style={{ background: color.bg }}>{children}</thead>
+  return <thead>{children}</thead>
 }
 
 export function TBody({ children }: { children: React.ReactNode }) {
@@ -20,29 +33,61 @@ export function TBody({ children }: { children: React.ReactNode }) {
 }
 
 export function Tr({ children, onClick, style }: { children: React.ReactNode; onClick?: () => void; style?: React.CSSProperties }) {
-  return <tr onClick={onClick} style={{ cursor: onClick ? 'pointer' : undefined, ...style }}>{children}</tr>
+  return (
+    <tr onClick={onClick} className={onClick ? 'mo-tr--click' : undefined} style={style}>
+      {children}
+    </tr>
+  )
 }
 
-export type ThProps = { children?: React.ReactNode; align?: 'left' | 'right' | 'center'; width?: number | string; style?: React.CSSProperties }
-export function Th({ children, align = 'left', width, style }: ThProps) {
+export type ThProps = {
+  children?: React.ReactNode
+  align?: 'left' | 'right' | 'center'
+  width?: number | string
+  /** Cabecera clickeable para ordenar: cambia el cursor y el hover. */
+  onClick?: () => void
+  /** Dirección actual del orden por esta columna (dibuja la flecha). */
+  sort?: 'asc' | 'desc' | null
+  style?: React.CSSProperties
+}
+
+export function Th({ children, align = 'left', width, onClick, sort, style }: ThProps) {
   return (
-    <th style={{ textAlign: align, fontSize: font.xs, fontWeight: weight.semibold, color: color.mut2, textTransform: 'uppercase', letterSpacing: 0.5, padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.line}`, whiteSpace: 'nowrap', width, ...style }}>
+    <th
+      className={onClick ? 'mo-th--sortable' : undefined}
+      onClick={onClick}
+      aria-sort={sort ? (sort === 'asc' ? 'ascending' : 'descending') : undefined}
+      style={{ textAlign: align, width, ...style }}
+    >
       {children}
+      {sort && <span aria-hidden style={{ marginLeft: 4, opacity: 0.8 }}>{sort === 'asc' ? '↑' : '↓'}</span>}
     </th>
   )
 }
 
-export type TdProps = { children?: React.ReactNode; align?: 'left' | 'right' | 'center'; mono?: boolean; wrap?: boolean; strong?: boolean; style?: React.CSSProperties }
-export function Td({ children, align = 'left', mono, wrap, strong, style }: TdProps) {
+export type TdProps = {
+  children?: React.ReactNode
+  align?: 'left' | 'right' | 'center'
+  mono?: boolean
+  wrap?: boolean
+  strong?: boolean
+  /** Alto libre: para celdas que hospedan un input o dos líneas de texto. */
+  tall?: boolean
+  colSpan?: number
+  style?: React.CSSProperties
+}
+
+export function Td({ children, align = 'left', mono, wrap, strong, tall, colSpan, style }: TdProps) {
   return (
     <td
+      colSpan={colSpan}
+      className={[align === 'right' ? 'mo-td--num' : '', strong ? 'mo-td--strong' : '', wrap ? 'mo-td--wrap' : '', tall ? 'mo-td--tall' : '']
+        .filter(Boolean)
+        .join(' ')}
       style={{
-        textAlign: align, fontSize: font.base, color: color.ink2,
-        padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.bg2}`,
-        whiteSpace: wrap ? 'normal' : 'nowrap',
+        textAlign: align,
+        whiteSpace: wrap ? undefined : 'nowrap',
         fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
-        fontVariantNumeric: align === 'right' ? 'tabular-nums' : undefined,
-        fontWeight: strong ? weight.semibold : undefined,
         ...style,
       }}
     >

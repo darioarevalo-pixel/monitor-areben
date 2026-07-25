@@ -6,6 +6,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { esDeMarca, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
+import { useConfirmar } from '@/components/ui/Confirm'
 
 /** Label del menú (con emoji): LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
@@ -24,10 +25,23 @@ function rutaActiva(it: NavItem, activa: string, sub?: string | null): boolean {
 /** Grupos homónimos con un solo destino: se muestran como ítem directo (sin doble clic). */
 const APLANAR = new Set(['inicio', 'clientes'])
 
-export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }) {
+export function Sidebar({
+  activa,
+  sub,
+  abierto: cajonAbierto,
+  onNavegar,
+}: {
+  activa: string
+  sub?: string | null
+  /** Solo en móvil: el sidebar es un cajón y esto dice si está afuera. */
+  abierto?: boolean
+  /** Se llama al elegir una sección, para que el cajón se cierre solo. */
+  onNavegar?: () => void
+}) {
   const { perfil, marca, setMarca, salir } = useSesion()
   const [abierto, setAbierto] = useState<string | null>(null)
   const [menuMarca, setMenuMarca] = useState(false)
+  const { confirmar } = useConfirmar()
 
   if (!perfil) return null
 
@@ -78,7 +92,7 @@ export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }
   })()
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${cajonAbierto ? ' abierto' : ''}`}>
       <div className="sidebar-brand">
         Monitor<span>AREBEN SRL</span>
       </div>
@@ -130,6 +144,7 @@ export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }
                   <Link
                     href={`/${k}`}
                     className={`nav-cat${k === activa ? ' active' : ''}`}
+                    onClick={onNavegar}
                   >
                     {cat.label}
                   </Link>
@@ -144,6 +159,7 @@ export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }
                 className={`nav-opt${k === activa ? ' active' : ''}${
                   cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
                 }`}
+                onClick={onNavegar}
               >
                 {cat.labels?.[k] ?? label(k)}
               </Link>
@@ -167,6 +183,7 @@ export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }
                           key={it.ruta + it.label}
                           href={it.ruta}
                           className={`nav-opt${rutaActiva(it, activa, sub) ? ' active' : ''}${cat.accent === 'marketing' ? ' nav-accent-mkt' : ''}`}
+                          onClick={onNavegar}
                         >
                           {it.label}
                         </Link>
@@ -182,11 +199,20 @@ export function Sidebar({ activa, sub }: { activa: string; sub?: string | null }
 
       <div className="sidebar-foot">
         <div className="user-foot">
-          <span className="side-user">{perfil.name}</span>
+          <span className="side-user">
+            {/* La inicial identifica de un vistazo con quién está abierta la sesión: en el
+                local se comparte la máquina y eso importa. */}
+            <span className="side-avatar" aria-hidden>
+              {(perfil.name || '?').trim().charAt(0)}
+            </span>
+            <span className="side-user-nombre">{perfil.name}</span>
+          </span>
           <button
             className="side-salir"
             onClick={() => {
-              if (confirm('¿Cerrar sesión?')) salir()
+              void (async () => {
+                if (await confirmar({ titulo: 'Cerrar sesión', mensaje: `¿Cerrás la sesión de ${perfil.name}?`, ok: 'Cerrar sesión' })) salir()
+              })()
             }}
           >
             Salir

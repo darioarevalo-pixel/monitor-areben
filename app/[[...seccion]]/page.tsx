@@ -1,13 +1,16 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { createElement, useEffect } from 'react'
+import { createElement, useEffect, useState } from 'react'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
+import { AccionesProvider } from '@/components/layout/acciones'
+import { ToastProvider } from '@/components/ui/Toast'
+import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
-import { esDeMarca, esKeyValida } from '@/lib/nav'
+import { esDeMarca, esKeyValida, tituloLimpio } from '@/lib/nav'
 import { esAdmin, puedeVer } from '@/lib/permisos'
 
 /** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
@@ -25,6 +28,9 @@ export default function Seccion() {
   const params = useParams()
   const router = useRouter()
   const { perfil, marca, cargando } = useSesion()
+  // Cajón del sidebar en móvil. Vive acá porque lo abren dos lugares (el botón de la
+  // topbar y la tapa oscura) y lo cierra un tercero (navegar a una sección).
+  const [menuAbierto, setMenuAbierto] = useState(false)
 
   const partes = params.seccion
   const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)
@@ -56,25 +62,44 @@ export default function Seccion() {
   const seccion = componenteDe(key)
 
   return (
-    <div className="shell">
-      <Sidebar activa={key} sub={Array.isArray(partes) ? partes[1] : null} />
-      <div className="shell-main">
-        <div className="shell-content">
-          <div className="seccion-pad">
-            {seccion ? (
-              <>
-                <SeccionHeader seccion={key} />
-                {createElement(seccion)}
-              </>
-            ) : (
-              <div className="card" style={{ color: '#B45309' }}>
-                La sección <b>{key}</b> está en el menú pero no tiene pantalla asociada. Avisá que
-                falta registrarla.
+    <ToastProvider>
+      <ConfirmProvider>
+        <div className="shell">
+          <Sidebar
+            activa={key}
+            sub={Array.isArray(partes) ? partes[1] : null}
+            abierto={menuAbierto}
+            onNavegar={() => setMenuAbierto(false)}
+          />
+          {menuAbierto && <div className="sidebar-tapa" onClick={() => setMenuAbierto(false)} />}
+          <div className="shell-main">
+            {/* Topbar: solo existe abajo de 900px (la regla vive en globals.css). Es la
+                puerta al menú cuando el sidebar se convirtió en cajón. */}
+            <div className="shell-topbar">
+              <button className="shell-burger" onClick={() => setMenuAbierto(true)} aria-label="Abrir el menú">
+                ☰
+              </button>
+              <span className="shell-topbar-marca">Monitor</span>
+              <span className="shell-topbar-seccion">· {tituloLimpio(key)}</span>
+            </div>
+            <div className="shell-content">
+              <div className="seccion-pad">
+                {seccion ? (
+                  <AccionesProvider>
+                    <SeccionHeader seccion={key} />
+                    {createElement(seccion)}
+                  </AccionesProvider>
+                ) : (
+                  <div className="mo-card" style={{ padding: 20, color: 'var(--mo-warning)' }}>
+                    La sección <b>{key}</b> está en el menú pero no tiene pantalla asociada. Avisá que
+                    falta registrarla.
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </ConfirmProvider>
+    </ToastProvider>
   )
 }

@@ -1,8 +1,23 @@
 'use client'
 
-/** Button — primitiva de acción del kit. variant (forma) + tone (color) + size (densidad). */
-import { forwardRef, useState } from 'react'
-import { color, radius, font, weight, focusRing, toneTokens, toneSolid, type Tone } from '@/components/ui/tokens'
+/**
+ * Button — primitiva de acción del kit. variant (forma) + tone (color) + size (densidad).
+ *
+ * La forma y los estados viven en `.mo-btn` (kit.css); acá solo se resuelven los colores
+ * del tono y se pasan en custom properties. Antes el `:hover` se emulaba con `useState`
+ * —un re-render de React por pasar el mouse— porque el kit estaba obligado a usar
+ * estilos inline para vencerle al CSS del legacy. Muerto el legacy, el hover es CSS.
+ *
+ * Jerarquía de acciones (la regla del rediseño, para que no vuelva el "un botón, un
+ * color inventado"):
+ *   solid + brand    → la acción principal de la pantalla. UNA por pantalla.
+ *   outline neutral  → secundarias (el default).
+ *   ghost            → terciarias, dentro de una fila o celda.
+ *   solid/soft danger→ destructivas, y siempre con confirmación.
+ *   warning          → ámbar: solo advertencia (operación que pisa datos).
+ */
+import { forwardRef } from 'react'
+import { color, toneTokens, toneSolid, toneSolidHover, type Tone } from '@/components/ui/tokens'
 
 export type ButtonVariant = 'solid' | 'soft' | 'outline' | 'ghost'
 export type ButtonSize = 'sm' | 'md' | 'lg'
@@ -16,52 +31,54 @@ export type ButtonProps = {
   fullWidth?: boolean
 } & React.ButtonHTMLAttributes<HTMLButtonElement>
 
-const PAD: Record<ButtonSize, string> = { sm: '4px 10px', md: '8px 16px', lg: '11px 20px' }
-const FS: Record<ButtonSize, number> = { sm: font.xs, md: font.base, lg: font.md }
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'outline', tone = 'neutral', size = 'md', loading, iconLeft, fullWidth, disabled, style, children, onMouseEnter, onMouseLeave, onFocus, onBlur, ...rest },
-  ref,
-) {
-  const [hover, setHover] = useState(false)
-  const [focus, setFocus] = useState(false)
+/** Los colores del tono como custom properties que consume `.mo-btn`. */
+function vars(variant: ButtonVariant, tone: Tone): React.CSSProperties {
   const t = toneTokens[tone]
   const solid = toneSolid[tone]
-  const off = !!disabled || !!loading
+  const neutral = tone === 'neutral'
 
-  let bg = 'transparent'
-  let fg = t.fg
-  let border = 'transparent'
-  if (variant === 'solid') { bg = solid; fg = '#fff'; border = solid }
-  else if (variant === 'soft') { bg = t.bg; fg = t.fg; border = t.border }
-  else if (variant === 'outline') { bg = color.surface; fg = tone === 'neutral' ? color.ink2 : t.fg; border = tone === 'neutral' ? color.line : t.border }
-  else if (variant === 'ghost') { bg = 'transparent'; fg = tone === 'neutral' ? color.ink2 : t.fg; border = 'transparent' }
-
-  const hovered = hover && !off
-  const base: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    fontSize: FS[size], fontWeight: weight.semibold, lineHeight: 1.2,
-    padding: PAD[size], borderRadius: radius.lg,
-    border: `1px solid ${border}`, background: bg, color: fg,
-    cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.55 : 1,
-    width: fullWidth ? '100%' : undefined, whiteSpace: 'nowrap',
-    transition: 'background .12s ease, box-shadow .12s ease, border-color .12s ease, transform .05s ease',
-    boxShadow: focus ? focusRing : undefined,
-    filter: hovered ? (variant === 'solid' ? 'brightness(.94)' : 'brightness(.98)') : undefined,
-    transform: hovered ? 'translateY(-0.5px)' : undefined,
-    ...(hovered && variant !== 'solid' ? { background: variant === 'ghost' ? color.bg2 : t.bg } : null),
-    ...style,
+  if (variant === 'solid') {
+    return { '--_bg': solid, '--_fg': '#fff', '--_bd': solid, '--_bg-hover': toneSolidHover[tone] } as React.CSSProperties
   }
+  if (variant === 'soft') {
+    return { '--_bg': t.bg, '--_fg': t.fg, '--_bd': t.border, '--_bg-hover': t.bg } as React.CSSProperties
+  }
+  if (variant === 'outline') {
+    return {
+      '--_bg': color.surface,
+      '--_fg': neutral ? color.ink2 : t.fg,
+      '--_bd': neutral ? color.line2 : t.border,
+      '--_bg-hover': neutral ? color.bg2 : t.bg,
+    } as React.CSSProperties
+  }
+  return {
+    '--_bg': 'transparent',
+    '--_fg': neutral ? color.ink2 : t.fg,
+    '--_bd': 'transparent',
+    '--_bg-hover': neutral ? color.bg2 : t.bg,
+  } as React.CSSProperties
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'outline', tone = 'neutral', size = 'md', loading, iconLeft, fullWidth, disabled, className, style, children, ...rest },
+  ref,
+) {
+  const off = !!disabled || !!loading
   return (
     <button
-      ref={ref} disabled={off} style={base}
-      onMouseEnter={(e) => { setHover(true); onMouseEnter?.(e) }}
-      onMouseLeave={(e) => { setHover(false); onMouseLeave?.(e) }}
-      onFocus={(e) => { setFocus(true); onFocus?.(e) }}
-      onBlur={(e) => { setFocus(false); onBlur?.(e) }}
+      ref={ref}
+      disabled={off}
+      className={['mo-btn', `mo-btn--${size}`, fullWidth ? 'mo-btn--full' : '', className ?? ''].filter(Boolean).join(' ')}
+      style={{ ...vars(variant, tone), ...style }}
       {...rest}
     >
-      {loading ? <span aria-hidden style={{ opacity: 0.8 }}>…</span> : iconLeft}
+      {loading ? (
+        <span aria-hidden style={{ opacity: 0.8 }}>
+          …
+        </span>
+      ) : (
+        iconLeft
+      )}
       {children}
     </button>
   )

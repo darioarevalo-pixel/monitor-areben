@@ -8,48 +8,58 @@
  *  - Un estado de negocio (ej. estado de un cambio) se mapea a un `Tone` en su feature (`lib/*`),
  *    y el `Tone` resuelve a un trío {fg,bg,border} coherente acá.
  *
- * Convivencia con globals.css: el kit usa objetos `React.CSSProperties` inline (vencen por especificidad
- * al scoping por elemento del CSS legacy bajo `.shell-content`). NO se agregan clases CSS globales.
+ * ⚠️ Los COLORES no son hex: son `var(--mo-*)` de `app/tokens.css`. La paleta se cambia
+ * en un solo archivo CSS y toda la app (kit + secciones ya migradas) se reviste sola.
+ * Por eso NUNCA se concatena ni se manipula un valor de `color` (nada de `color.brand + '20'`
+ * ni de pasarlo a una función que espere hex): para transparencias, usá la var del tono.
+ * Los números (space/font/radius) siguen siendo números: se usan en `React.CSSProperties`.
+ *
+ * Muerto el iframe legacy, el kit ya no necesita ganar por especificidad con estilos
+ * inline: la forma de los primitivos vive en `components/ui/kit.css` (que sí puede
+ * :hover, :focus-visible y @media) y acá quedan los valores.
  */
 
 export const color = {
   // Texto
-  ink: '#111827', // principal
-  ink2: '#374151', // medio-fuerte (labels)
-  mut: '#6B7280', // secundario
-  mut2: '#9CA3AF', // terciario / placeholders
+  ink: 'var(--mo-ink)', // principal
+  ink2: 'var(--mo-ink2)', // medio-fuerte (labels)
+  mut: 'var(--mo-mut)', // secundario
+  mut2: 'var(--mo-mut2)', // terciario / placeholders
 
   // Superficies y bordes
-  surface: '#FFFFFF',
-  bg: '#F9FAFB',
-  bg2: '#F3F4F6',
-  line: '#E5E7EB', // borde estándar de cards/tablas
-  line2: '#D1D5DB', // borde de inputs
+  surface: 'var(--mo-surface)',
+  bg: 'var(--mo-bg)',
+  bg2: 'var(--mo-bg2)',
+  line: 'var(--mo-line)', // borde estándar de cards/tablas
+  line2: 'var(--mo-line2)', // borde de inputs
 
-  // Marca — ÁMBAR (acento del shell, refinado)
-  brand: '#B45309',
-  brandBorder: '#D97706',
-  brandBg: '#FFFBEB',
-  brandBg2: '#FDE68A',
-  brandRing: '#FEF3C7', // ring de foco accesible
+  // Marca — ÍNDIGO (acento de firma: acción, activo, foco)
+  brand: 'var(--mo-brand)',
+  brandSolid: 'var(--mo-brand-solid)',
+  brandBorder: 'var(--mo-brand-border)',
+  brandBg: 'var(--mo-brand-bg)',
+  brandBg2: 'var(--mo-brand-bg2)',
+  brandRing: 'var(--mo-ring)', // ring de foco accesible
 
-  // Acción — azul
-  action: '#1D4ED8',
-  actionAlt: '#378ADD',
-  actionBg: '#EFF6FF',
+  // Acción — el MISMO índigo. Existe por compatibilidad: antes era el azul del legacy,
+  // y tener dos azules compitiendo era justamente el problema.
+  action: 'var(--mo-action)',
+  actionAlt: 'var(--mo-action-solid)',
+  actionBg: 'var(--mo-action-bg)',
 
   // Semánticos
-  danger: '#DC2626',
-  dangerBg: '#FEF2F2',
-  dangerBorder: '#FECACA',
-  dangerInk: '#991B1B',
-  success: '#15803D',
-  successBg: '#ECFDF5',
-  successBorder: '#A7F3D0',
-  successInk: '#065F46',
-  warning: '#B45309',
-  warningBg: '#FFFBEB',
-  warningBorder: '#FDE68A',
+  danger: 'var(--mo-danger)',
+  dangerBg: 'var(--mo-danger-bg)',
+  dangerBorder: 'var(--mo-danger-border)',
+  dangerInk: 'var(--mo-danger-ink)',
+  success: 'var(--mo-success)',
+  successBg: 'var(--mo-success-bg)',
+  successBorder: 'var(--mo-success-border)',
+  successInk: 'var(--mo-success-ink)',
+  warning: 'var(--mo-warning)', // ÁMBAR = advertencia y nada más
+  warningBg: 'var(--mo-warning-bg)',
+  warningBorder: 'var(--mo-warning-border)',
+  warningInk: 'var(--mo-warning-ink)',
 } as const
 
 export const radius = { sm: 6, md: 8, lg: 10, xl: 12, '2xl': 14, pill: 999 } as const
@@ -62,17 +72,29 @@ export const font = { xs: 11, sm: 12, base: 13, md: 14, lg: 15, xl: 18, '2xl': 2
 export const weight = { normal: 400, medium: 500, semibold: 600, bold: 700, heavy: 800 } as const
 
 export const shadow = {
-  sm: '0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05)', // reposo (layered, sutil)
-  md: '0 2px 4px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.08)', // hover / elevación media
-  pop: '0 10px 28px rgba(16,24,40,.14)', // dropdowns / paneles flotantes
-  modal: '0 12px 40px rgba(16,24,40,.18)',
+  sm: 'var(--mo-sh-sm)', // reposo (layered, sutil)
+  md: 'var(--mo-sh-md)', // hover / elevación media
+  pop: 'var(--mo-sh-pop)', // dropdowns / paneles flotantes
+  modal: 'var(--mo-sh-modal)',
 } as const
 
-/** Sombra de foco accesible (ring ámbar). Se aplica en :focus-visible de controles interactivos. */
+/** Sombra de foco accesible (ring índigo). Se aplica en :focus-visible de controles interactivos. */
 export const focusRing = `0 0 0 3px ${color.brandRing}`
 
 /** Fuente tabular para columnas de números (alinea decimales — detalle "SaaS"). */
-export const tabularNums = "'DM Sans', system-ui, sans-serif"
+export const tabularNums = 'var(--mo-font)'
+
+/**
+ * Densidad operativa. El monitor se usa sobre planillas de 500 filas: la fila mide
+ * 38px en compu y 44px en móvil (dedo, no mouse). Los valores viven en tokens.css
+ * porque las clases de `kit.css` los necesitan; acá se exponen para los pocos casos
+ * en que una sección arma su propia grilla.
+ */
+export const density = {
+  rowH: 'var(--mo-row-h)',
+  cellX: 'var(--mo-cell-x)',
+  ctlH: 'var(--mo-ctl-h)',
+} as const
 
 export type Tone = 'neutral' | 'brand' | 'action' | 'success' | 'warning' | 'danger'
 
@@ -80,18 +102,28 @@ export type Tone = 'neutral' | 'brand' | 'action' | 'success' | 'warning' | 'dan
 export const toneTokens: Record<Tone, { fg: string; bg: string; border: string }> = {
   neutral: { fg: color.ink2, bg: color.bg2, border: color.line },
   brand: { fg: color.brand, bg: color.brandBg, border: color.brandBorder },
-  action: { fg: color.action, bg: color.actionBg, border: '#BFDBFE' },
+  action: { fg: color.action, bg: color.actionBg, border: 'var(--mo-action-border)' },
   success: { fg: color.successInk, bg: color.successBg, border: color.successBorder },
-  warning: { fg: color.warning, bg: color.warningBg, border: color.warningBorder },
+  warning: { fg: color.warningInk, bg: color.warningBg, border: color.warningBorder },
   danger: { fg: color.dangerInk, bg: color.dangerBg, border: color.dangerBorder },
 }
 
 /** Color "sólido" por tono (para botones variant=solid y acentos fuertes). */
 export const toneSolid: Record<Tone, string> = {
   neutral: color.ink,
-  brand: color.brand,
-  action: color.action,
+  brand: color.brandSolid,
+  action: 'var(--mo-action-solid)',
   success: color.success,
-  warning: color.brandBorder,
+  warning: 'var(--mo-warning-solid)',
   danger: color.danger,
+}
+
+/** Variante hover del sólido (la usa `kit.css`; en TS solo para casos puntuales). */
+export const toneSolidHover: Record<Tone, string> = {
+  neutral: color.ink2,
+  brand: 'var(--mo-brand-solid-hover)',
+  action: 'var(--mo-brand-solid-hover)',
+  success: color.successInk,
+  warning: color.warning,
+  danger: color.dangerInk,
 }

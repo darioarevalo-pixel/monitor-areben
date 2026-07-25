@@ -1,0 +1,496 @@
+/**
+ * kit.css — la FORMA de los primitivos del kit (rediseño jul-2026).
+ *
+ * Por qué existe: hasta jul-2026 el kit se escribía con estilos inline para vencerle por
+ * especificidad al CSS del legacy bajo `.shell-content`. Muerto el iframe, esa razón
+ * desapareció y el inline solo dejaba deuda: el hover de Button se resolvía con
+ * `useState` de React, no había `:focus-visible`, y sin CSS de verdad no se podía
+ * escribir una sola `@media` (la app no era responsive).
+ *
+ * Cómo se combina con React: la clase trae la forma y los ESTADOS; el componente pasa
+ * los colores del tono en custom properties locales (`--_bg`, `--_fg`, …). Así
+ * `variant × tone × size` no explota en 72 clases y el hover sigue siendo CSS.
+ *
+ * Los valores salen SIEMPRE de `app/tokens.css`. Acá no se escribe un hex.
+ */
+
+/* ══ Botón ═══════════════════════════════════════════════════ */
+.mo-btn {
+  --_bg: transparent;
+  --_fg: var(--mo-ink2);
+  --_bd: transparent;
+  --_bg-hover: var(--mo-bg2);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  border-radius: var(--mo-r-lg);
+  border: 1px solid var(--_bd);
+  background: var(--_bg);
+  color: var(--_fg);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.06s ease;
+}
+
+.mo-btn--sm {
+  font-size: var(--mo-fs-xs);
+  padding: 0 10px;
+  height: 28px;
+}
+.mo-btn--md {
+  font-size: var(--mo-fs-base);
+  padding: 0 14px;
+  height: var(--mo-ctl-h);
+}
+.mo-btn--lg {
+  font-size: var(--mo-fs-md);
+  padding: 0 20px;
+  height: calc(var(--mo-ctl-h) + 8px);
+}
+
+.mo-btn:hover:not(:disabled) {
+  background: var(--_bg-hover);
+}
+.mo-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.mo-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mo-ring);
+}
+.mo-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.mo-btn--full {
+  width: 100%;
+}
+
+/* En móvil los botones se pueden apilar y necesitan alcanzar el dedo. */
+@media (max-width: 900px) {
+  .mo-btn--md,
+  .mo-btn--lg {
+    height: var(--mo-ctl-h);
+  }
+}
+
+/* ══ Card ════════════════════════════════════════════════════ */
+.mo-card {
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-2xl);
+  box-shadow: var(--mo-sh-sm);
+}
+.mo-card--interactive {
+  transition:
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+.mo-card--interactive:hover {
+  box-shadow: var(--mo-sh-md);
+  border-color: var(--mo-line2);
+}
+
+/* ══ Controles de formulario ═════════════════════════════════ */
+.mo-input,
+.mo-select {
+  font-family: inherit;
+  font-size: var(--mo-fs-base);
+  color: var(--mo-ink);
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-md);
+  height: var(--mo-ctl-h);
+  padding: 0 10px;
+  width: 100%;
+  min-width: 0;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.mo-input::placeholder {
+  color: var(--mo-mut2);
+}
+.mo-input:hover:not(:disabled),
+.mo-select:hover:not(:disabled) {
+  border-color: var(--mo-mut2);
+}
+.mo-input:focus,
+.mo-select:focus {
+  outline: none;
+  border-color: var(--mo-brand-solid);
+  box-shadow: 0 0 0 3px var(--mo-ring);
+}
+.mo-input:disabled,
+.mo-select:disabled {
+  background: var(--mo-bg2);
+  color: var(--mo-mut);
+  cursor: not-allowed;
+}
+.mo-input--invalid,
+.mo-select--invalid {
+  border-color: var(--mo-danger);
+}
+.mo-input--invalid:focus {
+  box-shadow: 0 0 0 3px var(--mo-danger-border);
+}
+/* Los <textarea> comparten la forma pero no el alto fijo. */
+.mo-input--multi {
+  height: auto;
+  padding: 8px 10px;
+  line-height: 1.45;
+  resize: vertical;
+}
+/* El número no muestra las flechitas: se cargan cantidades a mano, no de a clics. */
+.mo-input--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mo-input--num::-webkit-outer-spin-button,
+.mo-input--num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.mo-input--num {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ══ Tabla ═══════════════════════════════════════════════════
+   Densidad operativa: fila de 38px (44 en móvil) y cabecera PEGAJOSA, que es lo que
+   más se extraña con 500 filas. El scroll es del wrapper, no de la página. */
+.mo-tablewrap {
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-2xl);
+  background: var(--mo-surface);
+  box-shadow: var(--mo-sh-sm);
+  max-height: var(--mo-table-max, none);
+}
+.mo-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--mo-fs-base);
+}
+.mo-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--mo-bg2);
+  color: var(--mo-mut);
+  font-size: var(--mo-fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  white-space: nowrap;
+  padding: 0 var(--mo-cell-x);
+  height: 34px;
+  border-bottom: 1px solid var(--mo-line);
+}
+.mo-table th.mo-th--sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.mo-table th.mo-th--sortable:hover {
+  color: var(--mo-ink2);
+}
+.mo-table td {
+  padding: 0 var(--mo-cell-x);
+  height: var(--mo-row-h);
+  color: var(--mo-ink2);
+  border-bottom: 1px solid var(--mo-line);
+  vertical-align: middle;
+}
+.mo-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.mo-table tbody tr:hover td {
+  background: var(--mo-bg);
+}
+.mo-table tr.mo-tr--click {
+  cursor: pointer;
+}
+.mo-td--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mo-td--strong {
+  color: var(--mo-ink);
+  font-weight: 600;
+}
+.mo-td--wrap {
+  white-space: normal;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  height: auto;
+}
+/* Celda de alto libre: cuando adentro va un input o dos líneas de texto. */
+.mo-td--tall {
+  height: auto;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+/* ══ Chips de filtro ═════════════════════════════════════════ */
+.mo-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: var(--mo-fs-sm);
+  font-weight: 600;
+  color: var(--mo-ink2);
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-pill);
+  height: 28px;
+  padding: 0 12px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.mo-chip:hover {
+  background: var(--mo-bg2);
+}
+.mo-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mo-ring);
+}
+.mo-chip[aria-pressed='true'] {
+  background: var(--mo-brand-bg);
+  border-color: var(--mo-brand-border);
+  color: var(--mo-brand);
+}
+.mo-chip-n {
+  font-size: var(--mo-fs-xs);
+  font-weight: 700;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══ Barra de filtros ════════════════════════════════════════ */
+.mo-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.mo-filterbar .mo-filterbar-search {
+  width: 240px;
+  max-width: 100%;
+}
+.mo-filterbar-right {
+  margin-left: auto;
+  font-size: var(--mo-fs-sm);
+  color: var(--mo-mut);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) {
+  .mo-filterbar .mo-filterbar-search {
+    width: 100%;
+  }
+  .mo-filterbar-right {
+    margin-left: 0;
+  }
+}
+
+/* ══ Grilla de KPIs ══════════════════════════════════════════ */
+.mo-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* ══ Estados: skeleton, vacío ════════════════════════════════ */
+.mo-skel {
+  background: linear-gradient(90deg, var(--mo-bg2) 25%, var(--mo-bg) 37%, var(--mo-bg2) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--mo-r-sm);
+  animation: mo-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes mo-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mo-skel {
+    animation: none;
+  }
+}
+
+/* ══ Modal ═══════════════════════════════════════════════════
+   Reemplaza confirm()/alert()/prompt() del navegador y los modales ad-hoc que cada
+   sección se armaba. Los diálogos nativos bloquean el hilo y se ven como una alerta
+   del sistema operativo: es lo que más rompía la sensación de producto. */
+.mo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(16, 24, 40, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: mo-fade 0.12s ease;
+}
+.mo-modal {
+  background: var(--mo-surface);
+  border-radius: var(--mo-r-2xl);
+  box-shadow: var(--mo-sh-modal);
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  animation: mo-pop 0.14s ease;
+}
+.mo-modal--wide {
+  max-width: 760px;
+}
+.mo-modal-head {
+  padding: 18px 20px 0;
+}
+.mo-modal-title {
+  font-size: var(--mo-fs-lg);
+  font-weight: 700;
+  color: var(--mo-ink);
+  letter-spacing: -0.2px;
+}
+.mo-modal-body {
+  padding: 10px 20px 4px;
+  overflow: auto;
+  font-size: var(--mo-fs-base);
+  color: var(--mo-ink2);
+  line-height: 1.5;
+}
+.mo-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px 18px;
+  flex-wrap: wrap;
+}
+@keyframes mo-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes mo-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mo-backdrop,
+  .mo-modal {
+    animation: none;
+  }
+}
+@media (max-width: 900px) {
+  /* En el teléfono el diálogo se apoya abajo: llega el pulgar. */
+  .mo-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .mo-modal {
+    max-width: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    max-height: 88vh;
+  }
+  .mo-modal-foot .mo-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* ══ Toast ═══════════════════════════════════════════════════ */
+.mo-toasts {
+  position: fixed;
+  z-index: 300;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.mo-toast {
+  --_bg: var(--mo-surface);
+  --_fg: var(--mo-ink);
+  --_bd: var(--mo-line);
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 10px 12px;
+  font-size: var(--mo-fs-base);
+  background: var(--_bg);
+  color: var(--_fg);
+  border: 1px solid var(--_bd);
+  border-radius: var(--mo-r-xl);
+  box-shadow: var(--mo-sh-pop);
+  animation: mo-toast-in 0.16s ease;
+}
+@keyframes mo-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mo-toast {
+    animation: none;
+  }
+}
+@media (max-width: 900px) {
+  .mo-toasts {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+  }
+  .mo-toast {
+    max-width: none;
+  }
+}
+
+/* ══ Utilidades responsive ═══════════════════════════════════ */
+@media (max-width: 900px) {
+  .mo-hide-mobile {
+    display: none !important;
+  }
+}
+@media (min-width: 901px) {
+  .mo-only-mobile {
+    display: none !important;
+  }
+}

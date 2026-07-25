@@ -1,0 +1,124 @@
+/**
+ * tokens.css — fundación del diseño del monitor (rediseño jul-2026).
+ *
+ * ÚNICA fuente de verdad de color, densidad, radios y sombras. `components/ui/tokens.ts`
+ * no define hex: sus valores son `var(--mo-*)` de acá, así que cambiar la paleta es
+ * cambiar este archivo y TODA la app (kit + secciones migradas) se reviste sola.
+ *
+ * Dirección: sidebar oscuro (el equipo ya lo adoptó) + lienzo claro. Acento de firma
+ * ÍNDIGO para acción/activo/foco. El ÁMBAR queda reservado a ADVERTENCIA — no es más
+ * el color de marca. El azul #378ADD del legacy se retira.
+ *
+ * Densidad: operativa. Fila de tabla de 38px y texto de 13px, porque acá se miran
+ * planillas de 500 filas; el aire va en los márgenes de página y entre bloques, no
+ * adentro de las tablas.
+ */
+
+:root {
+  /* ── Texto ─────────────────────────────────────────────── */
+  --mo-ink: #101828; /* principal */
+  --mo-ink2: #344054; /* medio-fuerte (labels, celdas con peso) */
+  --mo-mut: #667085; /* secundario */
+  --mo-mut2: #98a2b3; /* terciario / placeholders */
+
+  /* ── Superficies y bordes ──────────────────────────────── */
+  --mo-surface: #ffffff;
+  --mo-bg: #f8fafc; /* lienzo de página */
+  --mo-bg2: #f1f5f9; /* zebra, hover de fila, chips apagados */
+  --mo-line: #e4e7ec; /* borde de cards y tablas */
+  --mo-line2: #d0d5dd; /* borde de inputs */
+
+  /* ── Acento de firma: ÍNDIGO ───────────────────────────── */
+  --mo-brand: #4338ca; /* texto/ícono sobre claro */
+  --mo-brand-solid: #4f46e5; /* relleno de la acción primaria */
+  --mo-brand-solid-hover: #4338ca;
+  --mo-brand-border: #c7d2fe;
+  --mo-brand-bg: #eef2ff; /* soft */
+  --mo-brand-bg2: #e0e7ff;
+  --mo-ring: rgba(79, 70, 229, 0.22); /* foco accesible */
+
+  /* Acción = el mismo índigo. `action` existe por compatibilidad del kit: antes era
+     el azul del legacy, y tener dos azules distintos era justamente el problema. */
+  --mo-action: #4338ca;
+  --mo-action-solid: #4f46e5;
+  --mo-action-bg: #eef2ff;
+  --mo-action-border: #c7d2fe;
+
+  /* ── Semánticos ────────────────────────────────────────── */
+  --mo-warning: #b54708; /* ÁMBAR = advertencia, nada más */
+  --mo-warning-solid: #dc6803;
+  --mo-warning-bg: #fffaeb;
+  --mo-warning-border: #fedf89;
+  --mo-warning-ink: #93370d;
+
+  --mo-danger: #d92d20;
+  --mo-danger-bg: #fef3f2;
+  --mo-danger-border: #fecdca;
+  --mo-danger-ink: #b42318;
+
+  --mo-success: #079455;
+  --mo-success-bg: #ecfdf3;
+  --mo-success-border: #abefc6;
+  --mo-success-ink: #067647;
+
+  /* ── Sidebar (oscuro) ──────────────────────────────────── */
+  --mo-side-bg: #0f1729;
+  --mo-side-hover: rgba(255, 255, 255, 0.06);
+  --mo-side-ink: #e2e8f0; /* grupo (1er nivel) */
+  --mo-side-ink2: #94a3b8; /* sección (2º/3er nivel) */
+  --mo-side-ink3: #64748b; /* rótulos, marca secundaria */
+  --mo-side-line: rgba(255, 255, 255, 0.08);
+  --mo-side-active-bg: #4f46e5;
+  --mo-side-active-ink: #ffffff;
+  /* Acento del grupo Marketing dentro del sidebar: antes era un naranja suelto que no
+     pertenecía a ninguna paleta. Ahora es el índigo aclarado — distingue sin salirse. */
+  --mo-side-accent: #a5b4fc;
+  --mo-side-accent-hover: #e0e7ff;
+  --mo-side-w: 248px;
+
+  /* ── Radios ────────────────────────────────────────────── */
+  --mo-r-sm: 6px;
+  --mo-r-md: 8px;
+  --mo-r-lg: 10px;
+  --mo-r-xl: 12px;
+  --mo-r-2xl: 14px;
+  --mo-r-pill: 999px;
+
+  /* ── Sombras (capas sutiles, no bultos) ────────────────── */
+  --mo-sh-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --mo-sh-md: 0 2px 4px rgba(16, 24, 40, 0.04), 0 6px 16px rgba(16, 24, 40, 0.08);
+  --mo-sh-pop: 0 10px 28px rgba(16, 24, 40, 0.14);
+  --mo-sh-modal: 0 16px 48px rgba(16, 24, 40, 0.2);
+
+  /* ── Tipografía ────────────────────────────────────────── */
+  --mo-font: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mo-fs-xs: 11px;
+  --mo-fs-sm: 12px;
+  --mo-fs-base: 13px;
+  --mo-fs-md: 14px;
+  --mo-fs-lg: 15px;
+  --mo-fs-xl: 18px;
+  --mo-fs-2xl: 22px;
+  --mo-fs-3xl: 26px;
+
+  /* ── Densidad operativa ────────────────────────────────── */
+  --mo-row-h: 38px; /* alto de fila de tabla */
+  --mo-cell-x: 12px; /* padding horizontal de celda */
+  --mo-ctl-h: 34px; /* alto de inputs, selects y botones md */
+  --mo-page-pad: 28px 24px 32px; /* aire de página (se achica en móvil) */
+  --mo-page-max: 1560px;
+
+  /* ── Breakpoint del shell ──────────────────────────────── */
+  /* No se puede usar var() en @media: el valor está acá como documentación y las
+     media queries usan 900px literal. Cambiar los dos juntos. */
+  --mo-bp-shell: 900px;
+}
+
+/* Móvil: el aire de página se recorta (el contenido gana ancho, que es lo escaso). */
+@media (max-width: 900px) {
+  :root {
+    --mo-page-pad: 16px 14px 24px;
+    --mo-row-h: 44px; /* dedo, no mouse */
+    --mo-ctl-h: 42px;
+  }
+}

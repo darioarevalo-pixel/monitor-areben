@@ -1,7 +1,15 @@
-/* Chrome del shell. El CSS del sidebar está copiado del legacy (index.html:60-120)
-   a propósito: mientras convivan los dos mundos, el usuario no tiene que notar
-   dónde termina uno y empieza el otro. Cuando no quede iframe se puede rehacer
-   con el sistema de componentes de areben-produccion. */
+/**
+ * globals.css — chrome del shell (sidebar, encabezado de sección, login) + lo que queda
+ * del CSS legacy, aislado en `@layer legacy` al final de este archivo.
+ *
+ * Rediseño jul-2026: todo el chrome pasó a los tokens de `app/tokens.css`. Antes estaba
+ * copiado textual del legacy (index.html:60-120) para que la migración por secciones no
+ * se notara; cerrada la migración, esa razón desapareció.
+ *
+ * El sidebar sigue OSCURO a propósito: el equipo lo tiene incorporado y no había motivo
+ * para mover el punto de referencia. Lo que cambió es la jerarquía (los tres niveles del
+ * menú se veían casi iguales) y el activo, que pasó del azul del legacy al índigo de firma.
+ */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -14,10 +22,11 @@
 }
 
 body {
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f3f4f6;
-  color: #111827;
-  font-size: 14px;
+  font-family: var(--mo-font);
+  background: var(--mo-bg);
+  color: var(--mo-ink);
+  font-size: var(--mo-fs-md);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Los <Link> del shell (sidebar) son <a>, y el navegador los subraya por default.
@@ -28,11 +37,11 @@ a {
   color: inherit;
 }
 
-/* ── Layout: sidebar fijo + contenido que ocupa el resto ── */
+/* ══ Layout: sidebar fijo + contenido que ocupa el resto ══════ */
 .shell {
   display: flex;
   height: 100vh;
-  overflow: hidden; /* el legacy scrollea adentro del iframe, el shell no scrollea */
+  overflow: hidden; /* el scroll es del contenido, no de la página */
 }
 
 .shell-main {
@@ -46,117 +55,169 @@ a {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  background: var(--mo-bg);
 }
 
-/* Aire uniforme para las secciones servidas por el shell (no el iframe legacy,
-   que trae su propio padding interno). Despega el contenido del borde superior y
-   del sidebar; las que ya usan .card quedan levemente metidas hacia adentro. */
+/* Aire de página. Un solo lugar donde se define, y se recorta en móvil (donde el ancho
+   es lo escaso) vía `--mo-page-pad`. El ancho máximo evita que en un monitor de 27" las
+   tablas se estiren hasta ser ilegibles. */
 .seccion-pad {
-  padding: 28px 24px 24px;
+  padding: var(--mo-page-pad);
+  max-width: var(--mo-page-max);
+  margin: 0 auto;
 }
 
-/* Encabezado uniforme de sección (SeccionHeader): eyebrow de categoría + título +
-   descripción. Empuja el contenido hacia abajo (~2do cuarto) y da la identidad de
-   cada sección. Copiado del patrón PageHeader de areben-produccion, paleta del monitor. */
+/* ══ Encabezado de sección ════════════════════════════════════
+   Eyebrow de categoría + título + descripción, y a la derecha las ACCIONES: el rediseño
+   le dio a `SeccionHeader` el lugar fijo de la acción primaria. Antes cada sección
+   armaba su propia fila de botones donde le tocaba, así que el botón importante
+   aparecía en un lugar distinto en cada pantalla. */
 .seccion-header {
-  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.seccion-header-txt {
+  min-width: 0;
+  flex: 1 1 320px;
 }
 .seccion-eyebrow {
-  font-size: 12px;
+  font-size: var(--mo-fs-xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #b45309;
+  letter-spacing: 0.09em;
+  color: var(--mo-brand);
 }
 .seccion-titulo {
-  font-size: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--mo-fs-2xl);
   font-weight: 700;
-  color: #111827;
+  color: var(--mo-ink);
   margin: 2px 0 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .seccion-desc {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--mo-fs-base);
+  color: var(--mo-mut);
   margin: 4px 0 0;
   max-width: 680px;
+  line-height: 1.5;
+}
+.seccion-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 
-/* ── Sidebar (tema oscuro, igual al legacy) ── */
+/* ══ Botón hamburguesa (solo móvil) ═══════════════════════════ */
+.shell-topbar {
+  display: none;
+}
+
+/* ══ Sidebar (oscuro) ═════════════════════════════════════════ */
 .sidebar {
-  width: 248px;
+  width: var(--mo-side-w);
   flex-shrink: 0;
   height: 100vh;
-  background: #111827;
-  color: #cbd5e1;
+  background: var(--mo-side-bg);
+  color: var(--mo-side-ink2);
   display: flex;
   flex-direction: column;
-  padding: 14px 12px;
+  padding: 14px 10px;
   z-index: 60;
 }
 
 .sidebar-brand {
-  font-size: 17px;
-  font-weight: 800;
+  font-size: var(--mo-fs-lg);
+  font-weight: 700;
   color: #fff;
   line-height: 1.05;
-  padding: 4px 6px 2px;
+  letter-spacing: -0.01em;
+  padding: 4px 8px 2px;
 }
 
 .sidebar-brand span {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  color: #64748b;
-  letter-spacing: 0.12em;
-  margin-top: 2px;
+  color: var(--mo-side-ink3);
+  letter-spacing: 0.14em;
+  margin-top: 3px;
 }
 
 .side-nav {
-  margin-top: 8px;
+  margin-top: 10px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Scrollbar discreta: con 14 grupos el menú scrollea siempre. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.side-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.side-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
 }
 
 .nav-bar {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
+/* ── Nivel 1: grupo (Local, Depósito, Marketing…) ──
+   Es un CONTENEDOR, no un destino. Cuando está activo se marca con el texto en blanco,
+   no con un bloque de color: el bloque de color es del nivel 3, la sección donde
+   realmente estás. Antes los dos se pintaban sólidos y competían. */
 .nav-cat {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 6px;
-  padding: 9px 11px;
+  gap: 8px;
+  padding: 8px 10px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--mo-r-md);
   background: transparent;
-  color: #cbd5e1;
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--mo-side-ink);
+  font-size: var(--mo-fs-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   text-align: left;
   font-family: inherit;
 }
 
 .nav-cat:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--mo-side-hover);
   color: #fff;
+}
+.nav-cat:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mo-brand-solid);
 }
 
 .nav-cat.active {
-  background: #378add;
   color: #fff;
 }
 
 .nav-caret {
   margin-left: auto;
-  font-size: 10px;
-  opacity: 0.6;
+  font-size: 9px;
+  opacity: 0.5;
   transition: transform 0.15s ease;
 }
 
@@ -166,43 +227,52 @@ a {
 
 .nav-menu {
   display: none;
-  padding: 2px 0 4px 8px;
-  margin: 1px 0 2px 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 2px 0 6px 6px;
+  margin: 1px 0 2px 12px;
+  border-left: 1px solid var(--mo-side-line);
 }
 
 .nav-group.open .nav-menu {
   display: block;
 }
 
+/* ── Nivel 3: la sección. Es el destino, y el único que se pinta ── */
 .nav-opt {
   display: block;
   width: 100%;
-  padding: 8px 11px;
+  padding: 7px 10px;
+  margin-bottom: 1px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--mo-r-md);
   text-align: left;
-  font-size: 13px;
-  color: #94a3b8;
+  font-size: var(--mo-fs-base);
+  color: var(--mo-side-ink2);
   cursor: pointer;
   font-family: inherit;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .nav-opt:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--mo-side-hover);
   color: #fff;
+}
+.nav-opt:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mo-brand-solid);
 }
 
 .nav-opt.active {
-  background: #378add;
-  color: #fff;
+  background: var(--mo-side-active-bg);
+  color: var(--mo-side-active-ink);
   font-weight: 600;
 }
 
-/* ── Subgrupo (3er nivel: ej. Local > Actividades > Conteo Zattia) ──
-   Arranca cerrado: adentro va lo esporádico (conteos, chequeos), que no debe
-   competir en la vista con lo de todos los días. */
+/* ── Nivel 2: subgrupo (ej. Local > Actividades) ──
+   Arranca cerrado: adentro va lo esporádico (conteos, chequeos), que no debe competir
+   en la vista con lo de todos los días. Se lee como rótulo, no como botón. */
 .nav-sub {
   padding-top: 2px;
 }
@@ -212,28 +282,34 @@ a {
   width: 100%;
   align-items: center;
   gap: 6px;
-  padding: 7px 11px;
+  padding: 6px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--mo-r-sm);
   background: transparent;
-  color: #94a3b8;
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--mo-side-ink3);
+  font-size: var(--mo-fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   cursor: pointer;
   text-align: left;
   font-family: inherit;
+  transition: color 0.12s ease;
 }
 
 .nav-sub-cat:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  color: var(--mo-side-ink);
+}
+.nav-sub-cat:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mo-brand-solid);
 }
 
 .nav-sub-menu {
   display: none;
-  padding-left: 8px;
+  padding-left: 6px;
   margin-left: 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 1px solid var(--mo-side-line);
 }
 
 .nav-sub.open .nav-sub-menu {
@@ -244,23 +320,25 @@ a {
   transform: rotate(180deg);
 }
 
+/* Marketing tenía un naranja suelto que no era de ninguna paleta. Ahora es el mismo
+   índigo apenas aclarado: sigue distinguiéndose sin salirse del sistema. */
 .nav-accent-mkt {
-  color: #fdba74;
+  color: var(--mo-side-accent);
 }
 
 .nav-accent-mkt:hover {
-  color: #fed7aa;
+  color: var(--mo-side-accent-hover);
 }
 
 .nav-accent-mkt.active {
-  background: #378add;
-  color: #fff;
+  background: var(--mo-side-active-bg);
+  color: var(--mo-side-active-ink);
 }
 
-/* ── Switch de marca ── */
+/* ══ Switch de marca ══════════════════════════════════════════ */
 .empresa-switcher {
   position: relative;
-  margin: 10px 4px 6px;
+  margin: 10px 2px 8px;
 }
 
 .empresa-btn {
@@ -268,15 +346,27 @@ a {
   align-items: center;
   gap: 6px;
   width: 100%;
-  background: #fff;
-  color: #111827;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid var(--mo-side-line);
+  border-radius: var(--mo-r-md);
+  padding: 8px 10px;
+  font-size: var(--mo-fs-base);
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.empresa-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.empresa-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mo-ring);
 }
 
 .empresa-menu {
@@ -285,9 +375,10 @@ a {
   left: 0;
   top: calc(100% + 4px);
   min-width: 100%;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-lg);
+  box-shadow: var(--mo-sh-pop);
   padding: 4px;
   z-index: 70;
 }
@@ -302,34 +393,35 @@ a {
   text-align: left;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--mo-r-sm);
   padding: 7px 10px;
-  font-size: 13px;
-  color: #1f2937;
+  font-size: var(--mo-fs-base);
+  color: var(--mo-ink2);
   cursor: pointer;
   font-family: inherit;
 }
 
 .empresa-opt:hover {
-  background: #f3f4f6;
+  background: var(--mo-bg2);
 }
 
 .empresa-opt.active {
-  background: #eff6ff;
+  background: var(--mo-brand-bg);
+  color: var(--mo-brand);
   font-weight: 600;
 }
 
 .empresa-fija {
-  margin: 10px 4px 6px;
-  color: #94a3b8;
+  margin: 10px 2px 8px;
+  color: var(--mo-side-ink3);
   font-weight: 600;
-  font-size: 13px;
-  padding: 0 6px;
+  font-size: var(--mo-fs-base);
+  padding: 0 8px;
 }
 
-/* ── Pie del sidebar ── */
+/* ══ Pie del sidebar ══════════════════════════════════════════ */
 .sidebar-foot {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--mo-side-line);
   margin-top: 8px;
   padding-top: 10px;
 }
@@ -342,70 +434,182 @@ a {
 }
 
 .side-user {
-  font-size: 12px;
-  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--mo-fs-sm);
+  color: var(--mo-side-ink);
   font-weight: 600;
+}
+.side-user-nombre {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Inicial del usuario: identifica de un vistazo con quién está abierta la sesión (en el
+   local se comparte la máquina y eso importa). */
+.side-avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--mo-r-pill);
+  background: var(--mo-brand-solid);
+  color: #fff;
+  font-size: var(--mo-fs-xs);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+}
 
 .side-salir {
   background: transparent;
-  color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
+  color: var(--mo-side-ink3);
+  border: 1px solid var(--mo-side-line);
+  border-radius: var(--mo-r-sm);
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: var(--mo-fs-xs);
+  font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
   font-family: inherit;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .side-salir:hover {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.4);
 }
+.side-salir:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mo-ring);
+}
 
-/* ── Login ── */
+/* ══ Responsive del shell ═════════════════════════════════════
+   Hasta el rediseño no había una sola @media en este archivo: la app no era responsive,
+   aunque los conteos y las fallas se cargan con el celular en la mano. Abajo de 900px el
+   sidebar pasa a ser un cajón sobre el contenido.
+
+   El literal 900px tiene que ir de la mano de `--mo-bp-shell` en tokens.css (no se puede
+   usar var() en una @media). */
+@media (max-width: 900px) {
+  .shell {
+    height: 100dvh; /* dvh y no vh: en iOS la barra del navegador se come 100vh */
+  }
+
+  .shell-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    background: var(--mo-side-bg);
+    color: #fff;
+  }
+  .shell-topbar-marca {
+    font-size: var(--mo-fs-base);
+    font-weight: 700;
+  }
+  .shell-topbar-seccion {
+    font-size: var(--mo-fs-sm);
+    color: var(--mo-side-ink2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .shell-burger {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: var(--mo-r-md);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    box-shadow: var(--mo-sh-pop);
+  }
+  .sidebar.abierto {
+    transform: translateX(0);
+  }
+  .sidebar-tapa {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(16, 24, 40, 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
+
+/* ══ Login ════════════════════════════════════════════════════ */
 .login-screen {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #f3f4f6;
+  padding: 20px;
+  /* Un fondo con una insinuación del índigo de firma: es la primera pantalla del día. */
+  background:
+    radial-gradient(60% 55% at 50% 0%, var(--mo-brand-bg) 0%, transparent 100%),
+    var(--mo-bg);
 }
 
 .login-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 32px;
-  width: 340px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  background: var(--mo-surface);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-r-2xl);
+  padding: 30px 28px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: var(--mo-sh-md);
 }
 
 .login-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #111827;
+  font-size: var(--mo-fs-2xl);
+  font-weight: 700;
+  color: var(--mo-ink);
+  letter-spacing: -0.02em;
 }
 
 .login-title span {
-  color: #9ca3af;
+  color: var(--mo-mut2);
   font-weight: 500;
 }
 
 .login-sub {
-  color: #9ca3af;
-  font-size: 13px;
+  color: var(--mo-mut);
+  font-size: var(--mo-fs-base);
   margin-bottom: 22px;
 }
 
 .login-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--mo-fs-xs);
   font-weight: 600;
-  color: #6b7280;
+  color: var(--mo-mut);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   margin-bottom: 5px;
@@ -413,31 +617,44 @@ a {
 
 .login-input {
   width: 100%;
-  padding: 9px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 13px;
+  height: var(--mo-ctl-h);
+  padding: 0 12px;
+  border: 1px solid var(--mo-line2);
+  border-radius: var(--mo-r-md);
+  font-size: var(--mo-fs-base);
   outline: none;
   font-family: inherit;
   margin-bottom: 14px;
-  transition: border-color 0.15s;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .login-input:focus {
-  border-color: #111827;
+  border-color: var(--mo-brand-solid);
+  box-shadow: 0 0 0 3px var(--mo-ring);
 }
 
 .login-btn {
   width: 100%;
-  background: #111827;
+  background: var(--mo-brand-solid);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--mo-r-md);
   padding: 11px;
-  font-size: 14px;
+  font-size: var(--mo-fs-md);
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.12s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: var(--mo-brand-solid-hover);
+}
+.login-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mo-ring);
 }
 
 .login-btn:disabled {
@@ -446,8 +663,8 @@ a {
 }
 
 .login-error {
-  color: #dc2626;
-  font-size: 12px;
+  color: var(--mo-danger);
+  font-size: var(--mo-fs-sm);
   min-height: 18px;
   margin-top: 8px;
 }
@@ -477,7 +694,24 @@ a {
    2. `.section { display:none }` es el mecanismo de pestañas del legacy y acá el
       router ya decide qué se muestra. Se copia igual, y la sección se renderiza con
       `className="section visible"`: así el CSS queda textual y la animación de
-      entrada se mantiene. */
+      entrada se mantiene.
+
+   ⛔ NO AGREGAR NADA ACÁ ADENTRO. Todo esto es transitorio: se vacía a medida que cada
+   sección pasa al kit (`components/ui/`) y desaparece con la última tanda del rediseño.
+
+   ── Por qué va en `@layer legacy` (rediseño jul-2026) ──
+   Los selectores de acá son de ELEMENTO scopeados por clase (`.shell-content button`,
+   especificidad 0,1,1) y le ganaban a las clases del kit (`.mo-btn`, 0,1,0). Eso es lo
+   que obligaba al kit a usar estilos inline —y sin CSS no hay `:hover`, `:focus-visible`
+   ni `@media`, o sea no hay responsive—. Metiendo este bloque en una capa se invierte la
+   prioridad sin tocar un solo selector: **el CSS sin capa (el kit) le gana siempre al
+   CSS en capa**, por débil que sea. Así el kit vuelve a ser CSS de verdad y las 20
+   secciones que todavía no migraron siguen viéndose igual que ayer.
+
+   El contenido quedó sin re-indentar a propósito: es código con fecha de vencimiento y
+   re-indentarlo ensuciaría el diff de cada tanda que lo va borrando. */
+
+@layer legacy {
 
 .card {
   background: #fff;
@@ -690,3 +924,5 @@ a {
 .tab { padding:8px 14px; font-size:13px; color:#6B7280; background:transparent; border:none; border-bottom:2px solid transparent; cursor:pointer; border-radius:0; }
 .tab:hover { color:#111827; background:transparent; }
 .tab.active { color:#111827; border-bottom-color:#111827; font-weight:600; }
+
+} /* fin de @layer legacy — todo lo de arriba se borra cuando la última sección migre */
