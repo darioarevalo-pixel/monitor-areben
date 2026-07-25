@@ -21,13 +21,56 @@ export type CandidatoAgotado = {
 }
 
 export function candidatosAOcultar(productos: Producto[], idx: IndiceTn): CandidatoAgotado[] {
+  return cruzar(productos, idx, { stockCero: true, publicado: true })
+}
+
+/**
+ * El movimiento inverso: productos **con stock** que están DESPUBLICADOS en la tienda.
+ *
+ * Es el que faltaba. Ocultar agotados es fácil de recordar —lo hacés cuando se termina algo—
+ * pero volver a mostrarlos cuando reingresa mercadería no lo dispara nada: el producto
+ * queda invisible en la tienda con stock disponible, o sea plata quieta. El "Deshacer" de
+ * ocultar solo sirve en la misma sesión; esto lo encuentra siempre.
+ */
+export function candidatosAMostrar(productos: Producto[], idx: IndiceTn): CandidatoAgotado[] {
+  return cruzar(productos, idx, { stockCero: false, publicado: false })
+}
+
+/**
+ * Stock de Gestión Nube por producto de TiendaNube (`id` de TN → unidades).
+ *
+ * Existe para que la revisión de fotos pueda descartar lo que no tiene stock: una foto
+ * sirve para vender, así que arreglar la de algo agotado no es trabajo de hoy. El stock
+ * sale de GN —la fuente de verdad—, no del que TiendaNube tenga cargado.
+ *
+ * Varios productos de GN pueden matchear el mismo de TN (colores separados): se suman.
+ */
+export function stockPorProductoTn(productos: Producto[], idx: IndiceTn): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const p of productos) {
+    const tn = matchTn({ sku: p.sku, name: p.name }, idx)
+    if (!tn || tn.id == null) continue
+    const key = String(tn.id)
+    out.set(key, (out.get(key) ?? 0) + (p.stock || 0))
+  }
+  return out
+}
+
+/** El cruce GN⨯TN compartido por los dos sentidos (mismo match difuso, mismo dedupe). */
+function cruzar(
+  productos: Producto[],
+  idx: IndiceTn,
+  filtro: { stockCero: boolean; publicado: boolean },
+): CandidatoAgotado[] {
   const out: CandidatoAgotado[] = []
   const vistos = new Set<string>() // dedupe: varios productos GN pueden matchear el mismo TN
   for (const p of productos) {
-    if (p.stock !== 0) continue
+    if (filtro.stockCero ? p.stock !== 0 : p.stock <= 0) continue
     const tn = matchTn({ sku: p.sku, name: p.name }, idx)
     if (!tn || tn.id == null) continue
-    if (tn.published === false) continue // ya está oculto en la tienda
+    // `published` puede venir undefined en el audit: se asume publicado (es el default de TN).
+    const publicado = tn.published !== false
+    if (publicado !== filtro.publicado) continue
     const key = String(tn.id)
     if (vistos.has(key)) continue
     vistos.add(key)

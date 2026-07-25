@@ -150,7 +150,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'verif-ventas': 'Cruce de ventas anuladas en TiendaNube contra Gestión Nube.',
   marketing: 'Auditoría de fotos y descripciones cruzada con stock y ventas.',
   'sesion-fotos': 'Pedí productos para la sesión de fotos y controlá su retiro y devolución.',
-  tncat: 'Herramientas de TiendaNube: categorías por stock, carga de imágenes y más.',
+  tncat: 'Herramientas de la tienda online, por área: fotos, categorías, visibilidad y descripciones.',
   'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',
   disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
   etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',

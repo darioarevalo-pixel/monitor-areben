@@ -606,7 +606,6 @@ export const NAV_CATS: NavCat[] = [
       "marketing",
       "solicitudes",
       "tncat",
-      "gen-talles",
       "meta-ads"
     ],
     "labels": {

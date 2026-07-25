@@ -48,6 +48,48 @@ export function filtrar(data: ProductoFchk[], filtro: FiltroFchk, busqueda: stri
   return lista.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'))
 }
 
+/**
+ * Los tres recortes que hacen usable la revisión: son ~220 productos y la mayoría no
+ * necesitan atención hoy.
+ *
+ * - **sin stock**: una foto sirve para vender; si no hay unidades, arreglarla no es
+ *   urgente. El stock sale de Gestión Nube (fuente de verdad), no de TiendaNube.
+ * - **ignorados**: los que nunca van a tener foto porque no son de la tienda —mayoristas,
+ *   pruebas—. Se marcan a mano una vez y dejan de aparecer.
+ * - **categoría**: recorrer por categoría en vez de enfrentarse a la lista entera.
+ */
+export type RecortesFchk = {
+  /** Solo los que tienen stock. `stockPorProducto` viene del ETL de GN, por id de TN. */
+  soloConStock?: boolean
+  stockPorTn?: Map<string, number>
+  /** Ids de TN marcados como "no me interesa" (persistentes). */
+  ignorados?: Set<string>
+  /** Nombre exacto de la categoría de TN, o null para todas. */
+  categoria?: string | null
+}
+
+export function aplicarRecortes(data: ProductoFchk[], r: RecortesFchk): ProductoFchk[] {
+  return data.filter((p) => {
+    const id = String(p.id)
+    if (r.ignorados?.has(id)) return false
+    if (r.categoria && !(p.categories || []).includes(r.categoria)) return false
+    if (r.soloConStock) {
+      // Sin dato de stock se MUESTRA: preferimos que sobre un producto a esconder uno que
+      // sí hay que arreglar (el match GN⨯TN es difuso y puede no encontrarlo).
+      const s = r.stockPorTn?.get(id)
+      if (s !== undefined && s <= 0) return false
+    }
+    return true
+  })
+}
+
+/** Las categorías presentes en la lista, ordenadas y sin repetir (para el desplegable). */
+export function categoriasDe(data: ProductoFchk[]): string[] {
+  const set = new Set<string>()
+  for (const p of data) for (const c of p.categories || []) if (c) set.add(c)
+  return [...set].sort((a, b) => a.localeCompare(b, 'es'))
+}
+
 /** Los colores de un producto con su foto vinculada (o null), para la fila del detalle. */
 export function coloresConFoto(p: ProductoFchk): { color: string; foto: string | null }[] {
   const by: Record<string, { foto: string | null }> = {}

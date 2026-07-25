@@ -64,7 +64,14 @@ export type GrupoImg = {
 export type SubirResp = { ok?: boolean; image_id?: string | number; variantesObjetivo?: number; variantesAsignadas?: number; variantesDesasignadas?: number; error?: string }
 
 // ── Revisar fotos por variante (card 3, fchk) ───────────────────────────────────
-export type VarianteFchk = { color?: string | null; image_url?: string | null }
+export type VarianteFchk = {
+  color?: string | null
+  image_url?: string | null
+  /** SKU de la variante (cuando se pide `?variantes=1`): sirve para cruzar el stock con GN. */
+  sku?: string | null
+  /** Stock en TiendaNube (null = no gestionado). El de GN es la fuente de verdad. */
+  stock?: number | null
+}
 export type ImagenFchk = { id: string | number; src: string }
 export type ProductoFchk = {
   id: string | number
@@ -73,6 +80,13 @@ export type ProductoFchk = {
   imagenes?: ImagenFchk[]
   variantes?: VarianteFchk[]
   variantes_con_foto?: number
+  /**
+   * Categorías del producto en TiendaNube. El endpoint del audit ya las mandaba —solo
+   * faltaba tiparlas— y son lo que permite recorrer la revisión de fotos por categoría en
+   * vez de enfrentarse a 200 y pico de productos de una.
+   */
+  categories?: string[]
+  category_ids?: (string | number)[]
 }
 
 export type FiltroFchk = 'problema' | 'sinvincular' | 'sinfoto'

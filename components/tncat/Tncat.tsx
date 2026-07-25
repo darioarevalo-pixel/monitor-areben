@@ -1,36 +1,122 @@
 'use client'
 
+import dynamic from 'next/dynamic'
+import { useParams, useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
-import { puedeSub } from '@/lib/permisos'
+import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
+import { Tabs } from '@/components/ui/Tabs'
 import { CategoriasCard } from './CategoriasCard'
 import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
 import { AsignarCard } from './AsignarCard'
 import { AgotadosCard } from './AgotadosCard'
+import { ConStockCard } from './ConStockCard'
 import { VariantesSinStockCard } from './VariantesSinStockCard'
+import type { Marca } from '@/lib/nav'
+
+// La tabla de talles escribe descripciones en TiendaNube, así que es una herramienta más de
+// esta sección; se carga aparte (trae su propio peso) y solo cuando se abre esa pestaña.
+const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), {
+  loading: () => <div style={{ padding: 16, color: '#9CA3AF' }}>Cargando…</div>,
+})
 
 /**
- * Tienda Nube (tncat): 4 herramientas de escritura sobre la tienda online, cada una
- * gateada por su sub-permiso y por marca. Port de tncatAbrir (index.html:7954):
- * - Categorías por modelo: solo BDI + `tncat.categorias`.
- * - Carga de imágenes + Revisar fotos: ambas marcas + `tncat.imagenes`.
- * - Asignar categoría (Excel): solo Zattia + `tncat.asignar`.
+ * Tienda Nube: las herramientas que escriben sobre la tienda online, agrupadas por SUBÁREA.
+ *
+ * Antes eran seis tarjetas apiladas en un scroll único, y ese era el problema: la carga de
+ * imágenes —que se usa cuando entra mercadería, cada tanto— ocupaba el mismo lugar
+ * permanente que la revisión de fotos, que son 200 y pico de productos. Ahora cada grupo de
+ * trabajo es una pestaña.
+ *
+ * Son pestañas y no entradas del menú a propósito: las seis se alimentan del MISMO catálogo
+ * (el audit de TiendaNube + los productos de Gestión Nube). Separadas en el sidebar, cada
+ * una volvería a bajar todo al entrar; acá se baja una vez y cambiar de pestaña es
+ * instantáneo.
+ *
+ * Cada pestaña tiene **dirección propia** (`/tncat/visibilidad`), así se puede entrar
+ * derecho desde el Inicio o compartir el link, y aparece solo si la persona tiene ese
+ * sub-permiso.
  */
+type Sub = 'fotos' | 'categorias' | 'visibilidad' | 'descripciones'
+
 export function Tncat() {
   const { marca, perfil } = useSesion()
-  const verCat = marca === 'bdi' && puedeSub(perfil, marca, 'tncat', 'categorias')
-  const verImg = puedeSub(perfil, marca, 'tncat', 'imagenes')
-  const verAsig = marca === 'zattia' && puedeSub(perfil, marca, 'tncat', 'asignar')
-  const verOcultar = puedeSub(perfil, marca, 'tncat', 'ocultar')
+  const router = useRouter()
+  const params = useParams()
+
+  const admin = esAdmin(perfil)
+  const verImg = admin || puedeSub(perfil, marca, 'tncat', 'imagenes')
+  const verCat = marca === 'bdi' && (admin || puedeSub(perfil, marca, 'tncat', 'categorias'))
+  const verAsig = marca === 'zattia' && (admin || puedeSub(perfil, marca, 'tncat', 'asignar'))
+  const verOcultar = admin || puedeSub(perfil, marca, 'tncat', 'ocultar')
+  const verTalles = admin || puedeVer(perfil, marca, 'gen-talles')
+
+  const subs: { key: Sub; label: string; hint: string; ok: boolean }[] = [
+    { key: 'fotos', label: '📷 Fotos', hint: 'Subir fotos y revisar que estén pegadas al color', ok: verImg },
+    { key: 'categorias', label: '🗂️ Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
+    { key: 'visibilidad', label: '👁️ Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
+    { key: 'descripciones', label: '📏 Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
+  ]
+  const visibles = subs.filter((s) => s.ok)
+
+  // La subárea sale del 2º tramo de la URL (`/tncat/visibilidad`). Si no viene, o si es una
+  // que esta persona no puede ver, cae en la primera que sí.
+  const partes = params.seccion
+  const pedida = (Array.isArray(partes) ? partes[1] : null) as Sub | null
+  const activa: Sub | null = visibles.find((s) => s.key === pedida)?.key ?? visibles[0]?.key ?? null
+
+  if (!visibles.length) {
+    return <div style={{ padding: 16, color: '#9CA3AF' }}>No tenés habilitada ninguna herramienta de Tienda Nube.</div>
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {verCat && <CategoriasCard marca={marca} />}
-      {verImg && <ImagenesCard marca={marca} />}
-      {verImg && <FotosCard marca={marca} />}
-      {verAsig && <AsignarCard marca={marca} />}
-      {verOcultar && <AgotadosCard marca={marca} />}
-      {verOcultar && <VariantesSinStockCard marca={marca} />}
+      {visibles.length > 1 && (
+        <Tabs
+          items={visibles.map((s) => ({ key: s.key, label: s.label, hint: s.hint }))}
+          value={activa ?? ''}
+          onChange={(k) => router.push(`/tncat/${k}`)}
+        />
+      )}
+
+      {activa === 'fotos' && <Fotos marca={marca} />}
+      {activa === 'categorias' && <Categorias marca={marca} verCat={verCat} verAsig={verAsig} />}
+      {activa === 'visibilidad' && <Visibilidad marca={marca} />}
+      {activa === 'descripciones' && <GenTalles />}
     </div>
+  )
+}
+
+/** Fotos: cargar las nuevas y revisar que cada color tenga la suya. */
+function Fotos({ marca }: { marca: Marca }) {
+  return (
+    <>
+      <ImagenesCard marca={marca} />
+      <FotosCard marca={marca} />
+    </>
+  )
+}
+
+/** Categorías: el diff automático por modelo (BDI) y la asignación masiva (Zattia). */
+function Categorias({ marca, verCat, verAsig }: { marca: Marca; verCat: boolean; verAsig: boolean }) {
+  return (
+    <>
+      {verCat && <CategoriasCard marca={marca} />}
+      {verAsig && <AsignarCard marca={marca} />}
+    </>
+  )
+}
+
+/**
+ * Visibilidad: los dos sentidos de la misma decisión —esconder lo agotado y volver a mostrar
+ lo que reingresó— más la lista de variantes que quedaron sin stock a la vista.
+ */
+function Visibilidad({ marca }: { marca: Marca }) {
+  return (
+    <>
+      <AgotadosCard marca={marca} />
+      <ConStockCard marca={marca} />
+      <VariantesSinStockCard marca={marca} />
+    </>
   )
 }
