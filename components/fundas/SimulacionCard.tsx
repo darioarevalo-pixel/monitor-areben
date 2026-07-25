@@ -7,7 +7,7 @@ import { iphoneModelSort } from '@/lib/fundas/ranking'
 import { bloqueToCanvas, copiarOdescargarPNG } from '@/lib/fundas/export'
 import { imgAThumbYSubir } from '@/lib/imagenes'
 import type { SimVar } from '@/lib/fundas/tipos'
-import { color, useToast } from '@/components/ui'
+import { Button, Card, color, useToast } from '@/components/ui'
 
 /** El estado del editor de simulación, propiedad del shell (FundasModelo). */
 export type EditorSim = {
@@ -184,11 +184,11 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
   const copyIcon = (k: string) => (copiado === k ? '✓' : '⎘')
 
   return (
-    <div className="card" id="fm-sim-card" style={{ marginTop: 4 }}>
+    <Card id="fm-sim-card" style={{ marginTop: 4 }}>
       <datalist id="fm-sim-modelos">{FM_MODELOS.map((m) => <option key={m} value={m} />)}</datalist>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Simulación de pedido</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.mut2, letterSpacing: 0 }}>Simulación de pedido</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 12, color: color.mut }}>Total a pedir:</label>
           <input type="number" min={1} value={total} onChange={(e) => set({ total: e.target.value })} style={{ width: 90, textAlign: 'center', fontWeight: 600 }} />
@@ -203,7 +203,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
           {img ? (
             <img src={img} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: `1px solid ${color.line}`, display: 'block', opacity: subiendo.has('pedido') ? 0.5 : 1 }} />
           ) : (
-            <span style={{ display: 'flex', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 8, color: color.mut2, fontSize: 18 }}>📷</span>
+            <span style={{ display: 'flex', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 8, color: color.mut2, fontSize: 20 }}>+</span>
           )}
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -215,7 +215,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
 
       {/* Variantes */}
       <div style={{ marginBottom: 14, padding: '10px 12px', background: color.bg, border: `1px solid ${color.line}`, borderRadius: 10 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#444', cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: color.ink2, cursor: 'pointer' }}>
           <input type="checkbox" checked={varOn} onChange={(e) => toggleVar(e.target.checked)} />
           Separar cada modelo por variantes (color o diseño)
         </label>
@@ -230,13 +230,13 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
                     {v.img ? (
                       <img src={v.img} alt="" style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}`, display: 'block', opacity: subiendo.has(`var-${i}`) ? 0.5 : 1 }} />
                     ) : (
-                      <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 6, color: color.mut2, fontSize: 16 }}>📷</span>
+                      <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 6, color: color.mut2, fontSize: 18 }}>+</span>
                     )}
                   </label>
                   {v.img && <button onClick={() => setVarCampo(i, { img: null })} title="Quitar foto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11, padding: 0 }}>quitar</button>}
                   <input value={v.name} placeholder={`Variante ${i + 1} (ej: Negro, Serpiente...)`} onChange={(e) => setVarCampo(i, { name: e.target.value })} style={{ flex: 1, maxWidth: 240, padding: '5px 8px', fontSize: 13 }} />
                   <input type="number" min={0} max={100} step={0.1} value={v.pct} onChange={(e) => setVarCampo(i, { pct: parseFloat(e.target.value) || 0 })} style={{ width: 70, textAlign: 'center', padding: '5px 6px', fontSize: 13 }} />
-                  <span style={{ fontSize: 12, color: '#888' }}>%</span>
+                  <span style={{ fontSize: 12, color: color.mut2 }}>%</span>
                   <button onClick={() => eliminarVar(i)} style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                 </div>
               ))}
@@ -304,16 +304,36 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ fontSize: 11, color: color.mut2 }}>Los porcentajes y modelos son editables. <b>Tip:</b> tocá <b>⎘</b> en una columna para copiar esa línea lista para tipear en la tienda.</div>
+        {/* Un solo primario: "Guardar pedido" es lo que cierra el trabajo de esta card. Antes
+            había DOS botones llenos —índigo y el verde de WhatsApp— así que la acción que
+            hay que apretar no se distinguía de la que copia una imagen. */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-sm" onClick={onGuardar} title="Guarda este pedido en la lista de abajo" style={{ background: color.brandSolid, color: '#fff' }}>💾 Guardar pedido</button>
-          <button className="btn-sm" onClick={onNuevo} title="Vacía el editor para armar otro pedido">➕ Nuevo</button>
-          <button className="btn-sm" onClick={onVaciar} title="Borra todo y empieza de cero" style={{ color: color.danger }}>🗑 Vaciar</button>
-          <button className="btn-sm" onClick={() => copiarTabla('ambos')} title="Copia modelo y cantidad separados por tabulación">{copiado === 'tabla-ambos' ? '✓ Copiado' : '⎘ Modelo + Cantidad'}</button>
-          <button className="btn-sm" onClick={() => copiarTabla('cantidad')} title="Copia solo las cantidades">{copiado === 'tabla-cantidad' ? '✓ Copiado' : '⎘ Solo cantidad'}</button>
-          <button className="btn-sm" onClick={copiarImagen} disabled={imgMsg === 'Generando...'} title="Copia la tabla como imagen para pegar en WhatsApp" /* El verde es el de WhatsApp: identidad ajena, no del sistema. */
-            style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen'}</button>
+          <Button size="sm" variant="solid" tone="brand" onClick={onGuardar} title="Guarda este pedido en la lista de abajo">
+            Guardar pedido
+          </Button>
+          <Button size="sm" variant="outline" onClick={onNuevo} title="Vacía el editor para armar otro pedido">
+            Nuevo
+          </Button>
+          <Button size="sm" variant="outline" tone="danger" onClick={onVaciar} title="Borra todo y empieza de cero">
+            Vaciar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => copiarTabla('ambos')} title="Copia modelo y cantidad separados por tabulación">
+            {copiado === 'tabla-ambos' ? 'Copiado ✓' : 'Copiar modelo + cantidad'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => copiarTabla('cantidad')} title="Copia solo las cantidades">
+            {copiado === 'tabla-cantidad' ? 'Copiado ✓' : 'Copiar solo cantidad'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={copiarImagen}
+            loading={imgMsg === 'Generando...'}
+            title="Copia la tabla como imagen para pegar en WhatsApp"
+          >
+            {imgMsg || 'Copiar como imagen'}
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

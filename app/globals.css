@@ -13,12 +13,23 @@
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Orden de capas: reset < legacy < kit (el kit es CSS sin capa, y lo sin-capa gana).
+   El reset TIENE que estar en una capa: en la cascada, una regla sin capa le gana a
+   cualquier regla en capa sin mirar la especificidad, así que el `padding: 0` de acá
+   (especificidad 0) le ganaba a todos los paddings de `@layer legacy` — las tablas y los
+   botones del legacy estaban escritos con aire y se veían pegados al borde. Sigue
+   ganándole a los estilos del navegador porque cualquier CSS de autor, aun en capa,
+   vence al UA. */
+@layer reset, legacy;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 
 body {
@@ -851,64 +862,6 @@ a {
 
 /* ── Fundas por modelo ── */
 .chart-wrap { position: relative; width: 100%; }
-.fm-model-label:hover { background: var(--mo-bg2); border-radius: var(--mo-r-sm); }
-.fm-models-panel {
-  background: var(--mo-bg);
-  border: 1px solid var(--mo-line);
-  border-radius: var(--mo-r-lg);
-  padding: 12px;
-  margin-bottom: 12px;
-}
-.fm-models-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 2px;
-  max-height: 200px;
-  overflow-y: auto;
-  margin-top: 8px;
-}
-
-/* ── Selector múltiple de Marketing. El equivalente del kit es <MenuMulti>. ── */
-.mkt-multi { position: relative; }
-.mkt-multi-btn {
-  text-align: left;
-  padding: 0 10px;
-  height: var(--mo-ctl-h);
-  border: 1px solid var(--mo-line2);
-  border-radius: var(--mo-r-md);
-  font-size: var(--mo-fs-base);
-  background: var(--mo-surface);
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-  box-sizing: border-box;
-}
-.mkt-multi-panel {
-  position: absolute;
-  z-index: 40;
-  top: calc(100% + 4px);
-  left: 0;
-  background: var(--mo-surface);
-  border: 1px solid var(--mo-line);
-  border-radius: var(--mo-r-lg);
-  box-shadow: var(--mo-sh-pop);
-  padding: 6px;
-  max-height: 240px;
-  overflow: auto;
-  min-width: 190px;
-}
-.mkt-multi-panel label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 7px;
-  font-size: var(--mo-fs-base);
-  border-radius: var(--mo-r-sm);
-  cursor: pointer;
-}
-.mkt-multi-panel label:hover { background: var(--mo-bg2); }
 
 /* ── Botón ⓘ + popover (components/ui/InfoPopover.tsx). El panel va en portal con
       position:fixed, así no lo recorta el overflow de las cards. ── */
@@ -940,34 +893,6 @@ a {
 .info-pop-title { font-size: var(--mo-fs-sm); font-weight: 700; color: var(--mo-ink); margin-bottom: 4px; }
 .info-pop-body { font-size: var(--mo-fs-sm); line-height: 1.55; color: var(--mo-mut); }
 .info-pop-body b { color: var(--mo-ink2); }
-
-/* ── Miniatura de producto (60px: es el segundo identificador de una prenda) ── */
-.foto-thumb {
-  width: 60px;
-  height: 60px;
-  border-radius: var(--mo-r-sm);
-  object-fit: cover;
-  cursor: zoom-in;
-  background: var(--mo-bg2);
-  border: 1px solid var(--mo-line);
-  display: block;
-}
-.foto-thumb:hover { box-shadow: var(--mo-sh-md); border-color: var(--mo-brand-border); }
-.foto-thumb-placeholder {
-  width: 60px;
-  height: 60px;
-  border-radius: var(--mo-r-sm);
-  background: var(--mo-bg2);
-  border: 1px dashed var(--mo-line2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  color: var(--mo-mut2);
-  text-align: center;
-  line-height: 1.2;
-  padding: 4px;
-}
 
 /* ── Lightbox de fotos ── */
 .lightbox-overlay {

@@ -5,7 +5,7 @@ import { combinarDemanda, demandaPorModelo } from '@/lib/fundas/demanda'
 import { iphoneModelSort } from '@/lib/fundas/ranking'
 import type { DatosDemanda, FilaDemandaComb } from '@/lib/fundas/tipos'
 import type { DatosETL } from '@/lib/etl/tipos'
-import { color } from '@/components/ui'
+import { Button, Card, color } from '@/components/ui'
 
 type ColDem = 'model' | 'pMin' | 'pMay' | 'pComb'
 
@@ -85,16 +85,16 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
   const flecha = (k: ColDem) => (sort.col === k ? (sort.dir < 0 ? ' ▼' : ' ▲') : '')
 
   return (
-    <div className="card" style={{ marginTop: 4 }}>
+    <Card style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Demanda por modelo (corregida)</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.mut2, letterSpacing: 0 }}>Demanda por modelo (corregida)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 12, color: color.mut }}>Diseños lanzados desde:</label>
           <input type="date" value={cutoff} onChange={(e) => setCutoff(e.target.value)} />
         </div>
       </div>
 
-      <div style={{ fontSize: 12, color: '#444', marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: color.ink2, marginBottom: 12 }}>
         {totalU > 0 ? (
           <>
             Del total de fundas (desde {cutoff}): <b>{Math.round((calc.totMin / totalU) * 100)}% minorista</b> ·{' '}
@@ -169,8 +169,8 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
                     <input type="checkbox" checked={sel} onChange={(e) => setExcl((s) => toggleSet(s, r.model, e.target.checked))} />
                   </td>
                   <td style={{ fontWeight: 500 }}>{r.model}</td>
-                  <td style={{ textAlign: 'center', color: '#888' }}>{r.pMin.toFixed(1)}%</td>
-                  <td style={{ textAlign: 'center', color: '#888' }}>{r.pMay.toFixed(1)}%</td>
+                  <td style={{ textAlign: 'center', color: color.mut2 }}>{r.pMin.toFixed(1)}%</td>
+                  <td style={{ textAlign: 'center', color: color.mut2 }}>{r.pMay.toFixed(1)}%</td>
                   <td style={{ textAlign: 'center', fontWeight: 700 }}>
                     {r.pComb.toFixed(1)}%
                     <div style={{ display: 'inline-block', width: 48, height: 4, background: '#eee', borderRadius: 2, marginLeft: 6, verticalAlign: 'middle' }}>
@@ -192,8 +192,10 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: color.mut }}>{selCount} de {rowsSorted.length} modelos</span>
-          <button
-            className="btn-sm"
+          {/* Outline y no lleno: el primario de la pantalla es "Guardar pedido" en la
+              simulación; esto es el puente que la alimenta. */}
+          <Button
+            variant="outline"
             onClick={() => {
               // Elegidos con peso > 0, renormalizados a 100% (fmDemandaUsar, 3454).
               const sel = rowsSorted.filter((r) => !excl.has(r.model) && r.pComb > 0)
@@ -201,12 +203,11 @@ export function DemandaCard({ datos, onUsar }: { datos: DatosETL; onUsar?: (rows
               onUsar?.(suma > 0 ? sel.map((r) => ({ model: r.model, pct: +((r.pComb / suma) * 100).toFixed(1) })) : [])
             }}
             title="Lleva los modelos tildados a la simulación (renormalizados a 100%)"
-            style={{ background: color.brandSolid, color: '#fff' }}
           >
-            ↓ Usar los elegidos en la simulación
-          </button>
+            Usar los elegidos en la simulación
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

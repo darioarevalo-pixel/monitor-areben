@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib/tncat/cliente'
 import { nombresDeFilas } from '@/lib/tncat/excel'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
-import { color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -128,14 +128,14 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       setResultado(
         <div>
           <div style={{ background: paleta.successBg, border: `1px solid ${paleta.successBorder}`, borderRadius: 10, padding: 12, marginTop: 6 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: paleta.successInk }}>✅ Listo</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: paleta.successInk }}>Listo</div>
             <div style={{ fontSize: 13, color: paleta.successInk, marginTop: 3 }}>
               Se agregó <b>{catName}</b> a <b>{aplicados}</b> producto(s).{errores.length ? ` ${errores.length} con error.` : ''}
             </div>
           </div>
           {errores.length ? (
             <details style={{ marginTop: 6 }}>
-              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: paleta.dangerInk, fontWeight: 600 }}>❌ Errores ({errores.length})</summary>
+              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: paleta.dangerInk, fontWeight: 600 }}>Errores ({errores.length})</summary>
               <div style={{ fontSize: 12, color: paleta.ink2, maxHeight: 180, overflow: 'auto', marginTop: 4, paddingLeft: 6 }}>
                 {errores.map((e, i) => (
                   <div key={i}>{(e.nombre || '') + ': ' + (e.msg || e.status || '')}</div>
@@ -167,8 +167,8 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     ) : null
 
   return (
-    <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>🗂️ Asignar categoría (Excel)</div>
+    <Card>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>Asignar categoría (Excel)</div>
       <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px', maxWidth: 680 }}>
         Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.
       </div>
@@ -215,7 +215,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
             </div>
             {lista('✓ Se van a asignar', paleta.successInk, matched.map((m) => m.nombre))}
             {lista('Ya tenían la categoría', paleta.mut, preview.yaTenian)}
-            {lista('⚠️ No encontrados en TiendaNube (revisá el nombre)', paleta.dangerInk, preview.noEncontrados)}
+            {lista('No encontrados en TiendaNube (revisá el nombre)', paleta.dangerInk, preview.noEncontrados)}
           </div>
         )}
       </div>
@@ -223,10 +223,10 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       {matched.length > 0 && !resultado && progreso === null && (
         <div style={{ marginTop: 12 }}>
           <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: paleta.success, color: '#fff' }}>
-            ✅ Aplicar en TiendaNube
+            Aplicar en TiendaNube
           </button>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

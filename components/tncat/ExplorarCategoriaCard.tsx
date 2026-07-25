@@ -6,7 +6,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
 import { buscar, enCategoria, itemsParaAplicar } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
-import { color, useConfirmar } from '@/components/ui'
+import { Card, color, useConfirmar } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -98,10 +98,10 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
       )
       setSacar(new Set())
       setSumar(new Set())
-      setMsg(`✅ ${ok === 1 ? '1 producto actualizado' : `${ok} productos actualizados`}${errores.length ? ` · ${errores.length} con error` : ''}.`)
+      setMsg(`${ok === 1 ? '1 producto actualizado' : `${ok} productos actualizados`}${errores.length ? ` · ${errores.length} con error` : ''}.`)
       void bustAudit(marca)
     } catch (e) {
-      setMsg('⚠️ ' + (e instanceof Error ? e.message : String(e)))
+      setMsg('' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAplicando(false)
     }
@@ -119,9 +119,9 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   )
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>🗂️ Explorar una categoría</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Explorar una categoría</div>
         <InfoPopover titulo="Explorar una categoría">
           Elegí una categoría y vas a ver <b>qué productos tiene hoy</b>, para sacar los que ya no van, y un
           buscador para <b>sumar</b> los que faltan. Sirve sobre todo para las categorías que cambian seguido
@@ -221,6 +221,6 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

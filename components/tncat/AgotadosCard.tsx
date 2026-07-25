@@ -8,7 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAOcultar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
-import { color, useConfirmar } from '@/components/ui'
+import { Card, color, useConfirmar } from '@/components/ui'
 
 /**
  * Ocultar agotados (card 5 de tncat): lista los productos sin stock (GN) que siguen
@@ -72,13 +72,13 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
     const r = await despublicar(marca, ids)
     setProcesando(false)
     if (!r.ok) {
-      setMsg('⚠️ No se pudo ocultar: ' + (r.error || 'error del servidor') + '.')
+      setMsg('No se pudo ocultar: ' + (r.error || 'error del servidor') + '.')
       return
     }
     setOcultados((prev) => new Set([...prev, ...ids.map(String)]))
     setUltimoLote(ids)
     setSel(new Set())
-    setMsg(`✅ Oculté ${r.ocultados ?? ids.length} producto(s).`)
+    setMsg(`Oculté ${r.ocultados ?? ids.length} producto(s).`)
     void bustAudit(marca)
   }
 
@@ -88,7 +88,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
     const r = await publicar(marca, ultimoLote)
     setProcesando(false)
     if (!r.ok) {
-      setMsg('⚠️ No se pudo deshacer: ' + (r.error || 'error') + '.')
+      setMsg('No se pudo deshacer: ' + (r.error || 'error') + '.')
       return
     }
     setOcultados((prev) => {
@@ -104,9 +104,9 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
   const nSel = lista.filter((c) => sel.has(String(c.tnId))).length
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>🙈 Ocultar agotados</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Ocultar agotados</div>
         <InfoPopover titulo="Ocultar agotados">
           Productos sin stock (según Gestión Nube) que siguen visibles en la tienda. Ocultarlos los
           despublica (no los borra): si algún día reingresan, se vuelven a mostrar con “Deshacer” o
@@ -129,7 +129,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
         <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
       ) : lista.length === 0 ? (
         <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
-          ✅ No hay productos agotados publicados en la tienda.
+          No hay productos agotados publicados en la tienda.
         </div>
       ) : (
         <>
@@ -146,7 +146,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
               onClick={() => void ocultar()}
               style={{ background: nSel === 0 ? color.line : color.ink, color: nSel === 0 ? color.mut2 : '#fff', border: 'none', marginLeft: 'auto' }}
             >
-              {procesando ? 'Ocultando…' : `🙈 Ocultar ${nSel || ''}`}
+              {procesando ? 'Ocultando…' : `Ocultar ${nSel || ''}`}
             </button>
           </div>
 
@@ -174,6 +174,6 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
           </div>
         </>
       )}
-    </div>
+    </Card>
   )
 }

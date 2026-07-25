@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { aplicarCategorias, recalcularCategorias } from '@/lib/tncat/cliente'
 import type { CatRecalc } from '@/lib/tncat/tipos'
-import { Button, color, space, useConfirmar } from '@/components/ui'
+import { Button, Card, color, space, useConfirmar } from '@/components/ui'
 
 /**
  * Categorías por modelo (card 1, BDI). Mantiene cada producto en las categorías de
@@ -71,11 +71,11 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
         setResultado(
           <span>
             <span style={{ color: color.warning }}>Aplicados: {j.aplicados}. Con {j.errores.length} errores.</span>
-            {faltaWrite ? <><br /><b style={{ color: color.danger }}>⚠️ Falta activar el token de escritura en Vercel (TIENDANUBE_TOKEN). Avisame y lo vemos.</b></> : null}
+            {faltaWrite ? <><br /><b style={{ color: color.danger }}>Falta activar el token de escritura en Vercel (TIENDANUBE_TOKEN). Avisame y lo vemos.</b></> : null}
           </span>,
         )
       } else {
-        setResultado(<span style={{ color: color.success }}>✅ Listo: {j.aplicados} productos actualizados en TiendaNube.</span>)
+        setResultado(<span style={{ color: color.success }}>Listo: {j.aplicados} productos actualizados en TiendaNube.</span>)
         setTimeout(recalcular, 1500)
       }
     } catch (e) {
@@ -86,7 +86,7 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
   }
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Categorías por modelo</div>
@@ -124,14 +124,14 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
           data.detalle.map((d, i) => (
             <div key={i} style={{ padding: '8px 4px', borderBottom: `1px solid ${color.bg2}` }}>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{d.nombre}</div>
-              {d.agregar.length ? <div style={{ fontSize: 12, color: color.success }}>➕ {d.agregar.join(', ')}</div> : null}
-              {d.quitar.length ? <div style={{ fontSize: 12, color: color.danger }}>➖ {d.quitar.join(', ')}</div> : null}
+              {d.agregar.length ? <div style={{ fontSize: 12, color: color.success }}>+ {d.agregar.join(', ')}</div> : null}
+              {d.quitar.length ? <div style={{ fontSize: 12, color: color.danger }}>− {d.quitar.join(', ')}</div> : null}
             </div>
           ))
         ) : (
-          <div style={{ color: color.success, padding: 14, textAlign: 'center' }}>Todo al día ✅ No hay cambios para hacer.</div>
+          <div style={{ color: color.success, padding: 14, textAlign: 'center' }}>Todo al día: no hay cambios para hacer.</div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

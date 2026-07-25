@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { bustAudit, publicar, subirImagen, traerProductosImg, vincularColor } from '@/lib/tncat/cliente'
 import { colorPorNombre, findProd, matchByFilename } from '@/lib/tncat/matching'
 import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
-import { Button, color, space, useConfirmar, useToast } from '@/components/ui'
+import { Button, Card, color, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Carga de imágenes a TN (card 2). Un bloque por producto con varias fotos: se
@@ -251,8 +251,8 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     setSubiendo(false)
     setInfo(
       <>
-        <span style={{ color: color.success }}>✅ {ok} subidas</span>
-        {sinVincular ? <span style={{ color: color.warning }}> · ⚠ {sinVincular} sin vincular color (tocá 🔗 Revincular)</span> : null}
+        <span style={{ color: color.success }}>{ok} subidas</span>
+        {sinVincular ? <span style={{ color: color.warning }}> · {sinVincular} sin vincular color (tocá Revincular)</span> : null}
         {err ? <span style={{ color: color.danger }}> · {err} con error: {[...new Set(errMsgs)].slice(0, 2).join(' / ')}</span> : null}
       </>,
     )
@@ -269,11 +269,11 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
       const j = await vincularColor(marca, g.productId!, ft.imageId, ft.color)
       if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (j.variantesAsignadas ?? 0) >= (j.variantesObjetivo ?? 0)) {
         actualizarFoto(gid, fid, { avisoColor: null })
-        setInfo(<span style={{ color: color.success }}>✅ Color vinculado.</span>)
+        setInfo(<span style={{ color: color.success }}>Color vinculado.</span>)
       } else {
         const aviso = j.variantesObjetivo ? `Se vinculó ${j.variantesAsignadas}/${j.variantesObjetivo}` : `El color "${ft.color}" no coincide con ninguna variante`
         actualizarFoto(gid, fid, { avisoColor: aviso })
-        setInfo(<span style={{ color: color.warning }}>⚠ {aviso}</span>)
+        setInfo(<span style={{ color: color.warning }}>{aviso}</span>)
       }
     } catch {
       setInfo('Error al revincular.')
@@ -299,7 +299,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     try {
       const d = await publicar(marca, ids)
       if (d.ok) {
-        setInfo(<><span style={{ color: color.success }}>✅ {d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: color.danger }}> · {d.errores.length} con error</span> : null}</>)
+        setInfo(<><span style={{ color: color.success }}>{d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: color.danger }}> · {d.errores.length} con error</span> : null}</>)
         bustAudit(marca)
       } else {
         toast.error('No se pudo publicar: ' + (d.error || 'error desconocido'))
@@ -316,8 +316,8 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   const sinAsig = grupos.filter((g) => !g.productId).reduce((s, g) => s + g.fotos.length, 0)
 
   return (
-    <div className="card">
-      <div style={{ fontSize: 16, fontWeight: 700 }}>📷 Carga de imágenes</div>
+    <Card>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>Carga de imágenes</div>
       <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>
         Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.
       </div>
@@ -376,7 +376,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                   onBlur={(e) => setProd(g.id, e.target.value)}
                   style={{ flex: 1, minWidth: 200, padding: '7px 10px', border: `1px solid ${prod ? color.success : color.line2}`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}
                 />
-                {prod ? <span style={{ fontSize: 11, color: color.success, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ vinculado</span> : <span style={{ fontSize: 11, color: color.danger, fontWeight: 600, whiteSpace: 'nowrap' }}>⚠️ sin producto</span>}
+                {prod ? <span style={{ fontSize: 11, color: color.success, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ vinculado</span> : <span style={{ fontSize: 11, color: color.danger, fontWeight: 600, whiteSpace: 'nowrap' }}>sin producto</span>}
                 {tieneColores ? <span style={{ fontSize: 11, color: color.mut2 }}>↓ elegí el color de cada foto</span> : null}
                 <button onClick={() => quitarGrupo(g.id)} title="Quitar este producto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18 }}>×</button>
               </div>
@@ -410,7 +410,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                         </select>
                       )}
                       {ft.avisoColor ? (
-                        <button onClick={(e) => { e.stopPropagation(); revincular(g.id, ft.id) }} title={ft.avisoColor} style={{ fontSize: 10, marginTop: 3, border: `1px solid ${color.warning}`, background: color.warningBg, color: color.warningInk, borderRadius: 5, padding: '1px 6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>🔗 Revincular</button>
+                        <button onClick={(e) => { e.stopPropagation(); revincular(g.id, ft.id) }} title={ft.avisoColor} style={{ fontSize: 10, marginTop: 3, border: `1px solid ${color.warning}`, background: color.warningBg, color: color.warningInk, borderRadius: 5, padding: '1px 6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Revincular</button>
                       ) : null}
                     </div>
                   )
@@ -419,7 +419,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                   + fotos
                   <input type="file" accept="image/*" multiple onChange={(e) => { grupoFotos(g.id, e.target.files || []); e.currentTarget.value = '' }} style={{ display: 'none' }} />
                 </label>
-                <span style={{ fontSize: 12, color: esActivo ? color.brandSolid : color.mut2 }}>{esActivo ? '📋 Pegá acá (Cmd/Ctrl+V), arrastrá o tocá "+ fotos"' : g.fotos.length ? '' : 'Tocá acá para pegar/arrastrar fotos'}</span>
+                <span style={{ fontSize: 12, color: esActivo ? color.brandSolid : color.mut2 }}>{esActivo ? 'Pegá acá (Cmd/Ctrl+V), arrastrá o tocá "+ fotos"' : g.fotos.length ? '' : 'Tocá acá para pegar/arrastrar fotos'}</span>
               </div>
             </div>
           )
@@ -438,6 +438,6 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
           <img src={preview} alt="" style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.5)' }} />
         </div>
       )}
-    </div>
+    </Card>
   )
 }

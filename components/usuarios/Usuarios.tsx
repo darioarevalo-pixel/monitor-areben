@@ -9,7 +9,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, color, font, useConfirmar } from '@/components/ui'
+import { Badge, Button, Card, Field, Input, Notice, Select, color, font, weight, useConfirmar } from '@/components/ui'
 
 /**
  * Las secciones agrupadas por ÁREA, en el orden del menú. La lista plana de 35 filas
@@ -39,6 +39,12 @@ type Estado = { msg: string; color: string } | null
  * legacy (index.html:9417-9512). Pide la config COMPLETA (admin-gated), la edita en
  * una copia local, y guarda todo junto. La lógica (toggle padre/sub, validación) va
  * en lib/usuarios/core.
+ *
+ * Tanda 10: la lista era una pila de `<div>` con borde y **fondo transparente**, así que
+ * sobre el lienzo gris la pantalla entera se leía "todo en gris" (el reclamo de Bruno).
+ * Ahora las fichas viven dentro de UNA superficie blanca, separadas por línea — la regla 5
+ * del rediseño: toda lista importante va sobre una superficie, nunca como filas-card
+ * sueltas sobre el lienzo.
  */
 export function Usuarios() {
   const { confirmar } = useConfirmar()
@@ -103,14 +109,14 @@ export function Usuarios() {
     if (!users) return
     const err = validar(users)
     if (err) {
-      setStatus({ msg: '⚠️ ' + err, color: color.danger })
+      setStatus({ msg: err, color: color.danger })
       return
     }
     setGuardando(true)
     setStatus({ msg: 'Guardando…', color: color.mut })
     const r = await guardarConfigAdmin(perfil?.name || '', obtenerPass(), users)
     setGuardando(false)
-    if (r.ok) setStatus({ msg: '✓ Guardado. Los cambios ya aplican para todos.', color: color.success })
+    if (r.ok) setStatus({ msg: 'Guardado. Los cambios ya aplican para todos.', color: color.success })
     else {
       if (r.prohibido) guardarAdminPass('')
       setStatus({ msg: 'Error: ' + r.error, color: color.danger })
@@ -126,46 +132,48 @@ export function Usuarios() {
       <HeaderAcciones>
         {status && <span style={{ fontSize: font.sm, color: status.color }}>{status.msg}</span>}
         <Button variant="ghost" onClick={() => setTick((t) => t + 1)} title="Volver a leer la configuración">
-          ↻ Recargar
+          Recargar
         </Button>
         <Button variant="outline" onClick={agregar}>
-          + Usuario
+          Agregar usuario
         </Button>
         <Button variant="solid" tone="brand" onClick={guardar} loading={guardando} disabled={!users}>
           Guardar cambios
         </Button>
       </HeaderAcciones>
 
-
       {/* Config aparece dentro de las dos marcas, pero la lista de usuarios es UNA sola:
           el endpoint no recibe marca. Lo que sí es por marca son los permisos de cada uno. */}
-      <div style={{ fontSize: 12, color: color.mut, background: color.bg, border: `1px solid ${color.line}`, borderRadius: 8, padding: '8px 11px', marginBottom: 12 }}>
-        Esta configuración es <b>única para las dos marcas</b>: entres desde BDI o desde Zattia, editás la misma
-        lista de usuarios. Lo que se define por marca son los permisos de cada uno (las columnas BDI y Zattia).
-      </div>
+      <Notice style={{ marginBottom: 12 }}>
+        Esta configuración es <b>única para las dos marcas</b>: entres desde BDI o desde Zattia, editás la misma lista de
+        usuarios. Lo que se define por marca son los permisos de cada uno (las columnas BDI y Zattia).
+      </Notice>
 
       {!users ? (
-        <div style={{ padding: 16, color: error ? color.danger : color.mut2 }}>
+        <Card padding={4} style={{ color: error ? color.danger : color.mut2 }}>
           {error ? `No se pudo leer la configuración: ${error}` : 'Cargando configuración…'}
-        </div>
+        </Card>
       ) : (
-        users.map((u, i) => (
-          <UsuarioCard
-            key={i}
-            u={u}
-            i={i}
-            abierto={abierto === i}
-            onToggleOpen={() => setAbierto((a) => (a === i ? null : i))}
-            onCampo={onCampo}
-            onAdmin={onAdmin}
-            onCuenta={onCuenta}
-            onPerm={onPerm}
-            onPermArea={onPermArea}
-            onCopiar={onCopiar}
-            onFuncion={onFuncion}
-            onEliminar={() => eliminar(i)}
-          />
-        ))
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {users.map((u, i) => (
+            <UsuarioCard
+              key={i}
+              u={u}
+              i={i}
+              primero={i === 0}
+              abierto={abierto === i}
+              onToggleOpen={() => setAbierto((a) => (a === i ? null : i))}
+              onCampo={onCampo}
+              onAdmin={onAdmin}
+              onCuenta={onCuenta}
+              onPerm={onPerm}
+              onPermArea={onPermArea}
+              onCopiar={onCopiar}
+              onFuncion={onFuncion}
+              onEliminar={() => eliminar(i)}
+            />
+          ))}
+        </Card>
       )}
     </>
   )
@@ -174,6 +182,7 @@ export function Usuarios() {
 function UsuarioCard({
   u,
   i,
+  primero,
   abierto,
   onToggleOpen,
   onCampo,
@@ -187,6 +196,7 @@ function UsuarioCard({
 }: {
   u: UsuarioConfig
   i: number
+  primero: boolean
   abierto: boolean
   onToggleOpen: () => void
   onCampo: (i: number, campo: 'name' | 'pass', val: string) => void
@@ -199,43 +209,51 @@ function UsuarioCard({
   onEliminar: () => void
 }) {
   return (
-    <div style={{ border: `1px solid ${color.line}`, borderRadius: 10, marginBottom: 8 }}>
-      <div onClick={onToggleOpen} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '10px 12px' }}>
-        <div>
-          <b>{u.name || '(nuevo usuario)'}</b>{' '}
-          {u.admin && <span style={{ fontSize: 11, background: color.ink, color: '#fff', borderRadius: 10, padding: '1px 7px' }}>admin</span>}{' '}
-          <span style={{ fontSize: 11, color: color.mut2 }}>{u.cuenta ? '· solo ' + u.cuenta : '· BDI + Zattia'}</span>
+    <div style={{ borderTop: primero ? undefined : `1px solid ${color.line}`, background: abierto ? color.bg : undefined }}>
+      <div
+        onClick={onToggleOpen}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '11px 14px' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <b>{u.name || '(nuevo usuario)'}</b>
+          {u.admin && <Badge tone="brand">admin</Badge>}
+          <span style={{ fontSize: font.xs, color: color.mut2 }}>{u.cuenta ? 'solo ' + u.cuenta : 'BDI + Zattia'}</span>
         </div>
-        <span style={{ color: color.mut2 }}>{abierto ? '▴' : '▾'}</span>
+        <span aria-hidden style={{ color: color.mut2 }}>
+          {abierto ? '▴' : '▾'}
+        </span>
       </div>
 
       {abierto && (
-        <div style={{ padding: '0 12px 12px' }}>
+        <div style={{ padding: '0 14px 14px' }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', margin: '6px 0 14px' }}>
-            <label style={{ fontSize: 12, color: color.mut }}>
-              Usuario
-              <input value={u.name} onChange={(e) => onCampo(i, 'name', e.target.value)} style={campoInput} />
-            </label>
-            <label style={{ fontSize: 12, color: color.mut }}>
-              Contraseña
-              <input value={u.pass} onChange={(e) => onCampo(i, 'pass', e.target.value)} style={campoInput} />
-            </label>
-            <label style={{ fontSize: 12, color: color.mut }}>
-              Marca
-              <select value={u.cuenta || ''} onChange={(e) => onCuenta(i, e.target.value)} style={campoInput}>
+            <Field label="Usuario" width={180}>
+              <Input value={u.name} onChange={(e) => onCampo(i, 'name', e.target.value)} />
+            </Field>
+            <Field label="Contraseña" width={180}>
+              <Input value={u.pass} onChange={(e) => onCampo(i, 'pass', e.target.value)} />
+            </Field>
+            <Field label="Marca" width={170}>
+              <Select value={u.cuenta || ''} onChange={(e) => onCuenta(i, e.target.value)}>
                 <option value="">BDI + Zattia</option>
                 <option value="bdi">Solo BDI</option>
                 <option value="zattia">Solo Zattia</option>
-              </select>
-            </label>
-            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <input type="checkbox" checked={u.admin} onChange={(e) => onAdmin(i, e.target.checked)} /> Administrador (ve todo)
+              </Select>
+            </Field>
+            <label style={{ fontSize: font.base, display: 'flex', alignItems: 'center', gap: 6, height: 'var(--mo-ctl-h)' }}>
+              <input
+                type="checkbox"
+                checked={u.admin}
+                onChange={(e) => onAdmin(i, e.target.checked)}
+                style={{ accentColor: 'var(--mo-brand-solid)' }}
+              />
+              Administrador (ve todo)
             </label>
           </div>
 
           {/* Funciones (rol de flujo de trabajo): definen qué parte de las Solicitudes ve cada uno. */}
           <div style={{ margin: '0 0 14px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', fontSize: 12, color: color.mut, marginBottom: 5 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', fontSize: font.sm, color: color.mut, marginBottom: 5 }}>
               Función
               <InfoPopover titulo="Función del usuario">
                 Rol de flujo de trabajo (además de los permisos). Define qué parte de una Solicitud ve cada uno:
@@ -245,36 +263,45 @@ function UsuarioCard({
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {FUNCIONES.map((f) => (
-                <label key={f.key} style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 5 }} title={f.info}>
-                  <input type="checkbox" checked={!!u.funcion?.includes(f.key)} onChange={(e) => onFuncion(i, f.key, e.target.checked)} /> {f.label}
+                <label key={f.key} style={{ fontSize: font.base, display: 'inline-flex', alignItems: 'center', gap: 5 }} title={f.info}>
+                  <input
+                    type="checkbox"
+                    checked={!!u.funcion?.includes(f.key)}
+                    onChange={(e) => onFuncion(i, f.key, e.target.checked)}
+                    style={{ accentColor: 'var(--mo-brand-solid)' }}
+                  />{' '}
+                  {f.label}
                 </label>
               ))}
             </div>
           </div>
 
           {u.admin ? (
-            <div style={{ fontSize: 12, color: color.mut, padding: '8px 0' }}>Es administrador: ve todas las secciones de las dos marcas y puede gestionar usuarios.</div>
+            <div style={{ fontSize: font.sm, color: color.mut, padding: '8px 0' }}>Es administrador: ve todas las secciones de las dos marcas y puede gestionar usuarios.</div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: color.mut }}>Permisos por marca</span>
+                <span style={{ fontSize: font.sm, color: color.mut }}>Permisos por marca</span>
                 <InfoPopover titulo="Permisos, funciones y excepciones">
                   Lo que trae puesto la <b>función</b> aparece tildado y en gris: no hace falta marcarlo, y una
                   sección nueva de esa área la hereda sola. Si destildás algo que viene por función, queda como
                   <b> excepción</b> (en rojo) para esa persona y esa marca. Los sub-permisos (aplicar un ajuste,
                   crear cupones) nunca vienen por función: se tildan siempre a mano.
                 </InfoPopover>
-                <button className="btn-sm" onClick={() => onCopiar(i, 'bdi', 'zattia')} style={{ background: '#fff', border: `1px solid ${color.line2}`, marginLeft: 'auto' }}>
+                <Button size="sm" variant="outline" onClick={() => onCopiar(i, 'bdi', 'zattia')} style={{ marginLeft: 'auto' }}>
                   Copiar BDI → Zattia
-                </button>
-                <button className="btn-sm" onClick={() => onCopiar(i, 'zattia', 'bdi')} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onCopiar(i, 'zattia', 'bdi')}>
                   Copiar Zattia → BDI
-                </button>
+                </Button>
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              {/* La matriz de permisos se queda en una <table> propia y NO va a `mo-table`:
+                  son 35+ filas de checkbox y la fila de 38px del kit la volvería una
+                  pantalla y media de scroll. Acá la densidad es la funcionalidad. */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base, background: color.surface, borderRadius: 'var(--mo-r-lg)' }}>
                 <thead>
-                  <tr style={{ color: color.mut2, fontSize: 11 }}>
-                    <th style={{ textAlign: 'left' }}>Sección</th>
+                  <tr style={{ color: color.mut2, fontSize: font.xs }}>
+                    <th style={{ textAlign: 'left', padding: '5px 8px' }}>Sección</th>
                     <th style={{ width: 60 }}>BDI</th>
                     <th style={{ width: 60 }}>Zattia</th>
                   </tr>
@@ -289,7 +316,9 @@ function UsuarioCard({
           )}
 
           <div style={{ marginTop: 12 }}>
-            <button className="btn-sm" onClick={onEliminar} style={{ background: '#fff', color: color.danger, border: `1px solid ${color.dangerBorder}`, fontSize: 12 }}>🗑 Eliminar usuario</button>
+            <Button size="sm" variant="outline" tone="danger" onClick={onEliminar}>
+              Eliminar usuario
+            </Button>
           </div>
         </div>
       )}
@@ -332,7 +361,7 @@ function Area({
   return (
     <>
       <tr style={{ background: color.bg, borderTop: `1px solid ${color.line}` }}>
-        <td style={{ padding: '6px 4px', fontSize: 12, fontWeight: 700, color: color.ink2 }}>{area.label}</td>
+        <td style={{ padding: '6px 8px', fontSize: font.sm, fontWeight: weight.bold, color: color.ink2 }}>{area.label}</td>
         {celdaArea('bdi')}
         {celdaArea('zattia')}
       </tr>
@@ -418,4 +447,3 @@ function FilaPermiso({
   )
 }
 
-const campoInput: React.CSSProperties = { display: 'block', padding: '6px 8px', border: `1px solid ${color.line2}`, borderRadius: 7, marginTop: 3 }

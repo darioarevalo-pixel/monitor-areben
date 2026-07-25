@@ -11,7 +11,32 @@ import {
   type OrdenProd,
 } from '@/lib/fundas/ranking'
 import type { DatosRanking } from '@/lib/fundas/tipos'
-import { Button, TBody, THead, TableWrap, Td, Th, Tr, chartColor, color, font, space } from '@/components/ui'
+import { Button, Card, Field, Input, Notice, Select, TBody, THead, TableWrap, Td, Th, Tr, chartColor, color, font, radius, space } from '@/components/ui'
+
+/** Panel de selección (modelos / fundas): una bandeja dentro de la card de filtros. */
+const PANEL: React.CSSProperties = {
+  background: color.bg,
+  border: `1px solid ${color.line}`,
+  borderRadius: radius.lg,
+  padding: 12,
+  marginTop: space[3],
+}
+const GRID: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+  gap: 2,
+  maxHeight: 200,
+  overflowY: 'auto',
+  marginTop: 8,
+}
+const OPCION: React.CSSProperties = {
+  alignItems: 'center',
+  gap: 6,
+  fontSize: font.sm,
+  cursor: 'pointer',
+  padding: '3px 5px',
+  borderRadius: radius.sm,
+}
 
 type Col = 'pos' | 'model' | 'qty' | 'pct'
 const TITULOS: Record<Col, string> = { pos: '#', model: 'Modelo', qty: 'Vendidas', pct: '% del total' }
@@ -119,108 +144,147 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
 
   return (
     <div>
-      <div className="toolbar">
-        <label style={{ fontSize: 12, color: color.mut }}>Desde</label>
-        <select value={rangeStart} onChange={(e) => setRangeStart(e.target.value)}>
-          {meses.map((m) => (
-            <option key={m} value={m}>{fmMonthLabel(m)}</option>
-          ))}
-        </select>
-        <label style={{ fontSize: 12, color: color.mut }}>Hasta</label>
-        <select value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}>
-          {meses.map((m) => (
-            <option key={m} value={m}>{fmMonthLabel(m)}</option>
-          ))}
-        </select>
-        <button className="btn-sm" onClick={() => { setModelosOpen((o) => !o); setProdsOpen(false) }}>Modelos ▾</button>
-        <button className="btn-sm" onClick={() => { setProdsOpen((o) => !o); setModelosOpen(false) }}>Fundas ▾</button>
-        <span style={{ borderLeft: `1.5px solid ${color.line}`, height: 20, margin: '0 2px' }} />
-        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          <input type="checkbox" checked={corteEnabled} onChange={(e) => setCorteEnabled(e.target.checked)} />
-          Cortar al agotarse
-        </label>
-        <select value={corteN} onChange={(e) => setCorteN(parseInt(e.target.value))} style={{ width: 48 }}>
-          {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <span style={{ fontSize: 12, color: color.mut }}>modelos de</span>
-        <select
-          value={corteDiseno ?? ''}
-          onChange={(e) => setCorteDisenoSel(e.target.value)}
-          style={{ maxWidth: 200, fontSize: 12 }}
-        >
-          {corteOpciones.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
+      {/* La fila de filtros flotaba pelada sobre el lienzo —el mismo defecto que tenía
+          Gerencial en la tanda 8— y con ella el aviso del corte y los dos paneles de
+          selección. Va todo dentro de UNA card: es un solo control, el de "qué período y
+          qué fundas estoy mirando". */}
+      <Card padding={3} style={{ marginBottom: space[4] }}>
+        <div className="mo-filterbar" style={{ marginBottom: 0 }}>
+          <Field label="Desde" width={130}>
+            <Select value={rangeStart} onChange={(e) => setRangeStart(e.target.value)}>
+              {meses.map((m) => (
+                <option key={m} value={m}>{fmMonthLabel(m)}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Hasta" width={130}>
+            <Select value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}>
+              {meses.map((m) => (
+                <option key={m} value={m}>{fmMonthLabel(m)}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Modelos de iPhone" width={170}>
+            <Button
+              variant="outline"
+              onClick={() => { setModelosOpen((o) => !o); setProdsOpen(false) }}
+              aria-expanded={modelosOpen}
+              style={{ justifyContent: 'space-between', width: '100%' }}
+            >
+              {checkedModels.size === totalModels ? 'Todos' : `${checkedModels.size} de ${totalModels}`}
+              <span aria-hidden style={{ opacity: 0.5 }}>▾</span>
+            </Button>
+          </Field>
+          <Field label="Fundas" width={170}>
+            <Button
+              variant="outline"
+              onClick={() => { setProdsOpen((o) => !o); setModelosOpen(false) }}
+              aria-expanded={prodsOpen}
+              style={{ justifyContent: 'space-between', width: '100%' }}
+            >
+              {checkedProds.size === totalProds ? 'Todas' : `${checkedProds.size} de ${totalProds}`}
+              <span aria-hidden style={{ opacity: 0.5 }}>▾</span>
+            </Button>
+          </Field>
 
-      {resultado.corte.visible && (
-        <div style={{ fontSize: 11, color: '#888', padding: '2px 0 4px' }}>{resultado.corte.mensaje}</div>
-      )}
+          <span style={{ borderLeft: `1.5px solid ${color.line}`, height: 28, margin: '0 2px', alignSelf: 'flex-end' }} />
 
-      {modelosOpen && (
-        <div className="fm-models-panel">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: color.mut, letterSpacing: 0 }}>Modelos de iPhone</strong>
-            <input type="text" placeholder="Buscar..." value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
-            <button className="btn-sm" onClick={() => setCheckedModels(new Set(def.modelos))}>Todos</button>
-            <button className="btn-sm" onClick={() => setCheckedModels(new Set())}>Ninguno</button>
-          </div>
-          <div className="fm-models-grid">
-            {def.modelos.map((m) => {
-              const oculto = modelSearch && !m.toLowerCase().includes(modelSearch.toLowerCase())
-              return (
-                <label key={m} className="fm-model-label" style={{ display: oculto ? 'none' : 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', padding: '3px 5px', borderRadius: 4 }}>
-                  <input type="checkbox" checked={checkedModels.has(m)} onChange={(e) => setCheckedModels((s) => toggleSet(s, m, e.target.checked))} />
-                  {m}
-                </label>
-              )
-            })}
-          </div>
+          <label
+            style={{ fontSize: font.base, color: color.ink2, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap', height: 'var(--mo-ctl-h)', alignSelf: 'flex-end' }}
+          >
+            <input
+              type="checkbox"
+              checked={corteEnabled}
+              onChange={(e) => setCorteEnabled(e.target.checked)}
+              style={{ accentColor: 'var(--mo-brand-solid)' }}
+            />
+            Cortar al agotarse
+          </label>
+          <Field label="Modelos" width={80}>
+            <Select value={corteN} onChange={(e) => setCorteN(parseInt(e.target.value))} disabled={!corteEnabled}>
+              {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+            </Select>
+          </Field>
+          <Field label="de la funda" width={210}>
+            <Select value={corteDiseno ?? ''} onChange={(e) => setCorteDisenoSel(e.target.value)} disabled={!corteEnabled}>
+              {corteOpciones.map((p) => <option key={p} value={p}>{p}</option>)}
+            </Select>
+          </Field>
         </div>
-      )}
 
-      {prodsOpen && (
-        <div className="fm-models-panel">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-            <strong style={{ fontSize: 11, color: color.mut, letterSpacing: 0 }}>Nombre de funda</strong>
-            <input type="text" placeholder="Buscar..." value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
-            <select value={prodSort} onChange={(e) => setProdSort(e.target.value as OrdenProd)} style={{ fontSize: 12, padding: '3px 6px' }}>
-              <option value="qty">Más vendidas</option>
-              <option value="alpha">Alfabético</option>
-              <option value="date">Fecha de ingreso</option>
-            </select>
-            <button className="btn-sm" onClick={() => setCheckedProds(new Set(prodsOrdenados))}>Todos</button>
-            <button className="btn-sm" onClick={() => setCheckedProds(new Set())}>Ninguno</button>
-            {[10, 20, 30].map((n) => (
-              <button key={n} className="btn-sm" onClick={() => setCheckedProds(new Set(prodsOrdenados.slice(0, n)))}>Top {n}</button>
-            ))}
-          </div>
-          <div className="fm-models-grid">
-            {prodsOrdenados.map((p) => {
-              const oculto = prodSearch && !p.toLowerCase().includes(prodSearch.toLowerCase())
-              return (
-                <label key={p} className="fm-prod-label" style={{ display: oculto ? 'none' : 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', padding: '3px 5px', borderRadius: 4 }}>
-                  <input type="checkbox" checked={checkedProds.has(p)} onChange={(e) => setCheckedProds((s) => toggleSet(s, p, e.target.checked))} />
-                  {p}
-                </label>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        {/* El "✂" se saca acá y no en `lib/fundas/ranking`: la regla del rediseño es no
+            tocar lib para que la paridad contra el legacy no se mueva, y el Notice ya
+            aporta su propia forma de "esto es un aviso". */}
+        {resultado.corte.visible && (
+          <Notice style={{ marginTop: space[3] }}>{resultado.corte.mensaje.replace(/^\s*✂\s*/, '')}</Notice>
+        )}
 
-      <div className="card">
+        {modelosOpen && (
+          <div style={PANEL}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+              <strong style={{ fontSize: font.xs, color: color.mut, letterSpacing: 0 }}>Modelos de iPhone</strong>
+              <Input type="search" placeholder="Buscar…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} style={{ flex: 1, minWidth: 120, width: 'auto' }} />
+              <Button size="sm" variant="outline" onClick={() => setCheckedModels(new Set(def.modelos))}>Todos</Button>
+              <Button size="sm" variant="outline" onClick={() => setCheckedModels(new Set())}>Ninguno</Button>
+            </div>
+            <div style={GRID}>
+              {def.modelos.map((m) => {
+                const oculto = modelSearch && !m.toLowerCase().includes(modelSearch.toLowerCase())
+                return (
+                  <label key={m} style={{ ...OPCION, display: oculto ? 'none' : 'flex' }}>
+                    <input type="checkbox" checked={checkedModels.has(m)} onChange={(e) => setCheckedModels((s) => toggleSet(s, m, e.target.checked))} style={{ accentColor: 'var(--mo-brand-solid)' }} />
+                    {m}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {prodsOpen && (
+          <div style={PANEL}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+              <strong style={{ fontSize: font.xs, color: color.mut, letterSpacing: 0 }}>Nombre de funda</strong>
+              <Input type="search" placeholder="Buscar…" value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} style={{ flex: 1, minWidth: 120, width: 'auto' }} />
+              <Select value={prodSort} onChange={(e) => setProdSort(e.target.value as OrdenProd)} style={{ width: 170 }}>
+                <option value="qty">Más vendidas</option>
+                <option value="alpha">Alfabético</option>
+                <option value="date">Fecha de ingreso</option>
+              </Select>
+              <Button size="sm" variant="outline" onClick={() => setCheckedProds(new Set(prodsOrdenados))}>Todas</Button>
+              <Button size="sm" variant="outline" onClick={() => setCheckedProds(new Set())}>Ninguna</Button>
+              {[10, 20, 30].map((n) => (
+                <Button key={n} size="sm" variant="outline" onClick={() => setCheckedProds(new Set(prodsOrdenados.slice(0, n)))}>Top {n}</Button>
+              ))}
+            </div>
+            <div style={GRID}>
+              {prodsOrdenados.map((p) => {
+                const oculto = prodSearch && !p.toLowerCase().includes(prodSearch.toLowerCase())
+                return (
+                  <label key={p} style={{ ...OPCION, display: oculto ? 'none' : 'flex' }}>
+                    <input type="checkbox" checked={checkedProds.has(p)} onChange={(e) => setCheckedProds((s) => toggleSet(s, p, e.target.checked))} style={{ accentColor: 'var(--mo-brand-solid)' }} />
+                    {p}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ marginBottom: space[4] }}>
         <div className="chart-wrap" style={{ height: chartHeight }}>
-          <div style={{ textAlign: 'center', fontSize: 11, color: '#888', marginBottom: 4 }}>{rangeLabel}</div>
+          <div style={{ textAlign: 'center', fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>{rangeLabel}</div>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 0, bottom: 8 }}>
               <CartesianGrid horizontal={false} stroke={chartColor.grid} />
-              <XAxis type="number" tick={{ fill: '#888', fontSize: 11 }} />
-              <YAxis type="category" dataKey="model" width={140} tick={{ fill: '#444', fontSize: 12 }} />
+              <XAxis type="number" tick={{ fill: chartColor.axis, fontSize: 11 }} />
+              <YAxis type="category" dataKey="model" width={140} tick={{ fill: chartColor.axisFuerte, fontSize: 12 }} />
               <Bar dataKey="qty" fill={chartColor.brand} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </Card>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[2] }}>
         <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink }}>Ranking por modelo</h2>
@@ -232,7 +296,7 @@ export function RankingCard({ datos, onImportar }: { datos: DatosRanking; onImpo
           title="Lleva este ranking (en el orden actual) a la simulación"
           style={{ marginLeft: 'auto' }}
         >
-          ↓ Importar a simulación
+          Importar a simulación
         </Button>
       </div>
 

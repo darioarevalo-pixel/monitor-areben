@@ -8,7 +8,8 @@ import { reporteDecisiones, reporteGaleria, reporteLimpio } from '@/lib/disenos/
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from '@/lib/disenos/tipos'
 import { borrarDiseno, guardarDisenos, leerDisenos, leerLocales, localesParaImportar } from '@/lib/disenos/persistencia'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, Notice, color, space, useConfirmar, useToast } from '@/components/ui'
+import { Button, Card as Superficie, Chips, Notice, Select, Tabs, color, space, useConfirmar, useToast } from '@/components/ui'
+
 let seq = 0
 const newId = () => 'd' + Date.now() + '_' + seq++
 
@@ -198,7 +199,7 @@ export function Disenos() {
         setVotStatus(`Subiendo imágenes… ${i + 1}/${disenos.length}`)
         await subirImagen(id, disenos[i].id, disenos[i].url)
       }
-      setVotStatus('✓ Link listo. Compartilo con tu equipo. Cuando voten, tocá "Traer votos".')
+      setVotStatus('Link listo. Compartilo con tu equipo. Cuando voten, tocá "Traer votos".')
     } catch (e) {
       setVotStatus('Error: ' + (e as Error).message)
     }
@@ -210,7 +211,7 @@ export function Disenos() {
       const ballots = await traerBoletas(vot.id)
       setDisenos((ds) => aplicarTally(ds, tallyVotos(ballots)))
       const quienes = ballots.map((b) => b.name || '?').join(', ') || '—'
-      setVotStatus(`✓ ${ballots.length} persona(s) votaron: ${quienes}. Los votos del tablero se actualizaron.`)
+      setVotStatus(`${ballots.length} persona(s) votaron: ${quienes}. Los votos del tablero se actualizaron.`)
     } catch (e) {
       setVotStatus('Error: ' + (e as Error).message)
     }
@@ -259,7 +260,7 @@ export function Disenos() {
   }
 
   return (
-    <div className="card">
+    <Superficie>
       {errorCarga && (
         <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
           No se pudo leer el tablero compartido: {errorCarga}. Lo que cargues ahora podría no guardarse — recargá antes de seguir.
@@ -269,25 +270,29 @@ export function Disenos() {
       {/* El tablero pasó a ser compartido: lo que quedó en este navegador de la época en que
           se guardaba local se ofrece subir una vez. No se borra nada del navegador. */}
       {porImportar.length > 0 && (
-        <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 9, padding: '9px 13px', fontSize: 13, color: color.warningInk, marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span>
-            El tablero ahora es <b>compartido</b>. En esta computadora {porImportar.length === 1 ? 'quedó 1 diseño' : `quedaron ${porImportar.length} diseños`} que
-            todavía no están arriba.
-          </span>
-          <button
-            className="btn-sm"
-            style={{ background: color.warningInk, color: '#fff', border: 'none', marginLeft: 'auto' }}
-            onClick={() => {
-              setDisenos((prev) => [...porImportar, ...prev])
-              setPorImportar([])
-            }}
-          >
-            ⬆ Subirlos
-          </button>
-          <button className="btn-sm" style={{ background: '#fff', border: `1px solid ${color.line2}` }} onClick={() => setPorImportar([])}>
-            Ahora no
-          </button>
-        </div>
+        <Notice tone="warning" style={{ marginBottom: space[3] }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>
+              El tablero ahora es <b>compartido</b>. En esta computadora {porImportar.length === 1 ? 'quedó 1 diseño' : `quedaron ${porImportar.length} diseños`} que
+              todavía no están arriba.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              tone="warning"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => {
+                setDisenos((prev) => [...porImportar, ...prev])
+                setPorImportar([])
+              }}
+            >
+              Subirlos
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPorImportar([])}>
+              Ahora no
+            </Button>
+          </div>
+        </Notice>
       )}
 
       {/* Jerarquía: cargar imágenes es lo que se hace todos los días; el resto son
@@ -328,31 +333,40 @@ export function Disenos() {
         <input ref={importRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { importar(e.target.files?.[0]); e.target.value = '' }} />
       </div>
 
-      <div onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = color.brandBg }} onDragLeave={(e) => (e.currentTarget.style.background = '')} onDrop={(e) => { e.preventDefault(); e.currentTarget.style.background = ''; cargar(e.dataTransfer.files) }} onClick={() => fileRef.current?.click()} style={{ marginTop: 12, border: `2px dashed ${color.mut2}`, borderRadius: 10, padding: 14, textAlign: 'center', color: color.mut2, fontSize: 13, cursor: 'pointer' }}>Arrastrá acá las imágenes de los diseños, o tocá para elegirlas 📥</div>
+      <div onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = color.brandBg }} onDragLeave={(e) => (e.currentTarget.style.background = '')} onDrop={(e) => { e.preventDefault(); e.currentTarget.style.background = ''; cargar(e.dataTransfer.files) }} onClick={() => fileRef.current?.click()} style={{ marginTop: 12, border: `2px dashed ${color.mut2}`, borderRadius: 10, padding: 14, textAlign: 'center', color: color.mut2, fontSize: 13, cursor: 'pointer' }}>Arrastrá acá las imágenes de los diseños, o tocá para elegirlas</div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '12px 0 4px' }}>
         <div style={{ fontSize: 13, color: color.ink2 }}>
           {disenos.length
-            ? <><b>{disenos.length}</b> diseños · ✅ {contarPorEstado(disenos, 'confirmado')} · 🤔 {contarPorEstado(disenos, 'duda')} · ❌ {contarPorEstado(disenos, 'rechazado')} · 🕓 {contarPorEstado(disenos, 'revisar')} por revisar</>
-            : 'Todavía no cargaste diseños. Soltá las imágenes arriba para empezar. 👆'}
+            ? <><b>{disenos.length}</b> {disenos.length === 1 ? 'diseño' : 'diseños'} · {contarPorEstado(disenos, 'confirmado')} confirmados · {contarPorEstado(disenos, 'duda')} en duda · {contarPorEstado(disenos, 'rechazado')} rechazados · {contarPorEstado(disenos, 'revisar')} por revisar</>
+            : 'Todavía no cargaste diseños. Soltá las imágenes arriba para empezar.'}
         </div>
         <div style={{ display: 'flex', gap: 6, flex: 'none', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={orden} onChange={(e) => setOrden(e.target.value as OrdenDiseno)} style={{ padding: '6px 8px', fontSize: 12, border: `1px solid ${color.line2}`, borderRadius: 8, cursor: 'pointer' }}>
-            <option value="carga">↕ Orden de carga</option>
-            <option value="tildes">👍 Top tildes</option>
-            <option value="cruces">👎 Top cruces</option>
-            <option value="saldo">⚖️ Mejor saldo (👍−👎)</option>
-          </select>
-          <button onClick={() => setView('kanban')} style={viewBtn(view === 'kanban')}>🗂️ Columnas</button>
-          <button onClick={() => setView('galeria')} style={viewBtn(view === 'galeria')}>🖼️ Galería</button>
+          <Select value={orden} onChange={(e) => setOrden(e.target.value as OrdenDiseno)} style={{ width: 200 }} aria-label="Orden">
+            <option value="carga">Orden de carga</option>
+            <option value="tildes">Top tildes</option>
+            <option value="cruces">Top cruces</option>
+            <option value="saldo">Mejor saldo (tildes − cruces)</option>
+          </Select>
+          <Tabs
+            items={[{ key: 'kanban', label: 'Columnas' }, { key: 'galeria', label: 'Galería' }]}
+            value={view}
+            onChange={(k) => setView(k as 'kanban' | 'galeria')}
+          />
         </div>
       </div>
 
       {view === 'galeria' ? (
         <>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0 10px' }}>
-            <Chip active={galFiltro === 'todos'} onClick={() => setGalFiltro('todos')}>📋 Todas ({disenos.length})</Chip>
-            {DB_ESTADOS.map((e) => <Chip key={e.k} active={galFiltro === e.k} onClick={() => setGalFiltro(e.k)}>{e.ico} {e.lbl} ({contarPorEstado(disenos, e.k)})</Chip>)}
+          <div style={{ margin: '6px 0 10px' }}>
+            <Chips
+              value={galFiltro}
+              onChange={(k) => setGalFiltro(k as EstadoDiseno | 'todos')}
+              opciones={[
+                { key: 'todos', label: 'Todas', n: disenos.length },
+                ...DB_ESTADOS.map((e) => ({ key: e.k as EstadoDiseno | 'todos', label: e.lbl, n: contarPorEstado(disenos, e.k) })),
+              ]}
+            />
           </div>
           {(() => {
             const items = ordenar(galFiltro === 'todos' ? disenos : disenos.filter((d) => d.estado === galFiltro), orden)
@@ -384,32 +398,32 @@ export function Disenos() {
 
       {repChooser && (
         <Modal onClose={() => setRepChooser(false)} maxWidth={380}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}><div style={{ fontSize: 15, fontWeight: 700 }}>🖼️ Solo diseños</div><button onClick={() => setRepChooser(false)} style={cerrarBtn}>✕</button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}><div style={{ fontSize: 15, fontWeight: 700 }}>Solo diseños</div><button onClick={() => setRepChooser(false)} style={cerrarBtn}>✕</button></div>
           <div style={{ fontSize: 12, color: color.mut, marginBottom: 14 }}>¿Qué diseños querés en el reporte? (solo las imágenes, sin votos)</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(['confirmado', 'duda', 'rechazado'] as EstadoDiseno[]).map((k) => <button key={k} onClick={() => genLimpio(k)} style={choiceBtn}>{DB_ESTADOS.find((e) => e.k === k)!.ico} {DB_ESTADOS.find((e) => e.k === k)!.lbl} ({contarPorEstado(disenos, k)})</button>)}
-            <button onClick={() => genLimpio('todos')} style={choiceBtn}>📋 Todos ({disenos.length})</button>
+            {(['confirmado', 'duda', 'rechazado'] as EstadoDiseno[]).map((k) => <button key={k} onClick={() => genLimpio(k)} style={choiceBtn}>{DB_ESTADOS.find((e) => e.k === k)!.lbl} ({contarPorEstado(disenos, k)})</button>)}
+            <button onClick={() => genLimpio('todos')} style={choiceBtn}>Todos ({disenos.length})</button>
           </div>
         </Modal>
       )}
 
       {votOpen && (
         <Modal onClose={() => setVotOpen(false)} maxWidth={480}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontSize: 16, fontWeight: 700 }}>🌐 Votación online</div><button onClick={() => setVotOpen(false)} style={cerrarBtn}>✕</button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontSize: 16, fontWeight: 700 }}>Votación online</div><button onClick={() => setVotOpen(false)} style={cerrarBtn}>✕</button></div>
           {!vot ? (
             <>
               <div style={{ fontSize: 13, color: color.ink2, lineHeight: 1.5 }}>Generá un link para que tu equipo vote los <b>{disenos.length}</b> diseños desde el celular. Los votos se juntan acá.</div>
-              <button onClick={crearVot} style={{ marginTop: 14, background: color.brandSolid, color: '#fff', width: '100%', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>🔗 Crear link de votación</button>
+              <button onClick={crearVot} style={{ marginTop: 14, background: color.brandSolid, color: '#fff', width: '100%', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>Crear link de votación</button>
             </>
           ) : (
             <>
               <div style={{ fontSize: 13, color: color.ink2, marginBottom: 8 }}>Compartí este link con tu equipo:</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <input readOnly value={`${VOT_PAGE}?id=${vot.id}`} onClick={(e) => e.currentTarget.select()} style={{ flex: 1, fontSize: 12, padding: 9, border: `1px solid ${color.line2}`, borderRadius: 8 }} />
-                <button onClick={() => { navigator.clipboard?.writeText(`${VOT_PAGE}?id=${vot.id}`).then(() => setVotStatus('✓ Link copiado.'), () => setVotStatus('Copialo manualmente.')) }} style={{ background: color.ink, color: '#fff', padding: '0 14px', borderRadius: 8, cursor: 'pointer', border: 'none' }}>Copiar</button>
+                <button onClick={() => { navigator.clipboard?.writeText(`${VOT_PAGE}?id=${vot.id}`).then(() => setVotStatus('Link copiado.'), () => setVotStatus('Copialo manualmente.')) }} style={{ background: color.ink, color: '#fff', padding: '0 14px', borderRadius: 8, cursor: 'pointer', border: 'none' }}>Copiar</button>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button onClick={traerVot} style={{ flex: 1, background: color.success, color: '#fff', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>📥 Traer votos</button>
+                <button onClick={traerVot} style={{ flex: 1, background: color.success, color: '#fff', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>Traer votos</button>
                 <a href={`${VOT_PAGE}?id=${vot.id}`} target="_blank" rel="noopener noreferrer" style={{ flex: 'none', background: '#fff', border: `1px solid ${color.line2}`, color: color.ink2, padding: '11px 14px', borderRadius: 9, textDecoration: 'none' }}>Ver página</a>
               </div>
               <button onClick={crearVot} style={{ marginTop: 8, background: '#fff', border: `1px solid ${color.line}`, color: color.mut, width: '100%', padding: 8, borderRadius: 9, fontSize: 12, cursor: 'pointer' }}>Crear ronda nueva (reemplaza el link)</button>
@@ -420,7 +434,7 @@ export function Disenos() {
       )}
 
       {quickOn && <QuickModal disenos={disenos} cola={cola} index={quickIndex} onClose={() => setQuickOn(false)} onClasificar={clasificar} onSaltar={saltar} onCampo={setCampo} />}
-    </div>
+    </Superficie>
   )
 }
 
@@ -434,7 +448,7 @@ function Card({ d, onPreview, onCampo, onVoto, onEstado, onQuitar }: { d: Diseno
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
         <button onClick={() => onVoto(d.id, 'up')} style={{ flex: 1, padding: '4px 0', fontSize: 12, border: `1px solid ${color.successBorder}`, background: color.successBg, borderRadius: 6, cursor: 'pointer' }}>👍 {d.up}</button>
         <button onClick={() => onVoto(d.id, 'down')} style={{ flex: 1, padding: '4px 0', fontSize: 12, border: `1px solid ${color.dangerBorder}`, background: color.dangerBg, borderRadius: 6, cursor: 'pointer' }}>👎 {d.down}</button>
-        <button onClick={() => onQuitar(d.id)} title="Quitar" style={{ padding: '4px 7px', fontSize: 12, border: `1px solid ${color.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer' }}>🗑</button>
+        <button onClick={() => onQuitar(d.id)} title="Quitar este diseño" aria-label="Quitar" style={{ padding: '4px 8px', fontSize: 12, color: color.mut, border: `1px solid ${color.line}`, background: color.surface, borderRadius: 6, cursor: 'pointer' }}>✕</button>
       </div>
       <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>{DB_ESTADOS.map((e) => <button key={e.k} onClick={() => onEstado(d.id, e.k)} title={`Mover a ${e.lbl}`} style={{ flex: 1, padding: '3px 0', fontSize: 13, border: `1px solid ${d.estado === e.k ? e.color : color.line}`, background: d.estado === e.k ? e.color : '#fff', borderRadius: 6, cursor: 'pointer' }}>{e.ico}</button>)}</div>
     </div>
@@ -487,9 +501,9 @@ function QuickModal({ disenos, cola, index, onClose, onClasificar, onSaltar, onC
               <input defaultValue={d.name} key={d.id + 'n'} onChange={(e) => onCampo(d.id, 'name', e.target.value)} placeholder="Nombre del diseño" style={{ width: '100%', fontSize: 14, fontWeight: 600, textAlign: 'center', border: 'none', borderBottom: `1px solid ${color.bg2}`, margin: '10px 0', padding: 5, boxSizing: 'border-box' }} />
               <textarea defaultValue={d.nota} key={d.id + 't'} onChange={(e) => onCampo(d.id, 'nota', e.target.value)} placeholder="Nota rápida (opcional)…" style={{ width: '100%', fontSize: 12, border: `1px solid ${color.line}`, borderRadius: 8, padding: 6, minHeight: 32, resize: 'vertical', boxSizing: 'border-box', marginBottom: 11 }} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => onClasificar('rechazado')} style={quickBtn(color.dangerBg, color.danger, color.dangerBorder)}>❌ Rechazar<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 1</div></button>
-                <button onClick={() => onClasificar('duda')} style={quickBtn(color.warningBg, color.warning, color.warningBorder)}>🤔 Duda<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 2</div></button>
-                <button onClick={() => onClasificar('confirmado')} style={quickBtn(color.successBg, color.success, color.successBorder)}>✅ Confirmar<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 3</div></button>
+                <button onClick={() => onClasificar('rechazado')} style={quickBtn(color.dangerBg, color.danger, color.dangerBorder)}>Rechazar<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 1</div></button>
+                <button onClick={() => onClasificar('duda')} style={quickBtn(color.warningBg, color.warning, color.warningBorder)}>Duda<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 2</div></button>
+                <button onClick={() => onClasificar('confirmado')} style={quickBtn(color.successBg, color.success, color.successBorder)}>Confirmar<div style={{ fontSize: 10, fontWeight: 400, opacity: 0.65 }}>tecla 3</div></button>
               </div>
               <button onClick={onSaltar} style={{ width: '100%', marginTop: 8, background: '#fff', color: color.mut, border: `1px solid ${color.line}`, padding: '8px 0', borderRadius: 10, cursor: 'pointer', fontSize: 13 }}>Saltar por ahora → <span style={{ opacity: 0.6 }}>(barra espaciadora)</span></button>
             </div>
@@ -508,13 +522,7 @@ function Modal({ children, onClose, maxWidth }: { children: React.ReactNode; onC
   )
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ padding: '4px 10px', borderRadius: 14, border: `1px solid ${active ? color.brandSolid : color.line}`, background: active ? color.brandBg : '#fff', color: active ? color.brand : color.ink2, fontSize: 12, cursor: 'pointer' }}>{children}</button>
-}
 
-function viewBtn(on: boolean): CSSProperties {
-  return { padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer', background: on ? color.ink : '#fff', color: on ? '#fff' : color.ink2, border: `1px solid ${on ? color.ink : color.line}` }
-}
 function quickBtn(bg: string, col: string, bd: string): CSSProperties {
   return { flex: 1, background: bg, color: col, border: `1px solid ${bd}`, padding: '11px 0', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }
 }

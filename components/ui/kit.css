@@ -243,6 +243,42 @@
   padding-bottom: 7px;
 }
 
+/* Miniatura de producto dentro de una tabla. 60px y no 44: a 44 dos remeras negras son
+   indistinguibles, y la foto es el segundo identificador de una prenda (lo decidió Bruno
+   en la tanda 8). Venía de `.foto-thumb` del legacy; sube al kit porque cualquier listado
+   de productos la necesita. */
+.mo-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--mo-r-sm);
+  object-fit: cover;
+  cursor: zoom-in;
+  background: var(--mo-bg2);
+  border: 1px solid var(--mo-line);
+  display: block;
+}
+.mo-thumb:hover {
+  box-shadow: var(--mo-sh-md);
+  border-color: var(--mo-brand-border);
+}
+.mo-thumb--vacio {
+  border-style: dashed;
+  border-color: var(--mo-line2);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--mo-mut2);
+  text-align: center;
+  line-height: 1.2;
+  padding: 4px;
+}
+.mo-thumb--vacio:hover {
+  box-shadow: none;
+  border-color: var(--mo-line2);
+}
+
 /* ══ Chips de filtro ═════════════════════════════════════════ */
 .mo-chips {
   display: flex;

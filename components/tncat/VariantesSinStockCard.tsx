@@ -7,14 +7,14 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { agruparPorCategoria, variantesSinStockVisibles } from '@/lib/tncat/variantes-sin-stock'
 import type { Marca } from '@/lib/nav.datos'
-import { color } from '@/components/ui'
+import { Card, color } from '@/components/ui'
 
 /**
  * Variantes sin stock (visibles en la tienda) — card read-only (tncat). Lista las
  * variantes en stock 0 (GN) cuyo producto sigue PUBLICADO en TiendaNube, agrupadas por
  * producto, para gestionarlas a mano: TiendaNube NO permite ocultar una variante suelta
  * por API (solo el producto entero). Las de un producto entero agotado se marcan para
- * derivar a "🙈 Ocultar agotados".
+ * derivar a "Ocultar agotados".
  */
 export function VariantesSinStockCard({ marca }: { marca: Marca }) {
   const { datos } = useDatosMonitor()
@@ -52,13 +52,13 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
   const porCategoria = useMemo(() => agruparPorCategoria(lista), [lista])
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>📭 Variantes sin stock (visibles en la tienda)</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Variantes sin stock (visibles en la tienda)</div>
         <InfoPopover titulo="Variantes sin stock visibles">
           Variantes en stock 0 (según Gestión Nube) cuyo producto sigue <b>publicado</b> en TiendaNube. TiendaNube
           no deja ocultar una variante suelta por API, así que esto es una <b>lista para gestionarlas a mano</b> en el
-          admin. Si el producto está <b>entero agotado</b>, conviene despublicarlo completo desde “🙈 Ocultar agotados”.
+          admin. Si el producto está <b>entero agotado</b>, conviene despublicarlo completo desde “Ocultar agotados”.
         </InfoPopover>
       </div>
 
@@ -66,7 +66,7 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
         <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
       ) : grupos.length === 0 ? (
         <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
-          ✅ No hay variantes sin stock visibles en la tienda.
+          No hay variantes sin stock visibles en la tienda.
         </div>
       ) : (
         <>
@@ -99,7 +99,7 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
                   {g.sku ? <span style={{ fontSize: 12, color: color.mut2 }}>SKU {g.sku}</span> : null}
                   {g.enteroAgotado ? (
                     <span style={{ fontSize: 11, fontWeight: 700, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 6, padding: '2px 8px' }}>
-                      producto entero agotado — usá 🙈 Ocultar agotados
+                      producto entero agotado — usá Ocultar agotados
                     </span>
                   ) : null}
                 </div>
@@ -122,6 +122,6 @@ export function VariantesSinStockCard({ marca }: { marca: Marca }) {
           </div>
         </>
       )}
-    </div>
+    </Card>
   )
 }

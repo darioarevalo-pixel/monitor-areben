@@ -343,7 +343,9 @@ export function CRM() {
                   label={t.label}
                   value={t.n}
                   tone={seg === t.key && !verDescartados ? 'brand' : 'neutral'}
-                  style={{ cursor: 'pointer' }}
+                  activo={seg === t.key && !verDescartados}
+                  accion="Ver estos →"
+                  accionActiva="Viendo estos ✓"
                   onClick={() => {
                     setVerDescartados(false)
                     setSeg(t.key)

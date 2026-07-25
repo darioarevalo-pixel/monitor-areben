@@ -1,11 +1,33 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+/**
+ * Marketing — auditoría de fichas de TiendaNube cruzada con stock y ventas.
+ *
+ * Tanda 10 del rediseño. Era la sección más grande que había quedado entera en el CSS
+ * legacy: `.btn-sm` con un color inventado por botón, `.card`, `<table>` cruda sin
+ * cabecera pegajosa, un `inputStyle` propio, un multi-select a mano (`.mkt-multi`) y las
+ * acciones flotando arriba del contenido en vez de en el header de sección.
+ *
+ * Tres decisiones que valen la pena escribir:
+ *
+ * 1. **"Pendientes de tabla (con stock)" era un botón verde sólido**, del mismo peso que
+ *    la acción principal de la pantalla. No es una acción: es un filtro guardado. Pasó a
+ *    chip de la barra de filtros, y ahí además se ve cuándo está puesto.
+ * 2. **Los KPI son filtros.** Ahora lo dicen en reposo ("Filtrar →") y el que está
+ *    aplicado queda con anillo — antes tocabas uno, la tabla se filtraba y nada en la
+ *    pantalla decía que estaba filtrada.
+ * 3. **La columna "Calidad TN" era una hilera de emojis** (📷 3 · 📝 ✗ · 📏 ✗). Pasó a
+ *    badges con tono: se lee el problema, que es lo accionable, sin tener que descifrar
+ *    qué significa cada dibujito.
+ */
+
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { Lightbox } from '@/components/productos/Lightbox'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { HeaderAcciones } from '@/components/layout/acciones'
 import { ponerPuenteFotos } from '@/lib/sesionfotos/puente'
 import type { Variante } from '@/lib/etl/tipos'
 import {
@@ -28,7 +50,27 @@ import {
   ventasPorCanal,
 } from '@/lib/marketing/core'
 import { useMarketing } from './useMarketing'
-import { KpiCard, color, useConfirmar } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  Field,
+  FilterBar,
+  Input,
+  KpiCard,
+  MenuMulti,
+  Select,
+  TBody,
+  THead,
+  TableWrap,
+  Td,
+  Th,
+  Tr,
+  color,
+  font,
+  space,
+  weight,
+  useConfirmar,
+} from '@/components/ui'
 
 const STALE = 15 * 60 * 1000 // fotos "viejas" a partir de 15 min (salvaguarda del puente)
 const TOPE = 300 // la tabla muestra como mucho 300 filas (igual que el legacy)
@@ -38,12 +80,22 @@ const OPCIONES_CALIDAD: { v: FiltroCalidad; label: string }[] = [
   { v: 'sin-foto', label: 'Sin foto en TN' },
   { v: 'pocas-fotos', label: 'Pocas fotos (1-2)' },
   { v: 'sin-desc', label: 'Sin descripción' },
-  { v: 'sin-tabla', label: '📏 Le falta tabla de talles (Zattia)' },
-  { v: 'sin-foto-desc', label: '❌ Sin foto NI descripción' },
+  { v: 'sin-tabla', label: 'Le falta tabla de talles (Zattia)' },
+  { v: 'sin-foto-desc', label: 'Sin foto NI descripción' },
   { v: 'no-publicado', label: 'Oculto en TN' },
-  { v: 'var-sin-foto', label: '🎨 Variantes sin foto propia' },
-  { v: 'top-low-stock', label: '⚠ Top ventas con stock bajo' },
+  { v: 'var-sin-foto', label: 'Variantes sin foto propia' },
+  { v: 'top-low-stock', label: 'Top ventas con stock bajo' },
 ]
+
+const FILTROS_VACIOS: Filtros = {
+  q: '',
+  cohortes: new Set(),
+  catTn: '',
+  stock: '',
+  stockMin: '',
+  stockMax: '',
+  calidades: new Set(),
+}
 
 export function Marketing() {
   const { avisar } = useConfirmar()
@@ -63,19 +115,10 @@ export function Marketing() {
   )
 
   // ── Estado de UI ──────────────────────────────────────────────────────────────
-  const [filtros, setFiltros] = useState<Filtros>(() => ({
-    q: '',
-    cohortes: new Set(),
-    catTn: '',
-    stock: '',
-    stockMin: '',
-    stockMax: '',
-    calidades: new Set(),
-  }))
+  const [filtros, setFiltros] = useState<Filtros>(() => ({ ...FILTROS_VACIOS, cohortes: new Set(), calidades: new Set() }))
   const [orden, setOrden] = useState<OrdenState>({ col: 'sales30', dir: -1 })
   const [expandido, setExpandido] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ imagenes: string[]; nombre: string } | null>(null)
-  const [multiAbierto, setMultiAbierto] = useState<'cohorte' | 'calidad' | null>(null)
   const [refrescando, setRefrescando] = useState(false)
 
   // Modo "elegir productos para sesión de fotos" (el puente).
@@ -89,33 +132,35 @@ export function Marketing() {
   const cohortes = useMemo(() => (productos ? cohortesDisponibles(productos) : []), [productos])
   const categorias = useMemo(() => (audit.data ? categoriasDisponibles(audit.data.products) : []), [audit.data])
 
-  // Cerrar los paneles multi al hacer click afuera (port del listener del legacy).
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      const t = e.target as HTMLElement
-      if (!t.closest('.mkt-multi')) setMultiAbierto(null)
-    }
-    document.addEventListener('click', onDoc)
-    return () => document.removeEventListener('click', onDoc)
-  }, [])
-
   const setFiltro = <K extends keyof Filtros>(k: K, v: Filtros[K]) => setFiltros((f) => ({ ...f, [k]: v }))
 
+  /** ¿El único estado tildado es este? (es lo que pone un click en su KPI) */
+  const calidadUnica = (v: FiltroCalidad) => filtros.calidades.size === 1 && filtros.calidades.has(v)
+
   const toggleCalidadUnica = (v: FiltroCalidad) => {
-    // Click en un KPI: fija ESE estado como único filtro (port de mktSetFiltro).
-    setFiltros((f) => ({ ...f, calidades: new Set([v]) }))
+    // Click en un KPI: fija ESE estado como único filtro (port de mktSetFiltro). Si ya
+    // era el único, el segundo click lo saca — es lo que dice el pie de la tarjeta.
+    setFiltros((f) => ({ ...f, calidades: calidadUnica(v) ? new Set() : new Set([v]) }))
   }
 
-  const limpiarFiltros = () =>
-    setFiltros({ q: '', cohortes: new Set(), catTn: '', stock: '', stockMin: '', stockMax: '', calidades: new Set() })
+  const hayFiltro =
+    !!filtros.q || !!filtros.catTn || !!filtros.stock || filtros.cohortes.size > 0 || filtros.calidades.size > 0
 
-  const filtroTablasPendientes = () => {
-    // Atajo: con stock + le falta la tabla (no toca cat ni mes). Port de mktFiltroTablasPendientes.
-    setFiltros((f) => ({ ...f, stock: 'con', calidades: new Set<FiltroCalidad>(['sin-tabla']) }))
-  }
+  const limpiarFiltros = () => setFiltros({ ...FILTROS_VACIOS, cohortes: new Set(), calidades: new Set() })
+
+  // Atajo: con stock + le falta la tabla (no toca cat ni mes). Port de mktFiltroTablasPendientes.
+  const pendientesPuesto = filtros.stock === 'con' && calidadUnica('sin-tabla')
+  const filtroTablasPendientes = () =>
+    setFiltros((f) =>
+      pendientesPuesto
+        ? { ...f, stock: '', calidades: new Set() }
+        : { ...f, stock: 'con', calidades: new Set<FiltroCalidad>(['sin-tabla']) },
+    )
 
   const sort = (col: Columna) =>
     setOrden((o) => (o.col === col ? { col, dir: (o.dir * -1) as 1 | -1 } : { col, dir: -1 }))
+
+  const dirDe = (col: Columna) => (orden.col === col ? (orden.dir === -1 ? ('desc' as const) : ('asc' as const)) : null)
 
   const refrescarFotos = async () => {
     setRefrescando(true)
@@ -129,6 +174,8 @@ export function Marketing() {
   }
 
   // ── Puente a Sesión de fotos ────────────────────────────────────────────────────
+  const router = useRouter()
+
   const entrarSel = async () => {
     // Salvaguarda: si las fotos están viejas (>15 min), refrescar antes de elegir
     // (así no se mandan productos que ya tienen imágenes). Port de mktSelEntrar.
@@ -149,7 +196,6 @@ export function Marketing() {
     setSelMode(false)
     setSel(new Set())
   }
-  const router = useRouter()
   const mandarSel = () => {
     if (!sel.size) {
       void avisar('Tildá al menos un producto para mandar a Sesión de fotos.')
@@ -177,258 +223,327 @@ export function Marketing() {
   // ── Render ──────────────────────────────────────────────────────────────────────
   const visibles = lista.slice(0, TOPE)
   const colspan = selMode ? 9 : 8
+  const actualizado = audit.data?.cachedAt ? new Date(audit.data.cachedAt) : null
 
   return (
     <div>
-      {/* Barra de acciones (el título/descripción los pone el SeccionHeader del shell). */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {audit.data?.cachedAt ? (
-            <div style={{ fontSize: 11, color: color.mut2 }}>
-              TN actualizado: {new Date(audit.data.cachedAt).toLocaleDateString('es-AR')}{' '}
-              {new Date(audit.data.cachedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-          ) : null}
-          <button
-            className="btn-sm"
-            onClick={refrescarFotos}
+      <HeaderAcciones>
+        {actualizado && (
+          <span style={{ fontSize: font.xs, color: color.mut2 }}>
+            TN actualizado: {actualizado.toLocaleDateString('es-AR')}{' '}
+            {actualizado.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        <Button
+          variant="outline"
+          onClick={() => void refrescarFotos()}
+          loading={refrescando}
+          title="Trae las fotos y datos más nuevos de TiendaNube (bypassa el cache). Tocalo si cargaste fotos recién."
+        >
+          {refrescando ? 'Actualizando fotos…' : 'Actualizar fotos'}
+        </Button>
+        {!selMode && (
+          <Button
+            variant="solid"
+            tone="brand"
+            onClick={() => void entrarSel()}
             disabled={refrescando}
-            title="Trae las fotos y datos más nuevos de TiendaNube (bypassa el cache). Tocalo si cargaste fotos recién."
-            style={{ background: '#fff', border: `1px solid ${color.line2}` }}
+            title="Elegí productos para mandarlos a Sesión de fotos"
           >
-            {refrescando ? '⏳ Actualizando fotos…' : '🔄 Actualizar fotos'}
-          </button>
-          {talles && (
-            <button
-              className="btn-sm"
-              onClick={filtroTablasPendientes}
-              title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes."
-              style={{ background: color.successInk, color: '#fff' }}
-            >
-              📏 Pendientes de tabla (con stock)
-            </button>
-          )}
-          {selMode ? (
-            <>
-              <button className="btn-sm" onClick={mandarSel} style={{ background: color.brandSolid, color: '#fff' }}>
-                📷 Mandar a sesión de fotos ({sel.size})
-              </button>
-              <button className="btn-sm" onClick={cancelarSel} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn-sm"
-              onClick={entrarSel}
-              disabled={refrescando}
-              title="Elegí productos para mandarlos a Sesión de fotos"
-              style={{ background: color.brandSolid, color: '#fff' }}
-            >
-              📷 Productos para sesión de fotos
-            </button>
-          )}
-        </div>
-      </div>
+            Productos para sesión de fotos
+          </Button>
+        )}
+      </HeaderAcciones>
 
-      {/* KPIs */}
-      {/* Son FILTROS, no números decorativos: tocar uno filtra la tabla de abajo. Antes
-          eran `.stat` del CSS legacy con una grilla fija de 4 columnas, así que el quinto
-          se caía de la fila; `mo-kpis` acomoda los que haya. */}
+      {/* KPIs. Son FILTROS, no números decorativos: tocar uno filtra la tabla de abajo, y
+          volver a tocarlo lo saca. Antes eran `.stat` del CSS legacy con una grilla fija
+          de 4 columnas, así que el quinto se caía de la fila; `mo-kpis` acomoda los que haya. */}
       <div className="mo-kpis">
-        <KpiCard label="Sin foto en TN" value={stats.sinFoto} tone="danger" onClick={() => toggleCalidadUnica('sin-foto')} />
-        <KpiCard label="Sin descripción" value={stats.sinDesc} tone="warning" onClick={() => toggleCalidadUnica('sin-desc')} />
-        {talles && <KpiCard label="Le falta tabla de talles" value={stats.sinTabla} tone="warning" onClick={() => toggleCalidadUnica('sin-tabla')} />}
-        <KpiCard label="Sin foto ni descripción" value={stats.sinAmbos} tone="danger" onClick={() => toggleCalidadUnica('sin-foto-desc')} />
-        <KpiCard label="Top ventas con stock bajo" value={stats.topLow} tone="danger" onClick={() => toggleCalidadUnica('top-low-stock')} />
+        <KpiCard
+          label="Sin foto en TN"
+          value={stats.sinFoto}
+          tone="danger"
+          activo={calidadUnica('sin-foto')}
+          accionActiva="Quitar filtro ✕"
+          onClick={() => toggleCalidadUnica('sin-foto')}
+        />
+        <KpiCard
+          label="Sin descripción"
+          value={stats.sinDesc}
+          tone="warning"
+          activo={calidadUnica('sin-desc')}
+          accionActiva="Quitar filtro ✕"
+          onClick={() => toggleCalidadUnica('sin-desc')}
+        />
+        {talles && (
+          <KpiCard
+            label="Le falta tabla de talles"
+            value={stats.sinTabla}
+            tone="warning"
+            activo={calidadUnica('sin-tabla')}
+            accionActiva="Quitar filtro ✕"
+            onClick={() => toggleCalidadUnica('sin-tabla')}
+          />
+        )}
+        <KpiCard
+          label="Sin foto ni descripción"
+          value={stats.sinAmbos}
+          tone="danger"
+          activo={calidadUnica('sin-foto-desc')}
+          accionActiva="Quitar filtro ✕"
+          onClick={() => toggleCalidadUnica('sin-foto-desc')}
+        />
+        <KpiCard
+          label="Top ventas con stock bajo"
+          value={stats.topLow}
+          tone="danger"
+          activo={calidadUnica('top-low-stock')}
+          accionActiva="Quitar filtro ✕"
+          onClick={() => toggleCalidadUnica('top-low-stock')}
+        />
       </div>
 
       {/* Filtros */}
-      <div className="card" style={{ padding: '12px 14px', marginBottom: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-          <Filtro
-            label="Buscar"
-            info={<>Filtra los productos por su <b>nombre o código (SKU)</b>.</>}
-          >
-            <input
-              type="text"
-              value={filtros.q}
-              onChange={(e) => setFiltro('q', e.target.value)}
-              placeholder="Nombre o SKU..."
-              style={inputStyle}
-            />
-          </Filtro>
+      <FilterBar>
+        <Field
+          width={220}
+          label={
+            <>
+              Buscar
+              <InfoPopover titulo="Buscar">
+                Filtra los productos por su <b>nombre o código (SKU)</b>.
+              </InfoPopover>
+            </>
+          }
+        >
+          <Input type="search" value={filtros.q} onChange={(e) => setFiltro('q', e.target.value)} placeholder="Nombre o SKU…" />
+        </Field>
 
-          <Filtro
-            label="Mes de ingreso"
-            info={
-              <>
+        <Field
+          label={
+            <>
+              Mes de ingreso
+              <InfoPopover titulo="Mes de ingreso">
                 Muestra los productos que <b>entraron al catálogo</b> en los meses tildados. Podés elegir <b>varios</b>. Sin
                 nada tildado = todos.
-              </>
-            }
-          >
-            <MultiSelect
-              open={multiAbierto === 'cohorte'}
-              onToggle={() => setMultiAbierto((k) => (k === 'cohorte' ? null : 'cohorte'))}
-              etiquetaVacia="Todos los meses"
-              seleccion={filtros.cohortes}
-              opciones={cohortes.map((m) => ({ v: m, label: mesLabelLargo(m) }))}
-              onChange={(next) => setFiltro('cohortes', next)}
-            />
-          </Filtro>
+              </InfoPopover>
+            </>
+          }
+        >
+          <MenuMulti
+            opciones={cohortes.map((m) => ({ key: m, label: mesLabelLargo(m) }))}
+            seleccion={filtros.cohortes}
+            onCambiar={(next) => setFiltro('cohortes', next)}
+            vacio="Todos los meses"
+            etiqueta={(n, unico) => (n === 1 && unico ? unico : `${n} meses`)}
+          />
+        </Field>
 
-          <Filtro
-            label="Categoría TN"
-            info={<>Filtra por la <b>categoría</b> que tiene el producto en Tienda Nube.</>}
-          >
-            <select value={filtros.catTn} onChange={(e) => setFiltro('catTn', e.target.value)} style={inputStyle}>
-              <option value="">Todas las categorías</option>
-              {categorias.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Filtro>
+        <Field
+          width={200}
+          label={
+            <>
+              Categoría TN
+              <InfoPopover titulo="Categoría TN">
+                Filtra por la <b>categoría</b> que tiene el producto en Tienda Nube.
+              </InfoPopover>
+            </>
+          }
+        >
+          <Select value={filtros.catTn} onChange={(e) => setFiltro('catTn', e.target.value)}>
+            <option value="">Todas las categorías</option>
+            {categorias.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
-          <Filtro
-            label="Stock"
-            info={
-              <>
+        <Field
+          width={170}
+          label={
+            <>
+              Stock
+              <InfoPopover titulo="Stock">
                 Filtra por stock disponible: <b>con stock</b>, <b>sin stock</b>, o un <b>rango</b> (ej. entre 1 y 5 para ver
                 lo que está por agotarse). Independiente de los demás filtros.
-              </>
-            }
-          >
-            <select value={filtros.stock} onChange={(e) => setFiltro('stock', e.target.value)} style={inputStyle}>
-              <option value="">Todos</option>
-              <option value="con">Con stock (&gt; 0)</option>
-              <option value="sin">Sin stock (= 0)</option>
-              <option value="rango">Entre un rango…</option>
-            </select>
-            {filtros.stock === 'rango' && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <input
-                  type="number"
-                  min={0}
-                  value={filtros.stockMin}
-                  onChange={(e) => setFiltro('stockMin', e.target.value)}
-                  placeholder="mín"
-                  style={{ ...inputStyle, width: '50%', padding: '6px 8px' }}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  value={filtros.stockMax}
-                  onChange={(e) => setFiltro('stockMax', e.target.value)}
-                  placeholder="máx"
-                  style={{ ...inputStyle, width: '50%', padding: '6px 8px' }}
-                />
-              </div>
-            )}
-          </Filtro>
+              </InfoPopover>
+            </>
+          }
+        >
+          <Select value={filtros.stock} onChange={(e) => setFiltro('stock', e.target.value)}>
+            <option value="">Todos</option>
+            <option value="con">Con stock (&gt; 0)</option>
+            <option value="sin">Sin stock (= 0)</option>
+            <option value="rango">Entre un rango…</option>
+          </Select>
+        </Field>
 
-          <Filtro
-            label="Estado de la ficha"
-            info={
-              <>
+        {filtros.stock === 'rango' && (
+          <Field width={160} label="Rango de stock">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <Input
+                type="number"
+                min={0}
+                value={filtros.stockMin}
+                onChange={(e) => setFiltro('stockMin', e.target.value)}
+                placeholder="mín"
+                aria-label="Stock mínimo"
+              />
+              <Input
+                type="number"
+                min={0}
+                value={filtros.stockMax}
+                onChange={(e) => setFiltro('stockMax', e.target.value)}
+                placeholder="máx"
+                aria-label="Stock máximo"
+              />
+            </div>
+          </Field>
+        )}
+
+        <Field
+          label={
+            <>
+              Estado de la ficha
+              <InfoPopover titulo="Estado de la ficha">
                 Filtra por el <b>estado de la publicación</b>. Podés elegir <b>varios</b> a la vez (ej. &quot;sin foto&quot; +
                 &quot;sin descripción&quot; = los que les falta foto O descripción). Ideal para encontrar lo que hay que
                 completar.
-              </>
-            }
-          >
-            <MultiSelect
-              open={multiAbierto === 'calidad'}
-              onToggle={() => setMultiAbierto((k) => (k === 'calidad' ? null : 'calidad'))}
-              etiquetaVacia="Todos los estados"
-              seleccion={filtros.calidades}
-              opciones={OPCIONES_CALIDAD}
-              onChange={(next) => setFiltro('calidades', next as Set<FiltroCalidad>)}
-            />
-          </Filtro>
-        </div>
-        <div style={{ textAlign: 'right', marginTop: 10 }}>
-          <button className="btn-sm" onClick={limpiarFiltros} title="Resetear todos los filtros">
-            ✕ Limpiar filtros
-          </button>
-        </div>
-      </div>
+              </InfoPopover>
+            </>
+          }
+        >
+          <MenuMulti
+            opciones={OPCIONES_CALIDAD.map((o) => ({ key: o.v, label: o.label }))}
+            seleccion={filtros.calidades as Set<string>}
+            onCambiar={(next) => setFiltro('calidades', next as Set<FiltroCalidad>)}
+            vacio="Todos los estados"
+            etiqueta={(n, unico) => (n === 1 && unico ? unico : `${n} estados`)}
+            ancho={210}
+          />
+        </Field>
+
+        {/* Es un filtro guardado, no una acción: antes era un botón verde sólido, del
+            mismo peso visual que la acción principal de la pantalla. */}
+        {talles && (
+          <div className="mo-chips" style={{ alignSelf: 'flex-end' }}>
+            <button
+              type="button"
+              className="mo-chip"
+              aria-pressed={pendientesPuesto}
+              onClick={filtroTablasPendientes}
+              title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes."
+            >
+              Pendientes de tabla (con stock)
+              <span className="mo-chip-n">{stats.sinTabla}</span>
+            </button>
+          </div>
+        )}
+
+        {hayFiltro && (
+          <Button variant="ghost" onClick={limpiarFiltros} style={{ alignSelf: 'flex-end' }} title="Resetear todos los filtros">
+            Limpiar filtros
+          </Button>
+        )}
+
+        {listo && (
+          <span className="mo-filterbar-right" style={{ alignSelf: 'flex-end' }}>
+            {lista.length > TOPE
+              ? `Mostrando ${TOPE} de ${lista.length.toLocaleString('es-AR')} productos (refiná filtros para ver más)`
+              : `${lista.length.toLocaleString('es-AR')} ${lista.length === 1 ? 'producto' : 'productos'}`}
+          </span>
+        )}
+      </FilterBar>
 
       {/* Tabla */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ fontSize: 13 }}>
-          <thead>
-            <tr>
-              {selMode && (
-                <th style={{ width: 34, textAlign: 'center' }}>
-                  <input type="checkbox" checked={todosTildados} onChange={(e) => selTodos(e.target.checked)} title="Elegir todos / ninguno" />
-                </th>
-              )}
-              <th style={{ width: 72 }}>Foto</th>
-              <th onClick={() => sort('name')} style={{ cursor: 'pointer' }}>
-                Producto ↕
-              </th>
-              <th onClick={() => sort('cat_tn')} style={{ cursor: 'pointer', width: 160 }}>
-                Cat. TN ↕
-              </th>
-              <th style={{ width: 120, textAlign: 'center' }}>Calidad TN</th>
-              <th onClick={() => sort('stock')} style={{ cursor: 'pointer', width: 80, textAlign: 'right' }}>
-                Stock ↕
-              </th>
-              <th onClick={() => sort('sales30')} style={{ cursor: 'pointer', width: 90, textAlign: 'right' }}>
-                Ventas 30d ↕
-              </th>
-              <th style={{ width: 100, textAlign: 'center' }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!listo ? (
-              <tr>
-                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: color.mut2 }}>
-                  {audit.error ? `Error: ${audit.error}` : 'Cargando datos de TiendaNube y cruzando con stock/ventas…'}
-                </td>
-              </tr>
-            ) : visibles.length === 0 ? (
-              <tr>
-                <td colSpan={colspan} style={{ textAlign: 'center', padding: 30, color: color.mut2 }}>
-                  Sin resultados con los filtros actuales
-                </td>
-              </tr>
-            ) : (
-              visibles.map((x) => (
-                <Fila
-                  key={x.gn.id}
-                  x={x}
-                  marca={marca}
-                  talles={talles}
-                  selMode={selMode}
-                  tildado={sel.has(String(x.gn.id))}
-                  abierto={String(expandido) === String(x.gn.id)}
-                  variantes={datos?.allVariantes ?? []}
-                  ventas={datos?.ventas ?? []}
-                  detalles={datos?.detalles ?? []}
-                  today={today}
-                  onToggleSel={(on) => toggleSel(String(x.gn.id), on)}
-                  onExpand={() => setExpandido((e) => (String(e) === String(x.gn.id) ? null : String(x.gn.id)))}
-                  onFoto={(imagenes, nombre) => setLightbox({ imagenes, nombre })}
+      <TableWrap>
+        <THead>
+          <Tr>
+            {selMode && (
+              <Th width={38} align="center">
+                <input
+                  type="checkbox"
+                  checked={todosTildados}
+                  onChange={(e) => selTodos(e.target.checked)}
+                  title="Elegir todos / ninguno"
+                  style={{ accentColor: 'var(--mo-brand-solid)' }}
                 />
-              ))
+              </Th>
             )}
-          </tbody>
-        </table>
-      </div>
+            <Th width={76}>Foto</Th>
+            {/* En porcentaje y no en px: el nombre del producto es la columna que se lee,
+                y con auto-layout se la comían las de ancho fijo. */}
+            <Th width="32%" onClick={() => sort('name')} sort={dirDe('name')}>
+              Producto
+            </Th>
+            <Th width={150} onClick={() => sort('cat_tn')} sort={dirDe('cat_tn')}>
+              Cat. TN
+            </Th>
+            <Th width={190}>Calidad TN</Th>
+            <Th width={80} align="right" onClick={() => sort('stock')} sort={dirDe('stock')}>
+              Stock
+            </Th>
+            <Th width={96} align="right" onClick={() => sort('sales30')} sort={dirDe('sales30')}>
+              Ventas 30d
+            </Th>
+            <Th width={124} align="center">
+              Acciones
+            </Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {!listo ? (
+            <Tr>
+              <Td colSpan={colspan} align="center" tall style={{ padding: 30, color: color.mut2 }}>
+                {audit.error ? `Error: ${audit.error}` : 'Cargando datos de TiendaNube y cruzando con stock/ventas…'}
+              </Td>
+            </Tr>
+          ) : visibles.length === 0 ? (
+            <Tr>
+              <Td colSpan={colspan} align="center" tall style={{ padding: 30, color: color.mut2 }}>
+                Sin resultados con los filtros actuales
+              </Td>
+            </Tr>
+          ) : (
+            visibles.map((x) => (
+              <Fila
+                key={x.gn.id}
+                x={x}
+                marca={marca}
+                talles={talles}
+                selMode={selMode}
+                tildado={sel.has(String(x.gn.id))}
+                abierto={String(expandido) === String(x.gn.id)}
+                variantes={datos?.allVariantes ?? []}
+                ventas={datos?.ventas ?? []}
+                detalles={datos?.detalles ?? []}
+                today={today}
+                onToggleSel={(on) => toggleSel(String(x.gn.id), on)}
+                onExpand={() => setExpandido((e) => (String(e) === String(x.gn.id) ? null : String(x.gn.id)))}
+                onFoto={(imagenes, nombre) => setLightbox({ imagenes, nombre })}
+              />
+            ))
+          )}
+        </TBody>
+      </TableWrap>
 
-      {listo && lista.length > 0 && (
-        <div style={{ fontSize: 12, color: color.mut2, marginTop: 8, textAlign: 'right' }}>
-          {selMode ? (
-            <>
-              <b>{sel.size}</b> elegidos ·{' '}
-            </>
-          ) : null}
-          Mostrando {Math.min(lista.length, TOPE)} de {lista.length} productos
-          {lista.length > TOPE ? ' (limitado a 300, refiná filtros para ver más)' : ''}
+      {/* Modo selección: la barra queda fija abajo mientras se elige, con el contador.
+          Antes el "N elegidos" era un renglón gris al pie de la tabla, así que había que
+          scrollear hasta el final para saber cuántos llevabas. Mismo patrón que la barra
+          de pendientes de Ubicaciones. */}
+      {selMode && (
+        <div style={BARRA}>
+          <span style={{ fontSize: font.base, color: color.ink2 }}>
+            <b>{sel.size}</b> {sel.size === 1 ? 'producto elegido' : 'productos elegidos'}
+          </span>
+          <Button variant="ghost" onClick={cancelarSel} style={{ marginLeft: 'auto' }}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" onClick={mandarSel} disabled={!sel.size}>
+            Mandar a sesión de fotos
+          </Button>
         </div>
       )}
 
@@ -437,78 +552,20 @@ export function Marketing() {
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '7px 10px',
-  border: `1px solid ${color.line2}`,
-  borderRadius: 8,
-  fontSize: 13,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-}
-
-// ── Un filtro con su etiqueta + botón de info (popover) ────────────────────────────
-function Filtro({ label, info, children }: { label: string; info: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 12, color: color.mut, fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center' }}>
-        {label}
-        <InfoPopover titulo={label}>{info}</InfoPopover>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-// ── Multi-select (mes de ingreso / estado de la ficha) ─────────────────────────────
-function MultiSelect({
-  open,
-  onToggle,
-  etiquetaVacia,
-  seleccion,
-  opciones,
-  onChange,
-}: {
-  open: boolean
-  onToggle: () => void
-  etiquetaVacia: string
-  seleccion: Set<string>
-  opciones: { v: string; label: string }[]
-  onChange: (next: Set<string>) => void
-}) {
-  const labelDe = (v: string) => opciones.find((o) => o.v === v)?.label ?? v
-  const texto =
-    seleccion.size === 0 ? etiquetaVacia : seleccion.size === 1 ? labelDe([...seleccion][0]) : `${seleccion.size} seleccionados`
-  const activo = seleccion.size > 0
-
-  const cambiar = (v: string, on: boolean) => {
-    const n = new Set(seleccion)
-    if (on) n.add(v)
-    else n.delete(v)
-    onChange(n)
-  }
-
-  return (
-    <div className="mkt-multi">
-      <button type="button" className="mkt-multi-btn" onClick={onToggle}>
-        <span style={activo ? { color: color.brand, fontWeight: 600 } : undefined}>{texto}</span>
-        <span style={{ opacity: 0.5 }}>▾</span>
-      </button>
-      {open && (
-        <div className="mkt-multi-panel">
-          {opciones.length === 0 ? (
-            <div style={{ fontSize: 12, color: color.mut2, padding: 6 }}>Sin opciones</div>
-          ) : (
-            opciones.map((o) => (
-              <label key={o.v}>
-                <input type="checkbox" checked={seleccion.has(o.v)} onChange={(e) => cambiar(o.v, e.target.checked)} /> {o.label}
-              </label>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  )
+const BARRA: React.CSSProperties = {
+  position: 'sticky',
+  bottom: 0,
+  zIndex: 5,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  flexWrap: 'wrap',
+  marginTop: 12,
+  padding: '10px 14px',
+  background: 'var(--mo-surface)',
+  border: '1px solid var(--mo-line)',
+  borderRadius: 'var(--mo-r-xl)',
+  boxShadow: 'var(--mo-sh-pop)',
 }
 
 // ── Una fila de producto (+ su detalle expandible) ─────────────────────────────────
@@ -541,97 +598,125 @@ function Fila({
   onExpand: () => void
   onFoto: (imagenes: string[], nombre: string) => void
 }) {
-  const img = x.tn.image_count ?? 0
   const fotoUrl = x.tn.images?.[0] || null
   const cohorteLabel = x.ingresoMes ? mesLabelCorto(x.ingresoMes) : ''
   const meta = [x.gn.category, cohorteLabel].filter(Boolean).join(' · ')
-  const stockColor = x.stock === 0 ? color.danger : x.stock <= 5 ? color.warning : x.topLowStock ? color.danger : '#111'
+  const stockColor = x.stock === 0 ? color.danger : x.stock <= 5 ? color.warning : x.topLowStock ? color.danger : color.ink
 
   const handle = x.tn.handle || ''
   const tnId = x.tn.id || ''
 
   return (
     <>
-      <tr>
+      <Tr>
         {selMode && (
-          <td style={{ textAlign: 'center' }}>
-            <input type="checkbox" checked={tildado} onChange={(e) => onToggleSel(e.target.checked)} title="Elegir para sesión de fotos" />
-          </td>
+          <Td align="center">
+            <input
+              type="checkbox"
+              checked={tildado}
+              onChange={(e) => onToggleSel(e.target.checked)}
+              title="Elegir para sesión de fotos"
+              style={{ accentColor: 'var(--mo-brand-solid)' }}
+            />
+          </Td>
         )}
-        <td>
+        <Td tall>
           {fotoUrl ? (
+            // 60px y no 44: a 44 dos remeras negras son indistinguibles, y la foto es el
+            // segundo identificador de una prenda.
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              className="foto-thumb"
+              className="mo-thumb"
               src={fotoUrl}
               loading="lazy"
               onClick={() => onFoto((x.tn.images || []).filter(Boolean), x.gn.name)}
               alt={x.gn.name}
             />
           ) : (
-            <div className="foto-thumb-placeholder">Sin foto</div>
+            <div className="mo-thumb mo-thumb--vacio">Sin foto</div>
           )}
-        </td>
-        <td onClick={onExpand} style={{ cursor: 'pointer' }} title="Ver stock completo y ventas por canal">
-          <div style={{ fontWeight: 500 }}>
-            {abierto ? '▾' : '▸'} {x.gn.name}
+        </Td>
+        <Td wrap tall onClick={onExpand} title="Ver stock completo y ventas por canal" style={{ cursor: 'pointer' }}>
+          <div style={{ fontWeight: weight.medium }}>
+            <span aria-hidden style={{ color: color.mut2, marginRight: 4 }}>
+              {abierto ? '▾' : '▸'}
+            </span>
+            {x.gn.name}
           </div>
-          {meta ? <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>{meta}</div> : null}
-        </td>
-        <td style={{ fontSize: 12, color: color.mut }}>{x.categoriasTNStr || '—'}</td>
-        <td style={{ textAlign: 'center' }}>
-          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-            <span title={img === 0 ? 'Sin foto' : img <= 2 ? 'Pocas fotos' : 'OK'} style={{ color: img === 0 ? color.danger : img <= 2 ? color.warning : color.success }}>
-              📷 {img}
-            </span>
-            <span title={x.tn.has_desc ? 'OK' : 'Sin descripción'} style={{ color: x.tn.has_desc ? color.success : color.danger }}>
-              📝 {x.tn.has_desc ? '✓' : '✗'}
-            </span>
-            {talles && x.tn.has_desc ? (
-              tieneTabla(x.tn) ? (
-                <span title="Con tabla de talles" style={{ color: color.success }}>
-                  📏 ✓
-                </span>
-              ) : (
-                <span title="Le falta la tabla de talles" style={{ color: color.warning }}>
-                  📏 ✗
-                </span>
-              )
-            ) : null}
-            {!x.tn.published ? (
-              <span title="Oculto" style={{ color: color.danger }}>
-                ●
-              </span>
-            ) : null}
-          </span>
-        </td>
-        <td style={{ textAlign: 'right', fontWeight: 500 }}>
+          {meta ? <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{meta}</div> : null}
+        </Td>
+        {/* Un producto puede estar en 15 categorías de TN (todos los modelos de iPhone).
+            Si se deja envolver, esa fila sola mide media pantalla y aplasta el nombre del
+            producto, que es lo que se viene a leer. Se recorta y el detalle va al tooltip. */}
+        <Td title={x.categoriasTNStr || undefined} style={{ fontSize: font.sm, color: color.mut, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {x.categoriasTNStr || '—'}
+        </Td>
+        <Td wrap>
+          <CalidadTN x={x} talles={talles} />
+        </Td>
+        <Td align="right" strong>
           {x.topLowStock ? (
-            <strong style={{ color: color.danger }}>⚠ {x.stock}</strong>
+            <strong style={{ color: color.danger }} title="Top de ventas con stock bajo">
+              {x.stock}
+            </strong>
           ) : (
             <span style={{ color: stockColor }}>{x.stock}</span>
           )}
-        </td>
-        <td onClick={onExpand} style={{ textAlign: 'right', fontWeight: 500, cursor: 'pointer', color: color.brandSolid }} title="Ver Local vs Tienda online">
+        </Td>
+        <Td align="right" strong onClick={onExpand} title="Ver Local vs Tienda online" style={{ cursor: 'pointer', color: color.brandSolid }}>
           {x.sales30}
-        </td>
-        <td style={{ textAlign: 'center', fontSize: 18 }}>
-          {handle ? (
-            <a href={`${tiendaBaseUrl(marca)}/productos/${handle}`} target="_blank" rel="noreferrer" title="Ver en tienda" style={{ color: color.brandSolid, textDecoration: 'none' }}>
-              🌐
-            </a>
-          ) : null}{' '}
-          {tnId ? (
-            <a href={`${adminBaseUrl(marca)}/${tnId}`} target="_blank" rel="noreferrer" title="Editar en TN admin" style={{ color: color.brand, textDecoration: 'none' }}>
-              ✏️
-            </a>
-          ) : null}
-        </td>
-      </tr>
+        </Td>
+        <Td align="center">
+          <span style={{ display: 'inline-flex', gap: 10, fontSize: font.sm }}>
+            {handle ? (
+              <a
+                href={`${tiendaBaseUrl(marca)}/productos/${handle}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Ver en la tienda"
+                style={{ color: color.brandSolid, fontWeight: weight.semibold }}
+              >
+                Tienda
+              </a>
+            ) : null}
+            {tnId ? (
+              <a
+                href={`${adminBaseUrl(marca)}/${tnId}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Editar la ficha en el admin de TN"
+                style={{ color: color.brand, fontWeight: weight.semibold }}
+              >
+                Editar
+              </a>
+            ) : null}
+          </span>
+        </Td>
+      </Tr>
       {abierto && (
         <Detalle x={x} colspan={selMode ? 9 : 8} variantes={variantes} ventas={ventas} detalles={detalles} today={today} />
       )}
     </>
+  )
+}
+
+/**
+ * Calidad de la ficha en TN. Era una hilera de emojis (📷 3 · 📝 ✗ · 📏 ✗) que había que
+ * traducir mentalmente; ahora cada carencia se nombra, que es lo accionable. El conteo de
+ * fotos se queda siempre porque "3 fotos" y "6 fotos" no son lo mismo aunque las dos
+ * estén bien.
+ */
+function CalidadTN({ x, talles }: { x: ItemMkt; talles: boolean }) {
+  const img = x.tn.image_count ?? 0
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+      <Badge tone={img === 0 ? 'danger' : img <= 2 ? 'warning' : 'success'}>
+        {img === 0 ? 'Sin foto' : `${img} ${img === 1 ? 'foto' : 'fotos'}`}
+      </Badge>
+      {!x.tn.has_desc && <Badge tone="danger">Sin descripción</Badge>}
+      {talles && x.tn.has_desc && !tieneTabla(x.tn) && <Badge tone="warning">Sin tabla de talles</Badge>}
+      {!x.tn.published && <Badge tone="neutral">Oculto</Badge>}
+    </span>
   )
 }
 
@@ -664,7 +749,7 @@ function Detalle({
   const conVariantes = (tn.image_count || 0) > 0 && (tn.variantes_total || 0) > 1
 
   const titulo = (t: string) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: color.brand, letterSpacing: 0, marginBottom: 6 }}>{t}</div>
+    <div style={{ fontSize: font.xs, fontWeight: weight.bold, color: color.brand, letterSpacing: 0, marginBottom: 6 }}>{t}</div>
   )
 
   return (
@@ -674,55 +759,69 @@ function Detalle({
           <div>
             {titulo('Stock completo')}
             {vars.length ? (
-              <table style={{ width: 'auto', fontSize: 12, borderCollapse: 'collapse' }}>
+              <table style={{ width: 'auto', fontSize: font.sm, borderCollapse: 'collapse' }}>
                 <tbody>
                   {vars.map((v, i) => (
                     <tr key={i}>
-                      <td style={{ padding: '2px 18px 2px 0', color: '#555' }}>{v.size || '—'}</td>
-                      <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 600, color: v.stock <= 0 ? color.danger : v.stock <= 5 ? color.warning : '#111' }}>{v.stock}</td>
+                      <td style={{ padding: '2px 18px 2px 0', color: color.mut }}>{v.size || '—'}</td>
+                      <td
+                        style={{
+                          padding: '2px 0',
+                          textAlign: 'right',
+                          fontWeight: weight.semibold,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: v.stock <= 0 ? color.danger : v.stock <= 5 ? color.warning : color.ink,
+                        }}
+                      >
+                        {v.stock}
+                      </td>
                     </tr>
                   ))}
                   <tr style={{ borderTop: `1px solid ${color.line}` }}>
-                    <td style={{ padding: '5px 18px 2px 0', fontWeight: 700 }}>Total</td>
-                    <td style={{ padding: '5px 0', textAlign: 'right', fontWeight: 700 }}>{totalStock}</td>
+                    <td style={{ padding: '5px 18px 2px 0', fontWeight: weight.bold }}>Total</td>
+                    <td style={{ padding: '5px 0', textAlign: 'right', fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums' }}>
+                      {totalStock}
+                    </td>
                   </tr>
                 </tbody>
               </table>
             ) : (
-              <span style={{ color: color.mut2, fontSize: 12 }}>Sin variantes con stock</span>
+              <span style={{ color: color.mut2, fontSize: font.sm }}>Sin variantes con stock</span>
             )}
           </div>
           <div>
             {titulo('Ventas por canal')}
-            <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontSize: font.base, lineHeight: 1.7 }}>
               <div>
-                🏠 <b>Local:</b> {canal.local} u
+                <b>Local:</b> {canal.local} u
               </div>
               <div>
-                🌐 <b>Tienda online:</b> {canal.online} u
+                <b>Tienda online:</b> {canal.online} u
               </div>
-              <div style={{ color: color.mut2, fontSize: 11, marginTop: 4 }}>ventas de los últimos 30 días</div>
+              <div style={{ color: color.mut2, fontSize: font.xs, marginTop: 4 }}>ventas de los últimos 30 días</div>
             </div>
           </div>
           <div>
             {titulo('Fotos por variante (TN)')}
             {conVariantes ? (
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              <div style={{ fontSize: font.base, lineHeight: 1.6 }}>
                 <div>
                   <b>{tn.variantes_con_foto || 0}</b> de {tn.variantes_total} variantes con foto propia
                 </div>
                 {sinFotoVar.length ? (
-                  <div style={{ color: color.danger, marginTop: 3 }}>
+                  <div style={{ color: color.danger, marginTop: space[1] }}>
                     Sin foto propia (usan la principal):
                     <br />
                     <b>{sinFotoVar.join(' · ')}</b>
                   </div>
                 ) : (
-                  <div style={{ color: color.success, marginTop: 3 }}>✓ Todas las variantes tienen foto propia</div>
+                  <div style={{ marginTop: space[1] }}>
+                    <Badge tone="success">Todas las variantes tienen foto propia</Badge>
+                  </div>
                 )}
               </div>
             ) : (
-              <div style={{ color: color.mut2, fontSize: 12 }}>Una sola variante o sin fotos en TN.</div>
+              <div style={{ color: color.mut2, fontSize: font.sm }}>Una sola variante o sin fotos en TN.</div>
             )}
           </div>
         </div>

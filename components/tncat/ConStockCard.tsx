@@ -8,7 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAMostrar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
-import { Button, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
+import { Button, Card, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
 /**
  * Mostrar con stock: productos **despublicados** en la tienda que hoy tienen stock en
@@ -77,7 +77,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
     setUltimoLote(ids)
     setSel(new Set())
     const n = r.publicados ?? ids.length
-    setMsg(`✅ ${n === 1 ? 'Volvió a la tienda 1 producto' : `Volvieron a la tienda ${n} productos`}.`)
+    setMsg(`${n === 1 ? 'Volvió a la tienda 1 producto' : `Volvieron a la tienda ${n} productos`}.`)
     void bustAudit(marca)
   }
 
@@ -103,9 +103,9 @@ export function ConStockCard({ marca }: { marca: Marca }) {
   const nSel = lista.filter((c) => sel.has(String(c.tnId))).length
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>👁️ Mostrar con stock</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Mostrar con stock</div>
         <InfoPopover titulo="Mostrar con stock">
           Productos que están <b>ocultos</b> en la tienda pero hoy tienen stock en Gestión Nube — normalmente
           porque se agotaron, se despublicaron y después reingresaron. Publicarlos los vuelve a hacer visibles
@@ -127,7 +127,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
       {cargando ? (
         <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
       ) : lista.length === 0 ? (
-        <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>✅ No hay productos con stock ocultos en la tienda.</div>
+        <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>No hay productos con stock ocultos en la tienda.</div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[2] }}>
@@ -182,6 +182,6 @@ export function ConStockCard({ marca }: { marca: Marca }) {
           </TableWrap>
         </>
       )}
-    </div>
+    </Card>
   )
 }

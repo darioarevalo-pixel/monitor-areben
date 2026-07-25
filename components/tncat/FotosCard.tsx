@@ -12,7 +12,7 @@ import { stockPorProductoTn } from '@/lib/tncat/agotados'
 import { aplicarRecortes, categoriasDe, coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
 import type { FiltroFchk, ProductoFchk } from '@/lib/tncat/tipos'
-import { color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
 
 const MAX = 150
 
@@ -201,11 +201,11 @@ export function FotosCard({ marca }: { marca: Marca }) {
   )
 
   return (
-    <div className="card">
+    <Card>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>🔎 Revisar fotos por variante</div>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>Revisar fotos por variante</div>
         <button className="btn-sm" onClick={() => cargar(true)} title="Volvé a traer el estado real desde TiendaNube" style={{ background: '#fff', border: `1px solid ${paleta.line2}`, marginLeft: 'auto' }}>
-          🔄 Actualizar
+          Actualizar
         </button>
       </div>
       <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px' }}>
@@ -270,7 +270,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
           {lista.length === 0 ? (
             <div style={{ color: paleta.mut2, fontSize: 13, padding: 16, textAlign: 'center' }}>
-              {verIgnorados ? 'No hay productos apartados de la revisión.' : '✅ No hay productos con problema en este filtro.'}
+              {verIgnorados ? 'No hay productos apartados de la revisión.' : 'No hay productos con problema en este filtro.'}
             </div>
           ) : (
             <>
@@ -292,7 +292,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
       )}
 
       {accion && <ModalConfirmar accion={accion} onCancelar={() => setAccion(null)} onAceptar={ejecutar} />}
-    </div>
+    </Card>
   )
 }
 
@@ -374,7 +374,7 @@ function ProductoFila({
           {botonApartar}
         </div>
         <div style={{ fontSize: 12, color: paleta.mut2, marginTop: 3 }}>
-          Subí las fotos en <b>📷 Carga de imágenes</b> (arriba). Acá no hay nada para vincular todavía.
+          Subí las fotos en <b>Carga de imágenes</b> (arriba). Acá no hay nada para vincular todavía.
         </div>
       </div>
     )

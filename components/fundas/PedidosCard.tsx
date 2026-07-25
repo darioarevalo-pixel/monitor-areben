@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { computeFrom } from '@/lib/fundas/simulacion'
 import { copiarOdescargarPNG, imagenDeTodos, pdfDeTodos } from '@/lib/fundas/export'
 import type { SimBloque } from '@/lib/fundas/tipos'
-import { color, useToast } from '@/components/ui'
+import { Button, Card, color, font, useToast } from '@/components/ui'
 
 type Props = {
   pedidos: SimBloque[]
@@ -57,15 +57,20 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
   if (!pedidos.length) return null
 
   return (
-    <div className="card" style={{ marginTop: 4 }}>
+    <Card style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.mut2, letterSpacing: 0 }}>
           Pedidos del proveedor <span style={{ color: color.brandSolid }}>({pedidos.length})</span>
         </span>
+        {/* Las dos eran botones llenos (verde de WhatsApp y rojo) para dos exportaciones
+            equivalentes: ni son la acción principal de la pantalla ni una es destructiva. */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-sm" onClick={imagenTodo} disabled={imgMsg === 'Generando...'} title="Una imagen con todos los pedidos juntos" /* El verde es el de WhatsApp: identidad ajena, no del sistema. */
-            style={{ background: '#25D366', color: '#fff' }}>{imgMsg || '📷 Imagen de todo'}</button>
-          <button className="btn-sm" onClick={pdfTodo} disabled={pdfMsg === 'Generando...'} title="Un PDF con todos los pedidos" style={{ background: color.danger, color: '#fff' }}>{pdfMsg || '📄 PDF de todo'}</button>
+          <Button size="sm" variant="outline" onClick={imagenTodo} loading={imgMsg === 'Generando...'} title="Una imagen con todos los pedidos juntos">
+            {imgMsg || 'Imagen de todo'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={pdfTodo} loading={pdfMsg === 'Generando...'} title="Un PDF con todos los pedidos">
+            {pdfMsg || 'PDF de todo'}
+          </Button>
         </div>
       </div>
 
@@ -78,7 +83,7 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
           const variantes = varOn ? b.vars.map((v) => v.name || 'var').join(' / ') : 'sin variantes'
           const esEdit = b.id === editando
           return (
-            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${esEdit ? color.brandSolid : color.line}`, borderRadius: 8, marginBottom: 6, background: esEdit ? color.brandBg : '#fff', flexWrap: 'wrap' }}>
+            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${esEdit ? color.brandSolid : color.line}`, borderRadius: 8, marginBottom: 6, background: esEdit ? color.brandBg : color.surface, flexWrap: 'wrap' }}>
               <input
                 value={b.nombre}
                 onChange={(e) => onNombre(b.id, e.target.value)}
@@ -86,14 +91,14 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
               />
               <span style={{ fontSize: 12, color: color.mut, flex: 1, minWidth: 140 }}>{totalU} u · {nModelos} modelo{nModelos === 1 ? '' : 's'} · {variantes}</span>
               {esEdit && <span style={{ fontSize: 11, color: color.brandSolid, fontWeight: 600 }}>● editando</span>}
-              <button className="btn-sm" onClick={() => onEditar(b.id)}>Editar</button>
-              <button className="btn-sm" onClick={() => onDuplicar(b.id)} title="Duplicar">⧉</button>
-              <button className="btn-sm" onClick={() => onEliminar(b.id)} title="Eliminar" style={{ color: color.danger }}>🗑</button>
+              <Button size="sm" variant="outline" onClick={() => onEditar(b.id)}>Editar</Button>
+              <Button size="sm" variant="ghost" onClick={() => onDuplicar(b.id)} title="Duplicar este pedido">Duplicar</Button>
+              <Button size="sm" variant="ghost" tone="danger" onClick={() => onEliminar(b.id)} title="Eliminar este pedido">Eliminar</Button>
             </div>
           )
         })}
       </div>
-      <div style={{ fontSize: 11, color: color.mut2, marginTop: 4 }}>Armá un pedido arriba y tocá <b>💾 Guardar pedido</b>. Repetí con cada funda/diseño.</div>
-    </div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>Armá un pedido arriba y tocá <b>Guardar pedido</b>. Repetí con cada funda/diseño.</div>
+    </Card>
   )
 }

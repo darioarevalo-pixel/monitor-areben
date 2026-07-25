@@ -76,14 +76,17 @@ export type TdProps = {
   colSpan?: number
   /** Tooltip nativo: algunas celdas explican de dónde sale el número. */
   title?: string
+  /** Celda que abre el detalle de la fila (no la fila entera: el resto tiene sus links). */
+  onClick?: () => void
   style?: React.CSSProperties
 }
 
-export function Td({ children, align = 'left', mono, wrap, strong, tall, colSpan, title, style }: TdProps) {
+export function Td({ children, align = 'left', mono, wrap, strong, tall, colSpan, title, onClick, style }: TdProps) {
   return (
     <td
       colSpan={colSpan}
       title={title}
+      onClick={onClick}
       className={[align === 'right' ? 'mo-td--num' : '', strong ? 'mo-td--strong' : '', wrap ? 'mo-td--wrap' : '', tall ? 'mo-td--tall' : '']
         .filter(Boolean)
         .join(' ')}
