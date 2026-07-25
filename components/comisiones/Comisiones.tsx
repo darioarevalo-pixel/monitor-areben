@@ -37,7 +37,7 @@ const CELDA_DEF: Celda = { comision: 0, finan: 0, dias: 0, descuento: 0, aplicaI
 const num = (s: string) => parseFloat(s) || 0
 
 export function Comisiones() {
-  const { avisar } = useConfirmar()
+  const { avisar, confirmar, pedirTexto } = useConfirmar()
   const toast = useToast()
   const { marca, perfil } = useSesion()
   const admin = esAdminFn(perfil)
@@ -94,16 +94,22 @@ export function Comisiones() {
     const cel = { ...(cfg.matriz[canal]?.[forma] || CELDA_DEF), [campo]: v }
     guardar({ ...cfg, matriz: { ...cfg.matriz, [canal]: { ...cfg.matriz[canal], [forma]: cel } } })
   }
-  const addForma = () => {
-    const nombre = (prompt('Nombre de la forma de pago:') || '').trim()
+  const addForma = async () => {
+    const nombre = ((await pedirTexto('Nombre de la forma de pago', '', { titulo: 'Nueva forma de pago', ok: 'Agregar' })) || '').trim()
     if (!nombre) return
-    if (cfg.formas.includes(nombre)) return alert('Ya existe esa forma de pago.')
+    if (cfg.formas.includes(nombre)) return void avisar('Ya existe esa forma de pago.')
     const matriz = { ...cfg.matriz }
     cans.forEach((c) => (matriz[c] = { ...matriz[c], [nombre]: { ...CELDA_DEF } }))
     guardar({ ...cfg, formas: [...cfg.formas, nombre], matriz })
   }
-  const removeForma = (forma: string) => {
-    if (!confirm(`¿Quitar la forma de pago "${forma}"?`)) return
+  const removeForma = async (forma: string) => {
+    const ok = await confirmar({
+      titulo: 'Quitar la forma de pago',
+      tono: 'danger',
+      ok: 'Quitar',
+      mensaje: `Se borra "${forma}" y sus comisiones cargadas en todos los canales.`,
+    })
+    if (!ok) return
     const matriz = { ...cfg.matriz }
     cans.forEach((c) => {
       const m = { ...matriz[c] }
@@ -177,14 +183,14 @@ export function Comisiones() {
                     <td style={{ textAlign: 'center' }}>{cellInp('descuento', m.descuento || 0)}</td>
                     <td style={{ textAlign: 'center' }}><input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={m.aplicaImp} onChange={(e) => setCelda(f, 'aplicaImp', e.target.checked)} title="Aplica IVA / IIBB / DREI" /></td>
                     <td style={{ textAlign: 'center' }}>{cellInp('dias', m.dias)}</td>
-                    <td style={{ textAlign: 'center' }}><button onClick={() => removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 15 }}>×</button></td>
+                    <td style={{ textAlign: 'center' }}><button onClick={() => void removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 15 }}>×</button></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
-        <Button size="sm" variant="outline" onClick={addForma} style={{ marginTop: 8 }}>
+        <Button size="sm" variant="outline" onClick={() => void addForma()} style={{ marginTop: 8 }}>
           + Agregar forma de pago
         </Button>
       </Card>
@@ -276,6 +282,7 @@ function BuscadorProducto({
   onSimular: (precio: number) => void
   onAgregarSale: () => void
 }) {
+  const { avisar } = useConfirmar()
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<Producto | null>(null)
   const [descPct, setDescPct] = useState('')
@@ -350,7 +357,7 @@ function BuscadorProducto({
                   }
                 }} className="mo-input mo-input--num" style={{ width: 80 }} /></label>
                 <label style={lbl}>Precio sale (termina en 90)<br /><input type="number" value={precioNuevo} placeholder="$" onChange={(e) => setPrecioNuevo(e.target.value)} className="mo-input mo-input--num" style={{ width: 120 }} /></label>
-                <button onClick={() => { const v = parseFloat(precioNuevo); if (!v || v <= 0) return alert('Cargá el precio de sale (o un % de descuento).'); onSimular(v) }} style={{ ...simBtn('#DB2777'), padding: '7px 11px' }}>Simular</button>
+                <button onClick={() => { const v = parseFloat(precioNuevo); if (!v || v <= 0) return void avisar('Cargá el precio de sale, o un % de descuento.'); onSimular(v) }} style={{ ...simBtn('#DB2777'), padding: '7px 11px' }}>Simular</button>
                 <button onClick={onAgregarSale} style={{ ...simBtn('#111827'), padding: '7px 11px' }}>➕ Agregar a la lista</button>
               </div>
             </div>

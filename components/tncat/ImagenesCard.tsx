@@ -5,6 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { bustAudit, publicar, subirImagen, traerProductosImg, vincularColor } from '@/lib/tncat/cliente'
 import { colorPorNombre, findProd, matchByFilename } from '@/lib/tncat/matching'
 import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
+import { useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Carga de imágenes a TN (card 2). Un bloque por producto con varias fotos: se
@@ -15,6 +16,8 @@ import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
  * ⚠️ Subir/publicar/revincular ESCRIBEN en la tienda online en vivo.
  */
 export function ImagenesCard({ marca }: { marca: Marca }) {
+  const { confirmar, avisar } = useConfirmar()
+  const toast = useToast()
   const [productos, setProductos] = useState<ProductoImg[]>([])
   const [grupos, setGrupos] = useState<GrupoImg[]>([])
   const [activo, setActivo] = useState<number | null>(null)
@@ -206,7 +209,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     const gs = gruposRef.current.filter((g) => g.productId && g.fotos.some((f) => f.url && !f.subida))
     if (!gs.length) {
       const haySinProd = gruposRef.current.some((g) => !g.productId && g.fotos.length)
-      alert(haySinProd ? 'Falta elegir el PRODUCTO en cada bloque: el buscador tiene que quedar en VERDE. Escribí y tocá el producto de la lista.' : 'Agregá un producto y al menos una foto.')
+      void avisar(haySinProd ? 'Falta elegir el PRODUCTO en cada bloque: el buscador tiene que quedar en VERDE. Escribí y tocá el producto de la lista.' : 'Agregá un producto y al menos una foto.')
       return { ok: 0, err: 0 }
     }
     setSubiendo(true)
@@ -255,7 +258,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     )
     if (ok) bustAudit(marca)
     return { ok, err }
-  }, [marca, actualizarFoto])
+  }, [marca, actualizarFoto, avisar])
 
   const revincular = async (gid: number, fid: number) => {
     const g = gruposRef.current.find((x) => x.id === gid)
@@ -282,10 +285,16 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     if (hayPend) await subirTodo()
     const ids = [...new Set(gruposRef.current.filter((g) => g.productId).map((g) => g.productId!))]
     if (!ids.length) {
-      alert('No hay productos asignados para publicar (el buscador de cada bloque tiene que estar en verde).')
+      await avisar('No hay productos asignados para publicar: el buscador de cada bloque tiene que estar en verde.')
       return
     }
-    if (!confirm(`Se van a PUBLICAR (hacer visibles en la tienda) ${ids.length} producto(s) en TiendaNube. ¿Confirmás?`)) return
+    const ok = await confirmar({
+      titulo: 'Publicar en TiendaNube',
+      tono: 'warning',
+      ok: `Publicar ${ids.length}`,
+      mensaje: `${ids.length === 1 ? 'El producto queda visible' : `Los ${ids.length} productos quedan visibles`} en la tienda EN VIVO, para los clientes.`,
+    })
+    if (!ok) return
     setPublicando(true)
     try {
       const d = await publicar(marca, ids)
@@ -293,10 +302,10 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
         setInfo(<><span style={{ color: '#16A34A' }}>✅ {d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: '#DC2626' }}> · {d.errores.length} con error</span> : null}</>)
         bustAudit(marca)
       } else {
-        alert('Error al publicar: ' + (d.error || 'desconocido'))
+        toast.error('No se pudo publicar: ' + (d.error || 'error desconocido'))
       }
     } catch (e) {
-      alert('Error al publicar: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('No se pudo publicar: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setPublicando(false)
     }

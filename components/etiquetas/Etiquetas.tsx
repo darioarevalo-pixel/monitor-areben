@@ -436,7 +436,7 @@ function AvisoSinCodigo({ lista }: { lista: VarianteEti[] }) {
 // ── Editor de formas de pago ──
 const FP_TAM: [LineaEtiqueta['tam'], string][] = [['titulo', 'Título'], ['subtitulo', 'Subtítulo'], ['normal', 'Normal'], ['chico', 'Chico']]
 function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiqueta[]; guardarFP: (l: LineaEtiqueta[]) => void; catalogoListo: boolean }) {
-  const { avisar } = useConfirmar()
+  const { avisar, pedirTexto } = useConfirmar()
   const setLinea = (i: number, campo: keyof LineaEtiqueta, val: string | boolean) => guardarFP(fpLines.map((l, idx) => (idx === i ? { ...l, [campo]: val } : l)))
   const add = () => guardarFP([...fpLines, { texto: '', tam: 'normal', bold: false }])
   const del = (i: number) => {
@@ -448,7 +448,9 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
       await avisar('La etiqueta de formas de pago está vacía.')
       return
     }
-    const n = parseInt(prompt('¿Cuántas etiquetas de formas de pago querés imprimir?', '10') || '', 10)
+    const raw = await pedirTexto('¿Cuántas etiquetas de formas de pago querés imprimir?', '10', { titulo: 'Imprimir formas de pago', ok: 'Imprimir' })
+    if (raw === null) return
+    const n = parseInt(raw, 10)
     if (!n || n < 1) return
     const labels = Array.from({ length: n }, () => ({ __fp: true as const }))
     imprimirPdf(await buildEtiquetasPdf(labels, 'loc', { precioDe: () => 0, promoDe: () => null, fpLines }))

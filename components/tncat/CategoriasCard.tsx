@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { aplicarCategorias, recalcularCategorias } from '@/lib/tncat/cliente'
 import type { CatRecalc } from '@/lib/tncat/tipos'
+import { useConfirmar } from '@/components/ui'
 
 /**
  * Categorías por modelo (card 1, BDI). Mantiene cada producto en las categorías de
@@ -11,6 +12,7 @@ import type { CatRecalc } from '@/lib/tncat/tipos'
  * cliente lo muestra y lo aplica en la tienda EN VIVO. Port de tncatCargar/Render/Aplicar.
  */
 export function CategoriasCard({ marca }: { marca: Marca }) {
+  const { confirmar, avisar } = useConfirmar()
   const [data, setData] = useState<CatRecalc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aplicando, setAplicando] = useState(false)
@@ -48,10 +50,16 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
 
   const aplicar = async () => {
     if (!data || !data.total_con_cambios) {
-      alert('No hay cambios para aplicar (recalculá primero).')
+      await avisar('No hay cambios para aplicar: recalculá primero.')
       return
     }
-    if (!confirm(`¿Aplicar los cambios en TiendaNube?\n\n+${data.total_agregados} categorías y −${data.total_quitados} categorías en ${data.total_con_cambios} productos.\n\nEsto modifica tu tienda EN VIVO.`)) return
+    const ok = await confirmar({
+      titulo: 'Aplicar los cambios en TiendaNube',
+      tono: 'warning',
+      ok: 'Aplicar en la tienda',
+      mensaje: `Se agregan ${data.total_agregados} categorías y se quitan ${data.total_quitados}, en ${data.total_con_cambios} productos. Modifica tu tienda EN VIVO.`,
+    })
+    if (!ok) return
     setAplicando(true)
     setResultado('Aplicando cambios en TiendaNube… (no cierres esta pestaña)')
     try {

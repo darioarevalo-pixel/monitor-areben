@@ -8,6 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAOcultar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
+import { useConfirmar } from '@/components/ui'
 
 /**
  * Ocultar agotados (card 5 de tncat): lista los productos sin stock (GN) que siguen
@@ -16,6 +17,7 @@ import type { Marca } from '@/lib/nav.datos'
  * puntual queda para más adelante (el audit no expone id/stock por variante).
  */
 export function AgotadosCard({ marca }: { marca: Marca }) {
+  const { confirmar } = useConfirmar()
   const { datos } = useDatosMonitor()
   const [idx, setIdx] = useState<IndiceTn | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -58,7 +60,13 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
   const ocultar = async () => {
     const ids = lista.filter((c) => sel.has(String(c.tnId))).map((c) => c.tnId)
     if (!ids.length || procesando) return
-    if (!confirm(`Ocultar ${ids.length} producto(s) en la tienda online. Es reversible. ¿Seguir?`)) return
+    const ok = await confirmar({
+      titulo: 'Ocultar en la tienda online',
+      tono: 'warning',
+      ok: `Ocultar ${ids.length}`,
+      mensaje: `${ids.length === 1 ? 'El producto deja de verse' : `Los ${ids.length} productos dejan de verse`} en la tienda EN VIVO. Es reversible: se vuelven a mostrar desde "Con stock".`,
+    })
+    if (!ok) return
     setProcesando(true)
     setMsg(null)
     const r = await despublicar(marca, ids)

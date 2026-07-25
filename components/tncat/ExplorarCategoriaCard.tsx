@@ -6,6 +6,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
 import { buscar, enCategoria, itemsParaAplicar } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
+import { useConfirmar } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -21,6 +22,7 @@ const CHUNK = 20
  * salen. Nada se escribe hasta confirmar, y se avisa siempre cuántos productos se tocan.
  */
 export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
+  const { confirmar } = useConfirmar()
   const [categorias, setCategorias] = useState<Categoria[] | null>(null)
   const [catId, setCatId] = useState('')
   const [productos, setProductos] = useState<ProductoCat[] | null>(null)
@@ -62,7 +64,13 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
     const items = itemsParaAplicar(base.filter((p) => elegidos.has(String(p.id))), catId, accion)
     if (!items.length || aplicando) return
     const verbo = accion === 'quitar' ? 'sacar de' : 'agregar a'
-    if (!confirm(`Vas a ${verbo} "${catNombre}" ${items.length === 1 ? '1 producto' : `${items.length} productos`}. Se escribe en la tienda online. ¿Confirmás?`)) return
+    const confirmado = await confirmar({
+      titulo: `${verbo[0].toUpperCase()}${verbo.slice(1)} la categoría`,
+      tono: 'warning',
+      ok: `${verbo[0].toUpperCase()}${verbo.slice(1)} en ${items.length}`,
+      mensaje: `Se ${verbo} "${catNombre}" en ${items.length === 1 ? '1 producto' : `${items.length} productos`}. Se escribe en la tienda EN VIVO.`,
+    })
+    if (!confirmado) return
 
     setAplicando(true)
     setMsg(null)

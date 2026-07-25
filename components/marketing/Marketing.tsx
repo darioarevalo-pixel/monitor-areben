@@ -28,6 +28,7 @@ import {
   ventasPorCanal,
 } from '@/lib/marketing/core'
 import { useMarketing } from './useMarketing'
+import { useConfirmar } from '@/components/ui'
 
 const STALE = 15 * 60 * 1000 // fotos "viejas" a partir de 15 min (salvaguarda del puente)
 const TOPE = 300 // la tabla muestra como mucho 300 filas (igual que el legacy)
@@ -45,6 +46,7 @@ const OPCIONES_CALIDAD: { v: FiltroCalidad; label: string }[] = [
 ]
 
 export function Marketing() {
+  const { avisar } = useConfirmar()
   const { marca } = useSesion()
   const { datos } = useDatosMonitor()
   const audit = useMarketing(marca)
@@ -150,7 +152,7 @@ export function Marketing() {
   const router = useRouter()
   const mandarSel = () => {
     if (!sel.size) {
-      alert('Tildá al menos un producto para mandar a Sesión de fotos.')
+      void avisar('Tildá al menos un producto para mandar a Sesión de fotos.')
       return
     }
     ponerPuenteFotos([...sel])

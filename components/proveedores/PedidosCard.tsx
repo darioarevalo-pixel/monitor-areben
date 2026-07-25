@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { pedidoATexto, pedidosPorProveedor, type DatosProveedores } from '@/lib/proveedores'
+import { useToast } from '@/components/ui'
 
 /**
  * Qué hay que pedirle a cada proveedor: lo que se vendió en el período y hoy está en cero.
@@ -17,6 +18,7 @@ import { pedidoATexto, pedidosPorProveedor, type DatosProveedores } from '@/lib/
  * inútil.
  */
 export function PedidosCard({ data, meses, periodoLabel }: { data: DatosProveedores; meses: string[]; periodoLabel: string }) {
+  const toast = useToast()
   const [minimo, setMinimo] = useState(3)
   const [copiado, setCopiado] = useState<string | null>(null)
 
@@ -28,7 +30,7 @@ export function PedidosCard({ data, meses, periodoLabel }: { data: DatosProveedo
       setCopiado(prov)
       setTimeout(() => setCopiado(null), 2000)
     } catch {
-      alert('No se pudo copiar. Seleccioná el texto a mano.')
+      toast.error('No se pudo copiar. Seleccioná el texto a mano.')
     }
   }
 

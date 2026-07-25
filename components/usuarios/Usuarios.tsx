@@ -8,6 +8,7 @@ import { NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
+import { useConfirmar } from '@/components/ui'
 
 /**
  * Las secciones agrupadas por ÁREA, en el orden del menú. La lista plana de 35 filas
@@ -39,6 +40,7 @@ type Estado = { msg: string; color: string } | null
  * en lib/usuarios/core.
  */
 export function Usuarios() {
+  const { confirmar } = useConfirmar()
   const { perfil } = useSesion()
   const admin = esAdmin(perfil)
   const [users, setUsers] = useState<UsuarioConfig[] | null>(null)
@@ -83,8 +85,15 @@ export function Usuarios() {
       setAbierto(next.length - 1)
       return next
     })
-  const eliminar = (i: number) => {
-    if (!users || !confirm(`¿Eliminar al usuario "${users[i].name || '(sin nombre)'}"?`)) return
+  const eliminar = async (i: number) => {
+    if (!users) return
+    const ok = await confirmar({
+      titulo: 'Eliminar el usuario',
+      tono: 'danger',
+      ok: 'Eliminar',
+      mensaje: `"${users[i].name || '(sin nombre)'}" pierde el acceso al monitor. Si está trabajando ahora, se le corta.`,
+    })
+    if (!ok) return
     setUsers((prev) => (prev ? prev.filter((_, j) => j !== i) : prev))
     setAbierto(null)
   }

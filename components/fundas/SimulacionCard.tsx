@@ -7,6 +7,7 @@ import { iphoneModelSort } from '@/lib/fundas/ranking'
 import { bloqueToCanvas, copiarOdescargarPNG } from '@/lib/fundas/export'
 import { imgAThumbYSubir } from '@/lib/imagenes'
 import type { SimVar } from '@/lib/fundas/tipos'
+import { useToast } from '@/components/ui'
 
 /** El estado del editor de simulación, propiedad del shell (FundasModelo). */
 export type EditorSim = {
@@ -49,6 +50,7 @@ type Props = {
  * "Imagen" (copiar como PNG) queda inerte hasta el Paso 4.
  */
 export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar }: Props) {
+  const toast = useToast()
   const [sort, setSort] = useState<{ col: 'model' | 'pct' | null; dir: number }>({ col: null, dir: 1 })
   const [copiado, setCopiado] = useState('')
   const [imgMsg, setImgMsg] = useState('')
@@ -75,7 +77,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
 
   const flash = (k: string) => { setCopiado(k); setTimeout(() => setCopiado(''), 1500) }
   const copiar = (texto: string, k: string) => {
-    navigator.clipboard.writeText(texto).then(() => flash(k)).catch(() => alert('Copiá esto manualmente:\n\n' + texto))
+    navigator.clipboard.writeText(texto).then(() => flash(k)).catch(() => toast.error('No se pudo copiar automáticamente. Copiá el texto a mano desde la tabla.'))
   }
 
   // ── Mutaciones del editor (inmutables) ──
@@ -161,7 +163,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
       setImgMsg(res === 'copiado' ? '✓ Copiado' : '✓ Descargado')
     } catch {
       setImgMsg('')
-      alert('No se pudo generar la imagen.')
+      toast.error('No se pudo generar la imagen.')
       return
     }
     setTimeout(() => setImgMsg(''), 1500)

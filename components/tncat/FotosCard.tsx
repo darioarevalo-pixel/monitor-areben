@@ -12,6 +12,7 @@ import { stockPorProductoTn } from '@/lib/tncat/agotados'
 import { aplicarRecortes, categoriasDe, coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
 import type { FiltroFchk, ProductoFchk } from '@/lib/tncat/tipos'
+import { useConfirmar, useToast } from '@/components/ui'
 
 const MAX = 150
 
@@ -32,6 +33,8 @@ type Accion = {
  * producto para vincularla al color (ESCRIBE en TN). Port de fchk*.
  */
 export function FotosCard({ marca }: { marca: Marca }) {
+  const { pedirTexto } = useConfirmar()
+  const toast = useToast()
   const { perfil } = useSesion()
   const { datos } = useDatosMonitor()
   const [data, setData] = useState<ProductoFchk[]>([])
@@ -67,7 +70,11 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const stockPorTn = useMemo(() => (idx && datos ? stockPorProductoTn(datos.allProductos, idx) : undefined), [idx, datos])
 
   const ignorar = async (p: ProductoFchk) => {
-    const motivo = prompt(`¿Por qué no hay que revisar "${p.name}"?\n\n(${MOTIVOS_IGNORAR.join(' · ')})`, MOTIVOS_IGNORAR[0])
+    const motivo = await pedirTexto(`¿Por qué no hay que revisar "${p.name}"?`, MOTIVOS_IGNORAR[0], {
+      titulo: 'Ignorar el producto',
+      ok: 'Ignorar',
+      placeholder: MOTIVOS_IGNORAR.join(' · '),
+    })
     if (motivo === null) return
     const id = String(p.id)
     setIgnorados((prev) => new Set([...prev, id])) // optimista
@@ -79,7 +86,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         n.delete(id)
         return n
       })
-      alert('No se pudo guardar: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('No se pudo guardar: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -94,7 +101,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
       await dejarDeIgnorar(marca, id)
     } catch (e) {
       setIgnorados((prev) => new Set([...prev, id]))
-      alert('No se pudo guardar: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('No se pudo guardar: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 

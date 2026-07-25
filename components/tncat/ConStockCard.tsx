@@ -8,6 +8,7 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAMostrar } from '@/lib/tncat/agotados'
 import type { Marca } from '@/lib/nav.datos'
+import { useConfirmar } from '@/components/ui'
 
 /**
  * Mostrar con stock: productos **despublicados** en la tienda que hoy tienen stock en
@@ -21,6 +22,7 @@ import type { Marca } from '@/lib/nav.datos'
  * Escribe EN VIVO sobre TiendaNube, y es reversible: volver a ocultarlos es un clic.
  */
 export function ConStockCard({ marca }: { marca: Marca }) {
+  const { confirmar } = useConfirmar()
   const { datos } = useDatosMonitor()
   const [idx, setIdx] = useState<IndiceTn | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -56,7 +58,13 @@ export function ConStockCard({ marca }: { marca: Marca }) {
   const mostrar = async () => {
     const ids = lista.filter((c) => sel.has(String(c.tnId))).map((c) => c.tnId)
     if (!ids.length || procesando) return
-    if (!confirm(`Volver a mostrar ${ids.length === 1 ? '1 producto' : `${ids.length} productos`} en la tienda online. Es reversible. ¿Seguir?`)) return
+    const ok = await confirmar({
+      titulo: 'Mostrar en la tienda online',
+      tono: 'warning',
+      ok: `Mostrar ${ids.length}`,
+      mensaje: `${ids.length === 1 ? 'El producto vuelve a verse' : `Los ${ids.length} productos vuelven a verse`} en la tienda EN VIVO. Es reversible: se pueden volver a ocultar desde acá.`,
+    })
+    if (!ok) return
     setProcesando(true)
     setMsg(null)
     const r = await publicar(marca, ids)

@@ -7,6 +7,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { useCupones } from './useCupones'
 import { crearCupon, descuento, dias, editarCupon, filtrar, mensajeRecordatorio } from '@/lib/cupones/core'
 import type { Cupon, EstadoCupon, FiltroCupon, TipoDescuento } from '@/lib/cupones/tipos'
+import { useConfirmar, useToast } from '@/components/ui'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 const nuevoId = () => 'c' + Date.now() + '_' + Math.floor(Math.random() * 100000)
@@ -20,6 +21,8 @@ const BADGES: Record<EstadoCupon, [string, string, string]> = {
 }
 
 export function Cupones() {
+  const { confirmar, avisar } = useConfirmar()
+  const toast = useToast()
   const { marca, perfil } = useSesion()
   const usuario = perfil?.name || ''
   const puedeCrear = puedeSub(perfil, marca, 'cupones', 'crear') // puedeSub ya devuelve true para admin
@@ -39,12 +42,12 @@ export function Cupones() {
   const onGuardar = async (datos: Parameters<typeof crearCupon>[0]) => {
     if (form === 'nuevo') {
       const r = crearCupon(datos, { id: nuevoId(), hoy, usuario })
-      if (!r.ok) return void alert(r.error)
+      if (!r.ok) return void toast.error(r.error)
       const ok = await cup.persistir((l) => [r.cupon, ...l])
       if (ok) setForm(null)
     } else if (form) {
       const r = editarCupon(form, datos)
-      if (!r.ok) return void alert(r.error)
+      if (!r.ok) return void toast.error(r.error)
       const ok = await cup.persistir((l) => l.map((c) => (c.id === form.id ? r.cupon : c)))
       if (ok) setForm(null)
     }
@@ -52,26 +55,39 @@ export function Cupones() {
   const mutar = (id: string, fn: (c: Cupon) => Cupon) => cup.persistir((l) => l.map((c) => (c.id === id ? fn(c) : c)))
   const onMarcarUsado = (id: string) => void mutar(id, (c) => ({ ...c, usado: true, usadoFecha: hoy }))
   const onDesmarcarUsado = (id: string) => void mutar(id, (c) => ({ ...c, usado: false, usadoFecha: '' }))
-  const onAnular = (id: string) => {
-    if (!puedeCrear || !confirm('¿Anular este cupón?')) return
+  const onAnular = async (id: string) => {
+    if (!puedeCrear) return
+    const okAnular = await confirmar({
+      titulo: 'Anular el cupón',
+      tono: 'danger',
+      ok: 'Anular',
+      mensaje: 'El cupón deja de funcionar en la tienda al instante. Si alguien lo tiene, ya no le va a aplicar.',
+    })
+    if (!okAnular) return
     void mutar(id, (c) => ({ ...c, anulado: true }))
   }
   const onReactivar = (id: string) => {
     if (!puedeCrear) return
     void mutar(id, (c) => ({ ...c, anulado: false }))
   }
-  const onBorrar = (id: string) => {
+  const onBorrar = async (id: string) => {
     if (!admin) {
-      alert('Solo un administrador puede borrar cupones.')
+      await avisar('Solo un administrador puede borrar cupones.')
       return
     }
-    if (!confirm('¿Borrar este cupón de la lista?')) return
+    const okBorrar = await confirmar({
+      titulo: 'Borrar de la lista',
+      tono: 'danger',
+      ok: 'Borrar',
+      mensaje: 'Se saca de la lista del monitor. Si el cupón sigue activo en la tienda, esto NO lo anula.',
+    })
+    if (!okBorrar) return
     void cup.persistir((l) => l.filter((c) => c.id !== id))
   }
   const onRecordar = async (c: Cupon) => {
     try {
       await navigator.clipboard.writeText(mensajeRecordatorio(c))
-      alert('📋 Mensaje copiado. Pegalo en WhatsApp.')
+      toast.ok('Mensaje copiado: pegalo en WhatsApp.')
     } catch {
       prompt('Copiá el mensaje:', mensajeRecordatorio(c))
     }

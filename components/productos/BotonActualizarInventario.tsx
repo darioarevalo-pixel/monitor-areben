@@ -5,6 +5,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { userRole } from '@/lib/permisos'
 import { dispararSyncStock } from '@/lib/sync-gn'
+import { useToast } from '@/components/ui'
 
 /**
  * "🔄 Actualizar inventario": dispara el sync rápido de stock en GN, espera a que
@@ -13,6 +14,7 @@ import { dispararSyncStock } from '@/lib/sync-gn'
  * ventas). El disparo+polling compartido vive en `lib/sync-gn.ts` (lo reusa caducados).
  */
 export function BotonActualizarInventario() {
+  const toast = useToast()
   const { marca, perfil } = useSesion()
   const cargar = useMonitorStore((s) => s.cargar)
   const [syncing, setSyncing] = useState(false)
@@ -25,13 +27,13 @@ export function BotonActualizarInventario() {
       const done = await dispararSyncStock(marca, setLabel)
       setLabel('↻ Recargando…')
       await cargar(marca, userRole(perfil), true)
-      if (done) alert('✅ Inventario actualizado (' + marca.toUpperCase() + ').')
+      if (done) toast.ok('Inventario actualizado (' + marca.toUpperCase() + ')')
       else
-        alert(
+        toast.aviso(
           'La actualización está tardando más de lo normal. Te muestro lo último disponible; si falta algo, volvé a tocar "Actualizar inventario" en un minuto.',
         )
     } catch (e) {
-      alert('Error al actualizar inventario: ' + (e as Error).message)
+      toast.error('No se pudo actualizar el inventario: ' + (e as Error).message)
     } finally {
       setSyncing(false)
       setLabel('🔄 Actualizar inventario')

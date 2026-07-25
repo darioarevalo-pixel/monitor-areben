@@ -5,6 +5,7 @@ import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib/tncat/cliente'
 import { nombresDeFilas } from '@/lib/tncat/excel'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
+import { useConfirmar, useToast } from '@/components/ui'
 
 const CHUNK = 20
 
@@ -15,6 +16,8 @@ const CHUNK = 20
  * la escritura los hace el server. Port de tncatAsig*.
  */
 export function AsignarCard({ marca }: { marca: Marca }) {
+  const { confirmar } = useConfirmar()
+  const toast = useToast()
   const [categorias, setCategorias] = useState<Categoria[] | null>(null)
   const [catId, setCatId] = useState('')
   const [nombres, setNombres] = useState<string[]>([])
@@ -55,7 +58,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       setInfo(`${nn.length} nombre(s) cargado(s) de "${file.name}"`)
       await previsualizar(catId, nn)
     } catch (err) {
-      alert('No pude leer el Excel: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('No pude leer el Excel: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
 
@@ -96,7 +99,13 @@ export function AsignarCard({ marca }: { marca: Marca }) {
 
   const aplicar = async () => {
     if (!matched.length) return
-    if (!confirm(`Se va a agregar la categoría "${catName}" a ${matched.length} producto(s). ¿Confirmás?`)) return
+    const ok = await confirmar({
+      titulo: 'Asignar la categoría',
+      tono: 'warning',
+      ok: `Asignar a ${matched.length}`,
+      mensaje: `Se agrega "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.`,
+    })
+    if (!ok) return
     setAplicando(true)
     setPreview(null)
     const total = matched.length

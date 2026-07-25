@@ -19,6 +19,7 @@ import {
   type Severidad,
 } from '@/lib/gerencial/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import { useConfirmar, useToast } from '@/components/ui'
 
 /**
  * Panel Gerencial (key `gerencial`): la vista de decisiones. Toma los accionables que
@@ -238,6 +239,8 @@ function CardAccionable({
 
 /** Lista expandible de consumos internos pendientes, con aprobar/rechazar in-place. */
 function Aprobaciones({ consumos, onCambio }: { consumos: ConsumoPendiente[]; onCambio: () => void }) {
+  const { pedirTexto } = useConfirmar()
+  const toast = useToast()
   const { perfil, marca: marcaActiva, setMarca } = useSesion()
   const [abierto, setAbierto] = useState(false)
   const [procesando, setProcesando] = useState<string | null>(null)
@@ -251,7 +254,12 @@ function Aprobaciones({ consumos, onCambio }: { consumos: ConsumoPendiente[]; on
     if (!puede || procesando) return
     // El KV es por marca: si la activa no coincide, alinearla antes de escribir.
     if (marcaActiva !== c.marca) setMarca(c.marca)
-    const motivo = accion === 'rechazar' ? (prompt('Motivo del rechazo (opcional):') || '').trim() : ''
+    let motivo = ''
+    if (accion === 'rechazar') {
+      const m = await pedirTexto('Motivo del rechazo (opcional)', '', { titulo: 'Rechazar', ok: 'Rechazar' })
+      if (m === null) return // cancelar no rechaza
+      motivo = m.trim()
+    }
     setProcesando(c.id)
     const r =
       accion === 'aprobar'
@@ -259,7 +267,7 @@ function Aprobaciones({ consumos, onCambio }: { consumos: ConsumoPendiente[]; on
         : await rechazarConsumo(c.marca, c.id, motivo, usuario, hoyISO())
     setProcesando(null)
     if (!r.ok) {
-      alert('No se pudo guardar: ' + r.motivo)
+      toast.error('No se pudo guardar: ' + r.motivo)
       return
     }
     onCambio()

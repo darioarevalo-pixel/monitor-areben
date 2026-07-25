@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { computeFrom } from '@/lib/fundas/simulacion'
 import { copiarOdescargarPNG, imagenDeTodos, pdfDeTodos } from '@/lib/fundas/export'
 import type { SimBloque } from '@/lib/fundas/tipos'
+import { useToast } from '@/components/ui'
 
 type Props = {
   pedidos: SimBloque[]
@@ -20,6 +21,7 @@ type Props = {
  * "PDF de todo" quedan inertes hasta el Paso 4.
  */
 export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onEliminar, onNombre }: Props) {
+  const toast = useToast()
   const [imgMsg, setImgMsg] = useState('')
   const [pdfMsg, setPdfMsg] = useState('')
 
@@ -32,7 +34,7 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
       setImgMsg(res === 'copiado' ? '✓ Copiado' : '✓ Descargado')
     } catch {
       setImgMsg('')
-      alert('No se pudo generar la imagen.')
+      toast.error('No se pudo generar la imagen.')
       return
     }
     setTimeout(() => setImgMsg(''), 1500)
@@ -46,7 +48,7 @@ export function PedidosCard({ pedidos, editando, onEditar, onDuplicar, onElimina
       setPdfMsg('✓ Listo')
     } catch {
       setPdfMsg('')
-      alert('No se pudo generar el PDF.')
+      toast.error('No se pudo generar el PDF.')
       return
     }
     setTimeout(() => setPdfMsg(''), 1500)
