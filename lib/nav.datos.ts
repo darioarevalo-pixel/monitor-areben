@@ -72,7 +72,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "resumen",
     "area": "analisis",
-    "label": "📈 Resumen / KPIs",
+    "label": "Resumen / KPIs",
     "info": "Panel principal con métricas y resumen general del negocio.",
     "brands": [
       "bdi",
@@ -82,7 +82,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "productos",
     "area": "analisis",
-    "label": "📊 Por producto",
+    "label": "Por producto",
     "info": "Análisis por producto: ventas, vida útil, stock, estado y selección de outlet/sale.",
     "brands": [
       "bdi",
@@ -92,7 +92,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "variantes",
     "area": "analisis",
-    "label": "🔠 Por variante",
+    "label": "Por variante",
     "info": "Ventas y stock por variante (talle / modelo / color).",
     "brands": [
       "bdi",
@@ -102,7 +102,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ventas-mensuales",
     "area": "analisis",
-    "label": "📅 Ventas mensuales",
+    "label": "Ventas mensuales",
     "info": "Evolución de las ventas mes a mes.",
     "brands": [
       "bdi",
@@ -157,7 +157,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "marketing",
     "area": "marketing",
-    "label": "📸 Marketing",
+    "label": "Marketing",
     "info": "Armado de publicaciones (fotos + textos) para redes y TiendaNube.",
     "brands": [
       "bdi",
@@ -167,7 +167,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "sesion-fotos",
     "area": "marketing",
-    "label": "📷 Sesión de fotos",
+    "label": "Sesión de fotos",
     "info": "Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.",
     "brands": [
       "bdi",
@@ -176,17 +176,17 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "quitar-item",
-        "label": "🗑 Puede quitar ítems de una solicitud",
+        "label": "Puede quitar ítems de una solicitud",
         "info": "Puede quitar variantes de una solicitud (queda registrado quién y por qué). Los admins pueden siempre. Sin este permiso, solo ve la solicitud."
       },
       {
         "key": "editar-desc",
-        "label": "✏️ Puede editar la descripción",
+        "label": "Puede editar la descripción",
         "info": "Puede cambiar el texto/descripción de una solicitud. Los admins pueden siempre."
       },
       {
         "key": "editar",
-        "label": "✏️ Puede editar la solicitud",
+        "label": "Puede editar la solicitud",
         "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
@@ -194,7 +194,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "comisiones",
     "area": "analisis",
-    "label": "💵 Comisiones y margen",
+    "label": "Comisiones y margen",
     "info": "Simulador de comisiones de vendedores y cálculo de markup/margen.",
     "brands": [
       "bdi",
@@ -204,7 +204,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "margenes",
     "area": "analisis",
-    "label": "📊 Margen por producto",
+    "label": "Margen por producto",
     "info": "Margen y markup de cada producto disponible, comparado con el objetivo.",
     "brands": [
       "bdi",
@@ -214,7 +214,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "etiquetas",
     "area": "local",
-    "label": "🏷️ Etiquetas",
+    "label": "Etiquetas",
     "info": "Impresión de etiquetas con código de barras.",
     "brands": [
       "bdi",
@@ -223,22 +223,22 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "dep",
-        "label": "🏬 Depósito",
+        "label": "Depósito",
         "info": "Etiquetas para mercadería de depósito."
       },
       {
         "key": "loc",
-        "label": "🏪 Local",
+        "label": "Local",
         "info": "Etiquetas para el local."
       },
       {
         "key": "sku",
-        "label": "🔢 SKU",
+        "label": "SKU",
         "info": "Etiquetas con SKU + código de barras."
       },
       {
         "key": "libre",
-        "label": "✏️ Libre",
+        "label": "Libre",
         "info": "Etiqueta personalizada (texto o código a elección)."
       }
     ]
@@ -246,7 +246,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "gen-talles",
     "area": "marketing",
-    "label": "📏 Tabla de talles",
+    "label": "Tabla de talles",
     "info": "Generador de tablas de talles (HTML) para las descripciones de TiendaNube.",
     "brands": [
       "bdi",
@@ -256,7 +256,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "exhib",
     "area": "local",
-    "label": "👕 Chequeo de exhibición",
+    "label": "Chequeo de exhibición",
     "info": "Recorrido con lector de código de barras para verificar qué está exhibido en el local.",
     "brands": [
       "zattia"
@@ -265,7 +265,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "tncat",
     "area": "marketing",
-    "label": "🛍️ Tienda Nube",
+    "label": "Tienda Nube",
     "info": "Herramientas de TiendaNube.",
     "brands": [
       "bdi",
@@ -274,7 +274,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "imagenes",
-        "label": "📷 Carga de imágenes",
+        "label": "Carga de imágenes",
         "info": "Subir fotos y asignarlas a las variantes.",
         "brands": [
           "bdi",
@@ -283,7 +283,7 @@ export const PERM_CAT: PermCat[] = [
       },
       {
         "key": "categorias",
-        "label": "🗂️ Categorías por modelo",
+        "label": "Categorías por modelo",
         "info": "Auto-categorización de fundas por modelo de iPhone según stock (solo BDI).",
         "brands": [
           "bdi"
@@ -291,7 +291,7 @@ export const PERM_CAT: PermCat[] = [
       },
       {
         "key": "asignar",
-        "label": "🗂️ Asignar categoría (Excel)",
+        "label": "Asignar categoría (Excel)",
         "info": "Asignación masiva: elegís una categoría y subís un Excel con nombres de producto; se la agrega a todos los que matcheen (solo Zattia).",
         "brands": [
           "zattia"
@@ -299,7 +299,7 @@ export const PERM_CAT: PermCat[] = [
       },
       {
         "key": "ocultar",
-        "label": "🙈 Ocultar agotados",
+        "label": "Ocultar agotados",
         "info": "Despublicar de la tienda los productos sin stock que siguen visibles (reversible). Escribe en la tienda online en vivo.",
         "brands": [
           "bdi",
@@ -311,7 +311,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "disenos",
     "area": "compras",
-    "label": "🗳️ Diseños",
+    "label": "Diseños",
     "info": "Tablero para elegir diseños con el equipo (votación, ranking, reporte PDF).",
     "brands": [
       "bdi",
@@ -321,7 +321,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ingresos",
     "area": "compras",
-    "label": "📦 Ingresos proyectados",
+    "label": "Ingresos proyectados",
     "info": "Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.",
     "brands": [
       "bdi"
@@ -330,7 +330,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "reposicion",
     "area": "administracion",
-    "label": "🔁 Reposición",
+    "label": "Reposición",
     "info": "Reposición diaria de local: variantes por debajo del mínimo (por categoría) con stock en depósito. Incluye mínimos editables, apagados y conteo urgente.",
     "brands": [
       "bdi",
@@ -340,7 +340,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "conteo",
     "area": "local",
-    "label": "🔢 Conteo de fundas",
+    "label": "Conteo de fundas",
     "info": "Conteo de fundas del Local por escaneo, agrupado por modelo de celular. Escaneás un modelo completo y al cerrarlo compara contra el stock VIVO de GN (ubicación Local) y genera el Excel de ajuste + lo guarda en el historial con fecha. Exclusiva de BDI.",
     "brands": [
       "bdi"
@@ -348,7 +348,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "aplicar",
-        "label": "✅ Puede aplicar el ajuste",
+        "label": "Puede aplicar el ajuste",
         "info": "Puede cerrar un modelo y generar el ajuste (no solo contar)."
       }
     ]
@@ -356,7 +356,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "conteo-deposito",
     "area": "deposito",
-    "label": "🔢 Conteo",
+    "label": "Conteo",
     "info": "Conteo físico del depósito por producto (cargando cantidades a mano, no por escaneo). Buscás el producto, contás sus variantes y lo terminás. El ajuste a GN se calcula con stock vivo + diferencia, así las ventas durante el conteo no lo ensucian. Guarda historial de cada conteo aplicado.",
     "brands": [
       "bdi",
@@ -365,7 +365,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "aplicar",
-        "label": "✅ Puede aplicar el ajuste",
+        "label": "Puede aplicar el ajuste",
         "info": "Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos, pero no ve el botón de aplicar. OJO: el conteo se guarda en el dispositivo donde se cuenta, así que quien aplique tiene que hacerlo en esa misma compu/celular."
       }
     ]
@@ -373,7 +373,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "conteo-estandar-zattia",
     "area": "local",
-    "label": "🔢 Conteo Zattia",
+    "label": "Conteo Zattia",
     "info": "Conteo físico del LOCAL de ZATTIA (línea Zattia, SKU que NO empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.",
     "brands": [
       "zattia"
@@ -381,7 +381,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "aplicar",
-        "label": "✅ Puede aplicar el ajuste",
+        "label": "Puede aplicar el ajuste",
         "info": "Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos. OJO: el conteo se guarda en el dispositivo donde se cuenta."
       }
     ]
@@ -389,7 +389,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "conteo-estandar-stunned",
     "area": "local",
-    "label": "👕 Conteo Stunned",
+    "label": "Conteo Stunned",
     "info": "Conteo físico del LOCAL de ZATTIA (línea STUNNED, SKU que empieza con STU). Por producto y talle: escaneás lo exhibido (suma 1 por lectura) y cargás a mano el depósito del local; el total se compara contra el stock del Local. El ajuste a GN se calcula con stock vivo + diferencia. Guarda historial y fecha del último conteo.",
     "brands": [
       "zattia"
@@ -397,7 +397,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "aplicar",
-        "label": "✅ Puede aplicar el ajuste",
+        "label": "Puede aplicar el ajuste",
         "info": "Puede APLICAR el ajuste (leer el vivo de GN y generar el Excel). Los admins pueden siempre. Sin este permiso, el usuario solo cuenta y termina productos. OJO: el conteo se guarda en el dispositivo donde se cuenta."
       }
     ]
@@ -405,7 +405,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "cupones",
     "area": "local",
-    "label": "🎟️ Cupones",
+    "label": "Cupones",
     "info": "Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.",
     "brands": [
       "bdi",
@@ -414,7 +414,7 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "crear",
-        "label": "✏️ Puede generar cupones",
+        "label": "Puede generar cupones",
         "info": "Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local."
       }
     ]
@@ -422,7 +422,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "solicitudes-internas",
     "area": "local",
-    "label": "📋 Solicitudes internas",
+    "label": "Solicitudes internas",
     "info": "Retiros de productos para uso interno (moldería, video, muestras, consumo). Retornable (vuelve, se repone) o consumo (no vuelve). Los consumos requieren aprobación de un gerente/admin.",
     "brands": [
       "bdi",
@@ -431,12 +431,12 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "aprobar",
-        "label": "✅ Puede aprobar consumos",
+        "label": "Puede aprobar consumos",
         "info": "Puede APROBAR o rechazar las solicitudes de consumo (las que no vuelven). Los admins pueden siempre. Solo los aprobadores ven los pendientes."
       },
       {
         "key": "editar",
-        "label": "✏️ Puede editar la solicitud",
+        "label": "Puede editar la solicitud",
         "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
@@ -444,7 +444,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "solicitudes",
     "area": "local",
-    "label": "📋 Solicitudes",
+    "label": "Solicitudes",
     "info": "Vista unificada del ESTADO de todas las solicitudes (sesión de fotos + internas) de las marcas que ves, filtrada según tu función: Local ve lo que tiene retiro en local, Depósito lo de depósito, el resto ve todo. Solo lectura (para gestionar se entra a cada solicitud).",
     "brands": [
       "bdi",
@@ -454,7 +454,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "verif-ventas",
     "area": "analisis",
-    "label": "🧾 Verificación de ventas",
+    "label": "Verificación de ventas",
     "info": "Control mensual: cruza los pedidos cancelados en TiendaNube con las ventas de Gestión Nube y lista las que siguen ACTIVAS en GN (hay que anularlas a mano en GN). Con checklist de resueltas.",
     "brands": [
       "bdi",
@@ -464,7 +464,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "caducados",
     "area": "administracion",
-    "label": "🗑️ Productos caducados",
+    "label": "Productos caducados",
     "info": "Lista de productos para depurar: sin stock en ningún depósito y con la última venta hace más de N días (default 30, la ventana de cambio). Se verifican antes de eliminarlos de TN y GN.",
     "brands": [
       "bdi",
@@ -474,7 +474,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ubicaciones",
     "area": "local",
-    "label": "📍 Ubicaciones",
+    "label": "Ubicaciones",
     "info": "Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
     "brands": [
       "bdi"
@@ -483,7 +483,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "meta-ads",
     "area": "marketing",
-    "label": "💰 Meta Ads",
+    "label": "Meta Ads",
     "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.",
     "brands": [
       "bdi",
@@ -493,7 +493,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "gerencial",
     "area": "direccion",
-    "label": "🎯 Gerencial",
+    "label": "Gerencial",
     "info": "Panel de decisiones: reúne de todas las marcas lo que requiere tu atención (capital parado, productos en declive, pendientes operativos, importaciones por llegar) con la acción recomendada y un acceso directo a la sección donde se ejecuta. Solo lectura.",
     "brands": [
       "bdi",
@@ -503,7 +503,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "integraciones",
     "area": "integraciones",
-    "label": "🔌 Integraciones",
+    "label": "Integraciones",
     "info": "Integraciones entre Gestión Nube y Tienda Nube: mapeo de SKU GN↔TN (la base del sync de stock y ventas de Stunned) que se valida a mano antes de que el sync escriba. Más adelante suma el panel de sincronización.",
     "brands": [
       "zattia"
@@ -512,7 +512,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa",
     "area": "administracion",
-    "label": "🧾 Post-venta",
+    "label": "Post-venta",
     "info": "Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
     "brands": [
       "bdi",
@@ -522,7 +522,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa-local",
     "area": "local",
-    "label": "🧾 Fallas (carga)",
+    "label": "Fallas (carga)",
     "info": "Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.",
     "brands": [
       "bdi",
@@ -532,7 +532,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa-deposito",
     "area": "deposito",
-    "label": "🧾 Fallas (depósito)",
+    "label": "Fallas (depósito)",
     "info": "Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Post-venta.",
     "brands": [
       "bdi",
@@ -542,7 +542,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "cambios-local",
     "area": "local",
-    "label": "🔁 Cambios (iniciar)",
+    "label": "Cambios (iniciar)",
     "info": "Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.",
     "brands": [
       "bdi",
@@ -554,21 +554,21 @@ export const PERM_CAT: PermCat[] = [
 export const NAV_CATS: NavCat[] = [
   {
     "id": "inicio",
-    "label": "🏠 Inicio",
+    "label": "Inicio",
     "keys": [
       "inicio"
     ]
   },
   {
     "id": "direccion",
-    "label": "🎯 Dirección",
+    "label": "Dirección",
     "keys": [
       "gerencial"
     ]
   },
   {
     "id": "analisis",
-    "label": "📊 Análisis",
+    "label": "Análisis",
     "keys": [
       "productos",
       "variantes",
@@ -582,7 +582,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "local",
-    "label": "🏪 Local",
+    "label": "Local",
     "keys": [
       "solicitudes",
       "cupones",
@@ -594,7 +594,7 @@ export const NAV_CATS: NavCat[] = [
     "grupos": [
       {
         "id": "actividades",
-        "label": "🔢 Actividades",
+        "label": "Actividades",
         "keys": [
           "conteo-estandar-zattia",
           "conteo-estandar-stunned",
@@ -606,19 +606,19 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "deposito",
-    "label": "📦 Depósito",
+    "label": "Depósito",
     "keys": [
       "solicitudes",
       "conteo-deposito",
       "postventa-deposito"
     ],
     "labels": {
-      "solicitudes": "📋 Solicitudes a preparar"
+      "solicitudes": "Solicitudes a preparar"
     }
   },
   {
     "id": "marketing",
-    "label": "📣 Marketing",
+    "label": "Marketing",
     "keys": [
       "marketing",
       "solicitudes",
@@ -627,31 +627,31 @@ export const NAV_CATS: NavCat[] = [
     "grupos": [
       {
         "id": "tienda-nube",
-        "label": "🛍️ Tienda Nube",
+        "label": "Tienda Nube",
         "keys": [],
         "items": [
-          { "ruta": "/tncat/fotos", "label": "📷 Fotos", "key": "tncat", "sub": "imagenes" },
-          { "ruta": "/tncat/categorias", "label": "🗂️ Categorías", "key": "tncat", "sub": ["categorias", "asignar"] },
-          { "ruta": "/tncat/visibilidad", "label": "👁️ Visibilidad", "key": "tncat", "sub": "ocultar" },
-          { "ruta": "/tncat/descripciones", "label": "📏 Tabla de talles", "key": "gen-talles" }
+          { "ruta": "/tncat/fotos", "label": "Fotos", "key": "tncat", "sub": "imagenes" },
+          { "ruta": "/tncat/categorias", "label": "Categorías", "key": "tncat", "sub": ["categorias", "asignar"] },
+          { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "key": "tncat", "sub": "ocultar" },
+          { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "key": "gen-talles" }
         ]
       }
     ],
     "labels": {
-      "solicitudes": "📦 Solicitudes de productos"
+      "solicitudes": "Solicitudes de productos"
     },
     "accent": "marketing"
   },
   {
     "id": "integraciones",
-    "label": "🔌 Integraciones",
+    "label": "Integraciones",
     "keys": [
       "integraciones"
     ]
   },
   {
     "id": "administracion",
-    "label": "🗂️ Administración",
+    "label": "Administración",
     "keys": [
       "solicitudes",
       "postventa",
@@ -659,12 +659,12 @@ export const NAV_CATS: NavCat[] = [
       "caducados"
     ],
     "labels": {
-      "solicitudes": "📋 Solicitudes (todas las marcas)"
+      "solicitudes": "Solicitudes (todas las marcas)"
     }
   },
   {
     "id": "compras",
-    "label": "📦 Compras",
+    "label": "Compras",
     "keys": [
       "fundas-modelo",
       "ingresos",
@@ -674,14 +674,14 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "clientes",
-    "label": "👥 Clientes",
+    "label": "Clientes",
     "keys": [
       "clientes"
     ]
   },
   {
     "id": "config",
-    "label": "⚙️ Config",
+    "label": "Config",
     "keys": [
       "usuarios"
     ],

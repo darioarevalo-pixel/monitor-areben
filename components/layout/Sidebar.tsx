@@ -3,15 +3,15 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, estaEnVariosGrupos, labelConEmoji, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esDeMarca, estaEnVariosGrupos, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { color } from '@/components/ui/tokens'
 
-/** Label del menú (con emoji): LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
+/** Label del menú: LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
-  return labelConEmoji(key)
+  return labelDeMenu(key)
 }
 
 /**

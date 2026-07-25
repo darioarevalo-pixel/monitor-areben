@@ -66,27 +66,34 @@ export function todasLasKeys(): string[] {
 // ── Metadata para el encabezado de sección (SeccionHeader) ──────────────────────
 
 /**
- * Labels de las keys que NO están en PERM_CAT (`inicio`, `usuarios`) — CON emoji,
- * para el sidebar. Fuente única: antes vivían inline en Sidebar.tsx.
+ * Labels de las keys que NO están en PERM_CAT (`inicio`, `usuarios`).
+ * Fuente única: antes vivían inline en Sidebar.tsx.
  */
 export const LABELS_EXTRA: Record<string, string> = {
-  inicio: '🏠 Inicio',
-  usuarios: '👤 Usuarios',
+  inicio: 'Inicio',
+  usuarios: 'Usuarios',
 }
 
-/** El label CON emoji (para el sidebar): LABELS_EXTRA o el de PERM_CAT, o la key. */
-export function labelConEmoji(key: string): string {
+/** El label del menú: LABELS_EXTRA o el de PERM_CAT, o la key. */
+export function labelDeMenu(key: string): string {
   return LABELS_EXTRA[key] ?? labelDe(key)
 }
 
-// Emoji(s) inicial(es) + espacio. `Extended_Pictographic` NO incluye dígitos ASCII,
-// así que no toca títulos que empiecen con número/letra. Cubre variation selector
-// (️), ZWJ (‍) y modificadores de tono de piel.
+/**
+ * Emoji(s) inicial(es) + espacio.
+ *
+ * Los labels de `nav.datos.ts` llevaban un emoji adelante ("📊 Por producto") y esta
+ * regex existía para que el `<h1>` no lo mostrara. En la tanda 11 los emojis salieron del
+ * dato: el sidebar y el encabezado leen lo mismo. **La red se queda igual**: es una línea,
+ * y evita que un emoji pegado sin querer en un label vuelva a aparecer en un título.
+ * `Extended_Pictographic` NO incluye dígitos ASCII, así que no toca títulos que empiecen
+ * con número/letra. Cubre variation selector (️), ZWJ (‍) y modificadores de tono de piel.
+ */
 const RE_EMOJI_INICIAL = /^(\p{Extended_Pictographic}[\p{Extended_Pictographic}️‍\u{1F3FB}-\u{1F3FF}]*\s*)+/u
 
-/** El título SIN el emoji inicial (para el `<h1>` del encabezado). */
+/** El título de la sección para el `<h1>` del encabezado. */
 export function tituloLimpio(key: string): string {
-  const raw = labelConEmoji(key)
+  const raw = labelDeMenu(key)
   return raw.replace(RE_EMOJI_INICIAL, '').trim() || raw
 }
 
