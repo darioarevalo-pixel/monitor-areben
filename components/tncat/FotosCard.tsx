@@ -251,7 +251,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
               onClick={() => setVerIgnorados((v) => !v)}
               style={{ background: verIgnorados ? paleta.brandBg : '#fff', border: `1px solid ${verIgnorados ? paleta.brandBorder : paleta.line2}`, color: verIgnorados ? paleta.brand : paleta.ink2, marginLeft: 'auto' }}
             >
-              {verIgnorados ? '← Volver a la revisión' : `🚫 Ignorados (${ignorados.size})`}
+              {verIgnorados ? '← Volver a la revisión' : `Ignorados (${ignorados.size})`}
             </button>
           </div>
 
@@ -356,11 +356,11 @@ function ProductoFila({
   // hace que la lista pueda llegar a cero y sirva como tablero.
   const botonApartar = ignorado ? (
     <button onClick={onRestaurar} title="Volver a revisarlo" style={estiloApartar}>
-      ↩︎ Revisar de nuevo
+      Revisar de nuevo
     </button>
   ) : (
     <button onClick={onIgnorar} title="No hace falta revisar este producto" style={estiloApartar}>
-      🚫 No revisar
+      No revisar
     </button>
   )
 
@@ -417,7 +417,7 @@ function ProductoFila({
           ) : (
             <div key={color} style={{ padding: '5px 0', borderTop: `1px solid ${paleta.bg2}` }}>
               <div style={{ fontSize: 13 }}>
-                <b>{color}</b> <span style={{ color: paleta.danger }}>⚠ sin foto</span> <span style={{ color: paleta.mut2, fontSize: 11 }}>— tocá una foto para vincularla:</span>
+                <b>{color}</b> <span style={{ color: paleta.danger }}>sin foto</span> <span style={{ color: paleta.mut2, fontSize: 11 }}>— tocá una foto para vincularla:</span>
               </div>
               {imgs.length ? (
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>

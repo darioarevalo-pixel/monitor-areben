@@ -70,7 +70,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
     const r = await publicar(marca, ids)
     setProcesando(false)
     if (!r.ok) {
-      setMsg('⚠️ No se pudo publicar: ' + (r.error || 'error del servidor') + '.')
+      setMsg('No se pudo publicar: ' + (r.error || 'error del servidor') + '.')
       return
     }
     setPublicados((prev) => new Set([...prev, ...ids.map(String)]))
@@ -87,7 +87,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
     const r = await despublicar(marca, ultimoLote)
     setProcesando(false)
     if (!r.ok) {
-      setMsg('⚠️ No se pudo deshacer: ' + (r.error || 'error') + '.')
+      setMsg('No se pudo deshacer: ' + (r.error || 'error') + '.')
       return
     }
     setPublicados((prev) => {
@@ -95,7 +95,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
       ultimoLote.forEach((id) => n.delete(String(id)))
       return n
     })
-    setMsg(`↩️ ${ultimoLote.length === 1 ? 'Volví a ocultar 1 producto' : `Volví a ocultar ${ultimoLote.length} productos`}.`)
+    setMsg(`${ultimoLote.length === 1 ? 'Volví a ocultar 1 producto' : `Volví a ocultar ${ultimoLote.length} productos`}.`)
     setUltimoLote([])
     void bustAudit(marca)
   }
@@ -118,7 +118,7 @@ export function ConStockCard({ marca }: { marca: Marca }) {
           <span>{msg}</span>
           {ultimoLote.length > 0 && (
             <button className="btn-sm" disabled={procesando} onClick={() => void deshacer()} style={{ background: '#fff', border: `1px solid ${color.line2}`, marginLeft: 'auto' }}>
-              ↩️ Deshacer
+              Deshacer
             </button>
           )}
         </div>

@@ -483,7 +483,7 @@ function QuickModal({ disenos, cola, index, onClose, onClasificar, onSaltar, onC
       <div style={{ width: '100%', maxWidth: 520 }}>
         {!cola.length ? (
           <div style={{ background: '#fff', borderRadius: 14, textAlign: 'center', padding: '34px 22px' }}>
-            <div style={{ fontSize: 42 }}>🎉</div>
+            <div style={{ fontSize: 42 }}>✓</div>
             <div style={{ fontSize: 18, fontWeight: 700, margin: '10px 0 4px' }}>¡Revisaste los {total} diseños!</div>
             <div style={{ color: color.mut, fontSize: 13, marginBottom: 18 }}>No queda ninguno por revisar.</div>
             <button onClick={onClose} style={{ background: '#111', color: '#fff', padding: '10px 22px', borderRadius: 9, cursor: 'pointer', border: 'none' }}>Ver el tablero</button>

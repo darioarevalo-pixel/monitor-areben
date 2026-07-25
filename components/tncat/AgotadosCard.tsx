@@ -96,7 +96,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
       ultimoLote.forEach((id) => n.delete(String(id)))
       return n
     })
-    setMsg(`↩️ Volví a mostrar ${ultimoLote.length} producto(s).`)
+    setMsg(`Volví a mostrar ${ultimoLote.length} producto(s).`)
     setUltimoLote([])
     void bustAudit(marca)
   }
@@ -119,7 +119,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
           <span>{msg}</span>
           {ultimoLote.length > 0 && (
             <button className="btn-sm" disabled={procesando} onClick={() => void deshacer()} style={{ background: '#fff', border: `1px solid ${color.line2}`, marginLeft: 'auto' }}>
-              ↩️ Deshacer
+              Deshacer
             </button>
           )}
         </div>
