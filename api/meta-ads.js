@@ -182,7 +182,7 @@ async function detalle(res, account, rango, rangoEco) {
   // El filtro de gasto > 0 recorta el ruido de cuentas con cientos de anuncios dormidos, pero en
   // un rango CORTO esconde justo lo que se quiere mirar: a la mañana un anuncio que todavía no
   // gastó desaparece, y "Hoy" se ve vacío aunque esté entregando. Ahí se pide todo.
-  const rangoCorto = rangoEco === 'today' || rangoEco === 'yesterday';
+  const rangoCorto = esRangoCorto(rangoEco);
   const filtroGasto = rangoCorto
     ? ''
     : `filtering=${encodeURIComponent(JSON.stringify([{ field: 'spend', operator: 'GREATER_THAN', value: 0 }]))}&`;
@@ -435,6 +435,19 @@ function sumar(rows) {
     roas: t.spend ? t.revenue / t.spend : 0,
     costoPerfil: t.perfil ? t.spend / t.perfil : 0,
   };
+}
+
+/**
+ * ¿El rango es de pocos días? Define si se pide TODO o solo lo que gastó. Cubre los presets
+ * cortos y también el rango con fechas de "Hoy y ayer", que la pantalla manda como since/until
+ * porque Meta no tiene un preset para eso.
+ */
+function esRangoCorto(rangoEco) {
+  if (rangoEco === 'today' || rangoEco === 'yesterday') return true;
+  if (!rangoEco || typeof rangoEco !== 'object') return false;
+  const a = Date.parse(rangoEco.since), b = Date.parse(rangoEco.until);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(b - a) <= 2 * 86400000;
 }
 
 function num(v) {

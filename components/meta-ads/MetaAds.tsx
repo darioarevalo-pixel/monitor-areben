@@ -5,7 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, 
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { puedeSub } from '@/lib/permisos'
-import { pausarAnuncio, traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
+import { pausarAnuncio, traerDetalleCuenta, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
 import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
 import { chartColor, color as paleta } from '@/components/ui'
 
@@ -17,8 +17,16 @@ type CtxPausa = {
   onToggle: (adId: string, actual: string | null | undefined) => void
 }
 
-const RANGOS: { k: PresetMetaAds; label: string }[] = [
+/**
+ * El rango del selector. Es un superconjunto de los `date_preset` de Meta porque **"Hoy y ayer"
+ * no existe como preset**: Meta tiene `today` y `yesterday` sueltos, y sus rangos relativos
+ * (`last_7d` y compañía) no incluyen el día en curso. Se resuelve como rango con fechas.
+ */
+type RangoUI = PresetMetaAds | 'hoy_ayer'
+
+const RANGOS: { k: RangoUI; label: string }[] = [
   { k: 'today', label: 'Hoy' },
+  { k: 'hoy_ayer', label: 'Hoy y ayer' },
   { k: 'yesterday', label: 'Ayer' },
   { k: 'last_7d', label: 'Últimos 7 días' },
   { k: 'last_14d', label: 'Últimos 14 días' },
@@ -28,6 +36,21 @@ const RANGOS: { k: PresetMetaAds; label: string }[] = [
   { k: 'last_month', label: 'Mes pasado' },
   { k: 'maximum', label: 'Todo el historial' },
 ]
+
+/**
+ * Fecha en formato ISO tomando el día LOCAL. `toISOString()` no sirve: es UTC, así que en
+ * Argentina después de las 21 h devolvería el día siguiente y "hoy" saldría corrido.
+ */
+const isoLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** Traduce el rango de la pantalla a lo que entiende el endpoint. */
+function opcionesDe(r: RangoUI): OpcionesMetaAds {
+  if (r !== 'hoy_ayer') return { preset: r }
+  const hoy = new Date()
+  const ayer = new Date(hoy)
+  ayer.setDate(hoy.getDate() - 1)
+  return { since: isoLocal(ayer), until: isoLocal(hoy) }
+}
 
 const nf = new Intl.NumberFormat('es-AR')
 const nf1 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
@@ -73,16 +96,16 @@ type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { 
 export function MetaAds() {
   const { perfil, marca } = useSesion()
   const puedePausar = puedeSub(perfil, marca, 'meta-ads', 'pausar')
-  const [preset, setPreset] = useState<PresetMetaAds>('last_30d')
+  const [preset, setPreset] = useState<RangoUI>('last_30d')
   const [elegida, setElegida] = useState<string | null>(null)
   // Estados optimistas de pausa/activación, keyeados por cuenta+rango: al cambiar de
   // vista, `ovMap` vuelve a {} solo, sin efecto (evita setState-en-effect).
   const [pausaOv, setPausaOv] = useState<{ key: string; map: Record<string, EstadoPausa> }>({ key: '', map: {} })
 
-  const [ov, setOv] = useState<{ preset: PresetMetaAds; r: Cargable<CuentaMetaAds[]> } | null>(null)
+  const [ov, setOv] = useState<{ preset: RangoUI; r: Cargable<CuentaMetaAds[]> } | null>(null)
   useEffect(() => {
     let vivo = true
-    traerOverview({ preset }).then((r) => {
+    traerOverview(opcionesDe(preset)).then((r) => {
       if (!vivo) return
       setOv({ preset, r: r.ok ? { fase: 'ok', data: r.dato.cuentas } : { fase: 'error', motivo: r.motivo } })
     })
@@ -98,7 +121,7 @@ export function MetaAds() {
     if (!activaId) return
     let vivo = true
     const key = `${activaId}|${preset}`
-    traerDetalleCuenta(activaId, { preset }).then((r) => {
+    traerDetalleCuenta(activaId, opcionesDe(preset)).then((r) => {
       if (!vivo) return
       setDet({ key, r: r.ok ? { fase: 'ok', data: r.dato } : { fase: 'error', motivo: r.motivo } })
     })
@@ -139,13 +162,13 @@ export function MetaAds() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <label style={{ fontSize: 13, color: paleta.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
           Rango:
-          <select value={preset} onChange={(e) => setPreset(e.target.value as PresetMetaAds)} style={{ padding: '6px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
+          <select value={preset} onChange={(e) => setPreset(e.target.value as RangoUI)} style={{ padding: '6px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
             {RANGOS.map((r) => <option key={r.k} value={r.k}>{r.label}</option>)}
           </select>
         </label>
         {/* En rangos cortos la zona horaria de la cuenta ES el dato: "Hoy" lo resuelve Meta allá,
             así que si la cuenta está en otro huso, el corte del día no es el de acá. */}
-        {(preset === 'today' || preset === 'yesterday') && zonaActiva && (
+        {(preset === 'today' || preset === 'yesterday' || preset === 'hoy_ayer') && zonaActiva && (
           <span style={{ fontSize: 12, color: paleta.mut2 }} title="El día lo corta Meta en la zona horaria de la cuenta publicitaria, no en la tuya">
             en hora de {zonaActiva}
           </span>
