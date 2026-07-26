@@ -18,13 +18,18 @@ import { esDescartado, resumenCompras } from '@/lib/crm/core'
 import { leadInstaHref } from '@/lib/crm/leads'
 import { traerDetalles } from '@/lib/crm/datos'
 import type { ClienteCRM, MapaSeguimiento, ResumenCompras } from '@/lib/crm/tipos'
-import { color } from '@/components/ui'
+import { Button, Card, KpiCard, color, toneSolidHover } from '@/components/ui'
 
 const CADENCIA_LABEL: Record<string, string> = {
   '': 'Sin seguimiento',
   semanal: 'Semana (7 días)',
   quincenal: 'Quincena (15 días)',
   mensual: 'Mes (30 días)',
+}
+
+/** Punto de estado del seguimiento (era 🔴/🟡/🟢: un emoji trae su propio color y no se tematiza). */
+function Punto({ col }: { col: string }) {
+  return <span aria-hidden style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: col, verticalAlign: 'middle' }} />
 }
 
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -91,14 +96,14 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
   if (c.seg_estado === 'none') {
     proxLinea = <span style={{ color: color.mut2 }}>Elegí cada cuánto recontactarlo para programarlo.</span>
   } else if (c.seg_estado === 'pendiente') {
-    proxLinea = <span style={{ color: color.danger, fontWeight: 600 }}>🔴 A contactar (todavía sin primer contacto registrado)</span>
+    proxLinea = <span style={{ color: color.danger, fontWeight: 600 }}><Punto col={color.danger} /> A contactar (todavía sin primer contacto registrado)</span>
   } else {
     const d = c.dias_proximo as number
     const rel = d === 0 ? 'hoy' : d < 0 ? `hace ${-d} días` : `en ${d} días`
-    const cfg = { vencido: ['🔴', color.danger], semana: ['🟡', color.warningInk], aldia: ['🟢', color.success] }[c.seg_estado]!
+    const col = { vencido: color.danger, semana: color.warningInk, aldia: color.success }[c.seg_estado]!
     proxLinea = (
       <>
-        <span style={{ color: cfg[1], fontWeight: 600 }}>{cfg[0]} {fmtFecha(c.proximo_contacto)} ({rel})</span>
+        <span style={{ color: col, fontWeight: 600 }}><Punto col={col} /> {fmtFecha(c.proximo_contacto)} ({rel})</span>
         <span style={{ color: color.mut2 }}>{manualActivo ? ' · fijado a mano' : ' · automático'}</span>
       </>
     )
@@ -106,25 +111,25 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
   const notas = c.notas || []
   const meta = [
-    c.email ? `📧 ${c.email}` : '',
-    c.phone ? `📱 ${c.phone}` : '',
-    c.city ? `📍 ${[c.city, c.province].filter(Boolean).join(', ')}` : '',
+    c.email || '',
+    c.phone || '',
+    c.city ? [c.city, c.province].filter(Boolean).join(', ') : '',
   ].filter(Boolean).join(' · ')
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: 20, overflowY: 'auto' }} onClick={onCerrar}>
-      <div className="card" style={{ maxWidth: 720, width: '100%', margin: '20px 0' }} onClick={(e) => e.stopPropagation()}>
+      <Card style={{ maxWidth: 720, width: '100%', margin: '20px 0' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{c.name}</h3>
             <div style={{ fontSize: 12, color: color.mut, marginTop: 3 }}>{meta}</div>
           </div>
-          <button className="btn-sm" onClick={onCerrar}>✕ Cerrar</button>
+          <Button size="sm" variant="outline" onClick={onCerrar}>Cerrar</Button>
         </div>
 
         {/* Seguimiento */}
         <div style={{ background: color.bg, border: `1px solid ${color.line}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: color.mut, marginBottom: 10, fontWeight: 600, letterSpacing: 0 }}>📞 Seguimiento</div>
+          <div style={{ fontSize: 12, color: color.mut, marginBottom: 10, fontWeight: 600, letterSpacing: 0 }}>Seguimiento</div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--mo-mayorista-fg)' }}>
             <input type="checkbox" checked={!!seg.es_mayorista} onChange={(e) => mutar((s) => setMayorista(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--mo-mayorista-fg)' }} />
@@ -133,12 +138,12 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.success }}>
             <input type="checkbox" checked={!!seg.en_difusion} onChange={(e) => mutar((s) => setDifusion(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: color.success }} />
-            📢 En el canal de difusión <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(para que reciba los ingresos y novedades por WhatsApp)</span>
+            En el canal de difusión <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(para que reciba los ingresos y novedades por WhatsApp)</span>
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.mut }}>
             <input type="checkbox" checked={esDescartado(c.id, crmSeg)} onChange={(e) => mutar((s) => setDescartado(s, c.id, e.target.checked))} style={{ width: 16, height: 16 }} />
-            🚫 Ya no se dedica <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(lo saca del CRM, KPIs y recontacto; reversible)</span>
+            Ya no se dedica <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(lo saca del CRM, KPIs y recontacto; reversible)</span>
           </label>
 
           <div style={{ marginBottom: 12 }}>
@@ -152,7 +157,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                 onBlur={() => { if ((pagina || '').trim() !== (seg.pagina || '')) mutar((s) => setPagina(s, c.id, pagina)) }}
                 style={{ flex: 1, padding: 8, fontSize: 13, boxSizing: 'border-box' }}
               />
-              {pagHref && <a href={pagHref} target="_blank" rel="noopener" className="btn-sm" style={{ whiteSpace: 'nowrap', background: color.brandSolid, color: '#fff' }}>Abrir ↗</a>}
+              {pagHref && <a href={pagHref} target="_blank" rel="noopener" className="mo-btn mo-btn--sm" style={{ whiteSpace: 'nowrap', '--_bg': color.brandSolid, '--_fg': '#fff', '--_bd': color.brandSolid, '--_bg-hover': toneSolidHover.brand } as React.CSSProperties}>Abrir ↗</a>}
             </div>
           </div>
 
@@ -163,7 +168,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                 {['', 'semanal', 'quincenal', 'mensual'].map((v) => <option key={v} value={v}>{CADENCIA_LABEL[v]}</option>)}
               </select>
             </div>
-            <button className="btn-sm" onClick={() => mutar((s) => hableHoy(s, c.id))} style={{ background: color.success, color: '#fff' }}>✅ Hablé hoy</button>
+            <Button size="sm" variant="solid" tone="success" onClick={() => mutar((s) => hableHoy(s, c.id))}>Hablé hoy</Button>
             <div>
               <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }}>Último contacto</label>
               <div style={{ fontSize: 13, padding: '6px 0' }}>{c.ultimo_contacto ? fmtFecha(c.ultimo_contacto) : '—'}</div>
@@ -172,17 +177,17 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
               <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }}>Próximo contacto</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="date" value={c.proximo_contacto || ''} onChange={(e) => mutar((s) => setProximoManual(s, c.id, e.target.value))} style={{ padding: '5px 8px' }} />
-                {manualActivo && <button className="btn-sm" onClick={() => mutar((s) => setProximoManual(s, c.id, ''))} title="Volver a calcularlo por cadencia">↺ Automático</button>}
+                {manualActivo && <Button size="sm" variant="outline" onClick={() => mutar((s) => setProximoManual(s, c.id, ''))} title="Volver a calcularlo por cadencia">↺ Automático</Button>}
               </div>
               <div style={{ fontSize: 10, color: color.mut2, marginTop: 3 }}>Tocá la fecha para fijar otra a mano.</div>
             </div>
           </div>
 
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${color.line}` }}>
-            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>✍️ Le escribí hoy — recordarme de nuevo en:</div>
+            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>Le escribí hoy — recordarme de nuevo en:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {[[1, 'Mañana'], [2, 'En 2 días'], [3, 'En 3 días'], [7, 'En 1 semana']].map(([d, t]) => (
-                <button key={d} className="btn-sm" onClick={() => mutar((s) => escribiHoy(s, c.id, d as number))} style={{ background: color.brandBg, color: color.brand, border: `1px solid ${color.brandBorder}` }}>{t}</button>
+                <Button key={d} size="sm" variant="soft" tone="brand" onClick={() => mutar((s) => escribiHoy(s, c.id, d as number))}>{t}</Button>
               ))}
             </div>
           </div>
@@ -194,8 +199,9 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <input type="date" value={notaFecha} onChange={(e) => setNotaFecha(e.target.value)} title="Fecha de la nota" style={{ padding: 8, fontSize: 13 }} />
               <textarea rows={2} value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} placeholder="Qué hablaron, qué quedó pendiente..." style={{ flex: 1, padding: 8, fontSize: 13, resize: 'vertical', border: `1px solid ${color.line2}`, borderRadius: 6, fontFamily: 'inherit' }} />
-              <button
-                className="btn-sm"
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => {
                   const texto = notaTexto.trim()
                   if (!texto) return
@@ -205,7 +211,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                 style={{ alignSelf: 'flex-start' }}
               >
                 Agregar
-              </button>
+              </Button>
             </div>
             <div style={{ marginTop: 8 }}>
               {notas.length ? (
@@ -213,7 +219,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: `1px solid ${color.bg2}` }}>
                     <div style={{ fontSize: 11, color: color.mut2, whiteSpace: 'nowrap', minWidth: 64 }}>{fmtFecha(n.fecha)}</div>
                     <div style={{ fontSize: 13, flex: 1 }}>{n.texto}</div>
-                    <button className="btn-sm" title="Borrar nota" onClick={() => mutar((s) => borrarNota(s, c.id, i))} style={{ padding: '0 6px', color: color.danger }}>✕</button>
+                    <Button size="sm" variant="ghost" tone="danger" title="Borrar nota" onClick={() => mutar((s) => borrarNota(s, c.id, i))}>✕</Button>
                   </div>
                 ))
               ) : (
@@ -225,14 +231,14 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
-          <div className="stat"><div className="stat-label">Pedidos</div><div className="stat-value" style={{ fontSize: 22 }}>{c.total_sales}</div></div>
-          <div className="stat"><div className="stat-label">Total comprado</div><div className="stat-value" style={{ fontSize: 18 }}>{fmtMonto(c.total_amount)}</div></div>
-          <div className="stat"><div className="stat-label">Ticket prom.</div><div className="stat-value" style={{ fontSize: 18 }}>{fmtMonto(c.avg_ticket)}</div></div>
-          <div className="stat"><div className="stat-label">Último pedido</div><div className="stat-value" style={{ fontSize: 16 }}>{c.dias_ultimo === null ? '—' : 'hace ' + c.dias_ultimo + 'd'}</div><div style={{ fontSize: 11, color: color.mut2 }}>{fmtFecha(c.last_sale)}</div></div>
+          <KpiCard label="Pedidos" value={c.total_sales} />
+          <KpiCard label="Total comprado" value={fmtMonto(c.total_amount)} />
+          <KpiCard label="Ticket prom." value={fmtMonto(c.avg_ticket)} />
+          <KpiCard label="Último pedido" value={c.dias_ultimo === null ? '—' : 'hace ' + c.dias_ultimo + 'd'} sub={fmtFecha(c.last_sale)} />
         </div>
 
         {/* Resumen de compras */}
-        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, letterSpacing: 0 }}>🛒 Resumen de compras</div>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, letterSpacing: 0 }}>Resumen de compras</div>
         <div style={{ marginBottom: 16 }}>
           {errResumen ? (
             <div style={{ fontSize: 12, color: color.danger }}>No se pudo cargar el detalle de compras.</div>
@@ -280,7 +286,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

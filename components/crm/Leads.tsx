@@ -21,7 +21,7 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { normalizeArgPhone } from '@/lib/crm/core'
-import { Button, color, useConfirmar } from '@/components/ui'
+import { Button, Notice, StatusPill, Toolbar, color, useConfirmar } from '@/components/ui'
 
 /**
  * Vista de Leads. Port de index.html:13936-14247.
@@ -39,10 +39,10 @@ import { Button, color, useConfirmar } from '@/components/ui'
  */
 
 const CHIP = {
-  pendiente: { txt: 'A contactar', col: color.danger, bg: color.dangerBg, dot: '🔴' },
-  vencido: { txt: 'Vencido', col: color.danger, bg: color.dangerBg, dot: '🔴' },
-  semana: { txt: 'Esta semana', col: color.warningInk, bg: color.warningBg, dot: '🟡' },
-  aldia: { txt: 'Al día', col: color.success, bg: color.successBg, dot: '🟢' },
+  pendiente: { txt: 'A contactar', tone: 'danger' },
+  vencido: { txt: 'Vencido', tone: 'danger' },
+  semana: { txt: 'Esta semana', tone: 'warning' },
+  aldia: { txt: 'Al día', tone: 'success' },
 } as const
 
 const fmtFecha = (d: string | null) => {
@@ -98,15 +98,14 @@ export function Leads() {
       </div>
 
       {error && (
-        <div style={{ background: color.dangerBg, border: `1px solid ${color.dangerBorder}`, borderRadius: 8, padding: '7px 11px', marginBottom: 12, fontSize: 12, color: color.dangerInk }}>
-          ⚠️ {error}
-        </div>
+        <Notice tone="danger" style={{ marginBottom: 12 }}>{error}</Notice>
       )}
 
-      <div className="toolbar" style={{ marginBottom: 14 }}>
-        <button
-          className="btn-sm"
-          style={{ background: color.brandSolid, color: '#fff' }}
+      <Toolbar style={{ marginBottom: 14 }}>
+        <Button
+          size="sm"
+          variant="solid"
+          tone="brand"
           disabled={!cargado}
           title={cargado ? '' : 'El KV no se pudo leer'}
           onClick={() => {
@@ -115,8 +114,8 @@ export function Leads() {
             setAbierto(id)
           }}
         >
-          ➕ Nuevo lead
-        </button>
+          + Nuevo lead
+        </Button>
         <input type="text" placeholder="Buscar nombre, teléfono o Instagram..." value={q} onChange={(e) => setQ(e.target.value)} />
         <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={verArchivados} onChange={(e) => setVerArchivados(e.target.checked)} />
@@ -126,7 +125,7 @@ export function Leads() {
           {lista.length} lead{lista.length === 1 ? '' : 's'}
           {verArchivados ? ' archivados' : ''}
         </span>
-      </div>
+      </Toolbar>
 
       <div style={{ overflowX: 'auto' }}>
         <table>
@@ -172,9 +171,7 @@ export function Leads() {
                     <td>
                       {chip ? (
                         <>
-                          <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: chip.col, background: chip.bg, padding: '1px 7px', borderRadius: 999 }}>
-                            {chip.dot} {chip.txt}
-                          </span>
+                          <StatusPill tone={chip.tone} label={chip.txt} />
                           <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>
                             {x._seg.estado === 'pendiente' ? 'Sin primer contacto' : `${fmtFecha(x._seg.proximo)} · ${x._seg.dias === 0 ? 'hoy' : (x._seg.dias as number) < 0 ? `hace ${-(x._seg.dias as number)}d` : `en ${x._seg.dias}d`}`}
                           </div>
@@ -207,7 +204,7 @@ export function Leads() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: 'min(560px,100%)', maxHeight: '85vh', overflowY: 'auto', padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ fontWeight: 700 }}>{l.nombre || 'Lead nuevo'}</div>
-              <button className="btn-sm" onClick={() => setAbierto(null)}>Cerrar</button>
+              <Button size="sm" variant="outline" onClick={() => setAbierto(null)}>Cerrar</Button>
             </div>
 
             <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
@@ -233,7 +230,7 @@ export function Leads() {
                 <option value="quincenal">Quincenal</option>
                 <option value="mensual">Mensual</option>
               </select>
-              <button className="btn-sm" onClick={() => persistir(hableHoy(leads, l.id))}>✅ Hablé hoy</button>
+              <Button size="sm" variant="outline" onClick={() => persistir(hableHoy(leads, l.id))}>Hablé hoy</Button>
               <label style={{ fontSize: 12, color: color.mut }}>Próximo:</label>
               <input type="date" value={l.proximo_manual || ''} onChange={(e) => persistir(setProximoManual(leads, l.id, e.target.value))} />
             </div>
@@ -242,7 +239,7 @@ export function Leads() {
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Notas</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 <input type="text" placeholder="Agregar nota…" value={nota} onChange={(e) => setNota(e.target.value)} style={{ flex: 1 }} />
-                <button className="btn-sm" onClick={() => { persistir(agregarNota(leads, l.id, nota)); setNota('') }}>Agregar</button>
+                <Button size="sm" variant="outline" onClick={() => { persistir(agregarNota(leads, l.id, nota)); setNota('') }}>Agregar</Button>
               </div>
               {l.notas.map((n, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${color.bg2}` }}>
@@ -256,9 +253,9 @@ export function Leads() {
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
               {(['activo', 'comprado', 'descartado'] as EstadoLead[]).map((e) => (
-                <button key={e} className="btn-sm" style={l.estado === e ? { background: color.ink, color: '#fff' } : undefined} onClick={() => persistir(setEstado(leads, l.id, e))}>
+                <Button key={e} size="sm" variant={l.estado === e ? 'solid' : 'outline'} tone="neutral" onClick={() => persistir(setEstado(leads, l.id, e))}>
                   {LEAD_ESTADO_LABEL[e]}
-                </button>
+                </Button>
               ))}
               <Button
                 size="sm"

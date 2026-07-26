@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { agregarMensaje, borrarMensaje, editarMensaje, semillaFresca, type GrupoMensajes } from '@/lib/crm/banco'
 import { guardarBanco, leerBanco } from '@/lib/kv/cliente'
-import { Button, color, useConfirmar } from '@/components/ui'
+import { Button, Notice, color, useConfirmar } from '@/components/ui'
 
 /**
  * Banco de mensajes. Port de index.html:14293-14360.
@@ -79,14 +79,14 @@ export function BancoMensajes({ onCerrar }: Props) {
       >
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${color.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>💬 Banco de mensajes</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Banco de mensajes</div>
             <div style={{ fontSize: 11, color: color.mut2 }}>Clic en un mensaje para copiarlo. Editalo y se guarda solo.</div>
           </div>
-          <button className="btn-sm" onClick={onCerrar}>Cerrar</button>
+          <Button size="sm" variant="outline" onClick={onCerrar}>Cerrar</Button>
         </div>
 
         {error && (
-          <div style={{ background: color.dangerBg, padding: '7px 20px', fontSize: 12, color: color.dangerInk }}>⚠️ {error}</div>
+          <Notice tone="danger" style={{ margin: '0 20px' }}>{error}</Notice>
         )}
 
         <div style={{ padding: '4px 20px 18px', overflowY: 'auto', flex: 1 }}>
@@ -110,8 +110,8 @@ export function BancoMensajes({ onCerrar }: Props) {
                             style={{ width: '100%', minHeight: 60, fontSize: 12, fontFamily: 'inherit', padding: 6, border: `1px solid ${color.line2}`, borderRadius: 6 }}
                           />
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                            <button className="btn-sm btn-primary" onClick={() => guardarEdicion(gi, mi)}>Guardar</button>
-                            <button className="btn-sm" onClick={() => setEditando(null)}>Cancelar</button>
+                            <Button size="sm" variant="solid" tone="brand" onClick={() => guardarEdicion(gi, mi)}>Guardar</Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditando(null)}>Cancelar</Button>
                             {/* Vaciar el texto y guardar borra el mensaje: es lo que hace el legacy. */}
                           </div>
                         </>
@@ -121,8 +121,8 @@ export function BancoMensajes({ onCerrar }: Props) {
                             {m || <span style={{ color: color.mut2 }}>(vacío)</span>}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                            <button className="btn-sm" onClick={() => copiar(m, id)}>{copiado === id ? '✓ Copiado' : '📋 Copiar'}</button>
-                            <button className="btn-sm" onClick={() => { setEditando({ gi, mi }); setBorrador(m) }}>✏️ Editar</button>
+                            <Button size="sm" variant="outline" onClick={() => copiar(m, id)}>{copiado === id ? '✓ Copiado' : 'Copiar'}</Button>
+                            <Button size="sm" variant="outline" onClick={() => { setEditando({ gi, mi }); setBorrador(m) }}>Editar</Button>
                             <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar el mensaje', tono: 'danger', ok: 'Borrar', mensaje: 'Se saca del banco compartido: no lo va a ver nadie más.' })) persistir(borrarMensaje(banco, gi, mi)) })()}></Button>
                           </div>
                         </>
@@ -130,8 +130,9 @@ export function BancoMensajes({ onCerrar }: Props) {
                     </div>
                   )
                 })}
-                <button
-                  className="btn-sm"
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => {
                     const nuevo = agregarMensaje(banco, gi)
                     setBanco(nuevo)
@@ -139,8 +140,8 @@ export function BancoMensajes({ onCerrar }: Props) {
                     setBorrador('')
                   }}
                 >
-                  ➕ Agregar
-                </button>
+                  + Agregar
+                </Button>
               </div>
             ))
           )}

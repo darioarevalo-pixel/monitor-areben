@@ -17,7 +17,7 @@ import {
 import type { ClienteCRM, MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { BuscarInput, Button, KpiCard, Notice, Select, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { BuscarInput, Button, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
@@ -32,17 +32,17 @@ import { BuscarInput, Button, KpiCard, Notice, Select, TBody, THead, TableWrap, 
 
 const SEGMENTOS = [
   { v: 'todos', t: 'Todos' },
-  { v: 'contactar', t: '📞 Para contactar' },
+  { v: 'contactar', t: 'Para contactar' },
   { v: 'top', t: '⭐ Top clientes' },
-  { v: 'activos', t: '🔥 Activos recurrentes' },
-  { v: 'riesgo', t: '⚠️ En riesgo' },
-  { v: 'dormidos', t: '🥶 Dormidos (90+ días)' },
-  { v: 'nuevos', t: '🆕 Nuevos' },
-  { v: 'sin-difusion', t: '📢 Sin difusión' },
-  { v: 'sin-tel', t: '📵 Sin teléfono (cargar)' },
+  { v: 'activos', t: 'Activos recurrentes' },
+  { v: 'riesgo', t: 'En riesgo' },
+  { v: 'dormidos', t: 'Dormidos (90+ días)' },
+  { v: 'nuevos', t: 'Nuevos' },
+  { v: 'sin-difusion', t: 'Sin difusión' },
+  { v: 'sin-tel', t: 'Sin teléfono (cargar)' },
 ]
 
-const SEG_LABEL: Record<string, string> = { activos: '🔥 Activo', riesgo: '⚠️ Riesgo', dormidos: '🥶 Dormido', nuevos: '🆕 Nuevo', otros: '·' }
+const SEG_LABEL: Record<string, string> = { activos: 'Activo', riesgo: 'Riesgo', dormidos: 'Dormido', nuevos: 'Nuevo', otros: '·' }
 const SEG_COLOR: Record<string, string> = { activos: color.success, riesgo: color.warning, dormidos: color.danger, nuevos: color.brandSolid, otros: color.mut2 }
 
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -55,10 +55,10 @@ function fmtFecha(d: string | null): string {
 function CeldaProximo({ c }: { c: ClienteCRM }) {
   if (c.seg_estado === 'none') return <span style={{ color: color.mut2 }}>—</span>
   const cfg = {
-    pendiente: { txt: 'A contactar', col: color.danger, bg: color.dangerBg, dot: '🔴' },
-    vencido: { txt: 'Vencido', col: color.danger, bg: color.dangerBg, dot: '🔴' },
-    semana: { txt: 'Esta semana', col: color.warningInk, bg: color.warningBg, dot: '🟡' },
-    aldia: { txt: 'Al día', col: color.success, bg: color.successBg, dot: '🟢' },
+    pendiente: { txt: 'A contactar', tone: 'danger' as const },
+    vencido: { txt: 'Vencido', tone: 'danger' as const },
+    semana: { txt: 'Esta semana', tone: 'warning' as const },
+    aldia: { txt: 'Al día', tone: 'success' as const },
   }[c.seg_estado]
   let sub: string
   if (c.seg_estado === 'pendiente') sub = 'Sin primer contacto'
@@ -68,9 +68,7 @@ function CeldaProximo({ c }: { c: ClienteCRM }) {
   }
   return (
     <>
-      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: cfg.col, background: cfg.bg, padding: '1px 7px', borderRadius: 999 }}>
-        {cfg.dot} {cfg.txt}
-      </span>
+      <StatusPill tone={cfg.tone} label={cfg.txt} />
       <div style={{ fontSize: 11, color: color.mut2, marginTop: 2 }}>{sub}</div>
     </>
   )
@@ -266,14 +264,14 @@ export function CRM() {
   }
 
   const tarjetas = [
-    { key: 'contactar', label: '📞 Para contactar', n: kpis.contactar },
+    { key: 'contactar', label: 'Para contactar', n: kpis.contactar },
     { key: 'top', label: '⭐ Top clientes', n: kpis.top },
-    { key: 'activos', label: '🔥 Activos', n: kpis.activos },
-    { key: 'riesgo', label: '⚠️ En riesgo', n: kpis.riesgo },
-    { key: 'dormidos', label: '🥶 Dormidos', n: kpis.dormidos },
-    { key: 'nuevos', label: '🆕 Nuevos', n: kpis.nuevos },
-    { key: 'sin-difusion', label: '📢 Sin difusión', n: sinDifusion },
-    { key: 'sin-tel', label: '📵 Sin teléfono', n: kpis.sinTel },
+    { key: 'activos', label: 'Activos', n: kpis.activos },
+    { key: 'riesgo', label: 'En riesgo', n: kpis.riesgo },
+    { key: 'dormidos', label: 'Dormidos', n: kpis.dormidos },
+    { key: 'nuevos', label: 'Nuevos', n: kpis.nuevos },
+    { key: 'sin-difusion', label: 'Sin difusión', n: sinDifusion },
+    { key: 'sin-tel', label: 'Sin teléfono', n: kpis.sinTel },
   ]
 
   const clienteModal = modalId != null ? [...agregado.activos, ...agregado.descartados].find((c) => c.id === modalId) : null
