@@ -21,10 +21,12 @@ const RANGOS: { k: PresetMetaAds; label: string }[] = [
   { k: 'today', label: 'Hoy' },
   { k: 'yesterday', label: 'Ayer' },
   { k: 'last_7d', label: 'Últimos 7 días' },
+  { k: 'last_14d', label: 'Últimos 14 días' },
   { k: 'last_30d', label: 'Últimos 30 días' },
   { k: 'last_90d', label: 'Últimos 90 días' },
   { k: 'this_month', label: 'Este mes' },
   { k: 'last_month', label: 'Mes pasado' },
+  { k: 'maximum', label: 'Todo el historial' },
 ]
 
 const nf = new Intl.NumberFormat('es-AR')
@@ -214,6 +216,28 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
         <TilesTotales t={d.totales} moneda={moneda} hookRate={d.video?.hookRate} />
       </div>
 
+      {/* Las pautas de venta, aparte */}
+      {d.venta && d.venta.campañas > 0 && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: paleta.mut, letterSpacing: 0 }}>Solo las pautas de venta</div>
+            <InfoPopover titulo="Por qué este ROAS y no el de arriba">
+              <p>El ROAS de la cuenta mezcla <b>todas</b> las campañas, incluidas las de tráfico o reconocimiento, que ni
+              siquiera están optimizando para que alguien compre. Eso lo hunde sin que signifique nada.</p>
+              <p>Acá van solo las campañas cuyo objetivo en Meta es vender, que son las que se juzgan por el retorno.
+              A las de tráfico se les mira el <b>costo por visita al perfil</b>, en su propia fila más abajo.</p>
+            </InfoPopover>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: 10 }}>
+            <Tile label="ROAS de venta" valor={roas(d.venta.roas)} destacado color={paleta.success} />
+            <Tile label="Gasto en venta" valor={money(d.venta.spend, moneda)} />
+            <Tile label="Ingresos" valor={money(d.venta.revenue, moneda)} />
+            <Tile label="Compras" valor={entero(d.venta.purchases)} />
+            <Tile label="Campañas" valor={`${d.venta.campañas} de ${d.campañas.length}`} />
+          </div>
+        </div>
+      )}
+
       {/* Embudo de compra */}
       {d.funnel && d.funnel.some((p) => p.count > 0) && (
         <div className="card">
@@ -273,7 +297,7 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
         {d.campañas.length === 0 ? (
           <div style={{ fontSize: 13, color: paleta.mut2 }}>No hay anuncios con gasto en este rango.</div>
         ) : (
-          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} />)
+          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} accionesVistas={d.accionesVistas} />)
         )}
       </div>
 
@@ -388,7 +412,7 @@ function Tile({ label, valor, destacado, color }: { label: string; valor: string
   )
 }
 
-function CampañaBloque({ c, moneda, accountId, pausa }: { c: Campaña; moneda: string; accountId: string; pausa: CtxPausa }) {
+function CampañaBloque({ c, moneda, accountId, pausa, accionesVistas }: { c: Campaña; moneda: string; accountId: string; pausa: CtxPausa; accionesVistas?: string[] }) {
   const [abierta, setAbierta] = useState(true)
   return (
     <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
@@ -398,12 +422,30 @@ function CampañaBloque({ c, moneda, accountId, pausa }: { c: Campaña; moneda: 
       >
         <div style={{ fontSize: 13, fontWeight: 600, color: paleta.ink }}>
           <span style={{ color: paleta.mut2, marginRight: 6 }}>{abierta ? '▾' : '▸'}</span>{c.nombre}
+          {c.tipo && c.tipo !== 'otro' ? (
+            <Badge txt={c.tipo === 'venta' ? 'venta' : 'tráfico'} color={c.tipo === 'venta' ? paleta.success : paleta.brand} bg={c.tipo === 'venta' ? paleta.successBg : paleta.brandBg} />
+          ) : null}
           <span style={{ color: paleta.mut2, fontWeight: 400 }}> · {c.ads.length} anuncio{c.ads.length === 1 ? '' : 's'}</span>
         </div>
         <div style={{ fontSize: 12, color: paleta.ink2, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <span>Gasto <b>{money(c.totales.spend, moneda)}</b></span>
-          <span>Compras <b>{entero(c.totales.purchases)}</b></span>
-          <span style={{ color: paleta.success }}>ROAS <b>{roas(c.totales.roas)}</b></span>
+          {/* Una campaña de tráfico no se juzga por ROAS: su resultado es traer gente al perfil. */}
+          {c.tipo === 'trafico' ? (
+            <>
+              <span>Visitas al perfil <b>{entero(c.totales.perfil)}</b></span>
+              <span
+                style={{ color: paleta.brand }}
+                title={c.totales.perfil ? undefined : `Meta no devolvió visitas al perfil en esta cuenta. Acciones que sí trajo: ${(accionesVistas || []).join(', ') || 'ninguna'}`}
+              >
+                Costo por visita <b>{c.totales.perfil ? money(c.totales.costoPerfil, moneda) : '—'}</b>
+              </span>
+            </>
+          ) : (
+            <>
+              <span>Compras <b>{entero(c.totales.purchases)}</b></span>
+              <span style={{ color: paleta.success }}>ROAS <b>{roas(c.totales.roas)}</b></span>
+            </>
+          )}
         </div>
       </button>
       {abierta && (

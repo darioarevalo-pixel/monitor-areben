@@ -21,6 +21,10 @@ export type Metricas = {
   revenue: number
   /** Retorno (ingresos ÷ gasto). */
   roas: number
+  /** Visitas al perfil (IG/FB). Es el resultado de una pauta de tráfico, como la compra lo es de una de venta. */
+  perfil?: number
+  /** Gasto por visita al perfil. Solo en subtotales (`sumar`), donde se recalcula desde los agregados. */
+  costoPerfil?: number
   /** Solo a nivel cuenta (dedup — no se suma en subtotales). */
   reach?: number
   frequency?: number
@@ -82,7 +86,25 @@ export type DemografiaFila = { age: string; gender: string; spend: number; purch
 export type RegionFila = { region: string; spend: number; purchases: number; revenue: number }
 
 /** Una campaña con su subtotal y sus anuncios. */
-export type Campaña = { id: string; nombre: string; totales: Metricas; ads: AdRow[] }
+/** Para qué está optimizando una campaña. Decide qué métrica tiene sentido mirarle. */
+export type TipoCampaña = 'venta' | 'trafico' | 'otro'
+
+export type Campaña = {
+  id: string
+  nombre: string
+  /** El objetivo crudo de Meta (OUTCOME_SALES, OUTCOME_TRAFFIC…). `null` si la consulta falló. */
+  objetivo?: string | null
+  tipo?: TipoCampaña
+  totales: Metricas
+  ads: AdRow[]
+}
+
+/**
+ * Resumen de las pautas de VENTA. Existe aparte de `totales` a propósito: el ROAS de la cuenta
+ * mezcla campañas que ni siquiera optimizan para comprar, así que no dice lo que uno cree.
+ * `null` cuando no se pudieron leer los objetivos de campaña.
+ */
+export type ResumenVenta = { campañas: number; spend: number; revenue: number; purchases: number; roas: number }
 
 /** Un punto de la serie diaria. */
 export type DailyPoint = { date: string; spend: number; revenue: number; purchases: number }
@@ -95,6 +117,10 @@ export type DetalleCuenta = {
   rango: PresetMetaAds | { since: string; until: string }
   cuenta: { id: string; nombre: string; moneda: string }
   totales: Metricas
+  /** Solo las campañas de venta. Ver `ResumenVenta`. */
+  venta: ResumenVenta | null
+  /** Diagnóstico: los `action_type` que Meta devolvió en esta cuenta. Ver `RE_PERFIL` en el endpoint. */
+  accionesVistas?: string[]
   /** Embudo de compra de la cuenta (clic → web → carrito → checkout → compra). */
   funnel: FunnelPaso[]
   /** Video de la cuenta (hook rate y reproducciones). */

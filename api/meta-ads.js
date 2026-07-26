@@ -17,6 +17,18 @@ const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d'
 const ATTR = encodeURIComponent(JSON.stringify(['7d_click', '1d_view']));
 // Compras dedup cross-surface (pixel + CAPI + on-Meta): la fuente única de verdad de ventas.
 const COMPRA = 'omni_purchase';
+// Objetivos de campaña que buscan VENDER. Es lo que separa el ROAS que importa del ruido: una
+// campaña de tráfico o de reconocimiento baja el ROAS de la cuenta sin que eso signifique nada,
+// porque no está optimizando para comprar. Meta usa los nombres nuevos (OUTCOME_*) y los viejos.
+const OBJETIVOS_VENTA = new Set(['OUTCOME_SALES', 'CONVERSIONS', 'PRODUCT_CATALOG_SALES', 'CATALOG_SALES']);
+const OBJETIVOS_TRAFICO = new Set(['OUTCOME_TRAFFIC', 'LINK_CLICKS', 'OUTCOME_ENGAGEMENT', 'POST_ENGAGEMENT', 'PAGE_LIKES']);
+/**
+ * Visitas al perfil (Instagram/Facebook). El `action_type` exacto de Meta cambia entre versiones
+ * y no está documentado de forma estable, así que NO se hardcodea un nombre: se busca por patrón
+ * sobre las acciones que devuelve la fila. Si Meta lo llama distinto, el dato queda en 0 en vez
+ * de romper — mismo criterio que el resto de los enriquecimientos.
+ */
+const RE_PERFIL = /profile_visit|profile_view|profile_engagement/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -156,22 +168,31 @@ async function detalle(res, account, rango, rangoEco) {
   if (!/^\d+$/.test(account)) return res.status(400).json({ error: 'account inválido' });
   const act = `act_${account}`;
   const attr = `action_attribution_windows=${ATTR}`;
-  const filtroGasto = `filtering=${encodeURIComponent(JSON.stringify([{ field: 'spend', operator: 'GREATER_THAN', value: 0 }]))}`;
+  // El filtro de gasto > 0 recorta el ruido de cuentas con cientos de anuncios dormidos, pero en
+  // un rango CORTO esconde justo lo que se quiere mirar: a la mañana un anuncio que todavía no
+  // gastó desaparece, y "Hoy" se ve vacío aunque esté entregando. Ahí se pide todo.
+  const rangoCorto = rangoEco === 'today' || rangoEco === 'yesterday';
+  const filtroGasto = rangoCorto
+    ? ''
+    : `filtering=${encodeURIComponent(JSON.stringify([{ field: 'spend', operator: 'GREATER_THAN', value: 0 }]))}&`;
 
   // Las 4 primeras son las llamadas núcleo (no se tocan); las 4 nuevas son enriquecimientos
   // AISLADOS: si alguna falla, su dato queda vacío y el resto del detalle igual responde.
-  const [totRes, adsRes, dayRes, plRes, extraRes, statusRes, ageRes, regRes] = await Promise.all([
+  const [totRes, adsRes, dayRes, plRes, extraRes, statusRes, ageRes, regRes, campRes] = await Promise.all([
     graph(`${act}/insights?fields=account_name,account_currency,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas&${rango}&${attr}`),
-    insightsTodas(`${act}/insights?level=ad&fields=ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,inline_link_clicks,actions,action_values,purchase_roas&${filtroGasto}&${rango}&${attr}&limit=500`),
+    insightsTodas(`${act}/insights?level=ad&fields=ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,inline_link_clicks,actions,action_values,purchase_roas&${filtroGasto}${rango}&${attr}&limit=500`),
     graph(`${act}/insights?fields=spend,actions,action_values&time_increment=1&${rango}&${attr}&limit=500`),
     graph(`${act}/insights?fields=spend,actions,action_values&breakdowns=publisher_platform,platform_position&${rango}&${attr}&limit=500`),
     // Diagnóstico de creativos + video por anuncio (call separada para no arriesgar la de anuncios).
-    insightsTodas(`${act}/insights?level=ad&fields=ad_id,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,video_3_sec_watched_actions,video_thruplay_watched_actions&${filtroGasto}&${rango}&${attr}&limit=500`),
+    insightsTodas(`${act}/insights?level=ad&fields=ad_id,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions,video_3_sec_watched_actions,video_thruplay_watched_actions&${filtroGasto}${rango}&${attr}&limit=500`),
     // Estado de entrega (activo/pausado/en aprendizaje) + preview del creativo + links por anuncio.
     graph(`${act}/ads?fields=id,effective_status,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url}&limit=500`),
     // Quién: edad × género. Dónde: región.
     graph(`${act}/insights?breakdowns=age,gender&fields=spend,impressions,actions,action_values&${rango}&${attr}&limit=500`),
     graph(`${act}/insights?breakdowns=region&fields=spend,actions,action_values&${rango}&${attr}&limit=500`),
+    // Objetivo de cada campaña: es lo único que distingue una pauta de VENTA de una de tráfico,
+    // y no viene en insights. Enriquecimiento aislado: si falla, no hay ROAS de venta y listo.
+    graph(`${act}/campaigns?fields=id,objective&limit=500`),
   ]);
 
   if (!adsRes.ok) return res.status(502).json({ error: 'No se pudieron traer los anuncios de la cuenta', detalle: adsRes.error });
@@ -235,14 +256,50 @@ async function detalle(res, account, rango, rangoEco) {
       video: ex ? videoDe(ex) : { plays3s: 0, thruplay: 0, hookRate: 0 },
     };
   });
+  // Objetivo por campaña (de la consulta aislada; si falló, quedan todas sin objetivo).
+  const objetivoPorId = new Map();
+  if (campRes.ok && campRes.data && Array.isArray(campRes.data.data)) {
+    for (const c of campRes.data.data) objetivoPorId.set(String(c.id), c.objective || null);
+  }
+
   const porCamp = new Map();
   for (const a of ads) {
     if (!porCamp.has(a.campaign_id)) porCamp.set(a.campaign_id, { id: a.campaign_id, nombre: a.campaign_name, ads: [] });
     porCamp.get(a.campaign_id).ads.push(a);
   }
   const campañas = [...porCamp.values()]
-    .map((c) => ({ id: c.id, nombre: c.nombre, totales: sumar(c.ads), ads: c.ads.sort((x, y) => y.spend - x.spend) }))
+    .map((c) => {
+      const objetivo = objetivoPorId.get(String(c.id)) || null;
+      return {
+        id: c.id,
+        nombre: c.nombre,
+        objetivo,
+        // `tipo` es lo que la pantalla usa para decidir QUÉ métrica mostrar: una campaña de venta
+        // se juzga por ROAS y una de tráfico por lo que cuesta traer a alguien al perfil.
+        tipo: objetivo && OBJETIVOS_VENTA.has(objetivo) ? 'venta' : objetivo && OBJETIVOS_TRAFICO.has(objetivo) ? 'trafico' : 'otro',
+        totales: sumar(c.ads),
+        ads: c.ads.sort((x, y) => y.spend - x.spend),
+      };
+    })
     .sort((a, b) => b.totales.spend - a.totales.spend);
+
+  // ROAS de las pautas de VENTA: se calcula sobre el gasto y los ingresos de esas campañas nada
+  // más. El `roas` de la cuenta sigue existiendo y no se toca (lo consume la alerta del panel
+  // Gerencial): esto se suma al lado, no lo reemplaza.
+  // Qué action_types trajo Meta en esta cuenta. Es diagnóstico, no métrica: el nombre exacto de
+  // la visita al perfil no está documentado de forma estable, así que si `perfil` da 0 esta lista
+  // dice con qué nombre viene de verdad, sin tener que abrir la Graph API a mano.
+  const accionesVistas = totRow && Array.isArray(totRow.actions)
+    ? [...new Set(totRow.actions.map((a) => String((a && a.action_type) || '')).filter(Boolean))].sort()
+    : [];
+
+  const deVenta = campañas.filter((c) => c.tipo === 'venta');
+  const gastoVenta = deVenta.reduce((t, c) => t + c.totales.spend, 0);
+  const ingresoVenta = deVenta.reduce((t, c) => t + c.totales.revenue, 0);
+  const ventasVenta = deVenta.reduce((t, c) => t + c.totales.purchases, 0);
+  const venta = objetivoPorId.size
+    ? { campañas: deVenta.length, spend: gastoVenta, revenue: ingresoVenta, purchases: ventasVenta, roas: gastoVenta ? ingresoVenta / gastoVenta : 0 }
+    : null;
 
   const daily = (dayRes.ok ? (dayRes.data.data || []) : [])
     .map((row) => ({ date: row.date_start, spend: num(row.spend), revenue: accion(row.action_values, COMPRA), purchases: accion(row.actions, COMPRA) }))
@@ -253,7 +310,7 @@ async function detalle(res, account, rango, rangoEco) {
     .filter((p) => p.spend > 0)
     .sort((a, b) => b.spend - a.spend);
 
-  return res.status(200).json({ ok: true, rango: rangoEco, cuenta: { id: account, nombre, moneda }, totales, funnel, video: videoTotal, demografia, regiones, campañas, daily, placements });
+  return res.status(200).json({ ok: true, rango: rangoEco, cuenta: { id: account, nombre, moneda }, totales, venta, accionesVistas, funnel, video: videoTotal, demografia, regiones, campañas, daily, placements });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -275,6 +332,12 @@ function accion(arr, type) {
 function sumaAcciones(arr) {
   if (!Array.isArray(arr)) return 0;
   return arr.reduce((s, a) => s + num(a && a.value), 0);
+}
+
+// Suma los `value` de todas las acciones cuyo action_type matchea un patrón (ver RE_PERFIL).
+function accionRe(arr, re) {
+  if (!Array.isArray(arr)) return 0;
+  return arr.reduce((s, a) => s + (a && re.test(String(a.action_type || '')) ? num(a.value) : 0), 0);
 }
 
 // Pasos del embudo de compra, en orden, con su action_type de Meta.
@@ -319,6 +382,7 @@ function metricasDe(row) {
     purchases: accion(row.actions, COMPRA),
     revenue: accion(row.action_values, COMPRA),
     roas: accion(row.purchase_roas, COMPRA),
+    perfil: accionRe(row.actions, RE_PERFIL),
   };
 }
 
@@ -340,15 +404,17 @@ function adDe(row) {
     purchases: accion(row.actions, COMPRA),
     revenue: accion(row.action_values, COMPRA),
     roas: accion(row.purchase_roas, COMPRA),
+    perfil: accionRe(row.actions, RE_PERFIL),
   };
 }
 
 // Suma un conjunto de filas (para el subtotal de campaña / fallback de cuenta). Los ratios se recalculan
 // desde los agregados (no se promedian); reach NO se suma (es dedup) → se omite en subtotales.
 function sumar(rows) {
-  const t = { spend: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0 };
+  const t = { spend: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0, perfil: 0 };
   for (const r of rows) {
     t.spend += r.spend; t.impressions += r.impressions; t.clicks += r.clicks; t.purchases += r.purchases; t.revenue += r.revenue;
+    t.perfil += r.perfil || 0;
   }
   return {
     ...t,
@@ -356,6 +422,7 @@ function sumar(rows) {
     cpc: t.clicks ? t.spend / t.clicks : 0,
     cpm: t.impressions ? (t.spend / t.impressions) * 1000 : 0,
     roas: t.spend ? t.revenue / t.spend : 0,
+    costoPerfil: t.perfil ? t.spend / t.perfil : 0,
   };
 }
 
