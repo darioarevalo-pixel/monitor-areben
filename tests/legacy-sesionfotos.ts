@@ -66,7 +66,7 @@ export type LegacyCombi = {
  */
 export function cargarCombinadaLegacy(sfData: Solicitud[]): LegacyCombi {
   const html = readFileSync(join(RAIZ, 'index.html'), 'utf8')
-  const fuente = ['sfFaseCompleta', '_sfCombiAgg', 'sfFaseCompletaCombi']
+  const fuente = ['sfFaseCompleta', '_sfEsperadoEn', '_sfCombiAgg', 'sfFaseCompletaCombi']
     .map((n) => extraerBalanceado(html, n))
     .join('\n\n')
   const fabricar = new Function('sfData', `${fuente}\nreturn { _sfCombiAgg, sfFaseCompletaCombi };`)

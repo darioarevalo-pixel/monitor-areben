@@ -21,6 +21,19 @@ export function preparado(s: Solicitud, i: ItemSolicitud): number {
 }
 
 /**
+ * Cuántas unidades se esperan de un ítem EN ESTA FASE. Es la regla que separa las dos mitades
+ * del ciclo, y vale para todo lo que cuenta: la lista que se muestra, el tope del escaneo, el
+ * ajuste a mano, el cierre de fase y la vista combinada.
+ *
+ * - **Retiro**: lo pedido.
+ * - **Devolución**: lo que efectivamente SALIÓ. Si de 10 se encontraron 7, vuelven 7 — los no
+ *   encontrados no se venden, así que tampoco se devuelven.
+ */
+export function esperadoEn(s: Solicitud, i: ItemSolicitud, fase: Fase): number {
+  return fase === 'devolucion' ? preparado(s, i) : i.qty
+}
+
+/**
  * Faltantes de devolución: ítems que aún no volvieron. El "esperado a devolver" es lo que
  * efectivamente SALIÓ (lo preparado por escaneo), NO lo pedido — así lo no encontrado durante la
  * separación no aparece como pendiente de devolver ni genera correcciones manuales.
@@ -50,8 +63,7 @@ export function faseCompleta(s: Solicitud, fase: Fase): boolean {
   const m = s[claveConteo(fase)] || {}
   // Retiro: se completa cuando todo lo pedido está preparado. Devolución: cuando volvió todo lo que SALIÓ
   // (lo preparado), para que los no encontrados no impidan cerrar ni exijan corrección manual.
-  const esperado = (i: ItemSolicitud) => (fase === 'devolucion' ? preparado(s, i) : i.qty)
-  return (s.items || []).length > 0 && s.items.every((i) => (m[i.vid] || 0) >= esperado(i))
+  return (s.items || []).length > 0 && s.items.every((i) => (m[i.vid] || 0) >= esperadoEn(s, i, fase))
 }
 
 /** Unidades pedidas de un origen. */

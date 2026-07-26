@@ -61,6 +61,7 @@ import {
   historialVisible,
   itemDeVariante,
   origenesConItems,
+  preparado,
   retiradoDe,
   salio,
   sinItemSol,
@@ -576,10 +577,20 @@ function Detalle({
 
   const s = work
   const conteo = s[fase === 'devolucion' ? 'devuelto' : 'verif'] || {}
-  const conf = (it: ItemSolicitud) => Math.min(conteo[it.vid] || 0, it.qty)
+  /**
+   * Cuánto se espera de un ítem EN ESTA FASE. Al preparar es lo pedido; al devolver es lo que
+   * realmente salió, que puede ser menos: si de 10 se encontraron 7, vuelven 7. Sin esto la
+   * pestaña de devolución pedía devolver mercadería que nunca se retiró — y quedaba a la vista
+   * el síntoma raro de una tabla con 10 renglones al lado del panel de faltantes con 7, porque
+   * ese panel sí usa `faltantes` (que ya estaba bien).
+   */
+  const esperado = (it: ItemSolicitud) => (fase === 'devolucion' ? preparado(s, it) : it.qty)
+  const conf = (it: ItemSolicitud) => Math.min(conteo[it.vid] || 0, esperado(it))
 
-  const dep = s.items.filter((i) => i.origen === 'deposito')
-  const loc = s.items.filter((i) => i.origen === 'local')
+  // En devolución, lo que no salió no se lista.
+  const delOrigen = (o: Origen) => s.items.filter((i) => i.origen === o && esperado(i) > 0)
+  const dep = delOrigen('deposito')
+  const loc = delOrigen('local')
   // Vista por sector: un usuario Local ve solo lo de local, Depósito solo lo de depósito.
   // `puedeRetiro*` = veTodo || tiene la función de ese origen (ver `puedeRetirar`).
   const origenVisible = (o: Origen) => (o === 'deposito' ? puedeRetiroDep : puedeRetiroLoc)
@@ -688,7 +699,7 @@ function Detalle({
 
   const grupo = (titulo: string, arr: ItemSolicitud[], origen: Origen) => {
     if (!arr.length) return null
-    const totQ = arr.reduce((a, i) => a + i.qty, 0)
+    const totQ = arr.reduce((a, i) => a + esperado(i), 0)
     const confTot = arr.reduce((a, i) => a + conf(i), 0)
     const completo = confTot >= totQ
     const accionN = fase === 'devolucion' ? 'devueltos' : 'preparados'
@@ -719,14 +730,15 @@ function Detalle({
               <th style={{ padding: '3px 6px' }}>Producto</th>
               <th style={{ padding: '3px 6px' }}>Variante</th>
               <th style={{ padding: '3px 6px' }}>SKU</th>
-              <th style={{ padding: '3px 6px', textAlign: 'right' }}>{fase === 'devolucion' ? 'Devuelto' : 'Preparado'}/Ped.</th>
+              <th style={{ padding: '3px 6px', textAlign: 'right' }}>{fase === 'devolucion' ? 'Devuelto/Salió' : 'Preparado/Ped.'}</th>
               <th style={{ padding: '3px 6px' }} />
             </tr>
           </thead>
           <tbody>
             {arr.map((i) => {
               const c = conf(i)
-              const ok = c >= i.qty
+              const esp = esperado(i)
+              const ok = c >= esp
               return (
                 <tr key={i.vid} style={ok ? { background: color.successBg } : undefined}>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
@@ -747,11 +759,11 @@ function Detalle({
                     {i.manual ? (
                       <>
                         <BotonMini label="−" onClick={() => setWork((w) => ajustarManualSol(w, fase, i.vid, -1))} />
-                        {' '}{c}/{i.qty}{' '}
+                        {' '}{c}/{esp}{' '}
                         <BotonMini label="+" acento onClick={() => setWork((w) => ajustarManualSol(w, fase, i.vid, 1))} />
                       </>
                     ) : (
-                      <>{c}/{i.qty}</>
+                      <>{c}/{esp}</>
                     )}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}`, textAlign: 'right', whiteSpace: 'nowrap' }}>

@@ -10,7 +10,7 @@
  * muestra ni el badge "sin venta" ni el código de barras — igual que el legacy.
  */
 
-import { faseCompleta } from './core'
+import { esperadoEn, faseCompleta } from './core'
 import type { Fase, Origen, Solicitud } from './tipos'
 
 export type ItemCombinado = {
@@ -18,7 +18,7 @@ export type ItemCombinado = {
   nombre: string
   variante: string
   sku: string
-  /** Total pedido de esta variante entre todas las solicitudes. */
+  /** Total esperado en esta fase: lo pedido al preparar, lo que salió al devolver. */
   ped: number
   /** Total confirmado (preparado o devuelto) entre todas, cada uno topeado a su qty. */
   conf: number
@@ -32,24 +32,26 @@ export function agregarCombinada(sols: Solicitud[], origen: Origen, fase: Fase):
   const map: Record<string, ItemCombinado> = {}
   sols.forEach((s) =>
     (s.items || [])
-      .filter((i) => i.origen === origen)
+      // En devolución solo entra lo que efectivamente salió (mismo criterio que el detalle).
+      .filter((i) => i.origen === origen && esperadoEn(s, i, fase) > 0)
       .forEach((i) => {
+        const esp = esperadoEn(s, i, fase)
         if (i.manual) {
           map['m_' + i.vid] = {
             vid: i.vid,
             nombre: i.nombre,
             variante: i.variante,
             sku: i.sku,
-            ped: i.qty,
-            conf: Math.min((s[mk] || {})[i.vid] || 0, i.qty),
+            ped: esp,
+            conf: Math.min((s[mk] || {})[i.vid] || 0, esp),
             manual: true,
             solId: s.id,
           }
           return
         }
         const e = map[i.vid] || (map[i.vid] = { vid: i.vid, nombre: i.nombre, variante: i.variante, sku: i.sku, ped: 0, conf: 0 })
-        e.ped += i.qty
-        e.conf += Math.min((s[mk] || {})[i.vid] || 0, i.qty)
+        e.ped += esp
+        e.conf += Math.min((s[mk] || {})[i.vid] || 0, esp)
       }),
   )
   return Object.values(map).sort(

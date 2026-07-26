@@ -416,3 +416,31 @@ describe('sesionfotos/core — bolsas numeradas (Fase C #3)', () => {
     expect(s1.items[0].bolsa).toBe(1)
   })
 })
+
+describe('vista combinada · devolución solo con lo que salió', () => {
+  const conFaltantes = (): Solicitud[] => [
+    sol({
+      id: 'c1',
+      estado: 'cargada',
+      items: [
+        item({ vid: 'a', nombre: 'Remera', qty: 3, origen: 'deposito' }),
+        item({ vid: 'b', nombre: 'Buzo', qty: 2, origen: 'deposito' }),
+      ],
+      verif: { a: 2 }, // de la Remera salieron 2 de 3; el Buzo no se encontró
+      devuelto: {},
+    }),
+  ]
+
+  it('al devolver, el esperado es lo preparado y lo no encontrado no se lista', () => {
+    const filas = agregarCombinada(conFaltantes(), 'deposito', 'devolucion')
+    expect(filas.map((f) => ({ vid: f.vid, ped: f.ped }))).toEqual([{ vid: 'a', ped: 2 }])
+  })
+
+  it('al retirar sigue mostrando todo lo pedido', () => {
+    const filas = agregarCombinada(conFaltantes(), 'deposito', 'retiro')
+    expect(filas.map((f) => ({ vid: f.vid, ped: f.ped }))).toEqual([
+      { vid: 'b', ped: 2 },
+      { vid: 'a', ped: 3 },
+    ])
+  })
+})

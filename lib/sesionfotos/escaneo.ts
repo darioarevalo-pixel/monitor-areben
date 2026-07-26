@@ -9,7 +9,7 @@
  * nunca revierte una `devuelta`, y un decremento no baja el estado.
  */
 
-import { faseCompleta } from './core'
+import { esperadoEn, faseCompleta } from './core'
 import type { Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** Igual que `_sfNormBc`: normaliza un código de barras (trim + mayúsculas). */
@@ -86,25 +86,28 @@ export function escanearSol(
   mapa: Record<string, string>,
 ): { sol: Solicitud; resultado: ResultadoEscaneo } {
   const mapKey = fase === 'devolucion' ? 'devuelto' : 'verif'
-  const arr = (sol.items || []).filter((i) => i.origen === origen)
+  // En devolución el tope es lo que SALIÓ, no lo que se había pedido: de 10 pedidos y 7
+  // preparados vuelven 7, y escanear un octavo tiene que rebotar.
+  const arr = (sol.items || []).filter((i) => i.origen === origen && esperadoEn(sol, i, fase) > 0)
   const it = resolverItem(arr, code, mapa, true)
   if (!it) return { sol, resultado: { tipo: 'no-encontrado', code } }
+  const tope = esperadoEn(sol, it, fase)
   const done = (sol[mapKey] || {})[it.vid] || 0
-  if (done >= it.qty) {
-    return { sol, resultado: { tipo: 'ya-completo', nombre: it.nombre, variante: it.variante, qty: it.qty } }
+  if (done >= tope) {
+    return { sol, resultado: { tipo: 'ya-completo', nombre: it.nombre, variante: it.variante, qty: tope } }
   }
   const conteo = { ...(sol[mapKey] || {}), [it.vid]: done + 1 }
   const ns = transicionEstado({ ...sol, [mapKey]: conteo }, fase)
-  return { sol: ns, resultado: { tipo: 'ok', nombre: it.nombre, variante: it.variante, done: done + 1, qty: it.qty } }
+  return { sol: ns, resultado: { tipo: 'ok', nombre: it.nombre, variante: it.variante, done: done + 1, qty: tope } }
 }
 
-/** Ajuste a mano (+/−) de un ítem manual, clampeado a [0, qty]. Port de sfManualAjustar. */
+/** Ajuste a mano (+/−) de un ítem manual, clampeado a [0, lo esperado en esta fase]. Port de sfManualAjustar. */
 export function ajustarManualSol(sol: Solicitud, fase: Fase, vid: string, delta: number): Solicitud {
   const it = (sol.items || []).find((i) => i.vid === vid)
   if (!it) return sol
   const mapKey = fase === 'devolucion' ? 'devuelto' : 'verif'
   const actual = (sol[mapKey] || {})[vid] || 0
-  const nuevo = Math.max(0, Math.min(it.qty, actual + delta))
+  const nuevo = Math.max(0, Math.min(esperadoEn(sol, it, fase), actual + delta))
   const conteo = { ...(sol[mapKey] || {}), [vid]: nuevo }
   return transicionEstado({ ...sol, [mapKey]: conteo }, fase)
 }

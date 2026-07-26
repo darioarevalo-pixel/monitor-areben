@@ -10304,16 +10304,20 @@ function sfFaseCompletaCombi(ids, fase) {
   const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
   return sols.length > 0 && sols.every(s => sfFaseCompleta(s, fase));
 }
-// Agrupa por vid los items de varias solicitudes dentro de un origen (suma pedido y confirmado).
+// Cuánto se espera de un ítem en esta fase: al retirar lo pedido, al devolver lo que SALIÓ.
+// Espejo de esperadoEn() de lib/sesionfotos/core.ts — este archivo ya no corre, vive para la paridad.
+function _sfEsperadoEn(s, i, fase) { return fase === 'devolucion' ? Math.min((s.verif || {})[i.vid] || 0, i.qty) : i.qty; }
+// Agrupa por vid los items de varias solicitudes dentro de un origen (suma esperado y confirmado).
 function _sfCombiAgg(ids, origen, fase) {
   const mk = fase === 'devolucion' ? 'devuelto' : 'verif';
   const sols = ids.map(id => sfData.find(s => s.id === id)).filter(Boolean);
   const map = {};
-  sols.forEach(s => (s.items || []).filter(i => i.origen === origen).forEach(i => {
-    if (i.manual) { map['m_' + i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: i.qty, conf: Math.min((s[mk] || {})[i.vid] || 0, i.qty), manual: true, solId: s.id, vid: i.vid }; return; }
+  sols.forEach(s => (s.items || []).filter(i => i.origen === origen && _sfEsperadoEn(s, i, fase) > 0).forEach(i => {
+    const esp = _sfEsperadoEn(s, i, fase);
+    if (i.manual) { map['m_' + i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: esp, conf: Math.min((s[mk] || {})[i.vid] || 0, esp), manual: true, solId: s.id, vid: i.vid }; return; }
     const e = map[i.vid] || (map[i.vid] = { nombre: i.nombre, variante: i.variante, sku: i.sku, ped: 0, conf: 0 });
-    e.ped += i.qty;
-    e.conf += Math.min((s[mk] || {})[i.vid] || 0, i.qty);
+    e.ped += esp;
+    e.conf += Math.min((s[mk] || {})[i.vid] || 0, esp);
   }));
   return Object.values(map).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es') || (a.variante || '').localeCompare(b.variante || '', 'es', { numeric: true }));
 }

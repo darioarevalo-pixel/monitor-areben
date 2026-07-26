@@ -82,6 +82,27 @@ describe('escanearSol · preparado y devolución', () => {
     const { resultado } = escanearSol(s, 'deposito', 'retiro', '111', mapa)
     expect(resultado.tipo).toBe('no-encontrado')
   })
+
+  // En devolución el tope es lo que SALIÓ, no lo que se había pedido: si de 3 se prepararon 2,
+  // vuelven 2. Sin esto se aceptaba devolver mercadería que nunca se retiró.
+  it('devolución: el tope es lo preparado, no lo pedido', () => {
+    const s = sol({ estado: 'cargada', items: [item({ vid: 'a', qty: 3 })], verif: { a: 2 }, devuelto: { a: 2 } })
+    const { sol: ns, resultado } = escanearSol(s, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ya-completo', qty: 2 }) // no 3
+    expect(ns).toBe(s)
+  })
+
+  it('devolución: un ítem que nunca se preparó no se puede escanear', () => {
+    const s = sol({ estado: 'cargada', items: [item({ vid: 'a', qty: 2 })], verif: {} })
+    const { resultado } = escanearSol(s, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado.tipo).toBe('no-encontrado') // no salió: no hay nada que devolver
+  })
+
+  it('retiro: el tope sigue siendo lo pedido', () => {
+    const s = sol({ items: [item({ vid: 'a', qty: 3 })], verif: { a: 2 } })
+    const { resultado } = escanearSol(s, 'deposito', 'retiro', '111', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ok', done: 3, qty: 3 })
+  })
 })
 
 describe('ajustarManualSol · clamp y transición', () => {
@@ -96,6 +117,12 @@ describe('ajustarManualSol · clamp y transición', () => {
     expect(s.verif).toEqual({ man_1: 2 })
     s = ajustarManualSol(s, 'retiro', 'man_1', -5) // no baja de 0
     expect(s.verif).toEqual({ man_1: 0 })
+  })
+
+  it('en devolución el techo del ajuste a mano es lo preparado', () => {
+    const s = sol({ estado: 'cargada', items: [item({ vid: 'man_1', manual: true, qty: 3 })], verif: { man_1: 1 } })
+    const ns = ajustarManualSol(ajustarManualSol(s, 'devolucion', 'man_1', 1), 'devolucion', 'man_1', 1)
+    expect(ns.devuelto).toEqual({ man_1: 1 }) // salió 1, vuelve 1: el segundo + no hace nada
   })
 })
 
