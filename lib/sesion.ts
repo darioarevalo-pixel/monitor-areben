@@ -212,16 +212,25 @@ export async function login(user: string, pass: string): Promise<RespuestaLogin>
   }
 }
 
-/** Trae la lista de perfiles del KV (cargarConfigUsuarios, index.html:9339). */
-export async function traerPerfiles(): Promise<Perfil[] | null> {
-  try {
-    const r = await fetch(USU_API)
-    const d = await r.json()
-    if (d?.ok && Array.isArray(d.config?.users)) return d.config.users as Perfil[]
-    return null
-  } catch {
-    return null
-  }
+/**
+ * Rehidrata el perfil de una sesión de contraseña, revalidándola contra el KV.
+ *
+ * Antes esto se resolvía bajando la nómina COMPLETA del GET público de `api/usuarios` y
+ * buscando el nombre guardado. Dos problemas: ese GET respondía a cualquiera con CORS
+ * `*` (la nómina del equipo entero se bajaba desde afuera con un curl), y "el nombre
+ * está en la lista" no es lo mismo que "esta sesión sigue siendo válida" — a alguien a
+ * quien le cambiaron la contraseña se le rehidrataba igual. Ahora se revalida la
+ * credencial, que es la misma pregunta que hace el login.
+ *
+ * Devuelve null si la contraseña no está cacheada: en ese caso la sesión no se puede
+ * probar y hay que volver a entrar. Es raro —la pass persiste en localStorage junto a la
+ * sesión— y es el modo de falla correcto.
+ */
+export async function rehidratarPorPass(user: string): Promise<Perfil | null> {
+  const pass = leerAdminPass()
+  if (!pass) return null
+  const r = await login(user, pass)
+  return r.ok ? r.perfil : null
 }
 
 /**

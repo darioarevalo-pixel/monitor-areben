@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav.datos'
 import type { Perfil } from '@/lib/permisos'
 import { marcaInicial } from '@/lib/permisos'
 import { canjearCodigo, hayCodigoEnLaUrl, tokenActual } from '@/lib/identidad'
-import { borrarSesion, guardarSesion, leerSesion, loginGoogle, traerPerfiles, type Via } from '@/lib/sesion'
+import { borrarSesion, guardarSesion, leerSesion, loginGoogle, rehidratarPorPass, type Via } from '@/lib/sesion'
 
 type Ctx = {
   perfil: Perfil | null
@@ -33,9 +33,10 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   //  2. Sesión guardada de Google: el perfil se rehidrata con el token del proveedor, que
   //     `getSession()` refresca solo. Si ya no hay token (el refresh expiró o se cerró la
   //     sesión en otra app), la sesión del monitor tampoco vale.
-  //  3. Sesión guardada de contraseña: como siempre, contra la nómina del KV. Mismo
-  //     contrato que intentarAutoLogin() del legacy — la sesión guarda el nombre, no el
-  //     perfil, así que hay que ir a buscarlo.
+  //  3. Sesión guardada de contraseña: se revalida la credencial contra el KV. La sesión
+  //     guarda el nombre, no el perfil, así que hay que ir a buscarlo igual que hacía
+  //     intentarAutoLogin() del legacy — pero probando la contraseña, no leyendo la
+  //     nómina completa de un endpoint abierto.
   useEffect(() => {
     let vivo = true
     ;(async () => {
@@ -70,13 +71,13 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const perfiles = await traerPerfiles()
+      const p = await rehidratarPorPass(s.user)
       if (!vivo) return
-      const p = perfiles?.find((x) => x.name === s.user) ?? null
       if (p) {
         aplicar(p, s.empresa)
       } else {
-        // El usuario ya no existe en el KV: la sesión no vale.
+        // El usuario ya no existe, le cambiaron la contraseña, o la pass no está
+        // cacheada en este navegador: en los tres casos la sesión no se puede sostener.
         borrarSesion()
       }
       setCargando(false)
