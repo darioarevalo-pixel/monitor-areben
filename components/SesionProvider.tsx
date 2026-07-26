@@ -4,14 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { Marca } from '@/lib/nav.datos'
 import type { Perfil } from '@/lib/permisos'
 import { marcaInicial } from '@/lib/permisos'
-import { borrarSesion, guardarSesion, leerSesion, traerPerfiles } from '@/lib/sesion'
+import { canjearCodigo, hayCodigoEnLaUrl, tokenActual } from '@/lib/identidad'
+import { borrarSesion, guardarSesion, leerSesion, loginGoogle, traerPerfiles, type Via } from '@/lib/sesion'
 
 type Ctx = {
   perfil: Perfil | null
   marca: Marca
   cargando: boolean
+  /** Error de la vuelta de Google (cuenta sin alta en el KV, canje fallido). Lo muestra el login. */
+  errorGoogle: string
   setMarca: (m: Marca) => void
-  entrar: (perfil: Perfil) => void
+  entrar: (perfil: Perfil, via?: Via) => void
   salir: () => void
 }
 
@@ -21,39 +24,86 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null)
   const [marca, setMarcaState] = useState<Marca>('bdi')
   const [cargando, setCargando] = useState(true)
+  const [errorGoogle, setErrorGoogle] = useState('')
 
-  // Auto-login: mismo contrato que intentarAutoLogin() del legacy. La sesión no
-  // guarda el perfil, solo el nombre, así que hay que rehidratarlo del KV.
+  // Arranque. Tres caminos, en orden:
+  //
+  //  1. Volvemos de Google (`?code=` en la URL): se canjea y se entra. Va PRIMERO porque
+  //     puede haber una sesión vieja guardada y la vuelta de Google manda sobre ella.
+  //  2. Sesión guardada de Google: el perfil se rehidrata con el token del proveedor, que
+  //     `getSession()` refresca solo. Si ya no hay token (el refresh expiró o se cerró la
+  //     sesión en otra app), la sesión del monitor tampoco vale.
+  //  3. Sesión guardada de contraseña: como siempre, contra la nómina del KV. Mismo
+  //     contrato que intentarAutoLogin() del legacy — la sesión guarda el nombre, no el
+  //     perfil, así que hay que ir a buscarlo.
   useEffect(() => {
     let vivo = true
     ;(async () => {
+      if (hayCodigoEnLaUrl()) {
+        const canje = await canjearCodigo()
+        const r = canje.ok ? await loginGoogle(canje.token) : null
+        if (!vivo) return
+        if (r?.ok) {
+          const m = aplicar(r.perfil, null)
+          guardarSesion(r.perfil.name, m, 'google') // ingreso nuevo: acá sí nace la sesión
+        } else {
+          setErrorGoogle(r ? r.error : 'No se pudo completar el ingreso con Google. Probá de nuevo.')
+          borrarSesion()
+        }
+        setCargando(false)
+        return
+      }
+
       const s = leerSesion()
       if (!s) {
         if (vivo) setCargando(false)
         return
       }
+
+      if (s.via === 'google') {
+        const token = await tokenActual()
+        const r = token ? await loginGoogle(token) : null
+        if (!vivo) return
+        if (r?.ok) aplicar(r.perfil, s.empresa)
+        else borrarSesion()
+        setCargando(false)
+        return
+      }
+
       const perfiles = await traerPerfiles()
       if (!vivo) return
       const p = perfiles?.find((x) => x.name === s.user) ?? null
       if (p) {
-        setPerfil(p)
-        setMarcaState(marcaInicial(p, s.empresa))
+        aplicar(p, s.empresa)
       } else {
         // El usuario ya no existe en el KV: la sesión no vale.
         borrarSesion()
       }
       setCargando(false)
     })()
+
+    /**
+     * Deja el perfil andando y devuelve la marca elegida. NO reescribe la sesión: al
+     * rehidratar, tocarla correría los 30 días de vencimiento en cada visita, que no es
+     * lo que hacía el auto-login de antes. La sesión la escribe quien la crea.
+     */
+    function aplicar(p: Perfil, empresa: Marca | null): Marca {
+      const m = marcaInicial(p, empresa)
+      setPerfil(p)
+      setMarcaState(m)
+      return m
+    }
+
     return () => {
       vivo = false
     }
   }, [])
 
-  const entrar = useCallback((p: Perfil) => {
+  const entrar = useCallback((p: Perfil, via: Via = 'pass') => {
     const m = marcaInicial(p, null)
     setPerfil(p)
     setMarcaState(m)
-    guardarSesion(p.name, m)
+    guardarSesion(p.name, m, via)
   }, [])
 
   const salir = useCallback(() => {
@@ -64,14 +114,17 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   const setMarca = useCallback(
     (m: Marca) => {
       setMarcaState(m)
-      if (perfil) guardarSesion(perfil.name, m) // el iframe relee esto al recargarse
+      // Se reescribe la sesión entera, así que hay que arrastrar el `via`: sin esto,
+      // cambiar de marca degradaría una sesión de Google a una de contraseña y las
+      // escrituras empezarían a pedir una contraseña que esa persona no tiene.
+      if (perfil) guardarSesion(perfil.name, m, leerSesion()?.via ?? 'pass')
     },
     [perfil],
   )
 
   const valor = useMemo(
-    () => ({ perfil, marca, cargando, setMarca, entrar, salir }),
-    [perfil, marca, cargando, setMarca, entrar, salir],
+    () => ({ perfil, marca, cargando, errorGoogle, setMarca, entrar, salir }),
+    [perfil, marca, cargando, errorGoogle, setMarca, entrar, salir],
   )
 
   return <SesionCtx.Provider value={valor}>{children}</SesionCtx.Provider>

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin as esAdminDe } from '@/lib/permisos'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt } from '@/lib/sesion'
 import { imgAThumbYSubir } from '@/lib/imagenes'
 import { MODELOS_AUTOCOMPLETE } from '@/lib/ingresos/modelos'
 import {
@@ -58,23 +58,15 @@ function subirFotoIngreso(file: File | null | undefined, persistir: (url: string
   imgAThumbYSubir(file, { onUrl: persistir, onFallback: persistir }, 'ingresos', max)
 }
 
-/** Contraseña del Monitor para los guardados admin: cacheada por el login, o se pide una vez. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (prompt('Ingresá tu contraseña del Monitor (te la pido una sola vez):') || '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
+/** Credencial para los guardados admin. A nivel módulo: es estable entre renders. */
+const obtenerCred = () => credencialConPrompt('del Monitor')
 
 type Media = { tipo: 'img' | 'video'; url: string; nombre?: string }
 
 export function Ingresos() {
   const { marca, perfil } = useSesion()
   const admin = esAdminDe(perfil)
-  const cred = useMemo(() => ({ user: perfil?.name ?? '', obtenerPass }), [perfil])
-  const st = useIngresos(marca, admin, cred)
+  const st = useIngresos(marca, admin, obtenerCred)
   const { data, guardar } = st
 
   const [vista, setVistaState] = useState<VistaIngresos>('lector')

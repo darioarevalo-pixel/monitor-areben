@@ -34,14 +34,14 @@ const S = sol({
 
 describe('paridad de payload con sfCrearVentas (OFFLINE, cero POST)', () => {
   it('el body es byte-idéntico al del legacy', async () => {
-    const ctx = { store: 'bdi', user: 'ana', pass: 'secreta' }
-    const legacyBodies = await cargarCrearVentasBodies(S, ctx.store, ctx.user, ctx.pass)
+    const ctx = { store: 'bdi', cred: { user: 'ana', pass: 'secreta' } }
+    const legacyBodies = await cargarCrearVentasBodies(S, ctx.store, ctx.cred.user, ctx.cred.pass)
     const portBodies: PedidoVenta[] = construirPedidosVenta(S, ctx)
     expect(portBodies).toEqual(legacyBodies)
   })
 
   it('excluye los ítems nuevo/manual y arma un pedido por origen con ítems vendibles', () => {
-    const pedidos = construirPedidosVenta(S, { store: 'bdi', user: 'ana', pass: 'x' })
+    const pedidos = construirPedidosVenta(S, { store: 'bdi', cred: { user: 'ana', pass: 'x' } })
     expect(pedidos.map((p) => p.origen)).toEqual(['deposito', 'local'])
     expect(pedidos[0].items).toEqual([
       { product_id: '10', size_id: '100', quantity: 2 },
@@ -68,7 +68,7 @@ describe('paridad de payload con sfCrearVentas (OFFLINE, cero POST)', () => {
       ],
       verif: { p: 2, q: 1 },
     })
-    const pedidos = construirPedidosVenta(conNoEncontrado, { store: 'bdi', user: 'ana', pass: 'x' })
+    const pedidos = construirPedidosVenta(conNoEncontrado, { store: 'bdi', cred: { user: 'ana', pass: 'x' } })
     expect(pedidos.map((p) => p.origen)).toEqual(['deposito']) // local 'z' no se preparó → no hay pedido local
     expect(pedidos[0].items).toEqual([
       { product_id: '20', size_id: '200', quantity: 2 },
@@ -84,7 +84,7 @@ describe('crearVentas · orquestación secuencial', () => {
       orden.push(p.origen)
       return { ok: true, venta: { id: p.origen === 'deposito' ? 500 : 600, number: p.origen === 'deposito' ? 1 : 2 } }
     })
-    const { ventas, errores } = await crearVentas(S, { store: 'bdi', user: 'ana', pass: 'x' }, enviar)
+    const { ventas, errores } = await crearVentas(S, { store: 'bdi', cred: { user: 'ana', pass: 'x' } }, enviar)
     expect(orden).toEqual(['deposito', 'local']) // secuencial, en orden
     expect(ventas.deposito).toMatchObject({ id: 500 })
     expect(ventas.local).toMatchObject({ id: 600 })
@@ -93,7 +93,7 @@ describe('crearVentas · orquestación secuencial', () => {
 
   it('junta errores por origen sin abortar el resto', async () => {
     const enviar = vi.fn(async (p: PedidoVenta) => (p.origen === 'deposito' ? { ok: false, error: 'GN rechazó' } : { ok: true, venta: { id: 9 } }))
-    const { ventas, errores } = await crearVentas(S, { store: 'bdi', user: 'ana', pass: 'x' }, enviar)
+    const { ventas, errores } = await crearVentas(S, { store: 'bdi', cred: { user: 'ana', pass: 'x' } }, enviar)
     expect(ventas.deposito).toBeUndefined()
     expect(ventas.local).toMatchObject({ id: 9 })
     expect(errores).toEqual(['deposito: GN rechazó'])

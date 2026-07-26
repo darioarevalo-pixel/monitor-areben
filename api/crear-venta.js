@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!(await usuarioValido(b.user, b.pass))) return res.status(403).json({ error: 'Usuario o contraseña inválidos.' });
+  if (!(await usuarioValido(b.user, b.pass, b.token))) return res.status(403).json({ error: 'No pudimos verificar tu identidad. Volvé a entrar al Monitor.' });
 
   // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
   // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá

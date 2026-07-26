@@ -87,6 +87,12 @@ export type Perfil = {
   acceso: Partial<Record<Marca, Record<string, boolean>>>
   /** Funciones/roles de flujo de trabajo (opcional; ausente = sin función asignada). */
   funcion?: Funcion[]
+  /**
+   * Mail de Workspace, la clave que une esta persona con su cuenta en producción y en el
+   * dashboard. Null en las cuentas que son un puesto y no una persona (Depósito, Local,
+   * bdilocal): esas no pueden tener casilla y entran con contraseña.
+   */
+  email?: string | null
 }
 
 /** Port literal de _esAdmin() (index.html:9321). */

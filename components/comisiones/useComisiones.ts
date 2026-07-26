@@ -5,6 +5,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { canales, comDefault, comNormalizar } from '@/lib/comisiones/core'
 import { guardarConfigCompartida, leerConfigCompartida } from '@/lib/comisiones/kv'
 import type { ComCfg, ItemSale } from '@/lib/comisiones/tipos'
+import type { ObtenerCred } from '@/lib/sesion'
 
 /**
  * Config de Comisiones + lista de sale. La config se guarda LOCAL (por cuenta) y,
@@ -46,7 +47,7 @@ export type EstadoComisiones = {
   vaciarSale: () => void
 }
 
-export function useComisiones(marca: Marca, esAdmin: boolean, cred: { user: string; obtenerPass: () => string }): EstadoComisiones {
+export function useComisiones(marca: Marca, esAdmin: boolean, obtenerCred: ObtenerCred): EstadoComisiones {
   const cans = canales(marca === 'zattia')
   const [cfg, setCfg] = useState<ComCfg>(() => comDefault(cans))
   const [saleList, setSaleList] = useState<ItemSale[]>([])
@@ -92,12 +93,12 @@ export function useComisiones(marca: Marca, esAdmin: boolean, cred: { user: stri
       setShareStatus({ txt: 'Guardando…', color: '#6B7280' })
       if (saveT.current) clearTimeout(saveT.current)
       saveT.current = setTimeout(async () => {
-        const r = await guardarConfigCompartida(marca, next, cred.user, cred.obtenerPass())
+        const r = await guardarConfigCompartida(marca, next, await obtenerCred())
         if (marcaRef.current !== marca) return
         setShareStatus(r.ok ? { txt: '✓ Guardado (lo ve tu socio)', color: '#16A34A' } : { txt: 'Error: ' + (r.error || ''), color: '#DC2626' })
       }, 600)
     },
-    [marca, esAdmin, cred],
+    [marca, esAdmin, obtenerCred],
   )
 
   const agregarSale = useCallback(

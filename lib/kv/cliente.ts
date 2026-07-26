@@ -35,6 +35,7 @@
  */
 
 import type { Marca } from '../nav.datos'
+import { camposAdmin, type Credencial } from '../sesion'
 
 const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 
@@ -224,26 +225,25 @@ export type OpcionesGuardarIngresos<T> = {
   store: Marca
   ingresos: T[]
   /** El server valida que sea admin (config de usuarios en KV). Port del gate de ingresos.js. */
-  adminUser: string
-  adminPass: string
+  cred: Credencial | null
   /** Obligatorio, igual que las demás: sin lectura previa, guardar borraría todo. */
   cargado: boolean
 }
 
 /**
- * Guarda las importaciones (solo admins: el server valida `adminUser`/`adminPass`).
- * `prohibido` distingue el 403 (contraseña equivocada) para que el llamador olvide
- * la pass cacheada, como hace `_olvidarAdminPass` en el legacy.
+ * Guarda las importaciones (solo admins: el server valida la credencial, que puede ser
+ * usuario+contraseña o el token del proveedor). `prohibido` distingue el 403 (credencial
+ * equivocada) para que el llamador olvide la pass cacheada, como `_olvidarAdminPass`.
  */
 export type EscrituraIngresos = { ok: true } | { ok: false; motivo: string; prohibido?: boolean }
 
-export async function guardarIngresos<T>({ store, ingresos, adminUser, adminPass, cargado }: OpcionesGuardarIngresos<T>): Promise<EscrituraIngresos> {
+export async function guardarIngresos<T>({ store, ingresos, cred, cargado }: OpcionesGuardarIngresos<T>): Promise<EscrituraIngresos> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
   try {
     const r = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store, ingresos, adminUser, adminPass }),
+      body: JSON.stringify({ store, ingresos, ...camposAdmin(cred) }),
     })
     let d: Record<string, unknown> | null = null
     try {

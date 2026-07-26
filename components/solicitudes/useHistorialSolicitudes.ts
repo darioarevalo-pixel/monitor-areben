@@ -6,6 +6,7 @@ import type { KindLista } from '@/lib/kv/cliente'
 import { aplicarDiff, diffSolicitudes, leerCajon } from '@/lib/solicitudes/cajon'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
+import type { Credencial } from '@/lib/sesion'
 
 /**
  * Motor de carga/persistencia del historial de solicitudes, compartido por Sesión de
@@ -45,7 +46,7 @@ export type HistorialSolicitudes<T> = {
   cargado: boolean
   recargar: () => void
   persistir: (mutar: (l: T[]) => T[]) => Promise<boolean>
-  crearVentasDe: (s: T, cred: { user: string; pass: string }) => Promise<ResultadoCrearGen>
+  crearVentasDe: (s: T, cred: Credencial) => Promise<ResultadoCrearGen>
   cerrarAnuladas: () => Promise<number>
 }
 
@@ -55,7 +56,7 @@ export type OpcionesHistorial<T> = {
   etiqueta: string
   /** Estado que toma la solicitud al crear la venta GN ('cargada' en fotos, 'retirada' en internas). */
   estadoTrasVenta: string
-  crearVentas: (s: T, ctx: { store: Marca; user: string; pass: string }) => Promise<{ ventas: Partial<Record<Origen, VentaGN>>; errores: string[] }>
+  crearVentas: (s: T, ctx: { store: Marca; cred: Credencial }) => Promise<{ ventas: Partial<Record<Origen, VentaGN>>; errores: string[] }>
   idsParaCerrar: (data: T[], marca: Marca) => Promise<string[]>
 }
 
@@ -129,7 +130,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
   )
 
   const crearVentasDe = useCallback(
-    async (s: T, cred: { user: string; pass: string }): Promise<ResultadoCrearGen> => {
+    async (s: T, cred: Credencial): Promise<ResultadoCrearGen> => {
       if (!cargado) return { tipo: 'no-leido' }
       const marcaAhora = marcaRef.current
       const fresca = await leerCajon<T>(kind, marcaAhora)
@@ -138,7 +139,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       if (fresh?.ventas && Object.keys(fresh.ventas).length) {
         return { tipo: 'ya-tenia', ventas: fresh.ventas, estadoSol: fresh.estado }
       }
-      const { ventas, errores } = await crearVentas(s, { store: marcaAhora, user: cred.user, pass: cred.pass })
+      const { ventas, errores } = await crearVentas(s, { store: marcaAhora, cred })
       if (Object.keys(ventas).length) {
         await persistir((l) => l.map((x) => (x.id === s.id ? ({ ...x, ventas: { ...(x.ventas || {}), ...ventas }, estado: estadoTrasVenta } as T) : x)))
       }

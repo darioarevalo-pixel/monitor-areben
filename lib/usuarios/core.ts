@@ -12,7 +12,7 @@ import type { UsuarioConfig } from './tipos'
 
 /** Un usuario nuevo, vacío (sin permisos ni funciones). Port de usuAgregar. */
 export function nuevoUsuario(): UsuarioConfig {
-  return { name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] }
+  return { name: '', pass: '', email: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] }
 }
 
 /** Asegura que `acceso.bdi` / `acceso.zattia` y `funcion` existan (el legacy los rellena al cargar). */

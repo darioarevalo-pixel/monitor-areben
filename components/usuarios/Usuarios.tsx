@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, funcionQueDa, FUNCIONES, type Funcion } from '@/lib/permisos'
-import { guardarAdminPass, guardarConfigAdmin, leerAdminPass, traerConfigAdmin } from '@/lib/sesion'
+import { credencialConPrompt, guardarAdminPass, guardarConfigAdmin, traerConfigAdmin } from '@/lib/sesion'
 import { NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
@@ -21,16 +21,6 @@ const AREAS = NAV_CATS.map((c) => ({
   label: c.label,
   secciones: PERM_CAT.filter((p) => p.area === c.id),
 })).filter((a) => a.secciones.length > 0)
-
-/** Contraseña de admin: cacheada por el login, o se pide una vez. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (prompt('Ingresá tu contraseña de administrador (te la pido una sola vez):') || '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
 
 type Estado = { msg: string; color: string } | null
 
@@ -62,7 +52,7 @@ export function Usuarios() {
     ;(async () => {
       setUsers(null)
       setError(null)
-      const r = await traerConfigAdmin<UsuarioConfig>(perfil?.name || '', obtenerPass())
+      const r = await traerConfigAdmin<UsuarioConfig>(await credencialConPrompt())
       if (!vivo) return
       if (r.ok) setUsers(r.users.map(normalizar))
       else {
@@ -78,7 +68,7 @@ export function Usuarios() {
   if (!admin) return <div style={{ padding: 16, color: color.mut2 }}>Solo un administrador puede gestionar usuarios.</div>
 
   const mut = (i: number, fn: (u: UsuarioConfig) => UsuarioConfig) => setUsers((prev) => (prev ? prev.map((u, j) => (j === i ? fn(u) : u)) : prev))
-  const onCampo = (i: number, campo: 'name' | 'pass', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
+  const onCampo = (i: number, campo: 'name' | 'pass' | 'email', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
   const onAdmin = (i: number, val: boolean) => mut(i, (u) => ({ ...u, admin: val }))
   const onCuenta = (i: number, val: string) => mut(i, (u) => ({ ...u, cuenta: (val || null) as Marca | null }))
   const onPerm = (i: number, brand: Marca, key: string, val: boolean) => mut(i, (u) => togglePerm(u, brand, key, val))
@@ -114,7 +104,7 @@ export function Usuarios() {
     }
     setGuardando(true)
     setStatus({ msg: 'Guardando…', color: color.mut })
-    const r = await guardarConfigAdmin(perfil?.name || '', obtenerPass(), users)
+    const r = await guardarConfigAdmin(await credencialConPrompt(), users)
     setGuardando(false)
     if (r.ok) setStatus({ msg: 'Guardado. Los cambios ya aplican para todos.', color: color.success })
     else {
@@ -199,7 +189,7 @@ function UsuarioCard({
   primero: boolean
   abierto: boolean
   onToggleOpen: () => void
-  onCampo: (i: number, campo: 'name' | 'pass', val: string) => void
+  onCampo: (i: number, campo: 'name' | 'pass' | 'email', val: string) => void
   onAdmin: (i: number, val: boolean) => void
   onCuenta: (i: number, val: string) => void
   onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
@@ -232,6 +222,19 @@ function UsuarioCard({
             </Field>
             <Field label="Contraseña" width={180}>
               <Input value={u.pass} onChange={(e) => onCampo(i, 'pass', e.target.value)} />
+            </Field>
+            {/* El mail es lo que enlaza a esta persona con su cuenta de Google, y de paso
+                con la misma persona en producción y en el dashboard: los nombres de usuario
+                no cruzan entre sistemas ("Candela Luis" acá es "candela" en producción), el
+                mail sí. Vacío = entra solo con contraseña, que es el caso de Depósito y
+                Local, que son puestos y no personas. */}
+            <Field label="Mail (para entrar con Google)" width={240}>
+              <Input
+                type="email"
+                placeholder="nombre@arebensrl.com"
+                value={u.email || ''}
+                onChange={(e) => onCampo(i, 'email', e.target.value.trim().toLowerCase())}
+              />
             </Field>
             <Field label="Marca" width={170}>
               <Select value={u.cuenta || ''} onChange={(e) => onCuenta(i, e.target.value)}>

@@ -16,12 +16,19 @@
  *   endpoint ya manda, crear-venta.js:74).
  */
 
+import type { Credencial } from '../sesion'
 import { faseCompleta, preparado } from './core'
 import type { ItemSolicitud, Origen, Solicitud, VentaGN } from './tipos'
 
 const SF_CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
 
-export type CtxVenta = { store: string; user: string; pass: string }
+/**
+ * La credencial viaja adentro del pedido, como siempre. Lo que cambió es que puede ser
+ * el par usuario/contraseña o un token del proveedor: `crear-venta.js` acepta los dos y
+ * resuelve el mismo perfil. Para una sesión de contraseña el payload es idéntico al de
+ * antes, que es lo que verifican los tests de este módulo.
+ */
+export type CtxVenta = { store: string; cred: Credencial }
 
 export type PedidoVenta = {
   store: string
@@ -29,11 +36,9 @@ export type PedidoVenta = {
   items: { product_id: string | null; size_id: string | null; quantity: number; unit_price?: number | null }[]
   comments: string
   solicitudId: string
-  user: string
-  pass: string
   /** Marca la venta como técnica del Monitor → crear-venta usa el cliente propio de GN (Falla/Cambio). */
   proposito?: 'falla' | 'cambio'
-}
+} & Credencial
 
 /**
  * Motor genérico de armado de pedidos, compartido con Solicitudes internas
@@ -51,8 +56,7 @@ export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: 
     items: s.items.filter((i) => i.origen === origen && incluir(i)).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: cantidad(i) })),
     comments: opts.comments,
     solicitudId: s.id,
-    user: ctx.user,
-    pass: ctx.pass,
+    ...ctx.cred,
   }))
 }
 

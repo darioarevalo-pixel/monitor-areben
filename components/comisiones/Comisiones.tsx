@@ -5,7 +5,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { esAdmin as esAdminFn } from '@/lib/permisos'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt } from '@/lib/sesion'
 import { matchTn, type IndiceTn } from '@/lib/tn'
 import { useComisiones } from './useComisiones'
 import {
@@ -24,14 +24,8 @@ import type { Celda, ComCfg, ResultadoMargen } from '@/lib/comisiones/tipos'
 import type { Producto } from '@/lib/etl/tipos'
 import { Button, Card, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (prompt('Ingresá tu contraseña del Monitor (te la pido una sola vez):') || '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
+/** Credencial para los guardados admin. A nivel módulo: es estable entre renders. */
+const obtenerCred = () => credencialConPrompt('del Monitor')
 
 const CELDA_DEF: Celda = { comision: 0, finan: 0, dias: 0, descuento: 0, aplicaImp: true }
 const num = (s: string) => parseFloat(s) || 0
@@ -43,7 +37,7 @@ export function Comisiones() {
   const admin = esAdminFn(perfil)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(marca)
-  const com = useComisiones(marca, admin, { user: perfil?.name || '', obtenerPass })
+  const com = useComisiones(marca, admin, obtenerCred)
   const { cfg, guardar } = com
 
   const cans = useMemo(() => canalesDe(marca === 'zattia'), [marca])

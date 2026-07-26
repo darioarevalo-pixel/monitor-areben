@@ -15,23 +15,31 @@
 // Supabase. Cualquiera podía pisar la ubicación física de un producto, insertar
 // conteos falsos, o bajarse el stock completo de las dos marcas.
 //
-// Lo que esto NO resuelve: la contraseña sigue viajando en cada request y vive en
-// sessionStorage del browser. Es el modelo actual del Monitor, no uno nuevo. El
-// reemplazo de verdad (Supabase Auth / token firmado) toca bdi-catalogo y es otro
-// trabajo. Esto cierra el agujero de "sin credencial alguna", que es lo urgente.
+// Desde el SSO hay DOS formas válidas de identificarse, y el guard acepta las dos:
+//
+//   - {user, pass}  el modelo de siempre. Se queda porque Depósito, Local y bdilocal
+//                   son puestos de trabajo compartidos, no personas, y no pueden tener
+//                   casilla de Workspace.
+//   - {token}       un token del proveedor de identidad de Areben (el proyecto Supabase
+//                   del dashboard), para quien entró con Google. La misma cuenta con la
+//                   que entra a producción y al dashboard.
+//
+// Las dos terminan en la misma pregunta a bdi-catalogo y devuelven el mismo perfil del
+// KV, así que los handlers no se enteran de cuál se usó. Lo que la segunda arregla es que
+// la contraseña deje de viajar en cada request y de vivir cacheada en el navegador.
 
 const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
 
 /**
  * Lee las credenciales del request.
  *
- * El header `x-monitor-auth` lleva base64(JSON {user, pass}) en UTF-8. Va en
- * base64 y no en dos headers de texto plano por una razón concreta: los valores
- * de header son latin-1, y una contraseña con "ñ" o un acento haría que fetch
+ * El header `x-monitor-auth` lleva base64(JSON) en UTF-8, con `{user, pass}` o `{token}`
+ * adentro. Va en base64 y no en headers de texto plano por una razón concreta: los
+ * valores de header son latin-1, y una contraseña con "ñ" o un acento haría que fetch
  * tire TypeError del lado del cliente antes de salir.
  *
- * También acepta user/pass en el body, que es como los manda crear-venta.js
- * desde antes de esto. No se toca ese contrato.
+ * También acepta user/pass en el body, que es como los manda crear-venta.js desde antes
+ * de esto. No se toca ese contrato.
  */
 export function credenciales(req) {
   const h = req.headers || {};
@@ -42,35 +50,43 @@ export function credenciales(req) {
     try {
       const json = Buffer.from(String(raw), 'base64').toString('utf8');
       const d = JSON.parse(json);
-      return { user: String(d.user || '').trim(), pass: String(d.pass || '') };
+      if (d.token) return { user: '', pass: '', token: String(d.token) };
+      return { user: String(d.user || '').trim(), pass: String(d.pass || ''), token: '' };
     } catch {
-      return { user: '', pass: '' };
+      return { user: '', pass: '', token: '' };
     }
   }
 
   return {
     user: String(b.user || b.adminUser || '').trim(),
     pass: String(b.pass || b.adminPass || ''),
+    token: String(b.token || b.adminToken || ''),
   };
 }
 
 /**
- * Le pregunta al KV si el usuario existe. Devuelve el perfil o null.
+ * Le pregunta al KV quién es. Devuelve el perfil o null.
  *
  * Port de usuarioValido (api/crear-venta.js:25), que ahora importa de acá.
  *
- * Ojo con el modo de falla que esto agrega: si bdi-catalogo se cae, estos
- * endpoints devuelven 403 y Conteo depósito deja de andar. Antes no dependían de
- * él. Es el precio de que el KV sea el único que sabe las contraseñas; crear-venta
- * ya cargaba con lo mismo.
+ * Ojo con el modo de falla que esto agrega: si bdi-catalogo se cae, estos endpoints
+ * devuelven 403 y Conteo depósito deja de andar. Antes no dependían de él. Es el precio
+ * de que el KV sea el único que sabe quién es quién; crear-venta ya cargaba con lo mismo.
+ * Con token hay un eslabón más (bdi-catalogo le pregunta al proveedor), así que si el
+ * proveedor se cae, las sesiones de Google dejan de escribir y las de contraseña no.
  */
-export async function usuarioValido(user, pass) {
-  if (!user || !pass) return null;
+export async function usuarioValido(user, pass, token) {
+  const cuerpo = token
+    ? { action: 'login-google', token }
+    : user && pass
+      ? { action: 'login', user, pass }
+      : null;
+  if (!cuerpo) return null;
   try {
     const r = await fetch(USU_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', user, pass }),
+      body: JSON.stringify(cuerpo),
     });
     const d = await r.json();
     return d && d.ok && d.perfil ? d.perfil : null;
@@ -86,8 +102,8 @@ export async function usuarioValido(user, pass) {
  *   if (!perfil) return;
  */
 export async function exigirUsuario(req, res) {
-  const { user, pass } = credenciales(req);
-  const perfil = await usuarioValido(user, pass);
+  const { user, pass, token } = credenciales(req);
+  const perfil = await usuarioValido(user, pass, token);
   if (!perfil) {
     res.status(403).json({ error: 'Necesitás estar logueado en el Monitor para hacer esto.' });
     return null;

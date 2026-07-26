@@ -1,11 +1,12 @@
 /**
  * Config compartida de Comisiones en su propio endpoint (`/api/comisiones`, NO el
- * `/ingresos` del seam). Los admins la persisten (con adminUser+adminPass, que el
- * server valida); todos la leen. Port de comCargarCompartida/comGuardarCompartida
+ * `/ingresos` del seam). Los admins la persisten (con su credencial, que el server
+ * valida); todos la leen. Port de comCargarCompartida/comGuardarCompartida
  * (index.html:6032/6043).
  */
 
 import type { Marca } from '../nav.datos'
+import { camposAdmin, type Credencial } from '../sesion'
 import type { ComCfg } from './tipos'
 
 const COM_API = 'https://bdi-catalogo.vercel.app/api/comisiones'
@@ -22,13 +23,13 @@ export async function leerConfigCompartida(marca: Marca): Promise<ComCfg | null>
   return null
 }
 
-/** Persiste la config compartida (solo admins). El server valida adminUser/adminPass. */
-export async function guardarConfigCompartida(marca: Marca, config: ComCfg, adminUser: string, adminPass: string): Promise<{ ok: boolean; error?: string }> {
+/** Persiste la config compartida (solo admins). El server valida la credencial. */
+export async function guardarConfigCompartida(marca: Marca, config: ComCfg, cred: Credencial | null): Promise<{ ok: boolean; error?: string }> {
   try {
     const r = await fetch(COM_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store: marca, config, adminUser, adminPass }),
+      body: JSON.stringify({ store: marca, config, ...camposAdmin(cred) }),
     })
     const d = await r.json()
     return { ok: !!d.ok, error: d.error }

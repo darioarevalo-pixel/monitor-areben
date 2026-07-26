@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { guardarAdminPass } from '@/lib/sesion'
+import { guardarAdminPass, type ObtenerCred } from '@/lib/sesion'
 import { guardarIngresos, leerIngresos } from '@/lib/kv/cliente'
 import { conItemsDerivados, normalizar } from '@/lib/ingresos/core'
 import type { Ingreso } from '@/lib/ingresos/tipos'
@@ -40,7 +40,7 @@ export type EstadoIngresos = {
  * admin-only y de baja frecuencia; el merge por-ingreso queda como mejora futura.
  * Un 403 (contraseña equivocada) olvida la pass cacheada, como `_olvidarAdminPass`.
  */
-export function useIngresos(marca: Marca, esAdmin: boolean, cred: { user: string; obtenerPass: () => string }): EstadoIngresos {
+export function useIngresos(marca: Marca, esAdmin: boolean, obtenerCred: ObtenerCred): EstadoIngresos {
   const [data, setData] = useState<Ingreso[] | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +55,7 @@ export function useIngresos(marca: Marca, esAdmin: boolean, cred: { user: string
   const pendienteRef = useRef<Ingreso[] | null>(null)
   const marcaRef = useRef(marca)
   const cargadoRef = useRef(false)
-  const credRef = useRef(cred)
+  const credRef = useRef(obtenerCred)
   useEffect(() => {
     marcaRef.current = marca
   }, [marca])
@@ -63,8 +63,8 @@ export function useIngresos(marca: Marca, esAdmin: boolean, cred: { user: string
     cargadoRef.current = cargado
   }, [cargado])
   useEffect(() => {
-    credRef.current = cred
-  }, [cred])
+    credRef.current = obtenerCred
+  }, [obtenerCred])
 
   useEffect(() => {
     let vivo = true
@@ -114,8 +114,7 @@ export function useIngresos(marca: Marca, esAdmin: boolean, cred: { user: string
         const r = await guardarIngresos({
           store: marcaAhora,
           ingresos: lista,
-          adminUser: credRef.current.user,
-          adminPass: credRef.current.obtenerPass(),
+          cred: await credRef.current(),
           cargado: cargadoRef.current,
         })
         if (r.ok) {

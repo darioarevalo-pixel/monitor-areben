@@ -4,6 +4,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { crearVentas, idsParaCerrar } from '@/lib/sesionfotos/ventas'
 import type { EstadoSolicitud, Origen, Solicitud, VentaGN } from '@/lib/sesionfotos/tipos'
 import { useHistorialSolicitudes, type HistorialSolicitudes } from '@/components/solicitudes/useHistorialSolicitudes'
+import type { Credencial } from '@/lib/sesion'
 
 /**
  * Carga y persistencia del historial de Sesión de fotos. Desde la Fase A de la
@@ -19,7 +20,7 @@ export type ResultadoCrear =
   | { tipo: 'no-leido' }
 
 export type EstadoSF = HistorialSolicitudes<Solicitud> & {
-  crearVentasDe: (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrear>
+  crearVentasDe: (s: Solicitud, cred: Credencial) => Promise<ResultadoCrear>
 }
 
 export function useSesionFotos(marca: Marca): EstadoSF {

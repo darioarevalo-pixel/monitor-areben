@@ -7,7 +7,9 @@ const base = (over: Partial<UsuarioConfig> = {}): UsuarioConfig => ({ name: 'Ana
 
 describe('usuarios/core — nuevoUsuario / normalizar', () => {
   it('nuevoUsuario arranca vacío y sin permisos', () => {
-    expect(nuevoUsuario()).toEqual({ name: '', pass: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] })
+    // `email` nace vacío: es lo que enlaza al usuario con su cuenta de Google, y un
+    // usuario nuevo todavía no tiene ninguna (los puestos compartidos nunca la tienen).
+    expect(nuevoUsuario()).toEqual({ name: '', pass: '', email: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] })
   })
   it('normalizar rellena acceso.bdi/zattia si faltan', () => {
     const u = normalizar({ name: 'X', pass: 'y', admin: false, cuenta: null, acceso: {} as UsuarioConfig['acceso'] })

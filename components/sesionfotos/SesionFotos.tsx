@@ -8,7 +8,7 @@ import { useSesionFotos } from './useSesionFotos'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
 import { AYUDA_DESTINO, DESTINO_DEFAULT, MOTIVO_DEFAULT, motivosDe, necesitaAprobacion, PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt, type Credencial } from '@/lib/sesion'
 import { agregarCombinada, faseCompletaCombi, type ItemCombinado } from '@/lib/sesionfotos/combinada'
 import {
   ajustarManualSol,
@@ -76,19 +76,9 @@ import { color, useConfirmar, useToast } from '@/components/ui'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
-type CrearVentasDe = (s: Solicitud, cred: { user: string; pass: string }) => Promise<ResultadoCrearGen>
+type CrearVentasDe = (s: Solicitud, cred: Credencial) => Promise<ResultadoCrearGen>
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
-
-/** Contraseña del Monitor para las ventas: cacheada por el login, o se pide una vez. Port de _getAdminPass. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (prompt('Ingresá tu contraseña del Monitor (te la pido una sola vez):') || '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
 
 export function SesionFotos() {
   const { marca } = useSesion()
@@ -619,14 +609,14 @@ function Detalle({
   // Crear las ventas en GN (la única escritura IRREVERSIBLE). Pide la contraseña,
   // el hook re-lee fresco y aborta si ya hay ventas (anti-duplicado), y persiste.
   const onCrearVentas = async () => {
-    const pass = obtenerPass()
-    if (!pass) {
-      await avisar('Necesito tu contraseña para crear las ventas.')
+    const cred = await credencialConPrompt('del Monitor')
+    if (!cred) {
+      await avisar('No pude verificar tu identidad para crear las ventas. Volvé a entrar al Monitor y probá de nuevo.')
       return
     }
     setCreando(true)
     try {
-      const r = await crearVentasDe(work, { user: usuario, pass })
+      const r = await crearVentasDe(work, cred)
       if (r.tipo === 'no-leido') {
         await avisar({
           titulo: 'No se pudo crear',
