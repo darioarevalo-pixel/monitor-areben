@@ -169,7 +169,9 @@ export function MetaAds() {
         ) : detEstado.fase === 'error' ? (
           <div className="card" style={{ color: paleta.danger }}>No se pudo traer el detalle: {detEstado.motivo}</div>
         ) : (
-          <Detalle d={detEstado.data} pausa={pausa} />
+          // El nombre sale del selector, no del detalle: el overview es el único que
+          // conoce el portfolio dueño cuando la cuenta no tiene nombre propio.
+          <Detalle d={detEstado.data} pausa={pausa} nombre={cuentas.find((c) => c.id === activaId)?.nombre} />
         )
       )}
     </div>
@@ -180,29 +182,35 @@ function ChipCuenta({ c, activa, onClick }: { c: CuentaMetaAds; activa: boolean;
   return (
     <button
       onClick={onClick}
+      title={`Cuenta ${c.id}`}
       style={{
+        // `height: auto` no es de adorno: la regla legacy `.shell-content button` le fija a
+        // TODO botón la altura de un control (una línea), y este tiene dos → el importe se
+        // salía de la caja y el borde inferior lo cruzaba como si estuviera tachado.
+        height: 'auto',
         border: `1px solid ${activa ? paleta.brandSolid : paleta.line2}`,
-        background: activa ? paleta.brandBg : '#fff',
+        background: activa ? paleta.brandBg : paleta.surface,
         borderRadius: 10,
         padding: '8px 12px',
         cursor: 'pointer',
         textAlign: 'left',
         minWidth: 140,
+        lineHeight: 1.35,
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: activa ? paleta.brand : paleta.ink2 }}>{c.nombre}</div>
-      <div style={{ fontSize: 12, color: paleta.mut }}>{c.error ? 'error' : c.sinDatos ? 'sin datos' : money(c.spend, c.moneda)}</div>
+      <div style={{ fontSize: 12, fontWeight: 400, color: paleta.mut }}>{c.error ? 'error' : c.sinDatos ? 'sin gasto en el rango' : money(c.spend, c.moneda)}</div>
     </button>
   )
 }
 
-function Detalle({ d, pausa }: { d: DetalleCuenta; pausa: CtxPausa }) {
+function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nombre?: string }) {
   const moneda = d.cuenta.moneda
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Totales */}
       <div className="card">
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Totales · {d.cuenta.nombre}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Totales · {nombre || d.cuenta.nombre}</div>
         <TilesTotales t={d.totales} moneda={moneda} hookRate={d.video?.hookRate} />
       </div>
 

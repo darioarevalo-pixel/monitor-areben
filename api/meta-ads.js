@@ -115,15 +115,32 @@ async function accionAd(req, res, perfil) {
   return res.status(200).json({ ok: true, status });
 }
 
+/**
+ * Nombre presentable de una cuenta publicitaria.
+ *
+ * Meta NO deja vacío el `name` de una cuenta sin nombre propio: le pone el ID.
+ * Así, el selector mostraba `1145878766790149` como si fuera un nombre. Cuando pasa
+ * eso caemos al portfolio dueño (`business.name`) y le pegamos los 4 últimos dígitos
+ * del ID, porque un portfolio puede tener más de una cuenta y si no serían iguales.
+ */
+function nombreCuenta(c) {
+  const id = String(c.account_id || '');
+  const n = String(c.name || '').trim();
+  if (n && n !== id && n !== `act_${id}`) return n;
+  const biz = (c.business && String(c.business.name || '').trim()) || '';
+  const cola = id.slice(-4);
+  return biz ? `${biz} · ${cola}` : `Cuenta ${cola}`;
+}
+
 // ── Modo overview: las 3 cuentas con su total (para el selector) ────────────────
 async function overview(res, rango, rangoEco) {
-  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency&limit=100');
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency,business{name}&limit=100');
   if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
   const cuentas = (cuentasRes.data && cuentasRes.data.data) || [];
 
   const filas = await Promise.all(
     cuentas.map(async (c) => {
-      const base = { id: c.account_id, nombre: c.name || `act_${c.account_id}`, moneda: c.currency || '' };
+      const base = { id: c.account_id, nombre: nombreCuenta(c), moneda: c.currency || '' };
       const ins = await graph(`act_${c.account_id}/insights?fields=spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,action_values,purchase_roas&${rango}&action_attribution_windows=${ATTR}`);
       if (!ins.ok) return { ...base, error: mensajeError(ins) };
       const row = ins.data && ins.data.data && ins.data.data[0];
@@ -161,7 +178,9 @@ async function detalle(res, account, rango, rangoEco) {
 
   const totRow = totRes.ok && totRes.data && totRes.data.data && totRes.data.data[0];
   const moneda = (totRow && totRow.account_currency) || '';
-  const nombre = (totRow && totRow.account_name) || act;
+  // `account_name` trae el mismo ID cuando la cuenta no tiene nombre propio; el overview
+  // sí conoce el portfolio, así que la pantalla usa aquel nombre y este es el respaldo.
+  const nombre = nombreCuenta({ account_id: account, name: totRow && totRow.account_name });
   const totales = totRow ? metricasDe(totRow) : sumar(adsRes.rows.map(adDe));
 
   // Índices de los enriquecimientos por ad_id.
