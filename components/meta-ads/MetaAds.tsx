@@ -131,6 +131,7 @@ export function MetaAds() {
   }
 
   const pausa: CtxPausa = { puede: puedePausar, ov: ovMap, onToggle }
+  const zonaActiva = cuentas.find((c) => c.id === activaId)?.zona || ''
 
   return (
     <div>
@@ -142,6 +143,13 @@ export function MetaAds() {
             {RANGOS.map((r) => <option key={r.k} value={r.k}>{r.label}</option>)}
           </select>
         </label>
+        {/* En rangos cortos la zona horaria de la cuenta ES el dato: "Hoy" lo resuelve Meta allá,
+            así que si la cuenta está en otro huso, el corte del día no es el de acá. */}
+        {(preset === 'today' || preset === 'yesterday') && zonaActiva && (
+          <span style={{ fontSize: 12, color: paleta.mut2 }} title="El día lo corta Meta en la zona horaria de la cuenta publicitaria, no en la tuya">
+            en hora de {zonaActiva}
+          </span>
+        )}
         <InfoPopover titulo="Sobre estos números">
           <p>De la API de Marketing de Meta (solo lectura). Las <b>ventas</b> y el <b>ROAS</b> usan las compras <i>omni_purchase</i> con ventana de atribución <b>7 días clic / 1 día view</b>.</p>
           <p>Si el píxel/CAPI de Meta no está midiendo compras, ventas y ROAS aparecen en <b>0</b> aunque haya gasto — es un tema de configuración del píxel, no del reporte.</p>

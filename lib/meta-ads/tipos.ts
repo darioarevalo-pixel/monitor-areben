@@ -32,6 +32,8 @@ export type Metricas = {
 
 /** Una cuenta en el modo overview (para el selector + vistazo). */
 export type CuentaMetaAds = Partial<Metricas> & {
+  /** Zona horaria de la cuenta publicitaria: es la que define qué es "hoy" para Meta. */
+  zona?: string
   /** account_id (sin `act_`). */
   id: string
   nombre: string

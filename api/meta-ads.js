@@ -130,10 +130,13 @@ async function accionAd(req, res, perfil) {
 /**
  * Nombre presentable de una cuenta publicitaria.
  *
- * Meta NO deja vacío el `name` de una cuenta sin nombre propio: le pone el ID.
- * Así, el selector mostraba `1145878766790149` como si fuera un nombre. Cuando pasa
- * eso caemos al portfolio dueño (`business.name`) y le pegamos los 4 últimos dígitos
- * del ID, porque un portfolio puede tener más de una cuenta y si no serían iguales.
+ * Meta NO deja vacío el `name` de una cuenta sin nombre propio: le pone el ID. Así, el selector
+ * mostraba `1145878766790149` como si fuera un nombre.
+ *
+ * El portfolio dueño (`business.name`) sería el mejor reemplazo, pero pedirlo rompe la consulta
+ * entera por permisos (ver `overview`), así que queda como opcional: si vino, se usa; si no, la
+ * cuenta se llama "Cuenta ####" con los últimos 4 dígitos, que al menos es legible y no se
+ * confunde con un nombre. El ID completo va en el title del chip.
  */
 function nombreCuenta(c) {
   const id = String(c.account_id || '');
@@ -146,13 +149,21 @@ function nombreCuenta(c) {
 
 // ── Modo overview: las 3 cuentas con su total (para el selector) ────────────────
 async function overview(res, rango, rangoEco) {
-  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency,business{name}&limit=100');
+  // ⚠️ NO agregar `business{name}` acá. Exige el permiso `business_management`, que este token
+  // (solo `ads_read`) no tiene, y Meta no lo ignora: rechaza la consulta ENTERA con
+  // `(#100) Requires business_management permission` — o sea que la sección se queda sin una
+  // sola cuenta. Pasó en producción el 26-jul-2026.
+  // Una cuenta sin nombre propio cae a "Cuenta ####" (ver `nombreCuenta`); si molesta, se
+  // resuelve poniéndole nombre en Ads Manager, no ampliando los permisos del token.
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency,timezone_name&limit=100');
   if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
   const cuentas = (cuentasRes.data && cuentasRes.data.data) || [];
 
   const filas = await Promise.all(
     cuentas.map(async (c) => {
-      const base = { id: c.account_id, nombre: nombreCuenta(c), moneda: c.currency || '' };
+      // La zona horaria es de la CUENTA, no del navegador: `date_preset=today` lo resuelve Meta
+      // allá, así que "Hoy" puede no ser el hoy de quien mira. Se muestra para que se note.
+      const base = { id: c.account_id, nombre: nombreCuenta(c), moneda: c.currency || '', zona: c.timezone_name || '' };
       const ins = await graph(`act_${c.account_id}/insights?fields=spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,action_values,purchase_roas&${rango}&action_attribution_windows=${ATTR}`);
       if (!ins.ok) return { ...base, error: mensajeError(ins) };
       const row = ins.data && ins.data.data && ins.data.data[0];
