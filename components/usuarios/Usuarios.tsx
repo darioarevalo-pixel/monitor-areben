@@ -207,6 +207,11 @@ function UsuarioCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <b>{u.name || '(nuevo usuario)'}</b>
           {u.admin && <Badge tone="brand">admin</Badge>}
+          {/* Cómo entra: es lo que se mira al repartir los mails de Google. Quien no tiene
+              ninguna de las dos cosas no entra por ningún lado, y `validar` lo frena. */}
+          <span style={{ fontSize: font.xs, color: color.mut2 }}>
+            {u.email ? `Google · ${u.email}` : u.tienePass || u.pass ? 'con contraseña' : 'sin acceso'}
+          </span>
           <span style={{ fontSize: font.xs, color: color.mut2 }}>{u.cuenta ? 'solo ' + u.cuenta : 'BDI + Zattia'}</span>
         </div>
         <span aria-hidden style={{ color: color.mut2 }}>
@@ -220,8 +225,17 @@ function UsuarioCard({
             <Field label="Usuario" width={180}>
               <Input value={u.name} onChange={(e) => onCampo(i, 'name', e.target.value)} />
             </Field>
-            <Field label="Contraseña" width={180}>
-              <Input value={u.pass} onChange={(e) => onCampo(i, 'pass', e.target.value)} />
+            {/* Las contraseñas se guardan hasheadas: no se pueden volver a leer, ni acá
+                ni en el KV. Así que este campo no muestra la actual —muestra si hay una— y
+                sirve para poner una nueva. Vacío al guardar = no se toca. */}
+            <Field label={u.tienePass ? 'Cambiar contraseña' : 'Contraseña'} width={200}>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder={u.tienePass ? 'dejar vacío = sin cambios' : 'sin contraseña (solo Google)'}
+                value={u.pass || ''}
+                onChange={(e) => onCampo(i, 'pass', e.target.value)}
+              />
             </Field>
             {/* El mail es lo que enlaza a esta persona con su cuenta de Google, y de paso
                 con la misma persona en producción y en el dashboard: los nombres de usuario

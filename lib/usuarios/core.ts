@@ -15,12 +15,16 @@ export function nuevoUsuario(): UsuarioConfig {
   return { name: '', pass: '', email: '', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [] }
 }
 
-/** Asegura que `acceso.bdi` / `acceso.zattia` y `funcion` existan (el legacy los rellena al cargar). */
+/**
+ * Asegura que `acceso.bdi` / `acceso.zattia` y `funcion` existan (el legacy los rellena al
+ * cargar), y recuerda con qué nombre llegó cada fila: al guardar, es lo que permite
+ * renombrar a alguien sin perderle la contraseña (el servidor la busca por ese nombre).
+ */
 export function normalizar(u: UsuarioConfig): UsuarioConfig {
   const acceso = { ...(u.acceso || {}) }
   acceso.bdi = acceso.bdi || {}
   acceso.zattia = acceso.zattia || {}
-  return { ...u, acceso, funcion: Array.isArray(u.funcion) ? u.funcion : [] }
+  return { ...u, acceso, funcion: Array.isArray(u.funcion) ? u.funcion : [], nameOriginal: u.nameOriginal ?? u.name }
 }
 
 /** Marca/desmarca una función del usuario (lista sin duplicados). Devuelve un usuario nuevo (inmutable). */
@@ -98,13 +102,20 @@ export function copiarPermisos(u: UsuarioConfig, origen: Marca, destino: Marca):
 }
 
 /**
- * Valida la config antes de guardar. Port de los chequeos de usuariosGuardar: al
- * menos un admin, todos con nombre y contraseña, sin nombres repetidos. Devuelve el
- * mensaje de error o `null` si está OK.
+ * Valida la config antes de guardar: al menos un admin, nadie sin nombre, nadie sin forma
+ * de entrar, sin nombres repetidos. Devuelve el mensaje de error o `null` si está OK.
+ *
+ * "Forma de entrar" reemplaza al viejo "todos necesitan contraseña", que dejó de tener
+ * sentido dos veces: las contraseñas ya no viajan al navegador (así que acá casi siempre
+ * están vacías aunque existan), y desde el ingreso con Google una persona puede no tener
+ * ninguna. Lo que no puede pasar es que alguien quede sin mail Y sin contraseña: esa
+ * cuenta no entra por ningún lado.
  */
 export function validar(users: UsuarioConfig[]): string | null {
   if (!users.some((u) => u.admin)) return 'Tiene que quedar al menos un administrador.'
-  if (users.some((u) => !u.name || !u.pass)) return 'Todos los usuarios necesitan nombre y contraseña.'
+  if (users.some((u) => !u.name)) return 'Todos los usuarios necesitan un nombre.'
+  const sinAcceso = users.find((u) => !u.email && !u.pass && !u.tienePass)
+  if (sinAcceso) return `"${sinAcceso.name}" no tiene con qué entrar: ponele un mail (para Google) o una contraseña.`
   const nombres = users.map((u) => (u.name || '').trim())
   if (new Set(nombres).size !== nombres.length) return 'Hay nombres de usuario repetidos.'
   return null

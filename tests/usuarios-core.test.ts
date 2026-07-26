@@ -121,8 +121,22 @@ describe('usuarios/core — validar', () => {
   it('exige al menos un admin', () => {
     expect(validar([base({ admin: false })])).toBe('Tiene que quedar al menos un administrador.')
   })
-  it('exige nombre y contraseña en todos', () => {
-    expect(validar([base({ admin: true }), base({ name: '', pass: '' })])).toBe('Todos los usuarios necesitan nombre y contraseña.')
+  it('exige nombre en todos', () => {
+    expect(validar([base({ admin: true }), base({ name: '', pass: '' })])).toBe('Todos los usuarios necesitan un nombre.')
+  })
+  // Desde el ingreso con Google, "sin contraseña" es un caso legítimo (se entra con el
+  // mail) y las contraseñas ya no viajan al navegador. Lo que no puede pasar es que
+  // alguien quede sin las dos cosas: esa cuenta no entra por ningún lado.
+  it('rechaza a quien no tiene ni mail ni contraseña', () => {
+    expect(validar([base({ admin: true }), base({ name: 'Beto', pass: '' })])).toBe(
+      '"Beto" no tiene con qué entrar: ponele un mail (para Google) o una contraseña.',
+    )
+  })
+  it('acepta a quien solo tiene mail (entra con Google)', () => {
+    expect(validar([base({ name: 'Ana', admin: true }), base({ name: 'Beto', pass: '', email: 'beto@arebensrl.com' })])).toBeNull()
+  })
+  it('acepta a quien ya tenía contraseña guardada, aunque no se esté cambiando', () => {
+    expect(validar([base({ name: 'Ana', admin: true }), base({ name: 'Beto', pass: '', tienePass: true })])).toBeNull()
   })
   it('rechaza nombres repetidos', () => {
     expect(validar([base({ name: 'Ana', admin: true }), base({ name: 'Ana' })])).toBe('Hay nombres de usuario repetidos.')
