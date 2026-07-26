@@ -234,6 +234,24 @@ a {
   transition: transform 0.15s ease;
 }
 
+/* Contador de avisos sin ver. Es el ÚNICO indicador de datos del menú, así que tiene que
+   ganarle al gris del sidebar oscuro sin gritar: ámbar, que en este sistema es "mirá esto".
+   Se apaga solo al entrar a Inicio (ver lib/notificaciones/visto.ts). */
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--mo-warning);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  flex: none;
+}
+
 .nav-group.open > .nav-cat .nav-caret {
   transform: rotate(180deg);
 }

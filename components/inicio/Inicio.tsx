@@ -1,20 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
-import { leerCajon } from '@/lib/solicitudes/cajon'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
-import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
-import type { Solicitud } from '@/lib/sesionfotos/tipos'
 
-import { filtrarPorFuncion, ordenarResumenes, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { horaLabel, marcasVisibles, modoInicio, origenesDe, pendientesDeTrabajo, tituloPendientes } from '@/lib/inicio/core'
+import { ordenarResumenes, type ResumenSolicitud } from '@/lib/solicitudes/overview'
+import { horaLabel, modoInicio, origenesDe, pendientesDeTrabajo, tituloPendientes } from '@/lib/inicio/core'
+import { useAvisos } from '@/store/useAvisos'
+import { marcarVisto, vistoHasta } from '@/lib/notificaciones/visto'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, EmptyState, Esqueleto, MarcaChip, Notice, color, font, space } from '@/components/ui'
-
-const POLL_MS = 180000 // refresco automático cada 3 min (como el legacy)
 
 /**
  * Inicio: lo que hay que hacer hoy, según la función de cada uno.
@@ -34,39 +31,29 @@ const POLL_MS = 180000 // refresco automático cada 3 min (como el legacy)
 export function Inicio() {
   const { perfil, marca, setMarca } = useSesion()
   const router = useRouter()
-  const [pend, setPend] = useState<ResumenSolicitud[] | null>(null)
-  const [aprobaciones, setAprobaciones] = useState(0)
-
   const admin = esAdmin(perfil)
   const ve = (k: string) => admin || puedeVer(perfil, marca, k)
 
-  const cargar = useCallback(async () => {
-    // `esAprobador` se calcula acá adentro y no afuera: como dependencia del useCallback,
-    // el React Compiler no puede garantizar que no cambie entre renders y desactiva la
-    // memoización de todo el componente (error `preserve-manual-memoization`).
-    const esAprobador =
-      esAdmin(perfil) || puedeSub(perfil, marca, 'solicitudes-internas', 'aprobar') || puedeSub(perfil, marca, 'solicitudes', 'aprobar')
-    const marcas = marcasVisibles(perfil, marca)
-    const partes = await Promise.all(
-      marcas.map(async (m) => {
-        const [f, i] = await Promise.all([leerCajon<Solicitud>('sesionfotos', m), leerCajon<SolicitudInterna>('solicitudesinternas', m)])
-        return [...(f.ok ? f.dato.map((s) => resumenFoto(s, m)) : []), ...(i.ok ? i.dato.map((s) => resumenInterna(s, m)) : [])]
-      }),
-    )
-    const todas = filtrarPorFuncion(partes.flat(), perfil)
-    setPend(ordenarResumenes(pendientesDeTrabajo(todas)))
-    // Lo que espera MI aprobación (consumos): solo tiene sentido mostrarlo al aprobador.
-    setAprobaciones(esAprobador ? todas.filter((r) => r.estadoLabel === 'Pendiente de aprobar').length : 0)
-  }, [perfil, marca])
+  // Los datos y el refresco viven en el store compartido (`useAvisosPoll`, montado en el
+  // shell): antes esta pantalla tenía su propio setInterval de 3 minutos, y Solicitudes otro,
+  // pidiendo lo mismo por separado.
+  const resumenes = useAvisos((st) => st.resumenes)
+  const cargando = useAvisos((st) => st.cargando)
+  const recargar = useAvisos((st) => st.cargar)
+  const recontar = useAvisos((st) => st.recontar)
 
+  const esAprobador =
+    esAdmin(perfil) || puedeSub(perfil, marca, 'solicitudes-internas', 'aprobar') || puedeSub(perfil, marca, 'solicitudes', 'aprobar')
+  const pend = resumenes.length || !cargando ? ordenarResumenes(pendientesDeTrabajo(resumenes)) : null
+  const aprobaciones = esAprobador ? resumenes.filter((r) => r.estadoLabel === 'Pendiente de aprobar').length : 0
+
+  // Abrir Inicio ES leer los avisos: se apaga el contador del sidebar. El "visto" se lee ANTES
+  // de marcar, para poder seguir resaltando en esta pantalla lo que acaba de llegar.
+  const [corte] = useState(() => vistoHasta(perfil?.name))
   useEffect(() => {
-    // El IIFE async evita el set-state-in-effect (cargar es async y hace setState).
-    void (async () => {
-      await cargar()
-    })()
-    const t = setInterval(() => void cargar(), POLL_MS)
-    return () => clearInterval(t)
-  }, [cargar])
+    marcarVisto(perfil?.name)
+    recontar(perfil?.name)
+  }, [perfil?.name, resumenes, recontar])
 
   const ver = (r: ResumenSolicitud) => {
     if (marca !== r.marca) setMarca(r.marca)
@@ -91,7 +78,7 @@ export function Inicio() {
   return (
     <>
       <HeaderAcciones>
-        <Button variant="outline" onClick={() => void cargar()} title="Volver a leer las solicitudes">
+        <Button variant="outline" onClick={() => void recargar(perfil, marca)} title="Volver a leer las solicitudes">
           Actualizar
         </Button>
       </HeaderAcciones>
@@ -170,11 +157,17 @@ export function Inicio() {
                   <div style={{ flex: 1, minWidth: 180 }}>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                       <MarcaChip marca={r.marca} />
+                      {r.creado > corte && (
+                        <span style={{ fontSize: font.xs, fontWeight: 700, color: '#fff', background: color.warning, borderRadius: 6, padding: '1px 7px' }}>NUEVA</span>
+                      )}
                       <span style={{ fontWeight: 600, color: color.ink }}>{r.titulo}</span>
                       <span style={{ fontSize: font.xs, fontWeight: 700, color: r.color, background: r.bg, borderRadius: 6, padding: '1px 7px' }}>{r.estadoLabel}</span>
                     </div>
                     <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 3 }}>
                       {r.subtitulo} · {unidadesDe(r, origenes)} · creada por {r.creadoPor || '—'} · {horaLabel(r.creado, r.fecha)}
+                      {diasDe(r.creado) >= DIAS_TRABADA && (
+                        <span style={{ color: color.dangerInk, fontWeight: 600 }}> · trabada hace {diasDe(r.creado)} días</span>
+                      )}
                     </div>
                   </div>
                   <span aria-hidden style={{ color: color.mut2, fontSize: font.lg }}>
@@ -189,6 +182,14 @@ export function Inicio() {
     </>
   )
 }
+
+/**
+ * A partir de cuántos días una solicitud abierta deja de ser "de esta semana" y pasa a ser un
+ * problema. Una con venta creada en la que nadie tildó "retirado" NO se va nunca del Inicio, así
+ * que sin esto se mezcla con lo de hoy y nadie la ve envejecer.
+ */
+const DIAS_TRABADA = 7
+const diasDe = (creado: number) => (creado ? Math.floor((Date.now() - creado) / 86400000) : 0)
 
 /** Las unidades que le tocan a este usuario: en un sector, solo las de su origen. */
 function unidadesDe(r: ResumenSolicitud, origenes: ReturnType<typeof origenesDe>): string {

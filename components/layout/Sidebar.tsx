@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { useAvisos } from '@/store/useAvisos'
 import { esDeMarca, estaEnVariosGrupos, iconoDe, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
@@ -44,6 +45,8 @@ export function Sidebar({
   onNavegar?: () => void
 }) {
   const { perfil, marca, setMarca, salir } = useSesion()
+  // Lo único que el menú lee de los datos. El refresco lo hace el shell (useAvisosPoll), no acá.
+  const nuevos = useAvisos((st) => st.nuevos)
   const [abierto, setAbierto] = useState<string | null>(null)
   const [menuMarca, setMenuMarca] = useState(false)
   const { confirmar } = useConfirmar()
@@ -156,6 +159,12 @@ export function Sidebar({
                   >
                     {hayIcono(cat.icono) && <Icono nombre={cat.icono} />}
                     {cat.label}
+                    {/* El contador de avisos cuelga de Inicio, que es adonde llevan todos. */}
+                    {k === 'inicio' && nuevos > 0 && (
+                      <span className="nav-badge" title={`${nuevos} ${nuevos === 1 ? 'aviso nuevo' : 'avisos nuevos'}`}>
+                        {nuevos > 99 ? '99+' : nuevos}
+                      </span>
+                    )}
                   </Link>
                 </div>
               )

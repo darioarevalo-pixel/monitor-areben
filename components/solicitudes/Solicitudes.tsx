@@ -1,22 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
-import { CUENTAS } from '@/lib/cuentas'
-import { leerCajon } from '@/lib/solicitudes/cajon'
 import { ponerAltaSolicitud, ponerVerSolicitud } from '@/lib/sesionfotos/puente'
-import type { Solicitud, TipoSol } from '@/lib/sesionfotos/tipos'
-import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
+import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge, BuscarInput, Button, Card, Chips, EmptyState, Esqueleto, FilterBar, MarcaChip, color, font, space, useFiltroUrl } from '@/components/ui'
+import { useAvisos } from '@/store/useAvisos'
 import { NuevaSolicitud } from './NuevaSolicitud'
 import { presetPorMotivo } from './preset'
-import type { Marca } from '@/lib/nav'
-import { filtrarPorFuncion, marcasQueVe, ordenarResumenes, puedePedir, resumenFoto, resumenInterna, veTodo, type GrupoEstado, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-
-const POLL_MS = 180000
+import { ordenarResumenes, puedePedir, veTodo, type GrupoEstado, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 
 const FILTROS: { k: GrupoEstado | 'todas'; label: string }[] = [
   { k: 'todas', label: 'Todas' },
@@ -42,35 +37,20 @@ const horaCorta = (creado: number, fecha: string) => {
 export function Solicitudes() {
   const { perfil, marca, setMarca } = useSesion()
   const router = useRouter()
-  const [datos, setDatos] = useState<ResumenSolicitud[] | null>(null)
   const [filtro, setFiltro] = useFiltroUrl<GrupoEstado | 'todas'>('f', 'todas')
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
 
   const [pidiendo, setPidiendo] = useState(false)
 
-  // Local y Depósito ven SOLO la marca activa (están parados en un local); Administración
-  // y Dirección ven las dos juntas con chip, que es su forma real de trabajar.
-  const marcas = useMemo<Marca[]>(() => marcasQueVe(perfil, marca, Object.keys(CUENTAS) as Marca[]), [perfil, marca])
-
-  const cargar = useCallback(async () => {
-    const partes = await Promise.all(
-      marcas.map(async (m) => {
-        const [f, i] = await Promise.all([leerCajon<Solicitud>('sesionfotos', m), leerCajon<SolicitudInterna>('solicitudesinternas', m)])
-        const rf = f.ok ? f.dato.map((s) => resumenFoto(s, m)) : []
-        const ri = i.ok ? i.dato.map((s) => resumenInterna(s, m)) : []
-        return [...rf, ...ri]
-      }),
-    )
-    setDatos(ordenarResumenes(filtrarPorFuncion(partes.flat(), perfil)))
-  }, [marcas, perfil])
-
-  useEffect(() => {
-    void (async () => {
-      await cargar()
-    })()
-    const t = setInterval(() => void cargar(), POLL_MS)
-    return () => clearInterval(t)
-  }, [cargar])
+  // El refresco lo hace el shell una sola vez para toda la app (`useAvisosPoll`): antes esta
+  // pantalla y el Inicio tenían cada una su propio setInterval de 3 minutos pidiendo lo mismo.
+  const resumenes = useAvisos((st) => st.resumenes)
+  const cargando = useAvisos((st) => st.cargando)
+  const recargar = useAvisos((st) => st.cargar)
+  const cargar = useCallback(async () => { await recargar(perfil, marca) }, [recargar, perfil, marca])
+  // Memoizado porque de acá cuelgan los contadores de los chips (useMemo): sin esto sería un
+  // array nuevo por render y el compilador no puede sostener esa memoización.
+  const datos = useMemo(() => (resumenes.length || !cargando ? ordenarResumenes(resumenes) : null), [resumenes, cargando])
 
   const q = busqueda.trim().toLowerCase()
   const lista = (datos || []).filter(

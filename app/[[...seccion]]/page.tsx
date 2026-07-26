@@ -2,6 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createElement, useEffect, useState } from 'react'
+import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
 import { LoginScreen } from '@/components/LoginScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
@@ -34,6 +35,10 @@ export default function Seccion() {
   // Cajón del sidebar en móvil. Vive acá porque lo abren dos lugares (el botón de la
   // topbar y la tapa oscura) y lo cierra un tercero (navegar a una sección).
   const [menuAbierto, setMenuAbierto] = useState(false)
+
+  // El refresco de avisos vive acá y no en una sección: el contador del sidebar tiene que
+  // encenderse estés donde estés. Se llama antes de cualquier return temprano (regla de hooks).
+  useAvisosPoll()
 
   const partes = params.seccion
   const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)

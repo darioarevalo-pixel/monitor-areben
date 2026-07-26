@@ -6,6 +6,8 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
+import { origenesDe } from '@/lib/inicio/core'
+import { veTodo } from '@/lib/solicitudes/overview'
 import { AYUDA_DESTINO, DESTINO_DEFAULT, MOTIVO_DEFAULT, motivosDe, necesitaAprobacion, PRESET_FOTOS, type PresetSolicitud } from '@/components/solicitudes/preset'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { credencialConPrompt, type Credencial } from '@/lib/sesion'
@@ -24,6 +26,7 @@ import {
   reporteBolsasPDF,
   reporteFaltantesPDF,
   reportePDF,
+  textoAvisoSolicitud,
   textoReporteFaltantes,
 } from '@/lib/sesionfotos/pdf'
 import {
@@ -388,11 +391,14 @@ function Historial({
   const toast = useToast()
   const { marca: marcaHist, perfil: perfilHist } = useSesion()
   const cerradasN = useMemo(() => contarCerradas(data), [data])
-  const visibles = useMemo(() => historialVisible(data, verCerradas), [data, verCerradas])
+  // Local ve solo lo de local, Depósito solo lo suyo — el mismo recorte que ya hacía
+  // /solicitudes. Quien ve todo (marketing, administración, dirección) no recorta nada.
+  const origenesHist = useMemo(() => (veTodo(perfilHist) ? undefined : origenesDe(perfilHist)), [perfilHist])
+  const visibles = useMemo(() => historialVisible(data, verCerradas, origenesHist), [data, verCerradas, origenesHist])
   const [chequeando, setChequeando] = useState(false)
   // Consumos pendientes de aprobación (para el aprobador). Lo define el DESTINO de cada
   // solicitud, no la sección: una de sesión de fotos también puede ser consumo.
-  const consumosPend = data.filter((s) => necesitaAprobacion(s) && s.estado === 'pendiente')
+  const consumosPend = visibles.filter((s) => necesitaAprobacion(s) && s.estado === 'pendiente')
   const esAprobadorHist = admin || puedeSub(perfilHist, marcaHist, preset.seccionKey, 'aprobar')
   const verificarAnulaciones = async () => {
     setChequeando(true)
@@ -830,6 +836,16 @@ function Detalle({
         </Button>
         <Button size="sm" variant="outline" onClick={() => correrSalida(() => imprimirTicket80(s), toast.error)} title="Ticket 80 mm con el detalle de todos los productos pedidos">
           Ticket 80mm
+        </Button>
+        {/* El aviso al sector. El badge del monitor solo se ve con la pantalla abierta; esto
+            llega al teléfono. */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => correrSalida(() => compartirTexto('Solicitud nueva', textoAvisoSolicitud(s), () => toast.ok('Aviso copiado: pegalo en WhatsApp.')), toast.error)}
+          title="Mandar el detalle por WhatsApp a quien la tiene que preparar"
+        >
+          Avisar
         </Button>
         {nBolsas > 0 ? (
           <>
@@ -1754,17 +1770,34 @@ async function copiarReporte(s: Solicitud, onOk?: () => void) {
  * Enviar el reporte de no devueltos a Marketing: abre la hoja de compartir del sistema
  * (WhatsApp, mail, etc. en el cel); si no hay Web Share (escritorio), cae a copiar.
  */
-async function enviarReporte(s: Solicitud) {
-  const msg = textoReporteFaltantes(s)
+/**
+ * Comparte un texto por la hoja nativa del sistema (WhatsApp, mail, lo que haya). En escritorio
+ * no existe, así que cae al portapapeles. Es lo único del monitor que llega al teléfono con la
+ * pantalla cerrada — el badge del sidebar solo se enciende con la pestaña abierta.
+ */
+async function compartirTexto(titulo: string, msg: string, onOk?: () => void): Promise<void> {
   const nav = navigator as Navigator & { share?: (d: { title?: string; text: string }) => Promise<void> }
   if (nav.share) {
     try {
-      await nav.share({ title: 'Productos no devueltos', text: msg })
+      await nav.share({ title: titulo, text: msg })
       return
     } catch (e) {
       if (e && (e as Error).name === 'AbortError') return // cerró la hoja de compartir
       /* si falla el share, cae a copiar */
     }
   }
-  await copiarReporte(s)
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(msg)
+      onOk?.()
+      return
+    } catch {
+      /* cae al prompt */
+    }
+  }
+  prompt('Copiá el texto:', msg)
+}
+
+async function enviarReporte(s: Solicitud) {
+  await compartirTexto('Productos no devueltos', textoReporteFaltantes(s))
 }

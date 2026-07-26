@@ -148,8 +148,16 @@ export function filaHistorial(s: Solicitud): FilaHistorial {
  * orden en que vienen del KV (más nueva primero, como las inserta sfProcesar con
  * unshift). Port de sfHistorialHtml (index.html:10271-10273).
  */
-export function historialVisible(data: Solicitud[], verCerradas: boolean): Solicitud[] {
-  return (data || []).filter((s) => verCerradas || s.estado !== 'cerrada')
+export function historialVisible(data: Solicitud[], verCerradas: boolean, origenes?: Origen[]): Solicitud[] {
+  const porEstado = (data || []).filter((s) => verCerradas || s.estado !== 'cerrada')
+  // Recorte por sector: sin esto, un usuario de Local que entra por /sesion-fotos veía TODAS las
+  // solicitudes de la marca, incluidas las 100% de depósito — mientras que entrando por
+  // /solicitudes veía solo las suyas. Eran dos puertas al mismo dato con criterios distintos.
+  // `undefined` = ve todo (marketing, administración, dirección, admin).
+  if (!origenes || !origenes.length) return porEstado
+  return porEstado.filter((s) =>
+    origenes.some((o) => (s.items || []).some((i) => i.origen === o)),
+  )
 }
 
 /** Cuántas cerradas hay (para el toggle "Ver cerradas (N)"). */

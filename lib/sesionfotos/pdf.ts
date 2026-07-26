@@ -295,6 +295,38 @@ export async function reporteBolsasPDF(s: Solicitud): Promise<void> {
 }
 
 /** El texto del reporte de faltantes para copiar a WhatsApp. Lanza si volvió todo. */
+/**
+ * El aviso de que hay una solicitud nueva para preparar, listo para mandar por WhatsApp.
+ *
+ * El badge del monitor solo se enciende con la pantalla abierta; esto es lo único que llega al
+ * teléfono. Por eso el texto se basta solo: quién la pide, qué sector la tiene que preparar y
+ * cuánto, sin obligar a entrar a mirar.
+ */
+export function textoAvisoSolicitud(s: Solicitud): string {
+  const porOrigen = (o: 'deposito' | 'local') =>
+    (s.items || []).reduce((a, i) => a + (i.origen === o ? Number(i.qty) || 0 : 0), 0)
+  const dep = porOrigen('deposito')
+  const loc = porOrigen('local')
+  const sectores = [dep ? `Depósito ${dep} u.` : '', loc ? `Local ${loc} u.` : ''].filter(Boolean).join(' · ')
+  const total = dep + loc
+  const items = (s.items || [])
+    .slice(0, 12)
+    .map((i) => `• ${i.nombre} · ${i.variante}${i.qty > 1 ? ` (x${i.qty})` : ''}`)
+    .join('\n')
+  const resto = (s.items || []).length > 12 ? `\n…y ${(s.items || []).length - 12} más` : ''
+  return [
+    `SOLICITUD NUEVA — ${s.descripcion || 'sin descripción'}`,
+    `${s.fecha}${s.creadoPor ? ` · pide ${s.creadoPor}` : ''}`,
+    sectores ? `Para preparar: ${sectores}` : '',
+    '',
+    items + resto,
+    '',
+    `Total: ${total} ${total === 1 ? 'unidad' : 'unidades'}.`,
+  ]
+    .filter((l) => l !== undefined)
+    .join('\n')
+}
+
 export function textoReporteFaltantes(s: Solicitud): string {
   const f = calcFaltantes(s)
   if (!f.length) throw new Error('No hay faltantes: volvió todo.')
