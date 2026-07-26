@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, funcionQueDa, FUNCIONES, type Funcion } from '@/lib/permisos'
 import { credencialConPrompt, guardarAdminPass, guardarConfigAdmin, traerConfigAdmin } from '@/lib/sesion'
@@ -23,6 +23,12 @@ const AREAS = NAV_CATS.map((c) => ({
 })).filter((a) => a.secciones.length > 0)
 
 type Estado = { msg: string; color: string } | null
+
+/**
+ * Los checkbox de la matriz. Al bajar la altura de fila el tilde queda chico para el dedo,
+ * así que el área táctil se la da el propio control: 17px de caja más el margen alrededor.
+ */
+const ESTILO_CHECK: React.CSSProperties = { width: 17, height: 17, margin: '7px 4px', cursor: 'pointer' }
 
 /**
  * Gestión de usuarios y permisos (solo admin). Port de la sección usuarios* del
@@ -198,6 +204,9 @@ function UsuarioCard({
   onFuncion: (i: number, f: Funcion, val: boolean) => void
   onEliminar: () => void
 }) {
+  // Las áreas arrancan plegadas: abiertas de una son ~64 filas por persona (37 secciones +
+  // 18 sub-permisos + los 9 encabezados), que en el celular son casi 3.000px de scroll.
+  const [areasAbiertas, setAreasAbiertas] = useState<ReadonlySet<string>>(() => new Set())
   return (
     <div style={{ borderTop: primero ? undefined : `1px solid ${color.line}`, background: abierto ? color.bg : undefined }}>
       <div
@@ -221,14 +230,16 @@ function UsuarioCard({
 
       {abierto && (
         <div style={{ padding: '0 14px 14px' }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', margin: '6px 0 14px' }}>
-            <Field label="Usuario" width={180}>
+          {/* Grid auto-fit en vez de cuatro anchos fijos que sumaban 790px: los campos se
+              acomodan solos de 4 a 1 columna sin media query, que es el idioma del repo. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, alignItems: 'end', margin: '6px 0 14px' }}>
+            <Field label="Usuario">
               <Input value={u.name} onChange={(e) => onCampo(i, 'name', e.target.value)} />
             </Field>
             {/* Las contraseñas se guardan hasheadas: no se pueden volver a leer, ni acá
                 ni en el KV. Así que este campo no muestra la actual —muestra si hay una— y
                 sirve para poner una nueva. Vacío al guardar = no se toca. */}
-            <Field label={u.tienePass ? 'Cambiar contraseña' : 'Contraseña'} width={200}>
+            <Field label={u.tienePass ? 'Cambiar contraseña' : 'Contraseña'}>
               <Input
                 type="password"
                 autoComplete="new-password"
@@ -242,7 +253,7 @@ function UsuarioCard({
                 no cruzan entre sistemas ("Candela Luis" acá es "candela" en producción), el
                 mail sí. Vacío = entra solo con contraseña, que es el caso de Depósito y
                 Local, que son puestos y no personas. */}
-            <Field label="Mail (para entrar con Google)" width={240}>
+            <Field label="Mail (para entrar con Google)">
               <Input
                 type="email"
                 placeholder="nombre@arebensrl.com"
@@ -250,7 +261,7 @@ function UsuarioCard({
                 onChange={(e) => onCampo(i, 'email', e.target.value.trim().toLowerCase())}
               />
             </Field>
-            <Field label="Marca" width={170}>
+            <Field label="Marca">
               <Select value={u.cuenta || ''} onChange={(e) => onCuenta(i, e.target.value)}>
                 <option value="">BDI + Zattia</option>
                 <option value="bdi">Solo BDI</option>
@@ -305,30 +316,47 @@ function UsuarioCard({
                   <b> excepción</b> (en rojo) para esa persona y esa marca. Los sub-permisos (aplicar un ajuste,
                   crear cupones) nunca vienen por función: se tildan siempre a mano.
                 </InfoPopover>
-                <Button size="sm" variant="outline" onClick={() => onCopiar(i, 'bdi', 'zattia')} style={{ marginLeft: 'auto' }}>
+                <Button size="sm" variant="outline" onClick={() => onCopiar(i, 'bdi', 'zattia')}>
                   Copiar BDI → Zattia
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => onCopiar(i, 'zattia', 'bdi')}>
                   Copiar Zattia → BDI
                 </Button>
               </div>
-              {/* La matriz de permisos se queda en una <table> propia y NO va a `mo-table`:
-                  son 35+ filas de checkbox y la fila de 38px del kit la volvería una
-                  pantalla y media de scroll. Acá la densidad es la funcionalidad. */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base, background: color.surface, borderRadius: 'var(--mo-r-lg)' }}>
-                <thead>
-                  <tr style={{ color: color.mut2, fontSize: font.xs }}>
-                    <th style={{ textAlign: 'left', padding: '5px 8px' }}>Sección</th>
-                    <th style={{ width: 60 }}>BDI</th>
-                    <th style={{ width: 60 }}>Zattia</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {AREAS.map((area) => (
-                    <Area key={area.id} area={area} u={u} i={i} onPerm={onPerm} onPermArea={onPermArea} />
-                  ))}
-                </tbody>
-              </table>
+              {/* La matriz se queda en una <table> propia y NO va a `mo-table`: son 37
+                  secciones más sus sub-permisos, y la fila de 38px del kit la volvería una
+                  pantalla y media de scroll. Acá la densidad es la funcionalidad.
+                  El wrapper con overflow es porque la Card padre recorta (mismo recurso que
+                  usa Etiquetas para su tabla cruda). */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base, background: color.surface, borderRadius: 'var(--mo-r-lg)' }}>
+                  <thead>
+                    <tr style={{ color: color.mut2, fontSize: font.xs }}>
+                      <th style={{ textAlign: 'left', padding: '5px 8px' }}>Sección</th>
+                      <th style={{ width: 56 }}>BDI</th>
+                      <th style={{ width: 56 }}>Zattia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {AREAS.map((area) => (
+                      <Area
+                        key={area.id}
+                        area={area}
+                        u={u}
+                        i={i}
+                        abierta={areasAbiertas.has(area.id)}
+                        onToggle={() => setAreasAbiertas((prev) => {
+                          const s = new Set(prev)
+                          if (!s.delete(area.id)) s.add(area.id)
+                          return s
+                        })}
+                        onPerm={onPerm}
+                        onPermArea={onPermArea}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
 
@@ -344,19 +372,43 @@ function UsuarioCard({
 }
 
 /**
+ * Un checkbox de tres estados. El indeterminado no se puede poner por atributo: es una
+ * propiedad del nodo, así que va por ref.
+ */
+function CheckTri({
+  checked,
+  indeterminado,
+  ...rest
+}: { checked: boolean; indeterminado?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !!indeterminado && !checked
+  }, [indeterminado, checked])
+  return <input ref={ref} type="checkbox" checked={checked} {...rest} />
+}
+
+/**
  * Un área del menú con sus secciones. El tilde del encabezado marca/desmarca el área
  * entera para esa marca — el alta de alguien pasa de 35 clics a uno por sector.
+ *
+ * El área **arranca plegada**: abiertas todas de una son ~64 filas por persona. Al plegarse,
+ * el tilde del encabezado pasa a ser lo único que dice qué hay adentro, así que necesita el
+ * tercer estado: sin el indeterminado, "ninguna sección" y "la mitad" se ven igual.
  */
 function Area({
   area,
   u,
   i,
+  abierta,
+  onToggle,
   onPerm,
   onPermArea,
 }: {
   area: (typeof AREAS)[number]
   u: UsuarioConfig
   i: number
+  abierta: boolean
+  onToggle: () => void
   onPerm: (i: number, brand: Marca, key: string, val: boolean) => void
   onPermArea: (i: number, brand: Marca, keys: string[], val: boolean) => void
 }) {
@@ -364,25 +416,39 @@ function Area({
     const keys = area.secciones.filter((s) => s.brands.includes(brand)).map((s) => s.key)
     if (!keys.length) return <td key={brand} style={{ textAlign: 'center', color: color.line2 }}>—</td>
     const todas = keys.every((k) => tienePermiso(u, brand, k))
+    const algunas = keys.some((k) => tienePermiso(u, brand, k))
     return (
-      <td key={brand} style={{ textAlign: 'center' }}>
-        <input
-          type="checkbox"
+      // El clic no burbujea: darle un sector entero de un tilde es el atajo que ya existía y
+      // tiene que seguir funcionando sin abrir el área.
+      <td key={brand} style={{ textAlign: 'center', height: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <CheckTri
           checked={todas}
+          indeterminado={algunas}
           title={todas ? `Sacarle todo ${area.label}` : `Darle todo ${area.label}`}
           onChange={(e) => onPermArea(i, brand, keys, e.target.checked)}
+          style={ESTILO_CHECK}
         />
       </td>
     )
   }
+  const n = area.secciones.length
   return (
     <>
       <tr style={{ background: color.bg, borderTop: `1px solid ${color.line}` }}>
-        <td style={{ padding: '6px 8px', fontSize: font.sm, fontWeight: weight.bold, color: color.ink2 }}>{area.label}</td>
+        <td
+          onClick={onToggle}
+          style={{ padding: '6px 8px', height: 'auto', fontSize: font.sm, fontWeight: weight.bold, color: color.ink2, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <span aria-hidden style={{ display: 'inline-block', width: 14, color: color.mut2 }}>{abierta ? '▾' : '▸'}</span>
+          {area.label}
+          <span style={{ fontWeight: weight.medium, color: color.mut2, fontSize: font.xs, marginLeft: 6 }}>
+            {n} {n === 1 ? 'sección' : 'secciones'}
+          </span>
+        </td>
         {celdaArea('bdi')}
         {celdaArea('zattia')}
       </tr>
-      {area.secciones.map((sec) => (
+      {abierta && area.secciones.map((sec) => (
         <FilaPermiso key={sec.key} u={u} i={i} label={sec.label} info={sec.info} claveKey={sec.key} brands={sec.brands} onPerm={onPerm}>
           {(sec.subs || []).map((sub) => (
             <FilaPermiso
@@ -425,7 +491,7 @@ function FilaPermiso({
   children?: React.ReactNode
 }) {
   const celda = (brand: Marca) => {
-    if (!brands.includes(brand)) return <td key={brand} style={{ textAlign: 'center', color: color.line2 }}>—</td>
+    if (!brands.includes(brand)) return <td key={brand} style={{ textAlign: 'center', height: 'auto', color: color.line2 }}>—</td>
     const origen = origenPermiso(u, brand, claveKey)
     const f = origen === 'funcion' ? funcionQueDa(u, claveKey) : null
     const titulo =
@@ -435,14 +501,20 @@ function FilaPermiso({
           ? `Su función se lo daría, pero se lo quitaron para ${brand === 'bdi' ? 'BDI' : 'Zattia'}.`
           : undefined
     return (
-      <td key={brand} style={{ textAlign: 'center' }}>
+      <td key={brand} style={{ textAlign: 'center', height: 'auto' }}>
         <input
           type="checkbox"
           checked={tienePermiso(u, brand, claveKey)}
           disabled={u.admin}
           title={titulo}
           onChange={(e) => onPerm(i, brand, claveKey, e.target.checked)}
-          style={origen === 'funcion' ? { accentColor: color.mut2 } : origen === 'excluido' ? { outline: `1.5px solid ${color.dangerBorder}`, borderRadius: 3 } : undefined}
+          style={
+            origen === 'funcion'
+              ? { ...ESTILO_CHECK, accentColor: color.mut2 }
+              : origen === 'excluido'
+                ? { ...ESTILO_CHECK, outline: `1.5px solid ${color.dangerBorder}`, borderRadius: 3 }
+                : ESTILO_CHECK
+          }
         />
       </td>
     )
@@ -450,7 +522,10 @@ function FilaPermiso({
   return (
     <>
       <tr style={sub ? { color: color.mut } : { borderTop: `1px solid ${color.bg2}` }}>
-        <td style={{ padding: sub ? '3px 4px 3px 22px' : '5px 4px', fontSize: sub ? 12 : 13 }}>
+        {/* `height: auto` inline porque el legacy le fija --mo-row-h a todo <td> de
+            .shell-content, que en pantalla angosta son 44px: por 64 filas es media pantalla
+            de más. El área táctil no se pierde — vive en el checkbox, no en la fila. */}
+        <td style={{ padding: sub ? '3px 4px 3px 22px' : '5px 4px', height: 'auto', fontSize: sub ? 12 : 13 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center' }}>
             {label}
             {info && <InfoPopover titulo={label.replace(/^↳ /, '')}>{info}</InfoPopover>}
