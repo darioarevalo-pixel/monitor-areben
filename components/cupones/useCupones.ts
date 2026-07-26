@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { guardarCupones, leerCupones } from '@/lib/kv/cliente'
+import { useToast } from '@/components/ui'
 import type { Cupon } from '@/lib/cupones/tipos'
 
 /**
@@ -27,6 +28,7 @@ export type EstadoCupones = {
 }
 
 export function useCupones(marca: Marca): EstadoCupones {
+  const toast = useToast()
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<Cupon[] | null>(null)
@@ -66,26 +68,26 @@ export function useCupones(marca: Marca): EstadoCupones {
   const persistir = useCallback(
     async (mutar: (l: Cupon[]) => Cupon[]): Promise<boolean> => {
       if (!cargado) {
-        alert(NO_LEIDO)
+        toast.error(NO_LEIDO)
         return false
       }
       const marcaAlGuardar = marcaRef.current
       setData((prev) => (prev ? mutar(prev) : prev)) // optimista
       const fresca = await leerCupones<Cupon>(marcaAlGuardar)
       if (!fresca.ok) {
-        alert('No se pudo re-leer los cupones para guardar sin pisar cambios de otros: ' + fresca.motivo)
+        toast.error('No se pudo re-leer los cupones para guardar sin pisar cambios de otros: ' + fresca.motivo)
         return false
       }
       const merged = mutar(fresca.dato)
       const r = await guardarCupones({ store: marcaAlGuardar, cupones: merged, cargado: true })
       if (!r.ok) {
-        alert('No se pudo guardar: ' + r.motivo)
+        toast.error('No se pudo guardar: ' + r.motivo)
         return false
       }
       if (marcaRef.current === marcaAlGuardar) setData(merged)
       return true
     },
-    [cargado],
+    [cargado, toast],
   )
 
   return { cargando, error, data, cargado, recargar, persistir }

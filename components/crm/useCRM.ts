@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { useToast } from '@/components/ui'
 import { traerClientes, traerVentas, type ModoCanal } from '@/lib/crm/datos'
 import { calcularAgregado } from '@/lib/crm/core'
 import type { Agregado, FilaCliente, FilaVenta, MapaSeguimiento, MapaTelefonos } from '@/lib/crm/tipos'
@@ -46,6 +47,7 @@ export type EstadoCRM = {
 const VACIO: Agregado = { activos: [], descartados: [] }
 
 export function useCRM(modo: ModoCanal): EstadoCRM {
+  const toast = useToast()
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ventas, setVentas] = useState<FilaVenta[]>([])
@@ -140,20 +142,20 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     async (nuevo: MapaSeguimiento): Promise<boolean> => {
       setCrmSeg(nuevo) // optimista, como el legacy (renderCRM antes del POST)
       const r = await guardarMapa({ kind: 'crmseg', store: 'bdi', mapa: nuevo, cargado })
-      if (!r.ok) alert('No se pudo guardar el seguimiento: ' + r.motivo)
+      if (!r.ok) toast.error('No se pudo guardar el seguimiento: ' + r.motivo)
       return r.ok
     },
-    [cargado],
+    [cargado, toast],
   )
 
   const guardarTel = useCallback(
     async (nuevo: MapaTelefonos): Promise<boolean> => {
       setCrmTelOverride(nuevo)
       const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa: nuevo, cargado })
-      if (!r.ok) alert('No se pudieron guardar los teléfonos: ' + r.motivo)
+      if (!r.ok) toast.error('No se pudieron guardar los teléfonos: ' + r.motivo)
       return r.ok
     },
-    [cargado],
+    [cargado, toast],
   )
 
   return { cargando, error, agregado, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel }

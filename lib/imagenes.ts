@@ -9,7 +9,7 @@ import { apiFetch } from './api-fetch'
  * `imgAThumbYSubir` lo sube a Vercel Blob y persiste la URL. `imgAThumb` sigue
  * siendo el paso de reducción y el fallback cuando el Blob no está disponible.
  */
-export function imgAThumb(file: File | null | undefined, cb: (url: string) => void, max = 256): void {
+export function imgAThumb(file: File | null | undefined, cb: (url: string) => void, max = 256, onError?: (msg: string) => void): void {
   if (!file) return
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -32,7 +32,9 @@ export function imgAThumb(file: File | null | undefined, cb: (url: string) => vo
       }
       cb(url)
     }
-    img.onerror = () => alert('No se pudo leer la imagen.')
+    // Está en `lib/`, así que no puede usar el hook del toast: el aviso vuelve al
+    // llamador, que sí es un componente.
+    img.onerror = () => onError?.('No se pudo leer la imagen.')
     img.src = src
   }
   reader.readAsDataURL(file)

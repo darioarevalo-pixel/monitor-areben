@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { useToast } from '@/components/ui'
 import { indexarTn, type IndiceTn, type TnProducto } from '@/lib/tn'
 import type { TablaGuardada } from '@/lib/gen-talles/plantillas'
 
@@ -63,6 +64,7 @@ export type EstadoGenTalles = {
 }
 
 export function useGenTalles(marca: Marca): EstadoGenTalles {
+  const toast = useToast()
   const [cargando, setCargando] = useState(true)
   const [tnProducts, setTnProducts] = useState<TnProducto[]>([])
   const [guardadas, setGuardadas] = useState<Record<string, TablaGuardada>>({})
@@ -92,25 +94,25 @@ export function useGenTalles(marca: Marca): EstadoGenTalles {
   const guardarVinculado = useCallback(
     async (id: string, tabla: TablaGuardada): Promise<boolean> => {
       if (!cargado) {
-        alert('No se pudo leer las tablas guardadas, así que no se guarda nada (guardar ahora las borraría). Recargá y probá de nuevo.')
+        toast.error('No se pudo leer las tablas guardadas, así que no se guarda nada (guardar ahora las borraría). Recargá y probá de nuevo.')
         return false
       }
       // Merge por-clave: re-leer fresco y setear sólo este producto.
       const fresca = await leerMapa<TablaGuardada>('talles', marca)
       if (!fresca.ok) {
-        alert('No se pudo re-leer las tablas para guardar sin pisar las de otros: ' + fresca.motivo)
+        toast.error('No se pudo re-leer las tablas para guardar sin pisar las de otros: ' + fresca.motivo)
         return false
       }
       const merged = { ...fresca.dato, [id]: tabla }
       const r = await guardarMapa({ kind: 'talles', store: marca, mapa: merged, cargado: true })
       if (!r.ok) {
-        alert('No se pudo guardar la tabla de talles: ' + r.motivo)
+        toast.error('No se pudo guardar la tabla de talles: ' + r.motivo)
         return false
       }
       setGuardadas(merged)
       return true
     },
-    [cargado, marca],
+    [cargado, marca, toast],
   )
 
   const cargarEnTN = useCallback(

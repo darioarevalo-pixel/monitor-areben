@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import type { KindLista } from '@/lib/kv/cliente'
 import { aplicarDiff, diffSolicitudes, leerCajon } from '@/lib/solicitudes/cajon'
+import { useToast } from '@/components/ui'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
 import type { Credencial } from '@/lib/sesion'
@@ -61,6 +62,7 @@ export type OpcionesHistorial<T> = {
 }
 
 export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: OpcionesHistorial<T>): HistorialSolicitudes<T> {
+  const toast = useToast()
   const { kind, etiqueta, estadoTrasVenta, crearVentas, idsParaCerrar } = opts
   const noLeido = `No se pudo leer el historial de ${etiqueta}, así que no se guarda nada: guardar ahora borraría lo que hay. Recargá y probá de nuevo.`
 
@@ -105,14 +107,14 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
   const persistir = useCallback(
     async (mutar: (l: T[]) => T[]): Promise<boolean> => {
       if (!cargado) {
-        alert(noLeido)
+        toast.error(noLeido)
         return false
       }
       const marcaAlGuardar = marcaRef.current
       setData((prev) => (prev ? mutar(prev) : prev)) // optimista
       const fresca = await leerCajon<T>(kind, marcaAlGuardar)
       if (!fresca.ok) {
-        alert('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
+        toast.error('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
         return false
       }
       const merged = mutar(fresca.dato)
@@ -120,13 +122,13 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       // se tocan, así dos personas trabajando a la vez no se pisan.
       const r = await aplicarDiff(kind, marcaAlGuardar, diffSolicitudes(fresca.dato, merged))
       if (!r.ok) {
-        alert('No se pudo guardar: ' + r.motivo)
+        toast.error('No se pudo guardar: ' + r.motivo)
         return false
       }
       if (marcaRef.current === marcaAlGuardar) setData(merged)
       return true
     },
-    [cargado, kind, noLeido],
+    [cargado, kind, noLeido, toast],
   )
 
   const crearVentasDe = useCallback(

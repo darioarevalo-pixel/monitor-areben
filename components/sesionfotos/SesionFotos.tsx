@@ -512,12 +512,16 @@ function Historial({
 
 const NUM_VENTA = (v: { number?: number | string; id: number | string }) => String(v.number || v.id || '?')
 
-/** Alerta el mensaje de error de un PDF/clipboard (equivalente a los alert del legacy). */
-async function correrSalida(fn: () => void | Promise<void>) {
+/**
+ * Corre una salida (PDF, etiqueta, clipboard) y avisa si falla. El aviso llega por
+ * parámetro porque esta función vive fuera del componente y no puede usar el hook;
+ * mismo criterio que `copiarReporte(s, onOk)` más abajo.
+ */
+async function correrSalida(fn: () => void | Promise<void>, onError: (msg: string) => void) {
   try {
     await fn()
   } catch (e) {
-    alert(e instanceof Error ? e.message : String(e))
+    onError(e instanceof Error ? e.message : String(e))
   }
 }
 
@@ -696,7 +700,7 @@ function Detalle({
             {titulo} <span style={{ color: color.mut2, fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
             {completo ? <span style={{ color: color.success, fontWeight: 700 }}> ✓ completo</span> : null}
           </div>
-          <button className="btn-sm" onClick={() => correrSalida(() => reportePDF(s, origen))} style={{ background: color.ink, color: '#fff' }}>
+          <button className="btn-sm" onClick={() => correrSalida(() => reportePDF(s, origen), toast.error)} style={{ background: color.ink, color: '#fff' }}>
             📄 Reporte
           </button>
         </div>
@@ -808,18 +812,18 @@ function Detalle({
           <div style={{ fontWeight: 700, fontSize: 15 }}>{s.descripcion || 'Solicitud'}</div>
         )}
         <span style={{ color: color.mut2, fontSize: 12 }}>{s.fecha}</span>
-        <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s))} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+        <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s), toast.error)} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           🏷️ Etiqueta de bolsa
         </button>
-        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s))} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s), toast.error)} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
           🧾 Ticket 80mm
         </button>
         {nBolsas > 0 ? (
           <>
-            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s))} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s), toast.error)} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
               🏷️ Etiquetas de bolsas ({nBolsas})
             </button>
-            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s))} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s), toast.error)} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
               📄 Reporte por bolsa
             </button>
           </>
@@ -972,13 +976,13 @@ function Detalle({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
             <div style={{ fontWeight: 700, color: color.dangerInk }}>📋 Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s))} style={{ background: color.success, color: '#fff' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s), toast.error)} style={{ background: color.success, color: '#fff' }}>
                 📤 Enviar a Marketing
               </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')))} style={{ background: '#fff', border: `1px solid ${color.dangerBorder}`, color: color.dangerInk }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')), toast.error)} style={{ background: '#fff', border: `1px solid ${color.dangerBorder}`, color: color.dangerInk }}>
                 📋 Copiar
               </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s))} style={{ background: color.ink, color: '#fff' }}>
+              <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s), toast.error)} style={{ background: color.ink, color: '#fff' }}>
                 📄 PDF
               </button>
             </div>

@@ -110,7 +110,7 @@ export function Disenos() {
   }
   const cargar = (files: FileList | null) => {
     const arr = [...(files || [])].filter((f) => /^image\//.test(f.type))
-    arr.forEach((f) => imgAThumb(f, (url) => setDisenos((ds) => [...ds, { id: newId(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url, nota: '', up: 0, down: 0, estado: 'revisar' }]), 600))
+    arr.forEach((f) => imgAThumb(f, (url) => setDisenos((ds) => [...ds, { id: newId(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url, nota: '', up: 0, down: 0, estado: 'revisar' }]), 600, () => toast.error(`No se pudo leer la imagen "${f.name}".`)))
   }
   const limpiar = async () => {
     if (!disenos.length) return
