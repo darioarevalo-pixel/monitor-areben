@@ -350,6 +350,28 @@ const TRAZOS = {
       <circle cx="12" cy="12" r="3" />
     </>
   ),
+  /** Eliminar — papelera. Los tres de abajo son acciones de fila, no secciones del menú. */
+  papelera: (
+    <>
+      <path d="M4.5 6.8h15" />
+      <path d="M9.5 6.8V4.6h5v2.2" />
+      <path d="M6.6 6.8 7.6 20h8.8l1-13.2" />
+      <path d="M10.3 10.2v6.4M13.7 10.2v6.4" />
+    </>
+  ),
+  /** Editar — lápiz. */
+  lapiz: (
+    <>
+      <path d="M16.4 3.9a2.2 2.2 0 0 1 3.1 3.1L8.2 18.3l-4.1 1 1-4.1z" />
+      <path d="M14.6 5.7l3.1 3.1" />
+    </>
+  ),
+  /** Quitar / cerrar — cruz. */
+  cruz: (
+    <>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </>
+  ),
 } as const
 
 export function Icono({ nombre, size = 16, style }: { nombre: NombreIcono; size?: number; style?: React.CSSProperties }) {
