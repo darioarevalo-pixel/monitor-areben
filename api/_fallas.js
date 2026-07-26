@@ -30,7 +30,7 @@ function cfgFor(store) {
 }
 
 const ESTADOS = ['cargada', 'recibida', 'confirmada', 'en_deposito', 'vendida_feria', 'descartada'];
-const COLS = 'id, store, sku, producto, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, precio_lista, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
+const COLS = 'id, store, sku, producto, variante, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, precio_lista, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
 
 // Espejo de lib/postventa/barcode.ts (una función .js de Vercel no importa un .ts; se mantiene igual).
 function generarBarcodeFalla(store, id) {
@@ -43,6 +43,7 @@ function camposDe(b) {
   const f = {};
   if (b.sku !== undefined) f.sku = b.sku ? String(b.sku) : null;
   if (b.producto !== undefined) f.producto = String(b.producto || '');
+  if (b.variante !== undefined) f.variante = b.variante ? String(b.variante) : null;
   if (b.cantidad !== undefined) f.cantidad = Math.max(1, parseInt(b.cantidad, 10) || 1);
   if (b.motivo !== undefined) f.motivo = b.motivo ? String(b.motivo) : null;
   if (b.ubicacion !== undefined) f.ubicacion = b.ubicacion === 'deposito' ? 'deposito' : 'local';
@@ -77,12 +78,19 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-      const { data, error } = await supabase
-        .from('fallas_deposito')
-        .select(COLS)
-        .eq('store', store)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const leer = (cols) =>
+        supabase
+          .from('fallas_deposito')
+          .select(cols)
+          .eq('store', store)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+      let { data, error } = await leer(COLS);
+      // Ídem el insert: si la base todavía no tiene `variante` (migrate-fallas-4), se lee sin
+      // ella. Sin esto, una columna nueva sin migrar tumba la lista ENTERA de fallas.
+      if (error && /variante/i.test(error.message || '')) {
+        ({ data, error } = await leer(COLS.replace(', variante', '')));
+      }
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, fallas: data || [] });
     }
@@ -102,7 +110,16 @@ export default async function handler(req, res) {
           ...camposDe(b),
         };
         if (!row.ubicacion) row.ubicacion = 'local';
-        const { data, error } = await supabase.from('fallas_deposito').insert(row).select('id').single();
+        let { data, error } = await supabase.from('fallas_deposito').insert(row).select('id').single();
+        // `variante` es una columna nueva (migrate-fallas-4). Si la base todavía no la tiene,
+        // se reintenta sin ese campo en vez de dejar al local sin poder cargar: la migración
+        // corre a mano y son DOS bases, así que puede estar aplicada en una sola. Mismo criterio
+        // que el reintento de `inventario` en lib/datos.ts.
+        if (error && /variante/i.test(error.message || '')) {
+          const sinVariante = { ...row };
+          delete sinVariante.variante;
+          ({ data, error } = await supabase.from('fallas_deposito').insert(sinVariante).select('id').single());
+        }
         if (error) throw new Error(error.message);
         // El barcode se deriva del id (único por base): insert → generar → update.
         const barcode = generarBarcodeFalla(store, data.id);

@@ -207,6 +207,28 @@ export function faltantesParaVenta(c: {
   return faltan
 }
 
+/**
+ * La solicitud de envío guarda **solo el número**: el `EM` es fijo y lo pone la pantalla.
+ *
+ * Antes se guardaba lo que la persona tipeara, `EM` incluido, y `crearVentaCambio` le antepone
+ * otro `EM ` al armar la nota del pedido — así que en Gestión Nube salía `EM EM1234`. Estas dos
+ * funciones son el único lugar donde se decide el formato: `numeroEM` para editar y guardar,
+ * `etiquetaEM` para mostrar y para la nota de GN.
+ *
+ * Los registros viejos tienen el prefijo adentro, por eso `numeroEM` lo saca al leer.
+ */
+export function numeroEM(v: string | null | undefined): string {
+  return String(v || '').trim().replace(/^em[\s-]*/i, '')
+}
+
+/** Cómo se muestra: `EM 1234`. La cadetería no tiene número y se muestra tal cual. */
+export function etiquetaEM(v: string | null | undefined): string {
+  const raw = String(v || '').trim()
+  if (!raw) return ''
+  const n = numeroEM(raw)
+  return n && /\d/.test(n) ? `EM ${n}` : raw
+}
+
 /** Sólo correo/andreani tienen tracking online. Cadete no. */
 export const VIA_CON_TRACKING: CambioVia[] = ['andreani', 'correo']
 

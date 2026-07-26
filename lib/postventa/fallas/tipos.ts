@@ -24,6 +24,8 @@ export type FallaRow = {
   store: Marca
   sku?: string | null
   producto: string
+  /** Talle/color de la unidad. Se guarda para que la etiqueta lo diga sin ir a buscarlo por SKU. */
+  variante?: string | null
   cantidad: number
   motivo?: string | null
   valuacion_costo?: number | null
@@ -49,6 +51,7 @@ export type FallaRow = {
 export type FallaInput = {
   producto: string
   sku?: string | null
+  variante?: string | null
   cantidad?: number
   motivo?: string | null
   valuacion_costo?: number | null

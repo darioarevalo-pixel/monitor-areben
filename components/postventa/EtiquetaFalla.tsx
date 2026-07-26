@@ -1,18 +1,38 @@
 'use client'
 
 /**
- * Etiqueta imprimible de una falla: dibuja el código de barras interno (CODE128 con JsBarcode, el
- * mismo motor que lib/etiquetas/pdf.ts) + producto/SKU/motivo. Toda la info identifica la unidad por
- * el barcode (no una cinta). Botón de imprimir (window.print sobre una ventana nueva).
+ * Etiqueta imprimible de una falla: 50×25 mm, con todo lo que hace falta para identificar la
+ * unidad sin abrir el sistema — qué es, de qué talle, por qué está acá y su código interno.
+ *
+ * Antes salía por `window.open` + `document.write`: sin tamaño de etiqueta, o sea a hoja
+ * completa y con el tamaño que decidiera el driver, que es por qué se veía chica. Ahora usa la
+ * misma cañería que las etiquetas de producto —`buildLibrePdf` para la geometría e
+ * `imprimirPdf` para mandarla a la impresora desde un iframe oculto, sin pestaña nueva—, que
+ * es la que ya sale bien en la Zebra.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
-import { color } from '@/components/ui'
+import { buildLibrePdf, imprimirPdf } from '@/lib/etiquetas/pdf'
+import { Button, color, useToast } from '@/components/ui'
+
+/** Las líneas de la etiqueta, en orden. Lo vacío no ocupa lugar (buildLibrePdf lo descarta). */
+function lineasDe(falla: FallaRow) {
+  const variante = (falla.variante || '').trim()
+  const sku = (falla.sku || '').trim()
+  return [
+    { texto: `FALLA${falla.motivo ? ' · ' + falla.motivo : ''}`, tam: 'chico' as const, bold: true },
+    { texto: falla.producto || '', tam: 'subtitulo' as const, bold: true },
+    { texto: [variante, sku].filter(Boolean).join(' · '), tam: 'chico' as const, bold: false },
+  ]
+}
 
 export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [imprimiendo, setImprimiendo] = useState(false)
+  const toast = useToast()
 
+  // Vista previa en pantalla (el PDF se arma recién al imprimir).
   useEffect(() => {
     let vivo = true
     ;(async () => {
@@ -29,31 +49,34 @@ export function EtiquetaFalla({ falla, onClose }: { falla: FallaRow; onClose: ()
     return () => { vivo = false }
   }, [falla.barcode])
 
-  const imprimir = () => {
-    const canvas = canvasRef.current
-    const img = canvas ? canvas.toDataURL('image/png') : ''
-    const w = window.open('', '_blank', 'width=600,height=460')
-    if (!w) return
-    w.document.write(`
-      <html><head><title>Etiqueta ${falla.barcode || ''}</title></head>
-      <body style="font-family:system-ui,sans-serif;margin:20px;text-align:center">
-        ${img ? `<img src="${img}" style="max-width:100%" />` : `<div style="font-family:monospace;font-size:32px">${falla.barcode || ''}</div>`}
-        <div style="font-size:22px;font-weight:700;margin-top:8px">${(falla.producto || '').replace(/</g, '')}</div>
-        <div style="font-size:16px;color:#555;margin-top:2px">${(falla.sku || '').replace(/</g, '')} · ${(falla.motivo || '').replace(/</g, '')}</div>
-        <script>window.onload=function(){window.print()}</script>
-      </body></html>`)
-    w.document.close()
+  const imprimir = async () => {
+    if (!falla.barcode) return
+    setImprimiendo(true)
+    try {
+      const pdf = await buildLibrePdf({ grande: false, copias: 1, barcode: falla.barcode, precio: null, lineas: lineasDe(falla) })
+      if (pdf) imprimirPdf(pdf)
+    } catch (e) {
+      toast.error('No se pudo armar la etiqueta: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setImprimiendo(false)
+    }
   }
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 20, minWidth: 320, textAlign: 'center' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: color.ink, marginBottom: 4 }}>{falla.producto}</div>
-        <div style={{ fontSize: 12, color: color.mut, marginBottom: 12 }}>{falla.sku || 's/sku'} · {falla.motivo || 'sin motivo'}</div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: color.surface, borderRadius: 12, padding: 20, minWidth: 320, textAlign: 'center' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: color.dangerInk, letterSpacing: 0.4 }}>FALLA{falla.motivo ? ' · ' + falla.motivo : ''}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: color.ink, marginTop: 4 }}>{falla.producto}</div>
+        <div style={{ fontSize: 12, color: color.mut, marginBottom: 12 }}>
+          {[falla.variante, falla.sku].filter(Boolean).join(' · ') || 's/variante'}
+        </div>
         {falla.barcode ? <canvas ref={canvasRef} /> : <div style={{ fontSize: 13, color: color.mut2 }}>Sin código de barras.</div>}
+        <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>Se imprime en 50 × 25 mm.</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
-          <button onClick={imprimir} disabled={!falla.barcode} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.warning}`, color: color.warningInk, background: color.warningBg, cursor: 'pointer' }}>🖨️ Imprimir</button>
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${color.line}`, background: '#fff', cursor: 'pointer' }}>Cerrar</button>
+          <Button variant="solid" tone="warning" onClick={imprimir} disabled={!falla.barcode} loading={imprimiendo}>
+            Imprimir
+          </Button>
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
         </div>
       </div>
     </div>

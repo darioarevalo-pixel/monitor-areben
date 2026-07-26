@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularTotalCambio, detalleCambioTexto, faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingUrl, type CambioItem } from '@/lib/cambios/tipos'
+import { calcularTotalCambio, detalleCambioTexto, etiquetaEM, faltantesParaVenta, numeroEM, numeroReclamo, repartirSeguimiento, trackingUrl, type CambioItem } from '@/lib/cambios/tipos'
 
 const item = (precio: number, cantidad = 1, extra: Partial<CambioItem> = {}): CambioItem => ({ producto: 'x', precio, cantidad, ...extra })
 
@@ -47,7 +47,7 @@ describe('faltantesParaVenta', () => {
     cliente: 'Juan', orden_tn: '1234',
     items_devueltos: [item(1000)], items_nuevos: [item(2000, 1, { product_id: 'p1', size_id: 's1' })],
     forma_pago: 'transferencia' as const, via: 'andreani' as const, envio_paga: 'cliente' as const,
-    solicitud_envio: 'EM1234',
+    solicitud_envio: '1234',
   }
   it('completo → sin faltantes', () => {
     expect(faltantesParaVenta(completo)).toEqual([])
@@ -110,5 +110,29 @@ describe('detalleCambioTexto (cuenta itemizada)', () => {
     expect(txt).toContain('Total productos:')
     expect(txt).toMatch(/Envío \(Andreani\):/)
     expect(txt).toMatch(/\*Total a pagar:/)
+  })
+})
+
+describe('solicitud de envío · el EM es fijo', () => {
+  it('numeroEM saca el prefijo, venga como venga', () => {
+    // Los registros viejos lo tienen adentro; el input nuevo no debería, pero si pegan "EM1234" igual limpia.
+    expect(numeroEM('EM1234')).toBe('1234')
+    expect(numeroEM('em 1234')).toBe('1234')
+    expect(numeroEM('EM-1234')).toBe('1234')
+    expect(numeroEM('1234')).toBe('1234')
+    expect(numeroEM('  1234  ')).toBe('1234')
+    expect(numeroEM(null)).toBe('')
+  })
+
+  it('etiquetaEM lo muestra con UN solo prefijo', () => {
+    // El bug que cierra: crearVentaCambio anteponía "EM " a un valor que ya lo traía,
+    // así que en Gestión Nube la nota decía "EM EM1234".
+    expect(etiquetaEM('1234')).toBe('EM 1234')
+    expect(etiquetaEM('EM1234')).toBe('EM 1234')
+    expect(etiquetaEM('')).toBe('')
+  })
+
+  it('la cadetería no lleva prefijo: no tiene número', () => {
+    expect(etiquetaEM('Cadetería')).toBe('Cadetería')
   })
 })

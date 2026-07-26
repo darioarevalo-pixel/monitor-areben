@@ -2,7 +2,7 @@
 
 /** Resumen de un cambio en un modal: cliente, estado, lo que devuelve / se lleva, y totales separados. */
 import { Button, Card, StatusPill, MoneyText, color, font, weight, space, radius } from '@/components/ui'
-import { ESTADO_LABEL, ESTADO_TONE, VIA_LABEL, calcularTotalCambio, numeroReclamo, type CambioItem, type CambioRow } from '@/lib/cambios/tipos'
+import { ESTADO_LABEL, ESTADO_TONE, VIA_LABEL, calcularTotalCambio, etiquetaEM, numeroReclamo, type CambioItem, type CambioRow } from '@/lib/cambios/tipos'
 
 export function ResumenCambio({ cambio, onClose }: { cambio: CambioRow; onClose: () => void }) {
   const dev = cambio.items_devueltos || []
@@ -41,7 +41,7 @@ export function ResumenCambio({ cambio, onClose }: { cambio: CambioRow; onClose:
         </div>
 
         <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[4] }}>
-          {cambio.cliente || 's/cliente'}{cambio.orden_tn ? ` · orden #${cambio.orden_tn}` : ''}{cambio.solicitud_envio ? ` · 📮 ${cambio.solicitud_envio}` : ''}
+          {cambio.cliente || 's/cliente'}{cambio.orden_tn ? ` · orden #${cambio.orden_tn}` : ''}{cambio.solicitud_envio ? ` · ${etiquetaEM(cambio.solicitud_envio)}` : ''}
         </div>
 
         <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, letterSpacing: 0.4, marginBottom: 4 }}>Devuelve</div>

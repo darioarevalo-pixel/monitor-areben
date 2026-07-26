@@ -56,7 +56,7 @@ function obtenerPass(): string {
   return p
 }
 
-const FORM0 = { producto: '', sku: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', ubicacion: 'local', product_id: '', size_id: '' }
+const FORM0 = { producto: '', sku: '', variante: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', ubicacion: 'local', product_id: '', size_id: '' }
 
 function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   const { marca, perfil } = useSesion()
@@ -89,7 +89,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   }, [marca])
 
   const elegirArticulo = useCallback((a: ArticuloGN) => {
-    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '', precio_lista: a.retailer_price != null ? String(a.retailer_price) : '' }))
+    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', variante: a.size_name || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '', precio_lista: a.retailer_price != null ? String(a.retailer_price) : '' }))
   }, [])
 
   const agregar = useCallback(async () => {
@@ -101,14 +101,14 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
     const snap = {
       cantidad: Math.max(1, parseInt(form.cantidad, 10) || 1),
       product_id: form.product_id || null, size_id: form.size_id || null,
-      sku: form.sku.trim() || null, motivo: form.motivo.trim() || null,
+      sku: form.sku.trim() || null, variante: form.variante.trim() || null, motivo: form.motivo.trim() || null,
       precio_lista: form.precio_lista === '' ? null : Number(form.precio_lista),
       ubicacion: ubic,
     }
     setGuardando(true); setError(null); setMsg(null)
     try {
       const { id, barcode } = await crearFalla(marca, {
-        producto: form.producto.trim(), sku: snap.sku, cantidad: snap.cantidad, motivo: snap.motivo,
+        producto: form.producto.trim(), sku: snap.sku, variante: snap.variante, cantidad: snap.cantidad, motivo: snap.motivo,
         valuacion_costo: form.valuacion_costo === '' ? null : Number(form.valuacion_costo),
         valuacion_pvp_feria: form.valuacion_pvp_feria === '' ? null : Number(form.valuacion_pvp_feria),
         precio_lista: snap.precio_lista,
@@ -237,13 +237,19 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
           const ocup = ocupada === f.id
           return (
             <Tr key={f.id}>
-              <Td strong wrap>{f.producto}</Td>
+              <Td strong wrap>
+                {f.producto}
+                {f.variante ? <div style={{ fontWeight: 400, fontSize: 11, color: color.mut }}>{f.variante}</div> : null}
+              </Td>
               <Td mono style={{ color: color.mut }}>{f.sku || '—'}</Td>
               <Td align="right">{f.cantidad}</Td>
               <Td wrap style={{ color: color.mut }}>{f.motivo || '—'}</Td>
               <Td>{f.ubicacion ? UBICACION_LABEL[f.ubicacion] : '—'}</Td>
               {esAdmin && <Td align="right"><MoneyText value={f.valuacion_costo} /></Td>}
-              <Td><StatusPill tone={ESTADO_TONE[f.estado]} label={ESTADO_LABEL[f.estado]} /></Td>
+              <Td>
+                <StatusPill tone={ESTADO_TONE[f.estado]} label={ESTADO_LABEL[f.estado]} />
+                {f.gn_venta_number ? <div style={{ fontSize: 10, color: color.mut }}>venta GN #{f.gn_venta_number}</div> : null}
+              </Td>
               <Td>{f.barcode ? <Button size="sm" variant="ghost" onClick={() => setEtiqueta(f)}> {f.barcode}</Button> : '—'}</Td>
               {esAdmin && (
                 <Td>

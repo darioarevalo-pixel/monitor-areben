@@ -27,7 +27,7 @@ import {
 } from '@/lib/cambios/cliente'
 import {
   DIAS_CAMBIO, ESTADO_LABEL, ESTADO_TONE, VIA_CON_TRACKING, VIA_LABEL, calcularTotalCambio, detalleCambioTexto,
-  faltantesParaVenta, numeroReclamo, repartirSeguimiento, trackingPortalUrl, trackingUrl,
+  etiquetaEM, faltantesParaVenta, numeroEM, numeroReclamo, repartirSeguimiento, trackingPortalUrl, trackingUrl,
   type CambioEstado, type CambioInput, type CambioItem, type CambioRow, type CambioVia, type EnvioPaga,
   type FormaPago, type OrdenTN, type OrdenTNLinea,
 } from '@/lib/cambios/tipos'
@@ -185,7 +185,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     envio_costo: envioCosto === '' ? null : Number(envioCosto), envio_paga: envioPaga,
     forma_pago: formaPago || null, descuento_manual: descManual === '' ? null : Number(descManual),
     // Cadetería no usa solicitud de envío → si está vacía se guarda "Cadetería" para dejar traza.
-    solicitud_envio: solicitudEnvio.trim() || (via === 'cadete' ? 'Cadetería' : null), pagado,
+    solicitud_envio: numeroEM(solicitudEnvio) || (via === 'cadete' ? 'Cadetería' : null), pagado,
   }), [ordenNum, cliente, via, seguimiento, seguimientoVuelta, devueltos, nuevos, envioCosto, envioPaga, formaPago, descManual, solicitudEnvio, pagado])
 
   const guardarBorrador = useCallback(async () => {
@@ -279,7 +279,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
     setEnvioPaga(c.envio_paga || 'cliente')
     setFormaPago(c.forma_pago || '')
     setDescManual(c.descuento_manual != null ? String(c.descuento_manual) : '')
-    setSolicitudEnvio(c.solicitud_envio || '')
+    setSolicitudEnvio(numeroEM(c.solicitud_envio))
     setPagado(!!c.pagado)
     setError(null); setMsg(null)
     if (c.orden_tn) void leerOrdenTN(marca, c.orden_tn).then((o) => setOrden(o)).catch(() => setOrden(null))
@@ -459,8 +459,29 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
 
         {/* Solicitud de envío (obligatoria) + tracking de ida + guardar */}
         <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', marginTop: space[5], paddingTop: space[4], borderTop: `1px solid ${color.line}` }}>
-          <Field label="Solicitud de envío (EMXXXX)" required={VIA_CON_TRACKING.includes(via)} width={190} hint={VIA_CON_TRACKING.includes(via) ? 'obligatoria para generar la venta' : 'opcional (cadetería)'}>
-            <Input value={solicitudEnvio} onChange={(e) => setSolicitudEnvio(e.target.value)} placeholder={VIA_CON_TRACKING.includes(via) ? 'EM1234' : 'Cadetería'} invalid={VIA_CON_TRACKING.includes(via) && !solicitudEnvio.trim()} />
+          {/* El `EM` es fijo: solo se carga el número. Lo que se guarda es el número solo,
+              así que la nota del pedido en GN deja de decir "EM EM1234". */}
+          <Field label="Solicitud de envío" required={VIA_CON_TRACKING.includes(via)} width={190} hint={VIA_CON_TRACKING.includes(via) ? 'obligatoria para generar la venta' : 'opcional (cadetería)'}>
+            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+              <span
+                aria-hidden
+                style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '0 9px',
+                  border: `1px solid ${color.line2}`, borderRight: 'none',
+                  borderRadius: 'var(--mo-r-md) 0 0 var(--mo-r-md)',
+                  background: color.bg2, color: color.mut, fontSize: font.sm, fontWeight: weight.semibold,
+                }}
+              >
+                EM
+              </span>
+              <Input
+                value={solicitudEnvio}
+                onChange={(e) => setSolicitudEnvio(numeroEM(e.target.value))}
+                placeholder={VIA_CON_TRACKING.includes(via) ? '1234' : 'sin número (cadetería)'}
+                invalid={VIA_CON_TRACKING.includes(via) && !solicitudEnvio.trim()}
+                style={{ borderRadius: '0 var(--mo-r-md) var(--mo-r-md) 0' }}
+              />
+            </div>
           </Field>
           {VIA_CON_TRACKING.includes(via) && (
             <>
@@ -520,7 +541,7 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <Td>{c.cliente || '—'}</Td>
                       <Td>
                         {c.orden_tn || '—'}
-                        {c.solicitud_envio && <div style={{ fontSize: 10, color: color.mut2 }}>📮 {c.solicitud_envio}</div>}
+                        {c.solicitud_envio && <div style={{ fontSize: 10, color: color.mut2 }}>{etiquetaEM(c.solicitud_envio)}</div>}
                       </Td>
                       <Td wrap style={{ maxWidth: 240, whiteSpace: 'normal' }}>{resumenItems(c)}</Td>
                       <Td align="right" strong><MoneyText value={c.total != null ? c.total : c.diferencia} /></Td>
