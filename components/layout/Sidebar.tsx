@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esDeMarca, estaEnVariosGrupos, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esDeMarca, estaEnVariosGrupos, iconoDe, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { color } from '@/components/ui/tokens'
+import { Icono, hayIcono, type NombreIcono } from '@/components/ui/Icono'
 
 /** Label del menú: LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
@@ -153,6 +154,7 @@ export function Sidebar({
                     className={`nav-cat${k === activa ? ' active' : ''}`}
                     onClick={onNavegar}
                   >
+                    {hayIcono(cat.icono) && <Icono nombre={cat.icono} />}
                     {cat.label}
                   </Link>
                 </div>
@@ -171,6 +173,7 @@ export function Sidebar({
                 }`}
                 onClick={onNavegar}
               >
+                {hayIcono(iconoDe(k)) && <Icono nombre={iconoDe(k) as NombreIcono} size={15} />}
                 {cat.labels?.[k] ?? label(k)}
               </Link>
             )
@@ -180,6 +183,7 @@ export function Sidebar({
                   className={`nav-cat${grupoActivo === cat.id ? ' active' : ''}`}
                   onClick={() => setAbierto(open ? '' : cat.id)}
                 >
+                  {hayIcono(cat.icono) && <Icono nombre={cat.icono} />}
                   {cat.label}
                   <span className="nav-caret">▾</span>
                 </button>
@@ -195,6 +199,7 @@ export function Sidebar({
                           className={`nav-opt${rutaActiva(it, activa, sub) ? ' active' : ''}${cat.accent === 'marketing' ? ' nav-accent-mkt' : ''}`}
                           onClick={onNavegar}
                         >
+                          {hayIcono(it.icono) && <Icono nombre={it.icono} size={15} />}
                           {it.label}
                         </Link>
                       ))}
@@ -247,6 +252,7 @@ function Subgrupo({ grupo, activa, sub, children }: { grupo: NavGrupo; activa: s
   return (
     <div className={`nav-sub${open ? ' open' : ''}`}>
       <button className="nav-sub-cat" onClick={() => setAbierto(!open)}>
+        {hayIcono(grupo.icono) && <Icono nombre={grupo.icono} size={14} />}
         {grupo.label}
         <span className="nav-caret">▾</span>
       </button>

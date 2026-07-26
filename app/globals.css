@@ -251,7 +251,10 @@ a {
 
 /* ── Nivel 3: la sección. Es el destino, y el único que se pinta ── */
 .nav-opt {
-  display: block;
+  /* Flex y no block: la sección lleva ícono adelante desde la tanda 11. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 7px 10px;
   margin-bottom: 1px;

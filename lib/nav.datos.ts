@@ -44,16 +44,24 @@ export type NavItem = {
   ruta: string
   label: string
   key: string
+  /** Ícono de la entrada (`components/ui/Icono.tsx`). */
+  icono?: string
   /** Sub-permiso(s) que habilitan la entrada. Con varios, alcanza con tener uno. */
   sub?: string | string[]
 }
 
 /** Un subgrupo del menú: 2º nivel dentro de un grupo (ej. Local > Actividades). */
-export type NavGrupo = { id: string; label: string; keys: string[]; items?: NavItem[] }
+export type NavGrupo = { id: string; label: string; icono?: string; keys: string[]; items?: NavItem[] }
 
 export type NavCat = {
   id: string
   label: string
+  /**
+   * Nombre del ícono del grupo (`components/ui/Icono.tsx`). Ocupa el lugar que tenía el
+   * emoji dentro del `label` ("📊 Análisis"): el emoji traía su propio color y no se podía
+   * cambiar, así que no servía para marcar el estado activo del menú.
+   */
+  icono?: string
   keys: string[]
   /** Subgrupos colapsables, después de las `keys` sueltas del grupo. */
   grupos?: NavGrupo[]
@@ -554,6 +562,7 @@ export const PERM_CAT: PermCat[] = [
 export const NAV_CATS: NavCat[] = [
   {
     "id": "inicio",
+      "icono": "inicio",
     "label": "Inicio",
     "keys": [
       "inicio"
@@ -561,6 +570,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "direccion",
+      "icono": "direccion",
     "label": "Dirección",
     "keys": [
       "gerencial"
@@ -568,6 +578,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "analisis",
+      "icono": "analisis",
     "label": "Análisis",
     "keys": [
       "productos",
@@ -582,6 +593,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "local",
+      "icono": "local",
     "label": "Local",
     "keys": [
       "solicitudes",
@@ -594,6 +606,7 @@ export const NAV_CATS: NavCat[] = [
     "grupos": [
       {
         "id": "actividades",
+      "icono": "actividades",
         "label": "Actividades",
         "keys": [
           "conteo-estandar-zattia",
@@ -606,6 +619,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "deposito",
+      "icono": "deposito",
     "label": "Depósito",
     "keys": [
       "solicitudes",
@@ -618,6 +632,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "marketing",
+      "icono": "marketing",
     "label": "Marketing",
     "keys": [
       "marketing",
@@ -627,13 +642,14 @@ export const NAV_CATS: NavCat[] = [
     "grupos": [
       {
         "id": "tienda-nube",
+      "icono": "tienda-nube",
         "label": "Tienda Nube",
         "keys": [],
         "items": [
-          { "ruta": "/tncat/fotos", "label": "Fotos", "key": "tncat", "sub": "imagenes" },
-          { "ruta": "/tncat/categorias", "label": "Categorías", "key": "tncat", "sub": ["categorias", "asignar"] },
-          { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "key": "tncat", "sub": "ocultar" },
-          { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "key": "gen-talles" }
+          { "ruta": "/tncat/fotos", "label": "Fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
+          { "ruta": "/tncat/categorias", "label": "Categorías", "icono": "tn-categorias", "key": "tncat", "sub": ["categorias", "asignar"] },
+          { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "icono": "tn-visibilidad", "key": "tncat", "sub": "ocultar" },
+          { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" }
         ]
       }
     ],
@@ -644,6 +660,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "integraciones",
+      "icono": "integraciones",
     "label": "Integraciones",
     "keys": [
       "integraciones"
@@ -651,6 +668,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "administracion",
+      "icono": "administracion",
     "label": "Administración",
     "keys": [
       "solicitudes",
@@ -664,6 +682,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "compras",
+      "icono": "compras",
     "label": "Compras",
     "keys": [
       "fundas-modelo",
@@ -674,6 +693,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "clientes",
+      "icono": "clientes",
     "label": "Clientes",
     "keys": [
       "clientes"
@@ -681,6 +701,7 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "config",
+      "icono": "config",
     "label": "Config",
     "keys": [
       "usuarios"

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { keysDeCat, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { keysDeCat, iconoDe, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { hayIcono } from '@/components/ui/Icono'
 
 /**
  * Invariantes de la estructura del menú, ahora que `lib/nav.datos.ts` se edita a mano
@@ -85,5 +86,35 @@ describe('estructura del nav', () => {
         }
       }
     }
+  })
+
+  /**
+   * Los emojis del menú (🏠 Inicio, 📊 Análisis…) se reemplazaron por íconos SVG. El
+   * riesgo del cambio es que el ícono ya no viaja dentro del label: es un dato aparte, y
+   * una sección nueva puede quedar sin él y ser la única del menú sin marca. Estos dos
+   * tests lo impiden — que el nombre exista, y que no falte ninguno.
+   */
+  it('cada grupo y subgrupo del menú tiene un ícono, y el ícono existe', () => {
+    const rotos: string[] = []
+    for (const cat of NAV_CATS) {
+      if (!hayIcono(cat.icono)) rotos.push(`grupo '${cat.label}' (icono: ${cat.icono ?? '—'})`)
+      for (const g of cat.grupos ?? []) {
+        if (!hayIcono(g.icono)) rotos.push(`subgrupo '${g.label}' (icono: ${g.icono ?? '—'})`)
+        for (const it of g.items ?? []) {
+          if (!hayIcono(it.icono)) rotos.push(`entrada '${it.label}' (icono: ${it.icono ?? '—'})`)
+        }
+      }
+    }
+    expect(rotos).toEqual([])
+  })
+
+  it('cada sección del menú tiene un ícono, y el ícono existe', () => {
+    const rotos: string[] = []
+    for (const cat of NAV_CATS) {
+      for (const k of keysDeCat(cat)) {
+        if (!hayIcono(iconoDe(k))) rotos.push(`sección '${k}' (icono: ${iconoDe(k) ?? '—'})`)
+      }
+    }
+    expect(rotos).toEqual([])
   })
 })

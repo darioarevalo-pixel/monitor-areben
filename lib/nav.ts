@@ -80,6 +80,66 @@ export function labelDeMenu(key: string): string {
 }
 
 /**
+ * El ícono de cada sección del menú (`components/ui/Icono.tsx`).
+ *
+ * Vive acá y no en `PERM_CAT` porque **no es un dato del permiso**: `PERM_CAT` define qué
+ * puede ver cada uno, y meterle una decisión de presentación mezclaba dos cosas que se
+ * tocan por motivos distintos. El grupo sí lo lleva en `NAV_CATS.icono`, que es la
+ * estructura del menú y ahí sí corresponde.
+ *
+ * Varias keys comparten ícono a propósito: los cuatro conteos son el mismo trabajo en
+ * distinto lugar, y las dos post-ventas y los dos cambios también. Repetirlo dice
+ * "esto es lo mismo, en otro lado".
+ */
+const ICONO_POR_KEY: Record<string, string> = {
+  inicio: 'inicio',
+  gerencial: 'gerencial',
+  // Análisis
+  productos: 'productos',
+  variantes: 'variantes',
+  'ventas-mensuales': 'ventas-mensuales',
+  'verif-ventas': 'verif-ventas',
+  margenes: 'margenes',
+  comisiones: 'comisiones',
+  colores: 'colores',
+  talles: 'talles',
+  // Local / Depósito
+  solicitudes: 'solicitudes',
+  cupones: 'cupones',
+  'postventa-local': 'postventa',
+  'postventa-deposito': 'postventa',
+  postventa: 'postventa',
+  'cambios-local': 'cambios',
+  etiquetas: 'etiquetas',
+  ubicaciones: 'ubicaciones',
+  conteo: 'conteo',
+  'conteo-deposito': 'conteo',
+  'conteo-estandar-zattia': 'conteo',
+  'conteo-estandar-stunned': 'conteo',
+  exhib: 'exhib',
+  // Marketing
+  marketing: 'marketing',
+  'meta-ads': 'meta-ads',
+  tncat: 'tienda-nube',
+  'gen-talles': 'talles',
+  integraciones: 'integraciones',
+  // Administración / Compras
+  reposicion: 'reposicion',
+  caducados: 'caducados',
+  'fundas-modelo': 'fundas-modelo',
+  ingresos: 'ingresos',
+  proveedores: 'proveedores',
+  disenos: 'disenos',
+  // Clientes / Config
+  clientes: 'clientes',
+  usuarios: 'usuarios',
+}
+
+export function iconoDe(key: string): string | undefined {
+  return ICONO_POR_KEY[key]
+}
+
+/**
  * Emoji(s) inicial(es) + espacio.
  *
  * Los labels de `nav.datos.ts` llevaban un emoji adelante ("📊 Por producto") y esta
