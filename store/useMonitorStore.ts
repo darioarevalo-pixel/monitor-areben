@@ -4,10 +4,10 @@
  *
  * **Por qué un store cliente y no RSC.** areben-dashboard resuelve esto del lado
  * del servidor (pre-agrega en Postgres y sirve tablas planas), y acá no se puede
- * copiar: el monitor computa el ETL en el browser contra un caché de localStorage
- * que **comparte con el iframe legacy**. Mientras el iframe exista, los datos
- * tienen que vivir del lado del cliente o los dos mundos divergen. Cuando no
- * quede iframe, esto se puede repensar entero.
+ * copiar todavía: el monitor baja las tablas crudas y computa el ETL en el browser,
+ * contra un caché local. Nació así porque el caché se compartía con el iframe legacy
+ * —que ya no existe—, y hoy se sostiene por el volumen: son ~100.000 filas de
+ * detalle de venta por marca. Moverlo al server es posible pero es otro proyecto.
  *
  * Port de cargarTodo (index.html:2032), sin el DOM: el legacy pintaba el estado
  * en #status y #progress-bar desde adentro de la función; acá queda en el store y
@@ -16,7 +16,7 @@
 
 import { create } from 'zustand'
 import { computarDatos } from '@/lib/etl/computar'
-import { guardarCache, leerCache, mapaColorManual } from '@/lib/cache'
+import { guardarCache, leerCache, mapaColorManual, type PayloadCache } from '@/lib/cache'
 import { traerDatos } from '@/lib/datos'
 import type { Marca } from '@/lib/nav.datos'
 import type { DatosETL } from '@/lib/etl/tipos'
@@ -26,7 +26,8 @@ export type EstadoCarga = 'vacio' | 'cargando' | 'listo' | 'error'
 /** De dónde salieron los datos que se están mostrando. */
 export type Origen =
   | { tipo: 'cache'; edadMin: number; refrescando: boolean }
-  | { tipo: 'red' }
+  /** `sinCache`: se bajó bien pero no se pudo guardar, así que la próxima vuelve a bajar todo. */
+  | { tipo: 'red'; sinCache?: string }
 
 type MonitorState = {
   marca: Marca | null
@@ -63,12 +64,12 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
 
     set({ marca, error: null, progreso: null })
 
-    const computar = (payload: ReturnType<typeof leerCache> extends null ? never : NonNullable<ReturnType<typeof leerCache>>['data'], today: Date) =>
+    const computar = (payload: PayloadCache, today: Date) =>
       computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
 
     // ── Camino 1: caché fresco (< 6 h) ────────────────────────────────────────
     if (!forzar) {
-      const fresco = leerCache(marca, false)
+      const fresco = await leerCache(marca, false)
       if (fresco) {
         const edadMin = Math.round((Date.now() - fresco.timestamp) / 60000)
         set({ datos: computar(fresco.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
@@ -76,7 +77,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       }
 
       // ── Camino 2: caché vencido → mostrarlo igual y refrescar atrás ─────────
-      const vencido = leerCache(marca, true)
+      const vencido = await leerCache(marca, true)
       if (vencido) {
         const edadMin = Math.round((Date.now() - vencido.timestamp) / 60000)
         set({ datos: computar(vencido.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
@@ -111,17 +112,56 @@ async function refrescar(
   set: (partial: Partial<MonitorState>) => void,
 ): Promise<void> {
   const today = ahora()
-  const payload = await traerDatos({ marca, rol, today, onProgress: (label) => set({ progreso: label }) })
+  let tiempos: { tablas: number; detalles: number } | null = null
+  const payload = await traerDatos({
+    marca,
+    rol,
+    today,
+    onProgress: (label) => set({ progreso: label }),
+    onTiempos: (t) => {
+      tiempos = t
+    },
+  })
 
   // El timestamp se guarda ANTES de computar, igual que el legacy (index.html:2100):
   // marca cuándo se bajaron los datos, no cuánto tardó el cómputo.
-  guardarCache(marca, payload, Date.now())
+  //
+  // Se espera el guardado en vez de dispararlo y seguir: contra los ~20 s de red que
+  // acabamos de pagar, el clone es ruido, y a cambio el resultado entra en el MISMO `set`
+  // que publica `origen`. Además, asignarlo a una variable y usarla es lo que impide
+  // olvidarse el `await` — el ESLint del repo no tiene reglas type-aware, así que un
+  // `guardarCache()` suelto no sería error de compilación.
+  const guardado = await guardarCache(marca, payload, Date.now())
+
+  const t0 = performance.now()
+  const datos = computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
+  loguearTiempos(marca, tiempos, performance.now() - t0, guardado.ok)
 
   set({
-    datos: computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) }),
+    datos,
     estado: 'listo',
-    origen: { tipo: 'red' },
+    origen: guardado.ok ? { tipo: 'red' } : { tipo: 'red', sinCache: guardado.motivo },
     error: null,
     progreso: null,
   })
+}
+
+/**
+ * Una línea por carga fría, en consola. El repo no tenía NI UNA medición de tiempo, así que
+ * "tarda 20 segundos" era folklore: nadie sabía cuánto es la bajada y cuánto el cómputo del
+ * ETL sobre ~100.000 filas en el hilo principal. Sin este número no se puede decidir qué
+ * optimizar — y la respuesta cambia el arreglo por completo.
+ */
+function loguearTiempos(
+  marca: Marca,
+  red: { tablas: number; detalles: number } | null,
+  computo: number,
+  cacheOk: boolean,
+): void {
+  const s = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + 's'
+  const partes = [`[monitor] ${marca} — carga fría`]
+  if (red) partes.push(`red ${s(red.tablas + red.detalles)} (tablas ${s(red.tablas)} · detalles ${s(red.detalles)})`)
+  partes.push(`cómputo ${s(computo)}`)
+  partes.push(cacheOk ? 'caché guardado' : 'CACHÉ NO GUARDADO')
+  console.info(partes.join(' · '))
 }

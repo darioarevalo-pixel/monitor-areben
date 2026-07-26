@@ -75,10 +75,16 @@ export type OpcionesFetch = {
   today: Date
   /** Se llama con cada tabla que termina, para mover la barra de progreso. */
   onProgress?: (label: string) => void
+  /**
+   * Cuánto tardó cada fase, en ms. Es lo único que dice si los ~20 segundos de la carga
+   * fría son la bajada o el cómputo posterior — el repo no tenía ninguna medición. Los
+   * tests no lo pasan, así que para ellos no cambia nada.
+   */
+  onTiempos?: (t: { tablas: number; detalles: number }) => void
 }
 
 /** Trae las 8 tablas crudas de una marca, listas para computarDatos o para el caché. */
-export async function traerDatos({ marca, rol, today, onProgress }: OpcionesFetch): Promise<PayloadCache> {
+export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: OpcionesFetch): Promise<PayloadCache> {
   const cuenta: Cuenta = CUENTAS[marca]
   const esZattia = marca === 'zattia'
 
@@ -94,6 +100,7 @@ export async function traerDatos({ marca, rol, today, onProgress }: OpcionesFetc
       ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
       : 'select=id,name,category,sku,retailer_price,unit_cost,created_at,active&active=eq.1') + '&order=id'
 
+  const t0 = performance.now()
   const [productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, syncMeta] = await Promise.all([
     fetchAll<FilaProducto>(cuenta, 'productos', selectProductos, onProgress, 'productos'),
     // Algunas bases no tienen sku/barcode en inventario: el legacy reintenta con el select corto.
@@ -148,6 +155,8 @@ export async function traerDatos({ marca, rol, today, onProgress }: OpcionesFetc
     syncMetaPromise,
   ])
 
+  const t1 = performance.now()
+
   // venta_detalles se pide recién acá porque el filtro sale del mínimo id de ventas:
   // sin esto habría que traer la tabla entera, que es la más grande de todas.
   const minSaleId = ventas.length ? Math.min(...ventas.map((v) => v.id)) : 0
@@ -158,6 +167,7 @@ export async function traerDatos({ marca, rol, today, onProgress }: OpcionesFetc
     onProgress,
     'detalles',
   )
+  onTiempos?.({ tablas: t1 - t0, detalles: performance.now() - t1 })
 
   // Excluir las ventas TÉCNICAS del Monitor (Sesión de Fotos y Fallas): precio 0, canal "Ninguno"
   // (channel_id 12). No son ventas reales — solo descuentan stock — así que inflaban la analítica de

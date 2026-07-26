@@ -22,6 +22,7 @@
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
 import { color, font, space } from '@/components/ui/tokens'
+import type { Origen } from '@/store/useMonitorStore'
 
 export type DatosGateProps<T> = {
   datos: T | null | undefined
@@ -36,7 +37,7 @@ export type DatosGateProps<T> = {
    */
   progreso?: string | null
   /** De dónde salieron los datos: caché de hace X minutos (y si se está refrescando) o red. */
-  origen?: { tipo: 'cache'; edadMin: number; refrescando: boolean } | { tipo: 'red' } | null
+  origen?: Origen | null
   children: (datos: T) => React.ReactNode
 }
 
@@ -68,6 +69,13 @@ export function DatosGate<T>({ datos, error, esqueleto = 'tabla', onReintentar, 
   }
   return (
     <>
+      {origen?.tipo === 'red' && origen.sinCache && (
+        // Un caché que no se guarda es invisible hasta que alguien se pregunta por qué la app
+        // tarda 20 segundos TODAS las veces. Eso ya pasó una vez y duró meses.
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+          No se pudo guardar el caché, así que la próxima vez vuelve a tardar. ({origen.sinCache})
+        </div>
+      )}
       {origen?.tipo === 'cache' && origen.refrescando && (
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
           <span className="mo-skel" style={{ width: 8, height: 8, borderRadius: 999 }} />

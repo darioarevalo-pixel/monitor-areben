@@ -1,21 +1,30 @@
 /**
- * Caché de datos en localStorage. Port de getCacheKey / loadCache / saveCache
- * (index.html:1987-2011).
+ * Caché del payload del ETL, en IndexedDB.
  *
- * ⚠️ **ESTE ARCHIVO COMPARTE ESTADO CON EL LEGACY.** Shell e iframe son
- * same-origin, así que leen y escriben literalmente la misma entrada de
- * localStorage. Eso es una ventaja — el que carga primero le calienta el caché al
- * otro, y la app arranca rápido en los dos mundos — pero tiene un precio:
+ * **Por qué se movió (26-jul-2026).** Vivía en localStorage y solo guardaba si el payload
+ * serializado medía menos de 8 MB; si no, no guardaba **y no avisaba**. El payload de BDI
+ * pesa ~14,7 MB (solo `detalles` son ~9,6 MB en más de 100.000 filas), así que el caché de
+ * BDI no se escribía nunca: en vez de pagar la carga fría cada 6 horas se pagaba en CADA
+ * entrada, ~20 segundos, para todo el equipo. Zattia mide ~5 MB y entraba raspando, contra
+ * un techo real de localStorage que ronda los 5 MB de caracteres.
  *
- *   **la clave, el formato del payload y el TTL tienen que ser idénticos a los del
- *   legacy.** Si divergen, no falla nada de forma visible: simplemente conviven
- *   dos cachés y las secciones migradas muestran números distintos de las
- *   embebidas. Es el peor modo de falla posible, porque parece que funciona.
+ * IndexedDB no tiene ese techo y guarda con structured clone, así que además desaparecen el
+ * `JSON.stringify` y el `JSON.parse` de 15 MB que corrían en el hilo principal.
  *
- * Nada de esto se cambia hasta que no quede iframe. Ahí sí se puede repensar
- * (RSC, fetch cache, lo que sea) sin coordinar con nadie.
+ * **La cabecera anterior decía que este archivo no se tocara "hasta que no quede iframe",
+ * porque compartía la entrada de localStorage con el legacy. Ya no queda iframe** — la
+ * migración cerró en julio e `index.html` sobrevive solo para los tests de paridad. Esa
+ * restricción está vencida y por eso se borró: fue lo que mantuvo el bug congelado. Hoy
+ * este caché no comparte estado con nada.
+ *
+ * **No hay tope de tamaño.** Chequearlo obligaría a serializar el payload entero, que es
+ * justo el costo que vinimos a sacar. La salvaguarda ya no es un número sino el manejo de
+ * error: si IndexedDB rechaza (cuota, modo privado), `guardarCache` devuelve
+ * `{ ok: false, motivo }` y se ve — en consola y en pantalla. La regla es "guarda, y si no
+ * puede lo dice", nunca más "no guarda callado".
  */
 
+import { almacenActivo, degradarAMemoria } from './almacen'
 import type { Marca } from './nav.datos'
 import type {
   FilaColorManual,
@@ -29,16 +38,15 @@ import type {
   SyncMeta,
 } from './etl/tipos'
 
-/** 6 horas, igual que index.html:1998. */
+/** 6 horas, igual que el legacy (index.html:1998). */
 export const TTL_MS = 6 * 60 * 60 * 1000
-
-/** Tope de 8 MB sobre el string serializado (index.html:2007). */
-const LIMITE_BYTES = 8 * 1024 * 1024
 
 /**
  * Lo que se guarda son las filas CRUDAS, previas al cómputo — no la salida de
- * computarDatos. Es a propósito y conviene que siga así: `fmKeyPids` contiene
- * Sets, que JSON.stringify serializa como `{}` sin avisar.
+ * `computarDatos`. Con localStorage era obligatorio: `fmKeyPids` contiene `Set`s y
+ * `JSON.stringify` los aplasta a `{}` sin avisar. Con IndexedDB **ya no lo es** (el
+ * structured clone serializa `Set` y `Map` bien), así que cachear la salida del ETL pasó a
+ * ser una opción real — pero es otro cambio, y hay que medir antes si el cómputo pesa.
  */
 export type PayloadCache = {
   productos: FilaProducto[]
@@ -56,56 +64,71 @@ export type EntradaCache = {
   timestamp: number
   data: PayloadCache
   /**
-   * Marca a la que pertenece este payload. Se estampa al guardar y se valida al
-   * leer: si no coincide con la pedida (o falta, en entradas viejas sin sello), la
-   * entrada se descarta. Cierra un bug real —una entrada de BDI servida bajo la
-   * clave de Zattia mostraba el catálogo/stock equivocado— sin depender de que el
-   * refresco de fondo la pise. El legacy escribe `{timestamp,data}` sin este campo:
-   * esas entradas se rechazan (una vez) y se rebajan limpias.
+   * Marca a la que pertenece este payload. Se estampa al guardar y se valida al leer: si no
+   * coincide con la pedida (o falta, en entradas viejas sin sello), la entrada se descarta.
+   * Cierra un bug real —una entrada de BDI servida bajo la clave de Zattia mostraba el
+   * catálogo y el stock equivocados— sin depender de que el refresco de fondo la pise.
    */
   marca?: Marca
 }
 
-/**
- * getCacheKey (index.html:1987). El legacy compara `currentCuenta === CUENTAS.zattia`
- * y cae a 'bdi' por defecto; acá la marca es explícita y el resultado es el mismo.
- */
+export type ResultadoGuardado = { ok: true } | { ok: false; motivo: string }
+
+/** `v5` porque `v4` es lo que quedó en localStorage y `limpiarCacheLegacy` borra. */
 export function claveCache(marca: Marca): string {
-  return 'monitor_v4_' + (marca === 'zattia' ? 'zattia' : 'bdi')
+  return 'monitor_v5_' + (marca === 'zattia' ? 'zattia' : 'bdi')
 }
 
-/** loadCache (index.html:1991). `ignorarVencimiento` habilita el stale-while-revalidate. */
-export function leerCache(marca: Marca, ignorarVencimiento = false): EntradaCache | null {
+/** Las claves de la etapa localStorage. Ocupaban ~5 MB del cupo del origen sin servir a nadie. */
+export const CLAVES_LS_LEGACY = ['monitor_v4_bdi', 'monitor_v4_zattia'] as const
+
+/**
+ * Borra el caché viejo de localStorage. No se migra su contenido a propósito: BDI no tiene
+ * nada que migrar (nunca guardó, ese era el bug) y leer el de Zattia costaría un `JSON.parse`
+ * de 5 MB para ahorrar una sola carga fría, una sola vez, por navegador.
+ *
+ * Se llama desde `leerCache` sin flag de "ya lo hice": un `removeItem` sobre una clave
+ * ausente cuesta microsegundos y evita un estado global que le ensucie el orden a los tests.
+ */
+export function limpiarCacheLegacy(): void {
   try {
-    const raw = localStorage.getItem(claveCache(marca))
-    if (!raw) return null
-    const cached = JSON.parse(raw) as EntradaCache
-    // Sello de marca: una entrada de otra marca (o sin sello, escrita por el legacy o
-    // por una versión vieja) no es válida para esta marca, sin importar la edad.
+    if (typeof localStorage === 'undefined') return
+    for (const k of CLAVES_LS_LEGACY) localStorage.removeItem(k)
+  } catch {
+    /* localStorage deshabilitado: no hay nada que limpiar */
+  }
+}
+
+/** `ignorarVencimiento` habilita el stale-while-revalidate del store (camino 2). */
+export async function leerCache(marca: Marca, ignorarVencimiento = false): Promise<EntradaCache | null> {
+  try {
+    limpiarCacheLegacy()
+    const cached = await almacenActivo().leer<EntradaCache>(claveCache(marca))
+    if (!cached) return null
+    // Sello de marca: una entrada de otra marca (o sin sello, de una versión vieja) no es
+    // válida para esta marca, sin importar la edad.
     if (cached.marca !== marca) return null
-    if (!ignorarVencimiento) {
-      const age = Date.now() - cached.timestamp
-      if (age > TTL_MS) return null
-    }
+    if (!ignorarVencimiento && Date.now() - cached.timestamp > TTL_MS) return null
     return cached
   } catch {
+    degradarAMemoria()
     return null
   }
 }
 
 /**
- * saveCache (index.html:2004). Si el payload pasa los 8 MB **no guarda y no
- * avisa** — el legacy hace exactamente eso. La app sigue andando, solo que sin
- * caché: cada carga baja todo de nuevo.
+ * Guarda el payload. **Nunca lanza**: devuelve el resultado para que el llamador lo muestre.
+ * Que un caché no se guarde tiene que ser visible — invisible ya nos costó una vez.
  */
-export function guardarCache(marca: Marca, data: PayloadCache, timestamp: number): void {
+export async function guardarCache(marca: Marca, data: PayloadCache, timestamp: number): Promise<ResultadoGuardado> {
   try {
-    const payload = JSON.stringify({ timestamp, data, marca })
-    if (payload.length < LIMITE_BYTES) {
-      localStorage.setItem(claveCache(marca), payload)
-    }
-  } catch {
-    /* localStorage lleno, ignorar */
+    await almacenActivo().guardar(claveCache(marca), { timestamp, data, marca })
+    return { ok: true }
+  } catch (e) {
+    const motivo = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+    console.warn(`[cache] no se pudo guardar el caché de ${marca} — ${motivo}. La próxima carga baja todo de nuevo (~20 s).`)
+    degradarAMemoria()
+    return { ok: false, motivo }
   }
 }
 

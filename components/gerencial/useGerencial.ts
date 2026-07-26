@@ -42,11 +42,11 @@ function puedeVerAds(perfil: Perfil | null, marcas: Marca[]): boolean {
 
 /**
  * ETL de una marca sin pasar por el store (que solo publica una marca a la vez):
- * caché de localStorage aunque esté vencido —la misma que ya usa el equipo— y, si no
+ * caché local aunque esté vencido —el mismo que ya usa el equipo— y, si no
  * hay, la red. Mismo cómputo que el store (`computarDatos` + `mapaColorManual`).
  */
 async function cargarETL(marca: Marca, rol: 'admin' | 'marketing', today: Date): Promise<DatosETL> {
-  const cache = leerCache(marca, true)
+  const cache = await leerCache(marca, true)
   const payload = cache?.data ?? (await traerDatos({ marca, rol, today }))
   return computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
 }
