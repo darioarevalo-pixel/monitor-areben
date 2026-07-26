@@ -59,12 +59,18 @@ export function clienteIdentidad(): SupabaseClient {
  * `redirectTo` sale de `window.location.origin` para que ande igual en local, en la URL
  * de Vercel y en `monitor.arebensrl.com` el día que exista el subdominio. Cada uno de
  * esos orígenes tiene que estar en la allow-list de redirects del proyecto de Supabase.
+ *
+ * **La barra final no es cosmética.** Los patrones de esa allow-list se escriben
+ * `https://…/**`, y ese `/` es literal: contra un `redirectTo` sin barra el patrón NO
+ * matchea, Supabase descarta el destino sin avisar y manda al Site URL del proyecto. El
+ * síntoma es desconcertante —Google autentica bien y terminás en OTRA app— así que la
+ * barra se pone acá y no se depende de que la allow-list tenga cargadas las dos formas.
  */
 export async function entrarConGoogle(): Promise<{ ok: boolean; error?: string }> {
   const { error } = await clienteIdentidad().auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/`,
       // La pantalla de consentimiento ya es Interna (solo cuentas de la organización);
       // `hd` evita además que el selector ofrezca cuentas personales.
       queryParams: { hd: 'arebensrl.com' },
