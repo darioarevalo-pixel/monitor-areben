@@ -7,7 +7,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { puedeSub } from '@/lib/permisos'
 import { pausarAnuncio, traerDetalleCuenta, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
 import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
-import { chartColor, color as paleta } from '@/components/ui'
+import { Notice, chartColor, color as paleta } from '@/components/ui'
 
 /** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
 type EstadoPausa = { status?: string; pending?: boolean; error?: string }
@@ -269,6 +269,23 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
         </div>
       )}
 
+      {/* Diagnóstico: aparece solo si NINGUNA campaña trajo visitas al perfil. El nombre exacto de
+          esa acción no está documentado de forma estable en Meta, así que en vez de adivinar se
+          muestra lo que la cuenta sí devolvió — con eso se ajusta el patrón de una. */}
+      {d.campañas.length > 0 && !d.campañas.some((c) => (c.totales.perfil || 0) > 0 || (c.totales.seguidores || 0) > 0) && (
+        <Notice tone="neutral" style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12 }}>
+            <b>Meta no devolvió visitas al perfil ni seguidores nuevos</b> en esta cuenta y este rango,
+            así que no se puede calcular su costo. Puede ser que no haya habido, o que esas acciones
+            se llamen distinto de lo que buscamos.
+            <div style={{ color: paleta.mut2, marginTop: 4 }}>
+              Acciones que sí trajo:{' '}
+              {(d.accionesVistas || []).length ? (d.accionesVistas || []).join(', ') : 'ninguna'}
+            </div>
+          </div>
+        </Notice>
+      )}
+
       {/* Embudo de compra */}
       {d.funnel && d.funnel.some((p) => p.count > 0) && (
         <div className="card">
@@ -456,22 +473,36 @@ function CampañaBloque({ c, moneda, accountId, pausa, accionesVistas }: { c: Ca
           {c.tipo && c.tipo !== 'otro' ? (
             <Badge txt={c.tipo === 'venta' ? 'venta' : 'tráfico'} color={c.tipo === 'venta' ? paleta.success : paleta.brand} bg={c.tipo === 'venta' ? paleta.successBg : paleta.brandBg} />
           ) : null}
-          <span style={{ color: paleta.mut2, fontWeight: 400 }}> · {c.ads.length} anuncio{c.ads.length === 1 ? '' : 's'}</span>
+          <span style={{ color: paleta.mut2, fontWeight: 400 }} title={c.objetivo ? `Objetivo en Meta: ${c.objetivo}` : 'Meta no devolvió el objetivo de esta campaña'}>
+            {' '}· {c.ads.length} anuncio{c.ads.length === 1 ? '' : 's'}
+          </span>
         </div>
         <div style={{ fontSize: 12, color: paleta.ink2, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <span>Gasto <b>{money(c.totales.spend, moneda)}</b></span>
-          {/* Una campaña de tráfico no se juzga por ROAS: su resultado es traer gente al perfil. */}
-          {c.tipo === 'trafico' ? (
+          {/* Las métricas salen del DATO, no de cómo clasifiqué la campaña: si Meta devuelve
+              visitas al perfil se muestran, sea cual sea el objetivo, y si hay compras se
+              muestra el ROAS. Clasificar mal no puede esconder un número que existe. */}
+          {(c.totales.perfil || 0) > 0 && (
             <>
               <span>Visitas al perfil <b>{entero(c.totales.perfil)}</b></span>
-              <span
-                style={{ color: paleta.brand }}
-                title={c.totales.perfil ? undefined : `Meta no devolvió visitas al perfil en esta cuenta. Acciones que sí trajo: ${(accionesVistas || []).join(', ') || 'ninguna'}`}
-              >
-                Costo por visita <b>{c.totales.perfil ? money(c.totales.costoPerfil, moneda) : '—'}</b>
-              </span>
+              <span style={{ color: paleta.brand }}>Costo por visita <b>{money(c.totales.costoPerfil, moneda)}</b></span>
             </>
-          ) : (
+          )}
+          {(c.totales.seguidores || 0) > 0 && (
+            <>
+              <span>Seguidores <b>{entero(c.totales.seguidores)}</b></span>
+              <span style={{ color: paleta.brand }}>Costo por seguidor <b>{money(c.totales.costoSeguidor, moneda)}</b></span>
+            </>
+          )}
+          {c.tipo === 'trafico' && !(c.totales.perfil || 0) && !(c.totales.seguidores || 0) && (
+            <span
+              style={{ color: paleta.mut2 }}
+              title={`Meta no devolvió visitas al perfil ni seguidores. Las acciones que sí trajo esta cuenta: ${(accionesVistas || []).join(', ') || 'ninguna'}`}
+            >
+              Sin visitas ni seguidores
+            </span>
+          )}
+          {(c.tipo !== 'trafico' || c.totales.purchases > 0) && (
             <>
               <span>Compras <b>{entero(c.totales.purchases)}</b></span>
               <span style={{ color: paleta.success }}>ROAS <b>{roas(c.totales.roas)}</b></span>

@@ -29,6 +29,12 @@ const OBJETIVOS_TRAFICO = new Set(['OUTCOME_TRAFFIC', 'LINK_CLICKS', 'OUTCOME_EN
  * de romper — mismo criterio que el resto de los enriquecimientos.
  */
 const RE_PERFIL = /profile_visit|profile_view|profile_engagement/i;
+/**
+ * Seguidores nuevos. Mismo criterio y mismo cuidado que RE_PERFIL: Meta los nombra distinto
+ * según la superficie (`follow` de Instagram, `like`/`page_like` de una página de Facebook), así
+ * que se matchea por patrón. `like` va anclado para no comerse `post_reaction` ni parecidos.
+ */
+const RE_SEGUIDOR = /(^|\.)follow|page_like|(^|\.)like$/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -394,6 +400,7 @@ function metricasDe(row) {
     revenue: accion(row.action_values, COMPRA),
     roas: accion(row.purchase_roas, COMPRA),
     perfil: accionRe(row.actions, RE_PERFIL),
+    seguidores: accionRe(row.actions, RE_SEGUIDOR),
   };
 }
 
@@ -416,16 +423,17 @@ function adDe(row) {
     revenue: accion(row.action_values, COMPRA),
     roas: accion(row.purchase_roas, COMPRA),
     perfil: accionRe(row.actions, RE_PERFIL),
+    seguidores: accionRe(row.actions, RE_SEGUIDOR),
   };
 }
 
 // Suma un conjunto de filas (para el subtotal de campaña / fallback de cuenta). Los ratios se recalculan
 // desde los agregados (no se promedian); reach NO se suma (es dedup) → se omite en subtotales.
 function sumar(rows) {
-  const t = { spend: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0, perfil: 0 };
+  const t = { spend: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0, perfil: 0, seguidores: 0 };
   for (const r of rows) {
     t.spend += r.spend; t.impressions += r.impressions; t.clicks += r.clicks; t.purchases += r.purchases; t.revenue += r.revenue;
-    t.perfil += r.perfil || 0;
+    t.perfil += r.perfil || 0; t.seguidores += r.seguidores || 0;
   }
   return {
     ...t,
@@ -434,6 +442,7 @@ function sumar(rows) {
     cpm: t.impressions ? (t.spend / t.impressions) * 1000 : 0,
     roas: t.spend ? t.revenue / t.spend : 0,
     costoPerfil: t.perfil ? t.spend / t.perfil : 0,
+    costoSeguidor: t.seguidores ? t.spend / t.seguidores : 0,
   };
 }
 

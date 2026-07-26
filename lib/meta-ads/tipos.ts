@@ -25,6 +25,10 @@ export type Metricas = {
   perfil?: number
   /** Gasto por visita al perfil. Solo en subtotales (`sumar`), donde se recalcula desde los agregados. */
   costoPerfil?: number
+  /** Seguidores nuevos (follow de IG / like de página de FB). El otro resultado de una pauta de tráfico. */
+  seguidores?: number
+  /** Gasto por seguidor nuevo. */
+  costoSeguidor?: number
   /** Solo a nivel cuenta (dedup — no se suma en subtotales). */
   reach?: number
   frequency?: number
