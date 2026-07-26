@@ -72,7 +72,7 @@ import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
 import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { color, useConfirmar, useToast } from '@/components/ui'
+import { Badge, Button, Icono, color, useConfirmar, useToast } from '@/components/ui'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
 type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
@@ -330,7 +330,7 @@ function Banner({ prioridad, admin }: { prioridad: Origen; admin: boolean }) {
         flexWrap: 'wrap',
       }}
     >
-      🏷️ <b>Prioridad de retiro:</b>{' '}
+      <b>Prioridad de retiro:</b>{' '}
       {prioridad === 'local' ? (
         <span>
           <b>Local primero</b> (si no hay stock, se retira de Depósito)
@@ -415,31 +415,32 @@ function Historial({
         {/* Local y Depósito ejecutan, no piden: para ellos el botón no existe (ver
             `puedePedir`). Piden Marketing, Administración y los admins. */}
         {puedePedir(perfilHist) && (
-          <button className="btn-primary" onClick={onNueva}>
+          <Button variant="solid" tone="brand" onClick={onNueva}>
             + Nueva solicitud
-          </button>
+          </Button>
         )}
         {seleccion.size >= 2 ? (
-          <button
-            className="btn-sm"
+          <Button
+            size="sm"
+            variant="soft"
+            tone="brand"
             onClick={onVerCombinada}
-            style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, color: color.brand, fontWeight: 600 }}
           >
-            🔗 Ver combinadas ({seleccion.size})
-          </button>
+            Ver combinadas ({seleccion.size})
+          </Button>
         ) : seleccion.size === 1 ? (
           <span style={{ fontSize: 12, color: color.mut2 }}>Tildá otra solicitud para combinarlas.</span>
         ) : null}
         {admin && (
-          <button
-            className="btn-sm"
+          <Button
+            size="sm"
+            variant="outline"
             onClick={verificarAnulaciones}
             disabled={chequeando}
             title="Consulta en GN si las ventas ya se anularon y cierra esas solicitudes"
-            style={{ background: '#fff', border: `1px solid ${color.line2}` }}
           >
-            {chequeando ? '⏳ verificando en GN…' : '🔄 Verificar anulaciones en GN'}
-          </button>
+            {chequeando ? 'Verificando en GN…' : 'Verificar anulaciones en GN'}
+          </Button>
         )}
         {cerradasN > 0 && (
           <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto', cursor: 'pointer' }}>
@@ -480,24 +481,24 @@ function Historial({
               />
               <div style={{ flex: 1, minWidth: 160, cursor: 'pointer' }} onClick={() => onVer(s.id)}>
                 <div style={{ fontWeight: 600 }}>
-                  {f.cerrada ? '✅ ' : ''}
                   {f.descripcion || '(sin descripción)'}
+                  {f.cerrada ? <Badge tone="success" subtle style={{ marginLeft: 6 }}>Cerrada</Badge> : null}
                   {f.porDevolver ? (
                     <span style={{ background: color.dangerBg, color: color.dangerInk, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>
-                      ⏳ {f.porDevolver} por devolver
+                      {f.porDevolver} por devolver
                     </span>
                   ) : null}
                 </div>
                 <div style={{ fontSize: 12, color: color.mut2 }}>
-                  {f.fecha} · 📦 {f.dep} · 🏪 {f.loc} · {f.estado}
+                  {f.fecha} · <MarcaOrigen o="deposito" soloIcono size={12} /> {f.dep} · <MarcaOrigen o="local" soloIcono size={12} /> {f.loc} · {f.estado}
                 </div>
               </div>
-              <button className="btn-sm" onClick={() => onVer(s.id)} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+              <Button size="sm" variant="outline" onClick={() => onVer(s.id)}>
                 Ver
-              </button>
+              </Button>
               {puedeQuitar && (
                 <button onClick={() => onBorrar(s)} title="Eliminar solicitud" style={{ border: 'none', background: 'none', color: color.mut2, fontSize: 15, cursor: 'pointer' }}>
-                  🗑
+                  <Icono nombre="papelera" size={15} />
                 </button>
               )}
             </div>
@@ -700,14 +701,14 @@ function Detalle({
             {titulo} <span style={{ color: color.mut2, fontWeight: 500, fontSize: 12 }}>({confTot}/{totQ} {accionN})</span>
             {completo ? <span style={{ color: color.success, fontWeight: 700 }}> ✓ completo</span> : null}
           </div>
-          <button className="btn-sm" onClick={() => correrSalida(() => reportePDF(s, origen), toast.error)} style={{ background: color.ink, color: '#fff' }}>
-            📄 Reporte
-          </button>
+          <Button size="sm" variant="solid" tone="neutral" onClick={() => correrSalida(() => reportePDF(s, origen), toast.error)}>
+            Reporte
+          </Button>
         </div>
         <div style={{ margin: '8px 0' }}>
           <ScanInput
             disabled={!catalogoListo}
-            placeholder={catalogoListo ? `🔫 Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            placeholder={catalogoListo ? `Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
             onScan={(v) => onScan(origen, v)}
           />
         </div>
@@ -729,7 +730,7 @@ function Detalle({
               return (
                 <tr key={i.vid} style={ok ? { background: color.successBg } : undefined}>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
-                    {ok ? '✅' : '⬜'} {i.nombre}
+                    <MarcaOk ok={ok} /> {i.nombre}
                     {i.manual ? <EtiquetaMini texto="a mano" fg={color.brand} bg={color.brandBg} /> : i.nuevo ? <EtiquetaMini texto="sin venta" fg={color.warningInk} bg={color.warningBg} /> : null}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
@@ -765,7 +766,7 @@ function Detalle({
                         style={{ width: 38, textAlign: 'center', border: `1px solid ${color.line}`, borderRadius: 5, padding: '1px 2px', fontSize: 12, marginRight: 6 }}
                       />
                     ) : typeof i.bolsa === 'number' ? (
-                      <span style={{ fontSize: 11, color: color.brand, marginRight: 6 }} title="Bolsa">👜{i.bolsa}</span>
+                      <span style={{ marginRight: 6 }}><Badge tone="brand" subtle>B{i.bolsa}</Badge></span>
                     ) : null}
                     {editable && !i.manual ? (
                       <button
@@ -773,12 +774,12 @@ function Detalle({
                         title="Cambiar cantidad"
                         style={{ border: 'none', background: 'none', color: color.brandSolid, fontSize: 13, cursor: 'pointer' }}
                       >
-                        ✏
+                        <Icono nombre="lapiz" size={13} />
                       </button>
                     ) : null}
                     {editable ? (
                       <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: color.danger, fontSize: 14, cursor: 'pointer' }}>
-                        ✕
+                        <Icono nombre="cruz" size={13} />
                       </button>
                     ) : null}
                   </td>
@@ -794,9 +795,9 @@ function Detalle({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+        <Button size="sm" variant="outline" onClick={onVolver}>
           ← Volver
-        </button>
+        </Button>
         {puedeEditarDesc ? (
           <input
             value={desc}
@@ -812,20 +813,20 @@ function Detalle({
           <div style={{ fontWeight: 700, fontSize: 15 }}>{s.descripcion || 'Solicitud'}</div>
         )}
         <span style={{ color: color.mut2, fontSize: 12 }}>{s.fecha}</span>
-        <button className="btn-sm" onClick={() => correrSalida(() => etiquetaBolsa(s), toast.error)} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-          🏷️ Etiqueta de bolsa
-        </button>
-        <button className="btn-sm" onClick={() => correrSalida(() => imprimirTicket80(s), toast.error)} title="Ticket 80 mm con el detalle de todos los productos pedidos" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-          🧾 Ticket 80mm
-        </button>
+        <Button size="sm" variant="outline" onClick={() => correrSalida(() => etiquetaBolsa(s), toast.error)} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)">
+          Etiqueta de bolsa
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => correrSalida(() => imprimirTicket80(s), toast.error)} title="Ticket 80 mm con el detalle de todos los productos pedidos">
+          Ticket 80mm
+        </Button>
         {nBolsas > 0 ? (
           <>
-            <button className="btn-sm" onClick={() => correrSalida(() => etiquetasBolsas(s), toast.error)} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-              🏷️ Etiquetas de bolsas ({nBolsas})
-            </button>
-            <button className="btn-sm" onClick={() => correrSalida(() => reporteBolsasPDF(s), toast.error)} title="Reporte A4 agrupado por bolsa (armado/packing)" style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
-              📄 Reporte por bolsa
-            </button>
+            <Button size="sm" variant="outline" onClick={() => correrSalida(() => etiquetasBolsas(s), toast.error)} title="Una etiqueta 5×2,5 cm por bolsa (BOLSA n/N)">
+              Etiquetas de bolsas ({nBolsas})
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => correrSalida(() => reporteBolsasPDF(s), toast.error)} title="Reporte A4 agrupado por bolsa (armado/packing)">
+              Reporte por bolsa
+            </Button>
           </>
         ) : null}
         <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto' }}>
@@ -848,14 +849,14 @@ function Detalle({
       {s.tipo ? (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 13 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? color.warningInk : color.successInk, background: esConsumo ? color.warningBg : color.successBg, border: `1px solid ${esConsumo ? color.warningBorder : color.successBorder}`, borderRadius: 6, padding: '2px 8px' }}>
-            {esConsumo ? '🔥 Consumo (baja definitiva)' : '🔁 Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
+            {esConsumo ? 'Consumo (baja definitiva)' : 'Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
           </span>
           {s.estado === 'rechazada' ? <span style={{ color: color.dangerInk }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
           {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: color.success }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
           {pendienteDeAprobar && esAprobador ? (
             <>
-              <button className="btn-sm" onClick={onAprobar} style={{ background: color.success, color: '#fff' }}>✓ Aprobar</button>
-              <button className="btn-sm" onClick={onRechazar} style={{ background: '#fff', color: color.dangerInk, border: `1px solid ${color.dangerBorder}` }}>✗ Rechazar</button>
+              <Button size="sm" variant="solid" tone="success" onClick={onAprobar}>Aprobar</Button>
+              <Button size="sm" variant="outline" tone="danger" onClick={onRechazar}>Rechazar</Button>
             </>
           ) : pendienteDeAprobar ? (
             <span style={{ color: color.warningInk }}>⏳ Esperando aprobación de un gerente.</span>
@@ -866,10 +867,10 @@ function Detalle({
       {s.ventas ? (
         <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13 }}>
           <div>
-            ✅ <b>Separado</b> en GN:{' '}
+            <b>Separado</b> en GN:{' '}
             {(['deposito', 'local'] as Origen[])
               .filter((o) => s.ventas?.[o] && origenVisible(o))
-              .map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`)
+              .map((o) => `${ROTULO_ORIGEN[o]} N° ${NUM_VENTA(s.ventas![o]!)}`)
               .join(' · ')}{' '}
             <span style={{ color: color.mut2, fontSize: 11 }}>Se separó el stock (no es retiro). Para anular, hacelo en GN.</span>
           </div>
@@ -877,10 +878,10 @@ function Detalle({
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
             {origenesConItems(s).filter(origenVisible).map((o) => {
               const yaRet = retiradoDe(s, o)
-              const et = o === 'deposito' ? '📦 Depósito' : '🏪 Local'
+              const et = ROTULO_ORIGEN[o]
               return yaRet ? (
                 <span key={o} style={{ fontSize: 12, fontWeight: 700, color: color.successInk, background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 7, padding: '3px 9px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  ✅ {et} retirado
+                  {et} retirado
                   {puedeRetiroDe(o) ? (
                     <button onClick={() => onRetirar(o, false)} title="Deshacer" style={{ background: 'none', border: 'none', color: color.successInk, cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>deshacer</button>
                   ) : null}
@@ -897,9 +898,9 @@ function Detalle({
         </div>
       ) : hayVentables && veTodosLosItems && (!necesitaAprobacion(s) || s.estado === 'aprobada') ? (
         <div style={{ marginBottom: 10 }}>
-          <button className="btn-primary" onClick={onCrearVentas} disabled={creando}>
-            {creando ? '⏳ Separando en GN…' : esConsumo ? '🧾 Crear venta en GN (descontar)' : '🧾 Crear venta en GN (separar)'}
-          </button>{' '}
+          <Button variant="solid" tone="brand" onClick={onCrearVentas} disabled={creando}>
+            {creando ? 'Separando en GN…' : esConsumo ? 'Crear venta en GN (descontar)' : 'Crear venta en GN (separar)'}
+          </Button>{' '}
           <span style={{ color: color.mut2, fontSize: 12 }}>{esConsumo ? 'Descuenta el stock (baja definitiva).' : 'Separa el stock con el cliente “Sesión de fotos” (no es retiro).'}</span>
         </div>
       ) : null}
@@ -909,10 +910,10 @@ function Detalle({
         {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />}
       </div>
 
-      {origenVisible('deposito') && grupo('📦 Retirar de Depósito', dep, 'deposito')}
-      {origenVisible('local') && grupo('🏪 Retirar de Local', loc, 'local')}
+      {origenVisible('deposito') && grupo('Retirar de Depósito', dep, 'deposito')}
+      {origenVisible('local') && grupo('Retirar de Local', loc, 'local')}
 
-      {/* Edición (Fase C): agregar productos. Quitar/cambiar cantidad van por ítem (✏/✕). */}
+      {/* Edición (Fase C): agregar productos. Quitar/cambiar cantidad van por ítem (lápiz/cruz). */}
       {editable ? (
         <div style={{ margin: '4px 0 10px' }}>
           {s.ventas ? (
@@ -921,12 +922,12 @@ function Detalle({
             </div>
           ) : null}
           {!agregando ? (
-            <button className="btn-sm" onClick={() => setAgregando(true)} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>+ Agregar producto</button>
+            <Button size="sm" variant="outline" onClick={() => setAgregando(true)}>+ Agregar producto</Button>
           ) : (
             <div style={{ border: `1px solid ${color.brandBorder}`, background: color.brandBg, borderRadius: 9, padding: 10 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <input autoFocus value={busqAgregar} onChange={(e) => setBusqAgregar(e.target.value)} placeholder="Buscar producto para agregar…" style={{ flex: 1, padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }} />
-                <button className="btn-sm" onClick={() => { setAgregando(false); setBusqAgregar('') }} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>Cerrar</button>
+                <Button size="sm" variant="outline" onClick={() => { setAgregando(false); setBusqAgregar('') }}>Cerrar</Button>
               </div>
               {busqAgregar.trim().length >= 2 ? (
                 <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -952,45 +953,45 @@ function Detalle({
       {/* Bolsas (Fase C #3): resumen del armado por bolsa. Aparece si hay alguna asignada. */}
       {nBolsas > 0 ? (
         <div style={{ border: `1px solid ${color.brandBorder}`, borderRadius: 9, padding: '9px 12px', margin: '10px 0', background: color.brandBg }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>👜 Bolsas ({nBolsas})</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>Bolsas ({nBolsas})</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {grupos.map((g) => (
               <div key={g.n ?? 'sin'} style={{ border: `1px solid ${g.n != null ? color.brandBorder : color.line}`, background: '#fff', borderRadius: 8, padding: '6px 9px', minWidth: 150 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: g.n != null ? color.brand : color.mut2, marginBottom: 3 }}>
-                  {g.n != null ? `👜 Bolsa ${g.n}` : 'Sin bolsa'} <span style={{ fontWeight: 500, color: color.mut2 }}>· {g.totalU} u.</span>
+                  {g.n != null ? `Bolsa ${g.n}` : 'Sin bolsa'} <span style={{ fontWeight: 500, color: color.mut2 }}>· {g.totalU} u.</span>
                 </div>
                 {g.items.map((i) => (
                   <div key={i.vid} style={{ fontSize: 11, color: color.ink2, padding: '1px 0' }}>
-                    • {i.nombre} · {i.variante} {i.qty > 1 ? `(x${i.qty})` : ''} {i.origen === 'local' ? '🏪' : '📦'}
+                    • {i.nombre} · {i.variante} {i.qty > 1 ? `(x${i.qty})` : ''} <MarcaOrigen o={i.origen} soloIcono size={11} />
                   </div>
                 ))}
               </div>
             ))}
           </div>
-          {editable ? <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>Asigná bolsas con el campo 👜 de cada ítem (próxima libre: {proxBolsa}).</div> : null}
+          {editable ? <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>Asigná bolsas con el campo de bolsa de cada ítem (próxima libre: {proxBolsa}).</div> : null}
         </div>
       ) : null}
 
       {!esConsumo && salio(s) && falt.length > 0 && (fase === 'devolucion' || (s.devuelto && Object.keys(s.devuelto).length > 0)) ? (
         <div style={{ border: `1px solid ${color.dangerBorder}`, background: color.dangerBg, borderRadius: 9, padding: '10px 12px', margin: '10px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, color: color.dangerInk }}>📋 Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
+            <div style={{ fontWeight: 700, color: color.dangerInk }}>Productos NO devueltos ({falt.reduce((a, f) => a + f.falta, 0)} u.)</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button className="btn-sm" onClick={() => correrSalida(() => enviarReporte(s), toast.error)} style={{ background: color.success, color: '#fff' }}>
-                📤 Enviar a Marketing
-              </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')), toast.error)} style={{ background: '#fff', border: `1px solid ${color.dangerBorder}`, color: color.dangerInk }}>
-                📋 Copiar
-              </button>
-              <button className="btn-sm" onClick={() => correrSalida(() => reporteFaltantesPDF(s), toast.error)} style={{ background: color.ink, color: '#fff' }}>
-                📄 PDF
-              </button>
+              <Button size="sm" variant="solid" tone="success" onClick={() => correrSalida(() => enviarReporte(s), toast.error)}>
+                Enviar a Marketing
+              </Button>
+              <Button size="sm" variant="outline" tone="danger" onClick={() => correrSalida(() => copiarReporte(s, () => toast.ok('Reporte copiado: pegalo en WhatsApp.')), toast.error)}>
+                Copiar
+              </Button>
+              <Button size="sm" variant="solid" tone="neutral" onClick={() => correrSalida(() => reporteFaltantesPDF(s), toast.error)}>
+                PDF
+              </Button>
             </div>
           </div>
           {falt.map((f) => (
             <div key={f.vid} style={{ fontSize: 13, color: color.dangerInk, padding: '2px 0' }}>
               • {f.nombre} · {f.variante}
-              {f.sku ? ` · ${f.sku}` : ''} — <b>faltan {f.falta} de {f.qty}</b> {f.origen === 'local' ? '🏪' : '📦'}
+              {f.sku ? ` · ${f.sku}` : ''} — <b>faltan {f.falta} de {f.qty}</b> <MarcaOrigen o={f.origen} soloIcono size={11} />
             </div>
           ))}
         </div>
@@ -999,7 +1000,7 @@ function Detalle({
       {/* Historial de cambios (Fase C). Fallback al panel viejo de "Quitados" para data sin `cambios`. */}
       {s.cambios && s.cambios.length > 0 ? (
         <div style={{ border: `1px dashed ${color.brandBorder}`, borderRadius: 9, padding: '9px 12px', marginTop: 6, background: color.brandBg }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 4 }}>📝 Historial de cambios ({s.cambios.length})</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 4 }}>Historial de cambios ({s.cambios.length})</div>
           {[...s.cambios].reverse().map((c, idx) => (
             <div key={idx} style={{ fontSize: 12, color: color.brand, padding: '1px 0' }}>
               • {fmtTs(c.ts)} · <b>{c.por || '—'}</b> {c.accion} {c.detalle}{c.motivo ? ` · "${c.motivo}"` : ''}
@@ -1009,11 +1010,11 @@ function Detalle({
       ) : s.eliminados && s.eliminados.length > 0 ? (
         <div style={{ border: `1px dashed ${color.dangerBorder}`, borderRadius: 9, padding: '9px 12px', marginTop: 6, background: color.dangerBg }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: color.dangerInk, marginBottom: 4 }}>
-            🗑️ Quitados de la solicitud ({s.eliminados.length})
+            Quitados de la solicitud ({s.eliminados.length})
           </div>
           {s.eliminados.map((e, idx) => (
             <div key={`${e.vid}-${idx}`} style={{ fontSize: 12, color: color.dangerInk }}>
-              • {e.nombre} · {e.variante} ({e.qty}) — {e.origen === 'deposito' ? '📦' : '🏪'} · {e.fecha}
+              • {e.nombre} · {e.variante} ({e.qty}) — <MarcaOrigen o={e.origen} soloIcono size={11} /> · {e.fecha}
               {e.por ? ` · ${e.por}` : ''}
               {e.motivo ? ` · "${e.motivo}"` : ''}
             </div>
@@ -1051,7 +1052,7 @@ function MotivoModal({ titulo, onCancelar, onOk }: { titulo: string; onCancelar:
         </div>
         <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, marginTop: 10 }} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="btn-sm" onClick={onCancelar} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>Cancelar</button>
+          <Button size="sm" variant="outline" onClick={onCancelar}>Cancelar</Button>
         </div>
       </div>
     </div>
@@ -1091,7 +1092,7 @@ function Combinada({
 
   const nventa = (s: Solicitud) =>
     s.ventas
-      ? (['deposito', 'local'] as Origen[]).filter((o) => s.ventas?.[o]).map((o) => `${o === 'deposito' ? '📦' : '🏪'} N° ${NUM_VENTA(s.ventas![o]!)}`).join(' · ')
+      ? (['deposito', 'local'] as Origen[]).filter((o) => s.ventas?.[o]).map((o) => `${ROTULO_ORIGEN[o]} N° ${NUM_VENTA(s.ventas![o]!)}`).join(' · ')
       : ''
 
   const onScan = (origen: Origen, code: string) => {
@@ -1119,7 +1120,7 @@ function Combinada({
         <div style={{ margin: '8px 0' }}>
           <ScanInput
             disabled={!catalogoListo}
-            placeholder={catalogoListo ? `🔫 Escaneá para confirmar ${accionV} de las ${works.length} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            placeholder={catalogoListo ? `Escaneá para confirmar ${accionV} de las ${works.length} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
             onScan={(v) => onScan(origen, v)}
           />
         </div>
@@ -1139,7 +1140,7 @@ function Combinada({
               return (
                 <tr key={i.manual ? `m_${i.solId}_${i.vid}` : i.vid} style={ok ? { background: color.successBg } : undefined}>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>
-                    {ok ? '✅' : '⬜'} {i.nombre}
+                    <MarcaOk ok={ok} /> {i.nombre}
                     {i.manual ? <EtiquetaMini texto="a mano" fg={color.brand} bg={color.brandBg} /> : null}
                   </td>
                   <td style={{ padding: '3px 6px', borderTop: `1px solid ${color.bg2}` }}>{i.variante}</td>
@@ -1167,10 +1168,10 @@ function Combinada({
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <button className="btn-sm" onClick={onVolver} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+        <Button size="sm" variant="outline" onClick={onVolver}>
           ← Volver
-        </button>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>🔗 Vista combinada — {works.length} solicitudes</div>
+        </Button>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Vista combinada — {works.length} solicitudes</div>
       </div>
       <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 12px', marginBottom: 10, background: color.bg }}>
         {works.map((s) => (
@@ -1184,9 +1185,9 @@ function Combinada({
       {completa ? (
         <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 13, color: color.successInk }}>
           {fase === 'devolucion' ? (
-            <>✅ <b>Devolución completa</b> de las {works.length} solicitudes.</>
+            <><b>Devolución completa</b> de las {works.length} solicitudes.</>
           ) : (
-            <>✅ <b>Preparación completa</b> de las {works.length} solicitudes.</>
+            <><b>Preparación completa</b> de las {works.length} solicitudes.</>
           )}
         </div>
       ) : null}
@@ -1194,8 +1195,8 @@ function Combinada({
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
         <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />
       </div>
-      {grupo('📦 Depósito (todas)', 'deposito')}
-      {grupo('🏪 Local (todas)', 'local')}
+      {grupo('Depósito (todas)', 'deposito')}
+      {grupo('Local (todas)', 'local')}
     </div>
   )
 }
@@ -1309,7 +1310,7 @@ function Draft({
         cursor: 'pointer',
       }}
     >
-      {o === 'deposito' ? '📦 Depósito' : '🏪 Local'}
+      <MarcaOrigen o={o} />
     </button>
   )
 
@@ -1341,7 +1342,7 @@ function Draft({
                 borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}
             >
-              {t === 'retornable' ? '🔁 Retornable' : '🔥 Consumo'}
+              {t === 'retornable' ? 'Retornable' : 'Consumo'}
             </button>
             <InfoPopover titulo={t === 'retornable' ? 'Retornable' : 'Consumo'}>{AYUDA_DESTINO[t]}</InfoPopover>
           </span>
@@ -1422,7 +1423,7 @@ function Draft({
         </div>
         <ScanInput
           disabled={!catalogoListo}
-          placeholder={catalogoListo ? '🔫 Escaneá el código de barras…' : 'Cargando catálogo…'}
+          placeholder={catalogoListo ? 'Escaneá el código de barras…' : 'Cargando catálogo…'}
           onScan={onScan}
         />
         <div style={{ fontSize: 13, marginTop: 8, minHeight: 18 }}>{fbScan ? fbDraft(fbScan) : null}</div>
@@ -1457,9 +1458,9 @@ function Draft({
             title="Cantidad"
             style={{ width: 72, textAlign: 'center', padding: '7px 6px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
           />
-          <button className="btn-sm" onClick={addManual} style={{ background: '#fff', color: color.ink2, border: `1px solid ${color.line2}` }}>
+          <Button size="sm" variant="outline" onClick={addManual}>
             + Agregar
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1493,7 +1494,7 @@ function Draft({
                       <input type="checkbox" checked={v.sel} onChange={(e) => setDraft((d) => toggleVar(d, p.pid, v.vid, e.target.checked))} style={{ flex: '0 0 auto' }} />
                       <span style={{ flex: 1, minWidth: 0 }}>
                         {v.size}
-                        {v.origenManual ? <span title="Ubicación fijada por escaneo" style={{ fontSize: 11 }}> {v.origenManual === 'local' ? '🏪' : '📦'}</span> : null}{' '}
+                        {v.origenManual ? <MarcaOrigen o={v.origenManual} soloIcono size={11} /> : null}{' '}
                         <span style={{ color: color.mut2, fontSize: 11, fontWeight: 400 }}>(stock {v.local + v.deposito}{v.sku ? ' · ' + v.sku : ''})</span>
                       </span>
                       {v.sel ? (
@@ -1515,11 +1516,11 @@ function Draft({
 
           {draft.pendientes.length > 0 && (
             <div style={{ border: `1px dashed ${color.warningBorder}`, background: color.warningBg, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: color.warningInk, marginBottom: 4 }}>🆕 Nuevos escaneados (aún no en GN)</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: color.warningInk, marginBottom: 4 }}>Nuevos escaneados (aún no en GN)</div>
               {draft.pendientes.map((pn) => (
                 <div key={pn.barcode} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: `1px solid ${color.warningBorder}` }}>
                   <span style={{ flex: 1, fontFamily: 'monospace' }}>
-                    {pn.barcode} <span style={{ fontSize: 11, fontFamily: 'inherit' }}>{pn.origenManual === 'local' ? '🏪' : '📦'}</span>
+                    {pn.barcode} <MarcaOrigen o={pn.origenManual} soloIcono size={11} />
                   </span>
                   <span style={{ color: color.warningInk, fontWeight: 600 }}>x{pn.qty}</span>
                   <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Quitar (mal escaneo)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
@@ -1533,11 +1534,11 @@ function Draft({
 
           {draft.manuales.length > 0 && (
             <div style={{ border: `1px dashed ${color.brandBorder}`, background: color.brandBg, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: color.brand, marginBottom: 4 }}>✍️ Sin código (control a mano)</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: color.brand, marginBottom: 4 }}>Sin código (control a mano)</div>
               {draft.manuales.map((m) => (
                 <div key={m.mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', borderTop: `1px solid ${color.brandBorder}` }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    {m.desc} <span style={{ fontSize: 11 }} title="Sale de Depósito">📦</span>
+                    {m.desc} <MarcaOrigen o="deposito" soloIcono size={11} />
                   </span>
                   <input
                     type="number"
@@ -1552,7 +1553,7 @@ function Draft({
                   </button>
                 </div>
               ))}
-              <div style={{ fontSize: 11, color: color.brand, marginTop: 4 }}>No generan venta ni tocan stock. Se retiran de 📦 Depósito y se controla su devolución a mano.</div>
+              <div style={{ fontSize: 11, color: color.brand, marginTop: 4 }}>No generan venta ni tocan stock. Se retiran de Depósito y se controla su devolución a mano.</div>
             </div>
           )}
         </>
@@ -1560,15 +1561,15 @@ function Draft({
 
       {/* Prioridad de retiro — config de lógica: abajo, sin color. */}
       <div style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5, margin: '16px 0 12px' }}>
-        🏷️ Prioridad de retiro: <b style={{ color: color.ink2 }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
+        Prioridad de retiro: <b style={{ color: color.ink2 }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
         <InfoPopover titulo="Prioridad de retiro">
           De dónde se retira cada producto: <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b> (si no hay stock, del otro depósito). Lo escaneado respeta la ubicación que elijas; lo agregado a mano se asigna solo.{admin ? ' Se configura al completar la migración.' : ''}
         </InfoPopover>
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="btn-primary" onClick={procesar} disabled={total === 0}>✓ Procesar ({total} u.)</button>
-        <button className="btn-sm" onClick={onCancelar}>Cancelar</button>
+        <Button variant="solid" tone="brand" onClick={procesar} disabled={total === 0}>Procesar ({total} u.)</Button>
+        <Button size="sm" variant="outline" onClick={onCancelar}>Cancelar</Button>
       </div>
     </div>
   )
@@ -1579,18 +1580,52 @@ function fbDraft(r: ResultadoDraftScan) {
   if (r.tipo === 'nuevo') {
     return (
       <span style={{ color: color.success }}>
-        🆕 Nuevo (sin cargar): <b>{r.barcode}</b> (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
+        Nuevo (sin cargar): <b>{r.barcode}</b> (x{r.qty}) → <MarcaOrigen o={r.origen} />
       </span>
     )
   }
   return (
     <span style={{ color: color.success }}>
-      ✓ Agregado: <b>{r.nombre}</b> · {r.size} (x{r.qty}) → {r.origen === 'local' ? '🏪 Local' : '📦 Depósito'}
+      ✓ Agregado: <b>{r.nombre}</b> · {r.size} (x{r.qty}) → <MarcaOrigen o={r.origen} />
     </span>
   )
 }
 
 // ── Helpers de UI ────────────────────────────────────────────────────────────────
+
+/**
+ * Origen de un ítem (Depósito / Local). Reemplaza a los 📦/🏪 que marcaban el sector
+ * por toda la sección: los nombres de `Origen` coinciden con los del set de íconos,
+ * y un ícono de trazo hereda el color de quien lo contiene (un emoji trae el suyo).
+ */
+const ROTULO_ORIGEN: Record<Origen, string> = { deposito: 'Depósito', local: 'Local' }
+
+function MarcaOrigen({ o, soloIcono, size = 13 }: { o: Origen; soloIcono?: boolean; size?: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }} title={ROTULO_ORIGEN[o]}>
+      <Icono nombre={o} size={size} />
+      {soloIcono ? null : ROTULO_ORIGEN[o]}
+    </span>
+  )
+}
+
+/** Casilla de "ya está preparado/devuelto" de las listas de escaneo (era ✅/⬜). */
+function MarcaOk({ ok }: { ok: boolean }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 15, height: 15, borderRadius: 4, flex: 'none', fontSize: 11, fontWeight: 700, lineHeight: 1,
+        border: `1.5px solid ${ok ? color.success : color.line2}`,
+        background: ok ? color.success : 'transparent',
+        color: '#fff',
+      }}
+    >
+      {ok ? '✓' : ''}
+    </span>
+  )
+}
 
 /** Feedback de un escaneo en el detalle. */
 function fbTexto(r: ResultadoEscaneo) {
