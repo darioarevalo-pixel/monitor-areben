@@ -10,6 +10,7 @@ import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { color } from '@/components/ui/tokens'
 import { Icono, hayIcono, type NombreIcono } from '@/components/ui/Icono'
+import { NuestrasApps } from '@/components/layout/NuestrasApps'
 
 /** Label del menú: LABELS_EXTRA (inicio/usuarios) o el de PERM_CAT. */
 function label(key: string): string {
@@ -222,6 +223,7 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-foot">
+        <NuestrasApps onNavegar={onNavegar} />
         <div className="user-foot">
           <span className="side-user">
             {/* La inicial identifica de un vistazo con quién está abierta la sesión: en el

@@ -66,17 +66,68 @@ export function clienteIdentidad(): SupabaseClient {
  * síntoma es desconcertante —Google autentica bien y terminás en OTRA app— así que la
  * barra se pone acá y no se depende de que la allow-list tenga cargadas las dos formas.
  */
-export async function entrarConGoogle(): Promise<{ ok: boolean; error?: string }> {
+export async function entrarConGoogle({ silencioso = false } = {}): Promise<{ ok: boolean; error?: string }> {
   const { error } = await clienteIdentidad().auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: `${window.location.origin}/`,
       // La pantalla de consentimiento ya es Interna (solo cuentas de la organización);
       // `hd` evita además que el selector ofrezca cuentas personales.
-      queryParams: { hd: 'arebensrl.com' },
+      //
+      // `prompt=none` es el salto silencioso entre apps: le pide a Google que resuelva
+      // SIN mostrar nada. Si el navegador ya tiene sesión —el caso de quien viene de
+      // otra app de Areben— la vuelta es inmediata. Si no la tiene, Google contesta con
+      // un error en vez de pedir credenciales, y cae la pantalla de ingreso de siempre.
+      queryParams: silencioso ? { hd: 'arebensrl.com', prompt: 'none' } : { hd: 'arebensrl.com' },
     },
   })
   return error ? { ok: false, error: error.message } : { ok: true }
+}
+
+/* ── Salto entre apps (`?sso=1`) ──────────────────────────────────────────────
+ *
+ * El menú "Nuestras apps" de las otras apps linkea acá con `?sso=1`. Eso pide un
+ * intento silencioso, que solo tiene sentido si NO hay sesión del monitor todavía.
+ *
+ * La marca en `sessionStorage` cumple dos funciones: evita disparar dos veces (React
+ * corre los efectos dos veces en dev) y, sobre todo, permite CALLAR el error de la
+ * vuelta cuando el intento no prospera — que falle es lo esperable si el navegador no
+ * tenía sesión de Google, y no es una falla que valga mostrar.
+ */
+const CLAVE_SALTO = 'areben-sso-salto'
+
+/** ¿La URL pide un salto silencioso? */
+export function pidenSalto(): boolean {
+  if (typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('sso') === '1'
+}
+
+/** ¿Ya hay un salto en curso? (sin consumir la marca) */
+export function saltoEnCurso(): boolean {
+  try {
+    return sessionStorage.getItem(CLAVE_SALTO) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function marcarSalto(): void {
+  try {
+    sessionStorage.setItem(CLAVE_SALTO, '1')
+  } catch {
+    /* sin sessionStorage el salto igual funciona; solo se pierde el silenciado del error */
+  }
+}
+
+/** Lee la marca y la borra. Devuelve si el ingreso en curso salió de un salto. */
+export function consumirSalto(): boolean {
+  try {
+    const habia = sessionStorage.getItem(CLAVE_SALTO) === '1'
+    sessionStorage.removeItem(CLAVE_SALTO)
+    return habia
+  } catch {
+    return false
+  }
 }
 
 /** ¿La URL actual es la vuelta de Google? */
