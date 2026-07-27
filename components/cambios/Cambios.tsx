@@ -32,6 +32,7 @@ import {
   type FormaPago, type OrdenTN, type OrdenTNLinea,
 } from '@/lib/cambios/tipos'
 import { ResumenCambio } from '@/components/cambios/ResumenCambio'
+import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
 
 function obtenerPass(): string {
   let p = leerAdminPass()
@@ -342,6 +343,21 @@ function CambiosInner({ modo }: { modo: 'local' | 'admin' }) {
   return (
     <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: space[5] }}>
       {resumen && <ResumenCambio cambio={resumen} onClose={() => setResumen(null)} />}
+
+      <DondeVa activa="cambios" />
+      <Instructivo
+        titulo="¿Cómo se hace un cambio?"
+        pasos={[
+          <>Buscá la <b>orden de Tienda Nube</b> y marcá <b>lo que devuelve</b> el cliente.</>,
+          <>Agregá <b>lo que se lleva</b> desde el buscador de artículos (así queda linkeado a Gestión Nube).</>,
+          <>Completá <b>envío, forma de pago y la etiqueta EM</b>. La diferencia de precio se calcula sola.</>,
+          <><b>Guardá el borrador</b> y, cuando esté cobrado, marcalo como <b>pagado</b>.</>,
+          <><b>Crear Venta</b> genera la venta real en GN del producto que se lleva y descuenta su stock.</>,
+          <>Cuando vuelve el paquete: <b>Volvió</b>, y después <b>Reingresado</b> una vez que cargaste el devuelto a mano en GN.</>,
+        ]}
+        ojo={<>El reingreso del devuelto <b>es manual</b>: Gestión Nube no acepta una venta negativa por API. Hasta que no lo cargues, ese producto no vuelve al stock.</>}
+      />
+
       {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut }}>Cambio por ENVÍO: buscá la orden, marcá lo que devuelve el cliente y agregá lo que se lleva. Guardá el borrador, marcalo como pagado y cuando esté todo, «Crear Venta».</div>}
 
       {/* ── Form ─────────────────────────────────────────────────────────── */}

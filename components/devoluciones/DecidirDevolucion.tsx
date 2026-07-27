@@ -64,6 +64,9 @@ export function DecidirDevolucion({
   const [envioIda, setEnvioIda] = useState<number | ''>('')
   const [guardando, setGuardando] = useState(false)
 
+  /** Cuántas unidades entran en el reclamo: lo que multiplica a los valores por unidad. */
+  const unidades = useMemo(() => items.reduce((s, it) => s + (Number(it.cantidad) || 0), 0), [items])
+
   /** Los ítems con el PVP de feria que se cargue acá, para que la cuenta lo tome. */
   const itemsConFeria: ItemDevolucion[] = useMemo(() => {
     const f = Number(pvpFeria)
@@ -174,11 +177,11 @@ export function DecidirDevolucion({
           <h4 style={{ fontSize: font.md, fontWeight: weight.bold, marginBottom: space[2] }}>¿Pedimos que vuelva la prenda?</h4>
 
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[2] }}>
-            <Field label="Envío de vuelta ($)" hint="Lo pagamos nosotros">
+            <Field label="Envío de vuelta ($)" hint="Total, lo pagamos nosotros">
               <NumberField value={envioVuelta} onChange={(v) => setEnvioVuelta(v)} style={{ width: 120 }} />
             </Field>
             {esFalla && (
-              <Field label="PVP de feria ($)" hint="Lo único que se saca de una fallada">
+              <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `Se multiplica por las ${unidades} unidades` : 'Lo único que se saca de una fallada'}>
                 <NumberField value={pvpFeria} onChange={(v) => setPvpFeria(v)} style={{ width: 120 }} />
               </Field>
             )}

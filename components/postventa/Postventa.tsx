@@ -26,6 +26,7 @@ import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
 import { Cambios } from '@/components/cambios/Cambios'
 import { Devoluciones } from '@/components/devoluciones/Devoluciones'
+import { DondeVa, Instructivo } from './GuiaPostventa'
 
 type Tab = 'fallas' | 'cambios' | 'devoluciones' | 'canjes'
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
@@ -305,6 +306,24 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               <KpiCard label="Valuado a PVP feria" value={<MoneyText value={totales.pvp} />} tone="success" />
             </div>
           )}
+
+          <DondeVa activa="fallas" />
+          <Instructivo
+            titulo={esAdmin ? '¿Cómo se procesa una falla?' : '¿Cómo cargo una falla?'}
+            pasos={esAdmin ? [
+              <>El local o el depósito carga la falla; te llega como <b>Pendiente de envío</b>.</>,
+              <>Cuando la prenda llega físicamente, <b>Recibir</b>: pasa a depósito.</>,
+              <><b>Confirmar</b> genera la venta en Gestión Nube que <b>descuenta la unidad del stock</b> y le da su etiqueta con código de barras.</>,
+              <>Después la unidad sigue su vida: <b>vendida en feria</b> o <b>descartada</b>. Nunca vuelve al stock que se vende online.</>,
+            ] : [
+              <>Buscá el artículo <b>en el buscador</b> (no lo escribas a mano): así queda linkeado a Gestión Nube y puede descontar stock.</>,
+              <>Poné la <b>cantidad</b> y el <b>motivo</b> — el motivo es lo que después sirve para reclamarle al proveedor.</>,
+              <>Guardá. La falla queda como <b>Pendiente de envío</b> hasta que Administración la reciba en depósito.</>,
+            ]}
+            ojo={esAdmin
+              ? <>Confirmar <b>toca el stock real</b> de Gestión Nube. Si la prenda todavía no está en depósito, no la confirmes.</>
+              : <>Si la prenda te llegó por correo de un cliente que compró online, no va acá: va en <b>Devoluciones</b>.</>}
+          />
 
           {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá la prenda con falla; descuenta el stock de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b>. Administración la recibe y confirma.</div>}
 

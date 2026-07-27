@@ -31,6 +31,7 @@ import {
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 import { DecidirDevolucion } from './DecidirDevolucion'
+import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
 
 /** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
 function obtenerPass(): string {
@@ -308,6 +309,27 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
           <KpiCard label="Ventas sin anular en GN" value={String(totales.sinAnular)} tone={totales.sinAnular ? 'warning' : 'neutral'} />
         </div>
       )}
+
+      <DondeVa activa="devoluciones" />
+      <Instructivo
+        titulo={esAdmin ? '¿Cómo se resuelve una devolución de punta a punta?' : '¿Cómo abro una devolución?'}
+        pasos={esAdmin ? [
+          <>Buscá la <b>orden de Tienda Nube</b> por número, tildá los productos que reclama y elegí el <b>motivo</b>.</>,
+          <>Al crear el reclamo se copia solo el <b>link para el cliente</b>: pegáselo por WhatsApp para que suba las fotos.</>,
+          <>Cuando cargue, el reclamo pasa a <b>Para revisar</b>. Tocá <b>Decidir</b> y respondé las dos preguntas: si nos conviene que la prenda vuelva, y qué recibe el cliente.</>,
+          <>Si vuelve, elegí <b>cómo vuelve</b> y cargá el <b>seguimiento</b> cuando tengas la etiqueta. Cuando llegue, <b>Volvió</b>.</>,
+          <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>corregir el stock en TN</b> o <b>pasar la prenda a Fallas</b>.</>,
+          <>Con todo resuelto, <b>Cerrar</b>.</>,
+        ] : [
+          <>Buscá la <b>orden de Tienda Nube</b> por número y tildá los productos que reclama.</>,
+          <>Elegí el <b>motivo</b> y escribí en el detalle lo que te dijo el cliente.</>,
+          <>Al crear, el <b>link queda copiado</b>: pegáselo por WhatsApp para que suba las fotos del problema.</>,
+          <>Listo. Desde acá seguís el estado; <b>Administración</b> decide qué se hace y devuelve la plata.</>,
+        ]}
+        ojo={esAdmin
+          ? <>El sistema <b>no anula la venta en Gestión Nube</b> ni devuelve la plata solo: eso lo hacés vos y acá queda la traza. El reclamo no cierra hasta que estén los tres pendientes.</>
+          : <>No cierres el reclamo ni prometas un monto: la plata la calcula y la devuelve Administración.</>}
+      />
 
       {!esAdmin && (
         <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>

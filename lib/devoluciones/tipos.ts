@@ -255,6 +255,12 @@ export function convieneRetorno(
     ),
   )
 
+  // El desglose no es adorno: los valores se cargan POR UNIDAD y el reclamo puede tener varias.
+  // Sin esto, alguien carga 6.000 de PVP de feria, lee "recuperás 12.000" y piensa que la cuenta
+  // está mal — pasó apenas se probó la pantalla.
+  const unidades = items.reduce((s, it) => s + positivo(it.cantidad), 0)
+  const detalle = unidades > 1 ? ` (${unidades} unidades × ${redondear(recuperable / unidades)} c/u)` : ''
+
   if (!recuperable) {
     return { recuperable, envioVuelta, conviene: false, motivo: 'No se sabe cuánto se recupera: falta el precio o el PVP de feria.' }
   }
@@ -262,9 +268,9 @@ export function convieneRetorno(
     return { recuperable, envioVuelta, conviene: false, motivo: `Está por debajo del piso de ${piso}: no se pide el retorno.` }
   }
   if (envioVuelta > 0 && recuperable <= envioVuelta) {
-    return { recuperable, envioVuelta, conviene: false, motivo: `No conviene: recuperás ${recuperable} y gastás ${envioVuelta} de envío.` }
+    return { recuperable, envioVuelta, conviene: false, motivo: `No conviene: recuperás ${recuperable}${detalle} y gastás ${envioVuelta} de envío.` }
   }
-  return { recuperable, envioVuelta, conviene: true, motivo: `Conviene: recuperás ${recuperable} y el envío sale ${envioVuelta}.` }
+  return { recuperable, envioVuelta, conviene: true, motivo: `Conviene: recuperás ${recuperable}${detalle} y el envío sale ${envioVuelta}.` }
 }
 
 /**
