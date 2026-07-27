@@ -79,8 +79,12 @@ export type OpcionesFetch = {
    * Cuánto tardó cada fase, en ms. Es lo único que dice si los ~20 segundos de la carga
    * fría son la bajada o el cómputo posterior — el repo no tenía ninguna medición. Los
    * tests no lo pasan, así que para ellos no cambia nada.
+   *
+   * `tablas` y `detalles` ahora **se solapan**: corren en paralelo. Por eso está `total`,
+   * que es el tiempo de pared de la bajada — el único que se puede comparar contra las
+   * mediciones viejas, donde `total` era la suma.
    */
-  onTiempos?: (t: { tablas: number; detalles: number }) => void
+  onTiempos?: (t: { tablas: number; detalles: number; total: number }) => void
 }
 
 /** Trae las 8 tablas crudas de una marca, listas para computarDatos o para el caché. */
@@ -100,7 +104,44 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
       ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
       : 'select=id,name,category,sku,retailer_price,unit_cost,created_at,active&active=eq.1') + '&order=id'
 
+  const desde = desdeVentas(rol, today)
   const t0 = performance.now()
+
+  // `venta_detalles` es la tabla más grande y su filtro sale del mínimo id de `ventas`. Esperar a
+  // que baje `ventas` entera para recién pedirla ponía la más pesada al final, sola, sumando su
+  // tiempo al de las otras ocho. Ese mínimo se puede saber con una consulta de UNA fila (mismo
+  // filtro, `order=id&limit=1`), así que la sonda va primero y `venta_detalles` arranca junto con
+  // las demás. Si la sonda falla, se cae al camino viejo — el mínimo calculado sobre `ventas` — y
+  // lo único que se pierde es el paralelismo.
+  let msDetalles = 0
+  const pedirDetalles = async (minSaleId: number): Promise<FilaDetalle[]> => {
+    const t = performance.now()
+    const filas = await fetchAll<FilaDetalle>(
+      cuenta,
+      'venta_detalles',
+      `select=sale_id,product_id,size_id,size,quantity&sale_id=gte.${minSaleId}&order=sale_id`,
+      onProgress,
+      'detalles',
+    )
+    msDetalles = performance.now() - t
+    return filas
+  }
+
+  // El error se guarda en vez de propagarse solo: mientras el Promise.all de abajo corre nadie
+  // está esperando esta promesa, y un rechazo sin dueño es un unhandled rejection en el browser.
+  let errDetalles: unknown = null
+  const detallesPromise = sbFetch<Pick<FilaVenta, 'id'>>(
+    cuenta,
+    'ventas',
+    `select=id&date_sale=gte.${desde}&order=id&limit=1`,
+  ).then(
+    (filas) => pedirDetalles(filas.length ? filas[0].id : 0),
+    () => null, // sonda caída: se resuelve después, con el mínimo de `ventas`
+  ).catch((e: unknown) => {
+    errDetalles = e
+    return null
+  })
+
   const [productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas, syncMeta] = await Promise.all([
     fetchAll<FilaProducto>(cuenta, 'productos', selectProductos, onProgress, 'productos'),
     // Algunas bases no tienen sku/barcode en inventario: el legacy reintenta con el select corto.
@@ -148,26 +189,22 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
       cuenta,
       'ventas',
       (esZattia ? 'select=id,date_sale,channel' : 'select=id,date_sale,channel,channel_id') +
-        '&date_sale=gte.' + desdeVentas(rol, today) + '&order=id',
+        '&date_sale=gte.' + desde + '&order=id',
       onProgress,
       'ventas',
     ),
     syncMetaPromise,
   ])
 
-  const t1 = performance.now()
+  const msTablas = performance.now() - t0
 
-  // venta_detalles se pide recién acá porque el filtro sale del mínimo id de ventas:
-  // sin esto habría que traer la tabla entera, que es la más grande de todas.
-  const minSaleId = ventas.length ? Math.min(...ventas.map((v) => v.id)) : 0
-  const detalles = await fetchAll<FilaDetalle>(
-    cuenta,
-    'venta_detalles',
-    `select=sale_id,product_id,size_id,size,quantity&sale_id=gte.${minSaleId}&order=sale_id`,
-    onProgress,
-    'detalles',
-  )
-  onTiempos?.({ tablas: t1 - t0, detalles: performance.now() - t1 })
+  let detalles = await detallesPromise
+  if (errDetalles) throw errDetalles
+  if (detalles === null) {
+    // La sonda no contestó: el mínimo sale de las ventas que ya bajaron, como antes.
+    detalles = await pedirDetalles(ventas.length ? Math.min(...ventas.map((v) => v.id)) : 0)
+  }
+  onTiempos?.({ tablas: msTablas, detalles: msDetalles, total: performance.now() - t0 })
 
   // Excluir las ventas TÉCNICAS del Monitor (Sesión de Fotos y Fallas): precio 0, canal "Ninguno"
   // (channel_id 12). No son ventas reales — solo descuentan stock — así que inflaban la analítica de

@@ -20,7 +20,7 @@ const AHORA = new Date('2026-07-16T12:00:00.000Z')
 /** URLs pedidas, en orden. */
 let pedidas: string[] = []
 
-function mockFetch(opciones: { totalPorTabla?: Record<string, number>; filas?: (t: string) => unknown[]; falla?: (url: string) => boolean } = {}) {
+function mockFetch(opciones: { totalPorTabla?: Record<string, number>; filas?: (t: string, url: string) => unknown[]; falla?: (url: string) => boolean } = {}) {
   const { totalPorTabla = {}, filas = () => [], falla = () => false } = opciones
 
   return vi.fn(async (url: string) => {
@@ -35,16 +35,23 @@ function mockFetch(opciones: { totalPorTabla?: Record<string, number>; filas?: (
 
     const tabla = url.split('/rest/v1/')[1]?.split('?')[0] ?? ''
     const total = totalPorTabla[tabla] ?? 0
-    return new Response(JSON.stringify(filas(tabla)), {
+    return new Response(JSON.stringify(filas(tabla, url)), {
       status: 200,
       headers: { 'Content-Range': `0-0/${total}` },
     })
   })
 }
 
-/** La parte de query de la URL de una tabla (la primera vez que se pide). */
+/**
+ * La consulta de UNA fila que saca el mínimo id de ventas, para que `venta_detalles` no tenga
+ * que esperar a que baje la tabla entera. Es una segunda llamada a `ventas`, así que hay que
+ * distinguirla de la de verdad — si no, `selectDe('ventas')` mide la sonda.
+ */
+const esSonda = (u: string) => u.includes('/rest/v1/ventas?') && u.includes('select=id&')
+
+/** La parte de query de la URL de una tabla (la primera vez que se pide, sin contar la sonda). */
 function queryDe(tabla: string): string {
-  const url = pedidas.find((u) => u.includes(`/rest/v1/${tabla}?`))
+  const url = pedidas.find((u) => u.includes(`/rest/v1/${tabla}?`) && !esSonda(u))
   if (!url) throw new Error(`No se pidió la tabla ${tabla}. Pedidas: ${pedidas.join(', ')}`)
   return decodeURIComponent(url.split('?')[1])
 }
@@ -126,17 +133,53 @@ describe('rango de ventas por rol (index.html:2084)', () => {
 describe('detalles y paginación', () => {
   it('venta_detalles se filtra por el mínimo id de ventas, no por la tabla entera', async () => {
     vi.stubGlobal('fetch', mockFetch({
-      totalPorTabla: { ventas: 3 },
-      filas: (t) => (t === 'ventas' ? [{ id: 771 }, { id: 55 }, { id: 900 }] : []),
+      filas: (t, url) => (t === 'ventas' && esSonda(url) ? [{ id: 55 }] : []),
     }))
     await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
     expect(queryDe('venta_detalles')).toContain('sale_id=gte.55')
+  })
+
+  // El mínimo se pide con el MISMO filtro que la tabla `ventas`: si la sonda mirara otro rango,
+  // traería detalles de ventas que el ETL no tiene, o le faltarían los de las que sí.
+  it('la sonda del mínimo usa el mismo rango de fechas que ventas', async () => {
+    vi.stubGlobal('fetch', mockFetch())
+    await traerDatos({ marca: 'bdi', rol: 'marketing', today: AHORA })
+
+    const sonda = pedidas.find(esSonda)
+    expect(sonda).toBeDefined()
+    expect(decodeURIComponent(sonda!)).toContain('date_sale=gte.2026-06-11')
+    expect(decodeURIComponent(sonda!)).toContain('order=id&limit=1')
   })
 
   it('sin ventas, detalles arranca en 0 (y no rompe)', async () => {
     vi.stubGlobal('fetch', mockFetch())
     await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
     expect(queryDe('venta_detalles')).toContain('sale_id=gte.0')
+  })
+
+  /**
+   * El motivo de que exista la sonda. `venta_detalles` es la tabla más grande, y antes se pedía
+   * recién cuando habían bajado las otras ocho: su tiempo se sumaba al final en vez de solaparse.
+   * El test bloquea `ventas` y exige que `venta_detalles` ya se haya pedido igual.
+   */
+  it('venta_detalles no espera a que baje ventas: arranca en paralelo', async () => {
+    let soltarVentas = () => {}
+    const ventasColgada = new Promise<void>((r) => { soltarVentas = r })
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      pedidas.push(url)
+      if (url.includes('api.github.com')) return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
+      if (url.includes('/rest/v1/ventas?') && !esSonda(url)) await ventasColgada
+      const filas = esSonda(url) ? [{ id: 55 }] : []
+      return new Response(JSON.stringify(filas), { status: 200, headers: { 'Content-Range': '0-0/0' } })
+    }))
+
+    const datos = traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await vi.waitFor(() => expect(pedidas.some((u) => u.includes('/venta_detalles?'))).toBe(true))
+    soltarVentas()
+    await datos
+
+    expect(queryDe('venta_detalles')).toContain('sale_id=gte.55')
   })
 
   it('más de 1000 filas: pagina de a 1000 pidiendo los offsets que faltan', async () => {
@@ -168,6 +211,26 @@ describe('degradados: el legacy sigue andando y el port también', () => {
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('variante_color_manual') }))
     const datos = await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
     expect(datos.colorManual).toEqual([])
+  })
+
+  // Si la sonda del mínimo no contesta, se vuelve al camino viejo: el mínimo sale de las ventas
+  // que ya bajaron. Se pierde el paralelismo, no los datos.
+  it('si la sonda del mínimo falla, el mínimo sale de las ventas ya bajadas', async () => {
+    vi.stubGlobal('fetch', mockFetch({
+      falla: esSonda,
+      filas: (t) => (t === 'ventas' ? [{ id: 771 }, { id: 55 }, { id: 900 }] : []),
+    }))
+    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+
+    expect(queryDe('venta_detalles')).toContain('sale_id=gte.55')
+    expect(datos.detalles).toEqual([])
+  })
+
+  // El otro lado: si la que falla es `venta_detalles`, traerDatos tiene que lanzar como antes
+  // (y no quedar en un rechazo sin dueño mientras las otras ocho tablas siguen bajando).
+  it('si venta_detalles falla, traerDatos lanza', async () => {
+    vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('/venta_detalles?') }))
+    await expect(traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })).rejects.toThrow('venta_detalles')
   })
 
   it('si GitHub no contesta, syncMeta queda null y los datos llegan igual', async () => {

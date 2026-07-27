@@ -112,7 +112,7 @@ async function refrescar(
   set: (partial: Partial<MonitorState>) => void,
 ): Promise<void> {
   const today = ahora()
-  let tiempos: { tablas: number; detalles: number } | null = null
+  let tiempos: { tablas: number; detalles: number; total: number } | null = null
   const payload = await traerDatos({
     marca,
     rol,
@@ -154,13 +154,15 @@ async function refrescar(
  */
 function loguearTiempos(
   marca: Marca,
-  red: { tablas: number; detalles: number } | null,
+  red: { tablas: number; detalles: number; total: number } | null,
   computo: number,
   cacheOk: boolean,
 ): void {
   const s = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + 's'
   const partes = [`[monitor] ${marca} — carga fría`]
-  if (red) partes.push(`red ${s(red.tablas + red.detalles)} (tablas ${s(red.tablas)} · detalles ${s(red.detalles)})`)
+  // `tablas` y `detalles` se solapan (van en paralelo), así que no suman: el de afuera es `total`.
+  // Si `detalles` es el más largo de los dos, es el que manda el tiempo de la carga.
+  if (red) partes.push(`red ${s(red.total)} (tablas ${s(red.tablas)} · detalles ${s(red.detalles)}, en paralelo)`)
   partes.push(`cómputo ${s(computo)}`)
   partes.push(cacheOk ? 'caché guardado' : 'CACHÉ NO GUARDADO')
   console.info(partes.join(' · '))
