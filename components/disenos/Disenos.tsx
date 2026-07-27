@@ -35,6 +35,8 @@ export function Disenos() {
   const [quickIndex, setQuickIndex] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  /** Lo último que quedó guardado en la base, por id, para poder mandar solo lo que cambió. */
+  const ultimo = useRef<Map<string, string>>(new Map())
 
   // El tablero se lee de la BASE (es compartido). Lo del navegador solo se mira para
   // ofrecer subir lo que haya quedado de la época en que se guardaba local.
@@ -49,6 +51,11 @@ export function Disenos() {
         if (vivo) setErrorCarga(e instanceof Error ? e.message : String(e))
       }
       if (!vivo) return
+      // Sembrar el "último guardado" con lo que se acaba de bajar, ANTES de publicarlo. Si no, el
+      // efecto de persistencia se despierta con el mapa vacío y cree que cambió todo: devolvía el
+      // tablero entero —con las fotos embebidas, megas— a la base en cada entrada a la sección. Y
+      // al cambiar de marca, además, mandaba a borrar los ids de la marca anterior contra la nueva.
+      ultimo.current = new Map(d.map((x) => [String(x.id), JSON.stringify(x)]))
       setDisenos(d)
       try {
         setView((localStorage.getItem('monitor_db_view') as 'kanban' | 'galeria') || 'kanban')
@@ -71,7 +78,6 @@ export function Disenos() {
    * fotos embebidas son megas por vuelta) y así dos personas trabajando a la vez no se
    * pisan: cada una escribe sus diseños. Los borrados se mandan aparte.
    */
-  const ultimo = useRef<Map<string, string>>(new Map())
   useEffect(() => {
     if (!hidratado) return
     const previo = ultimo.current

@@ -337,6 +337,19 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
   })
 
   // ── Agotamiento por color ───────────────────────────────────────────────────
+  //
+  // `coloresPorProd` se arma acá, de paso, y es lo que evita el cuadrático de más abajo: con él,
+  // saber los colores de un producto es un `get`. Sin él había que barrer TODAS las claves
+  // `producto|color` de los dos diccionarios por CADA producto activo — miles por miles, con un
+  // `Object.keys()` nuevo cada vuelta. Eso es lo que congelaba la pestaña, y no lo salva el caché:
+  // el caché guarda las filas crudas, así que este cómputo corre igual en cada carga.
+  const coloresPorProd = new Map<string, Set<string>>()
+  const anotarColor = (pid: string, color: string) => {
+    const set = coloresPorProd.get(pid)
+    if (set) set.add(color)
+    else coloresPorProd.set(pid, new Set([color]))
+  }
+
   const invByProdColor: Record<string, number> = {}
   ;(inventario || []).forEach((i) => {
     if (/mayorista/i.test(i.store_name || '')) return // Depósito Mayorista: no se cuenta
@@ -344,6 +357,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     if (!c || c === COLOR_UNICA) return
     const key = `${i.product_id}|${c}`
     invByProdColor[key] = (invByProdColor[key] || 0) + (i.available_quantity || 0)
+    anotarColor(String(i.product_id), c)
   })
 
   const salesByProdColorDate: Record<string, Record<string, number>> = {}
@@ -355,14 +369,13 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     const key = `${item.product_id}|${c}`
     if (!salesByProdColorDate[key]) salesByProdColorDate[key] = {}
     salesByProdColorDate[key][fecha] = (salesByProdColorDate[key][fecha] || 0) + (item.quantity || 1)
+    anotarColor(String(item.product_id), c)
   })
 
   const allAgotamientoData: Agotamiento[] = []
   ;(productos || []).filter((p) => p.active !== false).forEach((prod) => {
     const pid = String(prod.id)
-    const colorSet = new Set<string>()
-    Object.keys(invByProdColor).filter((k) => k.startsWith(pid + '|')).forEach((k) => colorSet.add(k.slice(pid.length + 1)))
-    Object.keys(salesByProdColorDate).filter((k) => k.startsWith(pid + '|')).forEach((k) => colorSet.add(k.slice(pid.length + 1)))
+    const colorSet = coloresPorProd.get(pid) ?? new Set<string>()
     if (colorSet.size < 2) return
 
     const colors: Record<string, ColorAgotamiento> = {}
