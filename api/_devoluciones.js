@@ -45,11 +45,14 @@ const DESTINOS = ['stock', 'falla', 'no_salio'];
 const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'cupon', 'ninguna'];
 const ESTADOS = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
+// Cómo vuelve la prenda. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
+const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
 
 const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle, relato_cliente, fotos,
   destino_prenda, compensacion, estado, items, monto_producto, monto_acordado, monto_envio_devuelto,
   monto_total, pago_metodo, pago_gateway, devolver_envio, retorno_sugerido, retorno_decidido,
-  envio_costo, seguimiento_vuelta, gn_venta_id, gn_venta_number, stock_estado, reintegro_estado,
+  via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
+  gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
   costo_caso, usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 // El `token` NUNCA sale en los listados: es la llave del link público. Se pide aparte, de a uno.
@@ -184,7 +187,9 @@ export default async function handler(req, res) {
         devolver_envio: b.devolver_envio === true,
         retorno_sugerido: b.retorno_sugerido === true,
         retorno_decidido: b.retorno_decidido === true,
+        via_retorno: VIAS.includes(b.via_retorno) ? b.via_retorno : null,
         envio_costo: num(b.envio_costo),
+        envio_ida_costo: num(b.envio_ida_costo),
         costo_caso: num(b.costo_caso),
         cupon_codigo: texto(b.cupon_codigo),
         estado: vuelve ? 'en_transito' : 'resuelto',
@@ -254,6 +259,11 @@ export default async function handler(req, res) {
       if (b.items !== undefined && Array.isArray(b.items)) campos.items = b.items;
       if (b.envio_costo !== undefined) campos.envio_costo = num(b.envio_costo);
       if (b.seguimiento_vuelta !== undefined) campos.seguimiento_vuelta = texto(b.seguimiento_vuelta);
+      if (b.seguimiento_ida !== undefined) campos.seguimiento_ida = texto(b.seguimiento_ida);
+      if (b.envio_ida_costo !== undefined) campos.envio_ida_costo = num(b.envio_ida_costo);
+      if (b.via_retorno !== undefined && VIAS.includes(b.via_retorno)) campos.via_retorno = b.via_retorno;
+      if (b.gn_venta_reemplazo_id !== undefined) campos.gn_venta_reemplazo_id = texto(b.gn_venta_reemplazo_id);
+      if (b.gn_venta_reemplazo_number !== undefined) campos.gn_venta_reemplazo_number = texto(b.gn_venta_reemplazo_number);
       if (b.gn_venta_id !== undefined) campos.gn_venta_id = texto(b.gn_venta_id);
       if (b.gn_venta_number !== undefined) campos.gn_venta_number = texto(b.gn_venta_number);
       if (b.cupon_codigo !== undefined) campos.cupon_codigo = texto(b.cupon_codigo);

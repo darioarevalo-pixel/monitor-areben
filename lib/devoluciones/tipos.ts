@@ -26,6 +26,26 @@ export type DestinoPrenda = 'stock' | 'falla' | 'no_salio'
 export type Compensacion = 'plata_total' | 'plata_parcial' | 'otra_unidad' | 'cupon' | 'ninguna'
 
 /**
+ * Cómo vuelve la prenda. `presencial` es el cliente acercándose al local: **no hay envío**, así
+ * que no hay etiqueta, ni costo, ni código que seguir. Sin esta distinción la pantalla asumía
+ * siempre un envío en curso y había que marcar "Volvió" sobre un tránsito que nunca existió.
+ */
+export type ViaRetorno = 'correo' | 'andreani' | 'cadete' | 'presencial'
+
+export const VIA_LABEL: Record<ViaRetorno, string> = {
+  andreani: 'Andreani',
+  correo: 'Correo Argentino',
+  cadete: 'Cadete',
+  presencial: 'La trae al local',
+}
+
+/** Las que tienen código de seguimiento. Cadete y presencial no: no hay nada que rastrear. */
+const VIA_CON_SEGUIMIENTO: ViaRetorno[] = ['andreani', 'correo']
+export const pideSeguimiento = (via?: ViaRetorno | null): boolean => !!via && VIA_CON_SEGUIMIENTO.includes(via)
+/** Presencial no tiene envío: ni costo ni etiqueta. */
+export const hayEnvio = (via?: ViaRetorno | null): boolean => !!via && via !== 'presencial'
+
+/**
  * `esperando_cliente` es el link mandado y sin responder; `en_revision` es el cliente ya cargó
  * y falta que Administración decida. `en_transito`/`recibido` solo aplican si la prenda vuelve.
  */
@@ -53,6 +73,16 @@ export const ESTADO_LABEL: Record<EstadoDevolucion, string> = {
   recibido: 'Recibido',
   cerrado: 'Cerrado',
   anulado: 'Anulado',
+}
+
+/**
+ * El estado como lo lee alguien del local. Cambia solo en un caso, pero importa: si el cliente
+ * la trae en mano, "En camino de vuelta" es mentira — no hay nada viajando, hay alguien que
+ * todavía no vino.
+ */
+export function estadoEnCriollo(d: Pick<DevolucionRow, 'estado' | 'via_retorno'>): string {
+  if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que la traiga'
+  return ESTADO_LABEL[d.estado] ?? d.estado
 }
 
 // ── La orden de Tienda Nube ─────────────────────────────────────────────────────
@@ -294,10 +324,19 @@ export type DevolucionRow = {
   /** Lo que sugirió la cuenta vs lo que se decidió: si difieren, quedó registrado. */
   retorno_sugerido?: boolean | null
   retorno_decidido?: boolean | null
+  /** Cómo vuelve. Null si no vuelve (se la queda el cliente) o si todavía no se decidió. */
+  via_retorno?: ViaRetorno | null
+  /** El envío de VUELTA (la fallada que regresa), siempre a nuestro cargo. */
   envio_costo?: number | null
   seguimiento_vuelta?: string | null
+  /** El envío de IDA: solo existe cuando se le manda otra unidad. También a nuestro cargo. */
+  envio_ida_costo?: number | null
+  seguimiento_ida?: string | null
   gn_venta_id?: string | null
   gn_venta_number?: string | null
+  /** La venta técnica que descontó del stock la unidad de reemplazo. */
+  gn_venta_reemplazo_id?: string | null
+  gn_venta_reemplazo_number?: string | null
   stock_estado: PendienteEstado
   reintegro_estado: PendienteEstado
   tn_stock_estado: PendienteEstado

@@ -12,10 +12,10 @@ import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
-import { laFallaDescuentaStock } from './tipos'
+import { laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
   Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
-  MotivoDevolucion, OrdenTN,
+  MotivoDevolucion, OrdenTN, ViaRetorno,
 } from './tipos'
 
 const API = '/api/postventa?recurso=devoluciones'
@@ -23,6 +23,11 @@ const API = '/api/postventa?recurso=devoluciones'
 const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 /** Escribe stock en la tienda. El mismo que usa Integraciones (acción `stock`). */
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias'
+/**
+ * Las ventas van SIEMPRE al crear-venta de producción, esté donde esté corriendo el Monitor: los
+ * tokens de ventas de Gestión Nube viven solo ahí. Mismo criterio que Sesión de fotos y Cambios.
+ */
+const CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
 
 async function postear(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const r = await apiFetch(API, {
@@ -148,7 +153,11 @@ export type Decision = {
   devolver_envio?: boolean
   retorno_sugerido?: boolean
   retorno_decidido?: boolean
+  /** Cómo vuelve la prenda. `presencial` = la trae al local, sin envío ni seguimiento. */
+  via_retorno?: ViaRetorno | null
   envio_costo?: number | null
+  /** El envío del reemplazo, cuando se le manda otra unidad. */
+  envio_ida_costo?: number | null
   costo_caso?: number | null
   cupon_codigo?: string | null
   /** Lo que se pagó por la orden entera: el servidor lo usa de techo del reintegro. */
@@ -242,6 +251,55 @@ export async function pasarAFallas(
   }
   if (ids.length) await linkearFallas(marca, d.id, ids)
   return ids
+}
+
+/**
+ * Descuenta del stock la unidad de reemplazo que se le manda al cliente.
+ *
+ * **Es el agujero que tapa esta función**: cuando la salida es "le mandamos otra igual", esa
+ * prenda sale del depósito y sin esto no queda registrada en ningún lado — el stock queda de más
+ * hasta que alguien lo descubre en un conteo.
+ *
+ * No es una venta comercial: es la **venta técnica** que ya usa Fallas al confirmar, a precio de
+ * lista con 100% de descuento (neto $0, pero valuada real para que la analítica no se distorsione).
+ * Va contra el `crear-venta` de PRODUCCIÓN, como todas las ventas del Monitor: los tokens de
+ * ventas de GN viven solo ahí.
+ */
+export async function descontarReemplazo(
+  marca: Marca,
+  d: DevolucionRow,
+  ctx: { user: string; pass: string },
+): Promise<{ id?: string; number?: string }> {
+  const items = (d.items || [])
+    .filter((i) => i.product_id && i.size_id)
+    .map((i) => ({ product_id: i.product_id as string, size_id: i.size_id as string, quantity: Number(i.cantidad) || 1, unit_price: Number(i.precio) || 0 }))
+  if (!items.length) {
+    throw new Error('Estos productos no están linkeados a Gestión Nube, así que no se puede descontar el stock del reemplazo. Cargalo a mano en GN.')
+  }
+  const r = await fetch(CREAR_VENTA_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store: marca,
+      origen: 'deposito',
+      items,
+      // 100% de descuento: la unidad sale del stock pero no se cobra (ya la pagó en la compra original).
+      descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
+      comments: `Reemplazo por falla — reclamo ${numeroReclamo(d.id)} · orden ${d.orden_tn || '?'} (Monitor)`.slice(0, 500),
+      solicitudId: `devolucion-${d.id}-reemplazo`, // idempotencia: dos clicks no generan dos ventas
+      proposito: 'falla',
+      user: ctx.user,
+      pass: ctx.pass,
+    }),
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!j?.ok) throw new Error(`No se pudo descontar el stock del reemplazo en GN — ${j?.error || r.status}`)
+  const venta = j.venta || {}
+  await editarDevolucion(marca, d.id, {
+    gn_venta_reemplazo_id: venta.id ? String(venta.id) : null,
+    gn_venta_reemplazo_number: venta.number ? String(venta.number) : null,
+  })
+  return { id: venta.id, number: venta.number }
 }
 
 /**

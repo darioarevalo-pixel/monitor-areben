@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, faltantesParaCerrar, laFallaDescuentaStock,
-  numeroReclamo, pagadoPorItem,
+  calcularMonto, convieneRetorno, costoDelCaso, estadoEnCriollo, faltantesParaCerrar, hayEnvio,
+  laFallaDescuentaStock, numeroReclamo, pagadoPorItem, pideSeguimiento,
   type DevolucionRow, type ItemDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 
@@ -204,6 +204,47 @@ describe('laFallaDescuentaStock', () => {
   it('sin decidir todavía, se asume que descuenta (el caso más común)', () => {
     expect(laFallaDescuentaStock(null)).toBe(true)
     expect(laFallaDescuentaStock(undefined)).toBe(true)
+  })
+})
+
+describe('cómo vuelve la prenda', () => {
+  it('correo y andreani tienen seguimiento; cadete y presencial no', () => {
+    expect(pideSeguimiento('andreani')).toBe(true)
+    expect(pideSeguimiento('correo')).toBe(true)
+    expect(pideSeguimiento('cadete')).toBe(false)
+    expect(pideSeguimiento('presencial')).toBe(false)
+    expect(pideSeguimiento(null)).toBe(false)
+  })
+
+  // Si la trae al local no hay etiqueta que pagar: pedir un costo ahí sería inventar un gasto.
+  it('presencial no tiene envío; el resto sí', () => {
+    expect(hayEnvio('presencial')).toBe(false)
+    expect(hayEnvio('cadete')).toBe(true)
+    expect(hayEnvio('andreani')).toBe(true)
+    expect(hayEnvio(null)).toBe(false)
+  })
+
+  // "En camino de vuelta" es mentira cuando no hay nada viajando: hay alguien que no vino todavía.
+  it('el estado se lee distinto si la trae al local', () => {
+    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'presencial' })).toBe('Esperando que la traiga')
+    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani' })).toBe('En camino de vuelta')
+    expect(estadoEnCriollo({ estado: 'recibido', via_retorno: 'presencial' })).toBe('Recibido')
+  })
+})
+
+describe('costoDelCaso con los DOS envíos', () => {
+  // El de la falla que vuelve y el del reemplazo que va: los dos los pagamos nosotros.
+  it('la falla con cambio suma ida y vuelta', () => {
+    const c = costoDelCaso({
+      montoDevuelto: 0, envioVuelta: 6000, envioReemplazo: 6500,
+      items: [item(12000, 1, { costo: 2000 })], destino: 'falla',
+    })
+    expect(c).toBe(14500) // 6000 + 6500 + 2000 de la unidad que se pierde
+  })
+
+  it('sin reemplazo, solo cuenta el de vuelta', () => {
+    const c = costoDelCaso({ montoDevuelto: 8000, envioVuelta: 6000, items: [item(12000)], destino: 'stock' })
+    expect(c).toBe(14000)
   })
 })
 

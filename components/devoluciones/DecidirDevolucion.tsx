@@ -22,8 +22,9 @@ import {
 import type { Marca } from '@/lib/nav'
 import { decidir } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, MOTIVO_LABEL, numeroReclamo,
+  calcularMonto, convieneRetorno, costoDelCaso, hayEnvio, MOTIVO_LABEL, numeroReclamo, pideSeguimiento, VIA_LABEL,
   type Compensacion, type DestinoPrenda, type DevolucionRow, type ItemDevolucion, type OrdenTN,
+  type ViaRetorno,
 } from '@/lib/devoluciones/tipos'
 
 /** Las salidas posibles, en el orden en que se usan de verdad. */
@@ -58,6 +59,9 @@ export function DecidirDevolucion({
   // Solo hace falta para la cuenta cuando la prenda está fallada: es lo único que se recupera.
   const [pvpFeria, setPvpFeria] = useState<number | ''>('')
   const [cupon, setCupon] = useState('')
+  const [via, setVia] = useState<ViaRetorno>('andreani')
+  // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
+  const [envioIda, setEnvioIda] = useState<number | ''>('')
   const [guardando, setGuardando] = useState(false)
 
   /** Los ítems con el PVP de feria que se cargue acá, para que la cuenta lo tome. */
@@ -97,11 +101,11 @@ export function DecidirDevolucion({
     () => costoDelCaso({
       montoDevuelto: monto.total,
       envioVuelta: retorno ? Number(envioVuelta) || 0 : 0,
-      envioReemplazo: compensacion === 'otra_unidad' ? Number(envioVuelta) || 0 : 0,
+      envioReemplazo: compensacion === 'otra_unidad' ? Number(envioIda) || 0 : 0,
       items,
       destino: retorno ? destino : 'falla',
     }),
-    [monto.total, retorno, envioVuelta, compensacion, items, destino],
+    [monto.total, retorno, envioVuelta, envioIda, compensacion, items, destino],
   )
 
   const guardar = async () => {
@@ -119,7 +123,9 @@ export function DecidirDevolucion({
         devolver_envio: devolverEnvio,
         retorno_sugerido: cuenta.conviene,
         retorno_decidido: retorno,
-        envio_costo: Number(envioVuelta) || null,
+        via_retorno: retorno ? via : null,
+        envio_costo: retorno && hayEnvio(via) ? Number(envioVuelta) || null : null,
+        envio_ida_costo: compensacion === 'otra_unidad' ? Number(envioIda) || null : null,
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
@@ -197,6 +203,31 @@ export function DecidirDevolucion({
               <StatusPill tone="warning" label="Va contra la sugerencia" />
             )}
           </div>
+
+          {/* Cómo vuelve. Si la trae al local no hay envío que pagar ni código que seguir, así que
+              el costo de arriba deja de tener sentido y se avisa. */}
+          {retorno && (
+            <div style={{ marginTop: space[3] }}>
+              <Field label="¿Cómo vuelve?">
+                <Select value={via} onChange={(e) => setVia(e.target.value as ViaRetorno)}>
+                  {(Object.keys(VIA_LABEL) as ViaRetorno[]).map((v) => (
+                    <option key={v} value={v}>{VIA_LABEL[v]}</option>
+                  ))}
+                </Select>
+              </Field>
+              {!hayEnvio(via) && (
+                <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>
+                  Sin envío: no hay etiqueta que pagar ni código que seguir. El reclamo va a decir
+                  &quot;Esperando que la traiga&quot;.
+                </div>
+              )}
+              {pideSeguimiento(via) && (
+                <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>
+                  El código de seguimiento se carga desde la lista, cuando tengas la etiqueta.
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -213,6 +244,13 @@ export function DecidirDevolucion({
         {compensacion === 'plata_parcial' && (
           <Field label="Monto acordado ($)" style={{ marginTop: space[2] }}>
             <NumberField value={montoAcordado} onChange={(v) => setMontoAcordado(v)} style={{ width: 140 }} />
+          </Field>
+        )}
+        {/* El segundo envío: el que va con el reemplazo. También a nuestro cargo, y suma al costo
+            del caso — antes se contaba uno solo y el caso salía más barato de lo que era. */}
+        {compensacion === 'otra_unidad' && (
+          <Field label="Envío del reemplazo ($)" hint="El que va con la unidad nueva" style={{ marginTop: space[2] }}>
+            <NumberField value={envioIda} onChange={(v) => setEnvioIda(v)} style={{ width: 140 }} />
           </Field>
         )}
         {compensacion === 'cupon' && (

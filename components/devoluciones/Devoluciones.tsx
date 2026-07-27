@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
   Button, Card, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Toolbar, Tabs, KpiCard,
@@ -22,13 +23,24 @@ import {
 import {
   buscarOrden, crearDevolucion, enriquecerConGN, leerDevoluciones, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarDevolucion,
-  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn,
+  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarDevolucion,
 } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, ESTADO_LABEL, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, numeroReclamo, pagadoPorItem,
+  calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, numeroReclamo,
+  pagadoPorItem, pideSeguimiento, VIA_LABEL,
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 import { DecidirDevolucion } from './DecidirDevolucion'
+
+/** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
+function obtenerPass(): string {
+  let p = leerAdminPass()
+  if (!p) {
+    p = (typeof window !== 'undefined' ? window.prompt('Ingresá tu contraseña del Monitor (para descontar el stock en GN):') || '' : '').trim()
+    if (p) guardarAdminPass(p)
+  }
+  return p
+}
 
 const ESTADO_TONE: Record<EstadoDevolucion, Tone> = {
   borrador: 'neutral',
@@ -50,7 +62,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
   const esAdmin = modo === 'admin'
   const toast = useToast()
-  const { confirmar } = useConfirmar()
+  const { confirmar, pedirTexto } = useConfirmar()
 
   const [filas, setFilas] = useState<DevolucionRow[]>([])
   const [cargando, setCargando] = useState(true)
@@ -220,6 +232,39 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
       const n = await ponerStockCeroEnTn(marca, d.items || [])
       await marcarStockTn(marca, d.id)
       toast.ok(`${n} variante${n === 1 ? '' : 's'} en 0 en Tienda Nube.`)
+      void recargar()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  /** El código de seguimiento, cuando ya se emitió la etiqueta. */
+  const cargarSeguimiento = async (d: DevolucionRow) => {
+    const codigo = await pedirTexto('Código de seguimiento de la vuelta', d.seguimiento_vuelta || '', {
+      titulo: `Seguimiento — ${VIA_LABEL[d.via_retorno || 'andreani']}`,
+      ok: 'Guardar',
+    })
+    if (codigo === null) return
+    await accion(() => editarDevolucion(marca, d.id, { seguimiento_vuelta: codigo.trim() || null }), 'Seguimiento guardado.')
+  }
+
+  /**
+   * Descuenta del stock la unidad que se le manda al cliente. Es lo que evita que esa prenda salga
+   * del depósito sin quedar registrada en ningún lado.
+   */
+  const descontarLaQueVa = async (d: DevolucionRow) => {
+    const si = await confirmar({
+      titulo: 'Descontar el reemplazo del stock',
+      tono: 'warning',
+      ok: 'Descontar en GN',
+      mensaje: `Se crea la venta técnica en Gestión Nube que saca del depósito ${(d.items || []).map((i) => `${i.cantidad} × ${i.producto}`).join(', ')}. Neto $0: el cliente ya lo pagó en la compra original.`,
+    })
+    if (!si) return
+    const pass = obtenerPass()
+    if (!pass) { toast.aviso('Sin la contraseña no se puede escribir la venta en GN.'); return }
+    try {
+      const v = await descontarReemplazo(marca, d, { user: perfil?.name || '', pass })
+      toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)
@@ -410,7 +455,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                     </div>
                   </Td>
                   <Td>{MOTIVO_LABEL[d.motivo] || d.motivo}</Td>
-                  <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={ESTADO_LABEL[d.estado]} /></Td>
+                  <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
                   <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>
                   <Td>
                     <div style={{ fontSize: font.xs, color: faltan.length ? color.warning : color.mut2 }}>
@@ -426,6 +471,14 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                       {esAdmin && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
                         <Button size="sm" variant="solid" tone="brand" onClick={() => setDecidiendo(d)}>Decidir</Button>
                       )}
+                      {/* El seguimiento se carga acá, cuando ya tenés la etiqueta en la mano — no
+                          al decidir, que es cuando todavía no existe. Solo para correo/andreani:
+                          el cadete y el "la trae al local" no tienen nada que rastrear. */}
+                      {esAdmin && pideSeguimiento(d.via_retorno) && d.estado === 'en_transito' && (
+                        <Button size="sm" variant="outline" onClick={() => void cargarSeguimiento(d)}>
+                          {d.seguimiento_vuelta ? 'Cambiar código' : 'Cargar seguimiento'}
+                        </Button>
+                      )}
                       {esAdmin && d.estado === 'en_transito' && (
                         <Button size="sm" variant="outline" onClick={() => void accion(() => cambiarEstado(marca, d.id, 'recibido'), 'Marcado como recibido.')}>Volvió</Button>
                       )}
@@ -437,6 +490,10 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                       )}
                       {esAdmin && d.tn_stock_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void ponerEnCero(d)}>Poner en 0 en TN</Button>
+                      )}
+                      {/* Sale una unidad de stock y hasta que no se haga, GN dice que sigue estando. */}
+                      {esAdmin && d.compensacion === 'otra_unidad' && !d.gn_venta_reemplazo_id && (
+                        <Button size="sm" variant="solid" tone="warning" onClick={() => void descontarLaQueVa(d)}>Descontar reemplazo</Button>
                       )}
                       {esAdmin && d.destino_prenda === 'falla' && !(d.falla_ids || []).length && (d.estado === 'recibido' || d.estado === 'resuelto') && (
                         <Button size="sm" variant="outline" onClick={() => void aFallas(d)}>Pasar a Fallas</Button>
