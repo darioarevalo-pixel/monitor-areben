@@ -8,6 +8,8 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import { CUENTAS } from '@/lib/cuentas'
+import { sbFetch } from '@/lib/supabase/rest'
 import type { Marca } from '@/lib/nav.datos'
 import type {
   Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
@@ -59,7 +61,53 @@ export async function buscarOrden(marca: Marca, numero: string | number): Promis
 
 /** ¿Esta orden trae los datos para calcular la plata sola, o hay que cargarla a mano? */
 export function ordenTraeDatosDePlata(orden: OrdenTN | null | undefined): boolean {
-  return !!orden && typeof orden.subtotal === 'number'
+  return !!orden && orden.subtotal != null && Number(orden.subtotal) > 0
+}
+
+type FilaInv = { product_id: number | string; size_id: number | string | null; sku: string | null }
+type FilaProd = { id: number | string; unit_cost: number | string | null; retailer_price: number | string | null }
+
+/**
+ * Le pega a los ítems de la orden de TN sus datos de Gestión Nube: los ids de la variante (sin
+ * ellos no se puede crear la falla ni tocar stock) y el costo.
+ *
+ * El cruce es **por SKU exacto**, que es lo que hay: los `product_id` de TN y de GN son mundos
+ * distintos. Si un SKU no aparece en GN el ítem queda como vino y se avisa en pantalla — es
+ * preferible a adivinar un cruce difuso cuando lo que sigue es tocar stock.
+ *
+ * Misma consulta que usa `BuscarArticuloGN`: el costo vive en `productos`, no en `inventario`.
+ */
+export async function enriquecerConGN(marca: Marca, items: ItemDevolucion[]): Promise<ItemDevolucion[]> {
+  const skus = [...new Set(items.map((i) => (i.sku || '').trim()).filter(Boolean))]
+  if (!skus.length) return items
+  try {
+    const lista = skus.map((s) => `"${s.replace(/"/g, '')}"`).join(',')
+    const inv = await sbFetch<FilaInv>(CUENTAS[marca], 'inventario', `select=product_id,size_id,sku&sku=in.(${encodeURIComponent(lista)})`)
+    if (!inv.length) return items
+    const porSku = new Map<string, FilaInv>()
+    for (const r of inv) if (r.sku && !porSku.has(r.sku)) porSku.set(r.sku, r)
+
+    const pids = [...new Set(inv.map((r) => String(r.product_id)))]
+    const prods = pids.length
+      ? await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,unit_cost,retailer_price&id=in.(${pids.join(',')})`)
+      : []
+    const costo = new Map(prods.map((p) => [String(p.id), p.unit_cost == null ? null : Number(p.unit_cost)]))
+
+    return items.map((it) => {
+      const g = it.sku ? porSku.get(it.sku.trim()) : undefined
+      if (!g) return it
+      return {
+        ...it,
+        product_id: String(g.product_id),
+        size_id: g.size_id == null ? null : String(g.size_id),
+        costo: it.costo ?? costo.get(String(g.product_id)) ?? null,
+      }
+    })
+  } catch {
+    // Sin los datos de GN el reclamo se puede cargar igual; lo que no se va a poder es crear la
+    // falla ni corregir stock desde acá.
+    return items
+  }
 }
 
 export type CrearDevolucion = {

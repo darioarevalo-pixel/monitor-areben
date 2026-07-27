@@ -25,12 +25,13 @@ import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow, type Fa
 import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
 import { Cambios } from '@/components/cambios/Cambios'
+import { Devoluciones } from '@/components/devoluciones/Devoluciones'
 
 type Tab = 'fallas' | 'cambios' | 'devoluciones' | 'canjes'
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
   { key: 'fallas', label: 'Fallas', listo: true },
   { key: 'cambios', label: 'Cambios', listo: true },
-  { key: 'devoluciones', label: 'Devoluciones', listo: false },
+  { key: 'devoluciones', label: 'Devoluciones', listo: true },
   { key: 'canjes', label: 'Canjes', listo: false },
 ]
 
@@ -291,6 +292,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
 
       {esAdmin && tab === 'cambios' ? (
         <Cambios />
+      ) : esAdmin && tab === 'devoluciones' ? (
+        <Devoluciones />
       ) : esAdmin && tab !== 'fallas' ? (
         <Card padding={4}><EmptyState icon="🚧" title={`${TABS.find((t) => t.key === tab)?.label} llega en una próxima tanda`} hint="Post-venta suma esta pestaña más adelante." /></Card>
       ) : (

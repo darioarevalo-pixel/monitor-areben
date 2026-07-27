@@ -110,6 +110,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   'postventa-deposito': 'postventa',
   postventa: 'postventa',
   'cambios-local': 'cambios',
+  'devoluciones-local': 'cambios',
   etiquetas: 'etiquetas',
   ubicaciones: 'ubicaciones',
   conteo: 'conteo',
@@ -261,6 +262,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'postventa-local': 'Cargá las prendas con falla que recibís del cliente. El motor está en Administración.',
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
   'cambios-local': 'Iniciá un cambio: buscá la orden de TN, marcá qué devuelve y qué se lleva el cliente.',
+  'devoluciones-local': 'Abrí un reclamo de devolución y pasale el link al cliente para que suba las fotos. La plata la devuelve Administración.',
 }
 
 export function descripcionDe(key: string): string | undefined {
