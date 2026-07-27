@@ -15,7 +15,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, FotoReclamo, ItemReclamo,
-  Expectativa, MotivoReclamo, OrdenTN, ViaRetorno,
+  Expectativa, FormaPago, MotivoReclamo, OrdenTN, ViaRetorno,
 } from './tipos'
 
 const API = '/api/postventa?recurso=reclamos'
@@ -162,6 +162,11 @@ export type Decision = {
   envio_costo?: number | null
   /** El envío del reemplazo, cuando se le manda otra unidad. */
   envio_ida_costo?: number | null
+  /** Cambio por otro producto: lo que se lleva, cómo paga la diferencia y cuánto es. */
+  items_nuevos?: ItemReclamo[]
+  forma_pago?: FormaPago | null
+  diferencia?: number | null
+  descuento_manual?: number | null
   costo_caso?: number | null
   cupon_codigo?: string | null
   /** Lo que se pagó por la orden entera: el servidor lo usa de techo del reintegro. */

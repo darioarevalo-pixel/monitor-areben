@@ -18,11 +18,10 @@
 import { color, font, space } from '@/components/ui'
 
 /** Dónde se carga cada cosa. La regla es de dónde VIENE la prenda, no qué le pasó. */
-export function DondeVa({ activa }: { activa: 'fallas' | 'cambios' | 'reclamos' }) {
+export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' }) {
   const filas: { key: typeof activa; pregunta: string; donde: string }[] = [
-    { key: 'fallas', pregunta: '¿La prenda ya está acá?', donde: 'Fallas' },
-    { key: 'reclamos', pregunta: '¿Compró online y reclama a distancia?', donde: 'Reclamos' },
-    { key: 'cambios', pregunta: '¿Quiere otro producto distinto?', donde: 'Cambios' },
+    { key: 'fallas', pregunta: '¿La prenda ya está acá, sin orden de por medio?', donde: 'Fallas' },
+    { key: 'reclamos', pregunta: '¿Compró online y algo salió mal?', donde: 'Reclamos' },
   ]
   return (
     <details style={{ marginBottom: space[3], border: `1px solid ${color.line}`, background: color.bg2, borderRadius: 'var(--mo-r-lg)', padding: '10px 14px' }}>
@@ -36,8 +35,12 @@ export function DondeVa({ activa }: { activa: 'fallas' | 'cambios' | 'reclamos' 
           </div>
         ))}
         <div style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
-          Si te equivocás de pestaña, el stock y la plata pueden quedar mal en dos lugares a la vez.
-          Ante la duda, preguntá antes de cargar.
+          <b>Los cambios ahora son un reclamo más</b>: se abre con el motivo que corresponda y al
+          resolver se elige &quot;lo cambia por otro producto&quot;.
+          <div style={{ marginTop: 4 }}>
+            Si te equivocás de lugar, el stock y la plata pueden quedar mal a la vez. Ante la duda,
+            preguntá antes de cargar.
+          </div>
         </div>
       </div>
     </details>

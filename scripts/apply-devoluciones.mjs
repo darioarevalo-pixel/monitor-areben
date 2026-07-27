@@ -22,7 +22,7 @@ const env = Object.fromEntries(
 )
 
 // Las dos migraciones en orden, ambas idempotentes: crea la tabla y luego la extiende.
-const sql = ['sql/migrate-devoluciones.sql', 'sql/migrate-devoluciones-2.sql', 'sql/migrate-devoluciones-3.sql'].map((f) => readFileSync(f, 'utf8')).join('\n;\n')
+const sql = ['sql/migrate-devoluciones.sql', 'sql/migrate-devoluciones-2.sql', 'sql/migrate-devoluciones-3.sql', 'sql/migrate-reclamos-4.sql'].map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
 // Parse robusto (la contraseña puede tener caracteres especiales sin encodear).
 function parse(raw) {

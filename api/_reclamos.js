@@ -48,7 +48,8 @@ const MOTIVOS = [
 ];
 const EXPECTATIVAS = ['plata', 'mismo_producto', 'otro_producto', 'completar'];
 const DESTINOS = ['stock', 'falla', 'no_salio', 'perdida'];
-const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'reenvio', 'cupon', 'ninguna'];
+const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'otro_producto', 'reenvio', 'cupon', 'ninguna'];
+const FORMAS_PAGO = ['tarjeta', 'transferencia'];
 const ESTADOS = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
 // Cómo vuelve la prenda. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
@@ -61,6 +62,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
+  items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 // El `token` NUNCA sale en los listados: es la llave del link público. Se pide aparte, de a uno.
 
@@ -204,6 +206,11 @@ export default async function handler(req, res) {
         envio_ida_costo: num(b.envio_ida_costo),
         costo_caso: num(b.costo_caso),
         cupon_codigo: texto(b.cupon_codigo),
+        // El cambio por otro producto: lo que se lleva y cuánto queda de diferencia.
+        items_nuevos: Array.isArray(b.items_nuevos) ? b.items_nuevos : [],
+        forma_pago: FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null,
+        diferencia: num(b.diferencia),
+        descuento_manual: num(b.descuento_manual),
         estado: vuelve ? 'en_transito' : 'resuelto',
         // Sin plata que devolver (le mandamos otra unidad o un cupón), el pendiente no aplica.
         reintegro_estado: compensacion === 'otra_unidad' || compensacion === 'ninguna' ? 'no_aplica' : 'pendiente',
@@ -282,6 +289,10 @@ export default async function handler(req, res) {
       if (b.expectativa !== undefined && EXPECTATIVAS.includes(b.expectativa)) campos.expectativa = b.expectativa;
       if (b.reclamo_correo !== undefined) campos.reclamo_correo = texto(b.reclamo_correo);
       if (b.items_correctos !== undefined && Array.isArray(b.items_correctos)) campos.items_correctos = b.items_correctos;
+      if (b.items_nuevos !== undefined && Array.isArray(b.items_nuevos)) campos.items_nuevos = b.items_nuevos;
+      if (b.forma_pago !== undefined && FORMAS_PAGO.includes(b.forma_pago)) campos.forma_pago = b.forma_pago;
+      if (b.solicitud_envio !== undefined) campos.solicitud_envio = texto(b.solicitud_envio);
+      if (b.descuento_manual !== undefined) campos.descuento_manual = num(b.descuento_manual);
       if (b.reclamo_correo_estado !== undefined && PENDIENTES.includes(b.reclamo_correo_estado)) campos.reclamo_correo_estado = b.reclamo_correo_estado;
       // Los tres pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
       for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado']) {

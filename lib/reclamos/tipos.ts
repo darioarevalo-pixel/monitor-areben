@@ -58,7 +58,16 @@ export const EXPECTATIVA_LABEL: Record<Expectativa, string> = {
  */
 export type DestinoPrenda = 'stock' | 'falla' | 'no_salio' | 'perdida'
 
-export type Compensacion = 'plata_total' | 'plata_parcial' | 'otra_unidad' | 'reenvio' | 'cupon' | 'ninguna'
+export type Compensacion =
+  | 'plata_total'
+  | 'plata_parcial'
+  /** Otra unidad DEL MISMO producto (reposición). Sin diferencia de precio. */
+  | 'otra_unidad'
+  /** Otro producto DISTINTO: es el cambio de toda la vida, y por eso hay diferencia de precio. */
+  | 'otro_producto'
+  | 'reenvio'
+  | 'cupon'
+  | 'ninguna'
 
 /**
  * Cómo vuelve la prenda. `presencial` es el cliente acercándose al local: **no hay envío**, así
@@ -326,6 +335,67 @@ export function convieneRetorno(
   return { recuperable, envioVuelta, conviene: true, motivo: `Conviene: recuperás ${recuperable}${detalle} y el envío sale ${envioVuelta}.` }
 }
 
+// ── El cambio por otro producto ─────────────────────────────────────────────────
+
+/** Solo dos formas, y transferencia lleva descuento. Igual que en el motor viejo de Cambios. */
+export type FormaPago = 'tarjeta' | 'transferencia'
+/** El % que se le descuenta a la diferencia A COBRAR según cómo pague. */
+const DESCUENTO_FORMA: Record<FormaPago, number> = { tarjeta: 0, transferencia: 10 }
+
+export type CuentaCambio = {
+  /** Lo que se lleva, a precio de lista. */
+  nuevos: number
+  /** Lo que devuelve, a lo que REALMENTE pagó (con los descuentos de la orden prorrateados). */
+  devueltos: number
+  diferencia: number
+  descuentoForma: number
+  /** Positivo: lo paga el cliente. Negativo: se le devuelve. Cero: parejo. */
+  total: number
+  /** En criollo, para la pantalla y para el mensaje. */
+  quienPaga: 'cliente' | 'nosotros' | 'nadie'
+}
+
+/**
+ * La cuenta de un cambio por otro producto.
+ *
+ * ⚠️ **Acá está el arreglo del hueco que tenía el motor viejo de Cambios**: tomaba el precio de
+ * lista de lo devuelto en vez de lo que la persona **pagó**. En una orden con cupón del 20%, eso
+ * le acreditaba al cliente plata que nunca puso — y la diferencia le quedaba a favor. Con
+ * `pagadoPorItem` el devuelto se valúa por lo pagado y la cuenta cierra.
+ *
+ * El descuento por forma de pago solo aplica sobre una diferencia **a cobrar**: si el cambio da a
+ * favor del cliente no hay nada que descontar.
+ */
+export function calcularCambio(opciones: {
+  devueltos: ItemReclamo[]
+  nuevos: ItemReclamo[]
+  orden?: OrdenTN | null
+  formaPago?: FormaPago | null
+  /** Un descuento extra acordado a mano, sobre la diferencia a cobrar. */
+  descuentoManual?: number | null
+}): CuentaCambio {
+  const { devueltos, nuevos, orden } = opciones
+  const totalNuevos = redondear(nuevos.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0))
+  const totalDevueltos = redondear(devueltos.reduce((s, it) => s + (it.pagado ?? pagadoPorItem(it, orden)), 0))
+  const diferencia = redondear(totalNuevos - totalDevueltos)
+
+  // Los descuentos solo tienen sentido sobre lo que el cliente TIENE que poner.
+  const manual = diferencia > 0 ? Math.min(positivo(opciones.descuentoManual), diferencia) : 0
+  const base = Math.max(diferencia - manual, 0)
+  const pct = opciones.formaPago ? DESCUENTO_FORMA[opciones.formaPago] : 0
+  const descuentoForma = diferencia > 0 ? redondear((base * pct) / 100) : 0
+  const total = redondear(diferencia - manual - descuentoForma)
+
+  return {
+    nuevos: totalNuevos,
+    devueltos: totalDevueltos,
+    diferencia,
+    descuentoForma,
+    total,
+    quienPaga: total > 0 ? 'cliente' : total < 0 ? 'nosotros' : 'nadie',
+  }
+}
+
 // ── Qué aplica a cada motivo ────────────────────────────────────────────────────
 
 /**
@@ -340,10 +410,10 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
     case 'arrepentimiento':
     case 'no_esperaba':
     case 'no_era_lo_esperado':
-      return ['plata_total', 'plata_parcial', 'cupon']
+      return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
     // Falla: es donde hay más margen: devolver, descontar para que se la quede, o reponerla.
     case 'falla':
-      return ['plata_total', 'plata_parcial', 'otra_unidad', 'cupon']
+      return ['otra_unidad', 'otro_producto', 'plata_total', 'plata_parcial', 'cupon']
     // Nunca salió: o se lo mandamos, o le devolvemos esa parte. No hay prenda que negociar.
     case 'faltante':
     case 'sin_stock':
@@ -552,6 +622,12 @@ export type ReclamoRow = {
   mensajes?: { tipo: string; at: string; por?: string | null; texto: string }[]
   /** En "pedido mal armado": lo que se le TENDRÍA que haber mandado. */
   items_correctos?: ItemReclamo[]
+  /** En un cambio por otro producto: lo que se lleva. De acá sale la diferencia de precio. */
+  items_nuevos?: ItemReclamo[]
+  forma_pago?: FormaPago | null
+  /** Positivo: lo paga el cliente. Negativo: se le devuelve. */
+  diferencia?: number | null
+  descuento_manual?: number | null
   falla_ids?: number[]
   costo_caso?: number | null
   usuario?: string | null

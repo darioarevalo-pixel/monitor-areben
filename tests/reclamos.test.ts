@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  alertasDe, calcularMonto, compensacionesDe, conAlerta, convieneRetorno, correccionesMalArmado,
+  alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
+  correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
   destinoDe, estadoEnCriollo, faltantesParaCerrar, hayEnvio, laFallaDescuentaStock, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda,
@@ -475,5 +476,62 @@ describe('alertas por antigüedad', () => {
   it('conAlerta cuenta reclamos, no alertas', () => {
     const dormido = fila({ id: 2, estado: 'esperando_cliente', created_at: hace(30), updated_at: hace(30) })
     expect(conAlerta([fila({}), dormido], AHORA)).toBe(1)
+  })
+})
+
+/**
+ * El cambio por otro producto: lo que era la sección Cambios, ahora como una resolución más.
+ *
+ * El caso del cupón es el que importa: el motor viejo valuaba lo devuelto a precio de LISTA, así
+ * que le acreditaba al cliente plata que nunca pagó.
+ */
+describe('calcularCambio', () => {
+  const devuelto = item(10000)
+  const nuevo = item(12000)
+
+  it('sin descuentos, la diferencia es la resta directa', () => {
+    const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_LIMPIA })
+    expect(c.diferencia).toBe(2000)
+    expect(c.quienPaga).toBe('cliente')
+  })
+
+  // El hueco del motor viejo: con un cupón del 20%, pagó 8.000 y no 10.000.
+  it('con cupón: lo devuelto vale lo que PAGÓ, no el precio de lista', () => {
+    const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_CON_CUPON })
+    expect(c.devueltos).toBe(8000)
+    expect(c.diferencia).toBe(4000) // y no 2000, que es lo que calculaba antes
+  })
+
+  it('transferencia descuenta 10% de lo que hay que cobrar', () => {
+    const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_LIMPIA, formaPago: 'transferencia' })
+    expect(c.descuentoForma).toBe(200)
+    expect(c.total).toBe(1800)
+  })
+
+  it('tarjeta no descuenta nada', () => {
+    expect(calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_LIMPIA, formaPago: 'tarjeta' }).total).toBe(2000)
+  })
+
+  // Si el cambio da a favor del cliente no hay nada que descontar: descontar ahí sería regalar más.
+  it('si el cambio da a favor del cliente, no se aplica descuento por forma de pago', () => {
+    const c = calcularCambio({ devueltos: [item(12000)], nuevos: [item(10000)], orden: ORDEN_LIMPIA, formaPago: 'transferencia' })
+    expect(c.descuentoForma).toBe(0)
+    expect(c.total).toBe(-2000)
+    expect(c.quienPaga).toBe('nosotros')
+  })
+
+  it('un cambio parejo no le cobra ni le devuelve a nadie', () => {
+    expect(calcularCambio({ devueltos: [item(10000)], nuevos: [item(10000)], orden: ORDEN_LIMPIA }).quienPaga).toBe('nadie')
+  })
+
+  it('el descuento manual no puede superar la diferencia', () => {
+    const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_LIMPIA, descuentoManual: 99999 })
+    expect(c.total).toBe(0)
+  })
+
+  it('varios productos de cada lado se suman', () => {
+    const c = calcularCambio({ devueltos: [item(5000), item(5000)], nuevos: [item(12000)], orden: ORDEN_LIMPIA })
+    expect(c.devueltos).toBe(10000)
+    expect(c.diferencia).toBe(2000)
   })
 })

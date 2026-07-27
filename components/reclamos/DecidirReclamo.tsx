@@ -20,12 +20,14 @@ import {
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
+import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { decidir } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento, destinoDe, hayEnvio,
+  calcularCambio, calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
+  destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
-  type ViaRetorno,
+  type ViaRetorno, type FormaPago,
 } from '@/lib/reclamos/tipos'
 
 /** Todas las salidas. Cuáles se ofrecen lo decide `compensacionesDe` según lo que pasó. */
@@ -33,6 +35,7 @@ const SALIDAS: { key: Compensacion; label: string; ayuda: string }[] = [
   { key: 'plata_total', label: 'Le devolvemos todo', ayuda: 'La devolución clásica.' },
   { key: 'plata_parcial', label: 'Le devolvemos una parte', ayuda: 'Se queda la prenda con un descuento acordado. La más barata: ni envío ni reintegro completo.' },
   { key: 'otra_unidad', label: 'Le mandamos otra igual', ayuda: 'No se toca la plata. Sale una unidad de stock.' },
+  { key: 'otro_producto', label: 'Lo cambia por otro producto', ayuda: 'El cambio de siempre: elegís lo que se lleva y sale la diferencia de precio.' },
   { key: 'reenvio', label: 'Le mandamos lo que corresponde', ayuda: 'Se despacha lo que faltó o lo correcto. No se toca la plata.' },
   { key: 'cupon', label: 'Le damos un cupón', ayuda: 'Cuesta menos que efectivo y lo retiene. El cupón se genera aparte y se anota acá.' },
   { key: 'ninguna', label: 'Nada', ayuda: 'Se resuelve sin compensación.' },
@@ -70,6 +73,9 @@ export function DecidirReclamo({
   const [via, setVia] = useState<ViaRetorno>('andreani')
   // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
   const [envioIda, setEnvioIda] = useState<number | ''>('')
+  /** El cambio por otro producto: lo que se lleva y cómo paga la diferencia. */
+  const [lleva, setLleva] = useState<ItemReclamo[]>([])
+  const [formaPago, setFormaPago] = useState<FormaPago>('transferencia')
   const [guardando, setGuardando] = useState(false)
 
   /** Cuántas unidades entran en el reclamo: lo que multiplica a los valores por unidad. */
@@ -136,7 +142,10 @@ export function DecidirReclamo({
         retorno_decidido: retorno,
         via_retorno: retorno ? via : null,
         envio_costo: retorno && hayEnvio(via) ? Number(envioVuelta) || null : null,
-        envio_ida_costo: compensacion === 'otra_unidad' ? Number(envioIda) || null : null,
+        envio_ida_costo: compensacion === 'otra_unidad' || compensacion === 'otro_producto' ? Number(envioIda) || null : null,
+        items_nuevos: compensacion === 'otro_producto' ? lleva : [],
+        forma_pago: compensacion === 'otro_producto' ? formaPago : null,
+        diferencia: compensacion === 'otro_producto' ? cambio.total : null,
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
@@ -156,6 +165,13 @@ export function DecidirReclamo({
     () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta: Number(envioVuelta) || 0 }),
     [itemsConFeria, esFalla, envioVuelta],
   )
+
+  /**
+   * La cuenta del cambio: lo que se lleva contra lo que PAGÓ por lo que devuelve.
+   * Sin `useMemo` a propósito: es una resta sobre un puñado de ítems, y memoizarla obligaba a
+   * pelearse con el compilador de React por nada.
+   */
+  const cambio = calcularCambio({ devueltos: items, nuevos: lleva, orden, formaPago })
 
   const salida = SALIDAS.find((s) => s.key === compensacion)
 
@@ -295,6 +311,46 @@ export function DecidirReclamo({
           <Field label="Envío del reemplazo ($)" hint="El que va con la unidad nueva" style={{ marginTop: space[2] }}>
             <NumberField value={envioIda} onChange={(v) => setEnvioIda(v)} style={{ width: 140 }} />
           </Field>
+        )}
+        {/* El cambio por otro producto. Lo que devuelve se valúa por lo que PAGÓ —con los
+            descuentos de la orden prorrateados—, que es justamente lo que el motor viejo de
+            Cambios calculaba mal: acreditaba precio de lista y la diferencia le quedaba a favor. */}
+        {compensacion === 'otro_producto' && (
+          <div style={{ marginTop: space[2] }}>
+            <div style={{ fontSize: font.sm, fontWeight: weight.semibold, marginBottom: space[2] }}>¿Qué se lleva?</div>
+            <BuscarArticuloGN marca={marca} mostrarCosto={false} onSelect={(a) => setLleva((prev) => [...prev, {
+              producto: a.product_name || 'Sin nombre', sku: a.sku, variante: a.size_name, cantidad: 1,
+              product_id: a.product_id, size_id: a.size_id, precio: a.retailer_price ?? null, costo: a.unit_cost ?? null,
+            }])} />
+            {lleva.map((l, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: 4, fontSize: font.sm }}>
+                <span>{l.cantidad}× {l.producto}{l.variante ? ` (${l.variante})` : ''}</span>
+                <MoneyText value={Number(l.precio) || 0} />
+                <Button size="sm" variant="ghost" onClick={() => setLleva((p) => p.filter((_, j) => j !== i))}>Quitar</Button>
+              </div>
+            ))}
+
+            {!!lleva.length && (
+              <>
+                <Field label="¿Cómo paga la diferencia?" style={{ marginTop: space[2] }}>
+                  <Select value={formaPago} onChange={(e) => setFormaPago(e.target.value as FormaPago)}>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="transferencia">Transferencia (10% off)</option>
+                  </Select>
+                </Field>
+                <Notice tone={cambio.quienPaga === 'cliente' ? 'warning' : cambio.quienPaga === 'nosotros' ? 'action' : 'success'} style={{ marginTop: space[2] }}>
+                  Se lleva <b><MoneyText value={cambio.nuevos} /></b> y devuelve{' '}
+                  <b><MoneyText value={cambio.devueltos} /></b> (lo que pagó).
+                  {cambio.descuentoForma > 0 && <> Menos <MoneyText value={cambio.descuentoForma} /> por transferencia.</>}
+                  <div style={{ marginTop: 4, fontWeight: weight.bold }}>
+                    {cambio.quienPaga === 'cliente' && <>Tiene que abonar <MoneyText value={cambio.total} /></>}
+                    {cambio.quienPaga === 'nosotros' && <>Le devolvemos <MoneyText value={Math.abs(cambio.total)} /></>}
+                    {cambio.quienPaga === 'nadie' && <>Cambio parejo: no se cobra ni se devuelve nada.</>}
+                  </div>
+                </Notice>
+              </>
+            )}
+          </div>
         )}
         {compensacion === 'cupon' && (
           <Field label="Código del cupón" hint="Generalo en Tienda Nube y anotalo acá" style={{ marginTop: space[2] }}>
