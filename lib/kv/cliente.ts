@@ -27,13 +27,13 @@
  * tira y un `try/catch` NO lo caza. Hay que mirar `r.ok` Y `d.ok`. Ese fue
  * exactamente el bug: el `catch` del legacy nunca corría.
  *
- * SEGURIDAD (ver A7 en el plan): estas claves **no piden credencial**. Se bajaron
- * los 653 teléfonos de clientes sin autenticarse. No se usa un route handler
- * porque no hay ningún token que esconder — sería cero seguridad y un modo de
- * falla nuevo, y no cerraría nada mientras el iframe le pegue directo. El día que
- * `bdi-catalogo` exija auth, el cambio es este archivo y nada más.
+ * SEGURIDAD: acá adentro viven `crmtel`, `crmseg` y `crmleads` — los teléfonos y el
+ * seguimiento de los clientes. Estas claves **no pedían credencial**: se bajaron los 653
+ * teléfonos sin autenticarse. Ese día llegó, y como decía este comentario, el cambio de este
+ * lado fue un archivo: todo pasa por `apiFetch`, que manda el header `x-monitor-auth`.
  */
 
+import { apiFetch } from '../api-fetch'
 import type { Marca } from '../nav.datos'
 import { camposAdmin, type Credencial } from '../sesion'
 
@@ -68,7 +68,7 @@ export const MOTIVO_NO_LEIDO =
 
 async function pedir(url: string, init?: RequestInit): Promise<Lectura<Record<string, unknown>>> {
   try {
-    const r = await fetch(url, init)
+    const r = await apiFetch(url, init)
     let d: Record<string, unknown> | null = null
     try {
       d = (await r.json()) as Record<string, unknown>
@@ -240,7 +240,7 @@ export type EscrituraIngresos = { ok: true } | { ok: false; motivo: string; proh
 export async function guardarIngresos<T>({ store, ingresos, cred, cargado }: OpcionesGuardarIngresos<T>): Promise<EscrituraIngresos> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
   try {
-    const r = await fetch(API, {
+    const r = await apiFetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ store, ingresos, ...camposAdmin(cred) }),

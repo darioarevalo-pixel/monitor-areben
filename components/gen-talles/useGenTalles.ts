@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
 import { useToast } from '@/components/ui'
+import { apiFetch } from '@/lib/api-fetch'
 import { indexarTn, type IndiceTn, type TnProducto } from '@/lib/tn'
 import type { TablaGuardada } from '@/lib/gen-talles/plantillas'
 
@@ -25,6 +26,8 @@ import type { TablaGuardada } from '@/lib/gen-talles/plantillas'
  */
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+// ⚠️ Escribe la descripción del producto en la tienda en vivo, así que va con credencial
+// (`apiFetch` manda el header `x-monitor-auth`). Este endpoint estaba abierto a cualquiera.
 const TN_CATEGORIAS = 'https://bdi-catalogo.vercel.app/api/tn-categorias'
 
 const cacheProductos: Partial<Record<Marca, TnProducto[]>> = {}
@@ -35,7 +38,7 @@ async function bajarAudit(marca: Marca, refrescar = false): Promise<void> {
   if (!enVuelo[marca] || refrescar) {
     enVuelo[marca] = (async () => {
       try {
-        const r = await fetch(`${AUDIT}?store=${marca}${refrescar ? `&refresh=1&nc=${Date.now()}` : ''}`)
+        const r = await apiFetch(`${AUDIT}?store=${marca}${refrescar ? `&refresh=1&nc=${Date.now()}` : ''}`)
         const d = await r.json()
         cacheProductos[marca] = (d && d.products) || []
       } catch {
@@ -118,7 +121,7 @@ export function useGenTalles(marca: Marca): EstadoGenTalles {
   const cargarEnTN = useCallback(
     async (productId: string | number, tablaHtml: string) => {
       try {
-        const r = await fetch(`${TN_CATEGORIAS}?store=${marca}`, {
+        const r = await apiFetch(`${TN_CATEGORIAS}?store=${marca}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accion: 'descripcion-talles', productId, tablaHtml }),

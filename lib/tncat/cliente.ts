@@ -5,8 +5,15 @@
  *
  * ⚠️ Todas las funciones POST de este módulo ESCRIBEN en la tienda online en vivo
  * (categorías, imágenes, publicación de productos, vínculo foto→color).
+ *
+ * Por eso van con **`apiFetch`** y no con `fetch` pelado: manda el header `x-monitor-auth` con
+ * la credencial de quien está usando el Monitor. Del otro lado, `bdi-catalogo` la exige — antes
+ * estos endpoints estaban abiertos a cualquiera con la URL, o sea que desde afuera se podía
+ * vaciar la tienda o poner el stock en cero. Las lecturas van con `apiFetch` también: cuesta lo
+ * mismo y deja el camino listo para cuando se cierren.
  */
 
+import { apiFetch } from '../api-fetch'
 import type { Marca } from '../nav'
 import type {
   AsigAplicar,
@@ -29,26 +36,26 @@ const auditUrl = (store: Marca) => `${BASE}/tiendanube-audit?store=${store}`
 // ── Categorías por modelo (card 1) ──────────────────────────────────────────────
 /** Recalcula el diff de categorías por stock (read-only). Port de tncatCargar. */
 export async function recalcularCategorias(store: Marca): Promise<CatRecalc> {
-  const r = await fetch(catUrl(store))
+  const r = await apiFetch(catUrl(store))
   return r.json()
 }
 /** Aplica el diff calculado en la tienda EN VIVO. Port de tncatAplicar. */
 export async function aplicarCategorias(store: Marca): Promise<CatAplicar> {
-  const r = await fetch(catUrl(store), { method: 'POST' })
+  const r = await apiFetch(catUrl(store), { method: 'POST' })
   return r.json()
 }
 
 // ── Asignar categoría por Excel (card 4) ────────────────────────────────────────
 /** Lista de categorías de la tienda (para el select). Port de tncatAsigInit. */
 export async function traerCategorias(store: Marca): Promise<Categoria[]> {
-  const r = await fetch(`${catUrl(store)}&accion=cats`)
+  const r = await apiFetch(`${catUrl(store)}&accion=cats`)
   const d = await r.json()
   if (!d.ok || !d.categorias) throw new Error(d.error || 'No se pudieron cargar las categorías')
   return d.categorias as Categoria[]
 }
 /** Previsualiza la asignación (aplicar:false): matched / yaTenían / noEncontrados. Port de tncatAsigPrevisualizar. */
 export async function previsualizarAsignar(store: Marca, categoriaId: string, nombres: string[]): Promise<AsigPreview> {
-  const r = await fetch(catUrl(store), {
+  const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accion: 'asignar', categoriaId, nombres, aplicar: false }),
@@ -57,7 +64,7 @@ export async function previsualizarAsignar(store: Marca, categoriaId: string, no
 }
 /** Aplica un lote de asignaciones en la tienda EN VIVO. Port del fetch de tncatAsigAplicar. */
 export async function aplicarAsignarLote(store: Marca, items: AsigMatched[]): Promise<AsigAplicar> {
-  const r = await fetch(catUrl(store), {
+  const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accion: 'asignar', items }),
@@ -68,7 +75,7 @@ export async function aplicarAsignarLote(store: Marca, items: AsigMatched[]): Pr
 // ── Publicar (card 2, botón "Subir y publicar") ─────────────────────────────────
 /** Publica (hace visibles) productos en la tienda EN VIVO. Port del fetch de tnImgSubirYPublicar. */
 export async function publicar(store: Marca, ids: (string | number)[]): Promise<{ ok: boolean; publicados?: number; errores?: unknown[]; error?: string }> {
-  const r = await fetch(catUrl(store), {
+  const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accion: 'publicar', ids }),
@@ -79,7 +86,7 @@ export async function publicar(store: Marca, ids: (string | number)[]): Promise<
 // ── Ocultar agotados (card 5) ───────────────────────────────────────────────────
 /** Oculta (despublica) productos en la tienda EN VIVO. Espejo de publicar(), reversible con publicar(). */
 export async function despublicar(store: Marca, ids: (string | number)[]): Promise<{ ok: boolean; ocultados?: number; errores?: unknown[]; error?: string }> {
-  const r = await fetch(catUrl(store), {
+  const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accion: 'ocultar', ids }),
@@ -90,13 +97,13 @@ export async function despublicar(store: Marca, ids: (string | number)[]): Promi
 // ── Carga de imágenes (card 2) ──────────────────────────────────────────────────
 /** Lista de productos con sus colores (para el datalist y el match). Port de tnImgInit/Recargar. */
 export async function traerProductosImg(store: Marca, bust = false): Promise<ProductoImg[]> {
-  const r = await fetch(`${imgUrl(store)}&productos=1${bust ? '&nc=' + Math.random() : ''}`)
+  const r = await apiFetch(`${imgUrl(store)}&productos=1${bust ? '&nc=' + Math.random() : ''}`)
   const j = await r.json()
   return (j.productos || []) as ProductoImg[]
 }
 /** Sube una imagen (y, si viene `color`, la vincula a la variante). ESCRIBE. Port del fetch de tnImgSubirTodo. */
 export async function subirImagen(store: Marca, body: { product_id: string | number; image: string; filename: string; color?: string }): Promise<SubirResp> {
-  const r = await fetch(imgUrl(store), {
+  const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -106,7 +113,7 @@ export async function subirImagen(store: Marca, body: { product_id: string | num
 }
 /** Revincula el color de una imagen YA subida (por image_id, no re-sube). ESCRIBE. Port de tnImgRevincular/fchkVincular. */
 export async function vincularColor(store: Marca, product_id: string | number, image_id: string | number, color: string): Promise<SubirResp> {
-  const r = await fetch(imgUrl(store), {
+  const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'link', product_id, image_id, color }),
@@ -116,7 +123,7 @@ export async function vincularColor(store: Marca, product_id: string | number, i
 }
 /** Quita (desvincula) la foto de las variantes de un color: PUT image_id null en TN. ESCRIBE. Espejo de vincularColor. */
 export async function desvincularColor(store: Marca, product_id: string | number, color: string): Promise<SubirResp> {
-  const r = await fetch(imgUrl(store), {
+  const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'unlink', product_id, color }),
@@ -128,7 +135,7 @@ export async function desvincularColor(store: Marca, product_id: string | number
 // ── Revisar fotos por variante (card 3) ─────────────────────────────────────────
 /** Trae el estado de fotos por variante del audit. Port de fchkAbrir. */
 export async function auditVariantes(store: Marca, refrescar = false): Promise<ProductoFchk[]> {
-  const r = await fetch(`${auditUrl(store)}&variantes=1${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
+  const r = await apiFetch(`${auditUrl(store)}&variantes=1${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
   const d = await r.json()
   return (d && d.products ? d.products : []) as ProductoFchk[]
 }
@@ -138,7 +145,7 @@ export async function auditVariantes(store: Marca, refrescar = false): Promise<P
  * Es lo que permite recorrer la tienda POR categoría en vez de a ciegas.
  */
 export async function auditProductos(store: Marca, refrescar = false): Promise<ProductoCat[]> {
-  const r = await fetch(`${auditUrl(store)}${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
+  const r = await apiFetch(`${auditUrl(store)}${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
   const d = await r.json()
   return (d && d.products ? d.products : []) as ProductoCat[]
 }
@@ -146,7 +153,7 @@ export async function auditProductos(store: Marca, refrescar = false): Promise<P
 /** Refresca el caché del audit de Marketing tras subir/publicar (así las fotos nuevas se ven ya). Port de _mktBustAudit. */
 export async function bustAudit(store: Marca): Promise<void> {
   try {
-    await fetch(`${auditUrl(store)}&refresh=1&nc=${Math.random()}`)
+    await apiFetch(`${auditUrl(store)}&refresh=1&nc=${Math.random()}`)
   } catch {
     /* no crítico */
   }

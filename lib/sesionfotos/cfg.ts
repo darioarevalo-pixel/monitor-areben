@@ -8,6 +8,7 @@
  * (que deja `repoCfg` con su default ante error).
  */
 
+import { apiFetch } from '../api-fetch'
 import type { Marca } from '../nav.datos'
 import type { Origen } from './tipos'
 
@@ -15,7 +16,7 @@ const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
 
 export async function leerPrioridadRetiro(marca: Marca): Promise<Origen> {
   try {
-    const r = await fetch(`${REPO_API}?store=${marca}`)
+    const r = await apiFetch(`${REPO_API}?store=${marca}`)
     const d = await r.json()
     if (r.ok && d && d.ok && d.config) return d.config.prioridadRetiro === 'local' ? 'local' : 'deposito'
   } catch {

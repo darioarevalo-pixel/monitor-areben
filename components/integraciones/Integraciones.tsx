@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CUENTAS } from '@/lib/cuentas'
+import { apiFetch } from '@/lib/api-fetch'
 import { sbFetch } from '@/lib/supabase/rest'
 import { guardarMapeo, leerMapeo, validarSkus } from '@/lib/sku-map/cliente'
 import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
@@ -131,7 +132,7 @@ export function Integraciones() {
           gn_variant_id: v.size_id != null ? String(v.size_id) : null,
         }))
       // TN: variantes de la tienda propia de Stunned (?variantes=1 expone sku/barcode/id por talle).
-      const d = await fetch(`${AUDIT}?store=${STORE}&variantes=1&nc=${Date.now()}`)
+      const d = await apiFetch(`${AUDIT}?store=${STORE}&variantes=1&nc=${Date.now()}`)
         .then((r) => r.json())
         .catch(() => ({}))
       const tnProducts: TnAuditProducto[] = Array.isArray(d?.products) ? d.products : []
@@ -215,7 +216,7 @@ export function Integraciones() {
       }
       // TN: stock por SKU (de las variantes). refresh=1 evita el caché de 1h del endpoint —
       // clave para que, tras aplicar, el dry-run lea el stock REAL y no el viejo.
-      const d = await fetch(`${AUDIT}?store=${STORE}&variantes=1&refresh=1&nc=${Date.now()}`)
+      const d = await apiFetch(`${AUDIT}?store=${STORE}&variantes=1&refresh=1&nc=${Date.now()}`)
         .then((r) => r.json())
         .catch(() => ({}))
       const tnStock = new Map<string, number | null>()
@@ -254,7 +255,7 @@ export function Integraciones() {
     setDryMsg(null)
     try {
       // tn-categorias lee la tienda del query param (?store=), no del body. Sin esto asume 'bdi'.
-      const resp = await fetch(`${TN_STOCK_API}?store=${STORE}`, {
+      const resp = await apiFetch(`${TN_STOCK_API}?store=${STORE}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion: 'stock', updates: [{ product_id: r.tnProductId, variant_id: r.tnVariantId, stock: r.gn }] }),

@@ -5,6 +5,7 @@
  * (index.html:12515/12592/12314). Read-only sobre stock (nunca ajusta GN).
  */
 
+import { apiFetch } from '../api-fetch'
 import { CUENTAS } from '../cuentas'
 import type { Marca } from '../nav.datos'
 import { fetchAll } from '../supabase/rest'
@@ -53,7 +54,7 @@ export async function ventasLocal7d(marca: Marca): Promise<Record<string, number
 /** Guarda la config compartida (mins/topes/apagados/…). Port de repoCfgSave @11314. */
 export async function guardarRepoConfig(marca: Marca, config: RepoCfg): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await fetch(`${REPO_API}?store=${marca}`, {
+    const r = await apiFetch(`${REPO_API}?store=${marca}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ store: marca, config }),
