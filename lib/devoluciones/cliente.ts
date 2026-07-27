@@ -1,0 +1,155 @@
+/**
+ * Cliente de Devoluciones. Entra por el router `/api/postventa?recurso=devoluciones` (Vercel
+ * cuenta una función por archivo de ruta y el proyecto vive cerca del tope del plan Hobby).
+ *
+ * Todo va con `apiFetch`, que manda la credencial del Monitor en `x-monitor-auth`. Las acciones
+ * que mueven plata las rechaza el servidor si quien las pide no es de administración — el gate
+ * de la UI es comodidad, no seguridad.
+ */
+
+import { apiFetch } from '@/lib/api-fetch'
+import type { Marca } from '@/lib/nav.datos'
+import type {
+  Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
+  MotivoDevolucion, OrdenTN,
+} from './tipos'
+
+const API = '/api/postventa?recurso=devoluciones'
+/** El mismo endpoint que usa Cambios para traer una orden. Sin auth: es lectura de TN. */
+const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+
+async function postear(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const r = await apiFetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const d = (await r.json().catch(() => ({}))) as Record<string, unknown>
+  if (!r.ok || !d.ok) throw new Error(String(d.error || `Error ${r.status}`))
+  return d
+}
+
+export async function leerDevoluciones(marca: Marca, opts?: { estado?: EstadoDevolucion; soloPendientes?: boolean }): Promise<DevolucionRow[]> {
+  const qs = [
+    `store=${marca}`,
+    opts?.estado ? `estado=${opts.estado}` : '',
+    opts?.soloPendientes ? 'pendientes=1' : '',
+    `nc=${Date.now()}`,
+  ].filter(Boolean).join('&')
+  const r = await apiFetch(`${API}&${qs}`)
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer las devoluciones.')
+  return (d.devoluciones || []) as DevolucionRow[]
+}
+
+/**
+ * Trae una orden de Tienda Nube por número.
+ *
+ * Los campos de plata (forma de pago, descuentos, subtotal) **pueden no venir**: dependen de que
+ * bdi-catalogo tenga desplegada la versión que los mapea. Si faltan, el monto se carga a mano en
+ * lugar de calcularse — el módulo sigue funcionando, solo pierde el automatismo.
+ */
+export async function buscarOrden(marca: Marca, numero: string | number): Promise<OrdenTN | null> {
+  const r = await fetch(`${ORDEN_API}?orden=${encodeURIComponent(String(numero))}&store=${marca}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!d) throw new Error('No se pudo consultar Tienda Nube.')
+  if (d.error) throw new Error(String(d.error))
+  return (d.orden || null) as OrdenTN | null
+}
+
+/** ¿Esta orden trae los datos para calcular la plata sola, o hay que cargarla a mano? */
+export function ordenTraeDatosDePlata(orden: OrdenTN | null | undefined): boolean {
+  return !!orden && typeof orden.subtotal === 'number'
+}
+
+export type CrearDevolucion = {
+  store: Marca
+  orden_tn?: string | null
+  cliente?: string | null
+  motivo: MotivoDevolucion
+  motivo_detalle?: string | null
+  items: ItemDevolucion[]
+  monto_producto?: number | null
+  pago_metodo?: string | null
+  pago_gateway?: string | null
+  gn_venta_id?: string | null
+  gn_venta_number?: string | null
+  destino_prenda?: DestinoPrenda | null
+  fotos?: FotoReclamo[]
+}
+
+/** Crea el reclamo y devuelve su id y el token del link para el cliente. */
+export async function crearDevolucion(payload: CrearDevolucion): Promise<{ id: number; token: string }> {
+  const d = await postear({ action: 'crear', ...payload })
+  return { id: Number(d.id), token: String(d.token || '') }
+}
+
+export type Decision = {
+  store: Marca
+  id: number
+  destino_prenda: DestinoPrenda
+  compensacion: Compensacion
+  monto_producto?: number | null
+  monto_acordado?: number | null
+  monto_envio_devuelto?: number | null
+  monto_total?: number | null
+  devolver_envio?: boolean
+  retorno_sugerido?: boolean
+  retorno_decidido?: boolean
+  envio_costo?: number | null
+  costo_caso?: number | null
+  cupon_codigo?: string | null
+  /** Lo que se pagó por la orden entera: el servidor lo usa de techo del reintegro. */
+  techo_orden?: number | null
+}
+
+/** La decisión de fondo: qué pasa con la prenda y qué recibe el cliente. Solo administración. */
+export async function decidir(payload: Decision): Promise<EstadoDevolucion> {
+  const d = await postear({ action: 'decidir', ...payload })
+  return d.estado as EstadoDevolucion
+}
+
+/** Marca la plata como devuelta. Solo administración. */
+export async function marcarReintegro(store: Marca, id: number, comprobante?: string | null): Promise<void> {
+  await postear({ action: 'reintegro', store, id, comprobante })
+}
+
+/**
+ * Registra que la venta original se anuló **a mano** en Gestión Nube. No la anula: GN no lo
+ * permite por API (ver api/crear-venta.js). Solo administración.
+ */
+export async function marcarAnulacion(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'anulacion', store, id })
+}
+
+/** Registra que la variante quedó corregida en Tienda Nube. Solo administración. */
+export async function marcarStockTn(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'tn-stock', store, id })
+}
+
+export async function cambiarEstado(store: Marca, id: number, estado: EstadoDevolucion, nota?: string | null): Promise<void> {
+  await postear({ action: 'estado', store, id, estado, nota })
+}
+
+export async function sumarFotos(store: Marca, id: number, fotos: FotoReclamo[]): Promise<void> {
+  await postear({ action: 'fotos', store, id, fotos })
+}
+
+/** Linkea las fallas creadas desde este reclamo (la prenda que no vuelve a stock). */
+export async function linkearFallas(store: Marca, id: number, falla_ids: number[]): Promise<void> {
+  await postear({ action: 'falla', store, id, falla_ids })
+}
+
+export async function editarDevolucion(store: Marca, id: number, campos: Partial<DevolucionRow>): Promise<void> {
+  await postear({ action: 'editar', store, id, ...campos })
+}
+
+export async function eliminarDevolucion(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'eliminar', store, id })
+}
+
+/** El link que se le pasa al cliente para que cargue fotos y cuente qué pasó. */
+export function linkDelCliente(token: string): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : 'https://monitor.arebensrl.com'
+  return `${base}/reclamo/${token}`
+}

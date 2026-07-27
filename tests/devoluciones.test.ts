@@ -49,6 +49,47 @@ describe('pagadoPorItem: lo que la persona realmente pagó', () => {
   })
 })
 
+/**
+ * Una orden REAL de BDI (#20700, 4-jul-2026), traída del endpoint en producción. Está acá porque
+ * fue la que encontró el bug: TN manda `price` y `quantity` como **texto**, no como número, y el
+ * cálculo devolvía 0 para toda orden de verdad mientras los tests sintéticos pasaban.
+ *
+ * Dos fundas de $8.990 = $17.980 de subtotal, 15% de descuento por transferencia = $2.697, más
+ * $5.929 de envío. Cierra exacto contra el total que informa TN: 17.980 − 2.697 + 5.929 = 21.212.
+ */
+const ORDEN_REAL: OrdenTN = {
+  id: 2010920738, number: 20700,
+  cliente: 'Carla florencia Ietta',
+  subtotal: 17980, descuento_total: 2697, descuento_cupon: null, descuento_pago: 0,
+  cupon: '606AD3', envio_costo_cliente: 5929, pago_metodo: 'wire_transfer', pago_gateway: 'pago-nube',
+  products: [
+    { product_id: 294663910, variant_id: '1316406298', name: 'WEAVE CASE CHERRY (iPhone 11)', sku: 'F-0026-11-CH', quantity: '1', price: '8990.00' },
+    { product_id: 329546668, variant_id: '1466347481', name: 'ICONIC GREEN (iPhone 11)', sku: 'F-0111', quantity: '1', price: '8990.00' },
+  ],
+}
+
+describe('contra una orden real de producción (#20700)', () => {
+  const items: ItemDevolucion[] = (ORDEN_REAL.products || []).map((p) => ({
+    producto: p.name || '', sku: p.sku, cantidad: p.quantity ?? 1, precio: p.price,
+  }))
+
+  // Los precios de TN son strings: si el cálculo los ignorara, esto daría 0.
+  it('devolver UNA funda: se devuelve lo pagado, no el precio de lista', () => {
+    expect(pagadoPorItem(items[0], ORDEN_REAL)).toBe(7641.5)
+  })
+
+  it('sin prorratear se le devolverían $1.348,50 de más', () => {
+    expect(8990 - pagadoPorItem(items[0], ORDEN_REAL)).toBe(1348.5)
+  })
+
+  it('devolver la orden entera cierra contra lo que TN dice que se pagó', () => {
+    const m = calcularMonto(items, ORDEN_REAL, { devolverEnvio: true })
+    expect(m.producto).toBe(15283) // 17.980 − 2.697
+    expect(m.envio).toBe(5929)
+    expect(m.total).toBe(21212) // el `total` de la orden en TN
+  })
+})
+
 describe('calcularMonto: cuánto se le devuelve', () => {
   it('solo el producto: el envío no se devuelve si no se tilda', () => {
     const m = calcularMonto([item(10000)], ORDEN_CON_CUPON)

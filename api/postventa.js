@@ -1,6 +1,5 @@
-// Post-venta: UNA puerta para los tres recursos del módulo —fallas, cambios y
-// solicitudes— que antes eran tres endpoints sueltos (`api/fallas.js`, `api/cambios.js`,
-// `api/solicitudes.js`).
+// Post-venta: UNA puerta para los recursos del módulo —fallas, cambios, solicitudes y
+// devoluciones— que de otro modo serían cuatro endpoints sueltos.
 //
 // POR QUÉ ESTÁN JUNTOS
 // --------------------
@@ -19,16 +18,18 @@
 // La lógica de cada recurso NO se tocó: son los mismos handlers, con el mismo contrato.
 // Lo único que cambia es la puerta por la que se entra.
 //
-//   GET  /api/postventa?recurso=fallas|cambios|solicitudes&...
+//   GET  /api/postventa?recurso=fallas|cambios|solicitudes|devoluciones&...
 //   POST /api/postventa?recurso=...  (o { recurso } en el body)
 //
-// Los tres validan usuario del Monitor por su cuenta (cada uno llama a `exigirUsuario`),
-// así que este router no afloja ningún control: solo elige a quién le pasa el request.
+// Todos validan usuario del Monitor por su cuenta (cada uno llama a `exigirUsuario`), así que
+// este router no afloja ningún control: solo elige a quién le pasa el request. `devoluciones`
+// además exige función de administración para lo que mueve plata.
 import fallas from './_fallas.js';
 import cambios from './_cambios.js';
 import solicitudes from './_solicitudes.js';
+import devoluciones from './_devoluciones.js';
 
-const RECURSOS = { fallas, cambios, solicitudes };
+const RECURSOS = { fallas, cambios, solicitudes, devoluciones };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

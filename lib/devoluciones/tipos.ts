@@ -73,12 +73,12 @@ export type OrdenTN = {
   pago_metodo?: string | null
   pago_gateway?: string | null
   pago_cuotas?: number | null
-  subtotal?: number | null
-  descuento_total?: number | null
-  descuento_cupon?: number | null
-  descuento_pago?: number | null
+  subtotal?: number | string | null
+  descuento_total?: number | string | null
+  descuento_cupon?: number | string | null
+  descuento_pago?: number | string | null
   cupon?: string | null
-  envio_costo_cliente?: number | null
+  envio_costo_cliente?: number | string | null
   estado_pago?: string | null
   estado_orden?: string | null
   products?: ProductoOrdenTN[]
@@ -89,8 +89,9 @@ export type ProductoOrdenTN = {
   variant_id?: string | number | null
   name?: string | null
   sku?: string | null
-  quantity?: number | null
-  price?: number | null
+  /** TN los manda como texto ("1", "8990.00"). El cálculo los tolera. */
+  quantity?: number | string | null
+  price?: number | string | null
 }
 
 /** Una línea del reclamo. `costo` y `pvp_feria` salen de GN y son los que deciden si conviene el retorno. */
@@ -101,9 +102,9 @@ export type ItemDevolucion = {
   variant_id?: string | null
   producto: string
   variante?: string | null
-  cantidad: number
-  /** Precio unitario de lista, tal como vino en la orden de TN. */
-  precio?: number | null
+  cantidad: number | string
+  /** Precio unitario de lista, tal como vino en la orden de TN (puede ser texto). */
+  precio?: number | string | null
   /** Lo que realmente se pagó por la línea, ya con los descuentos prorrateados. */
   pagado?: number | null
   costo?: number | null
@@ -113,7 +114,16 @@ export type ItemDevolucion = {
 // ── La plata ────────────────────────────────────────────────────────────────────
 
 const redondear = (n: number) => Math.round(n * 100) / 100
-const positivo = (n: number | null | undefined) => (typeof n === 'number' && isFinite(n) && n > 0 ? n : 0)
+
+/**
+ * Número positivo, o 0. **Acepta strings a propósito**: Tienda Nube manda los precios y las
+ * cantidades como texto (`price: "8990.00"`, `quantity: "1"`), así que exigir `number` acá hacía
+ * que toda orden real calculara 0. Se descubrió probando contra una orden de verdad.
+ */
+const positivo = (n: unknown): number => {
+  const v = typeof n === 'string' ? Number(n) : n
+  return typeof v === 'number' && isFinite(v) && v > 0 ? v : 0
+}
 
 /**
  * Lo que la persona **efectivamente pagó** por una línea: el precio de lista menos la parte
