@@ -55,7 +55,7 @@ const Postventa = dynamic(() => import('@/components/postventa/Postventa').then(
 const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
 const PostventaDeposito = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaDeposito), { loading: Cargando })
 const CambiosLocal = dynamic(() => import('@/components/cambios/Cambios').then((m) => m.CambiosLocal), { loading: Cargando })
-const DevolucionesLocal = dynamic(() => import('@/components/devoluciones/Devoluciones').then((m) => m.DevolucionesLocal), { loading: Cargando })
+const ReclamosLocal = dynamic(() => import('@/components/reclamos/Reclamos').then((m) => m.ReclamosLocal), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -313,9 +313,9 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Cambios (inicio Local): mismo motor en modo 'local' (buscar orden + elegir productos). El motor
   // completo es la pestaña Cambios de `postventa` (Administración). Gateada por permiso `cambios-local`.
   'cambios-local': CambiosLocal,
-  // Devoluciones (inicio Local): abre el reclamo y copia el link para que el cliente suba las fotos.
-  // Decidir qué se hace y devolver la plata es de Administración (pestaña Devoluciones de `postventa`).
-  'devoluciones-local': DevolucionesLocal,
+  // Reclamos (inicio Local): abre el reclamo por cualquier motivo y copia el link para que el
+  // cliente suba las fotos. Decidir y devolver la plata es de Administración (pestaña Reclamos).
+  'reclamos-local': ReclamosLocal,
 }
 
 /**

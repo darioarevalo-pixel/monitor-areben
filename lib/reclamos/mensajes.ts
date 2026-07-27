@@ -13,7 +13,7 @@
 
 import {
   MOTIVO_LABEL, VIA_LABEL,
-  type Compensacion, type DevolucionRow, type ItemDevolucion, type ViaRetorno,
+  type Compensacion, type ReclamoRow, type ItemReclamo, type ViaRetorno,
 } from './tipos'
 
 /**
@@ -28,12 +28,12 @@ const money = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).replace(/ /g, ' ')
 
 /** "2× Remera negra (M)" — cómo se nombra un producto de cara al cliente. */
-function linea(i: ItemDevolucion): string {
+function linea(i: ItemReclamo): string {
   const cant = Number(i.cantidad) || 1
   return `${cant}× ${i.producto}${i.variante ? ` (${i.variante})` : ''}`
 }
 
-const lista = (items: ItemDevolucion[]) => items.map((i) => `• ${linea(i)}`).join('\n')
+const lista = (items: ItemReclamo[]) => items.map((i) => `• ${linea(i)}`).join('\n')
 
 /** El nombre de pila alcanza y suena mejor que el nombre completo del comprobante. */
 function nombrePila(cliente?: string | null): string {
@@ -52,7 +52,7 @@ const saludo = (cliente?: string | null) => {
  * El link es el corazón del mensaje, así que va solo en su renglón: pegado a otro texto, WhatsApp
  * a veces se lo come dentro del enlace anterior.
  */
-export function mensajeApertura(d: Pick<DevolucionRow, 'cliente' | 'orden_tn' | 'motivo' | 'items'>, numero: string, link: string): string {
+export function mensajeApertura(d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'motivo' | 'items'>, numero: string, link: string): string {
   const items = d.items || []
   const queEs = d.motivo === 'falla' ? 'la falla' : 'el producto'
   return [
@@ -70,7 +70,7 @@ export function mensajeApertura(d: Pick<DevolucionRow, 'cliente' | 'orden_tn' | 
 
 /** 2) La resolución, tal como la decidió Administración. Es el mensaje que más importa. */
 export function mensajeResolucion(
-  d: Pick<DevolucionRow, 'cliente' | 'orden_tn' | 'items' | 'compensacion' | 'monto_total' | 'cupon_codigo' | 'via_retorno' | 'destino_prenda'>,
+  d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'items' | 'compensacion' | 'monto_total' | 'cupon_codigo' | 'via_retorno' | 'destino_prenda'>,
   numero: string,
 ): string {
   const items = d.items || []
@@ -129,7 +129,7 @@ export function mensajeResolucion(
 
 /** 3) El seguimiento: la etiqueta despachada, o la plata acreditada. */
 export function mensajeSeguimiento(
-  d: Pick<DevolucionRow, 'cliente' | 'via_retorno' | 'seguimiento_vuelta' | 'seguimiento_ida' | 'monto_total'>,
+  d: Pick<ReclamoRow, 'cliente' | 'via_retorno' | 'seguimiento_vuelta' | 'seguimiento_ida' | 'monto_total'>,
   numero: string,
   que: 'etiqueta' | 'reenvio' | 'plata',
 ): string {
@@ -155,6 +155,6 @@ export function mensajeSeguimiento(
 export type MensajeEnviado = { tipo: 'apertura' | 'resolucion' | 'seguimiento'; at: string; por?: string | null; texto: string }
 
 /** Etiqueta corta de un reclamo para listados y avisos: "D-0007 · Falla · Carla". */
-export function resumenCorto(d: Pick<DevolucionRow, 'motivo' | 'cliente'>, numero: string): string {
+export function resumenCorto(d: Pick<ReclamoRow, 'motivo' | 'cliente'>, numero: string): string {
   return [numero, MOTIVO_LABEL[d.motivo] || d.motivo, nombrePila(d.cliente)].filter(Boolean).join(' · ')
 }

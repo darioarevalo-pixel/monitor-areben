@@ -4,7 +4,7 @@
  * Devoluciones (post-venta). Dos modos, como Cambios:
  *  - **local**: abre el reclamo desde la orden de TN, copia el link para el cliente y mira el
  *    estado. No decide qué se hace ni toca plata.
- *  - **admin**: el motor — revisa la evidencia, decide (§ DecidirDevolucion) y cierra los tres
+ *  - **admin**: el motor — revisa la evidencia, decide (§ DecidirReclamo) y cierra los tres
  *    pendientes: la venta anulada en GN, la plata devuelta y el stock corregido en TN.
  *
  * Lo que hay que tener presente al leer esto: **el sistema no anula la venta en Gestión Nube**
@@ -22,18 +22,19 @@ import {
   color, font, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import {
-  buscarOrden, crearDevolucion, enriquecerConGN, leerDevoluciones, linkDelCliente,
-  marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarDevolucion,
-  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarDevolucion,
-} from '@/lib/devoluciones/cliente'
+  buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
+  marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarReclamo,
+  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarReclamo,
+} from '@/lib/reclamos/cliente'
 import {
   calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, EXPECTATIVA_LABEL,
+  alertasDe, conAlerta,
   type Expectativa,
-  type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
-} from '@/lib/devoluciones/tipos'
-import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/devoluciones/mensajes'
-import { DecidirDevolucion } from './DecidirDevolucion'
+  type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
+} from '@/lib/reclamos/tipos'
+import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { DecidirReclamo } from './DecidirReclamo'
 import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
 
 /** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
@@ -46,7 +47,7 @@ function obtenerPass(): string {
   return p
 }
 
-const ESTADO_TONE: Record<EstadoDevolucion, Tone> = {
+const ESTADO_TONE: Record<EstadoReclamo, Tone> = {
   borrador: 'neutral',
   esperando_cliente: 'warning',
   en_revision: 'action',
@@ -61,35 +62,35 @@ const ESTADO_TONE: Record<EstadoDevolucion, Tone> = {
 // desincroniza con lo que acepta el servidor.
 
 /** Los estados que siguen pidiendo algo de alguien. */
-const ABIERTOS: EstadoDevolucion[] = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido']
+const ABIERTOS: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido']
 
-function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
+function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
   const esAdmin = modo === 'admin'
   const toast = useToast()
   const { confirmar, pedirTexto } = useConfirmar()
 
-  const [filas, setFilas] = useState<DevolucionRow[]>([])
+  const [filas, setFilas] = useState<ReclamoRow[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<'abiertos' | 'todos'>('abiertos')
-  const [decidiendo, setDecidiendo] = useState<DevolucionRow | null>(null)
+  const [filtro, setFiltro] = useState<'abiertos' | 'dormidos' | 'todos'>('abiertos')
+  const [decidiendo, setDecidiendo] = useState<ReclamoRow | null>(null)
 
   // ── Alta ──
   const [numero, setNumero] = useState('')
   const [orden, setOrden] = useState<OrdenTN | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [elegidos, setElegidos] = useState<Set<number>>(new Set())
-  const [motivo, setMotivo] = useState<MotivoDevolucion>('falla')
+  const [motivo, setMotivo] = useState<MotivoReclamo>('falla')
   const [detalle, setDetalle] = useState('')
   const [expectativa, setExpectativa] = useState<Expectativa>('plata')
   /** Solo en "pedido mal armado": lo que el cliente TENDRÍA que haber recibido. */
-  const [correctos, setCorrectos] = useState<ItemDevolucion[]>([])
+  const [correctos, setCorrectos] = useState<ItemReclamo[]>([])
   const [guardando, setGuardando] = useState(false)
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
-    try { setFilas(await leerDevoluciones(marca)) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
+    try { setFilas(await leerReclamos(marca)) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
   }, [marca])
 
   // El setState va DENTRO del await, no en el cuerpo del effect: el linter del repo rechaza el
@@ -98,7 +99,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
     let vivo = true
     ;(async () => {
       try {
-        const d = await leerDevoluciones(marca)
+        const d = await leerReclamos(marca)
         if (vivo) setFilas(d)
       } catch (e) {
         if (vivo) setError((e as Error).message)
@@ -130,7 +131,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /** Los ítems tildados, ya con lo que se pagó por cada uno (descuentos prorrateados). */
-  const items: ItemDevolucion[] = useMemo(() => {
+  const items: ItemReclamo[] = useMemo(() => {
     if (!orden) return []
     return (orden.products || [])
       .map((p, i) => ({ p, i }))
@@ -158,7 +159,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
       // Antes de guardar se buscan los ids de GN por SKU: sin ellos no se puede crear la falla
       // ni corregir stock más adelante.
       const conGN = await enriquecerConGN(marca, items)
-      const { token } = await crearDevolucion({
+      const { token } = await crearReclamo({
         store: marca,
         orden_tn: String(orden.number),
         cliente: orden.cliente ?? null,
@@ -187,7 +188,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
     try { await fn(); toast.ok(ok); void recargar() } catch (e) { toast.error((e as Error).message) }
   }
 
-  const anular = async (d: DevolucionRow) => {
+  const anular = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Venta anulada en Gestión Nube',
       ok: 'Sí, ya la anulé',
@@ -196,7 +197,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
     if (si) await accion(() => marcarAnulacion(marca, d.id), 'Anotado: la venta quedó anulada.')
   }
 
-  const reintegrar = async (d: DevolucionRow) => {
+  const reintegrar = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Plata devuelta',
       ok: 'Sí, ya se la devolví',
@@ -210,7 +211,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
    * la diferencia que después no se ve: si se le mandó otra unidad al cliente, esa prenda ya
    * salió del stock con la venta original y descontarla de nuevo restaría dos veces.
    */
-  const aFallas = async (d: DevolucionRow) => {
+  const aFallas = async (d: ReclamoRow) => {
     const descuenta = laFallaDescuentaStock(d.compensacion)
     const si = await confirmar({
       titulo: 'Pasar al depósito de fallas',
@@ -230,7 +231,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /** Corrige el stock en la tienda: es lo que evita que el próximo cliente compre lo mismo. */
-  const ponerEnCero = async (d: DevolucionRow) => {
+  const ponerEnCero = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Poner el stock en 0 en Tienda Nube',
       tono: 'danger',
@@ -249,20 +250,20 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /** El código de seguimiento, cuando ya se emitió la etiqueta. */
-  const cargarSeguimiento = async (d: DevolucionRow) => {
+  const cargarSeguimiento = async (d: ReclamoRow) => {
     const codigo = await pedirTexto('Código de seguimiento de la vuelta', d.seguimiento_vuelta || '', {
       titulo: `Seguimiento — ${VIA_LABEL[d.via_retorno || 'andreani']}`,
       ok: 'Guardar',
     })
     if (codigo === null) return
-    await accion(() => editarDevolucion(marca, d.id, { seguimiento_vuelta: codigo.trim() || null }), 'Seguimiento guardado.')
+    await accion(() => editarReclamo(marca, d.id, { seguimiento_vuelta: codigo.trim() || null }), 'Seguimiento guardado.')
   }
 
   /**
    * Descuenta del stock la unidad que se le manda al cliente. Es lo que evita que esa prenda salga
    * del depósito sin quedar registrada en ningún lado.
    */
-  const descontarLaQueVa = async (d: DevolucionRow) => {
+  const descontarLaQueVa = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Descontar el reemplazo del stock',
       tono: 'warning',
@@ -282,7 +283,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /** El número de reclamo al transportista: es lo que después permite reclamar esa plata. */
-  const cargarReclamoCorreo = async (d: DevolucionRow) => {
+  const cargarReclamoCorreo = async (d: ReclamoRow) => {
     const nro = await pedirTexto('Número de reclamo al transportista', d.reclamo_correo || '', {
       titulo: 'Reclamo al correo',
       ok: 'Guardar',
@@ -291,26 +292,28 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
     if (nro === null) return
     const limpio = nro.trim()
     await accion(
-      () => editarDevolucion(marca, d.id, { reclamo_correo: limpio || null, reclamo_correo_estado: limpio ? 'hecho' : 'pendiente' }),
+      () => editarReclamo(marca, d.id, { reclamo_correo: limpio || null, reclamo_correo_estado: limpio ? 'hecho' : 'pendiente' }),
       limpio ? 'Reclamo al correo anotado.' : 'Queda pendiente.',
     )
   }
 
-  const cerrar = async (d: DevolucionRow) => {
+  const cerrar = async (d: ReclamoRow) => {
     const faltan = faltantesParaCerrar(d)
     if (faltan.length) { toast.aviso(`Falta ${faltan.join(', ')}.`); return }
     await accion(() => cambiarEstado(marca, d.id, 'cerrado'), 'Reclamo cerrado.')
   }
 
-  const visibles = useMemo(
-    () => (filtro === 'abiertos' ? filas.filter((f) => ABIERTOS.includes(f.estado)) : filas),
-    [filas, filtro],
-  )
+  const visibles = useMemo(() => {
+    if (filtro === 'todos') return filas
+    const abiertos = filas.filter((f) => ABIERTOS.includes(f.estado))
+    return filtro === 'dormidos' ? abiertos.filter((f) => alertasDe(f).length > 0) : abiertos
+  }, [filas, filtro])
 
   const totales = useMemo(() => {
     const abiertos = filas.filter((f) => ABIERTOS.includes(f.estado))
     return {
       abiertos: abiertos.length,
+      dormidos: conAlerta(abiertos),
       plata: abiertos.filter((f) => f.reintegro_estado === 'pendiente').reduce((s, f) => s + (f.monto_total || 0), 0),
       sinAnular: abiertos.filter((f) => f.stock_estado === 'pendiente').length,
     }
@@ -319,8 +322,8 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   return (
     <div style={{ maxWidth: 1100 }}>
       {decidiendo && (
-        <DecidirDevolucion
-          marca={marca} devolucion={decidiendo} orden={orden}
+        <DecidirReclamo
+          marca={marca} reclamo={decidiendo} orden={orden}
           onClose={() => setDecidiendo(null)}
           onListo={() => { setDecidiendo(null); void recargar() }}
         />
@@ -331,10 +334,11 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
           <KpiCard label="Reclamos abiertos" value={String(totales.abiertos)} />
           <KpiCard label="Plata sin devolver" value={<MoneyText value={totales.plata} />} tone="warning" />
           <KpiCard label="Ventas sin anular en GN" value={String(totales.sinAnular)} tone={totales.sinAnular ? 'warning' : 'neutral'} />
+          <KpiCard label="Durmiendo" value={String(totales.dormidos)} sub="sin moverse hace días" tone={totales.dormidos ? 'danger' : 'neutral'} />
         </div>
       )}
 
-      <DondeVa activa="devoluciones" />
+      <DondeVa activa="reclamos" />
       <Instructivo
         titulo={esAdmin ? '¿Cómo se resuelve una devolución de punta a punta?' : '¿Cómo abro una devolución?'}
         pasos={esAdmin ? [
@@ -442,7 +446,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
 
             <Toolbar style={{ marginTop: space[3] }}>
               <Field label="Motivo">
-                <Select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoDevolucion)}>
+                <Select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoReclamo)}>
                   {MOTIVOS_VIGENTES.map((m) => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
                 </Select>
               </Field>
@@ -498,8 +502,12 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
       {/* ── Lista ── */}
       <Toolbar justify="between" style={{ marginBottom: space[3] }}>
         <Tabs
-          variant="underline" value={filtro} onChange={(k) => setFiltro(k as 'abiertos' | 'todos')}
-          items={[{ key: 'abiertos', label: 'Abiertos' }, { key: 'todos', label: 'Todos' }]}
+          variant="underline" value={filtro} onChange={(k) => setFiltro(k as 'abiertos' | 'dormidos' | 'todos')}
+          items={[
+            { key: 'abiertos', label: 'Abiertos' },
+            { key: 'dormidos', label: totales.dormidos ? `Durmiendo (${totales.dormidos})` : 'Durmiendo' },
+            { key: 'todos', label: 'Todos' },
+          ]}
         />
         <Button variant="outline" onClick={() => void recargar()} disabled={cargando}>Recargar</Button>
       </Toolbar>
@@ -532,6 +540,13 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>
                       {d.orden_tn ? `#${d.orden_tn}` : '—'} · {d.cliente || 'sin nombre'}
                     </div>
+                    {/* Lo que está durmiendo. Solo la primera: la lista ya es larga y la más
+                        urgente viene primero. */}
+                    {alertasDe(d).slice(0, 1).map((a, i) => (
+                      <div key={i} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: a.tono === 'danger' ? color.dangerInk : color.warningInk, marginTop: 2 }}>
+                        ⏱ {a.texto}
+                      </div>
+                    ))}
                   </Td>
                   <Td>{MOTIVO_LABEL[d.motivo] || d.motivo}</Td>
                   <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
@@ -613,7 +628,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                           size="sm" variant="ghost"
                           onClick={async () => {
                             const si = await confirmar({ titulo: 'Borrar el reclamo', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra el registro. No anula nada de lo que ya se haya hecho en GN.' })
-                            if (si) await accion(() => eliminarDevolucion(marca, d.id), 'Reclamo borrado.')
+                            if (si) await accion(() => eliminarReclamo(marca, d.id), 'Reclamo borrado.')
                           }}
                         >Borrar</Button>
                       )}
@@ -641,5 +656,5 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   )
 }
 
-export function Devoluciones() { return <DevolucionesInner modo="admin" /> }
-export function DevolucionesLocal() { return <DevolucionesInner modo="local" /> }
+export function Devoluciones() { return <ReclamosInner modo="admin" /> }
+export function ReclamosLocal() { return <ReclamosInner modo="local" /> }

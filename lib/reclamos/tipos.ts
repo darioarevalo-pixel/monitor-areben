@@ -25,7 +25,7 @@ import type { Marca } from '@/lib/nav.datos'
  * `otro` ya no se ofrece al cargar, pero se conserva en el tipo: hay reclamos viejos con ese
  * valor y sacarlo del tipo los dejaría sin etiqueta en la pantalla.
  */
-export type MotivoDevolucion =
+export type MotivoReclamo =
   | 'arrepentimiento'
   | 'no_esperaba'
   | 'falla'
@@ -84,14 +84,14 @@ export const hayEnvio = (via?: ViaRetorno | null): boolean => !!via && via !== '
  * `esperando_cliente` es el link mandado y sin responder; `en_revision` es el cliente ya cargó
  * y falta que Administración decida. `en_transito`/`recibido` solo aplican si la prenda vuelve.
  */
-export type EstadoDevolucion =
+export type EstadoReclamo =
   | 'borrador' | 'esperando_cliente' | 'en_revision' | 'resuelto'
   | 'en_transito' | 'recibido' | 'cerrado' | 'anulado'
 
 /** Los tres pendientes que se cierran por separado, porque avanzan a ritmos distintos. */
 export type PendienteEstado = 'pendiente' | 'hecho' | 'no_aplica'
 
-export const MOTIVO_LABEL: Record<MotivoDevolucion, string> = {
+export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   arrepentimiento: 'Arrepentimiento',
   no_esperaba: 'No era lo que esperaba',
   falla: 'Falla',
@@ -104,7 +104,7 @@ export const MOTIVO_LABEL: Record<MotivoDevolucion, string> = {
 }
 
 /** Los que se ofrecen al cargar, en el orden en que pasan de verdad. */
-export const MOTIVOS_VIGENTES: MotivoDevolucion[] = [
+export const MOTIVOS_VIGENTES: MotivoReclamo[] = [
   'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
 ]
 
@@ -112,12 +112,12 @@ export const MOTIVOS_VIGENTES: MotivoDevolucion[] = [
  * ¿La prenda salió del depósito alguna vez? Los tres casos en que NO define medio flujo: no hay
  * etiqueta de vuelta, no hay tránsito, y no hay nada que reingresar — solo plata y stock.
  */
-export const NUNCA_SALIO: MotivoDevolucion[] = ['faltante', 'sin_stock']
+export const NUNCA_SALIO: MotivoReclamo[] = ['faltante', 'sin_stock']
 
 /** Motivos donde el error es NUESTRO. Sirve para separar lo que se puede corregir de lo que no. */
-export const ERROR_PROPIO: MotivoDevolucion[] = ['falla', 'faltante', 'mal_armado', 'sin_stock']
+export const ERROR_PROPIO: MotivoReclamo[] = ['falla', 'faltante', 'mal_armado', 'sin_stock']
 
-export const ESTADO_LABEL: Record<EstadoDevolucion, string> = {
+export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
   borrador: 'Borrador',
   esperando_cliente: 'Esperando al cliente',
   en_revision: 'Para revisar',
@@ -133,7 +133,7 @@ export const ESTADO_LABEL: Record<EstadoDevolucion, string> = {
  * la trae en mano, "En camino de vuelta" es mentira — no hay nada viajando, hay alguien que
  * todavía no vino.
  */
-export function estadoEnCriollo(d: Pick<DevolucionRow, 'estado' | 'via_retorno'>): string {
+export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno'>): string {
   if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que la traiga'
   return ESTADO_LABEL[d.estado] ?? d.estado
 }
@@ -186,7 +186,7 @@ export type ProductoOrdenTN = {
  * `tn_product_id`/`variant_id` son de Tienda Nube y sirven para corregir el stock de la tienda.
  * Usar uno donde va el otro escribe en el producto equivocado.
  */
-export type ItemDevolucion = {
+export type ItemReclamo = {
   sku?: string | null
   product_id?: string | null
   size_id?: string | null
@@ -229,7 +229,7 @@ const positivo = (n: unknown): number => {
  * Sin `subtotal` o sin descuentos (o si la versión vieja del endpoint no los manda), devuelve
  * el bruto: es el comportamiento anterior, no una regresión.
  */
-export function pagadoPorItem(item: Pick<ItemDevolucion, 'precio' | 'cantidad'>, orden?: OrdenTN | null): number {
+export function pagadoPorItem(item: Pick<ItemReclamo, 'precio' | 'cantidad'>, orden?: OrdenTN | null): number {
   const bruto = positivo(item.precio) * positivo(item.cantidad)
   if (!bruto) return 0
   const subtotal = positivo(orden?.subtotal)
@@ -241,7 +241,7 @@ export function pagadoPorItem(item: Pick<ItemDevolucion, 'precio' | 'cantidad'>,
   return redondear(bruto - prorrateo)
 }
 
-export type MontoDevolucion = {
+export type MontoReclamo = {
   /** Suma de lo pagado por los ítems del reclamo. */
   producto: number
   /** El envío que pagó el cliente, si se decide devolverlo. */
@@ -257,10 +257,10 @@ export type MontoDevolucion = {
  * cliente ni se le cobra.
  */
 export function calcularMonto(
-  items: ItemDevolucion[],
+  items: ItemReclamo[],
   orden?: OrdenTN | null,
   opciones?: { devolverEnvio?: boolean; montoAcordado?: number | null },
-): MontoDevolucion {
+): MontoReclamo {
   const producto = redondear(items.reduce((s, it) => s + (it.pagado ?? pagadoPorItem(it, orden)), 0))
   const envio = opciones?.devolverEnvio ? redondear(positivo(orden?.envio_costo_cliente)) : 0
   // En "se la queda + parte de la plata" manda el monto acordado con el cliente, no la cuenta.
@@ -296,7 +296,7 @@ export type CuentaRetorno = {
  * cuenta dé, porque el trabajo de recibirlo y procesarlo tampoco es gratis.
  */
 export function convieneRetorno(
-  items: ItemDevolucion[],
+  items: ItemReclamo[],
   opciones: { fallada: boolean; envioVuelta: number; piso?: number },
 ): CuentaRetorno {
   const { fallada, piso = 0 } = opciones
@@ -333,7 +333,7 @@ export function convieneRetorno(
  * igual" en un arrepentimiento, o "le devolvemos una parte" en un pedido mal armado, invita a
  * resolver mal. Cada motivo tiene su repertorio.
  */
-export function compensacionesDe(motivo: MotivoDevolucion): Compensacion[] {
+export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
   switch (motivo) {
     // Se arrepintió o no era lo que esperaba: la prenda está bien, lo que se discute es la plata.
     // El descuento parcial existe para retenerlo; mandarle otra igual no tendría sentido.
@@ -361,12 +361,12 @@ export function compensacionesDe(motivo: MotivoDevolucion): Compensacion[] {
 }
 
 /** ¿Hay una prenda que pueda volver? En los tres casos donde no, media pantalla sobra. */
-export function puedeVolverLaPrenda(motivo: MotivoDevolucion): boolean {
+export function puedeVolverLaPrenda(motivo: MotivoReclamo): boolean {
   return !NUNCA_SALIO.includes(motivo) && motivo !== 'no_llego'
 }
 
 /** El destino de la prenda queda determinado por el motivo, salvo en la falla. */
-export function destinoDe(motivo: MotivoDevolucion, vuelve: boolean): DestinoPrenda {
+export function destinoDe(motivo: MotivoReclamo, vuelve: boolean): DestinoPrenda {
   if (NUNCA_SALIO.includes(motivo)) return 'no_salio'
   if (motivo === 'no_llego') return 'perdida'
   if (motivo === 'falla') return 'falla'
@@ -436,7 +436,7 @@ const FRACCION_SUGERIDA = 0.5
  * Devuelve el techo Y un sugerido conservador: el techo es el límite de "no perder", no la oferta.
  */
 export function cuentaDescuento(opciones: {
-  items: ItemDevolucion[]
+  items: ItemReclamo[]
   fallada: boolean
   envioVuelta: number
   /** Lo que cuesta recibir, revisar y reingresar. Se suma al techo: también te lo ahorrás. */
@@ -478,7 +478,7 @@ export function costoDelCaso(opciones: {
   montoDevuelto: number
   envioVuelta?: number | null
   envioReemplazo?: number | null
-  items: ItemDevolucion[]
+  items: ItemReclamo[]
   destino: DestinoPrenda
 }): number {
   const { montoDevuelto, items, destino } = opciones
@@ -494,9 +494,9 @@ export function costoDelCaso(opciones: {
 
 export type FotoReclamo = { url: string; at: string; por?: 'cliente' | 'equipo' }
 
-export type DevolucionEvento = { estado: EstadoDevolucion; at: string; usuario?: string | null; nota?: string | null }
+export type DevolucionEvento = { estado: EstadoReclamo; at: string; usuario?: string | null; nota?: string | null }
 
-export type DevolucionRow = {
+export type ReclamoRow = {
   id: number
   store: Marca
   /** Derivado del id con `numeroReclamo`, no una columna: no viene de la base. */
@@ -506,14 +506,14 @@ export type DevolucionRow = {
   /** Token del link que se le pasa al cliente para que cargue fotos. Nunca se muestra en listados. */
   token?: string | null
   token_vence?: string | null
-  motivo: MotivoDevolucion
+  motivo: MotivoReclamo
   motivo_detalle?: string | null
   relato_cliente?: string | null
   fotos?: FotoReclamo[]
   destino_prenda?: DestinoPrenda | null
   compensacion?: Compensacion | null
-  estado: EstadoDevolucion
-  items: ItemDevolucion[]
+  estado: EstadoReclamo
+  items: ItemReclamo[]
   monto_producto?: number | null
   monto_acordado?: number | null
   monto_envio_devuelto?: number | null
@@ -551,7 +551,7 @@ export type DevolucionRow = {
   /** Lo que se le mandó al cliente, con su texto y su fecha. */
   mensajes?: { tipo: string; at: string; por?: string | null; texto: string }[]
   /** En "pedido mal armado": lo que se le TENDRÍA que haber mandado. */
-  items_correctos?: ItemDevolucion[]
+  items_correctos?: ItemReclamo[]
   falla_ids?: number[]
   costo_caso?: number | null
   usuario?: string | null
@@ -576,6 +576,57 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
   return compensacion !== 'otra_unidad'
 }
 
+// ── Alertas por antigüedad ──────────────────────────────────────────────────────
+
+/**
+ * Los días a partir de los cuales un reclamo deja de estar "en curso" y pasa a estar dormido.
+ * Son distintos a propósito: que un cliente tarde en mandar fotos es normal, que la plata no
+ * salga en cinco días no.
+ */
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3 } as const
+
+export type AlertaReclamo = { tono: Tono; texto: string; dias: number }
+type Tono = 'warning' | 'danger'
+
+const diasDesde = (iso?: string | null, ahora = Date.now()): number => {
+  if (!iso) return 0
+  const t = new Date(iso).getTime()
+  return isFinite(t) ? Math.floor((ahora - t) / 86400000) : 0
+}
+
+/**
+ * Qué está durmiendo en este reclamo. Se **deriva** de las fechas y los pendientes: no hay tabla
+ * de alertas ni proceso que las genere, igual que los avisos del sidebar.
+ *
+ * El orden importa: lo primero de la lista es lo que se muestra cuando hay lugar para una sola.
+ * La plata va primero porque es la que el cliente reclama.
+ */
+export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
+  const alertas: AlertaReclamo[] = []
+  const desdeCreado = diasDesde(d.created_at, ahora)
+  const desdeToque = diasDesde(d.updated_at || d.created_at, ahora)
+
+  if (d.reintegro_estado === 'pendiente' && d.compensacion && desdeToque >= DIAS_ALERTA.plata) {
+    alertas.push({ tono: 'danger', texto: `Hace ${desdeToque} días que la plata no sale`, dias: desdeToque })
+  }
+  if (d.estado === 'esperando_cliente' && desdeCreado >= DIAS_ALERTA.cliente) {
+    alertas.push({ tono: 'warning', texto: `El cliente no responde hace ${desdeCreado} días`, dias: desdeCreado })
+  }
+  if (d.estado === 'en_transito' && desdeToque >= DIAS_ALERTA.transito) {
+    alertas.push({ tono: 'warning', texto: `Hace ${desdeToque} días que no llega`, dias: desdeToque })
+  }
+  // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
+  if (d.estado === 'en_revision' && desdeToque >= DIAS_ALERTA.sinDecidir) {
+    alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${desdeToque} días`, dias: desdeToque })
+  }
+  return alertas
+}
+
+/** Cuántos reclamos tienen alguna alerta. Es el número del badge. */
+export function conAlerta(filas: ReclamoRow[], ahora = Date.now()): number {
+  return filas.filter((d) => alertasDe(d, ahora).length > 0).length
+}
+
 /** `D-0007`. Mismo formato que el `C-0045` de Cambios. */
 export function numeroReclamo(id: number): string {
   return 'D-' + String(id).padStart(4, '0')
@@ -585,7 +636,7 @@ export function numeroReclamo(id: number): string {
  * Qué falta para poder cerrar el reclamo. Devuelve la lista en criollo: si no está vacía, el
  * botón de cerrar va deshabilitado con esto como explicación.
  */
-export function faltantesParaCerrar(d: DevolucionRow): string[] {
+export function faltantesParaCerrar(d: ReclamoRow): string[] {
   const faltan: string[] = []
   if (d.stock_estado === 'pendiente') faltan.push('anular la venta original en Gestión Nube')
   if (d.reintegro_estado === 'pendiente') faltan.push('devolver la plata')

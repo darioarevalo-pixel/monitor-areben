@@ -18,10 +18,10 @@
 import { color, font, space } from '@/components/ui'
 
 /** Dónde se carga cada cosa. La regla es de dónde VIENE la prenda, no qué le pasó. */
-export function DondeVa({ activa }: { activa: 'fallas' | 'cambios' | 'devoluciones' }) {
+export function DondeVa({ activa }: { activa: 'fallas' | 'cambios' | 'reclamos' }) {
   const filas: { key: typeof activa; pregunta: string; donde: string }[] = [
     { key: 'fallas', pregunta: '¿La prenda ya está acá?', donde: 'Fallas' },
-    { key: 'devoluciones', pregunta: '¿Compró online y reclama a distancia?', donde: 'Devoluciones' },
+    { key: 'reclamos', pregunta: '¿Compró online y reclama a distancia?', donde: 'Reclamos' },
     { key: 'cambios', pregunta: '¿Quiere otro producto distinto?', donde: 'Cambios' },
   ]
   return (

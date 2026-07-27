@@ -558,10 +558,10 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
-    "key": "devoluciones-local",
+    "key": "reclamos-local",
     "area": "local",
-    "label": "Devoluciones (iniciar)",
-    "info": "Abrir un reclamo de devolución desde el LOCAL: buscás la orden de Tienda Nube, marcás qué vuelve y por qué, y le pasás al cliente un link para que suba las fotos. Acá ves en qué anda cada reclamo. Decidir qué se hace y devolver la plata es de Administración → Post-venta → Devoluciones.",
+    "label": "Reclamos (iniciar)",
+    "info": "Abrir un reclamo desde el LOCAL, por cualquier motivo: se arrepintió, vino fallado, le faltó un producto, le llegó otro, no le llegó nunca. Buscás la orden de Tienda Nube, marcás qué pasó, y le pasás al cliente un link para que suba las fotos. Acá ves en qué anda cada uno. Decidir qué se hace y devolver la plata es de Administración → Post-venta → Reclamos.",
     "brands": [
       "bdi",
       "zattia"
@@ -610,7 +610,7 @@ export const NAV_CATS: NavCat[] = [
       "cupones",
       "postventa-local",
       "cambios-local",
-      "devoluciones-local",
+      "reclamos-local",
       "etiquetas",
       "ubicaciones"
     ],

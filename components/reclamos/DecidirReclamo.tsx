@@ -20,13 +20,13 @@ import {
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import { decidir } from '@/lib/devoluciones/cliente'
+import { decidir } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento, destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
-  type Compensacion, type DestinoPrenda, type DevolucionRow, type ItemDevolucion, type OrdenTN,
+  type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
-} from '@/lib/devoluciones/tipos'
+} from '@/lib/reclamos/tipos'
 
 /** Todas las salidas. Cuáles se ofrecen lo decide `compensacionesDe` según lo que pasó. */
 const SALIDAS: { key: Compensacion; label: string; ayuda: string }[] = [
@@ -38,28 +38,28 @@ const SALIDAS: { key: Compensacion; label: string; ayuda: string }[] = [
   { key: 'ninguna', label: 'Nada', ayuda: 'Se resuelve sin compensación.' },
 ]
 
-export function DecidirDevolucion({
-  marca, devolucion, orden, onClose, onListo,
+export function DecidirReclamo({
+  marca, reclamo, orden, onClose, onListo,
 }: {
   marca: Marca
-  devolucion: DevolucionRow
+  reclamo: ReclamoRow
   orden?: OrdenTN | null
   onClose: () => void
   onListo: () => void
 }) {
   const toast = useToast()
   // Estable entre renders: de estos ítems cuelgan tres useMemo.
-  const items = useMemo(() => devolucion.items || [], [devolucion.items])
-  const esFalla = devolucion.motivo === 'falla'
-  const hayPrendaQueVuelva = puedeVolverLaPrenda(devolucion.motivo)
+  const items = useMemo(() => reclamo.items || [], [reclamo.items])
+  const esFalla = reclamo.motivo === 'falla'
+  const hayPrendaQueVuelva = puedeVolverLaPrenda(reclamo.motivo)
   const nuncaSalio = !hayPrendaQueVuelva
 
   /** Solo las salidas que tienen sentido para lo que pasó. */
   const opciones = useMemo(() => {
-    const permitidas = compensacionesDe(devolucion.motivo)
+    const permitidas = compensacionesDe(reclamo.motivo)
     return SALIDAS.filter((s) => permitidas.includes(s.key))
-  }, [devolucion.motivo])
-  const [compensacion, setCompensacion] = useState<Compensacion>(() => compensacionesDe(devolucion.motivo)[0] || 'plata_total')
+  }, [reclamo.motivo])
+  const [compensacion, setCompensacion] = useState<Compensacion>(() => compensacionesDe(reclamo.motivo)[0] || 'plata_total')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
   const [devolverEnvio, setDevolverEnvio] = useState(false)
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
@@ -76,7 +76,7 @@ export function DecidirDevolucion({
   const unidades = useMemo(() => items.reduce((s, it) => s + (Number(it.cantidad) || 0), 0), [items])
 
   /** Los ítems con el PVP de feria que se cargue acá, para que la cuenta lo tome. */
-  const itemsConFeria: ItemDevolucion[] = useMemo(() => {
+  const itemsConFeria: ItemReclamo[] = useMemo(() => {
     const f = Number(pvpFeria)
     if (!isFinite(f) || f <= 0) return items
     return items.map((it) => ({ ...it, pvp_feria: it.pvp_feria ?? f }))
@@ -106,7 +106,7 @@ export function DecidirDevolucion({
   )
 
   /** Dónde termina la prenda: es lo que después decide si la falla descuenta stock o no. */
-  const destino: DestinoPrenda = destinoDe(devolucion.motivo, retorno)
+  const destino: DestinoPrenda = destinoDe(reclamo.motivo, retorno)
 
   const costo = useMemo(
     () => costoDelCaso({
@@ -124,7 +124,7 @@ export function DecidirDevolucion({
     try {
       await decidir({
         store: marca,
-        id: devolucion.id,
+        id: reclamo.id,
         destino_prenda: destino,
         compensacion,
         monto_producto: monto.producto,
@@ -160,25 +160,25 @@ export function DecidirDevolucion({
   const salida = SALIDAS.find((s) => s.key === compensacion)
 
   return (
-    <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(devolucion.id)}`} ancho="ancho">
+    <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(reclamo.id)}`} ancho="ancho">
       <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
-        {MOTIVO_LABEL[devolucion.motivo]} · orden #{devolucion.orden_tn || '—'} · {devolucion.cliente || 'sin nombre'}
-        {devolucion.pago_metodo ? ` · pagó por ${devolucion.pago_metodo}` : ''}
+        {MOTIVO_LABEL[reclamo.motivo]} · orden #{reclamo.orden_tn || '—'} · {reclamo.cliente || 'sin nombre'}
+        {reclamo.pago_metodo ? ` · pagó por ${reclamo.pago_metodo}` : ''}
       </div>
 
       {/* La evidencia que cargó el cliente por el link. */}
-      {!!(devolucion.fotos || []).length && (
+      {!!(reclamo.fotos || []).length && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
-          {(devolucion.fotos || []).map((f, i) => (
+          {(reclamo.fotos || []).map((f, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img key={i} src={f.url} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}` }} />
           ))}
         </div>
       )}
-      {devolucion.relato_cliente && (
-        <Notice tone="neutral" style={{ marginBottom: space[3] }}>“{devolucion.relato_cliente}”</Notice>
+      {reclamo.relato_cliente && (
+        <Notice tone="neutral" style={{ marginBottom: space[3] }}>“{reclamo.relato_cliente}”</Notice>
       )}
-      {!(devolucion.fotos || []).length && esFalla && (
+      {!(reclamo.fotos || []).length && esFalla && (
         <Notice tone="warning" style={{ marginBottom: space[3] }}>
           Todavía no hay fotos. Si la prenda se la queda el cliente, no vas a poder cerrar el
           reclamo sin al menos una.
@@ -188,7 +188,7 @@ export function DecidirDevolucion({
       {/* ── 1. ¿Vuelve la prenda? ── */}
       {!hayPrendaQueVuelva && (
         <Notice tone="neutral" style={{ marginBottom: space[3] }}>
-          {devolucion.motivo === 'no_llego'
+          {reclamo.motivo === 'no_llego'
             ? 'El pedido se perdió en el camino: no hay prenda que vuelva. Queda pendiente el reclamo al transportista.'
             : 'La prenda nunca salió del depósito, así que no hay nada que esperar ni etiqueta que emitir.'}
         </Notice>

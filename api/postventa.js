@@ -32,10 +32,10 @@
 import fallas from './_fallas.js';
 import cambios from './_cambios.js';
 import solicitudes from './_solicitudes.js';
-import devoluciones from './_devoluciones.js';
+import reclamos from './_reclamos.js';
 import reclamo from './_reclamo.js';
 
-const RECURSOS = { fallas, cambios, solicitudes, devoluciones, reclamo };
+const RECURSOS = { fallas, cambios, solicitudes, reclamos, reclamo };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcularMonto, compensacionesDe, convieneRetorno, correccionesMalArmado, costoDelCaso, cuentaDescuento,
+  alertasDe, calcularMonto, compensacionesDe, conAlerta, convieneRetorno, correccionesMalArmado,
+  costoDelCaso, cuentaDescuento,
   destinoDe, estadoEnCriollo, faltantesParaCerrar, hayEnvio, laFallaDescuentaStock, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda,
-  type DevolucionRow, type ItemDevolucion, type OrdenTN,
-} from '@/lib/devoluciones/tipos'
+  type ReclamoRow, type ItemReclamo, type OrdenTN,
+} from '@/lib/reclamos/tipos'
 
 /**
  * La matemática de Devoluciones.
@@ -18,7 +19,7 @@ const ORDEN_LIMPIA: OrdenTN = { id: 1, number: 1234, subtotal: 10000, descuento_
 // Orden de $10.000 con 20% de descuento: se pagaron $8.000 + envío.
 const ORDEN_CON_CUPON: OrdenTN = { id: 2, number: 1235, subtotal: 10000, descuento_total: 2000, descuento_cupon: 2000, envio_costo_cliente: 3000 }
 
-const item = (precio: number, cantidad = 1, extra: Partial<ItemDevolucion> = {}): ItemDevolucion =>
+const item = (precio: number, cantidad = 1, extra: Partial<ItemReclamo> = {}): ItemReclamo =>
   ({ producto: 'Remera', cantidad, precio, ...extra })
 
 describe('pagadoPorItem: lo que la persona realmente pagó', () => {
@@ -71,7 +72,7 @@ const ORDEN_REAL: OrdenTN = {
 }
 
 describe('contra una orden real de producción (#20700)', () => {
-  const items: ItemDevolucion[] = (ORDEN_REAL.products || []).map((p) => ({
+  const items: ItemReclamo[] = (ORDEN_REAL.products || []).map((p) => ({
     producto: p.name || '', sku: p.sku, cantidad: p.quantity ?? 1, precio: p.price,
   }))
 
@@ -401,7 +402,7 @@ describe('numeroReclamo', () => {
 })
 
 describe('faltantesParaCerrar', () => {
-  const base: DevolucionRow = {
+  const base: ReclamoRow = {
     id: 1, store: 'bdi', numero: 'D-0001', motivo: 'falla', estado: 'recibido', items: [],
     stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
   }
@@ -424,5 +425,55 @@ describe('faltantesParaCerrar', () => {
 
   it('si la prenda tenía que volver y no llegó, lo dice', () => {
     expect(faltantesParaCerrar({ ...base, destino_prenda: 'stock', estado: 'en_transito' })).toContain('recibir la prenda')
+  })
+})
+
+/**
+ * Las alertas por antigüedad. Sin esto un reclamo se duerme en la lista: nadie lo cierra ni lo
+ * reclama, y el que paga es el cliente esperando su plata.
+ */
+describe('alertas por antigüedad', () => {
+  const AHORA = new Date('2026-07-27T12:00:00Z').getTime()
+  const hace = (dias: number) => new Date(AHORA - dias * 86400000).toISOString()
+  const fila = (extra: Partial<ReclamoRow>): ReclamoRow => ({
+    id: 1, store: 'bdi', numero: 'D-0001', motivo: 'falla', estado: 'en_revision', items: [],
+    stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
+    created_at: hace(1), updated_at: hace(1), ...extra,
+  })
+
+  it('un reclamo recién abierto no alerta nada', () => {
+    expect(alertasDe(fila({ estado: 'esperando_cliente', created_at: hace(2) }), AHORA)).toEqual([])
+  })
+
+  // La que más duele: el cliente esperando su plata.
+  it('la plata sin salir alerta a los 5 días, y va primero', () => {
+    const a = alertasDe(fila({ estado: 'resuelto', compensacion: 'plata_total', reintegro_estado: 'pendiente', updated_at: hace(6) }), AHORA)
+    expect(a[0].texto).toContain('la plata no sale')
+    expect(a[0].tono).toBe('danger')
+  })
+
+  it('el cliente que no responde alerta a los 10 días', () => {
+    expect(alertasDe(fila({ estado: 'esperando_cliente', created_at: hace(11) }), AHORA)[0].texto).toContain('no responde')
+  })
+
+  // Es el único que depende de nosotros: el cliente ya hizo su parte.
+  it('cargó las fotos y nadie decidió: alerta a los 3 días', () => {
+    const a = alertasDe(fila({ estado: 'en_revision', updated_at: hace(4) }), AHORA)
+    expect(a[0].texto).toContain('Esperando una decisión')
+    expect(a[0].tono).toBe('danger')
+  })
+
+  it('un paquete que no llega hace 15 días alerta', () => {
+    expect(alertasDe(fila({ estado: 'en_transito', updated_at: hace(16) }), AHORA)[0].texto).toContain('no llega')
+  })
+
+  it('sin compensación decidida, la plata todavía no puede alertar', () => {
+    expect(alertasDe(fila({ estado: 'en_revision', reintegro_estado: 'pendiente', updated_at: hace(30), compensacion: null }), AHORA)
+      .some((a) => a.texto.includes('plata'))).toBe(false)
+  })
+
+  it('conAlerta cuenta reclamos, no alertas', () => {
+    const dormido = fila({ id: 2, estado: 'esperando_cliente', created_at: hace(30), updated_at: hace(30) })
+    expect(conAlerta([fila({}), dormido], AHORA)).toBe(1)
   })
 })

@@ -1,5 +1,5 @@
 /**
- * Cliente de Devoluciones. Entra por el router `/api/postventa?recurso=devoluciones` (Vercel
+ * Cliente de Devoluciones. Entra por el router `/api/postventa?recurso=reclamos` (Vercel
  * cuenta una función por archivo de ruta y el proyecto vive cerca del tope del plan Hobby).
  *
  * Todo va con `apiFetch`, que manda la credencial del Monitor en `x-monitor-auth`. Las acciones
@@ -14,11 +14,11 @@ import { crearFalla } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
-  Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
-  Expectativa, MotivoDevolucion, OrdenTN, ViaRetorno,
+  Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, FotoReclamo, ItemReclamo,
+  Expectativa, MotivoReclamo, OrdenTN, ViaRetorno,
 } from './tipos'
 
-const API = '/api/postventa?recurso=devoluciones'
+const API = '/api/postventa?recurso=reclamos'
 /** El mismo endpoint que usa Cambios para traer una orden. Sin auth: es lectura de TN. */
 const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 /** Escribe stock en la tienda. El mismo que usa Integraciones (acción `stock`). */
@@ -40,7 +40,7 @@ async function postear(body: Record<string, unknown>): Promise<Record<string, un
   return d
 }
 
-export async function leerDevoluciones(marca: Marca, opts?: { estado?: EstadoDevolucion; soloPendientes?: boolean }): Promise<DevolucionRow[]> {
+export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo; soloPendientes?: boolean }): Promise<ReclamoRow[]> {
   const qs = [
     `store=${marca}`,
     opts?.estado ? `estado=${opts.estado}` : '',
@@ -50,7 +50,7 @@ export async function leerDevoluciones(marca: Marca, opts?: { estado?: EstadoDev
   const r = await apiFetch(`${API}&${qs}`)
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer las devoluciones.')
-  return (d.devoluciones || []) as DevolucionRow[]
+  return (d.devoluciones || []) as ReclamoRow[]
 }
 
 /**
@@ -86,7 +86,7 @@ type FilaProd = { id: number | string; unit_cost: number | string | null; retail
  *
  * Misma consulta que usa `BuscarArticuloGN`: el costo vive en `productos`, no en `inventario`.
  */
-export async function enriquecerConGN(marca: Marca, items: ItemDevolucion[]): Promise<ItemDevolucion[]> {
+export async function enriquecerConGN(marca: Marca, items: ItemReclamo[]): Promise<ItemReclamo[]> {
   const skus = [...new Set(items.map((i) => (i.sku || '').trim()).filter(Boolean))]
   if (!skus.length) return items
   try {
@@ -119,13 +119,13 @@ export async function enriquecerConGN(marca: Marca, items: ItemDevolucion[]): Pr
   }
 }
 
-export type CrearDevolucion = {
+export type CrearReclamo = {
   store: Marca
   orden_tn?: string | null
   cliente?: string | null
-  motivo: MotivoDevolucion
+  motivo: MotivoReclamo
   motivo_detalle?: string | null
-  items: ItemDevolucion[]
+  items: ItemReclamo[]
   monto_producto?: number | null
   pago_metodo?: string | null
   pago_gateway?: string | null
@@ -136,11 +136,11 @@ export type CrearDevolucion = {
   /** Qué esperaba el cliente. Comparado después con lo que se hizo, dice cuántas veces resolvimos distinto. */
   expectativa?: Expectativa | null
   /** Solo en "pedido mal armado": lo que TENDRÍA que haber recibido. */
-  items_correctos?: ItemDevolucion[]
+  items_correctos?: ItemReclamo[]
 }
 
 /** Crea el reclamo y devuelve su id y el token del link para el cliente. */
-export async function crearDevolucion(payload: CrearDevolucion): Promise<{ id: number; token: string }> {
+export async function crearReclamo(payload: CrearReclamo): Promise<{ id: number; token: string }> {
   const d = await postear({ action: 'crear', ...payload })
   return { id: Number(d.id), token: String(d.token || '') }
 }
@@ -169,9 +169,9 @@ export type Decision = {
 }
 
 /** La decisión de fondo: qué pasa con la prenda y qué recibe el cliente. Solo administración. */
-export async function decidir(payload: Decision): Promise<EstadoDevolucion> {
+export async function decidir(payload: Decision): Promise<EstadoReclamo> {
   const d = await postear({ action: 'decidir', ...payload })
-  return d.estado as EstadoDevolucion
+  return d.estado as EstadoReclamo
 }
 
 /** Marca la plata como devuelta. Solo administración. */
@@ -192,7 +192,7 @@ export async function marcarStockTn(store: Marca, id: number): Promise<void> {
   await postear({ action: 'tn-stock', store, id })
 }
 
-export async function cambiarEstado(store: Marca, id: number, estado: EstadoDevolucion, nota?: string | null): Promise<void> {
+export async function cambiarEstado(store: Marca, id: number, estado: EstadoReclamo, nota?: string | null): Promise<void> {
   await postear({ action: 'estado', store, id, estado, nota })
 }
 
@@ -205,11 +205,11 @@ export async function linkearFallas(store: Marca, id: number, falla_ids: number[
   await postear({ action: 'falla', store, id, falla_ids })
 }
 
-export async function editarDevolucion(store: Marca, id: number, campos: Partial<DevolucionRow>): Promise<void> {
+export async function editarReclamo(store: Marca, id: number, campos: Partial<ReclamoRow>): Promise<void> {
   await postear({ action: 'editar', store, id, ...campos })
 }
 
-export async function eliminarDevolucion(store: Marca, id: number): Promise<void> {
+export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
   await postear({ action: 'eliminar', store, id })
 }
 
@@ -228,7 +228,7 @@ export async function eliminarDevolucion(store: Marca, id: number): Promise<void
  */
 export async function pasarAFallas(
   marca: Marca,
-  d: DevolucionRow,
+  d: ReclamoRow,
   extra?: { pvpFeria?: number | null; usuario?: string },
 ): Promise<number[]> {
   const descuenta = laFallaDescuentaStock(d.compensacion)
@@ -271,7 +271,7 @@ export async function pasarAFallas(
  */
 export async function descontarReemplazo(
   marca: Marca,
-  d: DevolucionRow,
+  d: ReclamoRow,
   ctx: { user: string; pass: string },
 ): Promise<{ id?: string; number?: string }> {
   const items = (d.items || [])
@@ -299,7 +299,7 @@ export async function descontarReemplazo(
   const j = await r.json().catch(() => ({}))
   if (!j?.ok) throw new Error(`No se pudo descontar el stock del reemplazo en GN — ${j?.error || r.status}`)
   const venta = j.venta || {}
-  await editarDevolucion(marca, d.id, {
+  await editarReclamo(marca, d.id, {
     gn_venta_reemplazo_id: venta.id ? String(venta.id) : null,
     gn_venta_reemplazo_number: venta.number ? String(venta.number) : null,
   })
@@ -314,7 +314,7 @@ export async function descontarReemplazo(
  * lee la tienda del **query param**, no del body: sin `?store=` asume 'bdi' y escribiría en la
  * tienda equivocada.
  */
-export async function ponerStockCeroEnTn(marca: Marca, items: ItemDevolucion[]): Promise<number> {
+export async function ponerStockCeroEnTn(marca: Marca, items: ItemReclamo[]): Promise<number> {
   const updates = items
     .filter((i) => i.tn_product_id && i.variant_id)
     .map((i) => ({ product_id: i.tn_product_id, variant_id: i.variant_id, stock: 0 }))
