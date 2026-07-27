@@ -190,6 +190,10 @@ export default async function handler(req, res) {
         estado: vuelve ? 'en_transito' : 'resuelto',
         // Sin plata que devolver (le mandamos otra unidad o un cupón), el pendiente no aplica.
         reintegro_estado: compensacion === 'otra_unidad' || compensacion === 'ninguna' ? 'no_aplica' : 'pendiente',
+        // Si se le manda otra unidad igual, el cliente se queda con lo que compró: **la venta
+        // original NO se anula**. Anularla devolvería al stock una unidad que nunca volvió y
+        // dejaría la venta sin registrar. En el resto de los casos sí hay que anularla.
+        stock_estado: compensacion === 'otra_unidad' ? 'no_aplica' : 'pendiente',
       };
       await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}` }, extra);
       return res.status(200).json({ ok: true, estado: extra.estado });

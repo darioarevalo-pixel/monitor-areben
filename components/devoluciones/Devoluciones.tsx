@@ -22,10 +22,10 @@ import {
 import {
   buscarOrden, crearDevolucion, enriquecerConGN, leerDevoluciones, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarDevolucion,
-  ordenTraeDatosDePlata,
+  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn,
 } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, ESTADO_LABEL, faltantesParaCerrar, MOTIVO_LABEL, pagadoPorItem,
+  calcularMonto, ESTADO_LABEL, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, pagadoPorItem,
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 import { DecidirDevolucion } from './DecidirDevolucion'
@@ -117,6 +117,9 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
       .filter(({ i }) => elegidos.has(i))
       .map(({ p }) => ({
         sku: p.sku ?? null,
+        // Los ids de TN: son los que sirven para corregir el stock de la tienda. Los de GN los
+        // completa `enriquecerConGN` cruzando por SKU, y son otros.
+        tn_product_id: p.product_id == null ? null : String(p.product_id),
         variant_id: p.variant_id == null ? null : String(p.variant_id),
         producto: p.name || 'Sin nombre',
         cantidad: p.quantity ?? 1,
@@ -178,6 +181,49 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
       mensaje: `¿Ya le devolviste ${d.monto_total ?? d.monto_producto ?? 0} a ${d.cliente || 'el cliente'}${d.pago_metodo ? ` por ${d.pago_metodo}` : ''}?`,
     })
     if (si) await accion(() => marcarReintegro(marca, d.id), 'Anotado: la plata quedó devuelta.')
+  }
+
+  /**
+   * Manda la prenda al ledger de Fallas. El aviso dice si va a descontar stock o no, porque es
+   * la diferencia que después no se ve: si se le mandó otra unidad al cliente, esa prenda ya
+   * salió del stock con la venta original y descontarla de nuevo restaría dos veces.
+   */
+  const aFallas = async (d: DevolucionRow) => {
+    const descuenta = laFallaDescuentaStock(d.compensacion)
+    const si = await confirmar({
+      titulo: 'Pasar al depósito de fallas',
+      ok: 'Pasar a Fallas',
+      mensaje: descuenta
+        ? 'Se crea la falla con el vínculo a Gestión Nube: al confirmarla vas a descontar la unidad del stock (volvió al anular la venta, pero está fallada).'
+        : 'Se crea la falla SIN vínculo a Gestión Nube: esa unidad ya salió del stock con la venta original, así que no hay que descontarla de nuevo.',
+    })
+    if (!si) return
+    try {
+      const ids = await pasarAFallas(marca, d, { usuario: perfil?.name })
+      toast.ok(`${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito.`)
+      void recargar()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  /** Corrige el stock en la tienda: es lo que evita que el próximo cliente compre lo mismo. */
+  const ponerEnCero = async (d: DevolucionRow) => {
+    const si = await confirmar({
+      titulo: 'Poner el stock en 0 en Tienda Nube',
+      tono: 'danger',
+      ok: 'Poner en 0',
+      mensaje: `Se escribe en la tienda EN VIVO: ${(d.items || []).map((i) => i.producto).join(', ')}. Es lo que evita que se vuelva a vender algo que no hay.`,
+    })
+    if (!si) return
+    try {
+      const n = await ponerStockCeroEnTn(marca, d.items || [])
+      await marcarStockTn(marca, d.id)
+      toast.ok(`${n} variante${n === 1 ? '' : 's'} en 0 en Tienda Nube.`)
+      void recargar()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
   }
 
   const cerrar = async (d: DevolucionRow) => {
@@ -390,7 +436,13 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                         <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolví la plata</Button>
                       )}
                       {esAdmin && d.tn_stock_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void accion(() => marcarStockTn(marca, d.id), 'Anotado: stock corregido en TN.')}>Corregí TN</Button>
+                        <Button size="sm" variant="outline" onClick={() => void ponerEnCero(d)}>Poner en 0 en TN</Button>
+                      )}
+                      {esAdmin && d.destino_prenda === 'falla' && !(d.falla_ids || []).length && (d.estado === 'recibido' || d.estado === 'resuelto') && (
+                        <Button size="sm" variant="outline" onClick={() => void aFallas(d)}>Pasar a Fallas</Button>
+                      )}
+                      {!!(d.falla_ids || []).length && (
+                        <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>en Fallas</span>
                       )}
                       {esAdmin && ABIERTOS.includes(d.estado) && !faltan.length && (
                         <Button size="sm" variant="solid" tone="success" onClick={() => void cerrar(d)}>Cerrar</Button>

@@ -10,7 +10,9 @@
 import { apiFetch } from '@/lib/api-fetch'
 import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
+import { crearFalla } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
+import { laFallaDescuentaStock } from './tipos'
 import type {
   Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
   MotivoDevolucion, OrdenTN,
@@ -19,6 +21,8 @@ import type {
 const API = '/api/postventa?recurso=devoluciones'
 /** El mismo endpoint que usa Cambios para traer una orden. Sin auth: es lectura de TN. */
 const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+/** Escribe stock en la tienda. El mismo que usa Integraciones (acción `stock`). */
+const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias'
 
 async function postear(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const r = await apiFetch(API, {
@@ -194,6 +198,73 @@ export async function editarDevolucion(store: Marca, id: number, campos: Partial
 
 export async function eliminarDevolucion(store: Marca, id: number): Promise<void> {
   await postear({ action: 'eliminar', store, id })
+}
+
+/**
+ * Manda al ledger de Fallas la prenda que volvió fallada, y linkea las fallas al reclamo.
+ *
+ * ⚠️ **Acá se decide si el stock se descuenta o no, y es el punto donde una unidad se pierde en
+ * silencio si se elige mal.** El motor de Fallas descuenta stock al confirmar **solo si la falla
+ * tiene los ids de GN**; sin ellos es una "falla libre", que solo anota.
+ *
+ *   - **Se le devolvió la plata** → la venta original se anula, y al anularla la unidad **vuelve
+ *     al stock**. Está fallada, así que hay que volver a sacarla: la falla va CON ids.
+ *   - **Se le mandó otra unidad igual** (`otra_unidad`) → la venta original NO se anula, el
+ *     cliente se queda con lo que compró. Esa unidad ya salió del stock: la falla va SIN ids,
+ *     porque descontarla de nuevo restaría dos veces por una sola prenda.
+ */
+export async function pasarAFallas(
+  marca: Marca,
+  d: DevolucionRow,
+  extra?: { pvpFeria?: number | null; usuario?: string },
+): Promise<number[]> {
+  const descuenta = laFallaDescuentaStock(d.compensacion)
+  const ids: number[] = []
+  for (const it of d.items || []) {
+    const { id } = await crearFalla(
+      marca,
+      {
+        producto: it.producto,
+        sku: it.sku ?? null,
+        variante: it.variante ?? null,
+        cantidad: Number(it.cantidad) || 1,
+        motivo: `Devolución ${d.numero}${d.motivo_detalle ? ` — ${d.motivo_detalle}` : ''}`,
+        valuacion_costo: it.costo ?? null,
+        valuacion_pvp_feria: it.pvp_feria ?? extra?.pvpFeria ?? null,
+        precio_lista: it.precio == null ? null : Number(it.precio),
+        ubicacion: 'deposito',
+        product_id: descuenta ? it.product_id ?? null : null,
+        size_id: descuenta ? it.size_id ?? null : null,
+      },
+      extra?.usuario,
+    )
+    if (id) ids.push(id)
+  }
+  if (ids.length) await linkearFallas(marca, d.id, ids)
+  return ids
+}
+
+/**
+ * Pone en 0 el stock de las variantes en Tienda Nube. Es para el caso "se vendió sin stock": lo
+ * que evita que el próximo cliente compre lo mismo que no existe.
+ *
+ * Usa la acción `stock` de `tn-categorias` (el mismo camino que Integraciones). ⚠️ Ese endpoint
+ * lee la tienda del **query param**, no del body: sin `?store=` asume 'bdi' y escribiría en la
+ * tienda equivocada.
+ */
+export async function ponerStockCeroEnTn(marca: Marca, items: ItemDevolucion[]): Promise<number> {
+  const updates = items
+    .filter((i) => i.tn_product_id && i.variant_id)
+    .map((i) => ({ product_id: i.tn_product_id, variant_id: i.variant_id, stock: 0 }))
+  if (!updates.length) throw new Error('Estos productos no tienen los ids de Tienda Nube: corregilo desde la tienda.')
+  const r = await apiFetch(`${TN_STOCK_API}?store=${marca}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accion: 'stock', updates }),
+  })
+  const d = await r.json().catch(() => null)
+  if (!d?.ok) throw new Error(d?.errores?.[0]?.msg || d?.error || 'No se pudo escribir el stock en Tienda Nube.')
+  return Number(d.aplicados || 0)
 }
 
 /** El link que se le pasa al cliente para que cargue fotos y cuente qué pasó. */

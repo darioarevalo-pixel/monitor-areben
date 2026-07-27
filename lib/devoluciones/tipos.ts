@@ -94,11 +94,21 @@ export type ProductoOrdenTN = {
   price?: number | string | null
 }
 
-/** Una línea del reclamo. `costo` y `pvp_feria` salen de GN y son los que deciden si conviene el retorno. */
+/**
+ * Una línea del reclamo. `costo` y `pvp_feria` salen de GN y son los que deciden si conviene el
+ * retorno.
+ *
+ * ⚠️ **Hay ids de dos mundos y no son intercambiables.** `product_id`/`size_id` son de Gestión
+ * Nube (se completan cruzando por SKU) y sirven para descontar stock y crear la falla.
+ * `tn_product_id`/`variant_id` son de Tienda Nube y sirven para corregir el stock de la tienda.
+ * Usar uno donde va el otro escribe en el producto equivocado.
+ */
 export type ItemDevolucion = {
   sku?: string | null
   product_id?: string | null
   size_id?: string | null
+  /** De Tienda Nube (el par con `variant_id`), para escribir stock en la tienda. */
+  tn_product_id?: string | null
   variant_id?: string | null
   producto: string
   variante?: string | null
@@ -300,6 +310,22 @@ export type DevolucionRow = {
   historial?: DevolucionEvento[]
   created_at?: string
   updated_at?: string
+}
+
+/**
+ * ¿La falla que se crea desde este reclamo tiene que descontar stock?
+ *
+ * Es la regla más delicada del módulo, porque equivocarla no rompe nada visible: deja el stock
+ * mal por una unidad hasta el próximo conteo.
+ *
+ *   - **Se le devolvió la plata** → la venta original se anula, y al anularla la unidad vuelve al
+ *     stock. Está fallada y no se puede vender: hay que volver a sacarla. **Descuenta.**
+ *   - **Se le mandó otra unidad igual** → la venta original NO se anula (el cliente se queda con
+ *     lo que compró) y esa unidad ya salió del stock. Descontarla otra vez restaría dos veces por
+ *     una sola prenda. **No descuenta.**
+ */
+export function laFallaDescuentaStock(compensacion: Compensacion | null | undefined): boolean {
+  return compensacion !== 'otra_unidad'
 }
 
 /** `D-0007`. Mismo formato que el `C-0045` de Cambios. */

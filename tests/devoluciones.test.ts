@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, faltantesParaCerrar, numeroReclamo, pagadoPorItem,
+  calcularMonto, convieneRetorno, costoDelCaso, faltantesParaCerrar, laFallaDescuentaStock,
+  numeroReclamo, pagadoPorItem,
   type DevolucionRow, type ItemDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 
@@ -180,6 +181,29 @@ describe('costoDelCaso', () => {
   it('suma los dos envíos cuando además se manda un reemplazo', () => {
     const c = costoDelCaso({ montoDevuelto: 0, envioVuelta: 6000, envioReemplazo: 6000, items: [item(12000, 1, { costo: 2000 })], destino: 'falla' })
     expect(c).toBe(14000)
+  })
+})
+
+/**
+ * La regla más delicada del módulo. Equivocarla no rompe ninguna pantalla: deja el stock mal por
+ * una unidad hasta el próximo conteo, que es cuando alguien descubre que falta algo y no sabe por qué.
+ */
+describe('laFallaDescuentaStock', () => {
+  it('si se le devolvió la plata, la falla descuenta: la venta se anuló y la unidad volvió al stock', () => {
+    expect(laFallaDescuentaStock('plata_total')).toBe(true)
+    expect(laFallaDescuentaStock('plata_parcial')).toBe(true)
+    expect(laFallaDescuentaStock('cupon')).toBe(true)
+    expect(laFallaDescuentaStock('ninguna')).toBe(true)
+  })
+
+  // El único caso en que NO descuenta, y es el que se presta a error.
+  it('si se le mandó otra unidad igual, NO descuenta: esa prenda ya salió con la venta original', () => {
+    expect(laFallaDescuentaStock('otra_unidad')).toBe(false)
+  })
+
+  it('sin decidir todavía, se asume que descuenta (el caso más común)', () => {
+    expect(laFallaDescuentaStock(null)).toBe(true)
+    expect(laFallaDescuentaStock(undefined)).toBe(true)
   })
 })
 
