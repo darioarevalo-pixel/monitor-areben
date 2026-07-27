@@ -21,15 +21,21 @@
 //   GET  /api/postventa?recurso=fallas|cambios|solicitudes|devoluciones&...
 //   POST /api/postventa?recurso=...  (o { recurso } en el body)
 //
-// Todos validan usuario del Monitor por su cuenta (cada uno llama a `exigirUsuario`), así que
-// este router no afloja ningún control: solo elige a quién le pasa el request. `devoluciones`
-// además exige función de administración para lo que mueve plata.
+// Cada handler valida por su cuenta, así que este router no afloja ningún control: solo elige a
+// quién le pasa el request. `devoluciones` además exige función de administración para lo que
+// mueve plata.
+//
+// ⚠️ `reclamo` es la excepción y hay que saberlo: **no pide sesión del Monitor**. Es el link que
+// se le manda al cliente para que suba las fotos, o sea que está abierto a internet. Se defiende
+// con el token del reclamo (64 hex, con vencimiento, revocable) y solo deja escribir fotos y
+// relato en ESE reclamo. Ver el encabezado de `_reclamo.js`.
 import fallas from './_fallas.js';
 import cambios from './_cambios.js';
 import solicitudes from './_solicitudes.js';
 import devoluciones from './_devoluciones.js';
+import reclamo from './_reclamo.js';
 
-const RECURSOS = { fallas, cambios, solicitudes, devoluciones };
+const RECURSOS = { fallas, cambios, solicitudes, devoluciones, reclamo };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

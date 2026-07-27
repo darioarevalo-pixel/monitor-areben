@@ -4,6 +4,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createElement, useEffect, useState } from 'react'
 import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
 import { LoginScreen } from '@/components/LoginScreen'
+import { ReclamoPublico } from '@/components/devoluciones/ReclamoPublico'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { AccionesProvider } from '@/components/layout/acciones'
@@ -54,6 +55,14 @@ export default function Seccion() {
   useEffect(() => {
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
   }, [cargando, perfil, permitida, key, router])
+
+  // El link del cliente: /reclamo/<token>. Va acá adentro y NO como ruta propia de Next porque
+  // cada ruta es una función serverless y el proyecto está en el tope del plan Hobby (pasarse
+  // frena todos los deploys en silencio). Sale antes del gate de login a propósito: lo abre
+  // alguien de afuera, sin cuenta, desde el celular. Se defiende con el token, no con la sesión.
+  if (key === 'reclamo') {
+    return <ReclamoPublico token={Array.isArray(partes) ? partes[1] ?? null : null} />
+  }
 
   if (cargando) return <div className="login-screen" />
   if (!perfil) return <LoginScreen />
