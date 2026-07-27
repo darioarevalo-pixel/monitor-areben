@@ -1,5 +1,5 @@
-// Post-venta: UNA puerta para los recursos del módulo —fallas, cambios, solicitudes y
-// devoluciones— que de otro modo serían cuatro endpoints sueltos.
+// Post-venta: UNA puerta para los recursos del módulo —fallas, solicitudes y reclamos— que de otro
+// modo serían endpoints sueltos.
 //
 // POR QUÉ ESTÁN JUNTOS
 // --------------------
@@ -18,7 +18,7 @@
 // La lógica de cada recurso NO se tocó: son los mismos handlers, con el mismo contrato.
 // Lo único que cambia es la puerta por la que se entra.
 //
-//   GET  /api/postventa?recurso=fallas|cambios|solicitudes|devoluciones&...
+//   GET  /api/postventa?recurso=fallas|solicitudes|reclamos|reclamo&...
 //   POST /api/postventa?recurso=...  (o { recurso } en el body)
 //
 // Cada handler valida por su cuenta, así que este router no afloja ningún control: solo elige a
@@ -30,12 +30,14 @@
 // con el token del reclamo (64 hex, con vencimiento, revocable) y solo deja escribir fotos y
 // relato en ESE reclamo. Ver el encabezado de `_reclamo.js`.
 import fallas from './_fallas.js';
-import cambios from './_cambios.js';
 import solicitudes from './_solicitudes.js';
 import reclamos from './_reclamos.js';
 import reclamo from './_reclamo.js';
 
-const RECURSOS = { fallas, cambios, solicitudes, reclamos, reclamo };
+// `cambios` ya no está: un cambio es un reclamo cuya salida es otro producto, así que se atiende
+// por `reclamos` (acciones `cambio` / `procesar`). La tabla `cambios` estaba vacía en las dos
+// marcas, así que no hubo nada que migrar.
+const RECURSOS = { fallas, solicitudes, reclamos, reclamo };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

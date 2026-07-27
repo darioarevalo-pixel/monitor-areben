@@ -1,13 +1,17 @@
-// Devoluciones (post-venta) — tabla `devoluciones` (ver sql/migrate-devoluciones.sql).
+// Reclamos (post-venta) — tabla `devoluciones` (ver sql/migrate-devoluciones.sql).
 //
-// Cubre los tres escenarios con un solo motor: devolución total, parcial por falta de stock, y
-// falla que vuelve por correo. Lo que los distingue no es el tipo de reclamo sino dos decisiones
-// independientes: `destino_prenda` (qué pasa con la prenda) y `compensacion` (qué recibe el
-// cliente). Ver el plan en ~/.claude/plans/hidden-rolling-zephyr.md.
+// Un solo motor para todo lo que sale mal después de una venta, **cambios incluidos**. Lo que
+// distingue un caso de otro no es un "tipo de reclamo" sino dos decisiones independientes:
+// `destino_prenda` (qué pasa con la prenda) y `compensacion` (qué recibe el cliente). Un cambio es
+// simplemente `compensacion='otro_producto'`: comparte tabla, número (`R-0042`) y pendientes.
 //
 //   GET  ?store=bdi|zattia[&estado=][&pendientes=1][&limit=]     → lista.
 //   POST { store, action:'crear', orden_tn, items, motivo, ... } → crea el borrador + token.
 //   POST { store, action:'decidir', id, destino_prenda, compensacion, montos… } → ADMIN.
+//   POST { store, action:'cambio', id, items_nuevos, forma_pago, envio…, pagado? } → el POS.
+//   POST { store, action:'procesar', id, gn_venta_id, gn_venta_number } → registra la venta del cambio.
+//   POST { store, action:'reingreso', id }                       → el devuelto volvió al stock en GN.
+//   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
 //   POST { store, action:'reintegro', id, comprobante? }         → la plata devuelta. ADMIN.
 //   POST { store, action:'anulacion', id }                       → la venta anulada en GN. ADMIN.
 //   POST { store, action:'tn-stock', id }                        → variante corregida en TN. ADMIN.
@@ -17,18 +21,24 @@
 //   POST { store, action:'editar', id, ...campos }               → edita.
 //   POST { store, action:'eliminar', id }                        → borra. ADMIN.
 //
+// ⚠️ **`cambio` y `procesar` NO son de administración, a propósito.** Un cambio no es una decisión
+// que alguien tenga que autorizar —ya se sabe qué se hace, se cobra la diferencia y listo—, así que
+// el Local lo resuelve de punta a punta. Administración solo entra si la cuenta queda a favor del
+// cliente, porque ahí sí sale plata de la caja: eso cae en `reintegro`, que sí está gateado.
+//
 // ⚠️ DOS COSAS QUE NO HACE Y NO PUEDE HACER
 //
-// 1. **No anula la venta en Gestión Nube**: GN no lo expone por API (ver api/crear-venta.js y el
-//    módulo lib/verif-ventas/, que existe solo para listar lo que hay que anular a mano). Por eso
-//    `stock_estado` es una TRAZA de un paso manual, igual que el `reingreso_estado` de Cambios.
-// 2. **No recalcula los montos.** El cálculo vive en UN solo lugar, `lib/devoluciones/tipos.ts`,
-//    con tests. Replicarlo acá en JS sería el mismo espejo TS/JS que ya arrastra Cambios
-//    (`totalDe` vs `calcularTotalCambio`), que es una fuente conocida de desincronización. Lo que
-//    sí hace es **validar rangos**: nada negativo y nada por encima del total de la orden.
+// 1. **No anula la venta en Gestión Nube ni reingresa lo devuelto**: GN no expone ninguna de las
+//    dos por API (ver api/crear-venta.js y el módulo lib/verif-ventas/, que existe solo para listar
+//    lo que hay que anular a mano). Por eso `stock_estado` y `reingreso_estado` son TRAZAS de pasos
+//    manuales: lo que el sistema hace es no dejar que nadie se olvide.
+// 2. **No recalcula los montos.** El cálculo vive en UN solo lugar, `lib/reclamos/tipos.ts`, con
+//    tests. Replicarlo acá en JS sería un espejo TS/JS, que es una fuente conocida de
+//    desincronización — ya pasó con el motor viejo de Cambios. Lo que sí hace es **validar
+//    rangos**: nada negativo y nada por encima del total de la orden.
 //
-// A diferencia de _cambios.js —donde todo el gate de roles es client-side— acá las acciones que
-// mueven plata exigen función de administración TAMBIÉN en el servidor.
+// Las acciones que mueven plata exigen función de administración TAMBIÉN en el servidor: el gate
+// de la UI es comodidad, no seguridad.
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
@@ -40,10 +50,10 @@ function cfgFor(store) {
   return { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 
-// Los siete vigentes, más los dos históricos que quedaron en filas viejas (si se sacaran, editar
+// Los ocho vigentes, más los dos históricos que quedaron en filas viejas (si se sacaran, editar
 // un reclamo viejo lo rechazaría por "motivo inválido").
 const MOTIVOS = [
-  'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
+  'arrepentimiento', 'no_esperaba', 'talle', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
   'no_era_lo_esperado', 'otro',
 ];
 const EXPECTATIVAS = ['plata', 'mismo_producto', 'otro_producto', 'completar'];
@@ -52,6 +62,9 @@ const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'otro_pro
 const FORMAS_PAGO = ['tarjeta', 'transferencia'];
 const ESTADOS = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
+const COBROS = ['no_aplica', 'pendiente', 'cobrado'];
+// Quién paga el envío del cambio. Cambia el total a cobrar, no solo la logística.
+const ENVIO_PAGA = ['cliente', 'nosotros'];
 // Cómo vuelve la prenda. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
 const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
 
@@ -63,13 +76,14 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle,
   tn_stock_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
+  pagado, cobro_estado, envio_paga, reingreso_estado,
   usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 // El `token` NUNCA sale en los listados: es la llave del link público. Se pide aparte, de a uno.
 
 /** El día que el link deja de servir. Un reclamo no debería tardar más que esto. */
 const DIAS_TOKEN = 15;
 
-/** ¿Puede mover plata? Admin o función de administración. Es el gate que _cambios.js no tiene. */
+/** ¿Puede mover plata? Admin o función de administración. */
 function esAdministracion(perfil) {
   if (!perfil) return false;
   if (perfil.admin === true) return true;
@@ -81,9 +95,9 @@ const num = (v) => (v == null || v === '' ? null : Number(v));
 const texto = (v) => (v == null || v === '' ? null : String(v));
 
 /**
- * Historial append-only: se re-lee la fila, se apila el evento y se guarda. Mismo patrón que
- * `apilarHistorial` de _cambios.js — no es atómico, pero dos acciones simultáneas sobre el MISMO
- * reclamo no pasan en la práctica (lo maneja una persona por vez).
+ * Historial append-only: se re-lee la fila, se apila el evento y se guarda. No es atómico, pero dos
+ * acciones simultáneas sobre el MISMO reclamo no pasan en la práctica (lo maneja una persona por
+ * vez).
  */
 async function apilar(supabase, id, evento, extra = {}) {
   const { data: previo } = await supabase.from('devoluciones').select('historial').eq('id', id).single();
@@ -191,6 +205,10 @@ export default async function handler(req, res) {
 
       // Si la prenda no vuelve, no hay nada que esperar ni venta que anular por el retorno.
       const vuelve = destino === 'stock' || (destino === 'falla' && b.retorno_decidido === true);
+      // Un cambio no se salda con los pendientes de una devolución, y confundirlos lo dejaba
+      // trabado sin poder cerrarse nunca. Ver el bloque `esCambio` más abajo.
+      const esCambio = compensacion === 'otro_producto';
+      const diferencia = num(b.diferencia);
       const extra = {
         destino_prenda: destino,
         compensacion,
@@ -209,18 +227,107 @@ export default async function handler(req, res) {
         // El cambio por otro producto: lo que se lleva y cuánto queda de diferencia.
         items_nuevos: Array.isArray(b.items_nuevos) ? b.items_nuevos : [],
         forma_pago: FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null,
-        diferencia: num(b.diferencia),
+        diferencia,
         descuento_manual: num(b.descuento_manual),
+        envio_paga: ENVIO_PAGA.includes(b.envio_paga) ? b.envio_paga : null,
         estado: vuelve ? 'en_transito' : 'resuelto',
-        // Sin plata que devolver (le mandamos otra unidad o un cupón), el pendiente no aplica.
-        reintegro_estado: compensacion === 'otra_unidad' || compensacion === 'ninguna' ? 'no_aplica' : 'pendiente',
+        // ── Los pendientes ────────────────────────────────────────────────────────
+        //
+        // **En un cambio son otros**, y tratarlo como una devolución lo dejaba imposible de
+        // cerrar: se le exigía anular la venta original y devolver plata, y ninguna de las dos
+        // corresponde. El cliente se queda con la compra —solo cambia el artículo—, así que la
+        // venta NO se anula; y la plata sale únicamente si la diferencia quedó a favor suyo.
+        // Lo que sí hay que hacer, y no existía como pendiente, es reingresar a mano lo devuelto:
+        // GN no acepta una venta negativa por API.
+        reintegro_estado: esCambio
+          ? (diferencia != null && diferencia < 0 ? 'pendiente' : 'no_aplica')
+          // Sin plata que devolver (le mandamos otra unidad o un cupón), el pendiente no aplica.
+          : (compensacion === 'otra_unidad' || compensacion === 'ninguna' ? 'no_aplica' : 'pendiente'),
         // Si se le manda otra unidad igual, el cliente se queda con lo que compró: **la venta
         // original NO se anula**. Anularla devolvería al stock una unidad que nunca volvió y
         // dejaría la venta sin registrar. En el resto de los casos sí hay que anularla.
-        stock_estado: compensacion === 'otra_unidad' ? 'no_aplica' : 'pendiente',
+        stock_estado: esCambio || compensacion === 'otra_unidad' ? 'no_aplica' : 'pendiente',
+        reingreso_estado: esCambio ? 'pendiente' : 'no_aplica',
+        cobro_estado: esCambio && diferencia != null && diferencia > 0 ? 'pendiente' : 'no_aplica',
       };
       await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}` }, extra);
       return res.status(200).json({ ok: true, estado: extra.estado });
+    }
+
+    // ── El cambio: se arma en dos tiempos y NO lo aprueba Administración ──────────
+    //
+    // Está deliberadamente fuera de `DE_ADMIN`. Un cambio no es una decisión que alguien tenga que
+    // autorizar: es una operación de mostrador donde ya se sabe qué se hace. Mientras `decidir`
+    // estuvo siendo el único camino, el Local literalmente no podía armar uno.
+    //
+    // Guarda el borrador tal como esté, **sin exigir nada**: el cambio se arma en dos tiempos (se
+    // elige qué devuelve y qué se lleva, sale la diferencia, se le pasa al cliente, y queda a medio
+    // hacer hasta que paga). Lo que sí valida es el gate de facturar, en `procesar`.
+    if (action === 'cambio') {
+      const campos = {
+        compensacion: 'otro_producto',
+        destino_prenda: 'stock', // lo que vuelve en un cambio está sano y se revende
+      };
+      if (b.orden_tn !== undefined) campos.orden_tn = texto(b.orden_tn);
+      if (b.cliente !== undefined) campos.cliente = texto(b.cliente);
+      if (b.motivo !== undefined && MOTIVOS.includes(b.motivo)) campos.motivo = b.motivo;
+      if (b.items !== undefined && Array.isArray(b.items)) campos.items = b.items;
+      if (b.items_nuevos !== undefined && Array.isArray(b.items_nuevos)) campos.items_nuevos = b.items_nuevos;
+      if (b.forma_pago !== undefined) campos.forma_pago = FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null;
+      if (b.via_retorno !== undefined) campos.via_retorno = VIAS.includes(b.via_retorno) ? b.via_retorno : null;
+      if (b.envio_paga !== undefined) campos.envio_paga = ENVIO_PAGA.includes(b.envio_paga) ? b.envio_paga : null;
+      if (b.envio_costo !== undefined) campos.envio_costo = num(b.envio_costo);
+      if (b.descuento_manual !== undefined) campos.descuento_manual = num(b.descuento_manual);
+      if (b.solicitud_envio !== undefined) campos.solicitud_envio = texto(b.solicitud_envio);
+      if (b.seguimiento_ida !== undefined) campos.seguimiento_ida = texto(b.seguimiento_ida);
+      if (b.seguimiento_vuelta !== undefined) campos.seguimiento_vuelta = texto(b.seguimiento_vuelta);
+      if (b.pagado !== undefined) campos.pagado = b.pagado === true;
+      // La diferencia la calcula el cliente con `calcularCambio` (un solo lugar, con tests). Acá
+      // solo se valida el rango: un cambio no puede cobrar más que el valor de lo que se lleva.
+      if (b.diferencia !== undefined) {
+        const d = num(b.diferencia);
+        const techo = num(b.techo_nuevos);
+        if (d != null && techo != null && d > techo + 1) {
+          return res.status(400).json({ error: `la diferencia (${d}) supera lo que se lleva (${techo})` });
+        }
+        campos.diferencia = d;
+      }
+      // El cobro sigue a la diferencia salvo que ya se haya cobrado: no se pisa un cobro hecho.
+      const { data: previo } = await supabase.from('devoluciones').select('cobro_estado').eq('id', id).single();
+      if (campos.diferencia !== undefined && previo?.cobro_estado !== 'cobrado') {
+        campos.cobro_estado = campos.diferencia > 0 ? 'pendiente' : 'no_aplica';
+      }
+      await apilar(supabase, id, { estado: 'borrador', at: ahora(), usuario, nota: b.pagado === true ? 'cambio marcado como pagado' : 'borrador del cambio guardado' }, campos);
+      return res.status(200).json({ ok: true });
+    }
+
+    // Registra la venta REAL que ya se creó en Gestión Nube (la crea el cliente contra
+    // `crear-venta.js`, que es el único que sabe hablar con GN). A partir de acá la prenda que
+    // vuelve queda como pendiente de reingreso MANUAL: la API de GN no acepta una venta negativa.
+    if (action === 'procesar') {
+      const extra = {
+        gn_venta_id: texto(b.gn_venta_id),
+        gn_venta_number: texto(b.gn_venta_number),
+        pagado: true,
+        estado: 'en_transito',
+        reingreso_estado: 'pendiente',
+        // La venta original no se anula nunca en un cambio: el cliente se queda con su compra.
+        stock_estado: 'no_aplica',
+      };
+      await apilar(supabase, id, { estado: 'en_transito', at: ahora(), usuario, nota: `venta del cambio creada en GN${b.gn_venta_number ? ` (#${b.gn_venta_number})` : ''}` }, extra);
+      return res.status(200).json({ ok: true });
+    }
+
+    // El producto devuelto volvió al stock a mano en GN. Como `anulacion`, es una TRAZA de un paso
+    // manual: el sistema no lo hace ni puede hacerlo.
+    if (action === 'reingreso') {
+      await apilar(supabase, id, { estado: 'recibido', at: ahora(), usuario, nota: 'devuelto reingresado a mano en GN' }, { reingreso_estado: 'hecho' });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'cobrado') {
+      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'diferencia cobrada' }, { cobro_estado: 'cobrado' });
+      return res.status(200).json({ ok: true });
     }
 
     if (action === 'reintegro') {
@@ -293,9 +400,12 @@ export default async function handler(req, res) {
       if (b.forma_pago !== undefined && FORMAS_PAGO.includes(b.forma_pago)) campos.forma_pago = b.forma_pago;
       if (b.solicitud_envio !== undefined) campos.solicitud_envio = texto(b.solicitud_envio);
       if (b.descuento_manual !== undefined) campos.descuento_manual = num(b.descuento_manual);
+      if (b.envio_paga !== undefined && ENVIO_PAGA.includes(b.envio_paga)) campos.envio_paga = b.envio_paga;
+      if (b.pagado !== undefined) campos.pagado = b.pagado === true;
+      if (b.cobro_estado !== undefined && COBROS.includes(b.cobro_estado)) campos.cobro_estado = b.cobro_estado;
       if (b.reclamo_correo_estado !== undefined && PENDIENTES.includes(b.reclamo_correo_estado)) campos.reclamo_correo_estado = b.reclamo_correo_estado;
-      // Los tres pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
-      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado']) {
+      // Los pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
+      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado', 'reingreso_estado']) {
         if (b[k] !== undefined && PENDIENTES.includes(b[k])) campos[k] = b[k];
       }
       if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });

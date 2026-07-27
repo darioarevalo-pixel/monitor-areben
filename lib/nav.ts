@@ -261,7 +261,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   postventa: 'Post-venta (motor): recibe y confirma fallas, descuenta stock en GN, etiqueta. Valorizado.',
   'postventa-local': 'Cargá las prendas con falla que recibís del cliente. El motor está en Administración.',
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
-  'cambios-local': 'Iniciá un cambio: buscá la orden de TN, marcá qué devuelve y qué se lleva el cliente.',
+  'cambios-local': 'Armá un cambio de punta a punta: la diferencia, el cobro y la venta en GN. No hace falta que lo apruebe nadie.',
   'reclamos-local': 'Abrí un reclamo por cualquier motivo y pasale el link al cliente para que suba las fotos. La plata la devuelve Administración.',
 }
 

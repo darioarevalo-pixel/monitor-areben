@@ -43,7 +43,7 @@ describe('lo que ve el cliente en el link público', () => {
   const json = JSON.stringify(salida)
 
   it('trae lo justo para que sepa de qué reclamo se trata', () => {
-    expect(salida.numero).toBe('D-0042') // derivado del id 42
+    expect(salida.numero).toBe('R-0042') // derivado del id 42
     expect(salida.orden).toBe('20700')
     expect(salida.productos).toHaveLength(1)
     expect(salida.productos[0].producto).toContain('WEAVE CASE')

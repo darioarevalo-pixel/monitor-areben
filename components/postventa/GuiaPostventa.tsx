@@ -18,10 +18,11 @@
 import { color, font, space } from '@/components/ui'
 
 /** Dónde se carga cada cosa. La regla es de dónde VIENE la prenda, no qué le pasó. */
-export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' }) {
+export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' | 'cambios' }) {
   const filas: { key: typeof activa; pregunta: string; donde: string }[] = [
     { key: 'fallas', pregunta: '¿La prenda ya está acá, sin orden de por medio?', donde: 'Fallas' },
     { key: 'reclamos', pregunta: '¿Compró online y algo salió mal?', donde: 'Reclamos' },
+    { key: 'cambios', pregunta: '¿Ya sabés que quiere cambiarlo por otro?', donde: 'Cambios' },
   ]
   return (
     <details style={{ marginBottom: space[3], border: `1px solid ${color.line}`, background: color.bg2, borderRadius: 'var(--mo-r-lg)', padding: '10px 14px' }}>
@@ -35,8 +36,11 @@ export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' }) {
           </div>
         ))}
         <div style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
-          <b>Los cambios ahora son un reclamo más</b>: se abre con el motivo que corresponda y al
-          resolver se elige &quot;lo cambia por otro producto&quot;.
+          <b>Reclamos y Cambios son la misma cola</b>: comparten el número (<b>R-0042</b>) y la
+          lista, y los ves a los dos desde Reclamos. Lo que cambia es por dónde entrás. Si ya sabés
+          que quiere otro producto, entrá por <b>Cambios</b> y resolvelo ahí mismo — no hace falta
+          que Administración decida nada. Si hay que evaluar (vino fallado, no llegó), entrá por
+          <b> Reclamos</b>, y si la resolución termina siendo un cambio, se sigue en Cambios.
           <div style={{ marginTop: 4 }}>
             Si te equivocás de lugar, el stock y la plata pueden quedar mal a la vez. Ante la duda,
             preguntá antes de cargar.

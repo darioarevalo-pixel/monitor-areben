@@ -25,21 +25,26 @@ import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow, type Fa
 import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
 import { Devoluciones } from '@/components/reclamos/Reclamos'
+import { ArmarCambio } from '@/components/reclamos/ArmarCambio'
 import { DondeVa, Instructivo } from './GuiaPostventa'
 
 /**
- * Cambios ya no es una pestaña: pasó a ser una **resolución** dentro de Reclamos
- * (`compensacion='otro_producto'`). Lo que lo distinguía —la diferencia de precio entre lo que
- * devuelve y lo que se lleva— vive ahora en `calcularCambio`, y de paso corrige el hueco que tenía
- * el motor viejo: valuaba lo devuelto a precio de lista en vez de a lo que la persona pagó.
+ * **Cambios vuelve a ser una pestaña, pero no vuelve a ser un registro aparte.**
  *
- * Se pudo retirar directo porque las tablas `cambios` de las dos marcas estaban VACÍAS (verificado
- * antes de tocar nada): no había ningún cambio en curso que pudiera quedar a mitad de camino.
+ * Un cambio es un reclamo cuya salida es otro producto (`compensacion='otro_producto'`): comparte
+ * la tabla `devoluciones`, el número `R-00XX` y los pendientes. Lo que es propio —y lo que se había
+ * perdido al absorberlo— es la **operación de mostrador**: la grilla ±, el ticket, el cobro en dos
+ * tiempos y la venta real en Gestión Nube. Esa pantalla es `ArmarCambio`, y la lista que muestra es
+ * una **vista filtrada** sobre la misma tabla, no otra tabla.
+ *
+ * La diferencia se calcula con `calcularCambio`, que además corrige el hueco del motor viejo:
+ * valuaba lo devuelto a precio de lista en vez de a lo que la persona pagó.
  */
-type Tab = 'fallas' | 'reclamos' | 'canjes'
+type Tab = 'fallas' | 'reclamos' | 'cambios' | 'canjes'
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
   { key: 'fallas', label: 'Fallas', listo: true },
   { key: 'reclamos', label: 'Reclamos', listo: true },
+  { key: 'cambios', label: 'Cambios', listo: true },
   { key: 'canjes', label: 'Canjes', listo: false },
 ]
 
@@ -300,6 +305,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
 
       {esAdmin && tab === 'reclamos' ? (
         <Devoluciones />
+      ) : esAdmin && tab === 'cambios' ? (
+        <ArmarCambio />
       ) : esAdmin && tab !== 'fallas' ? (
         <Card padding={4}><EmptyState icon="🚧" title={`${TABS.find((t) => t.key === tab)?.label} llega en una próxima tanda`} hint="Post-venta suma esta pestaña más adelante." /></Card>
       ) : (

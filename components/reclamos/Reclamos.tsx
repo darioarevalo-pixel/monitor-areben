@@ -27,7 +27,7 @@ import {
   ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarReclamo,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
+  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, EXPECTATIVA_LABEL,
   alertasDe, conAlerta,
   type Expectativa,
@@ -172,8 +172,15 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         expectativa,
         items_correctos: motivo === 'mal_armado' ? correctos : [],
       })
-      await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
-      toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
+      // Si ya dijo que quiere cambiarlo, no hay nada que fotografiar ni nada que evaluar: pedirle
+      // fotos es mandarlo a un trámite que no existe. El link sigue disponible en la lista por si
+      // igual hace falta.
+      if (expectativa === 'otro_producto') {
+        toast.ok('Reclamo creado. Armá el cambio desde la pestaña Cambios.')
+      } else {
+        await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
+        toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
+      }
       setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle(''); setCorrectos([])
       void recargar()
     } catch (e) {
@@ -548,7 +555,15 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       </div>
                     ))}
                   </Td>
-                  <Td>{MOTIVO_LABEL[d.motivo] || d.motivo}</Td>
+                  <Td>
+                    {MOTIVO_LABEL[d.motivo] || d.motivo}
+                    {/* La lista es una sola —Administración les hace el seguimiento a todos—, así
+                        que el cambio tiene que distinguirse sin abrirlo: se resuelve en otra
+                        pantalla y sus pendientes son otros. */}
+                    {esCambio(d) && (
+                      <div style={{ marginTop: 2 }}><StatusPill tone="action" label="Cambio" dot={false} /></div>
+                    )}
+                  </Td>
                   <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
                   <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>
                   <Td>
@@ -580,8 +595,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {d.reintegro_estado === 'hecho' && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
                       )}
-                      {esAdmin && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
+                      {/* Un cambio ya está decidido por definición: lo que falta es armarlo, y eso
+                          vive en la pestaña Cambios. Ofrecer "Decidir" acá invita a resolverlo dos
+                          veces. */}
+                      {esAdmin && !esCambio(d) && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
                         <Button size="sm" variant="solid" tone="brand" onClick={() => setDecidiendo(d)}>Decidir</Button>
+                      )}
+                      {esAdmin && esCambio(d) && d.estado !== 'cerrado' && (
+                        <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>se sigue en Cambios</span>
                       )}
                       {/* El seguimiento se carga acá, cuando ya tenés la etiqueta en la mano — no
                           al decidir, que es cuando todavía no existe. Solo para correo/andreani:

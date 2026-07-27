@@ -3,8 +3,9 @@ import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
-  destinoDe, estadoEnCriollo, faltantesParaCerrar, hayEnvio, laFallaDescuentaStock, numeroReclamo,
-  pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda,
+  destinoDe, esCambio, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
+  hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
+  pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -396,15 +397,17 @@ describe('costoDelCaso con los DOS envíos', () => {
 })
 
 describe('numeroReclamo', () => {
-  it('formatea como D-0007', () => {
-    expect(numeroReclamo(7)).toBe('D-0007')
-    expect(numeroReclamo(1234)).toBe('D-1234')
+  // Un solo prefijo para todo el post-venta: antes convivían D- (Devoluciones) y C- (Cambios), y
+  // Administración tenía que seguir dos colas para lo mismo.
+  it('formatea como R-0007', () => {
+    expect(numeroReclamo(7)).toBe('R-0007')
+    expect(numeroReclamo(1234)).toBe('R-1234')
   })
 })
 
 describe('faltantesParaCerrar', () => {
   const base: ReclamoRow = {
-    id: 1, store: 'bdi', numero: 'D-0001', motivo: 'falla', estado: 'recibido', items: [],
+    id: 1, store: 'bdi', numero: 'R-0001', motivo: 'falla', estado: 'recibido', items: [],
     stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
   }
 
@@ -427,6 +430,147 @@ describe('faltantesParaCerrar', () => {
   it('si la prenda tenía que volver y no llegó, lo dice', () => {
     expect(faltantesParaCerrar({ ...base, destino_prenda: 'stock', estado: 'en_transito' })).toContain('recibir la prenda')
   })
+
+  /**
+   * El hueco que dejaba todo cambio trabado sin poder cerrarse: se le exigían las dos condiciones
+   * de una devolución, y en un cambio ninguna de las dos corresponde.
+   */
+  describe('un cambio no cierra con las condiciones de una devolución', () => {
+    const cambio: ReclamoRow = {
+      ...base, motivo: 'talle', compensacion: 'otro_producto',
+      // El estado en que queda un cambio recién procesado, con los pendientes que traía antes.
+      stock_estado: 'pendiente', reintegro_estado: 'pendiente',
+      reingreso_estado: 'no_aplica', cobro_estado: 'no_aplica',
+    }
+
+    it('no pide anular la venta original: el cliente se queda con la compra', () => {
+      expect(faltantesParaCerrar(cambio).join(' ')).not.toContain('anular la venta')
+    })
+
+    it('no pide devolver plata cuando la diferencia la paga el cliente', () => {
+      expect(faltantesParaCerrar({ ...cambio, diferencia: 2000 }).join(' ')).not.toContain('devolver')
+    })
+
+    it('sí pide devolverla cuando la cuenta quedó a favor del cliente', () => {
+      expect(faltantesParaCerrar({ ...cambio, diferencia: -2000 })).toContain('devolverle la diferencia')
+    })
+
+    // GN no acepta una venta negativa por API: la prenda que vuelve se reingresa a mano o el stock
+    // queda corto para siempre.
+    it('exige reingresar a mano el producto devuelto', () => {
+      expect(faltantesParaCerrar({ ...cambio, reingreso_estado: 'pendiente' })).toContain('reingresar en Gestión Nube el producto devuelto')
+    })
+
+    it('exige cobrar la diferencia si quedó pendiente', () => {
+      expect(faltantesParaCerrar({ ...cambio, cobro_estado: 'pendiente' })).toContain('cobrar la diferencia')
+    })
+
+    it('con todo hecho, cierra', () => {
+      expect(faltantesParaCerrar({ ...cambio, diferencia: 2000, reingreso_estado: 'hecho', cobro_estado: 'cobrado' })).toEqual([])
+    })
+  })
+})
+
+/**
+ * El envío del cambio. No es logística: si lo paga el cliente hay que cobrárselo en el mostrador,
+ * y el motor nuevo directamente no lo contemplaba — el POS viejo sí.
+ */
+describe('calcularCambio: el envío', () => {
+  it('si lo paga el cliente, se suma al total', () => {
+    const c = calcularCambio({ devueltos: [item(10000)], nuevos: [item(12000)], orden: ORDEN_LIMPIA, envioCosto: 6000, envioPaga: 'cliente' })
+    expect(c.diferencia).toBe(2000)
+    expect(c.envioACobrar).toBe(6000)
+    expect(c.total).toBe(8000)
+  })
+
+  it('si lo pagamos nosotros, no toca el total', () => {
+    const c = calcularCambio({ devueltos: [item(10000)], nuevos: [item(12000)], orden: ORDEN_LIMPIA, envioCosto: 6000, envioPaga: 'nosotros' })
+    expect(c.envioACobrar).toBe(0)
+    expect(c.total).toBe(2000)
+  })
+
+  // El caso que confunde: la diferencia va a favor del cliente pero el envío se lo cobramos, así
+  // que le devolvemos menos de lo que parece.
+  it('sobre una diferencia a favor, el envío achica lo que se le devuelve', () => {
+    const c = calcularCambio({ devueltos: [item(12000)], nuevos: [item(10000)], orden: ORDEN_LIMPIA, envioCosto: 500, envioPaga: 'cliente' })
+    expect(c.diferencia).toBe(-2000)
+    expect(c.total).toBe(-1500)
+    expect(c.quienPaga).toBe('nosotros')
+  })
+
+  // El orden importa: primero el descuento manual, después el % sobre lo que queda, y el envío
+  // recién al final — sobre el envío no se descuenta nada.
+  it('el envío no recibe el descuento por forma de pago', () => {
+    const c = calcularCambio({
+      devueltos: [item(10000)], nuevos: [item(20000)], orden: ORDEN_LIMPIA,
+      formaPago: 'transferencia', envioCosto: 1000, envioPaga: 'cliente',
+    })
+    expect(c.diferencia).toBe(10000)
+    expect(c.descuentoForma).toBe(1000) // 10% de 10.000
+    expect(c.total).toBe(10000 - 1000 + 1000)
+  })
+})
+
+describe('esCambio', () => {
+  // Un cambio no es un tipo de reclamo: es un reclamo cuya salida es otro producto.
+  it('la única condición es que la salida sea otro producto', () => {
+    expect(esCambio({ compensacion: 'otro_producto' })).toBe(true)
+    expect(esCambio({ compensacion: 'otra_unidad' })).toBe(false)
+    expect(esCambio({ compensacion: null })).toBe(false)
+  })
+})
+
+describe('faltantesParaProcesar: el gate para facturar el cambio', () => {
+  const completo = {
+    orden_tn: '20700',
+    items: [{ producto: 'Devuelto', cantidad: 1, precio: 10000 }],
+    items_nuevos: [{ producto: 'Nuevo', cantidad: 1, precio: 12000, product_id: 'p1', size_id: 's1' }],
+    forma_pago: 'transferencia' as const,
+    via_retorno: 'andreani' as const,
+    envio_paga: 'cliente' as const,
+    solicitud_envio: '1234',
+  }
+
+  it('completo, no falta nada', () => {
+    expect(faltantesParaProcesar(completo)).toEqual([])
+  })
+
+  // Sin los ids de GN la venta no puede descontar stock: un nombre suelto no alcanza.
+  it('exige que lo que se lleva esté linkeado a Gestión Nube', () => {
+    const sinIds = { ...completo, items_nuevos: [{ producto: 'Nuevo', cantidad: 1, precio: 12000 }] }
+    expect(faltantesParaProcesar(sinIds)).toContain('el producto que se lleva (de Gestión Nube)')
+  })
+
+  it('la solicitud EM solo es obligatoria en las vías con seguimiento', () => {
+    expect(faltantesParaProcesar({ ...completo, solicitud_envio: null })).toContain('la solicitud de envío (EM)')
+    expect(faltantesParaProcesar({ ...completo, solicitud_envio: null, via_retorno: 'cadete' })).toEqual([])
+  })
+})
+
+describe('numeroEM: el bug del "EM EM1234"', () => {
+  it('guarda solo el número, venga como venga', () => {
+    expect(numeroEM('EM1234')).toBe('1234')
+    expect(numeroEM('em 1234')).toBe('1234')
+    expect(numeroEM('1234')).toBe('1234')
+  })
+
+  it('el prefijo lo pone la pantalla, una sola vez', () => {
+    expect(etiquetaEM('EM1234')).toBe('EM 1234')
+    expect(etiquetaEM('1234')).toBe('EM 1234')
+    expect(etiquetaEM('')).toBe('')
+  })
+})
+
+describe('repartirSeguimiento', () => {
+  it('un código va a la ida', () => {
+    expect(repartirSeguimiento('ABC123')).toEqual({ ida: 'ABC123', vuelta: null })
+  })
+  it('dos códigos, el segundo a la vuelta', () => {
+    expect(repartirSeguimiento('ABC123 XYZ789')).toEqual({ ida: 'ABC123', vuelta: 'XYZ789' })
+  })
+  it('vacío no rompe', () => {
+    expect(repartirSeguimiento('  ')).toEqual({ ida: null, vuelta: null })
+  })
 })
 
 /**
@@ -437,7 +581,7 @@ describe('alertas por antigüedad', () => {
   const AHORA = new Date('2026-07-27T12:00:00Z').getTime()
   const hace = (dias: number) => new Date(AHORA - dias * 86400000).toISOString()
   const fila = (extra: Partial<ReclamoRow>): ReclamoRow => ({
-    id: 1, store: 'bdi', numero: 'D-0001', motivo: 'falla', estado: 'en_revision', items: [],
+    id: 1, store: 'bdi', numero: 'R-0001', motivo: 'falla', estado: 'en_revision', items: [],
     stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
     created_at: hace(1), updated_at: hace(1), ...extra,
   })

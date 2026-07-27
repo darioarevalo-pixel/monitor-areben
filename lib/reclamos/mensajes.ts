@@ -5,7 +5,7 @@
  * distinta, y después el cliente reclama sobre lo que le dijeron. Acá el texto sale con los datos
  * ya puestos —número, productos, monto, link— y queda registrado qué se le dijo y cuándo.
  *
- * Precedente en el repo: `detalleCambioTexto` (`lib/cambios/tipos.ts`) ya hacía esto para Cambios.
+ * Precedente en el repo: `detalleCambioTexto` (en `./tipos`) ya hace esto para el ticket del cambio.
  * Esto lo generaliza a los tres momentos del reclamo.
  *
  * Archivo PURO y con tests: son textos que salen a un cliente, no se improvisan.
@@ -154,7 +154,7 @@ export function mensajeSeguimiento(
 /** Para el historial: qué mensaje se le mandó y cuándo. */
 export type MensajeEnviado = { tipo: 'apertura' | 'resolucion' | 'seguimiento'; at: string; por?: string | null; texto: string }
 
-/** Etiqueta corta de un reclamo para listados y avisos: "D-0007 · Falla · Carla". */
+/** Etiqueta corta de un reclamo para listados y avisos: "R-0007 · Falla · Carla". */
 export function resumenCorto(d: Pick<ReclamoRow, 'motivo' | 'cliente'>, numero: string): string {
   return [numero, MOTIVO_LABEL[d.motivo] || d.motivo, nombrePila(d.cliente)].filter(Boolean).join(' · ')
 }

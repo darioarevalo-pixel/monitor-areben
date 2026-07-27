@@ -28,6 +28,13 @@ import type { Marca } from '@/lib/nav.datos'
 export type MotivoReclamo =
   | 'arrepentimiento'
   | 'no_esperaba'
+  /**
+   * No le quedó el talle. Es **qué pasó**, no qué quiere: la mayoría termina en cambio, pero el
+   * dato que importa es otro. Agrupados por este motivo, los reclamos señalan la **guía de talles
+   * y la ficha del producto** — exactamente igual que `mal_armado` señala el picking. Mezclado
+   * dentro de `no_esperaba`, ese dato no existe.
+   */
+  | 'talle'
   | 'falla'
   | 'faltante'
   | 'mal_armado'
@@ -100,9 +107,13 @@ export type EstadoReclamo =
 /** Los tres pendientes que se cierran por separado, porque avanzan a ritmos distintos. */
 export type PendienteEstado = 'pendiente' | 'hecho' | 'no_aplica'
 
+/** El cobro de la diferencia de un cambio. Solo aplica cuando queda plata a cobrar. */
+export type CobroEstado = 'no_aplica' | 'pendiente' | 'cobrado'
+
 export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   arrepentimiento: 'Arrepentimiento',
   no_esperaba: 'No era lo que esperaba',
+  talle: 'No le quedó el talle',
   falla: 'Falla',
   faltante: 'Faltante de producto',
   mal_armado: 'Pedido mal armado',
@@ -114,8 +125,15 @@ export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
 
 /** Los que se ofrecen al cargar, en el orden en que pasan de verdad. */
 export const MOTIVOS_VIGENTES: MotivoReclamo[] = [
-  'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
+  'talle', 'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
 ]
+
+/**
+ * El motivo con el que arranca el POS de cambios. Va primero en la lista y es el default porque es
+ * el caso que más entra por mostrador; el campo es opcional a propósito, para no meterle fricción
+ * a una operación que hoy se resuelve en dos minutos.
+ */
+export const MOTIVO_CAMBIO_POR_DEFECTO: MotivoReclamo = 'talle'
 
 /**
  * ¿La prenda salió del depósito alguna vez? Los tres casos en que NO define medio flujo: no hay
@@ -232,8 +250,8 @@ const positivo = (n: unknown): number => {
  * proporcional de los descuentos de la orden.
  *
  * El prorrateo no es un detalle. Si la orden tuvo un cupón del 20% y se devuelve un ítem a
- * precio de lista, se le está devolviendo plata que nunca pagó. **Es el hueco que Cambios
- * tiene hoy** (toma el precio del devuelto sin descuentos, `lib/cambios/tipos.ts`).
+ * precio de lista, se le está devolviendo plata que nunca pagó. **Era el hueco del motor viejo de
+ * Cambios**, que tomaba el precio del devuelto sin descuentos.
  *
  * Sin `subtotal` o sin descuentos (o si la versión vieja del endpoint no los manda), devuelve
  * el bruto: es el comportamiento anterior, no una regresión.
@@ -342,13 +360,34 @@ export type FormaPago = 'tarjeta' | 'transferencia'
 /** El % que se le descuenta a la diferencia A COBRAR según cómo pague. */
 const DESCUENTO_FORMA: Record<FormaPago, number> = { tarjeta: 0, transferencia: 10 }
 
+export const FORMA_PAGO_DEF: Record<FormaPago, { label: string; descuento: number }> = {
+  tarjeta: { label: 'Tarjeta', descuento: DESCUENTO_FORMA.tarjeta },
+  transferencia: { label: 'Transferencia', descuento: DESCUENTO_FORMA.transferencia },
+}
+
+/**
+ * Quién paga el envío del cambio. **No es un detalle de logística: cambia el total a cobrar.**
+ * El envío queda solo en el Monitor y NO viaja a la venta de Gestión Nube (decisión de Bruno en el
+ * motor viejo), pero si lo paga el cliente hay que cobrárselo en el mostrador.
+ */
+export type EnvioPaga = 'cliente' | 'nosotros'
+
+/** Días que el cliente tiene para cambiar desde la compra. Regla del negocio. */
+export const DIAS_CAMBIO = 30
+
 export type CuentaCambio = {
   /** Lo que se lleva, a precio de lista. */
   nuevos: number
   /** Lo que devuelve, a lo que REALMENTE pagó (con los descuentos de la orden prorrateados). */
   devueltos: number
+  /** Σnuevos − Σdevueltos, antes de descuentos y de envío. Es el "Subtotal productos" del ticket. */
   diferencia: number
+  descuentoManual: number
   descuentoForma: number
+  /** Los dos descuentos juntos: lo que se resta del subtotal. */
+  descuento: number
+  /** El envío, solo si lo paga el cliente. Si lo pagamos nosotros no entra en el total. */
+  envioACobrar: number
   /** Positivo: lo paga el cliente. Negativo: se le devuelve. Cero: parejo. */
   total: number
   /** En criollo, para la pantalla y para el mensaje. */
@@ -356,15 +395,22 @@ export type CuentaCambio = {
 }
 
 /**
- * La cuenta de un cambio por otro producto.
+ * La cuenta de un cambio por otro producto — la del ticket del POS, de arriba hacia abajo:
+ *
+ *     Subtotal productos   Σnuevos − Σdevueltos
+ *     − Descuento          manual en $, y después el % por forma de pago sobre lo que queda
+ *     = Total productos    esto es lo único que viaja a la venta de Gestión Nube
+ *     + Envío              solo si lo paga el cliente; queda únicamente en el Monitor
+ *     = Total a pagar
  *
  * ⚠️ **Acá está el arreglo del hueco que tenía el motor viejo de Cambios**: tomaba el precio de
  * lista de lo devuelto en vez de lo que la persona **pagó**. En una orden con cupón del 20%, eso
  * le acreditaba al cliente plata que nunca puso — y la diferencia le quedaba a favor. Con
  * `pagadoPorItem` el devuelto se valúa por lo pagado y la cuenta cierra.
  *
- * El descuento por forma de pago solo aplica sobre una diferencia **a cobrar**: si el cambio da a
- * favor del cliente no hay nada que descontar.
+ * Los dos descuentos solo aplican sobre una diferencia **a cobrar**: si el cambio da a favor del
+ * cliente no hay nada que descontar. El envío, en cambio, se suma siempre que lo pague él —
+ * incluso sobre una diferencia a favor, donde achica lo que le devolvemos.
  */
 export function calcularCambio(opciones: {
   devueltos: ItemReclamo[]
@@ -373,6 +419,9 @@ export function calcularCambio(opciones: {
   formaPago?: FormaPago | null
   /** Un descuento extra acordado a mano, sobre la diferencia a cobrar. */
   descuentoManual?: number | null
+  /** Lo que sale el envío del cambio. Solo entra al total si lo paga el cliente. */
+  envioCosto?: number | null
+  envioPaga?: EnvioPaga | null
 }): CuentaCambio {
   const { devueltos, nuevos, orden } = opciones
   const totalNuevos = redondear(nuevos.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0))
@@ -380,20 +429,30 @@ export function calcularCambio(opciones: {
   const diferencia = redondear(totalNuevos - totalDevueltos)
 
   // Los descuentos solo tienen sentido sobre lo que el cliente TIENE que poner.
-  const manual = diferencia > 0 ? Math.min(positivo(opciones.descuentoManual), diferencia) : 0
-  const base = Math.max(diferencia - manual, 0)
+  const descuentoManual = diferencia > 0 ? Math.min(positivo(opciones.descuentoManual), diferencia) : 0
+  const base = Math.max(diferencia - descuentoManual, 0)
   const pct = opciones.formaPago ? DESCUENTO_FORMA[opciones.formaPago] : 0
   const descuentoForma = diferencia > 0 ? redondear((base * pct) / 100) : 0
-  const total = redondear(diferencia - manual - descuentoForma)
+  const descuento = redondear(descuentoManual + descuentoForma)
+  const envioACobrar = opciones.envioPaga === 'cliente' ? redondear(positivo(opciones.envioCosto)) : 0
+  const total = redondear(diferencia - descuento + envioACobrar)
 
   return {
     nuevos: totalNuevos,
     devueltos: totalDevueltos,
     diferencia,
+    descuentoManual,
     descuentoForma,
+    descuento,
+    envioACobrar,
     total,
     quienPaga: total > 0 ? 'cliente' : total < 0 ? 'nosotros' : 'nadie',
   }
+}
+
+/** ¿Este reclamo es un cambio? Es la única condición: la salida es otro producto. */
+export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
+  return d.compensacion === 'otro_producto'
 }
 
 // ── Qué aplica a cada motivo ────────────────────────────────────────────────────
@@ -410,6 +469,10 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
     case 'arrepentimiento':
     case 'no_esperaba':
     case 'no_era_lo_esperado':
+      return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
+    // El talle: la prenda está sana y casi siempre se lleva otra. Por eso el cambio va primero —
+    // es la salida por defecto, no una más de la lista.
+    case 'talle':
       return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
     // Falla: es donde hay más margen: devolver, descontar para que se la quede, o reponerla.
     case 'falla':
@@ -596,8 +659,13 @@ export type ReclamoRow = {
   retorno_decidido?: boolean | null
   /** Cómo vuelve. Null si no vuelve (se la queda el cliente) o si todavía no se decidió. */
   via_retorno?: ViaRetorno | null
-  /** El envío de VUELTA (la fallada que regresa), siempre a nuestro cargo. */
+  /**
+   * El envío de VUELTA. En un reclamo común es siempre a nuestro cargo; en un **cambio** puede
+   * pagarlo el cliente, y por eso existe `envio_paga`.
+   */
   envio_costo?: number | null
+  /** Quién paga el envío. Solo tiene sentido en un cambio; en el resto es siempre nuestro. */
+  envio_paga?: EnvioPaga | null
   seguimiento_vuelta?: string | null
   /** El envío de IDA: solo existe cuando se le manda otra unidad. También a nuestro cargo. */
   envio_ida_costo?: number | null
@@ -628,6 +696,23 @@ export type ReclamoRow = {
   /** Positivo: lo paga el cliente. Negativo: se le devuelve. */
   diferencia?: number | null
   descuento_manual?: number | null
+  /**
+   * El cobro del cambio, en dos tiempos. `pagado` es el **gate** para generar la venta en GN: se
+   * marca cuando el cliente puso la plata, y recién entonces se puede facturar. Sin esta separación
+   * el cambio se armaba y se cobraba en el mismo gesto, que no es lo que pasa en el mostrador.
+   */
+  pagado?: boolean | null
+  /** El pendiente de caja: la diferencia quedó a cobrar y todavía no entró. */
+  cobro_estado?: CobroEstado | null
+  /**
+   * La prenda que el cliente devuelve en un cambio vuelve al stock **a mano** en GN (la API no
+   * acepta una venta negativa). No confundir con `stock_estado`, que traza la ANULACIÓN de la venta
+   * original: en un cambio esa venta no se anula nunca, porque el cliente se queda con la compra y
+   * solo cambia el artículo.
+   */
+  reingreso_estado?: PendienteEstado | null
+  /** La solicitud de etiqueta (EM####) del envío del cambio. Se guarda SIN el prefijo. */
+  solicitud_envio?: string | null
   falla_ids?: number[]
   costo_caso?: number | null
   usuario?: string | null
@@ -703,19 +788,43 @@ export function conAlerta(filas: ReclamoRow[], ahora = Date.now()): number {
   return filas.filter((d) => alertasDe(d, ahora).length > 0).length
 }
 
-/** `D-0007`. Mismo formato que el `C-0045` de Cambios. */
+/**
+ * `R-0042`. **Un solo prefijo para todo el post-venta**, cambios incluidos.
+ *
+ * Antes convivían `D-` (de cuando la sección se llamaba Devoluciones) y `C-` (de Cambios). Ninguna
+ * de las dos nombra lo que esto es hoy, y con dos prefijos Administración tiene que seguir dos
+ * colas para lo mismo. Se unificó aprovechando que las tablas estaban vacías: después son mensajes
+ * ya mandados a clientes.
+ */
 export function numeroReclamo(id: number): string {
-  return 'D-' + String(id).padStart(4, '0')
+  return 'R-' + String(id).padStart(4, '0')
 }
 
 /**
  * Qué falta para poder cerrar el reclamo. Devuelve la lista en criollo: si no está vacía, el
  * botón de cerrar va deshabilitado con esto como explicación.
+ *
+ * ⚠️ **Un cambio no cierra con las mismas condiciones que una devolución**, y esta es la
+ * distinción que hay que tener a la vista:
+ *   - La venta original **no se anula**: el cliente se queda con la compra y solo cambia el
+ *     artículo. Exigir la anulación dejaba todo cambio trabado para siempre.
+ *   - **No hay plata que devolver** salvo que la diferencia haya quedado a favor del cliente.
+ *   - Lo que sí hay, y no existía como pendiente, es **reingresar a mano** la prenda que volvió.
  */
 export function faltantesParaCerrar(d: ReclamoRow): string[] {
   const faltan: string[] = []
-  if (d.stock_estado === 'pendiente') faltan.push('anular la venta original en Gestión Nube')
-  if (d.reintegro_estado === 'pendiente') faltan.push('devolver la plata')
+  const cambio = esCambio(d)
+
+  if (cambio) {
+    if (d.reingreso_estado === 'pendiente') faltan.push('reingresar en Gestión Nube el producto devuelto')
+    if (d.cobro_estado === 'pendiente') faltan.push('cobrar la diferencia')
+    // Solo cuando la cuenta quedó a favor del cliente sale plata de la caja.
+    if (d.reintegro_estado === 'pendiente' && (d.diferencia ?? 0) < 0) faltan.push('devolverle la diferencia')
+  } else {
+    if (d.stock_estado === 'pendiente') faltan.push('anular la venta original en Gestión Nube')
+    if (d.reintegro_estado === 'pendiente') faltan.push('devolver la plata')
+  }
+
   if (d.tn_stock_estado === 'pendiente') faltan.push('corregir el stock en Tienda Nube')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
@@ -723,4 +832,135 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   // Cuando la prenda se le queda al cliente, la foto es la única prueba de que la falla existió.
   if (d.destino_prenda === 'falla' && !(d.fotos || []).length) faltan.push('al menos una foto del producto')
   return faltan
+}
+
+// ── El POS del cambio ───────────────────────────────────────────────────────────
+
+/**
+ * Qué falta para poder **generar la venta** del cambio en Gestión Nube. Es el gate del botón
+ * "Crear venta": mientras devuelva algo, no se factura.
+ *
+ * Portado de `faltantesParaVenta` del motor viejo. Deliberadamente **no exige nada para guardar el
+ * borrador**: el cambio se arma en dos tiempos y a medio hacer tiene que poder guardarse.
+ */
+export function faltantesParaProcesar(d: {
+  orden_tn?: string | null
+  items?: ItemReclamo[]
+  items_nuevos?: ItemReclamo[]
+  forma_pago?: FormaPago | null
+  via_retorno?: ViaRetorno | null
+  envio_paga?: EnvioPaga | null
+  solicitud_envio?: string | null
+}): string[] {
+  const faltan: string[] = []
+  if (!d.orden_tn) faltan.push('la orden de venta asociada')
+  if (!(d.items || []).length) faltan.push('el producto que devuelve')
+  // Sin los ids de GN no se puede descontar stock: un nombre suelto no alcanza.
+  if (!(d.items_nuevos || []).some((i) => i.product_id && i.size_id)) faltan.push('el producto que se lleva (de Gestión Nube)')
+  if (!d.forma_pago) faltan.push('la forma de pago')
+  if (!d.via_retorno) faltan.push('la vía de envío')
+  if (!d.envio_paga) faltan.push('quién paga el envío')
+  // La solicitud de etiqueta es del envío manual: la cadetería y el mostrador no la tienen.
+  if (pideSeguimiento(d.via_retorno) && !d.solicitud_envio) faltan.push('la solicitud de envío (EM)')
+  return faltan
+}
+
+/**
+ * La solicitud de envío guarda **solo el número**: el `EM` es fijo y lo pone la pantalla.
+ *
+ * Antes se guardaba lo que la persona tipeara, `EM` incluido, y al armar la nota del pedido en GN
+ * se le anteponía otro `EM ` — así que en Gestión Nube salía `EM EM1234`. Estas dos funciones son
+ * el único lugar donde se decide el formato.
+ */
+export function numeroEM(v: string | null | undefined): string {
+  return String(v || '').trim().replace(/^em[\s-]*/i, '')
+}
+
+/** Cómo se muestra: `EM 1234`. Lo que no tiene número se muestra tal cual. */
+export function etiquetaEM(v: string | null | undefined): string {
+  const raw = String(v || '').trim()
+  if (!raw) return ''
+  const n = numeroEM(raw)
+  return n && /\d/.test(n) ? `EM ${n}` : raw
+}
+
+/** Link al seguimiento con el código. Andreani es un portal y no lo toma por URL. */
+export function trackingUrl(via: ViaRetorno | null | undefined, codigo: string): string | null {
+  const c = (codigo || '').trim()
+  if (!c) return null
+  if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio'
+  if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?id=${encodeURIComponent(c)}`
+  return null
+}
+
+/** El portal de seguimiento, sin código: para el link que va al lado del campo. */
+export function trackingPortalUrl(via: ViaRetorno | null | undefined): string | null {
+  if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio'
+  if (via === 'correo') return 'https://www.correoargentino.com.ar/formularios/e-commerce?id='
+  return null
+}
+
+/**
+ * Reparte lo que se pegó en el campo de seguimiento: un código va a la ida; dos, el primero a la
+ * ida y el segundo a la vuelta. Es para poder pegar los dos de una en vez de abrir dos veces.
+ */
+export function repartirSeguimiento(entrada: string): { ida: string | null; vuelta: string | null } {
+  const parts = (entrada || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
+  if (!parts.length) return { ida: null, vuelta: null }
+  if (parts.length === 1) return { ida: parts[0], vuelta: null }
+  return { ida: parts[0], vuelta: parts[1] }
+}
+
+/**
+ * El detalle del cambio para pasarle al cliente por WhatsApp: la cuenta itemizada, cada concepto
+ * con su monto. Es el mismo ticket que muestra la pantalla, en texto — así nadie tiene que
+ * transcribirlo a mano y prometer un número distinto del que quedó guardado.
+ */
+export function detalleCambioTexto(d: {
+  id?: number | null
+  cliente?: string | null
+  items?: ItemReclamo[]
+  items_nuevos?: ItemReclamo[]
+  orden?: OrdenTN | null
+  forma_pago?: FormaPago | null
+  via_retorno?: ViaRetorno | null
+  envio_costo?: number | null
+  envio_paga?: EnvioPaga | null
+  descuento_manual?: number | null
+  seguimiento_ida?: string | null
+  seguimiento_vuelta?: string | null
+}): string {
+  // `toLocaleString('es-AR')` mete un espacio DURO (U+00A0) antes del símbolo, y esto se pega en
+  // WhatsApp: se normaliza a un espacio común.
+  const money = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).replace(/ /g, ' ')
+  const devueltos = d.items || []
+  const nuevos = d.items_nuevos || []
+  const t = calcularCambio({
+    devueltos, nuevos, orden: d.orden, formaPago: d.forma_pago,
+    descuentoManual: d.descuento_manual, envioCosto: d.envio_costo, envioPaga: d.envio_paga,
+  })
+  const linea = (i: ItemReclamo, monto: number) =>
+    `• ${i.cantidad}× ${i.producto}${i.variante ? ` (${i.variante})` : ''} — ${money(monto)}`
+
+  const out: string[] = [`*CAMBIO ${d.id ? numeroReclamo(d.id) : 'nuevo'}*${d.cliente ? ` · ${d.cliente}` : ''}`]
+  if (devueltos.length) {
+    out.push('Devolvés:')
+    devueltos.forEach((i) => out.push(linea(i, i.pagado ?? pagadoPorItem(i, d.orden))))
+  }
+  if (nuevos.length) {
+    out.push('Te llevás:')
+    nuevos.forEach((i) => out.push(linea(i, (Number(i.precio) || 0) * (Number(i.cantidad) || 1))))
+  }
+  out.push('———')
+  out.push(`Subtotal productos: ${money(t.diferencia)}`)
+  if (d.forma_pago && t.descuentoForma > 0) {
+    out.push(`Descuento ${FORMA_PAGO_DEF[d.forma_pago].label} (−${FORMA_PAGO_DEF[d.forma_pago].descuento}%): −${money(t.descuentoForma)}`)
+  }
+  if (t.descuentoManual > 0) out.push(`Descuento: −${money(t.descuentoManual)}`)
+  out.push(`Total productos: ${money(t.diferencia - t.descuento)}`)
+  if (t.envioACobrar > 0) out.push(`Envío${d.via_retorno ? ` (${VIA_LABEL[d.via_retorno]})` : ''}: ${money(t.envioACobrar)}`)
+  out.push(t.total < 0 ? `*Se te devuelven: ${money(Math.abs(t.total))}*` : `*Total a pagar: ${money(t.total)}*`)
+  if (d.seguimiento_ida) out.push(`Seguimiento ida: ${d.seguimiento_ida}`)
+  if (d.seguimiento_vuelta) out.push(`Seguimiento vuelta: ${d.seguimiento_vuelta}`)
+  return out.join('\n')
 }

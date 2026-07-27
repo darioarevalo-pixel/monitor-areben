@@ -54,7 +54,7 @@ const Integraciones = dynamic(() => import('@/components/integraciones/Integraci
 const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
 const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
 const PostventaDeposito = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaDeposito), { loading: Cargando })
-const CambiosLocal = dynamic(() => import('@/components/cambios/Cambios').then((m) => m.CambiosLocal), { loading: Cargando })
+const CambiosLocal = dynamic(() => import('@/components/reclamos/ArmarCambio').then((m) => m.ArmarCambioLocal), { loading: Cargando })
 const ReclamosLocal = dynamic(() => import('@/components/reclamos/Reclamos').then((m) => m.ReclamosLocal), { loading: Cargando })
 
 /**
@@ -310,8 +310,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   'postventa-local': PostventaLocal,
   // Post-venta (carga Depósito): mismo motor en modo 'deposito' (descuenta de depósito). Gateada por `postventa-deposito`.
   'postventa-deposito': PostventaDeposito,
-  // Cambios (inicio Local): mismo motor en modo 'local' (buscar orden + elegir productos). El motor
-  // completo es la pestaña Cambios de `postventa` (Administración). Gateada por permiso `cambios-local`.
+  // Cambios: el POS de mostrador. **No hay un "motor de Administración" detrás** — un cambio no es
+  // una decisión que alguien tenga que autorizar, así que el Local lo resuelve de punta a punta,
+  // incluida la venta en GN. Escribe sobre `devoluciones`: un cambio ES un reclamo, con el mismo
+  // número `R-00XX` y la misma lista. Gateada por el permiso `cambios-local`.
   'cambios-local': CambiosLocal,
   // Reclamos (inicio Local): abre el reclamo por cualquier motivo y copia el link para que el
   // cliente suba las fotos. Decidir y devolver la plata es de Administración (pestaña Reclamos).

@@ -550,8 +550,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "cambios-local",
     "area": "local",
-    "label": "Cambios (iniciar)",
-    "info": "Iniciar un cambio desde el LOCAL: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, y ves la diferencia de precio. El motor (confirmar, generar la venta en Gestión Nube, reingresar el devuelto) vive en Administración → Post-venta → Cambios.",
+    "label": "Cambios",
+    "info": "Armar un cambio DE PUNTA A PUNTA desde el local: buscás la orden de Tienda Nube, marcás qué devuelve el cliente y qué se lleva, sale la diferencia con el descuento por forma de pago y el envío, se guarda como borrador hasta que el cliente pague, y ahí mismo se genera la venta en Gestión Nube. No hace falta que Administración apruebe nada: un cambio ya está decidido. Lo único que pasa por Administración es la plata que SALE de la caja, o sea cuando la cuenta queda a favor del cliente. Un cambio es un reclamo más (mismo número R-00XX) y aparece también en Reclamos.",
     "brands": [
       "bdi",
       "zattia"

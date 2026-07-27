@@ -12,9 +12,9 @@ import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
-import { laFallaDescuentaStock, numeroReclamo } from './tipos'
+import { calcularCambio, etiquetaEM, laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
-  Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, FotoReclamo, ItemReclamo,
+  Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
   Expectativa, FormaPago, MotivoReclamo, OrdenTN, ViaRetorno,
 } from './tipos'
 
@@ -309,6 +309,116 @@ export async function descontarReemplazo(
     gn_venta_reemplazo_number: venta.number ? String(venta.number) : null,
   })
   return { id: venta.id, number: venta.number }
+}
+
+// ── El cambio por otro producto ─────────────────────────────────────────────────
+
+/** Lo que el POS guarda del cambio. Todo opcional: el borrador tiene que poder estar a medio hacer. */
+export type CambioInput = {
+  orden_tn?: string | null
+  cliente?: string | null
+  motivo?: MotivoReclamo
+  items?: ItemReclamo[]
+  items_nuevos?: ItemReclamo[]
+  forma_pago?: FormaPago | null
+  via_retorno?: ViaRetorno | null
+  envio_paga?: EnvioPaga | null
+  envio_costo?: number | null
+  descuento_manual?: number | null
+  solicitud_envio?: string | null
+  seguimiento_ida?: string | null
+  seguimiento_vuelta?: string | null
+  diferencia?: number | null
+  pagado?: boolean | null
+}
+
+/**
+ * Guarda el borrador del cambio. **No pasa por Administración**: la acción `cambio` está fuera del
+ * gate de admin del servidor a propósito, porque un cambio no es una decisión que haya que
+ * autorizar sino una operación de mostrador.
+ *
+ * `techo_nuevos` es la red de seguridad del servidor: la diferencia nunca puede ser mayor que el
+ * valor de lo que el cliente se lleva.
+ */
+export async function guardarCambio(marca: Marca, id: number, input: CambioInput, techoNuevos?: number | null): Promise<void> {
+  await postear({ store: marca, action: 'cambio', id, ...input, techo_nuevos: techoNuevos ?? null })
+}
+
+/**
+ * **Genera la venta REAL del cambio en Gestión Nube** y la registra en el reclamo.
+ *
+ * Es la operación más delicada del módulo: baja stock de lo que el cliente se lleva y **cuenta en
+ * la analítica**, porque va por un canal normal y no por la venta técnica de $0 que usa Fallas.
+ *
+ * Dos cosas que no son obvias y que ya estaban resueltas en el motor viejo:
+ *   - El **descuento a nivel venta** es Σdevueltos + los descuentos del cambio. Así la venta refleja
+ *     los productos a precio de lista y el total que queda es exactamente lo que el cliente paga.
+ *     Y lo devuelto se valúa por lo que **pagó** —no por precio de lista—, que es el hueco que el
+ *     motor viejo tenía y le regalaba plata al cliente en toda orden con cupón.
+ *   - **El envío NO viaja a GN** (decisión de Bruno): queda solo en el Monitor, aunque lo pague el
+ *     cliente. Por eso el descuento se calcula contra el total de productos y no contra el total
+ *     a pagar.
+ */
+export async function procesarCambio(
+  marca: Marca,
+  d: ReclamoRow,
+  orden: OrdenTN | null | undefined,
+  ctx: { user: string; pass: string },
+): Promise<{ id?: string; number?: string }> {
+  const nuevos = (d.items_nuevos || []).filter((i) => i.product_id && i.size_id)
+  if (!nuevos.length) throw new Error('Lo que se lleva el cliente no está linkeado a Gestión Nube: sin eso la venta no puede descontar stock.')
+  if (!d.forma_pago) throw new Error('Falta la forma de pago del cambio.')
+
+  const cuenta = calcularCambio({
+    devueltos: d.items || [], nuevos: d.items_nuevos || [], orden,
+    formaPago: d.forma_pago, descuentoManual: d.descuento_manual,
+    envioCosto: d.envio_costo, envioPaga: d.envio_paga,
+  })
+  // El descuento de la venta: lo que se le acredita por lo devuelto, más los descuentos del cambio.
+  const descuento = cuenta.devueltos + cuenta.descuento
+
+  const r = await fetch(CREAR_VENTA_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accion: 'cambio_real',
+      store: marca,
+      origen: 'deposito',
+      items: nuevos.map((i) => ({
+        product_id: i.product_id, size_id: i.size_id,
+        quantity: Number(i.cantidad) || 1, unit_price: Number(i.precio) || 0,
+      })),
+      descuento,
+      forma_pago: d.forma_pago,
+      // Red de seguridad: si el crear-venta desplegado no tuviera el bloque `cambio_real`, cae al
+      // camino normal y `proposito:'cambio'` hace que igual use el cliente "Cambio" de GN.
+      proposito: 'cambio',
+      comments: [`Cambio orden ${d.orden_tn || ''}`, etiquetaEM(d.solicitud_envio), d.cliente || '', '(Monitor)']
+        .filter(Boolean).join(' · ').slice(0, 500),
+      solicitudId: `reclamo-${d.id}-cambio`, // idempotencia: dos clicks no generan dos ventas
+      user: ctx.user,
+      pass: ctx.pass,
+    }),
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!j?.ok) throw new Error(`No se pudo crear la venta del cambio en GN — ${j?.error || r.status}`)
+  const venta = j.venta || {}
+  await postear({
+    store: marca, action: 'procesar', id: d.id,
+    gn_venta_id: venta.id ? String(venta.id) : null,
+    gn_venta_number: venta.number ? String(venta.number) : null,
+  })
+  return { id: venta.id, number: venta.number }
+}
+
+/** El producto devuelto ya volvió al stock a mano en GN. Traza de un paso manual, como `anulacion`. */
+export async function marcarReingreso(marca: Marca, id: number): Promise<void> {
+  await postear({ store: marca, action: 'reingreso', id })
+}
+
+/** La diferencia del cambio ya se cobró. */
+export async function marcarCobrado(marca: Marca, id: number): Promise<void> {
+  await postear({ store: marca, action: 'cobrado', id })
 }
 
 /**
