@@ -1,8 +1,8 @@
 /**
  * Tipos de inventario-vivo: el stock por depósito/ubicación leído en VIVO de GN
- * (endpoint propio `/api/inventario-vivo`), con fallback al espejo Supabase. Es el
+ * (endpoint propio `/api/deposito?recurso=inventario`), con fallback al espejo Supabase. Es el
  * cimiento de los conteos de la Tanda D (conteo-deposito, conteo-estandar). Port de
- * la forma que devuelve `api/inventario-vivo.js` (rows) y consume `_cdepFetchVivo`
+ * la forma que devuelve `api/_inventario-vivo.js` (rows) y consume `_cdepFetchVivo`
  * (index.html:11633).
  */
 
@@ -25,7 +25,7 @@ export type FilaVivo = {
   fuente?: 'vivo' | 'directo' | 'espejo'
 }
 
-/** La respuesta completa de `/api/inventario-vivo`. */
+/** La respuesta completa de `/api/deposito?recurso=inventario`. */
 export type RespuestaVivo = {
   ok: boolean
   error?: string

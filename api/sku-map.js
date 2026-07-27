@@ -5,7 +5,7 @@
 //   POST { store, rows: [...] }                                    → upsert (on conflict store,sku).
 //   POST { store, action:'validar', skus:[...], validado:bool }    → marca filas como validadas.
 //
-// Mismo molde que api/conteos-deposito.js: escribe con la service key (se saltea RLS) y exige
+// Mismo molde que api/_conteos-deposito.js: escribe con la service key (se saltea RLS) y exige
 // usuario logueado del Monitor. Stunned todavía no tiene base propia: se rutea a la de Zattia.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';

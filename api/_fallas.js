@@ -11,7 +11,7 @@
 //   POST { store, action:'estado', id, estado, usuario?, nota? } → vendida_feria | descartada, etc.
 //   POST { store, action:'editar', id, ...campos }           → edita campos de una falla.
 //
-// Mismo molde que api/conteos-deposito.js y api/sku-map.js: escribe con la service key (se saltea
+// Mismo molde que api/_conteos-deposito.js y api/sku-map.js: escribe con la service key (se saltea
 // RLS) y exige usuario logueado del Monitor.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';

@@ -1,8 +1,7 @@
 /**
  * `apiFetch`: el equivalente Next de `_apiFetch` (index.html:9413). Los endpoints
- * propios del Monitor (`/api/inventario-vivo`, `/api/conteos-deposito`,
- * `/api/observaciones`) validan credenciales server-side vía `api/_auth.js`, que
- * lee el header `x-monitor-auth`.
+ * propios del Monitor (`/api/deposito`, `/api/postventa`, `/api/datos`…) validan
+ * credenciales server-side vía `api/_auth.js`, que lee el header `x-monitor-auth`.
  *
  * El header es `base64(JSON …)` en UTF-8 (port de `_apiAuthHeader`, index.html:9403).
  * Va en base64 y no en headers de texto plano a propósito: los valores de header son

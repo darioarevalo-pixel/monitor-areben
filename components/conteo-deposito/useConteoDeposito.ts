@@ -11,7 +11,7 @@ import type { CdepProducto, CdepState } from '@/lib/conteo-deposito/tipos'
 /**
  * Carga y persistencia del Conteo de Depósito. Port de conteoDepInit/_cdepSave/
  * _cdepLoad/_cdepCargarUltimos (index.html:11640-11673). El stock viene VIVO de GN
- * (`/api/inventario-vivo`); el conteo en progreso vive en localStorage con la MISMA
+ * (`/api/deposito?recurso=inventario`); el conteo en progreso vive en localStorage con la MISMA
  * clave del legacy (`monitor_conteodep_<marca>`) → el flip no pierde lo cargado.
  */
 

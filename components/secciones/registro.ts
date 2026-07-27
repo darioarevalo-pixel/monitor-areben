@@ -146,7 +146,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   usuarios: Usuarios,
   // El flip de Ubicaciones (18-jul-2026, solo BDI): `/ubicaciones` lo sirve el shell.
   // Carga masiva de la ubicación física (NN-N) por producto → observación de GN en
-  // TODAS sus variantes (endpoint `/api/observaciones`, byte-fiel, vía apiFetch). Es
+  // TODAS sus variantes (endpoint `/api/deposito?recurso=observaciones`, byte-fiel, vía apiFetch). Es
   // metadata INTERNA de depósito (no stock/plata, reversible re-editando) → flip
   // directo como gen-talles. Lo tipeado se persiste en localStorage
   // (`monitor_ubi_pend_<marca>`, MISMA clave del iframe → sin migración). "Reparar"

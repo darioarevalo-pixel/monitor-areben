@@ -82,7 +82,7 @@ export type Preview = {
   store: string
 }
 
-/** Un conteo aplicado del historial (`/api/conteos-deposito`). */
+/** Un conteo aplicado del historial (`/api/deposito?recurso=conteos`). */
 export type ConteoHistorial = {
   fecha_aplicado?: string
   usuario?: string

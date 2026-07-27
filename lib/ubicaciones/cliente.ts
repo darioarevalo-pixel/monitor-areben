@@ -1,8 +1,12 @@
 /**
  * Datos y escritura de Ubicaciones. Port de los fetch de la sección
  * (index.html:14405, 14509). La lectura es Supabase (fetchAll); la escritura va al
- * endpoint propio del Monitor `/api/observaciones` (auth por header, vía apiFetch),
- * que escribe la observación en TODAS las variantes del producto en GN.
+ * endpoint propio del Monitor (auth por header, vía apiFetch), que escribe la observación
+ * en TODAS las variantes del producto en GN.
+ *
+ * Entra por el router `/api/deposito?recurso=observaciones` (antes era `/api/observaciones`, un
+ * archivo propio): Vercel cuenta una función por archivo de ruta y el proyecto estaba en el
+ * tope de 12 del plan Hobby. Ver el comentario de `api/deposito.js`.
  */
 
 import { CUENTAS, type Cuenta } from '@/lib/cuentas'
@@ -34,7 +38,7 @@ type ObsResp = { ok?: boolean; error?: string; pendientes?: number; errores?: { 
  */
 export async function guardarObservacion(productId: number | string, observation: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await apiFetch('/api/observaciones', {
+    const r = await apiFetch('/api/deposito?recurso=observaciones', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productId, observation }),
