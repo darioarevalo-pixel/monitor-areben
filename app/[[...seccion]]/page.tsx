@@ -44,6 +44,14 @@ export default function Seccion() {
   const partes = params.seccion
   const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)
 
+  /**
+   * El link del cliente (`/reclamo/<token>`) NO es una sección del monitor: no está en el nav, no
+   * tiene permiso y lo abre gente sin cuenta. Hay que sacarlo del camino ANTES del guard de
+   * secciones y también del efecto que redirige — si no, a cualquiera con sesión abierta el shell
+   * lo manda a Inicio antes de que llegue a ver el reclamo.
+   */
+  const esPortalCliente = key === 'reclamo'
+
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
   const permitida =
@@ -53,14 +61,14 @@ export default function Seccion() {
     (key === 'usuarios' ? esAdmin(perfil) : key === 'inicio' || puedeVer(perfil, marca, key))
 
   useEffect(() => {
+    if (esPortalCliente) return
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
-  }, [cargando, perfil, permitida, key, router])
+  }, [cargando, perfil, permitida, key, router, esPortalCliente])
 
-  // El link del cliente: /reclamo/<token>. Va acá adentro y NO como ruta propia de Next porque
-  // cada ruta es una función serverless y el proyecto está en el tope del plan Hobby (pasarse
-  // frena todos los deploys en silencio). Sale antes del gate de login a propósito: lo abre
-  // alguien de afuera, sin cuenta, desde el celular. Se defiende con el token, no con la sesión.
-  if (key === 'reclamo') {
+  // Va acá adentro y NO como ruta propia de Next porque cada ruta es una función serverless y el
+  // proyecto está en el tope del plan Hobby (pasarse frena todos los deploys en silencio). Sale
+  // antes del gate de login a propósito: se defiende con el token, no con la sesión.
+  if (esPortalCliente) {
     return <ReclamoPublico token={Array.isArray(partes) ? partes[1] ?? null : null} />
   }
 
