@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { asegurarIndices, indicesCacheados, indicesDe, invalidarAudit, traerAudit } from '@/lib/tn-audit'
-import { bustAudit, invalidarProductosImg, traerProductosImg } from '@/lib/tncat/cliente'
+import { bustAudit } from '@/lib/tncat/cliente'
 import type { TnProducto } from '@/lib/tn'
 
 /**
@@ -41,8 +41,6 @@ beforeEach(() => {
   pedidas = []
   invalidarAudit('bdi')
   invalidarAudit('zattia')
-  invalidarProductosImg('bdi')
-  invalidarProductosImg('zattia')
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -180,39 +178,6 @@ describe('degradados', () => {
     const { fotos, promo } = await asegurarIndices('bdi')
     expect(Object.keys(fotos.bySku)).toHaveLength(0)
     expect(Object.keys(promo.bySku)).toHaveLength(0)
-  })
-})
-
-/**
- * Otro endpoint (`tn-subir-imagen?productos=1`), pero el mismo problema: es el más lento de
- * `/tncat/fotos` (~2,5 s medidos) y se pedía de nuevo en cada montaje de la card.
- */
-describe('la lista de productos para cargar imágenes', () => {
-  it('se pide una sola vez por marca', async () => {
-    vi.stubGlobal('fetch', mockFetch())
-    await traerProductosImg('bdi')
-    await traerProductosImg('bdi')
-
-    expect(pedidas.filter((u) => u.includes('productos=1'))).toHaveLength(1)
-  })
-
-  it('dos pedidos a la vez comparten la bajada', async () => {
-    vi.stubGlobal('fetch', mockFetch())
-    const [a, b] = await Promise.all([traerProductosImg('zattia'), traerProductosImg('zattia')])
-
-    expect(pedidas.filter((u) => u.includes('productos=1'))).toHaveLength(1)
-    expect(a).toBe(b)
-  })
-
-  // El botón "Recargar productos" existe justamente para cuando la tienda cambió.
-  it('bust saltea el caché y lo repuebla', async () => {
-    vi.stubGlobal('fetch', mockFetch())
-    await traerProductosImg('bdi')
-    await traerProductosImg('bdi', true)
-    await traerProductosImg('bdi')
-
-    expect(pedidas.filter((u) => u.includes('productos=1'))).toHaveLength(2)
-    expect(pedidas.filter((u) => u.includes('productos=1'))[1]).toContain('nc=')
   })
 })
 

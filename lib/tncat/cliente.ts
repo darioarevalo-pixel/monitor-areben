@@ -96,42 +96,11 @@ export async function despublicar(store: Marca, ids: (string | number)[]): Promi
 }
 
 // ── Carga de imágenes (card 2) ──────────────────────────────────────────────────
-/**
- * Lista de productos con sus colores (para el datalist y el match). Port de tnImgInit/Recargar.
- *
- * Cacheada por marca mientras vive la pestaña: es el endpoint más lento de la sección (~2,5 s
- * medidos) y se pedía de nuevo en cada montaje de la card. Lo que devuelve son los productos y
- * sus colores —o sea, las variantes de TiendaNube—, que no cambian por subir una foto. Para el
- * caso en que sí cambien (se creó un producto recién) está el botón "Recargar productos", que
- * es `bust` y saltea el caché.
- */
-const productosImg = new Map<Marca, ProductoImg[]>()
-const productosImgEnVuelo = new Map<Marca, Promise<ProductoImg[]>>()
-
+/** Lista de productos con sus colores (para el datalist y el match). Port de tnImgInit/Recargar. */
 export async function traerProductosImg(store: Marca, bust = false): Promise<ProductoImg[]> {
-  if (!bust) {
-    const ya = productosImg.get(store)
-    if (ya) return ya
-    const yendo = productosImgEnVuelo.get(store)
-    if (yendo) return yendo
-  }
-
-  const p = (async () => {
-    const r = await apiFetch(`${imgUrl(store)}&productos=1${bust ? '&nc=' + Math.random() : ''}`)
-    const j = await r.json()
-    const filas = (j.productos || []) as ProductoImg[]
-    productosImg.set(store, filas)
-    return filas
-  })().finally(() => {
-    if (productosImgEnVuelo.get(store) === p) productosImgEnVuelo.delete(store)
-  })
-  if (!bust) productosImgEnVuelo.set(store, p)
-  return p
-}
-
-/** Tira la lista cacheada de la marca. */
-export function invalidarProductosImg(store: Marca): void {
-  productosImg.delete(store)
+  const r = await apiFetch(`${imgUrl(store)}&productos=1${bust ? '&nc=' + Math.random() : ''}`)
+  const j = await r.json()
+  return (j.productos || []) as ProductoImg[]
 }
 /** Sube una imagen (y, si viene `color`, la vincula a la variante). ESCRIBE. Port del fetch de tnImgSubirTodo. */
 export async function subirImagen(store: Marca, body: { product_id: string | number; image: string; filename: string; color?: string }): Promise<SubirResp> {
