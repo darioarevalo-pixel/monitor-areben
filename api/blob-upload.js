@@ -1,7 +1,7 @@
 // Sube una miniatura (data URL base64) a Vercel Blob y devuelve su URL pública.
 // POST { dataUrl, prefix? }
 //   - dataUrl: "data:image/jpeg;base64,...." (la produce lib/imagenes.imgAThumb).
-//   - prefix:  carpeta lógica en el Blob ("fundas" | "ingresos"). Default "fundas".
+//   - prefix:  carpeta lógica en el Blob ("fundas" | "ingresos" | "disenos"). Default "fundas".
 // Seguridad: mismo modelo que observaciones.js — exige un usuario válido del Monitor
 // (login server-side contra el KV). No es admin-only: Fundas la usan no-admins.
 // Requiere BLOB_READ_WRITE_TOKEN en el entorno (lo agrega el Blob store al linkearlo).
@@ -11,7 +11,7 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 const MAX_BYTES = 1.5 * 1024 * 1024; // los thumbs son ~10-40 KB; 1.5 MB es un techo generoso.
-const PREFIJOS = new Set(['fundas', 'ingresos']);
+const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
 
 // Parte un data URL en { contentType, buffer }. Devuelve null si no es una imagen válida.
 function parseDataUrl(dataUrl) {

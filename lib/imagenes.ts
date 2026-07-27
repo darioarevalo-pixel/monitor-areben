@@ -41,7 +41,7 @@ export function imgAThumb(file: File | null | undefined, cb: (url: string) => vo
 }
 
 /** Carpeta lógica del Blob según la sección que sube. */
-export type PrefijoBlob = 'fundas' | 'ingresos'
+export type PrefijoBlob = 'fundas' | 'ingresos' | 'disenos'
 
 /**
  * Sube un data URL (thumb base64) a Vercel Blob vía `/api/blob-upload` y devuelve
@@ -74,6 +74,8 @@ export type CallbacksSubida = {
   onUrl: (url: string) => void
   /** La subida falló: persistir el base64 como antes (degradación segura). */
   onFallback: (dataUrl: string) => void
+  /** No se pudo ni leer el archivo (no llegó a subirse nada). */
+  onError?: (msg: string) => void
 }
 
 /**
@@ -103,5 +105,6 @@ export function imgAThumbYSubir(
         })
     },
     max,
+    cbs.onError,
   )
 }

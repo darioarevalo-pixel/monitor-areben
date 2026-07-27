@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { imgAThumb } from '@/lib/imagenes'
+import { imgAThumbYSubir } from '@/lib/imagenes'
 import { aplicarTally, contarPorEstado, ordenar, sanearImportado, tallyVotos } from '@/lib/disenos/core'
 import { crearRonda, subirImagen, traerBoletas, VOT_PAGE } from '@/lib/disenos/cliente'
 import { reporteDecisiones, reporteGaleria, reporteLimpio } from '@/lib/disenos/pdf'
@@ -37,6 +37,8 @@ export function Disenos() {
   const importRef = useRef<HTMLInputElement>(null)
   /** Lo último que quedó guardado en la base, por id, para poder mandar solo lo que cambió. */
   const ultimo = useRef<Map<string, string>>(new Map())
+  /** Ids cuya foto todavía está subiendo a Blob: no se persisten hasta tener la URL. */
+  const subiendo = useRef<Set<string>>(new Set())
 
   // El tablero se lee de la BASE (es compartido). Lo del navegador solo se mira para
   // ofrecer subir lo que haya quedado de la época en que se guardaba local.
@@ -82,7 +84,9 @@ export function Disenos() {
     if (!hidratado) return
     const previo = ultimo.current
     const ahora = new Map(disenos.map((d) => [String(d.id), JSON.stringify(d)]))
-    const cambiados = disenos.filter((d) => previo.get(String(d.id)) !== ahora.get(String(d.id)))
+    const cambiados = disenos.filter(
+      (d) => !subiendo.current.has(String(d.id)) && previo.get(String(d.id)) !== ahora.get(String(d.id)),
+    )
     const borrados = [...previo.keys()].filter((id) => !ahora.has(id))
     ultimo.current = ahora
     if (!cambiados.length && !borrados.length) return
@@ -114,9 +118,50 @@ export function Disenos() {
     if (!ok) return
     setDisenos((ds) => ds.filter((d) => d.id !== id))
   }
+  /**
+   * Las fotos van a Vercel Blob y en el tablero queda la URL, no la imagen entera.
+   *
+   * El diseño aparece en pantalla al instante con el base64 local (`onPreview`), pero mientras
+   * la subida está en curso queda anotado en `subiendo` y el efecto de persistencia lo saltea:
+   * si no, cada foto viajaría DOS veces a la base, y la primera con los megas del base64 —
+   * justo lo que esta migración viene a sacar. Cuando llega la URL se suelta y ahí sí se guarda.
+   * Si la subida falla, se guarda el base64 como antes: se pierde el ahorro, no la foto.
+   */
   const cargar = (files: FileList | null) => {
     const arr = [...(files || [])].filter((f) => /^image\//.test(f.type))
-    arr.forEach((f) => imgAThumb(f, (url) => setDisenos((ds) => [...ds, { id: newId(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url, nota: '', up: 0, down: 0, estado: 'revisar' }]), 600, () => toast.error(`No se pudo leer la imagen "${f.name}".`)))
+    arr.forEach((f) => {
+      const id = newId()
+      const nombre = f.name.replace(/\.[a-z0-9]+$/i, '')
+      // Al soltar se borra también del "último guardado": mientras estaba en vuelo el efecto lo
+      // anotó ahí con su base64 aunque no lo guardó, así que sin esto el diff no lo vería como
+      // pendiente y la foto no llegaría nunca a la base.
+      const soltar = () => {
+        subiendo.current.delete(id)
+        ultimo.current.delete(id)
+      }
+      subiendo.current.add(id)
+      imgAThumbYSubir(
+        f,
+        {
+          onPreview: (base64) => setDisenos((ds) => [...ds, { id, name: nombre, url: base64, nota: '', up: 0, down: 0, estado: 'revisar' }]),
+          onUrl: (url) => {
+            soltar()
+            setDisenos((ds) => ds.map((d) => (d.id === id ? { ...d, url } : d)))
+          },
+          onFallback: () => {
+            soltar()
+            // El base64 ya está puesto por el preview: alcanza con dejar que se guarde.
+            setDisenos((ds) => [...ds])
+          },
+          onError: () => {
+            soltar()
+            toast.error(`No se pudo leer la imagen "${f.name}".`)
+          },
+        },
+        'disenos',
+        600,
+      )
+    })
   }
   const limpiar = async () => {
     if (!disenos.length) return

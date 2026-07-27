@@ -4,9 +4,16 @@
  * dbReporte/dbReporteGaleria/dbReporteLimpioGen (index.html:3760/3808/3873).
  */
 
-import { agregarImagenFit, compartirODescargarPDF } from '../pdf'
+import { agregarImagenFit, compartirODescargarPDF, precargarImagenes } from '../pdf'
 import { ordenar } from './core'
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from './tipos'
+
+/**
+ * Las fotos de los diseños viven en Vercel Blob, o sea que `d.url` es una URL remota y jsPDF
+ * —que dibuja sincrónico— no sabe ir a buscarla. Por eso los tres reportes precargan primero
+ * y después dibujan. Los diseños viejos, con la foto embebida en data URL, pasan derecho.
+ */
+const dibujable = (fotos: Map<string, string>, d: Diseno) => fotos.get(d.url) ?? d.url
 
 const fechaLarga = () => new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
 const hoy = () => new Date().toISOString().slice(0, 10)
@@ -14,6 +21,7 @@ const hoy = () => new Date().toISOString().slice(0, 10)
 /** Reporte de decisiones: confirmados → duda → rechazados → por revisar, con votos y notas. */
 export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
   const { jsPDF } = await import('jspdf')
+  const fotos = await precargarImagenes(disenos.map((d) => d.url))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = 210, M = 14
   let y = 18
@@ -51,7 +59,7 @@ export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
         pdf.addPage()
         y = 18
       }
-      agregarImagenFit(pdf, d.url, M, y, IMG, IMG)
+      agregarImagenFit(pdf, dibujable(fotos, d), M, y, IMG, IMG)
       const tx = M + IMG + 5
       pdf.setFontSize(11)
       pdf.setFont('helvetica', 'bold')
@@ -77,6 +85,7 @@ export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
 /** Reporte galería: grilla 3 columnas con foto, nombre, votos y barra de estado. */
 export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Promise<void> {
   const { jsPDF } = await import('jspdf')
+  const fotos = await precargarImagenes(disenos.map((d) => d.url))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = 210, M = 10, cols = 3, gap = 5
   const cellW = (W - 2 * M - (cols - 1) * gap) / cols
@@ -102,7 +111,7 @@ export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Pro
     const x = M + col * (cellW + gap)
     pdf.setFillColor(247, 248, 250)
     pdf.rect(x, y, cellW, imgH, 'F')
-    agregarImagenFit(pdf, d.url, x, y, cellW, imgH)
+    agregarImagenFit(pdf, dibujable(fotos, d), x, y, cellW, imgH)
     const c = estadoColor[d.estado] || estadoColor.revisar
     pdf.setFillColor(c[0], c[1], c[2])
     pdf.rect(x, y, cellW, 2.4, 'F')
@@ -129,6 +138,7 @@ export async function reporteLimpio(disenos: Diseno[], orden: OrdenDiseno, filtr
   const items = ordenar(filtro === 'todos' ? disenos : disenos.filter((d) => d.estado === filtro), orden)
   if (!items.length) return false
   const { jsPDF } = await import('jspdf')
+  const fotos = await precargarImagenes(items.map((d) => d.url))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = 210, M = 10, cols = 3, gap = 6
   const cellW = (W - 2 * M - (cols - 1) * gap) / cols
@@ -152,7 +162,7 @@ export async function reporteLimpio(disenos: Diseno[], orden: OrdenDiseno, filtr
     const x = M + col * (cellW + gap)
     pdf.setFillColor(247, 248, 250)
     pdf.rect(x, y, cellW, imgH, 'F')
-    agregarImagenFit(pdf, d.url, x, y, cellW, imgH)
+    agregarImagenFit(pdf, dibujable(fotos, d), x, y, cellW, imgH)
     col++
     if (col >= cols) {
       col = 0
