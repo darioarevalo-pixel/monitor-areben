@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
   Button, Card, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
@@ -27,7 +28,8 @@ import {
 } from '@/lib/devoluciones/cliente'
 import {
   calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
-  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, EXPECTATIVA_LABEL,
+  type Expectativa,
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/devoluciones/mensajes'
@@ -80,6 +82,9 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
   const [elegidos, setElegidos] = useState<Set<number>>(new Set())
   const [motivo, setMotivo] = useState<MotivoDevolucion>('falla')
   const [detalle, setDetalle] = useState('')
+  const [expectativa, setExpectativa] = useState<Expectativa>('plata')
+  /** Solo en "pedido mal armado": lo que el cliente TENDRÍA que haber recibido. */
+  const [correctos, setCorrectos] = useState<ItemDevolucion[]>([])
   const [guardando, setGuardando] = useState(false)
 
   const recargar = useCallback(async () => {
@@ -163,10 +168,12 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
         monto_producto: monto.producto,
         pago_metodo: orden.pago_metodo ?? null,
         pago_gateway: orden.pago_gateway ?? null,
+        expectativa,
+        items_correctos: motivo === 'mal_armado' ? correctos : [],
       })
       await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
       toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
-      setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle('')
+      setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle(''); setCorrectos([])
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)
@@ -272,6 +279,21 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
     } catch (e) {
       toast.error((e as Error).message)
     }
+  }
+
+  /** El número de reclamo al transportista: es lo que después permite reclamar esa plata. */
+  const cargarReclamoCorreo = async (d: DevolucionRow) => {
+    const nro = await pedirTexto('Número de reclamo al transportista', d.reclamo_correo || '', {
+      titulo: 'Reclamo al correo',
+      ok: 'Guardar',
+      placeholder: 'El número que te dio Andreani / Correo',
+    })
+    if (nro === null) return
+    const limpio = nro.trim()
+    await accion(
+      () => editarDevolucion(marca, d.id, { reclamo_correo: limpio || null, reclamo_correo_estado: limpio ? 'hecho' : 'pendiente' }),
+      limpio ? 'Reclamo al correo anotado.' : 'Queda pendiente.',
+    )
   }
 
   const cerrar = async (d: DevolucionRow) => {
@@ -427,11 +449,44 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
               <Field label="Detalle (opcional)" style={{ flex: 1, minWidth: 220 }}>
                 <Input value={detalle} onChange={(e) => setDetalle(e.target.value)} placeholder="Qué dijo el cliente" />
               </Field>
+              <Field label="¿Qué esperaba?" hint="Para poder ver después cuántas veces resolvimos distinto">
+                <Select value={expectativa} onChange={(e) => setExpectativa(e.target.value as Expectativa)}>
+                  {(Object.keys(EXPECTATIVA_LABEL) as Expectativa[]).map((x) => (
+                    <option key={x} value={x}>{EXPECTATIVA_LABEL[x]}</option>
+                  ))}
+                </Select>
+              </Field>
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                 <div style={{ fontSize: font.xs, color: color.mut }}>Pagó por lo tildado</div>
                 <div style={{ fontSize: font.lg, fontWeight: weight.bold }}><MoneyText value={monto.producto} /></div>
               </div>
             </Toolbar>
+
+            {/* En "pedido mal armado" hay DOS productos: el que recibió (arriba, tildado de la
+                orden) y el que tendría que haber recibido. Sin el segundo no se puede saber qué
+                stock hay que corregir. */}
+            {motivo === 'mal_armado' && (
+              <Card padding={3} style={{ marginTop: space[3] }}>
+                <div style={{ fontSize: font.sm, fontWeight: weight.semibold, marginBottom: space[2] }}>
+                  ¿Qué tendría que haber recibido?
+                </div>
+                <BuscarArticuloGN marca={marca} mostrarCosto={false} onSelect={(a) => setCorrectos((prev) => [...prev, {
+                  producto: a.product_name || 'Sin nombre', sku: a.sku, variante: a.size_name,
+                  cantidad: 1, product_id: a.product_id, size_id: a.size_id,
+                  precio: a.retailer_price ?? null, costo: a.unit_cost ?? null,
+                }])} />
+                {!!correctos.length && (
+                  <div style={{ marginTop: space[2], fontSize: font.sm }}>
+                    {correctos.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
+                        <span>{c.cantidad}× {c.producto}{c.variante ? ` (${c.variante})` : ''}</span>
+                        <Button size="sm" variant="ghost" onClick={() => setCorrectos((prev) => prev.filter((_, j) => j !== i))}>Quitar</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
 
             <Button variant="solid" tone="brand" onClick={() => void crear()} disabled={guardando || !items.length} style={{ marginTop: space[2] }}>
               {guardando ? 'Creando…' : `Crear reclamo (${items.length} ítem${items.length === 1 ? '' : 's'})`}
@@ -529,6 +584,13 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                       )}
                       {esAdmin && d.reintegro_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolví la plata</Button>
+                      )}
+                      {/* Plata recuperable: sin este pendiente, un pedido perdido se cierra y el
+                          reclamo al correo no lo hace nadie. */}
+                      {esAdmin && d.reclamo_correo_estado === 'pendiente' && (
+                        <Button size="sm" variant="outline" onClick={() => void cargarReclamoCorreo(d)}>
+                          {d.reclamo_correo ? 'Reclamo al correo ✓' : 'Reclamo al correo'}
+                        </Button>
                       )}
                       {esAdmin && d.tn_stock_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void ponerEnCero(d)}>Poner en 0 en TN</Button>

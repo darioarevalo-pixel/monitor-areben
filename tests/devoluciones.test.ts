@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, cuentaDescuento, estadoEnCriollo, faltantesParaCerrar, hayEnvio,
-  laFallaDescuentaStock, numeroReclamo, pagadoPorItem, pideSeguimiento,
+  calcularMonto, compensacionesDe, convieneRetorno, correccionesMalArmado, costoDelCaso, cuentaDescuento,
+  destinoDe, estadoEnCriollo, faltantesParaCerrar, hayEnvio, laFallaDescuentaStock, numeroReclamo,
+  pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda,
   type DevolucionRow, type ItemDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 
@@ -204,6 +205,93 @@ describe('laFallaDescuentaStock', () => {
   it('sin decidir todavía, se asume que descuenta (el caso más común)', () => {
     expect(laFallaDescuentaStock(null)).toBe(true)
     expect(laFallaDescuentaStock(undefined)).toBe(true)
+  })
+})
+
+describe('qué salidas se ofrecen según lo que pasó', () => {
+  // Ofrecer "le mandamos otra igual" en un arrepentimiento invita a resolver mal.
+  it('arrepentimiento: plata o cupón, nunca reponer', () => {
+    const c = compensacionesDe('arrepentimiento')
+    expect(c).toContain('plata_total')
+    expect(c).toContain('plata_parcial')
+    expect(c).not.toContain('otra_unidad')
+    expect(c).not.toContain('reenvio')
+  })
+
+  it('falla: es la que más opciones tiene, incluida reponerla', () => {
+    expect(compensacionesDe('falla')).toContain('otra_unidad')
+    expect(compensacionesDe('falla')).toContain('plata_parcial')
+  })
+
+  // Si nunca salió no hay prenda que negociar: o se manda o se devuelve la plata.
+  it('faltante y sin stock: reenviar o devolver, sin descuento parcial', () => {
+    for (const m of ['faltante', 'sin_stock'] as const) {
+      expect(compensacionesDe(m)).toContain('reenvio')
+      expect(compensacionesDe(m)).not.toContain('plata_parcial')
+    }
+  })
+
+  it('no llegó nunca: solo reponer o devolver', () => {
+    expect(compensacionesDe('no_llego')).toEqual(['reenvio', 'plata_total'])
+  })
+})
+
+describe('el destino de la prenda sale del motivo', () => {
+  it('faltante y sin stock: nunca salió', () => {
+    expect(destinoDe('faltante', false)).toBe('no_salio')
+    expect(destinoDe('sin_stock', false)).toBe('no_salio')
+  })
+
+  it('no llegó nunca: se perdió en el camino, ni vuelve ni está', () => {
+    expect(destinoDe('no_llego', false)).toBe('perdida')
+  })
+
+  it('falla: va al ledger de Fallas, vuelva o no', () => {
+    expect(destinoDe('falla', true)).toBe('falla')
+    expect(destinoDe('falla', false)).toBe('falla')
+  })
+
+  it('arrepentimiento: vuelve a stock si vuelve', () => {
+    expect(destinoDe('arrepentimiento', true)).toBe('stock')
+  })
+
+  it('sin prenda que pueda volver, media pantalla sobra', () => {
+    expect(puedeVolverLaPrenda('faltante')).toBe(false)
+    expect(puedeVolverLaPrenda('no_llego')).toBe(false)
+    expect(puedeVolverLaPrenda('falla')).toBe(true)
+  })
+})
+
+/**
+ * El caso más enredado del módulo: hay DOS productos y dos posibles descuadres. Equivocarse acá
+ * deja el stock mal en dos lugares a la vez, que es exactamente lo que se quería evitar.
+ */
+describe('pedido mal armado: qué stock hay que corregir', () => {
+  it('vuelve el equivocado y se manda el correcto: no hay nada que corregir', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: true, seEnviaElCorrecto: true })
+    expect(c.descontarEnviadoPorError).toBe(false)
+    expect(c.anularVentaOriginal).toBe(false)
+    expect(c.nota).toContain('cuadra solo')
+  })
+
+  // Se lo queda: esa unidad salió del depósito y GN nunca se enteró.
+  it('se queda el equivocado: hay que descontarlo', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: false, seEnviaElCorrecto: true })
+    expect(c.descontarEnviadoPorError).toBe(true)
+    expect(c.anularVentaOriginal).toBe(false)
+  })
+
+  // El correcto quedó descontado por la venta original y nunca salió: hay que devolverlo al stock.
+  it('no se envía el correcto: hay que anular su venta', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: true, seEnviaElCorrecto: false })
+    expect(c.anularVentaOriginal).toBe(true)
+    expect(c.descontarEnviadoPorError).toBe(false)
+  })
+
+  it('el peor caso: se queda uno y no se manda el otro → las dos correcciones', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: false, seEnviaElCorrecto: false })
+    expect(c.descontarEnviadoPorError).toBe(true)
+    expect(c.anularVentaOriginal).toBe(true)
   })
 })
 

@@ -326,6 +326,81 @@ export function convieneRetorno(
   return { recuperable, envioVuelta, conviene: true, motivo: `Conviene: recuperás ${recuperable}${detalle} y el envío sale ${envioVuelta}.` }
 }
 
+// ── Qué aplica a cada motivo ────────────────────────────────────────────────────
+
+/**
+ * Las salidas que tienen sentido según lo que pasó. No es cosmético: ofrecer "le mandamos otra
+ * igual" en un arrepentimiento, o "le devolvemos una parte" en un pedido mal armado, invita a
+ * resolver mal. Cada motivo tiene su repertorio.
+ */
+export function compensacionesDe(motivo: MotivoDevolucion): Compensacion[] {
+  switch (motivo) {
+    // Se arrepintió o no era lo que esperaba: la prenda está bien, lo que se discute es la plata.
+    // El descuento parcial existe para retenerlo; mandarle otra igual no tendría sentido.
+    case 'arrepentimiento':
+    case 'no_esperaba':
+    case 'no_era_lo_esperado':
+      return ['plata_total', 'plata_parcial', 'cupon']
+    // Falla: es donde hay más margen: devolver, descontar para que se la quede, o reponerla.
+    case 'falla':
+      return ['plata_total', 'plata_parcial', 'otra_unidad', 'cupon']
+    // Nunca salió: o se lo mandamos, o le devolvemos esa parte. No hay prenda que negociar.
+    case 'faltante':
+    case 'sin_stock':
+      return ['reenvio', 'plata_total', 'cupon']
+    // Le mandamos otra cosa: lo que corresponde es mandarle lo suyo. Devolver la plata es la
+    // salida si ya no lo quiere.
+    case 'mal_armado':
+      return ['reenvio', 'plata_total', 'cupon']
+    // Se perdió en el camino: se repone o se devuelve. La prenda no está en ningún lado.
+    case 'no_llego':
+      return ['reenvio', 'plata_total']
+    default:
+      return ['plata_total', 'plata_parcial', 'otra_unidad', 'reenvio', 'cupon', 'ninguna']
+  }
+}
+
+/** ¿Hay una prenda que pueda volver? En los tres casos donde no, media pantalla sobra. */
+export function puedeVolverLaPrenda(motivo: MotivoDevolucion): boolean {
+  return !NUNCA_SALIO.includes(motivo) && motivo !== 'no_llego'
+}
+
+/** El destino de la prenda queda determinado por el motivo, salvo en la falla. */
+export function destinoDe(motivo: MotivoDevolucion, vuelve: boolean): DestinoPrenda {
+  if (NUNCA_SALIO.includes(motivo)) return 'no_salio'
+  if (motivo === 'no_llego') return 'perdida'
+  if (motivo === 'falla') return 'falla'
+  return vuelve ? 'stock' : 'falla'
+}
+
+/**
+ * En "pedido mal armado" hay dos productos y **dos posibles descuadres de stock**. Esta función
+ * dice cuál de los dos hay que corregir, que es lo que nadie tiene en la cabeza a las 6 de la
+ * tarde:
+ *
+ *   - El producto **correcto** ya está descontado por la venta original. Si se lo mandamos ahora,
+ *     cuadra solo: no hay nada que hacer.
+ *   - El producto **equivocado** salió del depósito y GN no se enteró. Si el cliente se lo queda,
+ *     **hay que descontarlo**; si lo devuelve, vuelve al depósito y tampoco hay nada que hacer.
+ */
+export function correccionesMalArmado(opciones: { equivocadoVuelve: boolean; seEnviaElCorrecto: boolean }): {
+  descontarEnviadoPorError: boolean
+  anularVentaOriginal: boolean
+  nota: string
+} {
+  const { equivocadoVuelve, seEnviaElCorrecto } = opciones
+  const descontarEnviadoPorError = !equivocadoVuelve
+  const anularVentaOriginal = !seEnviaElCorrecto
+  const partes: string[] = []
+  if (descontarEnviadoPorError) partes.push('el producto que se envió por error se lo queda el cliente: hay que descontarlo del stock')
+  if (anularVentaOriginal) partes.push('el producto correcto no se envía: hay que anular su venta para que vuelva al stock')
+  return {
+    descontarEnviadoPorError,
+    anularVentaOriginal,
+    nota: partes.length ? partes.join(' · ') : 'El stock cuadra solo: no hay nada que corregir.',
+  }
+}
+
 // ── El descuento para que se la quede ───────────────────────────────────────────
 
 export type CuentaDescuento = {

@@ -15,7 +15,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
   Compensacion, DestinoPrenda, DevolucionRow, EstadoDevolucion, FotoReclamo, ItemDevolucion,
-  MotivoDevolucion, OrdenTN, ViaRetorno,
+  Expectativa, MotivoDevolucion, OrdenTN, ViaRetorno,
 } from './tipos'
 
 const API = '/api/postventa?recurso=devoluciones'
@@ -133,6 +133,10 @@ export type CrearDevolucion = {
   gn_venta_number?: string | null
   destino_prenda?: DestinoPrenda | null
   fotos?: FotoReclamo[]
+  /** Qué esperaba el cliente. Comparado después con lo que se hizo, dice cuántas veces resolvimos distinto. */
+  expectativa?: Expectativa | null
+  /** Solo en "pedido mal armado": lo que TENDRÍA que haber recibido. */
+  items_correctos?: ItemDevolucion[]
 }
 
 /** Crea el reclamo y devuelve su id y el token del link para el cliente. */

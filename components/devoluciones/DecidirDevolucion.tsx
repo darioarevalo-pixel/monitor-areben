@@ -22,16 +22,18 @@ import {
 import type { Marca } from '@/lib/nav'
 import { decidir } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, hayEnvio, MOTIVO_LABEL, numeroReclamo, pideSeguimiento, VIA_LABEL,
+  calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento, destinoDe, hayEnvio,
+  MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   type Compensacion, type DestinoPrenda, type DevolucionRow, type ItemDevolucion, type OrdenTN,
   type ViaRetorno,
 } from '@/lib/devoluciones/tipos'
 
-/** Las salidas posibles, en el orden en que se usan de verdad. */
+/** Todas las salidas. Cuáles se ofrecen lo decide `compensacionesDe` según lo que pasó. */
 const SALIDAS: { key: Compensacion; label: string; ayuda: string }[] = [
   { key: 'plata_total', label: 'Le devolvemos todo', ayuda: 'La devolución clásica.' },
   { key: 'plata_parcial', label: 'Le devolvemos una parte', ayuda: 'Se queda la prenda con un descuento acordado. La más barata: ni envío ni reintegro completo.' },
   { key: 'otra_unidad', label: 'Le mandamos otra igual', ayuda: 'No se toca la plata. Sale una unidad de stock.' },
+  { key: 'reenvio', label: 'Le mandamos lo que corresponde', ayuda: 'Se despacha lo que faltó o lo correcto. No se toca la plata.' },
   { key: 'cupon', label: 'Le damos un cupón', ayuda: 'Cuesta menos que efectivo y lo retiene. El cupón se genera aparte y se anota acá.' },
   { key: 'ninguna', label: 'Nada', ayuda: 'Se resuelve sin compensación.' },
 ]
@@ -49,9 +51,15 @@ export function DecidirDevolucion({
   // Estable entre renders: de estos ítems cuelgan tres useMemo.
   const items = useMemo(() => devolucion.items || [], [devolucion.items])
   const esFalla = devolucion.motivo === 'falla'
-  const nuncaSalio = devolucion.motivo === 'sin_stock'
+  const hayPrendaQueVuelva = puedeVolverLaPrenda(devolucion.motivo)
+  const nuncaSalio = !hayPrendaQueVuelva
 
-  const [compensacion, setCompensacion] = useState<Compensacion>('plata_total')
+  /** Solo las salidas que tienen sentido para lo que pasó. */
+  const opciones = useMemo(() => {
+    const permitidas = compensacionesDe(devolucion.motivo)
+    return SALIDAS.filter((s) => permitidas.includes(s.key))
+  }, [devolucion.motivo])
+  const [compensacion, setCompensacion] = useState<Compensacion>(() => compensacionesDe(devolucion.motivo)[0] || 'plata_total')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
   const [devolverEnvio, setDevolverEnvio] = useState(false)
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
@@ -98,7 +106,7 @@ export function DecidirDevolucion({
   )
 
   /** Dónde termina la prenda: es lo que después decide si la falla descuenta stock o no. */
-  const destino: DestinoPrenda = nuncaSalio ? 'no_salio' : esFalla ? 'falla' : 'stock'
+  const destino: DestinoPrenda = destinoDe(devolucion.motivo, retorno)
 
   const costo = useMemo(
     () => costoDelCaso({
@@ -143,6 +151,12 @@ export function DecidirDevolucion({
     }
   }
 
+  /** Hasta cuánto se puede descontar para que se la quede, y cuánto conviene ofrecer primero. */
+  const descuento = useMemo(
+    () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta: Number(envioVuelta) || 0 }),
+    [itemsConFeria, esFalla, envioVuelta],
+  )
+
   const salida = SALIDAS.find((s) => s.key === compensacion)
 
   return (
@@ -172,7 +186,14 @@ export function DecidirDevolucion({
       )}
 
       {/* ── 1. ¿Vuelve la prenda? ── */}
-      {!nuncaSalio && (
+      {!hayPrendaQueVuelva && (
+        <Notice tone="neutral" style={{ marginBottom: space[3] }}>
+          {devolucion.motivo === 'no_llego'
+            ? 'El pedido se perdió en el camino: no hay prenda que vuelva. Queda pendiente el reclamo al transportista.'
+            : 'La prenda nunca salió del depósito, así que no hay nada que esperar ni etiqueta que emitir.'}
+        </Notice>
+      )}
+      {hayPrendaQueVuelva && (
         <section style={{ marginBottom: space[4] }}>
           <h4 style={{ fontSize: font.md, fontWeight: weight.bold, marginBottom: space[2] }}>¿Pedimos que vuelva la prenda?</h4>
 
@@ -239,15 +260,34 @@ export function DecidirDevolucion({
         <h4 style={{ fontSize: font.md, fontWeight: weight.bold, marginBottom: space[2] }}>¿Qué recibe el cliente?</h4>
         <Field label="Salida">
           <Select value={compensacion} onChange={(e) => setCompensacion(e.target.value as Compensacion)}>
-            {SALIDAS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {opciones.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </Select>
         </Field>
         {salida && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>{salida.ayuda}</div>}
 
         {compensacion === 'plata_parcial' && (
-          <Field label="Monto acordado ($)" style={{ marginTop: space[2] }}>
-            <NumberField value={montoAcordado} onChange={(v) => setMontoAcordado(v)} style={{ width: 140 }} />
-          </Field>
+          <>
+            <Field label="Monto acordado ($)" hint="Lo que se le devuelve para que se lo quede" style={{ marginTop: space[2] }}>
+              <NumberField value={montoAcordado} onChange={(v) => setMontoAcordado(v)} style={{ width: 140 }} />
+            </Field>
+            {/* La cuenta que hace que esto valga la pena: en una falla barata el techo puede superar
+                el precio, o sea que regalarla sale más barato que pedirla de vuelta. */}
+            {!!descuento.techo && (
+              <Notice tone={descuento.convieneRegalar ? 'success' : 'neutral'} style={{ marginTop: space[2] }}>
+                {descuento.motivo}
+                <div style={{ marginTop: 4 }}>
+                  Podés ofrecer hasta <b><MoneyText value={descuento.techo} /></b> sin perder.
+                  {' '}Sugerido: <b><MoneyText value={descuento.sugerido} /></b>{' '}
+                  <Button size="sm" variant="outline" onClick={() => setMontoAcordado(descuento.sugerido)}>Usar</Button>
+                </div>
+                {Number(montoAcordado) > descuento.techo && (
+                  <div style={{ marginTop: 4, color: color.warningInk }}>
+                    ⚠️ Te estás pasando del techo: por encima de eso conviene pedirla de vuelta.
+                  </div>
+                )}
+              </Notice>
+            )}
+          </>
         )}
         {/* El segundo envío: el que va con el reemplazo. También a nuestro cargo, y suma al costo
             del caso — antes se contaba uno solo y el caso salía más barato de lo que era. */}
