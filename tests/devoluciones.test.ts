@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, estadoEnCriollo, faltantesParaCerrar, hayEnvio,
+  calcularMonto, convieneRetorno, costoDelCaso, cuentaDescuento, estadoEnCriollo, faltantesParaCerrar, hayEnvio,
   laFallaDescuentaStock, numeroReclamo, pagadoPorItem, pideSeguimiento,
   type DevolucionRow, type ItemDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
@@ -229,6 +229,63 @@ describe('cómo vuelve la prenda', () => {
     expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'presencial' })).toBe('Esperando que la traiga')
     expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani' })).toBe('En camino de vuelta')
     expect(estadoEnCriollo({ estado: 'recibido', via_retorno: 'presencial' })).toBe('Recibido')
+  })
+})
+
+/**
+ * El descuento para retener. Es donde una regla mal puesta cuesta miles por unidad, y donde la
+ * intuición falla: parece que el techo debería ser el envío, y en una falla es muchísimo más.
+ */
+describe('cuentaDescuento', () => {
+  // El caso real de BDI que motivó todo esto.
+  const funda = item(12000, 1, { costo: 2000, pvp_feria: 3500 })
+
+  it('fallada: el techo incluye la depreciación, no solo el envío', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000 })
+    expect(c.techo).toBe(14500) // 8500 que se deprecia + 6000 de envío
+    expect(c.seePierdeSiVuelve).toBe(14500)
+  })
+
+  // Lo contraintuitivo: el techo supera el precio, así que regalarla sale más barato que pedirla.
+  it('fallada barata: avisa que conviene regalarla', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000 })
+    expect(c.convieneRegalar).toBe(true)
+    expect(c.motivo).toContain('regalarla')
+  })
+
+  // Una prenda sana vuelve a stock y se revende: lo único que se pierde es la logística.
+  it('sana: el techo es solo lo que se ahorra en logística', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 })
+    expect(c.techo).toBe(6000)
+    expect(c.convieneRegalar).toBe(false)
+  })
+
+  it('el sugerido es la mitad del techo: el techo es el límite, no la oferta', () => {
+    expect(cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 }).sugerido).toBe(3000)
+  })
+
+  it('el sugerido nunca supera el precio del producto', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 20000 })
+    expect(c.sugerido).toBeLessThanOrEqual(12000)
+  })
+
+  it('el costo operativo también se ahorra y sube el techo', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativo: 1500 })
+    expect(c.techo).toBe(7500)
+  })
+
+  // Sin el PVP de feria no se puede saber cuánto se deprecia: mejor decirlo que inventar un número.
+  it('fallada sin PVP de feria: avisa en vez de calcular cualquier cosa', () => {
+    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000 })
+    expect(c.techo).toBe(0)
+    expect(c.motivo).toContain('PVP de feria')
+  })
+
+  it('una prenda cara y fallada: el techo NO llega a regalarla', () => {
+    const cara = item(90000, 1, { pvp_feria: 45000 })
+    const c = cuentaDescuento({ items: [cara], fallada: true, envioVuelta: 6000 })
+    expect(c.techo).toBe(51000)
+    expect(c.convieneRegalar).toBe(false)
   })
 })
 

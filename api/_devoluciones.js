@@ -40,9 +40,15 @@ function cfgFor(store) {
   return { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 
-const MOTIVOS = ['arrepentimiento', 'falla', 'sin_stock', 'no_era_lo_esperado', 'otro'];
-const DESTINOS = ['stock', 'falla', 'no_salio'];
-const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'cupon', 'ninguna'];
+// Los siete vigentes, más los dos históricos que quedaron en filas viejas (si se sacaran, editar
+// un reclamo viejo lo rechazaría por "motivo inválido").
+const MOTIVOS = [
+  'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
+  'no_era_lo_esperado', 'otro',
+];
+const EXPECTATIVAS = ['plata', 'mismo_producto', 'otro_producto', 'completar'];
+const DESTINOS = ['stock', 'falla', 'no_salio', 'perdida'];
+const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'reenvio', 'cupon', 'ninguna'];
 const ESTADOS = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido', 'cerrado', 'anulado'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
 // Cómo vuelve la prenda. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
@@ -54,7 +60,8 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle,
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
-  costo_caso, usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
+  costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
+  usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 // El `token` NUNCA sale en los listados: es la llave del link público. Se pide aparte, de a uno.
 
 /** El día que el link deja de servir. Un reclamo no debería tardar más que esto. */
@@ -131,6 +138,11 @@ export default async function handler(req, res) {
         token_vence: vence,
         motivo,
         motivo_detalle: texto(b.motivo_detalle),
+        expectativa: EXPECTATIVAS.includes(b.expectativa) ? b.expectativa : null,
+        items_correctos: Array.isArray(b.items_correctos) ? b.items_correctos : [],
+        // El pedido que se perdió en el camino arranca con el reclamo al transportista pendiente:
+        // es plata recuperable y sin este pendiente no la persigue nadie.
+        reclamo_correo_estado: motivo === 'no_llego' ? 'pendiente' : 'no_aplica',
         fotos: Array.isArray(b.fotos) ? b.fotos : [],
         destino_prenda: sinStock ? 'no_salio' : (DESTINOS.includes(b.destino_prenda) ? b.destino_prenda : null),
         estado: 'borrador',
@@ -267,6 +279,10 @@ export default async function handler(req, res) {
       if (b.gn_venta_id !== undefined) campos.gn_venta_id = texto(b.gn_venta_id);
       if (b.gn_venta_number !== undefined) campos.gn_venta_number = texto(b.gn_venta_number);
       if (b.cupon_codigo !== undefined) campos.cupon_codigo = texto(b.cupon_codigo);
+      if (b.expectativa !== undefined && EXPECTATIVAS.includes(b.expectativa)) campos.expectativa = b.expectativa;
+      if (b.reclamo_correo !== undefined) campos.reclamo_correo = texto(b.reclamo_correo);
+      if (b.items_correctos !== undefined && Array.isArray(b.items_correctos)) campos.items_correctos = b.items_correctos;
+      if (b.reclamo_correo_estado !== undefined && PENDIENTES.includes(b.reclamo_correo_estado)) campos.reclamo_correo_estado = b.reclamo_correo_estado;
       // Los tres pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
       for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado']) {
         if (b[k] !== undefined && PENDIENTES.includes(b[k])) campos[k] = b[k];

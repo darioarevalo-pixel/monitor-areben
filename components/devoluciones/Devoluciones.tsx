@@ -26,10 +26,11 @@ import {
   ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarDevolucion,
 } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, numeroReclamo,
-  pagadoPorItem, pideSeguimiento, VIA_LABEL,
+  calcularMonto, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL,
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
+import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/devoluciones/mensajes'
 import { DecidirDevolucion } from './DecidirDevolucion'
 import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
 
@@ -54,7 +55,8 @@ const ESTADO_TONE: Record<EstadoDevolucion, Tone> = {
   anulado: 'neutral',
 }
 
-const MOTIVOS: MotivoDevolucion[] = ['arrepentimiento', 'falla', 'no_era_lo_esperado', 'sin_stock', 'otro']
+// Los siete motivos vigentes salen de `MOTIVOS_VIGENTES`: una sola fuente, así no se
+// desincroniza con lo que acepta el servidor.
 
 /** Los estados que siguen pidiendo algo de alguien. */
 const ABIERTOS: EstadoDevolucion[] = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido']
@@ -419,7 +421,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
             <Toolbar style={{ marginTop: space[3] }}>
               <Field label="Motivo">
                 <Select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoDevolucion)}>
-                  {MOTIVOS.map((m) => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
+                  {MOTIVOS_VIGENTES.map((m) => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
                 </Select>
               </Field>
               <Field label="Detalle (opcional)" style={{ flex: 1, minWidth: 220 }}>
@@ -487,8 +489,26 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
                   <Td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {/* El link se puede volver a copiar mientras el reclamo siga abierto. */}
+                      {/* El mensaje entero, no el link pelado: si solo se copia el link, alguien
+                          tiene que escribir el texto alrededor y ahí cada uno promete algo distinto. */}
                       {ABIERTOS.includes(d.estado) && (
-                        <CopyButton getText={() => linkDelCliente(d.token || String(d.id))} label="Link" />
+                        <CopyButton
+                          getText={() => mensajeApertura(d, numeroReclamo(d.id), linkDelCliente(d.token || String(d.id)))}
+                          label="Msj: pedir fotos"
+                        />
+                      )}
+                      {d.compensacion && (
+                        <CopyButton
+                          getText={() => mensajeResolucion(d, numeroReclamo(d.id))}
+                          label="Msj: resolución"
+                          tone="brand"
+                        />
+                      )}
+                      {d.seguimiento_vuelta && (
+                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
+                      )}
+                      {d.reintegro_estado === 'hecho' && (
+                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
                       )}
                       {esAdmin && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
                         <Button size="sm" variant="solid" tone="brand" onClick={() => setDecidiendo(d)}>Decidir</Button>
