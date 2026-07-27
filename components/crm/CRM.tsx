@@ -141,8 +141,14 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
       </Td>
       <Td align="center">
         <button
-          onClickCapture={(e) => e.stopPropagation()}
-          onClick={() => onDifusion(c.id, !enDifusion)}
+          // El stopPropagation va acá adentro, no en un `onClickCapture`: en captura corta el
+          // recorrido del evento ANTES de que llegue al propio `onClick` del botón, así que lo
+          // deja muerto. Lo único que hay que evitar es que el click abra además la ficha del
+          // cliente, y para eso alcanza con cortar el burbujeo hacia la fila.
+          onClick={(e) => {
+            e.stopPropagation()
+            onDifusion(c.id, !enDifusion)
+          }}
           title={enDifusion ? 'Está en el canal de difusión — tocá para sacarlo' : 'Todavía no está en el canal — tocá cuando ya lo hayas agregado'}
           style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? `1px solid ${color.success}` : `1px dashed ${color.line2}`, background: enDifusion ? color.successBg : 'transparent', color: enDifusion ? color.success : color.mut2 }}
         >
