@@ -14,6 +14,7 @@
  */
 
 import { apiFetch } from '../api-fetch'
+import { invalidarAudit, traerAudit } from '../tn-audit'
 import type { Marca } from '../nav'
 import type {
   AsigAplicar,
@@ -133,11 +134,14 @@ export async function desvincularColor(store: Marca, product_id: string | number
 }
 
 // ── Revisar fotos por variante (card 3) ─────────────────────────────────────────
-/** Trae el estado de fotos por variante del audit. Port de fchkAbrir. */
+/**
+ * Trae el estado de fotos por variante del audit. Port de fchkAbrir.
+ *
+ * Es el payload pesado (`?variantes=1`). Va por `traerAudit`, que lo cachea y con eso le
+ * ahorra la bajada a quien después pida el liviano: es el mismo objeto con dos campos de más.
+ */
 export async function auditVariantes(store: Marca, refrescar = false): Promise<ProductoFchk[]> {
-  const r = await apiFetch(`${auditUrl(store)}&variantes=1${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
-  const d = await r.json()
-  return (d && d.products ? d.products : []) as ProductoFchk[]
+  return traerAudit<ProductoFchk>(store, { variantes: true, refrescar })
 }
 
 /**
@@ -145,13 +149,15 @@ export async function auditVariantes(store: Marca, refrescar = false): Promise<P
  * Es lo que permite recorrer la tienda POR categoría en vez de a ciegas.
  */
 export async function auditProductos(store: Marca, refrescar = false): Promise<ProductoCat[]> {
-  const r = await apiFetch(`${auditUrl(store)}${refrescar ? '&refresh=1&nc=' + Math.random() : ''}`)
-  const d = await r.json()
-  return (d && d.products ? d.products : []) as ProductoCat[]
+  return traerAudit<ProductoCat>(store, { refrescar })
 }
 
 /** Refresca el caché del audit de Marketing tras subir/publicar (así las fotos nuevas se ven ya). Port de _mktBustAudit. */
 export async function bustAudit(store: Marca): Promise<void> {
+  // Primero lo de acá, que es sincrónico y no puede fallar: si se cae la llamada, igual queda
+  // invalidado y la próxima lectura baja de nuevo. Al revés, un throw dejaría el caché local
+  // sirviendo la tienda de antes de escribir.
+  invalidarAudit(store)
   try {
     await apiFetch(`${auditUrl(store)}&refresh=1&nc=${Math.random()}`)
   } catch {

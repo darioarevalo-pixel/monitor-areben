@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
-import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { indexarTn, type IndiceTn } from '@/lib/tn'
+import { indicesDe } from '@/lib/tn-audit'
 import type { Marca } from '@/lib/nav'
-import { auditVariantes, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
+import { auditVariantes, bustAudit, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
 import { stockPorProductoTn } from '@/lib/tncat/agotados'
 import { aplicarRecortes, categoriasDe, coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
@@ -52,11 +52,6 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
   useEffect(() => {
     let vivo = true
-    // El índice de TN se usa para cruzar el stock de GN por producto (el match es el mismo
-    // que usan Ocultar agotados y Márgenes).
-    asegurarTnPromo(marca)
-      .then((i) => vivo && setIdx(i))
-      .catch(() => vivo && setIdx(indexarTn([])))
     leerIgnorados(marca)
       .then((l) => vivo && setIgnorados(new Set(l.map((x) => String(x.tn_id)))))
       .catch(() => {
@@ -105,12 +100,20 @@ export function FotosCard({ marca }: { marca: Marca }) {
     }
   }
 
+  /**
+   * El índice de TN sirve para cruzar el stock de GN por producto (el match es el mismo que
+   * usan Ocultar agotados y Márgenes), y sale del MISMO payload que la lista de variantes: es
+   * el catálogo entero, con dos campos de más. Pedirlo aparte era bajar la tienda dos veces.
+   */
   const cargar = async (refrescar = false) => {
     setCargando(true)
     try {
-      setData(await auditVariantes(marca, refrescar))
+      const d = await auditVariantes(marca, refrescar)
+      setData(d)
+      setIdx(indicesDe(d).promo)
     } catch {
       setData([])
+      setIdx(indexarTn([]))
     } finally {
       setCargando(false)
     }
@@ -122,9 +125,14 @@ export function FotosCard({ marca }: { marca: Marca }) {
       setCargando(true)
       try {
         const d = await auditVariantes(marca)
-        if (vivo) setData(d)
+        if (!vivo) return
+        setData(d)
+        setIdx(indicesDe(d).promo)
       } catch {
-        if (vivo) setData([])
+        if (vivo) {
+          setData([])
+          setIdx(indexarTn([]))
+        }
       } finally {
         if (vivo) setCargando(false)
       }
@@ -169,6 +177,12 @@ export function FotosCard({ marca }: { marca: Marca }) {
       const hechas = tipo === 'vincular' ? j.variantesAsignadas : j.variantesDesasignadas
       if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (hechas ?? 0) >= (j.variantesObjetivo ?? 0)) {
         // Refleja el cambio en memoria sin re-pegar al server. En 'quitar' la foto pasa a null.
+        //
+        // Y se avisa que el catálogo cacheado quedó viejo, que es lo único que este `setData`
+        // no alcanza a arreglar: sin eso, al volver a entrar a la sección se vería el estado
+        // de antes de vincular y el cambio parecería perdido (en TN sí quedó hecho). Es lo
+        // mismo que hacen Cargar imágenes, Ocultar agotados y Volver a mostrar al escribir.
+        void bustAudit(marca)
         const nuevaFoto = tipo === 'vincular' ? accion.src : null
         setData((prev) =>
           prev.map((x) =>
