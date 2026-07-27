@@ -25,7 +25,7 @@ import {
   ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn,
 } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, ESTADO_LABEL, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, pagadoPorItem,
+  calcularMonto, ESTADO_LABEL, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL, numeroReclamo, pagadoPorItem,
   type DevolucionRow, type EstadoDevolucion, type ItemDevolucion, type MotivoDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 import { DecidirDevolucion } from './DecidirDevolucion'
@@ -404,7 +404,7 @@ function DevolucionesInner({ modo }: { modo: 'local' | 'admin' }) {
               return (
                 <Tr key={d.id}>
                   <Td>
-                    <div style={{ fontWeight: weight.semibold }}>{d.numero || `D-${d.id}`}</div>
+                    <div style={{ fontWeight: weight.semibold }}>{numeroReclamo(d.id)}</div>
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>
                       {d.orden_tn ? `#${d.orden_tn}` : '—'} · {d.cliente || 'sin nombre'}
                     </div>

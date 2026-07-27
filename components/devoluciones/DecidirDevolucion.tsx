@@ -22,7 +22,7 @@ import {
 import type { Marca } from '@/lib/nav'
 import { decidir } from '@/lib/devoluciones/cliente'
 import {
-  calcularMonto, convieneRetorno, costoDelCaso, MOTIVO_LABEL,
+  calcularMonto, convieneRetorno, costoDelCaso, MOTIVO_LABEL, numeroReclamo,
   type Compensacion, type DestinoPrenda, type DevolucionRow, type ItemDevolucion, type OrdenTN,
 } from '@/lib/devoluciones/tipos'
 
@@ -137,7 +137,7 @@ export function DecidirDevolucion({
   const salida = SALIDAS.find((s) => s.key === compensacion)
 
   return (
-    <Modal abierto onCerrar={onClose} titulo={`Decidir ${devolucion.numero || `D-${devolucion.id}`}`} ancho="ancho">
+    <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(devolucion.id)}`} ancho="ancho">
       <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
         {MOTIVO_LABEL[devolucion.motivo]} · orden #{devolucion.orden_tn || '—'} · {devolucion.cliente || 'sin nombre'}
         {devolucion.pago_metodo ? ` · pagó por ${devolucion.pago_metodo}` : ''}

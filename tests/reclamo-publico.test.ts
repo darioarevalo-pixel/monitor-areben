@@ -15,7 +15,6 @@ import { paraElCliente } from '@/api/_reclamo.js'
 const FILA = {
   id: 42,
   store: 'bdi',
-  numero: 'D-0042',
   orden_tn: '20700',
   estado: 'esperando_cliente',
   motivo: 'falla',
@@ -44,7 +43,7 @@ describe('lo que ve el cliente en el link público', () => {
   const json = JSON.stringify(salida)
 
   it('trae lo justo para que sepa de qué reclamo se trata', () => {
-    expect(salida.numero).toBe('D-0042')
+    expect(salida.numero).toBe('D-0042') // derivado del id 42
     expect(salida.orden).toBe('20700')
     expect(salida.productos).toHaveLength(1)
     expect(salida.productos[0].producto).toContain('WEAVE CASE')
@@ -78,7 +77,7 @@ describe('lo que ve el cliente en el link público', () => {
   })
 
   it('sin ítems ni fotos no rompe', () => {
-    const vacio = paraElCliente({ numero: 'D-1', estado: 'borrador' })
+    const vacio = paraElCliente({ id: 1, estado: 'borrador' })
     expect(vacio.productos).toEqual([])
     expect(vacio.fotos).toEqual([])
   })

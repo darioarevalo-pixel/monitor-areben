@@ -33,7 +33,7 @@ function cfgFor(store) {
 }
 
 /** Las únicas columnas que se leen. Lo que no está acá no puede filtrarse por error. */
-const VISIBLE_AL_CLIENTE = 'id, store, numero, orden_tn, estado, motivo, items, fotos, relato_cliente, token_vence';
+const VISIBLE_AL_CLIENTE = 'id, store, orden_tn, estado, motivo, items, fotos, relato_cliente, token_vence';
 
 /** Busca el reclamo del token en las dos bases. Devuelve null si no existe, venció o ya cerró. */
 async function buscarPorToken(token) {
@@ -41,7 +41,11 @@ async function buscarPorToken(token) {
     const cfg = cfgFor(store);
     if (!cfg.url || !cfg.key) continue;
     const supabase = createClient(cfg.url, cfg.key);
-    const { data } = await supabase.from('devoluciones').select(VISIBLE_AL_CLIENTE).eq('token', token).maybeSingle();
+    const { data, error } = await supabase.from('devoluciones').select(VISIBLE_AL_CLIENTE).eq('token', token).maybeSingle();
+    // El error se loguea aunque el cliente vea 404 igual. Sin esto, un problema de base (una
+    // columna que no existe, credenciales vencidas) se ve EXACTAMENTE igual que un link inválido,
+    // y nadie entiende por qué "el link no anda". Pasó: el select pedía una columna inexistente.
+    if (error) console.error(`[reclamo] ${store}: ${error.message}`);
     if (!data) continue;
     if (data.token_vence && new Date(data.token_vence).getTime() < Date.now()) return null;
     if (!ABIERTO.includes(data.estado)) return null;
@@ -59,7 +63,9 @@ async function buscarPorToken(token) {
  */
 export function paraElCliente(fila) {
   return {
-    numero: fila.numero,
+    // El número se DERIVA del id (`D-0007`), no se guarda: es una forma de mostrarlo, no un dato.
+    // Espejo de `numeroReclamo` en lib/devoluciones/tipos.ts (acá no se puede importar TS).
+    numero: 'D-' + String(fila.id ?? '').padStart(4, '0'),
     orden: fila.orden_tn,
     estado: fila.estado,
     // Solo qué productos son: ni precio, ni costo, ni ids de Gestión Nube.

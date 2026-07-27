@@ -269,7 +269,8 @@ export type DevolucionEvento = { estado: EstadoDevolucion; at: string; usuario?:
 export type DevolucionRow = {
   id: number
   store: Marca
-  numero: string
+  /** Derivado del id con `numeroReclamo`, no una columna: no viene de la base. */
+  numero?: string
   orden_tn?: string | null
   cliente?: string | null
   /** Token del link que se le pasa al cliente para que cargue fotos. Nunca se muestra en listados. */
