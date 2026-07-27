@@ -4,12 +4,18 @@
 //   - prefix:  carpeta lógica en el Blob ("fundas" | "ingresos" | "disenos"). Default "fundas".
 // Seguridad: mismo modelo que observaciones.js — exige un usuario válido del Monitor
 // (login server-side contra el KV). No es admin-only: Fundas la usan no-admins.
-// Requiere BLOB_READ_WRITE_TOKEN en el entorno (lo agrega el Blob store al linkearlo).
-// Si falta el token, responde 500 y el cliente cae a guardar base64 (degradación segura).
+// Cómo se autentica contra el Blob: hay DOS formas y el store decide cuál.
+//   - Los stores nuevos inyectan `BLOB_STORE_ID` y el SDK firma con OIDC (`VERCEL_OIDC_TOKEN`,
+//     que Vercel pone solo en el runtime). NO hay read-write token: hay que dejar que el SDK
+//     resuelva, o sea NO pasarle `token`.
+//   - Los viejos inyectan `BLOB_READ_WRITE_TOKEN` y se lo pasamos explícito.
+// El orden lo fija `resolveBlobAuth` del propio SDK: token explícito → OIDC+storeId → env token.
+// Si no hay ninguna de las dos, responde 500 y el cliente cae a base64 (degradación segura).
 import { put } from '@vercel/blob';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const STORE_ID = process.env.BLOB_STORE_ID;
 const MAX_BYTES = 1.5 * 1024 * 1024; // los thumbs son ~10-40 KB; 1.5 MB es un techo generoso.
 const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
 
@@ -33,7 +39,7 @@ function extDe(contentType) {
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'POST, OPTIONS')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-  if (!TOKEN) return res.status(500).json({ error: 'Blob no configurado' });
+  if (!TOKEN && !STORE_ID) return res.status(500).json({ error: 'Blob no configurado' });
 
   // Sin usuario válido no se sube (va antes de tocar el body, como observaciones.js).
   if (!(await exigirUsuario(req, res))) return;
@@ -50,7 +56,9 @@ export default async function handler(req, res) {
       access: 'public',
       contentType: parsed.contentType,
       addRandomSuffix: true,
-      token: TOKEN,
+      // Sin token, el SDK va por OIDC + BLOB_STORE_ID. Pasarlo en `undefined` sería lo mismo,
+      // pero se omite la clave para que quede explícito que hay dos caminos.
+      ...(TOKEN ? { token: TOKEN } : {}),
     });
     return res.status(200).json({ ok: true, url });
   } catch (e) {
