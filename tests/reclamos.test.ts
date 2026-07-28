@@ -5,7 +5,7 @@ import {
   costoDelCaso, cuentaDescuento,
   destinoDe, esCambio, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
-  pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento,
+  pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -402,6 +402,34 @@ describe('numeroReclamo', () => {
   it('formatea como R-0007', () => {
     expect(numeroReclamo(7)).toBe('R-0007')
     expect(numeroReclamo(1234)).toBe('R-1234')
+  })
+})
+
+describe('tokenVencido', () => {
+  // El portal devuelve el MISMO 404 para un token vencido que para uno inválido, así que del lado
+  // del cliente las dos cosas se ven igual ("este link ya no está disponible"). Por eso hay que
+  // detectar el vencimiento acá y regenerar el link antes de copiarlo.
+  const enDias = (d: number) => new Date(Date.now() + d * 86400000).toISOString()
+
+  it('vencido si la fecha ya pasó', () => {
+    expect(tokenVencido(enDias(-1))).toBe(true)
+  })
+
+  it('vigente si falta', () => {
+    expect(tokenVencido(enDias(5))).toBe(false)
+  })
+
+  // Los reclamos anteriores a que existiera el vencimiento no tienen la fecha: tratarlos como
+  // vencidos regeneraría el token de cualquier reclamo viejo sin motivo.
+  it('sin fecha NO cuenta como vencido', () => {
+    expect(tokenVencido(null)).toBe(false)
+    expect(tokenVencido(undefined)).toBe(false)
+    expect(tokenVencido('')).toBe(false)
+  })
+
+  // Una fecha corrupta da NaN, y `NaN < Date.now()` es false: no se rompe, no regenera de más.
+  it('una fecha ilegible no rompe', () => {
+    expect(tokenVencido('mañana')).toBe(false)
   })
 })
 

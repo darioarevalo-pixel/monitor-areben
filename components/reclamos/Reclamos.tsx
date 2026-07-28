@@ -25,11 +25,12 @@ import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarReclamo,
   ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarReclamo,
+  leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, EXPECTATIVA_LABEL,
-  alertasDe, conAlerta,
+  alertasDe, conAlerta, tokenVencido,
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -63,6 +64,16 @@ const ESTADO_TONE: Record<EstadoReclamo, Tone> = {
 
 /** Los estados que siguen pidiendo algo de alguien. */
 const ABIERTOS: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido']
+
+/**
+ * Los estados en los que el link del cliente todavía sirve.
+ *
+ * Tiene que ser **el mismo conjunto** que `ABIERTO` en `api/_reclamo.js`: el portal devuelve 404
+ * fuera de esos tres. Antes acá se usaba `ABIERTOS` (seis estados) y la lista ofrecía copiar un
+ * link que el backend ya rechazaba. Una vez decidido el reclamo el link muere a propósito, y de
+ * ahí en más se le avisa al cliente por WhatsApp con el mensaje de resolución.
+ */
+const CON_LINK: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision']
 
 function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
@@ -173,8 +184,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         items_correctos: motivo === 'mal_armado' ? correctos : [],
       })
       // Si ya dijo que quiere cambiarlo, no hay nada que fotografiar ni nada que evaluar: pedirle
-      // fotos es mandarlo a un trámite que no existe. El link sigue disponible en la lista por si
-      // igual hace falta.
+      // fotos es mandarlo a un trámite que no existe. El link se puede volver a sacar desde la
+      // lista con "Msj: pedir fotos" mientras el reclamo siga sin decidir.
       if (expectativa === 'otro_producto') {
         toast.ok('Reclamo creado. Armá el cambio desde la pestaña Cambios.')
       } else {
@@ -188,6 +199,26 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     } finally {
       setGuardando(false)
     }
+  }
+
+  /**
+   * El mensaje de apertura, con el link del cliente resuelto.
+   *
+   * El token **no viene en la fila**: `COLS` del servidor lo excluye a propósito, así que hay que
+   * pedirlo aparte. Antes acá había un `d.token || String(d.id)` que, como `d.token` siempre era
+   * `undefined`, armaba `/reclamo/42` — y el portal exige 32+ hex, o sea 404 garantizado. El link
+   * solo funcionaba en el momento de crear el reclamo.
+   *
+   * Si venció, se regenera en el acto en vez de copiar un link muerto.
+   */
+  const textoApertura = async (d: ReclamoRow): Promise<string> => {
+    let { token, vence } = await leerToken(marca, d.id)
+    if (!token || tokenVencido(vence)) {
+      token = await reemitirToken(marca, d.id)
+      toast.ok('El link estaba vencido: se generó uno nuevo.')
+      void recargar()
+    }
+    return mensajeApertura(d, numeroReclamo(d.id), linkDelCliente(token))
   }
 
   // ── Acciones de la lista ──
@@ -573,12 +604,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                   </Td>
                   <Td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {/* El link se puede volver a copiar mientras el reclamo siga abierto. */}
+                      {/* El link se puede volver a copiar mientras el portal siga sirviendo (CON_LINK,
+                          los mismos tres estados que acepta `api/_reclamo.js`). */}
                       {/* El mensaje entero, no el link pelado: si solo se copia el link, alguien
                           tiene que escribir el texto alrededor y ahí cada uno promete algo distinto. */}
-                      {ABIERTOS.includes(d.estado) && (
+                      {CON_LINK.includes(d.estado) && (
                         <CopyButton
-                          getText={() => mensajeApertura(d, numeroReclamo(d.id), linkDelCliente(d.token || String(d.id)))}
+                          getText={() => textoApertura(d)}
+                          onError={(e) => toast.error(e.message)}
                           label="Msj: pedir fotos"
                         />
                       )}

@@ -54,6 +54,26 @@ export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo
 }
 
 /**
+ * El link del cliente, a pedido y de a uno.
+ *
+ * El token **nunca** viaja en el listado (`COLS` de `_reclamos.js` no lo incluye): un listado se
+ * loguea, se cachea y se comparte. Antes esto no existía y la lista armaba el link con el `id`
+ * como respaldo, lo que producía un 404 seguro — el portal exige 32+ hex.
+ */
+export async function leerToken(marca: Marca, id: number): Promise<{ token: string | null; vence: string | null }> {
+  const r = await apiFetch(`${API}&vista=token&store=${marca}&id=${id}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => ({}))
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el link del cliente.')
+  return { token: (d.token as string) || null, vence: (d.vence as string) || null }
+}
+
+/** Regenera el link cuando venció. Solo sirve mientras el reclamo no esté decidido. */
+export async function reemitirToken(marca: Marca, id: number): Promise<string> {
+  const d = await postear({ action: 'reemitir-token', store: marca, id })
+  return String(d.token || '')
+}
+
+/**
  * Trae una orden de Tienda Nube por número.
  *
  * Los campos de plata (forma de pago, descuentos, subtotal) **pueden no venir**: dependen de que

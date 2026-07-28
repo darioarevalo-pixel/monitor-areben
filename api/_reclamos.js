@@ -123,6 +123,19 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      // El link del cliente, de a uno y a pedido. No sale en el listado porque un listado se
+      // loguea, se cachea y se comparte; el token es la llave del portal público.
+      // Mismo molde que `vista=token` de Canjes (`_canjes.js`).
+      if (req.query.vista === 'token') {
+        const id = parseInt(req.query.id, 10);
+        if (!id) return res.status(400).json({ error: 'falta id' });
+        const { data, error } = await supabase
+          .from('devoluciones').select('token, token_vence').eq('store', store).eq('id', id).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return res.status(404).json({ error: 'no existe ese reclamo' });
+        return res.status(200).json({ ok: true, token: data.token || null, vence: data.token_vence || null });
+      }
+
       const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
       let q = supabase.from('devoluciones').select(COLS).eq('store', store).order('created_at', { ascending: false }).limit(limit);
       if (ESTADOS.includes(req.query.estado)) q = q.eq('estado', req.query.estado);
@@ -186,6 +199,24 @@ export default async function handler(req, res) {
     const DE_ADMIN = ['decidir', 'reintegro', 'anulacion', 'tn-stock', 'eliminar'];
     if (DE_ADMIN.includes(action) && !esAdministracion(perfil)) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
+    }
+
+    // Regenerar el link del cliente. Hace falta porque el token vence a los DIAS_TOKEN y hasta
+    // ahora no había forma de emitir uno nuevo: el reclamo quedaba sin link para siempre.
+    // Solo mientras el portal siga sirviendo — una vez decidido el reclamo el link muere a
+    // propósito y de ahí en más se le avisa por WhatsApp (ver `_reclamo.js`, ABIERTO).
+    if (action === 'reemitir-token') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select('estado').eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      if (!['borrador', 'esperando_cliente', 'en_revision'].includes(fila.estado)) {
+        return res.status(400).json({ error: 'El reclamo ya está decidido: el link del cliente no va más. Avisale por WhatsApp.' });
+      }
+      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+      const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
+      await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota: 'link del cliente regenerado' }, { token, token_vence: vence });
+      return res.status(200).json({ ok: true, token, vence });
     }
 
     if (action === 'decidir') {

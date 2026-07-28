@@ -801,6 +801,22 @@ export function numeroReclamo(id: number): string {
 }
 
 /**
+ * ¿Venció el link del cliente?
+ *
+ * El portal rechaza un token vencido con el mismo 404 que usa para uno inválido, así que del lado
+ * del cliente "venció" y "no existe" se ven idénticos. Conviene chequearlo antes de copiar el
+ * mensaje y regenerarlo en el acto, en vez de mandarle un link muerto.
+ *
+ * Sin fecha devuelve `false`: los reclamos viejos no tienen `token_vence` y no hay que tratarlos
+ * como vencidos.
+ */
+export function tokenVencido(vence: string | null | undefined): boolean {
+  if (!vence) return false
+  const t = Date.parse(vence)
+  return Number.isFinite(t) && t < Date.now()
+}
+
+/**
  * Qué falta para poder cerrar el reclamo. Devuelve la lista en criollo: si no está vacía, el
  * botón de cerrar va deshabilitado con esto como explicación.
  *
