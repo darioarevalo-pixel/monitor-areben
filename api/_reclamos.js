@@ -42,6 +42,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+// Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
+import { esAdmin, tieneFuncion } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -85,10 +87,7 @@ const DIAS_TOKEN = 15;
 
 /** ¿Puede mover plata? Admin o función de administración. */
 function esAdministracion(perfil) {
-  if (!perfil) return false;
-  if (perfil.admin === true) return true;
-  const fs = Array.isArray(perfil.funcion) ? perfil.funcion : [];
-  return fs.includes('administracion');
+  return esAdmin(perfil) || tieneFuncion(perfil, 'administracion');
 }
 
 const num = (v) => (v == null || v === '' ? null : Number(v));

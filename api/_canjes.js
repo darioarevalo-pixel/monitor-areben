@@ -51,6 +51,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+// Los permisos se IMPORTAN, no se copian: es la única implementación, la misma que usa la app.
+// Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
+import { esAdmin, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
+import { marcaDePermisos, marcasVisiblesCanjes } from '../lib/canjes/marcas.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -148,30 +152,9 @@ export function resumenCiego(c) {
 /** Las columnas mínimas que necesita `resumenCiego`. Pedir menos es pedir menos plata al aire. */
 const CANJE_COLS_CIEGO = 'id, persona_id, store, estado, acordado_at, entregado_at, cerrado_at, created_at';
 
-/** ¿Puede tocar la config del módulo? Admin o administración, mismo molde que `api/_reclamos.js:87`. */
+/** ¿Puede tocar la config del módulo? Admin o administración. */
 function esAdministracion(perfil) {
-  if (!perfil) return false;
-  if (perfil.admin === true) return true;
-  const fs = Array.isArray(perfil.funcion) ? perfil.funcion : [];
-  return fs.includes('administracion');
-}
-
-/**
- * Qué marcas puede ver este perfil. Es lo que decide qué canjes vienen enteros y cuáles ciegos.
- *
- * Stunned viaja con Zattia: quien ve Zattia ve Stunned, porque es una línea de esa misma marca —
- * el mismo criterio que usa `api/sku-map.js` para rutear sus costos.
- */
-function marcasVisibles(perfil) {
-  if (!perfil) return [];
-  if (perfil.admin === true) return [...STORES];
-  const cuentas = Array.isArray(perfil.cuenta) ? perfil.cuenta : [perfil.cuenta].filter(Boolean);
-  const out = new Set();
-  for (const c of cuentas) {
-    if (c === 'bdi') out.add('bdi');
-    if (c === 'zattia') { out.add('zattia'); out.add('stunned'); }
-  }
-  return STORES.filter((s) => out.has(s));
+  return esAdmin(perfil) || tieneFuncion(perfil, 'administracion');
 }
 
 // ── ESPEJOS DE `lib/canjes/tipos.ts` ────────────────────────────────────────────
@@ -209,32 +192,15 @@ function puedeIr(desde, hasta) {
 }
 
 /**
- * De qué marca del monitor cuelgan los permisos de esta `store`.
+ * ¿Tiene el sub-permiso para esta `store`?
  *
- * Stunned **no existe** en `perfil.acceso`: es una línea de Zattia, no una marca del monitor. Sin
- * esta traducción, tildarle a alguien `canjes.aprobar` en Zattia no le serviría para un canje de
- * Stunned y el permiso parecería roto.
- */
-function marcaDePermisos(store) {
-  return store === 'bdi' ? 'bdi' : 'zattia';
-}
-
-/**
- * Espejo de `puedeSub(perfil, marca, 'canjes', sub)`.
- *
- * ⚠️ Un sub **no se hereda de la función**: `ACCESO_POR_FUNCION` expande áreas a claves de sección
- * (`canjes`), nunca a subclaves (`canjes.aprobar`). O sea que sólo lo tiene el admin o quien lo
- * tenga tildado a mano en Config. Es el paso de puesta en marcha que más fácil se olvida, y sin él
- * ningún canje se puede aprobar nunca.
+ * ⚠️ Un sub **no se hereda de la función**: las áreas expanden a claves de sección (`canjes`),
+ * nunca a subclaves (`canjes.aprobar`). O sea que sólo lo tiene el admin o quien lo tenga tildado
+ * a mano en Config. Es el paso de puesta en marcha que más fácil se olvida, y sin él ningún canje
+ * se puede aprobar nunca.
  */
 function puedeSubCanjes(perfil, store, sub) {
-  if (!perfil) return false;
-  if (perfil.admin === true) return true;
-  const marca = marcaDePermisos(store);
-  const acc = (perfil.acceso || {})[marca] || {};
-  // La excepción negativa (`'-canjes.aprobar'`) gana sobre el tilde, igual que en `estaExcluido`.
-  if (acc[`-canjes.${sub}`]) return false;
-  return acc[`canjes.${sub}`] === true;
+  return puedeSub(perfil, marcaDePermisos(store), 'canjes', sub);
 }
 
 /**
@@ -329,8 +295,21 @@ export default async function handler(req, res) {
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!STORES.includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
 
-  const visibles = marcasVisibles(perfil);
-  if (!visibles.includes(store)) {
+  const visibles = marcasVisiblesCanjes(perfil);
+
+  // El gate va en dos niveles, y esa distinción es el arreglo del bug que dejó a todo el mundo sin
+  // padrón: antes esto era un solo `if (!visibles.includes(store)) 403` que mataba la request
+  // entera, así que no ver UNA marca era no ver NADA.
+  //
+  //  - LEER: alcanza con ver Canjes en alguna marca. El padrón es transversal a propósito (si
+  //    marketing de Zattia no viera que esa creadora ya laburó con BDI, un padrón compartido no
+  //    serviría de nada) y los canjes ajenos ya salen ciegos por `canjesDePersona`, desde el
+  //    servidor: filtrar plata en la UI significa que la plata ya viajó al browser.
+  //  - ESCRIBIR: hay que ver ESA marca. No se toca un canje de una marca que no te toca.
+  if (!visibles.length) {
+    return res.status(403).json({ error: 'No tenés acceso a Canjes. Pedí el permiso en Config.' });
+  }
+  if (req.method === 'POST' && !visibles.includes(store)) {
     return res.status(403).json({ error: 'No tenés acceso a esa marca.' });
   }
 

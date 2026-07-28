@@ -19,31 +19,24 @@
  */
 
 import { puedeSub, puedeVer, type Perfil } from '@/lib/permisos'
-import { marcasQueVe } from '@/lib/solicitudes/overview'
+import { marcasVisiblesCanjes } from './marcas.js'
 import type { Marca } from '@/lib/nav.datos'
-import { CANJE_STORES, type CanjeStore, type NivelAprobacion } from './tipos'
+import type { CanjeStore, NivelAprobacion } from './tipos'
 
 /**
  * Las marcas cuyos canjes ve enteros.
  *
- * Envuelve `marcasQueVe` (`lib/solicitudes/overview.ts:176`) y le suma el paso que ese helper no
- * puede dar: **Stunned viaja con Zattia**. No es una marca del monitor (es una línea de Zattia por
- * prefijo de SKU `STU`), así que no aparece en `Marca` ni en el switch de marca; pero desde el lado
- * del canje se elige como una más. Quien ve Zattia ve Stunned — el mismo criterio con el que
- * `api/sku-map.js` rutea sus costos.
+ * ⚠️ **Ya no es un espejo de nada**: llama a `marcasVisiblesCanjes` (`./marcas.js`), que es la
+ * misma función que usa `api/_canjes.js`. Antes había dos implementaciones y se despegaron — el
+ * servidor miraba sólo `perfil.cuenta` y devolvía vacío para todo el que podía cambiar de marca,
+ * o sea 403 en Canjes entero. `tests/permisos-espejo.test.ts` corre las dos puertas sobre la misma
+ * matriz de perfiles.
  *
- * ⚠️ Esto es el espejo de `marcasVisibles()` en `api/_canjes.js`. La que manda es la del servidor;
- * si divergen, la UI muestra de menos (molesto) o promete de más (un 403 al abrir). El test las
- * compara.
+ * `marcaActiva` y `todas` quedan en la firma por compatibilidad con quien la llama, pero **ya no
+ * se usan**: el acceso lo decide el permiso de cada marca, no en cuál estás parado.
  */
-export function veMarcaCanjes(perfil: Perfil | null, marcaActiva: Marca, todas: Marca[]): CanjeStore[] {
-  const marcas = marcasQueVe(perfil, marcaActiva, todas)
-  const out = new Set<CanjeStore>()
-  for (const m of marcas) {
-    out.add(m)
-    if (m === 'zattia') out.add('stunned')
-  }
-  return CANJE_STORES.filter((s) => out.has(s))
+export function veMarcaCanjes(perfil: Perfil | null, _marcaActiva?: Marca, _todas?: Marca[]): CanjeStore[] {
+  return marcasVisiblesCanjes(perfil) as CanjeStore[]
 }
 
 /** ¿Este canje se puede abrir, o llega ciego? */

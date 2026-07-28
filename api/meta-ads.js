@@ -8,6 +8,8 @@
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
 // Token: META_ADS_TOKEN (system user, no vence). Si falta → 500.
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+// Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
+import { puedeSub } from '../lib/permisos.core.js';
 
 const GRAPH = 'https://graph.facebook.com/v25.0';
 const TOKEN = process.env.META_ADS_TOKEN;
@@ -99,9 +101,10 @@ export default async function handler(req, res) {
 // escritura que afecta la entrega/gasto en vivo, pero reversible (se vuelve a activar).
 // El token debe tener scope ads_management; si es ads_read, Meta contesta con su error.
 function puedePausar(perfil) {
-  if (perfil && perfil.admin) return true;
-  const acc = (perfil && perfil.acceso) || {};
-  return Object.values(acc).some((m) => m && m['meta-ads.pausar']);
+  // Con `puedeSub` en vez de leer `acceso` a mano se respeta la excepción negativa
+  // (`'-meta-ads.pausar'`), que la versión anterior ignoraba: a alguien a quien se le había SACADO
+  // el permiso, el servidor igual lo dejaba pausar campañas.
+  return ['bdi', 'zattia'].some((marca) => puedeSub(perfil, marca, 'meta-ads', 'pausar'));
 }
 
 async function graphPost(path, params) {
