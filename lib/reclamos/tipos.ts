@@ -917,6 +917,19 @@ export type ReclamoRow = {
   gn_venta_reemplazo_number?: string | null
   stock_estado: PendienteEstado
   reintegro_estado: PendienteEstado
+  /**
+   * ⚠️ **La columna se llama `tn_stock_estado` por historia, pero ya no tiene que ver con Tienda
+   * Nube**: hoy es la traza de haber dado de baja **en Gestión Nube** la unidad que no existe.
+   *
+   * Escribir el stock en TN no servía para nada: TN está conectada a GN y **el stock de GN pisa el
+   * de TN** en la próxima sincronización, así que la corrección se deshacía sola. Lo que sí hace
+   * falta es bajar la unidad fantasma en GN —GN cree que hay 0 porque descontó la venta, pero esa
+   * unidad no existe, y al sacar el producto de la venta va a devolver +1— y de TN se encarga la
+   * sincronización.
+   *
+   * Se reusó la columna en vez de migrar porque sólo se enciende en `sin_stock` y significaba
+   * exactamente el mismo paso del mismo caso.
+   */
   tn_stock_estado: PendienteEstado
   reintegro_at?: string | null
   reintegro_por?: string | null
@@ -1085,7 +1098,7 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
     // El reclamo al transportista corre en paralelo y no espera a nadie: es plata recuperable y si
     // el reclamo se cierra sin presentarlo, se perdió.
     if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
-    if (d.tn_stock_estado === 'pendiente') faltan.push('corregir el stock en Tienda Nube')
+    if (d.tn_stock_estado === 'pendiente') faltan.push('dar de baja el producto en Gestión Nube')
     return faltan
   }
 
@@ -1099,7 +1112,7 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
     if (d.reintegro_estado === 'pendiente') faltan.push('devolver la plata')
   }
 
-  if (d.tn_stock_estado === 'pendiente') faltan.push('corregir el stock en Tienda Nube')
+  if (d.tn_stock_estado === 'pendiente') faltan.push('dar de baja el producto en Gestión Nube')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
   if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir el producto')

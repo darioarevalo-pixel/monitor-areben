@@ -21,8 +21,6 @@ import type {
 const API = '/api/postventa?recurso=reclamos'
 /** El mismo endpoint que usa Cambios para traer una orden. Sin auth: es lectura de TN. */
 const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
-/** Escribe stock en la tienda. El mismo que usa Integraciones (acción `stock`). */
-const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias'
 /**
  * Las ventas van SIEMPRE al crear-venta de producción, esté donde esté corriendo el Monitor: los
  * tokens de ventas de Gestión Nube viven solo ahí. Mismo criterio que Sesión de fotos y Cambios.
@@ -218,9 +216,17 @@ export async function marcarAnulacion(store: Marca, id: number): Promise<void> {
   await postear({ action: 'anulacion', store, id })
 }
 
-/** Registra que la variante quedó corregida en Tienda Nube. Solo administración. */
-export async function marcarStockTn(store: Marca, id: number): Promise<void> {
-  await postear({ action: 'tn-stock', store, id })
+/**
+ * Registra que la unidad fantasma se dio de baja **a mano en Gestión Nube**.
+ *
+ * No la da de baja: GN no expone ingresos ni ajustes por API, igual que la anulación de ventas.
+ * Es una traza de un paso manual, y lo que hace el sistema es no dejar que nadie se olvide.
+ *
+ * ⚠️ **No es de administración**: quien detecta que el producto no está es Local, y tiene que
+ * poder resolverlo sin pedirle permiso a nadie.
+ */
+export async function marcarBajaGN(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'gn-baja', store, id })
 }
 
 export async function cambiarEstado(store: Marca, id: number, estado: EstadoReclamo, nota?: string | null): Promise<void> {
@@ -447,28 +453,6 @@ export async function marcarCobrado(marca: Marca, id: number): Promise<void> {
   await postear({ store: marca, action: 'cobrado', id })
 }
 
-/**
- * Pone en 0 el stock de las variantes en Tienda Nube. Es para el caso "se vendió sin stock": lo
- * que evita que el próximo cliente compre lo mismo que no existe.
- *
- * Usa la acción `stock` de `tn-categorias` (el mismo camino que Integraciones). ⚠️ Ese endpoint
- * lee la tienda del **query param**, no del body: sin `?store=` asume 'bdi' y escribiría en la
- * tienda equivocada.
- */
-export async function ponerStockCeroEnTn(marca: Marca, items: ItemReclamo[]): Promise<number> {
-  const updates = items
-    .filter((i) => i.tn_product_id && i.variant_id)
-    .map((i) => ({ product_id: i.tn_product_id, variant_id: i.variant_id, stock: 0 }))
-  if (!updates.length) throw new Error('Estos productos no tienen los ids de Tienda Nube: corregilo desde la tienda.')
-  const r = await apiFetch(`${TN_STOCK_API}?store=${marca}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accion: 'stock', updates }),
-  })
-  const d = await r.json().catch(() => null)
-  if (!d?.ok) throw new Error(d?.errores?.[0]?.msg || d?.error || 'No se pudo escribir el stock en Tienda Nube.')
-  return Number(d.aplicados || 0)
-}
 
 /** El link que se le pasa al cliente para que cargue fotos y cuente qué pasó. */
 export function linkDelCliente(token: string): string {

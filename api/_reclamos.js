@@ -14,7 +14,7 @@
 //   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
 //   POST { store, action:'reintegro', id, comprobante? }         → la plata devuelta. ADMIN.
 //   POST { store, action:'anulacion', id }                       → la venta anulada en GN. ADMIN.
-//   POST { store, action:'tn-stock', id }                        → variante corregida en TN. ADMIN.
+//   POST { store, action:'gn-baja', id }                         → la unidad fantasma dada de baja en GN.
 //   POST { store, action:'estado', id, estado, nota? }           → cambia estado.
 //   POST { store, action:'fotos', id, fotos }                    → suma fotos cargadas por el equipo.
 //   POST { store, action:'falla', id, falla_ids }                → linkea las fallas creadas.
@@ -204,7 +204,8 @@ export default async function handler(req, res) {
     if (!id) return res.status(400).json({ error: 'falta id' });
 
     // ── Lo que mueve plata o toca stock: solo administración ──────────────────────
-    const DE_ADMIN = ['decidir', 'reintegro', 'anulacion', 'tn-stock', 'eliminar'];
+    // `gn-baja` NO está acá a propósito: quien ve que el producto no está es Local.
+    const DE_ADMIN = ['decidir', 'reintegro', 'anulacion', 'eliminar'];
     if (DE_ADMIN.includes(action) && !esAdministracion(perfil)) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
     }
@@ -393,7 +394,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    if (action === 'tn-stock') {
+    if (action === 'gn-baja') {
       await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'stock corregido en TN' }, { tn_stock_estado: 'hecho' });
       return res.status(200).json({ ok: true });
     }

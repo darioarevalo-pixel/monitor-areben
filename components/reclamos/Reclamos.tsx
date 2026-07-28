@@ -23,8 +23,8 @@ import {
 } from '@/components/ui'
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
-  marcarAnulacion, marcarReintegro, marcarStockTn, cambiarEstado, eliminarReclamo,
-  ordenTraeDatosDePlata, pasarAFallas, ponerStockCeroEnTn, descontarReemplazo, editarReclamo,
+  marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, eliminarReclamo,
+  ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, editarReclamo,
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
@@ -303,19 +303,27 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     }
   }
 
-  /** Corrige el stock en la tienda: es lo que evita que el próximo cliente compre lo mismo. */
-  const ponerEnCero = async (d: ReclamoRow) => {
+  /**
+   * La unidad que no existe, dada de baja en Gestión Nube.
+   *
+   * Antes esto escribía stock 0 en Tienda Nube, y no servía para nada: TN está conectada a GN y el
+   * stock de GN pisa el de TN en la próxima sincronización, así que la corrección se deshacía sola.
+   * Lo que hay que arreglar está en GN — cree que hay 0 porque descontó la venta, pero esa unidad
+   * no existe, y al sacar el producto de la venta va a devolver +1— y de TN se encarga el sync.
+   *
+   * GN no expone ajustes de stock por API, así que esto es un TILDE: se hace a mano y se registra.
+   */
+  const darDeBajaEnGN = async (d: ReclamoRow) => {
     const si = await confirmar({
-      titulo: 'Poner el stock en 0 en Tienda Nube',
-      tono: 'danger',
-      ok: 'Poner en 0',
-      mensaje: `Se escribe en la tienda EN VIVO: ${(d.items || []).map((i) => i.producto).join(', ')}. Es lo que evita que se vuelva a vender algo que no hay.`,
+      titulo: 'Dar de baja el producto en Gestión Nube',
+      tono: 'warning',
+      ok: 'Sí, ya lo di de baja',
+      mensaje: `¿Confirmás que ya diste de baja en Gestión Nube ${(d.items || []).map((i) => i.producto).join(', ')}? El sistema no lo hace solo: GN no lo permite por API. Al bajarlo en GN, Tienda Nube se corrige sola en la próxima sincronización.`,
     })
     if (!si) return
     try {
-      const n = await ponerStockCeroEnTn(marca, d.items || [])
-      await marcarStockTn(marca, d.id)
-      toast.ok(`${n} variante${n === 1 ? '' : 's'} en 0 en Tienda Nube.`)
+      await marcarBajaGN(marca, d.id)
+      toast.ok('Anotado: la unidad quedó dada de baja en Gestión Nube.')
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)
@@ -419,7 +427,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
           <>Al crear el reclamo se copia solo el <b>link para el cliente</b>: pegáselo por WhatsApp para que suba las fotos.</>,
           <>Cuando cargue, el reclamo pasa a <b>Para revisar</b>. Tocá <b>Decidir</b> y respondé las dos preguntas: si nos conviene que el producto vuelva, y qué recibe el cliente.</>,
           <>Si vuelve, elegí <b>cómo vuelve</b> y cargá el <b>seguimiento</b> cuando tengas la etiqueta. Cuando llegue, <b>Volvió</b>.</>,
-          <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>corregir el stock en TN</b> o <b>pasar el producto a Fallas</b>.</>,
+          <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>dar de baja el producto en GN</b> o <b>pasarlo a Fallas</b>.</>,
           <>Con todo resuelto, <b>Cerrar</b>.</>,
         ] : [
           <>Buscá la <b>orden de Tienda Nube</b> por número y tildá los productos que reclama.</>,
@@ -717,8 +725,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           {d.reclamo_correo ? 'Reclamo al correo ✓' : 'Reclamo al correo'}
                         </Button>
                       )}
-                      {esAdmin && d.tn_stock_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void ponerEnCero(d)}>Poner en 0 en TN</Button>
+                      {/* Sin `esAdmin`: quien ve que el producto no está es Local, y tiene que
+                          poder resolverlo sin pedirle permiso a nadie. */}
+                      {d.tn_stock_estado === 'pendiente' && (
+                        <Button size="sm" variant="outline" tone="warning" onClick={() => void darDeBajaEnGN(d)}>Dar de baja en GN</Button>
                       )}
                       {/* Sale una unidad de stock y hasta que no se haga, GN dice que sigue estando. */}
                       {esAdmin && d.compensacion === 'otra_unidad' && !d.gn_venta_reemplazo_id && (

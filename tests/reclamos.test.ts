@@ -611,6 +611,20 @@ describe('faltantesParaCerrar', () => {
   })
 
   /**
+   * ⚠️ `tn_stock_estado` se llama así por historia y **ya no tiene nada que ver con Tienda Nube**:
+   * hoy es la traza de dar de baja en Gestión Nube la unidad que no existe.
+   *
+   * Escribir stock en TN no servía: TN está conectada a GN y el stock de GN pisa el de TN en la
+   * próxima sincronización, así que la corrección se deshacía sola. Este test está para que el
+   * nombre de la columna no vuelva a arrastrar a nadie al comportamiento viejo.
+   */
+  it('el pendiente de stock habla de Gestión Nube, no de Tienda Nube', () => {
+    const f = faltantesParaCerrar({ ...base, tn_stock_estado: 'pendiente' })
+    expect(f).toEqual(['dar de baja el producto en Gestión Nube'])
+    expect(f.join(' ')).not.toContain('Tienda Nube')
+  })
+
+  /**
    * Un pendiente que aparece antes de la decisión que lo justifica es un pendiente inventado, y
    * es la forma más rápida de que la gente aprenda a no mirar la columna.
    *
@@ -633,10 +647,10 @@ describe('faltantesParaCerrar', () => {
 
     // Estos dos NO esperan a la decisión: se saben desde que se abre el caso y son plata o stock
     // que se pierde si nadie los persigue.
-    it('el reclamo al transportista y el stock de TN sí corren en paralelo', () => {
+    it('el reclamo al transportista y la baja en GN sí corren en paralelo', () => {
       const f = faltantesParaCerrar({ ...sinDecidir, reclamo_correo_estado: 'pendiente', tn_stock_estado: 'pendiente' })
       expect(f).toContain('presentar el reclamo al transportista')
-      expect(f).toContain('corregir el stock en Tienda Nube')
+      expect(f).toContain('dar de baja el producto en Gestión Nube')
     })
 
     it('un reclamo anulado no pide decidir nada', () => {
