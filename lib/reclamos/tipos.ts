@@ -827,9 +827,27 @@ export function tokenVencido(vence: string | null | undefined): boolean {
  *   - **No hay plata que devolver** salvo que la diferencia haya quedado a favor del cliente.
  *   - Lo que sí hay, y no existía como pendiente, es **reingresar a mano** el producto que volvió.
  */
+export function estaDecidido(d: ReclamoRow): boolean {
+  return !!d.compensacion
+}
+
 export function faltantesParaCerrar(d: ReclamoRow): string[] {
   const faltan: string[] = []
   const cambio = esCambio(d)
+
+  // Mientras no haya decisión, el único pendiente real es decidir. Los de plata y stock salen de
+  // la decisión, así que antes de tenerla no se sabe si van a existir — y en la mitad de los casos
+  // no existen. Antes nacían en 'pendiente' y la fila mostraba "anular la venta original en
+  // Gestión Nube · devolver la plata" desde el minuto cero: pendientes inventados, que es la forma
+  // más rápida de que la gente aprenda a no mirar la columna.
+  if (!estaDecidido(d) && d.estado !== 'anulado') {
+    faltan.push('decidir qué se hace')
+    // El reclamo al transportista corre en paralelo y no espera a nadie: es plata recuperable y si
+    // el reclamo se cierra sin presentarlo, se perdió.
+    if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
+    if (d.tn_stock_estado === 'pendiente') faltan.push('corregir el stock en Tienda Nube')
+    return faltan
+  }
 
   if (cambio) {
     if (d.reingreso_estado === 'pendiente') faltan.push('reingresar en Gestión Nube el producto devuelto')

@@ -180,8 +180,17 @@ export default async function handler(req, res) {
         pago_gateway: texto(b.pago_gateway),
         gn_venta_id: texto(b.gn_venta_id),
         gn_venta_number: texto(b.gn_venta_number),
-        stock_estado: 'pendiente',
-        reintegro_estado: 'pendiente',
+        // ⚠️ Los pendientes de plata y de stock nacen en 'no_aplica', NO en 'pendiente'.
+        //
+        // Antes nacían pendientes y la lista mostraba "anular la venta original en Gestión Nube ·
+        // devolver la plata" desde el minuto cero, cuando todavía no se había decidido nada — y en
+        // la mitad de los casos la respuesta termina siendo que no hay que anular ni devolver.
+        // Un pendiente que aparece antes de la decisión que lo justifica entrena a ignorarlos.
+        //
+        // Se derivan en `decidir`, que ya los recalcula según destino y compensación. Mientras
+        // tanto el único pendiente real es decidir, y eso lo dice `faltantesParaCerrar`.
+        stock_estado: 'no_aplica',
+        reintegro_estado: 'no_aplica',
         tn_stock_estado: sinStock ? 'pendiente' : 'no_aplica',
         usuario,
         historial: [{ estado: 'borrador', at: ahora(), usuario, nota: 'reclamo abierto' }],

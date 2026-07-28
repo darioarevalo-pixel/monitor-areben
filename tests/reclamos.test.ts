@@ -434,8 +434,12 @@ describe('tokenVencido', () => {
 })
 
 describe('faltantesParaCerrar', () => {
+  // `compensacion` es lo que marca que el caso YA se decidió. Sin eso, el único pendiente es
+  // decidir (ver el bloque de abajo), así que los pendientes operativos se prueban sobre un
+  // reclamo decidido — que es cuando existen de verdad.
   const base: ReclamoRow = {
     id: 1, store: 'bdi', numero: 'R-0001', motivo: 'falla', estado: 'recibido', items: [],
+    compensacion: 'plata_total',
     stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
   }
 
@@ -447,6 +451,40 @@ describe('faltantesParaCerrar', () => {
     const f = faltantesParaCerrar({ ...base, stock_estado: 'pendiente', reintegro_estado: 'pendiente', tn_stock_estado: 'pendiente' })
     expect(f).toHaveLength(3)
     expect(f.join(' ')).toContain('devolver la plata')
+  })
+
+  /**
+   * Un pendiente que aparece antes de la decisión que lo justifica es un pendiente inventado, y
+   * es la forma más rápida de que la gente aprenda a no mirar la columna.
+   *
+   * Antes el reclamo NACÍA con `stock_estado` y `reintegro_estado` en 'pendiente', así que desde
+   * el minuto cero decía "anular la venta original en Gestión Nube · devolver la plata" — cuando
+   * en la mitad de los casos la respuesta termina siendo que no hay que anular ni devolver nada.
+   */
+  describe('antes de decidir, el único pendiente es decidir', () => {
+    const sinDecidir: ReclamoRow = { ...base, compensacion: undefined, estado: 'en_revision' }
+
+    it('lo dice, y no inventa los de plata ni stock', () => {
+      expect(faltantesParaCerrar(sinDecidir)).toEqual(['decidir qué se hace'])
+    })
+
+    it('tampoco los inventa si la fila viniera con ellos en pendiente', () => {
+      const f = faltantesParaCerrar({ ...sinDecidir, stock_estado: 'pendiente', reintegro_estado: 'pendiente' })
+      expect(f.join(' ')).not.toContain('anular la venta')
+      expect(f.join(' ')).not.toContain('devolver la plata')
+    })
+
+    // Estos dos NO esperan a la decisión: se saben desde que se abre el caso y son plata o stock
+    // que se pierde si nadie los persigue.
+    it('el reclamo al transportista y el stock de TN sí corren en paralelo', () => {
+      const f = faltantesParaCerrar({ ...sinDecidir, reclamo_correo_estado: 'pendiente', tn_stock_estado: 'pendiente' })
+      expect(f).toContain('presentar el reclamo al transportista')
+      expect(f).toContain('corregir el stock en Tienda Nube')
+    })
+
+    it('un reclamo anulado no pide decidir nada', () => {
+      expect(faltantesParaCerrar({ ...sinDecidir, estado: 'anulado' })).toEqual([])
+    })
   })
 
   // Regalar mercadería sin una sola foto es justo el caso que no hay que poder cerrar.
