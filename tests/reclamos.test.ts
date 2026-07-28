@@ -271,12 +271,23 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
     expect(compensacionesDe('falla')).toContain('plata_parcial')
   })
 
-  // Si nunca salió no hay producto que negociar: o se manda o se devuelve la plata.
-  it('faltante y sin stock: reenviar o devolver, sin descuento parcial', () => {
+  // Si nunca salió no hay producto que negociar: no se le puede ofrecer que se lo quede con
+  // descuento algo que nunca tuvo.
+  it('faltante y sin stock: sin descuento parcial, porque el cliente no tiene nada', () => {
     for (const m of ['faltante', 'sin_stock'] as const) {
-      expect(compensacionesDe(m)).toContain('reenvio')
       expect(compensacionesDe(m)).not.toContain('plata_parcial')
     }
+  })
+
+  /**
+   * Los dos "nunca salieron", pero **sólo uno se puede reenviar**, y esa es la diferencia que el
+   * código agrupaba mal: en `faltante` el producto está en el depósito (sólo no se metió en la
+   * caja) y en `sin_stock` no existe.
+   */
+  it('faltante se reenvía; sin stock se cambia — mandarle lo que no tenemos es lo único imposible', () => {
+    expect(compensacionesDe('faltante')).toContain('reenvio')
+    expect(compensacionesDe('sin_stock')).not.toContain('reenvio')
+    expect(compensacionesDe('sin_stock')).toContain('otro_producto')
   })
 
   it('no llegó nunca: solo reponer o devolver', () => {
@@ -417,6 +428,55 @@ describe('el perfil del motivo', () => {
       expect(decideElCliente('sin_stock')).toBe(true)
       expect(decideElCliente('falla')).toBe(false)
       expect(decideElCliente('mal_armado')).toBe(false)
+    })
+  })
+
+  /**
+   * Lo que se le OFRECE y lo que se puede HACER tienen que hablar del mismo caso.
+   *
+   * Este bloque existe porque los dos se desincronizaron: al actualizar las expectativas por motivo
+   * quedó `sin_stock` prometiendo "cambiarlo por otro" mientras el desplegable de la decisión no
+   * ofrecía esa salida — y sí ofrecía **reenviarle lo que falta, que es justo lo único que no
+   * tenemos**. Un caso que no se puede resolver como se le prometió es peor que uno mal cargado.
+   */
+  describe('lo que se ofrece y lo que se hace no se contradicen', () => {
+    it('si se puede prometer un cambio, tiene que poder resolverse como cambio', () => {
+      for (const m of TODOS) {
+        if (expectativasDe(m).includes('otro_producto')) {
+          expect(compensacionesDe(m), m).toContain('otro_producto')
+        }
+      }
+    })
+
+    it('si se puede prometer que le mandemos lo que falta, tiene que poder reenviarse', () => {
+      for (const m of TODOS) {
+        if (expectativasDe(m).includes('completar')) {
+          expect(compensacionesDe(m), m).toContain('reenvio')
+        }
+      }
+    })
+
+    // No tenemos el producto: mandárselo es lo único imposible.
+    it('sin stock NO puede ofrecer reenvío', () => {
+      expect(compensacionesDe('sin_stock')).not.toContain('reenvio')
+      expect(compensacionesDe('sin_stock')).toContain('otro_producto')
+    })
+
+    // Acá sí existe: está en el depósito, sólo no se metió en la caja.
+    it('faltante SÍ puede reenviar: el producto existe', () => {
+      expect(compensacionesDe('faltante')).toContain('reenvio')
+      expect(hayUnidadFisica('faltante')).toBe(true)
+    })
+
+    // Sólo se puede reponer "otra igual" si la unidad existe en algún lado.
+    it('nadie ofrece otra unidad igual de algo que no existe', () => {
+      for (const m of TODOS) {
+        if (!hayUnidadFisica(m)) expect(compensacionesDe(m), m).not.toContain('otra_unidad')
+      }
+    })
+
+    it('ningún motivo se queda sin salidas', () => {
+      for (const m of TODOS) expect(compensacionesDe(m).length, m).toBeGreaterThan(0)
     })
   })
 

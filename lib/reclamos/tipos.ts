@@ -795,10 +795,16 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
     // Falla: es donde hay más margen: devolver, descontar para que se lo quede, o reponerla.
     case 'falla':
       return ['otra_unidad', 'otro_producto', 'plata_total', 'plata_parcial', 'cupon']
-    // Nunca salió: o se lo mandamos, o le devolvemos esa parte. No hay producto que negociar.
+    // Faltante: el producto EXISTE, sólo no se metió en la caja. Se lo mandamos o se le devuelve
+    // esa parte. No hay producto que negociar porque nunca lo tuvo.
     case 'faltante':
-    case 'sin_stock':
       return ['reenvio', 'plata_total', 'cupon']
+    // Sin stock: ⚠️ **NO se puede reenviar, que es justamente lo único que no tenemos.** Las dos
+    // salidas reales son cambiarlo por otro o devolverle la plata, y las elige el cliente. Ofrecer
+    // 'reenvio' acá era prometer algo imposible; y sin 'otro_producto' la salida principal no
+    // existía en el desplegable, aunque la expectativa sí la ofreciera.
+    case 'sin_stock':
+      return ['otro_producto', 'plata_total', 'cupon']
     // Le mandamos otra cosa: lo que corresponde es mandarle lo suyo. Devolver la plata es la
     // salida si ya no lo quiere.
     case 'mal_armado':
