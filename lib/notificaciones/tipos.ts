@@ -15,7 +15,9 @@ import type { Tone } from '@/components/ui/tokens'
  * falta: sería una pantalla que lista esto mismo.
  */
 
-export type TipoAviso = 'aprobacion' | 'solicitud' | 'no-devuelto' | 'falla-por-enviar'
+export type TipoAviso =
+  | 'aprobacion' | 'solicitud' | 'no-devuelto' | 'falla-por-enviar'
+  | 'canje-aprobacion' | 'canje-vencido'
 
 export type Aviso = {
   /** Estable entre refrescos: es lo que permite comparar "esto ya lo vi". */
@@ -36,4 +38,6 @@ export const TIPO_LABEL: Record<TipoAviso, string> = {
   solicitud: 'Para preparar',
   'no-devuelto': 'Sin devolver',
   'falla-por-enviar': 'Fallas por llevar al depósito',
+  'canje-aprobacion': 'Canjes esperando tu firma',
+  'canje-vencido': 'Canjes con contenido sin publicar',
 }

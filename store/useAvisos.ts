@@ -18,7 +18,9 @@ import { leerCajon } from '@/lib/solicitudes/cajon'
 import { leerFallas } from '@/lib/postventa/fallas/cliente'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
+import { nombrePersona, type CanjeRow } from '@/lib/canjes/tipos'
 import { vistoHasta } from '@/lib/notificaciones/visto'
 import type { Aviso } from '@/lib/notificaciones/tipos'
 import type { Perfil } from '@/lib/permisos'
@@ -40,6 +42,33 @@ type AvisosState = {
   /** Recalcula `nuevos` sin volver a pedir nada (después de marcar visto). */
   recontar: (usuario: string | null | undefined) => void
   limpiar: () => void
+}
+
+/**
+ * Los avisos de Canjes, en UNA sola lectura para las tres marcas.
+ *
+ * Vive acá y no en `derivar.ts` porque a diferencia de los otros derivadores **necesita traer
+ * datos**: los canjes no se bajan para nada más, así que no hay nada de donde derivarlos. Las
+ * funciones puras siguen en `derivar.ts`; esto es sólo el acarreo.
+ */
+async function avisosDeCanjes(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
+  // Cualquiera de las tres marcas sirve para la lectura: el handler devuelve todo lo que el perfil
+  // puede ver, y el `store` sólo decide qué viene ciego.
+  const { canjes, personas, vencidos } = await leerCanjes(marca)
+  const nombrePorId = new Map(personas.map((p) => [p.id, nombrePersona(p)]))
+
+  const propios = canjes.filter((c) => !esCiego(c)) as CanjeRow[]
+  return [
+    ...avisosDeCanjeAprobacion(
+      propios.map((c) => ({ ...c, persona: nombrePorId.get(c.persona_id) ?? null })),
+      perfil,
+    ),
+    ...avisosDeCanjeVencido(
+      vencidos.map((v) => ({ ...v, persona: nombrePorId.get(v.persona_id) ?? 'Alguien' })),
+      perfil,
+      marca,
+    ),
+  ]
 }
 
 export const useAvisos = create<AvisosState>((set, get) => ({
@@ -73,12 +102,19 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         }),
       )
 
+      // ⚠️ Los canjes salen de la base MAESTRA de BDI, para las tres marcas, así que esta lectura
+      // va FUERA del `Promise.all` por marca: adentro pediría lo mismo dos veces y devolvería los
+      // mismos canjes cada vez, duplicando cada aviso. Con `.catch(() => …)` porque un módulo que
+      // todavía no tiene sus tablas no puede tumbar el resto de los avisos.
+      const canjes = await avisosDeCanjes(perfil, marca).catch(() => [] as Aviso[])
+
       const resumenes = filtrarPorFuncion(porMarca.flatMap((p) => p.resumenes), perfil)
       const avisos = ordenarAvisos([
         ...avisosDeAprobacion(resumenes, perfil, marca),
         ...avisosDeSolicitud(resumenes, perfil),
         ...porMarca.flatMap((p) => avisosDeNoDevueltos(p.solsFoto, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeFallas(p.fallas, p.m, perfil)),
+        ...canjes,
       ])
 
       set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargando: false })

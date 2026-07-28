@@ -24,5 +24,28 @@ export default defineConfig({
      * cada corrida.
      */
     testTimeout: 30_000,
+    /**
+     * Y 30 s también para los hooks, por el mismo motivo — que al arreglar lo de arriba se pasó
+     * por alto.
+     *
+     * `hookTimeout` es un techo aparte y arranca en 10 s, y justamente `etl-paridad` (el primer
+     * sospechoso de la lista de acá arriba) hace todo su trabajo pesado en un `beforeAll`: computa
+     * el ETL entero, legacy y port, sobre el fixture real. O sea que la corrección de
+     * `testTimeout` no lo alcanzaba, y el archivo seguía cayéndose con
+     * `Hook timed out in 10000ms` — con sus 25 tests pasando y los otros 25 saltados, que es
+     * exactamente la forma que tenía la "falla fantasma".
+     *
+     * Mismo criterio: un techo holgado no esconde nada, una falla real sigue fallando.
+     *
+     * ⚠️ Va en 60 s y no en 30 s **porque con 30 s todavía se caía**, y el motivo es la
+     * concurrencia: `etl-paridad` solo tarda ~21 s en el hook, pero corre en paralelo con los
+     * otros cuatro archivos que computan el mismo ETL pesado sobre el fixture real, así que se
+     * pelean la CPU y cada uno tarda un múltiplo de lo que tarda solo.
+     *
+     * El techo es el parche, no el arreglo. El arreglo de fondo sería que los cinco archivos
+     * pesados compartan un ETL computado UNA vez en vez de recomputarlo cada uno — pero eso es
+     * cirugía sobre los tests de paridad del legacy y merece su propia sesión.
+     */
+    hookTimeout: 60_000,
   },
 })

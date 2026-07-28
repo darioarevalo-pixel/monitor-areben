@@ -1,0 +1,510 @@
+/**
+ * Canjes — las reglas del flujo (Fase 1).
+ *
+ * Lo que se testea acá es lo que decide plata y permisos:
+ *  - **quién firma**, que es un gate de autorización;
+ *  - **el tope**, que es lo único que impide que un canje de $80.000 salga $200.000;
+ *  - **el cumplimiento**, que se deriva y no se guarda;
+ *  - **el cierre**, que no tiene que dejar cerrar con cosas a medias;
+ *  - y el **espejo TS↔JS** de los tres primeros, porque el servidor los replica y una divergencia
+ *    ahí significa que la UI dice una cosa y el handler hace otra.
+ */
+import { describe, it, expect } from 'vitest'
+import {
+  CONFIG_DEFAULT, calcularBalance, controlDelTope, costoEstimado, cumplimiento,
+  entregablesVencidos, faltantesParaCerrarCanje, fechaISO, itemsVivos, pideSeguimiento,
+  puedeProponerCanje, quienApruebaCanje, vencimientoDe,
+  type CanjeConfig, type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow,
+} from '@/lib/canjes/tipos'
+import {
+  listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeLinkDatos,
+  mensajeRecordatorio,
+} from '@/lib/canjes/mensajes'
+// Los espejos del handler. Si divergen, el botón dice una cosa y el servidor hace otra.
+import { puedeIr as puedeIrJS, seVaDelTope, subQueApruebe, TRANSICIONES as TRANS_JS } from '../api/_canjes.js'
+import { TRANSICIONES, puedeIr } from '@/lib/canjes/tipos'
+
+// ── Fixtures ─────────────────────────────────────────────────────────────────────
+
+function canje(p: Partial<CanjeRow> = {}): CanjeRow {
+  return {
+    id: 31, persona_id: 7, store: 'bdi', tipo: 'producto', estado: 'preparando',
+    tope_tipo: 'monto', tope_pvp: 80000, pago_estado: 'no_aplica',
+    compra_estado: 'hecho', stock_estado: 'no_aplica', envio_estado: 'hecho',
+    aviso_estado: 'hecho', entregado_at: '2026-06-01T00:00:00.000Z', envio_costo: 5000,
+    cerrado_incompleto: false, producto_no_conservado: false,
+    created_at: '2026-05-01T00:00:00.000Z',
+    ...p,
+  } as CanjeRow
+}
+
+function item(p: Partial<CanjeItem> = {}): CanjeItem {
+  return {
+    id: 1, canje_id: 31, cantidad: 1, costo_unit: 10000, pvp_unit: 25000,
+    origen: 'equipo', estado: 'confirmado', created_at: '2026-05-01T00:00:00.000Z',
+    ...p,
+  } as CanjeItem
+}
+
+function entregable(p: Partial<CanjeEntregable> = {}): CanjeEntregable {
+  return {
+    id: 1, canje_id: 31, tipo: 'historia_ig', cantidad_comprometida: 2,
+    plazo_dias: 10, obligatorio: true, created_at: '2026-05-01T00:00:00.000Z',
+    ...p,
+  } as CanjeEntregable
+}
+
+function evidencia(p: Partial<CanjeEvidencia> = {}): CanjeEvidencia {
+  return {
+    id: 1, canje_id: 31, entregable_id: 1, subido_por: 'equipo', verificada: true,
+    created_at: '2026-06-05T00:00:00.000Z',
+    ...p,
+  } as CanjeEvidencia
+}
+
+const cfg = (p: Partial<CanjeConfig> = {}): CanjeConfig => ({ store: 'bdi', ...CONFIG_DEFAULT, ...p })
+
+const HOY = new Date('2026-06-20T12:00:00.000Z')
+
+// ── Quién firma ──────────────────────────────────────────────────────────────────
+
+describe('quienApruebaCanje — el gate de autorización', () => {
+  it('con plata de por medio siempre va a la firma alta, tenga el monto que tenga', () => {
+    // $1 de plata también: lo que dispara la firma alta es que salga plata, no cuánta.
+    const c = canje({ tipo: 'producto_plata', monto_plata: 1 })
+    expect(quienApruebaCanje(c, [], cfg({ umbral_aprobacion_alta: 1_000_000 }))).toBe('aprobar-plata')
+  })
+
+  it('el umbral null manda TODO a la firma alta: es el default seguro', () => {
+    expect(CONFIG_DEFAULT.umbral_aprobacion_alta).toBeNull()
+    expect(quienApruebaCanje(canje({ tope_pvp: 100 }), [], cfg())).toBe('aprobar-plata')
+  })
+
+  it('con umbral cargado, por debajo alcanza la firma común', () => {
+    // 80.000 de tope × 0,4 de factor = 32.000 estimado, contra un umbral de 50.000.
+    expect(quienApruebaCanje(canje(), [], cfg({ umbral_aprobacion_alta: 50000 }))).toBe('aprobar')
+  })
+
+  it('por encima del umbral, firma alta', () => {
+    expect(quienApruebaCanje(canje(), [], cfg({ umbral_aprobacion_alta: 20000 }))).toBe('aprobar-plata')
+  })
+
+  it('con items cargados manda el costo REAL, no la estimación', () => {
+    // Tres items a 10.000 de costo = 30.000 real, contra la estimación de 32.000.
+    const items = [item({ id: 1 }), item({ id: 2 }), item({ id: 3 })]
+    expect(quienApruebaCanje(canje(), items, cfg({ umbral_aprobacion_alta: 31000 }))).toBe('aprobar')
+    expect(quienApruebaCanje(canje(), items, cfg({ umbral_aprobacion_alta: 29000 }))).toBe('aprobar-plata')
+  })
+
+  it('lo que no se puede estimar va a la firma alta, no a la común', () => {
+    // Tope por unidades y sin items: no hay monto todavía. Prefiero molestar a un gerente que
+    // dejar pasar un canje caro por una firma baja.
+    const c = canje({ tope_tipo: 'unidades', tope_pvp: null, tope_unidades: [{ cantidad: 2, descripcion: 'fundas' }] })
+    expect(costoEstimado(c, [], cfg())).toBeNull()
+    expect(quienApruebaCanje(c, [], cfg({ umbral_aprobacion_alta: 999999 }))).toBe('aprobar-plata')
+  })
+
+  it('un item quitado no cuenta para el costo', () => {
+    const items = [item({ id: 1 }), item({ id: 2, estado: 'quitado' }), item({ id: 3, estado: 'sin_stock' })]
+    expect(itemsVivos(items)).toHaveLength(1)
+    expect(costoEstimado(canje(), items, cfg())).toBe(10000)
+  })
+
+  it('el espejo del handler decide EXACTAMENTE el mismo nivel', () => {
+    const casos: [CanjeRow, CanjeItem[], CanjeConfig][] = [
+      [canje({ tipo: 'producto_plata' }), [], cfg({ umbral_aprobacion_alta: 1_000_000 })],
+      [canje(), [], cfg()],
+      [canje(), [], cfg({ umbral_aprobacion_alta: 50000 })],
+      [canje(), [], cfg({ umbral_aprobacion_alta: 20000 })],
+      [canje(), [item(), item({ id: 2 })], cfg({ umbral_aprobacion_alta: 25000 })],
+      [canje({ tope_tipo: 'unidades', tope_pvp: null }), [], cfg({ umbral_aprobacion_alta: 999999 })],
+    ]
+    for (const [c, items, config] of casos) {
+      expect(subQueApruebe(c, items, config), JSON.stringify({ tipo: c.tipo, umbral: config.umbral_aprobacion_alta }))
+        .toBe(quienApruebaCanje(c, items, config))
+    }
+  })
+})
+
+// ── El tope ──────────────────────────────────────────────────────────────────────
+
+describe('controlDelTope — modo monto', () => {
+  it('deja pasar mientras la suma de PVP no se pase', () => {
+    const r = controlDelTope(canje({ tope_pvp: 80000 }), [item({ pvp_unit: 25000 }), item({ id: 2, pvp_unit: 25000 })])
+    expect(r.ok).toBe(true)
+    expect(r.usado).toBe(50000)
+  })
+
+  it('frena cuando se pasa, y lo dice con los dos números', () => {
+    const r = controlDelTope(canje({ tope_pvp: 40000 }), [item({ pvp_unit: 25000 }), item({ id: 2, pvp_unit: 25000 })])
+    expect(r.ok).toBe(false)
+    expect(r.mensaje).toContain('50.000')
+    expect(r.mensaje).toContain('40.000')
+  })
+
+  it('justo en el tope entra: el control es "no pasarse", no "quedar debajo"', () => {
+    expect(controlDelTope(canje({ tope_pvp: 50000 }), [item({ pvp_unit: 50000 })]).ok).toBe(true)
+  })
+
+  it('la cantidad multiplica', () => {
+    expect(controlDelTope(canje({ tope_pvp: 40000 }), [item({ pvp_unit: 25000, cantidad: 2 })]).ok).toBe(false)
+  })
+
+  it('sin tope cargado no frena nada, pero lo avisa', () => {
+    const r = controlDelTope(canje({ tope_pvp: null }), [item({ pvp_unit: 999999 })])
+    expect(r.ok).toBe(true)
+    expect(r.mensaje).toContain('no tiene tope')
+  })
+})
+
+describe('controlDelTope — modo unidades', () => {
+  const conUnidades = canje({
+    tope_tipo: 'unidades',
+    tope_pvp: null,
+    tope_unidades: [{ cantidad: 2, descripcion: 'fundas' }, { cantidad: 1, descripcion: 'jean' }, { cantidad: 1, descripcion: 'remera' }],
+  })
+
+  it('el control es sobre el TOTAL de unidades, no sobre el detalle', () => {
+    // Cuatro items cualesquiera entran; que sean las prendas correctas lo mira el operador. La
+    // categoría de GN no da para colgar de ahí un bloqueo.
+    const cuatro = [item({ id: 1 }), item({ id: 2 }), item({ id: 3 }), item({ id: 4 })]
+    const r = controlDelTope(conUnidades, cuatro)
+    expect(r.ok).toBe(true)
+    expect(r.usado).toBe(4)
+    expect(r.tope).toBe(4)
+  })
+
+  it('la quinta unidad frena', () => {
+    const cinco = [1, 2, 3, 4, 5].map((id) => item({ id }))
+    const r = controlDelTope(conUnidades, cinco)
+    expect(r.ok).toBe(false)
+    expect(r.mensaje).toContain('5')
+    expect(r.mensaje).toContain('4')
+  })
+
+  it('un item de cantidad 4 llena el acuerdo igual que cuatro items', () => {
+    expect(controlDelTope(conUnidades, [item({ cantidad: 4 })]).ok).toBe(true)
+    expect(controlDelTope(conUnidades, [item({ cantidad: 5 })]).ok).toBe(false)
+  })
+
+  it('el PVP NO frena en modo unidades: lo acordado son piezas', () => {
+    expect(controlDelTope(conUnidades, [item({ pvp_unit: 9_000_000 })]).ok).toBe(true)
+  })
+
+  it('el espejo del handler frena en los mismos casos', () => {
+    const casos: [CanjeRow, CanjeItem[]][] = [
+      [canje({ tope_pvp: 40000 }), [item({ pvp_unit: 25000 }), item({ id: 2, pvp_unit: 25000 })]],
+      [canje({ tope_pvp: 80000 }), [item({ pvp_unit: 25000 })]],
+      [canje({ tope_pvp: 50000 }), [item({ pvp_unit: 50000 })]],
+      [conUnidades, [1, 2, 3, 4, 5].map((id) => item({ id }))],
+      [conUnidades, [item({ cantidad: 4 })]],
+      [canje({ tope_pvp: null }), [item({ pvp_unit: 999999 })]],
+    ]
+    for (const [c, items] of casos) {
+      const ts = controlDelTope(c, items)
+      const js = seVaDelTope(c, items)
+      expect(js == null, `divergen: TS dice ok=${ts.ok}, JS dice ${js}`).toBe(ts.ok)
+    }
+  })
+})
+
+// ── El grafo de estados ──────────────────────────────────────────────────────────
+
+describe('el espejo del grafo de estados', () => {
+  it('las TRANSICIONES son idénticas en los dos lados', () => {
+    expect(TRANS_JS).toEqual(TRANSICIONES)
+  })
+
+  it('`puedeIr` decide igual para TODO par de estados', () => {
+    const estados = Object.keys(TRANSICIONES) as (keyof typeof TRANSICIONES)[]
+    for (const a of estados) {
+      for (const b of estados) {
+        expect(puedeIrJS(a, b), `${a}→${b}`).toBe(puedeIr(a, b))
+      }
+    }
+  })
+})
+
+// ── El cumplimiento ──────────────────────────────────────────────────────────────
+
+describe('cumplimiento — se deriva, no se guarda', () => {
+  it('sólo cuentan las evidencias VERIFICADAS', () => {
+    // Sin este control, pegar un link roto cerraría el canje.
+    const e = [entregable({ cantidad_comprometida: 2 })]
+    const evs = [evidencia({ id: 1, verificada: true }), evidencia({ id: 2, verificada: false })]
+    const c = cumplimiento(e, evs, HOY)
+    expect(c.cumplidas).toBe(1)
+    expect(c.comprometidas).toBe(2)
+    expect(c.completo).toBe(false)
+  })
+
+  it('una rechazada tampoco cuenta', () => {
+    const evs = [evidencia({ id: 1, verificada: false, rechazada_motivo: 'el link no abre' })]
+    expect(cumplimiento([entregable()], evs, HOY).cumplidas).toBe(0)
+  })
+
+  it('no se pasa del 100%: cinco historias para dos prometidas son dos', () => {
+    const evs = [1, 2, 3, 4, 5].map((id) => evidencia({ id }))
+    const c = cumplimiento([entregable({ cantidad_comprometida: 2 })], evs, HOY)
+    expect(c.cumplidas).toBe(2)
+    expect(c.fraccion).toBe(1)
+  })
+
+  it('sin nada comprometido la fracción es 1, no 0', () => {
+    // Un 0 haría que un canje sin entregables se viera como un incumplimiento total.
+    const c = cumplimiento([], [], HOY)
+    expect(c.fraccion).toBe(1)
+    expect(c.completo).toBe(true)
+  })
+
+  it('un entregable opcional sin cumplir no impide el "completo"', () => {
+    const e = [entregable({ id: 1, cantidad_comprometida: 1 }), entregable({ id: 2, obligatorio: false, cantidad_comprometida: 1 })]
+    const evs = [evidencia({ id: 1, entregable_id: 1 })]
+    expect(cumplimiento(e, evs, HOY).completo).toBe(true)
+  })
+
+  it('una evidencia sin entregable asociado no le suma a ninguno', () => {
+    const evs = [evidencia({ id: 1, entregable_id: null })]
+    expect(cumplimiento([entregable()], evs, HOY).cumplidas).toBe(0)
+  })
+})
+
+describe('entregablesVencidos', () => {
+  it('vencido = obligatorio + fecha pasada + sin cumplir', () => {
+    const e = [entregable({ vence_el: '2026-06-11' })]
+    expect(entregablesVencidos(e, [], HOY)).toHaveLength(1)
+  })
+
+  it('cumplido a tiempo no vence, aunque la fecha ya haya pasado', () => {
+    const e = [entregable({ cantidad_comprometida: 1, vence_el: '2026-06-11' })]
+    expect(entregablesVencidos(e, [evidencia()], HOY)).toHaveLength(0)
+  })
+
+  it('el opcional nunca vence: no es una obligación', () => {
+    const e = [entregable({ obligatorio: false, vence_el: '2026-06-11' })]
+    expect(entregablesVencidos(e, [], HOY)).toHaveLength(0)
+  })
+
+  it('sin `vence_el` no vence: el pedido todavía no llegó y el plazo no arrancó', () => {
+    expect(entregablesVencidos([entregable({ vence_el: null })], [], HOY)).toHaveLength(0)
+  })
+
+  it('el día del vencimiento todavía no está vencido', () => {
+    const e = [entregable({ vence_el: fechaISO(HOY) })]
+    expect(entregablesVencidos(e, [], HOY)).toHaveLength(0)
+  })
+})
+
+describe('vencimientoDe — el plazo se vuelve fecha al entregar', () => {
+  it('suma los días a la fecha de entrega', () => {
+    expect(vencimientoDe('2026-06-01T15:00:00.000Z', 10, 30)).toMatch(/^2026-06-1[01]$/)
+  })
+
+  it('sin plazo propio usa el default de la config', () => {
+    const conDefault = vencimientoDe('2026-06-01T15:00:00.000Z', null, 5)
+    const explicito = vencimientoDe('2026-06-01T15:00:00.000Z', 5, 99)
+    expect(conDefault).toBe(explicito)
+  })
+})
+
+// ── §2 bis: el bloqueo ───────────────────────────────────────────────────────────
+
+describe('puedeProponerCanje — §2 bis', () => {
+  const vencido = {
+    canje: { id: 31, estado: 'en_curso' as const },
+    entregables: [entregable({ vence_el: '2026-06-01' })],
+    evidencias: [],
+  }
+
+  it('⚠️ arranca APAGADO: con la config de fábrica no frena a nadie', () => {
+    // Es la decisión de §8: si nadie carga evidencias, todo el mundo figura como incumplidor y el
+    // sistema empieza a frenar canjes con gente que sí cumplió.
+    expect(CONFIG_DEFAULT.bloquear_por_vencidos).toBe(false)
+    expect(puedeProponerCanje({ vetada: false }, [vencido], cfg(), HOY)).toEqual({ ok: true })
+  })
+
+  it('prendido, frena y explica en criollo con el número del canje', () => {
+    const r = puedeProponerCanje({ vetada: false }, [vencido], cfg({ bloquear_por_vencidos: true }), HOY)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.motivo).toContain('C-0031')
+      expect(r.motivo).toContain('historias')
+    }
+  })
+
+  it('un canje ya cerrado no bloquea, aunque tuviera vencidos', () => {
+    const cerrado = { ...vencido, canje: { id: 31, estado: 'cerrado' as const } }
+    expect(puedeProponerCanje({ vetada: false }, [cerrado], cfg({ bloquear_por_vencidos: true }), HOY)).toEqual({ ok: true })
+  })
+
+  it('el veto manual frena SIEMPRE, esté como esté la config', () => {
+    // Alguien lo decidió a mano: no lo revierte un flag.
+    const r = puedeProponerCanje({ vetada: true, vetada_motivo: 'no cumplió nunca' }, [], cfg(), HOY)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.motivo).toContain('no cumplió nunca')
+  })
+})
+
+// ── El cierre ────────────────────────────────────────────────────────────────────
+
+describe('faltantesParaCerrarCanje', () => {
+  const listo = canje({ estado: 'en_curso' })
+  const ents = [entregable({ cantidad_comprometida: 1, vence_el: '2026-06-11' })]
+  const evs = [evidencia()]
+
+  it('con todo hecho no falta nada', () => {
+    expect(faltantesParaCerrarCanje(listo, ents, evs, HOY)).toEqual([])
+  })
+
+  it('sin el costo del envío no cierra: sin eso el balance miente', () => {
+    const f = faltantesParaCerrarCanje(canje({ estado: 'en_curso', envio_costo: null }), ents, evs, HOY)
+    expect(f.join(' ')).toContain('costo del envío')
+  })
+
+  it('con un entregable obligatorio sin verificar, lo dice con la cantidad y el tipo', () => {
+    const f = faltantesParaCerrarCanje(listo, [entregable({ cantidad_comprometida: 2 })], [evidencia()], HOY)
+    expect(f.join(' ')).toContain('verificar 1 historia de instagram')
+  })
+
+  it('una evidencia cargada y sin mirar traba: o se verifica o se rechaza', () => {
+    const f = faltantesParaCerrarCanje(listo, ents, [evidencia({ id: 1 }), evidencia({ id: 2, verificada: false })], HOY)
+    expect(f.join(' ')).toContain('1 evidencia sin verificar')
+  })
+
+  it('la plata sin pagar traba, y con el monto adentro', () => {
+    const c = canje({ estado: 'en_curso', tipo: 'producto_plata', monto_plata: 30000, pago_estado: 'pendiente' })
+    expect(faltantesParaCerrarCanje(c, ents, evs, HOY).join(' ')).toContain('30.000')
+  })
+
+  it('sin marcar la entrega no cierra', () => {
+    const c = canje({ estado: 'en_curso', entregado_at: null })
+    expect(faltantesParaCerrarCanje(c, ents, evs, HOY).join(' ')).toContain('le llegó')
+  })
+})
+
+describe('calcularBalance', () => {
+  it('suma productos, envío y plata', () => {
+    const c = canje({ tipo: 'producto_plata', monto_plata: 30000, envio_costo: 5000 })
+    const b = calcularBalance(c, [item({ costo_unit: 10000, cantidad: 2 })])
+    expect(b.costo_productos).toBe(20000)
+    expect(b.costo_envio).toBe(5000)
+    expect(b.costo_plata).toBe(30000)
+    expect(b.costo_total).toBe(55000)
+  })
+
+  it('en un canje sin plata, la plata no suma aunque el campo tenga algo', () => {
+    // Pasa al cambiar el tipo después de haber cargado un monto.
+    const c = canje({ tipo: 'producto', monto_plata: 30000 })
+    expect(calcularBalance(c, []).costo_plata).toBe(0)
+  })
+
+  it('los items quitados no entran al costo', () => {
+    const b = calcularBalance(canje(), [item({ id: 1 }), item({ id: 2, estado: 'quitado' })])
+    expect(b.costo_productos).toBe(10000)
+  })
+
+  it('sin alcance no hay CPM: un 0 se leería como "gratis"', () => {
+    expect(calcularBalance(canje({ balance_alcance: null }), [item()]).cpm).toBeNull()
+    expect(calcularBalance(canje({ balance_alcance: 0 }), [item()]).cpm).toBeNull()
+  })
+
+  it('con alcance, el CPM es costo por cada mil', () => {
+    const b = calcularBalance(canje({ envio_costo: 5000, balance_alcance: 10000 }), [item({ costo_unit: 5000 })])
+    // (5000 + 5000) / 10000 × 1000 = 1000
+    expect(b.cpm).toBe(1000)
+  })
+})
+
+describe('pideSeguimiento', () => {
+  it('sólo Correo y Andreani tienen código que seguir', () => {
+    expect(pideSeguimiento('correo')).toBe(true)
+    expect(pideSeguimiento('andreani')).toBe(true)
+    // Pedirle un código a un cadete es pedir un dato que no existe.
+    expect(pideSeguimiento('cadete')).toBe(false)
+    expect(pideSeguimiento('presencial')).toBe(false)
+    expect(pideSeguimiento(null)).toBe(false)
+  })
+})
+
+// ── Los mensajes ─────────────────────────────────────────────────────────────────
+
+const lucia = { nombre: 'Lucía', apellido: 'Pérez', instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }
+
+describe('mensajeLinkDatos — las dos versiones', () => {
+  it('la primera vez le pide los datos', () => {
+    const m = mensajeLinkDatos(lucia, 'bdi', 'https://x/canje/abc', true)
+    expect(m).toContain('necesitamos algunos datos')
+    expect(m).toContain('el modelo de tu celular')
+    expect(m).toContain('https://x/canje/abc')
+  })
+
+  it('si ya la conocemos, le pide que VERIFIQUE — no que complete de cero', () => {
+    // Es la diferencia que evita que suene a que perdimos lo que ya nos dio.
+    const m = mensajeLinkDatos(lucia, 'zattia', 'https://x/canje/abc', false)
+    expect(m).toContain('Tenemos tus datos de la acción anterior')
+    expect(m).toContain('verifiques')
+    expect(m).not.toContain('necesitamos algunos datos')
+  })
+
+  it('pide talles en Zattia y modelo de celular en BDI', () => {
+    expect(mensajeLinkDatos(lucia, 'zattia', 'x', true)).toContain('tus talles')
+    expect(mensajeLinkDatos(lucia, 'stunned', 'x', true)).toContain('tus talles')
+    expect(mensajeLinkDatos(lucia, 'bdi', 'x', true)).toContain('modelo de tu celular')
+  })
+
+  it('sin nombre cargado la saluda por el @, no con un hueco', () => {
+    const m = mensajeLinkDatos({ instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }, 'bdi', 'x', true)
+    expect(m).toContain('@Lucia.MKP')
+  })
+})
+
+describe('mensajeDespacho', () => {
+  it('con seguimiento manda el código y el link', () => {
+    const c = canje({ envio_via: 'correo', envio_seguimiento: '1234' })
+    const m = mensajeDespacho(lucia, c, 'https://correo/1234')
+    expect(m).toContain('1234')
+    expect(m).toContain('https://correo/1234')
+  })
+
+  it('presencial no habla de envío: la invita a pasar a buscarlo', () => {
+    const m = mensajeDespacho(lucia, canje({ envio_via: 'presencial' }), null)
+    expect(m).toContain('pases a buscar')
+    expect(m).not.toContain('seguir')
+  })
+
+  it('sin código no promete un seguimiento que no existe', () => {
+    const m = mensajeDespacho(lucia, canje({ envio_via: 'cadete', envio_seguimiento: null }), null)
+    expect(m).not.toContain('código')
+  })
+})
+
+describe('los textos que arman las listas', () => {
+  it('listaEntregables concuerda singular y plural, y usa "y" al final', () => {
+    expect(listaEntregables([{ tipo: 'historia_ig', cantidad_comprometida: 1 }])).toBe('1 historia de instagram')
+    expect(listaEntregables([
+      { tipo: 'historia_ig', cantidad_comprometida: 2 },
+      { tipo: 'reel_ig', cantidad_comprometida: 1 },
+    ])).toBe('2 historias de instagram y 1 reel de instagram')
+  })
+
+  it('loQueLeMandamos habla en plata o en unidades según el modo', () => {
+    expect(loQueLeMandamos(canje({ tope_tipo: 'monto', tope_pvp: 80000 }))).toContain('80.000')
+    expect(loQueLeMandamos(canje({
+      tope_tipo: 'unidades',
+      tope_unidades: [{ cantidad: 2, descripcion: 'fundas' }, { cantidad: 1, descripcion: 'jean' }],
+    }))).toBe('2 fundas y 1 jean')
+  })
+
+  it('mensajeAcuerdo deja el plazo atado a la ENTREGA, no a hoy', () => {
+    // Al acordar todavía no sabemos cuándo llega el pedido: prometer una fecha sería prometer algo
+    // que no controlamos.
+    const m = mensajeAcuerdo(lucia, canje(), [{ tipo: 'historia_ig', cantidad_comprometida: 2, plazo_dias: 10 }])
+    expect(m).toContain('desde que te llega el pedido')
+  })
+
+  it('mensajeRecordatorio no reclama: ofrece más tiempo', () => {
+    const m = mensajeRecordatorio(lucia, [{ tipo: 'historia_ig', cuantas: 2 }])
+    expect(m).toContain('2 historias de instagram')
+    expect(m).toContain('necesitás más tiempo')
+  })
+})

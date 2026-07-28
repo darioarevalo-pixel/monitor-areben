@@ -20,14 +20,16 @@ import {
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  agregarNota, borrarNota, editarPersona, esCiego, leerPersona, numeroDe,
+  agregarNota, borrarNota, crearCanje, editarPersona, esCiego, leerPersona, numeroDe,
   type CamposPersona, type CanjeVisible,
 } from '@/lib/canjes/cliente'
 import { instagramHref, instagramParaMostrar, tiktokHref } from '@/lib/canjes/instagram'
 import { CONTACTO_LABEL, estadoDeContacto, type EstadoContacto } from '@/lib/canjes/seguimiento'
 import {
-  ESTADO_CANJE_LABEL, STORE_LABEL, nombrePersona, queDatoPide, tieneDireccion, tieneDatosDeMarca,
-  type CanjePersona, type CanjeStore, type EstadoCanje, type TallesPersona,
+  ESTADO_CANJE_LABEL, STORE_LABEL, TIPO_CANJE_LABEL, nombrePersona, queDatoPide, tieneDireccion,
+  tieneDatosDeMarca,
+  type CanjePersona, type CanjeStore, type EstadoCanje, type TallesPersona, type TipoCanje,
+  type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
 
 const CONTACTO_TONE: Record<EstadoContacto, Tone> = {
@@ -53,15 +55,20 @@ export function FichaPersona({
   personaId,
   onVolver,
   onCambio,
+  onAbrirCanje,
+  onCanjeCreado,
 }: {
   store: CanjeStore
   personaId: number
   onVolver: () => void
   /** Avisa a la lista que esta ficha cambió, para que no quede desactualizada al volver. */
   onCambio: (p: CanjePersona) => void
+  onAbrirCanje: (id: number) => void
+  onCanjeCreado: (id: number) => Promise<void>
 }) {
   const toast = useToast()
   const { confirmar } = useConfirmar()
+  const [proponiendo, setProponiendo] = useState(false)
 
   const [persona, setPersona] = useState<CanjePersona | null>(null)
   const [canjes, setCanjes] = useState<CanjeVisible[]>([])
@@ -163,6 +170,12 @@ export function FichaPersona({
             </Button>
           )}
           <Button variant="outline" onClick={() => setEditando(true)}>Editar ficha</Button>
+          {/* Si está vetada no se le propone nada: el veto es una decisión que alguien tomó a
+              mano. El bloqueo por vencidos (§2 bis) lo aplica el servidor, que ve los canjes de
+              TODAS las marcas — desde acá no se puede saber. */}
+          <Button variant="solid" tone="brand" onClick={() => setProponiendo(true)} disabled={persona.vetada}>
+            Proponerle un canje
+          </Button>
         </div>
       </div>
 
@@ -280,12 +293,14 @@ export function FichaPersona({
             {canjes.map((c) => (
               <div
                 key={c.id}
+                onClick={() => { if (!esCiego(c)) onAbrirCanje(c.id) }}
                 style={{
                   display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap',
                   padding: space[2], borderRadius: 8,
                   border: `1px solid ${color.line}`,
                   // El ciego se ve apagado a propósito: se sabe que existe, no se puede entrar.
                   opacity: esCiego(c) ? 0.6 : 1,
+                  cursor: esCiego(c) ? 'default' : 'pointer',
                 }}
               >
                 <strong style={{ fontWeight: weight.medium, minWidth: 72 }}>{numeroDe(c)}</strong>
@@ -350,6 +365,14 @@ export function FichaPersona({
           store={store}
           onCerrar={() => setEditando(false)}
           onGuardar={guardar}
+        />
+      )}
+      {proponiendo && (
+        <ProponerCanje
+          persona={persona}
+          store={store}
+          onCerrar={() => setProponiendo(false)}
+          onListo={async (id) => { setProponiendo(false); await onCanjeCreado(id) }}
         />
       )}
     </div>
@@ -543,6 +566,156 @@ function EditarFicha({
             <Input value={f.vetada_motivo ?? ''} onChange={(e) => set('vetada_motivo', e.target.value)} />
           </Field>
         )}
+      </div>
+    </Modal>
+  )
+}
+
+// ── Proponerle un canje ─────────────────────────────────────────────────────────
+
+/**
+ * El alta de un canje.
+ *
+ * Lo que más pesa acá es **el tope y sus dos modos**, porque es lo que después controla lo que se
+ * puede cargar:
+ *  - **Por monto** ("hasta $80.000"): un número, control duro sobre la suma de PVP.
+ *  - **Por unidades** ("2 fundas, 1 jean, 1 remera"): control duro sobre el TOTAL de unidades y
+ *    blando sobre el detalle. El operador ve la lista acordada al lado de lo que carga; no se
+ *    intenta adivinar si algo "es un jean" porque la categoría de GN no da para colgar de ahí un
+ *    bloqueo.
+ *
+ * El bloqueo por vencidos (§2 bis) **no se chequea acá**: hace falta ver los canjes de todas las
+ * marcas y eso sólo lo puede el servidor, que rechaza con el motivo en criollo.
+ */
+function ProponerCanje({
+  persona, store, onCerrar, onListo,
+}: {
+  persona: CanjePersona
+  store: CanjeStore
+  onCerrar: () => void
+  onListo: (id: number) => Promise<void>
+}) {
+  const toast = useToast()
+  const [tipo, setTipo] = useState<TipoCanje>('producto')
+  const [titulo, setTitulo] = useState('')
+  const [topeTipo, setTopeTipo] = useState<TopeTipo>('monto')
+  const [topePvp, setTopePvp] = useState('')
+  const [unidades, setUnidades] = useState<TopeUnidad[]>([{ cantidad: 1, descripcion: '' }])
+  const [montoPlata, setMontoPlata] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const unidadesLimpias = unidades.filter((u) => u.descripcion.trim() !== '' && Number(u.cantidad) > 0)
+  const puede = topeTipo === 'monto' ? topePvp !== '' : unidadesLimpias.length > 0
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo={`Proponerle un canje a ${nombrePersona(persona)}`}
+      ancho="ancho"
+      cerrarConFondo={false}
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button
+            variant="solid"
+            tone="brand"
+            loading={guardando}
+            disabled={!puede}
+            onClick={async () => {
+              setGuardando(true)
+              try {
+                const { id } = await crearCanje(store, {
+                  persona_id: persona.id,
+                  tipo,
+                  titulo: titulo.trim() || undefined,
+                  tope_tipo: topeTipo,
+                  tope_pvp: topeTipo === 'monto' ? Number(topePvp) : null,
+                  tope_unidades: topeTipo === 'unidades' ? unidadesLimpias : [],
+                  monto_plata: tipo === 'producto_plata' && montoPlata !== '' ? Number(montoPlata) : null,
+                })
+                await onListo(id)
+              } catch (e) {
+                // El servidor devuelve el bloqueo por vencidos con el motivo ya escrito en criollo.
+                toast.error(String((e as Error)?.message || e))
+              } finally {
+                setGuardando(false)
+              }
+            }}
+          >
+            Crear el borrador
+          </Button>
+        </>
+      }
+    >
+      <Field label="De qué es la acción" hint="Opcional, para reconocerlo después">
+        <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Lanzamiento cápsula invierno" />
+      </Field>
+
+      <div style={{ display: 'grid', gap: space[3], gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginTop: space[3] }}>
+        <Field label="Qué se le da">
+          <Select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCanje)}>
+            {(['producto', 'producto_plata'] as TipoCanje[]).map((t) => (
+              <option key={t} value={t}>{TIPO_CANJE_LABEL[t]}</option>
+            ))}
+          </Select>
+        </Field>
+        {tipo === 'producto_plata' && (
+          <Field label="Cuánta plata" hint="El pago se hace por fuera; acá se registra">
+            <Input type="number" value={montoPlata} onChange={(e) => setMontoPlata(e.target.value)} />
+          </Field>
+        )}
+        <Field label="Cómo se acordó el tope">
+          <Select value={topeTipo} onChange={(e) => setTopeTipo(e.target.value as TopeTipo)}>
+            <option value="monto">Por monto (&quot;hasta $80.000&quot;)</option>
+            <option value="unidades">Por unidades (&quot;2 fundas, 1 jean&quot;)</option>
+          </Select>
+        </Field>
+      </div>
+
+      {topeTipo === 'monto' ? (
+        <div style={{ marginTop: space[3] }}>
+          <Field label="Hasta cuánto puede elegir" hint="En PVP. Al cargar productos no se va a poder pasar de acá" required>
+            <Input type="number" value={topePvp} onChange={(e) => setTopePvp(e.target.value)} autoFocus />
+          </Field>
+        </div>
+      ) : (
+        <div style={{ marginTop: space[3] }}>
+          <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
+            Qué se acordó. El total de unidades se controla solo; que sean las prendas correctas lo
+            mirás vos al cargarlas.
+          </div>
+          {unidades.map((u, i) => (
+            <div key={i} style={{ display: 'flex', gap: space[2], marginBottom: space[2], alignItems: 'center' }}>
+              <Input
+                type="number"
+                min={1}
+                value={String(u.cantidad)}
+                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x)))}
+                style={{ width: 80 }}
+              />
+              <Input
+                value={u.descripcion}
+                placeholder="fundas, jean, remera…"
+                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, descripcion: e.target.value } : x)))}
+                style={{ flex: 1 }}
+              />
+              {unidades.length > 1 && (
+                <Button variant="ghost" tone="danger" size="sm" onClick={() => setUnidades((p) => p.filter((_, j) => j !== i))}>
+                  Quitar
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" onClick={() => setUnidades((p) => [...p, { cantidad: 1, descripcion: '' }])}>
+            Sumar otra línea
+          </Button>
+        </div>
+      )}
+
+      <div style={{ marginTop: space[5], color: color.mut2, fontSize: font.sm }}>
+        Nace como borrador. Lo que prometa publicar se carga en la ficha del canje, y recién
+        después se manda a aprobar.
       </div>
     </Modal>
   )

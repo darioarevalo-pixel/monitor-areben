@@ -10,8 +10,12 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import { numeroCanje } from './tipos'
-import type { CanjeConfig, CanjePersona, CanjeRow, CanjeStore, TallesPersona } from './tipos'
+import { baseDeCostos, numeroCanje } from './tipos'
+import type {
+  Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
+  CanjeStore, EstadoCanje, NivelAprobacion, TallesPersona, TipoCanje, TipoEntregable, TopeTipo,
+  TopeUnidad, ViaEnvio,
+} from './tipos'
 
 const API = '/api/postventa?recurso=canjes'
 
@@ -47,9 +51,21 @@ async function leer(qs: string): Promise<Record<string, unknown>> {
   return d
 }
 
+/** Un canje con entregables obligatorios vencidos. Lo resume el servidor para el aviso. */
+export type CanjeVencido = {
+  canjeId: number
+  store: CanjeStore
+  persona_id: number
+  /** Cuántas piezas faltan publicar. */
+  cuantas: number
+  /** Timestamp del vencimiento más viejo: es lo que ordena el aviso. */
+  desde: number
+}
+
 export type DatosCanjes = {
   personas: CanjePersona[]
   canjes: CanjeVisible[]
+  vencidos: CanjeVencido[]
   config: CanjeConfig | null
   marcasVisibles: CanjeStore[]
 }
@@ -64,6 +80,7 @@ export async function leerCanjes(store: CanjeStore): Promise<DatosCanjes> {
   return {
     personas: (d.personas as CanjePersona[]) || [],
     canjes: (d.canjes as CanjeVisible[]) || [],
+    vencidos: (d.vencidos as CanjeVencido[]) || [],
     config: (d.config as CanjeConfig) || null,
     marcasVisibles: (d.marcasVisibles as CanjeStore[]) || [],
   }
@@ -159,4 +176,264 @@ export async function guardarConfig(store: CanjeStore, campos: Partial<Omit<Canj
 /** El número visible, para cuando el canje viene de la API sin él (los ciegos ya lo traen). */
 export function numeroDe(c: { id: number; numero?: string }): string {
   return c.numero || numeroCanje(c.id)
+}
+
+// ══ EL CANJE ═══════════════════════════════════════════════════════════════════
+
+export type FichaCanjeDatos = {
+  canje: CanjeRow
+  items: CanjeItem[]
+  entregables: CanjeEntregable[]
+  evidencias: CanjeEvidencia[]
+  persona: CanjePersona | null
+  config: CanjeConfig
+}
+
+/** El canje con sus cuatro tablas de una. Pedirlas de a una serían cuatro round-trips por click. */
+export async function leerCanje(store: CanjeStore, id: number): Promise<FichaCanjeDatos> {
+  const d = await leer(`vista=canje&store=${store}&id=${id}`)
+  return {
+    canje: d.canje as CanjeRow,
+    items: (d.items as CanjeItem[]) || [],
+    entregables: (d.entregables as CanjeEntregable[]) || [],
+    evidencias: (d.evidencias as CanjeEvidencia[]) || [],
+    persona: (d.persona as CanjePersona) || null,
+    config: d.config as CanjeConfig,
+  }
+}
+
+/**
+ * El link del portal, a pedido y de a uno.
+ *
+ * El token **nunca** viaja en un listado: un listado se loguea, se cachea y se comparte. Esto es
+ * lo mismo que hace Reclamos con el link del cliente.
+ */
+export async function leerToken(store: CanjeStore, id: number): Promise<{ token: string | null; vence: string | null }> {
+  const d = await leer(`vista=token&store=${store}&id=${id}`)
+  return { token: (d.token as string) || null, vence: (d.vence as string) || null }
+}
+
+/** La URL que se le manda por WhatsApp. Mismo patrón que `/reclamo/<token>`. */
+export function linkDelPortal(token: string): string {
+  const origen = typeof window === 'undefined' ? '' : window.location.origin
+  return `${origen}/canje/${token}`
+}
+
+export type NuevoCanje = {
+  persona_id: number
+  tipo: TipoCanje
+  titulo?: string
+  nota?: string
+  tope_tipo: TopeTipo
+  tope_pvp?: number | null
+  tope_unidades?: TopeUnidad[]
+  monto_plata?: number | null
+}
+
+export async function crearCanje(store: CanjeStore, datos: NuevoCanje): Promise<{ id: number; numero: string }> {
+  const d = await postear({ store, action: 'canje-crear', ...datos })
+  return { id: d.id as number, numero: d.numero as string }
+}
+
+export async function editarCanje(store: CanjeStore, id: number, campos: Partial<NuevoCanje>): Promise<void> {
+  await postear({ store, action: 'canje-editar', id, ...campos })
+}
+
+/** Las transiciones las valida el servidor contra `TRANSICIONES`: esto no es el único control. */
+export async function cambiarEstadoCanje(store: CanjeStore, id: number, estado: EstadoCanje, motivo?: string): Promise<void> {
+  await postear({ store, action: 'canje-estado', id, estado, motivo })
+}
+
+/** Devuelve con qué nivel se aprobó, que es lo que queda guardado en el canje. */
+export async function aprobarCanje(store: CanjeStore, id: number): Promise<NivelAprobacion> {
+  const d = await postear({ store, action: 'canje-aprobar', id })
+  return d.nivel as NivelAprobacion
+}
+
+export async function rechazarCanje(store: CanjeStore, id: number, motivo: string): Promise<void> {
+  await postear({ store, action: 'canje-rechazar', id, motivo })
+}
+
+// ── Los productos ───────────────────────────────────────────────────────────────
+
+export type NuevoItem = {
+  sku?: string | null
+  product_id?: string | null
+  size_id?: string | null
+  nombre?: string | null
+  variante?: string | null
+  cantidad: number
+  costo_unit?: number | null
+  pvp_unit?: number | null
+}
+
+/**
+ * ⚠️ El control del tope lo hace **el servidor** con la lista real. Si el canje se pasa, esto tira
+ * un error con el motivo en criollo — la UI lo muestra tal cual. Dos operadores cargando a la vez
+ * se pasarían del tope sin que ninguno lo viera si el único control fuera el del browser.
+ */
+export async function agregarItem(store: CanjeStore, id: number, item: NuevoItem): Promise<CanjeItem> {
+  const d = await postear({ store, action: 'item-agregar', id, ...item })
+  return d.item as CanjeItem
+}
+
+/** No borra: marca `quitado` o `sin_stock`. Que algo se haya caído es información. */
+export async function quitarItem(
+  store: CanjeStore, id: number, itemId: number, motivo: string, sinStock = false,
+): Promise<void> {
+  await postear({ store, action: 'item-quitar', id, item_id: itemId, motivo, sin_stock: sinStock })
+}
+
+// ── Compra y envío ──────────────────────────────────────────────────────────────
+
+export async function registrarCompra(
+  store: CanjeStore, id: number, datos: { tn_orden: string; gn_venta_number?: string },
+): Promise<void> {
+  await postear({ store, action: 'compra', id, ...datos })
+}
+
+export async function registrarEnvio(
+  store: CanjeStore, id: number,
+  datos: { envio_via: ViaEnvio; envio_seguimiento?: string | null; envio_costo?: number | null },
+): Promise<void> {
+  await postear({ store, action: 'envio', id, ...datos })
+}
+
+export async function marcarAvisada(store: CanjeStore, id: number): Promise<void> {
+  await postear({ store, action: 'aviso', id })
+}
+
+/** ⚠️ Es el pivote: acá el servidor **congela** el `vence_el` de cada entregable. */
+export async function marcarEntregado(store: CanjeStore, id: number): Promise<void> {
+  await postear({ store, action: 'entregado', id })
+}
+
+// ── Entregables y evidencias ────────────────────────────────────────────────────
+
+export async function agregarEntregable(
+  store: CanjeStore, id: number,
+  datos: { tipo: TipoEntregable; cantidad_comprometida: number; plazo_dias?: number | null; obligatorio?: boolean; nota?: string },
+): Promise<CanjeEntregable> {
+  const d = await postear({ store, action: 'entregable-agregar', id, ...datos })
+  return d.entregable as CanjeEntregable
+}
+
+export async function quitarEntregable(store: CanjeStore, id: number, entregableId: number): Promise<void> {
+  await postear({ store, action: 'entregable-quitar', id, entregable_id: entregableId })
+}
+
+export type NuevaEvidencia = {
+  entregable_id?: number | null
+  url_publicacion?: string | null
+  captura_url?: string | null
+  fecha_publicacion?: string | null
+  metricas?: Record<string, number | string | null>
+}
+
+/** La carga **el equipo**, no ella: al portal no se le agrega esta pantalla (es mucho pedirle). */
+export async function agregarEvidencia(store: CanjeStore, id: number, ev: NuevaEvidencia): Promise<CanjeEvidencia> {
+  const d = await postear({ store, action: 'evidencia-agregar', id, ...ev })
+  return d.evidencia as CanjeEvidencia
+}
+
+/** Sin verificar no cuenta: si no, pegar un link roto cerraría el canje. */
+export async function verificarEvidencia(
+  store: CanjeStore, id: number, evidenciaId: number, ok: boolean, motivo?: string,
+): Promise<void> {
+  await postear({ store, action: 'evidencia-verificar', id, evidencia_id: evidenciaId, ok, motivo })
+}
+
+export async function borrarEvidencia(store: CanjeStore, id: number, evidenciaId: number): Promise<void> {
+  await postear({ store, action: 'evidencia-borrar', id, evidencia_id: evidenciaId })
+}
+
+// ── Plata y cierre ──────────────────────────────────────────────────────────────
+
+export async function registrarPago(store: CanjeStore, id: number, nota?: string): Promise<void> {
+  await postear({ store, action: 'pago', id, pago_nota: nota })
+}
+
+/**
+ * Cierra y **congela el balance**.
+ *
+ * El balance lo calcula `calcularBalance` (puro, con tests) y se manda ya hecho; el servidor
+ * valida rangos. Es la regla de `api/_reclamos.js`: replicar aritmética en JS es la fuente
+ * conocida de desincronización, así que el cálculo vive en un solo lugar.
+ */
+export async function cerrarCanje(
+  store: CanjeStore, id: number,
+  datos: {
+    balance: Balance
+    balance_alcance?: number | null
+    balance_interacciones?: number | null
+    balance_puntaje_manual?: number | null
+    balance_nota?: string | null
+    incompleto?: boolean
+    cierre_motivo?: string | null
+  },
+): Promise<void> {
+  await postear({
+    store, action: 'cerrar', id,
+    balance_costo_productos: datos.balance.costo_productos,
+    balance_costo_envio: datos.balance.costo_envio,
+    balance_costo_plata: datos.balance.costo_plata,
+    balance_costo_total: datos.balance.costo_total,
+    balance_cpm: datos.balance.cpm,
+    balance_alcance: datos.balance_alcance,
+    balance_interacciones: datos.balance_interacciones,
+    balance_puntaje_manual: datos.balance_puntaje_manual,
+    balance_nota: datos.balance_nota,
+    incompleto: datos.incompleto === true,
+    cierre_motivo: datos.cierre_motivo,
+  })
+}
+
+/** Devolvió o vendió lo que le mandamos. Un flag y nada más: sin flujo de reingreso. */
+export async function marcarNoConservado(store: CanjeStore, id: number, motivo: string): Promise<void> {
+  await postear({ store, action: 'no-conservado', id, motivo })
+}
+
+// ── La orden de Tienda Nube ─────────────────────────────────────────────────────
+
+/**
+ * El mismo endpoint que usan Cambios y Reclamos para traer una orden. Sin auth: es lectura de TN,
+ * y las credenciales viven en `bdi-catalogo`, no acá.
+ *
+ * ⚠️ Stunned lee por **Zattia**: es una línea de esa tienda, no una tienda propia.
+ */
+const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+
+export type VerificacionOrden = {
+  encontrada: boolean
+  total: number | null
+  /** El canje se crea con 100% de descuento: un total distinto de cero es una señal, no un error. */
+  esGratis: boolean
+  aviso: string | null
+}
+
+/**
+ * Verifica la orden que el operador creó **a mano** en el admin de Tienda Nube.
+ *
+ * El monitor no puede crearla: no hay credenciales de TN en este repo y `bdi-catalogo` sólo
+ * escribe categorías, visibilidad, stock e imágenes — nunca órdenes. Lo único que se puede hacer
+ * es leerla por número y avisar si algo no cuadra.
+ */
+export async function verificarOrden(store: CanjeStore, numero: string): Promise<VerificacionOrden> {
+  const marca = baseDeCostos(store)
+  const r = await fetch(`${ORDEN_API}?orden=${encodeURIComponent(numero)}&store=${marca}&nc=${Date.now()}`)
+  const d = (await r.json().catch(() => null)) as { orden?: { total?: number | string }; error?: string } | null
+  if (!d) throw new Error('No se pudo consultar Tienda Nube.')
+  if (d.error) throw new Error(String(d.error))
+  if (!d.orden) return { encontrada: false, total: null, esGratis: false, aviso: 'No se encontró esa orden en Tienda Nube.' }
+
+  const total = d.orden.total == null ? null : Number(d.orden.total)
+  const esGratis = total != null && total === 0
+  return {
+    encontrada: true,
+    total,
+    esGratis,
+    aviso: esGratis || total == null
+      ? null
+      : `Ojo: la orden figura con un total de $${total.toLocaleString('es-AR')}. Un canje va con 100% de descuento.`,
+  }
 }

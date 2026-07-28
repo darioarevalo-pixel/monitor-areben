@@ -7,7 +7,8 @@
  * aviso de algo que no vería entrando a la sección.
  */
 
-import { esAdmin, puedeSub, tieneFuncion, type Perfil } from '@/lib/permisos'
+import { esAdmin, puedeSub, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
+import { numeroCanje, type CanjeStore } from '@/lib/canjes/tipos'
 import { faltantes, salio } from '@/lib/sesionfotos/core'
 import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { pendientesDeTrabajo } from '@/lib/inicio/core'
@@ -108,6 +109,92 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
       detalle: `${u} ${u === 1 ? 'unidad' : 'unidades'} esperando en el local`,
       ruta: '/postventa-local',
       ts: Number.isFinite(masVieja) ? masVieja : 0,
+      tono: 'warning' as const,
+    },
+  ]
+}
+
+// ── Canjes ───────────────────────────────────────────────────────────────────────
+//
+// ⚠️ Los canjes salen de la **base maestra de BDI**, para las tres marcas. En `store/useAvisos.ts`
+// eso significa que su lectura va FUERA del `Promise.all` por marca: meterla adentro pediría lo
+// mismo dos o tres veces y devolvería los mismos canjes cada vez, duplicando cada aviso.
+//
+// Stunned no es una `Marca` del monitor, así que sus avisos se cuelgan de `zattia`, que es de
+// donde cuelgan también sus permisos.
+
+/** De qué marca del monitor cuelga un canje. Espejo de `marcaDePermisos` en `api/_canjes.js`. */
+function marcaDelCanje(store: CanjeStore): Marca {
+  return store === 'bdi' ? 'bdi' : 'zattia'
+}
+
+/**
+ * Canjes esperando la firma de gerencia. Es lo que más traba el flujo: sin aprobar no se genera el
+ * link, y sin link ella no manda la dirección.
+ *
+ * Uno por canje y no agrupados, a diferencia de los vencidos: cada firma es una decisión distinta
+ * sobre un monto distinto, y agruparlas escondería justamente lo que hay que mirar.
+ */
+export function avisosDeCanjeAprobacion(
+  canjes: { id: number; store: CanjeStore; estado: string; titulo?: string | null; created_at: string; persona?: string | null }[],
+  perfil: Perfil | null,
+): Aviso[] {
+  return canjes
+    .filter((c) => c.estado === 'propuesta')
+    // Se filtra por permiso REAL: quien no puede firmar no tiene por qué ver el pendiente. Ojo que
+    // los subs no se heredan de la función — si nadie los tiene, esta lista sale vacía y ese es el
+    // síntoma de que faltó tildarlos en Config.
+    .filter((c) => {
+      const m = marcaDelCanje(c.store)
+      return esAdmin(perfil) || puedeSub(perfil, m, 'canjes', 'aprobar') || puedeSub(perfil, m, 'canjes', 'aprobar-plata')
+    })
+    .map((c) => ({
+      // Estable entre refrescos: es lo que permite comparar "esto ya lo vi".
+      id: `canje-aprobacion:${c.id}`,
+      tipo: 'canje-aprobacion' as const,
+      marca: marcaDelCanje(c.store),
+      titulo: c.titulo || `Canje ${numeroCanje(c.id)}`,
+      detalle: c.persona ? `${c.persona} · esperando tu firma` : 'Esperando tu firma',
+      ruta: '/canjes',
+      ts: Date.parse(c.created_at) || 0,
+      tono: 'warning' as const,
+    }))
+}
+
+/**
+ * Contenido prometido que ya venció.
+ *
+ * **Agrupados en un solo aviso**, como las fallas: si una creadora debe cuatro historias no son
+ * cuatro recordatorios, es un tema. Llenar el contador es la forma más rápida de que la gente
+ * empiece a ignorar el badge.
+ *
+ * El `id` no lleva la cantidad a propósito: si la llevara, verificar una sola evidencia cambiaría
+ * el id y el aviso volvería a contarse como nuevo.
+ */
+export function avisosDeCanjeVencido(
+  vencidos: { canjeId: number; store: CanjeStore; persona: string; cuantas: number; desde: number }[],
+  perfil: Perfil | null,
+  marcaActiva: Marca,
+): Aviso[] {
+  // Sin acceso a la sección no hay aviso: nadie ve un aviso de algo a lo que no puede entrar.
+  const visibles = vencidos.filter((v) => puedeVer(perfil, marcaDelCanje(v.store), 'canjes'))
+  if (!visibles.length) return []
+
+  const personas = new Set(visibles.map((v) => v.persona))
+  const total = visibles.reduce((a, v) => a + v.cuantas, 0)
+  const masViejo = Math.min(...visibles.map((v) => v.desde).filter(Boolean))
+
+  return [
+    {
+      id: 'canje-vencido',
+      tipo: 'canje-vencido' as const,
+      marca: marcaActiva,
+      titulo: total === 1 ? '1 entregable vencido' : `${total} entregables vencidos`,
+      detalle: personas.size === 1
+        ? `${[...personas][0]} no publicó lo que acordó`
+        : `${personas.size} personas no publicaron lo que acordaron`,
+      ruta: '/canjes',
+      ts: Number.isFinite(masViejo) ? masViejo : 0,
       tono: 'warning' as const,
     },
   ]

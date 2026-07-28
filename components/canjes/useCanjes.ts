@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { leerCanjes, type CanjeVisible, type DatosCanjes } from '@/lib/canjes/cliente'
+import { leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes } from '@/lib/canjes/cliente'
 import { estadoDeContacto, ordenarPorContacto, type Seguimiento } from '@/lib/canjes/seguimiento'
 import { nombrePersona, type CanjeConfig, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
 
@@ -26,6 +26,8 @@ export type PersonaEnLista = CanjePersona & {
 export type EstadoCanjes = {
   personas: PersonaEnLista[]
   canjes: CanjeVisible[]
+  /** Resumido por el servidor: qué canjes tienen entregables obligatorios vencidos. */
+  vencidos: CanjeVencido[]
   config: CanjeConfig | null
   marcasVisibles: CanjeStore[]
   cargando: boolean
@@ -35,7 +37,7 @@ export type EstadoCanjes = {
   parchearPersona: (p: CanjePersona) => void
 }
 
-const VACIO: DatosCanjes = { personas: [], canjes: [], config: null, marcasVisibles: [] }
+const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, marcasVisibles: [] }
 
 export function useCanjes(store: CanjeStore): EstadoCanjes {
   const [datos, setDatos] = useState<DatosCanjes>(VACIO)
@@ -119,6 +121,7 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
   return {
     personas,
     canjes: datos.canjes,
+    vencidos: datos.vencidos,
     config: datos.config,
     marcasVisibles: datos.marcasVisibles,
     cargando,

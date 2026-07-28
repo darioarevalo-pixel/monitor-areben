@@ -26,11 +26,13 @@ import {
   Button, Card, Field, Input, Modal, Notice, Tabs, useToast,
   color, font, space, type TabItem,
 } from '@/components/ui'
-import { crearPersona } from '@/lib/canjes/cliente'
+import { crearPersona, esCiego } from '@/lib/canjes/cliente'
 import { normalizarInstagram } from '@/lib/canjes/instagram'
 import { veMarcaCanjes } from '@/lib/canjes/permisos'
 import { STORE_LABEL, type CanjeStore } from '@/lib/canjes/tipos'
+import { FichaCanje } from './FichaCanje'
 import { FichaPersona } from './FichaPersona'
+import { ListaCanjes } from './ListaCanjes'
 import { ListaPersonas } from './ListaPersonas'
 import { useCanjes } from './useCanjes'
 
@@ -52,12 +54,26 @@ export function Canjes() {
   const [store, setStore] = useState<CanjeStore>(() =>
     marcasPosibles.includes(marca) ? marca : (marcasPosibles[0] ?? 'bdi'),
   )
+  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones'>('personas')
   const [abierta, setAbierta] = useState<number | null>(null)
+  const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
   const [dandoAlta, setDandoAlta] = useState(false)
 
   const est = useCanjes(store)
 
   const abrir = useCallback((id: number) => setAbierta(id), [])
+
+  // Cuántos esperan firma: va como badge en la pestaña, que es donde se mira sin entrar.
+  const esperandoFirma = useMemo(
+    () => est.canjes.filter((c) => !esCiego(c) && c.estado === 'propuesta').length,
+    [est.canjes],
+  )
+
+  const tabs = useMemo<TabItem[]>(() => [
+    { key: 'personas', label: 'Padrón', hint: 'Todas las personas, de todas las marcas' },
+    { key: 'canjes', label: 'Canjes' },
+    { key: 'aprobaciones', label: 'Aprobaciones', badge: esperandoFirma || undefined },
+  ], [esperandoFirma])
 
   if (!marcasPosibles.length) {
     return <Notice tone="warning">No tenés acceso a los canjes de ninguna marca.</Notice>
@@ -92,8 +108,25 @@ export function Canjes() {
 
       {est.error && <Notice tone="danger">{est.error}</Notice>}
 
+      {/* Una ficha abierta ocupa la pantalla entera: mostrar la lista debajo sería ruido, y las
+          pestañas se vuelven a ver al volver. */}
+      {!abierta && !canjeAbierto && (
+        <div style={{ marginBottom: space[5] }}>
+          <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
+        </div>
+      )}
+
       {est.cargando && !est.personas.length ? (
         <Card>Cargando el padrón…</Card>
+      ) : canjeAbierto ? (
+        <FichaCanje
+          store={store}
+          canjeId={canjeAbierto}
+          onVolver={() => {
+            setCanjeAbierto(null)
+            void est.recargar()
+          }}
+        />
       ) : abierta ? (
         <FichaPersona
           store={store}
@@ -103,9 +136,22 @@ export function Canjes() {
             void est.recargar()
           }}
           onCambio={est.parchearPersona}
+          onAbrirCanje={setCanjeAbierto}
+          onCanjeCreado={async (id) => {
+            await est.recargar()
+            setCanjeAbierto(id)
+          }}
         />
-      ) : (
+      ) : tab === 'personas' ? (
         <ListaPersonas personas={est.personas} onAbrir={abrir} />
+      ) : (
+        <ListaCanjes
+          canjes={est.canjes}
+          personas={est.personas}
+          vencidos={est.vencidos}
+          soloAprobaciones={tab === 'aprobaciones'}
+          onAbrir={setCanjeAbierto}
+        />
       )}
 
       <AltaPersona

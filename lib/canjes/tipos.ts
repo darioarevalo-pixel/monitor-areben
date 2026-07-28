@@ -484,10 +484,364 @@ export const CONFIG_DEFAULT: Omit<CanjeConfig, 'store'> = {
 
 export type NivelAprobacion = 'aprobar' | 'aprobar-plata'
 
-// Las funciones de negocio de la Fase 1 en adelante — `costoEstimado`, `quienApruebaCanje`,
-// `controlDelTope`, `cumplimiento`, `faltantesParaCerrarCanje`, `calcularBalance`,
-// `entregablesVencidos`, `puedeProponerCanje` — entran con su fase. La Fase 0 es el padrón: hasta
-// que no haya canjes cargados no tienen nada que calcular.
+/** Los items que cuentan: un quitado o un sin stock no está en el pedido. */
+export function itemsVivos(items: CanjeItem[]): CanjeItem[] {
+  return items.filter((i) => i.estado === 'propuesto' || i.estado === 'confirmado')
+}
+
+/**
+ * Lo que **cuesta** el canje, para que gerencia apruebe mirando un número.
+ *
+ * Devuelve `null` cuando **no se puede estimar**, que no es lo mismo que cero: un canje con tope
+ * por unidades y sin items todavía no tiene monto (por eso el tope es por unidades). Ese `null`
+ * lo lee `quienApruebaCanje` y manda el caso a la firma alta, que es el default seguro.
+ *
+ * Con items cargados se usa el **costo real acumulado**, que es lo que va a salir de verdad. Sin
+ * items y con tope por monto se estima con `factor_costo_estimado` (el ratio costo/PVP): el tope
+ * está en PVP y lo que a la empresa le cuesta es el costo.
+ */
+export function costoEstimado(
+  c: Pick<CanjeRow, 'tope_tipo' | 'tope_pvp'>,
+  items: CanjeItem[],
+  cfg: Pick<CanjeConfig, 'factor_costo_estimado'>,
+): number | null {
+  const vivos = itemsVivos(items)
+  if (vivos.length) {
+    return vivos.reduce((a, i) => a + (Number(i.costo_unit) || 0) * (Number(i.cantidad) || 0), 0)
+  }
+  if (c.tope_tipo === 'monto' && c.tope_pvp != null) {
+    return Number(c.tope_pvp) * (Number(cfg.factor_costo_estimado) || 0)
+  }
+  return null
+}
+
+/**
+ * Quién tiene que firmar.
+ *
+ * ⚠️ **El umbral NO es una constante**: entra por parámetro desde la config editable. Arranca en
+ * `null`, que significa **todo pasa por la firma alta** — el default seguro mientras el monto no
+ * esté definido.
+ *
+ * Los dos niveles son sub-permisos de `canjes`, no una función nueva: el monitor no tiene el
+ * concepto "gerente", y agregar una función tocaría `ACCESO_POR_FUNCION`, la pantalla de Usuarios
+ * y sus tests para modelar lo mismo que un tilde en Config.
+ */
+export function quienApruebaCanje(
+  c: Pick<CanjeRow, 'tipo' | 'tope_tipo' | 'tope_pvp'>,
+  items: CanjeItem[],
+  cfg: Pick<CanjeConfig, 'umbral_aprobacion_alta' | 'factor_costo_estimado'>,
+): NivelAprobacion {
+  // Hay plata de por medio: no importa cuánta.
+  if (c.tipo === 'producto_plata') return 'aprobar-plata'
+  if (cfg.umbral_aprobacion_alta == null) return 'aprobar-plata'
+  const costo = costoEstimado(c, items, cfg)
+  // Si no se puede estimar, va a la firma alta. Prefiero molestar a un gerente que dejar pasar un
+  // canje caro por una firma baja.
+  if (costo == null) return 'aprobar-plata'
+  return costo > Number(cfg.umbral_aprobacion_alta) ? 'aprobar-plata' : 'aprobar'
+}
+
+// ── El tope ─────────────────────────────────────────────────────────────────────
+
+export type ControlTope = {
+  /** `false` frena el botón de agregar. */
+  ok: boolean
+  /** En criollo, para mostrar al lado de la lista. */
+  mensaje: string
+  /** Lo consumido y el techo, para la barra de progreso. */
+  usado: number
+  tope: number | null
+  /** `'$'` o `'u'`, según el modo. */
+  unidad: '$' | 'u'
+}
+
+/**
+ * ¿Entra un producto más?
+ *
+ * **Modo monto:** control **duro** sobre la suma de PVP. "Elegí hasta $80.000" es un número y se
+ * compara con un número.
+ *
+ * **Modo unidades:** control **duro sobre el total de unidades** (4, en `2 fundas + 1 jean + 1
+ * remera`) y **blando sobre el detalle**. Deliberadamente no se intenta adivinar si algo "es un
+ * jean": la categoría de Gestión Nube no es lo bastante prolija para colgar de ahí un bloqueo, y
+ * una validación que se equivoca la mitad de las veces se termina apagando. El operador ve la
+ * lista acordada al lado de lo que carga y valida a ojo.
+ */
+export function controlDelTope(
+  c: Pick<CanjeRow, 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
+  items: CanjeItem[],
+): ControlTope {
+  const vivos = itemsVivos(items)
+
+  if (c.tope_tipo === 'unidades') {
+    const tope = (c.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0)
+    const usado = vivos.reduce((a, i) => a + (Number(i.cantidad) || 0), 0)
+    const ok = tope === 0 || usado <= tope
+    return {
+      ok,
+      usado,
+      tope: tope || null,
+      unidad: 'u',
+      mensaje: !tope
+        ? 'El acuerdo no tiene unidades cargadas.'
+        : ok
+          ? `${usado} de ${tope} ${tope === 1 ? 'unidad' : 'unidades'}`
+          : `Se pasa del acuerdo: ${usado} ${usado === 1 ? 'unidad' : 'unidades'} contra las ${tope} acordadas.`,
+    }
+  }
+
+  const tope = c.tope_pvp == null ? null : Number(c.tope_pvp)
+  const usado = vivos.reduce((a, i) => a + (Number(i.pvp_unit) || 0) * (Number(i.cantidad) || 0), 0)
+  const ok = tope == null || usado <= tope
+  return {
+    ok,
+    usado,
+    tope,
+    unidad: '$',
+    mensaje: tope == null
+      ? 'El acuerdo no tiene tope cargado.'
+      : ok
+        ? `$${usado.toLocaleString('es-AR')} de $${tope.toLocaleString('es-AR')}`
+        : `Se pasa del tope: $${usado.toLocaleString('es-AR')} contra los $${tope.toLocaleString('es-AR')} acordados.`,
+  }
+}
+
+// ── El cumplimiento ─────────────────────────────────────────────────────────────
+
+export type CumplimientoEntregable = {
+  entregable: CanjeEntregable
+  comprometidas: number
+  /** Sólo evidencias **verificadas**. Una sin verificar no cuenta. */
+  cumplidas: number
+  completo: boolean
+  /** Obligatorio, con fecha pasada y sin cumplir. */
+  vencido: boolean
+}
+
+export type Cumplimiento = {
+  comprometidas: number
+  cumplidas: number
+  /** 0–1. `1` si no se comprometió nada (no hay nada que incumplir). */
+  fraccion: number
+  completo: boolean
+  porEntregable: CumplimientoEntregable[]
+  vencidos: CumplimientoEntregable[]
+}
+
+/**
+ * Cuánto de lo que prometió publicó de verdad.
+ *
+ * ⚠️ Se **deriva** contando evidencias verificadas: `cantidad_cumplida` no es columna a propósito.
+ * Un contador denormalizado se desincroniza el día que alguien borre una evidencia, y ese día el
+ * canje cierra sin que nadie note que falta algo.
+ *
+ * Una evidencia **sin verificar no cuenta**. Sin eso, pegar un link roto cierra el canje.
+ */
+export function cumplimiento(
+  entregables: CanjeEntregable[],
+  evidencias: CanjeEvidencia[],
+  hoy: Date,
+): Cumplimiento {
+  const hoyISO = fechaISO(hoy)
+  // Un solo barrido: contar con un `filter` por entregable sería cuadrático.
+  const verificadasPorEntregable = new Map<number, number>()
+  for (const e of evidencias) {
+    if (!e.verificada || e.entregable_id == null) continue
+    verificadasPorEntregable.set(e.entregable_id, (verificadasPorEntregable.get(e.entregable_id) ?? 0) + 1)
+  }
+
+  const porEntregable = entregables.map<CumplimientoEntregable>((e) => {
+    const comprometidas = Number(e.cantidad_comprometida) || 0
+    // Se topea en lo comprometido: subir cinco historias para dos prometidas no da 250%.
+    const cumplidas = Math.min(verificadasPorEntregable.get(e.id) ?? 0, comprometidas)
+    const completo = cumplidas >= comprometidas
+    return {
+      entregable: e,
+      comprometidas,
+      cumplidas,
+      completo,
+      vencido: Boolean(e.obligatorio && e.vence_el && e.vence_el < hoyISO && !completo),
+    }
+  })
+
+  const comprometidas = porEntregable.reduce((a, e) => a + e.comprometidas, 0)
+  const cumplidas = porEntregable.reduce((a, e) => a + e.cumplidas, 0)
+  return {
+    comprometidas,
+    cumplidas,
+    // Sin nada comprometido no hay nada que incumplir: 1, no 0. Un 0 haría que un canje sin
+    // entregables se vea como un incumplimiento total.
+    fraccion: comprometidas === 0 ? 1 : cumplidas / comprometidas,
+    completo: porEntregable.every((e) => !e.entregable.obligatorio || e.completo),
+    porEntregable,
+    vencidos: porEntregable.filter((e) => e.vencido),
+  }
+}
+
+/** `YYYY-MM-DD` en hora **local**. En UTC, un canje de la tarde vencería un día antes. */
+export function fechaISO(d: Date): string {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+/**
+ * Los entregables obligatorios que pasaron su fecha sin evidencia verificada. Alimenta el aviso
+ * del sidebar y el bloqueo de §2 bis.
+ */
+export function entregablesVencidos(
+  entregables: CanjeEntregable[],
+  evidencias: CanjeEvidencia[],
+  hoy: Date,
+): CumplimientoEntregable[] {
+  return cumplimiento(entregables, evidencias, hoy).vencidos
+}
+
+// ── §2 bis: qué pasa cuando no cumple ───────────────────────────────────────────
+
+export type PuedeProponer = { ok: true } | { ok: false; motivo: string }
+
+/**
+ * ¿Se le puede proponer un canje nuevo?
+ *
+ * ⚠️ **Arranca apagado** (`bloquear_por_vencidos = false`) y eso es deliberado. El riesgo del
+ * módulo no es técnico: es que la carga del cumplimiento se abandone a los dos meses. Si nadie
+ * carga evidencias, **todo el mundo figura como incumplidor** y el sistema empieza a frenar canjes
+ * con gente que sí cumplió. Se prende desde la config cuando la carga se haya sostenido un mes.
+ *
+ * ⚠️ El bloqueo es **transversal a las marcas**: si debe algo en BDI, tampoco se le propone en
+ * Zattia. Es el sentido de tener padrón único — si no, se esquiva cambiando de marca. Por eso
+ * `susCanjes` tiene que traer los de **todas** las marcas, no los de la que se está mirando.
+ *
+ * Se valida **server-side** en el handler, no sólo deshabilitando el botón.
+ */
+export function puedeProponerCanje(
+  persona: Pick<CanjePersona, 'vetada' | 'vetada_motivo'>,
+  susCanjes: { canje: Pick<CanjeRow, 'id' | 'estado'>; entregables: CanjeEntregable[]; evidencias: CanjeEvidencia[] }[],
+  cfg: Pick<CanjeConfig, 'bloquear_por_vencidos'>,
+  hoy: Date,
+): PuedeProponer {
+  // El veto manual frena siempre, esté como esté la config: alguien lo decidió a mano.
+  if (persona.vetada) {
+    return { ok: false, motivo: persona.vetada_motivo ? `Está vetada: ${persona.vetada_motivo}` : 'Está vetada.' }
+  }
+  if (!cfg.bloquear_por_vencidos) return { ok: true }
+
+  for (const c of susCanjes) {
+    if (esTerminal(c.canje.estado)) continue
+    const vencidos = entregablesVencidos(c.entregables, c.evidencias, hoy)
+    if (!vencidos.length) continue
+    const cuantas = vencidos.reduce((a, v) => a + (v.comprometidas - v.cumplidas), 0)
+    const detalle = vencidos.map((v) => entregableEnCriollo(v.entregable.tipo, v.comprometidas - v.cumplidas)).join(' y ')
+    return {
+      ok: false,
+      motivo: `Tiene ${detalle} ${cuantas === 1 ? 'vencida' : 'vencidas'} del canje ${numeroCanje(c.canje.id)}. Resolvelo antes de proponerle otro.`,
+    }
+  }
+  return { ok: true }
+}
+
+// ── El cierre ───────────────────────────────────────────────────────────────────
+
+/**
+ * Qué falta para poder cerrar. Devuelve la lista **en criollo**: si no está vacía, el botón va
+ * deshabilitado y esto se muestra debajo como explicación. Es el patrón de `faltantesParaCerrar`
+ * (`lib/reclamos/tipos.ts:815`), que resolvió el problema de los botones grises sin motivo.
+ */
+export function faltantesParaCerrarCanje(
+  c: CanjeRow,
+  entregables: CanjeEntregable[],
+  evidencias: CanjeEvidencia[],
+  hoy: Date,
+): string[] {
+  const faltan: string[] = []
+
+  if (c.compra_estado === 'pendiente') faltan.push('marcar la compra como hecha')
+  if (c.envio_estado === 'pendiente') faltan.push('despachar el pedido')
+  if (!c.entregado_at) faltan.push('marcar que le llegó')
+  // Sin el costo del envío el balance miente, y el balance es para lo que se hace todo esto.
+  if (c.envio_costo == null) faltan.push('cargar el costo del envío')
+  if (c.tipo === 'producto_plata' && c.pago_estado === 'pendiente') {
+    faltan.push(c.monto_plata ? `pagar los $${Number(c.monto_plata).toLocaleString('es-AR')}` : 'registrar el pago')
+  }
+
+  const cump = cumplimiento(entregables, evidencias, hoy)
+  for (const e of cump.porEntregable) {
+    if (!e.entregable.obligatorio || e.completo) continue
+    faltan.push(`verificar ${entregableEnCriollo(e.entregable.tipo, e.comprometidas - e.cumplidas)}`)
+  }
+
+  // Una evidencia cargada y sin mirar es trabajo a medio hacer: o se verifica o se rechaza.
+  const sinMirar = evidencias.filter((e) => !e.verificada && !e.rechazada_motivo).length
+  if (sinMirar) faltan.push(`revisar ${sinMirar === 1 ? '1 evidencia' : `${sinMirar} evidencias`} sin verificar`)
+
+  return faltan
+}
+
+export type Balance = {
+  costo_productos: number
+  costo_envio: number
+  costo_plata: number
+  costo_total: number
+  /** `null` si nadie cargó el alcance: no se inventa un CPM. */
+  cpm: number | null
+}
+
+/**
+ * El balance, que se congela al cerrar (`balance_*` en `canjes`) en vez de calcularse cada vez.
+ *
+ * No es una vista a propósito: el costo que importa es el del día del canje. Si dentro de un año
+ * cambia el costo de esa remera, lo que se gastó en esta acción no cambia.
+ */
+export function calcularBalance(
+  c: Pick<CanjeRow, 'tipo' | 'monto_plata' | 'envio_costo' | 'balance_alcance'>,
+  items: CanjeItem[],
+): Balance {
+  const costo_productos = itemsVivos(items)
+    .reduce((a, i) => a + (Number(i.costo_unit) || 0) * (Number(i.cantidad) || 0), 0)
+  const costo_envio = Number(c.envio_costo) || 0
+  const costo_plata = c.tipo === 'producto_plata' ? Number(c.monto_plata) || 0 : 0
+  const costo_total = costo_productos + costo_envio + costo_plata
+  const alcance = Number(c.balance_alcance) || 0
+  return {
+    costo_productos,
+    costo_envio,
+    costo_plata,
+    costo_total,
+    // Costo por mil impresiones. Sin alcance cargado no hay CPM: un 0 se leería como "gratis".
+    cpm: alcance > 0 ? (costo_total / alcance) * 1000 : null,
+  }
+}
+
+// ── El envío ────────────────────────────────────────────────────────────────────
+
+/** Las mismas vías que Reclamos. `presencial` = se lo damos en mano: sin envío ni seguimiento. */
+export type ViaEnvio = 'correo' | 'andreani' | 'cadete' | 'presencial'
+
+export const VIAS_ENVIO: ViaEnvio[] = ['correo', 'andreani', 'cadete', 'presencial']
+
+export const VIA_ENVIO_LABEL: Record<ViaEnvio, string> = {
+  correo: 'Correo Argentino',
+  andreani: 'Andreani',
+  cadete: 'Cadete',
+  presencial: 'Se lo damos en mano',
+}
+
+/** Sólo Correo y Andreani tienen código que seguir. */
+export function pideSeguimiento(via: ViaEnvio | string | null | undefined): boolean {
+  return via === 'correo' || via === 'andreani'
+}
+
+/**
+ * La fecha en que vence un entregable, congelada al marcar la entrega.
+ *
+ * El plazo se guarda **en días desde la entrega** y no como fecha porque al armar el acuerdo
+ * todavía no se sabe cuándo va a llegar el pedido. Este es el momento en que se vuelve una fecha.
+ */
+export function vencimientoDe(entregadoISO: string, plazoDias: number | null | undefined, plazoDefault: number): string {
+  const dias = plazoDias == null ? plazoDefault : Number(plazoDias)
+  const d = new Date(entregadoISO)
+  d.setDate(d.getDate() + (Number.isFinite(dias) ? dias : plazoDefault))
+  return fechaISO(d)
+}
 
 // ── El nombre para mostrar ──────────────────────────────────────────────────────
 
