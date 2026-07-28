@@ -131,6 +131,7 @@ export function Canjes() {
         <FichaPersona
           store={store}
           personaId={abierta}
+          ctxPuntaje={est.ctxPuntaje}
           onVolver={() => {
             setAbierta(null)
             void est.recargar()

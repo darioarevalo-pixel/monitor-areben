@@ -19,6 +19,7 @@ import {
   color, font, space, weight, type ChipOpt, type Tone,
 } from '@/components/ui'
 import { instagramHref, instagramParaMostrar } from '@/lib/canjes/instagram'
+import { MINIMO_CANJES_CERRADOS, NIVEL_LABEL, porQueNoHayPuntaje, type NivelPuntaje } from '@/lib/canjes/puntaje'
 import { CONTACTO_LABEL, type EstadoContacto } from '@/lib/canjes/seguimiento'
 import { STORE_LABEL, type CanjeStore } from '@/lib/canjes/tipos'
 import type { PersonaEnLista } from './useCanjes'
@@ -30,13 +31,20 @@ const CONTACTO_TONE: Record<EstadoContacto, Tone> = {
   aldia: 'success',
 }
 
-type Filtro = 'todas' | 'vencido' | 'nunca' | 'destacadas' | 'vetadas'
+const NIVEL_TONE: Record<NivelPuntaje, Tone> = {
+  alta: 'success',
+  media: 'action',
+  baja: 'warning',
+}
+
+type Filtro = 'todas' | 'vencido' | 'nunca' | 'destacadas' | 'buenas' | 'vetadas'
 
 const FILTROS: ChipOpt<Filtro>[] = [
   { key: 'todas', label: 'Todas' },
   { key: 'vencido', label: 'Hace rato', title: 'Pasó su cadencia sin que le propongamos nada' },
   { key: 'nunca', label: 'Nunca', title: 'Están en el padrón pero todavía no hicimos ninguna acción' },
   { key: 'destacadas', label: 'Destacadas' },
+  { key: 'buenas', label: 'Muy buenas', title: 'Las que ya tienen puntaje y les fue muy bien. Hace falta un mínimo de canjes cerrados para tenerlo' },
   { key: 'vetadas', label: 'Vetadas' },
 ]
 
@@ -64,6 +72,7 @@ export function ListaPersonas({
       if (filtro === 'vencido' && p._seg.estado !== 'vencido') return false
       if (filtro === 'nunca' && p._seg.estado !== 'nunca') return false
       if (filtro === 'destacadas' && !p.destacada) return false
+      if (filtro === 'buenas' && !(p._puntaje.hay && p._puntaje.nivel === 'alta')) return false
       if (filtro === 'vetadas' && !p.vetada) return false
       if (!busca) return true
       // Se busca por @ y por nombre a la vez: quien la conoce por el @ lo tipea, quien la conoce
@@ -106,6 +115,7 @@ export function ListaPersonas({
               <Th>Última acción</Th>
               <Th>Marcas</Th>
               <Th align="right">Canjes cerrados</Th>
+              <Th>Puntaje</Th>
               <Th>Seguidores</Th>
             </Tr>
           </THead>
@@ -146,6 +156,9 @@ export function ListaPersonas({
                 </Td>
                 <Td align="right">{p._cerrados || <span style={{ color: color.mut2 }}>—</span>}</Td>
                 <Td>
+                  <PuntajeChip puntaje={p._puntaje} />
+                </Td>
+                <Td>
                   {p.seguidores_ig ? (
                     <span title={p.seguidores_at ? `Cargado el ${p.seguidores_at.slice(0, 10)}` : undefined}>
                       {p.seguidores_ig.toLocaleString('es-AR')}
@@ -160,6 +173,31 @@ export function ListaPersonas({
         </TableWrap>
       )}
     </>
+  )
+}
+
+/**
+ * El puntaje, que la mayor parte del tiempo **no existe** — y eso está bien.
+ *
+ * Cuando no alcanza no se muestra un número en gris ni un "0": se muestra un guion, y el motivo
+ * completo en el tooltip. Un puntaje provisorio se lee como definitivo dos semanas después.
+ */
+function PuntajeChip({ puntaje }: { puntaje: PersonaEnLista['_puntaje'] }) {
+  if (!puntaje.hay) {
+    return (
+      <span style={{ color: color.mut2 }} title={porQueNoHayPuntaje(puntaje)}>
+        {puntaje.motivo === 'vetada' ? '—' : `${puntaje.cerrados}/${MINIMO_CANJES_CERRADOS}`}
+      </span>
+    )
+  }
+  return (
+    <span
+      style={{ display: 'flex', alignItems: 'center', gap: space[2] }}
+      title={`Sobre ${puntaje.cerrados === 1 ? '1 canje cerrado' : `${puntaje.cerrados} canjes cerrados`}`}
+    >
+      <strong style={{ fontWeight: weight.medium }}>{puntaje.total}</strong>
+      <StatusPill tone={NIVEL_TONE[puntaje.nivel]} label={NIVEL_LABEL[puntaje.nivel]} />
+    </span>
   )
 }
 

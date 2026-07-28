@@ -24,6 +24,10 @@ import {
   type CamposPersona, type CanjeVisible,
 } from '@/lib/canjes/cliente'
 import { instagramHref, instagramParaMostrar, tiktokHref } from '@/lib/canjes/instagram'
+import {
+  NIVEL_LABEL, calcularPuntaje, porQueNoHayPuntaje,
+  type ContextoPuntaje, type NivelPuntaje,
+} from '@/lib/canjes/puntaje'
 import { CONTACTO_LABEL, estadoDeContacto, type EstadoContacto } from '@/lib/canjes/seguimiento'
 import {
   ESTADO_CANJE_LABEL, STORE_LABEL, TIPO_CANJE_LABEL, nombrePersona, queDatoPide, tieneDireccion,
@@ -53,6 +57,7 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
 export function FichaPersona({
   store,
   personaId,
+  ctxPuntaje,
   onVolver,
   onCambio,
   onAbrirCanje,
@@ -60,6 +65,8 @@ export function FichaPersona({
 }: {
   store: CanjeStore
   personaId: number
+  /** Viene de la lista: la comparación de rendimiento se hace contra el padrón entero. */
+  ctxPuntaje: ContextoPuntaje
   onVolver: () => void
   /** Avisa a la lista que esta ficha cambió, para que no quede desactualizada al volver. */
   onCambio: (p: CanjePersona) => void
@@ -227,6 +234,9 @@ export function FichaPersona({
       {/* ── Lo que hace falta para despachar ── */}
       <FaltaParaDespachar persona={persona} store={store} />
 
+      {/* ── El puntaje, con el desglose a la vista ── */}
+      <PuntajeDeLaPersona persona={persona} canjes={canjes} ctx={ctxPuntaje} />
+
       <div style={{ display: 'grid', gap: space[5], gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
         <SectionCard title="Contacto">
           <Dato label="Teléfono" valor={persona.telefono} />
@@ -376,6 +386,66 @@ export function FichaPersona({
         />
       )}
     </div>
+  )
+}
+
+const NIVEL_TONE: Record<NivelPuntaje, Tone> = { alta: 'success', media: 'action', baja: 'warning' }
+
+/**
+ * El puntaje **con el desglose siempre a la vista**, no un número solo.
+ *
+ * Es deliberado y es la mitad del diseño: un score de 73 sin decir de dónde sale no se puede
+ * discutir, sólo creer o ignorar. Acá se ve qué señal aportó cuánto, cuáles se apagaron por falta
+ * de datos, y sobre cuántos canjes se calculó — así, cuando alguien no está de acuerdo, la
+ * conversación es sobre el dato y no sobre el número.
+ *
+ * Ver el encabezado de `lib/canjes/puntaje.ts` para por qué la mayor parte del tiempo no hay
+ * puntaje, y por qué eso no es un bug.
+ */
+function PuntajeDeLaPersona({
+  persona, canjes, ctx,
+}: {
+  persona: CanjePersona
+  canjes: CanjeVisible[]
+  ctx: ContextoPuntaje
+}) {
+  const p = useMemo(() => calcularPuntaje(persona, canjes, ctx), [persona, canjes, ctx])
+
+  if (!p.hay) {
+    // Sin puntaje no se pinta una tarjeta vacía: una línea que explique alcanza y no ocupa la
+    // pantalla con un cartel de algo que no existe.
+    return (
+      <div style={{ color: color.mut, fontSize: font.sm }}>
+        <strong style={{ fontWeight: weight.medium }}>Puntaje:</strong> {porQueNoHayPuntaje(p)}
+      </div>
+    )
+  }
+
+  return (
+    <SectionCard
+      title="Puntaje"
+      subtitle={`Sobre ${p.cerrados === 1 ? '1 canje cerrado' : `${p.cerrados} canjes cerrados`}${
+        p.ciegos ? `. No entran ${p.ciegos === 1 ? '1 canje cerrado' : `${p.ciegos} canjes cerrados`} de otras marcas: desde acá no se ve cómo salieron.` : ''
+      }`}
+      actions={<StatusPill tone={NIVEL_TONE[p.nivel]} label={NIVEL_LABEL[p.nivel]} />}
+    >
+      <div style={{ display: 'flex', gap: space[5], alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 40, fontWeight: weight.semibold, lineHeight: 1 }}>{p.total}</div>
+        <div style={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: space[3] }}>
+          {p.dimensiones.map((d) => (
+            <div key={d.clave}>
+              <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline' }}>
+                <span style={{ fontWeight: weight.medium }}>{d.label}</span>
+                <span style={{ marginLeft: 'auto', color: d.valor == null ? color.mut2 : color.ink }}>
+                  {d.valor == null ? 'sin datos' : `${Math.round(d.valor)} · pesa ${d.peso} %`}
+                </span>
+              </div>
+              <div style={{ color: color.mut, fontSize: font.sm }}>{d.detalle}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </SectionCard>
   )
 }
 

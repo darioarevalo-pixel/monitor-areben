@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes } from '@/lib/canjes/cliente'
+import { calcularPuntaje, contextoDePuntaje, type ContextoPuntaje, type Puntaje } from '@/lib/canjes/puntaje'
 import { estadoDeContacto, ordenarPorContacto, type Seguimiento } from '@/lib/canjes/seguimiento'
 import { nombrePersona, type CanjeConfig, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
 
@@ -21,10 +22,20 @@ export type PersonaEnLista = CanjePersona & {
   _canjes: CanjeVisible[]
   /** Cuántos cerró. Es lo primero que se mira antes de proponerle algo. */
   _cerrados: number
+  /**
+   * El puntaje, que la mayor parte del tiempo va a ser `hay: false` — hace falta un mínimo de
+   * canjes cerrados. Ver el encabezado de `lib/canjes/puntaje.ts`.
+   */
+  _puntaje: Puntaje
 }
 
 export type EstadoCanjes = {
   personas: PersonaEnLista[]
+  /**
+   * Contra qué se compara el rendimiento en el puntaje. Sale del padrón entero y por eso viaja: la
+   * ficha de una persona no puede armarlo sola sin dar un número distinto al de la lista.
+   */
+  ctxPuntaje: ContextoPuntaje
   canjes: CanjeVisible[]
   /** Resumido por el servidor: qué canjes tienen entregables obligatorios vencidos. */
   vencidos: CanjeVencido[]
@@ -91,7 +102,7 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     setDatos((d) => ({ ...d, personas: d.personas.map((x) => (x.id === p.id ? p : x)) }))
   }, [])
 
-  const personas = useMemo<PersonaEnLista[]>(() => {
+  const { personas, ctxPuntaje } = useMemo<{ personas: PersonaEnLista[]; ctxPuntaje: ContextoPuntaje }>(() => {
     // Un solo barrido para agrupar los canjes por persona: con el padrón entero en memoria, hacer
     // un `filter` por persona sería cuadrático y se nota a los cientos de fichas.
     const porPersona = new Map<number, CanjeVisible[]>()
@@ -105,6 +116,10 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     // medirían contra relojes distintos.
     const hoy = new Date()
 
+    // El contexto del puntaje se arma UNA vez para todo el padrón: la mediana de CPM tiene que ser
+    // la misma para todas, o dos personas idénticas darían puntajes distintos.
+    const ctx = contextoDePuntaje(datos.personas.map((p) => ({ canjes: porPersona.get(p.id) || [] })))
+
     const lista = datos.personas.map((p) => {
       const suyos = porPersona.get(p.id) || []
       return {
@@ -113,13 +128,15 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
         _seg: estadoDeContacto(p, suyos, hoy),
         _nombre: nombrePersona(p),
         _cerrados: suyos.filter((c) => c.estado === 'cerrado').length,
+        _puntaje: calcularPuntaje(p, suyos, ctx),
       }
     })
-    return ordenarPorContacto(lista)
+    return { personas: ordenarPorContacto(lista), ctxPuntaje: ctx }
   }, [datos.personas, datos.canjes])
 
   return {
     personas,
+    ctxPuntaje,
     canjes: datos.canjes,
     vencidos: datos.vencidos,
     config: datos.config,
