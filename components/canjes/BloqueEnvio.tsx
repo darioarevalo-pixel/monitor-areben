@@ -14,7 +14,7 @@
 
 import { useState } from 'react'
 import {
-  Button, Field, Input, Notice, SectionCard, Select, StatusPill,
+  Button, CopyButton, Field, Input, Notice, SectionCard, Select, StatusPill,
   color, font, space, weight, useToast, type Tone,
 } from '@/components/ui'
 import { numeroEM, etiquetaEM, trackingUrl } from '@/lib/reclamos/tipos'
@@ -22,11 +22,65 @@ import { marcarAvisada, marcarEntregado, registrarCompra, registrarEnvio, verifi
 import { mensajeDespacho } from '@/lib/canjes/mensajes'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  VIAS_ENVIO, VIA_ENVIO_LABEL, pideSeguimiento,
+  VIAS_ENVIO, VIA_ENVIO_LABEL, pideSeguimiento, queDatoPide, tieneDatosDeMarca, tieneDireccion,
   type CanjePersona, type CanjeRow, type ViaEnvio,
 } from '@/lib/canjes/tipos'
 
 const PENDIENTE_TONE: Record<string, Tone> = { pendiente: 'warning', hecho: 'success', no_aplica: 'neutral' }
+
+/** La dirección en un renglón, para copiarla al admin de TN sin ir y volver a la ficha. */
+function direccionEnUnaLinea(p: CanjePersona): string {
+  const calle = [p.calle, p.numero].filter(Boolean).join(' ')
+  const puerta = [p.piso && `piso ${p.piso}`, p.depto && `depto ${p.depto}`].filter(Boolean).join(', ')
+  return [calle, puerta, p.localidad, p.provincia, p.cp && `CP ${p.cp}`].filter(Boolean).join(', ')
+}
+
+/**
+ * De dónde salieron los datos con los que se va a armar el pedido: si los cargó el equipo de
+ * memoria o si los confirmó ella por el link.
+ *
+ * Es el único lugar del panel donde se ve el resultado del portal, y por eso está acá y no en la
+ * ficha de la persona: el momento en que importa saber si la dirección es confiable es **justo
+ * antes de tipearla en Tienda Nube**, no antes.
+ */
+function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePersona | null }) {
+  if (!persona) return null
+
+  const falta: string[] = []
+  if (!tieneDireccion(persona)) falta.push('la dirección')
+  if (!tieneDatosDeMarca(persona, canje.store)) {
+    falta.push(queDatoPide(canje.store) === 'talles' ? 'los talles' : 'el modelo de celular')
+  }
+  if (!persona.telefono) falta.push('el teléfono')
+  const confirmado = canje.datos_confirmados_at
+
+  const aviso = falta.length ? (
+    <Notice tone="warning">
+      Falta {falta.length === 1 ? falta[0] : `${falta.slice(0, -1).join(', ')} y ${falta[falta.length - 1]}`}
+      {confirmado
+        ? `. Ella abrió el link el ${confirmado.slice(0, 10)} pero eso quedó vacío: pedíselo por WhatsApp.`
+        : '. Mandale el link con «Mandarle el link» y lo carga ella.'}
+    </Notice>
+  ) : (
+    <Notice tone={confirmado ? 'success' : 'neutral'}>
+      {confirmado
+        ? `Ella confirmó estos datos el ${confirmado.slice(0, 10)}.`
+        : 'Los datos los cargó el equipo: ella nunca abrió el link. Si hay dudas con la dirección, mandáselo antes de despachar.'}
+    </Notice>
+  )
+
+  return (
+    <div style={{ marginBottom: space[5] }}>
+      {aviso}
+      {tieneDireccion(persona) && (
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginTop: space[2], flexWrap: 'wrap' }}>
+          <span style={{ color: color.mut, fontSize: font.sm }}>{direccionEnUnaLinea(persona)}</span>
+          <CopyButton getText={() => direccionEnUnaLinea(persona)} label="Copiar la dirección" />
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function BloqueEnvio({
   canje, persona, onCambio,
@@ -120,6 +174,8 @@ export function BloqueEnvio({
         </div>
       }
     >
+      <DatosDeElla canje={canje} persona={persona} />
+
       {/* ── Paso 1: la orden ── */}
       <div style={{ marginBottom: space[5] }}>
         <div style={{ fontWeight: weight.semibold, fontSize: font.md, marginBottom: space[2] }}>

@@ -25,15 +25,17 @@
 // quién le pasa el request. `devoluciones` además exige función de administración para lo que
 // mueve plata.
 //
-// ⚠️ `reclamo` es la excepción y hay que saberlo: **no pide sesión del Monitor**. Es el link que
-// se le manda al cliente para que suba las fotos, o sea que está abierto a internet. Se defiende
-// con el token del reclamo (64 hex, con vencimiento, revocable) y solo deja escribir fotos y
-// relato en ESE reclamo. Ver el encabezado de `_reclamo.js`.
+// ⚠️ `reclamo` y `canje` son las excepciones y hay que saberlo: **no piden sesión del Monitor**.
+// Son los links que se le mandan al cliente (para subir las fotos de su reclamo) y a la creadora
+// (para cargar sus datos de envío), o sea que están abiertos a internet. Se defienden con un token
+// de 64 hex, con vencimiento y revocable, y cada uno deja escribir sólo un puñado de campos de ESA
+// fila: fotos y relato en `_reclamo.js`, contacto y dirección en `_canje-portal.js`.
 import fallas from './_fallas.js';
 import solicitudes from './_solicitudes.js';
 import reclamos from './_reclamos.js';
 import reclamo from './_reclamo.js';
 import canjes from './_canjes.js';
+import canje from './_canje-portal.js';
 
 // `cambios` ya no está: un cambio es un reclamo cuya salida es otro producto, así que se atiende
 // por `reclamos` (acciones `cambio` / `procesar`). La tabla `cambios` estaba vacía en las dos
@@ -42,7 +44,10 @@ import canjes from './_canjes.js';
 // `canjes` no es post-venta, y está acá por la misma razón que los demás: cuelga de esta puerta
 // para no gastar uno de los 12 archivos de ruta. Además es el único que habla SIEMPRE con la base
 // de BDI, para las tres marcas — ver el encabezado de `_canjes.js`.
-const RECURSOS = { fallas, solicitudes, reclamos, reclamo, canjes };
+//
+// `canje` (en singular) es al canje lo que `reclamo` al reclamo: el link público, sin sesión. Ver
+// abajo.
+const RECURSOS = { fallas, solicitudes, reclamos, reclamo, canjes, canje };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

@@ -380,8 +380,8 @@ export function FichaPersona({
 }
 
 /**
- * Lo que falta para poder mandarle el pedido. Es la lista que hoy se arma de memoria mirando el
- * WhatsApp, y la que justifica que exista el portal (Fase 2): sin dirección no se cotiza el envío.
+ * Lo que falta para poder mandarle el pedido. Es la lista que antes se armaba de memoria mirando el
+ * WhatsApp, y la que justifica que exista el portal: sin dirección no se cotiza el envío.
  */
 function FaltaParaDespachar({ persona, store }: { persona: CanjePersona; store: CanjeStore }) {
   const falta: string[] = []
@@ -395,7 +395,8 @@ function FaltaParaDespachar({ persona, store }: { persona: CanjePersona; store: 
   const lista = falta.length === 1 ? falta[0] : `${falta.slice(0, -1).join(', ')} y ${falta[falta.length - 1]}`
   return (
     <Notice tone="warning">
-      Para mandarle un pedido falta {lista}. Se lo podés pedir por WhatsApp y cargarlo acá.
+      Para mandarle un pedido falta {lista}. Lo más rápido es mandarle el link desde el canje, que lo
+      carga ella; si no, se lo pedís por WhatsApp y lo cargás acá.
     </Notice>
   )
 }

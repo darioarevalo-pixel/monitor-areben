@@ -5,6 +5,7 @@ import { createElement, useEffect, useState } from 'react'
 import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
 import { LoginScreen } from '@/components/LoginScreen'
 import { ReclamoPublico } from '@/components/reclamos/ReclamoPublico'
+import { CanjePortal } from '@/components/canjes/CanjePortal'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { AccionesProvider } from '@/components/layout/acciones'
@@ -45,12 +46,12 @@ export default function Seccion() {
   const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)
 
   /**
-   * El link del cliente (`/reclamo/<token>`) NO es una sección del monitor: no está en el nav, no
-   * tiene permiso y lo abre gente sin cuenta. Hay que sacarlo del camino ANTES del guard de
-   * secciones y también del efecto que redirige — si no, a cualquiera con sesión abierta el shell
-   * lo manda a Inicio antes de que llegue a ver el reclamo.
+   * Los links públicos (`/reclamo/<token>` para el cliente, `/canje/<token>` para la creadora) NO
+   * son secciones del monitor: no están en el nav, no tienen permiso y los abre gente sin cuenta.
+   * Hay que sacarlos del camino ANTES del guard de secciones y también del efecto que redirige — si
+   * no, a cualquiera con sesión abierta el shell lo manda a Inicio antes de que llegue a verlos.
    */
-  const esPortalCliente = key === 'reclamo'
+  const esPortalCliente = key === 'reclamo' || key === 'canje'
 
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
@@ -69,7 +70,8 @@ export default function Seccion() {
   // proyecto está en el tope del plan Hobby (pasarse frena todos los deploys en silencio). Sale
   // antes del gate de login a propósito: se defiende con el token, no con la sesión.
   if (esPortalCliente) {
-    return <ReclamoPublico token={Array.isArray(partes) ? partes[1] ?? null : null} />
+    const token = Array.isArray(partes) ? partes[1] ?? null : null
+    return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} />
   }
 
   if (cargando) return <div className="login-screen" />
