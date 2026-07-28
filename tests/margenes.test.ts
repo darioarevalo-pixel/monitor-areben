@@ -5,6 +5,7 @@ import {
   colorDesfase,
   computarFilas,
   etiquetaDesfase,
+  ocultosPorFaltaDeCosto,
   ordenar,
   resumen,
 } from '@/lib/margenes'
@@ -12,7 +13,7 @@ import { indexarTn } from '@/lib/tn'
 
 function prod(over: Partial<Producto> & { id: string }): Producto {
   return {
-    name: 'X', sku: null, proveedor: null, category: null, retailer_price: 0, unit_cost: 0,
+    name: 'X', sku: null, proveedor: null, category: null, retailer_price: 0, unit_cost: 0, sinCosto: false,
     margin: null, markup: null, ingresoMes: null, firstSale: null, lastSale: null, daysSinceLast: 0,
     sales7: 0, sales15: 0, sales30: 0, sales60: 0, sales90: 0, totalSales: 0, monthlySales: [],
     stock: 0, lifespan: LIFESPAN_SIN_DATO, lifespanFirst: LIFESPAN_SIN_DATO,
@@ -32,6 +33,27 @@ describe('computarFilas · disponibles + exclusiones', () => {
   it('sólo con stock, costo y precio; excluye SKU "stu"', () => {
     const filas = computarFilas(productos, indexarTn([]), 130)
     expect(filas.map((f) => f.p.id)).toEqual(['1'])
+  })
+
+  // Cuando el token de GN pierde `costs:read` la API deja de mandar `unit_cost` y TODOS los
+  // productos caen en este filtro: la pantalla se ve vacía como si no hubiera stock. Le pasó a
+  // BDI con sus 428 productos y nadie lo notó. El contador es lo que hace visible la diferencia
+  // entre "no hay productos" y "no sabemos cuánto cuestan".
+  it('cuenta aparte los que se ocultan por falta de costo, y NO los confunde con costo cero', () => {
+    const conStock = { stock: 5, retailer_price: 250 }
+    expect(ocultosPorFaltaDeCosto([
+      prod({ id: '1', ...conStock, unit_cost: 100 }), // tiene costo
+      prod({ id: '2', ...conStock, unit_cost: 0, sinCosto: true }), // GN no lo mandó
+      prod({ id: '3', ...conStock, unit_cost: 0 }), // costo cero cargado a mano: NO cuenta
+      prod({ id: '4', stock: 0, retailer_price: 250, unit_cost: 0, sinCosto: true }), // sin stock: no se muestra igual
+      prod({ id: '5', ...conStock, retailer_price: 0, unit_cost: 0, sinCosto: true }), // sin precio tampoco
+    ])).toBe(1)
+  })
+
+  it('sin ningún costo cargado, todos los disponibles quedan contados', () => {
+    const todos = [1, 2, 3].map((i) => prod({ id: String(i), stock: 5, retailer_price: 250, unit_cost: 0, sinCosto: true }))
+    expect(computarFilas(todos, indexarTn([]), 130)).toHaveLength(0)
+    expect(ocultosPorFaltaDeCosto(todos)).toBe(3)
   })
 
   it('markup y margen sobre el minorista si no hay promo', () => {

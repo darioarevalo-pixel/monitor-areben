@@ -10,6 +10,7 @@ import {
   colorDesfase,
   computarFilas,
   etiquetaDesfase,
+  ocultosPorFaltaDeCosto,
   ordenar,
   resumen,
   type FilaMargen,
@@ -22,6 +23,7 @@ import {
   DatosGate,
   EmptyState,
   FilterBar,
+  Notice,
   NumberField,
   Select,
   color,
@@ -57,6 +59,9 @@ export function Margenes() {
   // Mientras TN no cargó se usa un índice vacío: precio = minorista, sin foto.
   const idx = useMemo(() => tnPromo ?? indexarTn([]), [tnPromo])
   const filas = useMemo(() => computarFilas(productos, idx, objetivo), [productos, idx, objetivo])
+  // Los que quedan afuera porque Gestión Nube no mandó el costo. Sin esto la pantalla se ve vacía
+  // y parece que no hay stock, cuando el problema es el permiso del token.
+  const sinCosto = useMemo(() => ocultosPorFaltaDeCosto(productos), [productos])
   const lista = useMemo(() => ordenar(buscar(filas, busqueda), orden), [filas, busqueda, orden])
   const res = useMemo(() => resumen(lista), [lista])
 
@@ -98,11 +103,24 @@ export function Margenes() {
               </Select>
             </FilterBar>
 
+            {sinCosto > 0 && (
+              <Notice tone="warning" icon="⚠" style={{ marginBottom: space[4] }}>
+                <b>{sinCosto === 1 ? 'Hay 1 producto con stock que no aparece' : `Hay ${sinCosto.toLocaleString('es-AR')} productos con stock que no aparecen`}</b>{' '}
+                porque Gestión Nube no mandó el costo, y sin costo no hay margen que calcular.
+                Suele ser el permiso <b>costs:read</b> del token de GN: si falta, la API no manda el
+                campo y el Monitor lo lee como cero.
+              </Notice>
+            )}
+
             {lista.length === 0 ? (
               <EmptyState
                 icon="🔍"
                 title="No hay productos disponibles que coincidan"
-                hint={busqueda ? `Nada para "${busqueda}". Probá con menos palabras.` : 'Puede que no haya stock disponible en esta marca.'}
+                hint={
+                  busqueda ? `Nada para "${busqueda}". Probá con menos palabras.`
+                    : sinCosto > 0 ? 'Todos los productos con stock quedaron afuera por falta de costo (ver el aviso de arriba).'
+                    : 'Puede que no haya stock disponible en esta marca.'
+                }
                 dashed
               />
             ) : (

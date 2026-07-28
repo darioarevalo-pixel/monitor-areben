@@ -28,6 +28,17 @@ export type FilaMargen = {
 export type OrdenMargen = 'markup-desc' | 'markup-asc' | 'desfase-desc' | 'name' | 'pvp-desc' | 'stock-desc'
 
 /**
+ * Cuántos productos con stock quedan afuera **porque no vino el costo** de Gestión Nube.
+ *
+ * No es lo mismo que un costo en 0 cargado a mano: acá el dato no existe. Sin esto la pantalla se
+ * ve vacía y parece que no hay productos, cuando en realidad lo que falta es el permiso
+ * `costs:read` en el token de GN (le pasó a BDI en julio de 2026 con los 428 productos).
+ */
+export function ocultosPorFaltaDeCosto(productos: Producto[]): number {
+  return productos.filter((p) => (p.stock || 0) > 0 && p.retailer_price > 0 && p.sinCosto).length
+}
+
+/**
  * Filas base: sólo disponibles (stock>0, costo>0, precio>0) y sin los SKU "stu"
  * (Stunned, otra marca cargada en el GN de Zattia). Port de index.html:8535-8552.
  */

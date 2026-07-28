@@ -26,13 +26,14 @@ const AHORA = new Date('2026-07-16T12:00:00.000Z')
  * Los campos de DatosETL que deben coincidir campo-a-campo con el legacy. Se
  * comparan de a uno: un toEqual del objeto entero dice "algo cambió" y nada más.
  *
- * `allVariantes` va aparte (más abajo): el port le agregó `local`/`deposito` para
- * Sesión de fotos, campos que el ETL legacy no computa, así que su comparación
- * excluye esos dos y verifica el split por separado.
+ * `allVariantes` y `allProductos` van aparte (más abajo): el port les agregó campos
+ * que el ETL legacy no computa — `local`/`deposito` para Sesión de fotos, y `sinCosto`
+ * para distinguir un costo ausente de un costo en cero. Sus comparaciones excluyen
+ * esos campos y los verifican por separado.
  */
 const CAMPOS: (keyof DatosETL)[] = [
   'ventas', 'detalles', 'invByProduct', 'invByProdModelo', 'invDepoMin', 'prodMeta',
-  'fmKeyPids', 'fmProdCreatedAt', 'allVvar', 'allProductos', 'allMonths',
+  'fmKeyPids', 'fmProdCreatedAt', 'allVvar', 'allMonths',
   'allMonthlyStats', 'allFundasStats', 'allProveedoresData', 'allColoresSales',
   'allAgotamientoData', 'allTallesData', 'allTallesCategories', 'proveedoresList',
   'maxVentaDate', 'syncMeta',
@@ -66,6 +67,30 @@ describe.each(['bdi', 'zattia'])('ETL %s: legacy vs port', (cuenta) => {
 
   it.each(CAMPOS)('%s', (campo) => {
     expect(normalizar(port[campo])).toEqual(normalizar(legacy[campo]))
+  })
+
+  // allProductos: igual que el legacy una vez sacado `sinCosto`, que el legacy no computa.
+  // El port lo agrega para poder distinguir "el costo no vino de GN" de "el costo es 0" — el
+  // legacy hace `parseFloat(...) || 0` y pierde esa diferencia para siempre.
+  it('allProductos (sin el campo nuevo sinCosto)', () => {
+    const sinNuevos = (ps: DatosETL['allProductos']) =>
+      ps.map((p) => {
+        const copia: Record<string, unknown> = { ...p }
+        delete copia.sinCosto
+        return copia
+      })
+    expect(normalizar(sinNuevos(port.allProductos))).toEqual(normalizar(sinNuevos(legacy.allProductos)))
+  })
+
+  // `sinCosto` tiene que mirar el dato CRUDO, no el normalizado: si se calculara desde
+  // `unit_cost` (ya colapsado a 0) marcaría también los que valen cero de verdad.
+  it('sinCosto marca sólo los que Gestión Nube no mandó, no los que valen 0', () => {
+    const crudo = new Map(fixture.entrada.productos.map((p) => [String(p.id), p.unit_cost]))
+    for (const p of port.allProductos) {
+      const v = crudo.get(p.id)
+      expect(p.sinCosto).toBe(v == null || v === '')
+      if (p.sinCosto) expect(p.unit_cost).toBe(0) // se sigue normalizando a 0 para poder sumar
+    }
   })
 
   // allVariantes: mismos campos que el legacy una vez sacados local/deposito (que

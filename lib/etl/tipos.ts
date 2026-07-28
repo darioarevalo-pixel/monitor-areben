@@ -113,6 +113,15 @@ export type Producto = {
   category: string | null
   retailer_price: number
   unit_cost: number
+  /**
+   * El costo **no vino** de Gestión Nube: distinto de que el costo sea 0.
+   *
+   * `unit_cost` se normaliza con `num()`, que colapsa `null` a `0` — cómodo para sumar, pésimo
+   * para decidir. En julio de 2026 el token de GN de BDI perdió el permiso `costs:read` y la API
+   * dejó de mandar el campo: los 428 productos quedaron "costando cero" y **nadie se enteró**
+   * (Márgenes se veía vacía, Proveedores daba $0). Este flag existe para que eso grite.
+   */
+  sinCosto: boolean
   /** Margen sobre PVP, en %. null si no hay precio. */
   margin: number | null
   /** Recargo sobre costo, en %. null si no hay costo. */

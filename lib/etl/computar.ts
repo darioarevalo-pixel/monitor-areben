@@ -215,6 +215,9 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       category: p.category || null,
       retailer_price: rp,
       unit_cost: uc,
+      // Se mira el valor CRUDO, antes de que num() lo colapse a 0: "no vino el costo" y "el costo
+      // es cero" son cosas distintas y desde `uc` ya no se distinguen.
+      sinCosto: p.unit_cost == null || p.unit_cost === '',
       margin: rp > 0 ? ((rp - uc) / rp) * 100 : null, // margen sobre PVP
       markup: uc > 0 ? (rp / uc - 1) * 100 : null, // recargo sobre costo
       ingresoMes,
