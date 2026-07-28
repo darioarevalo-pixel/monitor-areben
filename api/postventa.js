@@ -33,11 +33,16 @@ import fallas from './_fallas.js';
 import solicitudes from './_solicitudes.js';
 import reclamos from './_reclamos.js';
 import reclamo from './_reclamo.js';
+import canjes from './_canjes.js';
 
 // `cambios` ya no está: un cambio es un reclamo cuya salida es otro producto, así que se atiende
 // por `reclamos` (acciones `cambio` / `procesar`). La tabla `cambios` estaba vacía en las dos
 // marcas, así que no hubo nada que migrar.
-const RECURSOS = { fallas, solicitudes, reclamos, reclamo };
+//
+// `canjes` no es post-venta, y está acá por la misma razón que los demás: cuelga de esta puerta
+// para no gastar uno de los 12 archivos de ruta. Además es el único que habla SIEMPRE con la base
+// de BDI, para las tres marcas — ver el encabezado de `_canjes.js`.
+const RECURSOS = { fallas, solicitudes, reclamos, reclamo, canjes };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

@@ -173,6 +173,33 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "canjes",
+    "area": "marketing",
+    "label": "Canjes",
+    "info": "Canjes con influencers y creadoras: el padrón de personas (compartido entre las tres marcas), qué se le manda, qué prometió publicar y si cumplió.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "aprobar",
+        "label": "Puede aprobar canjes",
+        "info": "Firma los canjes de solo producto que estén por debajo del umbral configurado. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      },
+      {
+        "key": "aprobar-plata",
+        "label": "Puede aprobar canjes con plata o de monto alto",
+        "info": "Firma los canjes que incluyen plata y los que superan el umbral configurado. Incluye lo que puede el permiso anterior. ⚠️ Si nadie tiene este permiso, ningún canje con plata se puede aprobar nunca."
+      },
+      {
+        "key": "cerrar",
+        "label": "Puede cerrar un canje incompleto",
+        "info": "Cierra un canje aunque la persona no haya cumplido todo lo que prometió, dejando el motivo. Queda marcado como incompleto y le baja el puntaje a ella."
+      }
+    ]
+  },
+  {
     "key": "sesion-fotos",
     "area": "marketing",
     "label": "Sesión de fotos",
@@ -647,6 +674,7 @@ export const NAV_CATS: NavCat[] = [
     "label": "Marketing",
     "keys": [
       "marketing",
+      "canjes",
       "solicitudes",
       "meta-ads"
     ],

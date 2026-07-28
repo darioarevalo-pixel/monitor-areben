@@ -120,6 +120,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   exhib: 'exhib',
   // Marketing
   marketing: 'marketing',
+  canjes: 'canjes',
   'meta-ads': 'meta-ads',
   tncat: 'tienda-nube',
   'gen-talles': 'talles',
@@ -237,6 +238,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   caducados: 'Candidatos a depurar: sin stock y sin ventas hace más de N días.',
   'verif-ventas': 'Cruce de ventas anuladas en TiendaNube contra Gestión Nube.',
   marketing: 'Auditoría de fotos y descripciones cruzada con stock y ventas.',
+  canjes: 'Canjes con influencers: quién es cada una, hace cuánto no le proponemos algo, qué se le mandó y si publicó lo que prometió.',
   'sesion-fotos': 'Pedí productos para la sesión de fotos y controlá su retiro y devolución.',
   tncat: 'Herramientas de la tienda online, por área: fotos, categorías, visibilidad y descripciones.',
   'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',

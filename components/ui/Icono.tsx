@@ -267,6 +267,15 @@ const TRAZOS = {
       <path d="M12 8.6 3.4 15.4a1.2 1.2 0 0 0 .8 2.2h15.6a1.2 1.2 0 0 0 .8-2.2z" />
     </>
   ),
+  /** Canjes — dos flechas que se cruzan: le mandamos producto, nos manda contenido. */
+  canjes: (
+    <>
+      <path d="M4 8.4h13.2" />
+      <path d="M14.2 5.2 17.6 8.4l-3.4 3.2" />
+      <path d="M20 15.6H6.8" />
+      <path d="M9.8 12.4 6.4 15.6l3.4 3.2" />
+    </>
+  ),
   /** Meta Ads — la curva que sube. */
   'meta-ads': (
     <>
