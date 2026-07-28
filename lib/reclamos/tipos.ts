@@ -57,6 +57,40 @@ export const EXPECTATIVA_LABEL: Record<Expectativa, string> = {
 }
 
 /**
+ * Cómo se lee cada opción **según el caso**. La etiqueta genérica alcanza para la mayoría, pero en
+ * algunos motivos dice cualquier cosa: "que le manden lo que falta" en un pedido que nunca llegó, o
+ * "cambiarlo por otro" en algo que el cliente todavía no tiene.
+ *
+ * Sólo se listan los motivos donde la genérica está mal. El resto usa `EXPECTATIVA_LABEL`.
+ */
+const EXPECTATIVA_LABEL_POR_MOTIVO: Partial<Record<MotivoReclamo, Partial<Record<Expectativa, string>>>> = {
+  no_llego: {
+    completar: 'Que le mandemos el pedido de nuevo',
+    plata: 'Que le devolvamos la plata',
+  },
+  faltante: { completar: 'Que le mandemos el producto que faltó' },
+  mal_armado: { completar: 'Que le mandemos el producto que faltó' },
+  // Acá no es "qué espera": el cliente todavía no sabe que hay un problema. Es qué ELIGIÓ cuando
+  // se le avisó, que es el único caso donde la decisión es suya.
+  sin_stock: {
+    otro_producto: 'Cambiarlo por otro producto',
+    plata: 'Que le devolvamos la plata',
+  },
+}
+
+export function expectativaLabel(e: Expectativa, m?: MotivoReclamo | null): string {
+  return (m && EXPECTATIVA_LABEL_POR_MOTIVO[m]?.[e]) || EXPECTATIVA_LABEL[e]
+}
+
+/**
+ * El rótulo de la pregunta. En `sin_stock` no es "qué espera" —no recibió nada, ni sabe que hay un
+ * problema— sino qué eligió cuando se le ofrecieron las dos salidas.
+ */
+export function tituloExpectativa(m?: MotivoReclamo | null): string {
+  return m && decideElCliente(m) && !PERFIL_MOTIVO[m].recibioAlgo ? '¿Qué eligió?' : '¿Qué esperaba?'
+}
+
+/**
  * Qué pasa con el producto:
  *   - `stock`    vuelve sano y se revende.
  *   - `falla`    vuelve pero no se revende como nuevo: va al ledger de Fallas.
@@ -120,7 +154,9 @@ export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   no_llego: 'No le llegó nunca',
   sin_stock: 'No tenemos stock',
   no_era_lo_esperado: 'No era lo que esperaba', // histórico
-  otro: 'Otro', // histórico
+  // Catch-all histórico, y hoy también lo que se guarda cuando un cambio va SIN motivo:
+  // cambiar es un derecho del comprador y no hace falta justificarlo.
+  otro: 'Sin motivo',
 }
 
 /** Los que se ofrecen al cargar, en el orden en que pasan de verdad. */
@@ -129,20 +165,204 @@ export const MOTIVOS_VIGENTES: MotivoReclamo[] = [
 ]
 
 /**
- * El motivo con el que arranca el POS de cambios. Va primero en la lista y es el default porque es
- * el caso que más entra por mostrador; el campo es opcional a propósito, para no meterle fricción
- * a una operación que hoy se resuelve en dos minutos.
+ * Los motivos que entran por el **mostrador**, o sea por la puerta Cambios.
+ *
+ * Son los tres en que no hay nada que evaluar: llegó lo que pidió, en buen estado, y no lo quiere.
+ * Todo el resto (falla, faltante, mal armado, no llegó, sin stock) implica una decisión nuestra o
+ * una gestión, así que **entra por Reclamos**. Antes el POS ofrecía los ocho y eso invitaba a
+ * resolver de mostrador casos que necesitan expediente.
+ *
+ * ⚠️ El motivo del cambio es **opcional de verdad**: cambiar es un derecho del comprador y no hace
+ * falta justificarlo. Antes decía "opcional" pero el select no tenía opción vacía y arrancaba en
+ * `talle`, así que en la práctica se guardaba `talle` aunque nadie lo hubiera elegido — y eso
+ * ensuciaba la única señal que el campo existe para dar.
  */
-export const MOTIVO_CAMBIO_POR_DEFECTO: MotivoReclamo = 'talle'
+export const MOTIVOS_CAMBIO: MotivoReclamo[] = ['talle', 'arrepentimiento', 'no_esperaba']
 
 /**
- * ¿El producto salió del depósito alguna vez? Los tres casos en que NO define medio flujo: no hay
+ * ¿El producto salió del depósito alguna vez? Los casos en que NO define medio flujo: no hay
  * etiqueta de vuelta, no hay tránsito, y no hay nada que reingresar — solo plata y stock.
+ *
+ * ⚠️ **No alcanza con esto para saber qué hacer con el stock**, y confundirlo cuesta caro: en
+ * `faltante` la unidad ESTÁ en el depósito (hay que reingresarla en GN) y en `sin_stock` NO EXISTE
+ * (hay que darla de baja). Mismo "nunca salió", movimiento opuesto. Eso lo responde
+ * `hayUnidadFisica`.
  */
 export const NUNCA_SALIO: MotivoReclamo[] = ['faltante', 'sin_stock']
 
 /** Motivos donde el error es NUESTRO. Sirve para separar lo que se puede corregir de lo que no. */
 export const ERROR_PROPIO: MotivoReclamo[] = ['falla', 'faltante', 'mal_armado', 'sin_stock']
+
+// ── El perfil de cada motivo ────────────────────────────────────────────────────
+//
+// Todo lo que cambia de un caso a otro sale de acá, y sale de **dos preguntas físicas**: ¿el
+// producto salió del depósito? ¿la unidad existe? Con eso se derivan el stock, la plata, las fotos
+// y qué se le puede ofrecer. Antes cada una de esas respuestas era un `includes` suelto en un
+// archivo distinto, y por eso se contradecían.
+
+/** Cuándo hace falta una foto, y de qué. */
+export type PideFotos =
+  /** La foto ES la prueba: sin ella no se decide (falla, mal armado). */
+  | 'siempre'
+  /** Solo si el producto vuelve por plata. Si lo cambia, se ve en el mostrador. */
+  | 'si_quiere_plata'
+  /** No del producto reclamado —no lo tiene— sino de lo que SÍ recibió, para verificar. */
+  | 'de_lo_recibido'
+  /** No hay nada que fotografiar. */
+  | 'nunca'
+
+export type PerfilMotivo = {
+  /** Cuándo se usa este motivo. Es el texto del ⓘ, y lo leen las tres pantallas. */
+  ayuda: string
+  /** ¿El pedido salió del depósito? */
+  salio: boolean
+  /** ¿La unidad existe físicamente? Separa `faltante` (sí, reingresar) de `sin_stock` (no, dar de baja). */
+  unidadExiste: boolean
+  /** ¿El cliente llegó a recibir algo? Es lo que decide si se le devuelve el envío de ida. */
+  recibioAlgo: boolean
+  /** ¿El reclamo es sobre la venta entera? Entonces no se destildan productos. */
+  ventaCompleta: boolean
+  /** ¿Quién decide? En casi todos nosotros, con la evidencia. En `sin_stock`, el cliente. */
+  decideCliente: boolean
+  fotos: PideFotos
+  /** Las salidas que se le pueden ofrecer, en el orden en que conviene. */
+  expectativas: Expectativa[]
+  /** ¿Se le puede ofrecer un descuento para que se lo quede en vez de devolverlo? */
+  retencion: boolean
+}
+
+/**
+ * ⚠️ `talle`, `arrepentimiento` y `no_esperaba` son **el mismo flujo con tres etiquetas**. Se
+ * mantienen separados a propósito: cada uno mide algo distinto y es la única señal de por qué
+ * vuelven las cosas — el talle mide la guía de talles, "no era lo que esperaba" mide la ficha de
+ * producto, y el arrepentimiento no mide nada nuestro. Fusionarlos ahorraría una línea de código y
+ * perdería el dato.
+ */
+export const PERFIL_MOTIVO: Record<MotivoReclamo, PerfilMotivo> = {
+  talle: {
+    ayuda: 'Llegó lo que pidió, en buen estado, pero no le entra. Es lo que mide si la guía de talles está bien.',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    fotos: 'si_quiere_plata', expectativas: ['otro_producto', 'plata'], retencion: true,
+  },
+  arrepentimiento: {
+    ayuda: 'Se arrepintió, sin más. Llegó bien y es lo que pidió: no mide nada nuestro.',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
+  },
+  no_esperaba: {
+    ayuda: 'Llegó lo que pidió pero no era como se lo imaginaba. Es lo que mide si la ficha de producto (fotos, descripción, medidas) está engañando.',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
+  },
+  falla: {
+    ayuda: 'Llegó con un defecto: mancha, costura, rotura. Error nuestro o del proveedor. Las fotos son la prueba y las decidimos nosotros.',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    fotos: 'siempre', expectativas: ['mismo_producto', 'plata', 'otro_producto'], retencion: true,
+  },
+  faltante: {
+    ayuda: 'El paquete llegó pero faltaba un producto adentro. La unidad sigue en el depósito: no salió. Distinto de "pedido mal armado", donde llegó otra cosa en su lugar.',
+    salio: false, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    fotos: 'de_lo_recibido', expectativas: ['completar', 'plata'], retencion: false,
+  },
+  mal_armado: {
+    ayuda: 'Le llegó un producto distinto al que compró. Hay que corregir dos stocks: el que pidió no salió y el que se mandó por error salió sin descontarse.',
+    salio: false, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    fotos: 'siempre', expectativas: ['completar', 'plata'], retencion: false,
+  },
+  no_llego: {
+    ayuda: 'El pedido nunca llegó a destino: se perdió en el transporte. Va sobre la venta completa y en paralelo se le reclama al transportista, que es plata recuperable.',
+    salio: true, unidadExiste: false, recibioAlgo: false, ventaCompleta: true, decideCliente: true,
+    fotos: 'nunca', expectativas: ['completar', 'plata'], retencion: false,
+  },
+  sin_stock: {
+    ayuda: 'Entró la venta pero el producto no existe. El cliente no recibió nada ni está enterado: se le avisa y ELIGE ÉL entre cambiarlo o que le devolvamos la plata.',
+    salio: false, unidadExiste: false, recibioAlgo: false, ventaCompleta: true, decideCliente: true,
+    fotos: 'nunca', expectativas: ['otro_producto', 'plata'], retencion: false,
+  },
+  // Históricos: quedan para que una fila vieja no reviente. Se comportan como su equivalente.
+  no_era_lo_esperado: {
+    ayuda: 'Motivo histórico. Usá "No era lo que esperaba".',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
+  },
+  otro: {
+    ayuda: 'Motivo histórico, sin flujo propio. Elegí el que corresponda.',
+    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
+  },
+}
+
+/** El texto del ⓘ de cada motivo: cuándo se usa, para no tener que adivinar cuál asignar. */
+export function ayudaDeMotivo(m: MotivoReclamo): string {
+  return PERFIL_MOTIVO[m].ayuda
+}
+
+/**
+ * Qué se le puede ofrecer, según el motivo.
+ *
+ * Antes era una lista fija de cuatro opciones que no dependía de nada, así que en un "no le llegó
+ * nunca" se ofrecía "el mismo producto en buen estado" y en una falla "que le manden lo que falta".
+ */
+export function expectativasDe(m: MotivoReclamo): Expectativa[] {
+  return PERFIL_MOTIVO[m].expectativas
+}
+
+/**
+ * ¿Hay que pedirle fotos, y de qué?
+ *
+ * **Depende del motivo Y de qué quiere el cliente**, no sólo del motivo: la foto sirve para ver en
+ * qué estado vuelve el producto, así que sólo hace falta cuando el producto vuelve. Si lo quiere
+ * cambiar, lo trae al mostrador y se ve ahí.
+ */
+export function pideFotos(m: MotivoReclamo, expectativa?: Expectativa | null): boolean {
+  const modo = PERFIL_MOTIVO[m].fotos
+  if (modo === 'nunca') return false
+  if (modo === 'si_quiere_plata') return expectativa !== 'otro_producto' && expectativa !== 'mismo_producto'
+  return true
+}
+
+/** El reclamo es sobre la venta entera: no se pueden destildar productos. */
+export function sobreLaVentaCompleta(m: MotivoReclamo): boolean {
+  return PERFIL_MOTIVO[m].ventaCompleta
+}
+
+/**
+ * ¿La unidad reclamada existe físicamente?
+ *
+ * Es la pregunta que separa dos casos que parecen el mismo: en `faltante` el producto está en el
+ * depósito y si se devuelve la plata hay que **reingresarlo** en GN; en `sin_stock` no existe y
+ * hay que **darlo de baja**. Los dos "nunca salieron" y el movimiento es opuesto.
+ */
+export function hayUnidadFisica(m: MotivoReclamo): boolean {
+  return PERFIL_MOTIVO[m].unidadExiste
+}
+
+/**
+ * ¿Se le devuelve también el envío de ida?
+ *
+ * Sólo cuando **no recibió nada** (`no_llego`, `sin_stock`). En todo el resto la devolución es del
+ * producto únicamente: el envío se prestó el servicio, llegó. Antes esto era un checkbox libre que
+ * se podía tildar en cualquier caso.
+ */
+export function devuelveElEnvioDeIda(m: MotivoReclamo): boolean {
+  return !PERFIL_MOTIVO[m].recibioAlgo
+}
+
+/**
+ * ¿Se le puede ofrecer un descuento para que se lo quede?
+ *
+ * Sólo tiene sentido si el producto está en su poder. La cuenta la hace `cuentaDescuento`: el techo
+ * es lo que perdemos porque vuelva — la logística si está sano, la depreciación más el envío si
+ * está fallado.
+ */
+export function ofreceRetencion(m: MotivoReclamo): boolean {
+  return PERFIL_MOTIVO[m].retencion
+}
+
+/** ¿Decide el cliente en vez de nosotros? Hoy sólo en `sin_stock`, que es el caso raro. */
+export function decideElCliente(m: MotivoReclamo): boolean {
+  return PERFIL_MOTIVO[m].decideCliente
+}
 
 export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
   borrador: 'Borrador',
@@ -403,10 +623,22 @@ export type CuentaCambio = {
  *     + Envío              solo si lo paga el cliente; queda únicamente en el Monitor
  *     = Total a pagar
  *
- * ⚠️ **Acá está el arreglo del hueco que tenía el motor viejo de Cambios**: tomaba el precio de
- * lista de lo devuelto en vez de lo que la persona **pagó**. En una orden con cupón del 20%, eso
- * le acreditaba al cliente plata que nunca puso — y la diferencia le quedaba a favor. Con
- * `pagadoPorItem` el devuelto se valúa por lo pagado y la cuenta cierra.
+ * # Cuánto vale lo que entrega: LISTA CONTRA LISTA
+ *
+ * Un cambio se cuenta **lista contra lista**, o sea que el cliente **conserva el descuento** que
+ * había conseguido en la compra original. Cambiar una funda por la misma funda da **cero**, que es
+ * lo que cualquiera espera parado en el mostrador. Si se le acreditara lo que pagó, cambiar algo
+ * comprado con cupón por su equivalente le saldría plata — el castigo justo al revés.
+ *
+ * ⚠️ **Pero eso sólo vale mientras la diferencia esté a favor NUESTRO.** Si se lleva algo más
+ * barato y el crédito fuera el precio de lista, se le devolvería plata que nunca puso: es
+ * exactamente el hueco del motor viejo de Cambios. Con la funda de la orden #20700 —lista $8.990,
+ * pagada $7.641,50— cambiada por algo de $6.000, lista contra lista devolvería $2.990 cuando
+ * corresponden $1.641,50.
+ *
+ * Entonces la cuenta corre **dos veces**: primero lista contra lista; si da a favor del cliente,
+ * se rehace valuando lo devuelto a **lo que pagó**, y ése es el número que vale. Así el cliente
+ * conserva su descuento cuando pone plata, y nunca sale de la caja más de lo que entró.
  *
  * Los dos descuentos solo aplican sobre una diferencia **a cobrar**: si el cambio da a favor del
  * cliente no hay nada que descontar. El envío, en cambio, se suma siempre que lo pague él —
@@ -425,7 +657,15 @@ export function calcularCambio(opciones: {
 }): CuentaCambio {
   const { devueltos, nuevos, orden } = opciones
   const totalNuevos = redondear(nuevos.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0))
-  const totalDevueltos = redondear(devueltos.reduce((s, it) => s + (it.pagado ?? pagadoPorItem(it, orden)), 0))
+
+  // Los dos valores de lo devuelto: a precio de vidriera y a lo que la persona realmente puso.
+  const aLista = redondear(devueltos.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0))
+  const aPagado = redondear(devueltos.reduce((s, it) => s + (it.pagado ?? pagadoPorItem(it, orden)), 0))
+
+  // Lista contra lista mientras el cliente ponga plata: conserva el descuento que había conseguido.
+  // En cuanto la cuenta queda a favor de él, se revalúa a lo pagado para no devolver de más — que
+  // es la única regla innegociable del módulo.
+  const totalDevueltos = totalNuevos - aLista >= 0 ? aLista : Math.min(aLista, aPagado)
   const diferencia = redondear(totalNuevos - totalDevueltos)
 
   // Los descuentos solo tienen sentido sobre lo que el cliente TIENE que poner.

@@ -39,7 +39,7 @@ import {
   leerReclamos, marcarCobrado, marcarReingreso, procesarCambio,
 } from '@/lib/reclamos/cliente'
 import {
-  DIAS_CAMBIO, ESTADO_LABEL, MOTIVO_CAMBIO_POR_DEFECTO, MOTIVO_LABEL, MOTIVOS_VIGENTES, VIA_LABEL,
+  DIAS_CAMBIO, ESTADO_LABEL, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL,
   calcularCambio, detalleCambioTexto, esCambio, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   numeroEM, numeroReclamo, pagadoPorItem, pideSeguimiento, trackingPortalUrl, trackingUrl,
   type EnvioPaga, type EstadoReclamo, type FormaPago, type ItemReclamo, type MotivoReclamo,
@@ -138,7 +138,10 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
   const [cliente, setCliente] = useState('')
   const [buscando, setBuscando] = useState(false)
   const [lineas, setLineas] = useState<Linea[]>([])
-  const [motivo, setMotivo] = useState<MotivoReclamo>(MOTIVO_CAMBIO_POR_DEFECTO)
+  // Sin default: cambiar es un derecho del comprador y no hace falta justificarlo. Antes arrancaba
+  // en 'talle' y el select no tenía opción vacía, así que se guardaba 'talle' aunque nadie lo
+  // hubiera elegido — y eso ensucia la única señal que el campo existe para dar.
+  const [motivo, setMotivo] = useState<MotivoReclamo | ''>('')
   const [via, setVia] = useState<ViaRetorno>('andreani')
   const [seguimiento, setSeguimiento] = useState('')
   const [seguimientoVuelta, setSeguimientoVuelta] = useState('')
@@ -197,6 +200,16 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     [devueltos, nuevos, orden, formaPago, descManual, envioCosto, envioPaga],
   )
 
+  /**
+   * ¿La cuenta se revaluó? Se compara lo que `calcularCambio` usó contra la suma a precio de lista
+   * de los renglones: si no coinciden es porque la diferencia quedó a favor del cliente y lo
+   * devuelto se tomó a lo pagado. Hay que decirlo, o el total parece no cerrar con la tabla.
+   */
+  const revaluado = useMemo(() => {
+    const aLista = devueltos.reduce((s, it) => s + (Number(it.precio) || 0) * (Number(it.cantidad) || 0), 0)
+    return devueltos.length > 0 && Math.abs(aLista - t.devueltos) > 0.5
+  }, [devueltos, t.devueltos])
+
   const faltan = useMemo(
     () => faltantesParaProcesar({
       orden_tn: ordenNum, items: devueltos, items_nuevos: nuevos,
@@ -251,7 +264,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
   const quitarLinea = (key: string) => setLineas((ls) => ls.filter((l) => l.key !== key))
 
   const limpiarForm = useCallback(() => {
-    setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setMotivo(MOTIVO_CAMBIO_POR_DEFECTO)
+    setOrdenNum(''); setOrden(null); setCliente(''); setLineas([]); setMotivo('')
     setVia('andreani'); setSeguimiento(''); setSeguimientoVuelta('')
     setEnvioCosto(''); setEnvioPaga('cliente'); setFormaPago(''); setDescManual('')
     setSolicitudEnvio(''); setPagado(false); setEditandoId(null)
@@ -271,7 +284,8 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
         store: marca,
         orden_tn: ordenNum.trim() || null,
         cliente: cliente.trim() || null,
-        motivo,
+        // Sin motivo se guarda 'otro', que es el catch-all histórico y el default de la columna.
+        motivo: motivo || 'otro',
         items: conGN,
         monto_producto: t.devueltos,
         pago_metodo: orden?.pago_metodo ?? null,
@@ -284,7 +298,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     await guardarCambio(marca, id, {
       orden_tn: ordenNum.trim() || null,
       cliente: cliente.trim() || null,
-      motivo,
+      motivo: motivo || 'otro',
       items: devueltos,
       items_nuevos: nuevos,
       forma_pago: formaPago || null,
@@ -351,7 +365,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     try {
       const id = await persistir(true)
       const row: ReclamoRow = {
-        id, store: marca, estado: 'borrador', motivo, items: devueltos, items_nuevos: nuevos,
+        id, store: marca, estado: 'borrador', motivo: motivo || 'otro', items: devueltos, items_nuevos: nuevos,
         orden_tn: ordenNum.trim() || null, cliente: cliente.trim() || null,
         forma_pago: formaPago || null, via_retorno: via, envio_paga: envioPaga,
         envio_costo: envioCosto === '' ? null : Number(envioCosto),
@@ -368,7 +382,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     setEditandoId(c.id)
     setOrdenNum(c.orden_tn || '')
     setCliente(c.cliente || '')
-    setMotivo(c.motivo || MOTIVO_CAMBIO_POR_DEFECTO)
+    setMotivo(c.motivo || '')
     keyRef.current += 1
     const base = keyRef.current
     setLineas([
@@ -520,7 +534,11 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
       {/* ── El form ──────────────────────────────────────────────────────── */}
       <SectionCard
         title={editandoId != null ? `Editando ${numeroReclamo(editandoId)}` : 'Nuevo cambio'}
-        subtitle={orden ? `${cliente || 's/cliente'} · orden #${String(orden.number)}` : 'Se guarda como borrador hasta que se cobre'}
+        // El método de pago de la COMPRA ORIGINAL: es lo que dice por dónde vuelve la plata si la
+        // cuenta queda a favor del cliente. Se venía leyendo sólo para guardarlo.
+        subtitle={orden
+          ? `${cliente || 's/cliente'} · orden #${String(orden.number)}${orden.pago_metodo ? ` · pagó por ${orden.pago_metodo}` : ''}`
+          : 'Se guarda como borrador hasta que se cobre'}
         actions={<CopyButton getText={detalleForm} label="Copiar detalle" tone="neutral" variant="outline" />}
       >
         <Toolbar gap={2} style={{ alignItems: 'flex-end', marginBottom: space[3] }}>
@@ -531,8 +549,9 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
           {/* El motivo es opcional a propósito: en el mostrador no se para a diagnosticar. Pero
               agrupados por motivo, los cambios dicen si el problema está en la guía de talles. */}
           <Field label="¿Por qué lo cambia?" hint="opcional, para poder medirlo después" width={210}>
-            <Select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoReclamo)}>
-              {MOTIVOS_VIGENTES.map((m) => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
+            <Select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoReclamo | '')}>
+              <option value="">Sin motivo</option>
+              {MOTIVOS_CAMBIO.map((m) => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
             </Select>
           </Field>
           {orden && fechaOrden && (
@@ -555,10 +574,11 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                     <span style={{ fontWeight: weight.semibold, minWidth: 160 }}>{l.name || l.sku}</span>
                     <span style={{ color: color.mut2, fontFamily: 'monospace' }}>{l.sku || ''}</span>
                     <span style={{ color: color.mut }}>×{l.quantity} · {formatMoney(Number(l.price) || 0)}</span>
-                    {/* Lo que se le acredita de verdad. Sin esto se le devolvía el precio de lista
-                        y en una orden con cupón la diferencia le quedaba a favor. */}
+                    {/* Se le toma a precio de lista, así conserva el descuento que consiguió. Lo
+                        pagado sigue a la vista porque es el TECHO: si la cuenta queda a favor del
+                        cliente, es lo máximo que puede salir de la caja por esta línea. */}
                     {pagadoLinea < lista && (
-                      <span style={{ color: color.warningInk, fontSize: font.xs }}>pagó {formatMoney(pagadoLinea)}</span>
+                      <span style={{ color: color.mut2, fontSize: font.xs }}>pagó {formatMoney(pagadoLinea)}</span>
                     )}
                   </label>
                 )
@@ -588,10 +608,11 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
             <TBody>
               {lineas.map((l) => {
                 const signo = l.tipo === 'devuelve' ? -1 : 1
-                // El devuelto vale lo que se pagó por él, no lo que dice la etiqueta.
-                const bruto = l.tipo === 'devuelve' && l.pagado != null
-                  ? l.pagado
-                  : (Number(l.precio) || 0) * (Number(l.cantidad) || 0)
+                // Lista contra lista: el renglón vale lo que dice la etiqueta. Si la cuenta termina
+                // a favor del cliente, `calcularCambio` revalúa lo devuelto a lo pagado — y ahí el
+                // ticket de abajo deja de coincidir con la suma de los renglones a propósito, por
+                // eso el aviso.
+                const bruto = (Number(l.precio) || 0) * (Number(l.cantidad) || 0)
                 const sub = signo * bruto
                 return (
                   <Tr key={l.key}>
@@ -610,6 +631,17 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
           </TableWrap>
         ) : (
           <EmptyState dashed icon="🧾" title="Sin renglones" hint="Marcá lo que devuelve (arriba) y agregá lo que se lleva." style={{ marginBottom: space[4] }} />
+        )}
+
+        {/* Cuando la cuenta queda a favor del cliente, lo devuelto se revalúa a lo que pagó para no
+            devolver de más. Ahí el subtotal deja de ser la resta de los renglones de arriba, y sin
+            este aviso parece un error de la pantalla. */}
+        {revaluado && (
+          <Notice tone="warning" icon="⚠" style={{ marginBottom: space[3] }}>
+            La cuenta queda a favor del cliente, así que lo que devuelve se toma a{' '}
+            <b>lo que pagó ({formatMoney(t.devueltos)})</b> y no a precio de lista. Es lo que evita
+            devolverle plata que nunca puso.
+          </Notice>
         )}
 
         {/* Los totales apilados — productos (van a GN) vs envío (queda en el Monitor) */}

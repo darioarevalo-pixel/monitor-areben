@@ -6,6 +6,9 @@ import {
   destinoDe, esCambio, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
+  PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
+  ayudaDeMotivo, decideElCliente, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
+  hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -236,6 +239,160 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
 
   it('no llegó nunca: solo reponer o devolver', () => {
     expect(compensacionesDe('no_llego')).toEqual(['reenvio', 'plata_total'])
+  })
+})
+
+/**
+ * El perfil de cada motivo: la tabla de la que sale todo lo demás.
+ *
+ * Antes cada una de estas respuestas era un `includes` suelto en un archivo distinto, y por eso se
+ * contradecían: la lista de "qué espera el cliente" era fija y no dependía del motivo, el mensaje
+ * de apertura pedía fotos siempre, y el checkbox del envío se podía tildar en cualquier caso.
+ */
+describe('el perfil del motivo', () => {
+  const TODOS = MOTIVOS_VIGENTES
+
+  it('los ocho vigentes tienen perfil y ayuda', () => {
+    for (const m of TODOS) {
+      expect(PERFIL_MOTIVO[m], m).toBeTruthy()
+      expect(ayudaDeMotivo(m).length, m).toBeGreaterThan(20)
+    }
+  })
+
+  describe('hayUnidadFisica: lo que separa faltante de sin stock', () => {
+    // Los dos "nunca salieron", pero el movimiento de stock es OPUESTO. Es el error más fácil de
+    // cometer acá: en faltante el producto está en el depósito y hay que REINGRESARLO en GN; en
+    // sin stock no existe y hay que DARLO DE BAJA.
+    it('en faltante la unidad está; en sin stock no existe', () => {
+      expect(NUNCA_SALIO).toContain('faltante')
+      expect(NUNCA_SALIO).toContain('sin_stock')
+      expect(hayUnidadFisica('faltante')).toBe(true)
+      expect(hayUnidadFisica('sin_stock')).toBe(false)
+    })
+  })
+
+  describe('devuelveElEnvioDeIda: sólo si no recibió nada', () => {
+    it('no llegó y sin stock: se devuelve producto + envío', () => {
+      expect(devuelveElEnvioDeIda('no_llego')).toBe(true)
+      expect(devuelveElEnvioDeIda('sin_stock')).toBe(true)
+    })
+
+    // El envío se prestó: el paquete llegó. Devolverlo es regalar plata.
+    it('en los otros seis, la devolución es del producto únicamente', () => {
+      for (const m of TODOS.filter((x) => x !== 'no_llego' && x !== 'sin_stock')) {
+        expect(devuelveElEnvioDeIda(m), m).toBe(false)
+      }
+    })
+  })
+
+  describe('pideFotos: la foto sirve para ver en qué estado vuelve', () => {
+    it('falla y mal armado: siempre, la foto es la prueba', () => {
+      for (const m of ['falla', 'mal_armado'] as const) {
+        expect(pideFotos(m, 'plata'), m).toBe(true)
+        expect(pideFotos(m, 'otro_producto'), m).toBe(true)
+      }
+    })
+
+    // Si lo quiere cambiar lo trae al mostrador y se ve en persona: pedirle fotos es fricción
+    // por nada.
+    it('talle y arrepentimiento: sólo si quiere la plata', () => {
+      for (const m of ['talle', 'arrepentimiento', 'no_esperaba'] as const) {
+        expect(pideFotos(m, 'plata'), m).toBe(true)
+        expect(pideFotos(m, 'otro_producto'), m).toBe(false)
+      }
+    })
+
+    it('no llegó y sin stock: nunca, no hay nada que fotografiar', () => {
+      for (const m of ['no_llego', 'sin_stock'] as const) {
+        for (const e of ['plata', 'otro_producto', 'completar'] as const) {
+          expect(pideFotos(m, e), `${m}/${e}`).toBe(false)
+        }
+      }
+    })
+  })
+
+  describe('sobreLaVentaCompleta: cuándo no se pueden destildar productos', () => {
+    // El problema es de la venta y el inconveniente de un producto: si después se decide devolver
+    // todo, tiene que devolverse TODO, no sólo el que se tildó.
+    it('no llegó y sin stock van sobre la venta entera', () => {
+      expect(sobreLaVentaCompleta('no_llego')).toBe(true)
+      expect(sobreLaVentaCompleta('sin_stock')).toBe(true)
+      expect(sobreLaVentaCompleta('falla')).toBe(false)
+    })
+  })
+
+  describe('expectativasDe: qué se le puede ofrecer', () => {
+    it('depende del motivo, no es una lista fija', () => {
+      expect(expectativasDe('no_llego')).toEqual(['completar', 'plata'])
+      expect(expectativasDe('sin_stock')).toEqual(['otro_producto', 'plata'])
+      expect(expectativasDe('falla')).toContain('mismo_producto')
+    })
+
+    // Ofrecer "el mismo producto en buen estado" en un arrepentimiento no significa nada.
+    it('sólo la falla ofrece el mismo producto', () => {
+      for (const m of TODOS.filter((x) => x !== 'falla')) {
+        expect(expectativasDe(m), m).not.toContain('mismo_producto')
+      }
+    })
+
+    it('ninguna queda vacía: siempre hay algo que ofrecerle', () => {
+      for (const m of TODOS) expect(expectativasDe(m).length, m).toBeGreaterThan(0)
+    })
+  })
+
+  describe('las etiquetas se leen distinto según el caso', () => {
+    it('en un pedido que nunca llegó no se dice "lo que falta"', () => {
+      expect(expectativaLabel('completar', 'no_llego')).toBe('Que le mandemos el pedido de nuevo')
+      expect(expectativaLabel('completar', 'faltante')).toContain('el producto que faltó')
+    })
+
+    // El cliente no sabe que hay un problema: no "esperaba" nada, eligió cuando se le avisó.
+    it('en sin stock la pregunta es qué eligió, no qué esperaba', () => {
+      expect(tituloExpectativa('sin_stock')).toBe('¿Qué eligió?')
+      expect(tituloExpectativa('falla')).toBe('¿Qué esperaba?')
+    })
+
+    it('sin motivo cae a la etiqueta genérica', () => {
+      expect(expectativaLabel('plata', null)).toBe(EXPECTATIVA_LABEL.plata)
+    })
+  })
+
+  describe('ofreceRetencion: intentar que se lo quede', () => {
+    // Sólo tiene sentido si el producto está en su poder. Si nunca salió, no hay nada que quedarse.
+    it('los cuatro casos donde el cliente tiene el producto', () => {
+      for (const m of ['talle', 'arrepentimiento', 'no_esperaba', 'falla'] as const) {
+        expect(ofreceRetencion(m), m).toBe(true)
+      }
+      for (const m of ['faltante', 'mal_armado', 'no_llego', 'sin_stock'] as const) {
+        expect(ofreceRetencion(m), m).toBe(false)
+      }
+    })
+  })
+
+  describe('decideElCliente', () => {
+    // En todos los demás el cliente pide la plata y nosotros evaluamos con la evidencia.
+    it('sin stock es el caso donde la decisión es suya y no hay nada que evaluar', () => {
+      expect(decideElCliente('sin_stock')).toBe(true)
+      expect(decideElCliente('falla')).toBe(false)
+      expect(decideElCliente('mal_armado')).toBe(false)
+    })
+  })
+
+  describe('MOTIVOS_CAMBIO: qué entra por el mostrador', () => {
+    // Lo demás implica una decisión nuestra o una gestión: entra por Reclamos, con expediente.
+    it('sólo los tres en que no hay nada que evaluar', () => {
+      expect(MOTIVOS_CAMBIO).toEqual(['talle', 'arrepentimiento', 'no_esperaba'])
+    })
+
+    it('ninguno de los que necesitan evaluación', () => {
+      for (const m of ['falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock'] as const) {
+        expect(MOTIVOS_CAMBIO, m).not.toContain(m)
+      }
+    })
+
+    it('todos son motivos vigentes', () => {
+      for (const m of MOTIVOS_CAMBIO) expect(MOTIVOS_VIGENTES).toContain(m)
+    })
   })
 })
 
@@ -705,11 +862,53 @@ describe('calcularCambio', () => {
     expect(c.quienPaga).toBe('cliente')
   })
 
-  // El hueco del motor viejo: con un cupón del 20%, pagó 8.000 y no 10.000.
-  it('con cupón: lo devuelto vale lo que PAGÓ, no el precio de lista', () => {
-    const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_CON_CUPON })
-    expect(c.devueltos).toBe(8000)
-    expect(c.diferencia).toBe(4000) // y no 2000, que es lo que calculaba antes
+  /**
+   * Un cambio se cuenta **lista contra lista**: el cliente conserva el descuento que consiguió en
+   * la compra original. La red de seguridad se enciende sólo cuando la cuenta queda a favor de él,
+   * que es donde el motor viejo regalaba plata.
+   */
+  describe('lista contra lista, con la red de seguridad', () => {
+    // Comprado con un cupón del 20%: lista 10.000, pagó 8.000.
+    it('si el cliente pone plata, conserva su descuento', () => {
+      const c = calcularCambio({ devueltos: [devuelto], nuevos: [nuevo], orden: ORDEN_CON_CUPON })
+      expect(c.devueltos).toBe(10000) // se le toma a precio de vidriera
+      expect(c.diferencia).toBe(2000) // paga sólo la diferencia real entre productos
+    })
+
+    // Lo que cualquiera espera parado en el mostrador. Con la regla vieja esto costaba plata.
+    it('el mismo producto por el mismo producto da CERO', () => {
+      const c = calcularCambio({ devueltos: [devuelto], nuevos: [item(10000)], orden: ORDEN_CON_CUPON })
+      expect(c.diferencia).toBe(0)
+      expect(c.quienPaga).toBe('nadie')
+    })
+
+    // Acá se da vuelta: a precio de lista le devolveríamos 4.000 de algo por lo que puso 8.000.
+    it('si se lleva algo más barato, se revalúa a lo que pagó', () => {
+      const c = calcularCambio({ devueltos: [devuelto], nuevos: [item(6000)], orden: ORDEN_CON_CUPON })
+      expect(c.devueltos).toBe(8000) // lo pagado, no los 10.000 de lista
+      expect(c.diferencia).toBe(-2000) // y no −4.000: no sale de la caja más de lo que entró
+    })
+
+    // El borde exacto, que es donde estas cosas se rompen.
+    it('en el cero justo no salta a lo pagado', () => {
+      const c = calcularCambio({ devueltos: [devuelto], nuevos: [item(10000)], orden: ORDEN_CON_CUPON })
+      expect(c.devueltos).toBe(10000)
+      // Un peso menos y ya se revalúa.
+      expect(calcularCambio({ devueltos: [devuelto], nuevos: [item(9999)], orden: ORDEN_CON_CUPON }).devueltos).toBe(8000)
+    })
+
+    // Sin descuentos en la orden las dos valuaciones coinciden: la regla no cambia nada.
+    it('sin cupón, lista y pagado son lo mismo', () => {
+      expect(calcularCambio({ devueltos: [devuelto], nuevos: [item(6000)], orden: ORDEN_LIMPIA }).diferencia).toBe(-4000)
+    })
+
+    // Con la funda real: lista 8.990, pagada 7.641,50.
+    it('la funda de la orden #20700, para los dos lados', () => {
+      const funda = item(8990, 1, { pagado: 7641.5 })
+      expect(calcularCambio({ devueltos: [funda], nuevos: [item(8990)] }).diferencia).toBe(0)
+      expect(calcularCambio({ devueltos: [funda], nuevos: [item(10000)] }).diferencia).toBe(1010)
+      expect(calcularCambio({ devueltos: [funda], nuevos: [item(6000)] }).diferencia).toBe(-1641.5)
+    })
   })
 
   it('transferencia descuenta 10% de lo que hay que cobrar', () => {
