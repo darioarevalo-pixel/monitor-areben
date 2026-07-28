@@ -230,7 +230,12 @@ export default async function handler(req, res) {
         diferencia,
         descuento_manual: num(b.descuento_manual),
         envio_paga: ENVIO_PAGA.includes(b.envio_paga) ? b.envio_paga : null,
-        estado: vuelve ? 'en_transito' : 'resuelto',
+        // **Un cambio decidido acá todavía no existe como cambio: queda en BORRADOR.**
+        // Falta lo esencial —qué se lleva, la forma de pago, la diferencia, el cobro— y eso se
+        // arma en el POS. Mandarlo a `en_transito` como al resto lo dejaba diciendo "En camino de
+        // vuelta" sobre algo que nunca se armó, y encima fuera del estado en el que el POS ofrece
+        // "Crear venta": el local no podía terminarlo.
+        estado: esCambio ? 'borrador' : (vuelve ? 'en_transito' : 'resuelto'),
         // ── Los pendientes ────────────────────────────────────────────────────────
         //
         // **En un cambio son otros**, y tratarlo como una devolución lo dejaba imposible de
