@@ -25,6 +25,7 @@ import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
+  devuelveElEnvioDeIda, expectativaLabel, expectativasDe, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
 } from '@/lib/reclamos/tipos'
@@ -62,8 +63,15 @@ export function DecidirReclamo({
     return SALIDAS.filter((s) => permitidas.includes(s.key))
   }, [reclamo.motivo])
   const [compensacion, setCompensacion] = useState<Compensacion>(() => compensacionesDe(reclamo.motivo)[0] || 'plata_total')
+  // Arranca con lo que ya se haya cargado en el alta, si es que se cargó.
+  const [expectativa, setExpectativa] = useState<Expectativa | ''>(reclamo.expectativa ?? '')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
-  const [devolverEnvio, setDevolverEnvio] = useState(false)
+  /**
+   * ¿Se le devuelve el envío de ida? Lo decide el MOTIVO, no quien resuelve: sólo cuando el cliente
+   * no recibió nada. Dejarlo a criterio hacía que el mismo caso se resolviera distinto según quién
+   * lo tocara.
+   */
+  const devuelveElEnvio = devuelveElEnvioDeIda(reclamo.motivo)
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
   const [piso, setPiso] = useState<number | ''>('')
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
@@ -99,12 +107,12 @@ export function DecidirReclamo({
 
   const monto = useMemo(
     () => calcularMonto(items, orden, {
-      devolverEnvio,
+      devolverEnvio: devuelveElEnvio,
       montoAcordado: compensacion === 'plata_parcial' ? Number(montoAcordado) || 0
         : compensacion === 'otra_unidad' || compensacion === 'ninguna' || compensacion === 'cupon' ? 0
           : null,
     }),
-    [items, orden, devolverEnvio, compensacion, montoAcordado],
+    [items, orden, devuelveElEnvio, compensacion, montoAcordado],
   )
 
   /** Dónde termina el producto: es lo que después decide si la falla descuenta stock o no. */
@@ -133,7 +141,7 @@ export function DecidirReclamo({
         monto_acordado: compensacion === 'plata_parcial' ? Number(montoAcordado) || 0 : null,
         monto_envio_devuelto: monto.envio,
         monto_total: monto.total,
-        devolver_envio: devolverEnvio,
+        devolver_envio: devuelveElEnvio,
         retorno_sugerido: cuenta.conviene,
         retorno_decidido: retorno,
         via_retorno: retorno ? via : null,
@@ -141,6 +149,7 @@ export function DecidirReclamo({
         envio_ida_costo: compensacion === 'otra_unidad' ? Number(envioIda) || null : null,
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
+        expectativa: expectativa || null,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
         techo_orden: orden?.total != null ? Number(orden.total) : null,
       })
@@ -188,6 +197,22 @@ export function DecidirReclamo({
           reclamo sin al menos una.
         </Notice>
       )}
+
+      {/* Qué quiere el cliente. Se puede completar ACÁ y no sólo al abrir el reclamo: en la
+          mayoría de los casos se sabe recién después de escribirle, así que exigirlo en el alta
+          era pedir que alguien invente el dato. Es lo que justifica la decisión de abajo. */}
+      <Field
+        label={tituloExpectativa(reclamo.motivo)}
+        hint="lo que pidió el cliente — sirve para ver cuántas veces resolvemos distinto"
+        style={{ marginBottom: space[3] }}
+      >
+        <Select value={expectativa} onChange={(e) => setExpectativa(e.target.value as Expectativa | '')} style={{ maxWidth: 320 }}>
+          <option value="">Sin registrar</option>
+          {expectativasDe(reclamo.motivo).map((x) => (
+            <option key={x} value={x}>{expectativaLabel(x, reclamo.motivo)}</option>
+          ))}
+        </Select>
+      </Field>
 
       {/* ── 1. ¿Vuelve el producto? ── */}
       {!hayPrendaQueVuelva && (
@@ -322,11 +347,21 @@ export function DecidirReclamo({
             <Input value={cupon} onChange={(e) => setCupon(e.target.value)} style={{ width: 200 }} />
           </Field>
         )}
+        {/* El envío de ida NO es una decisión: sale del motivo. Se devuelve sólo cuando el cliente
+            no recibió nada —no llegó nunca, no teníamos stock—; en el resto el envío se prestó, el
+            paquete llegó, y devolverlo es regalar plata. Antes era un checkbox libre que se podía
+            tildar en cualquier caso. */}
         {(compensacion === 'plata_total' || compensacion === 'plata_parcial') && !!orden?.envio_costo_cliente && (
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: space[2], fontSize: font.sm }}>
-            <input type="checkbox" checked={devolverEnvio} onChange={(e) => setDevolverEnvio(e.target.checked)} />
-            Devolverle también el envío que pagó (<MoneyText value={Number(orden.envio_costo_cliente)} />)
-          </label>
+          devuelveElEnvio ? (
+            <Notice tone="action" icon="ⓘ" style={{ marginTop: space[2] }}>
+              Se le devuelve también <b>el envío que pagó</b> (<MoneyText value={Number(orden.envio_costo_cliente)} />):
+              nunca llegó a recibir nada.
+            </Notice>
+          ) : (
+            <div style={{ marginTop: space[2], fontSize: font.xs, color: color.mut2 }}>
+              El envío de ida no se devuelve: la devolución es del producto únicamente.
+            </div>
+          )
         )}
       </section>
 

@@ -189,6 +189,12 @@ export type Decision = {
   descuento_manual?: number | null
   costo_caso?: number | null
   cupon_codigo?: string | null
+  /**
+   * Qué pidió el cliente. Se puede completar ACÁ y no sólo al abrir el reclamo: en la mayoría de
+   * los casos se sabe recién después de escribirle, así que exigirlo en el alta era pedir que
+   * alguien lo invente. `null` no pisa lo que ya estuviera cargado.
+   */
+  expectativa?: Expectativa | null
   /** Lo que se pagó por la orden entera: el servidor lo usa de techo del reintegro. */
   techo_orden?: number | null
 }

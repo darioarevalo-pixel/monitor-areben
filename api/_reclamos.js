@@ -263,6 +263,9 @@ export default async function handler(req, res) {
         envio_ida_costo: num(b.envio_ida_costo),
         costo_caso: num(b.costo_caso),
         cupon_codigo: texto(b.cupon_codigo),
+        // Se puede completar al decidir. Sólo pisa si viene algo: mandar null no borra lo cargado
+        // en el alta.
+        ...(EXPECTATIVAS.includes(b.expectativa) ? { expectativa: b.expectativa } : {}),
         // El cambio por otro producto: lo que se lleva y cuánto queda de diferencia.
         items_nuevos: Array.isArray(b.items_nuevos) ? b.items_nuevos : [],
         forma_pago: FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null,

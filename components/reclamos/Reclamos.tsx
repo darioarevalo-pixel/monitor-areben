@@ -29,8 +29,9 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
-  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, EXPECTATIVA_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL,
   alertasDe, conAlerta, tokenVencido,
+  ayudaDeMotivo, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -92,12 +93,37 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [orden, setOrden] = useState<OrdenTN | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [elegidos, setElegidos] = useState<Set<number>>(new Set())
-  const [motivo, setMotivo] = useState<MotivoReclamo>('falla')
+  // El primero de la lista, no 'falla': el default tiene que ser el que más entra, y sobre todo
+  // tiene que coincidir con lo que muestra el select (antes decía "No le quedó el talle" y guardaba
+  // 'falla' si nadie lo tocaba).
+  const [motivo, setMotivo] = useState<MotivoReclamo>(MOTIVOS_VIGENTES[0])
   const [detalle, setDetalle] = useState('')
-  const [expectativa, setExpectativa] = useState<Expectativa>('plata')
+  // Vacío = "todavía no sé". En la mayoría de los casos se sabe recién después de escribirle al
+  // cliente, así que forzarlo en el alta era pedir que alguien invente el dato.
+  const [expectativa, setExpectativa] = useState<Expectativa | ''>('')
   /** Solo en "pedido mal armado": lo que el cliente TENDRÍA que haber recibido. */
   const [correctos, setCorrectos] = useState<ItemReclamo[]>([])
   const [guardando, setGuardando] = useState(false)
+
+  /**
+   * Las dos cosas que dependen del motivo se **derivan**, no se sincronizan con un effect: un
+   * effect que llama a setState dispara un render en cascada y deja un instante en que la pantalla
+   * muestra un estado que ya no vale.
+   *
+   *  - `expectativaVal`: si la elegida no está entre las del motivo actual, no cuenta. Cambiar de
+   *    "falla" a "no llegó nunca" no puede dejar guardado "el mismo producto en buen estado".
+   *  - `seleccion`: en los motivos que van sobre la venta completa son todos, sí o sí. Los
+   *    checkboxes además se bloquean, pero lo que manda es esto.
+   */
+  const expectativaVal: Expectativa | '' =
+    expectativa && expectativasDe(motivo).includes(expectativa) ? expectativa : ''
+
+  const seleccion = useMemo(
+    () => (sobreLaVentaCompleta(motivo) && orden
+      ? new Set((orden.products || []).map((_, i) => i))
+      : elegidos),
+    [motivo, orden, elegidos],
+  )
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
@@ -146,7 +172,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     if (!orden) return []
     return (orden.products || [])
       .map((p, i) => ({ p, i }))
-      .filter(({ i }) => elegidos.has(i))
+      .filter(({ i }) => seleccion.has(i))
       .map(({ p }) => ({
         sku: p.sku ?? null,
         // Los ids de TN: son los que sirven para corregir el stock de la tienda. Los de GN los
@@ -158,7 +184,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         precio: p.price ?? null,
         pagado: pagadoPorItem({ precio: p.price, cantidad: p.quantity ?? 1 }, orden),
       }))
-  }, [orden, elegidos])
+  }, [orden, seleccion])
 
   const monto = useMemo(() => calcularMonto(items, orden), [items, orden])
   const conPlata = ordenTraeDatosDePlata(orden)
@@ -180,14 +206,22 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         monto_producto: monto.producto,
         pago_metodo: orden.pago_metodo ?? null,
         pago_gateway: orden.pago_gateway ?? null,
-        expectativa,
+        expectativa: expectativaVal || null,
         items_correctos: motivo === 'mal_armado' ? correctos : [],
       })
-      // Si ya dijo que quiere cambiarlo, no hay nada que fotografiar ni nada que evaluar: pedirle
-      // fotos es mandarlo a un trámite que no existe. El link se puede volver a sacar desde la
-      // lista con "Msj: pedir fotos" mientras el reclamo siga sin decidir.
-      if (expectativa === 'otro_producto') {
+      /**
+       * El link del cliente sirve para UNA cosa: que suba fotos. Así que sólo se copia si en este
+       * caso hacen falta — y eso depende del motivo Y de qué quiere el cliente:
+       *
+       *  - Si lo quiere cambiar, lo trae al mostrador y se ve en persona.
+       *  - En "no le llegó nunca" y "no tenemos stock" no hay nada que fotografiar.
+       *
+       * De todos modos se puede volver a sacar desde la lista mientras el reclamo siga sin decidir.
+       */
+      if (expectativaVal === 'otro_producto') {
         toast.ok('Reclamo creado. Armá el cambio desde la pestaña Cambios.')
+      } else if (!pideFotos(motivo, expectativaVal || null)) {
+        toast.ok('Reclamo creado. Acá no hacen falta fotos: escribile con el mensaje de la lista.')
       } else {
         await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
         toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
@@ -437,6 +471,16 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               </Notice>
             )}
 
+            {/* Cuando el reclamo es de la venta entera no se destilda nada: si después se decide
+                devolver todo, tiene que devolverse TODO. Antes se podía tildar un solo producto y
+                "devolver todo" devolvía sólo ése, aunque el pedido tuviera dos. */}
+            {sobreLaVentaCompleta(motivo) && (
+              <Notice tone="action" icon="ⓘ" style={{ marginBottom: space[3] }}>
+                Este reclamo va sobre <b>la venta completa</b>: el problema es del pedido, no de un
+                producto suelto. Por eso no se pueden destildar.
+              </Notice>
+            )}
+
             <TableWrap>
               <THead>
                 <Tr>
@@ -456,7 +500,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <Td>
                         <input
                           type="checkbox"
-                          checked={elegidos.has(i)}
+                          checked={seleccion.has(i)}
+                          disabled={sobreLaVentaCompleta(motivo)}
                           onChange={(e) => setElegidos((prev) => {
                             const n = new Set(prev)
                             if (e.target.checked) n.add(i); else n.delete(i)
@@ -492,10 +537,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               <Field label="Detalle (opcional)" style={{ flex: 1, minWidth: 220 }}>
                 <Input value={detalle} onChange={(e) => setDetalle(e.target.value)} placeholder="Qué dijo el cliente" />
               </Field>
-              <Field label="¿Qué esperaba?" hint="Para poder ver después cuántas veces resolvimos distinto">
-                <Select value={expectativa} onChange={(e) => setExpectativa(e.target.value as Expectativa)}>
-                  {(Object.keys(EXPECTATIVA_LABEL) as Expectativa[]).map((x) => (
-                    <option key={x} value={x}>{EXPECTATIVA_LABEL[x]}</option>
+              {/* Las opciones dependen del motivo: ofrecer "el mismo producto en buen estado" en un
+                  arrepentimiento, o "que le manden lo que falta" en una falla, no significa nada.
+                  Y es opcional: en la mayoría de los casos se sabe recién después de escribirle. */}
+              <Field label={tituloExpectativa(motivo)} hint="opcional — se puede completar al decidir">
+                <Select value={expectativaVal} onChange={(e) => setExpectativa(e.target.value as Expectativa | '')}>
+                  <option value="">Todavía no sé</option>
+                  {expectativasDe(motivo).map((x) => (
+                    <option key={x} value={x}>{expectativaLabel(x, motivo)}</option>
                   ))}
                 </Select>
               </Field>
@@ -504,6 +553,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                 <div style={{ fontSize: font.lg, fontWeight: weight.bold }}><MoneyText value={monto.producto} /></div>
               </div>
             </Toolbar>
+
+            {/* El ⓘ: cuándo se usa este motivo. Es lo que evita que "faltante", "mal armado" y "sin
+                stock" —que se parecen y tienen consecuencias de stock opuestas— se elijan a dedo. */}
+            <Notice tone="neutral" icon="ⓘ" style={{ marginTop: space[2] }}>
+              <b>{MOTIVO_LABEL[motivo]}:</b> {ayudaDeMotivo(motivo)}
+            </Notice>
 
             {/* En "pedido mal armado" hay DOS productos: el que recibió (arriba, tildado de la
                 orden) y el que tendría que haber recibido. Sin el segundo no se puede saber qué
