@@ -125,6 +125,15 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     [motivo, orden, elegidos],
   )
 
+  /**
+   * En "no tenemos stock" el tilde **vuelve, pero significa otra cosa**: el reclamo cubre la venta
+   * entera igual (por eso `seleccion` son todos), y lo que se marca es **cuál producto no salió**.
+   *
+   * Sin ese dato la devolución parcial no se puede resolver: haría falta saber cuál de los dos es
+   * el que falta para devolver sólo ése y despachar el resto.
+   */
+  const marcaFaltante = motivo === 'sin_stock'
+
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
     try { setFilas(await leerReclamos(marca)) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
@@ -173,7 +182,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     return (orden.products || [])
       .map((p, i) => ({ p, i }))
       .filter(({ i }) => seleccion.has(i))
-      .map(({ p }) => ({
+      .map(({ p, i }) => ({
         sku: p.sku ?? null,
         // Los ids de TN: son los que sirven para corregir el stock de la tienda. Los de GN los
         // completa `enriquecerConGN` cruzando por SKU, y son otros.
@@ -183,8 +192,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         cantidad: p.quantity ?? 1,
         precio: p.price ?? null,
         pagado: pagadoPorItem({ precio: p.price, cantidad: p.quantity ?? 1 }, orden),
+        // Sólo donde el tilde significa "éste es el que no salió".
+        ...(marcaFaltante ? { falto: elegidos.has(i) } : {}),
       }))
-  }, [orden, seleccion])
+  }, [orden, seleccion, marcaFaltante, elegidos])
 
   const monto = useMemo(() => calcularMonto(items, orden), [items, orden])
   const conPlata = ordenTraeDatosDePlata(orden)
@@ -485,7 +496,11 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
             {sobreLaVentaCompleta(motivo) && (
               <Notice tone="action" icon="ⓘ" style={{ marginBottom: space[3] }}>
                 Este reclamo va sobre <b>la venta completa</b>: el problema es del pedido, no de un
-                producto suelto. Por eso no se pueden destildar.
+                producto suelto.{' '}
+                {marcaFaltante
+                  ? <>Tildá <b>cuál es el producto que no tenemos</b>. Si después el cliente pide que
+                      le devuelvan todo, se devuelve el pedido entero igual.</>
+                  : <>Por eso no se pueden destildar.</>}
               </Notice>
             )}
 
@@ -493,7 +508,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               <THead>
                 <Tr>
                   <Th style={{ width: 34 }}></Th>
-                  <Th>Producto</Th>
+                  <Th>{marcaFaltante ? '¿Cuál no tenemos?' : 'Producto'}</Th>
                   <Th align="right">Cant.</Th>
                   <Th align="right">Precio</Th>
                   <Th align="right">Pagó</Th>
@@ -508,8 +523,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <Td>
                         <input
                           type="checkbox"
-                          checked={seleccion.has(i)}
-                          disabled={sobreLaVentaCompleta(motivo)}
+                          checked={marcaFaltante ? elegidos.has(i) : seleccion.has(i)}
+                          disabled={sobreLaVentaCompleta(motivo) && !marcaFaltante}
                           onChange={(e) => setElegidos((prev) => {
                             const n = new Set(prev)
                             if (e.target.checked) n.add(i); else n.delete(i)

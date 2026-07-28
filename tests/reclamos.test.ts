@@ -9,6 +9,7 @@ import {
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
   ayudaDeMotivo, decideElCliente, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
+  admiteDevolucionParcial, itemsQueFaltaron,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -392,6 +393,66 @@ describe('el perfil del motivo', () => {
 
     it('todos son motivos vigentes', () => {
       for (const m of MOTIVOS_CAMBIO) expect(MOTIVOS_VIGENTES).toContain(m)
+    })
+  })
+})
+
+/**
+ * La devolución parcial de "no tenemos stock".
+ *
+ * El reclamo cubre la venta entera pero el inconveniente es de un producto: si el cliente pide que
+ * le devuelvan todo, hay que devolver TODO. Antes "devolver todo" devolvía sólo el producto que se
+ * había tildado, aunque el pedido tuviera dos.
+ */
+describe('qué se devuelve cuando falta un producto de varios', () => {
+  const faltante = item(8990, 1, { producto: 'Funda que no tenemos', falto: true })
+  const sale = item(6000, 1, { producto: 'La que sí sale' })
+
+  it('sin marcar nada, son todos: el reclamo cubre la venta entera', () => {
+    expect(itemsQueFaltaron([item(1000), item(2000)])).toHaveLength(2)
+  })
+
+  it('con uno marcado, sólo ése', () => {
+    expect(itemsQueFaltaron([faltante, sale]).map((i) => i.producto)).toEqual(['Funda que no tenemos'])
+  })
+
+  describe('admiteDevolucionParcial: cuándo hay algo que partir', () => {
+    it('sí, si falta uno de dos', () => {
+      expect(admiteDevolucionParcial([faltante, sale])).toBe(true)
+    })
+
+    // Con un solo producto no hay parcial que valga: o se devuelve o no.
+    it('no, con un solo producto', () => {
+      expect(admiteDevolucionParcial([faltante])).toBe(false)
+    })
+
+    // Si no salió NADA, la parcial y la total son lo mismo.
+    it('no, si faltan todos', () => {
+      expect(admiteDevolucionParcial([faltante, { ...sale, falto: true }])).toBe(false)
+    })
+
+    it('no, si no hay ninguno marcado', () => {
+      expect(admiteDevolucionParcial([item(1000), item(2000)])).toBe(false)
+    })
+  })
+
+  describe('la plata de cada alcance', () => {
+    const orden: OrdenTN = { id: 9, number: 99, subtotal: 14990, descuento_total: 0, envio_costo_cliente: 5000 }
+
+    // El resto del pedido SÍ se despacha, así que el envío se prestó: devolverlo sería regalarlo.
+    it('parcial: sólo el faltante, sin envío', () => {
+      const m = calcularMonto(itemsQueFaltaron([faltante, sale]), orden, { devolverEnvio: false })
+      expect(m.producto).toBe(8990)
+      expect(m.envio).toBe(0)
+      expect(m.total).toBe(8990)
+    })
+
+    // No recibió absolutamente nada: se le devuelve el pedido entero y también lo que pagó de envío.
+    it('total: los dos productos MÁS el envío', () => {
+      const m = calcularMonto([faltante, sale], orden, { devolverEnvio: true })
+      expect(m.producto).toBe(14990)
+      expect(m.envio).toBe(5000)
+      expect(m.total).toBe(19990)
     })
   })
 })

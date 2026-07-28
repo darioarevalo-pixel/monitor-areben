@@ -449,6 +449,25 @@ export type ItemReclamo = {
   pagado?: number | null
   costo?: number | null
   pvp_feria?: number | null
+  /**
+   * **El que no salió.** Sólo en los motivos que van sobre la venta completa: el reclamo cubre el
+   * pedido entero, pero el inconveniente es de un producto puntual.
+   *
+   * Sin esto no se puede resolver la devolución parcial: haría falta saber cuál de los dos
+   * productos es el que falta para devolver sólo ése y despachar el resto.
+   */
+  falto?: boolean
+}
+
+/** Los que no salieron. Si no hay ninguno marcado son todos: el reclamo cubre la venta entera. */
+export function itemsQueFaltaron(items: ItemReclamo[]): ItemReclamo[] {
+  const marcados = items.filter((i) => i.falto)
+  return marcados.length ? marcados : items
+}
+
+/** ¿Se puede devolver sólo una parte, o el pedido es indivisible? */
+export function admiteDevolucionParcial(items: ItemReclamo[]): boolean {
+  return items.length > 1 && items.some((i) => i.falto) && items.some((i) => !i.falto)
 }
 
 // ── La plata ────────────────────────────────────────────────────────────────────

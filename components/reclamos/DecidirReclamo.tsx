@@ -25,7 +25,8 @@ import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
-  devuelveElEnvioDeIda, expectativaLabel, expectativasDe, tituloExpectativa, type Expectativa,
+  admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
+  itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
 } from '@/lib/reclamos/tipos'
@@ -71,7 +72,30 @@ export function DecidirReclamo({
    * no recibió nada. Dejarlo a criterio hacía que el mismo caso se resolviera distinto según quién
    * lo tocara.
    */
-  const devuelveElEnvio = devuelveElEnvioDeIda(reclamo.motivo)
+  const envioDelMotivo = devuelveElEnvioDeIda(reclamo.motivo)
+
+  /**
+   * Devolución parcial o total, y quién lo elige.
+   *
+   * En "no tenemos stock" **decide el cliente**: se le avisa que un producto no salió y contesta si
+   * quiere que le devolvamos sólo ése —el resto se despacha— o el pedido entero. Es el único caso
+   * del módulo donde la decisión no es nuestra: todavía no recibió nada y no hay nada que evaluar.
+   *
+   * Sólo se ofrece si hay algo que partir: un pedido de un solo producto, o donde falta todo, no
+   * tiene parcial que valga.
+   */
+  const hayParcial = admiteDevolucionParcial(items)
+  const [alcance, setAlcance] = useState<'faltante' | 'todo'>('faltante')
+  const itemsADevolver = useMemo(
+    () => (hayParcial && alcance === 'faltante' ? itemsQueFaltaron(items) : items),
+    [hayParcial, alcance, items],
+  )
+
+  /**
+   * El envío de ida se devuelve sólo si **no se recibió nada de nada**. En una parcial el resto del
+   * pedido sí se despacha, así que el envío se prestó: devolverlo sería regalar plata.
+   */
+  const devuelveElEnvio = envioDelMotivo && !(hayParcial && alcance === 'faltante')
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
   const [piso, setPiso] = useState<number | ''>('')
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
@@ -106,13 +130,13 @@ export function DecidirReclamo({
   const retorno = nuncaSalio ? false : (pedirRetorno ?? cuenta.conviene)
 
   const monto = useMemo(
-    () => calcularMonto(items, orden, {
+    () => calcularMonto(itemsADevolver, orden, {
       devolverEnvio: devuelveElEnvio,
       montoAcordado: compensacion === 'plata_parcial' ? Number(montoAcordado) || 0
         : compensacion === 'otra_unidad' || compensacion === 'ninguna' || compensacion === 'cupon' ? 0
           : null,
     }),
-    [items, orden, devuelveElEnvio, compensacion, montoAcordado],
+    [itemsADevolver, orden, devuelveElEnvio, compensacion, montoAcordado],
   )
 
   /** Dónde termina el producto: es lo que después decide si la falla descuenta stock o no. */
@@ -213,6 +237,30 @@ export function DecidirReclamo({
           ))}
         </Select>
       </Field>
+
+      {/* ¿Hasta dónde llega la devolución? Sólo aparece si hay algo que partir: con un solo
+          producto, o si falta todo, no hay parcial que valga.
+
+          Los dos montos van a la vista porque es lo que se le va a decir al cliente, y porque el
+          total incluye el envío y el parcial no — el resto del pedido sí se despacha, así que ese
+          envío se prestó. */}
+      {hayParcial && (
+        <Field
+          label="¿Hasta dónde llega la devolución?"
+          hint="lo elige el cliente: todavía no recibió nada"
+          style={{ marginBottom: space[3] }}
+        >
+          <Select value={alcance} onChange={(e) => setAlcance(e.target.value as 'faltante' | 'todo')} style={{ maxWidth: 420 }}>
+            <option value="faltante">Sólo lo que no tenemos — el resto se despacha</option>
+            <option value="todo">Todo el pedido, más el envío</option>
+          </Select>
+          <div style={{ fontSize: font.xs, color: color.mut, marginTop: 4 }}>
+            {alcance === 'faltante'
+              ? <>Se devuelve <b>{itemsQueFaltaron(items).map((i) => i.producto).join(', ')}</b>. El envío no se devuelve: el resto del pedido sale igual.</>
+              : <>Se devuelven <b>los {items.length} productos</b> y también el envío que pagó.</>}
+          </div>
+        </Field>
+      )}
 
       {/* ── 1. ¿Vuelve el producto? ── */}
       {!hayPrendaQueVuelva && (
