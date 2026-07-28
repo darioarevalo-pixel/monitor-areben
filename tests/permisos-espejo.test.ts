@@ -72,9 +72,7 @@ describe('cliente y servidor deciden lo mismo en Canjes', () => {
   ]
 
   it.each(CASOS)('$nombre', ({ p }) => {
-    for (const activa of MARCAS) {
-      expect(veMarcaCanjes(p, activa, MARCAS)).toEqual(marcasVisiblesCanjes(p))
-    }
+    expect(veMarcaCanjes(p)).toEqual(marcasVisiblesCanjes(p))
   })
 
   // La razón de ser del arreglo: antes esto daba [] y por eso no se veía el padrón.

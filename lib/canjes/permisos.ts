@@ -32,10 +32,10 @@ import type { CanjeStore, NivelAprobacion } from './tipos'
  * o sea 403 en Canjes entero. `tests/permisos-espejo.test.ts` corre las dos puertas sobre la misma
  * matriz de perfiles.
  *
- * `marcaActiva` y `todas` quedan en la firma por compatibilidad con quien la llama, pero **ya no
- * se usan**: el acceso lo decide el permiso de cada marca, no en cuál estás parado.
+ * Ya no recibe la marca activa ni la lista de marcas: el acceso lo decide el permiso de cada marca,
+ * no en cuál estás parado.
  */
-export function veMarcaCanjes(perfil: Perfil | null, _marcaActiva?: Marca, _todas?: Marca[]): CanjeStore[] {
+export function veMarcaCanjes(perfil: Perfil | null): CanjeStore[] {
   return marcasVisiblesCanjes(perfil) as CanjeStore[]
 }
 

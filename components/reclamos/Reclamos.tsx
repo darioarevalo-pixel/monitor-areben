@@ -212,7 +212,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * Si venció, se regenera en el acto en vez de copiar un link muerto.
    */
   const textoApertura = async (d: ReclamoRow): Promise<string> => {
-    let { token, vence } = await leerToken(marca, d.id)
+    const { token: emitido, vence } = await leerToken(marca, d.id)
+    let token = emitido
     if (!token || tokenVencido(vence)) {
       token = await reemitirToken(marca, d.id)
       toast.ok('El link estaba vencido: se generó uno nuevo.')

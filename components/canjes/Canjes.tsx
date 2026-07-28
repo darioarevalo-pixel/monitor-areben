@@ -36,9 +36,6 @@ import { ListaCanjes } from './ListaCanjes'
 import { ListaPersonas } from './ListaPersonas'
 import { useCanjes } from './useCanjes'
 
-/** Las marcas del monitor, que son dos. La tercera (Stunned) sale de `veMarcaCanjes`. */
-const MARCAS_MONITOR = ['bdi', 'zattia'] as const
-
 export function Canjes() {
   const { marca, perfil } = useSesion()
   const toast = useToast()
@@ -46,8 +43,8 @@ export function Canjes() {
   // Qué marcas puede elegir. Es el espejo en UI de `marcasVisibles()` del handler; el servidor
   // vuelve a chequearlo, así que esto es comodidad, no seguridad.
   const marcasPosibles = useMemo(
-    () => veMarcaCanjes(perfil, marca, [...MARCAS_MONITOR]),
-    [perfil, marca],
+    () => veMarcaCanjes(perfil),
+    [perfil],
   )
 
   // Arranca en la marca activa del header si está entre las posibles; si no, la primera que haya.
