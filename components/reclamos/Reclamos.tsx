@@ -12,7 +12,7 @@
  * olvide: lleva los pendientes y no deja cerrar el reclamo hasta que estén.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
@@ -29,7 +29,8 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
-  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, ESTADO_LABEL,
+  resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido,
   ayudaDeMotivo, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
   type Expectativa,
@@ -87,6 +88,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [error, setError] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<'abiertos' | 'dormidos' | 'todos'>('abiertos')
   const [decidiendo, setDecidiendo] = useState<ReclamoRow | null>(null)
+  /** Qué fila tiene abierto el resumen de lo decidido y la traza. */
+  const [expandido, setExpandido] = useState<number | null>(null)
 
   // ── Alta ──
   const [numero, setNumero] = useState('')
@@ -651,7 +654,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
             {visibles.map((d) => {
               const faltan = faltantesParaCerrar(d)
               return (
-                <Tr key={d.id}>
+                <React.Fragment key={d.id}>
+                <Tr>
                   <Td>
                     <div style={{ fontWeight: weight.semibold }}>{numeroReclamo(d.id)}</div>
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>
@@ -758,6 +762,13 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {esAdmin && ABIERTOS.includes(d.estado) && !faltan.length && (
                         <Button size="sm" variant="solid" tone="success" onClick={() => void cerrar(d)}>Cerrar</Button>
                       )}
+                      {/* Lo decidido y la traza. Sin esto la fila es puro botón de acción: para
+                          saber qué se resolvió había que deducirlo de qué botones quedaban. */}
+                      <Button
+                        size="sm" variant="ghost"
+                        title="Qué se decidió y qué pasó"
+                        onClick={() => setExpandido(expandido === d.id ? null : d.id)}
+                      >⋯</Button>
                       {esAdmin && (
                         <Button
                           size="sm" variant="ghost"
@@ -770,6 +781,37 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                     </div>
                   </Td>
                 </Tr>
+                {expandido === d.id && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: `${space[3]}px ${space[4]}px`, background: color.bg, borderBottom: `1px solid ${color.line}` }}>
+                      <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap' }}>
+                        <div style={{ minWidth: 280, flex: '1 1 280px' }}>
+                          <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, marginBottom: 4 }}>Lo decidido</div>
+                          {resumenDeLoDecidido(d).map((r, i) => (
+                            <div key={i} style={{ fontSize: font.xs, display: 'flex', gap: 8, padding: '1px 0' }}>
+                              <span style={{ color: color.mut2, minWidth: 130 }}>{r.que}</span>
+                              <span style={{ color: color.ink2 }}>{r.valor}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ minWidth: 280, flex: '1 1 280px' }}>
+                          <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, marginBottom: 4 }}>Qué pasó</div>
+                          {(d.historial || []).length
+                            ? (d.historial || []).map((h, i) => (
+                              <div key={i} style={{ fontSize: font.xs, color: color.ink2, display: 'flex', gap: 8, flexWrap: 'wrap', padding: '1px 0' }}>
+                                <span style={{ color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{new Date(h.at).toLocaleString('es-AR')}</span>
+                                <span style={{ fontWeight: weight.semibold }}>{h.estado ? ESTADO_LABEL[h.estado] : '—'}</span>
+                                {h.usuario && <span style={{ color: color.mut }}>· {h.usuario}</span>}
+                                {h.nota && <span style={{ color: color.mut }}>· {h.nota}</span>}
+                              </div>
+                            ))
+                            : <div style={{ fontSize: font.xs, color: color.mut2 }}>Sin movimientos.</div>}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               )
             })}
           </TBody>

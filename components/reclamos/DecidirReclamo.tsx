@@ -26,6 +26,7 @@ import {
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
+  GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, type GravedadFalla,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
@@ -101,6 +102,8 @@ export function DecidirReclamo({
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   const [pvpFeria, setPvpFeria] = useState<number | ''>('')
   const [cupon, setCupon] = useState('')
+  /** Qué tan rota está: da el PVP de feria de arranque, que es lo que mueve la cuenta. */
+  const [gravedad, setGravedad] = useState<GravedadFalla | null>(null)
   const [via, setVia] = useState<ViaRetorno>('andreani')
   // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
   const [envioIda, setEnvioIda] = useState<number | ''>('')
@@ -196,6 +199,14 @@ export function DecidirReclamo({
 
   const salida = SALIDAS.find((s) => s.key === compensacion)
 
+  /**
+   * La oferta de retención sólo tiene sentido con las fotos delante: hasta ver en qué estado está
+   * el producto no se sabe qué se está ofreciendo. Y sólo en los casos donde el cliente LO TIENE:
+   * si nunca salió, no hay nada que quedarse.
+   */
+  const hayFotos = !!(reclamo.fotos || []).length
+  const mostrarRetencion = ofreceRetencion(reclamo.motivo) && hayFotos && compensacion !== 'plata_parcial'
+
   return (
     <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(reclamo.id)}`} ancho="ancho">
       <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
@@ -258,6 +269,50 @@ export function DecidirReclamo({
             {alcance === 'faltante'
               ? <>Se devuelve <b>{itemsQueFaltaron(items).map((i) => i.producto).join(', ')}</b>. El envío no se devuelve: el resto del pedido sale igual.</>
               : <>Se devuelven <b>los {items.length} productos</b> y también el envío que pagó.</>}
+          </div>
+        </Field>
+      )}
+
+      {/* ── La oferta de retención ──
+          Es plata que no sale de la caja y producto que no vuelve a costar logística, y hasta ahora
+          era una opción más perdida en el desplegable de abajo. Acá es un paso: con las fotos a la
+          vista, antes de aceptar la devolución. */}
+      {mostrarRetencion && !!descuento.techo && (
+        <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginBottom: space[3], background: color.bg2 }}>
+          <div style={{ fontWeight: weight.semibold, fontSize: font.sm, marginBottom: 4 }}>¿Intentamos que se lo quede?</div>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: space[2] }}>{descuento.motivo}</div>
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
+            <span>Hasta <b><MoneyText value={descuento.techo} /></b> sin perder plata.</span>
+            <span>Sugerido: <b><MoneyText value={descuento.sugerido} /></b></span>
+            <Button
+              size="sm" variant="solid" tone="brand"
+              onClick={() => { setCompensacion('plata_parcial'); setMontoAcordado(descuento.sugerido) }}
+            >Ofrecer que se lo quede</Button>
+          </div>
+          {descuento.convieneRegalar && (
+            <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>
+              Acá <b>regalarlo sale más barato que pedirlo de vuelta</b>: el envío y lo que se
+              deprecia superan lo que se recupera.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* La gravedad es lo que da el punto de partida del PVP de feria, que es lo único que se
+          recupera de un producto fallado — y hasta ahora se tipeaba sin ninguna referencia. */}
+      {esFalla && (
+        <Field label="¿Qué tan rota está?" hint="da el PVP de feria de arranque; se puede ajustar" style={{ marginBottom: space[3] }}>
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            {(Object.keys(GRAVEDAD_DEF) as GravedadFalla[]).map((g) => (
+              <Button
+                key={g} size="sm"
+                variant={gravedad === g ? 'solid' : 'outline'}
+                tone={g === 'inutil' ? 'danger' : 'brand'}
+                title={GRAVEDAD_DEF[g].ayuda}
+                onClick={() => { setGravedad(g); setPvpFeria(pvpFeriaSugerido(items, g)) }}
+              >{GRAVEDAD_DEF[g].label}</Button>
+            ))}
+            {gravedad && <span style={{ fontSize: font.xs, color: color.mut, alignSelf: 'center' }}>{GRAVEDAD_DEF[gravedad].ayuda}</span>}
           </div>
         </Field>
       )}

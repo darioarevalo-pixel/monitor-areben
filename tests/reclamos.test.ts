@@ -9,7 +9,7 @@ import {
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
   ayudaDeMotivo, decideElCliente, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
-  admiteDevolucionParcial, itemsQueFaltaron,
+  admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -454,6 +454,76 @@ describe('qué se devuelve cuando falta un producto de varios', () => {
       expect(m.envio).toBe(5000)
       expect(m.total).toBe(19990)
     })
+  })
+})
+
+/**
+ * El PVP de feria es lo ÚNICO que se recupera de un producto fallado, y es lo que mueve toda la
+ * cuenta de la retención. Hasta ahora se tipeaba a mano sin ninguna referencia.
+ */
+describe('la gravedad da el PVP de feria de arranque', () => {
+  const funda = item(10000, 1)
+
+  it('una que se puede usar vale más en feria que una que no', () => {
+    expect(pvpFeriaSugerido([funda], 'util')).toBeGreaterThan(pvpFeriaSugerido([funda], 'inutil'))
+  })
+
+  it('es POR UNIDAD, no por el total de la línea', () => {
+    expect(pvpFeriaSugerido([item(10000, 3)], 'util')).toBe(pvpFeriaSugerido([item(10000, 1)], 'util'))
+  })
+
+  it('sin precio de lista no inventa un número', () => {
+    expect(pvpFeriaSugerido([item(0)], 'util')).toBe(0)
+    expect(pvpFeriaSugerido([], 'util')).toBe(0)
+  })
+
+  // Es lo que hace que la sugerencia sirva: alimenta directamente el techo de la oferta.
+  it('el techo de la retención se mueve con la gravedad', () => {
+    const conFeria = (g: 'util' | 'inutil') =>
+      cuentaDescuento({
+        items: [{ ...funda, pvp_feria: pvpFeriaSugerido([funda], g) }],
+        fallada: true,
+        envioVuelta: 2000,
+      }).techo
+    // Cuanto menos se recupera, más se pierde si vuelve, y más se puede ofrecer para que se quede.
+    expect(conFeria('inutil')).toBeGreaterThan(conFeria('util'))
+  })
+})
+
+describe('el resumen de lo decidido', () => {
+  const base: ReclamoRow = {
+    id: 7, store: 'bdi', numero: 'R-0007', motivo: 'falla', estado: 'en_revision', items: [],
+    stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
+  }
+  const texto = (d: ReclamoRow) => resumenDeLoDecidido(d).map((r) => `${r.que}: ${r.valor}`).join(' | ')
+
+  // Existe porque la fila era puro botón: para saber qué se había resuelto había que deducirlo de
+  // qué botones quedaban.
+  it('sin decisión, lo dice y no inventa', () => {
+    expect(texto(base)).toContain('Todavía sin decidir')
+    expect(texto(base)).not.toContain('Se le devuelve')
+  })
+
+  it('decidido, cuenta qué recibe, qué pasa con el producto y cuánto costó', () => {
+    const t = texto({ ...base, compensacion: 'plata_total', monto_total: 8000, destino_prenda: 'falla', costo_caso: 12000 })
+    expect(t).toContain('Se le devuelve todo')
+    expect(t).toContain('$8.000')
+    expect(t).toContain('no se revende')
+    expect(t).toContain('$12.000')
+  })
+
+  // Se guarda lo que sugirió la cuenta ADEMÁS de lo que se hizo: sirve para ver cuándo se va en
+  // contra y si valió la pena.
+  it('marca cuándo se fue en contra de la cuenta', () => {
+    const t = texto({ ...base, compensacion: 'plata_total', retorno_sugerido: false, retorno_decidido: true, via_retorno: 'andreani' })
+    expect(t).toContain('en contra de lo que sugería la cuenta')
+    const ok = texto({ ...base, compensacion: 'plata_total', retorno_sugerido: true, retorno_decidido: true })
+    expect(ok).not.toContain('en contra')
+  })
+
+  it('la expectativa se lee con la etiqueta del caso', () => {
+    const t = texto({ ...base, motivo: 'sin_stock', expectativa: 'otro_producto' })
+    expect(t).toContain('Cambiarlo por otro producto')
   })
 })
 

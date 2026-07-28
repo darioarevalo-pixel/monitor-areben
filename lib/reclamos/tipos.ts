@@ -459,6 +459,65 @@ export type ItemReclamo = {
   falto?: boolean
 }
 
+export const COMPENSACION_LABEL: Record<Compensacion, string> = {
+  plata_total: 'Se le devuelve todo',
+  plata_parcial: 'Se le devuelve una parte y se queda con el producto',
+  otra_unidad: 'Se le manda otra unidad igual',
+  otro_producto: 'Lo cambia por otro producto',
+  reenvio: 'Se le manda lo que corresponde',
+  cupon: 'Se le da un cupón',
+  ninguna: 'Sin compensación',
+}
+
+export const DESTINO_LABEL: Record<DestinoPrenda, string> = {
+  stock: 'Vuelve y se revende',
+  falla: 'Vuelve como falla (no se revende)',
+  no_salio: 'Nunca salió del depósito',
+  perdida: 'Se perdió o se la queda el cliente',
+}
+
+/** Una línea del resumen de lo decidido: qué se resolvió y por qué. */
+export type LineaResumen = { que: string; valor: string }
+
+/**
+ * Lo que se decidió, en criollo, para mostrarlo junto al historial.
+ *
+ * Existe porque la fila del reclamo era **puro botón de acción**: `compensacion`, `destino_prenda`,
+ * `retorno_decidido` y `costo_caso` se guardaban y **no se leían en ninguna pantalla**. Sin esto,
+ * para saber qué se había resuelto en un caso había que deducirlo de qué botones quedaban.
+ */
+export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
+  const l: LineaResumen[] = []
+  const money = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
+
+  l.push({ que: 'Motivo', valor: MOTIVO_LABEL[d.motivo] + (d.motivo_detalle ? ` — ${d.motivo_detalle}` : '') })
+  if (d.expectativa) l.push({ que: tituloExpectativa(d.motivo).replace(/[¿?]/g, ''), valor: expectativaLabel(d.expectativa, d.motivo) })
+
+  if (!d.compensacion) {
+    l.push({ que: 'Decisión', valor: 'Todavía sin decidir' })
+    return l
+  }
+
+  l.push({ que: 'Qué recibe', valor: COMPENSACION_LABEL[d.compensacion] })
+  if (d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
+  if (d.cupon_codigo) l.push({ que: 'Cupón', valor: d.cupon_codigo })
+
+  if (d.destino_prenda) l.push({ que: 'El producto', valor: DESTINO_LABEL[d.destino_prenda] })
+  // Se guarda lo que sugirió la cuenta además de lo que se hizo: sirve para ver cuándo se va en
+  // contra y si valió la pena.
+  if (d.retorno_decidido != null) {
+    const contra = d.retorno_sugerido != null && d.retorno_sugerido !== d.retorno_decidido
+    l.push({
+      que: '¿Se pidió que vuelva?',
+      valor: (d.retorno_decidido ? 'Sí' : 'No')
+        + (d.via_retorno ? `, por ${VIA_LABEL[d.via_retorno]}` : '')
+        + (contra ? ' — en contra de lo que sugería la cuenta' : ''),
+    })
+  }
+  if (d.costo_caso != null) l.push({ que: 'Lo que nos costó', valor: money(Number(d.costo_caso)) })
+  return l
+}
+
 /** Los que no salieron. Si no hay ninguno marcado son todos: el reclamo cubre la venta entera. */
 export function itemsQueFaltaron(items: ItemReclamo[]): ItemReclamo[] {
   const marcados = items.filter((i) => i.falto)
@@ -809,6 +868,41 @@ export type CuentaDescuento = {
 
 /** Del techo, lo que se ofrece primero. El resto queda como margen de negociación. */
 const FRACCION_SUGERIDA = 0.5
+
+/**
+ * Qué tan rota está. Es lo que decide **qué se le puede ofrecer** para que se la quede.
+ *
+ * La cuenta de la retención necesita el PVP de feria —lo único que se recupera de un producto
+ * fallado— y hasta ahora se tipeaba a mano, sin ninguna referencia. Clasificar la falla da un punto
+ * de partida: una a la que se le salió un botón se arregla y se vende casi como nueva, así que se
+ * pierde poco si vuelve y con una oferta chica alcanza. Una manchada no se recupera, el techo sube,
+ * y ahí conviene regalarla o devolver la plata entera.
+ */
+export type GravedadFalla = 'util' | 'inutil'
+
+export const GRAVEDAD_DEF: Record<GravedadFalla, { label: string; ayuda: string; fraccionFeria: number }> = {
+  util: {
+    label: 'Se puede usar',
+    ayuda: 'Se arregla y se usa: se le salió un botón, una costura chica, un hilo suelto.',
+    fraccionFeria: 0.6,
+  },
+  inutil: {
+    label: 'No se recupera',
+    ayuda: 'Mancha grande, rotura, falla estructural. En feria sale por poco y nada.',
+    fraccionFeria: 0.2,
+  },
+}
+
+/**
+ * Un PVP de feria de arranque según la gravedad. **Es una sugerencia, no un precio**: se ajusta a
+ * mano si el producto lo amerita. Lo que evita es tener que inventar el número desde cero.
+ */
+export function pvpFeriaSugerido(items: ItemReclamo[], gravedad: GravedadFalla): number {
+  const unidades = items.reduce((s, it) => s + positivo(it.cantidad), 0) || 1
+  const lista = items.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0)
+  if (lista <= 0) return 0
+  return Math.round((lista / unidades) * GRAVEDAD_DEF[gravedad].fraccionFeria)
+}
 
 /**
  * Cuánto se le puede descontar al cliente para que se quede el producto, en vez de que vuelva.
