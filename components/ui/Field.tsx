@@ -69,7 +69,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
 
 export type NumberFieldProps = {
   value: number | ''
-  onChange: (n: number) => void
+  /**
+   * Devuelve `''` cuando el campo queda vacío. **Un campo en blanco no es un cero**: en los campos
+   * de plata la diferencia importa —"no lo cargué todavía" no es lo mismo que "sale $0"— y además
+   * es lo que hacía aparecer el `0` fantasma que había que borrar a mano antes de poder escribir.
+   */
+  onChange: (n: number | '') => void
   min?: number
   max?: number
   step?: number
@@ -77,11 +82,12 @@ export type NumberFieldProps = {
   width?: number
   invalid?: boolean
   disabled?: boolean
+  placeholder?: string
   style?: React.CSSProperties
 }
 
 /** Input numérico con prefijo (ej. "$" o "×"). Clampa a [min,max]. Sin flechitas: acá se tipea. */
-export function NumberField({ value, onChange, min, max, step, prefix, width = 96, invalid, disabled, style }: NumberFieldProps) {
+export function NumberField({ value, onChange, min, max, step, prefix, width = 96, invalid, disabled, placeholder, style }: NumberFieldProps) {
   const clamp = (n: number) => {
     let v = n
     if (min != null) v = Math.max(v, min)
@@ -101,7 +107,17 @@ export function NumberField({ value, onChange, min, max, step, prefix, width = 9
         max={max}
         step={step}
         disabled={disabled}
-        onChange={(e) => onChange(clamp(Number(e.target.value) || 0))}
+        placeholder={placeholder}
+        // Si lo que hay es un 0, se selecciona al entrar: el primer dígito que tipeás lo reemplaza
+        // en vez de quedar pegado atrás ("05"). Con cualquier otro valor no se toca la selección,
+        // porque ahí el que entra al campo suele querer corregir un dígito, no rehacerlo.
+        onFocus={(e) => { if (Number(e.currentTarget.value) === 0) e.currentTarget.select() }}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (raw === '') return onChange('')
+          const n = Number(raw)
+          onChange(Number.isFinite(n) ? clamp(n) : '')
+        }}
         style={prefix != null ? { paddingLeft: 24 } : undefined}
       />
     </span>

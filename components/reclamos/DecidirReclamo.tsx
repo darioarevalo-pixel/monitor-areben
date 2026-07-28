@@ -4,9 +4,9 @@
  * La pantalla donde Administración decide qué se hace con un reclamo, con la evidencia y la
  * cuenta delante. Son **dos decisiones separadas**:
  *
- *  1. **¿Conviene que la prenda vuelva?** Es económica y la decidimos nosotros. La cuenta está a
+ *  1. **¿Conviene que el producto vuelva?** Es económica y la decidimos nosotros. La cuenta está a
  *     la vista: lo recuperable contra lo que sale el envío de vuelta. El matiz que la hace útil
- *     es que una prenda fallada NO vuelve a stock —lo único que se saca de ella es venderla en
+ *     es que un producto fallado NO vuelve a stock —lo único que se saca de él es venderlo en
  *     feria—, así que se mide contra el PVP de feria y no contra el precio de lista.
  *  2. **Qué recibe el cliente**: la plata entera, una parte, otra unidad igual, o un cupón.
  *
@@ -32,7 +32,7 @@ import {
 /** Todas las salidas. Cuáles se ofrecen lo decide `compensacionesDe` según lo que pasó. */
 const SALIDAS: { key: Compensacion; label: string; ayuda: string }[] = [
   { key: 'plata_total', label: 'Le devolvemos todo', ayuda: 'La devolución clásica.' },
-  { key: 'plata_parcial', label: 'Le devolvemos una parte', ayuda: 'Se queda la prenda con un descuento acordado. La más barata: ni envío ni reintegro completo.' },
+  { key: 'plata_parcial', label: 'Le devolvemos una parte', ayuda: 'Se queda con el producto y un descuento acordado. La salida más barata: ni envío ni reintegro completo.' },
   { key: 'otra_unidad', label: 'Le mandamos otra igual', ayuda: 'No se toca la plata. Sale una unidad de stock.' },
   { key: 'otro_producto', label: 'Lo cambia por otro producto', ayuda: 'El cambio de siempre: elegís lo que se lleva y sale la diferencia de precio.' },
   { key: 'reenvio', label: 'Le mandamos lo que corresponde', ayuda: 'Se despacha lo que faltó o lo correcto. No se toca la plata.' },
@@ -66,7 +66,7 @@ export function DecidirReclamo({
   const [devolverEnvio, setDevolverEnvio] = useState(false)
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
   const [piso, setPiso] = useState<number | ''>('')
-  // Solo hace falta para la cuenta cuando la prenda está fallada: es lo único que se recupera.
+  // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   const [pvpFeria, setPvpFeria] = useState<number | ''>('')
   const [cupon, setCupon] = useState('')
   const [via, setVia] = useState<ViaRetorno>('andreani')
@@ -107,7 +107,7 @@ export function DecidirReclamo({
     [items, orden, devolverEnvio, compensacion, montoAcordado],
   )
 
-  /** Dónde termina la prenda: es lo que después decide si la falla descuenta stock o no. */
+  /** Dónde termina el producto: es lo que después decide si la falla descuenta stock o no. */
   const destino: DestinoPrenda = destinoDe(reclamo.motivo, retorno)
 
   const costo = useMemo(
@@ -146,7 +146,7 @@ export function DecidirReclamo({
       })
       toast.ok(compensacion === 'otro_producto'
         ? 'Decidido. Seguí el cambio desde la pestaña Cambios.'
-        : retorno ? 'Decidido. Queda esperando que vuelva la prenda.' : 'Decidido.')
+        : retorno ? 'Decidido. Queda esperando que vuelva el producto.' : 'Decidido.')
       onListo()
     } catch (e) {
       toast.error((e as Error).message)
@@ -155,7 +155,7 @@ export function DecidirReclamo({
     }
   }
 
-  /** Hasta cuánto se puede descontar para que se la quede, y cuánto conviene ofrecer primero. */
+  /** Hasta cuánto se puede descontar para que se lo quede, y cuánto conviene ofrecer primero. */
   const descuento = useMemo(
     () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta: Number(envioVuelta) || 0 }),
     [itemsConFeria, esFalla, envioVuelta],
@@ -184,49 +184,49 @@ export function DecidirReclamo({
       )}
       {!(reclamo.fotos || []).length && esFalla && (
         <Notice tone="warning" style={{ marginBottom: space[3] }}>
-          Todavía no hay fotos. Si la prenda se la queda el cliente, no vas a poder cerrar el
+          Todavía no hay fotos. Si el producto se lo queda el cliente, no vas a poder cerrar el
           reclamo sin al menos una.
         </Notice>
       )}
 
-      {/* ── 1. ¿Vuelve la prenda? ── */}
+      {/* ── 1. ¿Vuelve el producto? ── */}
       {!hayPrendaQueVuelva && (
         <Notice tone="neutral" style={{ marginBottom: space[3] }}>
           {reclamo.motivo === 'no_llego'
-            ? 'El pedido se perdió en el camino: no hay prenda que vuelva. Queda pendiente el reclamo al transportista.'
-            : 'La prenda nunca salió del depósito, así que no hay nada que esperar ni etiqueta que emitir.'}
+            ? 'El pedido se perdió en el camino: no hay producto que vuelva. Queda pendiente el reclamo al transportista.'
+            : 'El producto nunca salió del depósito, así que no hay nada que esperar ni etiqueta que emitir.'}
         </Notice>
       )}
       {hayPrendaQueVuelva && (
         <section style={{ marginBottom: space[4] }}>
-          <h4 style={{ fontSize: font.md, fontWeight: weight.bold, marginBottom: space[2] }}>¿Pedimos que vuelva la prenda?</h4>
+          <h4 style={{ fontSize: font.md, fontWeight: weight.bold, marginBottom: space[2] }}>¿Pedimos que vuelva el producto?</h4>
 
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[2] }}>
             <Field label="Envío de vuelta ($)" hint="Total, lo pagamos nosotros">
               <NumberField value={envioVuelta} onChange={(v) => setEnvioVuelta(v)} style={{ width: 120 }} />
             </Field>
             {esFalla && (
-              <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `Se multiplica por las ${unidades} unidades` : 'Lo único que se saca de una fallada'}>
+              <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `Se multiplica por las ${unidades} unidades` : 'Lo único que se saca de un producto fallado'}>
                 <NumberField value={pvpFeria} onChange={(v) => setPvpFeria(v)} style={{ width: 120 }} />
               </Field>
             )}
-            <Field label="Piso ($)" hint="Nunca pedirla por debajo">
+            <Field label="Piso ($)" hint="Nunca pedirlo por debajo">
               <NumberField value={piso} onChange={(v) => setPiso(v)} style={{ width: 110 }} />
             </Field>
           </div>
 
           <Notice tone={cuenta.conviene ? 'success' : 'warning'}>
-            <b>{cuenta.conviene ? 'Conviene pedirla' : 'No conviene pedirla'}.</b> {cuenta.motivo}
+            <b>{cuenta.conviene ? 'Conviene pedirlo' : 'No conviene pedirlo'}.</b> {cuenta.motivo}
             {esFalla && (
               <div style={{ fontSize: font.xs, marginTop: 4 }}>
-                Se mide contra el PVP de feria porque una prenda fallada no vuelve a stock.
+                Se mide contra el PVP de feria porque un producto fallado no vuelve a stock.
               </div>
             )}
           </Notice>
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[2] }}>
             <Button variant={retorno ? 'solid' : 'outline'} tone="brand" size="sm" onClick={() => setPedirRetorno(true)}>Que vuelva</Button>
-            <Button variant={!retorno ? 'solid' : 'outline'} tone="brand" size="sm" onClick={() => setPedirRetorno(false)}>Que se la quede</Button>
+            <Button variant={!retorno ? 'solid' : 'outline'} tone="brand" size="sm" onClick={() => setPedirRetorno(false)}>Que se lo quede</Button>
             {pedirRetorno !== null && pedirRetorno !== cuenta.conviene && (
               <StatusPill tone="warning" label="Va contra la sugerencia" />
             )}
@@ -246,7 +246,7 @@ export function DecidirReclamo({
               {!hayEnvio(via) && (
                 <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>
                   Sin envío: no hay etiqueta que pagar ni código que seguir. El reclamo va a decir
-                  &quot;Esperando que la traiga&quot;.
+                  &quot;Esperando que lo traiga&quot;.
                 </div>
               )}
               {pideSeguimiento(via) && (
@@ -275,7 +275,7 @@ export function DecidirReclamo({
               <NumberField value={montoAcordado} onChange={(v) => setMontoAcordado(v)} style={{ width: 140 }} />
             </Field>
             {/* La cuenta que hace que esto valga la pena: en una falla barata el techo puede superar
-                el precio, o sea que regalarla sale más barato que pedirla de vuelta. */}
+                el precio, o sea que regalarlo sale más barato que pedirlo de vuelta. */}
             {!!descuento.techo && (
               <Notice tone={descuento.convieneRegalar ? 'success' : 'neutral'} style={{ marginTop: space[2] }}>
                 {descuento.motivo}
@@ -286,7 +286,7 @@ export function DecidirReclamo({
                 </div>
                 {Number(montoAcordado) > descuento.techo && (
                   <div style={{ marginTop: 4, color: color.warningInk }}>
-                    ⚠️ Te estás pasando del techo: por encima de eso conviene pedirla de vuelta.
+                    ⚠️ Te estás pasando del techo: por encima de eso conviene pedirlo de vuelta.
                   </div>
                 )}
               </Notice>

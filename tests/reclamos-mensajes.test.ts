@@ -53,7 +53,7 @@ describe('mensaje de resolución', () => {
   })
 
   // La duda número uno del cliente cuando le devuelven plata y no le piden el producto.
-  it('si se la queda, lo dice explícitamente', () => {
+  it('si se lo queda, lo dice explícitamente', () => {
     const t = mensajeResolucion({ ...base, compensacion: 'plata_parcial', monto_total: 5000, destino_prenda: 'falla', via_retorno: null } as ReclamoRow, 'R-0025')
     expect(t).toContain('No hace falta que nos devuelvas nada')
     expect(t).toContain('$ 5.000')

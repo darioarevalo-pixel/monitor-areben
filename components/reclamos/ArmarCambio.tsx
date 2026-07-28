@@ -71,18 +71,22 @@ type Linea = {
   variant_id: string | null
   producto: string
   variante: string | null
-  precio: number
-  cantidad: number
+  /** `''` mientras se está editando: el campo vacío no es un cero, se resuelve al armar el ítem. */
+  precio: number | ''
+  cantidad: number | ''
   /** Lo que se pagó por esta línea (descuentos de la orden prorrateados). Solo en los devueltos. */
   pagado?: number | null
   /** Tope de cantidad: no se puede devolver más de lo que se compró. */
   max?: number
 }
 
+/** Un renglón a medio escribir no rompe la cuenta: vacío vale 0, y la cantidad nunca baja de 1. */
 const toItem = (l: Linea): ItemReclamo => ({
   sku: l.sku, product_id: l.product_id, size_id: l.size_id,
   tn_product_id: l.tn_product_id, variant_id: l.variant_id,
-  producto: l.producto, variante: l.variante, precio: l.precio, cantidad: l.cantidad,
+  producto: l.producto, variante: l.variante,
+  precio: l.precio === '' ? 0 : l.precio,
+  cantidad: l.cantidad === '' ? 1 : l.cantidad,
   pagado: l.pagado ?? null,
 })
 
@@ -232,13 +236,15 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     }])
   }, [])
 
-  const actualizarLinea = (key: string, campo: 'precio' | 'cantidad', valor: number) =>
+  const actualizarLinea = (key: string, campo: 'precio' | 'cantidad', valor: number | '') =>
     setLineas((ls) => ls.map((l) => {
       if (l.key !== key) return l
-      const next = { ...l, [campo]: valor }
+      const next: Linea = { ...l, [campo]: valor }
       // Si se cambia a mano el precio o la cantidad de un devuelto, lo pagado deja de valer: la
       // cuenta pasa a usar el bruto. Se recalcula contra la orden para que siga cerrando.
-      if (l.tipo === 'devuelve') next.pagado = pagadoPorItem({ precio: next.precio, cantidad: next.cantidad }, orden)
+      if (l.tipo === 'devuelve') {
+        next.pagado = pagadoPorItem({ precio: next.precio || 0, cantidad: next.cantidad || 1 }, orden)
+      }
       return next
     }))
 
@@ -502,7 +508,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
           <><b>Guardá el borrador</b> y pasale el detalle al cliente. Queda esperando hasta que pague — no hace falta terminarlo de una.</>,
           <>Cuando cobres, <b>Marcar como pagado</b>. Recién ahí se habilita <b>Crear venta</b>.</>,
           <><b>Crear venta</b> genera la venta REAL en Gestión Nube: baja el stock de lo que se lleva y cuenta en la analítica.</>,
-          <>Cuando vuelva la prenda, <b>Volvió</b> y después <b>Reingresado</b> (el reingreso en GN es a mano: la API no acepta una venta negativa).</>,
+          <>Cuando vuelva el producto, <b>Volvió</b> y después <b>Reingresado</b> (el reingreso en GN es a mano: la API no acepta una venta negativa).</>,
         ]}
         ojo={<>El cambio <b>no lo aprueba Administración</b>: ya está decidido. Lo único que pasa por ella es la plata que sale de la caja, o sea cuando la cuenta queda a favor del cliente.</>}
       />
@@ -592,7 +598,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                     <Td strong>{l.producto}</Td>
                     <Td style={{ color: color.mut }}>{l.variante || 'Variante única'}</Td>
                     <Td align="right">
-                      <NumberField value={l.cantidad} onChange={(n) => actualizarLinea(l.key, 'cantidad', Math.max(1, l.max ? Math.min(n, l.max) : n))} min={1} max={l.max} prefix={l.tipo === 'devuelve' ? '−' : undefined} width={92} />
+                      <NumberField value={l.cantidad} onChange={(n) => actualizarLinea(l.key, 'cantidad', n === '' ? '' : Math.max(1, l.max ? Math.min(n, l.max) : n))} min={1} max={l.max} prefix={l.tipo === 'devuelve' ? '−' : undefined} width={92} />
                     </Td>
                     <Td align="right"><NumberField value={l.precio} onChange={(n) => actualizarLinea(l.key, 'precio', n)} min={0} prefix="$" width={118} /></Td>
                     <Td align="right" strong><MoneyText value={sub} tone={sub < 0 ? 'action' : undefined} /></Td>

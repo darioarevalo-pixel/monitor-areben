@@ -2,11 +2,11 @@
  * Tipos y matemática de Devoluciones (tabla `devoluciones`, ver sql/migrate-devoluciones.sql).
  *
  * Este archivo es PURO —sin React, sin fetch— porque es donde vive la plata: cuánto se le
- * devuelve a cada persona y si conviene pagar el envío para que la prenda vuelva. Todo lo que
+ * devuelve a cada persona y si conviene pagar el envío para que el producto vuelva. Todo lo que
  * está acá tiene test (`tests/devoluciones.test.ts`).
  *
  * Las tres decisiones que modela un reclamo, y que son independientes entre sí:
- *   - **la prenda**: vuelve · se la queda el cliente · nunca salió   (la decidimos nosotros, es económica)
+ *   - **el producto**: vuelve · se lo queda el cliente · nunca salió   (la decidimos nosotros, es económica)
  *   - **la compensación**: plata total · parte · otra unidad · cupón · nada
  *   - **la evidencia**: fotos + relato que carga el cliente por un link
  */
@@ -57,9 +57,9 @@ export const EXPECTATIVA_LABEL: Record<Expectativa, string> = {
 }
 
 /**
- * Qué pasa con la prenda:
- *   - `stock`    vuelve sana y se revende.
- *   - `falla`    vuelve pero no se revende como nueva: va al ledger de Fallas.
+ * Qué pasa con el producto:
+ *   - `stock`    vuelve sano y se revende.
+ *   - `falla`    vuelve pero no se revende como nuevo: va al ledger de Fallas.
  *   - `no_salio` nunca se despachó (faltante, sin stock): no hay nada que esperar ni etiqueta.
  *   - `perdida`  se perdió en el camino: ni vuelve ni está. Hay reclamo al transportista.
  */
@@ -77,7 +77,7 @@ export type Compensacion =
   | 'ninguna'
 
 /**
- * Cómo vuelve la prenda. `presencial` es el cliente acercándose al local: **no hay envío**, así
+ * Cómo vuelve el producto. `presencial` es el cliente acercándose al local: **no hay envío**, así
  * que no hay etiqueta, ni costo, ni código que seguir. Sin esta distinción la pantalla asumía
  * siempre un envío en curso y había que marcar "Volvió" sobre un tránsito que nunca existió.
  */
@@ -98,7 +98,7 @@ export const hayEnvio = (via?: ViaRetorno | null): boolean => !!via && via !== '
 
 /**
  * `esperando_cliente` es el link mandado y sin responder; `en_revision` es el cliente ya cargó
- * y falta que Administración decida. `en_transito`/`recibido` solo aplican si la prenda vuelve.
+ * y falta que Administración decida. `en_transito`/`recibido` solo aplican si el producto vuelve.
  */
 export type EstadoReclamo =
   | 'borrador' | 'esperando_cliente' | 'en_revision' | 'resuelto'
@@ -136,7 +136,7 @@ export const MOTIVOS_VIGENTES: MotivoReclamo[] = [
 export const MOTIVO_CAMBIO_POR_DEFECTO: MotivoReclamo = 'talle'
 
 /**
- * ¿La prenda salió del depósito alguna vez? Los tres casos en que NO define medio flujo: no hay
+ * ¿El producto salió del depósito alguna vez? Los tres casos en que NO define medio flujo: no hay
  * etiqueta de vuelta, no hay tránsito, y no hay nada que reingresar — solo plata y stock.
  */
 export const NUNCA_SALIO: MotivoReclamo[] = ['faltante', 'sin_stock']
@@ -157,11 +157,11 @@ export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
 
 /**
  * El estado como lo lee alguien del local. Cambia solo en un caso, pero importa: si el cliente
- * la trae en mano, "En camino de vuelta" es mentira — no hay nada viajando, hay alguien que
+ * lo trae en mano, "En camino de vuelta" es mentira — no hay nada viajando, hay alguien que
  * todavía no vino.
  */
 export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno'>): string {
-  if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que la traiga'
+  if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que lo traiga'
   return ESTADO_LABEL[d.estado] ?? d.estado
 }
 
@@ -290,7 +290,7 @@ export function calcularMonto(
 ): MontoReclamo {
   const producto = redondear(items.reduce((s, it) => s + (it.pagado ?? pagadoPorItem(it, orden)), 0))
   const envio = opciones?.devolverEnvio ? redondear(positivo(orden?.envio_costo_cliente)) : 0
-  // En "se la queda + parte de la plata" manda el monto acordado con el cliente, no la cuenta.
+  // En "se lo queda + parte de la plata" manda el monto acordado con el cliente, no la cuenta.
   const acordado = opciones?.montoAcordado
   const total = typeof acordado === 'number' && isFinite(acordado) && acordado >= 0
     ? redondear(acordado)
@@ -298,7 +298,7 @@ export function calcularMonto(
   return { producto, envio, total }
 }
 
-// ── ¿Conviene que la prenda vuelva? ─────────────────────────────────────────────
+// ── ¿Conviene que el producto vuelva? ─────────────────────────────────────────────
 
 export type CuentaRetorno = {
   /** Lo que se recupera si vuelve. */
@@ -313,9 +313,9 @@ export type CuentaRetorno = {
  * La cuenta que hoy no está en ningún lado y hace perder plata: pagar un envío de vuelta de
  * una funda que en feria se vende por menos que ese envío.
  *
- * Lo recuperable **depende del estado de la prenda**, y esa es la parte que se pasa por alto:
- *   - **sana** → vuelve a stock y se revende a precio completo: se recupera el precio de venta.
- *   - **fallada** → NO vuelve a stock (va al ledger de Fallas). Lo único que se saca de esa
+ * Lo recuperable **depende del estado de el producto**, y esa es la parte que se pasa por alto:
+ *   - **sano** → vuelve a stock y se revende a precio completo: se recupera el precio de venta.
+ *   - **fallado** → NO vuelve a stock (va al ledger de Fallas). Lo único que se saca de esa
  *     unidad es venderla en feria, así que lo recuperable es el **PVP de feria**, que suele ser
  *     una fracción del precio de lista.
  *
@@ -464,20 +464,20 @@ export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
  */
 export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
   switch (motivo) {
-    // Se arrepintió o no era lo que esperaba: la prenda está bien, lo que se discute es la plata.
+    // Se arrepintió o no era lo que esperaba: el producto está bien, lo que se discute es la plata.
     // El descuento parcial existe para retenerlo; mandarle otra igual no tendría sentido.
     case 'arrepentimiento':
     case 'no_esperaba':
     case 'no_era_lo_esperado':
       return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
-    // El talle: la prenda está sana y casi siempre se lleva otra. Por eso el cambio va primero —
+    // El talle: el producto está sana y casi siempre se lleva otra. Por eso el cambio va primero —
     // es la salida por defecto, no una más de la lista.
     case 'talle':
       return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
-    // Falla: es donde hay más margen: devolver, descontar para que se la quede, o reponerla.
+    // Falla: es donde hay más margen: devolver, descontar para que se lo quede, o reponerla.
     case 'falla':
       return ['otra_unidad', 'otro_producto', 'plata_total', 'plata_parcial', 'cupon']
-    // Nunca salió: o se lo mandamos, o le devolvemos esa parte. No hay prenda que negociar.
+    // Nunca salió: o se lo mandamos, o le devolvemos esa parte. No hay producto que negociar.
     case 'faltante':
     case 'sin_stock':
       return ['reenvio', 'plata_total', 'cupon']
@@ -485,7 +485,7 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
     // salida si ya no lo quiere.
     case 'mal_armado':
       return ['reenvio', 'plata_total', 'cupon']
-    // Se perdió en el camino: se repone o se devuelve. La prenda no está en ningún lado.
+    // Se perdió en el camino: se repone o se devuelve. El producto no está en ningún lado.
     case 'no_llego':
       return ['reenvio', 'plata_total']
     default:
@@ -493,12 +493,12 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
   }
 }
 
-/** ¿Hay una prenda que pueda volver? En los tres casos donde no, media pantalla sobra. */
+/** ¿Hay un producto que pueda volver? En los tres casos donde no, media pantalla sobra. */
 export function puedeVolverLaPrenda(motivo: MotivoReclamo): boolean {
   return !NUNCA_SALIO.includes(motivo) && motivo !== 'no_llego'
 }
 
-/** El destino de la prenda queda determinado por el motivo, salvo en la falla. */
+/** El destino de el producto queda determinado por el motivo, salvo en la falla. */
 export function destinoDe(motivo: MotivoReclamo, vuelve: boolean): DestinoPrenda {
   if (NUNCA_SALIO.includes(motivo)) return 'no_salio'
   if (motivo === 'no_llego') return 'perdida'
@@ -534,16 +534,16 @@ export function correccionesMalArmado(opciones: { equivocadoVuelve: boolean; seE
   }
 }
 
-// ── El descuento para que se la quede ───────────────────────────────────────────
+// ── El descuento para que se lo quede ───────────────────────────────────────────
 
 export type CuentaDescuento = {
-  /** Hasta acá se puede ofrecer sin perder plata respecto de pedirla de vuelta. */
+  /** Hasta acá se puede ofrecer sin perder plata respecto de pedirlo de vuelta. */
   techo: number
   /** Lo que conviene ofrecer primero: deja margen para negociar. */
   sugerido: number
-  /** Lo que se pierde si la prenda vuelve, en positivo. */
+  /** Lo que se pierde si el producto vuelve, en positivo. */
   seePierdeSiVuelve: number
-  /** Cuando el techo supera el precio: regalarla sale más barato que pedirla. */
+  /** Cuando el techo supera el precio: regalarlo sale más barato que pedirlo. */
   convieneRegalar: boolean
   motivo: string
 }
@@ -552,19 +552,19 @@ export type CuentaDescuento = {
 const FRACCION_SUGERIDA = 0.5
 
 /**
- * Cuánto se le puede descontar al cliente para que se quede la prenda, en vez de que vuelva.
+ * Cuánto se le puede descontar al cliente para que se quede el producto, en vez de que vuelva.
  *
  * **La regla: el descuento máximo es lo que perdés porque vuelva.** Y eso cambia radicalmente
  * según en qué estado vuelve, que es lo que hace que un techo único sea caro:
  *
  *   - **Sana** (arrepentimiento, no era lo que esperaba): vuelve al stock y se revende a precio
  *     completo. Lo único que perdés es la logística → `techo = envío de vuelta`.
- *   - **Fallada**: NO se revende como nueva, va a feria. Perdés el envío **y** la diferencia entre
+ *   - **Fallada**: NO se revende como nuevo, va a feria. Perdés el envío **y** la diferencia entre
  *     lo que vale nueva y lo que vas a sacar en feria → `techo = precio − PVP feria + envío`.
  *
  * El caso real de BDI que justifica esto: funda de $12.000, PVP feria $3.500, envío $6.000. Si
- * vuelve, se termina $2.500 en rojo; el techo da $14.500, o sea **más que el precio**: regalarla
- * sale más barato que pedirla. Con un techo del envío se perdían ~$8.500 por unidad.
+ * vuelve, se termina $2.500 en rojo; el techo da $14.500, o sea **más que el precio**: regalarlo
+ * sale más barato que pedirlo. Con un techo del envío se perdían ~$8.500 por unidad.
  *
  * Devuelve el techo Y un sugerido conservador: el techo es el límite de "no perder", no la oferta.
  */
@@ -594,8 +594,8 @@ export function cuentaDescuento(opciones: {
 
   const motivo = fallada
     ? `Si vuelve perdés ${seePierdeSiVuelve} (se deprecia ${depreciacion} más ${envio} de envío).` +
-      (convieneRegalar ? ' Es más que el precio: regalarla sale más barato que pedirla.' : '')
-    : `Vuelve sana y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve} de logística.`
+      (convieneRegalar ? ' Es más que el precio: regalarlo sale más barato que pedirlo.' : '')
+    : `Vuelve sano y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve} de logística.`
 
   return { techo, sugerido, seePierdeSiVuelve, convieneRegalar, motivo }
 }
@@ -604,7 +604,7 @@ export function cuentaDescuento(opciones: {
  * Qué nos costó el caso. Sin esto no se puede responder después "cuánto nos costaron las
  * devoluciones este mes" ni con qué proveedor se van en fallas.
  *
- * La unidad perdida se valúa **a costo**: es lo que se fue por la puerta cuando la prenda se le
+ * La unidad perdida se valúa **a costo**: es lo que se fue por la puerta cuando el producto se le
  * regala al cliente. Si vuelve (a stock o a fallas) no se perdió, se recuperó.
  */
 export function costoDelCaso(opciones: {
@@ -616,7 +616,7 @@ export function costoDelCaso(opciones: {
 }): number {
   const { montoDevuelto, items, destino } = opciones
   const envios = positivo(opciones.envioVuelta) + positivo(opciones.envioReemplazo)
-  // Solo se pierde la unidad si el cliente se la queda; si vuelve —sana o fallada— se recupera.
+  // Solo se pierde la unidad si el cliente se lo queda; si vuelve —sana o fallada— se recupera.
   const unidadPerdida = destino === 'stock' || destino === 'no_salio'
     ? 0
     : items.reduce((s, it) => s + positivo(it.costo) * positivo(it.cantidad), 0)
@@ -657,7 +657,7 @@ export type ReclamoRow = {
   /** Lo que sugirió la cuenta vs lo que se decidió: si difieren, quedó registrado. */
   retorno_sugerido?: boolean | null
   retorno_decidido?: boolean | null
-  /** Cómo vuelve. Null si no vuelve (se la queda el cliente) o si todavía no se decidió. */
+  /** Cómo vuelve. Null si no vuelve (se lo queda el cliente) o si todavía no se decidió. */
   via_retorno?: ViaRetorno | null
   /**
    * El envío de VUELTA. En un reclamo común es siempre a nuestro cargo; en un **cambio** puede
@@ -705,7 +705,7 @@ export type ReclamoRow = {
   /** El pendiente de caja: la diferencia quedó a cobrar y todavía no entró. */
   cobro_estado?: CobroEstado | null
   /**
-   * La prenda que el cliente devuelve en un cambio vuelve al stock **a mano** en GN (la API no
+   * El producto que el cliente devuelve en un cambio vuelve al stock **a mano** en GN (la API no
    * acepta una venta negativa). No confundir con `stock_estado`, que traza la ANULACIÓN de la venta
    * original: en un cambio esa venta no se anula nunca, porque el cliente se queda con la compra y
    * solo cambia el artículo.
@@ -731,7 +731,7 @@ export type ReclamoRow = {
  *     stock. Está fallada y no se puede vender: hay que volver a sacarla. **Descuenta.**
  *   - **Se le mandó otra unidad igual** → la venta original NO se anula (el cliente se queda con
  *     lo que compró) y esa unidad ya salió del stock. Descontarla otra vez restaría dos veces por
- *     una sola prenda. **No descuenta.**
+ *     una sola producto. **No descuenta.**
  */
 export function laFallaDescuentaStock(compensacion: Compensacion | null | undefined): boolean {
   return compensacion !== 'otra_unidad'
@@ -809,7 +809,7 @@ export function numeroReclamo(id: number): string {
  *   - La venta original **no se anula**: el cliente se queda con la compra y solo cambia el
  *     artículo. Exigir la anulación dejaba todo cambio trabado para siempre.
  *   - **No hay plata que devolver** salvo que la diferencia haya quedado a favor del cliente.
- *   - Lo que sí hay, y no existía como pendiente, es **reingresar a mano** la prenda que volvió.
+ *   - Lo que sí hay, y no existía como pendiente, es **reingresar a mano** el producto que volvió.
  */
 export function faltantesParaCerrar(d: ReclamoRow): string[] {
   const faltan: string[] = []
@@ -828,8 +828,8 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   if (d.tn_stock_estado === 'pendiente') faltan.push('corregir el stock en Tienda Nube')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
-  if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir la prenda')
-  // Cuando la prenda se le queda al cliente, la foto es la única prueba de que la falla existió.
+  if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir el producto')
+  // Cuando el producto se le queda al cliente, la foto es la única prueba de que la falla existió.
   if (d.destino_prenda === 'falla' && !(d.fotos || []).length) faltan.push('al menos una foto del producto')
   return faltan
 }

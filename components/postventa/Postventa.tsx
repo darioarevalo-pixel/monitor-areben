@@ -2,7 +2,7 @@
 
 /**
  * Post-venta por roles. Un mismo motor con dos modos (como SolicitudesInner + preset):
- *  - **modo 'local'** (sección `postventa-local`, grupo Local): el local RECIBE la prenda del cliente
+ *  - **modo 'local'** (sección `postventa-local`, grupo Local): el local RECIBE el producto del cliente
  *    y CARGA la falla (elige el artículo de GN, pone el motivo). Ve las fallas, sin acciones de motor.
  *  - **modo 'admin'** (sección `postventa`, grupo Administración): el motor — recibir (mover ubicación
  *    a depósito), CONFIRMAR (genera la venta en GN que descuenta la unidad) y estados; totales
@@ -186,7 +186,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   }, [fallas])
 
   const esAdmin = modo === 'admin'
-  const setNum = (k: 'cantidad' | 'valuacion_costo' | 'valuacion_pvp_feria' | 'precio_lista') => (n: number) => setForm((s) => ({ ...s, [k]: String(n) }))
+  // `''` es "vacío", no cero: el form guarda strings y un campo en blanco tiene que quedar en blanco.
+  const setNum = (k: 'cantidad' | 'valuacion_costo' | 'valuacion_pvp_feria' | 'precio_lista') => (n: number | '') => setForm((s) => ({ ...s, [k]: n === '' ? '' : String(n) }))
 
   const avisos = (
     <>
@@ -324,7 +325,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
             titulo={esAdmin ? '¿Cómo se procesa una falla?' : '¿Cómo cargo una falla?'}
             pasos={esAdmin ? [
               <>El local o el depósito carga la falla; te llega como <b>Pendiente de envío</b>.</>,
-              <>Cuando la prenda llega físicamente, <b>Recibir</b>: pasa a depósito.</>,
+              <>Cuando el producto llega físicamente, <b>Recibir</b>: pasa a depósito.</>,
               <><b>Confirmar</b> genera la venta en Gestión Nube que <b>descuenta la unidad del stock</b> y le da su etiqueta con código de barras.</>,
               <>Después la unidad sigue su vida: <b>vendida en feria</b> o <b>descartada</b>. Nunca vuelve al stock que se vende online.</>,
             ] : [
@@ -333,11 +334,11 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               <>Guardá. La falla queda como <b>Pendiente de envío</b> hasta que Administración la reciba en depósito.</>,
             ]}
             ojo={esAdmin
-              ? <>Confirmar <b>toca el stock real</b> de Gestión Nube. Si la prenda todavía no está en depósito, no la confirmes.</>
-              : <>Si la prenda te llegó por correo de un cliente que compró online, no va acá: va en <b>Devoluciones</b>.</>}
+              ? <>Confirmar <b>toca el stock real</b> de Gestión Nube. Si el producto todavía no está en depósito, no confirmes la falla.</>
+              : <>Si el producto te llegó por correo de un cliente que compró online, no va acá: va en <b>Reclamos</b>.</>}
           />
 
-          {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá la prenda con falla; descuenta el stock de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b>. Administración la recibe y confirma.</div>}
+          {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá el producto con falla; descuenta el stock de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b>. Administración recibe y confirma la falla.</div>}
 
           {formCarga}
           {avisos}

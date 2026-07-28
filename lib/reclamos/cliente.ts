@@ -157,7 +157,7 @@ export type Decision = {
   devolver_envio?: boolean
   retorno_sugerido?: boolean
   retorno_decidido?: boolean
-  /** Cómo vuelve la prenda. `presencial` = la trae al local, sin envío ni seguimiento. */
+  /** Cómo vuelve el producto. `presencial` = la trae al local, sin envío ni seguimiento. */
   via_retorno?: ViaRetorno | null
   envio_costo?: number | null
   /** El envío del reemplazo, cuando se le manda otra unidad. */
@@ -173,7 +173,7 @@ export type Decision = {
   techo_orden?: number | null
 }
 
-/** La decisión de fondo: qué pasa con la prenda y qué recibe el cliente. Solo administración. */
+/** La decisión de fondo: qué pasa con el producto y qué recibe el cliente. Solo administración. */
 export async function decidir(payload: Decision): Promise<EstadoReclamo> {
   const d = await postear({ action: 'decidir', ...payload })
   return d.estado as EstadoReclamo
@@ -205,7 +205,7 @@ export async function sumarFotos(store: Marca, id: number, fotos: FotoReclamo[])
   await postear({ action: 'fotos', store, id, fotos })
 }
 
-/** Linkea las fallas creadas desde este reclamo (la prenda que no vuelve a stock). */
+/** Linkea las fallas creadas desde este reclamo (el producto que no vuelve a stock). */
 export async function linkearFallas(store: Marca, id: number, falla_ids: number[]): Promise<void> {
   await postear({ action: 'falla', store, id, falla_ids })
 }
@@ -219,7 +219,7 @@ export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
 }
 
 /**
- * Manda al ledger de Fallas la prenda que volvió fallada, y linkea las fallas al reclamo.
+ * Manda al ledger de Fallas el producto que volvió fallado, y linkea las fallas al reclamo.
  *
  * ⚠️ **Acá se decide si el stock se descuenta o no, y es el punto donde una unidad se pierde en
  * silencio si se elige mal.** El motor de Fallas descuenta stock al confirmar **solo si la falla
@@ -229,7 +229,7 @@ export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
  *     al stock**. Está fallada, así que hay que volver a sacarla: la falla va CON ids.
  *   - **Se le mandó otra unidad igual** (`otra_unidad`) → la venta original NO se anula, el
  *     cliente se queda con lo que compró. Esa unidad ya salió del stock: la falla va SIN ids,
- *     porque descontarla de nuevo restaría dos veces por una sola prenda.
+ *     porque descontarla de nuevo restaría dos veces por una sola producto.
  */
 export async function pasarAFallas(
   marca: Marca,
@@ -266,7 +266,7 @@ export async function pasarAFallas(
  * Descuenta del stock la unidad de reemplazo que se le manda al cliente.
  *
  * **Es el agujero que tapa esta función**: cuando la salida es "le mandamos otra igual", esa
- * prenda sale del depósito y sin esto no queda registrada en ningún lado — el stock queda de más
+ * producto sale del depósito y sin esto no queda registrada en ningún lado — el stock queda de más
  * hasta que alguien lo descubre en un conteo.
  *
  * No es una venta comercial: es la **venta técnica** que ya usa Fallas al confirmar, a precio de

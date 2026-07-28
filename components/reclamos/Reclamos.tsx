@@ -214,8 +214,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /**
-   * Manda la prenda al ledger de Fallas. El aviso dice si va a descontar stock o no, porque es
-   * la diferencia que después no se ve: si se le mandó otra unidad al cliente, esa prenda ya
+   * Manda el producto al ledger de Fallas. El aviso dice si va a descontar stock o no, porque es
+   * la diferencia que después no se ve: si se le mandó otra unidad al cliente, ese producto ya
    * salió del stock con la venta original y descontarla de nuevo restaría dos veces.
    */
   const aFallas = async (d: ReclamoRow) => {
@@ -267,7 +267,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /**
-   * Descuenta del stock la unidad que se le manda al cliente. Es lo que evita que esa prenda salga
+   * Descuenta del stock la unidad que se le manda al cliente. Es lo que evita que ese producto salga
    * del depósito sin quedar registrada en ningún lado.
    */
   const descontarLaQueVa = async (d: ReclamoRow) => {
@@ -351,9 +351,9 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         pasos={esAdmin ? [
           <>Buscá la <b>orden de Tienda Nube</b> por número, tildá los productos que reclama y elegí el <b>motivo</b>.</>,
           <>Al crear el reclamo se copia solo el <b>link para el cliente</b>: pegáselo por WhatsApp para que suba las fotos.</>,
-          <>Cuando cargue, el reclamo pasa a <b>Para revisar</b>. Tocá <b>Decidir</b> y respondé las dos preguntas: si nos conviene que la prenda vuelva, y qué recibe el cliente.</>,
+          <>Cuando cargue, el reclamo pasa a <b>Para revisar</b>. Tocá <b>Decidir</b> y respondé las dos preguntas: si nos conviene que el producto vuelva, y qué recibe el cliente.</>,
           <>Si vuelve, elegí <b>cómo vuelve</b> y cargá el <b>seguimiento</b> cuando tengas la etiqueta. Cuando llegue, <b>Volvió</b>.</>,
-          <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>corregir el stock en TN</b> o <b>pasar la prenda a Fallas</b>.</>,
+          <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>corregir el stock en TN</b> o <b>pasar el producto a Fallas</b>.</>,
           <>Con todo resuelto, <b>Cerrar</b>.</>,
         ] : [
           <>Buscá la <b>orden de Tienda Nube</b> por número y tildá los productos que reclama.</>,

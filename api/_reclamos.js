@@ -2,7 +2,7 @@
 //
 // Un solo motor para todo lo que sale mal después de una venta, **cambios incluidos**. Lo que
 // distingue un caso de otro no es un "tipo de reclamo" sino dos decisiones independientes:
-// `destino_prenda` (qué pasa con la prenda) y `compensacion` (qué recibe el cliente). Un cambio es
+// `destino_prenda` (qué pasa con el producto) y `compensacion` (qué recibe el cliente). Un cambio es
 // simplemente `compensacion='otro_producto'`: comparte tabla, número (`R-0042`) y pendientes.
 //
 //   GET  ?store=bdi|zattia[&estado=][&pendientes=1][&limit=]     → lista.
@@ -65,7 +65,7 @@ const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
 const COBROS = ['no_aplica', 'pendiente', 'cobrado'];
 // Quién paga el envío del cambio. Cambia el total a cobrar, no solo la logística.
 const ENVIO_PAGA = ['cliente', 'nosotros'];
-// Cómo vuelve la prenda. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
+// Cómo vuelve el producto. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
 const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
 
 const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle, relato_cliente, fotos,
@@ -142,7 +142,7 @@ export default async function handler(req, res) {
       const items = Array.isArray(b.items) ? b.items : [];
       if (!items.length) return res.status(400).json({ error: 'faltan los productos del reclamo' });
       const motivo = MOTIVOS.includes(b.motivo) ? b.motivo : 'otro';
-      // El reclamo por falta de stock es el único que nace sabiendo qué pasa con la prenda: nada,
+      // El reclamo por falta de stock es el único que nace sabiendo qué pasa con el producto: nada,
       // porque nunca salió. Y es el único que arranca con el pendiente de corregir TN.
       const sinStock = motivo === 'sin_stock';
       const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
@@ -189,11 +189,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'decidir') {
-      // La decisión de fondo: qué pasa con la prenda y qué recibe el cliente. Se guarda también
+      // La decisión de fondo: qué pasa con el producto y qué recibe el cliente. Se guarda también
       // lo que sugirió la cuenta, para poder ver después cuándo se fue en contra y si valió.
       const destino = DESTINOS.includes(b.destino_prenda) ? b.destino_prenda : null;
       const compensacion = COMPENSACIONES.includes(b.compensacion) ? b.compensacion : null;
-      if (!destino || !compensacion) return res.status(400).json({ error: 'falta el destino de la prenda o la compensación' });
+      if (!destino || !compensacion) return res.status(400).json({ error: 'falta el destino de el producto o la compensación' });
 
       const total = num(b.monto_total);
       if (total != null && total < 0) return res.status(400).json({ error: 'el monto no puede ser negativo' });
@@ -203,7 +203,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `el monto (${total}) supera lo que se pagó por la orden (${techo})` });
       }
 
-      // Si la prenda no vuelve, no hay nada que esperar ni venta que anular por el retorno.
+      // Si el producto no vuelve, no hay nada que esperar ni venta que anular por el retorno.
       const vuelve = destino === 'stock' || (destino === 'falla' && b.retorno_decidido === true);
       // Un cambio no se salda con los pendientes de una devolución, y confundirlos lo dejaba
       // trabado sin poder cerrarse nunca. Ver el bloque `esCambio` más abajo.
@@ -302,7 +302,7 @@ export default async function handler(req, res) {
     }
 
     // Registra la venta REAL que ya se creó en Gestión Nube (la crea el cliente contra
-    // `crear-venta.js`, que es el único que sabe hablar con GN). A partir de acá la prenda que
+    // `crear-venta.js`, que es el único que sabe hablar con GN). A partir de acá el producto que
     // vuelve queda como pendiente de reingreso MANUAL: la API de GN no acepta una venta negativa.
     if (action === 'procesar') {
       const extra = {

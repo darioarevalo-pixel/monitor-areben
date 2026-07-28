@@ -13,7 +13,7 @@ import {
  * La matemática de Devoluciones.
  *
  * Lo que se protege acá es plata que sale de la caja: cuánto se le devuelve a cada persona y si
- * conviene pagar un envío para recuperar la prenda. Un error no rompe ninguna pantalla —se ve
+ * conviene pagar un envío para recuperar el producto. Un error no rompe ninguna pantalla —se ve
  * recién en la caja o en el stock—, así que es el único lugar del módulo con tests exhaustivos.
  */
 
@@ -128,7 +128,7 @@ describe('calcularMonto: cuánto se le devuelve', () => {
 
 describe('convieneRetorno: el caso de la funda', () => {
   // El ejemplo real: una funda barata que en feria se vende por menos que el envío de vuelta.
-  it('fallada y barata: NO conviene pedirla', () => {
+  it('fallada y barata: NO conviene pedirlo', () => {
     const r = convieneRetorno([item(12000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: true, envioVuelta: 6000 })
     expect(r.conviene).toBe(false)
     expect(r.recuperable).toBe(3500) // el PVP de feria, NO el precio de lista
@@ -139,7 +139,7 @@ describe('convieneRetorno: el caso de la funda', () => {
     expect(r.conviene).toBe(true)
   })
 
-  // Una prenda sana vuelve a stock y se revende a precio completo: casi siempre conviene.
+  // Un producto sano vuelve a stock y se revende a precio completo: casi siempre conviene.
   it('sana: se mide contra el precio de venta, no contra el PVP de feria', () => {
     const r = convieneRetorno([item(12000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: false, envioVuelta: 6000 })
     expect(r.conviene).toBe(true)
@@ -167,12 +167,12 @@ describe('convieneRetorno: el caso de la funda', () => {
 })
 
 describe('costoDelCaso', () => {
-  it('si la prenda vuelve a stock, la unidad no se perdió', () => {
+  it('si el producto vuelve a stock, la unidad no se perdió', () => {
     const c = costoDelCaso({ montoDevuelto: 8000, envioVuelta: 6000, items: [item(12000, 1, { costo: 2000 })], destino: 'stock' })
     expect(c).toBe(14000)
   })
 
-  it('si el cliente se la queda, se suma el costo de la unidad regalada', () => {
+  it('si el cliente se lo queda, se suma el costo de la unidad regalada', () => {
     const c = costoDelCaso({ montoDevuelto: 8000, envioVuelta: 0, items: [item(12000, 1, { costo: 2000 })], destino: 'falla' })
     expect(c).toBe(10000)
   })
@@ -201,7 +201,7 @@ describe('laFallaDescuentaStock', () => {
   })
 
   // El único caso en que NO descuenta, y es el que se presta a error.
-  it('si se le mandó otra unidad igual, NO descuenta: esa prenda ya salió con la venta original', () => {
+  it('si se le mandó otra unidad igual, NO descuenta: ese producto ya salió con la venta original', () => {
     expect(laFallaDescuentaStock('otra_unidad')).toBe(false)
   })
 
@@ -226,7 +226,7 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
     expect(compensacionesDe('falla')).toContain('plata_parcial')
   })
 
-  // Si nunca salió no hay prenda que negociar: o se manda o se devuelve la plata.
+  // Si nunca salió no hay producto que negociar: o se manda o se devuelve la plata.
   it('faltante y sin stock: reenviar o devolver, sin descuento parcial', () => {
     for (const m of ['faltante', 'sin_stock'] as const) {
       expect(compensacionesDe(m)).toContain('reenvio')
@@ -239,7 +239,7 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
   })
 })
 
-describe('el destino de la prenda sale del motivo', () => {
+describe('el destino de el producto sale del motivo', () => {
   it('faltante y sin stock: nunca salió', () => {
     expect(destinoDe('faltante', false)).toBe('no_salio')
     expect(destinoDe('sin_stock', false)).toBe('no_salio')
@@ -258,7 +258,7 @@ describe('el destino de la prenda sale del motivo', () => {
     expect(destinoDe('arrepentimiento', true)).toBe('stock')
   })
 
-  it('sin prenda que pueda volver, media pantalla sobra', () => {
+  it('sin producto que pueda volver, media pantalla sobra', () => {
     expect(puedeVolverLaPrenda('faltante')).toBe(false)
     expect(puedeVolverLaPrenda('no_llego')).toBe(false)
     expect(puedeVolverLaPrenda('falla')).toBe(true)
@@ -298,7 +298,7 @@ describe('pedido mal armado: qué stock hay que corregir', () => {
   })
 })
 
-describe('cómo vuelve la prenda', () => {
+describe('cómo vuelve el producto', () => {
   it('correo y andreani tienen seguimiento; cadete y presencial no', () => {
     expect(pideSeguimiento('andreani')).toBe(true)
     expect(pideSeguimiento('correo')).toBe(true)
@@ -317,7 +317,7 @@ describe('cómo vuelve la prenda', () => {
 
   // "En camino de vuelta" es mentira cuando no hay nada viajando: hay alguien que no vino todavía.
   it('el estado se lee distinto si la trae al local', () => {
-    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'presencial' })).toBe('Esperando que la traiga')
+    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'presencial' })).toBe('Esperando que lo traiga')
     expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani' })).toBe('En camino de vuelta')
     expect(estadoEnCriollo({ estado: 'recibido', via_retorno: 'presencial' })).toBe('Recibido')
   })
@@ -337,14 +337,14 @@ describe('cuentaDescuento', () => {
     expect(c.seePierdeSiVuelve).toBe(14500)
   })
 
-  // Lo contraintuitivo: el techo supera el precio, así que regalarla sale más barato que pedirla.
-  it('fallada barata: avisa que conviene regalarla', () => {
+  // Lo contraintuitivo: el techo supera el precio, así que regalarlo sale más barato que pedirlo.
+  it('fallada barata: avisa que conviene regalarlo', () => {
     const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000 })
     expect(c.convieneRegalar).toBe(true)
-    expect(c.motivo).toContain('regalarla')
+    expect(c.motivo).toContain('regalarlo')
   })
 
-  // Una prenda sana vuelve a stock y se revende: lo único que se pierde es la logística.
+  // Un producto sano vuelve a stock y se revende: lo único que se pierde es la logística.
   it('sana: el techo es solo lo que se ahorra en logística', () => {
     const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 })
     expect(c.techo).toBe(6000)
@@ -372,7 +372,7 @@ describe('cuentaDescuento', () => {
     expect(c.motivo).toContain('PVP de feria')
   })
 
-  it('una prenda cara y fallada: el techo NO llega a regalarla', () => {
+  it('un producto cara y fallada: el techo NO llega a regalarlo', () => {
     const cara = item(90000, 1, { pvp_feria: 45000 })
     const c = cuentaDescuento({ items: [cara], fallada: true, envioVuelta: 6000 })
     expect(c.techo).toBe(51000)
@@ -422,13 +422,13 @@ describe('faltantesParaCerrar', () => {
   })
 
   // Regalar mercadería sin una sola foto es justo el caso que no hay que poder cerrar.
-  it('si la prenda se la queda el cliente, exige foto', () => {
+  it('si el producto se lo queda el cliente, exige foto', () => {
     expect(faltantesParaCerrar({ ...base, destino_prenda: 'falla' })).toContain('al menos una foto del producto')
     expect(faltantesParaCerrar({ ...base, destino_prenda: 'falla', fotos: [{ url: 'u', at: 'x' }] })).toEqual([])
   })
 
-  it('si la prenda tenía que volver y no llegó, lo dice', () => {
-    expect(faltantesParaCerrar({ ...base, destino_prenda: 'stock', estado: 'en_transito' })).toContain('recibir la prenda')
+  it('si el producto tenía que volver y no llegó, lo dice', () => {
+    expect(faltantesParaCerrar({ ...base, destino_prenda: 'stock', estado: 'en_transito' })).toContain('recibir el producto')
   })
 
   /**
@@ -455,7 +455,7 @@ describe('faltantesParaCerrar', () => {
       expect(faltantesParaCerrar({ ...cambio, diferencia: -2000 })).toContain('devolverle la diferencia')
     })
 
-    // GN no acepta una venta negativa por API: la prenda que vuelve se reingresa a mano o el stock
+    // GN no acepta una venta negativa por API: el producto que vuelve se reingresa a mano o el stock
     // queda corto para siempre.
     it('exige reingresar a mano el producto devuelto', () => {
       expect(faltantesParaCerrar({ ...cambio, reingreso_estado: 'pendiente' })).toContain('reingresar en Gestión Nube el producto devuelto')
