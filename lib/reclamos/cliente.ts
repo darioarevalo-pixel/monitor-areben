@@ -10,7 +10,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
-import { crearFalla } from '@/lib/postventa/fallas/cliente'
+import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { calcularCambio, etiquetaEM, laFallaDescuentaStock, numeroReclamo } from './tipos'
 import type {
@@ -193,6 +193,12 @@ export type Decision = {
    * alguien lo invente. `null` no pisa lo que ya estuviera cargado.
    */
   expectativa?: Expectativa | null
+  /**
+   * Sólo en "pedido mal armado": lo que el cliente recibió POR ERROR. Se carga al decidir y no en
+   * el alta, porque hasta ver las fotos no se sabe qué le mandaron — y es el dato del que salen las
+   * dos correcciones de stock.
+   */
+  items_correctos?: ItemReclamo[]
   /** Lo que se pagó por la orden entera: el servidor lo usa de techo del reintegro. */
   techo_orden?: number | null
 }
@@ -266,12 +272,12 @@ export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
 export async function pasarAFallas(
   marca: Marca,
   d: ReclamoRow,
-  extra?: { pvpFeria?: number | null; usuario?: string },
+  extra?: { pvpFeria?: number | null; usuario?: string; pass?: string },
 ): Promise<number[]> {
   const descuenta = laFallaDescuentaStock(d.compensacion)
   const ids: number[] = []
   for (const it of d.items || []) {
-    const { id } = await crearFalla(
+    const { id, barcode } = await crearFalla(
       marca,
       {
         producto: it.producto,
@@ -289,6 +295,38 @@ export async function pasarAFallas(
       extra?.usuario,
     )
     if (id) ids.push(id)
+
+    /**
+     * La venta $0 que saca la unidad de Gestión Nube. **Sólo cuando corresponde**, y el matiz es lo
+     * que hace que esto no descuente de más:
+     *
+     *  - Si se le mandó **otra unidad**, la venta original NO se anula: el cliente conserva lo que
+     *    pagó. La unidad fallada que volvió **ya salió de GN** con esa venta, así que no hay nada
+     *    que descontar. El reemplazo se descuenta aparte, con `descontarReemplazo`.
+     *  - Si se le devolvió la **plata**, la venta original SÍ se anula y al anularla GN devuelve
+     *    +1. Esa unidad no es vendible, así que hay que volver a sacarla — y de eso se encarga
+     *    esta venta técnica.
+     *
+     * Es lo que dice `laFallaDescuentaStock`, que estaba escrita y nunca se conectaba a GN: la
+     * falla se creaba en el Monitor y el stock quedaba contado de más.
+     */
+    if (id && descuenta && it.product_id && it.size_id && extra?.pass) {
+      await registrarVentaGN(
+        marca,
+        {
+          id,
+          product_id: it.product_id,
+          size_id: it.size_id,
+          cantidad: Number(it.cantidad) || 1,
+          sku: it.sku ?? null,
+          motivo: `Reclamo ${d.numero || numeroReclamo(d.id)}`,
+          barcode: barcode ?? null,
+          ubicacion: 'deposito',
+          precio_lista: it.precio == null ? null : Number(it.precio),
+        },
+        { user: extra.usuario || '', pass: extra.pass },
+      )
+    }
   }
   if (ids.length) await linkearFallas(marca, d.id, ids)
   return ids

@@ -267,6 +267,8 @@ export default async function handler(req, res) {
         // Se puede completar al decidir. Sólo pisa si viene algo: mandar null no borra lo cargado
         // en el alta.
         ...(EXPECTATIVAS.includes(b.expectativa) ? { expectativa: b.expectativa } : {}),
+        // "Pedido mal armado": lo que recibió por error. Se carga al decidir, con las fotos.
+        ...(Array.isArray(b.items_correctos) ? { items_correctos: b.items_correctos } : {}),
         // El cambio por otro producto: lo que se lleva y cuánto queda de diferencia.
         items_nuevos: Array.isArray(b.items_nuevos) ? b.items_nuevos : [],
         forma_pago: FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null,

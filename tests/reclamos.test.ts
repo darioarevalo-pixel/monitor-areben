@@ -213,6 +213,47 @@ describe('laFallaDescuentaStock', () => {
     expect(laFallaDescuentaStock(null)).toBe(true)
     expect(laFallaDescuentaStock(undefined)).toBe(true)
   })
+
+  /**
+   * ⚠️ Esta función **estaba escrita y nunca se conectaba a GN**: `pasarAFallas` creaba la falla en
+   * el Monitor y no descontaba nada, así que la unidad no vendible quedaba contada como disponible.
+   *
+   * El razonamiento, que es el que se pierde fácil: la unidad **ya se descontó con la venta
+   * original**. Lo que decide si hay que volver a sacarla es si esa venta se anula.
+   */
+  it('lo que manda es si la venta original se anula, no que la falla "vuelva"', () => {
+    // Se le devolvió la plata → la venta se anula → GN devuelve +1 → hay que volver a sacarla.
+    expect(laFallaDescuentaStock('plata_total')).toBe(true)
+    // Se le mandó otra igual → la venta NO se anula → la fallada ya está fuera de GN → nada.
+    expect(laFallaDescuentaStock('otra_unidad')).toBe(false)
+  })
+})
+
+describe('pedido mal armado: las dos correcciones', () => {
+  /**
+   * El único caso con dos movimientos de stock en direcciones OPUESTAS. La cuenta existía con
+   * tests y no la llamaba nadie: `items_correctos` se guardaba en el alta y nunca se leía.
+   */
+  it('si se lo queda y no se le reenvía, hay que corregir los dos lados', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: false, seEnviaElCorrecto: false })
+    // El que salió por error nunca se descontó: no estaba en la venta.
+    expect(c.descontarEnviadoPorError).toBe(true)
+    // El que pidió sigue en el depósito, pero GN lo descontó con la venta.
+    expect(c.anularVentaOriginal).toBe(true)
+  })
+
+  it('si vuelve el equivocado y se le manda el correcto, el stock cuadra solo', () => {
+    const c = correccionesMalArmado({ equivocadoVuelve: true, seEnviaElCorrecto: true })
+    expect(c.descontarEnviadoPorError).toBe(false)
+    expect(c.anularVentaOriginal).toBe(false)
+    expect(c.nota).toContain('cuadra solo')
+  })
+
+  it('cada corrección depende de una decisión distinta', () => {
+    // Que vuelva el equivocado no dice nada sobre si se reenvía el correcto, y al revés.
+    expect(correccionesMalArmado({ equivocadoVuelve: true, seEnviaElCorrecto: false }).anularVentaOriginal).toBe(true)
+    expect(correccionesMalArmado({ equivocadoVuelve: false, seEnviaElCorrecto: true }).descontarEnviadoPorError).toBe(true)
+  })
 })
 
 describe('qué salidas se ofrecen según lo que pasó', () => {

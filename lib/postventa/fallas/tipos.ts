@@ -1,8 +1,16 @@
 /**
  * Tipos del depósito de fallas (tabla fallas_deposito, ver sql/migrate-fallas.sql + migrate-fallas-2.sql).
- * Flujo por roles: Local carga (estado 'cargada', ubicacion 'local'), Administración recibe
- * ('recibida', ubicacion 'deposito') y confirma ('confirmada' → genera venta en GN + barcode + costo).
- * Después la unidad sigue su vida interna: 'vendida_feria' | 'descartada'. NO vuelve al stock oficial.
+ *
+ * Flujo por roles: Local carga ('cargada', ubicación 'local'), Administración recibe ('recibida',
+ * ubicación 'deposito') y confirma ('confirmada'). Después la unidad sigue su vida interna:
+ * 'vendida_feria' | 'descartada'. NO vuelve al stock oficial.
+ *
+ * ⚠️ **La venta $0 en GN sale AL CARGAR la falla, no al confirmarla.** El stock hay que descontarlo
+ * apenas se identifica la unidad fallada: si esperara a la confirmación, entre una cosa y la otra
+ * GN seguiría ofreciendo para la venta algo que ya no se puede vender.
+ *
+ * **"Confirmar" valida el MOTIVO y los datos de la carga. No toca GN ni el stock.** Este docblock
+ * decía lo contrario y describía un flujo que ya no existe.
  */
 
 import type { Marca } from '@/lib/nav.datos'

@@ -209,7 +209,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
         ) : (
           <div style={{ fontSize: font.xs, color: color.warning }}>Falla libre: cargá el producto a mano abajo. No pasa por el sistema (no descuenta stock de GN).</div>
         )}
-        {form.product_id && <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>✓ Artículo linkeado ({form.sku || form.product_id}). Al confirmar se descuenta de GN.</div>}
+        {form.product_id && <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>✓ Artículo linkeado ({form.sku || form.product_id}). Al cargarla se descuenta de GN.</div>}
       </div>
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Producto" required width={220} style={{ flex: '2 1 220px' }}>
@@ -270,7 +270,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
                 <Td>
                   <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                     {f.estado === 'cargada' && <Button size="sm" variant="outline" tone="action" onClick={() => void recibir(f)} disabled={ocup}>{ocup ? '…' : 'Recibir'}</Button>}
-                    {(f.estado === 'cargada' || f.estado === 'recibida') && <Button size="sm" variant="outline" tone="success" onClick={() => void confirmar(f)} disabled={ocup} title="Valida los datos de la carga (no toca GN)">{ocup ? '…' : 'Confirmar'}</Button>}
+                    {(f.estado === 'cargada' || f.estado === 'recibida') && <Button size="sm" variant="outline" tone="success" onClick={() => void confirmar(f)} disabled={ocup} title="Valida el motivo y los datos de la carga. NO toca GN: el stock ya se descontó al cargarla.">{ocup ? '…' : 'Confirmar motivo'}</Button>}
                     <Button size="sm" onClick={() => setEditando(f)}>Editar</Button>
                       <Button size="sm" variant="outline" tone="danger" onClick={() => void eliminar(f)} disabled={ocup}>Eliminar
                     </Button>

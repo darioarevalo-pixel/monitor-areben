@@ -14,7 +14,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
   Button, Card, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
@@ -90,6 +89,15 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const [decidiendo, setDecidiendo] = useState<ReclamoRow | null>(null)
   /** Qué fila tiene abierto el resumen de lo decidido y la traza. */
   const [expandido, setExpandido] = useState<number | null>(null)
+  /**
+   * La orden DEL RECLAMO que se está decidiendo.
+   *
+   * ⚠️ Antes acá se pasaba `orden`, que es el estado del **formulario de alta** — y ese se resetea
+   * a `null` apenas se crea el reclamo, y arranca en `null` al recargar la página. O sea que el
+   * modal casi siempre decidía sin la orden, y con ella se iba `techo_orden`: **la red de seguridad
+   * del servidor contra un monto disparatado viajaba vacía**. Se busca al abrir.
+   */
+  const [ordenDecidir, setOrdenDecidir] = useState<OrdenTN | null>(null)
 
   // ── Alta ──
   const [numero, setNumero] = useState('')
@@ -104,8 +112,6 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   // Vacío = "todavía no sé". En la mayoría de los casos se sabe recién después de escribirle al
   // cliente, así que forzarlo en el alta era pedir que alguien invente el dato.
   const [expectativa, setExpectativa] = useState<Expectativa | ''>('')
-  /** Solo en "pedido mal armado": lo que el cliente TENDRÍA que haber recibido. */
-  const [correctos, setCorrectos] = useState<ItemReclamo[]>([])
   const [guardando, setGuardando] = useState(false)
 
   /**
@@ -221,7 +227,6 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         pago_metodo: orden.pago_metodo ?? null,
         pago_gateway: orden.pago_gateway ?? null,
         expectativa: expectativaVal || null,
-        items_correctos: motivo === 'mal_armado' ? correctos : [],
       })
       /**
        * El link del cliente sirve para UNA cosa: que suba fotos. Así que sólo se copia si en este
@@ -240,7 +245,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
         toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
       }
-      setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle(''); setCorrectos([])
+      setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle('')
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)
@@ -266,6 +271,18 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       token = await reemitirToken(marca, d.id)
       toast.ok('El link estaba vencido: se generó uno nuevo.')
       void recargar()
+    }
+    /**
+     * Copiar el mensaje ES escribirle: de acá va derecho a WhatsApp. Así que el reclamo pasa a
+     * "esperando al cliente", que era un estado huérfano —se enumeraba y se coloreaba y **ninguna
+     * acción lo seteaba**—. Sin esto la lista no distingue "ya le escribí" de "ni lo miré", que es
+     * justo lo que hay que saber para perseguir los que están durmiendo.
+     */
+    if (d.estado === 'borrador') {
+      try {
+        await cambiarEstado(marca, d.id, 'esperando_cliente', 'se le mandó el link para las fotos')
+        void recargar()
+      } catch { /* el mensaje se copia igual: no se pierde el trabajo por un fallo de red */ }
     }
     return mensajeApertura(d, numeroReclamo(d.id), linkDelCliente(token))
   }
@@ -300,17 +317,39 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    */
   const aFallas = async (d: ReclamoRow) => {
     const descuenta = laFallaDescuentaStock(d.compensacion)
+
+    /**
+     * ⚠️ **El orden importa y descuidarlo descuenta dos veces.**
+     *
+     * Cuando la salida fue devolver la plata, la venta original se anula a mano en GN y al anularla
+     * GN **devuelve +1**. Esa unidad no es vendible, así que la venta técnica de la falla la vuelve
+     * a sacar. Pero si sale ANTES de que la anulación esté hecha, descuenta una unidad que todavía
+     * no volvió: el stock queda uno abajo del real.
+     */
+    if (descuenta && d.stock_estado === 'pendiente') {
+      toast.aviso('Primero anulá la venta en GN y tildá "Anulé en GN". Recién ahí la unidad vuelve, y es la que se saca como falla.')
+      return
+    }
+
     const si = await confirmar({
       titulo: 'Pasar al depósito de fallas',
       ok: 'Pasar a Fallas',
       mensaje: descuenta
-        ? 'Se crea la falla con el vínculo a Gestión Nube: al confirmarla vas a descontar la unidad del stock (volvió al anular la venta, pero está fallada).'
-        : 'Se crea la falla SIN vínculo a Gestión Nube: esa unidad ya salió del stock con la venta original, así que no hay que descontarla de nuevo.',
+        ? 'Se crea la falla Y se descuenta la unidad de Gestión Nube con una venta de $0: volvió al anular la venta original, pero está fallada y no se puede revender.'
+        : 'Se crea la falla SIN tocar Gestión Nube: esa unidad ya salió del stock con la venta original, que no se anuló. Descontarla de nuevo la contaría dos veces.',
     })
     if (!si) return
     try {
-      const ids = await pasarAFallas(marca, d, { usuario: perfil?.name })
-      toast.ok(`${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito.`)
+      // La contraseña sólo hace falta si hay que escribir en GN. Se pide una vez y queda cacheada.
+      const pass = descuenta ? obtenerPass() : undefined
+      if (descuenta && !pass) {
+        toast.aviso('Sin la contraseña no se puede descontar el stock en GN. La falla no se creó.')
+        return
+      }
+      const ids = await pasarAFallas(marca, d, { usuario: perfil?.name, pass })
+      toast.ok(descuenta
+        ? `${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito, descontada${ids.length === 1 ? '' : 's'} de GN.`
+        : `${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito.`)
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)
@@ -392,6 +431,19 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     )
   }
 
+  /** Abre la decisión con la orden del reclamo, no con la del formulario de alta. */
+  const abrirDecidir = async (d: ReclamoRow) => {
+    setDecidiendo(d)
+    setOrdenDecidir(null)
+    if (!d.orden_tn) return
+    try {
+      setOrdenDecidir(await buscarOrden(marca, d.orden_tn))
+    } catch {
+      // Sin la orden se decide igual: lo que se pierde es el tope automático y el detalle de plata.
+      toast.aviso('No se pudo traer la orden: vas a tener que cargar el monto a mano.')
+    }
+  }
+
   const cerrar = async (d: ReclamoRow) => {
     const faltan = faltantesParaCerrar(d)
     if (faltan.length) { toast.aviso(`Falta ${faltan.join(', ')}.`); return }
@@ -418,9 +470,9 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     <div style={{ maxWidth: 1100 }}>
       {decidiendo && (
         <DecidirReclamo
-          marca={marca} reclamo={decidiendo} orden={orden}
-          onClose={() => setDecidiendo(null)}
-          onListo={() => { setDecidiendo(null); void recargar() }}
+          marca={marca} reclamo={decidiendo} orden={ordenDecidir}
+          onClose={() => { setDecidiendo(null); setOrdenDecidir(null) }}
+          onListo={() => { setDecidiendo(null); setOrdenDecidir(null); void recargar() }}
         />
       )}
 
@@ -586,32 +638,6 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               <b>{MOTIVO_LABEL[motivo]}:</b> {ayudaDeMotivo(motivo)}
             </Notice>
 
-            {/* En "pedido mal armado" hay DOS productos: el que recibió (arriba, tildado de la
-                orden) y el que tendría que haber recibido. Sin el segundo no se puede saber qué
-                stock hay que corregir. */}
-            {motivo === 'mal_armado' && (
-              <Card padding={3} style={{ marginTop: space[3] }}>
-                <div style={{ fontSize: font.sm, fontWeight: weight.semibold, marginBottom: space[2] }}>
-                  ¿Qué tendría que haber recibido?
-                </div>
-                <BuscarArticuloGN marca={marca} mostrarCosto={false} onSelect={(a) => setCorrectos((prev) => [...prev, {
-                  producto: a.product_name || 'Sin nombre', sku: a.sku, variante: a.size_name,
-                  cantidad: 1, product_id: a.product_id, size_id: a.size_id,
-                  precio: a.retailer_price ?? null, costo: a.unit_cost ?? null,
-                }])} />
-                {!!correctos.length && (
-                  <div style={{ marginTop: space[2], fontSize: font.sm }}>
-                    {correctos.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
-                        <span>{c.cantidad}× {c.producto}{c.variante ? ` (${c.variante})` : ''}</span>
-                        <Button size="sm" variant="ghost" onClick={() => setCorrectos((prev) => prev.filter((_, j) => j !== i))}>Quitar</Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            )}
-
             <Button variant="solid" tone="brand" onClick={() => void crear()} disabled={guardando || !items.length} style={{ marginTop: space[2] }}>
               {guardando ? 'Creando…' : `Crear reclamo (${items.length} ítem${items.length === 1 ? '' : 's'})`}
             </Button>
@@ -715,7 +741,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           vive en la pestaña Cambios. Ofrecer "Decidir" acá invita a resolverlo dos
                           veces. */}
                       {esAdmin && !esCambio(d) && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
-                        <Button size="sm" variant="solid" tone="brand" onClick={() => setDecidiendo(d)}>Decidir</Button>
+                        <Button size="sm" variant="solid" tone="brand" onClick={() => void abrirDecidir(d)}>Decidir</Button>
                       )}
                       {esAdmin && esCambio(d) && d.estado !== 'cerrado' && (
                         <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>se sigue en Cambios</span>

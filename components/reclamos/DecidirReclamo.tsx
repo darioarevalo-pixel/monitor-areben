@@ -20,13 +20,14 @@ import {
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
+import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { decidir } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
-  GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, type GravedadFalla,
+  GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
@@ -104,6 +105,9 @@ export function DecidirReclamo({
   const [cupon, setCupon] = useState('')
   /** Qué tan rota está: da el PVP de feria de arranque, que es lo que mueve la cuenta. */
   const [gravedad, setGravedad] = useState<GravedadFalla | null>(null)
+  /** Sólo en "pedido mal armado": lo que le llegó por error, cargado con las fotos delante. */
+  const [recibidos, setRecibidos] = useState<ItemReclamo[]>(reclamo.items_correctos ?? [])
+
   const [via, setVia] = useState<ViaRetorno>('andreani')
   // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
   const [envioIda, setEnvioIda] = useState<number | ''>('')
@@ -142,6 +146,24 @@ export function DecidirReclamo({
     [itemsADevolver, orden, devuelveElEnvio, compensacion, montoAcordado],
   )
 
+  /**
+   * Las dos correcciones de stock del pedido mal armado, que van en direcciones OPUESTAS:
+   *
+   *  - **El que se mandó por error** salió del depósito y GN nunca lo descontó, porque no estaba en
+   *    la venta. Si el cliente se lo queda, hay que descontarlo.
+   *  - **El que pidió** no salió: sigue en el depósito, pero GN lo descontó con la venta. Si no se
+   *    le reenvía, hay que anular esa línea para que vuelva a estar disponible.
+   *
+   * La cuenta existía (`correccionesMalArmado`) con tests y **no la llamaba nadie**.
+   */
+  const correcciones = useMemo(
+    () => correccionesMalArmado({
+      equivocadoVuelve: retorno,
+      seEnviaElCorrecto: compensacion === 'reenvio',
+    }),
+    [retorno, compensacion],
+  )
+
   /** Dónde termina el producto: es lo que después decide si la falla descuenta stock o no. */
   const destino: DestinoPrenda = destinoDe(reclamo.motivo, retorno)
 
@@ -177,6 +199,7 @@ export function DecidirReclamo({
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
         expectativa: expectativa || null,
+        items_correctos: reclamo.motivo === 'mal_armado' ? recibidos : undefined,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
         techo_orden: orden?.total != null ? Number(orden.total) : null,
       })
@@ -317,6 +340,38 @@ export function DecidirReclamo({
         </Field>
       )}
 
+      {/* ── Pedido mal armado: qué recibió REALMENTE ──
+          Va acá y no en el alta porque hasta ver las fotos no se sabe qué le mandaron. Sin este
+          dato no se puede saber qué stock corregir, y eran DOS correcciones en direcciones
+          opuestas que hasta ahora no hacía nadie. */}
+      {reclamo.motivo === 'mal_armado' && (
+        <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginBottom: space[3] }}>
+          <div style={{ fontWeight: weight.semibold, fontSize: font.sm, marginBottom: 4 }}>¿Qué recibió realmente?</div>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: space[2] }}>
+            Lo que se le mandó por error, según las fotos. Es lo que dice qué stock hay que corregir.
+          </div>
+          <BuscarArticuloGN marca={marca} mostrarCosto={false} onSelect={(a) => setRecibidos((prev) => [...prev, {
+            producto: a.product_name || 'Sin nombre', sku: a.sku, variante: a.size_name,
+            cantidad: 1, product_id: a.product_id, size_id: a.size_id,
+            precio: a.retailer_price ?? null, costo: a.unit_cost ?? null,
+          }])} />
+          {!!recibidos.length && (
+            <div style={{ marginTop: space[2] }}>
+              {recibidos.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: font.sm, padding: '2px 0' }}>
+                  <span style={{ fontWeight: weight.semibold }}>{r.producto}</span>
+                  <span style={{ color: color.mut2, fontFamily: 'monospace' }}>{r.sku}</span>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => setRecibidos((p) => p.filter((_, j) => j !== i))}>Quitar</Button>
+                </div>
+              ))}
+              <Notice tone="warning" icon="⚠" style={{ marginTop: space[2] }}>
+                <b>Stock a corregir:</b> {correcciones.nota}
+              </Notice>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── 1. ¿Vuelve el producto? ── */}
       {!hayPrendaQueVuelva && (
         <Notice tone="neutral" style={{ marginBottom: space[3] }}>
@@ -434,16 +489,32 @@ export function DecidirReclamo({
             en un modal que se confirma de una. Lo que hace este paso es dejar registrado que la
             resolución es un cambio; el armado sigue en la pantalla de Cambios, que tiene la grilla,
             el ticket, el envío y la venta en Gestión Nube. */}
+        {/* Y en "no tenemos stock" el cambio no es siquiera el del mostrador: no vuelve nada,
+            porque nunca salió. Se edita la venta que ya existe en vez de crear una nueva, y el
+            envío no se vuelve a cobrar porque ya lo pagó en la compra. */}
         {compensacion === 'otro_producto' && (
-          <Notice tone="action" style={{ marginTop: space[2] }}>
-            Al confirmar, el reclamo queda listo como <b>cambio</b> y se sigue en la pestaña{' '}
-            <b>Cambios</b>: ahí elegís qué se lleva, sale la diferencia, se cobra y se genera la
-            venta en Gestión Nube.
-            <div style={{ fontSize: font.xs, marginTop: 4 }}>
-              Lo que devuelve se le acredita por <b>lo que pagó</b> ({<MoneyText value={monto.producto} />}),
-              no a precio de lista.
-            </div>
-          </Notice>
+          reclamo.motivo === 'sin_stock' ? (
+            <Notice tone="action" style={{ marginTop: space[2] }}>
+              Acá <b>no vuelve nada</b>: el producto nunca salió. En vez de crear una venta nueva,{' '}
+              <b>se edita la venta original en Gestión Nube</b> — se saca lo que no había, se pone
+              lo que eligió, y la diferencia queda marcada en esa misma venta.
+              <div style={{ fontSize: font.xs, marginTop: 4 }}>
+                <b>El envío no se vuelve a cobrar</b>: ya lo pagó en la compra. Si lo que eligió es
+                más caro, paga sólo la diferencia entre productos. GN no permite editar ventas por
+                API, así que se hace a mano y queda el tilde para no perderle el rastro.
+              </div>
+            </Notice>
+          ) : (
+            <Notice tone="action" style={{ marginTop: space[2] }}>
+              Al confirmar, el reclamo queda listo como <b>cambio</b> y se sigue en la pestaña{' '}
+              <b>Cambios</b>: ahí elegís qué se lleva, sale la diferencia, se cobra y se genera la
+              venta en Gestión Nube.
+              <div style={{ fontSize: font.xs, marginTop: 4 }}>
+                Se cuenta <b>lista contra lista</b>: conserva el descuento que consiguió. Si la
+                cuenta queda a favor de él, se revalúa a lo que pagó para no devolver de más.
+              </div>
+            </Notice>
+          )
         )}
         {compensacion === 'cupon' && (
           <Field label="Código del cupón" hint="Generalo en Tienda Nube y anotalo acá" style={{ marginTop: space[2] }}>
