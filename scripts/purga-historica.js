@@ -26,7 +26,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'fs';
+import { readFileSync, appendFileSync } from 'fs';
 import { resolve } from 'path';
 import { purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
@@ -150,6 +150,15 @@ function mesesEntre(desde, hasta) {
   return meses;
 }
 
+/**
+ * Respaldo de todo lo que se borra, una fila JSON por línea. Lo borrado ya no existe en
+ * GN: sin esto no hay vuelta atrás. El workflow lo guarda como artifact de la corrida.
+ */
+const ARCHIVO_RESPALDO = `respaldo-purga-${MARCA}.jsonl`;
+function respaldo(tabla, filas) {
+  appendFileSync(ARCHIVO_RESPALDO, filas.map(f => JSON.stringify({ tabla, fila: f })).join('\n') + '\n');
+}
+
 /** Cuántas ventas del mes tienen el costo vacío en el espejo (el agujero de 2024). */
 async function sinCostoEnEspejo(desde, hasta) {
   if (!cfg.completo) return null; // la tabla de Zattia no tiene la columna
@@ -195,7 +204,8 @@ async function main() {
       detallesPorVenta.set(v.id, set);
     }
 
-    const opciones = { topePorc: TOPE, simular: !APLICAR };
+    // El respaldo solo tiene sentido cuando se borra de verdad.
+    const opciones = { topePorc: TOPE, simular: !APLICAR, respaldo: APLICAR ? respaldo : null };
     const borradas  = await purgarVentas(supabase, idsGN, ini, fin, opciones);
     const renglones = await purgarDetalles(supabase, detallesPorVenta, opciones);
 
@@ -220,6 +230,7 @@ async function main() {
   console.log(`Renglones ${APLICAR ? 'borrados' : 'a borrar'}:           ${total.renglones}`);
   if (cfg.completo) console.log(`Costo ${APLICAR ? 'completado' : 'a completar'}:              ${total.costoRellenado} ventas`);
   if (!APLICAR) console.log('\nNada de esto se aplicó. Para hacerlo: agregar --aplicar al comando.');
+  else if (total.borradas + total.renglones > 0) console.log(`\nRespaldo de lo borrado: ${ARCHIVO_RESPALDO}`);
 }
 
 main().catch(e => { console.error('\nERROR:', e.message); process.exit(1); });

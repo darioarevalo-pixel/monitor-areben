@@ -63,3 +63,15 @@ jobs:
             --desde=${{ inputs.desde }} \
             --tope=${{ inputs.tope }} \
             --aplicar=${{ inputs.aplicar }}
+
+      # Lo borrado ya no existe en Gestión Nube: este archivo es la única vuelta atrás.
+      # Se guarda 90 días. `if: always()` para que quede incluso si la corrida se cae
+      # a mitad de camino, que es justo cuando más se necesita.
+      - name: Guardar el respaldo de lo borrado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-purga-${{ inputs.marca }}
+          path: respaldo-purga-*.jsonl
+          if-no-files-found: ignore
+          retention-days: 90

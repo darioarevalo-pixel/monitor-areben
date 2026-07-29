@@ -26,6 +26,10 @@
  * volvió a medias) no puede vaciar el espejo en silencio. La descarga ya corta con
  * error si GN falla, así que esto es la segunda red, no la primera.
  *
+ * RESPALDO: quien llame puede pasar `respaldo`, y las filas completas se guardan antes
+ * de borrarse. Lo que se borra ya no existe en GN, así que no hay de dónde volver a
+ * bajarlo — el respaldo es la única vuelta atrás. La purga histórica lo usa siempre.
+ *
  * El porcentaje solo no alcanza: sobre un universo chico, el 10% es menos de una
  * fila y la purga no borraría NUNCA (una anulación entre dos ventas es el 50%). Por
  * eso el tope real es `max(PISO_BORRADO, porcentaje)`: el porcentaje manda cuando el
@@ -43,6 +47,22 @@ const PISO_BORRADO = 20
 export function fechaDesdeRepaso(dias = DIAS_REPASO, hoy = new Date()) {
   const d = new Date(hoy.getTime() - dias * 24 * 60 * 60 * 1000)
   return d.toISOString().substring(0, 10)
+}
+
+/**
+ * Guarda las filas completas antes de borrarlas, si el llamador pasó un `respaldo`.
+ * Lo que se borra son filas que Gestión Nube ya no tiene: si nos equivocamos, no hay
+ * de dónde volver a bajarlas. Con el respaldo se reponen.
+ */
+async function respaldar(supabase, tabla, ids, respaldo) {
+  if (!respaldo || !ids.length) return
+  const filas = []
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from(tabla).select('*').in('id', ids.slice(i, i + 200))
+    if (error) throw new Error(`no se pudo respaldar ${tabla}: ${error.message}`)
+    filas.push(...(data || []))
+  }
+  await respaldo(tabla, filas)
 }
 
 /** Lee una tabla entera salteando el tope de 1000 filas de PostgREST. */
@@ -65,12 +85,13 @@ async function leerPaginado(query) {
  * @param {Set<number>} idsGN  ids que GN devolvió para el rango
  * @param {string} desde  YYYY-MM-DD inclusive
  * @param {string} hasta  YYYY-MM-DD inclusive
- * @param {{topePorc?: number, simular?: boolean}} opciones
+ * @param {{topePorc?: number, simular?: boolean, respaldo?: ((tabla: string, filas: object[]) => void | Promise<void>) | null}} opciones
  *        topePorc: fracción máxima del rango que se permite borrar.
  *        simular: informa qué borraría y no toca nada (la purga histórica arranca así).
+ *        respaldo: recibe las filas completas antes del borrado. Si tira error, no se borra.
  * @returns {Promise<number>} ventas borradas (o que se borrarían, en simulación)
  */
-export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0.1, simular = false } = {}) {
+export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0.1, simular = false, respaldo = null } = {}) {
   const espejo = await leerPaginado((a, b) =>
     supabase.from('ventas').select('id').gte('date_sale', desde).lte('date_sale', hasta).range(a, b)
   )
@@ -98,6 +119,8 @@ export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0
     return 0
   }
 
+  await respaldar(supabase, 'ventas', aBorrar, respaldo)
+
   let borradas = 0
   for (let i = 0; i < aBorrar.length; i += 200) {
     const lote = aBorrar.slice(i, i + 200)
@@ -118,11 +141,12 @@ export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0
  * vacío es indistinguible de un problema al traer el detalle, y en la duda no se
  * vacía una venta que en el espejo tiene productos.
  *
+ * @param supabase  client de @supabase/supabase-js
  * @param {Map<number, Set<number>>} detallesPorVenta  saleId -> ids de renglón vivos en GN
- * @param {{topePorc?: number, simular?: boolean}} opciones
+ * @param {{topePorc?: number, simular?: boolean, respaldo?: ((tabla: string, filas: object[]) => void | Promise<void>) | null}} opciones
  * @returns {Promise<number>} renglones borrados (o que se borrarían, en simulación)
  */
-export async function purgarDetalles(supabase, detallesPorVenta, { topePorc = 0.1, simular = false } = {}) {
+export async function purgarDetalles(supabase, detallesPorVenta, { topePorc = 0.1, simular = false, respaldo = null } = {}) {
   const saleIds = [...detallesPorVenta.keys()].filter(id => detallesPorVenta.get(id).size > 0)
   if (!saleIds.length) return 0
 
@@ -158,6 +182,8 @@ export async function purgarDetalles(supabase, detallesPorVenta, { topePorc = 0.
     )
     return 0
   }
+
+  await respaldar(supabase, 'venta_detalles', aBorrar, respaldo)
 
   let borrados = 0
   for (let i = 0; i < aBorrar.length; i += 200) {

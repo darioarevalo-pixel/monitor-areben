@@ -46,6 +46,11 @@ function mock(ventas: FilaVenta[], detalles: FilaDetalle[] = []): any {
           return api
         },
         async range(a: number, b: number) { return { data: filas.slice(a, b + 1), error: null } },
+        /* El builder de PostgREST es esperable sin llamar a range: `await
+           from(t).select('*').in('id', ids)` devuelve las filas. El respaldo lo usa así. */
+        then(res: (v: { data: unknown[]; error: null }) => unknown, rej: (e: unknown) => unknown) {
+          return Promise.resolve({ data: filas, error: null }).then(res, rej)
+        },
       }
       return api
     },
@@ -178,6 +183,55 @@ describe('modo simulación (la purga histórica arranca así)', () => {
 
     expect(await purgarVentas(sb, vivas, '2026-06-01', '2026-07-31')).toBe(0)                     // default 10%: frena
     expect(await purgarVentas(sb, vivas, '2026-06-01', '2026-07-31', { topePorc: 0.3 })).toBe(25) // 30%: pasa
+  })
+})
+
+describe('respaldo antes de borrar', () => {
+  it('guarda las filas completas de las ventas antes de que desaparezcan', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }])
+    const guardado: { tabla: string; filas: unknown[] }[] = []
+
+    await purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', {
+      respaldo: (tabla: string, filas: unknown[]) => { guardado.push({ tabla, filas }) },
+    })
+
+    expect(guardado).toHaveLength(1)
+    expect(guardado[0].tabla).toBe('ventas')
+    expect(guardado[0].filas).toEqual([{ id: 2, date_sale: '2026-07-02' }]) // la fila entera, no solo el id
+    expect(sb.tablas.ventas.map((v: FilaVenta) => v.id)).toEqual([1])       // y sí se borró
+  })
+
+  it('guarda los renglones antes de borrarlos', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }], [{ id: 10, sale_id: 1 }, { id: 11, sale_id: 1 }])
+    const guardado: unknown[] = []
+
+    await purgarDetalles(sb, new Map([[1, new Set([10])]]), {
+      respaldo: (_t: string, filas: unknown[]) => { guardado.push(...filas) },
+    })
+
+    expect(guardado).toEqual([{ id: 11, sale_id: 1 }])
+  })
+
+  it('en simulación no respalda nada, porque no borra nada', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }])
+    let llamado = false
+
+    await purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', {
+      simular: true,
+      respaldo: () => { llamado = true },
+    })
+
+    expect(llamado).toBe(false)
+  })
+
+  it('si el respaldo falla, NO se borra: el error corta antes del delete', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }])
+
+    await expect(purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', {
+      respaldo: () => { throw new Error('disco lleno') },
+    })).rejects.toThrow('disco lleno')
+
+    expect(sb.tablas.ventas).toHaveLength(2) // intacto
   })
 })
 
