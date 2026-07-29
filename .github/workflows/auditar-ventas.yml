@@ -1,0 +1,57 @@
+name: Auditar ventas (solo lectura)
+
+# Compara el espejo contra Gestión Nube y clasifica qué pasaría si purgáramos los
+# renglones, usando `items_sold` —las unidades que GN declara para cada venta— como
+# árbitro. NO escribe ni borra: es la verificación previa a decidir una purga.
+# Ver scripts/auditar-ventas.js.
+
+on:
+  workflow_dispatch:
+    inputs:
+      marca:
+        description: 'Marca (bdi o zattia)'
+        required: true
+        default: 'bdi'
+      desde:
+        description: 'Desde (YYYY-MM-DD)'
+        required: true
+        default: '2026-05-01'
+      hasta:
+        description: 'Hasta (YYYY-MM-DD)'
+        required: false
+        default: ''
+      fantasmas:
+        description: 'Listar una por una las ventas que GN ya no tiene'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Auditar
+        env:
+          SUPABASE_URL:                ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:                ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY:        ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GN_TOKEN:                    ${{ secrets.GN_TOKEN }}
+          ZATTIA_SUPABASE_URL:         ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_KEY:         ${{ secrets.ZATTIA_SUPABASE_KEY }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          GN_TOKEN_ZATTIA:             ${{ secrets.GN_TOKEN_ZATTIA }}
+        run: |
+          node scripts/auditar-ventas.js \
+            --marca=${{ inputs.marca }} \
+            --desde=${{ inputs.desde }} \
+            ${{ inputs.hasta && format('--hasta={0}', inputs.hasta) || '' }} \
+            --fantasmas=${{ inputs.fantasmas }}
