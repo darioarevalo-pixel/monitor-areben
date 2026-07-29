@@ -45,6 +45,13 @@ function mock(ventas: FilaVenta[], detalles: FilaDetalle[] = []): any {
           filas = filas.filter(f => set.has(f[col as 'id'] as number))
           return api
         },
+        /* Ordena de verdad, no es un no-op: sin `order` estable las páginas de PostgREST
+           se pisan, y ese fue un bug real (ver purga-ventas.mjs). El mock tiene que
+           fallar si alguien saca el order del código. */
+        order(col: string) {
+          filas = [...filas].sort((x, y) => Number(x[col as 'id']) - Number(y[col as 'id']))
+          return api
+        },
         async range(a: number, b: number) { return { data: filas.slice(a, b + 1), error: null } },
         /* El builder de PostgREST es esperable sin llamar a range: `await
            from(t).select('*').in('id', ids)` devuelve las filas. El respaldo lo usa así. */

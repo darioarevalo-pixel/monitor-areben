@@ -170,7 +170,7 @@ async function ventasSinRenglones(filasGN) {
   for (let i = 0; i < ids.length; i += 200) {
     const lote = ids.slice(i, i + 200);
     for (let d = 0; ; d += 1000) {
-      const { data, error } = await supabase.from('venta_detalles').select('sale_id').in('sale_id', lote).range(d, d + 999);
+      const { data, error } = await supabase.from('venta_detalles').select('sale_id').order('id').in('sale_id', lote).range(d, d + 999);
       if (error) throw new Error(`chequeo de vacías: ${error.message}`);
       for (const r of data || []) conRenglones.add(r.sale_id);
       if (!data || data.length < 1000) break;

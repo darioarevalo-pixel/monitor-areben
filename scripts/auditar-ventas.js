@@ -138,10 +138,12 @@ async function bajarGN(desde, hasta) {
   return filas;
 }
 
+// `order('id')` es obligatorio: sin un orden estable las páginas se pisan y el mismo
+// registro vuelve en la siguiente, inflando los totales.
 async function leerEspejo(tabla, select, filtro) {
   const filas = [];
   for (let d = 0; ; d += 1000) {
-    let q = supabase.from(tabla).select(select).range(d, d + 999);
+    let q = supabase.from(tabla).select(select).order('id').range(d, d + 999);
     q = filtro(q);
     const { data, error } = await q;
     if (error) throw new Error(`${tabla}: ${error.message}`);

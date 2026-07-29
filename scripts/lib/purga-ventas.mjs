@@ -65,7 +65,16 @@ async function respaldar(supabase, tabla, ids, respaldo) {
   await respaldo(tabla, filas)
 }
 
-/** Lee una tabla entera salteando el tope de 1000 filas de PostgREST. */
+/**
+ * Lee una tabla entera salteando el tope de 1000 filas de PostgREST.
+ *
+ * EL ORDEN NO ES DECORATIVO. Sin un `order` estable, dos páginas consecutivas pueden
+ * pisarse: la misma fila vuelve en la página siguiente y otra no aparece nunca. Eso
+ * infla los totales (y con ellos el tope de seguridad, que se afloja solo) y puede
+ * dejar filas sin revisar. Se detectó porque una auditoría contó 4.969 ventas en el
+ * espejo contra 4.932 en GN y, al mismo tiempo, ninguna "solo en el espejo": las 37
+ * de diferencia eran repetidas de la paginación, no datos.
+ */
 async function leerPaginado(query) {
   const filas = []
   for (let desde = 0; ; desde += 1000) {
@@ -93,7 +102,7 @@ async function leerPaginado(query) {
  */
 export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0.1, simular = false, respaldo = null } = {}) {
   const espejo = await leerPaginado((a, b) =>
-    supabase.from('ventas').select('id').gte('date_sale', desde).lte('date_sale', hasta).range(a, b)
+    supabase.from('ventas').select('id').gte('date_sale', desde).lte('date_sale', hasta).order('id').range(a, b)
   )
   const aBorrar = espejo.filter(v => !idsGN.has(v.id)).map(v => v.id)
 
@@ -154,7 +163,7 @@ export async function purgarDetalles(supabase, detallesPorVenta, { topePorc = 0.
   for (let i = 0; i < saleIds.length; i += 200) {
     const lote = saleIds.slice(i, i + 200)
     const filas = await leerPaginado((a, b) =>
-      supabase.from('venta_detalles').select('id, sale_id').in('sale_id', lote).range(a, b)
+      supabase.from('venta_detalles').select('id, sale_id').in('sale_id', lote).order('id').range(a, b)
     )
     espejo.push(...filas)
   }
