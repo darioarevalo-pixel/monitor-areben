@@ -54,6 +54,15 @@ de Supabase (`productos` + `inventario`), y la tabla `inventario` ya trae sku, b
 variante. El único camino en vivo es `api/_inventario-vivo.js` (10-30 s por marca). Ante "no
 aparece un producto nuevo", el problema es el cruce o la frescura del espejo, no el endpoint.
 
+**El sync de ventas relee los últimos 90 días y borra lo que GN ya no tiene.** Nació solo-upsert
+con ventana incremental, así que una venta quedaba congelada en la foto de su primer día y una
+anulada seguía sumando plata (GN no devuelve las anuladas con un estado: dejan de venir). El mapeo
+y el guardado son de `scripts/lib/ventas-espejo.mjs` —una sola implementación para las dos marcas,
+`completo: false` es Zattia, cuya tabla todavía no tiene cliente ni costo— y el borrado, de
+`scripts/lib/purga-ventas.mjs`. **La purga va DESPUÉS del upsert**: si una venta cambió de fecha,
+mirarla antes la mostraría con la fecha vieja y se borraría por "desaparecida". Para el histórico
+anterior a la ventana existe `scripts/purga-historica.js`, que arranca en simulación.
+
 **`allVariantesHuerfanas` (ETL) se lee SIEMPRE con `?? []`.** Son las variantes con stock cuyo
 producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
 secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.

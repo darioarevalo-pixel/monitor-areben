@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
+import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
+import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 
 // Zattia es otra base: su propia fila en sync_state, con la misma clave 'diario'.
 const SYNC_KEY = 'diario';
@@ -237,68 +239,44 @@ async function syncInventario(maps) {
 
 async function syncVentas(fromDate) {
   const today = new Date().toISOString().substring(0, 10);
-  const basePath = `ventas/obtener?from=${fromDate}&to=${today}&include_details=1&per_page=50`;
-  console.log(`\n[ventas] Descargando desde ${fromDate} hasta ${today}...`);
+
+  // Mismo criterio que BDI: se releen SIEMPRE los últimos DIAS_REPASO días para que
+  // estado, importe y renglones dejen de quedar congelados en la foto del primer día.
+  const repasoDesde = fechaDesdeRepaso();
+  const desde = fromDate < repasoDesde ? fromDate : repasoDesde;
+
+  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
+  console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
   const rows = await fetchAllPages(basePath);
 
-  const ventasMap = new Map();
-  rows.forEach(v => {
-    if (!ventasMap.has(v.id)) {
-      ventasMap.set(v.id, {
-        id:             v.id,
-        number:         v.number || null,
-        date_sale:      v.date_sale || null,
-        total_price:    v.total_price ?? null,
-        channel:        v.channel || null,
-        sale_state:     v.sale_state || null,
-        payment_method: v.payment_method || null,
-        store:          v.store || null,
-        client_name:    v.client_name || null,
-      });
+  // Mapeo y guardado compartidos con BDI (scripts/lib/ventas-espejo.mjs).
+  // `completo: false` = solo las 9 columnas que la tabla de Zattia tiene hoy; le faltan
+  // cliente, costo, ganancia y unidades, y por eso esta marca no tiene CRM ni márgenes.
+  // Cuando se agreguen las columnas, esto pasa a `true` y hereda todo.
+  const guardado = await guardarVentasBatch(supabase, rows, { completo: false });
+  console.log(`[ventas] ${guardado.ventas} ventas (de ${rows.length} raw), ${guardado.detalles} detalles guardados.`);
+
+  // Purga DESPUÉS del upsert (ver scripts/lib/purga-ventas.mjs: una venta que cambió de
+  // fecha se vería como desaparecida si se mirara antes).
+  const resultado = { ventas: guardado.ventas, detalles: guardado.detalles };
+  try {
+    const idsGN = new Set();
+    const detallesPorVenta = new Map();
+    for (const v of rows) {
+      if ((v.date_sale || '') < repasoDesde) continue; // el tramo viejo no se recorrió entero
+      idsGN.add(v.id);
+      const set = detallesPorVenta.get(v.id) || new Set();
+      for (const d of v.detalles || []) set.add(d.id);
+      detallesPorVenta.set(v.id, set);
     }
-  });
-  const ventas = [...ventasMap.values()];
-
-  const detallesMap = new Map();
-  rows.forEach(v =>
-    (v.detalles || []).forEach(d => {
-      if (!detallesMap.has(d.id)) {
-        detallesMap.set(d.id, {
-          id:           d.id,
-          sale_id:      v.id,
-          product_id:   d.product_id || null,
-          product_name: d.product_name || null,
-          size_id:      d.size_id || null,
-          size:         d.size || null,
-          quantity:     d.quantity ?? null,
-          unit_price:   d.unit_price ?? null,
-          total:        d.total ?? null,
-        });
-      }
-    })
-  );
-  const detalles = [...detallesMap.values()];
-
-  console.log(`[ventas] ${ventas.length} ventas (de ${rows.length} raw), ${detalles.length} detalles. Guardando en Supabase...`);
-
-  if (ventas.length) {
-    const { error } = await supabase.from('ventas').upsert(ventas, { onConflict: 'id' });
-    if (error) throw new Error(`Error guardando ventas: ${error.message}`);
-  }
-
-  if (detalles.length) {
-    const BATCH = 2000;
-    for (let i = 0; i < detalles.length; i += BATCH) {
-      const lote = detalles.slice(i, i + BATCH);
-      process.stdout.write(`  detalles ${i + lote.length}/${detalles.length}...\r`);
-      const { error } = await supabase.from('venta_detalles').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando detalles (lote ${i}): ${error.message}`);
-    }
-    process.stdout.write('\n');
+    resultado.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today);
+    resultado.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta);
+  } catch (e) {
+    console.warn(`[ventas] purga omitida por error (no crítico): ${e.message}`);
   }
 
   console.log(`[ventas] OK`);
-  return { ventas: ventas.length, detalles: detalles.length };
+  return resultado;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -335,8 +313,8 @@ async function main() {
 
     console.log('\n=== Resultado ===');
     console.log(`Inventario:     ${inventario}`);
-    console.log(`Ventas:         ${ventas.ventas}`);
-    console.log(`Venta detalles: ${ventas.detalles}`);
+    console.log(`Ventas:         ${ventas.ventas} (${ventas.ventasBorradas ?? 0} borradas)`);
+    console.log(`Venta detalles: ${ventas.detalles} (${ventas.detallesBorrados ?? 0} borrados)`);
     console.log(`Productos:      ${productos}`);
     console.log('\nSincronización completada.');
   } catch (e) {

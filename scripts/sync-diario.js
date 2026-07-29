@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
+import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
+import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 
 // Identifica esta fila en sync_state. BDI y Zattia son bases distintas, así que
 // alcanza con 'diario'; si algún día hay más de un sync por base, se distinguen acá.
@@ -259,125 +261,59 @@ async function syncInventario(maps) {
   return inventario.length;
 }
 
-function mapVentaRow(v) {
-  return {
-    id:             v.id,
-    number:         v.number || null,
-    date_sale:      v.date_sale || null,
-    total_price:    v.total_price ?? null,
-    channel:        v.channel || null,
-    sale_state:     v.sale_state || null,
-    payment_method: v.payment_method || null,
-    store:          v.store || null,
-    client_name:    v.client_name || null,
-    client_id:       v.client_id || null,
-    client_email:    v.client_email || null,
-    client_phone:    v.client_phone || null,
-    client_city:     v.client_city || null,
-    client_province: v.client_province || null,
-    channel_id:      v.channel_id ?? null,
-    sale_type_id:    v.sale_type_id ?? null,
-    total_cost:      v.total_cost ?? null,
-    profit:          v.profit ?? null,
-    items_sold:      v.items_sold ?? null,
-  };
-}
-
-function extraerClientesDeVentas(rows) {
-  const map = new Map();
-  for (const v of rows) {
-    if (!v.client_id) continue;
-    const ts = v.created_at || v.updated_at || v.date_sale || '';
-    const prev = map.get(v.client_id);
-    if (!prev || (ts && ts > prev._ts)) {
-      map.set(v.client_id, {
-        id:           v.client_id,
-        name:         v.client_name || null,
-        email:        v.client_email || null,
-        phone:        v.client_phone || null,
-        city:         v.client_city || null,
-        province:     v.client_province || null,
-        postal_code:  v.client_postal_code || null,
-        address:      v.client_address || null,
-        updated_at:   new Date().toISOString(),
-        _ts: ts,
-      });
-    }
-  }
-  return [...map.values()].map(({ _ts, ...rest }) => rest);
-}
-
-// Dedup helper: si llega el mismo id dos veces en el batch, se queda con la última versión
-function dedupById(arr) {
-  const map = new Map();
-  for (const x of arr) {
-    if (x && x.id != null) map.set(String(x.id), x);
-  }
-  return [...map.values()];
-}
-
-async function flushVentasBatch(rawRows) {
-  // Dedup rawRows por venta id ANTES de mapear (puede venir duplicado de paginación GN)
-  const rawDedup = dedupById(rawRows);
-
-  const ventas = dedupById(rawDedup.map(mapVentaRow));
-  const clientes = dedupById(extraerClientesDeVentas(rawDedup));
-  const detalles = dedupById(
-    rawDedup.flatMap(v =>
-      (v.detalles || []).map(d => ({
-        id:           d.id,
-        sale_id:      v.id,
-        product_id:   d.product_id || null,
-        product_name: d.product_name || null,
-        size_id:      d.size_id || null,
-        size:         d.size || null,
-        quantity:     d.quantity ?? null,
-        unit_price:   d.unit_price ?? null,
-        total:        d.total ?? null,
-      }))
-    )
-  );
-
-  if (ventas.length) {
-    for (let i = 0; i < ventas.length; i += 1000) {
-      const lote = ventas.slice(i, i + 1000);
-      const { error } = await supabase.from('ventas').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando ventas: ${error.message}`);
-    }
-  }
-  if (clientes.length) {
-    for (let i = 0; i < clientes.length; i += 500) {
-      const lote = clientes.slice(i, i + 500);
-      const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando clientes: ${error.message}`);
-    }
-  }
-  if (detalles.length) {
-    for (let i = 0; i < detalles.length; i += 2000) {
-      const lote = detalles.slice(i, i + 2000);
-      const { error } = await supabase.from('venta_detalles').upsert(lote, { onConflict: 'id' });
-      if (error) throw new Error(`Error guardando detalles: ${error.message}`);
-    }
-  }
-
-  console.log(`    ✓ ventas: ${ventas.length}, clientes: ${clientes.length}, detalles: ${detalles.length}`);
-  return { ventas: ventas.length, detalles: detalles.length, clientes: clientes.length };
-}
+// El mapeo, el dedupe y el guardado viven en scripts/lib/ventas-espejo.mjs: los
+// compartimos con Zattia y con la purga histórica. Estaban copiados acá y la copia
+// de Zattia se quedó atrás (9 columnas contra 19), que es por qué esa marca no tiene
+// CRM ni márgenes.
 
 async function syncVentas(fromDate) {
   const today = new Date().toISOString().substring(0, 10);
-  const basePath = `ventas/obtener?from=${fromDate}&to=${today}&include_details=1&per_page=50`;
-  console.log(`\n[ventas] Descargando desde ${fromDate} hasta ${today}...`);
+
+  // Se releen SIEMPRE los últimos DIAS_REPASO días, aunque el sync haya corrido ayer.
+  // Sin esto, una venta entraba al espejo el día que se cargó y no se volvía a mirar:
+  // el estado, el importe y el costo quedaban congelados en la foto del primer día, y
+  // una venta anulada seguía sumando plata para siempre. Si el sync no corre por más
+  // tiempo que la ventana, manda `fromDate` (el menor de los dos).
+  const repasoDesde = fechaDesdeRepaso();
+  const desde = fromDate < repasoDesde ? fromDate : repasoDesde;
+
+  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
+  console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
+
+  // Lo que GN devolvió, para poder borrar por diferencia una vez terminada la descarga.
+  // Solo se guardan ids (livianos): con streaming las filas no quedan todas en memoria.
+  const idsGN = new Set();
+  const detallesPorVenta = new Map();
 
   const totales = { ventas: 0, detalles: 0, clientes: 0 };
   await fetchAllPagesStreaming(basePath, async (rows) => {
-    const r = await flushVentasBatch(rows);
+    for (const v of rows) {
+      // Solo el tramo de repaso se purga; el tramo viejo (sync atrasado) se actualiza pero
+      // no se borra, porque su rango no se recorrió entero.
+      if ((v.date_sale || '') < repasoDesde) continue;
+      idsGN.add(v.id);
+      const set = detallesPorVenta.get(v.id) || new Set();
+      for (const d of v.detalles || []) set.add(d.id);
+      detallesPorVenta.set(v.id, set);
+    }
+    const r = await guardarVentasBatch(supabase, rows);
+    console.log(`    ✓ ventas: ${r.ventas}, clientes: ${r.clientes}, detalles: ${r.detalles}`);
     totales.ventas   += r.ventas;
     totales.detalles += r.detalles;
     totales.clientes += r.clientes;
   });
 
   console.log(`[ventas] OK — total acumulado: ${totales.ventas} ventas, ${totales.detalles} detalles, ${totales.clientes} clientes`);
+
+  // Purga DESPUÉS del upsert, nunca antes: si una venta cambió de fecha en GN, mirarla
+  // antes la mostraría con la fecha vieja y la borraríamos por "desaparecida".
+  try {
+    totales.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today);
+    totales.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta);
+  } catch (e) {
+    console.warn(`[ventas] purga omitida por error (no crítico): ${e.message}`);
+  }
+
   return totales;
 }
 
@@ -423,8 +359,8 @@ async function main() {
 
     console.log('\n=== Resultado ===');
     console.log(`Inventario:     ${inventario}`);
-    console.log(`Ventas:         ${ventas.ventas}`);
-    console.log(`Venta detalles: ${ventas.detalles}`);
+    console.log(`Ventas:         ${ventas.ventas} (${ventas.ventasBorradas ?? 0} borradas)`);
+    console.log(`Venta detalles: ${ventas.detalles} (${ventas.detallesBorrados ?? 0} borrados)`);
     console.log(`Productos:      ${productos}`);
     console.log(`\nSync guardado en sync_state (Supabase)`);
     console.log('Sincronización diaria completada.');

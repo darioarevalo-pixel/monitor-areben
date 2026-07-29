@@ -1,0 +1,60 @@
+name: Purga histórica de ventas
+
+# Pasada única sobre todo el histórico: relee mes por mes desde Gestión Nube, corrige
+# lo que cambió y borra lo que ya no existe. El sync diario solo cubre 90 días para
+# atrás; esto limpia el resto (ver scripts/purga-historica.js).
+#
+# ARRANCA EN SIMULACIÓN: con `aplicar` en false no escribe ni borra nada, solo informa
+# mes por mes cuántas ventas borraría. Se mira el número y recién después se corre con
+# `aplicar` en true.
+
+on:
+  workflow_dispatch:
+    inputs:
+      marca:
+        description: 'Marca (bdi o zattia)'
+        required: true
+        default: 'bdi'
+      desde:
+        description: 'Desde (YYYY-MM-DD)'
+        required: true
+        default: '2024-01-01'
+      aplicar:
+        description: '¿Aplicar de verdad? (en false solo simula)'
+        type: boolean
+        required: true
+        default: false
+      tope:
+        description: 'Tope de borrado por mes (0.1 = 10%)'
+        required: false
+        default: '0.1'
+
+jobs:
+  purga:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Purga histórica
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GN_TOKEN:             ${{ secrets.GN_TOKEN }}
+          ZATTIA_SUPABASE_URL:  ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_KEY:  ${{ secrets.ZATTIA_SUPABASE_KEY }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          GN_TOKEN_ZATTIA:      ${{ secrets.GN_TOKEN_ZATTIA }}
+        run: |
+          node scripts/purga-historica.js \
+            --marca=${{ inputs.marca }} \
+            --desde=${{ inputs.desde }} \
+            --tope=${{ inputs.tope }} \
+            ${{ inputs.aplicar && '--aplicar' || '' }}
