@@ -49,6 +49,15 @@ cachea en IndexedDB. Estado en Zustand (`store/`). Dos marcas: `bdi` y `zattia`.
 Portales públicos, sin sesión y fuera del nav: `/reclamo/<token>` (cliente) y `/canje/<token>`
 (creadora). Se resuelven antes del guard de permisos.
 
+**Ninguna sección consulta Gestión Nube en vivo, salvo los Conteos.** Todo lo demás lee el espejo
+de Supabase (`productos` + `inventario`), y la tabla `inventario` ya trae sku, barcode y stock por
+variante. El único camino en vivo es `api/_inventario-vivo.js` (10-30 s por marca). Ante "no
+aparece un producto nuevo", el problema es el cruce o la frescura del espejo, no el endpoint.
+
+**`allVariantesHuerfanas` (ETL) se lee SIEMPRE con `?? []`.** Son las variantes con stock cuyo
+producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
+secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.
+
 ## Mapa de secciones
 
 41 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
