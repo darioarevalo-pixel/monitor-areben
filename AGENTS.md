@@ -106,6 +106,11 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
 - **Tests: uno por vez.** `npx vitest run tests/<archivo>.test.ts --reporter=dot`. La suite completa
   son 89 archivos y su salida entera queda en contexto — correrla solo si se pide.
 - **Comandos largos van cortados**: `git log`, builds y deploys con `| tail -30`.
+- **Avisar el `/clear` al cerrar cada unidad de trabajo** — Bruno no lo tiene que pedir. El marcador
+  natural es después de deployar y verificar. El criterio no es "cambió el tema" sino **"¿vamos a
+  volver a abrir los mismos archivos?"**. Donde más rinde es justo después de resolver un bug
+  difícil: ese contexto es casi todo intento fallido. Dentro de una tarea sin terminar va
+  `/compact`, no `/clear`.
 - **Los archivos caros se leen por rango, no enteros.** Los peores:
   `components/sesionfotos/SesionFotos.tsx` (1.803 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
   `tests/reclamos.test.ts` (1.192) · `api/_canjes.js` (1.146) · `lib/canjes/tipos.ts` (871) ·
