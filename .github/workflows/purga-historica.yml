@@ -52,9 +52,14 @@ jobs:
           ZATTIA_SUPABASE_KEY:  ${{ secrets.ZATTIA_SUPABASE_KEY }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA:      ${{ secrets.GN_TOKEN_ZATTIA }}
+        # `aplicar` se pasa SIEMPRE con su valor y decide el script, en vez de que el
+        # YAML decida si agrega el flag. Si la casilla llegara como el texto "false"
+        # en lugar de un booleano, `inputs.aplicar && '--aplicar'` la tomaría por
+        # verdadera y una simulación borraría de verdad. El script solo acepta el
+        # booleano true o el texto "true"; cualquier otra cosa simula.
         run: |
           node scripts/purga-historica.js \
             --marca=${{ inputs.marca }} \
             --desde=${{ inputs.desde }} \
             --tope=${{ inputs.tope }} \
-            ${{ inputs.aplicar && '--aplicar' || '' }}
+            --aplicar=${{ inputs.aplicar }}
