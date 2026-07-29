@@ -21,7 +21,12 @@ on:
         required: false
         default: ''
       fantasmas:
-        description: 'Listar una por una las ventas que GN ya no tiene'
+        description: 'Listar las ventas que el listado de GN no trae'
+        type: boolean
+        required: false
+        default: false
+      verificar:
+        description: 'Preguntar por cada una de esas ventas de a una (prueba si existe o está borrada)'
         type: boolean
         required: false
         default: false
@@ -54,4 +59,5 @@ jobs:
             --marca=${{ inputs.marca }} \
             --desde=${{ inputs.desde }} \
             ${{ inputs.hasta && format('--hasta={0}', inputs.hasta) || '' }} \
-            --fantasmas=${{ inputs.fantasmas }}
+            --fantasmas=${{ inputs.fantasmas }} \
+            --verificar=${{ inputs.verificar }}

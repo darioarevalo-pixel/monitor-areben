@@ -40,6 +40,7 @@
  * Uso:
  *   node scripts/auditar-ventas.js --marca=bdi --desde=2026-05-01 --hasta=2026-07-31
  *   node scripts/auditar-ventas.js --marca=bdi --fantasmas    # lista las ventas que GN ya no tiene
+ *   node scripts/auditar-ventas.js --marca=bdi --verificar     # pregunta por cada una, de a una
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -69,6 +70,7 @@ const MARCA = String(args.marca || 'bdi').toLowerCase();
 const DESDE = String(args.desde || '2026-05-01');
 const HASTA = String(args.hasta || new Date().toISOString().substring(0, 10));
 const FANTASMAS = args.fantasmas === true || args.fantasmas === 'true';
+const VERIFICAR = args.verificar === true || args.verificar === 'true';
 
 const MARCAS = {
   bdi:    { url: process.env.SUPABASE_URL,        key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,               token: process.env.GN_TOKEN },
@@ -80,6 +82,24 @@ if (!cfg?.url || !cfg?.key || !cfg?.token) { console.error(`Faltan credenciales 
 const supabase = createClient(cfg.url, cfg.key);
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Pregunta por UNA venta puntual: GET /ventas/<id>. Devuelve la venta, o null si GN
+ * contesta 404.
+ *
+ * Es la prueba decisiva sobre las "fantasma". El listado por rango puede no traer una
+ * venta por mil razones (un filtro, un estado, un borde de fecha); que el endpoint
+ * puntual conteste 404 es lo único que prueba que la venta ya no existe. Sin esto,
+ * borrar por ausencia en el listado es borrar por sospecha.
+ */
+async function gnVenta(id) {
+  const res = await fetch(`${GN_BASE}/ventas/${id}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/json' } });
+  if (res.status === 404) return null;
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GN ${res.status} en ventas/${id}: ${text.substring(0, 120)}`);
+  const d = JSON.parse(text);
+  return d?.data || d;
+}
 
 async function gnFetch(path, retries = 5) {
   for (let intento = 1; intento <= retries; intento++) {
@@ -167,6 +187,42 @@ async function main() {
     console.log('(si son duplicados que se borraron a mano, se reconocen por el número seguido)\n');
     for (const f of fantasmas.sort((a, b) => String(a.number).localeCompare(String(b.number)))) {
       console.log(`  N° ${String(f.number).padEnd(7)} ${f.date_sale}  $${String(Math.round(f.total_price || 0)).padStart(9)}  ${String(f.sale_state).padEnd(18)} ${f.channel || ''}`);
+    }
+  }
+
+  // ── ¿Las fantasma existen de verdad? Se pregunta por cada una ────────────────
+  if (VERIFICAR && fantasmas.length) {
+    console.log(`\n=== Preguntando por las ${fantasmas.length} ventas, de a una ===`);
+    const existen = [], borradas = [], fallaron = [];
+    for (const f of fantasmas) {
+      try {
+        const v = await gnVenta(f.id);
+        if (v) existen.push({ ...f, estadoGN: v.sale_state || v.state || '?' });
+        else borradas.push(f);
+      } catch (e) {
+        fallaron.push({ ...f, error: e.message });
+      }
+      await sleep(250);
+    }
+    console.log(`\n  Existen en GN (el listado no las trae):  ${existen.length}  ⛔ NO se pueden borrar`);
+    console.log(`  GN contesta 404 (borradas de verdad):   ${borradas.length}  ✅ se pueden borrar`);
+    if (fallaron.length) console.log(`  No se pudo verificar:                   ${fallaron.length}`);
+
+    if (existen.length) {
+      console.log('\n  ⛔ Estas EXISTEN en Gestión Nube y el listado por rango no las devuelve:');
+      for (const e of existen.slice(0, 40)) {
+        console.log(`     N° ${String(e.number).padEnd(7)} ${e.date_sale}  $${String(Math.round(e.total_price || 0)).padStart(9)}  espejo: ${String(e.sale_state).padEnd(17)} GN ahora: ${e.estadoGN}`);
+      }
+    }
+    if (borradas.length) {
+      console.log('\n  ✅ Estas ya no existen (404). Son las que se borraron a mano:');
+      for (const b of borradas.slice(0, 40)) {
+        console.log(`     N° ${String(b.number).padEnd(7)} ${b.date_sale}  $${String(Math.round(b.total_price || 0)).padStart(9)}  ${b.sale_state}`);
+      }
+    }
+    if (fallaron.length) {
+      console.log('\n  Errores al verificar:');
+      for (const f of fallaron.slice(0, 10)) console.log(`     N° ${f.number}: ${f.error}`);
     }
   }
 
