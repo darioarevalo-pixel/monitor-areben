@@ -253,12 +253,31 @@ async function main() {
   const peligro = [], incompleto = [];
   let renglonesABorrar = 0, renglonesABorrarSeguros = 0;
 
+  // Mismo análisis, abierto por mes: un total de dos años no deja ver si un mes puntual
+  // se comporta distinto, y es justo lo que hay que mirar antes de decidir una purga.
+  const meses = new Map();
+  const mesDe = f => String(f || '').substring(0, 7);
+  const mes = k => {
+    if (!meses.has(k)) meses.set(k, { ventas: 0, fantasma: 0, plataFantasma: 0, ok: 0, tocadas: 0, renglones: 0, renglonesABorrar: 0 });
+    return meses.get(k);
+  };
+  for (const v of ventasEspejo) {
+    const m = mes(mesDe(v.date_sale));
+    m.ventas++;
+    if (!idsGN.has(v.id)) { m.fantasma++; m.plataFantasma += Number(v.total_price) || 0; }
+    m.renglones += (espejoPorVenta.get(v.id) || []).length;
+  }
+  const afectadas = [];   // detalle de cada venta que cambiaría
+
   for (const v of ventasEspejo) {
     if (!idsGN.has(v.id)) continue; // fantasma, se cuenta aparte
     const esp = espejoPorVenta.get(v.id) || [];
     const gn = gnPorVenta.get(v.id) || new Map();
     const sobran = esp.filter(d => !gn.has(d.id));
     renglonesABorrar += sobran.length;
+    const m = mes(mesDe(v.date_sale));
+    m.renglonesABorrar += sobran.length;
+    if (sobran.length) m.tocadas++; else m.ok++;
 
     if (!gn.size) { clases.SIN_DETALLE_GN++; continue; } // la salvaguarda ya los saltea
     if (!gnDeclara.has(v.id)) { clases.SIN_DATO++; continue; }
@@ -283,6 +302,7 @@ async function main() {
     if (sobran.length === esp.length && uEspejo === declara) {
       clases.RECREADA++;
       renglonesABorrarSeguros += sobran.length;
+      afectadas.push({ n: v.number, f: v.date_sale, tipo: 'RE-CREADA', uEspejo, declara, esp: esp.length, queda: gn.size });
       continue;
     }
     if (uEspejo === declara) {
@@ -293,7 +313,24 @@ async function main() {
     }
     if (uEspejo === declara * 2) clases.DUPLICADO++; else clases.ARREGLA++;
     renglonesABorrarSeguros += sobran.length;
+    afectadas.push({ n: v.number, f: v.date_sale, tipo: uEspejo === declara * 2 ? 'DUPLICADO' : 'ARREGLA', uEspejo, declara, esp: esp.length, queda: gn.size });
   }
+
+  console.log('\n=== Mes por mes ===');
+  console.log('  mes       ventas  borradas   $borradas   con desglose mal   renglones   a borrar');
+  for (const [k, m] of [...meses].sort()) {
+    console.log(
+      `  ${k}   ${String(m.ventas).padStart(5)}  ${String(m.fantasma).padStart(6)}  ${('$' + Math.round(m.plataFantasma).toLocaleString('es-AR')).padStart(12)}` +
+      `  ${String(m.tocadas).padStart(14)}   ${String(m.renglones).padStart(9)}  ${String(m.renglonesABorrar).padStart(9)}`
+    );
+  }
+
+  console.log('\n=== Ventas cuyo desglose cambiaría (las 25 más grandes) ===');
+  console.log('  (unidades: lo que muestra el Monitor hoy → lo que dice GN · renglones: hoy → quedarían)');
+  for (const a of afectadas.sort((x, y) => y.esp - x.esp).slice(0, 25)) {
+    console.log(`   N° ${String(a.n).padEnd(7)} ${a.f}  ${String(a.tipo).padEnd(10)} unidades ${String(a.uEspejo).padStart(4)} → ${String(a.declara).padStart(4)}   renglones ${String(a.esp).padStart(4)} → ${String(a.queda).padStart(4)}`);
+  }
+  console.log(`\n  (total de ventas con el desglose mal: ${afectadas.length})`);
 
   console.log('\n=== Qué pasaría si purgáramos los renglones ===');
   console.log(`  OK (ya coincidía, nada que borrar):        ${clases.OK}`);
