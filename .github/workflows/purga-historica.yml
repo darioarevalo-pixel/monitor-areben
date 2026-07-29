@@ -19,6 +19,10 @@ on:
         description: 'Desde (YYYY-MM-DD)'
         required: true
         default: '2024-01-01'
+      hasta:
+        description: 'Hasta (YYYY-MM-DD). Vacío = hoy'
+        required: false
+        default: ''
       aplicar:
         description: '¿Aplicar de verdad? (en false solo simula)'
         type: boolean
@@ -61,6 +65,7 @@ jobs:
           node scripts/purga-historica.js \
             --marca=${{ inputs.marca }} \
             --desde=${{ inputs.desde }} \
+            ${{ inputs.hasta && format('--hasta={0}', inputs.hasta) || '' }} \
             --tope=${{ inputs.tope }} \
             --aplicar=${{ inputs.aplicar }}
 

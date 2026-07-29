@@ -159,6 +159,26 @@ function respaldo(tabla, filas) {
   appendFileSync(ARCHIVO_RESPALDO, filas.map(f => JSON.stringify({ tabla, fila: f })).join('\n') + '\n');
 }
 
+/**
+ * De las ventas que GN devolvió CON renglones, cuáles quedaron sin un solo renglón en el
+ * espejo. Después de purgar tiene que dar cero: si da otra cosa, el upsert no entró y la
+ * purga vació ventas.
+ */
+async function ventasSinRenglones(filasGN) {
+  const ids = filasGN.map(v => v.id);
+  const conRenglones = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    const lote = ids.slice(i, i + 200);
+    for (let d = 0; ; d += 1000) {
+      const { data, error } = await supabase.from('venta_detalles').select('sale_id').in('sale_id', lote).range(d, d + 999);
+      if (error) throw new Error(`chequeo de vacías: ${error.message}`);
+      for (const r of data || []) conRenglones.add(r.sale_id);
+      if (!data || data.length < 1000) break;
+    }
+  }
+  return filasGN.filter(v => !conRenglones.has(v.id)).map(v => v.number || v.id);
+}
+
 /** Cuántas ventas del mes tienen el costo vacío en el espejo (el agujero de 2024). */
 async function sinCostoEnEspejo(desde, hasta) {
   if (!cfg.completo) return null; // la tabla de Zattia no tiene la columna
@@ -208,6 +228,18 @@ async function main() {
     const opciones = { topePorc: TOPE, simular: !APLICAR, respaldo: APLICAR ? respaldo : null };
     const borradas  = await purgarVentas(supabase, idsGN, ini, fin, opciones);
     const renglones = await purgarDetalles(supabase, detallesPorVenta, opciones);
+
+    // Red de seguridad para el tramo viejo: ahí hay ventas donde se reemplaza el 100%
+    // del desglose (GN tiene los mismos productos con otros códigos de línea). Si por lo
+    // que fuera las líneas nuevas no entraran, la venta quedaría vacía. Esto lo grita.
+    if (APLICAR && filas.length) {
+      const vacias = await ventasSinRenglones(filas.filter(v => (v.detalles || []).length));
+      if (vacias.length) {
+        console.error(`  ⛔ ${vacias.length} venta(s) quedaron SIN renglones y GN sí tiene: ${vacias.slice(0, 10).join(', ')}`);
+        console.error('  ⛔ FRENANDO: revisar antes de seguir con los meses que faltan.');
+        process.exit(1);
+      }
+    }
 
     const rellenado = sinCostoAntes != null ? Math.min(sinCostoAntes, conCostoEnGN) : 0;
     total.ventasGN += filas.length;
