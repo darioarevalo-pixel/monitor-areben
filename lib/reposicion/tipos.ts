@@ -47,4 +47,11 @@ export type RepoItem = {
   s7: number
   /** Ubicación física (observación de GN). */
   ubic: string
+  /**
+   * El producto tiene stock en `inventario` pero todavía no está en el catálogo
+   * (`productos`) que bajó el ETL. Antes estas variantes se descartaban en silencio y el
+   * stock desaparecía del reporte; ahora entran igual, con la categoría y el precio
+   * pendientes hasta el próximo sync.
+   */
+  sinProducto: boolean
 }

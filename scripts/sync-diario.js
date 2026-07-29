@@ -37,10 +37,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function daysBetween(isoA, isoB) {
-  return Math.abs(new Date(isoA) - new Date(isoB)) / 86400000;
-}
-
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Reintentos: errores de red (fetch failed, ECONNRESET, timeouts) y HTTP 5xx
@@ -149,11 +145,15 @@ async function cargarProductos() {
   console.log('\n[productos] Descargando (con variantes)...');
   const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
   const gnIds = new Set(rows.map(p => p.id));
-  const activeIds = new Set();
+  // SOLO los explícitamente inactivos, mismo criterio que scripts/sync-inventario-solo.js:73.
+  // Antes esto era al revés (un set de activos con `active === 1 || active === true`) y todo lo
+  // que GN devolvía SIN el campo `active` — típicamente un producto recién cargado — perdía
+  // también sus filas de inventario. Un producto nuevo no es un producto inactivo.
+  const inactiveIds = new Set();
   const varBarcode = {};   // `${pid}|${sid}` -> barcode
   const prodSku = {};      // pid -> sku (respaldo)
   const productos = rows.map(p => {
-    if (p.active === 1 || p.active === true) activeIds.add(p.id);
+    if (p.active === 0 || p.active === false) inactiveIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
     (p.variantes || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
     return {
@@ -169,13 +169,13 @@ async function cargarProductos() {
       updated_at:       p.updated_at || null,
     };
   });
-  console.log(`[productos] ${productos.length} descargados (${activeIds.size} activos).`);
+  console.log(`[productos] ${productos.length} descargados (${inactiveIds.size} inactivos).`);
   await desactivarBorrados(gnIds);
-  return { activeIds, varBarcode, prodSku, productos };
+  return { inactiveIds, varBarcode, prodSku, productos };
 }
 
 async function guardarProductos(productos) {
-  console.log('[productos] Guardando en Supabase (sync semanal)...');
+  console.log('[productos] Guardando en Supabase...');
   if (!productos.length) return 0;
   const { error } = await supabase.from('productos').upsert(productos, { onConflict: 'id' });
   if (error) throw new Error(`Error guardando productos: ${error.message}`);
@@ -184,13 +184,13 @@ async function guardarProductos(productos) {
 }
 
 async function syncInventario(maps) {
-  const { activeIds, varBarcode, prodSku } = maps;
+  const { inactiveIds, varBarcode, prodSku } = maps;
   console.log('\n[inventario] Descargando (siempre completo)...');
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
   const seen = new Map();
   let saltInactivos = 0;
   for (const r of rows) {
-    if (!activeIds.has(r.product_id)) { saltInactivos++; continue; } // no cargar stock de inactivos
+    if (inactiveIds.has(r.product_id)) { saltInactivos++; continue; } // no cargar stock de inactivos
     const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     seen.set(key, {
@@ -396,27 +396,22 @@ async function main() {
   // Ventas: desde el último sync (o 2025-01-01 si nunca se corrió)
   const ventasFrom = lastSync.ventasDate || '2025-01-01';
 
-  // Productos: solo si pasaron más de 7 días desde el último sync de productos
-  const productosPendiente = !lastSync.productosDate ||
-    daysBetween(lastSync.productosDate, today) >= 7;
-
-  if (productosPendiente) {
-    console.log('\nSync semanal de productos activado.');
-  }
+  // Productos: se guardan TODOS los días. Antes había un candado de 7 días acá, y como el
+  // inventario sí se escribía a diario, quedaban filas de stock cuyo producto no existía en la
+  // tabla `productos` — y el Monitor las descartaba al cruzarlas. Un producto cargado en GN podía
+  // tardar una semana en ser visible. Sacar el candado NO suma llamadas a Gestión Nube: los
+  // productos ya se descargaban todos los días (`cargarProductos()` corre siempre); lo único que
+  // estaba frenado era el upsert a Supabase.
 
   try {
     const maps       = await cargarProductos();     // siempre (para completar barcode + saltear inactivos)
     const inventario = await syncInventario(maps);
     const ventas     = await syncVentas(ventasFrom);
-    let productos    = 'omitido';
-
-    if (productosPendiente) {
-      productos = await guardarProductos(maps.productos);
-    }
+    const productos  = await guardarProductos(maps.productos);
 
     const newSync = {
       ventasDate:    today,
-      productosDate: productosPendiente ? today : lastSync.productosDate,
+      productosDate: today,
     };
     await guardarEstado(supabase, SYNC_KEY, newSync);
 

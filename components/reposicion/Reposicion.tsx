@@ -4,6 +4,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
+import { useRecargarDatos } from '@/components/productos/BotonRecargar'
 import { dispararSyncStock } from '@/lib/sync-gn'
 import { indexarTn } from '@/lib/tn'
 import { construirInv } from '@/lib/reposicion/inventario'
@@ -15,6 +16,7 @@ import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
+  Badge,
   Button,
   EmptyState,
   Esqueleto,
@@ -57,8 +59,9 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
   const [manual, setManual] = useState<Record<string, number>>({})
   const [verVentas, setVerVentas] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
-  const [syncLabel, setSyncLabel] = useState('🔄 Actualizar reporte')
+  const [syncLabel, setSyncLabel] = useState('🔄 Traer de Gestión Nube')
   const [syncing, setSyncing] = useState(false)
+  const { recargar, cargando: recargando } = useRecargarDatos()
 
   const report = useMemo(() => reporte(inv, cfg, esBdi), [inv, cfg, esBdi])
 
@@ -82,13 +85,16 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
     try {
       await dispararSyncStock(marca, setSyncLabel)
       setSyncLabel('↻ Recargando…')
-      await rep.traer()
+      // `rep.traer()` refresca SOLO inventario + ventas 7d + config. El catálogo (`allProductos`,
+      // que es contra lo que se cruza el inventario) vive en el caché de IndexedDB y sin este
+      // `recargar()` quedaba viejo: se sincronizaba y el producto nuevo seguía sin aparecer.
+      await Promise.all([rep.traer(), recargar()])
       setManual({})
     } catch (e) {
       toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncing(false)
-      setSyncLabel('🔄 Actualizar reporte')
+      setSyncLabel('🔄 Traer de Gestión Nube')
     }
   }
 
@@ -99,15 +105,18 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
 
   // Reporte agrupado por producto, ordenado por ubicación física.
   const porProd = useMemo(() => {
-    const g: Record<string, { name: string; cat: string; ubic: string; items: RepoItem[] }> = {}
+    const g: Record<string, { name: string; cat: string; ubic: string; sinProducto: boolean; items: RepoItem[] }> = {}
     report.forEach((it) => {
-      if (!g[it.pid]) g[it.pid] = { name: it.name, cat: it.cat, ubic: it.ubic || '', items: [] }
+      if (!g[it.pid]) g[it.pid] = { name: it.name, cat: it.cat, ubic: it.ubic || '', sinProducto: it.sinProducto, items: [] }
       g[it.pid].items.push(it)
     })
     return g
   }, [report])
   const prodKeys = useMemo(() => Object.keys(porProd).sort((a, b) => ubicCmp(porProd[a].ubic, porProd[b].ubic) || porProd[a].name.localeCompare(porProd[b].name, 'es')), [porProd])
   const totalMover = report.reduce((s, it) => s + moverFinal(it, cfg, esBdi, manual), 0)
+  // Se cuenta sobre `inv` (todo el inventario) y no sobre `report`: un producto nuevo cuyo stock
+  // no llega a disparar reposición igual hay que avisarlo, porque el que falta es el catálogo.
+  const nuevosSinCatalogo = useMemo(() => new Set(inv.filter((it) => it.sinProducto).map((it) => it.pid)).size, [inv])
   const hayEdit = Object.keys(manual).length > 0
 
   return (
@@ -120,8 +129,16 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
         <Button variant="ghost" onClick={() => setConfigOpen(true)}>
           Configurar mínimos
         </Button>
-        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing}>
-          {syncing ? syncLabel : 'Actualizar reporte'}
+        <Button
+          variant="ghost"
+          onClick={() => void Promise.all([rep.traer(), recargar()])}
+          loading={recargando}
+          title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube (~20 s)"
+        >
+          Recargar
+        </Button>
+        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Le pide el stock y el catálogo a Gestión Nube (~2 min)">
+          {syncing ? syncLabel : 'Traer de Gestión Nube'}
         </Button>
         <Button variant="solid" tone="brand" onClick={() => void onPDF()} disabled={!report.length}>
           Exportar reposición
@@ -156,6 +173,23 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
             </span>
           </div>
 
+          {/* Antes estas variantes se descartaban en silencio y el stock desaparecía del reporte.
+              El cartel es la mitad importante del arreglo: aunque el catálogo se atrase, se ve. */}
+          {nuevosSinCatalogo > 0 && (
+            <Notice tone="warning" icon="✨">
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+                <span>
+                  <b>{nuevosSinCatalogo}</b> {nuevosSinCatalogo === 1 ? 'producto nuevo todavía no está' : 'productos nuevos todavía no están'} en el catálogo
+                  sincronizado. {nuevosSinCatalogo === 1 ? 'Aparece' : 'Aparecen'} igual, con el stock real, pero sin categoría — y por eso
+                  con el mínimo por defecto.
+                </span>
+                <Button size="sm" variant="outline" onClick={() => void onActualizar()} loading={syncing}>
+                  Traer de Gestión Nube
+                </Button>
+              </div>
+            </Notice>
+          )}
+
           {report.length > 0 && (
             <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
               Podés ajustar a mano la cantidad a mover: el PDF usa esos valores y omite las que dejes en 0.
@@ -177,6 +211,11 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
                     <span style={{ color: color.mut2, fontSize: font.sm }}>📍 —</span>
                   )}
                   <b style={{ fontSize: font.md, color: color.ink }}>{g.name}</b>
+                  {g.sinProducto && (
+                    <span title="Tiene stock pero todavía no está en el catálogo sincronizado: la categoría (y con ella el mínimo) aparecen después del próximo sync.">
+                      <Badge tone="warning">✨ recién cargado</Badge>
+                    </span>
+                  )}
                   <span style={{ color: color.mut2, fontSize: font.sm }}>
                     · {g.cat} · {items.length}
                   </span>

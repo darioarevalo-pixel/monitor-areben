@@ -37,10 +37,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function daysBetween(isoA, isoB) {
-  return Math.abs(new Date(isoA) - new Date(isoB)) / 86400000;
-}
-
 async function gnFetch(path, retries = 4) {
   const url = `${GN_BASE}/${path}`;
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -111,11 +107,14 @@ async function cargarProductos() {
   console.log('\n[productos] Descargando (con variantes)...');
   const rows = await fetchAllPages('productos/obtener?include_variants=1&per_page=200');
   const gnIds = new Set(rows.map(p => p.id));
-  const activeIds = new Set();   // ids activos (para filtrar el stock)
+  // SOLO los explícitamente inactivos, mismo criterio que scripts/sync-inventario-solo.js:73.
+  // Antes era un set de activos, y todo lo que GN devolvía SIN el campo `active` — típicamente un
+  // producto recién cargado — perdía también sus filas de inventario. Nuevo ≠ inactivo.
+  const inactiveIds = new Set();
   const varBarcode = {};         // `${pid}|${sid}` -> barcode (completa inventario)
   const prodSku = {};            // pid -> sku (respaldo)
   const productos = rows.map(p => {
-    if (p.active === 1 || p.active === true) activeIds.add(p.id);
+    if (p.active === 0 || p.active === false) inactiveIds.add(p.id);
     if (p.sku || p.code) prodSku[p.id] = p.sku || p.code;
     (p.variantes || []).forEach(v => { if (v.barcode) varBarcode[`${p.id}|${v.size_id}`] = v.barcode; });
     return {
@@ -132,15 +131,15 @@ async function cargarProductos() {
       updated_at:       p.updated_at || null,
     };
   });
-  console.log(`[productos] ${productos.length} descargados (${activeIds.size} activos).`);
+  console.log(`[productos] ${productos.length} descargados (${inactiveIds.size} inactivos).`);
   // prodSku robusto: sumar el sku que ya está en el espejo (evita el parpadeo del fetch con productos nuevos)
   try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
   await desactivarBorrados(gnIds);
-  return { activeIds, varBarcode, prodSku, productos };
+  return { inactiveIds, varBarcode, prodSku, productos };
 }
 
 async function guardarProductos(productos) {
-  console.log('[productos] Guardando en Supabase (sync semanal)...');
+  console.log('[productos] Guardando en Supabase...');
   if (!productos.length) return 0;
   const BATCH = 500;
   for (let i = 0; i < productos.length; i += BATCH) {
@@ -155,7 +154,7 @@ async function guardarProductos(productos) {
 }
 
 async function syncInventario(maps) {
-  const { activeIds, varBarcode, prodSku } = maps;
+  const { inactiveIds, varBarcode, prodSku } = maps;
   console.log('\n[inventario] Descargando (siempre completo)...');
   const rows = await fetchAllPages('inventario/obtener?per_page=200');
 
@@ -163,7 +162,7 @@ async function syncInventario(maps) {
   const invMap = {};
   let saltInactivos = 0;
   rows.forEach(r => {
-    if (!activeIds.has(r.product_id)) { saltInactivos++; return; } // no cargar stock de inactivos
+    if (inactiveIds.has(r.product_id)) { saltInactivos++; return; } // no cargar stock de inactivos
     const skey = `${r.product_id}|${r.size_id}`;
     const key = `${r.product_id}|${r.size_id}|${r.store_name || r.store || ''}`;
     if (!invMap[key]) {
@@ -317,25 +316,21 @@ async function main() {
   // Ventas: desde el último sync (o 2025-01-01 si nunca se corrió)
   const ventasFrom = lastSync.ventasDate || '2025-01-01';
 
-  // Productos: solo si pasaron más de 7 días desde el último sync de productos
-  const productosPendiente = !lastSync.productosDate ||
-    daysBetween(lastSync.productosDate, today) >= 7;
-
-  if (productosPendiente) console.log('\nSync semanal de productos activado.');
+  // Productos: se guardan TODOS los días. Antes había un candado de 7 días acá, y como el
+  // inventario sí se escribía a diario, quedaban filas de stock cuyo producto no existía en la
+  // tabla `productos` — y el Monitor las descartaba al cruzarlas. Sacar el candado NO suma
+  // llamadas a Gestión Nube: los productos ya se descargaban todos los días
+  // (`cargarProductos()` corre siempre); lo único frenado era el upsert a Supabase.
 
   try {
     const maps       = await cargarProductos();     // siempre (para completar barcode + saltear inactivos)
     const inventario = await syncInventario(maps);
     const ventas     = await syncVentas(ventasFrom);
-    let productos    = 'omitido';
-
-    if (productosPendiente) {
-      productos = await guardarProductos(maps.productos);
-    }
+    const productos  = await guardarProductos(maps.productos);
 
     await guardarEstado(supabase, SYNC_KEY, {
       ventasDate:    today,
-      productosDate: productosPendiente ? today : lastSync.productosDate,
+      productosDate: today,
     });
 
     console.log('\n=== Resultado ===');

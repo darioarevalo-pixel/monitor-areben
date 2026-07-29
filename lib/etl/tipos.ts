@@ -279,6 +279,12 @@ export type DatosETL = {
   allVvar: Record<string, VentasVariante>
   allProductos: Producto[]
   allVariantes: Variante[]
+  /**
+   * Variantes con stock cuyo producto todavía no está en `productos` (recién cargado en GN).
+   * Aparte de `allVariantes` para no exponerlas a las secciones que joinean contra el
+   * producto. Los cachés de IndexedDB anteriores a este campo no lo traen: leerlo con `?? []`.
+   */
+  allVariantesHuerfanas: Variante[]
   allMonths: string[]
   allMonthlyStats: EstadisticaMensual[]
   /** mes → (`${modelo}|||${product_name}` → items). */

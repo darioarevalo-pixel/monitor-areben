@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
+import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import {
   agruparCantidades,
@@ -19,7 +20,7 @@ import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from 
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, Card, Tabs, color, space, useConfirmar } from '@/components/ui'
+import { Badge, Button, Card, Notice, Tabs, color, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
 const FP_DEFAULT: LineaEtiqueta[] = [
@@ -55,7 +56,17 @@ export function Etiquetas() {
   const { datos } = useDatosMonitor()
   const tn = useEtiquetasTn(marca)
 
-  const allVariantes = useMemo(() => (datos?.allVariantes ?? []) as VarianteEti[], [datos])
+  // Las huérfanas (stock en `inventario`, producto todavía no en `productos`) vienen aparte del
+  // ETL a propósito y hay que sumarlas acá: si no, un producto recién cargado en GN no se puede
+  // etiquetar aunque su código de barras ya esté. Con `?? []` para los cachés viejos de IndexedDB.
+  const allVariantes = useMemo<VarianteEti[]>(
+    () => [
+      ...((datos?.allVariantes ?? []) as VarianteEti[]),
+      ...((datos?.allVariantesHuerfanas ?? []) as VarianteEti[]).map((v) => ({ ...v, sinProducto: true })),
+    ],
+    [datos],
+  )
+  const nuevosSinCatalogo = useMemo(() => new Set((datos?.allVariantesHuerfanas ?? []).map((v) => v.pid)).size, [datos])
   const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
   const varsById = useMemo(() => Object.fromEntries(vars.map((v) => [v.id, v])) as Record<string, VarianteEti>, [vars])
   const sinCodigo = useMemo(() => variantesSinCodigo(allVariantes), [allVariantes])
@@ -168,8 +179,21 @@ export function Etiquetas() {
   return (
     <div>
       <HeaderAcciones>
+        <BotonRecargar />
         <BotonActualizarInventario />
       </HeaderAcciones>
+
+      {/* Antes estas variantes no se listaban en ningún lado: el producto nuevo simplemente no
+          existía para Etiquetas. Ahora se etiquetan igual y el cartel explica qué les falta. */}
+      {nuevosSinCatalogo > 0 && (
+        <Notice tone="warning" icon="✨">
+          <b>
+            {nuevosSinCatalogo} {nuevosSinCatalogo === 1 ? 'producto nuevo todavía no está' : 'productos nuevos todavía no están'} en el catálogo sincronizado.
+          </b>{' '}
+          {nuevosSinCatalogo === 1 ? 'Se puede etiquetar' : 'Se pueden etiquetar'} igual (el código de barras y el stock ya están); lo que falta es el precio,
+          así que en Local y Promo {nuevosSinCatalogo === 1 ? 'sale' : 'salen'} en $0 hasta que sincronice.
+        </Notice>
+      )}
 
       <Tabs
         items={[
@@ -385,7 +409,15 @@ function ModoPanel({
                   const pr = esPromo ? promoDe(v) : null
                   return (
                     <tr key={v.id} style={{ borderTop: `1px solid ${color.line}` }}>
-                      <td style={tdC}>{v.name || '—'}</td>
+                      <td style={tdC}>
+                        {v.name || '—'}
+                        {v.sinProducto && (
+                          <span title="Tiene stock y código de barras, pero su producto todavía no está en el catálogo sincronizado: el precio aparece después del próximo sync.">
+                            {' '}
+                            <Badge tone="warning">✨ recién cargado</Badge>
+                          </span>
+                        )}
+                      </td>
                       <td style={tdC}>{v.size || '—'}</td>
                       <td style={{ ...tdC, color: color.mut }}>{v.sku || '—'}</td>
                       <td style={{ ...tdC, color: color.mut, fontFamily: 'monospace', fontSize: 12 }}>{v.barcode}</td>
@@ -419,7 +451,8 @@ function AvisoSinCodigo({ lista }: { lista: VarianteEti[] }) {
   const items = lista.slice(0, 80)
   return (
     <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: color.warningInk }}>
-      ⚠️ <b>{lista.length} producto(s) con stock SIN código de barras.</b> No se pueden etiquetar hasta tener el código (cargalo en GN; a veces GN tarda en sincronizarlo).
+      ⚠️ <b>{lista.length} {lista.length === 1 ? 'producto con stock SIN código de barras' : 'productos con stock SIN código de barras'}.</b>{' '}
+      {lista.length === 1 ? 'No se puede etiquetar' : 'No se pueden etiquetar'} hasta tener el código (cargalo en GN; a veces GN tarda en sincronizarlo).
       <details style={{ marginTop: 4 }}>
         <summary style={{ cursor: 'pointer' }}>Ver cuáles</summary>
         {items.map((v, i) => (

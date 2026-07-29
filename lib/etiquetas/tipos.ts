@@ -16,6 +16,12 @@ export type VarianteEti = {
   sku: string
   barcode: string
   stock: number
+  /**
+   * Tiene stock en `inventario` pero su producto todavía no está en el catálogo sincronizado
+   * (`allVariantesHuerfanas` del ETL). Antes estas variantes ni se listaban: un producto recién
+   * cargado en GN no se podía etiquetar y no había forma de saber por qué.
+   */
+  sinProducto?: boolean
 }
 
 /** Cantidades cargadas por modo: id de variante → cantidad. */

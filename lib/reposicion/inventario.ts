@@ -29,9 +29,16 @@ export function construirInv(inventario: FilaInvRepo[], prodById: Record<string,
     const pid = String(r.product_id)
     const sid = String(r.size_id)
     const vid = pid + '_' + sid
-    const p = prodById[pid]
-    if (!p) return
+    // Un producto recién cargado en GN entra a `inventario` antes que a `productos` (el sync
+    // los escribe por separado). Antes esa variante se descartaba acá con un `return` y el
+    // stock desaparecía del reporte sin dejar rastro. Ahora se arma un producto de respaldo
+    // con lo que ya trae la propia fila de inventario y se marca con `sinProducto`.
+    const pReal = prodById[pid]
+    const sinProducto = !pReal
+    const p: ProductoGN = pReal ?? { id: pid, name: r.product_name || null, category: null, sku: r.sku || null }
     if (!map[vid]) {
+      // `matchTn` cruza contra TiendaNube por sku/nombre: con el producto de respaldo puede no
+      // encontrar nada, y está bien — las categorías de TN se suman recién cuando sincronice.
       const tn = matchTn(p, tnIdx)
       const cats: string[] = []
       const pushCand = (c: string) => {
@@ -57,6 +64,7 @@ export function construirInv(inventario: FilaInvRepo[], prodById: Record<string,
         modelo: modeloDe(r.size_name || ''),
         s7: s7[vid] || 0,
         ubic: r.observation || '',
+        sinProducto,
       }
     }
     if (r.observation && !map[vid].ubic) map[vid].ubic = r.observation

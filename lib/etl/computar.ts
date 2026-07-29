@@ -259,22 +259,35 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
 
   const activeProductIds = new Set(allProductos.map((p) => p.id))
 
+  const conVentas = (v: VarBase): Variante => {
+    const d = vvar[v.id] || vacioVar()
+    const dsl = d.last ? daysSince(d.last, today) : 999
+    const ls = lifespanDays(v.stock, d.s30)
+    return {
+      ...v,
+      lastSale: d.last || null,
+      daysSinceLast: dsl,
+      sales7: d.s7, sales15: d.s15, sales30: d.s30, sales60: d.s60, sales90: d.s90,
+      totalSales: d.total,
+      lifespan: ls === null ? LIFESPAN_SIN_DATO : ls,
+      phase: getPhase(d.s60, d.s30, dsl),
+    }
+  }
+
   const allVariantes: Variante[] = Object.values(variantesMap)
     .filter((v) => activeProductIds.has(v.pid))
-    .map((v) => {
-      const d = vvar[v.id] || vacioVar()
-      const dsl = d.last ? daysSince(d.last, today) : 999
-      const ls = lifespanDays(v.stock, d.s30)
-      return {
-        ...v,
-        lastSale: d.last || null,
-        daysSinceLast: dsl,
-        sales7: d.s7, sales15: d.s15, sales30: d.s30, sales60: d.s60, sales90: d.s90,
-        totalSales: d.total,
-        lifespan: ls === null ? LIFESPAN_SIN_DATO : ls,
-        phase: getPhase(d.s60, d.s30, dsl),
-      }
-    })
+    .map(conVentas)
+
+  /**
+   * Las que este filtro deja afuera: tienen stock en `inventario` pero su producto todavía no
+   * está en `productos` (el sync escribe las dos tablas por separado, así que un producto
+   * recién cargado en GN aparece primero acá). Antes se perdían en silencio y el stock
+   * desaparecía de Etiquetas. Van en un array APARTE a propósito: `allVariantes` lo consumen
+   * varias secciones que joinean contra el producto, y sumarlas ahí las expondría a todas.
+   */
+  const allVariantesHuerfanas: Variante[] = Object.values(variantesMap)
+    .filter((v) => !activeProductIds.has(v.pid))
+    .map(conVentas)
 
   // Fecha de la venta más reciente cargada (date_sale es 'YYYY-MM-DD', compara como string)
   let maxVentaDate: string | null = null
@@ -461,7 +474,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     detalles: detalles || [],
     invByProduct, invByProdModelo, invDepoMin,
     prodMeta, fmKeyPids, fmProdCreatedAt,
-    allVvar: vvar, allProductos, allVariantes,
+    allVvar: vvar, allProductos, allVariantes, allVariantesHuerfanas,
     allMonths, allMonthlyStats, allFundasStats: fStats, allProveedoresData,
     allColoresSales, allAgotamientoData, allTallesData, allTallesCategories,
     proveedoresList, maxVentaDate, syncMeta,

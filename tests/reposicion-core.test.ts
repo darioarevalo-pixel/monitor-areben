@@ -3,7 +3,7 @@ import { aplicarCats, catsDisponibles, minKey, minimo, moverFinal, objetivo, rep
 import { repoCfgDefault, type RepoCfg, type RepoItem } from '@/lib/reposicion/tipos'
 
 function item(over: Partial<RepoItem> = {}): RepoItem {
-  return { vid: '10_100', pid: '10', sid: '100', name: 'Templado', size: 'iPhone 15', sku: 'T-15', local: 0, deposito: 10, cats: [], catFallback: 'VIDRIOS', cat: 'VIDRIOS', subcat: null, modelo: null, s7: 0, ubic: '', ...over }
+  return { vid: '10_100', pid: '10', sid: '100', name: 'Templado', size: 'iPhone 15', sku: 'T-15', local: 0, deposito: 10, cats: [], catFallback: 'VIDRIOS', cat: 'VIDRIOS', subcat: null, modelo: null, s7: 0, ubic: '', sinProducto: false, ...over }
 }
 function cfg(over: Partial<RepoCfg> = {}): RepoCfg {
   return { ...repoCfgDefault(), ...over }
