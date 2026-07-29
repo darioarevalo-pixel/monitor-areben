@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
 import { BancoMensajes } from './BancoMensajes'
 import { Leads } from './Leads'
+import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente } from '@/lib/crm/core'
 import {
@@ -191,9 +192,9 @@ export function CRM() {
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
   const [banco, setBanco] = useState(false)
-  const [vista, setVista] = useState<'clientes' | 'leads'>('clientes')
+  const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
-  const { cargando, error, agregado, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel } = useCRM(modo)
+  const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
   // Los que compraron pero todavía no están en el canal de difusión. Se cuenta
@@ -284,12 +285,18 @@ export function CRM() {
 
   return (
     <>
+      {/* En Métricas estas acciones no aplican: el canal no cambia el tablero (siempre es
+          el 10) y las tres de la derecha editan el seguimiento, que ahí no se ve. */}
       <HeaderAcciones>
-        <Select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)} style={{ width: 170 }} aria-label="Canal">
-          <option value="10">Mayorista</option>
-          <option value="all">Todos los canales</option>
-        </Select>
+        {vista !== 'metricas' && (
+          <Select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)} style={{ width: 170 }} aria-label="Canal">
+            <option value="10">Mayorista</option>
+            <option value="all">Todos los canales</option>
+          </Select>
+        )}
         <Button variant="ghost" onClick={recargar}>Recalcular</Button>
+        {vista !== 'metricas' && (
+          <>
         <Button variant="outline" onClick={() => setBanco(true)}>
           Banco de mensajes
         </Button>
@@ -315,6 +322,8 @@ export function CRM() {
           Cargar teléfonos
           <input type="file" accept=".xlsx,.xls,.csv" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
         </label>
+          </>
+        )}
       </HeaderAcciones>
 
       <div>
@@ -322,14 +331,17 @@ export function CRM() {
           items={[
             { key: 'clientes', label: 'Clientes' },
             { key: 'leads', label: 'Leads' },
+            { key: 'metricas', label: 'Métricas' },
           ]}
           value={vista}
-          onChange={(k) => setVista(k as 'clientes' | 'leads')}
+          onChange={(k) => setVista(k as 'clientes' | 'leads' | 'metricas')}
           style={{ marginBottom: space[4] }}
         />
 
         {vista === 'leads' ? (
           <Leads />
+        ) : vista === 'metricas' ? (
+          <Metricas ventas={ventas} cargando={cargando} />
         ) : (
           <>
             {error && (

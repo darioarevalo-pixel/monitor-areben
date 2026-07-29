@@ -33,6 +33,12 @@ export type EstadoCRM = {
   cargando: boolean
   error: string | null
   agregado: Agregado
+  /**
+   * Las ventas crudas ya cargadas. Las consume la pestaña Métricas, que necesita
+   * la venta como unidad (cuántas y por cuánto) y no el cliente agregado. Sale de
+   * acá y no de una consulta propia: es el mismo lote, sin una llamada de más.
+   */
+  ventas: FilaVenta[]
   crmSeg: MapaSeguimiento
   crmTelOverride: MapaTelefonos
   /** ¿Se pudo leer el KV? Sin esto en true, ningún guardado puede salir. */
@@ -158,5 +164,5 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     [cargado, toast],
   )
 
-  return { cargando, error, agregado, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel }
+  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel }
 }
