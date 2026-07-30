@@ -86,9 +86,16 @@ describe('sync-state sin la tabla (degradación)', () => {
     warn.mockRestore()
   })
 
-  it('guardar no tira (el sync ya trajo los datos; la próxima corrida barre de más)', async () => {
+  it('guardar no tira, pero avisa que no pudo (el sync ya trajo los datos)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await expect(guardarEstado(mockSinTabla(), 'diario', { ventasDate: '2026-07-17', productosDate: null })).resolves.toBeUndefined()
+    // No tira: el sync ya bajó los datos y la próxima corrida barre de más. Pero
+    // devuelve false, para que el sync pueda terminar en rojo en vez de dejar el
+    // fallo en un console.warn con el job en verde.
+    await expect(guardarEstado(mockSinTabla(), 'diario', { ventasDate: '2026-07-17', productosDate: null })).resolves.toBe(false)
     warn.mockRestore()
+  })
+
+  it('guardar devuelve true cuando quedó guardado', async () => {
+    await expect(guardarEstado(mockConTabla(), 'diario', { ventasDate: '2026-07-17', productosDate: null })).resolves.toBe(true)
   })
 })

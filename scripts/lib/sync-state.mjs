@@ -44,6 +44,12 @@ export async function leerEstado(supabase, clave) {
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
  * @param {string} clave
  * @param {{ventasDate: string|null, productosDate: string|null}} estado
+ * @returns {Promise<boolean>} true si quedó guardado.
+ *
+ * Devuelve el resultado en vez de solo avisar por consola: quien llama necesita
+ * poder terminar en rojo. Un `console.warn` adentro de un job que igual sale con
+ * código 0 es exactamente cómo el refresco de vistas estuvo roto una semana sin
+ * que nadie lo viera.
  */
 export async function guardarEstado(supabase, clave, estado) {
   const { error } = await supabase
@@ -57,5 +63,7 @@ export async function guardarEstado(supabase, clave, estado) {
     // Que no se pueda guardar el estado no debe tirar abajo un sync que ya trajo
     // los datos: la próxima corrida simplemente barre de más, como hoy.
     console.warn(`[sync-state] no se pudo guardar (${error.code || error.message}). El próximo sync barrerá de más. ¿Falta aplicar sql/migrate-sync-state.sql?`)
+    return false
   }
+  return true
 }

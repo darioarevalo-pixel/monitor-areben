@@ -63,6 +63,15 @@ y el guardado son de `scripts/lib/ventas-espejo.mjs` —una sola implementación
 mirarla antes la mostraría con la fecha vieja y se borraría por "desaparecida". Para el histórico
 anterior a la ventana existe `scripts/purga-historica.js`, que arranca en simulación.
 
+**El `statement_timeout` de la API de Supabase es de 8 segundos**, y las tres vistas materializadas
+juntas ya no entran. Por eso el refresco va **una llamada por vista**
+(`scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql`, que les sube el tiempo a
+120s). Mientras ese SQL no esté aplicado en una base, el módulo cae solo a `refresh_all_views()`.
+
+**Un paso que falla sin frenar el sync se junta en `problemas[]` y el script sale con código 1.**
+Antes eran `console.warn` con salida 0: el refresco de vistas estuvo roto una semana con el job en
+verde. Si el job queda en rojo, el Monitor lo muestra solo (`fetchUltimoSync` lee el `conclusion`).
+
 **`allVariantesHuerfanas` (ETL) se lee SIEMPRE con `?? []`.** Son las variantes con stock cuyo
 producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
 secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.

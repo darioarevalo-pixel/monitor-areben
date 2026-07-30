@@ -4,6 +4,19 @@ import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
+import { refrescarVistas } from './lib/refrescar-vistas.mjs';
+
+/**
+ * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
+ * estado). Al final decide el código de salida.
+ *
+ * POR QUÉ: estos pasos se escribían con `console.warn` y el proceso terminaba en
+ * 0, así que el workflow de GitHub quedaba VERDE con el refresco de vistas roto
+ * adentro. Estuvo así una semana. Si el job termina en rojo, el Monitor lo
+ * muestra solo: el cartel de "última actualización" lee el `conclusion` del
+ * último run (lib/datos.ts → fetchUltimoSync).
+ */
+const problemas = [];
 
 // Identifica esta fila en sync_state. BDI y Zattia son bases distintas, así que
 // alcanza con 'diario'; si algún día hay más de un sync por base, se distinguen acá.
@@ -255,7 +268,8 @@ async function syncInventario(maps) {
       console.log(`[inventario] limpieza: ${borradas} fila(s) que GN ya no tiene → borradas.`);
     }
   } catch (e) {
-    console.warn(`[inventario] limpieza omitida por error (no crítico): ${e.message}`);
+    console.warn(`[inventario] limpieza omitida por error: ${e.message}`);
+    problemas.push(`limpieza de inventario: ${e.message}`);
   }
 
   return inventario.length;
@@ -311,7 +325,8 @@ async function syncVentas(fromDate) {
     totales.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today);
     totales.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta);
   } catch (e) {
-    console.warn(`[ventas] purga omitida por error (no crítico): ${e.message}`);
+    console.warn(`[ventas] purga omitida por error: ${e.message}`);
+    problemas.push(`purga de ventas: ${e.message}`);
   }
 
   return totales;
@@ -349,20 +364,33 @@ async function main() {
       ventasDate:    today,
       productosDate: today,
     };
-    await guardarEstado(supabase, SYNC_KEY, newSync);
+    if (!(await guardarEstado(supabase, SYNC_KEY, newSync))) {
+      problemas.push('no se pudo guardar sync_state');
+    }
 
-    // Refrescar vistas materializadas
-    process.stdout.write('\n[vistas] Refrescando vistas materializadas...');
-    const { error: viewsError } = await supabase.rpc('refresh_all_views');
-    if (viewsError) console.log(` WARN: ${viewsError.message}`);
-    else console.log(' OK');
+    // Refrescar vistas materializadas: una llamada por vista (ver
+    // scripts/lib/refrescar-vistas.mjs y sql/migrate-refresco-vistas.sql).
+    console.log('\n[vistas] Refrescando vistas materializadas...');
+    const vistas = await refrescarVistas(supabase);
+    for (const f of vistas.fallaron) problemas.push(`vista ${f.vista}: ${f.error}`);
 
     console.log('\n=== Resultado ===');
     console.log(`Inventario:     ${inventario}`);
     console.log(`Ventas:         ${ventas.ventas} (${ventas.ventasBorradas ?? 0} borradas)`);
     console.log(`Venta detalles: ${ventas.detalles} (${ventas.detallesBorrados ?? 0} borrados)`);
     console.log(`Productos:      ${productos}`);
+    console.log(`Vistas:         ${vistas.ok.length}/${vistas.ok.length + vistas.fallaron.length} al día${vistas.legacy ? ' (por refresh_all_views)' : ''}`);
     console.log(`\nSync guardado en sync_state (Supabase)`);
+
+    // Los datos ya están bajados y guardados; lo que falló acá es accesorio. Pero
+    // el job tiene que terminar en ROJO igual, o nadie se entera.
+    if (problemas.length) {
+      console.error(`\n⚠️  Sincronización terminada CON PROBLEMAS (${problemas.length}):`);
+      for (const p of problemas) console.error(`  - ${p}`);
+      console.error('\nLos datos crudos se bajaron igual. Revisar lo de arriba.');
+      process.exit(1);
+    }
+
     console.log('Sincronización diaria completada.');
   } catch (e) {
     console.error('\nERROR:', e.message);

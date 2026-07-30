@@ -4,6 +4,10 @@ import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
+import { refrescarVistas } from './lib/refrescar-vistas.mjs';
+
+/** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
+const problemas = [];
 
 // Zattia es otra base: su propia fila en sync_state, con la misma clave 'diario'.
 const SYNC_KEY = 'diario';
@@ -231,7 +235,8 @@ async function syncInventario(maps) {
       console.log(`[inventario] limpieza: ${borradas} fila(s) que GN ya no tiene → borradas.`);
     }
   } catch (e) {
-    console.warn(`[inventario] limpieza omitida por error (no crítico): ${e.message}`);
+    console.warn(`[inventario] limpieza omitida por error: ${e.message}`);
+    problemas.push(`limpieza de inventario: ${e.message}`);
   }
 
   return inventario.length;
@@ -272,7 +277,8 @@ async function syncVentas(fromDate) {
     resultado.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today);
     resultado.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta);
   } catch (e) {
-    console.warn(`[ventas] purga omitida por error (no crítico): ${e.message}`);
+    console.warn(`[ventas] purga omitida por error: ${e.message}`);
+    problemas.push(`purga de ventas: ${e.message}`);
   }
 
   console.log(`[ventas] OK`);
@@ -306,16 +312,31 @@ async function main() {
     const ventas     = await syncVentas(ventasFrom);
     const productos  = await guardarProductos(maps.productos);
 
-    await guardarEstado(supabase, SYNC_KEY, {
-      ventasDate:    today,
-      productosDate: today,
-    });
+    if (!(await guardarEstado(supabase, SYNC_KEY, { ventasDate: today, productosDate: today }))) {
+      problemas.push('no se pudo guardar sync_state');
+    }
+
+    // Zattia NO refrescaba las vistas: el paso no existía en este script, así que
+    // Ventas mensuales de esta marca mostraba lo que hubiera quedado del último
+    // refresco a mano. Ahora corre igual que BDI.
+    console.log('\n[vistas] Refrescando vistas materializadas...');
+    const vistas = await refrescarVistas(supabase);
+    for (const f of vistas.fallaron) problemas.push(`vista ${f.vista}: ${f.error}`);
 
     console.log('\n=== Resultado ===');
     console.log(`Inventario:     ${inventario}`);
     console.log(`Ventas:         ${ventas.ventas} (${ventas.ventasBorradas ?? 0} borradas)`);
     console.log(`Venta detalles: ${ventas.detalles} (${ventas.detallesBorrados ?? 0} borrados)`);
     console.log(`Productos:      ${productos}`);
+    console.log(`Vistas:         ${vistas.ok.length}/${vistas.ok.length + vistas.fallaron.length} al día${vistas.legacy ? ' (por refresh_all_views)' : ''}`);
+
+    if (problemas.length) {
+      console.error(`\n⚠️  Sincronización terminada CON PROBLEMAS (${problemas.length}):`);
+      for (const p of problemas) console.error(`  - ${p}`);
+      console.error('\nLos datos crudos se bajaron igual. Revisar lo de arriba.');
+      process.exit(1);
+    }
+
     console.log('\nSincronización completada.');
   } catch (e) {
     console.error('\nERROR:', e.message);
