@@ -80,6 +80,15 @@ describe('prioridad — se cuentan publicaciones, no productos', () => {
     expect(filas[0].producto.id).toBe('desco')
   })
 
+  it('el producto sin ninguna foto entra en la lista y en el filtro de sin-foto', () => {
+    const vacio: ProductoFchk = { id: 'v', name: 'DISTRIC CASE GRAY', image_count: 0, imagenes: [], variantes: [] }
+    const f = armarFilas([vacio])[0]
+    expect(predicadoDe('todo')(f)).toBe(true)
+    expect(predicadoDe('sin-foto')(f)).toBe(true)
+    expect(predicadoDe('fotografia')(f)).toBe(true)
+    expect(f.impacto).toBeGreaterThan(0)
+  })
+
   it('sin problema el impacto es cero', () => {
     const sano = prod('ok', [v('A', 'a.jpg'), v('B', 'b.jpg')], {
       imagenes: [{ id: '1', src: 'a.jpg' }, { id: '2', src: 'b.jpg' }],

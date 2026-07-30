@@ -118,6 +118,20 @@ describe('auditoría — las dos colas de trabajo', () => {
     expect(estadoDe(p).cola).toBe('mixto')
   })
 
+  it('un producto sin NINGUNA foto está roto aunque no tenga colores', () => {
+    // Es DISTRIC CASE GRAY: no es de color-en-variante, es un producto suelto sin fotos. Mirando
+    // solo los colores quedaba invisible, y en la tienda se ve en blanco.
+    const p = prod([], [])
+    const e = estadoDe(p)
+    expect(e.sinNingunaFoto).toBe(true)
+    expect(e.hayProblema).toBe(true)
+    expect(e.cola).toBe('fotografia')
+  })
+
+  it('con fotos cargadas ya no está en ese estado', () => {
+    expect(estadoDe(prod([v('A', 'a.jpg')], [{ id: '1', src: 'a.jpg' }])).sinNingunaFoto).toBe(false)
+  })
+
   it('sin nada roto no hay trabajo', () => {
     const p = prod([v('A', 'a.jpg'), v('B', 'b.jpg')], [
       { id: '1', src: 'a.jpg' },

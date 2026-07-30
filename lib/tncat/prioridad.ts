@@ -60,7 +60,11 @@ export type ContextoPrioridad = {
  */
 export function impactoDe(fila: Omit<FilaAuditoria, 'impacto'>): number {
   const { estado, ventas90, stock } = fila
-  const base = estado.variantesCruzadas * 3 + estado.variantesSinFoto
+  // Un producto sin NINGUNA foto no tiene colores rotos que contar, pero está roto entero: la
+  // tienda lo muestra en blanco. Pesa por sus variantes, o por una si no tiene ninguna.
+  const base = estado.sinNingunaFoto
+    ? Math.max(1, estado.colores.length || 1) + estado.variantesSinFoto
+    : estado.variantesCruzadas * 3 + estado.variantesSinFoto
   if (!base) return 0
   const porVenta = ventas90 === undefined ? 2 : 1 + Math.log10(1 + ventas90) * 2
   // Sin stock la foto no vende hoy: pesa, pero no desaparece (puede reingresar mercadería).
@@ -153,7 +157,7 @@ export function predicadoDe(f: FiltroProblema): (fila: FilaAuditoria) => boolean
     case 'cruzada':
       return (x) => x.estado.choques.length > 0
     case 'sin-foto':
-      return (x) => x.estado.sinFoto.length > 0
+      return (x) => x.estado.sinFoto.length > 0 || x.estado.sinNingunaFoto
     case 'escritorio':
       return (x) => x.estado.hayProblema && (x.estado.cola === 'escritorio' || x.estado.cola === 'mixto')
     case 'fotografia':

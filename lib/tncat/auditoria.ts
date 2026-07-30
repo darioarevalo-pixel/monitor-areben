@@ -63,6 +63,14 @@ export type EstadoFotos = {
   variantesCruzadas: number
   /** Variantes de un color sin foto. */
   variantesSinFoto: number
+  /**
+   * El producto no tiene NINGUNA foto cargada.
+   *
+   * Va aparte de `sinFoto` (que son colores sin vincular) porque no depende de los colores: un
+   * producto sin variantes de color y sin fotos igual está roto —la tienda lo muestra en
+   * blanco— y mirando solo los colores quedaba invisible. Es el caso de DISTRIC CASE GRAY.
+   */
+  sinNingunaFoto: boolean
   cola: Cola
   /** `true` si hay algo que la auditoría considera roto. */
   hayProblema: boolean
@@ -152,16 +160,31 @@ export function estadoDe(p: ProductoFchk): EstadoFotos {
   const variantesCruzadas = choques.reduce((acc, c) => acc + Math.round((c.variantes * (c.colores.length - 1)) / c.colores.length), 0)
   const variantesSinFoto = variantesConColor(p).filter((v) => !v.image_url).length
 
-  const porResolver = choques.length + sinFoto.length
-  const cola: Cola = !porResolver
-    ? 'sin-trabajo'
-    : fotosLibres.length === 0
-      ? 'fotografia'
-      : fotosLibres.length >= porResolver
-        ? 'escritorio'
-        : 'mixto'
+  // `image_count` puede no venir; en ese caso vale la lista de imágenes que sí viene.
+  const sinNingunaFoto = (p.image_count ?? (p.imagenes || []).length) === 0
 
-  return { colores, choques, sinFoto, fotosLibres, variantesCruzadas, variantesSinFoto, cola, hayProblema: porResolver > 0 }
+  const porResolver = choques.length + sinFoto.length
+  const cola: Cola = sinNingunaFoto
+    ? 'fotografia' // no hay ni una foto: no hay nada que vincular
+    : !porResolver
+      ? 'sin-trabajo'
+      : fotosLibres.length === 0
+        ? 'fotografia'
+        : fotosLibres.length >= porResolver
+          ? 'escritorio'
+          : 'mixto'
+
+  return {
+    colores,
+    choques,
+    sinFoto,
+    fotosLibres,
+    variantesCruzadas,
+    variantesSinFoto,
+    sinNingunaFoto,
+    cola,
+    hayProblema: porResolver > 0 || sinNingunaFoto,
+  }
 }
 
 /**

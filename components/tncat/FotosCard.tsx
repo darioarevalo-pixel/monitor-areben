@@ -538,7 +538,8 @@ function Fila({
           <span style={{ fontWeight: 600 }}>{p.name}</span>
           {f.cambioDesdeRevision && <Badge tone="warning">cambió desde la revisión</Badge>}
           {f.verificado && <Badge tone="success">verificado</Badge>}
-          {e.cola === 'fotografia' && <Badge tone="neutral">falta fotografiar</Badge>}
+          {e.sinNingunaFoto && <Badge tone="danger">sin ninguna foto</Badge>}
+          {!e.sinNingunaFoto && e.cola === 'fotografia' && <Badge tone="neutral">falta fotografiar</Badge>}
         </div>
         <div style={{ fontSize: font.sm, color: paleta.mut, marginTop: 2 }}>
           {e.variantesCruzadas > 0 && (
@@ -548,6 +549,7 @@ function Fila({
           )}
           {e.variantesCruzadas > 0 && e.variantesSinFoto > 0 && ' · '}
           {e.variantesSinFoto > 0 && `${e.variantesSinFoto} sin foto propia`}
+          {e.sinNingunaFoto && 'El producto no tiene ninguna foto cargada — subilas en Carga de imágenes, acá arriba.'}
           {!e.hayProblema && (f.cambioDesdeRevision ? 'Sin problemas detectables, pero hay que volver a mirarlo.' : 'Sin problemas detectados.')}
         </div>
         <div style={{ fontSize: font.xs, color: paleta.mut2, marginTop: 2 }}>

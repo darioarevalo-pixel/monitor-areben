@@ -134,11 +134,18 @@ export function FichaProducto({
         </Notice>
       )}
 
-      {fila.estado.cola === 'fotografia' && (
-        <Notice tone="warning" style={{ marginBottom: space[3] }}>
-          <b>Acá no hay nada para vincular.</b> Todas las fotos del producto ya están en uso: falta fotografiar los
-          colores que quedaron sin la suya.
+      {fila.estado.sinNingunaFoto ? (
+        <Notice tone="danger" style={{ marginBottom: space[3] }}>
+          <b>Este producto no tiene ninguna foto cargada.</b> En la tienda se ve en blanco. Subilas desde «Carga de
+          imágenes», arriba de esta card; recién ahí se van a poder pegar a cada color.
         </Notice>
+      ) : (
+        fila.estado.cola === 'fotografia' && (
+          <Notice tone="warning" style={{ marginBottom: space[3] }}>
+            <b>Acá no hay nada para vincular.</b> Todas las fotos del producto ya están en uso: falta fotografiar los
+            colores que quedaron sin la suya.
+          </Notice>
+        )
       )}
 
       {!colores.length ? (
