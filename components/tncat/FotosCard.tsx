@@ -64,6 +64,12 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
   const [data, setData] = useState<ProductoFchk[]>([])
   const [cargando, setCargando] = useState(true)
+  /**
+   * Por qué no hay datos. Antes esto se tragaba en un `catch {}` y la pantalla quedaba en
+   * cero — que es indistinguible de "está todo bien" y es la peor cara que puede poner un
+   * tablero: dice que no hay nada roto justo cuando no pudo mirar.
+   */
+  const [error, setError] = useState<string | null>(null)
   const [idx, setIdx] = useState<IndiceTn | null>(null)
   const [abierto, setAbierto] = useState<string | null>(null)
 
@@ -91,10 +97,12 @@ export function FotosCard({ marca }: { marca: Marca }) {
         if (!sigueVivo()) return
         setData(d)
         setIdx(indicesDe(d).promo)
-      } catch {
+        setError(d.length ? null : 'La tienda contestó, pero sin ningún producto.')
+      } catch (e) {
         if (!sigueVivo()) return
         setData([])
         setIdx(indexarTn([]))
+        setError('No se pudo traer el catálogo de TiendaNube: ' + (e instanceof Error ? e.message : String(e)))
       } finally {
         if (sigueVivo()) setCargando(false)
       }
@@ -163,6 +171,14 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const categorias = useMemo(() => categoriasDe(filas), [filas])
   const nVerificados = filas.filter((f) => f.verificado).length
   const nCambiados = recortadas.filter((f) => f.cambioDesdeRevision).length
+
+  // Cuántos productos con problema quedaron afuera por los recortes. Sin esto, filtrar de más
+  // se ve idéntico a "no hay nada roto": el tablero muestra cero y no dice por qué.
+  const conProblema = useMemo(() => filas.filter((f) => f.estado.hayProblema || f.cambioDesdeRevision).length, [filas])
+  const escondidos = conProblema - tablero.productos
+  // El stock y las ventas salen del ETL, que carga aparte y tarda. Mientras no esté, los
+  // recortes que dependen de él no filtran nada — hay que decirlo, no simularlo.
+  const cruceListo = !!stockPorTn
   const abiertaFila = abierto ? (lista.find((f) => String(f.producto.id) === abierto) ?? filas.find((f) => String(f.producto.id) === abierto)) : null
 
   // ── Escrituras ────────────────────────────────────────────────────────────────
@@ -288,6 +304,15 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
       {cargando ? (
         <div style={{ padding: space[4], color: paleta.mut2 }}>Cargando estado de fotos…</div>
+      ) : error ? (
+        <Notice tone="danger">
+          <b>No se pudo revisar nada.</b> {error}
+          <div style={{ marginTop: space[2] }}>
+            <Button size="sm" variant="outline" onClick={() => void cargar(true, () => true)}>
+              Reintentar
+            </Button>
+          </div>
+        </Notice>
       ) : (
         <>
           {/* El tablero: se cuentan publicaciones, no productos. */}
@@ -347,14 +372,19 @@ export function FotosCard({ marca }: { marca: Marca }) {
           {!buscando && (
             <>
               <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[2], paddingBottom: space[2], borderBottom: `1px solid ${paleta.bg2}` }}>
-                <label style={etiqueta}>
+                <label style={{ ...etiqueta, opacity: cruceListo ? 1 : 0.55 }} title={cruceListo ? undefined : 'Todavía se están cargando los datos de Gestión Nube'}>
                   <input type="checkbox" checked={soloConStock} disabled={verIgnorados} onChange={(e) => setSoloConStock(e.target.checked)} />
                   Solo con stock
                 </label>
-                <label style={etiqueta}>
+                <label style={{ ...etiqueta, opacity: cruceListo ? 1 : 0.55 }} title={cruceListo ? undefined : 'Todavía se están cargando los datos de Gestión Nube'}>
                   <input type="checkbox" checked={soloQueSeVende} disabled={verIgnorados} onChange={(e) => setSoloQueSeVende(e.target.checked)} />
                   Solo lo que se vende
                 </label>
+                {!cruceListo && (
+                  <span style={{ fontSize: font.xs, color: paleta.mut2 }}>
+                    (el stock y las ventas todavía se están cargando: por ahora estos dos no filtran)
+                  </span>
+                )}
                 <InfoPopover titulo="Solo lo que se vende">
                   Mira las ventas de los últimos 90 días en Gestión Nube. Es el recorte que hace que la revisión se
                   pueda terminar: en Zattia son 288 productos con color en la variante y revisarlos todos a ojo no
@@ -405,13 +435,32 @@ export function FotosCard({ marca }: { marca: Marca }) {
             </>
           )}
 
+          {!buscando && !verIgnorados && escondidos > 0 && (
+            <div style={{ fontSize: font.sm, color: paleta.mut2, marginBottom: space[2] }}>
+              {escondidos === 1 ? 'Hay 1 producto con problema fuera de esta vista' : `Hay ${escondidos} productos con problema fuera de esta vista`} por los
+              filtros de arriba.{' '}
+              <button
+                onClick={() => {
+                  setSoloConStock(false)
+                  setSoloQueSeVende(false)
+                  setCategoria('')
+                }}
+                style={enlace}
+              >
+                Ver todo
+              </button>
+            </div>
+          )}
+
           {!lista.length ? (
             <div style={{ color: paleta.mut2, fontSize: font.base, padding: space[5], textAlign: 'center' }}>
               {buscando
                 ? 'Ningún producto coincide con esa búsqueda.'
                 : verIgnorados
                   ? 'No hay productos apartados de la revisión.'
-                  : '✓ No queda nada para arreglar con estos filtros.'}
+                  : conProblema > 0
+                    ? `Los ${conProblema} productos con algo para arreglar quedaron fuera de esta vista. Sacá los filtros de arriba para verlos.`
+                    : `✓ Los ${data.length} productos de la tienda están bien.`}
             </div>
           ) : (
             <>
