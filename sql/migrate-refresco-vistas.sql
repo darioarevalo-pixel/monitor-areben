@@ -106,10 +106,26 @@ $$;
 
 -- El sync entra con la service key; el resto de la app no tiene por qué poder
 -- disparar un refresco.
-REVOKE EXECUTE ON FUNCTION refresh_ventas_por_mes()            FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION refresh_ventas_por_categoria_mes()  FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION refresh_fundas_por_modelo_mes()     FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION refresh_all_views()                 FROM anon, authenticated;
+--
+-- ⚠️ VA CONTRA `PUBLIC`, NO CONTRA `anon`. En Postgres toda función nace con
+-- EXECUTE otorgado a PUBLIC, y `anon` llega por ahí: revocarle a `anon` no le
+-- saca nada. La primera versión de este archivo hacía justamente eso y quedó
+-- comprobado que con la anon key —que viaja en el bundle del browser, ver
+-- lib/cuentas.ts— cualquiera podía disparar un refresco: HTTP 204 en las dos
+-- bases. Un refresco toma un candado exclusivo sobre la vista, así que llamarlo
+-- en loop es una forma barata de tirar abajo Ventas mensuales.
+--
+-- Después de revocar a PUBLIC hay que devolverle el permiso a `service_role`
+-- explícitamente, que es con quien entra el sync.
+REVOKE EXECUTE ON FUNCTION refresh_ventas_por_mes()            FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION refresh_ventas_por_categoria_mes()  FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION refresh_fundas_por_modelo_mes()     FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION refresh_all_views()                 FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION refresh_ventas_por_mes()             TO service_role;
+GRANT EXECUTE ON FUNCTION refresh_ventas_por_categoria_mes()   TO service_role;
+GRANT EXECUTE ON FUNCTION refresh_fundas_por_modelo_mes()      TO service_role;
+GRANT EXECUTE ON FUNCTION refresh_all_views()                  TO service_role;
 
 
 -- ── Verificación ─────────────────────────────────────────────────────────────
