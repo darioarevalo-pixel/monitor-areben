@@ -1,6 +1,33 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+/**
+ * Revisar fotos por variante: que ningún color muestre la foto de otro color, y que eso se
+ * mantenga solo con el tiempo.
+ *
+ * Nació preguntándose una sola cosa —"¿este color tiene alguna foto?"— y así dejaba pasar el
+ * error que más caro sale: **la misma foto vinculada a dos colores distintos**. El producto
+ * figura como "4 de 4 colores con foto ✓", el filtro lo esconde, y mientras tanto dos colores
+ * muestran la funda equivocada. Como cada combinación color × modelo es una publicación
+ * distinta en Mercado Libre, eso llega al cliente: compra violeta y recibe negra.
+ *
+ * Tres decisiones que ordenan la pantalla:
+ *
+ * - **Se cuentan publicaciones, no productos.** BORDER CASE ensucia 3 y PROTECTOR DE CÁMARA
+ *   METALIZADO ensucia 63. Una lista que dice "5 productos con problema" los pone en la misma
+ *   fila y hace que se les dedique el mismo esfuerzo.
+ * - **El buscador se saltea los filtros.** Los filtros son para cuando no sabés por dónde
+ *   empezar; el buscador, para cuando sí sabés. Antes buscaba dentro de lo ya filtrado, y por
+ *   eso buscar "BORDER CASE" no devolvía nada: el producto que originó esta auditoría era
+ *   invisible al buscador de la pantalla que debería encontrarlo.
+ * - **"Verificado" caduca solo.** Se guarda junto con una firma del estado de fotos; si alguien
+ *   las toca, el producto vuelve a la lista. Sin eso, un verificado viejo taparía un error
+ *   nuevo, que es peor que no auditar.
+ *
+ * La lógica pura está en `lib/tncat/auditoria.ts` (qué está roto) y `lib/tncat/prioridad.ts`
+ * (en qué orden y sobre qué recorte). Acá solo vive el estado de la pantalla.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -8,71 +35,216 @@ import { indexarTn, type IndiceTn } from '@/lib/tn'
 import { indicesDe } from '@/lib/tn-audit'
 import type { Marca } from '@/lib/nav'
 import { auditVariantes, bustAudit, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
-import { stockPorProductoTn } from '@/lib/tncat/agotados'
-import { aplicarRecortes, categoriasDe, coloresConFoto, filtrar, sinFoto, sinVincular } from '@/lib/tncat/fchk'
+import { stockPorProductoTn, ventas90PorProductoTn } from '@/lib/tncat/agotados'
+import {
+  aplicarRecortes,
+  armarFilas,
+  buscar,
+  categoriasDe,
+  ordenar,
+  predicadoDe,
+  referenciaDe,
+  resumen,
+  type FilaAuditoria,
+  type FiltroProblema,
+} from '@/lib/tncat/prioridad'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
-import type { FiltroFchk, ProductoFchk } from '@/lib/tncat/tipos'
-import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { desmarcarVerificado, leerVerificadas, mapaDe, marcarVerificado } from '@/lib/tncat/verificadas'
+import type { ImagenFchk, ProductoFchk } from '@/lib/tncat/tipos'
+import { Badge, Button, Card, Chips, color as paleta, font, KpiCard, Notice, space, useConfirmar, useToast } from '@/components/ui'
+import { FichaProducto } from './FichaProducto'
 
-const MAX = 150
+const MAX = 80
 
-/** Acción pendiente de confirmar en el modal (con preview grande). Nada escribe hasta Aceptar. */
-type Accion = {
-  tipo: 'vincular' | 'quitar'
-  prodId: string | number
-  color: string
-  src: string | null // foto a mostrar en grande (candidata a vincular, o la actual a quitar)
-  imageId?: string | number // solo en 'vincular'
-  pending?: boolean
-  error?: string
-}
-
-/**
- * Revisar fotos por variante (card 3, fchk). Encuentra productos donde una foto se
- * cargó pero no quedó pegada al color, o que no tienen ninguna. Tocá una foto del
- * producto para vincularla al color (ESCRIBE en TN). Port de fchk*.
- */
 export function FotosCard({ marca }: { marca: Marca }) {
   const { pedirTexto } = useConfirmar()
   const toast = useToast()
   const { perfil } = useSesion()
   const { datos } = useDatosMonitor()
+
   const [data, setData] = useState<ProductoFchk[]>([])
   const [cargando, setCargando] = useState(true)
-  const [filtro, setFiltro] = useState<FiltroFchk>('problema')
-  const [busqueda, setBusqueda] = useState('')
-  const [accion, setAccion] = useState<Accion | null>(null)
+  const [idx, setIdx] = useState<IndiceTn | null>(null)
+  const [abierto, setAbierto] = useState<string | null>(null)
 
-  // Los tres recortes que hacen usable una lista de 200 y pico de productos.
+  const [filtro, setFiltro] = useState<FiltroProblema>('todo')
+  const [busqueda, setBusqueda] = useState('')
   const [soloConStock, setSoloConStock] = useState(true)
-  const [categoria, setCategoria] = useState<string>('')
+  const [soloQueSeVende, setSoloQueSeVende] = useState(false)
+  const [categoria, setCategoria] = useState('')
+  const [verVerificados, setVerVerificados] = useState(false)
+
   const [ignorados, setIgnorados] = useState<Set<string>>(new Set())
   const [verIgnorados, setVerIgnorados] = useState(false)
-  const [idx, setIdx] = useState<IndiceTn | null>(null)
+  const [huellas, setHuellas] = useState<Map<string, string>>(new Map())
+
+  // ── Datos ─────────────────────────────────────────────────────────────────────
+  /**
+   * `sigueVivo` evita pisar el estado con la respuesta de una marca que ya no es la que se está
+   * mirando: cambiar de marca dispara otra bajada y la vieja puede llegar después.
+   */
+  const cargar = useCallback(
+    async (refrescar: boolean, sigueVivo: () => boolean) => {
+      setCargando(true)
+      try {
+        const d = await auditVariantes(marca, refrescar)
+        if (!sigueVivo()) return
+        setData(d)
+        setIdx(indicesDe(d).promo)
+      } catch {
+        if (!sigueVivo()) return
+        setData([])
+        setIdx(indexarTn([]))
+      } finally {
+        if (sigueVivo()) setCargando(false)
+      }
+    },
+    [marca],
+  )
 
   useEffect(() => {
     let vivo = true
+    void (async () => {
+      await cargar(false, () => vivo)
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [cargar])
+
+  useEffect(() => {
+    let vivo = true
+    // Si alguna de las dos no se puede leer se sigue igual: mostrar de más es preferible a
+    // esconder un producto que hay que arreglar.
     leerIgnorados(marca)
       .then((l) => vivo && setIgnorados(new Set(l.map((x) => String(x.tn_id)))))
-      .catch(() => {
-        /* si no se pueden leer, se muestran todos: es peor esconder de más */
-      })
+      .catch(() => {})
+    leerVerificadas(marca)
+      .then((l) => vivo && setHuellas(mapaDe(l)))
+      .catch(() => {})
     return () => {
       vivo = false
     }
   }, [marca])
 
   const stockPorTn = useMemo(() => (idx && datos ? stockPorProductoTn(datos.allProductos, idx) : undefined), [idx, datos])
+  const ventas90PorTn = useMemo(() => (idx && datos ? ventas90PorProductoTn(datos.allProductos, idx) : undefined), [idx, datos])
 
-  const ignorar = async (p: ProductoFchk) => {
+  const filas = useMemo(
+    () => armarFilas(data, { stockPorTn, ventas90PorTn, huellasVerificadas: huellas }),
+    [data, stockPorTn, ventas90PorTn, huellas],
+  )
+
+  // ── Qué se está mirando ───────────────────────────────────────────────────────
+  // El buscador manda sobre todo lo demás: si lo estás buscando a propósito, ya decidiste que
+  // te importa, esté como esté (sin stock, verificado, apartado, o sin ningún problema).
+  const buscando = busqueda.trim().length > 0
+
+  const recortadas = useMemo(
+    () =>
+      verIgnorados
+        ? filas.filter((f) => ignorados.has(String(f.producto.id)))
+        : aplicarRecortes(filas, {
+            soloConStock,
+            soloQueSeVende,
+            categoria: categoria || null,
+            ignorados,
+            verVerificados,
+          }),
+    [filas, verIgnorados, ignorados, soloConStock, soloQueSeVende, categoria, verVerificados],
+  )
+
+  const lista = useMemo(
+    () => (buscando ? ordenar(buscar(filas, busqueda)) : ordenar(recortadas.filter(predicadoDe(filtro)))),
+    [buscando, filas, busqueda, recortadas, filtro],
+  )
+
+  const tablero = useMemo(() => resumen(recortadas), [recortadas])
+  const categorias = useMemo(() => categoriasDe(filas), [filas])
+  const nVerificados = filas.filter((f) => f.verificado).length
+  const nCambiados = recortadas.filter((f) => f.cambioDesdeRevision).length
+  const abiertaFila = abierto ? (lista.find((f) => String(f.producto.id) === abierto) ?? filas.find((f) => String(f.producto.id) === abierto)) : null
+
+  // ── Escrituras ────────────────────────────────────────────────────────────────
+  /**
+   * Refleja el cambio en memoria y avisa que el catálogo cacheado quedó viejo. Sin lo segundo,
+   * al volver a entrar a la sección se vería el estado de antes y el cambio parecería perdido
+   * (en TiendaNube sí quedó hecho).
+   */
+  const aplicarLocal = (prodId: string | number, color: string, nuevaFoto: string | null) => {
+    void bustAudit(marca)
+    setData((prev) =>
+      prev.map((x) =>
+        String(x.id) !== String(prodId)
+          ? x
+          : { ...x, variantes: (x.variantes || []).map((v) => (v.color === color ? { ...v, image_url: nuevaFoto } : v)) },
+      ),
+    )
+  }
+
+  const accionesDe = (fila: FilaAuditoria) => {
+    const prodId = fila.producto.id
+    const id = String(prodId)
+    return {
+      vincular: async (color: string, imagen: ImagenFchk): Promise<string | null> => {
+        try {
+          const j = await vincularColor(marca, prodId, imagen.id, color)
+          if (!j.ok || !(j.variantesObjetivo ?? 0) || (j.variantesAsignadas ?? 0) < (j.variantesObjetivo ?? 0)) {
+            return j.error || ((j.variantesObjetivo ?? 0) === 0 ? `El color "${color}" no coincide con ninguna variante en la tienda.` : `Se vincularon ${j.variantesAsignadas ?? 0} de ${j.variantesObjetivo}.`)
+          }
+          aplicarLocal(prodId, color, imagen.src)
+          return null
+        } catch {
+          return 'Error de conexión.'
+        }
+      },
+      quitar: async (color: string): Promise<string | null> => {
+        try {
+          const j = await desvincularColor(marca, prodId, color)
+          if (!j.ok || !(j.variantesObjetivo ?? 0) || (j.variantesDesasignadas ?? 0) < (j.variantesObjetivo ?? 0)) {
+            return j.error || `Se quitaron ${j.variantesDesasignadas ?? 0} de ${j.variantesObjetivo ?? 0}.`
+          }
+          aplicarLocal(prodId, color, null)
+          return null
+        } catch {
+          return 'Error de conexión.'
+        }
+      },
+      verificar: async (huella: string): Promise<string | null> => {
+        try {
+          await marcarVerificado(marca, id, huella, fila.producto.name, perfil?.name)
+          setHuellas((prev) => new Map(prev).set(id, huella))
+          return null
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e)
+        }
+      },
+      desverificar: async (): Promise<string | null> => {
+        try {
+          await desmarcarVerificado(marca, id)
+          setHuellas((prev) => {
+            const n = new Map(prev)
+            n.delete(id)
+            return n
+          })
+          return null
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e)
+        }
+      },
+    }
+  }
+
+  const ignorar = async (fila: FilaAuditoria) => {
+    const p = fila.producto
     const motivo = await pedirTexto(`¿Por qué no hay que revisar "${p.name}"?`, MOTIVOS_IGNORAR[0], {
-      titulo: 'Ignorar el producto',
-      ok: 'Ignorar',
+      titulo: 'Apartar el producto',
+      ok: 'Apartar',
       placeholder: MOTIVOS_IGNORAR.join(' · '),
     })
     if (motivo === null) return
     const id = String(p.id)
-    setIgnorados((prev) => new Set([...prev, id])) // optimista
+    setIgnorados((prev) => new Set([...prev, id]))
     try {
       await ignorarProducto(marca, id, p.name, motivo.trim() || 'Otro', perfil?.name)
     } catch (e) {
@@ -85,8 +257,8 @@ export function FotosCard({ marca }: { marca: Marca }) {
     }
   }
 
-  const restaurar = async (p: ProductoFchk) => {
-    const id = String(p.id)
+  const restaurar = async (fila: FilaAuditoria) => {
+    const id = String(fila.producto.id)
     setIgnorados((prev) => {
       const n = new Set(prev)
       n.delete(id)
@@ -100,370 +272,274 @@ export function FotosCard({ marca }: { marca: Marca }) {
     }
   }
 
-  /**
-   * El índice de TN sirve para cruzar el stock de GN por producto (el match es el mismo que
-   * usan Ocultar agotados y Márgenes), y sale del MISMO payload que la lista de variantes: es
-   * el catálogo entero, con dos campos de más. Pedirlo aparte era bajar la tienda dos veces.
-   */
-  const cargar = async (refrescar = false) => {
-    setCargando(true)
-    try {
-      const d = await auditVariantes(marca, refrescar)
-      setData(d)
-      setIdx(indicesDe(d).promo)
-    } catch {
-      setData([])
-      setIdx(indexarTn([]))
-    } finally {
-      setCargando(false)
-    }
-  }
-
-  useEffect(() => {
-    let vivo = true
-    ;(async () => {
-      setCargando(true)
-      try {
-        const d = await auditVariantes(marca)
-        if (!vivo) return
-        setData(d)
-        setIdx(indicesDe(d).promo)
-      } catch {
-        if (vivo) {
-          setData([])
-          setIdx(indexarTn([]))
-        }
-      } finally {
-        if (vivo) setCargando(false)
-      }
-    })()
-    return () => {
-      vivo = false
-    }
-  }, [marca])
-
-  // Primero los recortes (stock / ignorados / categoría) y recién después el filtro de
-  // problema: así los contadores de arriba cuentan lo que se está mirando, no el catálogo
-  // entero. La pestaña "ignorados" muestra justamente lo apartado, para poder revertirlo.
-  const visible = useMemo(
-    () =>
-      verIgnorados
-        ? data.filter((p) => ignorados.has(String(p.id)))
-        : aplicarRecortes(data, { soloConStock, stockPorTn, ignorados, categoria: categoria || null }),
-    [data, verIgnorados, ignorados, soloConStock, stockPorTn, categoria],
-  )
-  const categorias = useMemo(() => categoriasDe(data), [data])
-  const nSinVinc = visible.filter(sinVincular).length
-  const nSinFoto = visible.filter(sinFoto).length
-  const lista = filtrar(visible, filtro, busqueda)
-  const nApartados = data.length - aplicarRecortes(data, { soloConStock, stockPorTn, ignorados, categoria: categoria || null }).length
-
-  // Abren el modal de confirmación (con preview grande). NO escriben todavía.
-  const pedirVincular = (prodId: string | number, imageId: string | number, color: string, src: string | null) =>
-    setAccion({ tipo: 'vincular', prodId, imageId, color, src })
-  const pedirQuitar = (prodId: string | number, color: string, src: string | null) =>
-    setAccion({ tipo: 'quitar', prodId, color, src })
-
-  // Confirmación del modal: recién acá se escribe en TiendaNube.
-  const ejecutar = async () => {
-    if (!accion || accion.pending) return
-    const { tipo, prodId, color, imageId } = accion
-    setAccion((a) => (a ? { ...a, pending: true, error: undefined } : a))
-    try {
-      const j =
-        tipo === 'vincular'
-          ? await vincularColor(marca, prodId, imageId as string | number, color)
-          : await desvincularColor(marca, prodId, color)
-      const hechas = tipo === 'vincular' ? j.variantesAsignadas : j.variantesDesasignadas
-      if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (hechas ?? 0) >= (j.variantesObjetivo ?? 0)) {
-        // Refleja el cambio en memoria sin re-pegar al server. En 'quitar' la foto pasa a null.
-        //
-        // Y se avisa que el catálogo cacheado quedó viejo, que es lo único que este `setData`
-        // no alcanza a arreglar: sin eso, al volver a entrar a la sección se vería el estado
-        // de antes de vincular y el cambio parecería perdido (en TN sí quedó hecho). Es lo
-        // mismo que hacen Cargar imágenes, Ocultar agotados y Volver a mostrar al escribir.
-        void bustAudit(marca)
-        const nuevaFoto = tipo === 'vincular' ? accion.src : null
-        setData((prev) =>
-          prev.map((x) =>
-            x.id !== prodId
-              ? x
-              : {
-                  ...x,
-                  variantes: (x.variantes || []).map((v) => (v.color === color ? { ...v, image_url: nuevaFoto } : v)),
-                  variantes_con_foto: (x.variantes || []).filter((v) => (v.color === color ? nuevaFoto : v.image_url)).length,
-                },
-          ),
-        )
-        setAccion(null)
-      } else {
-        const detalle = j.error || ((j.variantesObjetivo ?? 0) === 0 ? `el color "${color}" no coincide con ninguna variante en TN` : `${tipo === 'vincular' ? 'vinculó' : 'quitó'} ${hechas ?? 0}/${j.variantesObjetivo}`)
-        setAccion((a) => (a ? { ...a, pending: false, error: detalle } : a))
-      }
-    } catch {
-      setAccion((a) => (a ? { ...a, pending: false, error: 'Error de conexión.' } : a))
-    }
-  }
-
-  const btn = (k: FiltroFchk, t: string) => (
-    <button
-      onClick={() => setFiltro(k)}
-      style={{ border: `1px solid ${filtro === k ? paleta.brandSolid : paleta.line2}`, background: filtro === k ? paleta.brandSolid : '#fff', color: filtro === k ? '#fff' : paleta.ink2, borderRadius: 8, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
-    >
-      {t}
-    </button>
-  )
-
+  // ── Pantalla ──────────────────────────────────────────────────────────────────
   return (
     <Card>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>Revisar fotos por variante</div>
-        <button className="btn-sm" onClick={() => cargar(true)} title="Volvé a traer el estado real desde TiendaNube" style={{ background: '#fff', border: `1px solid ${paleta.line2}`, marginLeft: 'auto' }}>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: font.xl, fontWeight: 700 }}>Revisar fotos por variante</div>
+        <Button variant="outline" size="sm" style={{ marginLeft: 'auto' }} onClick={() => void cargar(true, () => true)} title="Volvé a traer el estado real desde TiendaNube">
           Actualizar
-        </button>
+        </Button>
       </div>
-      <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px' }}>
-        Encontrá los productos donde una foto se cargó pero <b>no quedó pegada al color</b>, o que no tienen ninguna foto. Tocá una foto para verla en grande y confirmar el cambio.
+      <div style={{ fontSize: font.sm, color: paleta.mut2, margin: '2px 0 12px' }}>
+        Que ningún color muestre la foto de otro. Cada color × modelo es una publicación distinta, así que una foto mal
+        pegada llega al cliente.
       </div>
 
       {cargando ? (
-        <div style={{ padding: 16, color: paleta.mut2 }}>Cargando estado de fotos…</div>
+        <div style={{ padding: space[4], color: paleta.mut2 }}>Cargando estado de fotos…</div>
       ) : (
         <>
-          {/* Recortes: qué parte del catálogo se está mirando. Van arriba de los filtros de
-              problema porque decidir "sobre qué" es anterior a decidir "qué buscar". */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${paleta.bg2}` }}>
-            <label style={{ fontSize: 12.5, color: paleta.ink2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <input type="checkbox" checked={soloConStock} disabled={verIgnorados} onChange={(e) => setSoloConStock(e.target.checked)} />
-              Solo con stock
-            </label>
-            <InfoPopover titulo="Solo con stock">
-              La foto sirve para vender: si el producto no tiene unidades en Gestión Nube, arreglarla no es
-              trabajo de hoy. Si un producto no se pudo cruzar con la tienda, se muestra igual — preferimos
-              que sobre uno antes que esconder uno que sí hay que arreglar.
-            </InfoPopover>
-
-            {categorias.length > 0 && (
-              <label style={{ fontSize: 12.5, color: paleta.ink2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                Categoría
-                <select
-                  value={categoria}
-                  disabled={verIgnorados}
-                  onChange={(e) => setCategoria(e.target.value)}
-                  style={{ padding: '5px 8px', border: `1px solid ${paleta.line2}`, borderRadius: 7, fontSize: 12.5, cursor: 'pointer', maxWidth: 220 }}
-                >
-                  <option value="">Todas</option>
-                  {categorias.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            <button
-              className="btn-sm"
-              onClick={() => setVerIgnorados((v) => !v)}
-              style={{ background: verIgnorados ? paleta.brandBg : '#fff', border: `1px solid ${verIgnorados ? paleta.brandBorder : paleta.line2}`, color: verIgnorados ? paleta.brand : paleta.ink2, marginLeft: 'auto' }}
-            >
-              {verIgnorados ? '← Volver a la revisión' : `Ignorados (${ignorados.size})`}
-            </button>
+          {/* El tablero: se cuentan publicaciones, no productos. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: space[3], marginBottom: space[4] }}>
+            <KpiCard
+              label="Publicaciones con la foto cruzada"
+              value={tablero.cruzadas}
+              tone={tablero.cruzadas ? 'danger' : 'success'}
+              sub="El cliente compra un color y recibe otro"
+              onClick={() => setFiltro('cruzada')}
+              activo={filtro === 'cruzada'}
+              accion="Ver solo estas →"
+              accionActiva="Filtrando ✓"
+            />
+            <KpiCard
+              label="Publicaciones sin foto propia"
+              value={tablero.sinFoto}
+              tone={tablero.sinFoto ? 'warning' : 'success'}
+              sub="Muestran la foto principal del producto"
+              onClick={() => setFiltro('sin-foto')}
+              activo={filtro === 'sin-foto'}
+              accion="Ver solo estas →"
+              accionActiva="Filtrando ✓"
+            />
+            <KpiCard label="Productos para revisar" value={tablero.productos} sub={`${nVerificados} ya verificados`} />
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            {btn('problema', 'Todos con problema')}
-            {btn('sinvincular', `Sin vincular al color (${nSinVinc})`)}
-            {btn('sinfoto', `Sin ninguna foto (${nSinFoto})`)}
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar producto…" style={{ flex: 1, minWidth: 180, padding: '7px 9px', border: `1px solid ${paleta.line2}`, borderRadius: 7 }} />
-          </div>
-
-          {!verIgnorados && nApartados > 0 && (
-            <div style={{ fontSize: 12, color: paleta.mut2, marginBottom: 8 }}>
-              {nApartados === 1 ? 'Hay 1 producto fuera de esta vista' : `Hay ${nApartados} productos fuera de esta vista`} por los recortes de arriba.
-            </div>
+          {nCambiados > 0 && (
+            <Notice tone="warning" style={{ marginBottom: space[3] }}>
+              <b>{nCambiados === 1 ? 'Un producto cambió' : `${nCambiados} productos cambiaron`} después de la última
+              revisión.</b> Alguien cargó o revinculó fotos, así que lo que se había dado por bueno hay que mirarlo de
+              nuevo. Están en la lista, marcados.
+            </Notice>
           )}
 
-          {lista.length === 0 ? (
-            <div style={{ color: paleta.mut2, fontSize: 13, padding: 16, textAlign: 'center' }}>
-              {verIgnorados ? 'No hay productos apartados de la revisión.' : 'No hay productos con problema en este filtro.'}
+          {/* Buscador. Va arriba de todo y por fuera de los filtros a propósito: es el otro
+              modo de usar la pantalla, no un filtro más. */}
+          <div style={{ marginBottom: space[3] }}>
+            <input
+              className="mo-input"
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre o código (escaneá el producto)…"
+              style={{ width: '100%', padding: '9px 11px', border: `1px solid ${busqueda ? paleta.brandBorder : paleta.line2}`, borderRadius: 8 }}
+            />
+            {buscando && (
+              <div style={{ fontSize: font.sm, color: paleta.brand, marginTop: 4 }}>
+                Buscando en el catálogo entero, sin filtros — {lista.length === 1 ? '1 producto' : `${lista.length} productos`}.{' '}
+                <button onClick={() => setBusqueda('')} style={enlace}>
+                  Volver a la lista
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!buscando && (
+            <>
+              <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[2], paddingBottom: space[2], borderBottom: `1px solid ${paleta.bg2}` }}>
+                <label style={etiqueta}>
+                  <input type="checkbox" checked={soloConStock} disabled={verIgnorados} onChange={(e) => setSoloConStock(e.target.checked)} />
+                  Solo con stock
+                </label>
+                <label style={etiqueta}>
+                  <input type="checkbox" checked={soloQueSeVende} disabled={verIgnorados} onChange={(e) => setSoloQueSeVende(e.target.checked)} />
+                  Solo lo que se vende
+                </label>
+                <InfoPopover titulo="Solo lo que se vende">
+                  Mira las ventas de los últimos 90 días en Gestión Nube. Es el recorte que hace que la revisión se
+                  pueda terminar: en Zattia son 288 productos con color en la variante y revisarlos todos a ojo no
+                  termina nunca; revisar los que se venden, sí. Si mañana uno empieza a venderse, vuelve solo a la
+                  lista. Los que no se pudieron cruzar con la tienda se muestran igual.
+                </InfoPopover>
+
+                {categorias.length > 0 && (
+                  <label style={etiqueta}>
+                    Categoría
+                    <select
+                      value={categoria}
+                      disabled={verIgnorados}
+                      onChange={(e) => setCategoria(e.target.value)}
+                      style={{ padding: '5px 8px', border: `1px solid ${paleta.line2}`, borderRadius: 7, fontSize: font.base, cursor: 'pointer', maxWidth: 220 }}
+                    >
+                      <option value="">Todas</option>
+                      {categorias.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label style={etiqueta}>
+                  <input type="checkbox" checked={verVerificados} disabled={verIgnorados} onChange={(e) => setVerVerificados(e.target.checked)} />
+                  Mostrar los ya verificados
+                </label>
+
+                <Button size="sm" variant={verIgnorados ? 'soft' : 'outline'} style={{ marginLeft: 'auto' }} onClick={() => setVerIgnorados((v) => !v)}>
+                  {verIgnorados ? '← Volver a la revisión' : `Apartados (${ignorados.size})`}
+                </Button>
+              </div>
+
+              <div style={{ marginBottom: space[3] }}>
+                <Chips<FiltroProblema>
+                  value={filtro}
+                  onChange={setFiltro}
+                  opciones={[
+                    { key: 'todo', label: 'Todo lo que falta' },
+                    { key: 'cruzada', label: 'Foto cruzada', title: 'La misma foto en dos colores: el cliente recibe otro color' },
+                    { key: 'sin-foto', label: 'Sin foto propia' },
+                    { key: 'escritorio', label: 'Se arregla acá', title: 'La foto ya existe en el producto: solo falta pegarla' },
+                    { key: 'fotografia', label: 'Falta fotografiar', title: 'No hay ninguna foto de ese color' },
+                  ]}
+                />
+              </div>
+            </>
+          )}
+
+          {!lista.length ? (
+            <div style={{ color: paleta.mut2, fontSize: font.base, padding: space[5], textAlign: 'center' }}>
+              {buscando
+                ? 'Ningún producto coincide con esa búsqueda.'
+                : verIgnorados
+                  ? 'No hay productos apartados de la revisión.'
+                  : '✓ No queda nada para arreglar con estos filtros.'}
             </div>
           ) : (
             <>
-              {lista.slice(0, MAX).map((p) => (
-                <ProductoFila
-                  key={p.id}
-                  p={p}
-                  onPedirVincular={pedirVincular}
-                  onPedirQuitar={pedirQuitar}
-                  ignorado={verIgnorados}
-                  onIgnorar={() => void ignorar(p)}
-                  onRestaurar={() => void restaurar(p)}
+              {lista.slice(0, MAX).map((f) => (
+                <Fila
+                  key={String(f.producto.id)}
+                  f={f}
+                  apartado={verIgnorados}
+                  onAbrir={() => setAbierto(String(f.producto.id))}
+                  onApartar={() => void ignorar(f)}
+                  onRestaurar={() => void restaurar(f)}
                 />
               ))}
-              {lista.length > MAX ? <div style={{ color: paleta.mut2, fontSize: 12, textAlign: 'center', padding: 8 }}>Mostrando {MAX} de {lista.length}. Afiná con el buscador.</div> : null}
+              {lista.length > MAX && (
+                <div style={{ color: paleta.mut2, fontSize: font.sm, textAlign: 'center', padding: space[2] }}>
+                  Mostrando los {MAX} de mayor impacto, de {lista.length}. Afiná con los filtros o buscá el producto.
+                </div>
+              )}
             </>
           )}
         </>
       )}
 
-      {accion && <ModalConfirmar accion={accion} onCancelar={() => setAccion(null)} onAceptar={ejecutar} />}
+      {abiertaFila && (
+        <FichaProducto
+          fila={abiertaFila}
+          marca={marca}
+          acciones={accionesDe(abiertaFila)}
+          onCerrar={() => setAbierto(null)}
+        />
+      )}
     </Card>
   )
 }
 
-/** Modal de confirmación con la foto en grande. Nada se escribe hasta Aceptar. */
-function ModalConfirmar({ accion, onCancelar, onAceptar }: { accion: Accion; onCancelar: () => void; onAceptar: () => void }) {
-  const quitar = accion.tipo === 'quitar'
-  return (
-    <div
-      onClick={accion.pending ? undefined : onCancelar}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 460, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,.3)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-          {quitar ? 'Quitar foto del color ' : 'Vincular foto al color '}
-          <span style={{ color: paleta.brandSolid }}>{accion.color}</span>
-        </div>
-        <div style={{ fontSize: 12, color: paleta.mut2, marginBottom: 12 }}>
-          {quitar ? 'La variante vuelve a quedar sin foto en TiendaNube.' : 'Se escribe en TiendaNube en vivo.'}
-        </div>
-        {accion.src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={accion.src} alt="" style={{ display: 'block', width: '100%', maxHeight: '55vh', objectFit: 'contain', borderRadius: 10, background: paleta.bg2, border: `1px solid ${paleta.line}` }} />
-        ) : (
-          <div style={{ padding: 24, textAlign: 'center', color: paleta.mut2, background: paleta.bg2, borderRadius: 10 }}>Sin vista previa</div>
-        )}
-        {accion.error ? <div style={{ color: paleta.danger, fontSize: 12, marginTop: 10 }}>No se pudo: {accion.error}</div> : null}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button className="btn-sm" onClick={onCancelar} disabled={accion.pending} style={{ background: '#fff', border: `1px solid ${paleta.line2}` }}>
-            Cancelar
-          </button>
-          <button
-            className="btn-sm"
-            onClick={onAceptar}
-            disabled={accion.pending}
-            style={{ background: accion.pending ? paleta.brandBorder : quitar ? paleta.danger : paleta.brandSolid, color: '#fff', border: 'none' }}
-          >
-            {accion.pending ? 'Guardando…' : quitar ? 'Quitar foto' : 'Aceptar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ProductoFila({
-  p,
-  onPedirVincular,
-  onPedirQuitar,
-  ignorado,
-  onIgnorar,
+/** Un producto en la lista: qué le pasa y cuánto duele. Se toca para abrir la ficha. */
+function Fila({
+  f,
+  apartado,
+  onAbrir,
+  onApartar,
   onRestaurar,
 }: {
-  p: ProductoFchk
-  onPedirVincular: (prodId: string | number, imageId: string | number, color: string, src: string | null) => void
-  onPedirQuitar: (prodId: string | number, color: string, src: string | null) => void
-  ignorado?: boolean
-  onIgnorar?: () => void
-  onRestaurar?: () => void
+  f: FilaAuditoria
+  apartado: boolean
+  onAbrir: () => void
+  onApartar: () => void
+  onRestaurar: () => void
 }) {
-  // Apartar un producto de la revisión (mayorista, prueba) o devolverlo a ella. Es lo que
-  // hace que la lista pueda llegar a cero y sirva como tablero.
-  const botonApartar = ignorado ? (
-    <button onClick={onRestaurar} title="Volver a revisarlo" style={estiloApartar}>
-      Revisar de nuevo
-    </button>
-  ) : (
-    <button onClick={onIgnorar} title="No hace falta revisar este producto" style={estiloApartar}>
-      No revisar
-    </button>
-  )
+  const { estado: e, producto: p } = f
+  const grave = e.variantesCruzadas > 0
+  const miniaturas = e.choques[0]?.foto ? [e.choques[0].foto] : []
 
-  if (sinFoto(p)) {
-    return (
-      <div style={{ border: `1px solid ${paleta.warningBorder}`, background: paleta.warningBg, borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>
-            {p.name} <span style={{ background: paleta.dangerBg, color: paleta.dangerInk, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>sin ninguna foto</span>
-          </div>
-          {botonApartar}
-        </div>
-        <div style={{ fontSize: 12, color: paleta.mut2, marginTop: 3 }}>
-          Subí las fotos en <b>Carga de imágenes</b> (arriba). Acá no hay nada para vincular todavía.
-        </div>
-      </div>
-    )
-  }
-  const colores = coloresConFoto(p)
-  const conFoto = colores.filter((c) => c.foto).length
-  const nSin = colores.length - conFoto
-  const imgs = p.imagenes || []
   return (
-    <div style={{ border: `1px solid ${nSin ? paleta.dangerBorder : paleta.line}`, background: nSin ? paleta.dangerBg : '#fff', borderRadius: 9, padding: '10px 12px', marginBottom: 8 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>
-          {p.name} <span style={{ color: paleta.mut2, fontSize: 12, fontWeight: 400 }}>· {conFoto}/{colores.length} colores con foto{nSin ? ` · ${nSin} sin vincular` : ''}</span>
+    <div
+      style={{
+        border: `1px solid ${grave ? paleta.dangerBorder : e.hayProblema ? paleta.warningBorder : paleta.line}`,
+        background: grave ? paleta.dangerBg : e.hayProblema ? paleta.warningBg : paleta.surface,
+        borderRadius: 9,
+        padding: space[3],
+        marginBottom: space[2],
+        display: 'flex',
+        gap: space[3],
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      {miniaturas.map((src) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={src} src={src} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.danger}`, flex: '0 0 auto' }} />
+      ))}
+
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600 }}>{p.name}</span>
+          {f.cambioDesdeRevision && <Badge tone="warning">cambió desde la revisión</Badge>}
+          {f.verificado && <Badge tone="success">verificado</Badge>}
+          {e.cola === 'fotografia' && <Badge tone="neutral">falta fotografiar</Badge>}
         </div>
-        {botonApartar}
+        <div style={{ fontSize: font.sm, color: paleta.mut, marginTop: 2 }}>
+          {e.variantesCruzadas > 0 && (
+            <b style={{ color: paleta.dangerInk }}>
+              {e.variantesCruzadas === 1 ? '1 publicación con la foto de otro color' : `${e.variantesCruzadas} publicaciones con la foto de otro color`}
+            </b>
+          )}
+          {e.variantesCruzadas > 0 && e.variantesSinFoto > 0 && ' · '}
+          {e.variantesSinFoto > 0 && `${e.variantesSinFoto} sin foto propia`}
+          {!e.hayProblema && (f.cambioDesdeRevision ? 'Sin problemas detectables, pero hay que volver a mirarlo.' : 'Sin problemas detectados.')}
+        </div>
+        <div style={{ fontSize: font.xs, color: paleta.mut2, marginTop: 2 }}>
+          {referenciaDe(p)}
+          {f.ventas90 !== undefined && ` · ${f.ventas90} vendidas en 90 días`}
+          {f.stock !== undefined && ` · ${f.stock} en stock`}
+        </div>
       </div>
-      <div style={{ marginTop: 4 }}>
-        {colores.map(({ color, foto }) =>
-          foto ? (
-            <div key={color} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: `1px solid ${paleta.bg2}` }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={foto}
-                alt={color}
-                onClick={() => onPedirQuitar(p.id, color, foto)}
-                title={`Ver en grande / quitar la foto de ${color}`}
-                style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.success}`, flex: '0 0 auto', cursor: 'zoom-in' }}
-              />
-              <div style={{ fontSize: 13 }}>
-                <b>{color}</b> <span style={{ color: paleta.success }}>✓ con foto</span>
-              </div>
-              <button
-                onClick={() => onPedirQuitar(p.id, color, foto)}
-                title={`Quitar la foto de ${color}`}
-                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: paleta.dangerInk, background: paleta.dangerBg, border: `1px solid ${paleta.dangerBorder}`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
-              >
-                Quitar foto
-              </button>
-            </div>
-          ) : (
-            <div key={color} style={{ padding: '5px 0', borderTop: `1px solid ${paleta.bg2}` }}>
-              <div style={{ fontSize: 13 }}>
-                <b>{color}</b> <span style={{ color: paleta.danger }}>sin foto</span> <span style={{ color: paleta.mut2, fontSize: 11 }}>— tocá una foto para vincularla:</span>
-              </div>
-              {imgs.length ? (
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
-                  {imgs.map((im) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={im.id}
-                      src={im.src}
-                      onClick={() => onPedirVincular(p.id, im.id, color, im.src)}
-                      title={`Vincular esta foto a ${color}`}
-                      alt=""
-                      style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.line2}`, cursor: 'pointer', flex: '0 0 auto' }}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ),
+
+      <div style={{ display: 'flex', gap: space[2], flex: '0 0 auto' }}>
+        {apartado ? (
+          <Button size="sm" variant="outline" onClick={onRestaurar}>
+            Revisar de nuevo
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={onApartar} title="Este producto no hay que revisarlo (mayorista, prueba)">
+            Apartar
+          </Button>
         )}
+        <Button size="sm" variant={e.hayProblema ? 'solid' : 'soft'} onClick={onAbrir}>
+          Ver fotos
+        </Button>
       </div>
     </div>
   )
 }
 
-const estiloApartar: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: paleta.mut,
-  background: '#fff',
-  border: `1px solid ${paleta.line}`,
-  borderRadius: 6,
-  padding: '3px 9px',
+const etiqueta: React.CSSProperties = {
+  fontSize: font.base,
+  color: paleta.ink2,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+}
+
+const enlace: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: paleta.brand,
   cursor: 'pointer',
-  flex: '0 0 auto',
+  textDecoration: 'underline',
+  font: 'inherit',
 }

@@ -69,6 +69,13 @@ export type VarianteFchk = {
   image_url?: string | null
   /** SKU de la variante (cuando se pide `?variantes=1`): sirve para cruzar el stock con GN. */
   sku?: string | null
+  /**
+   * Código de barras de la variante. Es lo que se busca con el producto en la mano, y **cuál de
+   * los dos códigos está cargado depende de la marca**: en BDI el barcode cubre el 88% de las
+   * variantes y el sku el 63%; en Zattia es al revés (sku 90%, barcode 63%). Por eso el buscador
+   * mira los dos.
+   */
+  barcode?: string | null
   /** Stock en TiendaNube (null = no gestionado). El de GN es la fuente de verdad. */
   stock?: number | null
 }
@@ -76,10 +83,17 @@ export type ImagenFchk = { id: string | number; src: string }
 export type ProductoFchk = {
   id: string | number
   name: string
+  /** SKU a nivel producto. Lo busca el buscador; en BDI viene en 153 de 235 productos. */
+  sku?: string | null
+  /** Arma el link a la ficha pública (`tiendanube.com/productos/<handle>`). Viene siempre. */
+  handle?: string
+  /** `false` = despublicado en la tienda. Undefined se asume publicado (default de TN). */
+  published?: boolean
   image_count?: number
   imagenes?: ImagenFchk[]
   variantes?: VarianteFchk[]
   variantes_con_foto?: number
+  variantes_total?: number
   /**
    * Categorías del producto en TiendaNube. El endpoint del audit ya las mandaba —solo
    * faltaba tiparlas— y son lo que permite recorrer la revisión de fotos por categoría en

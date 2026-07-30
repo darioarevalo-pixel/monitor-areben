@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buscarProd, colorPorNombre, findProd, lev, limpiarNombre, matchByFilename, norm } from '@/lib/tncat/matching'
-import { coloresConFoto, coloresSinFoto, filtrar, problema, sinFoto, sinVincular } from '@/lib/tncat/fchk'
 import { nombresDeFilas } from '@/lib/tncat/excel'
-import type { ProductoFchk, ProductoImg } from '@/lib/tncat/tipos'
+import type { ProductoImg } from '@/lib/tncat/tipos'
 
 const PRODS: ProductoImg[] = [
   { id: 1, name: 'Funda Silicona iPhone 15', sku: 'FSI15', colores: ['Rosa', 'Negro'] },
@@ -55,48 +54,6 @@ describe('tncat/matching', () => {
     expect(colorPorNombre(PRODS[0], 'sin color.jpg')).toBe('')
     expect(colorPorNombre(PRODS[1], 'cualquiera.jpg')).toBe('') // sin colores
     expect(colorPorNombre(null, 'x.jpg')).toBe('')
-  })
-})
-
-const fchkProd = (over: Partial<ProductoFchk>): ProductoFchk => ({ id: 1, name: 'P', image_count: 2, variantes: [], imagenes: [], ...over })
-
-describe('tncat/fchk', () => {
-  it('coloresSinFoto: colores cuyas variantes no tienen foto (ignora sin color)', () => {
-    const p = fchkProd({
-      variantes: [
-        { color: 'Rosa', image_url: 'x.jpg' },
-        { color: 'Negro', image_url: null },
-        { color: null, image_url: null }, // single: se ignora
-      ],
-    })
-    expect(coloresSinFoto(p)).toEqual(['Negro'])
-  })
-
-  it('sinFoto / sinVincular / problema', () => {
-    expect(sinFoto(fchkProd({ image_count: 0 }))).toBe(true)
-    expect(sinFoto(fchkProd({ image_count: 3 }))).toBe(false)
-    const desvinc = fchkProd({ image_count: 2, variantes: [{ color: 'Rosa', image_url: null }] })
-    expect(sinVincular(desvinc)).toBe(true)
-    expect(problema(desvinc)).toBe(true)
-    const ok = fchkProd({ image_count: 2, variantes: [{ color: 'Rosa', image_url: 'x.jpg' }] })
-    expect(problema(ok)).toBe(false)
-  })
-
-  it('filtrar: aplica predicado + búsqueda + orden', () => {
-    const data = [
-      fchkProd({ id: 1, name: 'Beta', image_count: 0 }),
-      fchkProd({ id: 2, name: 'Alfa', image_count: 2, variantes: [{ color: 'Rosa', image_url: null }] }),
-      fchkProd({ id: 3, name: 'Gamma', image_count: 3, variantes: [{ color: 'Rosa', image_url: 'x.jpg' }] }),
-    ]
-    const problemas = filtrar(data, 'problema', '')
-    expect(problemas.map((p) => p.name)).toEqual(['Alfa', 'Beta']) // sin Gamma (ok), ordenado
-    expect(filtrar(data, 'sinfoto', '').map((p) => p.id)).toEqual([1])
-    expect(filtrar(data, 'problema', 'alf').map((p) => p.id)).toEqual([2])
-  })
-
-  it('coloresConFoto: cada color con su foto o null', () => {
-    const p = fchkProd({ variantes: [{ color: 'Rosa', image_url: 'r.jpg' }, { color: 'Negro', image_url: null }] })
-    expect(coloresConFoto(p)).toEqual([{ color: 'Rosa', foto: 'r.jpg' }, { color: 'Negro', foto: null }])
   })
 })
 

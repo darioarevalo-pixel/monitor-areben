@@ -10,12 +10,13 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
+import fotosVerificadas from './_tn-fotos-verificadas.js';
 import { soloMismoOrigen } from './_auth.js';
 
-const RECURSOS = { ignorados, disenos };
+const RECURSOS = { ignorados, disenos, 'fotos-verificadas': fotosVerificadas };
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;

@@ -56,6 +56,24 @@ export function stockPorProductoTn(productos: Producto[], idx: IndiceTn): Map<st
   return out
 }
 
+/**
+ * Ventas de los últimos 90 días por producto de TiendaNube (`id` de TN → unidades vendidas).
+ *
+ * Es el compañero de `stockPorProductoTn` y lo que hace manejable la auditoría de fotos en
+ * Zattia: son 288 productos con color en la variante y revisarlos todos a ojo no se termina
+ * nunca. Revisar **los que se venden** sí. Mismo cruce difuso y misma suma que el stock.
+ */
+export function ventas90PorProductoTn(productos: Producto[], idx: IndiceTn): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const p of productos) {
+    const tn = matchTn({ sku: p.sku, name: p.name }, idx)
+    if (!tn || tn.id == null) continue
+    const key = String(tn.id)
+    out.set(key, (out.get(key) ?? 0) + (p.sales90 || 0))
+  }
+  return out
+}
+
 /** El cruce GN⨯TN compartido por los dos sentidos (mismo match difuso, mismo dedupe). */
 function cruzar(
   productos: Producto[],
