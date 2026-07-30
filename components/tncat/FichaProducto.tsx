@@ -196,6 +196,10 @@ function RenglonColor({
   const [eligiendo, setEligiendo] = useState(false)
   const [candidata, setCandidata] = useState<ImagenFchk | null>(null)
 
+  // La foto que este color ya tiene, como imagen del producto (para poder re-vincularla). El
+  // cruce va por URL porque es lo que trae la variante; están comprobadas idénticas.
+  const fotoActual = c.foto ? (imgs.find((im) => im.src === c.foto) ?? null) : null
+
   const borde = c.comparteCon.length ? paleta.dangerBorder : !c.foto ? paleta.warningBorder : paleta.line
   const fondo = c.comparteCon.length ? paleta.dangerBg : !c.foto ? paleta.warningBg : paleta.surface
 
@@ -240,11 +244,20 @@ function RenglonColor({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: font.base, fontWeight: 700 }}>{c.color}</span>
+            {/* Se dice en modelos de teléfono, no en "variantes": un color existe para varios
+                modelos y la foto se pega a cada uno por separado. Que a 4 sí y a 2 no es
+                justamente lo que hay que poder leer de un vistazo. */}
             <span style={{ fontSize: font.sm, color: paleta.mut2 }}>
-              {c.variantes === 1 ? '1 modelo' : `${c.variantes} modelos`}
-              {c.variantesSinFoto ? ` · ${c.variantesSinFoto} sin foto` : ''}
+              en {c.variantes === 1 ? '1 modelo de teléfono' : `${c.variantes} modelos de teléfono`}
             </span>
           </div>
+
+          {c.foto && c.variantesSinFoto > 0 && (
+            <div style={{ fontSize: font.sm, color: paleta.warningInk, marginTop: space[2] }}>
+              A <b>{c.variantesSinFoto}</b> de esos {c.variantes} no se les pegó esta foto: en la tienda muestran la
+              principal del producto.
+            </div>
+          )}
 
           {c.comparteCon.length > 0 && (
             <div style={{ marginTop: space[2] }}>
@@ -271,6 +284,22 @@ function RenglonColor({
           )}
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap' }}>
+            {/* Completar los modelos que quedaron sin la foto es la acción más frecuente y la
+                que no tenía botón: había que entrar a "Cambiar la foto" y volver a elegir la
+                misma, que no se le ocurre a nadie. Vincular escribe sobre TODAS las variantes
+                del color, así que re-pegar la que ya está llena los huecos y no toca el resto. */}
+            {fotoActual && c.variantesSinFoto > 0 && (
+              <Button
+                size="sm"
+                variant="solid"
+                tone="brand"
+                loading={deshabilitado}
+                onClick={() => void onVincular(fotoActual)}
+                title="Le pega esta misma foto a los modelos que quedaron sin ella"
+              >
+                Ponerle esta foto a {c.variantesSinFoto === 1 ? 'el que falta' : `los ${c.variantesSinFoto} que faltan`}
+              </Button>
+            )}
             <Button
               size="sm"
               variant="soft"
@@ -314,6 +343,8 @@ function RenglonColor({
                   </Button>
                   <Button
                     size="sm"
+                    variant="solid"
+                    tone="brand"
                     loading={deshabilitado}
                     onClick={async () => {
                       if (await onVincular(candidata)) {
