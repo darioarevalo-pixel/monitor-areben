@@ -27,6 +27,9 @@ export function Cupones() {
   const { marca, perfil } = useSesion()
   const usuario = perfil?.name || ''
   const puedeCrear = puedeSub(perfil, marca, 'cupones', 'crear') // puedeSub ya devuelve true para admin
+  // Corregir y anular es su propio permiso, pero quien genera lo tiene por definición: separarlos
+  // sin esta herencia le sacaría el lápiz a marketing, que hoy lo usa.
+  const puedeEditar = puedeCrear || puedeSub(perfil, marca, 'cupones', 'editar')
   const admin = esAdmin(perfil)
   const cup = useCupones(marca)
 
@@ -42,11 +45,13 @@ export function Cupones() {
 
   const onGuardar = async (datos: Parameters<typeof crearCupon>[0]) => {
     if (form === 'nuevo') {
+      if (!puedeCrear) return
       const r = crearCupon(datos, { id: nuevoId(), hoy, usuario })
       if (!r.ok) return void toast.error(r.error)
       const ok = await cup.persistir((l) => [r.cupon, ...l])
       if (ok) setForm(null)
     } else if (form) {
+      if (!puedeEditar) return
       const r = editarCupon(form, datos)
       if (!r.ok) return void toast.error(r.error)
       const ok = await cup.persistir((l) => l.map((c) => (c.id === form.id ? r.cupon : c)))
@@ -57,7 +62,7 @@ export function Cupones() {
   const onMarcarUsado = (id: string) => void mutar(id, (c) => ({ ...c, usado: true, usadoFecha: hoy }))
   const onDesmarcarUsado = (id: string) => void mutar(id, (c) => ({ ...c, usado: false, usadoFecha: '' }))
   const onAnular = async (id: string) => {
-    if (!puedeCrear) return
+    if (!puedeEditar) return
     const okAnular = await confirmar({
       titulo: 'Anular el cupón',
       tono: 'danger',
@@ -68,7 +73,7 @@ export function Cupones() {
     void mutar(id, (c) => ({ ...c, anulado: true }))
   }
   const onReactivar = (id: string) => {
-    if (!puedeCrear) return
+    if (!puedeEditar) return
     void mutar(id, (c) => ({ ...c, anulado: false }))
   }
   const onBorrar = async (id: string) => {
@@ -107,7 +112,7 @@ export function Cupones() {
       </HeaderAcciones>
 
       <div>
-        {form && puedeCrear && (
+        {form && (form === 'nuevo' ? puedeCrear : puedeEditar) && (
           <FormCupon usuario={usuario} cuponInicial={form === 'nuevo' ? undefined : form} onGuardar={onGuardar} onCancelar={() => setForm(null)} />
         )}
 
@@ -175,10 +180,10 @@ export function Cupones() {
                           {(e === 'porvencer' || e === 'vigente') && (
                             <button onClick={() => onRecordar(c)} title="Copiar recordatorio para WhatsApp" style={btnGris}>📋 Recordar</button>
                           )}
-                          {puedeCrear && !c.anulado && (
+                          {puedeEditar && !c.anulado && (
                             <button onClick={() => setForm(c)} title="Editar" style={btnGris}>✏️</button>
                           )}
-                          {puedeCrear && (c.anulado
+                          {puedeEditar && (c.anulado
                             ? <button onClick={() => onReactivar(c.id)} title="Reactivar" style={btnGris}>Reactivar</button>
                             : <button onClick={() => onAnular(c.id)} title="Anular" style={{ border: 'none', background: 'none', color: color.danger, cursor: 'pointer', fontSize: 13 }}>✕</button>)}
                           {admin && (

@@ -450,7 +450,12 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "crear",
         "label": "Puede generar cupones",
-        "info": "Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local."
+        "info": "Puede CREAR cupones nuevos (admin, dueños, marketing). Sin este permiso, solo VE la lista y CONFIRMA el uso — para las chicas del local. Quien puede generar también puede corregir y anular."
+      },
+      {
+        "key": "editar",
+        "label": "Puede corregir y anular",
+        "info": "Puede EDITAR un cupón ya generado y anularlo o reactivarlo, pero no crear nuevos — para quien arregla un error de carga o corta un cupón que se fue de las manos. Quien puede generar ya lo tiene."
       }
     ]
   },
