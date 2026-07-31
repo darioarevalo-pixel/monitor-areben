@@ -59,6 +59,21 @@ export function FichaProducto({
   const libres = new Set(fila.estado.fotosLibres.map((f) => String(f.id)))
 
   const verificar = async () => {
+    // Verificar un producto que todavía tiene un error PROBADO (misma foto en dos colores, o
+    // ninguna foto) no lo saca de la lista: contra un hecho el ojo no tiene nada que aportar, y
+    // esconderlo bajaría el tablero sin arreglar nada. Se avisa antes para que el botón no
+    // parezca roto.
+    if (!fila.verificado && (fila.estado.choques.length > 0 || fila.estado.sinNingunaFoto)) {
+      const ok = await confirmar({
+        titulo: 'Todavía queda un problema sin arreglar',
+        mensaje: fila.estado.sinNingunaFoto
+          ? 'Este producto no tiene ninguna foto cargada. Se puede marcar como revisado, pero va a seguir en la lista hasta que tenga fotos.'
+          : 'Este producto todavía tiene la misma foto en dos colores. Se puede marcar como revisado, pero va a seguir en la lista —y contando en el tablero— hasta que se le dé a cada color la suya.',
+        ok: 'Marcar igual',
+        tono: 'warning',
+      })
+      if (!ok) return
+    }
     setGuardando(true)
     const err = fila.verificado ? await acciones.desverificar() : await acciones.verificar(huellaDe(p))
     setGuardando(false)

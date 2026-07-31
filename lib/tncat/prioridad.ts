@@ -122,11 +122,21 @@ export type Recortes = {
   verVerificados?: boolean
 }
 
+/**
+ * Un error que el sistema **probó**, no que sospecha: dos colores usando literalmente el mismo
+ * archivo, o un producto sin ninguna foto. Contra esto el ojo humano no tiene nada que aportar.
+ */
+const errorProbado = (f: FilaAuditoria) => f.estado.choques.length > 0 || f.estado.sinNingunaFoto
+
 export function aplicarRecortes(filas: FilaAuditoria[], r: Recortes): FilaAuditoria[] {
   return filas.filter((f) => {
     const p = f.producto
     if (r.ignorados?.has(String(p.id))) return false
-    if (!r.verVerificados && f.verificado) return false
+    // "Verificado" esconde lo que el ojo resolvió, NO lo que el sistema ya probó que está roto.
+    // Si no, marcar un producto con la foto cruzada lo saca de la lista y sus publicaciones mal
+    // dejan de contarse: el tablero baja sin que se haya arreglado nada. Eso es exactamente la
+    // confianza falsa que esta pantalla existe para no dar.
+    if (!r.verVerificados && f.verificado && !errorProbado(f)) return false
     if (r.categoria && !(p.categories || []).includes(r.categoria)) return false
     if (r.soloPublicado && p.published === false) return false
     if (r.minVariantes && (p.variantes || []).length < r.minVariantes) return false

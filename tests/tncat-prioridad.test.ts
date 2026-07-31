@@ -179,12 +179,30 @@ describe('prioridad — recortes', () => {
 describe('prioridad — verificado con huella', () => {
   const p = cruzado('1', ['A', 'B'])
 
-  it('con la huella que coincide queda verificado y se esconde', () => {
+  it('con la huella que coincide queda verificado', () => {
     const f = armarFilas([p], { huellasVerificadas: new Map([['1', huellaDe(p)]]) })
     expect(f[0].verificado).toBe(true)
     expect(f[0].cambioDesdeRevision).toBe(false)
-    expect(aplicarRecortes(f, {})).toHaveLength(0)
     expect(aplicarRecortes(f, { verVerificados: true })).toHaveLength(1)
+  })
+
+  it('verificar NO esconde un producto con la foto cruzada', () => {
+    // Contra un hecho probado —dos colores usando el mismo archivo— el ojo no tiene nada que
+    // aportar. Esconderlo bajaría el tablero sin que se arregle nada, que es la confianza falsa
+    // que toda esta pantalla existe para no dar.
+    const f = armarFilas([p], { huellasVerificadas: new Map([['1', huellaDe(p)]]) })
+    expect(f[0].verificado).toBe(true)
+    expect(f[0].estado.choques.length).toBeGreaterThan(0)
+    expect(aplicarRecortes(f, {})).toHaveLength(1)
+    expect(resumen(aplicarRecortes(f, {})).cruzadas).toBeGreaterThan(0)
+  })
+
+  it('pero sí esconde uno sano, que es de lo que se trata', () => {
+    const sano = prod('ok', [v('A', 'a.jpg'), v('B', 'b.jpg')], {
+      imagenes: [{ id: '1', src: 'a.jpg' }, { id: '2', src: 'b.jpg' }],
+    })
+    const f = armarFilas([sano], { huellasVerificadas: new Map([['ok', huellaDe(sano)]]) })
+    expect(aplicarRecortes(f, {})).toHaveLength(0)
   })
 
   it('si las fotos cambiaron, vuelve solo a la lista', () => {
