@@ -30,6 +30,14 @@ create table if not exists tn_fotos_verificadas (
 
 create index if not exists idx_tn_fotos_verificadas_store on tn_fotos_verificadas (store);
 
--- Igual que las demás tablas del monitor: el gate es el login server-side del endpoint
--- (service key), no RLS.
-alter table tn_fotos_verificadas disable row level security;
+-- RLS PRENDIDO y SIN políticas: nadie entra con la clave pública, ni a leer ni a escribir.
+--
+-- Las tablas viejas del monitor lo tienen apagado y se apoyan solo en el login del endpoint,
+-- pero la clave pública viaja dentro de la app y con RLS apagado alcanza para escribir. Acá
+-- eso significaría poder marcar productos como "verificado" sin haberlos mirado — o sea,
+-- fabricar justo la mentira que esta tabla existe para evitar.
+--
+-- La app no se entera: `api/_tn-fotos-verificadas.js` entra con la **service key**, que pasa
+-- por encima de RLS. Si el "Verificado" empieza a fallar en una marca, es que a esa base le
+-- falta su `*_SUPABASE_SERVICE_KEY` en Vercel y está cayendo a la clave pública.
+alter table tn_fotos_verificadas enable row level security;

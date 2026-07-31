@@ -15,16 +15,21 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 
+// A diferencia de las otras tablas del monitor, `tn_fotos_verificadas` tiene RLS PRENDIDO: la
+// clave pública no entra ni a leer ni a escribir (marcar "verificado" sin mirar es fabricar la
+// mentira que la tabla existe para evitar). Por eso acá interesa si la key es la de servicio:
+// con la pública las consultas no fallan con "permiso denegado", devuelven vacío — y eso se
+// vería como "nunca revisaste nada", que es un error mudo. Se prefiere gritar.
 function cfgFor(store) {
   if (store === 'zattia') {
-    return {
-      url: process.env.ZATTIA_SUPABASE_URL,
-      key: process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY,
-    };
+    const servicio = process.env.ZATTIA_SUPABASE_SERVICE_KEY;
+    return { url: process.env.ZATTIA_SUPABASE_URL, key: servicio || process.env.ZATTIA_SUPABASE_KEY, servicio: !!servicio };
   }
+  const servicio = process.env.SUPABASE_SERVICE_KEY;
   return {
     url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co',
-    key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
+    key: servicio || process.env.SUPABASE_KEY,
+    servicio: !!servicio,
   };
 }
 
@@ -36,6 +41,13 @@ export default async function handler(req, res) {
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
+  if (!cfg.servicio) {
+    const nombre = store === 'zattia' ? 'ZATTIA_SUPABASE_SERVICE_KEY' : 'SUPABASE_SERVICE_KEY';
+    return res.status(500).json({
+      ok: false,
+      error: `Falta ${nombre} en Vercel: con la clave pública esta tabla no se puede leer ni escribir (tiene RLS prendido).`,
+    });
+  }
   const supabase = createClient(cfg.url, cfg.key);
 
   try {
