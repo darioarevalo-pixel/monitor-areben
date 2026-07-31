@@ -83,6 +83,8 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const [ignorados, setIgnorados] = useState<Set<string>>(new Set())
   const [verIgnorados, setVerIgnorados] = useState(false)
   const [huellas, setHuellas] = useState<Map<string, string>>(new Map())
+  /** Por qué no se pudo leer qué productos ya se revisaron. Se muestra: ver el efecto de abajo. */
+  const [errorRevisiones, setErrorRevisiones] = useState<string | null>(null)
 
   // ── Datos ─────────────────────────────────────────────────────────────────────
   /**
@@ -122,14 +124,20 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
   useEffect(() => {
     let vivo = true
-    // Si alguna de las dos no se puede leer se sigue igual: mostrar de más es preferible a
-    // esconder un producto que hay que arreglar.
+    // Los apartados pueden fallar en silencio: no poder leerlos muestra de más, que es el lado
+    // seguro del error.
     leerIgnorados(marca)
       .then((l) => vivo && setIgnorados(new Set(l.map((x) => String(x.tn_id)))))
       .catch(() => {})
+    // Las revisiones NO. Si no se pueden leer, todo lo ya verificado reaparece como pendiente y
+    // el trabajo hecho se ve como trabajo por hacer — sin nada que lo explique. Hay que decirlo.
     leerVerificadas(marca)
-      .then((l) => vivo && setHuellas(mapaDe(l)))
-      .catch(() => {})
+      .then((l) => {
+        if (!vivo) return
+        setHuellas(mapaDe(l))
+        setErrorRevisiones(null)
+      })
+      .catch((e) => vivo && setErrorRevisiones(e instanceof Error ? e.message : String(e)))
     return () => {
       vivo = false
     }
@@ -339,6 +347,14 @@ export function FotosCard({ marca }: { marca: Marca }) {
             />
             <KpiCard label="Productos para revisar" value={tablero.productos} sub={`${nVerificados} ya verificados`} />
           </div>
+
+          {errorRevisiones && (
+            <Notice tone="warning" style={{ marginBottom: space[3] }}>
+              <b>No se pudo leer qué productos ya revisaste</b>, así que abajo van a aparecer todos como pendientes
+              aunque ya los hayas mirado. Lo demás de la pantalla anda bien.
+              <div style={{ fontSize: font.sm, color: paleta.mut, marginTop: 4 }}>{errorRevisiones}</div>
+            </Notice>
+          )}
 
           {nCambiados > 0 && (
             <Notice tone="warning" style={{ marginBottom: space[3] }}>
