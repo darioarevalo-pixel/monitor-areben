@@ -199,24 +199,47 @@ export type ColorEnFicha = {
   foto: string | null
   /** Otros colores que están usando la MISMA foto. Vacío = la foto es solo suya. */
   comparteCon: string[]
-  /** Cuántas variantes (modelos) tiene este color. */
+  /** Cuántas variantes tiene este color. */
   variantes: number
   /** Cuántas de esas variantes están sin foto. */
   variantesSinFoto: number
+  /**
+   * Cómo se llama cada variante de este color dentro del producto: `["iPhone 13","iPhone 14"]`
+   * en fundas, `["S","M","L"]` en ropa. Sale del dato, no de una palabra elegida a mano.
+   */
+  etiquetas: string[]
+  /** Las que quedaron sin la foto, por nombre. Es lo que hay que ir a completar. */
+  etiquetasSinFoto: string[]
   sospecha: Sospecha | null
+}
+
+/**
+ * Lo que distingue a una variante DENTRO de su color: el talle, el modelo de teléfono, lo que
+ * sea que la tienda use como segundo eje. Se saca quitando el color de los valores.
+ */
+export function etiquetaDe(v: VarianteFchk): string {
+  const color = (v.color || '').trim().toLowerCase()
+  return (v.valores || [])
+    .map((x) => String(x).trim())
+    .filter((x) => x && x.toLowerCase() !== color)
+    .join(' / ')
 }
 
 /** La ficha del producto: un renglón por color, en orden alfabético. */
 export function fichaDe(p: ProductoFchk): ColorEnFicha[] {
-  const porColor = new Map<string, { foto: string | null; variantes: number; sinFoto: number }>()
+  type Acum = { foto: string | null; variantes: number; sinFoto: number; etiquetas: string[]; sinFotoEt: string[] }
+  const porColor = new Map<string, Acum>()
   for (const v of variantesConColor(p)) {
     const c = v.color as string
-    const e = porColor.get(c) ?? { foto: null, variantes: 0, sinFoto: 0 }
+    const e = porColor.get(c) ?? { foto: null, variantes: 0, sinFoto: 0, etiquetas: [], sinFotoEt: [] }
     e.variantes += 1
+    const et = etiquetaDe(v)
+    if (et) e.etiquetas.push(et)
     if (v.image_url) {
       if (!e.foto) e.foto = v.image_url
     } else {
       e.sinFoto += 1
+      if (et) e.sinFotoEt.push(et)
     }
     porColor.set(c, e)
   }
@@ -230,6 +253,8 @@ export function fichaDe(p: ProductoFchk): ColorEnFicha[] {
       comparteCon: e.foto ? (choques.find((c) => c.foto === e.foto)?.colores || []).filter((c) => c !== color) : [],
       variantes: e.variantes,
       variantesSinFoto: e.sinFoto,
+      etiquetas: e.etiquetas,
+      etiquetasSinFoto: e.sinFotoEt,
       sospecha: sospechas.get(color) ?? null,
     }))
 }

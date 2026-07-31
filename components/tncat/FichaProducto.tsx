@@ -191,6 +191,18 @@ export function FichaProducto({
   )
 }
 
+/**
+ * Los valores del segundo eje, en una línea. Con pocos se listan enteros —"iPhone 13, 14, 15"—
+ * y con muchos se corta, porque la línea es una referencia y no un inventario. Si el producto
+ * no trae valores (payload viejo cacheado), cae a contar variantes.
+ */
+const TOPE_ETIQUETAS = 6
+function resumirEtiquetas(etiquetas: string[], variantes: number): string {
+  if (!etiquetas.length) return variantes === 1 ? '1 variante' : `${variantes} variantes`
+  if (etiquetas.length <= TOPE_ETIQUETAS) return etiquetas.join(' · ')
+  return `${etiquetas.slice(0, TOPE_ETIQUETAS).join(' · ')} y ${etiquetas.length - TOPE_ETIQUETAS} más`
+}
+
 /** Un color: su foto en grande a la izquierda y el estado + acciones a la derecha. */
 function RenglonColor({
   c,
@@ -259,18 +271,18 @@ function RenglonColor({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: font.base, fontWeight: 700 }}>{c.color}</span>
-            {/* Se dice en modelos de teléfono, no en "variantes": un color existe para varios
-                modelos y la foto se pega a cada uno por separado. Que a 4 sí y a 2 no es
-                justamente lo que hay que poder leer de un vistazo. */}
-            <span style={{ fontSize: font.sm, color: paleta.mut2 }}>
-              en {c.variantes === 1 ? '1 modelo de teléfono' : `${c.variantes} modelos de teléfono`}
-            </span>
+            {/* Se listan los valores tal como los tiene la tienda —"iPhone 13", "M"— en vez de
+                ponerles un nombre: el segundo eje es el modelo en fundas y el talle en ropa, y
+                cualquier palabra que se elija va a estar mal en una de las dos marcas. */}
+            <span style={{ fontSize: font.sm, color: paleta.mut2 }}>{resumirEtiquetas(c.etiquetas, c.variantes)}</span>
           </div>
 
           {c.foto && c.variantesSinFoto > 0 && (
             <div style={{ fontSize: font.sm, color: paleta.warningInk, marginTop: space[2] }}>
-              A <b>{c.variantesSinFoto}</b> de esos {c.variantes} no se les pegó esta foto: en la tienda muestran la
-              principal del producto.
+              {/* Cuáles, no cuántas: para completarlas hay que saber a cuáles ir. */}
+              {c.etiquetasSinFoto.length
+                ? <>Le falta esta foto a: <b>{c.etiquetasSinFoto.join(', ')}</b>. En la tienda muestran la principal del producto.</>
+                : <>A <b>{c.variantesSinFoto}</b> de {c.variantes} no se les pegó esta foto: en la tienda muestran la principal del producto.</>}
             </div>
           )}
 
@@ -310,7 +322,7 @@ function RenglonColor({
                 tone="brand"
                 loading={deshabilitado}
                 onClick={() => void onVincular(fotoActual)}
-                title="Le pega esta misma foto a los modelos que quedaron sin ella"
+                title="Le pega esta misma foto a las variantes que quedaron sin ella"
               >
                 Ponerle esta foto a {c.variantesSinFoto === 1 ? 'el que falta' : `los ${c.variantesSinFoto} que faltan`}
               </Button>

@@ -5,6 +5,7 @@ import {
   coloresDe,
   coloresSinFoto,
   estadoDe,
+  etiquetaDe,
   familiasEn,
   fichaDe,
   fotosLibresDe,
@@ -199,6 +200,44 @@ describe('auditoría — la ficha del producto', () => {
   it('un color con foto en un modelo y sin foto en otro muestra la que tiene', () => {
     const f = fichaDe(prod([v('AZUL', null), v('AZUL', 'azul.jpg')]))
     expect(f[0].foto).toBe('azul.jpg')
+    expect(f[0].variantesSinFoto).toBe(1)
+  })
+
+  /**
+   * El segundo eje es el modelo de teléfono en BDI y el talle en Zattia. Cualquier palabra que
+   * se elija va a estar mal en una de las dos marcas, así que se muestra el valor tal cual lo
+   * tiene la tienda. Antes decía "1 modelo de teléfono" arriba de un pantalón.
+   */
+  it('nombra cada variante con su propio valor, sin inventar la palabra', () => {
+    const fundas = fichaDe(
+      prod([
+        v('AZUL', 'a.jpg', { valores: ['iPhone 13', 'AZUL'] }),
+        v('AZUL', null, { valores: ['iPhone 14', 'AZUL'] }),
+      ]),
+    )
+    expect(fundas[0].etiquetas).toEqual(['iPhone 13', 'iPhone 14'])
+    expect(fundas[0].etiquetasSinFoto).toEqual(['iPhone 14'])
+
+    const ropa = fichaDe(
+      prod([
+        v('CHOCOLATE', 'c.jpg', { valores: ['M', 'CHOCOLATE'] }),
+        v('CHOCOLATE', null, { valores: ['L', 'CHOCOLATE'] }),
+      ]),
+    )
+    expect(ropa[0].etiquetas).toEqual(['M', 'L'])
+    expect(ropa[0].etiquetasSinFoto).toEqual(['L'])
+  })
+
+  it('saca el color de la etiqueta sin importar mayúsculas ni espacios', () => {
+    expect(etiquetaDe({ color: 'Negro', valores: [' negro ', 'XS'] })).toBe('XS')
+    expect(etiquetaDe({ color: 'AZUL', valores: ['AZUL'] })).toBe('')
+  })
+
+  it('sin valores no rompe: la ficha queda sin etiquetas', () => {
+    // Los cachés de payload anteriores al campo no lo traen; la pantalla cae a contar variantes.
+    const f = fichaDe(prod([v('AZUL', 'a.jpg'), v('AZUL', null)]))
+    expect(f[0].etiquetas).toEqual([])
+    expect(f[0].variantes).toBe(2)
     expect(f[0].variantesSinFoto).toBe(1)
   })
 

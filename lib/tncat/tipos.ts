@@ -78,6 +78,15 @@ export type VarianteFchk = {
   barcode?: string | null
   /** Stock en TiendaNube (null = no gestionado). El de GN es la fuente de verdad. */
   stock?: number | null
+  /**
+   * Todos los valores de opción de la variante, incluido el color:
+   * `["iPhone 13","AZUL"]` en BDI, `["M","CHOCOLATE"]` en Zattia.
+   *
+   * Es lo que permite nombrar el **segundo eje** sin adivinarlo. Decir "modelo de teléfono"
+   * está bien en fundas y no significa nada en ropa, donde ese eje es el talle. Mostrando el
+   * valor tal cual —"iPhone 13", "M"— no hay que elegir una palabra que sirva para las dos.
+   */
+  valores?: string[]
 }
 export type ImagenFchk = { id: string | number; src: string }
 export type ProductoFchk = {

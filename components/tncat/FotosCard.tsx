@@ -307,7 +307,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         </Button>
       </div>
       <div style={{ fontSize: font.sm, color: paleta.mut2, margin: '2px 0 12px' }}>
-        Que ningún color muestre la foto de otro. Cada color × modelo es una publicación distinta, así que una foto mal
+        Que ningún color muestre la foto de otro. Cada color × talle (o × modelo) es una publicación distinta, así que una foto mal
         pegada llega al cliente.
       </div>
 
@@ -601,7 +601,7 @@ function Fila({
               : e.colores.length > 1
                 ? // En la cola de revisión el dato útil no es "está bien" —eso ya se sabe— sino
                   // cuánto hay en juego si resulta que no lo está.
-                  `${e.colores.length} colores en ${(p.variantes || []).filter((v) => v.color).length} publicaciones — confirmá que cada color muestre lo suyo`
+                  `${e.colores.length} colores en ${(p.variantes || []).filter((v) => v.color).length} variantes — confirmá que cada color muestre lo suyo`
                 : 'Sin problemas detectados.')}
         </div>
         <div style={{ fontSize: font.xs, color: paleta.mut2, marginTop: 2 }}>
