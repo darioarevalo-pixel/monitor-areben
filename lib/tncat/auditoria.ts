@@ -65,6 +65,15 @@ export type EstadoFotos = {
   /** Variantes de un color sin foto. */
   variantesSinFoto: number
   /**
+   * Variantes sin foto **cuyo color sí tiene foto** en otra variante. Es el hueco a medio llenar:
+   * el color está fotografiado, pero a algún talle o modelo no se le pegó la foto.
+   *
+   * Va aparte de `sinFoto` (colores sin ninguna foto) porque son dos trabajos distintos: uno se
+   * resuelve pegando la foto que ya existe y el otro puede necesitar sacarla. Sumados en un solo
+   * número, el renglón decía "2 sin foto propia" sin decir de qué eran los 2.
+   */
+  variantesParciales: number
+  /**
    * El producto no tiene NINGUNA foto cargada.
    *
    * Va aparte de `sinFoto` (que son colores sin vincular) porque no depende de los colores: un
@@ -125,14 +134,18 @@ export function choquesDe(p: ProductoFchk): Choque[] {
   return out.sort((a, b) => b.variantes - a.variantes || b.colores.length - a.colores.length)
 }
 
+/** Los colores que tienen al menos una variante con foto propia. */
+export function coloresConFoto(p: ProductoFchk): Set<string> {
+  const con = new Set<string>()
+  for (const v of variantesConColor(p)) if (v.image_url) con.add(v.color as string)
+  return con
+}
+
 /** Colores sin ninguna foto vinculada, ordenados. Ignora variantes sin color (usan la principal). */
 export function coloresSinFoto(p: ProductoFchk): string[] {
-  const con = new Set<string>()
+  const con = coloresConFoto(p)
   const todos = new Set<string>()
-  for (const v of variantesConColor(p)) {
-    todos.add(v.color as string)
-    if (v.image_url) con.add(v.color as string)
-  }
+  for (const v of variantesConColor(p)) todos.add(v.color as string)
   return [...todos].filter((c) => !con.has(c)).sort((a, b) => a.localeCompare(b, 'es'))
 }
 
@@ -160,6 +173,8 @@ export function estadoDe(p: ProductoFchk): EstadoFotos {
   // uno lo es: contar las N sería inflar el problema.
   const variantesCruzadas = choques.reduce((acc, c) => acc + Math.round((c.variantes * (c.colores.length - 1)) / c.colores.length), 0)
   const variantesSinFoto = variantesConColor(p).filter((v) => !v.image_url).length
+  const conFoto = coloresConFoto(p)
+  const variantesParciales = variantesConColor(p).filter((v) => !v.image_url && conFoto.has(v.color as string)).length
 
   // `image_count` puede no venir; en ese caso vale la lista de imágenes que sí viene.
   const sinNingunaFoto = (p.image_count ?? (p.imagenes || []).length) === 0
@@ -182,6 +197,7 @@ export function estadoDe(p: ProductoFchk): EstadoFotos {
     fotosLibres,
     variantesCruzadas,
     variantesSinFoto,
+    variantesParciales,
     sinNingunaFoto,
     cola,
     hayProblema: porResolver > 0 || sinNingunaFoto,

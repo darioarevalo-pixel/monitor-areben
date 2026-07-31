@@ -171,6 +171,43 @@ describe('auditoría — cuántas publicaciones salen mal', () => {
 })
 
 /**
+ * Son dos trabajos distintos y el renglón los sumaba en un solo número: un color que **no está
+ * fotografiado** puede necesitar sacarle la foto, y un modelo al que **no le pegaron** la foto de
+ * su color se arregla en cinco segundos con una foto que ya existe.
+ */
+describe('auditoría — el color sin foto vs. el modelo al que no se la pegaron', () => {
+  it('el color entero sin foto no cuenta como parcial', () => {
+    const p = prod([v('A', null), v('A', null), v('B', 'b.jpg')], [{ id: '1', src: 'b.jpg' }])
+    const e = estadoDe(p)
+    expect(e.sinFoto).toEqual(['A'])
+    expect(e.variantesParciales).toBe(0)
+    expect(e.variantesSinFoto).toBe(2)
+  })
+
+  it('el modelo sin la foto de su color sí, y su color no figura como sin foto', () => {
+    // AZUL tiene foto en un modelo y en el otro quedó sin pegar.
+    const p = prod([v('AZUL', 'azul.jpg'), v('AZUL', null), v('ROJO', 'rojo.jpg')], [
+      { id: '1', src: 'azul.jpg' },
+      { id: '2', src: 'rojo.jpg' },
+    ])
+    const e = estadoDe(p)
+    expect(e.sinFoto).toEqual([])
+    expect(e.variantesParciales).toBe(1)
+    expect(e.variantesSinFoto).toBe(1)
+  })
+
+  it('los dos casos a la vez se cuentan cada uno por su lado', () => {
+    const p = prod([v('AZUL', 'azul.jpg'), v('AZUL', null), v('ROJO', null), v('ROJO', null)], [
+      { id: '1', src: 'azul.jpg' },
+    ])
+    const e = estadoDe(p)
+    expect(e.sinFoto).toEqual(['ROJO'])
+    expect(e.variantesParciales).toBe(1)
+    expect(e.variantesSinFoto).toBe(3)
+  })
+})
+
+/**
  * La ficha es lo que se mira a ojo. Tiene que decir, por color, con quién comparte la foto:
  * es la única forma de saber a cuál de los tres colores le corresponde la funda negra.
  */

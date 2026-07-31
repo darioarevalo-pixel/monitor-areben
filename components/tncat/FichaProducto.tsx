@@ -25,6 +25,7 @@ import type { IndiceStock } from '@/lib/tncat/stock-variante'
 import { referenciaDe, type FilaAuditoria } from '@/lib/tncat/prioridad'
 import type { ImagenFchk } from '@/lib/tncat/tipos'
 import type { Marca } from '@/lib/nav'
+import { FotoTn } from './FotoTn'
 
 const TIENDA: Record<Marca, string> = {
   bdi: 'https://www.bdiaccesorios.com.ar/productos',
@@ -45,6 +46,10 @@ export function FichaProducto({
   marca,
   acciones,
   stockGn,
+  posicion,
+  anteriorId,
+  siguienteId,
+  onIr,
   onCerrar,
 }: {
   fila: FilaAuditoria
@@ -52,6 +57,12 @@ export function FichaProducto({
   acciones: AccionFicha
   /** Stock de GN por código. Sin esto la ficha sale igual, solo sin unidades. */
   stockGn?: IndiceStock
+  /** Dónde está parado dentro de la lista. `null` si se llegó por fuera (el buscador). */
+  posicion?: { indice: number; total: number } | null
+  anteriorId?: string | null
+  siguienteId?: string | null
+  /** Salta a otro producto sin cerrar la ficha. */
+  onIr?: (id: string) => void
   onCerrar: () => void
 }) {
   const p = fila.producto
@@ -61,6 +72,8 @@ export function FichaProducto({
   const colores = fichaDe(p, stockGn)
   const imgs = p.imagenes || []
   const libres = new Set(fila.estado.fotosLibres.map((f) => String(f.id)))
+  /** Encadenar es lo que hace terminable una cola de 288: se revisa sin volver a la lista. */
+  const encadena = !!(siguienteId && onIr)
 
   const verificar = async () => {
     // Verificar un producto que todavía tiene un error PROBADO (misma foto en dos colores, o
@@ -83,7 +96,11 @@ export function FichaProducto({
     setGuardando(false)
     if (err) return toast.error(err)
     toast.ok(fila.verificado ? 'Vuelve a la lista para revisar.' : 'Marcado como revisado.')
-    if (!fila.verificado) onCerrar()
+    if (fila.verificado) return
+    // Al verificar, este producto sale de la lista. Si hay uno atrás se salta directo —el id se
+    // calculó antes, así que el corrimiento no lo afecta—; si era el último, se cierra.
+    if (encadena) onIr!(siguienteId!)
+    else onCerrar()
   }
 
   const quitar = async (color: string) => {
@@ -115,16 +132,33 @@ export function FichaProducto({
       }
       pie={
         <>
-          {p.handle && (
-            <a
-              href={`${TIENDA[marca]}/${p.handle}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ fontSize: font.sm, color: paleta.brand, alignSelf: 'center', marginRight: 'auto' }}
-            >
-              Ver en la tienda ↗
-            </a>
-          )}
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'center', marginRight: 'auto', flexWrap: 'wrap' }}>
+            {posicion && (
+              <span style={{ fontSize: font.sm, color: paleta.mut2 }}>
+                {posicion.indice} de {posicion.total}
+              </span>
+            )}
+            {onIr && (anteriorId || siguienteId) && (
+              <span style={{ display: 'flex', gap: 4 }}>
+                <Button size="sm" variant="ghost" disabled={!anteriorId || guardando} onClick={() => onIr(anteriorId!)} title="Producto anterior">
+                  ←
+                </Button>
+                <Button size="sm" variant="ghost" disabled={!siguienteId || guardando} onClick={() => onIr(siguienteId!)} title="Producto siguiente, sin marcar este">
+                  →
+                </Button>
+              </span>
+            )}
+            {p.handle && (
+              <a
+                href={`${TIENDA[marca]}/${p.handle}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: font.sm, color: paleta.brand, alignSelf: 'center' }}
+              >
+                Ver en la tienda ↗
+              </a>
+            )}
+          </div>
           <Button variant="ghost" onClick={onCerrar}>
             Cerrar
           </Button>
@@ -134,7 +168,7 @@ export function FichaProducto({
             loading={guardando}
             onClick={() => void verificar()}
           >
-            {fila.verificado ? 'Marcar para revisar de nuevo' : 'Verificado, está bien'}
+            {fila.verificado ? 'Marcar para revisar de nuevo' : encadena ? 'Verificado y siguiente →' : 'Verificado, está bien'}
           </Button>
         </>
       }
@@ -155,8 +189,8 @@ export function FichaProducto({
 
       {fila.estado.sinNingunaFoto ? (
         <Notice tone="danger" style={{ marginBottom: space[3] }}>
-          <b>Este producto no tiene ninguna foto cargada.</b> En la tienda se ve en blanco. Subilas desde «Carga de
-          imágenes», arriba de esta card; recién ahí se van a poder pegar a cada color.
+          <b>Este producto no tiene ninguna foto cargada.</b> En la tienda se ve en blanco. Hasta que tenga fotos no hay
+          nada para pegarle a cada color.
         </Notice>
       ) : (
         fila.estado.cola === 'fotografia' && (
@@ -239,6 +273,14 @@ function RenglonColor({
   // `null` = el elegidor cerrado. Con una imagen adentro = esperando que confirmen ESA foto.
   const [eligiendo, setEligiendo] = useState(false)
   const [candidata, setCandidata] = useState<ImagenFchk | null>(null)
+  /**
+   * La foto ampliada, para poder decidir de qué color es.
+   *
+   * Se agranda en el mismo lugar y no en un visor flotante a propósito: el `Modal` del kit
+   * escucha Escape en `document`, así que un modal adentro del modal se cerraría de a dos.
+   */
+  const [ampliada, setAmpliada] = useState(false)
+  const lado = ampliada ? 420 : 176
 
   // La foto que este color ya tiene, como imagen del producto (para poder re-vincularla). El
   // cruce va por URL porque es lo que trae la variante; están comprobadas idénticas.
@@ -251,25 +293,31 @@ function RenglonColor({
     <div style={{ border: `1px solid ${borde}`, background: fondo, borderRadius: 10, padding: space[3], marginBottom: space[2] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
         {c.foto ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <FotoTn
             src={c.foto}
             alt={c.color}
+            ancho={lado}
+            // Ampliada se pide la original: es lo que se está mirando para decidir el color.
+            original={ampliada}
+            title={ampliada ? 'Tocá para achicarla' : 'Tocá para verla en grande'}
+            onClick={() => setAmpliada((v) => !v)}
             style={{
-              width: 132,
-              height: 132,
+              width: lado,
+              height: lado,
               objectFit: 'cover',
               borderRadius: 8,
               border: `2px solid ${c.comparteCon.length ? paleta.danger : paleta.successBorder}`,
               flex: '0 0 auto',
               background: paleta.bg2,
+              cursor: ampliada ? 'zoom-out' : 'zoom-in',
+              maxWidth: '100%',
             }}
           />
         ) : (
           <div
             style={{
-              width: 132,
-              height: 132,
+              width: 176,
+              height: 176,
               borderRadius: 8,
               border: `2px dashed ${paleta.line2}`,
               display: 'flex',
@@ -384,11 +432,10 @@ function RenglonColor({
             // Confirmación en el mismo lugar: la foto elegida en grande, con el botón que dice
             // exactamente qué va a pasar. Escribe en la tienda en vivo.
             <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <FotoTn
                 src={candidata.src}
-                alt=""
-                style={{ width: 200, maxWidth: '100%', borderRadius: 8, border: `1px solid ${paleta.line}`, background: paleta.bg2 }}
+                ancho={260}
+                style={{ width: 260, maxWidth: '100%', borderRadius: 8, border: `1px solid ${paleta.line}`, background: paleta.bg2 }}
               />
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontSize: font.sm, color: paleta.ink2, marginBottom: space[2] }}>
@@ -422,16 +469,15 @@ function RenglonColor({
               </div>
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
                 {imgs.map((im) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <FotoTn
                     key={im.id}
                     src={im.src}
-                    alt=""
+                    ancho={96}
                     onClick={() => setCandidata(im)}
                     title={libres.has(String(im.id)) ? 'Ningún color la está usando' : 'Ya la usa otro color'}
                     style={{
-                      width: 72,
-                      height: 72,
+                      width: 96,
+                      height: 96,
                       objectFit: 'cover',
                       borderRadius: 7,
                       cursor: 'pointer',

@@ -52,9 +52,12 @@ import {
 } from '@/lib/tncat/prioridad'
 import { dejarDeIgnorar, ignorarProducto, leerIgnorados, MOTIVOS_IGNORAR } from '@/lib/tncat/ignorados'
 import { desmarcarVerificado, leerVerificadas, mapaDe, marcarVerificado } from '@/lib/tncat/verificadas'
+import { fichaDe, type ColorEnFicha } from '@/lib/tncat/auditoria'
+import { frasesDeProblema } from '@/lib/tncat/texto'
 import type { ImagenFchk, ProductoFchk } from '@/lib/tncat/tipos'
 import { Badge, Button, Card, Chips, color as paleta, font, KpiCard, Notice, space, useConfirmar, useToast } from '@/components/ui'
 import { FichaProducto } from './FichaProducto'
+import { FotoTn } from './FotoTn'
 
 const MAX = 80
 
@@ -214,6 +217,19 @@ export function FotosCard({ marca }: { marca: Marca }) {
   // recortes que dependen de él no filtran nada — hay que decirlo, no simularlo.
   const cruceListo = !!stockPorTn
   const abiertaFila = abierto ? (lista.find((f) => String(f.producto.id) === abierto) ?? filas.find((f) => String(f.producto.id) === abierto)) : null
+
+  /**
+   * Dónde está parada la ficha dentro de la lista, para poder encadenar la revisión sin salir a
+   * buscar el próximo a mano.
+   *
+   * Los ids se calculan **antes** de verificar: al marcar un producto, ese producto sale de la
+   * lista y todos los de atrás se corren un lugar. Guardando el id —y no la posición— el salto
+   * cae donde tiene que caer. Con `pos = -1` (se llegó por el buscador, o el producto ya salió
+   * de la lista) no hay a dónde ir y los controles no aparecen.
+   */
+  const pos = abierto ? lista.findIndex((f) => String(f.producto.id) === abierto) : -1
+  const anteriorId = pos > 0 ? String(lista[pos - 1].producto.id) : null
+  const siguienteId = pos >= 0 && pos < lista.length - 1 ? String(lista[pos + 1].producto.id) : null
 
   // ── Escrituras ────────────────────────────────────────────────────────────────
   /**
@@ -575,6 +591,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
                   key={String(f.producto.id)}
                   f={f}
                   apartado={verIgnorados}
+                  mostrarUnidades={filtro === 'fotografia' && !buscando && !verIgnorados}
                   onAbrir={() => setAbierto(String(f.producto.id))}
                   onApartar={() => void ignorar(f)}
                   onRestaurar={() => void restaurar(f)}
@@ -592,10 +609,17 @@ export function FotosCard({ marca }: { marca: Marca }) {
 
       {abiertaFila && (
         <FichaProducto
+          /* Remonta la ficha al saltar de producto: sin esto, el elegidor abierto y la foto
+             candidata del anterior seguirían en pantalla sobre el nuevo. */
+          key={String(abiertaFila.producto.id)}
           fila={abiertaFila}
           marca={marca}
           acciones={accionesDe(abiertaFila)}
           stockGn={stockGn}
+          posicion={pos >= 0 ? { indice: pos + 1, total: lista.length } : null}
+          anteriorId={anteriorId}
+          siguienteId={siguienteId}
+          onIr={setAbierto}
           onCerrar={() => setAbierto(null)}
         />
       )}
@@ -607,19 +631,29 @@ export function FotosCard({ marca }: { marca: Marca }) {
 function Fila({
   f,
   apartado,
+  mostrarUnidades,
   onAbrir,
   onApartar,
   onRestaurar,
 }: {
   f: FilaAuditoria
   apartado: boolean
+  /**
+   * Las unidades esperando foto solo se muestran en el reporte de fotografía, que es el único
+   * lugar donde el número hace algo: es el que ordena esa lista. En el resto de la pantalla se
+   * mide en variantes de color, y el dato de unidades era ruido al lado de eso.
+   */
+  mostrarUnidades: boolean
   onAbrir: () => void
   onApartar: () => void
   onRestaurar: () => void
 }) {
   const { estado: e, producto: p } = f
-  const grave = e.variantesCruzadas > 0
-  const miniaturas = e.choques[0]?.foto ? [e.choques[0].foto] : []
+  const grave = e.variantesCruzadas > 0 || e.sinNingunaFoto
+  const frases = useMemo(() => frasesDeProblema(e), [e])
+  // Cada color con su foto, para poder mirarlos sin abrir la ficha. Sin índice de stock: acá no
+  // se muestran unidades.
+  const colores = useMemo(() => fichaDe(p), [p])
 
   return (
     <div
@@ -631,16 +665,11 @@ function Fila({
         marginBottom: space[2],
         display: 'flex',
         gap: space[3],
-        alignItems: 'center',
+        alignItems: 'flex-start',
         flexWrap: 'wrap',
       }}
     >
-      {miniaturas.map((src) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img key={src} src={src} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6, border: `2px solid ${paleta.danger}`, flex: '0 0 auto' }} />
-      ))}
-
-      <div style={{ flex: 1, minWidth: 200 }}>
+      <div style={{ flex: 1, minWidth: 240 }}>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600 }}>{p.name}</span>
           {f.cambioDesdeRevision && <Badge tone="warning">cambió desde la revisión</Badge>}
@@ -649,26 +678,22 @@ function Fila({
           {!e.sinNingunaFoto && e.cola === 'fotografia' && <Badge tone="neutral">falta fotografiar</Badge>}
         </div>
         <div style={{ fontSize: font.sm, color: paleta.mut, marginTop: 2 }}>
-          {e.variantesCruzadas > 0 && (
-            <b style={{ color: paleta.dangerInk }}>
-              {e.variantesCruzadas === 1 ? '1 publicación con la foto de otro color' : `${e.variantesCruzadas} publicaciones con la foto de otro color`}
-            </b>
-          )}
-          {e.variantesCruzadas > 0 && e.variantesSinFoto > 0 && ' · '}
-          {e.variantesSinFoto > 0 && `${e.variantesSinFoto} sin foto propia`}
-          {e.sinNingunaFoto && 'El producto no tiene ninguna foto cargada — subilas en Carga de imágenes, acá arriba.'}
-          {!e.hayProblema &&
-            (f.cambioDesdeRevision
+          {frases.length
+            ? frases.map((fr, i) => (
+                <span key={fr.texto}>
+                  {i > 0 && ' · '}
+                  {fr.grave ? <b style={{ color: paleta.dangerInk }}>{fr.texto}</b> : fr.texto}
+                </span>
+              ))
+            : f.cambioDesdeRevision
               ? 'Sin problemas detectables, pero hay que volver a mirarlo.'
               : e.colores.length > 1
                 ? // En la cola de revisión el dato útil no es "está bien" —eso ya se sabe— sino
                   // cuánto hay en juego si resulta que no lo está.
                   `${e.colores.length} colores en ${(p.variantes || []).filter((v) => v.color).length} variantes — confirmá que cada color muestre lo suyo`
-                : 'Sin problemas detectados.')}
+                : 'Sin problemas detectados.'}
         </div>
-        {/* Las unidades esperando foto van aparte y en ámbar: es plata parada, no una referencia
-            más. El "en stock" de abajo es del producto entero y sale de un cruce por nombre. */}
-        {f.unidadesSinFoto !== undefined && f.unidadesSinFoto > 0 && (
+        {mostrarUnidades && f.unidadesSinFoto !== undefined && f.unidadesSinFoto > 0 && (
           <div style={{ fontSize: font.sm, color: paleta.warningInk, fontWeight: 600, marginTop: 2 }}>
             {f.unidadesSinFoto.toLocaleString('es-AR')} unidades esperando foto
           </div>
@@ -678,6 +703,8 @@ function Fila({
           {f.ventas90 !== undefined && ` · ${f.ventas90} vendidas en 90 días`}
           {f.stock !== undefined && ` · ${f.stock} en stock`}
         </div>
+
+        <TiraDeColores colores={colores} />
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flex: '0 0 auto' }}>
@@ -694,6 +721,78 @@ function Fila({
           Ver fotos
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Cuántos colores entran en el renglón antes de resumir. El máximo real medido son 10. */
+const TOPE_COLORES = 10
+
+/**
+ * Los colores del producto con su foto, en el renglón.
+ *
+ * Antes acá había una sola miniatura —la del primer choque— y para saber **qué** color estaba mal
+ * había que abrir la ficha. En la cola de "mirar a ojo" eso significa abrirlas todas: es
+ * justamente donde no hay nada detectado y lo único que resuelve es ver las fotos juntas. Con la
+ * tira, la mayoría se descarta de un vistazo y solo se abre lo dudoso.
+ */
+function TiraDeColores({ colores }: { colores: ColorEnFicha[] }) {
+  if (!colores.length) return null
+  const visibles = colores.slice(0, TOPE_COLORES)
+  const resto = colores.length - visibles.length
+
+  return (
+    <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
+      {visibles.map((c) => {
+        const borde = c.comparteCon.length ? paleta.danger : !c.foto ? paleta.warningBorder : paleta.line2
+        return (
+          <div key={c.color} style={{ width: 58, flex: '0 0 auto' }}>
+            {c.foto ? (
+              <FotoTn
+                src={c.foto}
+                alt={c.color}
+                ancho={58}
+                title={c.comparteCon.length ? `Comparte la foto con ${c.comparteCon.join(', ')}` : c.color}
+                style={{ width: 58, height: 58, objectFit: 'cover', borderRadius: 6, border: `2px solid ${borde}`, background: paleta.bg2, display: 'block' }}
+              />
+            ) : (
+              <div
+                title="Sin foto propia: muestra la principal del producto"
+                style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: 6,
+                  border: `2px dashed ${borde}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: paleta.mut2,
+                  fontSize: font.xs,
+                }}
+              >
+                sin foto
+              </div>
+            )}
+            <div
+              title={c.color}
+              style={{
+                fontSize: font.xs,
+                color: c.comparteCon.length ? paleta.dangerInk : paleta.mut2,
+                marginTop: 2,
+                textAlign: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {c.color}
+            </div>
+          </div>
+        )
+      })}
+      {resto > 0 && (
+        <div style={{ alignSelf: 'center', fontSize: font.sm, color: paleta.mut2 }}>+{resto} colores más</div>
+      )}
     </div>
   )
 }
