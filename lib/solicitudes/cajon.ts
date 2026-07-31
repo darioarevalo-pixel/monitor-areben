@@ -6,12 +6,16 @@
  * reescribía entero en cada guardado. Ahora la fuente de verdad es la tabla `solicitudes`
  * del propio monitor (API), una fila por solicitud.
  *
- * ── Convivencia (a propósito, y temporal) ──────────────────────────────────────────
- * Durante la migración se LEEN los dos lugares y se fusionan por id **ganando la tabla**,
- * pero se ESCRIBE solo en la tabla. Es la red de la mudanza: si algo no migró, sigue
- * apareciendo en pantalla —el equipo no pierde una solicitud— y se nota enseguida en vez
- * de descubrirse tres días después. Cuando `MIGRACION_LISTA` pase a true, se deja de leer
- * el KV; las claves viejas quedan intactas como respaldo (no se borran).
+ * ── Convivencia (terminada el 31-jul-2026) ─────────────────────────────────────────
+ * Durante la migración se LEÍAN los dos lugares y se fusionaban por id ganando la tabla,
+ * pero se ESCRIBÍA solo en la tabla. Era la red de la mudanza: si algo no migraba, seguía
+ * apareciendo en pantalla —el equipo no perdía una solicitud— y se notaba enseguida en vez
+ * de descubrirse tres días después.
+ *
+ * Se verificó por id contra las dos marcas (BDI 8 en el KV, todas en la tabla; Zattia 16,
+ * todas en la tabla) y la red se retiró: `MIGRACION_LISTA` está en true y el KV ya no se
+ * lee. Las claves viejas quedan intactas como respaldo — no se borran, y volver atrás es
+ * poner el flag en false.
  */
 
 import { apiFetch } from '@/lib/api-fetch'
@@ -22,10 +26,14 @@ import type { Marca } from '@/lib/nav.datos'
 const API = '/api/postventa?recurso=solicitudes'
 
 /**
- * ¿Ya se puede dejar de leer el KV viejo? Se prende cuando la migración esté verificada
- * en las dos marcas (ver scripts/migrar-solicitudes.mjs y el conteo por estado).
+ * ¿Ya se puede dejar de leer el KV viejo? Se prendió el 31-jul-2026, después de cruzar id
+ * por id el KV contra la tabla en las dos marcas (ver scripts/migrar-solicitudes.mjs).
+ *
+ * El cruce se hace por **id**, no por cantidad: desde la migración la tabla tiene más
+ * filas que el KV —lo nuevo se escribe solo ahí—, así que contar no responde la pregunta.
+ * La única que importa es si quedó algún id en el KV que la tabla no tenga.
  */
-export const MIGRACION_LISTA = false
+export const MIGRACION_LISTA = true
 
 /** Lo mínimo que el cajón necesita de una solicitud para poder fusionar por id. */
 type ConId = { id: string }
