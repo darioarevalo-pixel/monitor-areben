@@ -56,6 +56,9 @@ import { FichaProducto } from './FichaProducto'
 
 const MAX = 80
 
+/** El detalle que devuelve el endpoint cuando algo no se aplicó. Sin esto el error no se diagnostica. */
+const detalle = (errores?: string[]) => (errores?.length ? errores.join(' · ') : '')
+
 export function FotosCard({ marca }: { marca: Marca }) {
   const { pedirTexto } = useConfirmar()
   const toast = useToast()
@@ -215,7 +218,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         try {
           const j = await vincularColor(marca, prodId, imagen.id, color)
           if (!j.ok || !(j.variantesObjetivo ?? 0) || (j.variantesAsignadas ?? 0) < (j.variantesObjetivo ?? 0)) {
-            return j.error || ((j.variantesObjetivo ?? 0) === 0 ? `El color "${color}" no coincide con ninguna variante en la tienda.` : `Se vincularon ${j.variantesAsignadas ?? 0} de ${j.variantesObjetivo}.`)
+            return j.error || ((j.variantesObjetivo ?? 0) === 0 ? `El color "${color}" no coincide con ninguna variante en la tienda.` : `Se vincularon ${j.variantesAsignadas ?? 0} de ${j.variantesObjetivo}. ${detalle(j.linkErrores)}`)
           }
           aplicarLocal(prodId, color, imagen.src)
           return null
@@ -227,7 +230,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         try {
           const j = await desvincularColor(marca, prodId, color)
           if (!j.ok || !(j.variantesObjetivo ?? 0) || (j.variantesDesasignadas ?? 0) < (j.variantesObjetivo ?? 0)) {
-            return j.error || `Se quitaron ${j.variantesDesasignadas ?? 0} de ${j.variantesObjetivo ?? 0}.`
+            return j.error || `Se quitaron ${j.variantesDesasignadas ?? 0} de ${j.variantesObjetivo ?? 0}. ${detalle(j.linkErrores)}`
           }
           aplicarLocal(prodId, color, null)
           return null

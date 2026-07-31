@@ -60,8 +60,22 @@ export type GrupoImg = {
   portadaId?: number
 }
 
-/** Respuesta del endpoint al subir/vincular/desvincular una imagen. */
-export type SubirResp = { ok?: boolean; image_id?: string | number; variantesObjetivo?: number; variantesAsignadas?: number; variantesDesasignadas?: number; error?: string }
+/**
+ * Respuesta del endpoint al subir/vincular/desvincular una imagen.
+ *
+ * `variantesAsignadas` / `variantesDesasignadas` son las **comprobadas releyendo TiendaNube**, no
+ * las que contestaron 2xx: TN puede aceptar el pedido y no aplicarlo. `linkErrores` trae el
+ * detalle de qué falló, que es lo único que hace diagnosticable un "se aplicaron 0 de 1".
+ */
+export type SubirResp = {
+  ok?: boolean
+  image_id?: string | number
+  variantesObjetivo?: number
+  variantesAsignadas?: number
+  variantesDesasignadas?: number
+  linkErrores?: string[]
+  error?: string
+}
 
 // ── Revisar fotos por variante (card 3, fchk) ───────────────────────────────────
 export type VarianteFchk = {
