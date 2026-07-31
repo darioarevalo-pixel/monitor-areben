@@ -25,12 +25,14 @@
  *   node scripts/sf-kv.mjs --restore <carpeta> --store <marca> --si-estoy-seguro
  *
  * El dump va a tests/fixtures/kv/sf-<store>-<timestamp>/, gitignoreado (datos
- * reales). No necesita credenciales: la kind no pide auth (parte del problema A7).
+ * reales). Necesita `MONITOR_PASS` en el .env: desde que se cerró `api/ingresos`
+ * (27-jul-2026) el KV no se lee anónimo — ver scripts/lib/kv-auth.mjs.
  */
 
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { authKv } from './lib/kv-auth.mjs'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
 const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
@@ -46,7 +48,7 @@ const valor = (f, def) => {
 /** Un GET al KV. Distingue red caída / no-ok / ok-sin-dato (la confusión que es el bug). */
 async function traer(store) {
   const url = `${API}?kind=${KIND}&store=${store}&nc=${Date.now()}`
-  const r = await fetch(url)
+  const r = await fetch(url, { headers: authKv() })
   const texto = await r.text()
   let d = null
   try {
@@ -142,7 +144,7 @@ async function restore() {
   }
   const r = await fetch(`${API}?kind=${KIND}&store=${store}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authKv() },
     body: JSON.stringify({ store, list: lista }),
   })
   const d = await r.json().catch(() => null)

@@ -27,13 +27,14 @@
  * El dump va a tests/fixtures/kv/<store>-<timestamp>/, que está gitignoreado
  * (son datos reales de clientes).
  *
- * No necesita credenciales: las 4 kinds del CRM no piden auth (solo `ingresos`
- * exige admin, ingresos.js:210). Eso es parte del problema, no una comodidad.
+ * Necesita `MONITOR_PASS` en el .env: desde que se cerró `api/ingresos`
+ * (27-jul-2026) ninguna kind se lee anónima — ver scripts/lib/kv-auth.mjs.
  */
 
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { authKv } from './lib/kv-auth.mjs'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
 const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
@@ -61,7 +62,7 @@ const store = valor('--store', 'bdi')
  */
 async function traer(kind, campo) {
   const url = `${API}?kind=${kind}&store=${store}&nc=${Date.now()}`
-  const r = await fetch(url)
+  const r = await fetch(url, { headers: authKv() })
   const texto = await r.text()
   let d = null
   try {
@@ -153,7 +154,7 @@ async function restore() {
 
   const r = await fetch(`${API}?kind=${kind}&store=${store}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authKv() },
     body: JSON.stringify({ [def.campo]: dato }),
   })
   const d = await r.json().catch(() => null)

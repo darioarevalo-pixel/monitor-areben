@@ -25,14 +25,16 @@
  *   node scripts/migrar-solicitudes.mjs --aplicar --pisar     ← re-escribe documentos ya migrados
  *
  * Escribe con la connection string directa (DATABASE_URL_BDI / DATABASE_URL_ZATTIA del
- * .env), igual que scripts/apply-fallas.mjs — no pasa por el endpoint, así no necesita
- * credenciales de usuario ni depende del deploy.
+ * .env), igual que scripts/apply-fallas.mjs — no pasa por el endpoint, así no depende del
+ * deploy. **Leer el KV sí necesita credencial** desde que se cerró `api/ingresos`
+ * (27-jul-2026): `MONITOR_PASS` en el .env, ver scripts/lib/kv-auth.mjs.
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
+import { authKv } from './lib/kv-auth.mjs'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
 const KV_API = 'https://bdi-catalogo.vercel.app/api/ingresos'
@@ -77,7 +79,7 @@ function parseUrl(raw) {
 
 /** GET al KV. Distingue "no se pudo leer" de "leí y está vacío" (leer mal = migrar de menos). */
 async function traerKv(kind, store) {
-  const r = await fetch(`${KV_API}?kind=${kind}&store=${store}&nc=${Date.now()}`)
+  const r = await fetch(`${KV_API}?kind=${kind}&store=${store}&nc=${Date.now()}`, { headers: authKv(env) })
   const texto = await r.text()
   let d = null
   try {
