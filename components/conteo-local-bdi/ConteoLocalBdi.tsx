@@ -21,6 +21,7 @@ import {
 import type { LbPreview, ModeloGrupo } from '@/lib/conteo-local-bdi/tipos'
 import { useConteoLocalBdi } from './useConteoLocalBdi'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { HistorialConteos, InstructivoConteo } from '@/components/conteos/comunes'
 import {
   BuscarInput,
@@ -235,6 +236,15 @@ export function ConteoLocalBdi() {
   return (
     <>
       <HeaderAcciones>
+        <InfoPopover titulo="Conteo de fundas">
+          Se cuenta <b>de a un modelo de celular por vez</b>: escaneás todas las fundas de ese modelo y lo
+          cerrás. Recién ahí el monitor lee el stock <b>vivo</b> de Gestión Nube (ubicación Local), lo compara
+          con lo que contaste y arma el Excel de ajuste. Como el vivo se lee en el momento del cierre, las
+          ventas que hubo mientras contabas no ensucian la diferencia.
+          <br /><br />
+          ⚠️ <b>El conteo en curso se guarda en este dispositivo.</b> Si empezaste en el celular, terminalo y
+          cerralo en el celular: desde otra compu no está.
+        </InfoPopover>
         {vista === 'lista' && (
           <>
             <Button variant="outline" onClick={() => void onHistorial()}>

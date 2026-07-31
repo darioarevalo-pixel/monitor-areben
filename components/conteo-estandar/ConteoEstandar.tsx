@@ -26,6 +26,7 @@ import type { CePreview, CeProducto, CeState, Linea } from '@/lib/conteo-estanda
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { useConteoEstandar } from './useConteoEstandar'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
 import {
   Badge,
@@ -351,6 +352,17 @@ export function ConteoEstandar() {
   return (
     <>
       <HeaderAcciones>
+        <InfoPopover titulo={`Conteo del local — ${lineaLabel(linea)}`}>
+          Conteo físico del <b>local</b>, por producto y talle, de la línea <b>{lineaLabel(linea)}</b>: los
+          productos de la otra línea no entran en este conteo aunque los escanees.
+          <br /><br />
+          Lo <b>exhibido</b> se escanea (cada lectura suma 1) y el <b>depósito del local</b> se carga a mano;
+          el total de los dos es lo que se compara contra el stock del Local. El ajuste se calcula con el
+          stock <b>vivo</b> de Gestión Nube más la diferencia, así las ventas del rato no lo ensucian.
+          <br /><br />
+          ⚠️ <b>El conteo en curso se guarda en este dispositivo</b>, y el Excel que sale va{' '}
+          <b>solo al Gestión Nube de esta marca</b>.
+        </InfoPopover>
         {vista === 'lista' && (
           <>
             <Button variant="ghost" tone="danger" onClick={() => void onReset()}>

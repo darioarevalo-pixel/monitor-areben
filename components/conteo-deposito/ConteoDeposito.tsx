@@ -21,6 +21,7 @@ import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
 import type { CdepProducto, CdepState, ConteoHistorial, Preview } from '@/lib/conteo-deposito/tipos'
 import { useConteoDeposito } from './useConteoDeposito'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
 import {
   BuscarInput,
@@ -268,6 +269,17 @@ export function ConteoDeposito() {
   return (
     <>
       <HeaderAcciones>
+        <InfoPopover titulo="Conteo de depósito">
+          Conteo físico del depósito <b>producto por producto</b>: buscás el producto, cargás a mano cuánto
+          hay de cada variante y lo terminás. No es por escaneo.
+          <br /><br />
+          Al aplicar, el ajuste se calcula con el stock <b>vivo</b> de Gestión Nube más la diferencia que
+          contaste, así que las ventas que pasaron durante el conteo no lo ensucian. Queda el historial de
+          cada conteo aplicado.
+          <br /><br />
+          ⚠️ <b>El conteo en curso se guarda en este dispositivo.</b> El que aplique tiene que hacerlo en la
+          misma compu o celular donde se contó.
+        </InfoPopover>
         {vista === 'lista' && (
           <>
             <Button variant="ghost" tone="danger" onClick={() => void onReset()}>

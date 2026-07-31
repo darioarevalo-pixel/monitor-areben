@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
@@ -23,6 +23,7 @@ import { exportarSalePDF, exportarSaleXLSX } from '@/lib/comisiones/export'
 import type { Celda, ComCfg, ResultadoMargen } from '@/lib/comisiones/tipos'
 import type { Producto } from '@/lib/etl/tipos'
 import { Button, Card, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 
 /** Credencial para los guardados admin. A nivel módulo: es estable entre renders. */
 const obtenerCred = () => credencialConPrompt('del Monitor')
@@ -122,7 +123,13 @@ export function Comisiones() {
       {/* PARTE 1: CONFIGURACIÓN */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>1 · Configuración</div>
+          <TituloCard texto="1 · Configuración" info="La configuración">
+            Los números con los que se calcula todo lo de abajo: los impuestos y, para cada canal, la
+            comisión, el costo financiero, el descuento y los días de acreditación de cada forma de pago.
+            <b> La config es una sola para todo el equipo</b>: la guarda un admin y el resto la ve (el cartel
+            de la derecha avisa si se guardó). <b>Saldo IVA ACTIVO</b> quiere decir que el IVA de la venta se
+            recupera contra saldo a favor y no toca el margen; en <b>AGOTADO</b> se descuenta y el margen baja.
+          </TituloCard>
           <span style={{ fontSize: 11, color: com.shareStatus.color }}>{com.shareStatus.txt}</span>
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
@@ -191,7 +198,12 @@ export function Comisiones() {
 
       {/* PARTE 2: SIMULADOR */}
       <Card style={{ marginTop: space[4] }}>
-        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>2 · Simulador de margen por producto</div>
+        <TituloCard texto="2 · Simulador de margen por producto" info="El simulador">
+          Traés un producto y ves, forma de pago por forma de pago y canal por canal, qué margen neto queda.
+          El <b>costo va neto, sin IVA</b>, y el <b>PVP con IVA</b>. Tocando una celda se abre la cascada
+          completa: comisión, costo financiero, IIBB, DREI, costo de canal y Ganancias.
+          <b> Es una simulación</b>: no cambia ningún precio en Gestión Nube ni en la tienda.
+        </TituloCard>
         <BuscadorProducto
           productos={datos?.allProductos ?? []}
           tnIdx={tnIdx}
@@ -234,7 +246,11 @@ export function Comisiones() {
       {/* LISTA DE PRECIOS DE SALE */}
       <Card style={{ marginTop: space[4] }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>🏷️ Lista de precios de sale</div>
+          <TituloCard texto="🏷️ Lista de precios de sale" info="La lista de sale">
+            Los productos que fuiste agregando desde el simulador con el precio de sale que les pusiste, para
+            bajar la lista en Excel o PDF. <b>Vive en este navegador</b>: es un borrador tuyo, no lo ve el
+            resto del equipo y no toca los precios de la tienda.
+          </TituloCard>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button size="sm" variant="outline" onClick={() => exportarSaleXLSX(com.saleList, marca).catch(() => toast.error('No se pudo exportar el Excel.'))} disabled={!com.saleList.length}>
               Excel (.xlsx)
@@ -250,13 +266,30 @@ export function Comisiones() {
 
       {/* PISO DE PRECIO */}
       <Card style={{ marginTop: space[4] }}>
-        <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3] }}>3 · Piso de precio (PVP mínimo para un margen objetivo)</div>
+        <TituloCard texto="3 · Piso de precio (PVP mínimo para un margen objetivo)" info="El piso de precio">
+          Es el simulador al revés: en vez de fijar el precio y ver qué margen queda, ponés el margen que
+          querés y te dice el PVP mínimo que lo consigue, para cada forma de pago. Toma el <b>costo neto</b>
+          que cargaste arriba, así que sirve para saber hasta dónde podés descontar sin perder plata.
+        </TituloCard>
         <div style={{ marginBottom: 12, fontSize: 12, color: color.mut }}>
           Usa el <b>Costo neto</b> de arriba. Margen objetivo %
           <input type="number" step={1} value={pisoObj} onChange={(e) => setPisoObj(e.target.value)} className="mo-input mo-input--num" style={{ width: 90, marginLeft: 6 }} />
         </div>
         <Piso cfg={cfg} cans={cans} costo={costoN} objetivo={num(pisoObj) / 100} />
       </Card>
+    </div>
+  )
+}
+
+/**
+ * Título de cada parte de la sección con su ⓘ al lado. `texto` es el rótulo numerado que se ve en
+ * la pantalla; `info` es el encabezado del panel, sin el número (el "1 ·" ahí adentro no dice nada).
+ */
+function TituloCard({ texto, info, children }: { texto: string; info: string; children: ReactNode }) {
+  return (
+    <div style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, letterSpacing: 0, marginBottom: space[3], display: 'inline-flex', alignItems: 'center' }}>
+      {texto}
+      <InfoPopover titulo={info}>{children}</InfoPopover>
     </div>
   )
 }

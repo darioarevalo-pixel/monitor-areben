@@ -15,6 +15,7 @@ import type { RepoCfg, RepoItem } from '@/lib/reposicion/tipos'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
   Badge,
   Button,
@@ -122,6 +123,17 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
   return (
     <>
       <HeaderAcciones>
+        <InfoPopover titulo="Reposición">
+          Qué le falta al local: las variantes que quedaron por debajo del mínimo y que <b>sí hay</b> en el
+          depósito para reponerlas. El mínimo se fija por categoría en «Configurar mínimos» y ahí mismo se
+          apaga lo que no querés que aparezca nunca.
+          <br /><br />
+          <b>No mueve stock.</b> Lo que sale de acá es la lista para ir a buscar al depósito: se exporta y el
+          movimiento se hace en Gestión Nube.
+          <br /><br />
+          «Recargar» vuelve a leer lo que ya está sincronizado (rápido); «Traer de Gestión Nube» va a buscar
+          el stock y el catálogo de verdad y tarda un par de minutos.
+        </InfoPopover>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}>
           <input type="checkbox" checked={verVentas} onChange={(e) => setVerVentas(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
           Ver ventas del local (7d)
