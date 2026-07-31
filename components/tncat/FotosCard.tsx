@@ -183,6 +183,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
   // Cuántos productos con problema quedaron afuera por los recortes. Sin esto, filtrar de más
   // se ve idéntico a "no hay nada roto": el tablero muestra cero y no dice por qué.
   const conProblema = useMemo(() => filas.filter((f) => f.estado.hayProblema || f.cambioDesdeRevision).length, [filas])
+  const paraRevisar = useMemo(() => recortadas.filter(predicadoDe('para-revisar')).length, [recortadas])
   const escondidos = conProblema - tablero.productos
   // El stock y las ventas salen del ETL, que carga aparte y tarda. Mientras no esté, los
   // recortes que dependen de él no filtran nada — hay que decirlo, no simularlo.
@@ -345,7 +346,19 @@ export function FotosCard({ marca }: { marca: Marca }) {
               accion="Ver solo estas →"
               accionActiva="Filtrando ✓"
             />
-            <KpiCard label="Productos para revisar" value={tablero.productos} sub={`${nVerificados} ya verificados`} />
+            {/* La otra mitad del trabajo: los que figuran sanos y nadie miró todavía. El error
+                que ninguna máquina puede ver —la foto de otro color, bien vinculada— vive
+                justo acá, así que sin esta tarjeta esa cola no existía. */}
+            <KpiCard
+              label="Sanos, falta mirarlos a ojo"
+              value={paraRevisar}
+              tone={paraRevisar ? 'neutral' : 'success'}
+              sub={nVerificados ? `${nVerificados} ya verificados` : 'Ninguno verificado todavía'}
+              onClick={() => setFiltro('para-revisar')}
+              activo={filtro === 'para-revisar'}
+              accion="Empezar a revisar →"
+              accionActiva="Revisando ✓"
+            />
           </div>
 
           {errorRevisiones && (
@@ -445,13 +458,27 @@ export function FotosCard({ marca }: { marca: Marca }) {
                     { key: 'sin-foto', label: 'Sin foto propia' },
                     { key: 'escritorio', label: 'Se arregla acá', title: 'La foto ya existe en el producto: solo falta pegarla' },
                     { key: 'fotografia', label: 'Falta fotografiar', title: 'No hay ninguna foto de ese color' },
+                    {
+                      key: 'para-revisar',
+                      label: `Mirar a ojo (${paraRevisar})`,
+                      title: 'Figuran sanos, pero la máquina no puede ver si la foto es del color que dice',
+                    },
                   ]}
                 />
               </div>
             </>
           )}
 
-          {!buscando && !verIgnorados && escondidos > 0 && (
+          {!buscando && !verIgnorados && filtro === 'para-revisar' && lista.length > 0 && (
+            <Notice tone="neutral" style={{ marginBottom: space[3] }}>
+              <b>Estos figuran bien y por eso hay que mirarlos.</b> La pantalla puede darse cuenta de que dos colores
+              comparten una foto, pero no puede mirar una foto y decir de qué color es: si alguien pegó la violeta en
+              el azul, y cada una es un archivo distinto, el producto se ve impecable. Abrí cada uno, confirmá que cada
+              color muestre lo suyo y apretá <b>Verificado</b>. Van ordenados por lo que costaría que estén mal.
+            </Notice>
+          )}
+
+          {!buscando && !verIgnorados && filtro !== 'para-revisar' && escondidos > 0 && (
             <div style={{ fontSize: font.sm, color: paleta.mut2, marginBottom: space[2] }}>
               {escondidos === 1 ? 'Hay 1 producto con problema fuera de esta vista' : `Hay ${escondidos} productos con problema fuera de esta vista`} por los
               filtros de arriba.{' '}
@@ -474,7 +501,9 @@ export function FotosCard({ marca }: { marca: Marca }) {
                 ? 'Ningún producto coincide con esa búsqueda.'
                 : verIgnorados
                   ? 'No hay productos apartados de la revisión.'
-                  : conProblema > 0
+                  : filtro === 'para-revisar'
+                    ? '✓ No queda ninguno por mirar a ojo con estos filtros.'
+                    : conProblema > 0
                     ? `Los ${conProblema} productos con algo para arreglar quedaron fuera de esta vista. Sacá los filtros de arriba para verlos.`
                     : `✓ Los ${data.length} productos de la tienda están bien.`}
             </div>
@@ -566,7 +595,14 @@ function Fila({
           {e.variantesCruzadas > 0 && e.variantesSinFoto > 0 && ' · '}
           {e.variantesSinFoto > 0 && `${e.variantesSinFoto} sin foto propia`}
           {e.sinNingunaFoto && 'El producto no tiene ninguna foto cargada — subilas en Carga de imágenes, acá arriba.'}
-          {!e.hayProblema && (f.cambioDesdeRevision ? 'Sin problemas detectables, pero hay que volver a mirarlo.' : 'Sin problemas detectados.')}
+          {!e.hayProblema &&
+            (f.cambioDesdeRevision
+              ? 'Sin problemas detectables, pero hay que volver a mirarlo.'
+              : e.colores.length > 1
+                ? // En la cola de revisión el dato útil no es "está bien" —eso ya se sabe— sino
+                  // cuánto hay en juego si resulta que no lo está.
+                  `${e.colores.length} colores en ${(p.variantes || []).filter((v) => v.color).length} publicaciones — confirmá que cada color muestre lo suyo`
+                : 'Sin problemas detectados.')}
         </div>
         <div style={{ fontSize: font.xs, color: paleta.mut2, marginTop: 2 }}>
           {referenciaDe(p)}

@@ -27,8 +27,14 @@ export type FilaAuditoria = {
   stock?: number
   /** Unidades vendidas en los últimos 90 días, o undefined si el cruce no lo encontró. */
   ventas90?: number
-  /** Cuánto duele: publicaciones mal × qué tanto se vende ese producto. */
+  /** Cuánto duele lo que YA se detectó: publicaciones mal × qué tanto se vende ese producto. */
   impacto: number
+  /**
+   * Cuánto costaría que esté mal **sin que lo sepamos**. Ordena la cola de revisión a ojo, donde
+   * todos los productos tienen impacto cero justamente porque no se les detectó nada: sin esto,
+   * esa lista saldría alfabética y se revisarían primero los que menos importan.
+   */
+  riesgo: number
   /** `true` si alguien lo dio por revisado y las fotos no cambiaron desde entonces. */
   verificado: boolean
   /** `true` si estaba verificado pero las fotos cambiaron después: vuelve a la lista. */
@@ -58,7 +64,7 @@ export type ContextoPrioridad = {
  * no es lo mismo que "no vende". Preferimos que sobre un producto antes que esconder uno que sí
  * hay que arreglar.
  */
-export function impactoDe(fila: Omit<FilaAuditoria, 'impacto'>): number {
+export function impactoDe(fila: Pick<FilaAuditoria, 'estado' | 'ventas90' | 'stock'>): number {
   const { estado, ventas90, stock } = fila
   // Un producto sin NINGUNA foto no tiene colores rotos que contar, pero está roto entero: la
   // tienda lo muestra en blanco. Pesa por sus variantes, o por una si no tiene ninguna.
@@ -70,6 +76,25 @@ export function impactoDe(fila: Omit<FilaAuditoria, 'impacto'>): number {
   // Sin stock la foto no vende hoy: pesa, pero no desaparece (puede reingresar mercadería).
   const porStock = stock === undefined ? 1 : stock > 0 ? 1 : 0.3
   return base * porVenta * porStock
+}
+
+/**
+ * Cuánto costaría que este producto tenga una foto en el color equivocado sin que lo sepamos.
+ *
+ * Es lo que ordena la cola de revisión a ojo. Ahí todos tienen impacto cero —no se les detectó
+ * nada— así que sin esto la lista saldría alfabética y se empezaría por lo que menos importa.
+ * Pesa por publicaciones en juego (variantes con color) y por cuánto se vende, con la misma
+ * escala logarítmica del impacto para que un best-seller no aplaste al resto.
+ */
+export function riesgoDe(fila: Pick<FilaAuditoria, 'producto' | 'estado' | 'ventas90' | 'stock'>): number {
+  const { estado, ventas90, stock, producto } = fila
+  // Sin color en la variante no hay forma de que una foto caiga en el color equivocado: el
+  // producto entero es de un color y todas sus fotos son de ese color.
+  if (estado.colores.length < 2) return 0
+  const publicaciones = (producto.variantes || []).filter((v) => v.color).length
+  const porVenta = ventas90 === undefined ? 2 : 1 + Math.log10(1 + ventas90) * 2
+  const porStock = stock === undefined ? 1 : stock > 0 ? 1 : 0.3
+  return publicaciones * porVenta * porStock
 }
 
 /**
@@ -94,7 +119,7 @@ export function armarFilas(data: ProductoFchk[], ctx: ContextoPrioridad = {}): F
       verificado: coincide,
       cambioDesdeRevision: guardada !== undefined && !coincide,
     }
-    return { ...parcial, impacto: impactoDe(parcial) }
+    return { ...parcial, impacto: impactoDe(parcial), riesgo: riesgoDe(parcial) }
   })
 }
 
@@ -161,6 +186,16 @@ export type FiltroProblema =
   | 'escritorio'
   /** Necesita fotos que no existen. */
   | 'fotografia'
+  /**
+   * Los que figuran SANOS y todavía nadie miró. Es la otra mitad del trabajo.
+   *
+   * La automatización solo puede afirmar que dos colores comparten un archivo; **no puede mirar
+   * una foto y decir de qué color es**. Si alguien pegó la foto de la violeta al color azul, y
+   * cada una es un archivo distinto con nombre razonable, el producto figura impecable. O sea
+   * que el error que más se le parece a "todo bien" vive justo acá, y sin esta lista no había
+   * forma de recorrerlos.
+   */
+  | 'para-revisar'
 
 export function predicadoDe(f: FiltroProblema): (fila: FilaAuditoria) => boolean {
   switch (f) {
@@ -172,6 +207,11 @@ export function predicadoDe(f: FiltroProblema): (fila: FilaAuditoria) => boolean
       return (x) => x.estado.hayProblema && (x.estado.cola === 'escritorio' || x.estado.cola === 'mixto')
     case 'fotografia':
       return (x) => x.estado.cola === 'fotografia' || x.estado.cola === 'mixto'
+    case 'para-revisar':
+      // Sin nada detectado, sin cambios desde la última revisión, y con el color adentro de la
+      // variante — que es el único caso donde una foto puede terminar en el color equivocado.
+      // Los ya verificados no llegan hasta acá: los saca `aplicarRecortes`.
+      return (x) => !x.estado.hayProblema && !x.cambioDesdeRevision && x.estado.colores.length > 1
     default:
       // "Cambió desde la revisión" entra aunque no haya problema detectable: puede ser
       // justamente lo que la automatización no ve (una foto de otro color, bien vinculada).
@@ -180,10 +220,19 @@ export function predicadoDe(f: FiltroProblema): (fila: FilaAuditoria) => boolean
   }
 }
 
-/** Ordena por lo que más duele. A igual impacto, alfabético, para que la lista no baile. */
+/**
+ * Ordena por lo que más duele; a igual daño detectado, por lo que más costaría que esté mal sin
+ * saberlo. El desempate alfabético va último, solo para que la lista no baile entre renders.
+ *
+ * El segundo criterio es el que hace usable la cola de revisión a ojo: ahí todos tienen impacto
+ * cero, y sin el riesgo saldrían alfabéticos.
+ */
 export function ordenar(filas: FilaAuditoria[]): FilaAuditoria[] {
   return [...filas].sort(
-    (a, b) => b.impacto - a.impacto || (a.producto.name || '').localeCompare(b.producto.name || '', 'es'),
+    (a, b) =>
+      b.impacto - a.impacto ||
+      b.riesgo - a.riesgo ||
+      (a.producto.name || '').localeCompare(b.producto.name || '', 'es'),
   )
 }
 

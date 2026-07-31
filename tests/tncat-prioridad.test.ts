@@ -127,6 +127,78 @@ describe('prioridad — filtros por tipo de problema', () => {
   })
 })
 
+/**
+ * La otra mitad del trabajo. La automatización solo puede afirmar que dos colores comparten un
+ * archivo; no puede mirar una foto y decir de qué color es. O sea que el error que más se parece
+ * a "todo bien" vive justo entre los productos que figuran sanos, y sin esta cola no había forma
+ * de recorrerlos.
+ */
+describe('prioridad — la cola de revisión a ojo', () => {
+  const sano = (id: string, colores: string[], porColor = 1, over: Partial<ProductoFchk> = {}) =>
+    prod(
+      id,
+      colores.flatMap((c) => Array.from({ length: porColor }, () => v(c, `${c}.jpg`))),
+      { imagenes: colores.map((c) => ({ id: c, src: `${c}.jpg` })), ...over },
+    )
+
+  it('agarra los sanos con color en la variante', () => {
+    const f = armarFilas([sano('1', ['AZUL', 'ROJO'])])[0]
+    expect(f.estado.hayProblema).toBe(false)
+    expect(predicadoDe('para-revisar')(f)).toBe(true)
+    // Y NO aparece en la lista de lo que falta arreglar: son dos trabajos distintos.
+    expect(predicadoDe('todo')(f)).toBe(false)
+  })
+
+  it('deja afuera al producto de un solo color', () => {
+    // El color está en el nombre (WEAVE CASE BLACK): todas sus fotos son de ese color y no hay
+    // forma de que se mezcle. Mirarlo a ojo no aporta nada.
+    expect(predicadoDe('para-revisar')(armarFilas([sano('1', ['AZUL'], 3)])[0])).toBe(false)
+  })
+
+  it('deja afuera lo que ya tiene un problema detectado', () => {
+    expect(predicadoDe('para-revisar')(armarFilas([cruzado('1', ['A', 'B'])])[0])).toBe(false)
+  })
+
+  it('deja afuera lo que cambió desde la revisión: ese va con los pendientes', () => {
+    const p = sano('1', ['A', 'B'])
+    const f = armarFilas([p], { huellasVerificadas: new Map([['1', 'vieja']]) })[0]
+    expect(predicadoDe('para-revisar')(f)).toBe(false)
+    expect(predicadoDe('todo')(f)).toBe(true)
+  })
+
+  it('lo ya verificado no llega a la cola', () => {
+    const p = sano('1', ['A', 'B'])
+    const f = armarFilas([p], { huellasVerificadas: new Map([['1', huellaDe(p)]]) })
+    expect(aplicarRecortes(f, {})).toHaveLength(0)
+  })
+
+  it('ordena por lo que costaría que esté mal, no alfabético', () => {
+    // Todos tienen impacto cero —no se les detectó nada—, así que sin el riesgo saldría por
+    // nombre y se empezaría a revisar por lo que menos importa.
+    const chico = sano('aaa-chico', ['A', 'B'])
+    const grande = sano('zzz-grande', ['A', 'B', 'C', 'D'], 9)
+    const filas = ordenar(armarFilas([chico, grande]).filter(predicadoDe('para-revisar')))
+    expect(filas[0].producto.id).toBe('zzz-grande')
+    expect(filas[0].impacto).toBe(0)
+    expect(filas[0].riesgo).toBeGreaterThan(filas[1].riesgo)
+  })
+
+  it('a igual tamaño, primero el que más se vende', () => {
+    const ventas = new Map([['vende', 300], ['parado', 0]])
+    const filas = ordenar(
+      armarFilas([sano('parado', ['A', 'B']), sano('vende', ['A', 'B'])], { ventas90PorTn: ventas }).filter(
+        predicadoDe('para-revisar'),
+      ),
+    )
+    expect(filas[0].producto.id).toBe('vende')
+  })
+
+  it('lo roto sigue arriba de todo lo sano', () => {
+    const filas = ordenar(armarFilas([sano('sano', ['A', 'B', 'C'], 20), cruzado('roto', ['A', 'B'])]))
+    expect(filas[0].producto.id).toBe('roto')
+  })
+})
+
 describe('prioridad — recortes', () => {
   const filas = (over: Partial<ProductoFchk> = {}, ctx = {}) => armarFilas([cruzado('1', ['A', 'B'], 1, over)], ctx)
 
