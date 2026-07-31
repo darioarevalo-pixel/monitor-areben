@@ -21,6 +21,7 @@
 import { useState } from 'react'
 import { Badge, Button, Modal, Notice, color as paleta, font, space, useConfirmar, useToast } from '@/components/ui'
 import { fichaDe, huellaDe, type ColorEnFicha } from '@/lib/tncat/auditoria'
+import type { IndiceStock } from '@/lib/tncat/stock-variante'
 import { referenciaDe, type FilaAuditoria } from '@/lib/tncat/prioridad'
 import type { ImagenFchk } from '@/lib/tncat/tipos'
 import type { Marca } from '@/lib/nav'
@@ -43,18 +44,21 @@ export function FichaProducto({
   fila,
   marca,
   acciones,
+  stockGn,
   onCerrar,
 }: {
   fila: FilaAuditoria
   marca: Marca
   acciones: AccionFicha
+  /** Stock de GN por código. Sin esto la ficha sale igual, solo sin unidades. */
+  stockGn?: IndiceStock
   onCerrar: () => void
 }) {
   const p = fila.producto
   const toast = useToast()
   const { confirmar } = useConfirmar()
   const [guardando, setGuardando] = useState(false)
-  const colores = fichaDe(p)
+  const colores = fichaDe(p, stockGn)
   const imgs = p.imagenes || []
   const libres = new Set(fila.estado.fotosLibres.map((f) => String(f.id)))
 
@@ -203,6 +207,19 @@ function resumirEtiquetas(etiquetas: string[], variantes: number): string {
   return `${etiquetas.slice(0, TOPE_ETIQUETAS).join(' · ')} y ${etiquetas.length - TOPE_ETIQUETAS} más`
 }
 
+/**
+ * Las variantes que quedaron sin foto, con sus unidades: `iPhone 15 (34 u), iPhone 16 (12 u)`.
+ * Sin dato de stock va el nombre solo — nunca "(0 u)", que se leería como que no hay.
+ */
+function listarConUnidades(etiquetas: string[], porEtiqueta?: Map<string, number | undefined>): string {
+  return etiquetas
+    .map((e) => {
+      const u = porEtiqueta?.get(e)
+      return u === undefined ? e : `${e} (${u.toLocaleString('es-AR')} u)`
+    })
+    .join(', ')
+}
+
 /** Un color: su foto en grande a la izquierda y el estado + acciones a la derecha. */
 function RenglonColor({
   c,
@@ -275,13 +292,26 @@ function RenglonColor({
                 ponerles un nombre: el segundo eje es el modelo en fundas y el talle en ropa, y
                 cualquier palabra que se elija va a estar mal en una de las dos marcas. */}
             <span style={{ fontSize: font.sm, color: paleta.mut2 }}>{resumirEtiquetas(c.etiquetas, c.variantes)}</span>
+            {/* Las unidades son lo que decide si vale la pena: un color agotado y uno con 1.200
+                unidades se veían exactamente igual. Salen de Gestión Nube (local + depósito), no
+                del stock de TiendaNube, que es de un solo depósito y distinto por marca. */}
+            {c.unidades !== undefined ? (
+              <span style={{ fontSize: font.sm, color: c.unidades > 0 ? paleta.ink2 : paleta.mut2, fontWeight: c.unidades > 0 ? 600 : 400 }}>
+                · {c.unidades.toLocaleString('es-AR')} u
+              </span>
+            ) : (
+              <span style={{ fontSize: font.xs, color: paleta.mut2 }} title="No se pudo cruzar esta variante con Gestión Nube por SKU ni por código de barras">
+                · sin dato de stock
+              </span>
+            )}
           </div>
 
           {c.foto && c.variantesSinFoto > 0 && (
             <div style={{ fontSize: font.sm, color: paleta.warningInk, marginTop: space[2] }}>
-              {/* Cuáles, no cuántas: para completarlas hay que saber a cuáles ir. */}
+              {/* Cuáles, no cuántas: para completarlas hay que saber a cuáles ir. Y con las
+                  unidades al lado se ve de una si alguna vale más que las otras. */}
               {c.etiquetasSinFoto.length
-                ? <>Le falta esta foto a: <b>{c.etiquetasSinFoto.join(', ')}</b>. En la tienda muestran la principal del producto.</>
+                ? <>Le falta esta foto a: <b>{listarConUnidades(c.etiquetasSinFoto, c.porEtiqueta)}</b>. En la tienda muestran la principal del producto.</>
                 : <>A <b>{c.variantesSinFoto}</b> de {c.variantes} no se les pegó esta foto: en la tienda muestran la principal del producto.</>}
             </div>
           )}

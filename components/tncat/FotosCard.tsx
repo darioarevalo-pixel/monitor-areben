@@ -36,6 +36,8 @@ import { indicesDe } from '@/lib/tn-audit'
 import type { Marca } from '@/lib/nav'
 import { auditVariantes, bustAudit, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
 import { stockPorProductoTn, ventas90PorProductoTn } from '@/lib/tncat/agotados'
+import { indexarStockGn } from '@/lib/tncat/stock-variante'
+import { exportarPendientesXLSX } from '@/lib/tncat/export'
 import {
   aplicarRecortes,
   armarFilas,
@@ -88,6 +90,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const [huellas, setHuellas] = useState<Map<string, string>>(new Map())
   /** Por qué no se pudo leer qué productos ya se revisaron. Se muestra: ver el efecto de abajo. */
   const [errorRevisiones, setErrorRevisiones] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
 
   // ── Datos ─────────────────────────────────────────────────────────────────────
   /**
@@ -149,9 +152,20 @@ export function FotosCard({ marca }: { marca: Marca }) {
   const stockPorTn = useMemo(() => (idx && datos ? stockPorProductoTn(datos.allProductos, idx) : undefined), [idx, datos])
   const ventas90PorTn = useMemo(() => (idx && datos ? ventas90PorProductoTn(datos.allProductos, idx) : undefined), [idx, datos])
 
+  /**
+   * Stock de Gestión Nube por código, para llegar a las unidades **por variante**.
+   *
+   * Van también las huérfanas (`?? []`): son variantes con stock cuyo producto todavía no está en
+   * `productos` —recién cargado en GN— y son justamente las que más chance tienen de no tener foto.
+   */
+  const stockGn = useMemo(
+    () => (datos ? indexarStockGn([...datos.allVariantes, ...(datos.allVariantesHuerfanas ?? [])]) : undefined),
+    [datos],
+  )
+
   const filas = useMemo(
-    () => armarFilas(data, { stockPorTn, ventas90PorTn, huellasVerificadas: huellas }),
-    [data, stockPorTn, ventas90PorTn, huellas],
+    () => armarFilas(data, { stockPorTn, ventas90PorTn, stockGn, huellasVerificadas: huellas }),
+    [data, stockPorTn, ventas90PorTn, stockGn, huellas],
   )
 
   // ── Qué se está mirando ───────────────────────────────────────────────────────
@@ -173,10 +187,18 @@ export function FotosCard({ marca }: { marca: Marca }) {
     [filas, verIgnorados, ignorados, soloConStock, soloQueSeVende, categoria, verVerificados],
   )
 
-  const lista = useMemo(
-    () => (buscando ? ordenar(buscar(filas, busqueda)) : ordenar(recortadas.filter(predicadoDe(filtro)))),
-    [buscando, filas, busqueda, recortadas, filtro],
-  )
+  const lista = useMemo(() => {
+    if (buscando) return ordenar(buscar(filas, busqueda))
+    const base = recortadas.filter(predicadoDe(filtro))
+    // Cuando se está mirando qué fotografiar, el orden es por unidades: es un reporte para salir a
+    // sacar fotos, y lo primero tiene que ser lo que más mercadería tiene parada sin foto.
+    if (filtro === 'fotografia') {
+      return [...base].sort(
+        (a, b) => (b.unidadesSinFoto ?? -1) - (a.unidadesSinFoto ?? -1) || b.impacto - a.impacto,
+      )
+    }
+    return ordenar(base)
+  }, [buscando, filas, busqueda, recortadas, filtro])
 
   const tablero = useMemo(() => resumen(recortadas), [recortadas])
   const categorias = useMemo(() => categoriasDe(filas), [filas])
@@ -285,6 +307,17 @@ export function FotosCard({ marca }: { marca: Marca }) {
     }
   }
 
+  const exportar = async () => {
+    setExportando(true)
+    try {
+      await exportarPendientesXLSX(lista.map((f) => ({ producto: f.producto, estado: f.estado })), marca, stockGn)
+    } catch (e) {
+      toast.error('No se pudo exportar: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setExportando(false)
+    }
+  }
+
   const restaurar = async (fila: FilaAuditoria) => {
     const id = String(fila.producto.id)
     setIgnorados((prev) => {
@@ -347,6 +380,18 @@ export function FotosCard({ marca }: { marca: Marca }) {
               onClick={() => setFiltro('sin-foto')}
               activo={filtro === 'sin-foto'}
               accion="Ver solo estas →"
+              accionActiva="Filtrando ✓"
+            />
+            {/* La mercadería que está parada esperando una foto. Es lo que convierte "a este
+                producto le falta una foto" en una decisión: 1.257 unidades no es lo mismo que 3. */}
+            <KpiCard
+              label="Unidades esperando foto"
+              value={stockGn ? tablero.unidadesSinFoto.toLocaleString('es-AR') : '—'}
+              tone={tablero.unidadesSinFoto ? 'warning' : 'neutral'}
+              sub={stockGn ? 'En stock, sin foto de su color' : 'Cargando el stock de Gestión Nube…'}
+              onClick={() => setFiltro('fotografia')}
+              activo={filtro === 'fotografia'}
+              accion="Qué fotografiar →"
               accionActiva="Filtrando ✓"
             />
             {/* La otra mitad del trabajo: los que figuran sanos y nadie miró todavía. El error
@@ -472,6 +517,19 @@ export function FotosCard({ marca }: { marca: Marca }) {
             </>
           )}
 
+          {!buscando && !verIgnorados && filtro === 'fotografia' && lista.length > 0 && (
+            <Notice tone="warning" style={{ marginBottom: space[3] }}>
+              <b>Esto es lo que hay que fotografiar</b>, ordenado por la mercadería que tiene parada sin foto de su
+              color. Las unidades salen de Gestión Nube (local + depósito). Los que dicen «sin dato» no se pudieron
+              cruzar por código — se muestran igual, porque no saber no es lo mismo que no tener.
+              <div style={{ marginTop: space[2] }}>
+                <Button size="sm" variant="outline" loading={exportando} onClick={() => void exportar()}>
+                  Exportar a Excel ({lista.length} {lista.length === 1 ? 'producto' : 'productos'})
+                </Button>
+              </div>
+            </Notice>
+          )}
+
           {!buscando && !verIgnorados && filtro === 'para-revisar' && lista.length > 0 && (
             <Notice tone="neutral" style={{ marginBottom: space[3] }}>
               <b>Estos figuran bien y por eso hay que mirarlos.</b> La pantalla puede darse cuenta de que dos colores
@@ -537,6 +595,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
           fila={abiertaFila}
           marca={marca}
           acciones={accionesDe(abiertaFila)}
+          stockGn={stockGn}
           onCerrar={() => setAbierto(null)}
         />
       )}
@@ -607,6 +666,13 @@ function Fila({
                   `${e.colores.length} colores en ${(p.variantes || []).filter((v) => v.color).length} variantes — confirmá que cada color muestre lo suyo`
                 : 'Sin problemas detectados.')}
         </div>
+        {/* Las unidades esperando foto van aparte y en ámbar: es plata parada, no una referencia
+            más. El "en stock" de abajo es del producto entero y sale de un cruce por nombre. */}
+        {f.unidadesSinFoto !== undefined && f.unidadesSinFoto > 0 && (
+          <div style={{ fontSize: font.sm, color: paleta.warningInk, fontWeight: 600, marginTop: 2 }}>
+            {f.unidadesSinFoto.toLocaleString('es-AR')} unidades esperando foto
+          </div>
+        )}
         <div style={{ fontSize: font.xs, color: paleta.mut2, marginTop: 2 }}>
           {referenciaDe(p)}
           {f.ventas90 !== undefined && ` · ${f.ventas90} vendidas en 90 días`}

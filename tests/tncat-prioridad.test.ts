@@ -11,6 +11,7 @@ import {
   type FilaAuditoria,
 } from '@/lib/tncat/prioridad'
 import { huellaDe } from '@/lib/tncat/auditoria'
+import { indexarStockGn } from '@/lib/tncat/stock-variante'
 import type { ProductoFchk, VarianteFchk } from '@/lib/tncat/tipos'
 
 const v = (color: string | null, image_url: string | null, over: Partial<VarianteFchk> = {}): VarianteFchk => ({
@@ -94,6 +95,69 @@ describe('prioridad — se cuentan publicaciones, no productos', () => {
       imagenes: [{ id: '1', src: 'a.jpg' }, { id: '2', src: 'b.jpg' }],
     })
     expect(armarFilas([sano])[0].impacto).toBe(0)
+  })
+
+  /**
+   * `PROTECTOR DE CAMARA LISO` tiene 3.721 unidades sin foto y hasta ahora pesaba igual que
+   * cualquier otro producto sin foto. Las unidades son lo que lo pone primero.
+   */
+  it('con más unidades esperando foto, más arriba', () => {
+    const idx = indexarStockGn([
+      { sku: 'MUCHO', barcode: '', stock: 1200 } as never,
+      { sku: 'POCO', barcode: '', stock: 3 } as never,
+    ])
+    const mucho = prod('mucho', [v('A', null, { sku: 'MUCHO' })])
+    const poco = prod('poco', [v('A', null, { sku: 'POCO' })])
+    const filas = ordenar(armarFilas([poco, mucho], { stockGn: idx }))
+    expect(filas[0].producto.id).toBe('mucho')
+    expect(filas[0].unidadesSinFoto).toBe(1200)
+  })
+
+  it('sin unidades el impacto se comporta como antes', () => {
+    // Los cachés viejos y las variantes que no cruzan no tienen que cambiar de lugar por eso.
+    const p = prod('x', [v('A', null)])
+    const [sinIdx] = armarFilas([p])
+    expect(sinIdx.unidadesSinFoto).toBeUndefined()
+    expect(sinIdx.impacto).toBeGreaterThan(0)
+  })
+
+  /**
+   * `PROTECTOR DE CAMARA LISO` tiene 57 variantes y NINGUNA tiene SKU ni código de barras en
+   * TiendaNube: cruzan 0 de 57. Es de los productos que más importan, así que sin respaldo el
+   * dato más útil quedaba justo en "sin dato".
+   */
+  it('sin códigos, si NADA tiene foto, vale el stock del producto entero', () => {
+    const p = prod('liso', [v('NEGRO', null), v('BLANCO', null)]) // sin sku ni barcode
+    const f = armarFilas([p], { stockGn: indexarStockGn([]), stockPorTn: new Map([['liso', 156]]) })[0]
+    expect(f.unidadesSinFoto).toBe(156)
+  })
+
+  it('pero NO cuando la falta de foto por variante es lo normal', () => {
+    // `CABLE BDI … - NEGRO`: el color está en el nombre, la variante no tiene foto propia y usa la
+    // principal del producto, que es de ese único color. Contarlos infló BDI de ~500 a 27.000 u.
+    const p = prod('cable', [v(null, null)], { image_count: 2, imagenes: [{ id: '1', src: 'a.jpg' }, { id: '2', src: 'b.jpg' }] })
+    const f = armarFilas([p], { stockGn: indexarStockGn([]), stockPorTn: new Map([['cable', 4365]]) })[0]
+    expect(f.estado.hayProblema).toBe(false)
+    expect(f.unidadesSinFoto).toBeUndefined()
+  })
+
+  it('si algunos colores tienen foto y no hay códigos, no se inventa un número', () => {
+    // No hay forma de saber cuántas unidades son del color que quedó sin foto.
+    const p = prod('mixto', [v('A', 'a.jpg'), v('B', null)])
+    const f = armarFilas([p], { stockGn: indexarStockGn([]), stockPorTn: new Map([['mixto', 90]]) })[0]
+    expect(f.unidadesSinFoto).toBeUndefined()
+  })
+
+  it('el resumen suma las unidades esperando foto', () => {
+    const idx = indexarStockGn([{ sku: 'S1', barcode: '', stock: 40 } as never])
+    const r = resumen(armarFilas([prod('1', [v('A', null, { sku: 'S1' })])], { stockGn: idx }))
+    expect(r.unidadesSinFoto).toBe(40)
+  })
+
+  it('lo que no cruza no suma al total: el número es un piso, no una estimación', () => {
+    const idx = indexarStockGn([{ sku: 'OTRO', barcode: '', stock: 40 } as never])
+    const r = resumen(armarFilas([prod('1', [v('A', null, { sku: 'NO-ESTA' })])], { stockGn: idx }))
+    expect(r.unidadesSinFoto).toBe(0)
   })
 
   it('el resumen cuenta publicaciones y productos', () => {

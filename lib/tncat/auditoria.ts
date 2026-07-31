@@ -27,6 +27,7 @@
  * Puro y testeable: no toca red ni estado.
  */
 
+import { stockDeVariante, type IndiceStock } from './stock-variante'
 import type { ImagenFchk, ProductoFchk, VarianteFchk } from './tipos'
 
 /** Un choque: una misma foto vinculada a dos o más colores. */
@@ -211,6 +212,17 @@ export type ColorEnFicha = {
   /** Las que quedaron sin la foto, por nombre. Es lo que hay que ir a completar. */
   etiquetasSinFoto: string[]
   sospecha: Sospecha | null
+  /**
+   * Unidades de este color en Gestión Nube (local + depósito). `undefined` = no se pudo cruzar.
+   *
+   * Es lo que decide si vale la pena fotografiar: un color agotado y uno con 1.200 unidades se
+   * veían exactamente igual. Solo viene si a `fichaDe` se le pasa el índice de stock.
+   */
+  unidades?: number
+  /** Unidades de las variantes de este color que NO tienen foto propia. */
+  unidadesSinFoto?: number
+  /** Unidades por variante (`"iPhone 15" → 34`), para el detalle de lo que falta. */
+  porEtiqueta?: Map<string, number | undefined>
 }
 
 /**
@@ -225,21 +237,45 @@ export function etiquetaDe(v: VarianteFchk): string {
     .join(' / ')
 }
 
-/** La ficha del producto: un renglón por color, en orden alfabético. */
-export function fichaDe(p: ProductoFchk): ColorEnFicha[] {
-  type Acum = { foto: string | null; variantes: number; sinFoto: number; etiquetas: string[]; sinFotoEt: string[] }
+/**
+ * La ficha del producto: un renglón por color, en orden alfabético.
+ *
+ * `idx` es opcional: sin él la ficha sale igual que siempre, solo sin unidades. Se pasa cuando el
+ * ETL de Gestión Nube ya cargó, que es lo que permite cruzar el stock real por variante.
+ */
+export function fichaDe(p: ProductoFchk, idx?: IndiceStock): ColorEnFicha[] {
+  type Acum = {
+    foto: string | null
+    variantes: number
+    sinFoto: number
+    etiquetas: string[]
+    sinFotoEt: string[]
+    unidades?: number
+    unidadesSinFoto?: number
+    porEtiqueta: Map<string, number | undefined>
+  }
   const porColor = new Map<string, Acum>()
   for (const v of variantesConColor(p)) {
     const c = v.color as string
-    const e = porColor.get(c) ?? { foto: null, variantes: 0, sinFoto: 0, etiquetas: [], sinFotoEt: [] }
+    const e =
+      porColor.get(c) ??
+      ({ foto: null, variantes: 0, sinFoto: 0, etiquetas: [], sinFotoEt: [], porEtiqueta: new Map() } as Acum)
     e.variantes += 1
     const et = etiquetaDe(v)
     if (et) e.etiquetas.push(et)
+
+    // El stock se acumula con `?? 0` solo del lado del que ya tiene algo: si NINGUNA variante del
+    // color cruzó, el total queda `undefined` — que no es lo mismo que cero.
+    const u = idx ? stockDeVariante(v, idx) : undefined
+    if (u !== undefined) e.unidades = (e.unidades ?? 0) + u
+    if (et && idx) e.porEtiqueta.set(et, u)
+
     if (v.image_url) {
       if (!e.foto) e.foto = v.image_url
     } else {
       e.sinFoto += 1
       if (et) e.sinFotoEt.push(et)
+      if (u !== undefined) e.unidadesSinFoto = (e.unidadesSinFoto ?? 0) + u
     }
     porColor.set(c, e)
   }
@@ -256,6 +292,9 @@ export function fichaDe(p: ProductoFchk): ColorEnFicha[] {
       etiquetas: e.etiquetas,
       etiquetasSinFoto: e.sinFotoEt,
       sospecha: sospechas.get(color) ?? null,
+      unidades: e.unidades,
+      unidadesSinFoto: e.unidadesSinFoto,
+      porEtiqueta: idx ? e.porEtiqueta : undefined,
     }))
 }
 

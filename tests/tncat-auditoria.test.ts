@@ -13,6 +13,7 @@ import {
   nombreArchivo,
   sospechasDe,
 } from '@/lib/tncat/auditoria'
+import { indexarStockGn } from '@/lib/tncat/stock-variante'
 import type { ProductoFchk, VarianteFchk } from '@/lib/tncat/tipos'
 
 const v = (color: string | null, image_url: string | null, over: Partial<VarianteFchk> = {}): VarianteFchk => ({
@@ -239,6 +240,44 @@ describe('auditoría — la ficha del producto', () => {
     expect(f[0].etiquetas).toEqual([])
     expect(f[0].variantes).toBe(2)
     expect(f[0].variantesSinFoto).toBe(1)
+  })
+
+  /**
+   * Las unidades son lo que decide qué se fotografía primero: un color agotado y uno con 1.200
+   * unidades se veían exactamente igual. Salen de Gestión Nube, nunca del stock de TiendaNube,
+   * que es de un solo depósito y distinto por marca.
+   */
+  it('trae las unidades por color y por variante cuando se le pasa el índice', () => {
+    const idx = indexarStockGn([
+      { sku: 'A13', barcode: '', stock: 34 } as never,
+      { sku: 'A14', barcode: '', stock: 12 } as never,
+      { sku: 'R13', barcode: '', stock: 5 } as never,
+    ])
+    const p = prod([
+      v('AZUL', 'azul.jpg', { sku: 'A13', valores: ['iPhone 13', 'AZUL'] }),
+      v('AZUL', null, { sku: 'A14', valores: ['iPhone 14', 'AZUL'] }),
+      v('ROJO', null, { sku: 'R13', valores: ['iPhone 13', 'ROJO'] }),
+    ])
+    const f = fichaDe(p, idx)
+    const azul = f.find((x) => x.color === 'AZUL')!
+    expect(azul.unidades).toBe(46) // 34 + 12
+    expect(azul.unidadesSinFoto).toBe(12) // solo la que no tiene foto
+    expect(azul.porEtiqueta?.get('iPhone 14')).toBe(12)
+    expect(f.find((x) => x.color === 'ROJO')!.unidadesSinFoto).toBe(5)
+  })
+
+  it('sin índice la ficha sale igual que siempre, sin unidades', () => {
+    const f = fichaDe(prod([v('AZUL', 'a.jpg', { sku: 'A13' })]))
+    expect(f[0].unidades).toBeUndefined()
+    expect(f[0].porEtiqueta).toBeUndefined()
+  })
+
+  it('un color que no cruza queda sin dato, no en cero', () => {
+    // Un cero se leería como "no hay stock" y haría descartar algo que sí hay que fotografiar.
+    const idx = indexarStockGn([{ sku: 'OTRO', barcode: '', stock: 9 } as never])
+    const f = fichaDe(prod([v('AZUL', null, { sku: 'NO-ESTA' })]), idx)
+    expect(f[0].unidades).toBeUndefined()
+    expect(f[0].unidadesSinFoto).toBeUndefined()
   })
 
   it('lleva la sospecha del nombre de archivo al renglón del color', () => {

@@ -16,7 +16,8 @@
  * que la sección ya tiene en memoria. Cero consultas nuevas.
  */
 
-import { estadoDe, huellaDe } from './auditoria'
+import { estadoDe, huellaDe, type EstadoFotos } from './auditoria'
+import { unidadesSinFoto as unidadesSinFotoDe, type IndiceStock } from './stock-variante'
 import type { ProductoFchk } from './tipos'
 
 /** Un producto listo para ordenar y filtrar, con todo lo que la pantalla necesita mostrar. */
@@ -27,6 +28,13 @@ export type FilaAuditoria = {
   stock?: number
   /** Unidades vendidas en los últimos 90 días, o undefined si el cruce no lo encontró. */
   ventas90?: number
+  /**
+   * Unidades que están esperando una foto: las variantes con color y sin foto propia, cruzadas
+   * con Gestión Nube por código. `undefined` = ninguna de esas variantes se pudo cruzar.
+   *
+   * Es lo que convierte "a este producto le falta una foto" en "hay 1.257 unidades esperando".
+   */
+  unidadesSinFoto?: number
   /** Cuánto duele lo que YA se detectó: publicaciones mal × qué tanto se vende ese producto. */
   impacto: number
   /**
@@ -46,6 +54,12 @@ export type ContextoPrioridad = {
   ventas90PorTn?: Map<string, number>
   /** id de TN → huella con la que se dio por verificado. */
   huellasVerificadas?: Map<string, string>
+  /**
+   * Índice de stock de GN por código, para llegar al stock **por variante**. El `stockPorTn` de
+   * arriba es a nivel producto y por nombre (difuso); este es exacto y por variante, y es el
+   * único que puede decir cuántas unidades están esperando una foto.
+   */
+  stockGn?: IndiceStock
 }
 
 /**
@@ -64,8 +78,8 @@ export type ContextoPrioridad = {
  * no es lo mismo que "no vende". Preferimos que sobre un producto antes que esconder uno que sí
  * hay que arreglar.
  */
-export function impactoDe(fila: Pick<FilaAuditoria, 'estado' | 'ventas90' | 'stock'>): number {
-  const { estado, ventas90, stock } = fila
+export function impactoDe(fila: Pick<FilaAuditoria, 'estado' | 'ventas90' | 'stock' | 'unidadesSinFoto'>): number {
+  const { estado, ventas90, stock, unidadesSinFoto } = fila
   // Un producto sin NINGUNA foto no tiene colores rotos que contar, pero está roto entero: la
   // tienda lo muestra en blanco. Pesa por sus variantes, o por una si no tiene ninguna.
   const base = estado.sinNingunaFoto
@@ -73,8 +87,25 @@ export function impactoDe(fila: Pick<FilaAuditoria, 'estado' | 'ventas90' | 'sto
     : estado.variantesCruzadas * 3 + estado.variantesSinFoto
   if (!base) return 0
   const porVenta = ventas90 === undefined ? 2 : 1 + Math.log10(1 + ventas90) * 2
-  // Sin stock la foto no vende hoy: pesa, pero no desaparece (puede reingresar mercadería).
-  const porStock = stock === undefined ? 1 : stock > 0 ? 1 : 0.3
+  /**
+   * El stock, cuando se sabe cuánto es.
+   *
+   * Con las unidades reales por variante se escala por cantidad: 1.257 unidades sin foto no
+   * pueden pesar lo mismo que 3. Logarítmico, como las ventas, para que un producto enorme no
+   * aplaste al resto y la lista siga siendo una lista y no un solo elemento.
+   *
+   * Sin ese dato se cae al criterio anterior, que es binario: hay stock o no hay.
+   */
+  const porStock =
+    unidadesSinFoto !== undefined
+      ? unidadesSinFoto > 0
+        ? 1 + Math.log10(1 + unidadesSinFoto) * 2
+        : 0.3
+      : stock === undefined
+        ? 1
+        : stock > 0
+          ? 1
+          : 0.3
   return base * porVenta * porStock
 }
 
@@ -98,6 +129,43 @@ export function riesgoDe(fila: Pick<FilaAuditoria, 'producto' | 'estado' | 'vent
 }
 
 /**
+ * Cuántas unidades están esperando una foto.
+ *
+ * Primero por variante, cruzando por código: es lo preciso, y permite atribuir las unidades al
+ * color exacto.
+ *
+ * **Respaldo cuando el producto no tiene códigos cargados en TiendaNube.** Pasa: `PROTECTOR DE
+ * CAMARA LISO` tiene 57 variantes y ninguna tiene SKU ni código de barras, así que cruzan 0 de 57
+ * — y es de los productos que más importan. Si además **ninguna** de sus variantes tiene foto,
+ * entonces el stock del producto entero ES lo que está esperando foto: no hay nada que atribuir a
+ * un color con foto, porque no hay ninguno. Ahí se usa el total del producto, que llega por el
+ * cruce difuso por nombre de `stockPorProductoTn`.
+ *
+ * Fuera de ese caso no se inventa nada: si faltan códigos y solo algunos colores están sin foto,
+ * no hay forma de saber cuántas unidades son de esos colores, y queda `undefined`.
+ *
+ * ⚠️ El respaldo exige que la auditoría haya encontrado un problema. Sin eso se disparaba en los
+ * productos de un solo color —los que tienen el color en el nombre, como `CABLE BDI … - NEGRO`—,
+ * donde que la variante no tenga foto propia es lo normal: usa la principal del producto, que es
+ * de ese único color. Contarlos infló el total de BDI de ~500 a 27.000 unidades.
+ */
+function unidadesEsperandoFoto(
+  p: ProductoFchk,
+  estado: EstadoFotos,
+  ctx: ContextoPrioridad,
+  id: string,
+): number | undefined {
+  if (ctx.stockGn) {
+    const porVariante = unidadesSinFotoDe(p, ctx.stockGn)
+    if (porVariante !== undefined) return porVariante
+  }
+  if (!estado.hayProblema) return undefined
+  const variantes = p.variantes || []
+  const ningunaTieneFoto = variantes.length > 0 && variantes.every((v) => !v.image_url)
+  return ningunaTieneFoto ? ctx.stockPorTn?.get(id) : undefined
+}
+
+/**
  * Arma las filas con estado, cruces, impacto y el resultado de comparar la huella. No filtra ni
  * ordena.
  *
@@ -111,11 +179,13 @@ export function armarFilas(data: ProductoFchk[], ctx: ContextoPrioridad = {}): F
     const id = String(producto.id)
     const guardada = ctx.huellasVerificadas?.get(id)
     const coincide = guardada !== undefined && guardada === huellaDe(producto)
+    const estado = estadoDe(producto)
     const parcial = {
       producto,
-      estado: estadoDe(producto),
+      estado,
       stock: ctx.stockPorTn?.get(id),
       ventas90: ctx.ventas90PorTn?.get(id),
+      unidadesSinFoto: unidadesEsperandoFoto(producto, estado, ctx, id),
       verificado: coincide,
       cambioDesdeRevision: guardada !== undefined && !coincide,
     }
@@ -236,12 +306,19 @@ export function ordenar(filas: FilaAuditoria[]): FilaAuditoria[] {
   )
 }
 
-/** Los dos números del tablero, contados sobre lo que se está mirando. */
-export function resumen(filas: FilaAuditoria[]): { cruzadas: number; sinFoto: number; productos: number } {
+/** Los números del tablero, contados sobre lo que se está mirando. */
+export function resumen(filas: FilaAuditoria[]): {
+  cruzadas: number
+  sinFoto: number
+  productos: number
+  unidadesSinFoto: number
+} {
   return {
     cruzadas: filas.reduce((a, f) => a + f.estado.variantesCruzadas, 0),
     sinFoto: filas.reduce((a, f) => a + f.estado.variantesSinFoto, 0),
     productos: filas.filter((f) => f.estado.hayProblema || f.cambioDesdeRevision).length,
+    // Las que no cruzaron no suman (son `undefined`): el total es un piso, no una estimación.
+    unidadesSinFoto: filas.reduce((a, f) => a + (f.unidadesSinFoto ?? 0), 0),
   }
 }
 
