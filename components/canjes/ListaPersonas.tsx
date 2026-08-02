@@ -15,13 +15,13 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Badge, BuscarInput, Chips, EmptyState, StatusPill, TableWrap, THead, TBody, Tr, Th, Td,
+  Badge, BuscarInput, Button, Chips, EmptyState, StatusPill, TableWrap, THead, TBody, Tr, Th, Td,
   color, font, space, weight, type ChipOpt, type Tone,
 } from '@/components/ui'
 import { instagramHref, instagramParaMostrar } from '@/lib/canjes/instagram'
 import { MINIMO_CANJES_CERRADOS, NIVEL_LABEL, porQueNoHayPuntaje, type NivelPuntaje } from '@/lib/canjes/puntaje'
 import { CONTACTO_LABEL, type EstadoContacto } from '@/lib/canjes/seguimiento'
-import { STORE_LABEL, type CanjeStore } from '@/lib/canjes/tipos'
+import { STORE_LABEL, type CanjeStore, type EstadoCanje } from '@/lib/canjes/tipos'
 import type { PersonaEnLista } from './useCanjes'
 
 const CONTACTO_TONE: Record<EstadoContacto, Tone> = {
@@ -36,6 +36,9 @@ const NIVEL_TONE: Record<NivelPuntaje, Tone> = {
   media: 'action',
   baja: 'warning',
 }
+
+/** Estados que NO cuentan como haber trabajado para esa marca. */
+const SIN_ANTECEDENTE: EstadoCanje[] = ['propuesta', 'enviada', 'rechazado', 'no_acepto']
 
 type Filtro = 'todas' | 'vencido' | 'nunca' | 'destacadas' | 'buenas' | 'vetadas'
 
@@ -59,9 +62,12 @@ function haceCuanto(dias: number | null): string {
 export function ListaPersonas({
   personas,
   onAbrir,
+  onProponer,
 }: {
   personas: PersonaEnLista[]
   onAbrir: (id: number) => void
+  /** El atajo de la fila: proponerle un canje sin abrir la ficha. */
+  onProponer: (p: PersonaEnLista) => void
 }) {
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -117,6 +123,7 @@ export function ListaPersonas({
               <Th align="right">Canjes cerrados</Th>
               <Th>Puntaje</Th>
               <Th>Seguidores</Th>
+              <Th />
             </Tr>
           </THead>
           <TBody>
@@ -167,6 +174,21 @@ export function ListaPersonas({
                     <span style={{ color: color.mut2 }}>—</span>
                   )}
                 </Td>
+                <Td align="right">
+                  {/* El canje nace de una idea sobre alguien que ya está acá: tener que abrir la
+                      ficha primero es el paso que hace que se termine anotando en otro lado.
+                      `stopPropagation` porque la fila entera abre la ficha. */}
+                  <Button
+                    variant="soft"
+                    tone="brand"
+                    size="sm"
+                    disabled={p.vetada}
+                    title={p.vetada ? 'Está vetada' : 'Proponerle un canje'}
+                    onClick={(e) => { e.stopPropagation(); onProponer(p) }}
+                  >
+                    + canje
+                  </Button>
+                </Td>
               </Tr>
             ))}
           </TBody>
@@ -209,7 +231,9 @@ function PuntajeChip({ puntaje }: { puntaje: PersonaEnLista['_puntaje'] }) {
 function MarcasDeLaPersona({ canjes }: { canjes: PersonaEnLista['_canjes'] }) {
   const marcas = useMemo(() => {
     const s = new Set<CanjeStore>()
-    for (const c of canjes) if (c.estado !== 'borrador' && c.estado !== 'rechazado') s.add(c.store)
+    // Los dos "no" no cuentan como haber trabajado para la marca: ni el nuestro (`rechazado`) ni
+    // el de ella (`no_acepto`). Una propuesta que no prosperó no es un antecedente.
+    for (const c of canjes) if (!SIN_ANTECEDENTE.includes(c.estado)) s.add(c.store)
     return [...s]
   }, [canjes])
 

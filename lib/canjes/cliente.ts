@@ -66,7 +66,14 @@ export type DatosCanjes = {
   personas: CanjePersona[]
   canjes: CanjeVisible[]
   vencidos: CanjeVencido[]
+  /** La de la marca en la que se está parado. */
   config: CanjeConfig | null
+  /**
+   * Las de **todas** las marcas visibles. El modal de propuesta deja elegir la marca —el padrón es
+   * transversal, así que se propone desde donde uno esté— y necesita la unidad por defecto de
+   * cualquiera de ellas, no sólo la de la sección.
+   */
+  configs: CanjeConfig[]
   marcasVisibles: CanjeStore[]
 }
 
@@ -82,6 +89,7 @@ export async function leerCanjes(store: CanjeStore): Promise<DatosCanjes> {
     canjes: (d.canjes as CanjeVisible[]) || [],
     vencidos: (d.vencidos as CanjeVencido[]) || [],
     config: (d.config as CanjeConfig) || null,
+    configs: (d.configs as CanjeConfig[]) || [],
     marcasVisibles: (d.marcasVisibles as CanjeStore[]) || [],
   }
 }
@@ -142,6 +150,16 @@ export type CamposPersona = Partial<{
 
 export async function editarPersona(store: CanjeStore, id: number, campos: CamposPersona): Promise<void> {
   await postear({ store, action: 'persona-editar', id, ...campos })
+}
+
+/**
+ * Saca una persona del padrón. Es para el error de tipeo y la ficha duplicada.
+ *
+ * ⚠️ Con canjes encima el servidor lo rechaza con el motivo en criollo: eso ya es historial, y para
+ * "no la llamemos más" está el veto, que deja el porqué escrito.
+ */
+export async function borrarPersona(store: CanjeStore, id: number): Promise<void> {
+  await postear({ store, action: 'persona-borrar', id })
 }
 
 /** Devuelve las notas ya actualizadas: la lista se re-pinta sin volver a leer la ficha entera. */
@@ -219,6 +237,9 @@ export function linkDelPortal(token: string): string {
   return `${origen}/canje/${token}`
 }
 
+/** Lo que se le pide publicar, tal como sale de la grilla: un tipo y una cantidad. */
+export type EntregablePedido = { tipo: TipoEntregable; cantidad: number }
+
 export type NuevoCanje = {
   persona_id: number
   tipo: TipoCanje
@@ -228,11 +249,23 @@ export type NuevoCanje = {
   tope_pvp?: number | null
   tope_unidades?: TopeUnidad[]
   monto_plata?: number | null
+  /**
+   * Viajan en el MISMO request que el canje: son parte de la propuesta, no un agregado posterior.
+   * Mandarlos de a uno dejaría un canje a medias si falla el tercero.
+   */
+  entregables?: EntregablePedido[]
 }
 
-export async function crearCanje(store: CanjeStore, datos: NuevoCanje): Promise<{ id: number; numero: string }> {
+/**
+ * Devuelve también **en qué estado nació**: si el que propone ya podía firmarlo sale directo a
+ * `enviada` y hay un mensaje para copiar; si no, quedó esperando la firma y no hay nada que mandar
+ * todavía. La UI necesita saber cuál de las dos cosas pasó.
+ */
+export async function crearCanje(
+  store: CanjeStore, datos: NuevoCanje,
+): Promise<{ id: number; numero: string; estado: EstadoCanje }> {
   const d = await postear({ store, action: 'canje-crear', ...datos })
-  return { id: d.id as number, numero: d.numero as string }
+  return { id: d.id as number, numero: d.numero as string, estado: d.estado as EstadoCanje }
 }
 
 export async function editarCanje(store: CanjeStore, id: number, campos: Partial<NuevoCanje>): Promise<void> {
@@ -252,6 +285,23 @@ export async function aprobarCanje(store: CanjeStore, id: number): Promise<Nivel
 
 export async function rechazarCanje(store: CanjeStore, id: number, motivo: string): Promise<void> {
   await postear({ store, action: 'canje-rechazar', id, motivo })
+}
+
+/** "Ya le escribí". Pendiente, no estado: el canje no se mueve. Se dispara al copiar el mensaje. */
+export async function marcarContactada(store: CanjeStore, id: number): Promise<void> {
+  await postear({ store, action: 'contacto', id })
+}
+
+/**
+ * Lo que contestó ella. `acepto` es lo que **genera el link del portal**: antes del sí no hay nada
+ * que mostrarle. Va por acción propia y no por `cambiarEstadoCanje` justamente por eso.
+ */
+export async function registrarRespuesta(
+  store: CanjeStore, id: number,
+  respuesta: 'acepto' | 'no_acepto',
+  datos?: { motivo?: string; nota?: string },
+): Promise<void> {
+  await postear({ store, action: 'canje-respuesta', id, respuesta, ...datos })
 }
 
 // ── Los productos ───────────────────────────────────────────────────────────────

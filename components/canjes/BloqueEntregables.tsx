@@ -13,23 +13,26 @@
 
 import { useState } from 'react'
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
-  color, font, space, weight, useConfirmar, useToast, type Tone,
+  Badge, Button, CopyButton, EmptyState, Field, Input, Modal, Notice, SectionCard, Select,
+  StatusPill, color, font, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import {
   agregarEntregable, agregarEvidencia, borrarEvidencia, quitarEntregable, verificarEvidencia,
 } from '@/lib/canjes/cliente'
+import { mensajeRecordatorio } from '@/lib/canjes/mensajes'
 import {
   ENTREGABLE_LABEL, TIPOS_ENTREGABLE, cumplimiento, entregableEnCriollo,
-  type CanjeEntregable, type CanjeEvidencia, type CanjeRow, type TipoEntregable,
+  type CanjeEntregable, type CanjeEvidencia, type CanjePersona, type CanjeRow, type TipoEntregable,
 } from '@/lib/canjes/tipos'
 
 export function BloqueEntregables({
-  canje, entregables, evidencias, onCambio, editable,
+  canje, entregables, evidencias, persona, onCambio, editable,
 }: {
   canje: CanjeRow
   entregables: CanjeEntregable[]
   evidencias: CanjeEvidencia[]
+  /** Para el recordatorio: sin ella no hay a quién saludar. */
+  persona: CanjePersona | null
   onCambio: () => void
   editable: boolean
 }) {
@@ -86,12 +89,25 @@ export function BloqueEntregables({
       }
     >
       {cump.vencidos.length > 0 && (
-        <div style={{ marginBottom: space[3] }}>
+        <div style={{ marginBottom: space[3], display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <Notice tone="warning">
             {cump.vencidos.length === 1
               ? 'Hay un entregable vencido sin publicar.'
               : `Hay ${cump.vencidos.length} entregables vencidos sin publicar.`}
           </Notice>
+          {/* El recordatorio estaba escrito y testeado desde la Fase 1 pero no tenía botón, así
+              que la única forma de pedir lo que falta era escribirlo a mano. */}
+          {persona && (
+            <CopyButton
+              label="Copiar recordatorio"
+              getText={() => mensajeRecordatorio(
+                persona,
+                // Lo que FALTA, no lo comprometido: pedirle 3 historias cuando ya subió 2 es la
+                // forma más rápida de que deje de contestar.
+                cump.vencidos.map((v) => ({ tipo: v.entregable.tipo, cuantas: v.comprometidas - v.cumplidas })),
+              )}
+            />
+          )}
         </div>
       )}
 

@@ -28,12 +28,14 @@ import {
 } from '@/components/ui'
 import { crearPersona, esCiego } from '@/lib/canjes/cliente'
 import { normalizarInstagram } from '@/lib/canjes/instagram'
-import { veMarcaCanjes } from '@/lib/canjes/permisos'
-import { STORE_LABEL, type CanjeStore } from '@/lib/canjes/tipos'
+import { marcaDePermisos } from '@/lib/canjes/marcas.js'
+import { nivelesQueFirma, veMarcaCanjes } from '@/lib/canjes/permisos'
+import { STORE_LABEL, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
 import { FichaCanje } from './FichaCanje'
 import { FichaPersona } from './FichaPersona'
 import { ListaCanjes } from './ListaCanjes'
 import { ListaPersonas } from './ListaPersonas'
+import { ProponerCanje } from './ProponerCanje'
 import { useCanjes } from './useCanjes'
 
 export function Canjes() {
@@ -55,8 +57,19 @@ export function Canjes() {
   const [abierta, setAbierta] = useState<number | null>(null)
   const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
   const [dandoAlta, setDandoAlta] = useState(false)
+  /** A quién se le está proponiendo algo desde la lista, sin entrar a su ficha. */
+  const [proponiendoA, setProponiendoA] = useState<CanjePersona | null>(null)
 
   const est = useCanjes(store)
+
+  // Qué firmas tiene, para que el modal anticipe si la propuesta sale directo o va a la firma.
+  const susNiveles = useMemo(() => nivelesQueFirma(perfil, marcaDePermisos(store)), [perfil, store])
+
+  const canjeCreado = useCallback(async (id: number) => {
+    setProponiendoA(null)
+    await est.recargar()
+    setCanjeAbierto(id)
+  }, [est])
 
   const abrir = useCallback((id: number) => setAbierta(id), [])
 
@@ -129,19 +142,24 @@ export function Canjes() {
           store={store}
           personaId={abierta}
           ctxPuntaje={est.ctxPuntaje}
+          configs={est.configs}
+          marcasVisibles={est.marcasVisibles}
+          susNiveles={susNiveles}
           onVolver={() => {
             setAbierta(null)
             void est.recargar()
           }}
           onCambio={est.parchearPersona}
-          onAbrirCanje={setCanjeAbierto}
-          onCanjeCreado={async (id) => {
+          onBorrada={async () => {
+            setAbierta(null)
             await est.recargar()
-            setCanjeAbierto(id)
+            toast.ok('La sacamos del padrón.')
           }}
+          onAbrirCanje={setCanjeAbierto}
+          onCanjeCreado={canjeCreado}
         />
       ) : tab === 'personas' ? (
-        <ListaPersonas personas={est.personas} onAbrir={abrir} />
+        <ListaPersonas personas={est.personas} onAbrir={abrir} onProponer={setProponiendoA} />
       ) : (
         <ListaCanjes
           canjes={est.canjes}
@@ -149,6 +167,21 @@ export function Canjes() {
           vencidos={est.vencidos}
           soloAprobaciones={tab === 'aprobaciones'}
           onAbrir={setCanjeAbierto}
+        />
+      )}
+
+      {/* La propuesta desde la LISTA, sin pasar por la ficha: el canje nace de una idea sobre
+          alguien que ya está en el padrón, y hacer dos clicks para llegar es lo que hace que se
+          termine anotando en otro lado. */}
+      {proponiendoA && (
+        <ProponerCanje
+          persona={proponiendoA}
+          store={store}
+          configs={est.configs}
+          marcasVisibles={est.marcasVisibles}
+          susNiveles={susNiveles}
+          onCerrar={() => setProponiendoA(null)}
+          onListo={canjeCreado}
         />
       )}
 

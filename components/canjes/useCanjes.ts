@@ -40,6 +40,8 @@ export type EstadoCanjes = {
   /** Resumido por el servidor: qué canjes tienen entregables obligatorios vencidos. */
   vencidos: CanjeVencido[]
   config: CanjeConfig | null
+  /** Las de todas las marcas visibles: el modal de propuesta deja elegir la marca. */
+  configs: CanjeConfig[]
   marcasVisibles: CanjeStore[]
   cargando: boolean
   error: string | null
@@ -48,7 +50,7 @@ export type EstadoCanjes = {
   parchearPersona: (p: CanjePersona) => void
 }
 
-const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, marcasVisibles: [] }
+const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, configs: [], marcasVisibles: [] }
 
 export function useCanjes(store: CanjeStore): EstadoCanjes {
   const [datos, setDatos] = useState<DatosCanjes>(VACIO)
@@ -140,6 +142,7 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     canjes: datos.canjes,
     vencidos: datos.vencidos,
     config: datos.config,
+    configs: datos.configs,
     marcasVisibles: datos.marcasVisibles,
     cargando,
     error,

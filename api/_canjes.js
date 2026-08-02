@@ -25,14 +25,20 @@
 //   POST { action:'persona-nota-borrar', id, nota_id }           → borra POR ID, nunca por índice.
 //   POST { action:'persona-archivo', id, url, nombre, tipo }     → suma un archivo a la ficha.
 //   POST { action:'persona-archivo-borrar', id, url }            → lo saca.
+//   POST { action:'persona-borrar', id }                         → sólo si no tiene canjes.
 //   POST { action:'config', store, ...campos }                   → edita la config. ADMIN.
 //
 //   GET  ?recurso=canjes&vista=canje&id=N&store=...              → el canje con items, entregables y evidencias.
-//   POST { action:'canje-crear', persona_id, tipo, tope… }       → nace en 'borrador'.
-//   POST { action:'canje-editar', id, ...campos }                → sólo antes del acuerdo.
+//   POST { action:'canje-crear', persona_id, tipo, tope…, entregables[] } → nace en 'enviada' si el
+//                                                                  que propone ya podía firmarlo;
+//                                                                  si no, en 'propuesta'.
+//   POST { action:'canje-editar', id, ...campos, entregables? }  → sólo antes del acuerdo.
 //   POST { action:'canje-estado', id, estado, motivo? }          → transiciones validadas por TRANSICIONES.
-//   POST { action:'canje-aprobar', id }                          → exige el sub que corresponda. Genera el token.
+//   POST { action:'canje-aprobar', id }                          → exige el sub que corresponda. Deja el canje en 'enviada'.
 //   POST { action:'canje-rechazar', id, motivo }                 → ídem, con motivo obligatorio.
+//   POST { action:'contacto', id }                               → "ya le escribí". Pendiente, no estado.
+//   POST { action:'canje-respuesta', id, respuesta, motivo?, nota? } → lo que contestó ELLA.
+//                                                                  'acepto' genera el token del portal.
 //   POST { action:'item-agregar', id, ...datos }                 → snapshot del producto, con control del tope.
 //   POST { action:'item-quitar', id, item_id, motivo }           → NO borra: marca 'quitado'.
 //   POST { action:'compra', id, tn_orden, gn_venta_number? }     → la orden creada a mano en TN.
@@ -110,6 +116,7 @@ const PERSONA_COLS = `id, instagram, instagram_raw, nombre, apellido, telefono, 
 const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
   tope_tipo, tope_pvp, tope_unidades, monto_plata, pago_estado, pago_at, pago_nota,
   aprobado_por, aprobado_at, aprobacion_nivel, rechazado_motivo, rechazado_por, rechazado_at, acordado_at,
+  contacto_estado, contacto_at, respuesta_motivo, respuesta_nota, respuesta_at,
   token_vence, datos_confirmados_at,
   tn_orden, compra_estado, compra_at, compra_por, gn_venta_number, stock_estado,
   envio_via, envio_seguimiento, envio_costo, envio_estado, envio_at, envio_direccion,
@@ -171,11 +178,17 @@ function esAdministracion(perfil) {
 //
 // `tests/canjes-flujo.test.ts` compara los dos lados contra los mismos casos.
 
-/** Espejo de `TRANSICIONES`. `cancelado` no figura: se llega desde cualquier no-terminal. */
+/**
+ * Espejo de `TRANSICIONES`. `cancelado` no figura: se llega desde cualquier no-terminal.
+ *
+ * ⚠️ `propuesta` (nuestra firma) y `enviada` (su respuesta) son dos esperas distintas, y **no hay
+ * atajo de `propuesta` a `acuerdo`**: firmar puertas adentro no es que ella haya dicho que sí.
+ */
 const TRANSICIONES = {
-  borrador: ['propuesta'],
-  propuesta: ['acuerdo', 'rechazado'],
+  propuesta: ['enviada', 'rechazado'],
+  enviada: ['acuerdo', 'no_acepto'],
   rechazado: [],
+  no_acepto: [],
   acuerdo: ['preparando'],
   preparando: ['en_curso'],
   en_curso: ['cerrado'],
@@ -183,7 +196,18 @@ const TRANSICIONES = {
   cancelado: [],
 };
 const ESTADOS = Object.keys(TRANSICIONES);
-const TERMINALES = ['rechazado', 'cerrado', 'cancelado'];
+const TERMINALES = ['rechazado', 'no_acepto', 'cerrado', 'cancelado'];
+
+/** Espejo de `MOTIVOS_NO_ACEPTO`. Lista cerrada: es información sobre la persona, no sobre nosotros. */
+const MOTIVOS_NO_ACEPTO = [
+  'No respondió',
+  'No le interesó',
+  'Pidió más de lo que ofrecimos',
+  'Pidió plata',
+  'Trabaja con una marca competidora',
+  'Ahora no, más adelante',
+  'Otro',
+];
 
 /** Espejo de `puedeIr`. */
 function puedeIr(desde, hasta) {
@@ -223,6 +247,17 @@ function subQueApruebe(canje, items, cfg) {
   // No estimable ⇒ firma alta. Prefiero molestar a un gerente que dejar pasar un canje caro.
   if (costo == null) return 'aprobar-plata';
   return costo > Number(umbral) ? 'aprobar-plata' : 'aprobar';
+}
+
+/**
+ * Espejo de `cubreNivel`. Quien firma alto firma bajo; al revés no.
+ *
+ * Una sola implementación para las dos preguntas de la firma: si puede aprobar el canje de otro, y
+ * si el suyo propio sale directo sin pasar por la pestaña de Aprobaciones.
+ */
+function puedeFirmar(perfil, store, nivel) {
+  if (puedeSubCanjes(perfil, store, 'aprobar-plata')) return true;
+  return puedeSubCanjes(perfil, store, nivel);
 }
 
 /**
@@ -266,6 +301,32 @@ const bool = (v) => v === true || v === 'true';
 const DIAS_TOKEN = 45;
 
 const TIPOS_ENTREGABLE = ['historia_ig', 'reel_ig', 'post_ig', 'video_tiktok', 'contenido'];
+
+/**
+ * Lo que se le pide publicar, tal como llega de la grilla de la propuesta: una fila por tipo con su
+ * cantidad. Los que vienen en 0 **se ignoran** — la grilla manda los cinco tipos siempre, y un
+ * entregable de cantidad cero trabaría el cierre pidiendo algo que nadie prometió.
+ *
+ * Arrancan todos obligatorios y con el plazo de la config: lo fino se afina después en la ficha,
+ * que es donde tiene sentido mirarlo de a uno.
+ */
+function entregablesDelBody(lista, cfg) {
+  if (!Array.isArray(lista)) return [];
+  const porTipo = new Map();
+  for (const e of lista) {
+    if (!e || !TIPOS_ENTREGABLE.includes(e.tipo)) continue;
+    const cantidad = parseInt(e.cantidad ?? e.cantidad_comprometida, 10);
+    if (!Number.isFinite(cantidad) || cantidad < 1) continue;
+    // Si el mismo tipo viene dos veces, gana la última: es una grilla, no un carrito.
+    porTipo.set(e.tipo, {
+      tipo: e.tipo,
+      cantidad_comprometida: cantidad,
+      plazo_dias: Number(cfg?.plazo_entregable_dias_default) || 10,
+      obligatorio: true,
+    });
+  }
+  return [...porTipo.values()];
+}
 const VIAS_ENVIO = ['correo', 'andreani', 'cadete', 'presencial'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
 const TIPOS_CANJE = ['producto', 'producto_plata'];
@@ -340,6 +401,7 @@ export default async function handler(req, res) {
       store: st, umbral_aprobacion_alta: null, cadencia_dias_default: 90,
       plazo_entregable_dias_default: 10, tope_evidencias_por_canje: 30, factor_costo_estimado: 0.4,
       bloquear_por_vencidos: false, cierres_incompletos_no_repetir: 2, drive_url: null,
+      unidad_default: null, unidades_sugeridas: [],
     };
   }
 
@@ -429,7 +491,11 @@ export default async function handler(req, res) {
       if (propios.error) throw new Error(propios.error.message);
       if (ajenos.error) throw new Error(ajenos.error.message);
 
-      const { data: config } = await supabase.from('canje_config').select('*').eq('store', store).maybeSingle();
+      // Las tres filas, no sólo la de la sección: el modal de propuesta deja elegir la marca (el
+      // padrón es transversal, así que se propone desde donde se está parado) y necesita la unidad
+      // por defecto de cualquiera de ellas. Son tres filas: no se paga por pedirlas.
+      const { data: configs } = await supabase.from('canje_config').select('*');
+      const config = (configs || []).find((c) => c.store === store) || null;
 
       return res.status(200).json({
         ok: true,
@@ -442,7 +508,8 @@ export default async function handler(req, res) {
         // necesita, y sin esto habría que pedir los entregables de cada canje en cada refresco de
         // los avisos — una consulta por canje, cada tres minutos, para pintar un número.
         vencidos: await resumenDeVencidos(propios.data || []),
-        config: config || null,
+        config,
+        configs: (configs || []).filter((c) => visibles.includes(c.store)),
         marcasVisibles: visibles,
       });
     }
@@ -598,6 +665,36 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, archivos: quedan });
     }
 
+    /**
+     * Borrar del padrón. Es para el error de tipeo y la ficha duplicada, no para "ya no
+     * trabajamos más con ella" — para eso está el veto, que **deja el rastro**.
+     *
+     * ⚠️ Con canjes encima no se borra, y no es una restricción cosmética: la FK de
+     * `canjes.persona_id` es `restrict`, así que la base lo rechazaría igual. Se chequea acá para
+     * poder decirlo en criollo en vez de devolver un error de Postgres. Las notas y los archivos
+     * viven en la misma fila, así que se van con ella.
+     */
+    if (action === 'persona-borrar') {
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      const { data: p } = await supabase.from('canje_personas')
+        .select('id, instagram').eq('id', id).maybeSingle();
+      if (!p) return res.status(404).json({ error: 'no existe esa persona' });
+
+      // Cuenta sobre TODAS las marcas, no sólo las visibles: si tiene un canje de BDI y quien
+      // borra sólo ve Zattia, igual no se borra. El padrón es uno solo.
+      const { count } = await supabase.from('canjes')
+        .select('id', { count: 'exact', head: true }).eq('persona_id', id);
+      if (count) {
+        return res.status(409).json({
+          error: `@${p.instagram} tiene ${count} ${count === 1 ? 'canje' : 'canjes'} en el historial, así que no se borra. Si no querés que aparezca más, vetala: queda el motivo escrito.`,
+        });
+      }
+
+      const { error } = await supabase.from('canje_personas').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
+    }
+
     // ── La config del módulo ──────────────────────────────────────────────────
     // Los números que si no serían constantes escondidas en el código. Se toca con permiso de
     // administración: el umbral de aprobación decide qué firma hace falta, así que no es un ajuste
@@ -617,6 +714,11 @@ export default async function handler(req, res) {
       if (b.factor_costo_estimado !== undefined) campos.factor_costo_estimado = num(b.factor_costo_estimado);
       if (b.bloquear_por_vencidos !== undefined) campos.bloquear_por_vencidos = bool(b.bloquear_por_vencidos);
       if (b.drive_url !== undefined) campos.drive_url = texto(b.drive_url);
+      if (b.unidad_default !== undefined) campos.unidad_default = texto(b.unidad_default);
+      if (Array.isArray(b.unidades_sugeridas)) {
+        campos.unidades_sugeridas = b.unidades_sugeridas
+          .map((u) => String(u || '').trim()).filter(Boolean).slice(0, 20);
+      }
       if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });
 
       const { error } = await supabase.from('canje_config')
@@ -650,27 +752,60 @@ export default async function handler(req, res) {
         if (bloqueo) return res.status(403).json({ error: bloqueo });
       }
 
-      const tope_tipo = TOPE_TIPOS.includes(b.tope_tipo) ? b.tope_tipo : 'monto';
+      const tope_tipo = TOPE_TIPOS.includes(b.tope_tipo) ? b.tope_tipo : 'unidades';
+      const tipo = TIPOS_CANJE.includes(b.tipo) ? b.tipo : 'producto';
       const row = {
         persona_id: personaId,
         store,
-        tipo: TIPOS_CANJE.includes(b.tipo) ? b.tipo : 'producto',
-        estado: 'borrador',
+        tipo,
         titulo: texto(b.titulo),
         nota: texto(b.nota),
         tope_tipo,
         tope_pvp: tope_tipo === 'monto' ? num(b.tope_pvp) : null,
         tope_unidades: tope_tipo === 'unidades' && Array.isArray(b.tope_unidades) ? b.tope_unidades : [],
-        monto_plata: b.tipo === 'producto_plata' ? num(b.monto_plata) : null,
+        monto_plata: tipo === 'producto_plata' ? num(b.monto_plata) : null,
         // El pendiente de pago sólo existe si hay plata: si no, sería un pendiente que nunca se
         // resuelve y que traba el cierre para siempre.
-        pago_estado: b.tipo === 'producto_plata' ? 'pendiente' : 'no_aplica',
+        pago_estado: tipo === 'producto_plata' ? 'pendiente' : 'no_aplica',
         usuario,
-        historial: [{ estado: 'borrador', at: ahora(), usuario, nota: 'canje abierto' }],
       };
+
+      // ── La firma que se saltea sola ─────────────────────────────────────────
+      // Espejo de `naceEn`. Si quien lo propone ya podía firmarlo, no tiene sentido mandarlo a una
+      // pestaña para que se apruebe a sí mismo. Que se saltee NO borra la firma: se estampa igual,
+      // porque de lo que sirve una aprobación es de saber quién se hizo cargo.
+      const nivel = subQueApruebe(row, [], cfgStore);
+      const firmaSola = puedeFirmar(perfil, store, nivel);
+      row.estado = firmaSola ? 'enviada' : 'propuesta';
+      row.contacto_estado = 'pendiente';
+      if (firmaSola) {
+        row.aprobado_por = usuario;
+        row.aprobado_at = ahora();
+        row.aprobacion_nivel = nivel;
+      }
+      row.historial = [{
+        estado: row.estado,
+        at: ahora(),
+        usuario,
+        nota: firmaSola ? 'propuesta armada' : 'propuesta armada, a la firma',
+      }];
+
       const { data, error } = await supabase.from('canjes').insert(row).select('id').single();
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, id: data.id, numero: numeroCanje(data.id) });
+
+      // Los entregables vienen en el MISMO request: hacerlo con N llamadas desde el browser deja un
+      // canje a medias si falla la tercera, y lo que se le prometió publicar es parte de la
+      // propuesta, no un agregado posterior.
+      const entregables = entregablesDelBody(b.entregables, cfgStore);
+      if (entregables.length) {
+        const { error: e2 } = await supabase.from('canje_entregables')
+          .insert(entregables.map((e) => ({ ...e, canje_id: data.id, usuario })));
+        if (e2) throw new Error(e2.message);
+      }
+
+      return res.status(200).json({
+        ok: true, id: data.id, numero: numeroCanje(data.id), estado: row.estado,
+      });
     }
 
     const canjeId = parseInt(b.id, 10);
@@ -681,9 +816,11 @@ export default async function handler(req, res) {
     const cfgCanje = await configDe(canje.store);
 
     if (action === 'canje-editar') {
-      // Después del acuerdo el trato ya está cerrado con ella: cambiarlo por atrás es cambiarle
-      // las condiciones sin avisar. Se cancela y se hace otro.
-      if (!['borrador', 'propuesta'].includes(canje.estado)) {
+      // Se edita mientras la conversación esté abierta: eso incluye `enviada`, porque la
+      // negociación pasa por las redes y lo que se acuerde ahí hay que poder asentarlo (es el
+      // "generar cambios"). Después del acuerdo el trato ya está cerrado con ella: cambiarlo por
+      // atrás es cambiarle las condiciones sin avisar. Se cancela y se hace otro.
+      if (!['propuesta', 'enviada'].includes(canje.estado)) {
         return res.status(409).json({ error: 'Un canje ya acordado no se edita: cancelalo y armá uno nuevo.' });
       }
       const campos = {};
@@ -698,10 +835,110 @@ export default async function handler(req, res) {
       if (b.tope_tipo !== undefined && TOPE_TIPOS.includes(b.tope_tipo)) campos.tope_tipo = b.tope_tipo;
       if (b.tope_pvp !== undefined) campos.tope_pvp = num(b.tope_pvp);
       if (b.tope_unidades !== undefined && Array.isArray(b.tope_unidades)) campos.tope_unidades = b.tope_unidades;
-      if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });
-      const { error } = await supabase.from('canjes').update({ ...campos, updated_at: ahora() }).eq('id', canjeId);
+
+      // Los entregables se reemplazan enteros, porque lo que cambió en la negociación es el trato
+      // completo ("me hacés 2 historias en vez de 3"), no una fila suelta. Se borran y se insertan
+      // en un solo paso; con evidencias colgando no se toca, aunque acá no debería haberlas.
+      const nuevos = b.entregables === undefined ? null : entregablesDelBody(b.entregables, cfgCanje);
+      if (nuevos) {
+        const { count } = await supabase.from('canje_evidencias')
+          .select('id', { count: 'exact', head: true }).eq('canje_id', canjeId);
+        if (count) {
+          return res.status(409).json({
+            error: 'Este canje ya tiene publicaciones cargadas: cambiá los entregables de a uno desde la ficha.',
+          });
+        }
+      }
+      if (!Object.keys(campos).length && !nuevos) return res.status(400).json({ error: 'nada para editar' });
+
+      if (Object.keys(campos).length) {
+        const { error } = await supabase.from('canjes').update({ ...campos, updated_at: ahora() }).eq('id', canjeId);
+        if (error) throw new Error(error.message);
+      }
+      if (nuevos) {
+        const { error: eDel } = await supabase.from('canje_entregables').delete().eq('canje_id', canjeId);
+        if (eDel) throw new Error(eDel.message);
+        if (nuevos.length) {
+          const { error: eIns } = await supabase.from('canje_entregables')
+            .insert(nuevos.map((e) => ({ ...e, canje_id: canjeId, usuario })));
+          if (eIns) throw new Error(eIns.message);
+        }
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * "Ya le escribí." Es un **pendiente, no un estado**: la propuesta está armada igual y el canje
+     * no se mueve. Sirve para que el listado distinga "falta escribirle" de "esperando su
+     * respuesta", que es la diferencia entre una tarea mía y una espera de otro.
+     *
+     * Es registro, no control: no tiene espejo en TS.
+     */
+    if (action === 'contacto') {
+      if (canje.estado !== 'enviada') {
+        return res.status(409).json({ error: 'Sólo se marca en un canje que se le haya mandado.' });
+      }
+      const { error } = await supabase.from('canjes')
+        .update({ contacto_estado: 'hecho', contacto_at: ahora(), updated_at: ahora() }).eq('id', canjeId);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * Lo que contestó ELLA. Va por acción propia y no por `canje-estado` por una razón concreta:
+     * **acá nace el token del portal**, y `canje-estado` no mintea tokens. Si el acuerdo se
+     * alcanzara por la acción genérica, el link nunca existiría y la ficha diría "este canje no
+     * tiene link activo" sin explicar por qué.
+     *
+     * No exige sub-permiso: registrar lo que dijo la persona lo hace quien lleva la conversación,
+     * no quien firma la plata.
+     */
+    if (action === 'canje-respuesta') {
+      if (canje.estado !== 'enviada') {
+        return res.status(409).json({ error: 'Esa respuesta se registra sobre un canje que esté esperando contestación.' });
+      }
+      const at = ahora();
+
+      if (b.respuesta === 'acepto') {
+        // El token nace acá, con el sí. Antes del acuerdo el link no tiene nada que mostrarle.
+        const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+        const vence = new Date();
+        vence.setDate(vence.getDate() + DIAS_TOKEN);
+        await apilar(supabase, 'canjes', canjeId, { estado: 'acuerdo', at, usuario, nota: 'aceptó' }, {
+          estado: 'acuerdo',
+          // ⚠️ `acordado_at` se estampa ACÁ y no en la firma interna: es la fecha que
+          // `fechaDeAccion` lee como "última acción con ella", y una propuesta que nunca contestó
+          // no puede taparle la cadencia 90 días.
+          acordado_at: at,
+          respuesta_at: at,
+          token,
+          token_vence: vence.toISOString(),
+        });
+        return res.status(200).json({ ok: true, estado: 'acuerdo' });
+      }
+
+      if (b.respuesta === 'no_acepto') {
+        const motivo = texto(b.motivo);
+        if (!MOTIVOS_NO_ACEPTO.includes(motivo)) {
+          return res.status(400).json({ error: 'Elegí un motivo de la lista.' });
+        }
+        const nota = texto(b.nota);
+        if (motivo === 'Otro' && !nota) {
+          return res.status(400).json({ error: 'Contá en una línea qué pasó: "Otro" sin nota no dice nada dentro de seis meses.' });
+        }
+        await apilar(supabase, 'canjes', canjeId, { estado: 'no_acepto', at, usuario, nota: motivo }, {
+          estado: 'no_acepto',
+          respuesta_motivo: motivo,
+          respuesta_nota: nota,
+          respuesta_at: at,
+          // Higiene: sin canje vivo, el link no tiene por qué seguir abriendo.
+          token: null,
+          token_vence: null,
+        });
+        return res.status(200).json({ ok: true, estado: 'no_acepto' });
+      }
+
+      return res.status(400).json({ error: 'respuesta inválida (acepto | no_acepto)' });
     }
 
     if (action === 'canje-estado') {
@@ -734,11 +971,7 @@ export default async function handler(req, res) {
       // Qué firma hace falta lo decide el canje, no quien lo mira: un canje con plata siempre va a
       // la firma alta, tenga el monto que tenga.
       const nivel = subQueApruebe(canje, await itemsDe(canjeId), cfgCanje);
-      // Quien puede firmar lo alto puede firmar lo bajo; al revés no.
-      const puede = nivel === 'aprobar'
-        ? (puedeSubCanjes(perfil, canje.store, 'aprobar') || puedeSubCanjes(perfil, canje.store, 'aprobar-plata'))
-        : puedeSubCanjes(perfil, canje.store, 'aprobar-plata');
-      if (!puede) {
+      if (!puedeFirmar(perfil, canje.store, nivel)) {
         return res.status(403).json({
           error: nivel === 'aprobar-plata'
             ? 'Este canje necesita la firma alta (permiso "aprobar canjes con plata o de monto alto").'
@@ -755,26 +988,23 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      // El token nace acá, con el acuerdo: antes no hay nada que ella pueda completar.
-      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, ''); // 64 hex
-      const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
-      await apilar(supabase, 'canjes', canjeId, { estado: 'acuerdo', at: ahora(), usuario, nota: `aprobado (${nivel})` }, {
-        estado: 'acuerdo',
+      // ⚠️ Aprobar deja el canje en `enviada`, **no** en `acuerdo`: la firma es nuestra, el acuerdo
+      // es de ella. Y por eso acá tampoco nace el token — nace cuando dice que sí
+      // (`canje-respuesta`), que es cuando el link tiene algo para mostrarle.
+      await apilar(supabase, 'canjes', canjeId, { estado: 'enviada', at: ahora(), usuario, nota: `aprobado (${nivel})` }, {
+        estado: 'enviada',
         aprobado_por: usuario,
         aprobado_at: ahora(),
         // Se GUARDA el nivel, no se recalcula: si mañana cambia el umbral, lo ya aprobado sigue
         // diciendo con qué regla se aprobó.
         aprobacion_nivel: nivel,
-        acordado_at: ahora(),
-        token,
-        token_vence: vence,
       });
       return res.status(200).json({ ok: true, nivel });
     }
 
     // ── Los productos ─────────────────────────────────────────────────────────
     if (action === 'item-agregar') {
-      if (['cerrado', 'cancelado', 'rechazado'].includes(canje.estado)) {
+      if (TERMINALES.includes(canje.estado)) {
         return res.status(409).json({ error: 'Este canje ya está cerrado.' });
       }
       const cantidad = Math.max(1, parseInt(b.cantidad, 10) || 1);
@@ -1143,4 +1373,7 @@ export default async function handler(req, res) {
 // Fase 0 las fichas se editan sin apilar: una nota ya es el registro de lo que pasó.
 // Los espejos se exportan para que `tests/canjes-flujo.test.ts` los compare contra los de
 // `lib/canjes/tipos.ts`. Es lo único que mantiene honesta la duplicación.
-export { apilar, normalizarInstagram, numeroCanje, puedeIr, seVaDelTope, subQueApruebe, TRANSICIONES };
+export {
+  apilar, entregablesDelBody, MOTIVOS_NO_ACEPTO, normalizarInstagram, numeroCanje, puedeIr,
+  seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES,
+};

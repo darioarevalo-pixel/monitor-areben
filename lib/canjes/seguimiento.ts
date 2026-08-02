@@ -9,7 +9,7 @@
  * implementación probada de "cuántos días pasaron" y dos versiones divergen en el redondeo.
  */
 import { addDiasISO, diasDesde } from '@/lib/crm/core'
-import { CANJE_STORES, type CanjePersona, type CanjeRow, type CanjeStore } from './tipos'
+import { CANJE_STORES, type CanjePersona, type CanjeRow, type CanjeStore, type EstadoCanje } from './tipos'
 
 /**
  * `nunca` — todavía no hicimos nada con ella.
@@ -27,14 +27,18 @@ export const CONTACTO_LABEL: Record<EstadoContacto, string> = {
 }
 
 /**
- * La fecha que cuenta como "hicimos una acción". Es `acordado_at`, **no** `created_at`: un borrador
- * que nunca se aprobó no es una acción, y contarlo haría que una propuesta descartada tape a la
+ * La fecha que cuenta como "hicimos una acción". Es `acordado_at`, **no** `created_at`: una
+ * propuesta que nunca prosperó no es una acción, y contarla haría que un canje descartado tape a la
  * persona durante 90 días.
  *
- * Un canje `rechazado` o `cancelado` tampoco cuenta, por lo mismo.
+ * ⚠️ Por eso `acordado_at` se estampa cuando **ella acepta** y no cuando firmamos nosotros. El
+ * filtro de estados es el segundo cinturón: los dos "no" (`rechazado` nuestro, `no_acepto` de
+ * ella), lo cancelado, y lo que todavía está en el aire.
  */
+const NO_SON_ACCION: EstadoCanje[] = ['propuesta', 'enviada', 'rechazado', 'no_acepto', 'cancelado']
+
 export function fechaDeAccion(c: Pick<CanjeRow, 'estado' | 'acordado_at' | 'entregado_at'>): string | null {
-  if (c.estado === 'rechazado' || c.estado === 'cancelado' || c.estado === 'borrador') return null
+  if (NO_SON_ACCION.includes(c.estado)) return null
   return c.acordado_at || c.entregado_at || null
 }
 

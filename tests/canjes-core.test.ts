@@ -148,21 +148,36 @@ describe('las marcas son tres', () => {
 // ── Estados ──────────────────────────────────────────────────────────────────────
 
 describe('el ciclo de vida', () => {
-  it('son ocho y ni uno más', () => {
-    expect(ESTADOS_CANJE).toHaveLength(8)
+  it('son nueve y ni uno más', () => {
+    expect(ESTADOS_CANJE).toHaveLength(9)
   })
 
   it('el camino feliz avanza de a un paso', () => {
-    expect(puedeIr('borrador', 'propuesta')).toBe(true)
-    expect(puedeIr('propuesta', 'acuerdo')).toBe(true)
+    expect(puedeIr('propuesta', 'enviada')).toBe(true)
+    expect(puedeIr('enviada', 'acuerdo')).toBe(true)
     expect(puedeIr('acuerdo', 'preparando')).toBe(true)
     expect(puedeIr('preparando', 'en_curso')).toBe(true)
     expect(puedeIr('en_curso', 'cerrado')).toBe(true)
   })
 
+  it('firmar puertas adentro NO es que ella haya dicho que sí', () => {
+    // Es el agujero de la primera versión: aprobar dejaba el canje en `acuerdo` sin que la
+    // creadora se hubiera enterado de que existía.
+    expect(puedeIr('propuesta', 'acuerdo')).toBe(false)
+  })
+
+  it('los dos "no" tienen dueños distintos y cada uno su origen', () => {
+    // `rechazado` es nuestro y sale de la firma; `no_acepto` es de ella y sale de la espera.
+    expect(puedeIr('propuesta', 'rechazado')).toBe(true)
+    expect(puedeIr('enviada', 'no_acepto')).toBe(true)
+    expect(puedeIr('propuesta', 'no_acepto')).toBe(false)
+    expect(puedeIr('enviada', 'rechazado')).toBe(false)
+  })
+
   it('no se saltean pasos', () => {
-    expect(puedeIr('borrador', 'acuerdo')).toBe(false)
+    expect(puedeIr('propuesta', 'preparando')).toBe(false)
     expect(puedeIr('propuesta', 'cerrado')).toBe(false)
+    expect(puedeIr('enviada', 'preparando')).toBe(false)
     expect(puedeIr('acuerdo', 'en_curso')).toBe(false)
   })
 
@@ -172,23 +187,28 @@ describe('el ciclo de vida', () => {
   })
 
   it('se cancela desde cualquier estado no terminal, y desde ninguno terminal', () => {
-    const noTerminales: EstadoCanje[] = ['borrador', 'propuesta', 'acuerdo', 'preparando', 'en_curso']
+    const noTerminales: EstadoCanje[] = ['propuesta', 'enviada', 'acuerdo', 'preparando', 'en_curso']
     for (const e of noTerminales) expect(puedeIr(e, 'cancelado'), e).toBe(true)
-    for (const e of ['rechazado', 'cerrado', 'cancelado'] as EstadoCanje[]) {
+    for (const e of ['rechazado', 'no_acepto', 'cerrado', 'cancelado'] as EstadoCanje[]) {
       expect(puedeIr(e, 'cancelado'), e).toBe(false)
       expect(esTerminal(e), e).toBe(true)
     }
   })
 
   it('de un estado terminal no sale ninguna transición', () => {
-    for (const e of ['rechazado', 'cerrado', 'cancelado'] as EstadoCanje[]) {
+    for (const e of ['rechazado', 'no_acepto', 'cerrado', 'cancelado'] as EstadoCanje[]) {
       for (const h of ESTADOS_CANJE) expect(puedeIr(e, h), `${e}→${h}`).toBe(false)
     }
   })
 })
 
 describe('estadoEnCriollo — el matiz que el label solo no da', () => {
-  const base = { estado: 'preparando' as EstadoCanje, compra_estado: 'pendiente' as const, envio_estado: 'pendiente' as const }
+  const base = {
+    estado: 'preparando' as EstadoCanje,
+    compra_estado: 'pendiente' as const,
+    envio_estado: 'pendiente' as const,
+    contacto_estado: 'pendiente' as const,
+  }
 
   it('en preparando dice QUÉ falta, no "preparando"', () => {
     expect(estadoEnCriollo(base)).toBe('Falta comprar')
@@ -196,9 +216,16 @@ describe('estadoEnCriollo — el matiz que el label solo no da', () => {
     expect(estadoEnCriollo({ ...base, compra_estado: 'hecho', envio_estado: 'hecho' })).toBe('En camino')
   })
 
+  it('en enviada distingue mi tarea de la espera de ella', () => {
+    // Decir "esperando su respuesta" cuando todavía no se le escribió es echarle la culpa al de
+    // enfrente de algo que falta hacer acá.
+    expect(estadoEnCriollo({ ...base, estado: 'enviada' })).toBe('Falta escribirle')
+    expect(estadoEnCriollo({ ...base, estado: 'enviada', contacto_estado: 'hecho' })).toBe('Esperando su respuesta')
+  })
+
   it('en el resto de los estados es el label de siempre', () => {
     expect(estadoEnCriollo({ ...base, estado: 'cerrado' })).toBe('Cerrado')
-    expect(estadoEnCriollo({ ...base, estado: 'propuesta' })).toBe('Esperando aprobación')
+    expect(estadoEnCriollo({ ...base, estado: 'propuesta' })).toBe('Esperando la firma interna')
   })
 })
 
@@ -218,20 +245,24 @@ function canje(p: Partial<CanjeRow> & { store: CanjeRow['store']; estado: Estado
   return {
     id: 1, persona_id: 1, tipo: 'producto', tope_tipo: 'monto', pago_estado: 'no_aplica',
     compra_estado: 'pendiente', stock_estado: 'no_aplica', envio_estado: 'pendiente',
-    aviso_estado: 'pendiente', cerrado_incompleto: false, producto_no_conservado: false,
+    aviso_estado: 'pendiente', contacto_estado: 'pendiente',
+    cerrado_incompleto: false, producto_no_conservado: false,
     created_at: '2026-01-01T00:00:00.000Z',
     ...p,
   } as CanjeRow
 }
 
 describe('fechaDeAccion — qué cuenta como "hicimos algo con ella"', () => {
-  it('un borrador NO cuenta: una propuesta que nunca se aprobó no es una acción', () => {
-    // Si contara, un borrador descartado taparía a la persona durante 90 días.
-    expect(fechaDeAccion(canje({ store: 'bdi', estado: 'borrador', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
+  it('una propuesta que ella nunca contestó NO cuenta', () => {
+    // Es el bug que se arregló con los estados nuevos: si contara, una propuesta sin respuesta le
+    // taparía la cadencia 90 días y la persona no volvería a aparecer en "hace rato".
+    expect(fechaDeAccion(canje({ store: 'bdi', estado: 'propuesta', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
+    expect(fechaDeAccion(canje({ store: 'bdi', estado: 'enviada', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
   })
 
-  it('un rechazado o un cancelado tampoco', () => {
+  it('los dos "no", el cancelado incluido, tampoco', () => {
     expect(fechaDeAccion(canje({ store: 'bdi', estado: 'rechazado', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
+    expect(fechaDeAccion(canje({ store: 'bdi', estado: 'no_acepto', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
     expect(fechaDeAccion(canje({ store: 'bdi', estado: 'cancelado', acordado_at: '2026-05-01T00:00:00.000Z' }))).toBeNull()
   })
 
@@ -257,7 +288,7 @@ describe('ultimaAccion — cruzando marcas', () => {
 
   it('sin ninguna acción da null, no una fecha inventada', () => {
     expect(ultimaAccion([])).toBeNull()
-    expect(ultimaAccion([canje({ store: 'bdi', estado: 'borrador' })])).toBeNull()
+    expect(ultimaAccion([canje({ store: 'bdi', estado: 'enviada' })])).toBeNull()
   })
 
   it('por marca separa lo que ultimaAccion junta', () => {

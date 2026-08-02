@@ -148,8 +148,10 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
 
 - **⛔ Reclamos y Cambios: frenado.** El flujo no convence; no construir ahí hasta que Bruno
   devuelva el mapa marcado.
-- **⏸️ Canjes: terminado y vacío.** Las 4 fases están en prod con 0 canjes reales, esperando los
-  ajustes del sector. No tocar código hasta que lleguen.
+- **▶️ Canjes: llegaron los ajustes del sector (2-ago-2026)** y entró la **tanda 1: la propuesta**
+  (un solo modal desde el padrón, el estado `enviada` = "esperando su respuesta", `no_acepto`, el
+  mensaje para copiar). Falta la **tanda 2** (vitrina de productos con fotos, que ella elija por el
+  link) y la **tanda 3** (carga a TN sin transcribir + cola de tránsito). Sigue con 0 canjes reales.
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo

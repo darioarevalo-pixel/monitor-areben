@@ -50,6 +50,39 @@ export function loQueLeMandamos(c: Pick<CanjeRow, 'tope_tipo' | 'tope_pvp' | 'to
   return c.tope_pvp != null ? `productos por hasta ${money(Number(c.tope_pvp))}` : 'lo que acordamos'
 }
 
+// ── La propuesta ────────────────────────────────────────────────────────────────
+
+/**
+ * El primer mensaje: el que se le manda para preguntarle si le interesa.
+ *
+ * Dice **todo el trato en tres renglones** —qué le mandamos, qué esperamos de ella— porque la
+ * negociación pasa por las redes y lo que no esté acá se termina hablando por audios. Y es lo que
+ * después permite que "generar cambios" tenga sentido: se acordó sobre algo escrito.
+ *
+ * No pregunta por la dirección ni por el talle: eso va después, con el link, y sólo si dice que sí.
+ */
+export function mensajePropuesta(
+  persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
+  c: Pick<CanjeRow, 'store' | 'tipo' | 'monto_plata' | 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
+  entregables: Pick<CanjeEntregable, 'tipo' | 'cantidad_comprometida'>[],
+): string {
+  const vos = comoLaLlamamos(persona)
+  const pide = listaEntregables(entregables)
+  const plata = c.tipo === 'producto_plata' && c.monto_plata != null
+    ? ` más ${money(Number(c.monto_plata))}`
+    : ''
+
+  return [
+    `¡Hola ${vos}! Te escribimos de ${STORE_LABEL[c.store]} porque nos interesaba hacer un canje con vos.`,
+    '',
+    pide
+      ? `Habíamos pensado en ${loQueLeMandamos(c)}${plata} a cambio de ${pide}.`
+      : `Habíamos pensado en ${loQueLeMandamos(c)}${plata}.`,
+    '',
+    'Avisanos si te interesa y lo terminamos de armar.',
+  ].join('\n')
+}
+
 // ── El link del portal ──────────────────────────────────────────────────────────
 
 /**

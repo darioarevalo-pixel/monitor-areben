@@ -11,17 +11,21 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  CONFIG_DEFAULT, calcularBalance, controlDelTope, costoEstimado, cumplimiento,
-  entregablesVencidos, faltantesParaCerrarCanje, fechaISO, itemsVivos, pideSeguimiento,
+  CONFIG_DEFAULT, ESTADOS_TERMINALES, MOTIVOS_NO_ACEPTO,
+  calcularBalance, controlDelTope, costoEstimado, cumplimiento,
+  entregablesVencidos, faltantesParaCerrarCanje, fechaISO, itemsVivos, naceEn, pideSeguimiento,
   puedeProponerCanje, quienApruebaCanje, vencimientoDe,
   type CanjeConfig, type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow,
 } from '@/lib/canjes/tipos'
 import {
   listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeLinkDatos,
-  mensajeRecordatorio,
+  mensajePropuesta, mensajeRecordatorio,
 } from '@/lib/canjes/mensajes'
 // Los espejos del handler. Si divergen, el botón dice una cosa y el servidor hace otra.
-import { puedeIr as puedeIrJS, seVaDelTope, subQueApruebe, TRANSICIONES as TRANS_JS } from '../api/_canjes.js'
+import {
+  entregablesDelBody, MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS, puedeIr as puedeIrJS,
+  seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES as TRANS_JS,
+} from '../api/_canjes.js'
 import { TRANSICIONES, puedeIr } from '@/lib/canjes/tipos'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────────
@@ -222,6 +226,93 @@ describe('el espejo del grafo de estados', () => {
         expect(puedeIrJS(a, b), `${a}→${b}`).toBe(puedeIr(a, b))
       }
     }
+  })
+
+  it('los terminales son los mismos en los dos lados', () => {
+    expect([...TERMINALES].sort()).toEqual([...ESTADOS_TERMINALES].sort())
+  })
+
+  it('los motivos de "no aceptó" son los mismos', () => {
+    // Lista cerrada de los dos lados: si el servidor no reconoce el motivo que manda la UI,
+    // registrar la respuesta devuelve 400 y el canje queda colgado en "esperando respuesta".
+    expect(MOTIVOS_NO_ACEPTO_JS).toEqual(MOTIVOS_NO_ACEPTO)
+  })
+})
+
+// ── La firma que se saltea sola ──────────────────────────────────────────────────
+
+describe('naceEn — dónde arranca el canje', () => {
+  const cfgSinUmbral = { umbral_aprobacion_alta: null, factor_costo_estimado: 0.4 }
+  const cfgConUmbral = { umbral_aprobacion_alta: 50000, factor_costo_estimado: 0.4 }
+
+  it('quien ya podía firmarlo no se lo manda a sí mismo a la firma', () => {
+    const c = canje({ tipo: 'producto', tope_tipo: 'monto', tope_pvp: 10000 })
+    expect(naceEn(c, [], cfgConUmbral, ['aprobar']).estado).toBe('enviada')
+  })
+
+  it('quien no firma lo deja esperando la firma', () => {
+    const c = canje({ tipo: 'producto', tope_tipo: 'monto', tope_pvp: 10000 })
+    expect(naceEn(c, [], cfgConUmbral, []).estado).toBe('propuesta')
+  })
+
+  it('con plata de por medio, la firma común NO alcanza', () => {
+    // El caso que importa: alguien con `aprobar` armando un canje con plata no puede saltearse la
+    // firma alta armándolo él mismo.
+    const c = canje({ tipo: 'producto_plata', monto_plata: 30000 })
+    expect(naceEn(c, [], cfgConUmbral, ['aprobar']).estado).toBe('propuesta')
+    expect(naceEn(c, [], cfgConUmbral, ['aprobar-plata']).estado).toBe('enviada')
+  })
+
+  it('sin umbral cargado todo va a la firma alta, también para saltearla', () => {
+    const c = canje({ tipo: 'producto', tope_tipo: 'monto', tope_pvp: 1000 })
+    expect(naceEn(c, [], cfgSinUmbral, ['aprobar']).estado).toBe('propuesta')
+    expect(naceEn(c, [], cfgSinUmbral, ['aprobar-plata']).estado).toBe('enviada')
+  })
+
+  it('el nivel que devuelve es el mismo que decide el servidor', () => {
+    const casos: CanjeRow[] = [
+      canje({ tipo: 'producto', tope_tipo: 'monto', tope_pvp: 10000 }),
+      canje({ tipo: 'producto', tope_tipo: 'monto', tope_pvp: 900000 }),
+      canje({ tipo: 'producto_plata', monto_plata: 5000 }),
+      canje({ tipo: 'producto', tope_tipo: 'unidades', tope_unidades: [{ cantidad: 3, descripcion: 'fundas' }] }),
+    ]
+    for (const c of casos) {
+      const cfg = cfgConUmbral as CanjeConfig
+      expect(naceEn(c, [], cfg, []).nivel, JSON.stringify({ tipo: c.tipo, tope: c.tope_tipo }))
+        .toBe(subQueApruebe(c, [], cfg))
+    }
+  })
+})
+
+// ── Lo que se le pide publicar, tal como llega de la grilla ──────────────────────
+
+describe('entregablesDelBody — la grilla manda los cinco tipos siempre', () => {
+  const cfg = { plazo_entregable_dias_default: 10 }
+
+  it('los que vienen en 0 se ignoran', () => {
+    const r = entregablesDelBody([
+      { tipo: 'historia_ig', cantidad: 3 },
+      { tipo: 'reel_ig', cantidad: 0 },
+      { tipo: 'post_ig', cantidad: 0 },
+    ], cfg)
+    expect(r).toHaveLength(1)
+    expect(r[0].tipo).toBe('historia_ig')
+    expect(r[0].cantidad_comprometida).toBe(3)
+  })
+
+  it('arrancan obligatorios y con el plazo de la config', () => {
+    const [e] = entregablesDelBody([{ tipo: 'reel_ig', cantidad: 1 }], cfg)
+    expect(e.obligatorio).toBe(true)
+    expect(e.plazo_dias).toBe(10)
+  })
+
+  it('un tipo inventado no entra', () => {
+    expect(entregablesDelBody([{ tipo: 'tiktok_live', cantidad: 2 }], cfg)).toEqual([])
+  })
+
+  it('nada, o basura, devuelve lista vacía y no rompe', () => {
+    expect(entregablesDelBody(undefined, cfg)).toEqual([])
+    expect(entregablesDelBody([null, {}, { tipo: 'post_ig' }], cfg)).toEqual([])
   })
 })
 
@@ -429,6 +520,46 @@ describe('pideSeguimiento', () => {
 // ── Los mensajes ─────────────────────────────────────────────────────────────────
 
 const lucia = { nombre: 'Lucía', apellido: 'Pérez', instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }
+
+describe('mensajePropuesta — el primer mensaje', () => {
+  const pide = [
+    { tipo: 'historia_ig' as const, cantidad_comprometida: 3 },
+    { tipo: 'reel_ig' as const, cantidad_comprometida: 1 },
+  ]
+
+  it('dice la marca, qué se le manda y qué esperamos, en un solo mensaje', () => {
+    const c = canje({
+      store: 'bdi', tope_tipo: 'unidades',
+      tope_unidades: [{ cantidad: 3, descripcion: 'fundas' }],
+    })
+    const m = mensajePropuesta(lucia, c, pide)
+    expect(m).toContain('Lucía')
+    expect(m).toContain('BDI')
+    expect(m).toContain('3 fundas')
+    expect(m).toContain('3 historias de instagram y 1 reel de instagram')
+    expect(m).toContain('Avisanos si te interesa')
+  })
+
+  it('en modo monto habla en plata', () => {
+    const c = canje({ store: 'zattia', tope_tipo: 'monto', tope_pvp: 80000 })
+    expect(mensajePropuesta(lucia, c, pide)).toContain('80.000')
+  })
+
+  it('con plata de por medio la nombra: es parte del trato', () => {
+    const c = canje({ tipo: 'producto_plata', monto_plata: 30000 })
+    expect(mensajePropuesta(lucia, c, pide)).toContain('30.000')
+  })
+
+  it('sin entregables todavía no promete nada a cambio', () => {
+    const m = mensajePropuesta(lucia, canje(), [])
+    expect(m).not.toContain('a cambio de')
+  })
+
+  it('sin nombre cargado la saluda por el @, no con un hueco', () => {
+    const m = mensajePropuesta({ instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }, canje(), pide)
+    expect(m).toContain('@Lucia.MKP')
+  })
+})
 
 describe('mensajeLinkDatos — las dos versiones', () => {
   it('la primera vez le pide los datos', () => {

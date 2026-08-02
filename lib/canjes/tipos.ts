@@ -50,14 +50,24 @@ export function queDatoPide(store: CanjeStore): 'modelo_celular' | 'talles' {
 // ── Estados ─────────────────────────────────────────────────────────────────────
 
 /**
- * Ocho estados y ni uno más. Lo que avanza a ritmos distintos **no es un estado sino un pendiente**
- * (`compra_estado`, `envio_estado`, `pago_estado`, `aviso_estado`) — mismo criterio que Reclamos,
- * donde meter cada paso manual como estado dejaba casos trabados sin poder cerrarse nunca.
+ * Nueve estados y ni uno más. Lo que avanza a ritmos distintos **no es un estado sino un pendiente**
+ * (`compra_estado`, `envio_estado`, `pago_estado`, `aviso_estado`, `contacto_estado`) — mismo
+ * criterio que Reclamos, donde meter cada paso manual como estado dejaba casos trabados sin poder
+ * cerrarse nunca.
+ *
+ * ⚠️ Hay **dos esperas distintas** y por eso son dos estados, no uno: `propuesta` es la nuestra (la
+ * firma interna) y `enviada` es la de ella. Confundirlas era el agujero de la primera versión —
+ * un canje que la creadora nunca contestó figuraba como acordado apenas alguien lo firmaba puertas
+ * adentro, y encima le tapaba la cadencia 90 días.
+ *
+ * ⚠️ **No hay `borrador`**: la propuesta se cierra en una sola pantalla, así que ningún canje nace
+ * a medias. "Ya la armé pero todavía no le escribí" es `contacto_estado`, un pendiente.
  */
 export type EstadoCanje =
-  | 'borrador'
   | 'propuesta'
+  | 'enviada'
   | 'rechazado'
+  | 'no_acepto'
   | 'acuerdo'
   | 'preparando'
   | 'en_curso'
@@ -65,13 +75,15 @@ export type EstadoCanje =
   | 'cancelado'
 
 export const ESTADOS_CANJE: EstadoCanje[] = [
-  'borrador', 'propuesta', 'rechazado', 'acuerdo', 'preparando', 'en_curso', 'cerrado', 'cancelado',
+  'propuesta', 'enviada', 'rechazado', 'no_acepto',
+  'acuerdo', 'preparando', 'en_curso', 'cerrado', 'cancelado',
 ]
 
 export const ESTADO_CANJE_LABEL: Record<EstadoCanje, string> = {
-  borrador: 'Borrador',
-  propuesta: 'Esperando aprobación',
-  rechazado: 'Rechazado',
+  propuesta: 'Esperando la firma interna',
+  enviada: 'Esperando su respuesta',
+  rechazado: 'Rechazado internamente',
+  no_acepto: 'No aceptó',
   acuerdo: 'Acordado',
   preparando: 'Preparando el envío',
   en_curso: 'Esperando el contenido',
@@ -79,8 +91,14 @@ export const ESTADO_CANJE_LABEL: Record<EstadoCanje, string> = {
   cancelado: 'Cancelado',
 }
 
-/** Los terminales: de acá no se sale. `cancelado` revoca el token del portal. */
-export const ESTADOS_TERMINALES: EstadoCanje[] = ['rechazado', 'cerrado', 'cancelado']
+/**
+ * Los terminales: de acá no se sale. `cancelado` revoca el token del portal.
+ *
+ * `rechazado` y `no_acepto` son los dos "no" y tienen dueños distintos a propósito: el primero es
+ * nuestro y lo firma quien tiene el sub; el segundo es de ella y lo registra quien lleva la
+ * conversación. Uno dice algo de nosotros, el otro dice algo de la persona.
+ */
+export const ESTADOS_TERMINALES: EstadoCanje[] = ['rechazado', 'no_acepto', 'cerrado', 'cancelado']
 
 export function esTerminal(estado: EstadoCanje): boolean {
   return ESTADOS_TERMINALES.includes(estado)
@@ -91,9 +109,10 @@ export function esTerminal(estado: EstadoCanje): boolean {
  * terminal — lo resuelve `puedeIr`, no la tabla.
  */
 export const TRANSICIONES: Record<EstadoCanje, EstadoCanje[]> = {
-  borrador: ['propuesta'],
-  propuesta: ['acuerdo', 'rechazado'],
+  propuesta: ['enviada', 'rechazado'],
+  enviada: ['acuerdo', 'no_acepto'],
   rechazado: [],
+  no_acepto: [],
   acuerdo: ['preparando'],
   preparando: ['en_curso'],
   en_curso: ['cerrado'],
@@ -110,7 +129,16 @@ export function puedeIr(desde: EstadoCanje, hasta: EstadoCanje): boolean {
  * El estado en criollo, con el matiz que el label solo no da. Mismo patrón que
  * `estadoEnCriollo` de `lib/reclamos/tipos.ts:163`: la UI muestra esto, no el enum.
  */
-export function estadoEnCriollo(c: Pick<CanjeRow, 'estado' | 'compra_estado' | 'envio_estado'>): string {
+export function estadoEnCriollo(
+  // `contacto_estado` va opcional a propósito: un canje ciego (el de otra marca) no lo trae, y sin
+  // él la respuesta correcta igual es "falta escribirle".
+  c: Pick<CanjeRow, 'estado' | 'compra_estado' | 'envio_estado'> & Partial<Pick<CanjeRow, 'contacto_estado'>>,
+): string {
+  // Mientras no se le haya escrito, decir "esperando su respuesta" sería mentir: la pelota es
+  // nuestra. Es el mismo desdoble que hace `preparando` con la compra y el despacho.
+  if (c.estado === 'enviada') {
+    return c.contacto_estado === 'hecho' ? 'Esperando su respuesta' : 'Falta escribirle'
+  }
   if (c.estado === 'preparando') {
     if (c.compra_estado !== 'hecho') return 'Falta comprar'
     if (c.envio_estado !== 'hecho') return 'Falta despachar'
@@ -195,6 +223,7 @@ export function entregableEnCriollo(tipo: TipoEntregable, cantidad: number): str
 
 // ── Motivos ─────────────────────────────────────────────────────────────────────
 
+/** El "no" nuestro, en la firma interna. Es placeholder: el motivo se escribe libre. */
 export const MOTIVOS_RECHAZO = [
   'No encaja con la marca',
   'El costo no lo justifica',
@@ -202,6 +231,27 @@ export const MOTIVOS_RECHAZO = [
   'No hay stock de lo que pide',
   'Otro',
 ]
+
+/**
+ * El "no" de ella. **Lista cerrada**, a diferencia de `MOTIVOS_RECHAZO`, porque esto es información
+ * sobre la persona: alimenta filtros y el día de mañana el puntaje, y una lista abierta se llena de
+ * `no contestó` / `No respondio` / `ni bola`. Espejo en `api/_canjes.js`.
+ *
+ * `'Ahora no, más adelante'` está para que el registro no se ensucie: no es un no, y sin esa opción
+ * termina anotado como "No le interesó", que es lo que después mira quien la vuelva a proponer.
+ */
+export const MOTIVOS_NO_ACEPTO = [
+  'No respondió',
+  'No le interesó',
+  'Pidió más de lo que ofrecimos',
+  'Pidió plata',
+  'Trabaja con una marca competidora',
+  'Ahora no, más adelante',
+  'Otro',
+]
+
+/** El único que exige nota: sin eso, "Otro" no dice nada dentro de seis meses. */
+export const MOTIVO_NO_ACEPTO_OTRO = 'Otro'
 
 export const MOTIVOS_QUITAR_ITEM = ['Sin stock', 'Se cambió por otro', 'Se pasaba del tope', 'Otro']
 
@@ -322,7 +372,20 @@ export type CanjeRow = {
   rechazado_motivo?: string | null
   rechazado_por?: string | null
   rechazado_at?: string | null
+  /**
+   * Se estampa cuando **ella acepta**, no cuando firmamos nosotros. Es la fecha que
+   * `fechaDeAccion()` lee como "última acción con esta persona": si se estampara en la firma
+   * interna, una propuesta que nunca contestó le taparía la cadencia 90 días.
+   */
   acordado_at?: string | null
+
+  /** ¿Ya se le escribió? Es un pendiente, no un estado: el canje ya está armado igual. */
+  contacto_estado: Pendiente
+  contacto_at?: string | null
+  /** De `MOTIVOS_NO_ACEPTO`, lista cerrada. `nota` es obligatoria sólo si el motivo es "Otro". */
+  respuesta_motivo?: string | null
+  respuesta_nota?: string | null
+  respuesta_at?: string | null
 
   /** Nunca sale en listados: es la llave del link público. Se pide aparte, de a uno. */
   token?: string | null
@@ -466,6 +529,14 @@ export type CanjeConfig = {
   cierres_incompletos_no_repetir: number
   /** Una sola carpeta general por marca. El sistema no la organiza ni pretende hacerlo. */
   drive_url: string | null
+  /**
+   * Con qué palabra se cuentan las unidades en esta marca: BDI habla de fundas, Zattia de prendas.
+   * Va en la config y no en código para que cambiarla no cueste un deploy — es un texto que se
+   * mira todos los días y que el sector va a querer afinar.
+   */
+  unidad_default: string | null
+  /** Las otras palabras que aparecen seguido, para no tipearlas. Nunca es una lista cerrada. */
+  unidades_sugeridas: string[]
   updated_at?: string | null
 }
 
@@ -478,6 +549,15 @@ export const CONFIG_DEFAULT: Omit<CanjeConfig, 'store'> = {
   bloquear_por_vencidos: false,
   cierres_incompletos_no_repetir: 2,
   drive_url: null,
+  unidad_default: null,
+  unidades_sugeridas: [],
+}
+
+/** Si la marca no configuró la suya. Genérico a propósito: es mejor que adivinar mal. */
+export const UNIDAD_FALLBACK = 'productos'
+
+export function unidadDeLaMarca(cfg?: Pick<CanjeConfig, 'unidad_default'> | null): string {
+  return cfg?.unidad_default?.trim() || UNIDAD_FALLBACK
 }
 
 // ── Aprobación ──────────────────────────────────────────────────────────────────
@@ -539,6 +619,36 @@ export function quienApruebaCanje(
   // canje caro por una firma baja.
   if (costo == null) return 'aprobar-plata'
   return costo > Number(cfg.umbral_aprobacion_alta) ? 'aprobar-plata' : 'aprobar'
+}
+
+/**
+ * Quien firma alto firma bajo; al revés no. Una sola implementación para las dos preguntas que se
+ * hacen sobre la firma: si alguien puede aprobar un canje ajeno, y si el suyo propio sale directo.
+ *
+ * ⚠️ Espejo en `api/_canjes.js` (`cubreNivel`).
+ */
+export function cubreNivel(tiene: NivelAprobacion[], necesita: NivelAprobacion): boolean {
+  if (tiene.includes('aprobar-plata')) return true
+  return tiene.includes(necesita)
+}
+
+/**
+ * En qué estado **nace** el canje: la firma interna se saltea sola cuando quien lo propone ya podía
+ * firmarlo. Es un control, así que la decide el servidor — pero la función es pura y el modal la
+ * usa para anticipar el camino ("se manda directo" vs. "va a la firma"), porque un salteo
+ * silencioso se lee como que el sistema hizo algo raro.
+ *
+ * Que se saltee **no borra la firma**: el handler igual estampa `aprobado_por/at/nivel`. Queda
+ * asentado quién se hizo cargo, que es de lo que sirve una aprobación.
+ */
+export function naceEn(
+  c: Pick<CanjeRow, 'tipo' | 'tope_tipo' | 'tope_pvp'>,
+  items: CanjeItem[],
+  cfg: Pick<CanjeConfig, 'umbral_aprobacion_alta' | 'factor_costo_estimado'>,
+  susNiveles: NivelAprobacion[],
+): { estado: Extract<EstadoCanje, 'propuesta' | 'enviada'>; nivel: NivelAprobacion } {
+  const nivel = quienApruebaCanje(c, items, cfg)
+  return { estado: cubreNivel(susNiveles, nivel) ? 'enviada' : 'propuesta', nivel }
 }
 
 // ── El tope ─────────────────────────────────────────────────────────────────────

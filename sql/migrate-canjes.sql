@@ -379,6 +379,49 @@ create table if not exists canje_config (
 insert into canje_config (store) values ('bdi'), ('zattia'), ('stunned')
 on conflict (store) do nothing;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 7. Tanda 1 (2-ago-2026) — los ajustes del sector: la propuesta
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ⚠️ Va acá abajo y con `alter table` porque `create table if not exists` NO agrega columnas a una
+-- tabla que ya existe: re-correr la migración con la columna nueva arriba no haría nada.
+--
+-- Qué entra: el tramo en que la pelota la tiene ella. `propuesta` (nuestra firma interna) y
+-- `enviada` (esperando su respuesta) son dos esperas distintas; antes había una sola y un canje que
+-- la creadora nunca contestó figuraba como acordado.
+
+-- ¿Ya se le escribió? Es un pendiente, no un estado: la propuesta está armada igual.
+alter table canjes add column if not exists contacto_estado  text not null default 'pendiente';
+alter table canjes add column if not exists contacto_at      timestamptz;
+
+-- Su respuesta. El motivo sale de MOTIVOS_NO_ACEPTO (lista cerrada); la nota sólo si es 'Otro'.
+alter table canjes add column if not exists respuesta_motivo text;
+alter table canjes add column if not exists respuesta_nota   text;
+alter table canjes add column if not exists respuesta_at     timestamptz;
+
+-- Con qué palabra se cuentan las unidades en cada marca. En la config y no en código para que
+-- cambiar "fundas" por "fundas y accesorios" no cueste un deploy.
+alter table canje_config add column if not exists unidad_default     text;
+alter table canje_config add column if not exists unidades_sugeridas jsonb not null default '[]'::jsonb;
+
+-- La semilla. `where … is null` para no pisar lo que alguien haya configurado desde el panel.
+update canje_config set unidad_default = 'fundas'
+  where store = 'bdi' and unidad_default is null;
+update canje_config set unidad_default = 'prendas'
+  where store in ('zattia', 'stunned') and unidad_default is null;
+
+-- La cola de "esperando su respuesta" es la que se mira todos los días.
+create index if not exists idx_canjes_enviada on canjes (store, estado) where estado = 'enviada';
+
+-- `estado` es text sin CHECK a propósito (el gate es ESTADOS.includes en el handler), así que
+-- `enviada` y `no_acepto` no necesitan DDL.
+
+-- ⚠️ Los borradores que ya existían van a 'propuesta', NO a 'enviada'. Un borrador es una
+-- propuesta armada que nunca se firmó ni se le mandó a nadie, y de los dos estados nuevos el
+-- honesto es el de la firma pendiente: mandarlos a 'enviada' diría que la creadora la recibió,
+-- que es exactamente el tipo de mentira que estos estados vienen a arreglar. Sin esta línea
+-- quedan zombis: `puedeIr('borrador', …)` es false para todo y tampoco se pueden editar.
+update canjes set estado = 'propuesta' where estado = 'borrador';
+
 -- Sin RLS, como el resto del monitor: el gate es server-side en api/_canjes.js
 -- (`exigirUsuario` + `soloMismoOrigen`), igual que fallas, reclamos, solicitudes y conteos.
 alter table canje_personas    disable row level security;

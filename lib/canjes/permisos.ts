@@ -63,6 +63,19 @@ export function puedeAprobar(perfil: Perfil | null, marca: Marca, nivel: NivelAp
   return puedeSub(perfil, marca, 'canjes', 'aprobar-plata')
 }
 
+/**
+ * Qué firmas tiene, para una marca. Es lo que le pasa el modal de propuesta a `naceEn` para
+ * anticipar si el canje sale directo o va a la pestaña de aprobaciones.
+ *
+ * Sigue siendo presentación: quien decide en qué estado nace es el servidor, con la misma función.
+ */
+export function nivelesQueFirma(perfil: Perfil | null, marca: Marca): NivelAprobacion[] {
+  const niveles: NivelAprobacion[] = []
+  if (puedeSub(perfil, marca, 'canjes', 'aprobar')) niveles.push('aprobar')
+  if (puedeSub(perfil, marca, 'canjes', 'aprobar-plata')) niveles.push('aprobar-plata')
+  return niveles
+}
+
 /** El sub que habilita "Cerrar igual" con motivo, cuando la persona no cumplió del todo. */
 export function puedeCerrarIncompleto(perfil: Perfil | null, marca: Marca): boolean {
   return puedeSub(perfil, marca, 'canjes', 'cerrar')

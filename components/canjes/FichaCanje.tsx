@@ -11,31 +11,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  Badge, Button, Card, CopyButton, Field, Input, Modal, Notice, SectionCard, StatusPill,
+  Badge, Button, Card, CopyButton, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
   color, font, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  aprobarCanje, cambiarEstadoCanje, leerCanje, leerToken, linkDelPortal, rechazarCanje,
+  aprobarCanje, cambiarEstadoCanje, editarCanje, leerCanje, leerToken, linkDelPortal,
+  rechazarCanje, registrarRespuesta,
   type FichaCanjeDatos,
 } from '@/lib/canjes/cliente'
-import { mensajeAcuerdo, mensajeLinkDatos } from '@/lib/canjes/mensajes'
+import { mensajeAcuerdo, mensajeLinkDatos, mensajePropuesta } from '@/lib/canjes/mensajes'
 import { puedeAprobar, puedeCerrarIncompleto } from '@/lib/canjes/permisos'
 import { instagramParaMostrar } from '@/lib/canjes/instagram'
 import {
-  MOTIVOS_RECHAZO, STORE_LABEL, TIPO_CANJE_LABEL,
-  costoEstimado, estadoEnCriollo, nombrePersona, quienApruebaCanje,
-  type CanjeStore, type EstadoCanje,
+  MOTIVOS_NO_ACEPTO, MOTIVOS_RECHAZO, STORE_LABEL, TIPO_CANJE_LABEL,
+  costoEstimado, esTerminal, estadoEnCriollo, nombrePersona, quienApruebaCanje,
+  type CanjeStore, type EstadoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
 import { BloqueSeleccion } from './BloqueSeleccion'
 import { BloqueEnvio } from './BloqueEnvio'
 import { BloqueEntregables } from './BloqueEntregables'
 import { CierreBalance } from './CierreBalance'
+import { GrillaEntregables, listaAPedido, pedidoALista, totalPedido, type PedidoPorTipo } from './GrillaEntregables'
+import { MensajeParaCopiar } from './ProponerCanje'
 
 const ESTADO_TONE: Record<EstadoCanje, Tone> = {
-  borrador: 'neutral',
   propuesta: 'warning',
+  enviada: 'warning',
   rechazado: 'neutral',
+  no_acepto: 'neutral',
   acuerdo: 'action',
   preparando: 'action',
   en_curso: 'brand',
@@ -52,12 +56,15 @@ export function FichaCanje({
 }) {
   const { perfil } = useSesion()
   const toast = useToast()
-  const { confirmar, pedirTexto } = useConfirmar()
+  const { pedirTexto } = useConfirmar()
 
   const [d, setD] = useState<FichaCanjeDatos | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mostrandoLink, setMostrandoLink] = useState(false)
+  const [mostrandoPropuesta, setMostrandoPropuesta] = useState(false)
+  const [editandoTrato, setEditandoTrato] = useState(false)
+  const [noAcepto, setNoAcepto] = useState(false)
 
   const recargar = useCallback(async () => {
     try {
@@ -103,31 +110,23 @@ export function FichaCanje({
   if (!d) return <Notice tone="warning">No se encontró ese canje.</Notice>
 
   const { canje, items, entregables, evidencias, persona } = d
-  const editable = canje.estado !== 'cerrado' && canje.estado !== 'cancelado' && canje.estado !== 'rechazado'
+  const editable = !esTerminal(canje.estado)
   const puedeFirmar = nivel ? puedeAprobar(perfil, marcaPerm, nivel) : false
-
-  async function proponer() {
-    if (!entregables.length) {
-      const igual = await confirmar({
-        titulo: 'Sin entregables',
-        mensaje: 'No cargaste nada que se haya comprometido a publicar. Se puede aprobar igual, pero después no hay nada que verificar ni forma de saber si cumplió.',
-        ok: 'Mandar igual',
-        tono: 'warning',
-      })
-      if (!igual) return
-    }
-    try {
-      await cambiarEstadoCanje(store, canje.id, 'propuesta')
-      await recargar()
-      toast.ok('Mandado a aprobar. Le va a aparecer el aviso a quien pueda firmarlo.')
-    } catch (e) { toast.error(String((e as Error)?.message || e)) }
-  }
 
   async function aprobar() {
     try {
       const n = await aprobarCanje(store, canje.id)
       await recargar()
-      toast.ok(`Aprobado (${n === 'aprobar-plata' ? 'firma alta' : 'firma común'}). Ya podés mandarle el link.`)
+      toast.ok(`Aprobado (${n === 'aprobar-plata' ? 'firma alta' : 'firma común'}). Ya se le puede mandar la propuesta.`)
+    } catch (e) { toast.error(String((e as Error)?.message || e)) }
+  }
+
+  /** Ella dijo que sí. Es lo que genera el link del portal. */
+  async function acepto() {
+    try {
+      await registrarRespuesta(store, canje.id, 'acepto')
+      await recargar()
+      toast.ok('Acordado. Ya podés mandarle el link para que cargue sus datos.')
     } catch (e) { toast.error(String((e as Error)?.message || e)) }
   }
 
@@ -161,19 +160,27 @@ export function FichaCanje({
       <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
         <Button variant="ghost" onClick={onVolver}>Volver</Button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-          {canje.estado === 'borrador' && (
-            <Button variant="solid" tone="brand" onClick={() => void proponer()}>Mandar a aprobar</Button>
-          )}
           {canje.estado === 'propuesta' && puedeFirmar && (
             <>
               <Button variant="outline" tone="danger" onClick={() => void rechazar()}>Rechazar</Button>
               <Button variant="solid" tone="brand" onClick={() => void aprobar()}>Aprobar</Button>
             </>
           )}
+          {/* La negociación pasa por las redes; acá sólo se asienta cómo terminó. "Generar
+              cambios" existe porque las condiciones cambian en el chat y el mensaje tiene que
+              rearmarse con lo que se acordó de verdad. */}
+          {canje.estado === 'enviada' && (
+            <>
+              <Button variant="outline" onClick={() => setMostrandoPropuesta(true)}>Ver el mensaje</Button>
+              <Button variant="outline" onClick={() => setEditandoTrato(true)}>Generar cambios</Button>
+              <Button variant="outline" tone="danger" onClick={() => setNoAcepto(true)}>No aceptó</Button>
+              <Button variant="solid" tone="brand" onClick={() => void acepto()}>Aceptó</Button>
+            </>
+          )}
           {canje.estado === 'acuerdo' && (
             <Button variant="solid" tone="brand" onClick={() => setMostrandoLink(true)}>Mandarle el link</Button>
           )}
-          {editable && canje.estado !== 'borrador' && (
+          {editable && (
             <Button variant="ghost" tone="danger" onClick={() => void cancelar()}>Cancelar</Button>
           )}
         </div>
@@ -221,6 +228,23 @@ export function FichaCanje({
         {canje.estado === 'cancelado' && canje.cancelado_motivo && (
           <div style={{ marginTop: space[3] }}><Notice tone="neutral">Cancelado: {canje.cancelado_motivo}</Notice></div>
         )}
+        {canje.estado === 'no_acepto' && canje.respuesta_motivo && (
+          <div style={{ marginTop: space[3] }}>
+            <Notice tone="neutral">
+              No aceptó: {canje.respuesta_motivo}
+              {canje.respuesta_nota ? ` — ${canje.respuesta_nota}` : ''}
+            </Notice>
+          </div>
+        )}
+        {canje.estado === 'enviada' && (
+          <div style={{ marginTop: space[3] }}>
+            <Notice tone={canje.contacto_estado === 'hecho' ? 'action' : 'warning'}>
+              {canje.contacto_estado === 'hecho'
+                ? 'Ya se le escribió: esperando que conteste. Lo que se negocie por las redes se asienta con "Generar cambios".'
+                : 'La propuesta está armada pero todavía no se le escribió. Copiá el mensaje con "Ver el mensaje".'}
+            </Notice>
+          </div>
+        )}
         {canje.estado === 'propuesta' && !puedeFirmar && (
           <div style={{ marginTop: space[3] }}>
             <Notice tone="warning">
@@ -239,10 +263,12 @@ export function FichaCanje({
         canje={canje}
         entregables={entregables}
         evidencias={evidencias}
+        persona={persona}
         onCambio={() => void recargar()}
         editable={editable}
       />
-      {canje.estado !== 'borrador' && canje.estado !== 'propuesta' && canje.estado !== 'rechazado' && (
+      {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada. */}
+      {!['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado) && (
         <BloqueEnvio canje={canje} persona={persona} onCambio={() => void recargar()} />
       )}
       {(canje.estado === 'en_curso' || canje.estado === 'cerrado') && (
@@ -266,7 +292,227 @@ export function FichaCanje({
           onCerrar={() => setMostrandoLink(false)}
         />
       )}
+
+      {/* El mismo modal que sale al armar la propuesta: el texto se rearma con lo que hay ahora,
+          así que después de "Generar cambios" ya dice las condiciones nuevas. */}
+      {mostrandoPropuesta && persona && (
+        <MensajeParaCopiar
+          persona={persona}
+          store={canje.store}
+          canjeId={canje.id}
+          estado={canje.estado}
+          texto={mensajePropuesta(persona, canje, entregables)}
+          onCerrar={() => { setMostrandoPropuesta(false); void recargar() }}
+        />
+      )}
+
+      {editandoTrato && (
+        <EditarTrato
+          store={store}
+          canje={canje}
+          entregables={entregables}
+          onCerrar={() => setEditandoTrato(false)}
+          onListo={async () => { setEditandoTrato(false); await recargar(); setMostrandoPropuesta(true) }}
+        />
+      )}
+
+      {noAcepto && (
+        <NoAcepto
+          store={store}
+          canjeId={canje.id}
+          onCerrar={() => setNoAcepto(false)}
+          onListo={async () => { setNoAcepto(false); await recargar() }}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * "Generar cambios": lo que se negoció por las redes, asentado.
+ *
+ * Sólo el trato —cuánto se le manda y qué publica—, que es lo único que se mueve en una
+ * negociación. Lo demás (la marca, el tipo) no cambia sin que cambie el canje entero.
+ */
+function EditarTrato({
+  store, canje, entregables, onCerrar, onListo,
+}: {
+  store: CanjeStore
+  canje: FichaCanjeDatos['canje']
+  entregables: FichaCanjeDatos['entregables']
+  onCerrar: () => void
+  onListo: () => Promise<void>
+}) {
+  const toast = useToast()
+  const [topeTipo, setTopeTipo] = useState<TopeTipo>(canje.tope_tipo)
+  const [topePvp, setTopePvp] = useState(canje.tope_pvp == null ? '' : String(canje.tope_pvp))
+  const [unidades, setUnidades] = useState<TopeUnidad[]>(
+    canje.tope_unidades?.length ? canje.tope_unidades : [{ cantidad: 1, descripcion: '' }],
+  )
+  const [pedido, setPedido] = useState<PedidoPorTipo>(() => listaAPedido(entregables))
+  const [guardando, setGuardando] = useState(false)
+
+  const unidadesLimpias = unidades.filter((u) => u.descripcion.trim() !== '' && Number(u.cantidad) > 0)
+  const puede = (topeTipo === 'monto' ? topePvp !== '' : unidadesLimpias.length > 0) && totalPedido(pedido) > 0
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo="Lo que se acordó al final"
+      ancho="ancho"
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button
+            variant="solid"
+            tone="brand"
+            loading={guardando}
+            disabled={!puede}
+            onClick={async () => {
+              setGuardando(true)
+              try {
+                await editarCanje(store, canje.id, {
+                  tope_tipo: topeTipo,
+                  tope_pvp: topeTipo === 'monto' ? Number(topePvp) : null,
+                  tope_unidades: topeTipo === 'unidades' ? unidadesLimpias : [],
+                  entregables: pedidoALista(pedido),
+                })
+                await onListo()
+              } catch (e) {
+                toast.error(String((e as Error)?.message || e))
+              } finally {
+                setGuardando(false)
+              }
+            }}
+          >
+            Guardar y ver el mensaje
+          </Button>
+        </>
+      }
+    >
+      <Field label="Cómo quedó">
+        <Select value={topeTipo} onChange={(e) => setTopeTipo(e.target.value as TopeTipo)}>
+          <option value="unidades">Por cantidad</option>
+          <option value="monto">Por monto</option>
+        </Select>
+      </Field>
+
+      {topeTipo === 'monto' ? (
+        <div style={{ marginTop: space[3] }}>
+          <Field label="Hasta cuánto puede elegir" required>
+            <Input type="number" value={topePvp} onChange={(e) => setTopePvp(e.target.value)} />
+          </Field>
+        </div>
+      ) : (
+        <div style={{ marginTop: space[3] }}>
+          {unidades.map((u, i) => (
+            <div key={i} style={{ display: 'flex', gap: space[2], marginBottom: space[2], alignItems: 'center' }}>
+              <Input
+                type="number"
+                min={1}
+                value={String(u.cantidad)}
+                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x)))}
+                style={{ width: 80 }}
+              />
+              <Input
+                value={u.descripcion}
+                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, descripcion: e.target.value } : x)))}
+                style={{ flex: 1 }}
+              />
+              {unidades.length > 1 && (
+                <Button variant="ghost" tone="danger" size="sm" onClick={() => setUnidades((p) => p.filter((_, j) => j !== i))}>
+                  Quitar
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" onClick={() => setUnidades((p) => [...p, { cantidad: 1, descripcion: '' }])}>
+            Sumar otra línea
+          </Button>
+        </div>
+      )}
+
+      <div style={{ marginTop: space[5] }}>
+        <div style={{ fontWeight: weight.medium, marginBottom: space[2] }}>Qué le pedimos a cambio</div>
+        <GrillaEntregables valor={pedido} onCambio={setPedido} />
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * El "no" de ella.
+ *
+ * Motivo de **lista cerrada**, a diferencia del rechazo interno: esto es información sobre la
+ * persona —la mira quien la vuelva a proponer dentro de seis meses— y una lista abierta se llena de
+ * `no contestó` / `No respondio` / `ni bola`.
+ */
+function NoAcepto({
+  store, canjeId, onCerrar, onListo,
+}: {
+  store: CanjeStore
+  canjeId: number
+  onCerrar: () => void
+  onListo: () => Promise<void>
+}) {
+  const toast = useToast()
+  const [motivo, setMotivo] = useState(MOTIVOS_NO_ACEPTO[0])
+  const [nota, setNota] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const faltaNota = motivo === 'Otro' && !nota.trim()
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo="No salió"
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Volver</Button>
+          <Button
+            variant="solid"
+            tone="danger"
+            loading={guardando}
+            disabled={faltaNota}
+            onClick={async () => {
+              setGuardando(true)
+              try {
+                await registrarRespuesta(store, canjeId, 'no_acepto', { motivo, nota: nota.trim() || undefined })
+                await onListo()
+              } catch (e) {
+                toast.error(String((e as Error)?.message || e))
+              } finally {
+                setGuardando(false)
+              }
+            }}
+          >
+            Registrar
+          </Button>
+        </>
+      }
+    >
+      <Field label="Qué pasó">
+        <Select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+          {MOTIVOS_NO_ACEPTO.map((m) => <option key={m} value={m}>{m}</option>)}
+        </Select>
+      </Field>
+      <div style={{ marginTop: space[3] }}>
+        <Field
+          label="Detalle"
+          required={motivo === 'Otro'}
+          hint="Lo lee quien la vuelva a proponer dentro de seis meses"
+        >
+          <Input value={nota} onChange={(e) => setNota(e.target.value)} />
+        </Field>
+      </div>
+      <div style={{ marginTop: space[3], color: color.mut2, fontSize: font.sm }}>
+        {motivo === 'Ahora no, más adelante'
+          ? 'No cuenta como un no: la persona sigue igual de disponible para la próxima.'
+          : 'El canje queda cerrado. Para volver a intentarlo se arma uno nuevo.'}
+      </div>
+    </Modal>
   )
 }
 

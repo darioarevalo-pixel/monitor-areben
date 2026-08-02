@@ -23,9 +23,10 @@ import {
 } from '@/lib/canjes/tipos'
 
 const ESTADO_TONE: Record<EstadoCanje, Tone> = {
-  borrador: 'neutral',
   propuesta: 'warning',
+  enviada: 'warning',
   rechazado: 'neutral',
+  no_acepto: 'neutral',
   acuerdo: 'action',
   preparando: 'action',
   en_curso: 'brand',
@@ -33,10 +34,10 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
   cancelado: 'neutral',
 }
 
-type Filtro = 'abiertos' | 'aprobacion' | 'vencidos' | 'cerrados' | 'todos'
+type Filtro = 'abiertos' | 'respuesta' | 'aprobacion' | 'vencidos' | 'cerrados' | 'todos'
 
 /** Lo que sigue pidiendo trabajo de alguien. Es el default: la lista es para trabajar. */
-const ABIERTOS: EstadoCanje[] = ['borrador', 'propuesta', 'acuerdo', 'preparando', 'en_curso']
+const ABIERTOS: EstadoCanje[] = ['propuesta', 'enviada', 'acuerdo', 'preparando', 'en_curso']
 
 export function ListaCanjes({
   canjes, personas, vencidos, soloAprobaciones, onAbrir,
@@ -57,6 +58,7 @@ export function ListaCanjes({
 
   const chips = useMemo<ChipOpt<Filtro>[]>(() => [
     { key: 'abiertos', label: 'Abiertos', n: propios.filter((c) => ABIERTOS.includes(c.estado)).length },
+    { key: 'respuesta', label: 'Esperando respuesta', n: propios.filter((c) => c.estado === 'enviada').length },
     { key: 'aprobacion', label: 'Esperando firma', n: propios.filter((c) => c.estado === 'propuesta').length },
     { key: 'vencidos', label: 'Con vencidos', n: propios.filter((c) => vencidoPorCanje.has(c.id)).length },
     { key: 'cerrados', label: 'Cerrados', n: propios.filter((c) => c.estado === 'cerrado').length },
@@ -67,6 +69,7 @@ export function ListaCanjes({
     const f = soloAprobaciones ? 'aprobacion' : filtro
     const lista = propios.filter((c) => {
       if (f === 'abiertos') return ABIERTOS.includes(c.estado)
+      if (f === 'respuesta') return c.estado === 'enviada'
       if (f === 'aprobacion') return c.estado === 'propuesta'
       if (f === 'vencidos') return vencidoPorCanje.has(c.id)
       if (f === 'cerrados') return c.estado === 'cerrado'
@@ -86,7 +89,7 @@ export function ListaCanjes({
       <EmptyState
         dashed
         title="Todavía no hay canjes de esta marca"
-        hint="Se arma desde la ficha de una persona del padrón, con el botón “Proponerle un canje”."
+        hint="Se arma desde el padrón, con el botón “+ canje” de la fila de la persona."
       />
     )
   }
