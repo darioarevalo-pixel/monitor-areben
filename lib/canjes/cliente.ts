@@ -272,6 +272,24 @@ export async function editarCanje(store: CanjeStore, id: number, campos: Partial
   await postear({ store, action: 'canje-editar', id, ...campos })
 }
 
+/**
+ * Borra el canje. **No es cancelar**: cancelar deja el rastro de que existió y por qué se cayó;
+ * esto no deja nada. Es para la prueba y el error de carga.
+ *
+ * De `acuerdo` en adelante arrastra items, entregables y evidencias (cascada) y lo rechaza el
+ * servidor salvo Administración. Pedí antes `queSeLlevaElCanje` para poder decir cuánto se va.
+ */
+export async function borrarCanje(store: CanjeStore, id: number): Promise<void> {
+  await postear({ store, action: 'canje-borrar', id })
+}
+
+export type LoQueSeLleva = { items: number; entregables: number; evidencias: number }
+
+export async function queSeLlevaElCanje(store: CanjeStore, id: number): Promise<LoQueSeLleva> {
+  const d = await postear({ store, action: 'canje-borrar-que-se-lleva', id })
+  return { items: d.items as number, entregables: d.entregables as number, evidencias: d.evidencias as number }
+}
+
 /** Las transiciones las valida el servidor contra `TRANSICIONES`: esto no es el único control. */
 export async function cambiarEstadoCanje(store: CanjeStore, id: number, estado: EstadoCanje, motivo?: string): Promise<void> {
   await postear({ store, action: 'canje-estado', id, estado, motivo })

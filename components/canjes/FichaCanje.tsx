@@ -16,8 +16,8 @@ import {
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  aprobarCanje, cambiarEstadoCanje, editarCanje, leerCanje, leerToken, linkDelPortal,
-  rechazarCanje, registrarRespuesta,
+  aprobarCanje, borrarCanje, cambiarEstadoCanje, editarCanje, leerCanje, leerToken, linkDelPortal,
+  queSeLlevaElCanje, rechazarCanje, registrarRespuesta,
   type FichaCanjeDatos,
 } from '@/lib/canjes/cliente'
 import { mensajeAcuerdo, mensajeLinkDatos, mensajePropuesta } from '@/lib/canjes/mensajes'
@@ -56,7 +56,7 @@ export function FichaCanje({
 }) {
   const { perfil } = useSesion()
   const toast = useToast()
-  const { pedirTexto } = useConfirmar()
+  const { confirmar, pedirTexto } = useConfirmar()
 
   const [d, setD] = useState<FichaCanjeDatos | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -143,6 +143,36 @@ export function FichaCanje({
     } catch (e) { toast.error(String((e as Error)?.message || e)) }
   }
 
+  async function borrar() {
+    // Se pregunta primero qué cascadea, para poder decirlo en vez de "¿seguro?". Un canje ya
+    // acordado se lleva productos, entregables y publicaciones puestas.
+    let detalle = ''
+    try {
+      const l = await queSeLlevaElCanje(store, canje.id)
+      const partes = [
+        l.items ? `${l.items} ${l.items === 1 ? 'producto' : 'productos'}` : '',
+        l.entregables ? `${l.entregables} ${l.entregables === 1 ? 'entregable' : 'entregables'}` : '',
+        l.evidencias ? `${l.evidencias} ${l.evidencias === 1 ? 'publicación cargada' : 'publicaciones cargadas'}` : '',
+      ].filter(Boolean)
+      if (partes.length) detalle = ` Se van con él: ${partes.join(', ')}.`
+    } catch { /* si no se puede contar, igual se pregunta */ }
+
+    const ok = await confirmar({
+      titulo: `Borrar ${canje.numero}`,
+      mensaje: `No queda rastro de que existió.${detalle} Si el canje no salió, mejor cancelalo: así queda el motivo escrito.`,
+      ok: 'Borrar',
+      tono: 'danger',
+    })
+    if (!ok) return
+    try {
+      await borrarCanje(store, canje.id)
+      toast.ok(`${canje.numero} borrado.`)
+      onVolver()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    }
+  }
+
   async function cancelar() {
     const motivo = await pedirTexto('¿Por qué se cancela? El link del portal deja de funcionar.', '', {
       titulo: 'Cancelar el canje',
@@ -183,6 +213,9 @@ export function FichaCanje({
           {editable && (
             <Button variant="ghost" tone="danger" onClick={() => void cancelar()}>Cancelar</Button>
           )}
+          {/* Borrar es lo que cancelar no es: no deja rastro. Para la prueba y el error de carga.
+              Lo que se cayó de verdad se cancela, así queda el motivo. */}
+          <Button variant="ghost" tone="danger" onClick={() => void borrar()}>Borrar</Button>
         </div>
       </div>
 

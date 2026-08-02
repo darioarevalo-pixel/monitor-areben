@@ -34,6 +34,9 @@
 //                                                                  si no, en 'propuesta'.
 //   POST { action:'canje-editar', id, ...campos, entregables? }  → sólo antes del acuerdo.
 //   POST { action:'canje-estado', id, estado, motivo? }          → transiciones validadas por TRANSICIONES.
+//   POST { action:'canje-borrar', id }                           → NO deja rastro. Después del
+//                                                                  acuerdo, sólo Administración.
+//   POST { action:'canje-borrar-que-se-lleva', id }              → cuántas filas cascadean.
 //   POST { action:'canje-aprobar', id }                          → exige el sub que corresponda. Deja el canje en 'enviada'.
 //   POST { action:'canje-rechazar', id, motivo }                 → ídem, con motivo obligatorio.
 //   POST { action:'contacto', id }                               → "ya le escribí". Pendiente, no estado.
@@ -949,6 +952,44 @@ export default async function handler(req, res) {
       }
 
       return res.status(400).json({ error: 'respuesta inválida (acepto | no_acepto)' });
+    }
+
+    /**
+     * Borrar un canje. **Distinto de cancelar**: cancelar deja el rastro de que existió y por qué
+     * se cayó, borrar no deja nada. Es para la prueba y el error de carga, no para "esto no salió".
+     *
+     * Dos niveles, por lo que se lleva puesto:
+     * - **Antes del acuerdo** (`propuesta`, `enviada` y los dos "no") no hay nada material: ni
+     *   productos, ni envío, ni plata, ni publicaciones. Lo borra cualquiera que vea la marca.
+     * - **De `acuerdo` en adelante** ya hay cosas colgando y el borrado **cascadea** items,
+     *   entregables y evidencias. Eso lo hace sólo Administración, y la UI dice cuántas filas se
+     *   van antes de preguntar.
+     */
+    if (action === 'canje-borrar') {
+      const antesDelAcuerdo = ['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado);
+      if (!antesDelAcuerdo && !esAdministracion(perfil)) {
+        return res.status(403).json({
+          error: 'Este canje ya tiene productos o envío encima: borrarlo lo hace Administración. Si no salió, cancelalo — así queda el motivo.',
+        });
+      }
+      const { error } = await supabase.from('canjes').delete().eq('id', canjeId);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
+    }
+
+    /** Qué se lleva puesto el borrado. Se pide ANTES de preguntar, para poder decirlo. */
+    if (action === 'canje-borrar-que-se-lleva') {
+      const [items, ents, evis] = await Promise.all([
+        supabase.from('canje_items').select('id', { count: 'exact', head: true }).eq('canje_id', canjeId),
+        supabase.from('canje_entregables').select('id', { count: 'exact', head: true }).eq('canje_id', canjeId),
+        supabase.from('canje_evidencias').select('id', { count: 'exact', head: true }).eq('canje_id', canjeId),
+      ]);
+      return res.status(200).json({
+        ok: true,
+        items: items.count || 0,
+        entregables: ents.count || 0,
+        evidencias: evis.count || 0,
+      });
     }
 
     if (action === 'canje-estado') {
