@@ -799,8 +799,18 @@ export default async function handler(req, res) {
       const entregables = entregablesDelBody(b.entregables, cfgStore);
       if (entregables.length) {
         const { error: e2 } = await supabase.from('canje_entregables')
-          .insert(entregables.map((e) => ({ ...e, canje_id: data.id, usuario })));
-        if (e2) throw new Error(e2.message);
+          // ⚠️ Sin `usuario`: `canje_entregables` no tiene esa columna (quién lo cargó vive en el
+          // historial del canje, que es donde se mira). Ponerla tira "Could not find the 'usuario'
+          // column ... in the schema cache".
+          .insert(entregables.map((e) => ({ ...e, canje_id: data.id })));
+        if (e2) {
+          // No hay transacción (supabase-js va por REST), así que se compensa a mano: **si los
+          // entregables no entran, el canje no queda**. Un canje sin lo que prometió publicar es
+          // exactamente lo que la propuesta en una sola pantalla vino a evitar, y peor todavía
+          // porque el que lo creó vio un error y se fue creyendo que no se había guardado nada.
+          await supabase.from('canjes').delete().eq('id', data.id);
+          throw new Error(e2.message);
+        }
       }
 
       return res.status(200).json({
@@ -860,7 +870,7 @@ export default async function handler(req, res) {
         if (eDel) throw new Error(eDel.message);
         if (nuevos.length) {
           const { error: eIns } = await supabase.from('canje_entregables')
-            .insert(nuevos.map((e) => ({ ...e, canje_id: canjeId, usuario })));
+            .insert(nuevos.map((e) => ({ ...e, canje_id: canjeId })));
           if (eIns) throw new Error(eIns.message);
         }
       }
