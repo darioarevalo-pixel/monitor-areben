@@ -21,27 +21,70 @@ export function preparado(s: Solicitud, i: ItemSolicitud): number {
 }
 
 /**
+ * ¿Este origen SALIÓ sin que nadie escaneara el retiro?
+ *
+ * Escanear el preparado es opcional en la práctica: se junta la mercadería, se mete en la bolsa y
+ * se va. Cuando eso pasa, `verif` queda vacío, `preparado` da 0 para todos los ítems y la mitad de
+ * abajo del ciclo se apaga entera **en silencio**: la tabla de devolución sale vacía, el panel de
+ * no devueltos no aparece y el reporte de faltantes dice "volvió todo" aunque no haya vuelto nada.
+ *
+ * Las dos condiciones son necesarias y ninguna alcanza sola:
+ *
+ * - **`salio(s)`** — sin esto, una solicitud recién creada (que todavía no salió y obviamente no
+ *   tiene escaneos) aparecería con todo pendiente de devolver. Es la misma puerta que habilita el
+ *   control de devolución en la pantalla, y es lo que hace que esto no contradiga la paridad con
+ *   el legacy: mientras no salió, la cuenta es la de siempre.
+ * - **ningún escaneo en ESE origen** — "nadie escaneó" no es lo mismo que "se escaneó y no se
+ *   encontró ninguno". Se mira por origen porque cada sector prepara lo suyo por separado:
+ *   Depósito puede haber escaneado y Local no.
+ *
+ * ⚠️ La segunda condición mira si la **clave existe** en `verif`, no si vale 0. Un `0` explícito lo
+ * escribe el ajuste a mano y significa "lo busqué y no está" — un dato, no una ausencia. Mirar
+ * `preparado(s, i) === 0` mezclaba los dos casos y hacía reaparecer en la devolución justo lo que
+ * el sector había marcado como no encontrado, que es exactamente lo que `8d8265e` vino a sacar.
+ */
+export function salioSinEscanear(s: Solicitud, origen: Origen): boolean {
+  if (!salio(s)) return false
+  const v = s.verif || {}
+  const delOrigen = (s.items || []).filter((i) => i.origen === origen)
+  return delOrigen.length > 0 && delOrigen.every((i) => v[i.vid] == null)
+}
+
+/**
+ * Lo que SALIÓ de verdad. Es `preparado`, salvo que ese origen haya salido sin escanear: ahí lo
+ * que salió es lo pedido, porque la mercadería se llevó igual.
+ *
+ * No reemplaza a `preparado` —el tope del escaneo del retiro y la venta siguen usándolo—:
+ * reemplaza a la pregunta "¿cuánto tiene que volver?".
+ */
+export function salioEfectivo(s: Solicitud, i: ItemSolicitud): number {
+  return salioSinEscanear(s, i.origen) ? i.qty : preparado(s, i)
+}
+
+/**
  * Cuántas unidades se esperan de un ítem EN ESTA FASE. Es la regla que separa las dos mitades
  * del ciclo, y vale para todo lo que cuenta: la lista que se muestra, el tope del escaneo, el
  * ajuste a mano, el cierre de fase y la vista combinada.
  *
  * - **Retiro**: lo pedido.
  * - **Devolución**: lo que efectivamente SALIÓ. Si de 10 se encontraron 7, vuelven 7 — los no
- *   encontrados no se venden, así que tampoco se devuelven.
+ *   encontrados no se venden, así que tampoco se devuelven. Si de ese origen no se escaneó nada,
+ *   salió todo lo pedido (ver `sinEscaneoDeRetiro`).
  */
 export function esperadoEn(s: Solicitud, i: ItemSolicitud, fase: Fase): number {
-  return fase === 'devolucion' ? preparado(s, i) : i.qty
+  return fase === 'devolucion' ? salioEfectivo(s, i) : i.qty
 }
 
 /**
  * Faltantes de devolución: ítems que aún no volvieron. El "esperado a devolver" es lo que
  * efectivamente SALIÓ (lo preparado por escaneo), NO lo pedido — así lo no encontrado durante la
- * separación no aparece como pendiente de devolver ni genera correcciones manuales.
+ * separación no aparece como pendiente de devolver ni genera correcciones manuales. La excepción
+ * es el origen que nunca se escaneó: ahí lo que salió es lo pedido.
  */
 export function faltantes(s: Solicitud): Array<ItemSolicitud & { falta: number }> {
   const d = s.devuelto || {}
   return (s.items || [])
-    .map((i) => ({ ...i, falta: preparado(s, i) - (d[i.vid] || 0) }))
+    .map((i) => ({ ...i, falta: salioEfectivo(s, i) - (d[i.vid] || 0) }))
     .filter((x) => x.falta > 0)
 }
 

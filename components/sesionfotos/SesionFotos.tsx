@@ -59,14 +59,15 @@ import {
   contarBolsas,
   contarCerradas,
   maxBolsa,
+  esperadoEn,
   faltantes,
   filaHistorial,
   historialVisible,
   itemDeVariante,
   origenesConItems,
-  preparado,
   retiradoDe,
   salio,
+  salioSinEscanear,
   sinItemSol,
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
@@ -584,13 +585,11 @@ function Detalle({
   const s = work
   const conteo = s[fase === 'devolucion' ? 'devuelto' : 'verif'] || {}
   /**
-   * Cuánto se espera de un ítem EN ESTA FASE. Al preparar es lo pedido; al devolver es lo que
-   * realmente salió, que puede ser menos: si de 10 se encontraron 7, vuelven 7. Sin esto la
-   * pestaña de devolución pedía devolver mercadería que nunca se retiró — y quedaba a la vista
-   * el síntoma raro de una tabla con 10 renglones al lado del panel de faltantes con 7, porque
-   * ese panel sí usa `faltantes` (que ya estaba bien).
+   * Cuánto se espera de un ítem EN ESTA FASE. La cuenta vive en el core (`esperadoEn`): acá había
+   * una copia inline y el día que el core sumó el caso "de este origen no se escaneó nada", la
+   * pantalla se habría quedado con la cuenta vieja mientras el reporte usaba la nueva.
    */
-  const esperado = (it: ItemSolicitud) => (fase === 'devolucion' ? preparado(s, it) : it.qty)
+  const esperado = (it: ItemSolicitud) => esperadoEn(s, it, fase)
   const conf = (it: ItemSolicitud) => Math.min(conteo[it.vid] || 0, esperado(it))
 
   // En devolución, lo que no salió no se lista.
@@ -722,6 +721,15 @@ function Detalle({
             Reporte
           </Button>
         </div>
+        {/* Si nadie escaneó el retiro de este sector, la devolución no tiene contra qué comparar:
+            antes se apagaba sola y en silencio (tabla vacía, "volvió todo"). Ahora asume que salió
+            lo pedido, y lo dice — porque es un supuesto, no un dato. */}
+        {fase === 'devolucion' && salioSinEscanear(s, origen) ? (
+          <div style={{ fontSize: 12, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '6px 9px', margin: '8px 0' }}>
+            Nadie escaneó el retiro de {origen === 'deposito' ? 'Depósito' : 'Local'}: se asume que salió
+            todo lo pedido, así que eso es lo que hay que devolver.
+          </div>
+        ) : null}
         <div style={{ margin: '8px 0' }}>
           <ScanInput
             disabled={!catalogoListo}
@@ -831,6 +839,15 @@ function Detalle({
           <div style={{ fontWeight: 700, fontSize: 15 }}>{s.descripcion || 'Solicitud'}</div>
         )}
         <span style={{ color: color.mut2, fontSize: 12 }}>{s.fecha}</span>
+        {/* El "Reporte" de cada sector es la hoja con la que ese sector junta lo suyo, y por eso
+            filtra por origen. Pero era la ÚNICA forma de imprimir: una solicitud con ítems en los
+            dos lados salían dos papeles distintos y quien la pidió recibía siempre la mitad. Este
+            botón sale solo cuando hay ítems en los dos y quien mira ve los dos (coordinación). */}
+        {origenesConItems(s).length > 1 && veTodosLosItems ? (
+          <Button size="sm" variant="outline" onClick={() => correrSalida(() => reportePDF(s, 'todos'), toast.error)} title="Un solo PDF con lo de Depósito y lo de Local, separado por sector">
+            Reporte completo
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" onClick={() => correrSalida(() => etiquetaBolsa(s), toast.error)} title="Etiqueta 5×2,5 cm para la bolsa (con la descripción)">
           Etiqueta de bolsa
         </Button>

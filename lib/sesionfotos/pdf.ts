@@ -13,13 +13,24 @@
  * de un default implícito.
  */
 
-import { bolsasDe, faltantes as calcFaltantes } from './core'
+import { bolsasDe, faltantes as calcFaltantes, origenesConItems } from './core'
 import type { Origen, Solicitud } from './tipos'
 
 /** Tag corto de bolsa para las columnas de los reportes ("B3" / "" si no tiene). */
 function tagBolsa(bolsa?: number): string {
   return typeof bolsa === 'number' ? 'B' + bolsa : ''
 }
+
+const rotuloOrigen = (o: Origen) => (o === 'deposito' ? 'Depósito' : 'Local')
+
+/**
+ * Qué se imprime: un sector, o la solicitud entera.
+ *
+ * El reporte nació por sector porque es la hoja con la que cada uno junta lo suyo. Pero era la
+ * ÚNICA forma de imprimirlo, así que una solicitud con ítems en los dos lados salía en dos papeles
+ * y quien la pidió —Marketing, que no prepara nada— recibía siempre la mitad.
+ */
+export type OrigenReporte = Origen | 'todos'
 
 /** Ítems de un origen ordenados por SKU asc (sin SKU al final), como el depósito. */
 function itemsOrdenados(s: Solicitud, origen: Origen) {
@@ -34,9 +45,23 @@ function itemsOrdenados(s: Solicitud, origen: Origen) {
     })
 }
 
-/** Reporte de retiro (depósito o local) para tildar físicamente. Lanza si no hay ítems. */
-export async function reportePDF(s: Solicitud, origen: Origen): Promise<void> {
-  const arr = itemsOrdenados(s, origen)
+/**
+ * Reporte de retiro para tildar físicamente: un sector, o la solicitud entera (`'todos'`).
+ * Lanza si no hay ítems.
+ *
+ * ⚠️ **El nombre y la variante se miden, no se cortan por cantidad de caracteres.** Antes cada
+ * columna hacía `slice(0, N)` y el N de la variante era 18: como `'iPhone 17 Pro Max'` mide 17, el
+ * corte caía justo antes del guion y **el color desaparecía entero, sin siquiera puntos
+ * suspensivos que avisaran**. Cinco fundas de cinco colores distintos salían impresas idénticas.
+ * Eran 1.578 de las 6.765 filas del inventario de BDI. El dato siempre estuvo bien guardado —en
+ * pantalla se veía— y por eso el reclamo era del reporte y de nada más.
+ */
+export async function reportePDF(s: Solicitud, origen: OrigenReporte): Promise<void> {
+  const grupos =
+    origen === 'todos'
+      ? origenesConItems(s).map((o) => ({ origen: o, items: itemsOrdenados(s, o) }))
+      : [{ origen, items: itemsOrdenados(s, origen) }]
+  const arr = grupos.flatMap((g) => g.items)
   if (!arr.length) throw new Error('No hay ítems para ese origen.')
   const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
@@ -44,8 +69,12 @@ export async function reportePDF(s: Solicitud, origen: Origen): Promise<void> {
   const H = pdf.internal.pageSize.getHeight()
   const M = 40
   let y = M
-  const titulo = origen === 'deposito' ? 'Retiro de Deposito' : 'Retiro de Local'
+  const titulo = origen === 'todos' ? 'Retiro completo' : 'Retiro de ' + rotuloOrigen(origen)
   const tot = arr.reduce((a, i) => a + i.qty, 0)
+  // El reparto de columnas está calculado para ESTE catálogo, donde el producto es corto
+  // ("MAG CASE") y la variante larga ("iPhone 17 Pro Max - TRANSPARENTE"). Antes era al revés.
+  const X = { ok: M, prod: M + 26, var: M + 190, sku: M + 350, bolsa: M + 440 }
+  const ANCHO = { prod: X.var - X.prod - 8, var: X.sku - X.var - 8, sku: X.bolsa - X.sku - 8 }
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(15)
   pdf.setTextColor(0)
@@ -64,45 +93,80 @@ export async function reportePDF(s: Solicitud, origen: Origen): Promise<void> {
   pdf.setDrawColor(210)
   pdf.line(M, y, W - M, y)
   y += 18
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
-  pdf.setTextColor(120)
-  pdf.text('OK', M, y)
-  pdf.text('Producto', M + 26, y)
-  pdf.text('Variante', M + 240, y)
-  pdf.text('SKU', M + 340, y)
-  pdf.text('Bolsa', M + 430, y)
-  pdf.text('Cant.', W - M, y, { align: 'right' })
-  y += 6
-  pdf.setDrawColor(225)
-  pdf.line(M, y, W - M, y)
-  y += 14
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  arr.forEach((i, idx) => {
-    if (y > H - M) {
-      pdf.addPage()
-      y = M
-    }
-    if (idx % 2 === 1) {
-      pdf.setFillColor(219, 234, 254)
-      pdf.rect(M - 6, y - 11, W - 2 * M + 12, 18, 'F')
-    }
-    pdf.setDrawColor(120)
-    pdf.rect(M, y - 8, 10, 10)
-    pdf.setTextColor(0)
-    pdf.text(String(i.nombre || '').slice(0, 40), M + 26, y)
-    pdf.text(String(i.variante || '').slice(0, 18), M + 240, y)
-    pdf.setTextColor(110)
-    pdf.text(String(i.sku || '—').slice(0, 16), M + 340, y)
-    pdf.setTextColor(i.bolsa ? 0 : 180)
-    pdf.text(tagBolsa(i.bolsa) || '—', M + 430, y)
-    pdf.setTextColor(0)
+  // El encabezado se repite en cada página: en una solicitud larga, la hoja 2 salía sin decir
+  // qué columna era cuál (`reposicionPDF` ya lo hacía bien).
+  const header = () => {
     pdf.setFont('helvetica', 'bold')
-    pdf.text(String(i.qty), W - M, y, { align: 'right' })
+    pdf.setFontSize(9)
+    pdf.setTextColor(120)
+    pdf.text('OK', X.ok, y)
+    pdf.text('Producto', X.prod, y)
+    pdf.text('Variante', X.var, y)
+    pdf.text('SKU', X.sku, y)
+    pdf.text('Bolsa', X.bolsa, y)
+    pdf.text('Cant.', W - M, y, { align: 'right' })
+    y += 6
+    pdf.setDrawColor(225)
+    pdf.line(M, y, W - M, y)
+    y += 14
     pdf.setFont('helvetica', 'normal')
-    y += 18
-  })
+    pdf.setFontSize(10)
+  }
+  header()
+  let idx = 0
+  for (const g of grupos) {
+    // La banda de sector solo aparece en el reporte completo: el de un sector solo se queda igual
+    // que siempre, que es la hoja con la que ese sector junta lo suyo.
+    if (origen === 'todos') {
+      if (y > H - M - 30) {
+        pdf.addPage()
+        y = M
+        header()
+      }
+      const uG = g.items.reduce((a, i) => a + i.qty, 0)
+      pdf.setFillColor(238, 242, 255)
+      pdf.rect(M - 6, y - 12, W - 2 * M + 12, 19, 'F')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.setTextColor(30)
+      pdf.text(rotuloOrigen(g.origen).toUpperCase(), M, y + 1)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      pdf.setTextColor(110)
+      pdf.text(`${g.items.length} items · ${uG} u.`, W - M, y + 1, { align: 'right' })
+      pdf.setFontSize(10)
+      y += 24
+    }
+    for (const i of g.items) {
+      const lNom: string[] = pdf.splitTextToSize(String(i.nombre || ''), ANCHO.prod)
+      const lVar: string[] = pdf.splitTextToSize(String(i.variante || ''), ANCHO.var)
+      const alto = Math.max(18, Math.max(lNom.length, lVar.length) * 12 + 6)
+      if (y + alto > H - M) {
+        pdf.addPage()
+        y = M
+        header()
+      }
+      if (idx % 2 === 1) {
+        pdf.setFillColor(219, 234, 254)
+        pdf.rect(M - 6, y - 11, W - 2 * M + 12, alto, 'F')
+      }
+      pdf.setDrawColor(120)
+      pdf.rect(X.ok, y - 8, 10, 10)
+      pdf.setTextColor(0)
+      lNom.forEach((ln, k) => pdf.text(ln, X.prod, y + k * 12))
+      lVar.forEach((ln, k) => pdf.text(ln, X.var, y + k * 12))
+      pdf.setTextColor(110)
+      pdf.text(pdf.splitTextToSize(String(i.sku || '—'), ANCHO.sku)[0], X.sku, y)
+      pdf.setTextColor(i.bolsa ? 0 : 180)
+      pdf.text(tagBolsa(i.bolsa) || '—', X.bolsa, y)
+      pdf.setTextColor(0)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(String(i.qty), W - M, y, { align: 'right' })
+      pdf.setFont('helvetica', 'normal')
+      y += alto
+      idx++
+    }
+  }
   pdf.save('sesion-fotos-' + origen + '.pdf')
 }
 
@@ -133,15 +197,21 @@ export async function reporteFaltantesPDF(s: Solicitud): Promise<void> {
   y += 5
   pdf.setFont('helvetica', 'normal')
   f.forEach((x) => {
-    if (y > 282) {
+    // Mismo motivo que el reporte de retiro: acá el corte era 26 y se comía el color de 177 filas
+    // del catálogo (`iPhone 16 Pro Max - TRANSPARENTE`). Este PDF es el que se le manda a
+    // Marketing para que salga a buscar lo que no volvió: el color es medio dato.
+    const lNom: string[] = pdf.splitTextToSize(String(x.nombre || ''), 62)
+    const lVar: string[] = pdf.splitTextToSize(String(x.variante || ''), 46)
+    const alto = Math.max(6, Math.max(lNom.length, lVar.length) * 5 + 1)
+    if (y + alto > 282) {
       pdf.addPage()
       y = 18
     }
-    pdf.text(String(x.nombre || '').slice(0, 40), 14, y)
-    pdf.text(String(x.variante || '').slice(0, 26), 80, y)
+    lNom.forEach((ln, k) => pdf.text(ln, 14, y + k * 5))
+    lVar.forEach((ln, k) => pdf.text(ln, 80, y + k * 5))
     pdf.text(String(x.sku || '—').slice(0, 22), 130, y)
     pdf.text(`${x.falta}/${x.qty}`, 196, y, { align: 'right' })
-    y += 6
+    y += alto
   })
   y += 3
   pdf.setFont('helvetica', 'bold')
@@ -273,21 +343,25 @@ export async function reporteBolsasPDF(s: Solicitud): Promise<void> {
     y += 22
     pdf.setFontSize(10)
     for (const i of g.items) {
-      if (y > H - M) {
+      // Misma medición que el reporte de retiro: el corte de 18 caracteres borraba el color.
+      const lNom: string[] = pdf.splitTextToSize(String(i.nombre || ''), 175)
+      const lVar: string[] = pdf.splitTextToSize(String(i.variante || ''), 150)
+      const alto = Math.max(16, Math.max(lNom.length, lVar.length) * 12 + 4)
+      if (y + alto > H - M) {
         pdf.addPage()
         y = M
       }
       pdf.setTextColor(0)
-      pdf.text(String(i.nombre || '').slice(0, 40), M + 12, y)
-      pdf.text(String(i.variante || '').slice(0, 18), M + 250, y)
+      lNom.forEach((ln, k) => pdf.text(ln, M + 12, y + k * 12))
+      lVar.forEach((ln, k) => pdf.text(ln, M + 195, y + k * 12))
       pdf.setTextColor(110)
-      pdf.text(String(i.sku || '—').slice(0, 16), M + 350, y)
-      pdf.text(i.origen === 'local' ? 'Local' : 'Depósito', M + 440, y)
+      pdf.text(String(i.sku || '—').slice(0, 16), M + 355, y)
+      pdf.text(rotuloOrigen(i.origen), M + 445, y)
       pdf.setTextColor(0)
       pdf.setFont('helvetica', 'bold')
       pdf.text('x' + String(i.qty), W - M, y, { align: 'right' })
       pdf.setFont('helvetica', 'normal')
-      y += 16
+      y += alto
     }
     y += 8
   }

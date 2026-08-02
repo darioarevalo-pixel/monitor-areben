@@ -14,6 +14,7 @@ import {
   origenesConItems,
   retiradoCompleto,
   salio,
+  salioSinEscanear,
   sinItemSol,
   sinSolicitud,
   unidadesOrigen,
@@ -129,6 +130,56 @@ describe('devolución solo con lo preparado (no-encontrados fuera)', () => {
   it('faseCompleta devolución: se completa cuando volvió lo preparado (ignora lo no encontrado)', () => {
     const s = sol({ items: [item({ vid: 'a', qty: 3 }), item({ vid: 'b', qty: 1, origen: 'local' })], verif: { a: 2 }, devuelto: { a: 2 } })
     expect(faseCompleta(s, 'devolucion')).toBe(true) // a: preparó 2, devolvió 2; b: no se preparó → no cuenta
+  })
+})
+
+/**
+ * El caso que dejaba la devolución vacía sin decir nada: el sector prepara, mete todo en la bolsa
+ * y se va sin escanear. `preparado` daba 0 para todos, así que no había nada que devolver y el
+ * reporte de faltantes contestaba "volvió todo" con la mercadería afuera.
+ */
+describe('salió sin escanear: lo que salió es lo pedido', () => {
+  const conVenta = (over: Partial<Solicitud> = {}) =>
+    sol({ estado: 'cargada', ventas: { deposito: { id: 9, number: 77 } }, ...over })
+
+  it('sin ningún escaneo del origen, hay que devolver lo pedido', () => {
+    const s = conVenta({ items: [item({ vid: 'a', qty: 3 })], verif: {}, devuelto: {} })
+    expect(salioSinEscanear(s, 'deposito')).toBe(true)
+    expect(faltantes(s).map((x) => ({ vid: x.vid, falta: x.falta }))).toEqual([{ vid: 'a', falta: 3 }])
+    expect(faseCompleta(s, 'devolucion')).toBe(false)
+  })
+
+  // La distinción fina: un 0 explícito es "lo busqué y no está", y eso NO se devuelve.
+  it('un 0 escrito a mano no es lo mismo que no haber escaneado', () => {
+    const s = conVenta({ items: [item({ vid: 'a', qty: 3 })], verif: { a: 0 }, devuelto: {} })
+    expect(salioSinEscanear(s, 'deposito')).toBe(false)
+    expect(faltantes(s)).toEqual([])
+  })
+
+  it('con escaneo parcial manda lo escaneado, no lo pedido', () => {
+    const s = conVenta({ items: [item({ vid: 'a', qty: 3 })], verif: { a: 1 }, devuelto: {} })
+    expect(salioSinEscanear(s, 'deposito')).toBe(false)
+    expect(faltantes(s).map((x) => x.falta)).toEqual([1])
+  })
+
+  // Cada sector por su lado: Depósito escaneó y Local no.
+  it('vale por origen, no por solicitud', () => {
+    const s = conVenta({
+      items: [item({ vid: 'a', qty: 2, origen: 'deposito' }), item({ vid: 'b', qty: 4, origen: 'local' })],
+      verif: { a: 2 },
+      devuelto: {},
+    })
+    expect(salioSinEscanear(s, 'deposito')).toBe(false)
+    expect(salioSinEscanear(s, 'local')).toBe(true)
+    expect(faltantes(s).map((x) => ({ vid: x.vid, falta: x.falta }))).toEqual([{ vid: 'a', falta: 2 }, { vid: 'b', falta: 4 }])
+  })
+
+  // Sin esto, una solicitud recién creada aparecería con todo pendiente de devolver.
+  it('una solicitud que todavía no salió no tiene nada que devolver', () => {
+    const s = sol({ items: [item({ vid: 'a', qty: 3 })], verif: {}, devuelto: {} })
+    expect(salio(s)).toBe(false)
+    expect(salioSinEscanear(s, 'deposito')).toBe(false)
+    expect(faltantes(s)).toEqual([])
   })
 })
 

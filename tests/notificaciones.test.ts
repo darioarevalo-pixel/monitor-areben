@@ -83,9 +83,17 @@ describe('avisos de productos no devueltos', () => {
     expect(avisosDeNoDevueltos([conFalta], 'bdi', perfil({ funcion: ['local'] }))).toEqual([])
   })
 
+  // El fixture dice `0` y no `{}` a propósito: un 0 escrito a mano es "lo busqué y no está", que
+  // es lo que este caso quiere probar. El `{}` significa otra cosa —nadie escaneó— y es el caso de
+  // abajo.
   it('lo que no salió no falta (los no encontrados no se persiguen)', () => {
-    const sinPreparar = sol({ ventas: { local: { id: 1, number: 9 } }, verif: {}, devuelto: {} })
-    expect(avisosDeNoDevueltos([sinPreparar], 'bdi', perfil({ admin: true }))).toEqual([])
+    const noEncontrado = sol({ ventas: { local: { id: 1, number: 9 } }, verif: { v1: 0 }, devuelto: {} })
+    expect(avisosDeNoDevueltos([noEncontrado], 'bdi', perfil({ admin: true }))).toEqual([])
+  })
+
+  it('si salió sin que nadie escaneara, sí se persigue: salió lo pedido', () => {
+    const sinEscanear = sol({ ventas: { local: { id: 1, number: 9 } }, verif: {}, devuelto: {} })
+    expect(avisosDeNoDevueltos([sinEscanear], 'bdi', perfil({ admin: true }))).toHaveLength(1)
   })
 
   it('una solicitud cerrada ya no molesta', () => {
