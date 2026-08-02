@@ -140,7 +140,7 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
   `/compact`, no `/clear`.
 - **Los archivos caros se leen por rango, no enteros.** Los peores:
   `components/sesionfotos/SesionFotos.tsx` (1.803 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
-  `tests/reclamos.test.ts` (1.192) · `api/_canjes.js` (1.146) · `lib/canjes/tipos.ts` (871) ·
+  `api/_canjes.js` (1.700) · `tests/reclamos.test.ts` (1.192) · `lib/canjes/tipos.ts` (1.091) ·
   `components/reclamos/ArmarCambio.tsx` y `components/conteo-estandar/ConteoEstandar.tsx` (870) ·
   `lib/nav.datos.ts` (750 — es data, casi nunca hace falta entero).
 
@@ -148,10 +148,13 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
 
 - **⛔ Reclamos y Cambios: frenado.** El flujo no convence; no construir ahí hasta que Bruno
   devuelva el mapa marcado.
-- **▶️ Canjes: llegaron los ajustes del sector (2-ago-2026)** y entró la **tanda 1: la propuesta**
-  (un solo modal desde el padrón, el estado `enviada` = "esperando su respuesta", `no_acepto`, el
-  mensaje para copiar). Falta la **tanda 2** (vitrina de productos con fotos, que ella elija por el
-  link) y la **tanda 3** (carga a TN sin transcribir + cola de tránsito). Sigue con 0 canjes reales.
+- **▶️ Canjes: entraron la tanda 1 (la propuesta) y la tanda 2 (la vitrina)**, 2-ago-2026. La
+  vitrina es un **espejo curado de Tienda Nube**: se trae por categoría o buscando, se congela con
+  foto y precio (el portal no tiene sesión y no puede pedirle nada a TN), y la creadora elige desde
+  el link. Lo suyo entra como `origen:'persona'` + `estado:'propuesto'` y el equipo lo confirma. El
+  tope lo hacen cumplir los dos handlers con `api/_canjes-reglas.js`. **De TN sólo se lee: el
+  monitor no escribe en la tienda.** Falta la **tanda 3** (copiar campo por campo al admin de TN +
+  cola de tránsito). Ya no está vacío: 20 personas y 3 canjes.
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo

@@ -9,7 +9,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes } from '@/lib/canjes/cliente'
+import {
+  leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes, type VitrinaEnLista,
+} from '@/lib/canjes/cliente'
 import { calcularPuntaje, contextoDePuntaje, type ContextoPuntaje, type Puntaje } from '@/lib/canjes/puntaje'
 import { estadoDeContacto, ordenarPorContacto, type Seguimiento } from '@/lib/canjes/seguimiento'
 import { nombrePersona, type CanjeConfig, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
@@ -42,6 +44,8 @@ export type EstadoCanjes = {
   config: CanjeConfig | null
   /** Las de todas las marcas visibles: el modal de propuesta deja elegir la marca. */
   configs: CanjeConfig[]
+  /** Sin sus productos: acá alcanza el nombre para colgarle una vitrina a un canje. */
+  vitrinas: VitrinaEnLista[]
   marcasVisibles: CanjeStore[]
   cargando: boolean
   error: string | null
@@ -50,7 +54,7 @@ export type EstadoCanjes = {
   parchearPersona: (p: CanjePersona) => void
 }
 
-const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, configs: [], marcasVisibles: [] }
+const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, configs: [], vitrinas: [], marcasVisibles: [] }
 
 export function useCanjes(store: CanjeStore): EstadoCanjes {
   const [datos, setDatos] = useState<DatosCanjes>(VACIO)
@@ -143,6 +147,7 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     vencidos: datos.vencidos,
     config: datos.config,
     configs: datos.configs,
+    vitrinas: datos.vitrinas,
     marcasVisibles: datos.marcasVisibles,
     cargando,
     error,

@@ -393,6 +393,11 @@ export type CanjeRow = {
   /** Distingue "nunca lo miró" de "lo miró y estaba bien", que no es lo mismo al despachar. */
   datos_confirmados_at?: string | null
 
+  /** Qué vitrina ve al abrir el link. **La vitrina se reusa entre canjes; el link no.** */
+  vitrina_id?: number | null
+  /** Cuándo mandó su elección. Al mandar se cierra: si vuelve a entrar, la ve en lectura. */
+  seleccion_cerrada_at?: string | null
+
   tn_orden?: string | null
   compra_estado: Pendiente
   compra_at?: string | null
@@ -452,6 +457,13 @@ export type CanjeItem = {
   id: number
   canje_id: number
   sku?: string | null
+  /**
+   * ⚠️ **De qué sistema son estos ids lo dice `origen`.** Con `'equipo'` salen del buscador de
+   * Gestión Nube (`product_id` + `size_id` de GN); con `'persona'` salen de la vitrina, que es un
+   * espejo de Tienda Nube, así que son ids de TN. No se unifican porque no hay cruce confiable
+   * entre los dos —el SKU falta o se repite— y porque para la tanda 3, que es tipear la venta en el
+   * admin de TN, los útiles son justamente los de TN.
+   */
   product_id?: string | null
   size_id?: string | null
   nombre?: string | null
@@ -558,6 +570,104 @@ export const UNIDAD_FALLBACK = 'productos'
 
 export function unidadDeLaMarca(cfg?: Pick<CanjeConfig, 'unidad_default'> | null): string {
   return cfg?.unidad_default?.trim() || UNIDAD_FALLBACK
+}
+
+// ── La vitrina ──────────────────────────────────────────────────────────────────
+//
+// Una vitrina es **un espejo curado de Tienda Nube**: se trae de la tienda lo que se quiere
+// promocionar, se saca el resto, y eso es lo que la creadora ve al abrir su link. No vuelve nada a
+// TN — lo que ella elige se escribe sólo en `canje_items`.
+//
+// Todo viaja congelado, foto incluida, porque **el portal no tiene sesión** y no puede pedirle nada
+// a la tienda. Ver el encabezado de la sección 8 de `sql/migrate-canjes.sql`.
+
+export type EstadoVitrina = 'borrador' | 'activa' | 'archivada'
+
+export const ESTADOS_VITRINA: EstadoVitrina[] = ['borrador', 'activa', 'archivada']
+
+export const ESTADO_VITRINA_LABEL: Record<EstadoVitrina, string> = {
+  borrador: 'Armándose',
+  activa: 'Activa',
+  archivada: 'Archivada',
+}
+
+/**
+ * Una variante de Tienda Nube, congelada. Es **lo que ella elige**: el producto la lleva a esto.
+ *
+ * ⚠️ `valores` viene tal como lo manda la tienda y **no se puede nombrar de antemano**. Medido
+ * sobre los dos catálogos: en BDI 181 productos tienen un solo eje (`['iPhone 12']`) y 19 tienen
+ * dos (`['iPhone 11/12/12 Mini', 'Rosa']`); en Zattia son 495 y 42 (`['Negro', 'XS']`). Poner
+ * "modelo" y "color" en la pantalla sería mentira la mitad de las veces, así que se muestran los
+ * valores crudos y la palabra la pone la tienda.
+ *
+ * `id` es el de la variante en TN y es la llave: el SKU no alcanza —en BDI falta en 4 de cada 10
+ * variantes y en Zattia se repite igual en las 24 de un mismo producto—.
+ */
+export type OpcionVitrina = {
+  id: string
+  valores: string[]
+  /** La foto propia de la variante, si TN la tiene. Si no, se usa la del producto. */
+  foto?: string | null
+  sku?: string | null
+  barcode?: string | null
+}
+
+export type CanjeVitrinaItem = {
+  id: number
+  vitrina_id: number
+  orden: number
+  /** El id del PRODUCTO en Tienda Nube. */
+  tn_product_id: string
+  sku?: string | null
+  nombre: string
+  foto_url?: string | null
+  /** Precio de lista, de TN. El **costo no está**: vive en Gestión Nube y no se cruza confiable. */
+  pvp?: number | null
+  opciones: OpcionVitrina[]
+  activo: boolean
+  created_at?: string
+  updated_at?: string | null
+}
+
+export type CanjeVitrina = {
+  id: number
+  store: CanjeStore
+  nombre: string
+  estado: EstadoVitrina
+  nota?: string | null
+  usuario?: string | null
+  created_at?: string
+  updated_at?: string | null
+  /** Viajan con la vitrina: sin los productos no hay nada que mirar. */
+  items?: CanjeVitrinaItem[]
+}
+
+/** "Negro · XS", "iPhone 12". Una sola implementación: es lo que se guarda en `canje_items.variante`. */
+export function opcionEnCriollo(o: Pick<OpcionVitrina, 'valores'>): string {
+  return (o.valores || []).filter(Boolean).join(' · ')
+}
+
+/** La foto que se dibuja: la propia de la variante gana, y si no hay, la del producto. */
+export function fotoDeLaOpcion(item: Pick<CanjeVitrinaItem, 'foto_url'>, o?: Pick<OpcionVitrina, 'foto'> | null): string {
+  return (o?.foto || item.foto_url || '') as string
+}
+
+/** Lo que se le ofrece de verdad: apagado no se muestra, y sin opciones no hay nada que elegir. */
+export function itemsOfrecidos(items: CanjeVitrinaItem[]): CanjeVitrinaItem[] {
+  return items.filter((i) => i.activo && (i.opciones || []).length > 0)
+}
+
+/**
+ * ¿Sigue abierta su elección?
+ *
+ * Las tres condiciones son distintas y ninguna sobra: que haya vitrina colgada, que el canje esté
+ * en un tramo donde el link sirve, y que todavía no haya mandado. **Al mandar se cierra**: si
+ * vuelve a entrar ve lo que eligió, en lectura.
+ */
+export function puedeElegir(
+  c: Pick<CanjeRow, 'estado' | 'vitrina_id' | 'seleccion_cerrada_at'>,
+): boolean {
+  return !!c.vitrina_id && !c.seleccion_cerrada_at && ['acuerdo', 'preparando'].includes(c.estado)
 }
 
 // ── Aprobación ──────────────────────────────────────────────────────────────────

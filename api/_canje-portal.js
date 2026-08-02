@@ -2,7 +2,8 @@
 // módulo abierto a internet**, así que conviene leerlo con esa lente.
 //
 //   GET  /api/postventa?recurso=canje&token=XXX               → lo poco que ella ve, prellenado.
-//   POST { recurso:'canje', token, accion:'guardar', datos }  → sus datos + `datos_confirmados_at`.
+//   POST { recurso:'canje', token, accion:'guardar', datos, elecciones? }
+//                                                             → sus datos + lo que eligió, junto.
 //
 // CÓMO SE PROTEGE (no hay sesión: la llave es el token)
 //   - El token son 64 hex aleatorios, único por canje, con vencimiento, y `cancelar` lo revoca.
@@ -23,7 +24,20 @@
 // propia del canje, `datos_confirmados_at`. Nada de `apilar()`: ese patrón re-lee y reescribe un
 // array y **no es atómico**, y acá hay dos escritores por diseño —el operador desde el panel y ella
 // desde el portal, al mismo tiempo, sin coordinarse—. Columna propia = no hay carrera que perder.
+//
+// LA VITRINA (tanda 2): si el canje tiene una colgada, además elige productos. Tres cosas que hacen
+// que eso no rompa nada de lo de arriba:
+//   - **Todo lo que ve viaja congelado en la vitrina**, foto incluida. Este handler no le pregunta
+//     nada a Tienda Nube: no tiene credenciales y el link tiene que abrir aunque el catálogo esté
+//     caído. Ver la sección 8 de `sql/migrate-canjes.sql`.
+//   - **El tope lo hace cumplir el servidor**, con la lista real y con `seVaDelTope` —la misma
+//     función que usa el panel, importada de `_canjes-reglas.js`, no una copia—. Un control que
+//     sólo vive en su pantalla no es un control.
+//   - **Escribe en su propia columna del renglón**: los items que carga ella van con
+//     `origen:'persona'`, y los del equipo no se tocan nunca desde acá. Siguen siendo dos
+//     escritores sin coordinarse, igual que arriba.
 import { createClient } from '@supabase/supabase-js';
+import { seVaDelTope } from './_canjes-reglas.js';
 
 /** La misma base maestra de `_canjes.js`. Si algún día se separa por marca, cambian los dos. */
 function cfgMaestra() {
@@ -37,7 +51,19 @@ function cfgMaestra() {
 const ABIERTO = ['acuerdo', 'preparando', 'en_curso'];
 
 /** Las únicas columnas del canje que se leen. */
-const CANJE_COLS = 'id, store, estado, persona_id, token_vence, datos_confirmados_at, envio_estado, entregado_at';
+const CANJE_COLS = `id, store, estado, persona_id, token_vence, datos_confirmados_at, envio_estado, entregado_at,
+  vitrina_id, seleccion_cerrada_at, tope_tipo, tope_pvp, tope_unidades`;
+
+/**
+ * Los estados en los que **todavía puede elegir**. Espejo de `puedeElegir` en `lib/canjes/tipos.ts`.
+ *
+ * Es más corto que `ABIERTO` a propósito: en `en_curso` el pedido ya salió, así que el link sigue
+ * sirviendo para mirar pero no para elegir.
+ */
+const ELIGIENDO = ['acuerdo', 'preparando'];
+
+/** Tope de cordura por request. El de verdad es el del acuerdo, y lo aplica `seVaDelTope`. */
+const MAX_ELECCIONES = 50;
 
 /**
  * Los únicos campos que ella puede ver y escribir de su propia ficha. Es la whitelist en los dos
@@ -81,9 +107,10 @@ const recorte = (v, max) => {
  * `tests/canje-portal.test.ts` le pasa una fila con todo lo sensible adentro y verifica que no salga.
  *
  * @returns {{ numero: string, marca: string, pide: 'talles'|'modelo_celular', despachado: boolean,
- *   confirmadoAt: string|null, driveUrl: string|null, datos: Record<string, any> }}
+ *   confirmadoAt: string|null, driveUrl: string|null, datos: Record<string, any>,
+ *   vitrina: Record<string, any>|null, elegidos: Record<string, any>[] }}
  */
-export function paraLaPersona(canje, persona, cfg) {
+export function paraLaPersona(canje, persona, cfg, vitrina, items) {
   const store = canje.store;
   const p = persona || {};
   const datos = {};
@@ -111,6 +138,75 @@ export function paraLaPersona(canje, persona, cfg) {
     // La carpeta donde deja las fotos. Opcional: si la marca no la cargó, la sección no aparece.
     driveUrl: (cfg && cfg.drive_url) || null,
     datos,
+    ...laVitrina(canje, vitrina, items),
+  };
+}
+
+/**
+ * Lo de la vitrina que sale a internet: la lista para elegir y lo que ya eligió.
+ *
+ * Se arma **campo por campo**, como el resto de este archivo: de `canje_vitrina_items` no salen ni
+ * el `costo` (no existe en esa tabla, pero el criterio vale igual), ni el `sku`, ni el
+ * `tn_product_id`, ni el `activo`. Nada de eso le sirve a ella y todo eso es información nuestra
+ * sobre la tienda.
+ *
+ * ⚠️ **En modo unidades no viaja ni un peso.** No es un olvido: el precio de lo que se le regala no
+ * es asunto de nadie más, y este es el único endpoint del módulo abierto a internet. En modo monto
+ * sí viaja el precio de cada cosa y el saldo, porque el trato es "elegí hasta $X" y sin los números
+ * no puede cumplirlo.
+ *
+ * Sin vitrina colgada devuelve `vitrina: null` y el link se comporta como siempre: sólo los datos.
+ */
+function laVitrina(canje, vitrina, items) {
+  const elegidosRaw = (items || []).filter((i) => i.origen === 'persona' && i.estado !== 'quitado');
+  const porMonto = canje.tope_tipo === 'monto';
+
+  // Lo que ya eligió. Se le muestra **aunque la vitrina se haya archivado o cambiado**: quedó
+  // congelado en su canje y es lo que ella pidió, no lo que hoy se ofrece.
+  const elegidos = elegidosRaw.map((i) => ({
+    nombre: i.nombre || '',
+    variante: i.variante || '',
+    cantidad: Number(i.cantidad) || 1,
+    ...(porMonto ? { pvp: i.pvp_unit == null ? null : Number(i.pvp_unit) } : {}),
+  }));
+
+  if (!vitrina) return { vitrina: null, elegidos };
+
+  // El saldo cuenta TODOS los items vivos, no sólo los suyos: si el equipo ya le cargó algo, esa
+  // unidad está gastada de verdad y decirle que le quedan tres sería mandarla contra el error.
+  const vivos = (items || []).filter((i) => i.estado === 'propuesto' || i.estado === 'confirmado');
+  const tope = porMonto
+    ? (canje.tope_pvp == null ? null : Number(canje.tope_pvp))
+    : (canje.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0) || null;
+  const usado = porMonto
+    ? vivos.reduce((a, i) => a + (Number(i.pvp_unit) || 0) * (Number(i.cantidad) || 0), 0)
+    : vivos.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
+
+  return {
+    elegidos,
+    vitrina: {
+      titulo: vitrina.nombre || '',
+      // `false` = ya mandó, o el pedido ya se está preparando. La pantalla la muestra en lectura.
+      abierta: !canje.seleccion_cerrada_at && ELIGIENDO.includes(canje.estado),
+      modo: porMonto ? 'monto' : 'unidades',
+      tope,
+      usado,
+      items: (vitrina.items || [])
+        .filter((i) => i.activo && Array.isArray(i.opciones) && i.opciones.length)
+        .map((i) => ({
+          id: i.id,
+          nombre: i.nombre || '',
+          foto: i.foto_url || null,
+          ...(porMonto ? { pvp: i.pvp == null ? null : Number(i.pvp) } : {}),
+          // De cada variante sale lo justo para elegirla y verla: el id (que es lo que ella manda
+          // de vuelta), cómo se llama y su foto. El SKU y el código de barras se quedan acá.
+          opciones: i.opciones.map((o) => ({
+            id: String(o.id),
+            valores: Array.isArray(o.valores) ? o.valores : [],
+            foto: o.foto || null,
+          })),
+        })),
+    },
   };
 }
 
@@ -173,6 +269,85 @@ export function camposDeLaPersona(datos, store) {
   return { campos };
 }
 
+/**
+ * Convierte lo que ella eligió en filas de `canje_items`. Devuelve `{ filas }` o `{ error }` en
+ * criollo, que es lo que va a leer en el teléfono.
+ *
+ * **Nada se toma de lo que mandó el browser salvo el id y la cantidad.** El nombre, la variante y
+ * el precio salen de la vitrina que está en la base: si vinieran del cliente, cualquiera podría
+ * mandarse un producto inventado a precio cero y saltarse el tope. Es el mismo criterio con el que
+ * `camposDeLaPersona` re-valida los datos que el formulario ya validó.
+ *
+ * Exportada para test.
+ *
+ * @returns {{ filas?: Array<Record<string, any>>, error?: string }}
+ */
+export function eleccionesEnItems(elecciones, vitrina, canjeId) {
+  const lista = Array.isArray(elecciones) ? elecciones : [];
+  if (!lista.length) return { error: 'No elegiste nada todavía.' };
+  if (lista.length > MAX_ELECCIONES) return { error: 'Elegiste demasiadas cosas.' };
+
+  const porId = new Map(
+    (vitrina.items || []).filter((i) => i.activo && Array.isArray(i.opciones) && i.opciones.length)
+      .map((i) => [String(i.id), i]),
+  );
+
+  const filas = [];
+  for (const e of lista) {
+    const item = porId.get(String((e && e.item_id) ?? ''));
+    // Un producto que se apagó entre que abrió el link y mandó. Se lo dice con el nombre si lo
+    // tenemos, porque "algo que elegiste ya no está" la obliga a comparar toda la lista a ojo.
+    if (!item) return { error: 'Uno de los productos que elegiste ya no está disponible. Recargá la página y probá de nuevo.' };
+
+    const opcion = (item.opciones || []).find((o) => String(o.id) === String((e && e.opcion_id) ?? ''));
+    if (!opcion) return { error: `De "${item.nombre}" falta elegir la opción.` };
+
+    const cantidad = parseInt(e && e.cantidad, 10);
+    if (!Number.isFinite(cantidad) || cantidad < 1) return { error: `La cantidad de "${item.nombre}" no es válida.` };
+
+    filas.push({
+      canje_id: canjeId,
+      // Ids de **Tienda Nube**, no de Gestión Nube: la vitrina es un espejo de la tienda. Lo dice
+      // `origen`. Ver el comentario de `product_id` en `lib/canjes/tipos.ts`.
+      product_id: item.tn_product_id || null,
+      size_id: String(opcion.id),
+      sku: opcion.sku || item.sku || null,
+      nombre: item.nombre,
+      variante: (opcion.valores || []).filter(Boolean).join(' · ') || null,
+      cantidad,
+      // El precio sale de la vitrina congelada. El **costo queda en null a propósito**: vive en
+      // Gestión Nube y no se puede cruzar confiable desde acá (el SKU falta o se repite). Lo
+      // completa el equipo al confirmar, y mientras tanto el balance lo estima con
+      // `factor_costo_estimado`.
+      pvp_unit: item.pvp == null ? null : Number(item.pvp),
+      costo_unit: null,
+      origen: 'persona',
+      // **Propuesto, no confirmado**: que ella lo haya elegido no quiere decir que haya stock. El
+      // equipo lo confirma o lo marca sin stock, que es el flujo que ya existe.
+      estado: 'propuesto',
+    });
+  }
+  return { filas };
+}
+
+/**
+ * La vitrina del canje con sus productos, o `null` si no tiene.
+ *
+ * Se leen las columnas de a una y no con `select *` por lo mismo que el resto del archivo: es la
+ * tabla de la que sale lo que viaja a internet, y una columna nueva mañana no tiene que colarse
+ * sola. `activo` viene porque `laVitrina` filtra por él.
+ */
+async function traerVitrina(supabase, vitrinaId) {
+  if (!vitrinaId) return null;
+  const { data: v } = await supabase.from('canje_vitrinas')
+    .select('id, nombre, estado').eq('id', vitrinaId).maybeSingle();
+  if (!v) return null;
+  const { data: items } = await supabase.from('canje_vitrina_items')
+    .select('id, tn_product_id, sku, nombre, foto_url, pvp, opciones, activo')
+    .eq('vitrina_id', vitrinaId).order('orden');
+  return { ...v, items: items || [] };
+}
+
 /** Busca el canje del token. Devuelve null si no existe, venció, no arrancó o ya terminó. */
 async function buscarPorToken(supabase, token) {
   const { data, error } = await supabase.from('canjes').select(CANJE_COLS).eq('token', token).maybeSingle();
@@ -203,15 +378,19 @@ export default async function handler(req, res) {
     const canje = await buscarPorToken(supabase, token);
     if (!canje) return res.status(404).json({ error: 'no encontrado' });
 
-    const [{ data: persona }, { data: cfg }] = await Promise.all([
+    const [{ data: persona }, { data: cfg }, vitrina, { data: items }] = await Promise.all([
       supabase.from('canje_personas')
         .select(`${CAMPOS_PERSONA.join(', ')}, talles, modelo_celular`)
         .eq('id', canje.persona_id).maybeSingle(),
       supabase.from('canje_config').select('drive_url').eq('store', canje.store).maybeSingle(),
+      traerVitrina(supabase, canje.vitrina_id),
+      // Todos los items del canje, no sólo los suyos: el saldo del tope los cuenta a todos.
+      supabase.from('canje_items')
+        .select('nombre, variante, cantidad, pvp_unit, origen, estado').eq('canje_id', canje.id),
     ]);
 
     if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, canje: paraLaPersona(canje, persona, cfg) });
+      return res.status(200).json({ ok: true, canje: paraLaPersona(canje, persona, cfg, vitrina, items) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -227,14 +406,54 @@ export default async function handler(req, res) {
     const { campos, error: eValida } = camposDeLaPersona((req.body || {}).datos, canje.store);
     if (eValida) return res.status(400).json({ error: eValida });
 
+    // ── Lo que eligió ─────────────────────────────────────────────────────────
+    // Va en el MISMO request que los datos, igual que los entregables en `canje-crear`: si fueran
+    // dos llamadas, abandonar entre una y otra le dejaría la elección cerrada y la dirección sin
+    // cargar, que es el peor de los dos mundos. Se valida todo antes de escribir nada.
+    const elecciones = (req.body || {}).elecciones;
+    let filas = null;
+    if (elecciones !== undefined) {
+      if (!vitrina || !ELIGIENDO.includes(canje.estado)) {
+        return res.status(409).json({ error: 'Este pedido ya no admite elegir productos.' });
+      }
+      if (canje.seleccion_cerrada_at) {
+        return res.status(409).json({ error: 'Ya elegiste tus productos. Si querés cambiar algo, escribinos.' });
+      }
+      const r = eleccionesEnItems(elecciones, vitrina, canje.id);
+      if (r.error) return res.status(400).json({ error: r.error });
+
+      // El tope, con la lista REAL de la base y con la misma función que usa el panel. Los suyos
+      // anteriores no se suman: se van a reemplazar en el mismo guardado.
+      const ajenos = (items || []).filter((i) => i.origen !== 'persona');
+      const seVa = seVaDelTope(canje, [...ajenos, ...r.filas]);
+      if (seVa) return res.status(409).json({ error: seVa });
+      filas = r.filas;
+    }
+
     const ahora = new Date().toISOString();
+
+    // El orden importa. Los productos van primero porque son lo único que puede fallar a mitad de
+    // camino, y el borrado previo hace que reintentar sea inofensivo: si el guardado se corta acá,
+    // `seleccion_cerrada_at` no llega a estamparse y ella puede mandar de nuevo sin duplicar nada.
+    if (filas) {
+      const { error: eDel } = await supabase.from('canje_items')
+        .delete().eq('canje_id', canje.id).eq('origen', 'persona');
+      if (eDel) throw new Error(eDel.message);
+      const { error: eIns } = await supabase.from('canje_items').insert(filas);
+      if (eIns) throw new Error(eIns.message);
+    }
+
     const { error: eP } = await supabase.from('canje_personas')
       .update({ ...campos, updated_at: ahora }).eq('id', canje.persona_id);
     if (eP) throw new Error(eP.message);
 
-    // Sin historial y sin re-leer: una columna, un update. Ver el encabezado.
+    // Sin historial y sin re-leer: dos columnas, un update. Ver el encabezado.
     const { error: eC } = await supabase.from('canjes')
-      .update({ datos_confirmados_at: ahora, updated_at: ahora }).eq('id', canje.id);
+      .update({
+        datos_confirmados_at: ahora,
+        ...(filas ? { seleccion_cerrada_at: ahora } : {}),
+        updated_at: ahora,
+      }).eq('id', canje.id);
     if (eC) throw new Error(eC.message);
 
     return res.status(200).json({ ok: true });

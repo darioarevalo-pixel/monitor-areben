@@ -18,7 +18,7 @@ import { normalizeArgPhone } from '@/lib/crm/core'
 import {
   aprobarCanje, borrarCanje, cambiarEstadoCanje, editarCanje, leerCanje, leerToken, linkDelPortal,
   queSeLlevaElCanje, rechazarCanje, registrarRespuesta,
-  type FichaCanjeDatos,
+  type FichaCanjeDatos, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
 import { mensajeAcuerdo, mensajeLinkDatos, mensajePropuesta } from '@/lib/canjes/mensajes'
 import { puedeAprobar, puedeCerrarIncompleto } from '@/lib/canjes/permisos'
@@ -48,10 +48,12 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
 }
 
 export function FichaCanje({
-  store, canjeId, onVolver,
+  store, canjeId, vitrinas, onVolver,
 }: {
   store: CanjeStore
   canjeId: number
+  /** Las vitrinas de la marca, para poder cambiarle de cuál elige mientras no haya elegido. */
+  vitrinas: VitrinaEnLista[]
   onVolver: () => void
 }) {
   const { perfil } = useSesion()
@@ -109,7 +111,7 @@ export function FichaCanje({
   if (error) return <Notice tone="danger">{error}</Notice>
   if (!d) return <Notice tone="warning">No se encontró ese canje.</Notice>
 
-  const { canje, items, entregables, evidencias, persona } = d
+  const { canje, items, entregables, evidencias, persona, vitrina } = d
   const editable = !esTerminal(canje.estado)
   const puedeFirmar = nivel ? puedeAprobar(perfil, marcaPerm, nivel) : false
 
@@ -291,7 +293,15 @@ export function FichaCanje({
       {/* Historial de la persona a la vista al aprobar: es el dato que hoy no tiene quien firma. */}
       {canje.estado === 'propuesta' && persona && <HistorialCorto persona={persona} />}
 
-      <BloqueSeleccion canje={canje} items={items} onCambio={() => void recargar()} editable={editable} />
+      <BloqueSeleccion
+        store={store}
+        canje={canje}
+        items={items}
+        vitrina={vitrina}
+        vitrinas={vitrinas}
+        onCambio={() => void recargar()}
+        editable={editable}
+      />
       <BloqueEntregables
         canje={canje}
         entregables={entregables}
@@ -617,7 +627,10 @@ function MandarLink({
   // Si ya tiene dirección es porque trabajó con nosotros antes: el formulario le va a abrir
   // prellenado y el mensaje tiene que decirlo.
   const esPrimeraVez = !persona.calle
-  const texto = link ? mensajeLinkDatos(persona, store, link, esPrimeraVez) : ''
+  // Con vitrina el link no es un formulario: es la pantalla donde elige. El mensaje lo dice, o lo
+  // abre esperando un trámite.
+  const conVitrina = !!canje.vitrina_id && !canje.seleccion_cerrada_at
+  const texto = link ? mensajeLinkDatos(persona, store, link, esPrimeraVez, conVitrina) : ''
   const tel = normalizeArgPhone(persona.telefono)
 
   return (

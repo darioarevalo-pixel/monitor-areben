@@ -13,8 +13,8 @@ import { apiFetch } from '@/lib/api-fetch'
 import { baseDeCostos, numeroCanje } from './tipos'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
-  CanjeStore, EstadoCanje, NivelAprobacion, TallesPersona, TipoCanje, TipoEntregable, TopeTipo,
-  TopeUnidad, ViaEnvio,
+  CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, NivelAprobacion, OpcionVitrina,
+  TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
 } from './tipos'
 
 const API = '/api/postventa?recurso=canjes'
@@ -74,8 +74,16 @@ export type DatosCanjes = {
    * cualquiera de ellas, no sólo la de la sección.
    */
   configs: CanjeConfig[]
+  /**
+   * Las vitrinas **sin sus productos**: acá alcanza con el nombre para poder colgarle una a un
+   * canje. Los productos, con sus fotos congeladas, salen por `leerVitrinas`.
+   */
+  vitrinas: VitrinaEnLista[]
   marcasVisibles: CanjeStore[]
 }
+
+/** Una vitrina en el selector: lo justo para elegirla. */
+export type VitrinaEnLista = Pick<CanjeVitrina, 'id' | 'store' | 'nombre' | 'estado' | 'created_at'>
 
 /**
  * El padrón entero más los canjes que este perfil puede ver. El padrón **no se filtra por marca**:
@@ -90,6 +98,7 @@ export async function leerCanjes(store: CanjeStore): Promise<DatosCanjes> {
     vencidos: (d.vencidos as CanjeVencido[]) || [],
     config: (d.config as CanjeConfig) || null,
     configs: (d.configs as CanjeConfig[]) || [],
+    vitrinas: (d.vitrinas as VitrinaEnLista[]) || [],
     marcasVisibles: (d.marcasVisibles as CanjeStore[]) || [],
   }
 }
@@ -204,6 +213,8 @@ export type FichaCanjeDatos = {
   entregables: CanjeEntregable[]
   evidencias: CanjeEvidencia[]
   persona: CanjePersona | null
+  /** La vitrina de la que elige, con sus productos. `null` si no tiene ninguna colgada. */
+  vitrina: CanjeVitrina | null
   config: CanjeConfig
 }
 
@@ -216,8 +227,81 @@ export async function leerCanje(store: CanjeStore, id: number): Promise<FichaCan
     entregables: (d.entregables as CanjeEntregable[]) || [],
     evidencias: (d.evidencias as CanjeEvidencia[]) || [],
     persona: (d.persona as CanjePersona) || null,
+    vitrina: (d.vitrina as CanjeVitrina) || null,
     config: d.config as CanjeConfig,
   }
+}
+
+// ══ LA VITRINA ═════════════════════════════════════════════════════════════════
+//
+// Un espejo curado de Tienda Nube: se trae de la tienda lo que se quiere promocionar, se saca el
+// resto, y eso es lo que la creadora ve al abrir su link. **De acá no vuelve nada a TN.**
+
+/** Las vitrinas de la marca **con sus productos**: es la pantalla de armado. */
+export async function leerVitrinas(store: CanjeStore): Promise<CanjeVitrina[]> {
+  const d = await leer(`vista=vitrinas&store=${store}`)
+  return (d.vitrinas as CanjeVitrina[]) || []
+}
+
+export async function crearVitrina(store: CanjeStore, nombre: string, nota?: string): Promise<CanjeVitrina> {
+  const d = await postear({ store, action: 'vitrina-crear', nombre, nota })
+  return d.vitrina as CanjeVitrina
+}
+
+export async function editarVitrina(
+  store: CanjeStore, vitrinaId: number, campos: { nombre?: string; nota?: string | null },
+): Promise<void> {
+  await postear({ store, action: 'vitrina-editar', vitrina_id: vitrinaId, ...campos })
+}
+
+export async function cambiarEstadoVitrina(
+  store: CanjeStore, vitrinaId: number, estado: EstadoVitrina,
+): Promise<void> {
+  await postear({ store, action: 'vitrina-estado', vitrina_id: vitrinaId, estado })
+}
+
+/**
+ * Suma o refresca productos. Llegan **ya congelados** desde acá, que es el único lado con sesión
+ * para preguntarle a Tienda Nube: el portal no tiene ninguna.
+ *
+ * Se upsertean por producto, así que traer una categoría que se pisa con otra ya traída es
+ * inofensivo, y re-traer es también el botón "actualizar" (vuelve a congelar la foto y el precio de
+ * hoy). Lo que alguien haya apagado a mano **no se vuelve a prender**.
+ */
+export async function sumarAVitrina(
+  store: CanjeStore, vitrinaId: number, items: ProductoParaVitrina[],
+): Promise<{ sumados: number; actualizados: number }> {
+  const d = await postear({ store, action: 'vitrina-items', vitrina_id: vitrinaId, items })
+  return { sumados: (d.sumados as number) || 0, actualizados: (d.actualizados as number) || 0 }
+}
+
+/** Lo que se manda al congelar un producto en la vitrina. Sale de `traerAudit`. */
+export type ProductoParaVitrina = {
+  tn_product_id: string
+  sku?: string | null
+  nombre: string
+  foto_url?: string | null
+  pvp?: number | null
+  opciones: OpcionVitrina[]
+}
+
+/**
+ * Saca un producto. Sin `activo` lo **borra**, que el servidor sólo permite mientras la vitrina
+ * está en borrador; con `activo: false` lo apaga, que es lo que corresponde una vez que salió.
+ */
+export async function sacarDeVitrina(
+  store: CanjeStore, vitrinaId: number, itemId: number, activo?: boolean,
+): Promise<void> {
+  await postear({ store, action: 'vitrina-item', vitrina_id: vitrinaId, item_id: itemId, activo })
+}
+
+export async function borrarVitrina(store: CanjeStore, vitrinaId: number): Promise<void> {
+  await postear({ store, action: 'vitrina-borrar', vitrina_id: vitrinaId })
+}
+
+/** De qué vitrina elige este canje. `null` la saca y el link vuelve a pedir sólo los datos. */
+export async function colgarVitrina(store: CanjeStore, id: number, vitrinaId: number | null): Promise<void> {
+  await postear({ store, action: 'canje-vitrina', id, vitrina_id: vitrinaId })
 }
 
 /**
@@ -254,6 +338,8 @@ export type NuevoCanje = {
    * Mandarlos de a uno dejaría un canje a medias si falla el tercero.
    */
   entregables?: EntregablePedido[]
+  /** De qué vitrina elige. `null` = ninguna: los productos los carga el equipo, como siempre. */
+  vitrina_id?: number | null
 }
 
 /**
@@ -346,6 +432,18 @@ export async function agregarItem(store: CanjeStore, id: number, item: NuevoItem
 }
 
 /** No borra: marca `quitado` o `sin_stock`. Que algo se haya caído es información. */
+/**
+ * Confirma un producto que eligió ella. Sólo mueve los que están en `propuesto`.
+ *
+ * `costo` es opcional y es la única forma de que un item de la vitrina lo tenga: el precio viene
+ * congelado de Tienda Nube, pero el costo vive en Gestión Nube y no se cruza confiable.
+ */
+export async function confirmarItem(
+  store: CanjeStore, id: number, itemId: number, costo?: number | null,
+): Promise<void> {
+  await postear({ store, action: 'item-confirmar', id, item_id: itemId, costo_unit: costo })
+}
+
 export async function quitarItem(
   store: CanjeStore, id: number, itemId: number, motivo: string, sinStock = false,
 ): Promise<void> {

@@ -56,7 +56,10 @@ if (!url) {
   process.exit(1)
 }
 
-const TABLAS = ['canje_personas', 'canjes', 'canje_items', 'canje_entregables', 'canje_evidencias', 'canje_config']
+const TABLAS = [
+  'canje_personas', 'canjes', 'canje_items', 'canje_entregables', 'canje_evidencias', 'canje_config',
+  'canje_vitrinas', 'canje_vitrina_items',
+]
 
 const cfg = parse(url)
 const client = new pg.Client({ ...cfg, ssl: { rejectUnauthorized: false } })
@@ -66,7 +69,7 @@ try {
   await client.query(sql)
   await client.query('COMMIT')
 
-  // Verificación: las seis tablas existen, con cuántas filas y cuántos índices cada una.
+  // Verificación: las ocho tablas existen, con cuántas filas y cuántos índices cada una.
   console.log(`✓ BDI (${cfg.host}): migración aplicada\n`)
   for (const t of TABLAS) {
     const r = await client.query(`select count(*)::int as n from ${t}`)

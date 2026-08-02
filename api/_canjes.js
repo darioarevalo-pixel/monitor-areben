@@ -42,6 +42,10 @@
 //   POST { action:'contacto', id }                               → "ya le escribí". Pendiente, no estado.
 //   POST { action:'canje-respuesta', id, respuesta, motivo?, nota? } → lo que contestó ELLA.
 //                                                                  'acepto' genera el token del portal.
+//   POST { action:'canje-vitrina', id, vitrina_id }              → de qué lista elige. `null` = sin vitrina.
+//   GET  ?vista=vitrinas                                         → las vitrinas de la marca, CON sus productos.
+//   POST { action:'vitrina-crear'|'vitrina-editar'|'vitrina-estado'|'vitrina-items'|'vitrina-item'|'vitrina-borrar' }
+//                                                                → el espejo curado de Tienda Nube.
 //   POST { action:'item-agregar', id, ...datos }                 → snapshot del producto, con control del tope.
 //   POST { action:'item-quitar', id, item_id, motivo }           → NO borra: marca 'quitado'.
 //   POST { action:'compra', id, tn_orden, gn_venta_number? }     → la orden creada a mano en TN.
@@ -64,6 +68,10 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
 import { esAdmin, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
 import { marcaDePermisos, marcasVisiblesCanjes } from '../lib/canjes/marcas.js';
+// El grafo de estados y el tope viven aparte porque **el portal público también los usa** desde la
+// tanda 2 (ella elige productos desde el link y hay que frenarla si se pasa del acuerdo), y ese
+// handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
+import { ESTADOS, puedeIr, seVaDelTope, TERMINALES, TRANSICIONES } from './_canjes-reglas.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -181,25 +189,9 @@ function esAdministracion(perfil) {
 //
 // `tests/canjes-flujo.test.ts` compara los dos lados contra los mismos casos.
 
-/**
- * Espejo de `TRANSICIONES`. `cancelado` no figura: se llega desde cualquier no-terminal.
- *
- * ⚠️ `propuesta` (nuestra firma) y `enviada` (su respuesta) son dos esperas distintas, y **no hay
- * atajo de `propuesta` a `acuerdo`**: firmar puertas adentro no es que ella haya dicho que sí.
- */
-const TRANSICIONES = {
-  propuesta: ['enviada', 'rechazado'],
-  enviada: ['acuerdo', 'no_acepto'],
-  rechazado: [],
-  no_acepto: [],
-  acuerdo: ['preparando'],
-  preparando: ['en_curso'],
-  en_curso: ['cerrado'],
-  cerrado: [],
-  cancelado: [],
-};
-const ESTADOS = Object.keys(TRANSICIONES);
-const TERMINALES = ['rechazado', 'no_acepto', 'cerrado', 'cancelado'];
+// ⚠️ El grafo de estados (`TRANSICIONES`, `ESTADOS`, `TERMINALES`, `puedeIr`) y el tope
+// (`seVaDelTope`) **ya no están acá**: viven en `./_canjes-reglas.js` porque el portal público los
+// necesita y no puede importar este archivo. Se re-exportan al final para los tests de espejo.
 
 /** Espejo de `MOTIVOS_NO_ACEPTO`. Lista cerrada: es información sobre la persona, no sobre nosotros. */
 const MOTIVOS_NO_ACEPTO = [
@@ -211,12 +203,6 @@ const MOTIVOS_NO_ACEPTO = [
   'Ahora no, más adelante',
   'Otro',
 ];
-
-/** Espejo de `puedeIr`. */
-function puedeIr(desde, hasta) {
-  if (hasta === 'cancelado') return !TERMINALES.includes(desde);
-  return (TRANSICIONES[desde] || []).includes(hasta);
-}
 
 /**
  * ¿Tiene el sub-permiso para esta `store`?
@@ -263,31 +249,6 @@ function puedeFirmar(perfil, store, nivel) {
   return puedeSubCanjes(perfil, store, nivel);
 }
 
-/**
- * Espejo de `controlDelTope`. Devuelve `null` si entra, o el motivo en criollo si se pasa.
- *
- * El control es **duro** en los dos modos: sobre la suma de PVP, o sobre el TOTAL de unidades.
- * Sobre el *detalle* de las unidades (que sean un jean y no otra remera) es blando a propósito:
- * la categoría de GN no es lo bastante prolija para colgar de ahí un bloqueo.
- */
-function seVaDelTope(canje, items) {
-  const vivos = (items || []).filter((i) => i.estado === 'propuesto' || i.estado === 'confirmado');
-  if (canje.tope_tipo === 'unidades') {
-    const tope = (canje.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0);
-    if (!tope) return null;
-    const usado = vivos.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
-    return usado > tope
-      ? `Se pasa del acuerdo: ${usado} ${usado === 1 ? 'unidad' : 'unidades'} contra las ${tope} acordadas.`
-      : null;
-  }
-  if (canje.tope_pvp == null) return null;
-  const usado = vivos.reduce((a, i) => a + (Number(i.pvp_unit) || 0) * (Number(i.cantidad) || 0), 0);
-  const tope = Number(canje.tope_pvp);
-  return usado > tope
-    ? `Se pasa del tope: $${usado.toLocaleString('es-AR')} contra los $${tope.toLocaleString('es-AR')} acordados.`
-    : null;
-}
-
 /** `YYYY-MM-DD` local. Espejo de `fechaISO`: en UTC un canje de la tarde vencería un día antes. */
 function fechaISO(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -330,6 +291,59 @@ function entregablesDelBody(lista, cfg) {
   }
   return [...porTipo.values()];
 }
+// ── La vitrina ────────────────────────────────────────────────────────────────
+const ESTADOS_VITRINA = ['borrador', 'activa', 'archivada'];
+
+/**
+ * Cuántos productos admite una vitrina.
+ *
+ * El límite no es de base: **la vitrina entera viaja congelada al teléfono de la creadora**, con la
+ * foto y las variantes de cada producto adentro, porque el portal no tiene sesión para pedirle nada
+ * a Tienda Nube. Una vitrina de 500 productos no es una vitrina, es el catálogo — que es
+ * exactamente lo que curar viene a evitar. Se arman varias y se elige cuál va en cada canje.
+ */
+const TOPE_VITRINA = 120;
+
+/** Hasta cuántas variantes por producto. `PROTECTOR DE CÁMARA STRASS` (BDI) tiene 54; hay margen. */
+const TOPE_OPCIONES = 120;
+
+/**
+ * Un producto de la vitrina, saneado. Llega **ya congelado** desde el panel, que es el único lado
+ * con sesión para preguntarle a la tienda.
+ *
+ * Devuelve `null` si no sirve. Sin `tn_product_id` no hay llave, y sin opciones no hay nada que
+ * elegir: un producto cuyas variantes estaban todas agotadas al armar la vitrina simplemente no
+ * entra. Es la única forma honesta de no ofrecer lo agotado — un stock congelado hace dos semanas
+ * miente, así que no se guarda ni se le muestra "sin stock" a nadie.
+ */
+function itemDeVitrinaDelBody(x) {
+  if (!x || typeof x !== 'object') return null;
+  const tn_product_id = texto(x.tn_product_id);
+  const nombre = texto(x.nombre);
+  if (!tn_product_id || !nombre) return null;
+
+  const opciones = (Array.isArray(x.opciones) ? x.opciones : [])
+    .slice(0, TOPE_OPCIONES)
+    .map((o) => {
+      const id = texto(o && o.id);
+      const valores = (Array.isArray(o && o.valores) ? o.valores : [])
+        .map((v) => String(v ?? '').trim().slice(0, 80)).filter(Boolean).slice(0, 6);
+      if (!id) return null;
+      return { id, valores, foto: texto(o.foto), sku: texto(o.sku), barcode: texto(o.barcode) };
+    })
+    .filter(Boolean);
+  if (!opciones.length) return null;
+
+  return {
+    tn_product_id,
+    sku: texto(x.sku),
+    nombre: nombre.slice(0, 200),
+    foto_url: texto(x.foto_url),
+    pvp: num(x.pvp),
+    opciones,
+  };
+}
+
 const VIAS_ENVIO = ['correo', 'andreani', 'cadete', 'presencial'];
 const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
 const TIPOS_CANJE = ['producto', 'producto_plata'];
@@ -424,6 +438,35 @@ export default async function handler(req, res) {
     return { canje: data };
   }
 
+  /**
+   * Valida la vitrina que se le quiere colgar a un canje de `st`. Devuelve `{ id }` o `{ error }`.
+   *
+   * `null` es un valor válido y significa "sin vitrina": ese canje vuelve al modo de siempre, donde
+   * los productos los carga el equipo y el link sólo le pide los datos.
+   *
+   * Sólo se acepta una vitrina **activa**. Una en borrador se está armando todavía, y colgársela a
+   * un canje es mandarle a la creadora una pantalla que va a cambiar debajo de ella mientras elige.
+   */
+  async function vitrinaValida(valor, st) {
+    if (valor === null || valor === '' || valor === undefined) return { id: null };
+    const id = parseInt(valor, 10);
+    if (!id) return { error: 'vitrina inválida' };
+    const { data } = await supabase.from('canje_vitrinas').select('id, store, estado').eq('id', id).maybeSingle();
+    if (!data || data.store !== st) return { error: 'Esa vitrina no es de esta marca.' };
+    if (data.estado !== 'activa') return { error: 'Esa vitrina todavía no está activa.' };
+    return { id };
+  }
+
+  /** La vitrina de un canje, con sus productos. `null` si no tiene. */
+  async function vitrinaDe(id) {
+    if (!id) return null;
+    const { data } = await supabase.from('canje_vitrinas').select('*').eq('id', id).maybeSingle();
+    if (!data) return null;
+    const items = (await supabase.from('canje_vitrina_items')
+      .select('*').eq('vitrina_id', id).order('orden')).data || [];
+    return { ...data, items };
+  }
+
   const itemsDe = async (id) => (await supabase.from('canje_items').select('*').eq('canje_id', id)).data || [];
   const entregablesDe = async (id) => (await supabase.from('canje_entregables').select('*').eq('canje_id', id)).data || [];
   const evidenciasDe = async (id) => (await supabase.from('canje_evidencias').select('*').eq('canje_id', id)).data || [];
@@ -447,6 +490,26 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, persona: data, canjes: await canjesDePersona(id) });
       }
 
+      // Las vitrinas de la marca CON sus productos: es la pantalla de armado, y sin los productos
+      // no hay nada que mirar. Va en su propia vista y no en el listado general porque acá viajan
+      // las fotos y las variantes congeladas de cada producto, y eso no tiene por qué pesar en cada
+      // apertura de la sección.
+      if (vista === 'vitrinas') {
+        const { data: vitrinas, error } = await supabase.from('canje_vitrinas')
+          .select('*').eq('store', store).order('created_at', { ascending: false });
+        if (error) throw new Error(error.message);
+        const ids = (vitrinas || []).map((v) => v.id);
+        const items = ids.length
+          ? (await supabase.from('canje_vitrina_items').select('*').in('vitrina_id', ids).order('orden')).data || []
+          : [];
+        const porVitrina = new Map(ids.map((id) => [id, []]));
+        for (const i of items) porVitrina.get(i.vitrina_id)?.push(i);
+        return res.status(200).json({
+          ok: true,
+          vitrinas: (vitrinas || []).map((v) => ({ ...v, items: porVitrina.get(v.id) || [] })),
+        });
+      }
+
       // El canje entero: la ficha necesita las cuatro tablas a la vez y pedirlas de a una sería
       // cuatro round-trips por click.
       if (vista === 'canje') {
@@ -454,9 +517,10 @@ export default async function handler(req, res) {
         if (!id) return res.status(400).json({ error: 'falta id' });
         const t = await traerCanje(id);
         if (t.error) return t.error;
-        const [items, entregables, evidencias, persona] = await Promise.all([
+        const [items, entregables, evidencias, persona, vitrina] = await Promise.all([
           itemsDe(id), entregablesDe(id), evidenciasDe(id),
           supabase.from('canje_personas').select(PERSONA_COLS).eq('id', t.canje.persona_id).maybeSingle(),
+          vitrinaDe(t.canje.vitrina_id),
         ]);
         // El token NO viaja en el objeto del canje: se pide aparte con `vista=token`, de a uno.
         const { token, ...sinToken } = t.canje; // eslint-disable-line no-unused-vars
@@ -465,6 +529,8 @@ export default async function handler(req, res) {
           canje: { ...sinToken, numero: numeroCanje(id) },
           items, entregables, evidencias,
           persona: persona.data || null,
+          // La vitrina entera, con sus productos: la ficha muestra de dónde salió lo que ella eligió.
+          vitrina,
           config: await configDe(t.canje.store),
         });
       }
@@ -500,6 +566,12 @@ export default async function handler(req, res) {
       const { data: configs } = await supabase.from('canje_config').select('*');
       const config = (configs || []).find((c) => c.store === store) || null;
 
+      // Las vitrinas **sin sus productos**: acá alcanza con el nombre para poder colgarle una a un
+      // canje. Los productos, con sus fotos congeladas, salen por `vista=vitrinas`.
+      const { data: vitrinas } = await supabase.from('canje_vitrinas')
+        .select('id, store, nombre, estado, created_at').in('store', visibles)
+        .order('created_at', { ascending: false });
+
       return res.status(200).json({
         ok: true,
         personas: personas || [],
@@ -513,6 +585,7 @@ export default async function handler(req, res) {
         vencidos: await resumenDeVencidos(propios.data || []),
         config,
         configs: (configs || []).filter((c) => visibles.includes(c.store)),
+        vitrinas: vitrinas || [],
         marcasVisibles: visibles,
       });
     }
@@ -730,6 +803,148 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ══ LA VITRINA ════════════════════════════════════════════════════════════
+    // Un espejo curado de Tienda Nube. **De acá no vuelve nada a TN**: el monitor no escribe en la
+    // tienda (ni acá ni en ningún lado del módulo). Se trae, se saca lo que no va, y lo que queda
+    // se congela para que el link le abra a ella sin sesión y sin depender del catálogo.
+    //
+    // Escribir una vitrina pide lo mismo que armar un canje de esa marca: ya está chequeado arriba
+    // (`visibles.includes(store)` para todo POST). No pide Administración porque no hay plata de
+    // por medio — se decide qué se ofrece, no cuánto se gasta.
+
+    if (action === 'vitrina-crear') {
+      const nombre = texto(b.nombre);
+      if (!nombre) return res.status(400).json({ error: 'Ponele un nombre: es lo que después elegís al armar el canje.' });
+      const { data, error } = await supabase.from('canje_vitrinas')
+        .insert({ store, nombre: nombre.slice(0, 120), nota: texto(b.nota), usuario })
+        .select('*').single();
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, vitrina: { ...data, items: [] } });
+    }
+
+    if (action === 'vitrina-editar' || action === 'vitrina-estado'
+      || action === 'vitrina-items' || action === 'vitrina-item' || action === 'vitrina-borrar') {
+      const vitrinaId = parseInt(b.vitrina_id, 10);
+      if (!vitrinaId) return res.status(400).json({ error: 'falta vitrina_id' });
+
+      // El mismo gate que `traerCanje`: una vitrina es de una marca y no se toca desde otra.
+      const { data: vit } = await supabase.from('canje_vitrinas').select('*').eq('id', vitrinaId).maybeSingle();
+      if (!vit) return res.status(404).json({ error: 'no existe esa vitrina' });
+      if (!visibles.includes(vit.store)) return res.status(403).json({ error: 'Esa vitrina es de otra marca.' });
+
+      if (action === 'vitrina-editar') {
+        const campos = {};
+        if (b.nombre !== undefined) {
+          const n = texto(b.nombre);
+          if (!n) return res.status(400).json({ error: 'el nombre no puede quedar vacío' });
+          campos.nombre = n.slice(0, 120);
+        }
+        if (b.nota !== undefined) campos.nota = texto(b.nota);
+        if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });
+        const { error } = await supabase.from('canje_vitrinas')
+          .update({ ...campos, updated_at: ahora() }).eq('id', vitrinaId);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'vitrina-estado') {
+        if (!ESTADOS_VITRINA.includes(b.estado)) return res.status(400).json({ error: 'estado inválido' });
+        // Activar una vitrina vacía la deja ofrecible y le abre a la creadora una pantalla sin nada
+        // que elegir, que es la peor forma de enterarse de que faltaba cargarla.
+        if (b.estado === 'activa') {
+          const { count } = await supabase.from('canje_vitrina_items')
+            .select('id', { count: 'exact', head: true }).eq('vitrina_id', vitrinaId).eq('activo', true);
+          if (!count) return res.status(409).json({ error: 'Está vacía: sumale productos antes de activarla.' });
+        }
+        const { error } = await supabase.from('canje_vitrinas')
+          .update({ estado: b.estado, updated_at: ahora() }).eq('id', vitrinaId);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      // Sumar productos: llegan ya congelados desde el panel, que es el único lado con sesión para
+      // preguntarle a Tienda Nube. Se **upsertean por producto** (hay un unique por
+      // `vitrina_id + tn_product_id`) para que traer una categoría que se pisa con otra ya traída
+      // sea inofensivo en vez de duplicar la grilla. Re-traer es también el botón "actualizar": se
+      // vuelve a congelar la foto y el precio de hoy.
+      if (action === 'vitrina-items') {
+        const crudos = Array.isArray(b.items) ? b.items : [];
+        // Se corta con un error, **no truncando**: mandar 200 y guardar 120 en silencio se lee
+        // como que entraron todos, y el que armó la vitrina se entera recién cuando falta la mitad.
+        if (crudos.length > TOPE_VITRINA) {
+          return res.status(413).json({ error: `Son ${crudos.length} productos y el máximo es ${TOPE_VITRINA}. Traelos en tandas o armá otra vitrina.` });
+        }
+        const limpios = crudos.map(itemDeVitrinaDelBody).filter(Boolean);
+        if (!limpios.length) return res.status(400).json({ error: 'no llegó ningún producto' });
+
+        const { data: previos } = await supabase.from('canje_vitrina_items')
+          .select('id, tn_product_id').eq('vitrina_id', vitrinaId);
+        const porProducto = new Map((previos || []).map((p) => [String(p.tn_product_id), p.id]));
+
+        // El tope es por lo que le llega a ELLA: la vitrina entera viaja congelada al teléfono, con
+        // las fotos y las variantes de cada producto adentro. Una vitrina de 500 productos no es una
+        // vitrina, es el catálogo — y era justamente lo que había que evitar.
+        const nuevos = limpios.filter((i) => !porProducto.has(i.tn_product_id));
+        if (porProducto.size + nuevos.length > TOPE_VITRINA) {
+          return res.status(409).json({
+            error: `Una vitrina admite hasta ${TOPE_VITRINA} productos y con estos serían ${porProducto.size + nuevos.length}. Armá otra: se eligen al colgarlas del canje.`,
+          });
+        }
+
+        if (nuevos.length) {
+          const { error } = await supabase.from('canje_vitrina_items')
+            .insert(nuevos.map((i, n) => ({ ...i, vitrina_id: vitrinaId, orden: porProducto.size + n })));
+          if (error) throw new Error(error.message);
+        }
+        // Los que ya estaban se actualizan de a uno y **sin tocar `activo`**: si alguien apagó un
+        // producto a mano, re-traer la categoría no lo tiene que volver a prender por atrás.
+        for (const i of limpios) {
+          const id = porProducto.get(i.tn_product_id);
+          if (!id) continue;
+          const { error } = await supabase.from('canje_vitrina_items')
+            .update({ ...i, updated_at: ahora() }).eq('id', id);
+          if (error) throw new Error(error.message);
+        }
+        return res.status(200).json({ ok: true, sumados: nuevos.length, actualizados: limpios.length - nuevos.length });
+      }
+
+      // Sacar un producto. **Mientras la vitrina se está armando se borra de verdad**: todavía no se
+      // le ofreció a nadie y no hay nada que explicar. Una vez que salió, se apaga: que un producto
+      // se haya caído es información, y sin eso no se entiende por qué la vitrina salió como salió.
+      if (action === 'vitrina-item') {
+        const itemId = parseInt(b.item_id, 10);
+        if (!itemId) return res.status(400).json({ error: 'falta item_id' });
+        if (b.activo === undefined) {
+          if (vit.estado !== 'borrador') {
+            return res.status(409).json({ error: 'Esta vitrina ya salió: los productos se apagan, no se borran.' });
+          }
+          const { error } = await supabase.from('canje_vitrina_items')
+            .delete().eq('id', itemId).eq('vitrina_id', vitrinaId);
+          if (error) throw new Error(error.message);
+          return res.status(200).json({ ok: true });
+        }
+        const { error } = await supabase.from('canje_vitrina_items')
+          .update({ activo: bool(b.activo), updated_at: ahora() }).eq('id', itemId).eq('vitrina_id', vitrinaId);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      // Borrar la vitrina entera. La FK de `canjes.vitrina_id` es `no action`, así que si algún
+      // canje la está usando la base frena el borrado — y está bien que lo haga: lo que ella eligió
+      // quedó congelado en `canje_items`, pero la vitrina es lo que explica de dónde salió. Mismo
+      // criterio que `persona-borrar`: con historial encima, se archiva.
+      const { count: colgados } = await supabase.from('canjes')
+        .select('id', { count: 'exact', head: true }).eq('vitrina_id', vitrinaId);
+      if (colgados) {
+        return res.status(409).json({
+          error: `La están usando ${colgados} ${colgados === 1 ? 'canje' : 'canjes'}: archivala en vez de borrarla y deja de ofrecerse para los nuevos.`,
+        });
+      }
+      const { error: eBorrar } = await supabase.from('canje_vitrinas').delete().eq('id', vitrinaId);
+      if (eBorrar) throw new Error(eBorrar.message);
+      return res.status(200).json({ ok: true });
+    }
+
     // ══ EL CANJE ══════════════════════════════════════════════════════════════
 
     if (action === 'canje-crear') {
@@ -757,10 +972,15 @@ export default async function handler(req, res) {
 
       const tope_tipo = TOPE_TIPOS.includes(b.tope_tipo) ? b.tope_tipo : 'unidades';
       const tipo = TIPOS_CANJE.includes(b.tipo) ? b.tipo : 'producto';
+      // De qué vitrina va a elegir. Opcional: sin vitrina el canje sigue funcionando como siempre
+      // —los productos los carga el equipo— y el link sólo le pide los datos.
+      const vit = await vitrinaValida(b.vitrina_id, store);
+      if (vit.error) return res.status(400).json({ error: vit.error });
       const row = {
         persona_id: personaId,
         store,
         tipo,
+        vitrina_id: vit.id,
         titulo: texto(b.titulo),
         nota: texto(b.nota),
         tope_tipo,
@@ -878,6 +1098,33 @@ export default async function handler(req, res) {
         }
       }
       return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * De qué vitrina elige.
+     *
+     * Va **aparte de `canje-editar`**, que sólo deja tocar el canje antes del acuerdo, porque la
+     * vitrina recién importa cuando el link empieza a servir —o sea, a partir de `acuerdo`—. No es
+     * cambiarle el trato por atrás: la cantidad y lo que se le pide publicar siguen siendo los
+     * acordados, y lo único que se mueve es de qué lista elige.
+     *
+     * ⛔ Una vez que ella mandó su elección **no se cambia**: lo que eligió quedó congelado en
+     * `canje_items` y darle otra vitrina dejaría en la ficha una elección que no se corresponde con
+     * ninguna lista. Se quitan los productos de a uno, como cualquier otro.
+     */
+    if (action === 'canje-vitrina') {
+      if (canje.seleccion_cerrada_at) {
+        return res.status(409).json({ error: 'Ya eligió sus productos: para cambiarlos, quitalos de la lista de abajo.' });
+      }
+      if (TERMINALES.includes(canje.estado)) {
+        return res.status(409).json({ error: 'Este canje ya está cerrado.' });
+      }
+      const vit = await vitrinaValida(b.vitrina_id, canje.store);
+      if (vit.error) return res.status(400).json({ error: vit.error });
+      const { error } = await supabase.from('canjes')
+        .update({ vitrina_id: vit.id, updated_at: ahora() }).eq('id', canjeId);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, vitrina_id: vit.id });
     }
 
     /**
@@ -1084,6 +1331,25 @@ export default async function handler(req, res) {
       const { data, error } = await supabase.from('canje_items').insert(nuevo).select('*').single();
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, item: data });
+    }
+
+    /**
+     * "Sí, esto se lo mandamos." Sólo aplica a lo que eligió **ella**: lo que carga el equipo desde
+     * el buscador nace confirmado, porque lo está mirando contra el stock de Gestión Nube en ese
+     * mismo momento. La vitrina, en cambio, está congelada y no sabe si el producto sigue estando.
+     *
+     * Acá es también donde entra el **costo**: no viaja con la vitrina —vive en GN y no se puede
+     * cruzar confiable— así que el que confirma lo puede cargar de una si lo tiene a mano.
+     */
+    if (action === 'item-confirmar') {
+      const itemId = parseInt(b.item_id, 10);
+      if (!itemId) return res.status(400).json({ error: 'falta item_id' });
+      const campos = { estado: 'confirmado', updated_at: ahora() };
+      if (b.costo_unit !== undefined) campos.costo_unit = num(b.costo_unit);
+      const { error } = await supabase.from('canje_items')
+        .update(campos).eq('id', itemId).eq('canje_id', canjeId).eq('estado', 'propuesto');
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
     }
 
     if (action === 'item-quitar') {
@@ -1424,6 +1690,10 @@ export default async function handler(req, res) {
 // Fase 0 las fichas se editan sin apilar: una nota ya es el registro de lo que pasó.
 // Los espejos se exportan para que `tests/canjes-flujo.test.ts` los compare contra los de
 // `lib/canjes/tipos.ts`. Es lo único que mantiene honesta la duplicación.
+//
+// Los cuatro del grafo y `seVaDelTope` se re-exportan desde `_canjes-reglas.js`: se mudaron ahí para
+// que el portal público los use, y siguen saliendo por acá para no partir los tests en dos archivos
+// según dónde vive hoy cada función.
 export {
   apilar, entregablesDelBody, MOTIVOS_NO_ACEPTO, normalizarInstagram, numeroCanje, puedeIr,
   seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES,

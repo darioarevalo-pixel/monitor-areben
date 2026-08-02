@@ -95,15 +95,33 @@ export function mensajePropuesta(
  *
  * `esPrimeraVez` lo decide el llamador mirando si la persona ya tiene canjes anteriores, no un
  * flag guardado: un flag se desincroniza el día que alguien borre un canje.
+ *
+ * **Con vitrina el mensaje cambia entero**, y no es un matiz de redacción: lo que se le pide dejó
+ * de ser un trámite ("cargá tus datos") y pasó a ser lo divertido ("elegí lo que te guste"). Un
+ * mensaje que arranca por la dirección hace que el link parezca un formulario, que es exactamente
+ * lo que hay que evitar para que lo abra.
  */
 export function mensajeLinkDatos(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
   store: CanjeStore,
   link: string,
   esPrimeraVez: boolean,
+  /** `true` si el canje tiene una vitrina colgada: además de los datos, elige los productos. */
+  conVitrina = false,
 ): string {
   const vos = comoLaLlamamos(persona)
   const queDato = queDatoPide(store) === 'talles' ? 'tus talles' : 'el modelo de tu celular'
+
+  if (conVitrina) {
+    return [
+      `¡Hola ${vos}! Te escribimos de ${STORE_LABEL[store]}.`,
+      '',
+      'Te dejo el link para que elijas lo que más te guste y nos dejes la dirección para mandártelo:',
+      link,
+      '',
+      `Ah: cuando entres nos vas a tener que decir ${queDato}, así te mandamos lo que te queda bien.`,
+    ].join('\n')
+  }
 
   if (esPrimeraVez) {
     return [

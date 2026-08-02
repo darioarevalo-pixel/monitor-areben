@@ -38,6 +38,7 @@ import { ListaCanjes } from './ListaCanjes'
 import { ListaPersonas } from './ListaPersonas'
 import { ProponerCanje } from './ProponerCanje'
 import { useCanjes } from './useCanjes'
+import { Vitrinas } from './Vitrinas'
 
 export function Canjes() {
   const { marca, perfil } = useSesion()
@@ -54,7 +55,7 @@ export function Canjes() {
   const [store, setStore] = useState<CanjeStore>(() =>
     marcasPosibles.includes(marca) ? marca : (marcasPosibles[0] ?? 'bdi'),
   )
-  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones'>('personas')
+  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones' | 'vitrinas'>('personas')
   const [abierta, setAbierta] = useState<number | null>(null)
   const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
   const [dandoAlta, setDandoAlta] = useState(false)
@@ -84,6 +85,7 @@ export function Canjes() {
     { key: 'personas', label: 'Padrón', hint: 'Todas las personas, de todas las marcas' },
     { key: 'canjes', label: 'Canjes' },
     { key: 'aprobaciones', label: 'Aprobaciones', badge: esperandoFirma || undefined },
+    { key: 'vitrinas', label: 'Vitrinas', hint: 'Lo que ella ve al abrir el link' },
   ], [esperandoFirma])
 
   if (!marcasPosibles.length) {
@@ -137,6 +139,7 @@ export function Canjes() {
         <FichaCanje
           store={store}
           canjeId={canjeAbierto}
+          vitrinas={est.vitrinas}
           onVolver={() => {
             setCanjeAbierto(null)
             void est.recargar()
@@ -148,6 +151,7 @@ export function Canjes() {
           personaId={abierta}
           ctxPuntaje={est.ctxPuntaje}
           configs={est.configs}
+          vitrinas={est.vitrinas}
           marcasVisibles={est.marcasVisibles}
           susNiveles={susNiveles}
           onVolver={() => {
@@ -165,6 +169,8 @@ export function Canjes() {
         />
       ) : tab === 'personas' ? (
         <ListaPersonas personas={est.personas} onAbrir={abrir} onProponer={setProponiendoA} />
+      ) : tab === 'vitrinas' ? (
+        <Vitrinas store={store} />
       ) : (
         <>
           {/* Los estados en una línea: acá la pregunta no es "qué hago" sino "por qué este canje
@@ -188,6 +194,7 @@ export function Canjes() {
           persona={proponiendoA}
           store={store}
           configs={est.configs}
+          vitrinas={est.vitrinas}
           marcasVisibles={est.marcasVisibles}
           susNiveles={susNiveles}
           onCerrar={() => setProponiendoA(null)}

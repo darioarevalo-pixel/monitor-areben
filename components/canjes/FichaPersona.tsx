@@ -21,7 +21,7 @@ import {
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
   agregarNota, borrarNota, borrarPersona, editarPersona, esCiego, leerPersona, numeroDe,
-  type CamposPersona, type CanjeVisible,
+  type CamposPersona, type CanjeVisible, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
 import { ProponerCanje } from './ProponerCanje'
 import { instagramHref, instagramParaMostrar, tiktokHref } from '@/lib/canjes/instagram'
@@ -61,6 +61,7 @@ export function FichaPersona({
   personaId,
   ctxPuntaje,
   configs,
+  vitrinas,
   marcasVisibles,
   susNiveles,
   onVolver,
@@ -75,6 +76,8 @@ export function FichaPersona({
   ctxPuntaje: ContextoPuntaje
   /** Las de todas las marcas visibles: el modal de propuesta deja elegir cuál. */
   configs: CanjeConfig[]
+  /** Las vitrinas activas, para poder elegir de cuál va a elegir ella. */
+  vitrinas: VitrinaEnLista[]
   marcasVisibles: CanjeStore[]
   /** Qué firmas tiene quien está mirando, para anticipar si la propuesta sale directo. */
   susNiveles: NivelAprobacion[]
@@ -416,6 +419,7 @@ export function FichaPersona({
           persona={persona}
           store={store}
           configs={configs}
+          vitrinas={vitrinas}
           marcasVisibles={marcasVisibles}
           susNiveles={susNiveles}
           onCerrar={() => setProponiendo(false)}

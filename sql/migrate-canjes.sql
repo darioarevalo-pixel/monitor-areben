@@ -422,11 +422,96 @@ create index if not exists idx_canjes_enviada on canjes (store, estado) where es
 -- quedan zombis: `puedeIr('borrador', …)` es false para todo y tampoco se pueden editar.
 update canjes set estado = 'propuesta' where estado = 'borrador';
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 8. Tanda 2 (2-ago-2026) — la vitrina: que ELLA elija, con fotos
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Una vitrina es **un espejo curado de Tienda Nube**: se trae de la tienda lo que se quiere
+-- promocionar, se saca el resto, y eso es lo que la creadora ve al abrir su link. De acá **no
+-- vuelve nada a TN**: lo que ella elige se escribe sólo en `canje_items`, y sirve después para
+-- tipear la venta a mano en el admin de la tienda.
+--
+-- ⚠️ **Todo se congela, foto incluida.** Es la decisión que sostiene el resto, y son cuatro razones
+-- por peso: el portal **no tiene sesión** y no puede pedirle nada a TN; el link tiene que abrir en
+-- un celular aunque el catálogo esté caído; "Fundas verano" tiene que seguir mostrando lo mismo
+-- aunque mañana cambien las fotos en la tienda; y es el mismo criterio con el que `canje_items` ya
+-- congela `costo_unit` y `pvp_unit`.
+
+create table if not exists canje_vitrinas (
+  id          bigint generated always as identity primary key,
+  store       text not null,                          -- 'bdi' | 'zattia' | 'stunned'
+  nombre      text not null,                          -- "Fundas verano", "Sweaters Days"
+  -- 'borrador'  se está armando, ningún canje la puede usar todavía
+  -- 'activa'    se le puede colgar a un canje
+  -- 'archivada' los canjes que ya la tienen la siguen viendo; no se ofrece para nuevos
+  estado      text not null default 'borrador',
+  nota        text,
+  usuario     text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists idx_canje_vitrinas_store on canje_vitrinas (store, estado, created_at desc);
+
+-- Un producto de la vitrina, con su foto y sus opciones congeladas al momento de armarla.
+create table if not exists canje_vitrina_items (
+  id             bigint generated always as identity primary key,
+  vitrina_id     bigint not null references canje_vitrinas (id) on delete cascade,
+  orden          integer not null default 0,
+
+  -- El id del PRODUCTO en Tienda Nube. Es la llave y no el SKU porque el SKU no alcanza: en BDI 4
+  -- de cada 10 variantes no lo tienen cargado, y en Zattia el mismo SKU se repite en las 24
+  -- variantes de un producto (`CORSET FRANK` para todas). El id, en cambio, viene siempre.
+  tn_product_id  text not null,
+  sku            text,                                 -- informativo: para buscarlo a ojo
+  nombre         text not null,
+  foto_url       text,
+  -- Precio de LISTA, de TN. El costo no está acá a propósito: vive en Gestión Nube y no se puede
+  -- cruzar de forma confiable por lo que dice el comentario de arriba. Lo completa el equipo al
+  -- confirmar el item, y mientras tanto el balance lo estima con `factor_costo_estimado`.
+  pvp            numeric,
+
+  -- Las variantes del producto, congeladas: `[{id, valores:[…], foto, sku, barcode}]`.
+  --
+  -- ⚠️ **Los ejes cambian producto por producto y no se pueden nombrar de antemano.** Medido sobre
+  -- los dos catálogos: en BDI 181 productos tienen un solo eje (`iPhone 12`) y 19 tienen dos
+  -- (`iPhone 11/12/12 Mini` + `Rosa`); en Zattia son 495 y 42 (`Negro` + `XS`). Escribir "elegí
+  -- modelo" y "elegí color" sería mentira la mitad de las veces. Por eso se guardan los `valores`
+  -- tal como los manda TN y la pantalla los muestra con la palabra de la tienda.
+  --
+  -- Las variantes **sin stock al armar la vitrina no se guardan**: es la única forma honesta de no
+  -- ofrecer lo agotado. Un stock congelado hace dos semanas miente, así que no se muestra ni se
+  -- escribe "sin stock" en ningún lado — simplemente no está.
+  opciones       jsonb not null default '[]'::jsonb,
+
+  -- `false` en vez de borrar, una vez que la vitrina ya salió: que un producto se haya apagado es
+  -- información, y sin eso no se entiende por qué la vitrina salió como salió. Mientras la vitrina
+  -- está en `borrador` no hay nada que explicar y sacar un producto lo borra de verdad.
+  activo         boolean not null default true,
+
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- Un producto no entra dos veces a la misma vitrina: traer una categoría que se pisa con otra ya
+-- traída tiene que ser inofensivo, no duplicar la grilla.
+create unique index if not exists idx_canje_vitrina_items_prod on canje_vitrina_items (vitrina_id, tn_product_id);
+create index if not exists idx_canje_vitrina_items_vitrina    on canje_vitrina_items (vitrina_id, activo, orden);
+
+-- Qué vitrina le toca a este canje. Muchos canjes → una vitrina: **la vitrina se reusa, el link
+-- no**, porque el link lleva su cantidad y sus datos prellenados.
+alter table canjes add column if not exists vitrina_id bigint references canje_vitrinas (id);
+
+-- Cuándo mandó su elección. Se cierra al mandar: si vuelve a abrir el link ve lo que eligió, en
+-- lectura. Es también lo que distingue "todavía no entró" de "entró y eligió".
+alter table canjes add column if not exists seleccion_cerrada_at timestamptz;
+
 -- Sin RLS, como el resto del monitor: el gate es server-side en api/_canjes.js
 -- (`exigirUsuario` + `soloMismoOrigen`), igual que fallas, reclamos, solicitudes y conteos.
-alter table canje_personas    disable row level security;
-alter table canjes            disable row level security;
-alter table canje_items       disable row level security;
-alter table canje_entregables disable row level security;
-alter table canje_evidencias  disable row level security;
-alter table canje_config      disable row level security;
+alter table canje_personas      disable row level security;
+alter table canjes              disable row level security;
+alter table canje_items         disable row level security;
+alter table canje_entregables   disable row level security;
+alter table canje_evidencias    disable row level security;
+alter table canje_config        disable row level security;
+alter table canje_vitrinas      disable row level security;
+alter table canje_vitrina_items disable row level security;

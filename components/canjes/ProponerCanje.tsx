@@ -24,7 +24,7 @@ import {
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
-import { crearCanje, marcarContactada } from '@/lib/canjes/cliente'
+import { crearCanje, marcarContactada, type VitrinaEnLista } from '@/lib/canjes/cliente'
 import { instagramHref } from '@/lib/canjes/instagram'
 import { mensajePropuesta } from '@/lib/canjes/mensajes'
 import {
@@ -38,6 +38,7 @@ export function ProponerCanje({
   persona,
   store,
   configs,
+  vitrinas,
   marcasVisibles,
   susNiveles,
   onCerrar,
@@ -48,6 +49,8 @@ export function ProponerCanje({
   store: CanjeStore
   /** Las de todas las marcas visibles: de ahí sale la unidad por defecto de cada una. */
   configs: CanjeConfig[]
+  /** Las de todas las marcas: se filtran por la elegida, que se puede cambiar acá adentro. */
+  vitrinas: VitrinaEnLista[]
   marcasVisibles: CanjeStore[]
   /**
    * Qué firmas tiene quien está proponiendo. Sirve para **anticipar** si el canje sale directo o va
@@ -70,6 +73,15 @@ export function ProponerCanje({
   const [guardando, setGuardando] = useState(false)
   /** Lo que hay para copiarle, una vez creado. `null` mientras se arma. */
   const [creado, setCreado] = useState<{ id: number; estado: EstadoCanje } | null>(null)
+
+  /** Sólo las **activas** de la marca elegida: una en borrador se está armando todavía. */
+  const vitrinasDeLaMarca = useMemo(
+    () => vitrinas.filter((v) => v.store === marca && v.estado === 'activa'),
+    [vitrinas, marca],
+  )
+  const [vitrinaId, setVitrinaId] = useState<number | null>(null)
+  // Cambiar de marca invalida la vitrina elegida: son de una marca cada una.
+  const vitrinaElegida = vitrinasDeLaMarca.some((v) => v.id === vitrinaId) ? vitrinaId : null
 
   const cfg = useMemo(() => configs.find((c) => c.store === marca) || null, [configs, marca])
   const unidadPorDefecto = unidadDeLaMarca(cfg)
@@ -116,6 +128,7 @@ export function ProponerCanje({
         tope_unidades: topeTipo === 'unidades' ? unidadesLimpias : [],
         monto_plata: tipo === 'producto_plata' && montoPlata !== '' ? Number(montoPlata) : null,
         entregables: pedidoALista(pedido),
+        vitrina_id: vitrinaElegida,
       })
       setCreado({ id, estado })
     } catch (e) {
@@ -219,6 +232,31 @@ export function ProponerCanje({
           </Button>
         </div>
       )}
+
+      {/* ── De dónde elige ──
+          Opcional a propósito: sin vitrina el canje funciona como siempre —los productos los cargás
+          vos— y el link sólo le pide los datos. */}
+      <div style={{ marginTop: space[4] }}>
+        <Field
+          label="De qué vitrina elige"
+          hint={
+            vitrinasDeLaMarca.length
+              ? 'Lo que va a ver al abrir el link. Se puede cambiar después, hasta que elija.'
+              : 'Todavía no hay ninguna vitrina activa de esta marca: se arman en la pestaña Vitrinas.'
+          }
+        >
+          <Select
+            value={vitrinaId == null ? '' : String(vitrinaId)}
+            disabled={!vitrinasDeLaMarca.length}
+            onChange={(e) => setVitrinaId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Sin vitrina — los productos los cargás vos</option>
+            {vitrinasDeLaMarca.map((v) => (
+              <option key={v.id} value={v.id}>{v.nombre}</option>
+            ))}
+          </Select>
+        </Field>
+      </div>
 
       {/* ── Qué publica ── */}
       <div style={{ marginTop: space[5] }}>
