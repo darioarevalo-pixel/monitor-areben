@@ -100,7 +100,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
   }
 
   const onPDF = async () => {
-    const ok = await reposicionPDF(inv, cfg, marca, manual)
+    const ok = await reposicionPDF(inv, cfg, marca, manual, rep.lastUpdate)
     if (!ok) toast.aviso('No hay unidades para mover: están todas en 0.')
   }
 

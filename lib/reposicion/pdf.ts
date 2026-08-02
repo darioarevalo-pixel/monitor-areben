@@ -3,13 +3,35 @@
  * por ubicación física (recorrido), con casilleros para tildar "pickeado" y "no se
  * encontró", y un pie de firma/cierre. Cliente-only (jsPDF dinámico). Port de repoPDF
  * (index.html:12777).
+ *
+ * ── Por qué está la columna "Local" ──
+ * Mientras se recorre el depósito puede aparecer la necesidad de priorizar qué llevar
+ * primero, y esa decisión se tomaba de memoria: el papel decía cuánto hay en el depósito
+ * y cuánto reponer, pero no cuánto quedaba en el local. Sin eso no se distingue lo que
+ * está en cero de lo que todavía tiene para vender. El dato ya venía adentro de
+ * `RepoItem.local` —`construirInv` lo separa desde siempre— y esta función lo recibía sin
+ * usarlo.
+ *
+ * El orden **sigue siendo por ubicación física** y no por urgencia, a propósito: la hoja se
+ * usa caminando, y ordenar por faltante convierte el recorrido en un zigzag. La prioridad
+ * se marca en la fila (`!`), no en el orden.
  */
 
 import { compartirODescargarPDF } from '../pdf'
 import { moverFinal, reporte, ubicCmp } from './core'
 import type { RepoCfg, RepoItem } from './tipos'
 
-export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string, manual: Record<string, number>): Promise<boolean> {
+/** Con esto o menos en el local, la fila se marca. Mismo criterio que la pantalla (`Reposicion.tsx`). */
+const CRITICO = 1
+
+export async function reposicionPDF(
+  inv: RepoItem[],
+  cfg: RepoCfg,
+  marca: string,
+  manual: Record<string, number>,
+  /** Cuándo se leyeron los datos (el "Actualizado" de la pantalla). Un PDF de una pestaña abierta hace tres horas trae stock de hace tres horas. */
+  leido?: Date | null,
+): Promise<boolean> {
   const esBdi = marca === 'bdi'
   const rep = reporte(inv, cfg, esBdi).filter((it) => moverFinal(it, cfg, esBdi, manual) > 0)
   if (!rep.length) return false
@@ -28,15 +50,20 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
   pdf.setTextColor(120)
   y += 5
   pdf.text(`${fecha} · ${filas.length} variantes · ${totalMover} u. a mover`, M, y)
+  y += 4
+  // La aclaración del "!" va en el papel: quien camina el depósito no estuvo en esta conversación.
+  const cuando = leido ? leido.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
+  pdf.text(`${cuando ? `Stock leido: ${cuando}  ·  ` : ''}"!" = sin stock en el local (0 o 1): llevarlo primero`, M, y)
   pdf.setTextColor(0)
   y += 8
-  const X = { ubic: M, prod: 30, dep: 120, rep: 138, pick: 156, nf: 178 }
+  const X = { ubic: M, prod: 30, loc: 104, dep: 120, rep: 138, pick: 156, nf: 178 }
   const header = () => {
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(7.5)
     pdf.setTextColor(120)
     pdf.text('Ubic.', X.ubic, y)
     pdf.text('Producto · Variante', X.prod, y)
+    pdf.text('Local', X.loc, y)
     pdf.text('Depós', X.dep, y)
     pdf.text('Repone', X.rep, y)
     pdf.text('Pickeado', X.pick, y)
@@ -49,7 +76,7 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
   header()
   filas.forEach((it, i) => {
     // Nombre COMPLETO en varias líneas (antes se truncaba a la 1ª con [0] → se perdía info).
-    const lineas = pdf.splitTextToSize(`${it.name} · ${it.size || '—'}`, X.dep - X.prod - 3)
+    const lineas = pdf.splitTextToSize(`${it.name} · ${it.size || '—'}`, X.loc - X.prod - 3)
     const rowH = Math.max(6.6, lineas.length * 4 + 2.6)
     if (y + rowH > 292) {
       pdf.addPage()
@@ -69,6 +96,15 @@ export async function reposicionPDF(inv: RepoItem[], cfg: RepoCfg, marca: string
     pdf.setFontSize(8.5)
     pdf.setTextColor(20)
     lineas.forEach((ln: string, k: number) => pdf.text(ln, X.prod, y + k * 4))
+    // El local manda la prioridad: en 0 o 1 va en negrita, rojo y con "!" — el color se pierde
+    // en la fotocopia en blanco y negro del depósito, el signo no.
+    const critico = it.local <= CRITICO
+    if (critico) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(185, 28, 28)
+    }
+    pdf.text(critico ? `${it.local} !` : String(it.local), X.loc, y)
+    pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(165)
     pdf.text(String(it.deposito), X.dep, y)
     pdf.setTextColor(20)
