@@ -11,7 +11,7 @@
  * Lo que NO se unifica es la lógica: cada conteo sigue con su propio `core.ts` en `lib`
  * (los tests de paridad son por sección).
  */
-import { Badge, Card, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space } from '@/components/ui'
+import { Badge, Card, EmptyState, Esqueleto, Instructivo, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space } from '@/components/ui'
 import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 
 /** Estado de un producto dentro del conteo. */
@@ -59,24 +59,16 @@ export function fechaLabel(ms: number): string {
  */
 export function InstructivoConteo({ pasoCarga, queAplica }: { pasoCarga: React.ReactNode; queAplica: string }) {
   return (
-    <details style={{ marginBottom: space[3], border: `1px solid ${color.brandBorder}`, background: color.brandBg, borderRadius: 'var(--mo-r-lg)', padding: '10px 14px' }}>
-      <summary style={{ cursor: 'pointer', fontSize: font.base, fontWeight: 600, color: color.brand }}>¿Cómo cierro un conteo para que quede guardado y con fecha?</summary>
-      <ol style={{ margin: '10px 0 2px', paddingLeft: 20, fontSize: font.base, color: color.ink2, lineHeight: 1.8 }}>
-        <li>
-          Hacé todo el conteo en <b>la misma compu y la misma pestaña</b>, de principio a fin.
-        </li>
-        <li>{pasoCarga}</li>
-        <li>
-          Apretá <b>Terminar producto</b> en cada uno. <b>Si no lo terminás, ese producto no se guarda ni recibe fecha.</b>
-        </li>
-        <li>
-          Cuando terminaste todos, apretá <b>Aplicar ajuste</b> ({queAplica}).
-        </li>
-        <li>
-          En la revisión, <b>Generar Excel y guardar</b> (o <b>Guardar el conteo igual</b> si no hubo diferencias). <b>Si salís con Volver, no se guarda nada.</b>
-        </li>
-      </ol>
-    </details>
+    <Instructivo
+      titulo="¿Cómo cierro un conteo para que quede guardado y con fecha?"
+      pasos={[
+        <>Hacé todo el conteo en <b>la misma compu y la misma pestaña</b>, de principio a fin.</>,
+        pasoCarga,
+        <>Apretá <b>Terminar producto</b> en cada uno. <b>Si no lo terminás, ese producto no se guarda ni recibe fecha.</b></>,
+        <>Cuando terminaste todos, apretá <b>Aplicar ajuste</b> ({queAplica}).</>,
+        <>En la revisión, <b>Generar Excel y guardar</b> (o <b>Guardar el conteo igual</b> si no hubo diferencias). <b>Si salís con Volver, no se guarda nada.</b></>,
+      ]}
+    />
   )
 }
 

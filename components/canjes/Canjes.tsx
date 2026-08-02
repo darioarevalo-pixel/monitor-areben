@@ -32,6 +32,7 @@ import { marcaDePermisos } from '@/lib/canjes/marcas.js'
 import { nivelesQueFirma, veMarcaCanjes } from '@/lib/canjes/permisos'
 import { STORE_LABEL, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
 import { FichaCanje } from './FichaCanje'
+import { GuiaCanjes, LineaDeEstados } from './GuiaCanjes'
 import { FichaPersona } from './FichaPersona'
 import { ListaCanjes } from './ListaCanjes'
 import { ListaPersonas } from './ListaPersonas'
@@ -116,6 +117,10 @@ export function Canjes() {
         </span>
       </div>
 
+      {/* El circuito, escrito y plegado. Va antes de las pestañas porque no es de una pestaña: es
+          de todas, y arranca en el padrón para terminar en el cierre. */}
+      {!abierta && !canjeAbierto && <GuiaCanjes cfg={est.config} />}
+
       {est.error && <Notice tone="danger">{est.error}</Notice>}
 
       {/* Una ficha abierta ocupa la pantalla entera: mostrar la lista debajo sería ruido, y las
@@ -161,13 +166,18 @@ export function Canjes() {
       ) : tab === 'personas' ? (
         <ListaPersonas personas={est.personas} onAbrir={abrir} onProponer={setProponiendoA} />
       ) : (
-        <ListaCanjes
-          canjes={est.canjes}
-          personas={est.personas}
-          vencidos={est.vencidos}
-          soloAprobaciones={tab === 'aprobaciones'}
-          onAbrir={setCanjeAbierto}
-        />
+        <>
+          {/* Los estados en una línea: acá la pregunta no es "qué hago" sino "por qué este canje
+              está en esta pila". */}
+          {tab !== 'aprobaciones' && <LineaDeEstados />}
+          <ListaCanjes
+            canjes={est.canjes}
+            personas={est.personas}
+            vencidos={est.vencidos}
+            soloAprobaciones={tab === 'aprobaciones'}
+            onAbrir={setCanjeAbierto}
+          />
+        </>
       )}
 
       {/* La propuesta desde la LISTA, sin pasar por la ficha: el canje nace de una idea sobre

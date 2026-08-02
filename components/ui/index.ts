@@ -17,6 +17,7 @@ export { KpiCard, type KpiCardProps } from '@/components/ui/KpiCard'
 export { TableWrap, THead, TBody, Tr, Th, Td, type ThProps, type TdProps } from '@/components/ui/Table'
 export { MoneyText, formatMoney, type MoneyTextProps } from '@/components/ui/MoneyText'
 export { Notice, type NoticeProps } from '@/components/ui/Notice'
+export { Instructivo, type InstructivoProps } from '@/components/ui/Instructivo'
 export { CopyButton, type CopyButtonProps } from '@/components/ui/CopyButton'
 
 // ── Rediseño jul-2026 ──

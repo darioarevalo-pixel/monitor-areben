@@ -19,6 +19,7 @@ import {
   Button, Card, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Toolbar, Tabs, KpiCard,
   color, font, space, weight, useConfirmar, useToast, type Tone,
+  Instructivo,
 } from '@/components/ui'
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
@@ -37,7 +38,7 @@ import {
 } from '@/lib/reclamos/tipos'
 import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
 import { DecidirReclamo } from './DecidirReclamo'
-import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
+import { DondeVa } from '@/components/postventa/GuiaPostventa'
 
 /** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
 function obtenerPass(): string {

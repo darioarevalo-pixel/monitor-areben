@@ -28,11 +28,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { DondeVa, Instructivo } from '@/components/postventa/GuiaPostventa'
+import { DondeVa } from '@/components/postventa/GuiaPostventa'
 import {
   Button, SectionCard, Card, StatusPill, Field, Input, NumberField, Select, Toolbar, Tabs, EmptyState,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Notice, CopyButton,
   color, radius, font, weight, space, useConfirmar, useToast,
+  Instructivo,
 } from '@/components/ui'
 import {
   buscarOrden, cambiarEstado, crearReclamo, eliminarReclamo, enriquecerConGN, guardarCambio,

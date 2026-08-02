@@ -19,6 +19,7 @@ import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticul
 import {
   Button, SectionCard, Card, StatusPill, Field, Input, Select, NumberField, Toolbar, Tabs, EmptyState, KpiCard,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Notice, color, font, weight, space, type Tone,
+  Instructivo,
 } from '@/components/ui'
 import { cambiarEstadoFalla, confirmarFalla, crearFalla, eliminarFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow, type FallaUbicacion } from '@/lib/postventa/fallas/tipos'
@@ -26,7 +27,7 @@ import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
 import { Devoluciones } from '@/components/reclamos/Reclamos'
 import { ArmarCambio } from '@/components/reclamos/ArmarCambio'
-import { DondeVa, Instructivo } from './GuiaPostventa'
+import { DondeVa } from './GuiaPostventa'
 
 /**
  * **Cambios vuelve a ser una pestaña, pero no vuelve a ser un registro aparte.**

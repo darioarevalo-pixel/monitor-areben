@@ -1,18 +1,15 @@
 'use client'
 
 /**
- * Las dos ayudas de Post-venta, en un solo lugar porque resuelven el mismo problema: **las
- * pantallas no dicen lo que esperan de vos**.
+ * La ayuda propia de Post-venta. Resuelve el problema que tiene sólo este módulo: **el error caro
+ * no es cargar mal, es cargar en la pestaña equivocada.**
  *
- *  - `DondeVa` — el selector de arriba. El error caro no es cargar mal una devolución: es
- *    cargarla en la pestaña equivocada, y ahí el stock y la plata terminan mal en dos lados a la
- *    vez. Tres líneas que se leen en cinco segundos.
- *  - `Instructivo` — el paso a paso de cada pestaña, plegado. Mismo molde que
- *    `InstructivoConteo` (`components/conteos/comunes.tsx`), que nació de un problema idéntico:
- *    "si alguien sale sin terminar, el conteo no se guarda, y eso ya pasó".
- *
- * Van plegados a propósito: quien ya sabe no los abre, y quien no sabe los tiene ahí sin
+ * Son tres líneas que se leen en cinco segundos y evitan que el stock y la plata terminen mal en
+ * dos lados a la vez. Va **plegado**: quien ya sabe no lo abre, y quien no sabe lo tiene ahí sin
  * preguntarle a nadie.
+ *
+ * El paso a paso de cada pestaña es `Instructivo`, que vive en el kit (`components/ui`): nació acá
+ * y en conteos por separado, con el mismo markup, y ahora es uno solo.
  */
 
 import { color, font, space } from '@/components/ui'
@@ -47,21 +44,6 @@ export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' | 'cambios' 
           </div>
         </div>
       </div>
-    </details>
-  )
-}
-
-/** El paso a paso de una pestaña. `pasos` en el orden real de la operación. */
-export function Instructivo({ titulo, pasos, ojo }: { titulo: string; pasos: React.ReactNode[]; ojo?: React.ReactNode }) {
-  return (
-    <details style={{ marginBottom: space[3], border: `1px solid ${color.brandBorder}`, background: color.brandBg, borderRadius: 'var(--mo-r-lg)', padding: '10px 14px' }}>
-      <summary style={{ cursor: 'pointer', fontSize: font.base, fontWeight: 600, color: color.brand }}>{titulo}</summary>
-      <ol style={{ margin: '10px 0 2px', paddingLeft: 20, fontSize: font.base, color: color.ink2, lineHeight: 1.8 }}>
-        {pasos.map((p, i) => <li key={i}>{p}</li>)}
-      </ol>
-      {ojo && (
-        <div style={{ marginTop: space[2], fontSize: font.sm, color: color.warningInk }}>⚠️ {ojo}</div>
-      )}
     </details>
   )
 }
