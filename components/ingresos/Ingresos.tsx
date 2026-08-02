@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin as esAdminDe, puedeSub } from '@/lib/permisos'
 import { credencialConPrompt } from '@/lib/sesion'
 import { imgAThumbYSubir } from '@/lib/imagenes'
@@ -42,6 +43,7 @@ import {
   totalU,
   ytId,
 } from '@/lib/ingresos/core'
+import { indiceNombresGN, productoEnGN, type IndiceGN, type ProductoGN } from '@/lib/ingresos/gn'
 import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos/tipos'
 import { nuevoId, useIngresos } from './useIngresos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -87,6 +89,15 @@ export function Ingresos() {
   const puedeNombre = puedeTodo || puedeSub(perfil, marca, 'ingresos', 'nombre')
   const st = useIngresos(marca, puedeNombre, obtenerCred)
   const { data, guardar } = st
+
+  /**
+   * El espejo, solo para el ✓ "ya está en GN". La sección no depende de él: si el ETL todavía no
+   * llegó (o falla), `datos` es null, el índice queda vacío y no se pinta ningún ✓ — nunca se
+   * afirma lo contrario, que sería el error caro. Es la misma carga compartida que usan las otras
+   * secciones y se sirve del caché de IndexedDB, así que en la práctica ya está bajada.
+   */
+  const { datos } = useDatosMonitor()
+  const indiceGN = useMemo(() => indiceNombresGN(datos?.allProductos), [datos])
 
   const [vista, setVistaState] = useState<VistaIngresos>('lector')
   const [media, setMedia] = useState<Media | null>(null)
@@ -195,7 +206,8 @@ export function Ingresos() {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, color: paleta.mut, margin: '0 0 12px' }}>
           <span>
             El <b>nombre comercial</b> es el que va a tener el producto cuando se cargue en Gestión Nube.
-            {puedeNombre ? ' Escribirlo acá es proponerlo.' : ''}
+            {puedeNombre ? ' Escribirlo acá es proponerlo.' : ''} El <b style={{ color: paleta.success }}>✓ ya está en GN</b>{' '}
+            aparece cuando ese nombre ya existe como producto.
           </span>
           <InfoPopover titulo="El nombre comercial">
             Es el nombre con el que el producto va a existir: el que se carga en Gestión Nube y el que
@@ -209,6 +221,12 @@ export function Ingresos() {
             <br />
             Cuando el producto <b>ya existe en Gestión Nube</b>, manda el nombre de allá. Cambiarlo en esta
             pantalla <b>no</b> lo cambia en Gestión Nube ni en la tienda.
+            <br />
+            <br />
+            El <b>✓ ya está en GN</b> debajo del nombre dice que hay un producto llamado <b>exactamente</b> así
+            (no se miran mayúsculas ni acentos). Es un aviso, no un candado: se puede seguir escribiendo. Y al
+            revés, <b>si falta el ✓ no quiere decir que el producto no exista</b>: una letra distinta alcanza
+            para que el cruce no lo encuentre.
           </InfoPopover>
         </div>
       )}
@@ -221,11 +239,11 @@ export function Ingresos() {
             </div>
             {grp.items.map((g) =>
               vistaEfectiva === 'editar' ? (
-                <IngresoEditar key={g.id} g={g} guardar={guardar} onMedia={setMedia} pasteTarget={pasteTarget} onPasteSel={setPasteTarget} />
+                <IngresoEditar key={g.id} g={g} guardar={guardar} onMedia={setMedia} pasteTarget={pasteTarget} onPasteSel={setPasteTarget} indiceGN={indiceGN} />
               ) : vistaEfectiva === 'resumen' ? (
-                <IngresoResumen key={g.id} g={g} onMedia={setMedia} />
+                <IngresoResumen key={g.id} g={g} onMedia={setMedia} indiceGN={indiceGN} />
               ) : (
-                <IngresoLector key={g.id} g={g} onMedia={setMedia} guardar={puedeNombre ? guardar : null} />
+                <IngresoLector key={g.id} g={g} onMedia={setMedia} guardar={puedeNombre ? guardar : null} indiceGN={indiceGN} />
               ),
             )}
           </div>
@@ -415,12 +433,14 @@ function BloqueEditar({
   guardar,
   onPasteSel,
   pasteTarget,
+  indiceGN,
 }: {
   g: Ingreso
   b: Bloque
   guardar: (m: (l: Ingreso[]) => Ingreso[]) => void
   onPasteSel: (t: { gid: string; bid: string; did: string }) => void
   pasteTarget: { gid: string; bid: string; did: string } | null
+  indiceGN: IndiceGN
 }) {
   const { avisar, confirmar, pedirTexto } = useConfirmar()
   const disenos = b.disenos || []
@@ -519,6 +539,7 @@ function BloqueEditar({
                           ✕
                         </button>
                       </div>
+                      <SelloGN p={productoEnGN(d.nombre, indiceGN)} />
                     </th>
                   )
                 })}
@@ -594,6 +615,24 @@ function BloqueEditar({
 
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: paleta.brandSolid, cursor: 'pointer', fontSize: 12, padding: 0 }
 
+/**
+ * El ✓ de "ese nombre ya existe como producto en Gestión Nube". Sin match no dibuja nada —ni un
+ * hueco ni una cruz—: el cruce es exacto, así que la ausencia significa "no lo encontré", no "no
+ * existe", y una marca de negativo estaría afirmando lo que el dato no dice. El nombre que matcheó
+ * viaja en el `title` para que se pueda comprobar de dónde salió el ✓.
+ */
+function SelloGN({ p }: { p: ProductoGN | null }) {
+  if (!p) return null
+  return (
+    <div
+      title={`Ya existe en Gestión Nube: ${p.name}${p.sku ? ` (${p.sku})` : ''}`}
+      style={{ fontSize: 10, fontWeight: 700, color: paleta.success, marginTop: 2, whiteSpace: 'nowrap', textAlign: 'center' }}
+    >
+      ✓ ya está en GN
+    </div>
+  )
+}
+
 // ── Bloque de solo lectura (salvo el nombre comercial) ──────────────────────────
 /**
  * `guardar` llega en `null` para quien solo mira. Cuando llega una función, el único campo que
@@ -601,7 +640,7 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color
  * `ingresos.nombre`, y por eso es un componente de lectura con UN input y no el editor con todo
  * lo demás deshabilitado — así el día que el editor sume un campo, este permiso no lo hereda.
  */
-function BloqueLector({ b, g, onMedia, guardar }: { b: Bloque; g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null }) {
+function BloqueLector({ b, g, onMedia, guardar, indiceGN }: { b: Bloque; g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null; indiceGN: IndiceGN }) {
   const disenos = b.disenos || []
   const modelos = b.modelos || []
   const grand = bloqueU(b)
@@ -636,6 +675,7 @@ function BloqueLector({ b, g, onMedia, guardar }: { b: Bloque; g: Ingreso; onMed
                     ) : (
                       d.nombre || '—'
                     )}
+                    <SelloGN p={productoEnGN(d.nombre, indiceGN)} />
                   </th>
                 ))}
                 <th style={{ fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Total</th>
@@ -676,7 +716,7 @@ function BloqueLector({ b, g, onMedia, guardar }: { b: Bloque; g: Ingreso; onMed
 }
 
 // ── Bloque resumen (solo diseño + cantidad total, ordenado por cantidad) ────────
-function BloqueResumen({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }) {
+function BloqueResumen({ b, onMedia, indiceGN }: { b: Bloque; onMedia: (m: Media) => void; indiceGN: IndiceGN }) {
   const conTot = (b.disenos || []).map((d) => ({ d, t: totalDiseno(b, d.id) })).sort((a, c) => c.t - a.t)
   return (
     <div style={{ border: `1px solid ${paleta.line}`, borderRadius: 10, padding: '10px 12px', marginTop: 10, background: paleta.bg }}>
@@ -695,6 +735,7 @@ function BloqueResumen({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void 
                 <div style={{ width: 200, height: 112, borderRadius: 12, border: `1px dashed ${paleta.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: paleta.mut2, fontSize: 11, background: paleta.bg }}>sin foto</div>
               )}
               <div style={{ fontSize: 12, fontWeight: 600, color: paleta.ink2, marginTop: 5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre || '—'}</div>
+              <SelloGN p={productoEnGN(d.nombre, indiceGN)} />
               <div style={{ fontSize: 16, fontWeight: 800, color: paleta.ink }}>
                 {t.toLocaleString('es-AR')} <span style={{ fontSize: 11, fontWeight: 500, color: paleta.mut2 }}>u.</span>
               </div>
@@ -723,12 +764,14 @@ function IngresoEditar({
   onMedia,
   pasteTarget,
   onPasteSel,
+  indiceGN,
 }: {
   g: Ingreso
   guardar: (m: (l: Ingreso[]) => Ingreso[]) => void
   onMedia: (m: Media) => void
   pasteTarget: { gid: string; bid: string; did: string } | null
   onPasteSel: (t: { gid: string; bid: string; did: string }) => void
+  indiceGN: IndiceGN
 }) {
   const { confirmar, pedirTexto } = useConfirmar()
   const e = estadoDe(g.estado)
@@ -772,7 +815,7 @@ function IngresoEditar({
         <div style={{ fontSize: 11, color: paleta.mut2, letterSpacing: 0, marginBottom: 4 }}>Bloques (por material) · modelos × diseños</div>
         {bloques.length ? null : <div style={{ fontSize: 12, color: paleta.mut2, margin: '8px 0' }}>Esta importación todavía no tiene bloques. Agregá uno (ej. IMD, Formas…). 👇</div>}
         {bloques.map((b) => (
-          <BloqueEditar key={b.id} g={g} b={b} guardar={guardar} onPasteSel={onPasteSel} pasteTarget={pasteTarget} />
+          <BloqueEditar key={b.id} g={g} b={b} guardar={guardar} onPasteSel={onPasteSel} pasteTarget={pasteTarget} indiceGN={indiceGN} />
         ))}
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
           <button onClick={addBloque} style={{ background: paleta.brandBg, border: `1px solid ${paleta.brandBorder}`, color: paleta.brand, cursor: 'pointer', fontSize: 12, padding: '5px 10px', borderRadius: 7 }}>+ Agregar bloque</button>
@@ -785,7 +828,7 @@ function IngresoEditar({
   )
 }
 
-function IngresoLector({ g, onMedia, guardar }: { g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null }) {
+function IngresoLector({ g, onMedia, guardar, indiceGN }: { g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null; indiceGN: IndiceGN }) {
   const e = estadoDe(g.estado)
   const meta = metaDe(g)
   const bloques = g.bloques || []
@@ -798,7 +841,7 @@ function IngresoLector({ g, onMedia, guardar }: { g: Ingreso; onMedia: (m: Media
       </div>
       {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {bloques.map((b) => (
-        <BloqueLector key={b.id} b={b} g={g} onMedia={onMedia} guardar={guardar} />
+        <BloqueLector key={b.id} b={b} g={g} onMedia={onMedia} guardar={guardar} indiceGN={indiceGN} />
       ))}
       {bloques.length > 1 ? <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div> : null}
       <Galeria g={g} editable={false} guardar={noop} onMedia={onMedia} />
@@ -807,7 +850,7 @@ function IngresoLector({ g, onMedia, guardar }: { g: Ingreso; onMedia: (m: Media
   )
 }
 
-function IngresoResumen({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => void }) {
+function IngresoResumen({ g, onMedia, indiceGN }: { g: Ingreso; onMedia: (m: Media) => void; indiceGN: IndiceGN }) {
   const e = estadoDe(g.estado)
   const meta = metaDe(g)
   return (
@@ -818,7 +861,7 @@ function IngresoResumen({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => voi
       </div>
       {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {(g.bloques || []).map((b) => (
-        <BloqueResumen key={b.id} b={b} onMedia={onMedia} />
+        <BloqueResumen key={b.id} b={b} onMedia={onMedia} indiceGN={indiceGN} />
       ))}
       <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div>
     </div>
