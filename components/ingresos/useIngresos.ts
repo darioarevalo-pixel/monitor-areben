@@ -24,7 +24,7 @@ export type EstadoIngresos = {
   recargar: () => void
   /**
    * Aplica una mutación pura (lista → lista) optimista y agenda el guardado (debounce
-   * 600 ms, como el legacy). Solo admins; sin `cargado`, no hace nada.
+   * 600 ms, como el legacy). Sin permiso de escritura o sin `cargado`, no hace nada.
    */
   guardar: (mutar: (l: Ingreso[]) => Ingreso[]) => void
 }
@@ -36,11 +36,16 @@ export type EstadoIngresos = {
  *
  * Sobre el legacy agrega la disciplina del seam: el flag `cargado` viaja hacia
  * afuera y bloquea todo guardado sin lectura previa (el modo de falla que casi borra
- * el KV). El guardado es del ARRAY ENTERO (LWW, como el legacy) — la edición es
- * admin-only y de baja frecuencia; el merge por-ingreso queda como mejora futura.
+ * el KV). El guardado es del ARRAY ENTERO (LWW, como el legacy) — la edición es de
+ * baja frecuencia; el merge por-ingreso queda como mejora futura.
  * Un 403 (contraseña equivocada) olvida la pass cacheada, como `_olvidarAdminPass`.
+ *
+ * `puedeEscribir` es un booleano y no `esAdmin` a propósito: quién puede escribir lo decide el
+ * llamador con los permisos granulares (`ingresos.editar` / `ingresos.nombre`), y el hook solo
+ * obedece. Cuando el candado vivía acá adentro, "poner el nombre de un diseño" pedía el mismo
+ * poder que borrar una importación entera, y no había forma de aflojarlo sin abrirlo todo.
  */
-export function useIngresos(marca: Marca, esAdmin: boolean, obtenerCred: ObtenerCred): EstadoIngresos {
+export function useIngresos(marca: Marca, puedeEscribir: boolean, obtenerCred: ObtenerCred): EstadoIngresos {
   const [data, setData] = useState<Ingreso[] | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -99,7 +104,7 @@ export function useIngresos(marca: Marca, esAdmin: boolean, obtenerCred: Obtener
 
   const guardar = useCallback(
     (mutar: (l: Ingreso[]) => Ingreso[]) => {
-      if (!esAdmin) return
+      if (!puedeEscribir) return
       setData((prev) => {
         const next = mutar(prev ?? [])
         pendienteRef.current = next
@@ -125,7 +130,7 @@ export function useIngresos(marca: Marca, esAdmin: boolean, obtenerCred: Obtener
         }
       }, 600)
     },
-    [esAdmin],
+    [puedeEscribir],
   )
 
   return { data, cargando, error, cargado, estadoGuardado, recargar, guardar }

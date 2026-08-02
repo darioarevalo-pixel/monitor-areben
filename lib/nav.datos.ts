@@ -360,6 +360,18 @@ export const PERM_CAT: PermCat[] = [
     "info": "Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.",
     "brands": [
       "bdi"
+    ],
+    "subs": [
+      {
+        "key": "nombre",
+        "label": "Puede poner el nombre comercial",
+        "info": "Puede escribir el nombre comercial de cada diseño desde la vista Lector — el nombre con el que el producto se va a cargar en Gestión Nube cuando llegue. No puede tocar cantidades, modelos, estados ni fotos. Es el permiso de quien decide cómo se va a llamar el producto sin manejar la importación."
+      },
+      {
+        "key": "editar",
+        "label": "Puede editar la importación completa",
+        "info": "Abre la vista Editar: cantidades, modelos, diseños, bloques, estado, fotos y alta/baja de importaciones. Los admins pueden siempre. Sin esto ni el permiso de nombre, la sección es de solo lectura."
+      }
     ]
   },
   {

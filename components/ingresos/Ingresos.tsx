@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esAdmin as esAdminDe } from '@/lib/permisos'
+import { esAdmin as esAdminDe, puedeSub } from '@/lib/permisos'
 import { credencialConPrompt } from '@/lib/sesion'
 import { imgAThumbYSubir } from '@/lib/imagenes'
 import { MODELOS_AUTOCOMPLETE } from '@/lib/ingresos/modelos'
@@ -44,6 +44,7 @@ import {
 } from '@/lib/ingresos/core'
 import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos/tipos'
 import { nuevoId, useIngresos } from './useIngresos'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Card, color as paleta, useConfirmar } from '@/components/ui'
 
 const VISTA_KEY = 'monitor_ing_vista'
@@ -63,10 +64,28 @@ const obtenerCred = () => credencialConPrompt('del Monitor')
 
 type Media = { tipo: 'img' | 'video'; url: string; nombre?: string }
 
+/** La mutación pura que persiste el hook. En `null` cuando la persona solo puede mirar. */
+type Guardar = (mutar: (l: Ingreso[]) => Ingreso[]) => void
+
 export function Ingresos() {
   const { marca, perfil } = useSesion()
+  /**
+   * Dos niveles de escritura, no uno.
+   *
+   * Hasta acá la sección era admin duro y hardcodeado en el hook, así que "cargar el nombre
+   * comercial de un diseño" —una anotación— pedía el mismo poder que borrar una importación
+   * entera. Por eso el pedido del equipo era "incorporar la posibilidad de cargar los nombres":
+   * el campo existía desde siempre, lo que no existía era alguien no-admin que pudiera escribirlo.
+   *
+   * `nombre` NO abre la vista Editar: escribe el nombre ahí mismo, en el Lector. Así el permiso
+   * chico no es "el Editar con todo deshabilitado" —que hay que acordarse de deshabilitar campo
+   * por campo, y el día que se agregue uno nuevo queda abierto— sino una superficie que solo
+   * tiene ese input.
+   */
   const admin = esAdminDe(perfil)
-  const st = useIngresos(marca, admin, obtenerCred)
+  const puedeTodo = admin || puedeSub(perfil, marca, 'ingresos', 'editar')
+  const puedeNombre = puedeTodo || puedeSub(perfil, marca, 'ingresos', 'nombre')
+  const st = useIngresos(marca, puedeNombre, obtenerCred)
   const { data, guardar } = st
 
   const [vista, setVistaState] = useState<VistaIngresos>('lector')
@@ -82,22 +101,22 @@ export function Ingresos() {
         v = localStorage.getItem(VISTA_KEY)
       } catch {}
       const val = (['lector', 'resumen', 'editar'] as const).includes(v as VistaIngresos) ? (v as VistaIngresos) : 'lector'
-      setVistaState(val === 'editar' && !admin ? 'lector' : val)
+      setVistaState(val === 'editar' && !puedeTodo ? 'lector' : val)
     })()
-  }, [admin])
+  }, [puedeTodo])
 
   const setVista = (v: VistaIngresos) => {
-    if (v === 'editar' && !admin) return
+    if (v === 'editar' && !puedeTodo) return
     setVistaState(v)
     try {
       localStorage.setItem(VISTA_KEY, v)
     } catch {}
   }
-  const vistaEfectiva: VistaIngresos = vista === 'editar' && !admin ? 'lector' : vista
+  const vistaEfectiva: VistaIngresos = vista === 'editar' && !puedeTodo ? 'lector' : vista
 
   // Pegar imagen (Ctrl/Cmd+V) en la celda de diseño seleccionada. Port de ingPaste.
   useEffect(() => {
-    if (vistaEfectiva !== 'editar' || !pasteTarget || !admin) return
+    if (vistaEfectiva !== 'editar' || !pasteTarget || !puedeTodo) return
     const onPaste = (e: ClipboardEvent) => {
       const dt = e.clipboardData
       if (!dt) return
@@ -120,14 +139,14 @@ export function Ingresos() {
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [vistaEfectiva, pasteTarget, admin, guardar])
+  }, [vistaEfectiva, pasteTarget, puedeTodo, guardar])
 
-  const agregarIng = () => admin && guardar((l) => agregarIngreso(l, nuevoIngreso(nuevoId)))
+  const agregarIng = () => puedeTodo && guardar((l) => agregarIngreso(l, nuevoIngreso(nuevoId)))
 
   if (!data) {
     return (
       <Card>
-        <Header estado={st.estadoGuardado} admin={admin} vistaEditar={false} onRefrescar={st.recargar} onAgregar={agregarIng} />
+        <Header estado={st.estadoGuardado} admin={puedeTodo} vistaEditar={false} onRefrescar={st.recargar} onAgregar={agregarIng} />
         <div style={{ fontSize: 13, color: st.error ? paleta.danger : paleta.mut2, marginTop: 12 }}>
           {st.error ? `No se pudieron leer los ingresos: ${st.error}` : 'Cargando ingresos…'}
         </div>
@@ -151,15 +170,15 @@ export function Ingresos() {
     <Card>
       <Header
         estado={st.estadoGuardado}
-        admin={admin}
+        admin={puedeTodo}
         vistaEditar={vistaEfectiva === 'editar'}
         onRefrescar={st.recargar}
         onAgregar={agregarIng}
       />
 
-      {(data.length > 0 || admin) && (
+      {(data.length > 0 || puedeTodo) && (
         <div style={{ margin: '12px 0 0' }}>
-          <VistaSel vista={vistaEfectiva} admin={admin} onVista={setVista} />
+          <VistaSel vista={vistaEfectiva} admin={puedeTodo} onVista={setVista} />
         </div>
       )}
 
@@ -168,6 +187,31 @@ export function Ingresos() {
           ? <>📦 <b>{res.enCamino}</b> en camino · <b>{res.unidades.toLocaleString('es-AR')}</b> unidades</>
           : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦'}
       </div>
+
+      {/* La bajada del nombre comercial. Va acá, siempre visible y no adentro del ⓘ, porque las
+          siete columnas de la última importación están vacías: nadie sabía para qué era el campo.
+          Quien puede escribirlo necesita saber qué está proponiendo; quien no, entender qué lee. */}
+      {data.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, color: paleta.mut, margin: '0 0 12px' }}>
+          <span>
+            El <b>nombre comercial</b> es el que va a tener el producto cuando se cargue en Gestión Nube.
+            {puedeNombre ? ' Escribirlo acá es proponerlo.' : ''}
+          </span>
+          <InfoPopover titulo="El nombre comercial">
+            Es el nombre con el que el producto va a existir: el que se carga en Gestión Nube y el que
+            después ve el cliente en la tienda.
+            <br />
+            <br />
+            Mientras el producto <b>todavía no existe en Gestión Nube</b>, lo que se escribe acá es una{' '}
+            <b>propuesta</b>. Sirve para que quien lo dé de alta cuando llegue la mercadería no tenga que
+            inventarlo ni salir a buscarlo en un chat.
+            <br />
+            <br />
+            Cuando el producto <b>ya existe en Gestión Nube</b>, manda el nombre de allá. Cambiarlo en esta
+            pantalla <b>no</b> lo cambia en Gestión Nube ni en la tienda.
+          </InfoPopover>
+        </div>
+      )}
 
       <div>
         {grupos.map((grp, i) => (
@@ -181,7 +225,7 @@ export function Ingresos() {
               ) : vistaEfectiva === 'resumen' ? (
                 <IngresoResumen key={g.id} g={g} onMedia={setMedia} />
               ) : (
-                <IngresoLector key={g.id} g={g} onMedia={setMedia} />
+                <IngresoLector key={g.id} g={g} onMedia={setMedia} guardar={puedeNombre ? guardar : null} />
               ),
             )}
           </div>
@@ -550,8 +594,14 @@ function BloqueEditar({
 
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: paleta.brandSolid, cursor: 'pointer', fontSize: 12, padding: 0 }
 
-// ── Bloque de solo lectura ──────────────────────────────────────────────────────
-function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }) {
+// ── Bloque de solo lectura (salvo el nombre comercial) ──────────────────────────
+/**
+ * `guardar` llega en `null` para quien solo mira. Cuando llega una función, el único campo que
+ * se vuelve editable es el nombre comercial del diseño: es la superficie del permiso
+ * `ingresos.nombre`, y por eso es un componente de lectura con UN input y no el editor con todo
+ * lo demás deshabilitado — así el día que el editor sume un campo, este permiso no lo hereda.
+ */
+function BloqueLector({ b, g, onMedia, guardar }: { b: Bloque; g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null }) {
   const disenos = b.disenos || []
   const modelos = b.modelos || []
   const grand = bloqueU(b)
@@ -575,7 +625,17 @@ function BloqueLector({ b, onMedia }: { b: Bloque; onMedia: (m: Media) => void }
                     ) : (
                       <div style={{ width: 120, height: 68, borderRadius: 10, border: `1px dashed ${paleta.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: paleta.mut2, margin: '0 auto 5px', background: paleta.bg }}>—</div>
                     )}
-                    {d.nombre || '—'}
+                    {guardar ? (
+                      <input
+                        value={d.nombre}
+                        onChange={(e) => guardar((l) => setDisenoNombre(l, g.id, b.id, d.id, e.target.value))}
+                        placeholder="Nombre comercial"
+                        title="El nombre con el que se va a cargar el producto en Gestión Nube"
+                        style={{ width: 120, fontSize: 12, fontWeight: 600, textAlign: 'center', border: `1px solid ${paleta.line2}`, borderRadius: 6, padding: '3px 4px', background: '#fff', color: paleta.ink2 }}
+                      />
+                    ) : (
+                      d.nombre || '—'
+                    )}
                   </th>
                 ))}
                 <th style={{ fontSize: 11, color: paleta.mut2, padding: 4, verticalAlign: 'bottom' }}>Total</th>
@@ -725,7 +785,7 @@ function IngresoEditar({
   )
 }
 
-function IngresoLector({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => void }) {
+function IngresoLector({ g, onMedia, guardar }: { g: Ingreso; onMedia: (m: Media) => void; guardar: Guardar | null }) {
   const e = estadoDe(g.estado)
   const meta = metaDe(g)
   const bloques = g.bloques || []
@@ -738,7 +798,7 @@ function IngresoLector({ g, onMedia }: { g: Ingreso; onMedia: (m: Media) => void
       </div>
       {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {bloques.map((b) => (
-        <BloqueLector key={b.id} b={b} onMedia={onMedia} />
+        <BloqueLector key={b.id} b={b} g={g} onMedia={onMedia} guardar={guardar} />
       ))}
       {bloques.length > 1 ? <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div> : null}
       <Galeria g={g} editable={false} guardar={noop} onMedia={onMedia} />
