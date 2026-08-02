@@ -4,22 +4,51 @@ import { useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, funcionQueDa, FUNCIONES, type Funcion } from '@/lib/permisos'
 import { credencialConPrompt, guardarAdminPass, guardarConfigAdmin, traerConfigAdmin } from '@/lib/sesion'
-import { NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
+import { keysDeCat, NAV_CATS, PERM_CAT, type Marca } from '@/lib/nav'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge, Button, Card, Field, Input, Notice, Select, color, font, weight, useConfirmar } from '@/components/ui'
 
+/** En qué grupos del menú aparece cada sección (una puede colgar de varios). */
+const GRUPOS_DE = new Map<string, string[]>()
+for (const c of NAV_CATS) {
+  for (const k of keysDeCat(c)) GRUPOS_DE.set(k, [...(GRUPOS_DE.get(k) ?? []), c.id])
+}
+
+const LABEL_AREA = new Map(NAV_CATS.map((c) => [c.id, c.label]))
+
 /**
- * Las secciones agrupadas por ÁREA, en el orden del menú. La lista plana de 35 filas
+ * Las secciones agrupadas por sector, en el orden del menú. La lista plana de 35 filas
  * sin jerarquía era el reclamo concreto: no se sabía a qué sector correspondía cada
  * permiso, así que dar de alta a alguien era ir tildando de memoria.
+ *
+ * El grupo sale del **menú**, no de `PermCat.area`. El área es una sola y el menú puede
+ * mostrar la misma sección en varios sectores: `solicitudes` cuelga de cuatro (Local,
+ * Depósito, Marketing y Administración) pero su área es `local`, así que Config la mostraba
+ * únicamente ahí y darle Solicitudes a la cuenta de Depósito era imposible desde su sector —
+ * había que saber que estaba escondida en Local. Es el reclamo de Bruno.
+ *
+ * Las que no tienen entrada de menú caen en su área: `resumen`, y `sesion-fotos` /
+ * `solicitudes-internas`, que ya no son secciones sino el detalle de Solicitudes y siguen en
+ * la lista por sus sub-permisos (editar, aprobar consumos).
  */
 const AREAS = NAV_CATS.map((c) => ({
   id: c.id,
   label: c.label,
-  secciones: PERM_CAT.filter((p) => p.area === c.id),
+  secciones: PERM_CAT.filter((p) => (GRUPOS_DE.get(p.key) ?? [p.area]).includes(c.id)).map((p) => {
+    const otros = (GRUPOS_DE.get(p.key) ?? []).filter((g) => g !== c.id)
+    return {
+      ...p,
+      // El menú le da a la misma sección un nombre por sector ("Solicitudes a preparar" en
+      // Depósito). Config usa el mismo, porque es el que la persona va a ver.
+      label: c.labels?.[p.key] ?? p.label,
+      info: otros.length
+        ? `${p.info ?? ''} · Es la MISMA sección que ${otros.map((g) => LABEL_AREA.get(g) ?? g).join(', ')}: el permiso es uno solo, tildarlo acá lo tilda en todos (cada sector ve adentro lo suyo).`
+        : p.info,
+    }
+  }),
 })).filter((a) => a.secciones.length > 0)
 
 type Estado = { msg: string; color: string } | null

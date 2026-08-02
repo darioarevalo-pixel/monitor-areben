@@ -88,6 +88,50 @@ describe('cliente y servidor deciden lo mismo en Canjes', () => {
   })
 })
 
+/**
+ * La puerta pintada: Depósito veía la solicitud de fotos en la lista unificada y al abrirla el
+ * guard lo mandaba a Inicio, porque `sesion-fotos` es del área de Marketing y su función solo le
+ * da `solicitudes`. Como las dos pantallas ya no están en el menú (se entra por "Ver"), el permiso
+ * de la madre alcanza.
+ */
+describe('el detalle de Solicitudes se abre con el permiso de Solicitudes', () => {
+  const DETALLES = ['sesion-fotos', 'solicitudes-internas']
+
+  it.each(DETALLES)('depósito (función) entra a %s', (k) => {
+    expect(puedeVer(perfil({ funcion: ['deposito'] }), 'bdi', k)).toBe(true)
+  })
+
+  it.each(DETALLES)('con solicitudes tildado a mano también entra a %s', (k) => {
+    expect(puedeVer(perfil({ acceso: { bdi: { solicitudes: true } } }), 'bdi', k)).toBe(true)
+  })
+
+  it('sin Solicitudes no entra a ninguna de las dos', () => {
+    for (const k of DETALLES) expect(puedeVer(perfil({ funcion: ['direccion'] }), 'bdi', k)).toBe(false)
+  })
+
+  // La excepción negativa se sigue evaluando primero: sirve para dejar entrar a la lista pero no
+  // a una de las dos pantallas.
+  it('la excepción sobre el detalle gana aunque vea Solicitudes', () => {
+    const p = perfil({ funcion: ['deposito'], acceso: { bdi: { '-sesion-fotos': true } } })
+    expect(puedeVer(p, 'bdi', 'solicitudes')).toBe(true)
+    expect(puedeVer(p, 'bdi', 'sesion-fotos')).toBe(false)
+    expect(puedeVer(p, 'bdi', 'solicitudes-internas')).toBe(true)
+  })
+
+  // Editar/aprobar siguen siendo tilde a mano: la madre abre la pantalla, no las acciones.
+  it('no arrastra los sub-permisos', () => {
+    const p = perfil({ funcion: ['deposito'] })
+    expect(puedeVer(p, 'bdi', 'sesion-fotos.editar')).toBe(false)
+    expect(puedeVer(p, 'bdi', 'solicitudes-internas.aprobar')).toBe(false)
+  })
+
+  // Cada marca por su lado: ver Solicitudes en BDI no abre el detalle de Zattia.
+  it('no cruza de marca', () => {
+    const p = perfil({ acceso: { bdi: { solicitudes: true } } })
+    expect(puedeVer(p, 'zattia', 'sesion-fotos')).toBe(false)
+  })
+})
+
 describe('marcasConAcceso', () => {
   it('la cuenta fija acota aunque tenga permiso en la otra', () => {
     const p = perfil({ cuenta: 'bdi', acceso: { bdi: { canjes: true }, zattia: { canjes: true } } })
