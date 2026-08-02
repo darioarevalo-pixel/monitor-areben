@@ -513,7 +513,7 @@ export const PERM_CAT: PermCat[] = [
   },
   {
     "key": "ubicaciones",
-    "area": "local",
+    "area": "deposito",
     "label": "Ubicaciones",
     "info": "Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
     "brands": [
@@ -643,8 +643,7 @@ export const NAV_CATS: NavCat[] = [
       "postventa-local",
       "cambios-local",
       "reclamos-local",
-      "etiquetas",
-      "ubicaciones"
+      "etiquetas"
     ],
     "grupos": [
       {
@@ -667,7 +666,8 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "solicitudes",
       "conteo-deposito",
-      "postventa-deposito"
+      "postventa-deposito",
+      "ubicaciones"
     ],
     "labels": {
       "solicitudes": "Solicitudes a preparar"
