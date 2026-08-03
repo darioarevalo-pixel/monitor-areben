@@ -212,15 +212,12 @@ export function BloqueSeleccion({
                 <Td strong>
                   {i.nombre || '—'}
                   {i.variante ? <span style={{ color: color.mut }}> ({i.variante})</span> : null}
-                  {/* Quién lo eligió cambia qué hacer con él: los suyos hay que confirmarlos
-                      contra el stock real, porque la vitrina no lo sabe. */}
-                  {i.origen === 'persona' && (
-                    <span style={{ marginLeft: space[2] }}>
-                      <Badge tone={i.estado === 'propuesto' ? 'warning' : 'neutral'} subtle>
-                        {i.estado === 'propuesto' ? 'Lo eligió ella — falta confirmar' : 'Lo eligió ella'}
-                      </Badge>
-                    </span>
-                  )}
+                  {/* ⛔ Acá había una chapita "Lo eligió ella — falta confirmar". Se sacó: el botón
+                      Confirmar está en la misma fila y dice lo mismo sin ocupar media columna, y
+                      el estado del item **no traba nada** —propuesto y confirmado cuentan igual
+                      para el tope y para el balance—, así que anunciarlo en amarillo le daba peso
+                      de alerta a algo que no lo es. Quién lo eligió tampoco cambia qué hacer con
+                      él: el stock se descubre al cargar la venta en la tienda, no acá. */}
                 </Td>
                 <Td mono>{i.sku || '—'}</Td>
                 <Td align="right">{i.cantidad}</Td>
