@@ -78,7 +78,7 @@ secciones joinean contra el producto. Los cachés de IndexedDB anteriores al cam
 
 ## Mapa de secciones
 
-41 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+42 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -97,7 +97,7 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 **Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa`
 
 **Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos` · `meta-ads` ·
-`canjes` · `gen-talles`
+`canjes` · `gen-talles` · `calendario`
 
 **Administración** — `caducados` · `postventa` · `reposicion`
 
