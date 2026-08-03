@@ -35,6 +35,8 @@ import {
 
 const pendKey = (marca: string) => 'monitor_ubi_pend_' + marca
 const espera = (ms: number) => new Promise((res) => setTimeout(res, ms))
+/** Intentos por tanda de guardado (1 vuelta + 2 reintentos de lo que falló). */
+const RONDAS = 3
 
 type Filtro = 'todos' | 'sin' | 'reparar'
 
@@ -81,6 +83,7 @@ export function Ubicaciones() {
   const [reparando, setReparando] = useState(false)
   const [sincronizando, setSincronizando] = useState(false)
   const [progreso, setProgreso] = useState<{ hechos: number; total: number } | null>(null)
+  const [reintento, setReintento] = useState(0)
   const [syncLabel, setSyncLabel] = useState('')
   const [tick, setTick] = useState(0)
 
@@ -184,24 +187,39 @@ export function Ubicaciones() {
     if (!ok) return
 
     setGuardando(true)
-    let hechos = 0
-    let err = 0
-    let primerError = ''
     const exitosos: { pid: string; valor: string }[] = []
-    for (let i = 0; i < validos.length; i++) {
-      const p = validos[i]
-      setProgreso({ hechos: i, total: validos.length })
-      const valor = (cambios[String(p.product_id)] || '').trim()
-      const r = await guardarObservacion(p.product_id, cambios[String(p.product_id)])
-      if (r.ok) {
-        hechos++
-        exitosos.push({ pid: String(p.product_id), valor: valor.slice(0, 20) })
-      } else {
-        err++
-        if (!primerError) primerError = r.error || 'desconocido'
+    let ultimoError = ''
+    // Rondas: los que fallan se reintentan solos. Un producto con muchas variantes puede
+    // cortarse a mitad (GN acepta 60 llamadas por minuto y hay una por variante), pero el
+    // endpoint saltea las que ya escribió, así que cada ronda avanza sobre lo que quedó.
+    // Sin esto había que apretar Guardar de nuevo a mano para que terminaran.
+    let porHacer = validos.slice()
+    for (let ronda = 1; ronda <= RONDAS && porHacer.length; ronda++) {
+      setReintento(ronda - 1)
+      const fallaron: UbiProducto[] = []
+      // Sin reset por ronda a propósito: un error que NO se reintenta (sin variantes) pasa
+      // por la ronda 1 y no vuelve a aparecer. Si se limpiara acá, el cartel final podría
+      // contar ese fallo y quedarse sin motivo que mostrar.
+      for (let i = 0; i < porHacer.length; i++) {
+        const p = porHacer[i]
+        setProgreso({ hechos: i, total: porHacer.length })
+        const valor = (cambios[String(p.product_id)] || '').trim()
+        const r = await guardarObservacion(p.product_id, cambios[String(p.product_id)])
+        if (r.ok) {
+          exitosos.push({ pid: String(p.product_id), valor: valor.slice(0, 20) })
+        } else {
+          ultimoError = r.error || 'desconocido'
+          if (r.reintentable) fallaron.push(p) // insistir no arregla "no tiene variantes acá"
+        }
+        await espera(250) // pausa entre productos (no saturar GN)
       }
-      await espera(250) // pausa entre productos (no saturar GN)
+      porHacer = fallaron
+      if (porHacer.length && ronda < RONDAS) await espera(1000) // aire antes de la ronda siguiente
     }
+    setReintento(0)
+    const hechos = exitosos.length
+    const err = validos.length - hechos
+    const primerError = ultimoError
     // Aplicar los éxitos: actual = valor guardado, y sacar de cambios (+ persistir).
     const okPids = new Set(exitosos.map((e) => e.pid))
     const valorPorPid = new Map(exitosos.map((e) => [e.pid, e.valor]))
@@ -217,7 +235,7 @@ export function Ubicaciones() {
 
     if (err) {
       toast.error(
-        `Se guardaron ${hechos} y ${err} ${err === 1 ? 'dio' : 'dieron'} error (${primerError}). Los que fallaron siguen cargados acá: volvé a tocar Guardar para reintentar solo esos.`,
+        `Se guardaron ${hechos} y ${err} ${err === 1 ? 'quedó' : 'quedaron'} sin guardar después de ${RONDAS} intentos (${primerError}). ${err === 1 ? 'Sigue cargado' : 'Siguen cargados'} acá: podés tocar Guardar de nuevo, que retoma donde quedó.`,
       )
     } else {
       toast.ok(`${hechos} ${hechos === 1 ? 'ubicación guardada' : 'ubicaciones guardadas'}`)
@@ -310,7 +328,7 @@ export function Ubicaciones() {
   return (
     <>
       <HeaderAcciones>
-        {progreso && <ProgressInline hechos={progreso.hechos} total={progreso.total} label={reparando ? 'reparando' : 'guardando'} />}
+        {progreso && <ProgressInline hechos={progreso.hechos} total={progreso.total} label={reparando ? 'reparando' : reintento ? `reintento ${reintento}` : 'guardando'} />}
         {syncLabel && <span style={{ fontSize: font.sm, color: color.mut }}>{syncLabel}</span>}
         <Button variant="ghost" onClick={recargar} disabled={ocupado} title="Volver a leer la lista">↻</Button>
           <Button variant="outline" onClick={traerGN} loading={sincronizando} disabled={ocupado} title="Trae productos y stock nuevos de GN, y recarga la lista">Traer de GN
@@ -371,12 +389,12 @@ export function Ubicaciones() {
                   {items.length} {items.length === 1 ? 'producto' : 'productos'}
                 </span>
               </div>
-              <Tabla items={items} cambios={cambios} setUbi={setUbi} />
+              <Tabla items={items} cambios={cambios} setUbi={setUbi} bloqueado={ocupado} />
             </section>
           ))}
         </div>
       ) : (
-        <Tabla items={lista} cambios={cambios} setUbi={setUbi} />
+        <Tabla items={lista} cambios={cambios} setUbi={setUbi} bloqueado={ocupado} />
       )}
 
       {/* Barra de pendientes: el trabajo sin guardar tiene que verse siempre, incluso con
@@ -404,7 +422,13 @@ export function Ubicaciones() {
   )
 }
 
-function Tabla({ items, cambios, setUbi }: { items: UbiProducto[]; cambios: Record<string, string>; setUbi: (pid: number | string, v: string) => void }) {
+/**
+ * `bloqueado` (guardando/reparando/sincronizando): los casilleros se traban mientras
+ * corre la tanda. `guardar()` trabaja sobre la foto de `cambios` que había al confirmar y
+ * al terminar limpia esos product_id, así que lo tipeado en el medio se borraba sin aviso
+ * y quedaba el valor viejo. Trabar la edición es la forma simple de que eso no pase.
+ */
+function Tabla({ items, cambios, setUbi, bloqueado }: { items: UbiProducto[]; cambios: Record<string, string>; setUbi: (pid: number | string, v: string) => void; bloqueado?: boolean }) {
   return (
     <TableWrap>
       <THead>
@@ -443,8 +467,10 @@ function Tabla({ items, cambios, setUbi }: { items: UbiProducto[]; cambios: Reco
                     maxLength={20}
                     value={val}
                     onChange={(e) => setUbi(p.product_id, e.target.value)}
+                    disabled={bloqueado}
                     placeholder="11-1"
                     aria-label={`Ubicación de ${p.name}`}
+                    title={bloqueado ? 'Esperá a que termine de guardar' : undefined}
                     style={{ width: 110, ...(editado && !invalido ? { borderColor: color.success, background: color.successBg } : null) }}
                   />
                   {/* El estado se dice, no se adivina por el color del borde. */}

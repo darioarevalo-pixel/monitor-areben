@@ -61,7 +61,12 @@ export default async function handler(req, res) {
     }
     // 2) Filtrar al depósito pedido (por nombre, tolerante)
     const target = filas.filter(f => String(f.store_name || '').toLowerCase().includes(store));
-    if (!target.length) return res.status(200).json({ ok: true, productId, updated: 0, total: 0, nota: `Sin variantes en "${body.store || 'Deposito Mayorista'}"` });
+    const nombreDep = body.store || 'Deposito Minorista';
+    // Sin renglones en ese depósito no hay nada que escribir, y eso NO es un éxito: es el
+    // producto que ya no está en GN, o el espejo desactualizado. Contestarlo `ok: true`
+    // hacía que la pantalla dijera "guardado", limpiara el pendiente y pintara el valor
+    // sin que se hubiera escrito nada — el clásico "lo cargué y se revirtió solo".
+    if (!target.length) return res.status(200).json({ ok: false, productId, updated: 0, total: 0, error: `sin variantes en "${nombreDep}" — probá "Traer de GN"` });
     const total = target.length;
     const want = (obs || '');                     // valor esperado tras escribir (null → '')
     const sameObs = v => (v == null ? '' : String(v)).trim() === want;
@@ -69,7 +74,16 @@ export default async function handler(req, res) {
     // 3) Escribir y VERIFICAR: en cada pase, PATCH solo las variantes que aún no tienen el valor,
     //    luego re-leer y reintentar las que faltan. GN hace rate-limit con muchas variantes seguidas,
     //    así que cada pase reintenta solo las pendientes hasta que entren todas (máx 4 pases).
-    let pend = target.slice();                    // pendientes de este pase (filas con inventory_id)
+    //
+    // El pase 1 arranca SALTEANDO las que ya tienen el valor. La carga es por producto, pero
+    // GN guarda la observación por renglón de inventario y no existe endpoint por product_id
+    // (documentación de gestion.moda): las llamadas las hace este handler, una por variante,
+    // con pausa para no comerse el límite de 60/min. Escribir las 108 variantes de VIBE CASE
+    // cuando 107 ya decían lo mismo no entraba en el tope de duración de la función, y cada
+    // reintento volvía a empezar de cero. Ahora re-guardar lo que ya está bien cuesta 0
+    // escrituras, y si un producto grande se corta por tiempo, el reintento sigue donde quedó.
+    let pend = target.filter(f => !sameObs(f.observation)); // pendientes de este pase (filas con inventory_id)
+    const yaEstaban = total - pend.length;
     let lastErr = '';
     for (let pase = 1; pase <= 4 && pend.length; pase++) {
       const errInv = [];
@@ -99,7 +113,8 @@ export default async function handler(req, res) {
       }
     }
     const pendientes = pend.length;
-    return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, pendientes, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
+    // `updated` = variantes que quedaron con el valor puesto (escritas + las que ya lo tenían).
+    return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, yaEstaban, pendientes, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
