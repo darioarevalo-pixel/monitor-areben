@@ -44,7 +44,10 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
 
   const falta: string[] = []
   if (!tieneDireccion(persona)) falta.push('la dirección')
-  if (!tieneDatosDeMarca(persona, canje.store)) {
+  // ⚠️ Con vitrina NO se le pide el modelo ni los talles: **ya los dijo eligiendo la variante**, y
+  // el link dejó de preguntárselos justamente por eso. Reclamarlos acá mandaba a pedirle por
+  // WhatsApp un dato que ella no tiene forma de cargar y que además ya está en lo que eligió.
+  if (!canje.vitrina_id && !tieneDatosDeMarca(persona, canje.store)) {
     falta.push(queDatoPide(canje.store) === 'talles' ? 'los talles' : 'el modelo de celular')
   }
   if (!persona.telefono) falta.push('el teléfono')
@@ -70,21 +73,27 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
 }
 
 /**
- * Los datos para tipear la orden, **campo por campo**.
+ * Los datos para tipear el pedido, **campo por campo**.
  *
- * El admin de Tienda Nube pide el nombre por un lado y el apellido por otro, la calle en una
- * casilla y la altura en otra. Con "copiar la dirección entera" hay que volver a partirla a mano en
- * el formulario, que es exactamente donde se cuela un CP mal tipeado y el pedido vuelve.
+ * **El pedido se carga como una venta común, desde la tienda online**: se buscan los productos, se
+ * agregan al carrito, se aplica el cupón de 100% y se completa el checkout. El checkout pide el
+ * nombre por un lado y el apellido por otro, la calle en una casilla y la altura en otra; con
+ * "copiar la dirección entera" hay que volver a partirla a mano ahí, que es exactamente donde se
+ * cuela el CP mal tipeado que hace volver el paquete.
  *
  * Los vacíos se muestran igual, en gris y sin botón: la lista contesta de un vistazo la pregunta
  * que importa antes de empezar, que es qué le falta a esta persona para poder despacharle.
+ *
+ * **Se pliega solo cuando la compra ya está hecha.** Es un bloque grande cuyo trabajo termina en
+ * ese momento; dejarlo abierto empuja hacia abajo los dos pasos que siguen.
  */
 function ParaTipearEnTiendaNube({
-  persona, items, cupon,
+  persona, items, cupon, compraHecha,
 }: {
   persona: CanjePersona
   items: CanjeItem[]
   cupon: string | null
+  compraHecha: boolean
 }) {
   const campos = camposParaTiendaNube(persona)
   // Lo que efectivamente entra a la orden. Lo quitado y lo que se cayó por falta de stock queda
@@ -95,18 +104,31 @@ function ParaTipearEnTiendaNube({
     [items],
   )
   const listaEntera = useMemo(
-    () => alPedido.map((i) => `${textoDeBusquedaDelItem(i)} × ${i.cantidad}`).join('\n'),
+    () => alPedido.map((i) => {
+      const nombre = [i.nombre, i.variante].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ')
+      return `${textoDeBusquedaDelItem(i)}${nombre && i.sku ? ` · ${nombre}` : ''} × ${i.cantidad}`
+    }).join('\n'),
     [alPedido],
   )
 
   return (
-    <div style={{
-      border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[3], marginBottom: space[4],
-    }}>
-      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+    <details
+      open={!compraHecha}
+      style={{
+        border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[3], marginBottom: space[4],
+      }}
+    >
+      <summary style={{
+        cursor: 'pointer', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap',
+      }}>
         <span style={{ fontWeight: weight.semibold, fontSize: font.md }}>Para tipear en Tienda Nube</span>
-        <span style={{ color: color.mut, fontSize: font.sm }}>Copiá cada campo y pegalo en el formulario.</span>
-      </div>
+        <span style={{ color: color.mut, fontSize: font.sm }}>
+          {compraHecha
+            ? 'La compra ya está hecha. Abrilo si hace falta volver a mirar los datos.'
+            : 'Copiá cada campo y pegalo en el checkout.'}
+        </span>
+      </summary>
+      <div style={{ marginTop: space[3] }} />
 
       {/* El cupón: uno solo por marca y siempre el mismo. Es lo primero porque sin él la orden no
           sale en $0, que es lo único que la distingue de una venta. */}
@@ -167,37 +189,44 @@ function ParaTipearEnTiendaNube({
         </div>
       )}
 
-      {/* Los productos. ⚠️ Lo que eligió ella por el link viene sin SKU —la vitrina se congela por
-          id de variante— así que ahí se copia el nombre con la variante, que es lo que se termina
-          escribiendo en el buscador del admin. */}
+      {/* Los productos, para buscarlos en la tienda. Se copian **el SKU y el nombre por separado**:
+          son las dos formas de encontrar una funda en el buscador y no siempre funciona la misma.
+          ⚠️ El modelo va como texto y sin botón a propósito: no se busca por modelo, se usa para
+          confirmar a ojo que la funda que se agregó al carrito es la que ella eligió. */}
       {alPedido.length > 0 && (
         <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[2], flexWrap: 'wrap' }}>
             <span style={{ fontWeight: weight.medium, fontSize: font.sm }}>Qué va en la orden</span>
             <CopyButton getText={() => listaEntera} label="Copiar la lista entera" variant="ghost" />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[1.5] }}>
             {alPedido.map((i) => (
               <div key={i.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+                {i.sku ? (
+                  <>
+                    <CopyButton getText={() => i.sku as string} label="" copiedLabel="" title="Copiar el SKU" />
+                    <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: font.base }}>{i.sku}</span>
+                  </>
+                ) : (
+                  // Sin SKU no se inventa un botón vacío: se dice, y se busca por nombre.
+                  <span style={{ color: color.mut2, fontSize: font.xs }}>sin SKU</span>
+                )}
                 <CopyButton
-                  getText={() => textoDeBusquedaDelItem(i)}
+                  getText={() => String(i.nombre ?? '')}
                   label=""
                   copiedLabel=""
-                  title={i.sku ? 'Copiar el SKU' : 'Copiar el nombre para buscarlo'}
+                  title="Copiar el nombre"
+                  disabled={!i.nombre}
                 />
-                <span style={{ fontSize: font.base }}>
-                  {textoDeBusquedaDelItem(i)}
-                  <span style={{ color: color.mut }}> × {i.cantidad}</span>
-                </span>
-                {!i.sku && (
-                  <span style={{ color: color.mut2, fontSize: font.xs }}>sin SKU: buscalo por nombre</span>
-                )}
+                <span style={{ fontSize: font.base }}>{i.nombre || '—'}</span>
+                {i.variante && <span style={{ color: color.mut, fontSize: font.base }}>{i.variante}</span>}
+                <span style={{ color: color.mut }}>× {i.cantidad}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-    </div>
+    </details>
   )
 }
 
@@ -309,7 +338,7 @@ export function BloqueEnvio({
   return (
     <SectionCard
       title="Compra y envío"
-      subtitle="La orden se crea a mano en el admin de Tienda Nube: el monitor no puede crearla, sólo verificarla."
+      subtitle="El pedido se carga a mano en la tienda, como una venta común: el monitor no puede crearlo, sólo verificarlo."
       actions={
         <div style={{ display: 'flex', gap: space[2] }}>
           <StatusPill tone={PENDIENTE_TONE[canje.compra_estado]} label={canje.compra_estado === 'hecho' ? 'Comprado' : 'Falta comprar'} />
@@ -322,13 +351,19 @@ export function BloqueEnvio({
       {/* ── Paso 1: la orden ── */}
       <div style={{ marginBottom: space[5] }}>
         <div style={{ fontWeight: weight.semibold, fontSize: font.md, marginBottom: space[2] }}>
-          1. Creá la orden en Tienda Nube
+          1. Cargá el pedido en la tienda
         </div>
         {persona && (
-          <ParaTipearEnTiendaNube persona={persona} items={items} cupon={config?.cupon_codigo ?? null} />
+          <ParaTipearEnTiendaNube
+            persona={persona}
+            items={items}
+            cupon={config?.cupon_codigo ?? null}
+            compraHecha={canje.compra_estado === 'hecho'}
+          />
         )}
         <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
-          Con la dirección de ella, 100% de descuento y el envío a nuestro cargo. Después pegá acá el número.
+          Como una venta común: buscás los productos, los ponés en el carrito, aplicás el cupón de 100%
+          y completás el checkout con los datos de ella. Después pegá acá el número.
           La orden cae sola en Gestión Nube y descuenta el stock por el camino normal.
         </div>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
