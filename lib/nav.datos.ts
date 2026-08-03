@@ -200,6 +200,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "calendario",
+    "area": "marketing",
+    "label": "Calendario",
+    "info": "Cuándo se necesita cada cosa: las fechas comerciales de Argentina (calculadas solas, incluidas las que se mueven todos los años) y los hitos propios del equipo — lanzamientos, sesiones de fotos, llegada de mercadería. Cada fecha muestra qué etapas de la pauta ya tienen ideas anotadas y cuáles no. Sin sub-permisos: cargar un hito lo puede hacer cualquiera que vea la sección.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "sesion-fotos",
     "area": "marketing",
     "label": "Sesión de fotos",
@@ -703,6 +713,7 @@ export const NAV_CATS: NavCat[] = [
     "label": "Marketing",
     "keys": [
       "marketing",
+      "calendario",
       "canjes",
       "solicitudes"
     ],

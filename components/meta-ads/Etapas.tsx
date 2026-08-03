@@ -23,8 +23,11 @@
  */
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { hoyIso, laQueAprieta, proximas, type EntradaCalendario } from '@/lib/calendario'
+import { leerCalendario } from '@/lib/calendario/persistencia'
 import { traerEtapas } from '@/lib/meta-ads/cliente'
 import { diagnosticar, ETIQUETA_ETAPA, RESUMEN_ETAPA, rotuloObjetivo, UMBRALES_ETAPA } from '@/lib/meta-ads/etapas'
 import type { CampañaEtapa, Diagnostico, Etapa, ResumenEtapa, RespuestaEtapas } from '@/lib/meta-ads/tipos'
@@ -59,6 +62,7 @@ export function Etapas() {
   }, [marca, dias])
 
   const estado: Cargable<RespuestaEtapas> = !r || r.key !== key ? { fase: 'cargando' } : r.e
+  const fecha = useFechaQueAprieta(marca)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -100,12 +104,36 @@ export function Etapas() {
         </Notice>
       )}
 
-      {estado.fase === 'ok' && <Contenido d={estado.data} marcaLabel={marcaLabel} />}
+      {estado.fase === 'ok' && <Contenido d={estado.data} marcaLabel={marcaLabel} fecha={fecha} />}
     </div>
   )
 }
 
-function Contenido({ d, marcaLabel }: { d: RespuestaEtapas; marcaLabel: string }) {
+/**
+ * La fecha que aprieta, del calendario editorial.
+ *
+ * Es lo que convierte el diagnóstico en un pedido: "no hay pauta de la segunda etapa" es un dato,
+ * "no hay pauta de la segunda etapa **y el Día de la Madre es en 34 días**" es una tarea. Se pide
+ * aparte y en silencio — si el calendario falla, la pantalla de Etapas tiene que seguir andando
+ * igual, porque el diagnóstico se sostiene solo.
+ */
+function useFechaQueAprieta(marca: string): EntradaCalendario | null {
+  const [fecha, setFecha] = useState<EntradaCalendario | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const hoy = hoyIso()
+    leerCalendario(marca as Parameters<typeof leerCalendario>[0])
+      .then((cal) => {
+        if (!vivo) return
+        setFecha(laQueAprieta(proximas(hoy, 90, { fijadas: cal.fijadas, hitos: cal.hitos })))
+      })
+      .catch(() => { if (vivo) setFecha(null) })
+    return () => { vivo = false }
+  }, [marca])
+  return fecha
+}
+
+function Contenido({ d, marcaLabel, fecha }: { d: RespuestaEtapas; marcaLabel: string; fecha: EntradaCalendario | null }) {
   // Sin overrides todavía: los trae la tanda del tablero de ideas. Hasta entonces la clasificación
   // es la automática y las correcciones se piden mirando "sin clasificar".
   const diag = diagnosticar(d.campañas, { marca: marcaLabel })
@@ -124,7 +152,7 @@ function Contenido({ d, marcaLabel }: { d: RespuestaEtapas; marcaLabel: string }
         />
       ) : (
         <>
-          <Veredicto d={diag} />
+          <Veredicto d={diag} fecha={fecha} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: space[3] }}>
             {diag.etapas.map((e) => <TarjetaEtapa key={e.etapa} e={e} gastoTotal={diag.gastoTotal} />)}
           </div>
@@ -136,13 +164,28 @@ function Contenido({ d, marcaLabel }: { d: RespuestaEtapas; marcaLabel: string }
 }
 
 /** El pedido, en una frase. Es el único bloque que la gente tiene que leer sí o sí. */
-function Veredicto({ d }: { d: Diagnostico }) {
+function Veredicto({ d, fecha }: { d: Diagnostico; fecha: EntradaCalendario | null }) {
   const v = d.veredicto
   const tone: Tone = v.clase === 'vacia' ? 'danger' : v.clase === 'floja' ? 'warning' : v.clase === 'ok' ? 'success' : 'neutral'
+  // La fecha se suma sólo cuando hay un hueco que llenar. Con las tres etapas cubiertas, "y el Día
+  // de la Madre es en 34 días" no pide nada y sería una frase decorativa más.
+  const suma = fecha && (v.clase === 'vacia' || v.clase === 'floja')
   return (
     <Notice tone={tone} style={{ alignItems: 'center' }}>
       <div style={{ fontSize: font.lg, fontWeight: weight.bold, lineHeight: 1.35 }}>{v.titulo}</div>
-      <div style={{ fontSize: font.base, marginTop: space[1.5], lineHeight: 1.5 }}>{v.detalle}</div>
+      <div style={{ fontSize: font.base, marginTop: space[1.5], lineHeight: 1.5 }}>
+        {v.detalle}
+        {suma && (
+          <>
+            {' '}
+            <b>
+              Y {fecha.titulo} es en {fecha.faltan} {fecha.faltan === 1 ? 'día' : 'días'}
+              {fecha.arrancarEn <= 0 ? ': ya habría que estar produciendo' : ''}.
+            </b>{' '}
+            <Link href="/calendario" style={{ color: 'inherit' }}>Ver el calendario</Link>
+          </>
+        )}
+      </div>
     </Notice>
   )
 }

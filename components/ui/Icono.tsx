@@ -295,6 +295,20 @@ const TRAZOS = {
       <path d="M9.4 17.2h5.2" />
     </>
   ),
+  /**
+   * Calendario editorial — la hoja del almanaque con un día marcado. El punto no es decorativo: es
+   * lo que separa "un calendario" de "la fecha que se te viene encima", que es de lo que habla la
+   * pantalla.
+   */
+  calendario: (
+    <>
+      <path d="M4.4 6.4h15.2v13.2H4.4z" />
+      <path d="M4.4 10.4h15.2" />
+      <path d="M8.4 4.4v4" />
+      <path d="M15.6 4.4v4" />
+      <path d="M12 14.4h.01" />
+    </>
+  ),
   /** Reposición — flechas en círculo. */
   reposicion: (
     <>

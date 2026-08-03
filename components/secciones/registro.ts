@@ -57,6 +57,7 @@ const PostventaDeposito = dynamic(() => import('@/components/postventa/Postventa
 const CambiosLocal = dynamic(() => import('@/components/reclamos/ArmarCambio').then((m) => m.ArmarCambioLocal), { loading: Cargando })
 const ReclamosLocal = dynamic(() => import('@/components/reclamos/Reclamos').then((m) => m.ReclamosLocal), { loading: Cargando })
 const Canjes = dynamic(() => import('@/components/canjes/Canjes').then((m) => m.Canjes), { loading: Cargando })
+const Calendario = dynamic(() => import('@/components/calendario/Calendario').then((m) => m.Calendario), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -323,6 +324,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // de BDI, para las tres marcas: el padrón de personas es único y compartido, porque "¿hace cuánto
   // no hacemos una acción con ella?" tiene que tener UNA respuesta. Ver `sql/migrate-canjes.sql`.
   canjes: Canjes,
+  // Calendario editorial (Marketing). Es la mitad "cuándo lo necesitás" del problema que
+  // `/meta-ads/etapas` mira por el otro lado ("qué falta"): cada fecha muestra qué etapas tienen
+  // ideas anotadas y cuáles no, que es lo que convierte una fecha en un pedido concreto.
+  calendario: Calendario,
 }
 
 /**

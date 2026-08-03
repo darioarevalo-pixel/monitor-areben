@@ -10,13 +10,25 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
+import metaFunnel from './_meta-funnel.js';
+import calendario from './_calendario.js';
 import { soloMismoOrigen } from './_auth.js';
 
-const RECURSOS = { ignorados, disenos, 'fotos-verificadas': fotosVerificadas };
+// `meta-funnel` y `calendario` entran por acá y NO por api/meta-ads.js, aunque el tema sea el
+// mismo: aquel endpoint corta con 500 si falta o vence META_ADS_TOKEN, y ni el tablero de ideas ni
+// el calendario necesitan hablar con Meta. Atarlos a ese token los mataría justo cuando marketing
+// tiene que estar craneando las piezas.
+const RECURSOS = {
+  ignorados,
+  disenos,
+  'fotos-verificadas': fotosVerificadas,
+  'meta-funnel': metaFunnel,
+  calendario,
+};
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;

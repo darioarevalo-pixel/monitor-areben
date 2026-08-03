@@ -1,0 +1,218 @@
+import { describe, it, expect } from 'vitest'
+import {
+  diasEntre,
+  hoyIso,
+  laQueAprieta,
+  nEsimoDiaDeSemana,
+  proximas,
+  resolverComercial,
+  sumarDias,
+  FECHAS_COMERCIALES,
+} from '@/lib/calendario'
+import type { FechaFijada, Hito, IdeaParaContar } from '@/lib/calendario'
+
+/**
+ * El calendario editorial.
+ *
+ * Lo que estos tests protegen no es el render sino **la confianza en la fecha**: la mitad de las
+ * comerciales no son fijas, y una fecha mal calculada —o una estimación mostrada como firme— hace
+ * que el equipo planifique contra un dato falso y se entere tarde. Por eso se fijan contra años
+ * conocidos de verdad y no contra lo que devuelva la función.
+ */
+
+const hito = (h: Partial<Hito>): Hito => ({
+  id: 'h1', fecha: '2026-08-20', firme: true, titulo: 'Cápsula', tipo: 'lanzamiento',
+  nota: null, creadoPor: 'Nico', creado: null, ...h,
+})
+
+describe('las reglas de fecha', () => {
+  it('nEsimoDiaDeSemana encuentra el n-ésimo día, y devuelve null si no existe', () => {
+    // 1-oct-2026 cae jueves; los domingos de ese mes son 4, 11, 18 y 25.
+    expect(nEsimoDiaDeSemana(2026, 10, 0, 1)).toBe(4)
+    expect(nEsimoDiaDeSemana(2026, 10, 0, 3)).toBe(18)
+    expect(nEsimoDiaDeSemana(2026, 10, 0, 4)).toBe(25)
+    expect(nEsimoDiaDeSemana(2026, 10, 0, 5)).toBe(null)
+    // Contando desde el final.
+    expect(nEsimoDiaDeSemana(2026, 10, 0, -1)).toBe(25)
+    expect(nEsimoDiaDeSemana(2026, 10, 0, -2)).toBe(18)
+    // Febrero bisiesto: 2028 tiene 29 días y el último martes es el 29.
+    expect(nEsimoDiaDeSemana(2028, 2, 2, -1)).toBe(29)
+  })
+
+  it('el Día de la Madre es el tercer domingo de octubre, en los años que ya se conocen', () => {
+    expect(resolverComercial('dia-madre', 2025)?.fecha).toBe('2025-10-19')
+    expect(resolverComercial('dia-madre', 2026)?.fecha).toBe('2026-10-18')
+    expect(resolverComercial('dia-madre', 2027)?.fecha).toBe('2027-10-17')
+  })
+
+  it('Black Friday es el viernes siguiente al cuarto jueves de noviembre', () => {
+    expect(resolverComercial('black-friday', 2025)?.fecha).toBe('2025-11-28')
+    expect(resolverComercial('black-friday', 2026)?.fecha).toBe('2026-11-27')
+    expect(resolverComercial('black-friday', 2027)?.fecha).toBe('2027-11-26')
+  })
+
+  it('el Cyber Monday internacional cae tres días después y puede saltar a diciembre', () => {
+    expect(resolverComercial('cyber-monday-us', 2026)?.fecha).toBe('2026-11-30')
+    // 2024: el cuarto jueves fue el 28, Black Friday el 29 y el lunes ya cayó en diciembre.
+    expect(resolverComercial('cyber-monday-us', 2024)?.fecha).toBe('2024-12-02')
+  })
+
+  it('el Día del Padre es el tercer domingo de junio (el argentino, no el de afuera)', () => {
+    expect(resolverComercial('dia-padre', 2026)?.fecha).toBe('2026-06-21')
+  })
+
+  it('sumarDias y diasEntre cruzan meses y años sin correrse un día', () => {
+    expect(sumarDias('2026-12-30', 5)).toBe('2027-01-04')
+    expect(sumarDias('2026-03-01', -1)).toBe('2026-02-28')
+    expect(diasEntre('2026-10-01', '2026-10-18')).toBe(17)
+    expect(diasEntre('2026-12-20', '2027-01-06')).toBe(17)
+    // Un tramo que atraviesa el cambio de horario del hemisferio norte: siguen siendo días enteros.
+    expect(diasEntre('2026-03-01', '2026-04-01')).toBe(31)
+  })
+})
+
+describe('estimada vs. firme', () => {
+  it('sólo las anunciadas salen estimadas; una regla es exacta, no una estimación', () => {
+    expect(resolverComercial('hot-sale', 2026)?.estimada).toBe(true)
+    expect(resolverComercial('cybermonday-ar', 2026)?.estimada).toBe(true)
+    expect(resolverComercial('dia-nino', 2026)?.estimada).toBe(true)
+    expect(resolverComercial('dia-madre', 2026)?.estimada).toBe(false)
+    expect(resolverComercial('black-friday', 2026)?.estimada).toBe(false)
+    expect(resolverComercial('navidad', 2026)?.estimada).toBe(false)
+  })
+
+  it('toda anunciada explica cómo se confirma, o nadie sabría qué esperar', () => {
+    for (const f of FECHAS_COMERCIALES) {
+      if (f.clase === 'anunciada') expect(f.comoSeConfirma, `${f.clave} no dice cómo se confirma`).toBeTruthy()
+    }
+  })
+
+  it('una fecha fijada le gana a la estimada y pasa a ser firme', () => {
+    const fijadas: FechaFijada[] = [{ clave: 'hot-sale', anio: 2026, fecha: '2026-05-19', por: 'Bruno' }]
+    const conf = proximas('2026-04-01', 90, { fijadas }).find((e) => e.id === 'comercial:hot-sale:2026')
+    expect(conf?.fecha).toBe('2026-05-19')
+    expect(conf?.certeza).toBe('firme')
+
+    // Sin confirmar, la misma fecha sale estimada y en el día que estima el catálogo.
+    const sin = proximas('2026-04-01', 90).find((e) => e.id === 'comercial:hot-sale:2026')
+    expect(sin?.certeza).toBe('estimada')
+    expect(sin?.fecha).toBe('2026-05-11')
+  })
+
+  it('una fijación es de UN año: no arrastra al siguiente', () => {
+    const fijadas: FechaFijada[] = [{ clave: 'hot-sale', anio: 2026, fecha: '2026-05-19', por: 'Bruno' }]
+    const del27 = proximas('2027-04-01', 90, { fijadas }).find((e) => e.id === 'comercial:hot-sale:2027')
+    expect(del27?.certeza).toBe('estimada')
+  })
+})
+
+describe('proximas()', () => {
+  it('respeta la ventana y ordena por cercanía', () => {
+    const r = proximas('2026-10-01', 60)
+    expect(r.map((e) => e.fecha)).toEqual([...r.map((e) => e.fecha)].sort())
+    expect(r.every((e) => e.fecha >= '2026-10-01' && e.fecha <= '2026-11-30')).toBe(true)
+    expect(r.some((e) => e.id === 'comercial:dia-madre:2026')).toBe(true)
+    // Navidad queda afuera de una ventana de 60 días arrancando el 1 de octubre.
+    expect(r.some((e) => e.id === 'comercial:navidad:2026')).toBe(false)
+  })
+
+  it('cruza el año: parado en diciembre, lo que se viene es de enero', () => {
+    const r = proximas('2026-12-20', 90)
+    expect(r.some((e) => e.id === 'comercial:navidad:2026')).toBe(true)
+    expect(r.some((e) => e.id === 'comercial:reyes:2027')).toBe(true)
+    expect(r.some((e) => e.id === 'comercial:san-valentin:2027')).toBe(true)
+  })
+
+  it('calcula los días que faltan y cuándo hay que empezar', () => {
+    const madre = proximas('2026-09-14', 60).find((e) => e.id === 'comercial:dia-madre:2026')!
+    expect(madre.faltan).toBe(34)
+    expect(madre.anticipoDias).toBe(30)
+    expect(madre.arrancarEn).toBe(4)
+  })
+
+  it('los hitos entran en la misma lista, con su certeza', () => {
+    const hitos = [hito({ id: 'a', fecha: '2026-10-05', firme: false, titulo: 'Cápsula tejidos' })]
+    const r = proximas('2026-10-01', 30, { hitos })
+    const h = r.find((e) => e.id === 'hito:a')!
+    expect(h.clase).toBe('hito')
+    expect(h.certeza).toBe('proyectada')
+    expect(h.titulo).toBe('Cápsula tejidos')
+    expect(h.creadoPor).toBe('Nico')
+    // Un hito no tiene anticipo: la producción no la manda el calendario sino quien lo cargó.
+    expect(h.arrancarEn).toBe(h.faltan)
+  })
+
+  it('un hito fuera de la ventana no aparece', () => {
+    const hitos = [hito({ id: 'lejos', fecha: '2027-06-01' })]
+    expect(proximas('2026-10-01', 30, { hitos }).some((e) => e.id === 'hito:lejos')).toBe(false)
+  })
+})
+
+describe('el enganche: cuántas ideas hay por etapa', () => {
+  const ideas = (xs: Partial<IdeaParaContar>[]): IdeaParaContar[] =>
+    xs.map((x) => ({ evento: 'comercial:dia-madre:2026', etapa: 'tofu', estado: 'propuesta', ...x }))
+
+  const madre = (is: IdeaParaContar[]) =>
+    proximas('2026-09-14', 60, { ideas: is }).find((e) => e.id === 'comercial:dia-madre:2026')!
+
+  it('cuenta las ideas de cada etapa contra la fecha a la que apuntan', () => {
+    const e = madre(ideas([{ etapa: 'tofu' }, { etapa: 'tofu' }, { etapa: 'bofu' }]))
+    expect(e.cobertura).toEqual({ tofu: 2, mofu: 0, bofu: 1 })
+  })
+
+  it('una idea todavía en propuesta YA cuenta como cubierta', () => {
+    // El renglón contesta "¿hay alguien pensando esto?", no "¿está lista la pieza?". Si sólo
+    // contaran las listas, diría "no hay nada" con cuatro ideas anotadas y se le dejaría de creer.
+    expect(madre(ideas([{ etapa: 'mofu', estado: 'propuesta' }])).cobertura.mofu).toBe(1)
+    expect(madre(ideas([{ etapa: 'mofu', estado: 'en-produccion' }])).cobertura.mofu).toBe(1)
+    expect(madre(ideas([{ etapa: 'mofu', estado: 'pauteada' }])).cobertura.mofu).toBe(1)
+  })
+
+  it('una descartada no cubre nada', () => {
+    expect(madre(ideas([{ etapa: 'mofu', estado: 'descartada' }])).cobertura.mofu).toBe(0)
+  })
+
+  it('una idea sin fecha, o colgada de otra, no se le suma a ésta', () => {
+    expect(madre(ideas([{ etapa: 'mofu', evento: null }])).cobertura.mofu).toBe(0)
+    expect(madre(ideas([{ etapa: 'mofu', evento: 'comercial:navidad:2026' }])).cobertura.mofu).toBe(0)
+  })
+
+  it('sin ideas, la cobertura es todo ceros y no undefined', () => {
+    expect(madre([]).cobertura).toEqual({ tofu: 0, mofu: 0, bofu: 0 })
+  })
+})
+
+describe('laQueAprieta()', () => {
+  it('es la que ya entró en su anticipo, no la más cercana', () => {
+    // Parado el 1-nov-2026: el CyberMonday estimado es el 2 (mañana, anticipo ya vencido) y Black
+    // Friday el 27 con 21 días de anticipo. La que aprieta es la primera de las dos por fecha.
+    const r = proximas('2026-11-01', 60)
+    expect(laQueAprieta(r)?.id).toBe('comercial:cybermonday-ar:2026')
+  })
+
+  it('se calla cuando todavía no hay nada que empezar', () => {
+    // 1-abr-2026: lo más cercano es el Hot Sale del 11-may, a 40 días, con 21 de anticipo.
+    expect(laQueAprieta(proximas('2026-04-01', 30))).toBe(null)
+  })
+
+  it('nunca devuelve un hito: el que manda la producción es el anticipo, y un hito no tiene', () => {
+    const hitos = [hito({ id: 'ya', fecha: '2026-04-02' })]
+    expect(laQueAprieta(proximas('2026-04-01', 30, { hitos }))).toBe(null)
+  })
+})
+
+describe('hoyIso()', () => {
+  it('devuelve el día LOCAL, que es el que la persona tiene en la cabeza', () => {
+    // Misma jornada a dos horas distintas: la hora no puede cambiar el día.
+    expect(hoyIso(new Date(2026, 0, 1, 0, 0, 0))).toBe('2026-01-01')
+    expect(hoyIso(new Date(2026, 0, 1, 23, 59, 0))).toBe('2026-01-01')
+
+    // Y en una zona atrasada respecto de UTC (Argentina es -3) el resultado tiene que DIFERIR de
+    // `toISOString()`, que es justo el atajo que a las 21 haría saltar el calendario al día
+    // siguiente. En una máquina configurada en UTC no hay nada que comprobar acá.
+    const tarde = new Date(2026, 0, 1, 23, 0, 0)
+    if (tarde.getTimezoneOffset() > 0) {
+      expect(hoyIso(tarde)).not.toBe(tarde.toISOString().slice(0, 10))
+    }
+  })
+})

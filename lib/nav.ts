@@ -120,6 +120,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   exhib: 'exhib',
   // Marketing
   marketing: 'marketing',
+  calendario: 'calendario',
   canjes: 'canjes',
   'meta-ads': 'meta-ads',
   tncat: 'tienda-nube',
@@ -258,6 +259,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
   'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',
   'meta-ads': 'Gasto y rendimiento de Meta Ads por cuenta, y en qué etapa del embudo está cada pauta.',
+  calendario: 'Las fechas comerciales y los hitos propios, con cuánto falta y qué etapas ya tienen ideas anotadas.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
   integraciones: 'Mapeo de SKU entre Gestión Nube y Tienda Nube: la base del sync de stock y ventas.',
   postventa: 'Post-venta (motor): recibe y confirma fallas, descuenta stock en GN, etiqueta. Valorizado.',
