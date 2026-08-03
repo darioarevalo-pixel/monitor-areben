@@ -138,7 +138,7 @@ describe('lo que ve la creadora en el link público', () => {
     const e = paraLaPersona(
       { ...CANJE, envio_estado: 'hecho', envio_via: 'correo', envio_seguimiento: '1234' },
       PERSONA, null,
-    ).envio
+    ).envio!
     expect(e.via).toBe('Correo Argentino')
     expect(e.seguimiento).toBe('1234')
     // El link se arma en el SERVIDOR: el portal es público y no puede arrastrar
@@ -158,7 +158,7 @@ describe('lo que ve la creadora en el link público', () => {
         intentos: [{ at: '2026-08-01T10:00:00Z', nota: 'no había nadie', usuario: 'Bruno' }],
       },
       PERSONA, null,
-    ).envio
+    ).envio!
     expect(e.intentos).toEqual([{ at: '2026-08-01T10:00:00Z' }])
     expect(JSON.stringify(e)).not.toContain('no había nadie')
     expect(JSON.stringify(e)).not.toContain('Bruno')
