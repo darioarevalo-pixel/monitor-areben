@@ -15,8 +15,9 @@ import {
   estadoDeContacto, fechaDeAccion, ordenarPorContacto, proximoContacto, ultimaAccion, ultimaAccionPorMarca,
 } from '@/lib/canjes/seguimiento'
 import {
-  CANJE_STORES, CONFIG_DEFAULT, ESTADOS_CANJE, entregableEnCriollo, esTerminal, estadoEnCriollo,
-  baseDeCostos, nombrePersona, numeroCanje, puedeIr, queDatoPide, tieneDatosDeMarca, tieneDireccion,
+  CANJE_STORES, CONFIG_DEFAULT, ESTADOS_CANJE, camposParaTiendaNube, direccionEnUnaLinea,
+  enTransito, entregableEnCriollo, esTerminal, estadoEnCriollo, baseDeCostos, nombrePersona,
+  numeroCanje, puedeIr, queDatoPide, textoDeBusquedaDelItem, tieneDatosDeMarca, tieneDireccion,
   type CanjePersona, type CanjeRow, type EstadoCanje,
 } from '@/lib/canjes/tipos'
 // El handler es JS y no importa TS: se importan sus espejos para compararlos contra los de acá.
@@ -213,7 +214,9 @@ describe('estadoEnCriollo — el matiz que el label solo no da', () => {
   it('en preparando dice QUÉ falta, no "preparando"', () => {
     expect(estadoEnCriollo(base)).toBe('Falta comprar')
     expect(estadoEnCriollo({ ...base, compra_estado: 'hecho' })).toBe('Falta despachar')
-    expect(estadoEnCriollo({ ...base, compra_estado: 'hecho', envio_estado: 'hecho' })).toBe('En camino')
+    // "En tránsito" es la misma palabra que el chip de la cola en la lista: si acá dijera "En
+    // camino", la encargada tendría que traducir entre las dos pantallas que usa todos los días.
+    expect(estadoEnCriollo({ ...base, compra_estado: 'hecho', envio_estado: 'hecho' })).toBe('En tránsito')
   })
 
   it('en enviada distingue mi tarea de la espera de ella', () => {
@@ -490,5 +493,65 @@ describe('los defaults de la config', () => {
 
   it('la cadencia default es 90 días', () => {
     expect(CONFIG_DEFAULT.cadencia_dias_default).toBe(90)
+  })
+})
+
+// ── La carga a mano en Tienda Nube ───────────────────────────────────────────────
+
+describe('los datos para tipear la orden en Tienda Nube', () => {
+  const P = {
+    id: 1, instagram: 'lu', created_at: '2026-01-01', destacada: false, vetada: false, cadencia_dias: 90,
+    nombre: 'Lucía', apellido: 'Méndez', email: 'lu@mail.com', telefono: '1155550000', dni: '38111222',
+    calle: 'Av. Siempreviva', numero: '742', piso: '3', depto: 'B',
+    cp: '1425', localidad: 'Palermo', provincia: 'CABA', direccion_nota: 'portero eléctrico',
+  } as CanjePersona
+
+  it('los trece campos salen en el orden en que el admin los pide', () => {
+    expect(camposParaTiendaNube(P).map((c) => c.key)).toEqual([
+      'nombre', 'apellido', 'email', 'telefono', 'dni',
+      'calle', 'numero', 'piso', 'depto', 'cp', 'localidad', 'provincia', 'direccion_nota',
+    ])
+  })
+
+  it('lo que falta se devuelve igual, vacío', () => {
+    // Esconder los vacíos haría la lista más corta y la pregunta que importa más difícil: qué le
+    // falta a esta persona para poder despacharle.
+    const campos = camposParaTiendaNube({ ...P, piso: null, dni: '' } as CanjePersona)
+    expect(campos).toHaveLength(13)
+    expect(campos.find((c) => c.key === 'piso')?.valor).toBe('')
+    expect(campos.find((c) => c.key === 'dni')?.valor).toBe('')
+  })
+
+  it('la dirección en un renglón nombra el piso y el depto, y se saltea lo que no hay', () => {
+    expect(direccionEnUnaLinea(P)).toBe('Av. Siempreviva 742, piso 3, depto B, Palermo, CABA, CP 1425')
+    expect(direccionEnUnaLinea({ ...P, piso: null, depto: null } as CanjePersona))
+      .toBe('Av. Siempreviva 742, Palermo, CABA, CP 1425')
+  })
+})
+
+describe('qué se busca en el admin para encontrar cada producto', () => {
+  it('con SKU, el SKU', () => {
+    expect(textoDeBusquedaDelItem({ sku: 'BDI-123', nombre: 'Funda', variante: 'iPhone 12' })).toBe('BDI-123')
+  })
+
+  it('SIN SKU cae al nombre con la variante', () => {
+    // Lo que elige ella por el link se congela por id de variante de TN, no por SKU: en BDI falta
+    // en 4 de cada 10 variantes. Sin esto, la fila de la orden saldría vacía.
+    expect(textoDeBusquedaDelItem({ sku: null, nombre: 'Funda', variante: 'iPhone 12' }))
+      .toBe('Funda · iPhone 12')
+    expect(textoDeBusquedaDelItem({ sku: '  ', nombre: 'Funda', variante: null })).toBe('Funda')
+  })
+})
+
+// ── La cola de tránsito ──────────────────────────────────────────────────────────
+
+describe('enTransito — la cola que la encargada revisa todos los días', () => {
+  it('es despachado y todavía sin llegar', () => {
+    expect(enTransito({ envio_estado: 'hecho', entregado_at: null })).toBe(true)
+    expect(enTransito({ envio_estado: 'pendiente', entregado_at: null })).toBe(false)
+  })
+
+  it('llegar es lo único que lo saca de la cola', () => {
+    expect(enTransito({ envio_estado: 'hecho', entregado_at: '2026-08-01T00:00:00Z' })).toBe(false)
   })
 })

@@ -515,3 +515,25 @@ alter table canje_evidencias    disable row level security;
 alter table canje_config        disable row level security;
 alter table canje_vitrinas      disable row level security;
 alter table canje_vitrina_items disable row level security;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 9. Tanda 3 (2-ago-2026) — la carga a TN sin transcribir y la cola de tránsito
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- El cupón de 100% con el que la orden de canje se tipea en $0 en el admin de Tienda Nube.
+--
+-- Es **uno solo por marca, genérico y sin vencimiento**: no se emite uno por creadora ni por
+-- campaña, es interno de marketing y su único trabajo es que la venta marque $0. Se crea A MANO en
+-- TN —el monitor no puede crear cupones— y acá se guarda para no ir a buscarlo cada vez.
+--
+-- Por qué en la config y no en el código: es un dato que marketing va a querer cambiar solo, y un
+-- deploy para cambiar un código de cupón es un impuesto absurdo.
+alter table canje_config add column if not exists cupon_codigo text;
+
+-- Los intentos de entrega del correo, `[{at, nota, usuario}]`.
+--
+-- Es una lista y no una fecha porque **el correo intenta más de una vez**: con una sola columna el
+-- segundo intento pisa al primero y se pierde justo lo que explica por qué un pedido tardó tres
+-- semanas. Anotar un intento **no cambia el estado del canje**: sigue en la cola de tránsito hasta
+-- que alguien marque que llegó, que es el único evento que congela los vencimientos.
+alter table canjes add column if not exists intentos jsonb not null default '[]'::jsonb;

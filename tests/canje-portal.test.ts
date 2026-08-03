@@ -128,6 +128,44 @@ describe('lo que ve la creadora en el link público', () => {
     expect(paraLaPersona({ ...CANJE, estado: 'en_curso' }, PERSONA, null).despachado).toBe(true)
   })
 
+  it('mientras no salió, no manda ningún envío', () => {
+    // Un bloque de envío vacío en su pantalla se lee como un error del sistema, no como "todavía
+    // no salió".
+    expect(salida.envio).toBeNull()
+  })
+
+  it('una vez despachado le dice por dónde va, con el link al correo', () => {
+    const e = paraLaPersona(
+      { ...CANJE, envio_estado: 'hecho', envio_via: 'correo', envio_seguimiento: '1234' },
+      PERSONA, null,
+    ).envio
+    expect(e.via).toBe('Correo Argentino')
+    expect(e.seguimiento).toBe('1234')
+    // El link se arma en el SERVIDOR: el portal es público y no puede arrastrar
+    // `lib/reclamos/tipos.ts` al bundle que se descarga un teléfono.
+    expect(e.trackingUrl).toContain('correoargentino')
+    expect(e.trackingUrl).toContain('1234')
+  })
+
+  it('de los intentos de entrega sale la fecha y NADA más', () => {
+    // La nota es un juicio interno sobre lo que pasó ("no había nadie") y en su pantalla se leería
+    // como un reproche. Y el usuario es alguien del equipo, que no es asunto suyo.
+    const e = paraLaPersona(
+      {
+        ...CANJE,
+        envio_estado: 'hecho',
+        envio_via: 'cadete',
+        intentos: [{ at: '2026-08-01T10:00:00Z', nota: 'no había nadie', usuario: 'Bruno' }],
+      },
+      PERSONA, null,
+    ).envio
+    expect(e.intentos).toEqual([{ at: '2026-08-01T10:00:00Z' }])
+    expect(JSON.stringify(e)).not.toContain('no había nadie')
+    expect(JSON.stringify(e)).not.toContain('Bruno')
+    // Sin código no hay link: mandarle uno que no funciona es peor que no mandarlo.
+    expect(e.trackingUrl).toBeNull()
+  })
+
   it('sin ficha ni config no rompe: abre el formulario vacío', () => {
     const vacio = paraLaPersona({ id: 1, store: 'bdi', estado: 'acuerdo' }, null, null)
     expect(vacio.datos.calle).toBeNull()

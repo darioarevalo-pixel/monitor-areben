@@ -111,7 +111,7 @@ export function FichaCanje({
   if (error) return <Notice tone="danger">{error}</Notice>
   if (!d) return <Notice tone="warning">No se encontró ese canje.</Notice>
 
-  const { canje, items, entregables, evidencias, persona, vitrina } = d
+  const { canje, items, entregables, evidencias, persona, vitrina, config } = d
   const editable = !esTerminal(canje.estado)
   const puedeFirmar = nivel ? puedeAprobar(perfil, marcaPerm, nivel) : false
 
@@ -312,7 +312,13 @@ export function FichaCanje({
       />
       {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada. */}
       {!['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado) && (
-        <BloqueEnvio canje={canje} persona={persona} onCambio={() => void recargar()} />
+        <BloqueEnvio
+          canje={canje}
+          persona={persona}
+          items={items}
+          config={config}
+          onCambio={() => void recargar()}
+        />
       )}
       {(canje.estado === 'en_curso' || canje.estado === 'cerrado') && (
         <CierreBalance

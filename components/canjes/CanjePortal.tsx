@@ -56,6 +56,20 @@ type Datos = {
 
 type Elegido = { nombre: string; variante: string; cantidad: number; pvp?: number | null }
 
+/**
+ * Por dónde va el pedido. Llega armado del servidor —incluido el link al correo— para no arrastrar
+ * `lib/reclamos/tipos.ts` al bundle público.
+ *
+ * De los intentos de entrega sólo viene la fecha: la nota que escribió el equipo es interna.
+ */
+type Envio = {
+  via: string | null
+  seguimiento: string | null
+  trackingUrl: string | null
+  entregadoAt: string | null
+  intentos: { at: string }[]
+}
+
 type Vista = {
   numero: string
   marca: string
@@ -63,6 +77,7 @@ type Vista = {
   despachado: boolean
   confirmadoAt: string | null
   driveUrl: string | null
+  envio: Envio | null
   datos: Datos
   vitrina: Vitrina | null
   elegidos: Elegido[]
@@ -318,10 +333,40 @@ export function CanjePortal({ token }: { token: string | null }) {
   // Ya despachado: los datos no cambian nada, y dejarla editarlos sería hacerle creer que el pedido
   // cambia de rumbo. Se le dice, en vez de un link que no anda.
   if (vista?.despachado) {
+    const e = vista.envio
+    const llego = !!e?.entregadoAt
     return (
       <div style={{ ...caja, textAlign: 'center', paddingTop: 60 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
-        <h1 style={{ fontSize: 20, marginBottom: 8 }}>Tu pedido ya salió</h1>
+        <h1 style={{ fontSize: 20, marginBottom: 8 }}>{llego ? 'Tu pedido llegó' : 'Tu pedido ya salió'}</h1>
+
+        {/* El dato que ella vino a buscar. Antes esta pantalla sólo decía "ya salió", que es
+            justamente lo que la obliga a escribir para preguntar por dónde va. */}
+        {e?.via && (
+          <p style={{ color: '#374151', lineHeight: 1.5, marginBottom: 8 }}>
+            Va por <strong>{e.via}</strong>
+            {e.seguimiento ? <> · seguimiento <strong>{e.seguimiento}</strong></> : null}
+          </p>
+        )}
+        {e?.trackingUrl && (
+          <p style={{ marginBottom: 12 }}>
+            <a href={e.trackingUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#4f46e5' }}>
+              Seguir el envío
+            </a>
+          </p>
+        )}
+
+        {/* Los intentos, sólo la fecha. Explican la demora sin que tenga que preguntar, y sin
+            pasarle la nota interna de quien lo anotó. */}
+        {!llego && e?.intentos.length ? (
+          <p style={{ color: '#6b7280', lineHeight: 1.5, marginBottom: 12 }}>
+            {e.intentos.length === 1
+              ? `Pasaron a entregártelo el ${e.intentos[0].at.slice(0, 10)} y no te encontraron.`
+              : `Pasaron a entregártelo ${e.intentos.length} veces y no te encontraron.`}
+            {' '}Si querés, escribinos y coordinamos un horario.
+          </p>
+        ) : null}
+
         <p style={{ color: '#6b7280', lineHeight: 1.5 }}>
           Los datos quedaron como estaban. Si algo no coincide, escribinos y lo vemos.
         </p>

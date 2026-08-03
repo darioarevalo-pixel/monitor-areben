@@ -142,9 +142,21 @@ export function estadoEnCriollo(
   if (c.estado === 'preparando') {
     if (c.compra_estado !== 'hecho') return 'Falta comprar'
     if (c.envio_estado !== 'hecho') return 'Falta despachar'
-    return 'En camino'
+    return 'En tránsito'
   }
   return ESTADO_CANJE_LABEL[c.estado] ?? c.estado
+}
+
+/**
+ * La cola de tránsito: **despachado y todavía sin llegar**. Es lo que la encargada revisa todos los
+ * días, y por eso es un filtro y no un estado nuevo — el canje ya está en `preparando` con el envío
+ * hecho, y `estadoEnCriollo` ya lo llama "En tránsito".
+ *
+ * Anotar un intento de entrega **no lo saca de acá**: mientras el pedido no llegó, sigue siendo
+ * trabajo de alguien. El único evento que lo saca es `entregado_at`.
+ */
+export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): boolean {
+  return c.envio_estado === 'hecho' && !c.entregado_at
 }
 
 /**
@@ -164,6 +176,13 @@ export type PagoEstado = 'pendiente' | 'pagado' | 'no_aplica'
 
 export const PENDIENTES: Pendiente[] = ['pendiente', 'hecho', 'no_aplica']
 export const PAGO_ESTADOS: PagoEstado[] = ['pendiente', 'pagado', 'no_aplica']
+
+/**
+ * Un intento de entrega del correo. Se guardan **todos**, en `canjes.intentos`: con una sola fecha
+ * el segundo intento pisa al primero y se pierde justo lo que explica por qué un pedido tardó tres
+ * semanas.
+ */
+export type IntentoEntrega = { at: string; nota?: string | null; usuario?: string | null }
 
 // ── El tipo de canje y el tope ──────────────────────────────────────────────────
 
@@ -416,6 +435,11 @@ export type CanjeRow = {
   aviso_at?: string | null
   /** El pivote: al setearlo se congelan los `vence_el` de cada entregable. */
   entregado_at?: string | null
+  /**
+   * Los intentos de entrega del correo. Es una lista porque el correo intenta más de una vez y una
+   * fecha sola se pisa. Anotar uno **no cambia el estado**: el canje sigue en la cola de tránsito.
+   */
+  intentos?: IntentoEntrega[] | null
 
   cupon_codigo?: string | null
   cupon_desde?: string | null
@@ -549,6 +573,12 @@ export type CanjeConfig = {
   unidad_default: string | null
   /** Las otras palabras que aparecen seguido, para no tipearlas. Nunca es una lista cerrada. */
   unidades_sugeridas: string[]
+  /**
+   * El cupón de 100% con el que la orden de canje se tipea en $0 en el admin de Tienda Nube.
+   * **Uno solo por marca, genérico y sin vencimiento**: es interno de marketing y su único trabajo
+   * es que la venta marque $0. Se crea a mano en TN — el monitor no puede crear cupones.
+   */
+  cupon_codigo: string | null
   updated_at?: string | null
 }
 
@@ -563,6 +593,7 @@ export const CONFIG_DEFAULT: Omit<CanjeConfig, 'store'> = {
   drive_url: null,
   unidad_default: null,
   unidades_sugeridas: [],
+  cupon_codigo: null,
 }
 
 /** Si la marca no configuró la suya. Genérico a propósito: es mejor que adivinar mal. */
@@ -1088,4 +1119,62 @@ export function tieneDatosDeMarca(p: Pick<CanjePersona, 'talles' | 'modelo_celul
   if (queDatoPide(store) === 'modelo_celular') return Boolean(p.modelo_celular)
   const t = p.talles || {}
   return Boolean(t.remera || t.pantalon || t.calzado)
+}
+
+// ── La carga a mano en el admin de Tienda Nube ──────────────────────────────────
+//
+// El monitor **no crea la orden en TN y no puede hacerlo**: no hay credenciales de la tienda en
+// este repo. La orden con 100% de descuento se tipea a mano, y lo único que se puede hacer desde
+// acá es que no haya que transcribir nada.
+
+/** La dirección en un renglón, para pegarla de una cuando el formulario la acepta junta. */
+export function direccionEnUnaLinea(p: CanjePersona): string {
+  const calle = [p.calle, p.numero].filter(Boolean).join(' ')
+  const puerta = [p.piso && `piso ${p.piso}`, p.depto && `depto ${p.depto}`].filter(Boolean).join(', ')
+  return [calle, puerta, p.localidad, p.provincia, p.cp && `CP ${p.cp}`].filter(Boolean).join(', ')
+}
+
+export type CampoParaTN = { key: string; label: string; valor: string }
+
+/**
+ * Los datos de la persona **campo por campo, en el orden en que el admin de Tienda Nube los pide**.
+ *
+ * El formulario de TN los pide separados —nombre por un lado, apellido por otro, calle y altura en
+ * dos casillas—, así que copiar "la dirección entera" no alcanza: hay que volver a partirla a mano,
+ * que es exactamente donde se cuelan los errores de tipeo en una dirección de envío.
+ *
+ * Los vacíos **se devuelven igual**, con `valor: ''`. Esconderlos haría más corta la lista y más
+ * difícil la pregunta que importa: qué le falta a esta persona para poder despacharle.
+ */
+export function camposParaTiendaNube(p: CanjePersona): CampoParaTN[] {
+  const txt = (v: unknown) => String(v ?? '').trim()
+  return [
+    { key: 'nombre', label: 'Nombre', valor: txt(p.nombre) },
+    { key: 'apellido', label: 'Apellido', valor: txt(p.apellido) },
+    { key: 'email', label: 'Mail', valor: txt(p.email) },
+    { key: 'telefono', label: 'Teléfono', valor: txt(p.telefono) },
+    { key: 'dni', label: 'DNI', valor: txt(p.dni) },
+    { key: 'calle', label: 'Calle', valor: txt(p.calle) },
+    { key: 'numero', label: 'Altura', valor: txt(p.numero) },
+    { key: 'piso', label: 'Piso', valor: txt(p.piso) },
+    { key: 'depto', label: 'Depto', valor: txt(p.depto) },
+    { key: 'cp', label: 'Código postal', valor: txt(p.cp) },
+    { key: 'localidad', label: 'Localidad', valor: txt(p.localidad) },
+    { key: 'provincia', label: 'Provincia', valor: txt(p.provincia) },
+    { key: 'direccion_nota', label: 'Referencia', valor: txt(p.direccion_nota) },
+  ]
+}
+
+/**
+ * Qué se busca en el buscador del admin para encontrar este producto.
+ *
+ * ⚠️ **El SKU no siempre está.** Lo que ella elige por el link se congela por `id` de variante de
+ * Tienda Nube, no por SKU: en BDI falta en 4 de cada 10 variantes y en Zattia se repite igual en
+ * todas las de un mismo producto. Cuando no hay SKU se copia el nombre con la variante, que es lo
+ * que de todas formas se termina tipeando en el buscador.
+ */
+export function textoDeBusquedaDelItem(i: Pick<CanjeItem, 'sku' | 'nombre' | 'variante'>): string {
+  const sku = String(i.sku ?? '').trim()
+  if (sku) return sku
+  return [i.nombre, i.variante].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ')
 }

@@ -18,8 +18,8 @@ import {
   type CanjeConfig, type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow,
 } from '@/lib/canjes/tipos'
 import {
-  listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeLinkDatos,
-  mensajePropuesta, mensajeRecordatorio,
+  listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeIntentoEntrega,
+  mensajeLinkDatos, mensajePropuesta, mensajeRecordatorio,
 } from '@/lib/canjes/mensajes'
 // Los espejos del handler. Si divergen, el botón dice una cosa y el servidor hace otra.
 import {
@@ -605,6 +605,25 @@ describe('mensajeDespacho', () => {
 
   it('sin código no promete un seguimiento que no existe', () => {
     const m = mensajeDespacho(lucia, canje({ envio_via: 'cadete', envio_seguimiento: null }), null)
+    expect(m).not.toContain('código')
+  })
+})
+
+describe('mensajeIntentoEntrega', () => {
+  it('cuenta qué pasó y pide lo que destraba la entrega', () => {
+    const c = canje({ envio_via: 'correo', envio_seguimiento: '1234' })
+    const m = mensajeIntentoEntrega(lucia, c, 'https://correo/1234')
+    expect(m).toContain('no te encontraron')
+    expect(m).toContain('horario')
+    expect(m).toContain('1234')
+    expect(m).toContain('https://correo/1234')
+  })
+
+  it('NO promete un segundo intento', () => {
+    // El correo suele hacerlo, pero prometerlo desde acá es comprometer algo que no manejamos.
+    const m = mensajeIntentoEntrega(lucia, canje({ envio_via: 'cadete', envio_seguimiento: null }), null)
+    expect(m).not.toContain('vuelven a pasar mañana')
+    expect(m).not.toContain('van a volver')
     expect(m).not.toContain('código')
   })
 })

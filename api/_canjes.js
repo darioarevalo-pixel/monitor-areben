@@ -50,6 +50,7 @@
 //   POST { action:'item-quitar', id, item_id, motivo }           → NO borra: marca 'quitado'.
 //   POST { action:'compra', id, tn_orden, gn_venta_number? }     → la orden creada a mano en TN.
 //   POST { action:'envio', id, via, seguimiento, costo }         → despacho.
+//   POST { action:'intento-entrega', id, nota? }                 → el correo pasó y no había nadie. NO cambia el estado.
 //   POST { action:'entregado', id }                              → CONGELA los `vence_el`.
 //   POST { action:'entregable-agregar'|'entregable-quitar', … }  → lo que prometió publicar.
 //   POST { action:'evidencia-agregar', id, entregable_id, … }    → la carga el EQUIPO, no ella.
@@ -131,7 +132,7 @@ const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
   token_vence, datos_confirmados_at,
   tn_orden, compra_estado, compra_at, compra_por, gn_venta_number, stock_estado,
   envio_via, envio_seguimiento, envio_costo, envio_estado, envio_at, envio_direccion,
-  aviso_estado, aviso_at, entregado_at, cupon_codigo, cupon_desde, cupon_hasta,
+  aviso_estado, aviso_at, entregado_at, intentos, cupon_codigo, cupon_desde, cupon_hasta,
   balance_costo_productos, balance_costo_envio, balance_costo_plata, balance_costo_total,
   balance_alcance, balance_interacciones, balance_cpm, balance_puntaje_manual, balance_nota,
   cerrado_incompleto, cierre_motivo, cerrado_por, cerrado_at,
@@ -418,7 +419,7 @@ export default async function handler(req, res) {
       store: st, umbral_aprobacion_alta: null, cadencia_dias_default: 90,
       plazo_entregable_dias_default: 10, tope_evidencias_por_canje: 30, factor_costo_estimado: 0.4,
       bloquear_por_vencidos: false, cierres_incompletos_no_repetir: 2, drive_url: null,
-      unidad_default: null, unidades_sugeridas: [],
+      unidad_default: null, unidades_sugeridas: [], cupon_codigo: null,
     };
   }
 
@@ -791,6 +792,10 @@ export default async function handler(req, res) {
       if (b.bloquear_por_vencidos !== undefined) campos.bloquear_por_vencidos = bool(b.bloquear_por_vencidos);
       if (b.drive_url !== undefined) campos.drive_url = texto(b.drive_url);
       if (b.unidad_default !== undefined) campos.unidad_default = texto(b.unidad_default);
+      // El cupón de 100% de TN. Se le sacan los espacios de los bordes —se pega desde el admin y se
+      // arrastran— pero nada más: los códigos de Tienda Nube distinguen mayúsculas, y
+      // "normalizarlo" acá sería romperlo en silencio.
+      if (b.cupon_codigo !== undefined) campos.cupon_codigo = texto(String(b.cupon_codigo ?? '').trim());
       if (Array.isArray(b.unidades_sugeridas)) {
         campos.unidades_sugeridas = b.unidades_sugeridas
           .map((u) => String(u || '').trim()).filter(Boolean).slice(0, 20);
@@ -1378,6 +1383,11 @@ export default async function handler(req, res) {
         compra_por: usuario,
       };
       if (!campos.tn_orden) return res.status(400).json({ error: 'falta el número de orden de Tienda Nube' });
+      // Con qué cupón se tipeó esta orden. Es el de la marca y hoy es siempre el mismo, así que no
+      // sirve para decidir nada — sirve para que dentro de un año, cuando el código haya cambiado
+      // dos veces, se pueda entender una orden vieja. Se estampa una sola vez: si la orden se
+      // corrige después, el cupón con el que se cargó no cambió.
+      if (!canje.cupon_codigo && cfgCanje.cupon_codigo) campos.cupon_codigo = cfgCanje.cupon_codigo;
       const extra = canje.estado === 'acuerdo' ? { ...campos, estado: 'preparando' } : campos;
       await apilar(supabase, 'canjes', canjeId, { at: ahora(), usuario, nota: `orden ${campos.tn_orden} cargada` }, extra);
       return res.status(200).json({ ok: true });
@@ -1412,6 +1422,32 @@ export default async function handler(req, res) {
       await supabase.from('canjes')
         .update({ aviso_estado: 'hecho', aviso_at: ahora(), updated_at: ahora() }).eq('id', canjeId);
       return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * "Pasaron a entregarlo y no había nadie".
+     *
+     * **No cambia el estado a propósito**: el pedido sigue sin llegar, así que el canje sigue en la
+     * cola de tránsito y sigue siendo trabajo de alguien. Un estado "con problemas" lo sacaría de
+     * la lista que la encargada mira todos los días, que es justo donde tiene que estar.
+     *
+     * Se apila en una lista y no en una columna porque el correo intenta más de una vez: con una
+     * fecha sola, el segundo intento pisa al primero.
+     */
+    if (action === 'intento-entrega') {
+      if (canje.envio_estado !== 'hecho') {
+        return res.status(409).json({ error: 'Todavía no figura despachado: no puede haber un intento de entrega.' });
+      }
+      if (canje.entregado_at) return res.status(409).json({ error: 'Este canje ya figura entregado.' });
+      const at = ahora();
+      const nota = texto(b.nota);
+      const previos = Array.isArray(canje.intentos) ? canje.intentos : [];
+      // Tope defensivo: es una lista que crece sola desde un botón y vive en la fila del canje.
+      const intentos = [...previos, { at, nota, usuario }].slice(-20);
+      await apilar(supabase, 'canjes', canjeId, {
+        at, usuario, nota: nota ? `intento de entrega: ${nota}` : 'intento de entrega fallido',
+      }, { intentos });
+      return res.status(200).json({ ok: true, intentos });
     }
 
     /**

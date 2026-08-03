@@ -18,7 +18,7 @@ import {
 } from '@/components/ui'
 import { esCiego, type CanjeVencido, type CanjeVisible } from '@/lib/canjes/cliente'
 import {
-  STORE_LABEL, estadoEnCriollo, nombrePersona, numeroCanje,
+  STORE_LABEL, enTransito, estadoEnCriollo, nombrePersona, numeroCanje,
   type CanjePersona, type CanjeRow, type EstadoCanje,
 } from '@/lib/canjes/tipos'
 
@@ -34,7 +34,7 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
   cancelado: 'neutral',
 }
 
-type Filtro = 'abiertos' | 'respuesta' | 'aprobacion' | 'vencidos' | 'cerrados' | 'todos'
+type Filtro = 'abiertos' | 'respuesta' | 'aprobacion' | 'transito' | 'vencidos' | 'cerrados' | 'todos'
 
 /** Lo que sigue pidiendo trabajo de alguien. Es el default: la lista es para trabajar. */
 const ABIERTOS: EstadoCanje[] = ['propuesta', 'enviada', 'acuerdo', 'preparando', 'en_curso']
@@ -60,6 +60,9 @@ export function ListaCanjes({
     { key: 'abiertos', label: 'Abiertos', n: propios.filter((c) => ABIERTOS.includes(c.estado)).length },
     { key: 'respuesta', label: 'Esperando respuesta', n: propios.filter((c) => c.estado === 'enviada').length },
     { key: 'aprobacion', label: 'Esperando firma', n: propios.filter((c) => c.estado === 'propuesta').length },
+    // La cola de la encargada: despachado y sin llegar. No es un estado nuevo —`estadoEnCriollo` ya
+    // los llama "En tránsito"— sino la lista que se revisa todos los días.
+    { key: 'transito', label: 'En tránsito', n: propios.filter(enTransito).length },
     { key: 'vencidos', label: 'Con vencidos', n: propios.filter((c) => vencidoPorCanje.has(c.id)).length },
     { key: 'cerrados', label: 'Cerrados', n: propios.filter((c) => c.estado === 'cerrado').length },
     { key: 'todos', label: 'Todos', n: propios.length },
@@ -71,6 +74,7 @@ export function ListaCanjes({
       if (f === 'abiertos') return ABIERTOS.includes(c.estado)
       if (f === 'respuesta') return c.estado === 'enviada'
       if (f === 'aprobacion') return c.estado === 'propuesta'
+      if (f === 'transito') return enTransito(c)
       if (f === 'vencidos') return vencidoPorCanje.has(c.id)
       if (f === 'cerrados') return c.estado === 'cerrado'
       return true

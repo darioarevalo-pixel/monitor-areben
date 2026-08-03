@@ -18,7 +18,7 @@
  * O sea: lo de este archivo es **presentación**, no seguridad. El gate real está en el handler.
  */
 
-import { puedeSub, puedeVer, type Perfil } from '@/lib/permisos'
+import { esAdmin, puedeSub, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
 import { marcasVisiblesCanjes } from './marcas.js'
 import type { Marca } from '@/lib/nav.datos'
 import type { CanjeStore, NivelAprobacion } from './tipos'
@@ -84,4 +84,15 @@ export function puedeCerrarIncompleto(perfil: Perfil | null, marca: Marca): bool
 /** ¿Entra a la sección? Lo mismo que cualquier otra: el padrón, en cambio, lo ve entero. */
 export function puedeVerCanjes(perfil: Perfil | null, marca: Marca): boolean {
   return puedeVer(perfil, marca, 'canjes')
+}
+
+/**
+ * ¿Puede tocar los números del módulo (la pestaña Ajustes)?
+ *
+ * ⚠️ Espejo de `esAdministracion()` en `api/_canjes.js`, que es el gate de verdad: acá sirve para
+ * no mostrar una pantalla que el servidor va a rechazar. **No es por marca**: la config sí lo es,
+ * pero quién puede tocarla no — es la misma gente que maneja los números del resto del monitor.
+ */
+export function puedeConfigurarCanjes(perfil: Perfil | null): boolean {
+  return esAdmin(perfil) || tieneFuncion(perfil, 'administracion')
 }

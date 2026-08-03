@@ -12,28 +12,24 @@
  * orden y no la crea es peor que no tenerlo.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Button, CopyButton, Field, Input, Notice, SectionCard, Select, StatusPill,
-  color, font, space, weight, useToast, type Tone,
+  color, font, radius, space, weight, useToast, type Tone,
 } from '@/components/ui'
 import { numeroEM, etiquetaEM, trackingUrl } from '@/lib/reclamos/tipos'
-import { marcarAvisada, marcarEntregado, registrarCompra, registrarEnvio, verificarOrden } from '@/lib/canjes/cliente'
-import { mensajeDespacho } from '@/lib/canjes/mensajes'
+import {
+  anotarIntentoEntrega, marcarAvisada, marcarEntregado, registrarCompra, registrarEnvio, verificarOrden,
+} from '@/lib/canjes/cliente'
+import { mensajeDespacho, mensajeIntentoEntrega } from '@/lib/canjes/mensajes'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  VIAS_ENVIO, VIA_ENVIO_LABEL, pideSeguimiento, queDatoPide, tieneDatosDeMarca, tieneDireccion,
-  type CanjePersona, type CanjeRow, type ViaEnvio,
+  VIAS_ENVIO, VIA_ENVIO_LABEL, camposParaTiendaNube, direccionEnUnaLinea, pideSeguimiento,
+  queDatoPide, textoDeBusquedaDelItem, tieneDatosDeMarca, tieneDireccion,
+  type CanjeConfig, type CanjeItem, type CanjePersona, type CanjeRow, type ViaEnvio,
 } from '@/lib/canjes/tipos'
 
 const PENDIENTE_TONE: Record<string, Tone> = { pendiente: 'warning', hecho: 'success', no_aplica: 'neutral' }
-
-/** La dirección en un renglón, para copiarla al admin de TN sin ir y volver a la ficha. */
-function direccionEnUnaLinea(p: CanjePersona): string {
-  const calle = [p.calle, p.numero].filter(Boolean).join(' ')
-  const puerta = [p.piso && `piso ${p.piso}`, p.depto && `depto ${p.depto}`].filter(Boolean).join(', ')
-  return [calle, puerta, p.localidad, p.provincia, p.cp && `CP ${p.cp}`].filter(Boolean).join(', ')
-}
 
 /**
  * De dónde salieron los datos con los que se va a armar el pedido: si los cargó el equipo de
@@ -69,13 +65,136 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
     </Notice>
   )
 
+  // La dirección no se repite acá: está entera, campo por campo, en el bloque de abajo.
+  return <div style={{ marginBottom: space[4] }}>{aviso}</div>
+}
+
+/**
+ * Los datos para tipear la orden, **campo por campo**.
+ *
+ * El admin de Tienda Nube pide el nombre por un lado y el apellido por otro, la calle en una
+ * casilla y la altura en otra. Con "copiar la dirección entera" hay que volver a partirla a mano en
+ * el formulario, que es exactamente donde se cuela un CP mal tipeado y el pedido vuelve.
+ *
+ * Los vacíos se muestran igual, en gris y sin botón: la lista contesta de un vistazo la pregunta
+ * que importa antes de empezar, que es qué le falta a esta persona para poder despacharle.
+ */
+function ParaTipearEnTiendaNube({
+  persona, items, cupon,
+}: {
+  persona: CanjePersona
+  items: CanjeItem[]
+  cupon: string | null
+}) {
+  const campos = camposParaTiendaNube(persona)
+  // Lo que efectivamente entra a la orden. Lo quitado y lo que se cayó por falta de stock queda
+  // fuera: son los dos casos en que el canje sale distinto de lo acordado, y tipearlos sería el
+  // error que el bloque viene a evitar.
+  const alPedido = useMemo(
+    () => items.filter((i) => i.estado !== 'quitado' && i.estado !== 'sin_stock'),
+    [items],
+  )
+  const listaEntera = useMemo(
+    () => alPedido.map((i) => `${textoDeBusquedaDelItem(i)} × ${i.cantidad}`).join('\n'),
+    [alPedido],
+  )
+
   return (
-    <div style={{ marginBottom: space[5] }}>
-      {aviso}
+    <div style={{
+      border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[3], marginBottom: space[4],
+    }}>
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+        <span style={{ fontWeight: weight.semibold, fontSize: font.md }}>Para tipear en Tienda Nube</span>
+        <span style={{ color: color.mut, fontSize: font.sm }}>Copiá cada campo y pegalo en el formulario.</span>
+      </div>
+
+      {/* El cupón: uno solo por marca y siempre el mismo. Es lo primero porque sin él la orden no
+          sale en $0, que es lo único que la distingue de una venta. */}
+      <div style={{ marginBottom: space[3] }}>
+        {cupon ? (
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ color: color.mut, fontSize: font.sm }}>Cupón de 100%:</span>
+            <span style={{ fontWeight: weight.semibold, fontFamily: 'ui-monospace, monospace' }}>{cupon}</span>
+            <CopyButton getText={() => cupon} label="Copiar el cupón" />
+          </div>
+        ) : (
+          <Notice tone="warning">
+            Esta marca no tiene cargado el cupón de 100%. Se crea a mano en Tienda Nube —el monitor no
+            puede crearlo— y se guarda en la pestaña Ajustes.
+          </Notice>
+        )}
+      </div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: space[2],
+      }}>
+        {campos.map((c) => (
+          <div
+            key={c.key}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2],
+              background: color.bg2, borderRadius: radius.md, padding: `${space[1.5]}px ${space[2]}px`,
+              minWidth: 0,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: color.mut2, fontSize: font.xs }}>{c.label}</div>
+              <div
+                title={c.valor || undefined}
+                style={{
+                  fontSize: font.base, color: c.valor ? color.ink : color.mut2,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                {c.valor || '—'}
+              </div>
+            </div>
+            {/* Sólo el ícono: trece botones diciendo "Copiar" son trece veces la misma palabra. */}
+            {c.valor && (
+              <CopyButton getText={() => c.valor} label="" copiedLabel="" title={`Copiar ${c.label.toLowerCase()}`} />
+            )}
+          </div>
+        ))}
+      </div>
+
       {tieneDireccion(persona) && (
-        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginTop: space[2], flexWrap: 'wrap' }}>
-          <span style={{ color: color.mut, fontSize: font.sm }}>{direccionEnUnaLinea(persona)}</span>
-          <CopyButton getText={() => direccionEnUnaLinea(persona)} label="Copiar la dirección" />
+        <div style={{ marginTop: space[2] }}>
+          <CopyButton
+            getText={() => direccionEnUnaLinea(persona)}
+            label="Copiar la dirección en un renglón"
+            variant="ghost"
+          />
+        </div>
+      )}
+
+      {/* Los productos. ⚠️ Lo que eligió ella por el link viene sin SKU —la vitrina se congela por
+          id de variante— así que ahí se copia el nombre con la variante, que es lo que se termina
+          escribiendo en el buscador del admin. */}
+      {alPedido.length > 0 && (
+        <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[2], flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: weight.medium, fontSize: font.sm }}>Qué va en la orden</span>
+            <CopyButton getText={() => listaEntera} label="Copiar la lista entera" variant="ghost" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+            {alPedido.map((i) => (
+              <div key={i.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+                <CopyButton
+                  getText={() => textoDeBusquedaDelItem(i)}
+                  label=""
+                  copiedLabel=""
+                  title={i.sku ? 'Copiar el SKU' : 'Copiar el nombre para buscarlo'}
+                />
+                <span style={{ fontSize: font.base }}>
+                  {textoDeBusquedaDelItem(i)}
+                  <span style={{ color: color.mut }}> × {i.cantidad}</span>
+                </span>
+                {!i.sku && (
+                  <span style={{ color: color.mut2, fontSize: font.xs }}>sin SKU: buscalo por nombre</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -83,10 +202,12 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
 }
 
 export function BloqueEnvio({
-  canje, persona, onCambio,
+  canje, persona, items, config, onCambio,
 }: {
   canje: CanjeRow
   persona: CanjePersona | null
+  items: CanjeItem[]
+  config: CanjeConfig | null
   onCambio: () => void
 }) {
   const toast = useToast()
@@ -100,6 +221,10 @@ export function BloqueEnvio({
   const [seguimiento, setSeguimiento] = useState(canje.envio_seguimiento ?? '')
   const [costo, setCosto] = useState<string>(canje.envio_costo == null ? '' : String(canje.envio_costo))
   const [guardando, setGuardando] = useState(false)
+
+  const [anotandoIntento, setAnotandoIntento] = useState(false)
+  const [notaIntento, setNotaIntento] = useState('')
+  const intentos = canje.intentos ?? []
 
   const cerrado = canje.estado === 'cerrado' || canje.estado === 'cancelado'
   const link = canje.envio_seguimiento ? trackingUrl(canje.envio_via as never, canje.envio_seguimiento) : null
@@ -152,14 +277,32 @@ export function BloqueEnvio({
     }
   }
 
-  function avisarPorWhatsApp() {
+  async function guardarIntento() {
+    setGuardando(true)
+    try {
+      await anotarIntentoEntrega(canje.store, canje.id, notaIntento.trim() || undefined)
+      setNotaIntento('')
+      setAnotandoIntento(false)
+      onCambio()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  function escribirlePorWhatsApp(texto: string) {
     if (!persona) return
     const tel = normalizeArgPhone(persona.telefono)
-    const texto = mensajeDespacho(persona, canje, link)
     const url = tel
       ? `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`
       : `https://wa.me/?text=${encodeURIComponent(texto)}`
     window.open(url, '_blank', 'noopener')
+  }
+
+  function avisarPorWhatsApp() {
+    if (!persona) return
+    escribirlePorWhatsApp(mensajeDespacho(persona, canje, link))
     void marcarAvisada(canje.store, canje.id).then(onCambio).catch(() => {})
   }
 
@@ -181,6 +324,9 @@ export function BloqueEnvio({
         <div style={{ fontWeight: weight.semibold, fontSize: font.md, marginBottom: space[2] }}>
           1. Creá la orden en Tienda Nube
         </div>
+        {persona && (
+          <ParaTipearEnTiendaNube persona={persona} items={items} cupon={config?.cupon_codigo ?? null} />
+        )}
         <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
           Con la dirección de ella, 100% de descuento y el envío a nuestro cargo. Después pegá acá el número.
           La orden cae sola en Gestión Nube y descuenta el stock por el camino normal.
@@ -258,12 +404,76 @@ export function BloqueEnvio({
           >
             Marcar que le llegó
           </Button>
+          {/* Anotar un intento NO saca el canje de la cola de tránsito: el pedido sigue sin llegar,
+              así que sigue siendo trabajo de alguien. */}
+          <Button
+            variant="ghost"
+            onClick={() => setAnotandoIntento((v) => !v)}
+            disabled={canje.envio_estado !== 'hecho' || !!canje.entregado_at || cerrado}
+          >
+            Anotar un intento de entrega
+          </Button>
           {canje.entregado_at && (
             <span style={{ color: color.mut, fontSize: font.sm }}>
               Llegó el {canje.entregado_at.slice(0, 10)} — desde ahí corren los plazos.
             </span>
           )}
         </div>
+
+        {anotandoIntento && (
+          <div style={{
+            marginTop: space[3], padding: space[3], border: `1px solid ${color.line}`, borderRadius: radius.lg,
+          }}>
+            <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
+              Pasaron a entregarlo y no lo pudieron dejar. Se anota la fecha y sigue en la cola hasta
+              que llegue.
+            </div>
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field label="Qué pasó" hint="Opcional" width={320}>
+                <Input
+                  value={notaIntento}
+                  onChange={(e) => setNotaIntento(e.target.value)}
+                  placeholder="No había nadie / dirección incompleta…"
+                />
+              </Field>
+              <Button variant="outline" onClick={() => void guardarIntento()} loading={guardando}>
+                Anotarlo
+              </Button>
+              {/* Sirve para las dos puntas: para avisarle antes de que se entere, y para contestarle
+                  cuando la que escribe es ella preguntando por qué no le llegó. */}
+              {persona && (
+                <Button
+                  variant="ghost"
+                  onClick={() => escribirlePorWhatsApp(mensajeIntentoEntrega(persona, canje, link))}
+                >
+                  Escribirle por WhatsApp
+                </Button>
+              )}
+              {persona && (
+                <CopyButton
+                  getText={() => mensajeIntentoEntrega(persona, canje, link)}
+                  label="Copiar el mensaje"
+                  variant="ghost"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {intentos.length > 0 && (
+          <div style={{ marginTop: space[3] }}>
+            <div style={{ color: color.mut2, fontSize: font.xs, marginBottom: space[1] }}>
+              {intentos.length === 1 ? 'Un intento de entrega' : `${intentos.length} intentos de entrega`}
+            </div>
+            {intentos.map((i, n) => (
+              <div key={`${i.at}-${n}`} style={{ color: color.mut, fontSize: font.sm }}>
+                {i.at.slice(0, 10)}
+                {i.nota ? ` · ${i.nota}` : ''}
+                {i.usuario ? ` · ${i.usuario}` : ''}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </SectionCard>
   )

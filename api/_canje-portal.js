@@ -52,6 +52,7 @@ const ABIERTO = ['acuerdo', 'preparando', 'en_curso'];
 
 /** Las únicas columnas del canje que se leen. */
 const CANJE_COLS = `id, store, estado, persona_id, token_vence, datos_confirmados_at, envio_estado, entregado_at,
+  envio_via, envio_seguimiento, intentos,
   vitrina_id, seleccion_cerrada_at, tope_tipo, tope_pvp, tope_unidades`;
 
 /**
@@ -93,6 +94,44 @@ function numeroCanje(id) {
 
 const TALLES = ['remera', 'pantalon', 'calzado'];
 
+/** Espejo de `VIA_ENVIO_LABEL` en `lib/canjes/tipos.ts`. Es lo que ella lee, no un enum. */
+const VIA_ENVIO_LABEL = { correo: 'Correo Argentino', andreani: 'Andreani', cadete: 'Cadete', presencial: 'Lo retira' };
+
+/**
+ * Espejo de `trackingUrl` (`lib/reclamos/tipos.ts:1294`). Se calcula **en el servidor** y no en la
+ * pantalla: el portal es público y traerse `lib/reclamos/tipos.ts` —1.300 líneas de reglas
+ * internas— al bundle que se descarga un teléfono cualquiera es exactamente lo que no queremos.
+ */
+function urlDeSeguimiento(via, codigo) {
+  const c = String(codigo || '').trim();
+  if (!c) return null;
+  if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio';
+  if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?id=${encodeURIComponent(c)}`;
+  return null;
+}
+
+/**
+ * Por dónde va su pedido. Sólo se arma **después de despachar**: antes no hay nada que contar y
+ * mostrar un envío vacío parece un error.
+ *
+ * De los intentos de entrega sale **la fecha y nada más**. La nota interna ("no había nadie", "la
+ * dirección está incompleta") es para nosotros: es un juicio sobre lo que pasó, y en su pantalla se
+ * leería como un reproche. Lo que a ella le sirve es saber que pasaron y cuándo.
+ */
+function elEnvio(canje) {
+  if (canje.envio_estado !== 'hecho' && !canje.entregado_at) return null;
+  const via = canje.envio_via || null;
+  const seguimiento = canje.envio_seguimiento || null;
+  const intentos = Array.isArray(canje.intentos) ? canje.intentos : [];
+  return {
+    via: via ? (VIA_ENVIO_LABEL[via] || via) : null,
+    seguimiento,
+    trackingUrl: urlDeSeguimiento(via, seguimiento),
+    entregadoAt: canje.entregado_at || null,
+    intentos: intentos.map((i) => ({ at: i && i.at ? String(i.at) : null })).filter((i) => i.at),
+  };
+}
+
 const recorte = (v, max) => {
   const s = String(v ?? '').trim();
   return s ? s.slice(0, max) : null;
@@ -107,7 +146,8 @@ const recorte = (v, max) => {
  * `tests/canje-portal.test.ts` le pasa una fila con todo lo sensible adentro y verifica que no salga.
  *
  * @returns {{ numero: string, marca: string, pide: 'talles'|'modelo_celular', despachado: boolean,
- *   confirmadoAt: string|null, driveUrl: string|null, datos: Record<string, any>,
+ *   confirmadoAt: string|null, driveUrl: string|null, envio: Record<string, any>|null,
+ *   datos: Record<string, any>,
  *   vitrina: Record<string, any>|null, elegidos: Record<string, any>[] }}
  */
 export function paraLaPersona(canje, persona, cfg, vitrina, items) {
@@ -137,6 +177,8 @@ export function paraLaPersona(canje, persona, cfg, vitrina, items) {
     confirmadoAt: canje.datos_confirmados_at || null,
     // La carpeta donde deja las fotos. Opcional: si la marca no la cargó, la sección no aparece.
     driveUrl: (cfg && cfg.drive_url) || null,
+    // Por dónde va, una vez que salió. `null` mientras no se despachó.
+    envio: elEnvio(canje),
     datos,
     ...laVitrina(canje, vitrina, items),
   };

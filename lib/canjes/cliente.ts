@@ -13,8 +13,8 @@ import { apiFetch } from '@/lib/api-fetch'
 import { baseDeCostos, numeroCanje } from './tipos'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
-  CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, NivelAprobacion, OpcionVitrina,
-  TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
+  CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, IntentoEntrega, NivelAprobacion,
+  OpcionVitrina, TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
 } from './tipos'
 
 const API = '/api/postventa?recurso=canjes'
@@ -467,6 +467,17 @@ export async function registrarEnvio(
 
 export async function marcarAvisada(store: CanjeStore, id: number): Promise<void> {
   await postear({ store, action: 'aviso', id })
+}
+
+/**
+ * El correo pasó y no había nadie. **No cambia el estado**: el canje sigue en la cola de tránsito
+ * hasta que llegue de verdad.
+ */
+export async function anotarIntentoEntrega(
+  store: CanjeStore, id: number, nota?: string,
+): Promise<IntentoEntrega[]> {
+  const d = await postear({ store, action: 'intento-entrega', id, nota: nota || null })
+  return (d.intentos as IntentoEntrega[]) || []
 }
 
 /** ⚠️ Es el pivote: acá el servidor **congela** el `vence_el` de cada entregable. */

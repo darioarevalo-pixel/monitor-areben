@@ -212,6 +212,38 @@ export function mensajeDespacho(
   return lineas.join('\n')
 }
 
+/**
+ * "El correo pasó y no había nadie".
+ *
+ * Sirve para las dos puntas de la misma situación: para avisarle antes de que se entere sola, y
+ * para contestarle cuando la que escribe es ella preguntando por qué no le llegó. Por eso el texto
+ * no dice quién se enteró primero — dice qué pasó y qué hace falta.
+ *
+ * ⚠️ **No promete un segundo intento.** El correo suele hacerlo, pero prometerlo desde acá es
+ * comprometer algo que no manejamos; se pide el dato que sí destraba la entrega.
+ */
+export function mensajeIntentoEntrega(
+  persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
+  c: Pick<CanjeRow, 'store' | 'envio_via' | 'envio_seguimiento'>,
+  linkSeguimiento: string | null,
+): string {
+  const vos = comoLaLlamamos(persona)
+  const via = c.envio_via as ViaEnvio | null
+
+  const lineas = [
+    `¡Hola ${vos}! Te escribo por tu pedido de ${STORE_LABEL[c.store]}: pasaron a entregártelo y no te encontraron.`,
+    '',
+    'Contame si la dirección está bien y en qué horario te conviene que vuelvan a pasar, así lo coordinamos.',
+  ]
+  if (c.envio_seguimiento) {
+    lineas.push('', `El código de seguimiento es ${c.envio_seguimiento}`)
+    if (linkSeguimiento) lineas.push(linkSeguimiento)
+  } else if (via) {
+    lineas.push('', `Va por ${VIA_ENVIO_LABEL[via]}.`)
+  }
+  return lineas.join('\n')
+}
+
 // ── El recordatorio ─────────────────────────────────────────────────────────────
 
 /**

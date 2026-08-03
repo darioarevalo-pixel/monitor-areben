@@ -29,8 +29,9 @@ import {
 import { crearPersona, esCiego } from '@/lib/canjes/cliente'
 import { normalizarInstagram } from '@/lib/canjes/instagram'
 import { marcaDePermisos } from '@/lib/canjes/marcas.js'
-import { nivelesQueFirma, veMarcaCanjes } from '@/lib/canjes/permisos'
+import { nivelesQueFirma, puedeConfigurarCanjes, veMarcaCanjes } from '@/lib/canjes/permisos'
 import { STORE_LABEL, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
+import { Ajustes } from './Ajustes'
 import { FichaCanje } from './FichaCanje'
 import { GuiaCanjes, LineaDeEstados } from './GuiaCanjes'
 import { FichaPersona } from './FichaPersona'
@@ -55,7 +56,7 @@ export function Canjes() {
   const [store, setStore] = useState<CanjeStore>(() =>
     marcasPosibles.includes(marca) ? marca : (marcasPosibles[0] ?? 'bdi'),
   )
-  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones' | 'vitrinas'>('personas')
+  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones' | 'vitrinas' | 'ajustes'>('personas')
   const [abierta, setAbierta] = useState<number | null>(null)
   const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
   const [dandoAlta, setDandoAlta] = useState(false)
@@ -86,6 +87,9 @@ export function Canjes() {
     { key: 'canjes', label: 'Canjes' },
     { key: 'aprobaciones', label: 'Aprobaciones', badge: esperandoFirma || undefined },
     { key: 'vitrinas', label: 'Vitrinas', hint: 'Lo que ella ve al abrir el link' },
+    // Se muestra siempre: quien no puede editar igual necesita ver con qué números corre el módulo
+    // —y sobre todo cuál es el cupón— para no preguntarlo por WhatsApp cada vez.
+    { key: 'ajustes', label: 'Ajustes', hint: 'El cupón, los plazos y las firmas de esta marca' },
   ], [esperandoFirma])
 
   if (!marcasPosibles.length) {
@@ -171,6 +175,16 @@ export function Canjes() {
         <ListaPersonas personas={est.personas} onAbrir={abrir} onProponer={setProponiendoA} />
       ) : tab === 'vitrinas' ? (
         <Vitrinas store={store} />
+      ) : tab === 'ajustes' ? (
+        <Ajustes
+          // El formulario se inicializa de la config y no se sincroniza después: remontarlo es lo
+          // que hace que al cambiar de marca (o al terminar de cargar) muestre lo que corresponde.
+          key={`${store}-${est.config?.updated_at ?? 'sin'}`}
+          store={store}
+          config={est.config}
+          puedeEditar={puedeConfigurarCanjes(perfil)}
+          onGuardado={() => void est.recargar()}
+        />
       ) : (
         <>
           {/* Los estados en una línea: acá la pregunta no es "qué hago" sino "por qué este canje
