@@ -284,6 +284,17 @@ const TRAZOS = {
       <path d="M3.6 20.4h16.8" />
     </>
   ),
+  /**
+   * Etapas de la pauta — un embudo de tres tramos. Es la forma con la que ya se piensa el problema
+   * (arriba entra mucha gente, abajo compran pocos), y las tres barras se leen como las tres etapas.
+   */
+  etapas: (
+    <>
+      <path d="M3.8 5.2h16.4" />
+      <path d="M6.6 11.2h10.8" />
+      <path d="M9.4 17.2h5.2" />
+    </>
+  ),
   /** Reposición — flechas en círculo. */
   reposicion: (
     <>

@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { Etapas } from '@/components/meta-ads/Etapas'
 import { puedeSub } from '@/lib/permisos'
 import { pausarAnuncio, traerDetalleCuenta, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
 import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
@@ -93,7 +95,22 @@ function Badge({ txt, color, bg }: { txt: string; color: string; bg: string }) {
 
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
+/**
+ * La sección tiene dos vistas y la elige el 2º tramo de la URL (patrón de Tienda Nube):
+ *   `/meta-ads`         → Resumen, los números de cada cuenta.
+ *   `/meta-ads/etapas`  → Etapas de la pauta, a quién le está hablando la plata.
+ *
+ * El despacho vive en un componente aparte y no adentro de `Resumen` porque una salida temprana
+ * después de un hook cambiaría la cantidad de hooks entre renders al navegar de una vista a la otra.
+ */
 export function MetaAds() {
+  const params = useParams()
+  const partes = params.seccion
+  const sub = Array.isArray(partes) ? partes[1] : null
+  return sub === 'etapas' ? <Etapas /> : <Resumen />
+}
+
+function Resumen() {
   const { perfil, marca } = useSesion()
   const puedePausar = puedeSub(perfil, marca, 'meta-ads', 'pausar')
   const [preset, setPreset] = useState<RangoUI>('last_30d')
@@ -286,14 +303,22 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
         </Notice>
       )}
 
-      {/* Embudo de compra */}
+      {/* Del clic a la compra. Se llamaba "Embudo de compra" y se renombró cuando entró la pestaña
+          Etapas: son dos embudos distintos y compartir la palabra los volvía indistinguibles. Este
+          mide QUÉ PASA con quien ya hizo clic; aquel, A QUIÉN le habla la pauta. */}
       {d.funnel && d.funnel.some((p) => p.count > 0) && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Embudo de compra</div>
-            <InfoPopover titulo="Embudo de compra">
-              De cada paso, cuántas personas lo hicieron y cuánto costó cada resultado (gasto ÷ cantidad).
-              La barra muestra la caída respecto del primer paso. Sirve para ver <b>dónde se corta</b> el camino a la compra.
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0 }}>Del clic a la compra</div>
+            <InfoPopover titulo="Del clic a la compra">
+              <p>
+                De cada paso, cuántas personas lo hicieron y cuánto costó cada resultado (gasto ÷ cantidad).
+                La barra muestra la caída respecto del primer paso. Sirve para ver <b>dónde se corta</b> el camino a la compra.
+              </p>
+              <p>
+                Mide qué pasa con quien <b>ya hizo clic</b>. A quién le estás hablando lo mirás en la
+                pestaña <b>Etapas</b>.
+              </p>
             </InfoPopover>
           </div>
           <Embudo pasos={d.funnel} moneda={moneda} />

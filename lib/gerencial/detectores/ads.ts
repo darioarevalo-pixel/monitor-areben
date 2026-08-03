@@ -3,21 +3,31 @@
  * (un token, N cuentas), no por marca — por eso corre UNA vez (fuera del loop de marcas)
  * y recibe los totales por cuenta que el hook trae con `traerDetalleCuenta`.
  *
- * ⚠️ Dos supuestos a validar con Bruno:
- *  - El ROAS objetivo (`u.roasObjetivo`) es un placeholder: no existe en el código.
- *  - La marca de cada cuenta se INFIERE del nombre (no hay mapeo cuenta→marca en el repo).
- *    Si el nombre no delata la marca, cae a 'bdi'. Es transparente y fácil de corregir.
+ * ⚠️ Un supuesto a validar con Bruno: el ROAS objetivo (`u.roasObjetivo`) es un placeholder.
  */
 
 import type { Marca } from '@/lib/nav.datos'
+import { marcaDeCuentaAds } from '@/lib/meta-ads/etapas'
 import type { Metricas } from '@/lib/meta-ads/tipos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'
 
 export type CuentaAds = { id: string; nombre: string; moneda: string; totales: Metricas }
 
-/** Heurística nombre→marca (no hay mapeo en el repo). Zattia/Stunned → zattia; resto → bdi. */
-function marcaDeCuenta(nombre: string): Marca {
+/**
+ * Marca de una cuenta publicitaria.
+ *
+ * Lo correcto es el mapa explícito `MARCA_POR_CUENTA` (`lib/meta-ads/etapas.core.js`). La regex
+ * sobre el nombre quedó como **respaldo de las cuentas todavía no mapeadas**, no como el camino
+ * principal: adivinar mal le atribuye a una marca la plata de la otra, y el número se ve razonable
+ * estando mal. Cuando el mapa esté completo, esta función deja de usar la regex sola.
+ *
+ * (En la pantalla de Etapas no hay respaldo: una cuenta sin mapear se muestra aparte y no suma a
+ * nadie. Acá sí lo hay porque este detector ya existía y sacarlo apagaría un aviso que funciona.)
+ */
+function marcaDeCuenta(id: string, nombre: string): Marca {
+  const mapeada = marcaDeCuentaAds(id)
+  if (mapeada === 'bdi' || mapeada === 'zattia') return mapeada
   return /zattia|stunned/i.test(nombre) ? 'zattia' : 'bdi'
 }
 
@@ -29,7 +39,7 @@ export function detectarAds(cuentas: CuentaAds[], u: Umbrales): Accionable[] {
   const out: Accionable[] = []
   for (const c of cuentas) {
     const t = c.totales
-    const marca = marcaDeCuenta(c.nombre)
+    const marca = marcaDeCuenta(c.id, c.nombre)
 
     // 1. Gasto sin compras: plata quemada.
     if (t.spend >= u.gastoMinSinCompras && t.purchases === 0) {

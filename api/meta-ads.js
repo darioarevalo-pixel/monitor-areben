@@ -1,15 +1,19 @@
 // Métricas de Meta Ads (API de Marketing, solo lectura, scope ads_read).
-// Dos modos:
+// Tres modos:
 //   GET /api/meta-ads                         → lista las cuentas del token con su total (para el selector).
 //   GET /api/meta-ads?account=<id>&preset=... → DETALLE de una cuenta: totales + anuncios agrupables por
 //                                               campaña + serie diaria + desglose por plataforma/ubicación.
+//   GET /api/meta-ads?recurso=etapas&marca=…  → CENSO de campañas de una marca para el diagnóstico de
+//                                               etapas (TOFU/MOFU/BOFU). Incluye las pausadas.
 // Rango por preset (last_30d default) o since/until.
 //
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
 // Token: META_ADS_TOKEN (system user, no vence). Si falta → 500.
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { puedeSub } from '../lib/permisos.core.js';
+import { puedeSub, puedeVer } from '../lib/permisos.core.js';
+// La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
+import { etapaDeObjetivo, marcaDeCuentaAds, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
 
 const GRAPH = 'https://graph.facebook.com/v25.0';
 const TOKEN = process.env.META_ADS_TOKEN;
@@ -19,11 +23,8 @@ const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d'
 const ATTR = encodeURIComponent(JSON.stringify(['7d_click', '1d_view']));
 // Compras dedup cross-surface (pixel + CAPI + on-Meta): la fuente única de verdad de ventas.
 const COMPRA = 'omni_purchase';
-// Objetivos de campaña que buscan VENDER. Es lo que separa el ROAS que importa del ruido: una
-// campaña de tráfico o de reconocimiento baja el ROAS de la cuenta sin que eso signifique nada,
-// porque no está optimizando para comprar. Meta usa los nombres nuevos (OUTCOME_*) y los viejos.
-const OBJETIVOS_VENTA = new Set(['OUTCOME_SALES', 'CONVERSIONS', 'PRODUCT_CATALOG_SALES', 'CATALOG_SALES']);
-const OBJETIVOS_TRAFICO = new Set(['OUTCOME_TRAFFIC', 'LINK_CLICKS', 'OUTCOME_ENGAGEMENT', 'POST_ENGAGEMENT', 'PAGE_LIKES']);
+// `OBJETIVOS_VENTA` / `OBJETIVOS_TRAFICO` se mudaron a `lib/meta-ads/etapas.core.js` (importados
+// arriba): son la misma verdad que el mapa de etapas y ahí un test amarra que no se despeguen.
 /**
  * Visitas al perfil (Instagram/Facebook). El `action_type` exacto de Meta cambia entre versiones
  * y no está documentado de forma estable, así que NO se hardcodea un nombre: se busca por patrón
@@ -65,6 +66,7 @@ async function graph(path, tries = 4) {
 }
 
 // Sigue la paginación por cursor `after` hasta agotar (tope de 20 páginas por las dudas).
+// Nació para insights y sirve para cualquier edge paginado de la Graph (lo usa también `/campaigns`).
 async function insightsTodas(path) {
   let after = null, rows = [], guard = 0;
   do {
@@ -90,10 +92,97 @@ export default async function handler(req, res) {
   if (req.method === 'POST') return await accionAd(req, res, perfil);
 
   const q = req.query || {};
+
+  // Recursos que no son "métricas de una cuenta" entran por acá, como hace `api/datos.js`: el plan
+  // Hobby admite 12 funciones y un archivo nuevo en `api/` las frena todas sin error visible.
+  if (q.recurso === 'etapas') return await etapas(res, perfil, q.marca, parseInt(q.dias, 10));
+
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
 
   return q.account ? await detalle(res, String(q.account), rango, rangoEco) : await overview(res, rango, rangoEco);
+}
+
+// ── Modo etapas: el censo de campañas de UNA marca (TOFU/MOFU/BOFU) ─────────────
+/**
+ * Por qué esto no reusa el modo `detalle`:
+ *
+ * 1. **`detalle` no ve las campañas pausadas ni las que no gastaron.** Deriva las campañas de los
+ *    anuncios que entregaron, con `filtering: spend > 0`. Para decir "hay 5 de una etapa y ninguna
+ *    de la otra" hace falta el censo real, y el `status` de campaña hoy no se trae en ningún lado.
+ * 2. **Pesa 9 llamadas por cuenta** y trae demografía, regiones, placements y creativos. Acá no
+ *    hace falta nada de eso: son 2 llamadas por cuenta.
+ *
+ * La ventana es FIJA (30 días, o 90 si se pide) y no la del selector del Resumen: con "Hoy" a las 9
+ * de la mañana todas las etapas darían cero y la pantalla gritaría un hueco falso todos los días.
+ */
+async function etapas(res, perfil, marcaPedida, diasPedidos) {
+  const marca = String(marcaPedida || '').toLowerCase();
+  if (marca !== 'bdi' && marca !== 'zattia') return res.status(400).json({ error: 'marca inválida (bdi o zattia)' });
+  // Chequeo POR MARCA. El modo overview devuelve todas las cuentas del token a cualquiera que tenga
+  // meta-ads en alguna marca; acá, que el corte es por marca, se puede hacer bien.
+  if (!puedeVer(perfil, marca, 'meta-ads')) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads de esta marca.' });
+
+  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+  const rango = `date_preset=last_${dias}d`;
+  const attr = `action_attribution_windows=${ATTR}`;
+
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name&limit=100');
+  if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
+
+  // Una cuenta que no está en `MARCA_POR_CUENTA` NO se adivina: se devuelve aparte para que la
+  // pantalla la muestre con su id y se pueda mapear. Atribuirla por descarte es el bug que tenía
+  // el detector gerencial, y un número mal atribuido se ve razonable justo cuando está mal.
+  const mias = [], sinMarca = [];
+  for (const c of (cuentasRes.data && cuentasRes.data.data) || []) {
+    const fila = { id: String(c.account_id), nombre: nombreCuenta(c) };
+    const m = marcaDeCuentaAds(c.account_id);
+    if (!m) sinMarca.push(fila);
+    else if (m === marca) mias.push(fila);
+  }
+
+  const porCuenta = await Promise.all(mias.map(async (cuenta) => {
+    const act = `act_${cuenta.id}`;
+    const [censoRes, gastoRes] = await Promise.all([
+      // El censo: TODAS las campañas, incluidas las pausadas (Meta ya excluye archivadas y borradas).
+      insightsTodas(`${act}/campaigns?fields=id,name,objective,status,effective_status,start_time,daily_budget,lifetime_budget&limit=500`),
+      insightsTodas(`${act}/insights?level=campaign&fields=campaign_id,spend,impressions,clicks,actions,action_values&${rango}&${attr}&limit=500`),
+    ]);
+    if (!censoRes.ok) return { error: censoRes.error };
+
+    // El gasto es un enriquecimiento AISLADO: si falla, las campañas igual se listan con 0 y el
+    // diagnóstico dice "sin base" en vez de romper la pantalla entera.
+    const gastoPorId = new Map();
+    if (gastoRes.ok) for (const r of gastoRes.rows) gastoPorId.set(String(r.campaign_id), r);
+
+    return {
+      campañas: censoRes.rows.map((c) => {
+        const g = gastoPorId.get(String(c.id));
+        return {
+          id: String(c.id),
+          nombre: c.name || '(sin nombre)',
+          cuentaId: cuenta.id,
+          objetivo: c.objective || null,
+          etapaAuto: etapaDeObjetivo(c.objective),
+          // `effective_status` es el que manda: `status` dice ACTIVE aunque la cuenta esté frenada.
+          estado: c.effective_status || c.status || null,
+          spend: g ? num(g.spend) : 0,
+          impressions: g ? num(g.impressions) : 0,
+          clicks: g ? num(g.clicks) : 0,
+          purchases: g ? accion(g.actions, COMPRA) : 0,
+          revenue: g ? accion(g.action_values, COMPRA) : 0,
+        };
+      }),
+    };
+  }));
+
+  const fallo = porCuenta.find((r) => r.error);
+  if (fallo && porCuenta.every((r) => r.error)) {
+    return res.status(502).json({ error: 'No se pudieron traer las campañas de Meta', detalle: fallo.error });
+  }
+
+  const campañas = porCuenta.flatMap((r) => r.campañas || []).sort((a, b) => b.spend - a.spend);
+  return res.status(200).json({ ok: true, marca, dias, cuentas: mias, sinMarca, campañas });
 }
 
 // ── Mutación: pausar o activar un anuncio ───────────────────────────────────────

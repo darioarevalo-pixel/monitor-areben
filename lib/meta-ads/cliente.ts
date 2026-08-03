@@ -8,7 +8,7 @@
  */
 
 import { apiFetch } from '../api-fetch'
-import type { DetalleCuenta, PresetMetaAds, RespuestaOverview } from './tipos'
+import type { DetalleCuenta, PresetMetaAds, RespuestaEtapas, RespuestaOverview } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
 
@@ -60,6 +60,19 @@ export function traerDetalleCuenta(accountId: string, opts: OpcionesMetaAds): Pr
   const qs = rangoQS(opts)
   qs.set('account', accountId)
   return pedir<DetalleCuenta>(qs)
+}
+
+/**
+ * Censo de campañas de una marca para el diagnóstico de etapas (TOFU/MOFU/BOFU).
+ *
+ * Va por marca y no por cuenta a propósito: el embudo se piensa por marca, y una marca puede correr
+ * más de una cuenta publicitaria. La ventana es fija (30 o 90 días, ver `UMBRALES_ETAPA`) y por eso
+ * no toma el rango del selector del Resumen.
+ */
+export function traerEtapas(marca: string, dias?: number): Promise<Lectura<RespuestaEtapas>> {
+  const qs = new URLSearchParams({ recurso: 'etapas', marca })
+  if (dias) qs.set('dias', String(dias))
+  return pedir<RespuestaEtapas>(qs)
 }
 
 /**

@@ -118,6 +118,85 @@ export type DailyPoint = { date: string; spend: number; revenue: number; purchas
 /** Una fila del desglose por plataforma × ubicación. */
 export type Placement = { platform: string; position: string; spend: number; purchases: number; revenue: number }
 
+// ── Etapas de la pauta (TOFU / MOFU / BOFU) ─────────────────────────────────────
+// Ojo: NO confundir con `FunnelPaso`, que es el embudo TRANSACCIONAL (qué pasa con quien ya hizo
+// clic). Esto es a QUIÉN le habla cada campaña. Ver `lib/meta-ads/etapas.core.js`.
+
+/** Las tres etapas de la pauta. */
+export type Etapa = 'tofu' | 'mofu' | 'bofu'
+/** Una etapa, o la admisión de que no se sabe. `sin-clasificar` NO es una etapa: es su ausencia. */
+export type EtapaOSin = Etapa | 'sin-clasificar'
+
+/** Una campaña vista desde el diagnóstico de etapas: censo real, incluidas las que no gastaron. */
+export type CampañaEtapa = {
+  id: string
+  nombre: string
+  /** account_id (sin `act_`) de la cuenta que la corre. */
+  cuentaId: string
+  /** El objetivo crudo de Meta. `null` si no vino. */
+  objetivo: string | null
+  /** Etapa derivada del objetivo. El override manual la pisa, pero este valor se conserva. */
+  etapaAuto: EtapaOSin
+  /** `effective_status` de Meta (ACTIVE, PAUSED, …). Es lo que dice si está al aire de verdad. */
+  estado: string | null
+  spend: number
+  impressions: number
+  clicks: number
+  purchases: number
+  revenue: number
+}
+
+/** Cómo le va a una etapa dentro de una marca. */
+export type ResumenEtapa = {
+  etapa: EtapaOSin
+  /** Campañas AL AIRE = activas **y** con gasto. Las dos condiciones; ver `diagnosticar`. */
+  alAire: CampañaEtapa[]
+  /** Activas pero sin entrega en la ventana. Dato útil aparte: no cuentan como "hay pauta". */
+  sinEntrega: CampañaEtapa[]
+  spend: number
+  /** Porción del gasto de la marca (0-1). */
+  parte: number
+  estado: 'ok' | 'floja' | 'vacia'
+  /** Tiene pauta al aire pero se lleva menos del piso de gasto. No cambia el veredicto, lo matiza. */
+  gastoFlaco: boolean
+}
+
+/** El veredicto: una sola frase, la más urgente, sin jerga. */
+export type Veredicto = {
+  /** A qué etapa apunta el pedido (para preseleccionarla al anotar una idea). */
+  etapa: Etapa | null
+  clase: 'vacia' | 'floja' | 'ok' | 'sin-base'
+  titulo: string
+  detalle: string
+}
+
+/** El diagnóstico completo de una marca. */
+export type Diagnostico = {
+  /** Las tres etapas, siempre en orden de embudo, existan o no campañas. */
+  etapas: ResumenEtapa[]
+  /** Campañas cuyo objetivo Meta no supo o no conocemos: se muestran, no se reparten. */
+  sinClasificar: CampañaEtapa[]
+  gastoTotal: number
+  /** Total de campañas al aire en la marca. */
+  totalAlAire: number
+  veredicto: Veredicto
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=etapas`. */
+export type RespuestaEtapas = {
+  marca: string
+  /** Ventana usada, en días (fija: ver `UMBRALES_ETAPA`). */
+  dias: number
+  /** Las cuentas de esa marca que se consultaron. */
+  cuentas: { id: string; nombre: string }[]
+  /**
+   * Cuentas que el token devolvió pero que no están en `MARCA_POR_CUENTA`. No se atribuyen a
+   * ninguna marca: la pantalla las muestra para poder mapearlas.
+   */
+  sinMarca: { id: string; nombre: string }[]
+  campañas: CampañaEtapa[]
+}
+
 /** El detalle completo de una cuenta. */
 export type DetalleCuenta = {
   rango: PresetMetaAds | { since: string; until: string }

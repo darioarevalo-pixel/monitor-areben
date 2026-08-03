@@ -536,10 +536,22 @@ export const PERM_CAT: PermCat[] = [
     "key": "meta-ads",
     "area": "marketing",
     "label": "Meta Ads",
-    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Datos de solo lectura vía la API de Marketing.",
+    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Solo lectura vía la API de Marketing.",
     "brands": [
       "bdi",
       "zattia"
+    ],
+    "subs": [
+      {
+        "key": "pausar",
+        "label": "Puede pausar y activar anuncios",
+        "info": "Pausa o reactiva un anuncio desde el Monitor: deja de mostrarse y de gastar en el acto. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      },
+      {
+        "key": "pautar",
+        "label": "Puede aprobar ideas y corregir la etapa de una campaña",
+        "info": "En Etapas de la pauta: aprueba o descarta las ideas de creativos que anota el equipo, las marca como pauteadas, y corrige a mano la etapa de una campaña mal clasificada. Sin esto se pueden anotar ideas y moverlas por producción, pero no aprobarlas. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      }
     ]
   },
   {
@@ -692,10 +704,19 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "marketing",
       "canjes",
-      "solicitudes",
-      "meta-ads"
+      "solicitudes"
     ],
     "grupos": [
+      {
+        "id": "meta-ads",
+      "icono": "meta-ads",
+        "label": "Meta Ads",
+        "keys": [],
+        "items": [
+          { "ruta": "/meta-ads", "label": "Resumen", "icono": "meta-ads", "key": "meta-ads" },
+          { "ruta": "/meta-ads/etapas", "label": "Etapas de la pauta", "icono": "etapas", "key": "meta-ads" }
+        ]
+      },
       {
         "id": "tienda-nube",
       "icono": "tienda-nube",
