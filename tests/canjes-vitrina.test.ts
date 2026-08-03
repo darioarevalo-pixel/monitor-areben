@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buscarEnLaTienda, categoriasDeLaTienda, esModeloDeCelular, esTalle, facetaDeLaVitrina,
-  hayParaOfrecer, itemPasa, opcionPasa, paraVitrina, precioDeVitrina,
+  hayParaOfrecer, itemPasa, opcionPasa, paraVitrina, precioDeVitrina, revisarStock,
   type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { controlDelTope, opcionEnCriollo, puedeElegir, type CanjeItem } from '@/lib/canjes/tipos'
@@ -383,5 +383,55 @@ describe('el tope lo hace cumplir el servidor, y el link y el panel dicen lo mis
         expect(seVaDelTope(canje, items) == null).toBe(controlDelTope(canje, items).ok)
       }
     }
+  })
+})
+
+
+// ── Revisar el stock: lo único que despega la foto de la realidad ───────────────
+
+describe('revisarStock — la vitrina contra la tienda de hoy', () => {
+  /** Lo que la vitrina tiene guardado: los cuatro productos, todos prendidos. */
+  const EN_LA_VITRINA = [
+    { tn_product_id: '111', activo: true },  // CLEAR CASE: le queda stock
+    { tn_product_id: '222', activo: true },  // CORSET: le queda una variante
+    { tn_product_id: '333', activo: true },  // JEAN STONE: agotado del todo
+    { tn_product_id: '444', activo: true },  // REMERA VIEJA: despublicada
+  ]
+
+  it('apaga lo agotado y lo despublicado, y refresca el resto', () => {
+    // Es EL agujero que esto viene a tapar: traer de nuevo la categoría refresca sólo lo que vuelve
+    // en la importación, y un producto agotado del todo ya no vuelve — su fila quedaba intacta y se
+    // seguía ofreciendo para siempre.
+    const { actualizar, apagar } = revisarStock(EN_LA_VITRINA, TIENDA)
+    expect(apagar.sort()).toEqual(['333', '444'])
+    expect(actualizar.map((a) => a.tn_product_id).sort()).toEqual(['111', '222'])
+  })
+
+  it('lo que se refresca trae las variantes de HOY, sin las que se agotaron', () => {
+    const { actualizar } = revisarStock([{ tn_product_id: '222', activo: true }], TIENDA)
+    // El corset tenía dos variantes y una quedó en 0: la que se ofrece es una sola.
+    expect(actualizar[0].opciones.map((o) => o.valores.join(' · '))).toEqual(['Negro · XS'])
+  })
+
+  it('un producto que ya no está en la tienda también se apaga', () => {
+    // Borrado en TN: no viene en el catálogo y no hay forma de seguir ofreciéndolo.
+    const { actualizar, apagar } = revisarStock([{ tn_product_id: '999', activo: true }], TIENDA)
+    expect(apagar).toEqual(['999'])
+    expect(actualizar).toEqual([])
+  })
+
+  it('NO vuelve a prender lo que alguien apagó a mano', () => {
+    // Que hoy haya stock no revierte una decisión: si lo apagaron, fue por algo que el sistema no
+    // sabe. Un chequeo automático que pisa una decisión manual se apaga a la semana.
+    const r = revisarStock([{ tn_product_id: '111', activo: false }], TIENDA)
+    expect(r.actualizar).toEqual([])
+    expect(r.apagar).toEqual([])
+  })
+
+  it('con la tienda vacía dice que hay que apagar todo — por eso la pantalla no la llama así', () => {
+    // Documenta a propósito el borde peligroso: la función es pura y no puede distinguir "se agotó
+    // todo" de "la lectura falló". Quien decide es la pantalla, que no llama a esto si el catálogo
+    // vino vacío.
+    expect(revisarStock(EN_LA_VITRINA, []).apagar).toHaveLength(4)
   })
 })

@@ -537,3 +537,17 @@ alter table canje_config add column if not exists cupon_codigo text;
 -- semanas. Anotar un intento **no cambia el estado del canje**: sigue en la cola de tránsito hasta
 -- que alguien marque que llegó, que es el único evento que congela los vencimientos.
 alter table canjes add column if not exists intentos jsonb not null default '[]'::jsonb;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 10. Revisar el stock de una vitrina contra la tienda (2-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Cuándo se revisó **la vitrina entera** contra Tienda Nube.
+--
+-- Va aparte de `updated_at` porque no es lo mismo: `updated_at` se mueve al renombrarla o al sumar
+-- una categoría, y lo que hay que poder mirar de un vistazo es **qué tan vieja es la foto del
+-- stock**. Una vitrina es un espejo CONGELADO —el portal no tiene sesión y no puede preguntarle
+-- nada a la tienda— así que lo agotado se sigue ofreciendo hasta que alguien la revisa.
+--
+-- `null` = nunca se revisó desde que se armó; la pantalla cae a `created_at`.
+alter table canje_vitrinas add column if not exists stock_at timestamptz;

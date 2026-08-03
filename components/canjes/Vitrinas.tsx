@@ -26,11 +26,11 @@ import {
 import { FotoTn } from '@/components/tncat/FotoTn'
 import { traerAudit } from '@/lib/tn-audit'
 import {
-  borrarVitrina, cambiarEstadoVitrina, crearVitrina, editarVitrina, leerVitrinas, sacarDeVitrina,
-  sumarAVitrina, type ProductoParaVitrina,
+  borrarVitrina, cambiarEstadoVitrina, crearVitrina, editarVitrina, leerVitrinas,
+  revisarStockDeVitrina, sacarDeVitrina, sumarAVitrina, type ProductoParaVitrina,
 } from '@/lib/canjes/cliente'
 import {
-  buscarEnLaTienda, categoriasDeLaTienda, type CategoriaTn, type ProductoTn,
+  buscarEnLaTienda, categoriasDeLaTienda, revisarStock, type CategoriaTn, type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { baseDeCostos } from '@/lib/canjes/tipos'
 import {
@@ -40,6 +40,22 @@ import {
 
 /** El tope del servidor, repetido acá para poder avisar antes de mandar 300 productos al vacío. */
 const TOPE_VITRINA = 120
+
+/**
+ * Qué tan vieja es la foto del stock, en criollo.
+ *
+ * Va en la pantalla porque **la vitrina no se entera sola de que algo se agotó**: es un espejo
+ * congelado y el portal no puede preguntarle nada a la tienda. Decir la fecha es lo que convierte
+ * eso de trampa silenciosa en un dato que se mira antes de mandar el link.
+ */
+function desdeCuandoElStock(v: Pick<CanjeVitrina, 'stock_at' | 'created_at'>): string {
+  if (v.stock_at) return `el stock se revisó el ${v.stock_at.slice(0, 10)}`
+  // Sin revisión, la foto es de cuando se armó. Es menos preciso —los productos entraron en
+  // distintos momentos— pero es la fecha más vieja posible, que es la que conviene que se lea.
+  return v.created_at
+    ? `el stock no se revisó desde que se armó, el ${v.created_at.slice(0, 10)}`
+    : 'el stock nunca se revisó'
+}
 
 const tono: Record<EstadoVitrina, 'neutral' | 'success' | 'warning'> = {
   borrador: 'warning',
@@ -267,6 +283,7 @@ function ArmarVitrina({
   const [texto, setTexto] = useState('')
   const [elegidos, setElegidos] = useState<Set<string>>(new Set())
   const [guardando, setGuardando] = useState(false)
+  const [revisando, setRevisando] = useState(false)
 
   // Stunned se sirve del catálogo de Zattia: es una línea de esa tienda, no una tienda propia.
   const marcaTn = baseDeCostos(store)
@@ -338,6 +355,53 @@ function ArmarVitrina({
     }
   }
 
+  /**
+   * Revisar la vitrina entera contra la tienda de hoy.
+   *
+   * ⚠️ **Baja el catálogo salteando el caché, siempre.** Es lo único que esta acción decide sola, y
+   * es a propósito: revisar el stock contra una foto de hace una hora es no revisarlo.
+   *
+   * ⚠️ **Si el catálogo viene vacío no se toca nada.** Sin esa guarda, una lectura fallida apaga la
+   * vitrina entera de un click y no hay forma de distinguirlo de "se agotó todo".
+   */
+  const revisar = async () => {
+    setRevisando(true)
+    try {
+      const ps = await traerAudit<ProductoTn>(marcaTn, { variantes: true, refrescar: true })
+      setTienda(ps)
+      setErrorTienda(null)
+      if (!ps.length) {
+        toast.error('La tienda no devolvió ningún producto. No se tocó nada: probá de nuevo en un rato.')
+        return
+      }
+      const { actualizar, apagar } = revisarStock(items, ps)
+
+      // Apagar es la parte que cambia lo que ella ve, así que se pregunta con el número puesto.
+      if (apagar.length) {
+        const nombres = items
+          .filter((i) => apagar.includes(String(i.tn_product_id)))
+          .map((i) => i.nombre)
+        if (!(await confirmar({
+          titulo: apagar.length === 1 ? 'Se agotó 1 producto' : `Se agotaron ${apagar.length} productos`,
+          mensaje: `Dejan de ofrecerse en los canjes que tengan esta vitrina: ${nombres.slice(0, 6).join(', ')}${nombres.length > 6 ? '…' : ''}. Lo que alguien ya haya elegido no se toca.`,
+          ok: 'Apagarlos',
+        }))) return
+      }
+
+      const r = await revisarStockDeVitrina(store, vitrina.id, actualizar, apagar)
+      await onCambio()
+      toast.ok(
+        r.apagados
+          ? `Se apagaron ${r.apagados} y se actualizaron ${r.actualizados}.`
+          : `Todo en pie: se actualizaron ${r.actualizados} ${r.actualizados === 1 ? 'producto' : 'productos'}.`,
+      )
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setRevisando(false)
+    }
+  }
+
   const sacar = async (item: CanjeVitrinaItem) => {
     // En borrador se borra de verdad: todavía no se le ofreció a nadie y no hay nada que explicar.
     // Una vez que salió se apaga, porque que un producto se haya caído es información.
@@ -368,7 +432,14 @@ function ArmarVitrina({
           <Badge tone={tono[vitrina.estado]} subtle>{ESTADO_VITRINA_LABEL[vitrina.estado]}</Badge>
         </div>
         <div style={{ display: 'flex', gap: space[2] }}>
-          <Button variant="ghost" size="sm" onClick={() => void bajar(true)} disabled={bajando}>
+          {/* Es la acción que evita ofrecerle algo agotado, así que va primera y con tono de marca:
+              "actualizar la tienda" de al lado sólo refresca el catálogo en pantalla. */}
+          {items.length > 0 && (
+            <Button variant="soft" tone="brand" size="sm" onClick={() => void revisar()} loading={revisando}>
+              Revisar el stock
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => void bajar(true)} disabled={bajando || revisando}>
             {bajando ? 'Bajando…' : 'Actualizar la tienda'}
           </Button>
           <RenombrarVitrina store={store} vitrina={vitrina} onListo={onCambio} />
@@ -405,7 +476,7 @@ function ArmarVitrina({
         title="Lo que ella va a ver"
         subtitle={
           activos.length
-            ? `${activos.length} de ${TOPE_VITRINA} productos. La foto y el precio quedaron congelados: si cambian en la tienda, volvé a traerlos.`
+            ? `${activos.length} de ${TOPE_VITRINA} productos. Todo quedó congelado el día que se trajo: ${desdeCuandoElStock(vitrina)}.`
             : 'Todavía no hay nada. Buscá productos abajo y sumalos.'
         }
       >

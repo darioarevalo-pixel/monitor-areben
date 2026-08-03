@@ -289,6 +289,18 @@ export type ProductoParaVitrina = {
  * Saca un producto. Sin `activo` lo **borra**, que el servidor sólo permite mientras la vitrina
  * está en borrador; con `activo: false` lo apaga, que es lo que corresponde una vez que salió.
  */
+/**
+ * Revisa la vitrina entera contra la tienda de hoy: refresca lo que sigue en pie y **apaga lo que
+ * se agotó**. La comparación la hace el panel (`revisarStock`), que es el único lado que puede leer
+ * el catálogo de Tienda Nube.
+ */
+export async function revisarStockDeVitrina(
+  store: CanjeStore, vitrinaId: number, items: ProductoParaVitrina[], apagar: string[],
+): Promise<{ actualizados: number; apagados: number }> {
+  const d = await postear({ store, action: 'vitrina-stock', vitrina_id: vitrinaId, items, apagar })
+  return { actualizados: (d.actualizados as number) || 0, apagados: (d.apagados as number) || 0 }
+}
+
 export async function sacarDeVitrina(
   store: CanjeStore, vitrinaId: number, itemId: number, activo?: boolean,
 ): Promise<void> {

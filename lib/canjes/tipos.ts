@@ -669,6 +669,12 @@ export type CanjeVitrina = {
   usuario?: string | null
   created_at?: string
   updated_at?: string | null
+  /**
+   * Cuándo se revisó la vitrina **entera** contra la tienda. Aparte de `updated_at`, que también se
+   * mueve al renombrarla: lo que hay que poder mirar es qué tan vieja es la foto del stock.
+   * `null` = nunca desde que se armó.
+   */
+  stock_at?: string | null
   /** Viajan con la vitrina: sin los productos no hay nada que mirar. */
   items?: CanjeVitrinaItem[]
 }

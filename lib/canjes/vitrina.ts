@@ -117,6 +117,56 @@ export function paraVitrina(p: ProductoTn): ProductoParaVitrina | null {
   }
 }
 
+// ── Revisar el stock: lo único que despega la foto de la realidad ───────────────
+
+/**
+ * Qué hacer con cada producto de la vitrina después de volver a mirar la tienda.
+ *
+ * **Por qué existe.** La vitrina es un espejo *congelado*: se guarda foto, precio y las variantes
+ * que tenían stock **el día que se trajeron**, y de ahí en adelante nadie vuelve a preguntarle nada
+ * a Tienda Nube (el portal no tiene sesión y no puede). Volver a traer una categoría refresca lo
+ * que vuelve en esa importación, pero **un producto agotado del todo ya no vuelve en la lista**:
+ * su fila queda intacta y se sigue ofreciendo para siempre. Este es el agujero que tapa.
+ *
+ * `apagar` NO borra: la fila queda con `activo: false`, que es lo mismo que hace sacar un producto
+ * a mano. Que algo se haya caído es información, y lo que alguien ya eligió no se toca — quedó
+ * congelado en su canje.
+ */
+export type RevisionDeStock = {
+  /** Los que siguen ofreciéndose, con la foto, el precio y las variantes de hoy. */
+  actualizar: ProductoParaVitrina[]
+  /** `tn_product_id` de los que dejaron de poder ofrecerse. */
+  apagar: string[]
+}
+
+/**
+ * Compara lo que la vitrina tiene **activo** contra el catálogo de hoy.
+ *
+ * Se apaga por tres motivos, y los tres significan lo mismo para ella —que no se lo podemos
+ * ofrecer—: se agotaron todas sus variantes, lo despublicaron, o el producto ya no está en la
+ * tienda. `paraVitrina` decide los dos primeros con las mismas reglas con las que entró.
+ *
+ * ⚠️ Los que ya están apagados **no se miran**: alguien los apagó a mano y volver a prenderlos
+ * porque hoy hay stock sería pisar una decisión con un chequeo automático.
+ */
+export function revisarStock(
+  items: { tn_product_id: string; activo: boolean }[],
+  tienda: ProductoTn[],
+): RevisionDeStock {
+  const porId = new Map(tienda.map((p) => [String(p.id), p]))
+  const actualizar: ProductoParaVitrina[] = []
+  const apagar: string[] = []
+
+  for (const i of items) {
+    if (!i.activo) continue
+    const p = porId.get(String(i.tn_product_id))
+    const fresco = p ? paraVitrina(p) : null
+    if (fresco) actualizar.push(fresco)
+    else apagar.push(String(i.tn_product_id))
+  }
+  return { actualizar, apagar }
+}
+
 // ── La faceta: lo único por lo que ella puede filtrar ───────────────────────────
 
 /**

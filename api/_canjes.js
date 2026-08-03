@@ -46,6 +46,7 @@
 //   GET  ?vista=vitrinas                                         → las vitrinas de la marca, CON sus productos.
 //   POST { action:'vitrina-crear'|'vitrina-editar'|'vitrina-estado'|'vitrina-items'|'vitrina-item'|'vitrina-borrar' }
 //                                                                → el espejo curado de Tienda Nube.
+//   POST { action:'vitrina-stock', vitrina_id, items, apagar }   → la vitrina entera contra la tienda de hoy.
 //   POST { action:'item-agregar', id, ...datos }                 → snapshot del producto, con control del tope.
 //   POST { action:'item-quitar', id, item_id, motivo }           → NO borra: marca 'quitado'.
 //   POST { action:'compra', id, tn_orden, gn_venta_number? }     → la orden creada a mano en TN.
@@ -828,7 +829,8 @@ export default async function handler(req, res) {
     }
 
     if (action === 'vitrina-editar' || action === 'vitrina-estado'
-      || action === 'vitrina-items' || action === 'vitrina-item' || action === 'vitrina-borrar') {
+      || action === 'vitrina-items' || action === 'vitrina-item' || action === 'vitrina-borrar'
+      || action === 'vitrina-stock') {
       const vitrinaId = parseInt(b.vitrina_id, 10);
       if (!vitrinaId) return res.status(400).json({ error: 'falta vitrina_id' });
 
@@ -911,6 +913,59 @@ export default async function handler(req, res) {
           if (error) throw new Error(error.message);
         }
         return res.status(200).json({ ok: true, sumados: nuevos.length, actualizados: limpios.length - nuevos.length });
+      }
+
+      /**
+       * Revisar el stock de la vitrina ENTERA contra la tienda de hoy.
+       *
+       * Es distinto de `vitrina-items`, que refresca sólo lo que trae la importación: **un producto
+       * agotado del todo ya no vuelve en esa lista**, así que su fila quedaba intacta y se seguía
+       * ofreciendo para siempre. Acá llega la lista de los que sí se pueden seguir ofreciendo (con
+       * la foto y el precio de hoy) y aparte los `tn_product_id` que hay que apagar.
+       *
+       * La comparación la hace el panel y no el servidor porque **el catálogo se lee desde el
+       * panel**: `traerAudit` pasa por `bdi-catalogo`, que es el único lado con credenciales de TN,
+       * y este handler no las tiene. Lo que sí se hace acá es no aceptar apagar nada que no sea de
+       * esta vitrina.
+       */
+      if (action === 'vitrina-stock') {
+        const crudos = Array.isArray(b.items) ? b.items : [];
+        const limpios = crudos.map(itemDeVitrinaDelBody).filter(Boolean);
+        const aApagar = (Array.isArray(b.apagar) ? b.apagar : []).map((x) => String(x || '')).filter(Boolean);
+        if (!limpios.length && !aApagar.length) return res.status(400).json({ error: 'no llegó nada para revisar' });
+
+        const { data: previos } = await supabase.from('canje_vitrina_items')
+          .select('id, tn_product_id, activo').eq('vitrina_id', vitrinaId);
+        const porProducto = new Map((previos || []).map((p) => [String(p.tn_product_id), p]));
+
+        // Sólo se refresca lo que YA está en la vitrina: esta acción no suma productos. Sumar es
+        // `vitrina-items`, que además controla el tope.
+        let actualizados = 0;
+        for (const i of limpios) {
+          const fila = porProducto.get(i.tn_product_id);
+          if (!fila) continue;
+          // `activo` no se toca: si alguien lo apagó a mano, tener stock hoy no lo vuelve a prender.
+          const { error } = await supabase.from('canje_vitrina_items')
+            .update({ ...i, updated_at: ahora() }).eq('id', fila.id);
+          if (error) throw new Error(error.message);
+          actualizados++;
+        }
+
+        // Se apagan de a uno y sólo los de ESTA vitrina. No se borran: que un producto se haya
+        // caído es información, y lo que alguien ya eligió quedó congelado en su canje.
+        let apagados = 0;
+        for (const pid of aApagar) {
+          const fila = porProducto.get(pid);
+          if (!fila || fila.activo === false) continue;
+          const { error } = await supabase.from('canje_vitrina_items')
+            .update({ activo: false, updated_at: ahora() }).eq('id', fila.id);
+          if (error) throw new Error(error.message);
+          apagados++;
+        }
+
+        await supabase.from('canje_vitrinas')
+          .update({ stock_at: ahora(), updated_at: ahora() }).eq('id', vitrinaId);
+        return res.status(200).json({ ok: true, actualizados, apagados });
       }
 
       // Sacar un producto. **Mientras la vitrina se está armando se borra de verdad**: todavía no se
