@@ -148,13 +148,14 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
 
 - **⛔ Reclamos y Cambios: frenado.** El flujo no convence; no construir ahí hasta que Bruno
   devuelva el mapa marcado.
-- **▶️ Canjes: entraron la tanda 1 (la propuesta) y la tanda 2 (la vitrina)**, 2-ago-2026. La
+- **▶️ Canjes: entraron las tandas 1 (la propuesta), 2 (la vitrina) y 3 (la carga a TN)**, 2-ago-2026. La
   vitrina es un **espejo curado de Tienda Nube**: se trae por categoría o buscando, se congela con
   foto y precio (el portal no tiene sesión y no puede pedirle nada a TN), y la creadora elige desde
   el link. Lo suyo entra como `origen:'persona'` + `estado:'propuesto'` y el equipo lo confirma. El
   tope lo hacen cumplir los dos handlers con `api/_canjes-reglas.js`. **De TN sólo se lee: el
-  monitor no escribe en la tienda.** Falta la **tanda 3** (copiar campo por campo al admin de TN +
-  cola de tránsito). Ya no está vacío: 20 personas y 3 canjes.
+  monitor no escribe en la tienda** — la orden se tipea a mano con el cupón de 100% de la config y
+  los botones de copiar campo por campo. Ya no está vacío: 20 personas y 3 canjes.
+  **Nada de esto se probó a mano todavía.**
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo
