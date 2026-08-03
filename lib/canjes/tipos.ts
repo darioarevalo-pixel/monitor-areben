@@ -579,6 +579,13 @@ export type CanjeConfig = {
    * es que la venta marque $0. Se crea a mano en TN — el monitor no puede crear cupones.
    */
   cupon_codigo: string | null
+  /**
+   * El mail con el que se tipea la orden del canje en Tienda Nube. **No es el de la creadora**: la
+   * orden es un trámite interno para que el envío salga y la venta marque $0, y su mail es una
+   * herramienta de contacto nuestra que vive en el padrón. Con el de la marca, además, TN no le
+   * manda a ella los mails de la orden.
+   */
+  email_pedido: string | null
   updated_at?: string | null
 }
 
@@ -594,6 +601,7 @@ export const CONFIG_DEFAULT: Omit<CanjeConfig, 'store'> = {
   unidad_default: null,
   unidades_sugeridas: [],
   cupon_codigo: null,
+  email_pedido: null,
 }
 
 /** Si la marca no configuró la suya. Genérico a propósito: es mejor que adivinar mal. */
@@ -1151,13 +1159,22 @@ export type CampoParaTN = { key: string; label: string; valor: string }
  *
  * Los vacíos **se devuelven igual**, con `valor: ''`. Esconderlos haría más corta la lista y más
  * difícil la pregunta que importa: qué le falta a esta persona para poder despacharle.
+ *
+ * ⚠️ **El mail NO es el de ella**, sale de la config de la marca (`email_pedido`). La orden es un
+ * trámite interno para que el envío salga y la venta marque $0; el mail de la creadora es una
+ * herramienta de contacto que vive en el padrón y no tiene por qué entrar a la tienda. Si la marca
+ * todavía no lo configuró, el campo sale vacío como cualquier otro que falte: es lo que hace
+ * visible que hay algo que cargar en Ajustes.
  */
-export function camposParaTiendaNube(p: CanjePersona): CampoParaTN[] {
+export function camposParaTiendaNube(
+  p: CanjePersona,
+  cfg?: Pick<CanjeConfig, 'email_pedido'> | null,
+): CampoParaTN[] {
   const txt = (v: unknown) => String(v ?? '').trim()
   return [
     { key: 'nombre', label: 'Nombre', valor: txt(p.nombre) },
     { key: 'apellido', label: 'Apellido', valor: txt(p.apellido) },
-    { key: 'email', label: 'Mail', valor: txt(p.email) },
+    { key: 'email', label: 'Mail', valor: txt(cfg?.email_pedido) },
     { key: 'telefono', label: 'Teléfono', valor: txt(p.telefono) },
     { key: 'dni', label: 'DNI', valor: txt(p.dni) },
     { key: 'calle', label: 'Calle', valor: txt(p.calle) },

@@ -506,17 +506,34 @@ describe('los datos para tipear la orden en Tienda Nube', () => {
     cp: '1425', localidad: 'Palermo', provincia: 'CABA', direccion_nota: 'portero eléctrico',
   } as CanjePersona
 
+  const CFG = { email_pedido: 'canjes@bdi.com' }
+
   it('los trece campos salen en el orden en que el admin los pide', () => {
-    expect(camposParaTiendaNube(P).map((c) => c.key)).toEqual([
+    expect(camposParaTiendaNube(P, CFG).map((c) => c.key)).toEqual([
       'nombre', 'apellido', 'email', 'telefono', 'dni',
       'calle', 'numero', 'piso', 'depto', 'cp', 'localidad', 'provincia', 'direccion_nota',
     ])
   })
 
+  // Lo que se tipea en la orden es el mail DE LA MARCA. El de ella es una herramienta de contacto
+  // que vive en el padrón: si entrara a la tienda, TN le mandaría los avisos de una compra que no
+  // hizo, y su casilla quedaría atada a un cliente de Tienda Nube que no le pertenece.
+  it('el mail es el de la marca, nunca el de la creadora', () => {
+    const mail = camposParaTiendaNube(P, CFG).find((c) => c.key === 'email')
+    expect(mail?.valor).toBe('canjes@bdi.com')
+    expect(mail?.valor).not.toBe(P.email)
+  })
+
+  // Sin config cargada sale vacío como cualquier otro campo que falte, que es lo que hace visible
+  // que hay algo pendiente en Ajustes. Nunca cae al de ella por las dudas.
+  it.each([undefined, null, { email_pedido: null }])('sin mail configurado (%s) no cae al de ella', (cfg) => {
+    expect(camposParaTiendaNube(P, cfg).find((c) => c.key === 'email')?.valor).toBe('')
+  })
+
   it('lo que falta se devuelve igual, vacío', () => {
     // Esconder los vacíos haría la lista más corta y la pregunta que importa más difícil: qué le
     // falta a esta persona para poder despacharle.
-    const campos = camposParaTiendaNube({ ...P, piso: null, dni: '' } as CanjePersona)
+    const campos = camposParaTiendaNube({ ...P, piso: null, dni: '' } as CanjePersona, CFG)
     expect(campos).toHaveLength(13)
     expect(campos.find((c) => c.key === 'piso')?.valor).toBe('')
     expect(campos.find((c) => c.key === 'dni')?.valor).toBe('')

@@ -220,6 +220,9 @@ describe('lo que la creadora puede escribir', () => {
     // alta, y un error de ahí volvía el paquete.
     ['el apellido', { apellido: '' }, 'tu apellido'],
     ['el teléfono', { telefono: '  ' }, 'tu teléfono'],
+    // El email no va a la orden de Tienda Nube (esa lleva el de la marca): queda en el padrón y es
+    // con lo que se la vuelve a contactar. Por eso pasó a obligatorio.
+    ['el email', { email: '' }, 'tu email'],
     ['el DNI', { dni: '' }, 'tu DNI'],
     ['la altura', { numero: '' }, 'la altura'],
     ['el código postal', { cp: '' }, 'el código postal'],
@@ -228,6 +231,24 @@ describe('lo que la creadora puede escribir', () => {
     const { error } = camposDeLaPersona({ ...COMPLETO, ...parche }, 'zattia')
     expect(error).toContain(esperado)
   })
+
+  // La presencia sola no alcanza: un `lumail.com` pasa el "no está vacío" y deja el único dato de
+  // contacto tan inservible como si no lo hubiera cargado, pero sin que nadie se entere.
+  it.each(['lumail.com', 'lu@mail', 'lu @mail.com', '@mail.com'])(
+    'rebota el email mal escrito (%s)',
+    (email) => {
+      expect(camposDeLaPersona({ ...COMPLETO, email }, 'zattia').error).toContain('Revisá el email')
+    },
+  )
+
+  // El chequeo es a propósito mínimo: validar direcciones de verdad es imposible y lo único que se
+  // lograría es rebotar a alguien con un mail raro pero perfectamente válido.
+  it.each(['lu+canjes@mail.com.ar', 'lu.mendez@sub.dominio.io', "o'hara@mail.com"])(
+    'deja pasar el email raro pero válido (%s)',
+    (email) => {
+      expect(camposDeLaPersona({ ...COMPLETO, email }, 'zattia').error).toBeUndefined()
+    },
+  )
 
   it('junta los faltantes en una sola frase, bien conjugada', () => {
     const { error } = camposDeLaPersona({ ...COMPLETO, cp: '', localidad: '' }, 'zattia')

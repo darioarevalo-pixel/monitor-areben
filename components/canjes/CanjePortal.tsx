@@ -451,7 +451,7 @@ export function CanjePortal({ token }: { token: string | null }) {
         <Campo titulo="Apellido" valor={form.apellido} onChange={set('apellido')} />
       </div>
       <Campo titulo="Teléfono" valor={form.telefono} onChange={set('telefono')} tipo="tel" placeholder="11 5555 5555" />
-      <Campo titulo="Email" valor={form.email} onChange={set('email')} tipo="email" opcional />
+      <Campo titulo="Email" valor={form.email} onChange={set('email')} tipo="email" />
       <Campo titulo="DNI" valor={form.dni} onChange={set('dni')} tipo="tel" placeholder="Lo pide el correo para entregarte" />
 
       <h2 style={{ fontSize: 16, margin: '24px 0 10px' }}>A dónde te lo mandamos</h2>

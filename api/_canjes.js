@@ -420,7 +420,7 @@ export default async function handler(req, res) {
       store: st, umbral_aprobacion_alta: null, cadencia_dias_default: 90,
       plazo_entregable_dias_default: 10, tope_evidencias_por_canje: 30, factor_costo_estimado: 0.4,
       bloquear_por_vencidos: false, cierres_incompletos_no_repetir: 2, drive_url: null,
-      unidad_default: null, unidades_sugeridas: [], cupon_codigo: null,
+      unidad_default: null, unidades_sugeridas: [], cupon_codigo: null, email_pedido: null,
     };
   }
 
@@ -797,6 +797,10 @@ export default async function handler(req, res) {
       // arrastran— pero nada más: los códigos de Tienda Nube distinguen mayúsculas, y
       // "normalizarlo" acá sería romperlo en silencio.
       if (b.cupon_codigo !== undefined) campos.cupon_codigo = texto(String(b.cupon_codigo ?? '').trim());
+      // El mail con el que se tipea la orden en TN. Es el de la marca, NO el de la creadora: ver
+      // `camposParaTiendaNube` en `lib/canjes/tipos.ts`. Se guarda en minúsculas y sin espacios
+      // porque se copia de un mail o se tipea a mano, y ahí "BDI@…" y "bdi@…" son el mismo buzón.
+      if (b.email_pedido !== undefined) campos.email_pedido = texto(String(b.email_pedido ?? '').trim().toLowerCase());
       if (Array.isArray(b.unidades_sugeridas)) {
         campos.unidades_sugeridas = b.unidades_sugeridas
           .map((u) => String(u || '').trim()).filter(Boolean).slice(0, 20);

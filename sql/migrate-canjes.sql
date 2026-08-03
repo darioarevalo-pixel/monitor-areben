@@ -551,3 +551,19 @@ alter table canjes add column if not exists intentos jsonb not null default '[]'
 --
 -- `null` = nunca se revisó desde que se armó; la pantalla cae a `created_at`.
 alter table canje_vitrinas add column if not exists stock_at timestamptz;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 11. El mail con el que se tipea la orden en Tienda Nube (3-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Hasta ahora la orden de canje se cargaba con el mail DE LA CREADORA, que es el que ella dejó en
+-- el portal. Eso mezclaba dos cosas distintas: la orden es un trámite interno para que el envío
+-- salga y la venta marque $0, y su mail es una herramienta de contacto nuestra.
+--
+-- Con el mail de la marca, todas las órdenes de canje quedan bajo un mismo cliente en TN y la
+-- tienda no le manda nada a ella. El suyo queda en `canje_personas.email` —ahora obligatorio en el
+-- portal— para volver a escribirle dentro de seis meses.
+--
+-- Es por marca porque BDI, Zattia y Stunned son tres tiendas distintas. Va en la config y no en el
+-- código por lo mismo que el cupón: cambiar una dirección de mail no puede costar un deploy.
+alter table canje_config add column if not exists email_pedido text;

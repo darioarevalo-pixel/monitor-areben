@@ -172,7 +172,16 @@ export function Canjes() {
           onCanjeCreado={canjeCreado}
         />
       ) : tab === 'personas' ? (
-        <ListaPersonas personas={est.personas} onAbrir={abrir} onProponer={setProponiendoA} />
+        <ListaPersonas
+          personas={est.personas}
+          store={store}
+          onAbrir={abrir}
+          onProponer={setProponiendoA}
+          onBorrada={async () => {
+            await est.recargar()
+            toast.ok('La sacamos del padrón.')
+          }}
+        />
       ) : tab === 'vitrinas' ? (
         <Vitrinas store={store} />
       ) : tab === 'ajustes' ? (

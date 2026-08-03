@@ -88,14 +88,16 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
  * ese momento; dejarlo abierto empuja hacia abajo los dos pasos que siguen.
  */
 function ParaTipearEnTiendaNube({
-  persona, items, cupon, compraHecha,
+  persona, items, cupon, emailPedido, compraHecha,
 }: {
   persona: CanjePersona
   items: CanjeItem[]
   cupon: string | null
+  /** El mail de la MARCA, que es el que va en la orden. Ver `camposParaTiendaNube`. */
+  emailPedido: string | null
   compraHecha: boolean
 }) {
-  const campos = camposParaTiendaNube(persona)
+  const campos = camposParaTiendaNube(persona, { email_pedido: emailPedido })
   // Lo que efectivamente entra a la orden. Lo quitado y lo que se cayó por falta de stock queda
   // fuera: son los dos casos en que el canje sale distinto de lo acordado, y tipearlos sería el
   // error que el bloque viene a evitar.
@@ -188,6 +190,23 @@ function ParaTipearEnTiendaNube({
           />
         </div>
       )}
+
+      {/* El mail de ella, dicho y sin botón de copiar. Está a la vista para que nadie lo vaya a
+          buscar a la ficha, y no se puede copiar para que no se tipee por costumbre en la casilla
+          de arriba: en la orden va el de la marca. */}
+      {!emailPedido ? (
+        <div style={{ marginTop: space[2] }}>
+          <Notice tone="warning">
+            Esta marca no tiene cargado el mail para la orden. Se carga una vez en la pestaña
+            Ajustes — no va el de la creadora.
+          </Notice>
+        </div>
+      ) : persona.email ? (
+        <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
+          El mail de ella es <strong style={{ fontWeight: weight.medium }}>{persona.email}</strong>,
+          y no va en la orden: queda en el padrón para volver a escribirle.
+        </div>
+      ) : null}
 
       {/* Los productos, para buscarlos en la tienda. Se copian **el SKU y el nombre por separado**:
           son las dos formas de encontrar una funda en el buscador y no siempre funciona la misma.
@@ -358,12 +377,13 @@ export function BloqueEnvio({
             persona={persona}
             items={items}
             cupon={config?.cupon_codigo ?? null}
+            emailPedido={config?.email_pedido ?? null}
             compraHecha={canje.compra_estado === 'hecho'}
           />
         )}
         <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
           Como una venta común: buscás los productos, los ponés en el carrito, aplicás el cupón de 100%
-          y completás el checkout con los datos de ella. Después pegá acá el número.
+          y completás el checkout con los datos de arriba, campo por campo. Después pegá acá el número.
           La orden cae sola en Gestión Nube y descuenta el stock por el camino normal.
         </div>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>

@@ -296,6 +296,10 @@ export function camposDeLaPersona(datos, store) {
     // ficha lo tipeó el equipo, y estos dos son los que salen impresos en la etiqueta del envío.
     falta('apellido', 'tu apellido'),
     falta('telefono', 'tu teléfono'),
+    // El email dejó de ser opcional: no va en la orden de Tienda Nube (esa lleva el de la marca),
+    // va al padrón y es con lo que se la vuelve a contactar dentro de seis meses. Un dato de
+    // contacto que la mitad de las fichas no tiene no sirve para nada.
+    falta('email', 'tu email'),
     falta('dni', 'tu DNI (lo pide el correo)'),
     falta('calle', 'la calle'),
     falta('numero', 'la altura'),
@@ -308,6 +312,14 @@ export function camposDeLaPersona(datos, store) {
       ? faltantes[0]
       : `${faltantes.slice(0, -1).join(', ')} y ${faltantes[faltantes.length - 1]}`;
     return { error: `Nos falta ${lista}.` };
+  }
+
+  // Forma del email, después de la presencia: un `mailgmail.com` pasa el "no está vacío" y deja el
+  // dato tan inservible como si no lo hubiera cargado, pero sin que nadie se entere. El chequeo es
+  // a propósito mínimo —algo, arroba, algo, punto, algo— porque validar direcciones de verdad es
+  // imposible y lo único que se lograría es rebotar a alguien con un mail raro pero válido.
+  if (campos.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(campos.email)) {
+    return { error: 'Revisá el email: parece que le falta algo.' };
   }
 
   if (!Object.keys(campos).length) return { error: 'No llegó ningún dato.' };

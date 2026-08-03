@@ -20,10 +20,11 @@ import {
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  agregarNota, borrarNota, borrarPersona, editarPersona, esCiego, leerPersona, numeroDe,
+  agregarNota, borrarNota, editarPersona, esCiego, leerPersona, numeroDe,
   type CamposPersona, type CanjeVisible, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
 import { ProponerCanje } from './ProponerCanje'
+import { useBorrarPersona } from './useCanjes'
 import { instagramHref, instagramParaMostrar, tiktokHref } from '@/lib/canjes/instagram'
 import {
   NIVEL_LABEL, calcularPuntaje, porQueNoHayPuntaje,
@@ -91,6 +92,7 @@ export function FichaPersona({
 }) {
   const toast = useToast()
   const { confirmar } = useConfirmar()
+  const pedirBorrar = useBorrarPersona(store)
   const [proponiendo, setProponiendo] = useState(false)
 
   const [persona, setPersona] = useState<CanjePersona | null>(null)
@@ -172,23 +174,12 @@ export function FichaPersona({
     [persona, store, confirmar, toast],
   )
 
+  // La confirmación y el manejo del "no se puede" son los mismos que en la fila de la lista, así
+  // que salen de un solo lugar (`useBorrarPersona`).
   const borrar = useCallback(async () => {
     if (!persona) return
-    const ok = await confirmar({
-      titulo: `Borrar a ${nombrePersona(persona)} del padrón`,
-      mensaje: 'Se va la ficha entera con sus notas y sus archivos. No se puede deshacer.',
-      ok: 'Borrar',
-      tono: 'danger',
-    })
-    if (!ok) return
-    try {
-      await borrarPersona(store, persona.id)
-      await onBorrada()
-    } catch (e) {
-      // Con canjes encima el servidor rechaza y explica que se vete en vez de borrar.
-      toast.error(String((e as Error)?.message || e))
-    }
-  }, [persona, store, confirmar, onBorrada, toast])
+    await pedirBorrar({ id: persona.id, nombre: nombrePersona(persona) }, onBorrada)
+  }, [persona, pedirBorrar, onBorrada])
 
   if (cargando) return <Card>Cargando la ficha…</Card>
   if (error) return <Notice tone="danger">{error}</Notice>

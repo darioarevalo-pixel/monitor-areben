@@ -123,13 +123,22 @@ export function FichaCanje({
     } catch (e) { toast.error(String((e as Error)?.message || e)) }
   }
 
-  /** Ella dijo que sí. Es lo que genera el link del portal. */
-  async function acepto() {
+  /**
+   * Ella dijo que sí. Es lo que genera el link del portal.
+   *
+   * Devuelve si salió bien: "Guardar y aceptado" abre el modal del link a continuación y no tiene
+   * que abrirlo sobre un canje que no llegó a cambiar de estado.
+   */
+  async function acepto(): Promise<boolean> {
     try {
       await registrarRespuesta(store, canje.id, 'acepto')
       await recargar()
       toast.ok('Acordado. Ya podés mandarle el link para que cargue sus datos.')
-    } catch (e) { toast.error(String((e as Error)?.message || e)) }
+      return true
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+      return false
+    }
   }
 
   async function rechazar() {
@@ -199,8 +208,9 @@ export function FichaCanje({
             </>
           )}
           {/* La negociación pasa por las redes; acá sólo se asienta cómo terminó. "Generar
-              cambios" existe porque las condiciones cambian en el chat y el mensaje tiene que
-              rearmarse con lo que se acordó de verdad. */}
+              cambios" existe porque las condiciones se mueven en el chat: para cuando se usa, la
+              propuesta YA se mandó y lo que se está haciendo es registrar el acuerdo final, no
+              rearmar el pitch. Por eso no ofrece el mensaje — para eso está "Ver el mensaje". */}
           {canje.estado === 'enviada' && (
             <>
               <Button variant="outline" onClick={() => setMostrandoPropuesta(true)}>Ver el mensaje</Button>
@@ -342,8 +352,8 @@ export function FichaCanje({
         />
       )}
 
-      {/* El mismo modal que sale al armar la propuesta: el texto se rearma con lo que hay ahora,
-          así que después de "Generar cambios" ya dice las condiciones nuevas. */}
+      {/* El mismo modal que sale al armar la propuesta. El texto se rearma con lo que hay ahora,
+          así que si el trato cambió, dice las condiciones nuevas. */}
       {mostrandoPropuesta && persona && (
         <MensajeParaCopiar
           persona={persona}
@@ -361,7 +371,12 @@ export function FichaCanje({
           canje={canje}
           entregables={entregables}
           onCerrar={() => setEditandoTrato(false)}
-          onListo={async () => { setEditandoTrato(false); await recargar(); setMostrandoPropuesta(true) }}
+          onListo={async (tambienAcepto) => {
+            setEditandoTrato(false)
+            if (!tambienAcepto) { await recargar(); return }
+            // Es el mismo "Aceptó" de la barra: pasa a `acuerdo` y hace nacer el token del portal.
+            if (await acepto()) setMostrandoLink(true)
+          }}
         />
       )}
 
@@ -382,6 +397,11 @@ export function FichaCanje({
  *
  * Sólo el trato —cuánto se le manda y qué publica—, que es lo único que se mueve en una
  * negociación. Lo demás (la marca, el tipo) no cambia sin que cambie el canje entero.
+ *
+ * Sale con dos botones porque son dos momentos distintos y los dos existen: asentar un cambio
+ * mientras se sigue negociando, y asentar el cambio **con el que ella dijo que sí**. El segundo es
+ * el caso frecuente —se registra recién cuando el acuerdo cerró—, y separarlo en dos pantallas
+ * dejaba a mitad de camino un canje ya acordado.
  */
 function EditarTrato({
   store, canje, entregables, onCerrar, onListo,
@@ -390,7 +410,8 @@ function EditarTrato({
   canje: FichaCanjeDatos['canje']
   entregables: FichaCanjeDatos['entregables']
   onCerrar: () => void
-  onListo: () => Promise<void>
+  /** `tambienAcepto`: además de guardar, registra el sí y sigue con el link del portal. */
+  onListo: (tambienAcepto: boolean) => Promise<void>
 }) {
   const toast = useToast()
   const [topeTipo, setTopeTipo] = useState<TopeTipo>(canje.tope_tipo)
@@ -404,6 +425,24 @@ function EditarTrato({
   const unidadesLimpias = unidades.filter((u) => u.descripcion.trim() !== '' && Number(u.cantidad) > 0)
   const puede = (topeTipo === 'monto' ? topePvp !== '' : unidadesLimpias.length > 0) && totalPedido(pedido) > 0
 
+  /** Los dos botones guardan lo mismo; sólo cambia si además se registra el sí. */
+  const guardar = async (tambienAcepto: boolean) => {
+    setGuardando(true)
+    try {
+      await editarCanje(store, canje.id, {
+        tope_tipo: topeTipo,
+        tope_pvp: topeTipo === 'monto' ? Number(topePvp) : null,
+        tope_unidades: topeTipo === 'unidades' ? unidadesLimpias : [],
+        entregables: pedidoALista(pedido),
+      })
+      await onListo(tambienAcepto)
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   return (
     <Modal
       abierto
@@ -413,29 +452,18 @@ function EditarTrato({
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button variant="outline" loading={guardando} disabled={!puede} onClick={() => void guardar(false)}>
+            Guardar
+          </Button>
           <Button
             variant="solid"
             tone="brand"
             loading={guardando}
             disabled={!puede}
-            onClick={async () => {
-              setGuardando(true)
-              try {
-                await editarCanje(store, canje.id, {
-                  tope_tipo: topeTipo,
-                  tope_pvp: topeTipo === 'monto' ? Number(topePvp) : null,
-                  tope_unidades: topeTipo === 'unidades' ? unidadesLimpias : [],
-                  entregables: pedidoALista(pedido),
-                })
-                await onListo()
-              } catch (e) {
-                toast.error(String((e as Error)?.message || e))
-              } finally {
-                setGuardando(false)
-              }
-            }}
+            title="Guarda el trato nuevo y registra que aceptó"
+            onClick={() => void guardar(true)}
           >
-            Guardar y ver el mensaje
+            Guardar y aceptado
           </Button>
         </>
       }

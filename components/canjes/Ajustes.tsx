@@ -44,6 +44,7 @@ export function Ajustes({
   // `useEffect` + setState es lo que el lint prohíbe, y con razón: acá además pisaría lo que se
   // estaba tipeando si la sección se recargara sola.
   const [cupon, setCupon] = useState(config?.cupon_codigo ?? '')
+  const [emailPedido, setEmailPedido] = useState(config?.email_pedido ?? '')
   const [unidad, setUnidad] = useState(config?.unidad_default ?? '')
   const [drive, setDrive] = useState(config?.drive_url ?? '')
   const [umbral, setUmbral] = useState(aTexto(config?.umbral_aprobacion_alta))
@@ -59,6 +60,7 @@ export function Ajustes({
     try {
       await guardarConfig(store, {
         cupon_codigo: cupon.trim() || null,
+        email_pedido: emailPedido.trim().toLowerCase() || null,
         unidad_default: unidad.trim() || null,
         drive_url: drive.trim() || null,
         umbral_aprobacion_alta: aNumero(umbral),
@@ -91,8 +93,8 @@ export function Ajustes({
       )}
 
       <SectionCard
-        title={`El cupón de ${STORE_LABEL[store]}`}
-        subtitle="Con qué cupón se tipea la orden del canje para que salga en $0."
+        title={`La orden de ${STORE_LABEL[store]} en Tienda Nube`}
+        subtitle="Los dos datos que son siempre los mismos al tipear la orden de un canje."
       >
         {/* ⚠️ El monitor NO puede crear cupones en Tienda Nube: no hay credenciales de la tienda en
             este repo. El cupón se crea una vez a mano en el admin y acá sólo se guarda el código
@@ -108,6 +110,30 @@ export function Ajustes({
           Aparece con su botón de copiar en la ficha de cada canje, al lado de los datos para tipear
           la orden. Se guarda en el canje el día que se registra la compra, para que dentro de un año
           se pueda entender una orden vieja aunque el código haya cambiado.
+        </div>
+
+        {/* El mail de la marca, no el de ella. La orden es un trámite interno; el mail de la
+            creadora es una herramienta de contacto que vive en el padrón y no tiene por qué entrar
+            a la tienda —ni que TN le mande los avisos de una compra que ella no hizo. */}
+        <div style={{ marginTop: space[5] }}>
+          <Field
+            label="Mail para la orden"
+            hint="El de la marca. NO se usa el de la creadora."
+            width={280}
+          >
+            <Input
+              type="email"
+              value={emailPedido}
+              onChange={(e) => setEmailPedido(e.target.value)}
+              disabled={off}
+              placeholder="Sin cargar"
+            />
+          </Field>
+          <div style={{ color: color.mut, fontSize: font.sm, marginTop: space[2] }}>
+            Todas las órdenes de canje de la marca quedan bajo este mismo cliente en Tienda Nube, y
+            la tienda no le manda nada a ella. El mail de la creadora queda igual en su ficha del
+            padrón: es con lo que se la vuelve a contactar más adelante.
+          </div>
         </div>
       </SectionCard>
 

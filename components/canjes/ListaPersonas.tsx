@@ -22,7 +22,7 @@ import { instagramHref, instagramParaMostrar } from '@/lib/canjes/instagram'
 import { MINIMO_CANJES_CERRADOS, NIVEL_LABEL, porQueNoHayPuntaje, type NivelPuntaje } from '@/lib/canjes/puntaje'
 import { CONTACTO_LABEL, type EstadoContacto } from '@/lib/canjes/seguimiento'
 import { STORE_LABEL, type CanjeStore, type EstadoCanje } from '@/lib/canjes/tipos'
-import type { PersonaEnLista } from './useCanjes'
+import { useBorrarPersona, type PersonaEnLista } from './useCanjes'
 
 const CONTACTO_TONE: Record<EstadoContacto, Tone> = {
   vencido: 'warning',
@@ -61,16 +61,22 @@ function haceCuanto(dias: number | null): string {
 
 export function ListaPersonas({
   personas,
+  store,
   onAbrir,
   onProponer,
+  onBorrada,
 }: {
   personas: PersonaEnLista[]
+  store: CanjeStore
   onAbrir: (id: number) => void
   /** El atajo de la fila: proponerle un canje sin abrir la ficha. */
   onProponer: (p: PersonaEnLista) => void
+  /** Se fue del padrón: la lista se vuelve a pedir. */
+  onBorrada: () => Promise<void>
 }) {
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
+  const pedirBorrar = useBorrarPersona(store)
 
   const visibles = useMemo(() => {
     const busca = q.trim().toLowerCase()
@@ -135,6 +141,21 @@ export function ListaPersonas({
                       <strong style={{ fontWeight: weight.medium }}>{p._nombre}</strong>
                       {p.destacada && <Badge tone="brand" subtle>Destacada</Badge>}
                       {p.vetada && <Badge tone="danger" subtle>Vetada</Badge>}
+                      {/* El canje nace de una idea sobre alguien que ya está acá: tener que abrir
+                          la ficha primero es el paso que hace que se termine anotando en otro
+                          lado. Va pegado al nombre —y no al fondo de la fila— porque la decisión
+                          se toma mirando de quién se trata, no recorriendo las seis columnas.
+                          `stopPropagation` porque la fila entera abre la ficha. */}
+                      <Button
+                        variant="soft"
+                        tone="brand"
+                        size="sm"
+                        disabled={p.vetada}
+                        title={p.vetada ? 'Está vetada' : 'Proponerle un canje'}
+                        onClick={(e) => { e.stopPropagation(); onProponer(p) }}
+                      >
+                        + canje
+                      </Button>
                     </span>
                     <span style={{ color: color.mut, fontSize: font.sm }}>
                       {/* El @ abre el perfil sin pasar por la ficha: es el chequeo de 5 segundos
@@ -175,18 +196,17 @@ export function ListaPersonas({
                   )}
                 </Td>
                 <Td align="right">
-                  {/* El canje nace de una idea sobre alguien que ya está acá: tener que abrir la
-                      ficha primero es el paso que hace que se termine anotando en otro lado.
-                      `stopPropagation` porque la fila entera abre la ficha. */}
+                  {/* Borrar desde la fila, sin entrar: lo que se saca del padrón es el @ mal
+                      tipeado y la ficha duplicada, y para eso abrir la ficha es puro trámite. Si
+                      ya hizo canjes el servidor lo frena y manda a vetarla — eso es historial. */}
                   <Button
-                    variant="soft"
-                    tone="brand"
+                    variant="ghost"
+                    tone="danger"
                     size="sm"
-                    disabled={p.vetada}
-                    title={p.vetada ? 'Está vetada' : 'Proponerle un canje'}
-                    onClick={(e) => { e.stopPropagation(); onProponer(p) }}
+                    title="Borrar del padrón"
+                    onClick={(e) => { e.stopPropagation(); void pedirBorrar({ id: p.id, nombre: p._nombre }, onBorrada) }}
                   >
-                    + canje
+                    Borrar
                   </Button>
                 </Td>
               </Tr>

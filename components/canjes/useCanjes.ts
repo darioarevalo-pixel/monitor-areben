@@ -9,8 +9,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConfirmar, useToast } from '@/components/ui'
 import {
-  leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes, type VitrinaEnLista,
+  borrarPersona, leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
 import { calcularPuntaje, contextoDePuntaje, type ContextoPuntaje, type Puntaje } from '@/lib/canjes/puntaje'
 import { estadoDeContacto, ordenarPorContacto, type Seguimiento } from '@/lib/canjes/seguimiento'
@@ -154,4 +155,39 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     recargar,
     parchearPersona,
   }
+}
+
+/**
+ * Sacar a alguien del padrón, desde donde sea.
+ *
+ * Vive acá y no en la ficha porque se borra desde dos lugares —la fila de la lista y la ficha
+ * abierta— y es el mismo acto: lo que se lee antes de aceptar no puede depender de por dónde se
+ * entró. Lo que **no** decide este hook es si se puede borrar: eso lo sabe el servidor, que ve los
+ * canjes de todas las marcas y contesta 409 explicando que se vete en vez de borrar. Ese texto se
+ * muestra tal cual.
+ */
+export function useBorrarPersona(store: CanjeStore) {
+  const toast = useToast()
+  const { confirmar } = useConfirmar()
+
+  return useCallback(
+    async (persona: { id: number; nombre: string }, alBorrar: () => void | Promise<void>) => {
+      const ok = await confirmar({
+        titulo: `Borrar a ${persona.nombre} del padrón`,
+        mensaje: 'Se va la ficha entera con sus notas y sus archivos. No se puede deshacer.',
+        ok: 'Borrar',
+        tono: 'danger',
+      })
+      if (!ok) return false
+      try {
+        await borrarPersona(store, persona.id)
+        await alBorrar()
+        return true
+      } catch (e) {
+        toast.error(String((e as Error)?.message || e))
+        return false
+      }
+    },
+    [store, confirmar, toast],
+  )
 }
