@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buscarEnLaTienda, categoriasDeLaTienda, hayParaOfrecer, paraVitrina, precioDeVitrina,
+  buscarEnLaTienda, categoriasDeLaTienda, esModeloDeCelular, esTalle, facetaDeLaVitrina,
+  hayParaOfrecer, itemPasa, opcionPasa, paraVitrina, precioDeVitrina,
   type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { controlDelTope, opcionEnCriollo, puedeElegir, type CanjeItem } from '@/lib/canjes/tipos'
@@ -135,6 +136,73 @@ describe('qué de Tienda Nube entra a la vitrina', () => {
     expect(buscarEnLaTienda(TIENDA, { texto: 'corset' }).map((p) => p.nombre)).toEqual(['CORSET FRANK'])
     // Las categorías de BDI mezclan cada modelo de iPhone con FUNDAS: ahí se llega por el nombre.
     expect(buscarEnLaTienda(TIENDA, { texto: 'jean' })).toEqual([])
+  })
+})
+
+// ── 1 bis. El filtro de arriba del link ─────────────────────────────────────────
+
+/** Como llegan al teléfono: sólo los valores de cada opción deciden la faceta. */
+const conOpciones = (...opciones: string[][]) => ({ opciones: opciones.map((valores) => ({ valores })) })
+
+describe('la faceta: por lo único que ella puede filtrar', () => {
+  it('reconoce el eje por la FORMA del valor, no por su posición', () => {
+    // Medido: en BDI hay 11 modelos que caen en la posición 1 y en Zattia los talles aparecen en
+    // las dos. Mirar la posición daría "color" la mitad de las veces.
+    expect(esModeloDeCelular('iPhone 15 Pro Max')).toBe(true)
+    expect(esModeloDeCelular('Samsung Galaxy S23')).toBe(true)
+    expect(esModeloDeCelular('Negro')).toBe(false)
+    expect(esTalle('XL')).toBe(true)
+    expect(esTalle('38')).toBe(true)
+    expect(esTalle('Único')).toBe(true)
+    expect(esTalle('Talle M')).toBe(true)
+    expect(esTalle('Rosa')).toBe(false)
+  })
+
+  it('con datos tipo BDI la faceta es el modelo; con datos tipo Zattia, el talle', () => {
+    const bdi = facetaDeLaVitrina([conOpciones(['iPhone 13'], ['iPhone 15']), conOpciones(['iPhone 15', 'Rosa'])])
+    expect(bdi?.clase).toBe('modelo')
+    const zattia = facetaDeLaVitrina([conOpciones(['Negro', 'XS'], ['Blanco', 'M'])])
+    expect(zattia?.clase).toBe('talle')
+  })
+
+  it('sin un eje reconocible NO hay filtro, en vez de uno con un nombre inventado', () => {
+    // Sólo colores: la pantalla no puede decir "elegí color" cuando no sabe qué es ese valor.
+    expect(facetaDeLaVitrina([conOpciones(['Negro'], ['Rosa']), conOpciones(['Verde'])])).toBeNull()
+    // Un solo valor tampoco es filtro: ocuparía media pantalla para no sacar nada.
+    expect(facetaDeLaVitrina([conOpciones(['iPhone 15']), conOpciones(['iPhone 15', 'Negro'])])).toBeNull()
+    expect(facetaDeLaVitrina([])).toBeNull()
+  })
+
+  it('los talles van en el orden en que se prueban y el único al final; los modelos, del más nuevo', () => {
+    const talles = facetaDeLaVitrina([conOpciones(['M'], ['XS'], ['UNICO'], ['42'], ['L'], ['38'], ['XXL'])])
+    expect(talles?.valores).toEqual(['XS', 'M', 'L', 'XXL', '38', '42', 'UNICO'])
+    const modelos = facetaDeLaVitrina([conOpciones(['iPhone 12'], ['iPhone 15 Pro'], ['iPhone 6'], ['Samsung S23'])])
+    // La marca agrupa primero, o los Samsung quedarían intercalados entre los iPhone por el número.
+    expect(modelos?.valores).toEqual(['iPhone 15 Pro', 'iPhone 12', 'iPhone 6', 'Samsung S23'])
+  })
+
+  it('lo que no participa de la faceta se queda visible: no es de otro modelo, es de ninguno', () => {
+    const faceta = facetaDeLaVitrina([conOpciones(['iPhone 15'], ['iPhone 13'])])
+    const funda15 = conOpciones(['iPhone 15'])
+    const funda13 = conOpciones(['iPhone 13'])
+    // Los ~19 accesorios de BDI que sólo tienen color.
+    const accesorio = conOpciones(['Negro'], ['Rosa'])
+
+    expect(itemPasa(funda15, faceta, 'iPhone 15')).toBe(true)
+    expect(itemPasa(funda13, faceta, 'iPhone 15')).toBe(false)
+    expect(itemPasa(accesorio, faceta, 'iPhone 15')).toBe(true)
+    // Sin filtro puesto no se esconde nada.
+    expect(itemPasa(funda13, faceta, null)).toBe(true)
+  })
+
+  it('dentro de la hoja quedan sólo las opciones que matchean, y las neutras', () => {
+    const faceta = facetaDeLaVitrina([conOpciones(['iPhone 15'], ['iPhone 13'])])
+    expect(opcionPasa(['iPhone 15', 'Rosa'], faceta, 'iPhone 15')).toBe(true)
+    expect(opcionPasa(['iPhone 13'], faceta, 'iPhone 15')).toBe(false)
+    expect(opcionPasa(['Rosa'], faceta, 'iPhone 15')).toBe(true)
+    // `Único` y `UNICO` son el mismo talle: los cargó gente distinta.
+    const talles = facetaDeLaVitrina([conOpciones(['Único'], ['M'])])
+    expect(opcionPasa(['Único'], talles, 'UNICO')).toBe(true)
   })
 })
 

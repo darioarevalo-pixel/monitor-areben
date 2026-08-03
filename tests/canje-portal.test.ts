@@ -177,6 +177,10 @@ describe('lo que la creadora puede escribir', () => {
 
   it.each([
     ['el nombre', { nombre: '' }, 'tu nombre'],
+    // Los dos que salen impresos en la etiqueta. El apellido pasó a obligatorio cuando el
+    // formulario dejó de prellenarlos: lo que había en la ficha lo tipeó el equipo al darla de
+    // alta, y un error de ahí volvía el paquete.
+    ['el apellido', { apellido: '' }, 'tu apellido'],
     ['el teléfono', { telefono: '  ' }, 'tu teléfono'],
     ['el DNI', { dni: '' }, 'tu DNI'],
     ['la altura', { numero: '' }, 'la altura'],
@@ -190,6 +194,16 @@ describe('lo que la creadora puede escribir', () => {
   it('junta los faltantes en una sola frase, bien conjugada', () => {
     const { error } = camposDeLaPersona({ ...COMPLETO, cp: '', localidad: '' }, 'zattia')
     expect(error).toBe('Nos falta el código postal y la localidad.')
+  })
+
+  // Con vitrina, el formulario NO dibuja "Tu celular" ni "Tus talles" —ya lo dijo eligiendo la
+  // variante— y por eso la clave no viaja. El servidor tiene que dejarla guardar igual: exige el
+  // dato sólo si la clave vino.
+  it('con vitrina, guardar sin el dato de la ficha no da error', () => {
+    const { apellido, nombre, telefono, dni, calle, numero, cp, localidad, provincia } = COMPLETO
+    const sinFicha = { apellido, nombre, telefono, dni, calle, numero, cp, localidad, provincia }
+    expect(camposDeLaPersona(sinFicha, 'bdi').error).toBeUndefined()
+    expect(camposDeLaPersona(sinFicha, 'zattia').error).toBeUndefined()
   })
 
   it('exige al menos un talle, y el modelo del celular en BDI', () => {

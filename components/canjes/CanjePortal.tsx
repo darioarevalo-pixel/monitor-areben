@@ -32,7 +32,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { FotoTn } from '@/components/tncat/FotoTn'
+import { PortalVitrina, type Eleccion, type Opcion, type ProductoVitrina, type Vitrina } from '@/components/canjes/PortalVitrina'
 
 const API = '/api/postventa?recurso=canje'
 
@@ -54,29 +54,6 @@ type Datos = {
   modelo_celular?: string | null
 }
 
-/** Una variante, como la manda la tienda: `['iPhone 12']`, `['Negro', 'XS']`. */
-type Opcion = { id: string; valores: string[]; foto: string | null }
-
-type ProductoVitrina = {
-  id: number
-  nombre: string
-  foto: string | null
-  /** Sólo cuando el acuerdo es por monto: en modo unidades no viaja ni un peso. */
-  pvp?: number | null
-  opciones: Opcion[]
-}
-
-type Vitrina = {
-  titulo: string
-  /** `false` = ya eligió, o el pedido ya se está preparando. Se muestra en lectura. */
-  abierta: boolean
-  modo: 'unidades' | 'monto'
-  tope: number | null
-  /** Lo ya consumido del tope, contando lo que el equipo le haya cargado. */
-  usado: number
-  items: ProductoVitrina[]
-}
-
 type Elegido = { nombre: string; variante: string; cantidad: number; pvp?: number | null }
 
 type Vista = {
@@ -91,9 +68,6 @@ type Vista = {
   elegidos: Elegido[]
 }
 
-/** Lo que arma en el carrito. Se manda así: el resto lo pone el servidor desde la vitrina. */
-type Eleccion = { item_id: number; opcion_id: string; cantidad: number }
-
 /** Los estilos son propios y no el kit del Monitor: esto lo abre alguien de afuera, en un teléfono. */
 const caja: React.CSSProperties = {
   maxWidth: 520, margin: '0 auto', padding: 20,
@@ -106,11 +80,6 @@ const input: React.CSSProperties = {
 }
 const bloque: React.CSSProperties = { marginBottom: 14 }
 const fila: React.CSSProperties = { display: 'flex', gap: 10 }
-/** El − del carrito. 34 px porque abajo de eso el dedo no le pega. */
-const contador: React.CSSProperties = {
-  width: 34, height: 34, borderRadius: 999, border: '1px solid #d1d5db',
-  background: '#fff', color: '#1c1c1e', fontSize: 18, lineHeight: 1, cursor: 'pointer',
-}
 
 function Campo({
   titulo, valor, onChange, placeholder, tipo, opcional, ancho,
@@ -151,8 +120,6 @@ export function CanjePortal({ token }: { token: string | null }) {
   /** `elegir` sólo existe si hay vitrina abierta; si no, el link es el de siempre. */
   const [paso, setPaso] = useState<'elegir' | 'datos'>('datos')
   const [carrito, setCarrito] = useState<Eleccion[]>([])
-  /** Qué producto tiene las opciones desplegadas. Uno por vez: es una pantalla de teléfono. */
-  const [abierto, setAbierto] = useState<number | null>(null)
 
   // El setState va dentro del await y no en el cuerpo del effect: el linter del repo rechaza el
   // setState síncrono ahí (dispara renders en cascada). Mismo patrón que el resto de las secciones.
@@ -170,9 +137,14 @@ export function CanjePortal({ token }: { token: string | null }) {
         // Arranca eligiendo sólo si hay algo que elegir. Sin vitrina —o ya cerrada— el link es
         // exactamente el de antes: un formulario de datos y un botón.
         if (v.vitrina?.abierta && v.vitrina.items.length) setPaso('elegir')
+        // El nombre y el apellido arrancan **vacíos la primera vez**: son los datos del ENVÍO y lo
+        // que hay en la ficha lo tipeó el equipo al darla de alta, así que un error de ahí sale
+        // impreso en la etiqueta. Si ya confirmó una vez, se prellenan como el resto: esos datos ya
+        // son suyos y hacerla escribirlos de nuevo en cada visita sería un castigo.
+        const suyos = v.confirmadoAt != null
         setForm({
-          nombre: v.datos.nombre || '',
-          apellido: v.datos.apellido || '',
+          nombre: (suyos && v.datos.nombre) || '',
+          apellido: (suyos && v.datos.apellido) || '',
           telefono: v.datos.telefono || '',
           email: v.datos.email || '',
           dni: v.datos.dni || '',
@@ -225,22 +197,30 @@ export function CanjePortal({ token }: { token: string | null }) {
 
   const restante = vitrina?.tope == null ? null : vitrina.tope - usado
 
-  /** ¿Entra uno más de este producto? En monto depende del precio; en unidades, de que quede lugar. */
-  const entra = (item: ProductoVitrina) => {
-    if (restante == null) return true
-    if (vitrina?.modo === 'unidades') return restante >= 1
-    return restante >= (Number(item.pvp) || 0)
+  /**
+   * ¿Cuántos más de este producto entran en lo que queda? En monto depende del precio; en unidades,
+   * del lugar. Es un número y no un sí/no porque la hoja tiene un `+` que se tiene que cortar solo.
+   *
+   * El tope de 99 es sólo para que el `+` no sea infinito cuando no hay tope o el producto no tiene
+   * precio: quién puede llevarse cuánto lo decide el acuerdo, no esta pantalla.
+   */
+  const cuantosEntran = (item: ProductoVitrina) => {
+    if (restante == null) return 99
+    if (vitrina?.modo === 'unidades') return Math.max(0, restante)
+    const pvp = Number(item.pvp) || 0
+    if (pvp <= 0) return restante >= 0 ? 99 : 0
+    return Math.max(0, Math.floor(restante / pvp))
   }
 
-  const sumar = (item: ProductoVitrina, opcion: Opcion) => {
-    if (!entra(item)) return
+  const sumar = (item: ProductoVitrina, opcion: Opcion, cantidad: number) => {
+    const suman = Math.min(Math.max(1, cantidad), cuantosEntran(item))
+    if (suman < 1) return
     setCarrito((c) => {
       // Otra igual suma cantidad en vez de agregar un renglón: puede llevarse tres de lo mismo.
       const i = c.findIndex((e) => e.item_id === item.id && e.opcion_id === opcion.id)
-      if (i < 0) return [...c, { item_id: item.id, opcion_id: opcion.id, cantidad: 1 }]
-      return c.map((e, n) => (n === i ? { ...e, cantidad: e.cantidad + 1 } : e))
+      if (i < 0) return [...c, { item_id: item.id, opcion_id: opcion.id, cantidad: suman }]
+      return c.map((e, n) => (n === i ? { ...e, cantidad: e.cantidad + suman } : e))
     })
-    setAbierto(null)
   }
 
   const restar = (e: Eleccion) => setCarrito((c) => c
@@ -253,6 +233,19 @@ export function CanjePortal({ token }: { token: string | null }) {
     return (o?.valores || []).filter(Boolean).join(' · ')
   }
 
+  /**
+   * ¿Se le pregunta el dato de la ficha (el modelo del celular o los talles)?
+   *
+   * **Con vitrina, no**: ya lo dijo eligiendo la variante, y una pregunta de más es gente que
+   * abandona. Esto revierte a propósito la decisión de la tanda 2 —"se pide igual porque sirve para
+   * el próximo canje"—; el campo sigue estando en el panel y ahora se llena con lo que eligió de
+   * verdad, que es mejor dato que lo que hubiera tipeado. Sin vitrina el link queda como estaba.
+   *
+   * Mira `elegidos` además de `vitrina` para que tampoco reaparezca cuando vuelve a entrar con la
+   * selección ya cerrada.
+   */
+  const pideFicha = !vista?.vitrina && !(vista?.elegidos || []).length
+
   const guardar = async () => {
     if (!vista) return
     setGuardando(true)
@@ -264,12 +257,15 @@ export function CanjePortal({ token }: { token: string | null }) {
         cp: form.cp, localidad: form.localidad, provincia: form.provincia,
         direccion_nota: form.direccion_nota,
       }
-      // Sólo el dato que esta marca pide. Mandar el otro sería pisarle en la ficha algo que este
-      // formulario ni siquiera le mostró.
-      if (vista.pide === 'talles') {
-        datos.talles = { remera: form.remera, pantalon: form.pantalon, calzado: form.calzado }
-      } else {
-        datos.modelo_celular = form.modelo_celular
+      // Sólo el dato que esta marca pide, y sólo si se lo mostramos: mandar una clave que el
+      // formulario no dibujó le pisaría la ficha con un vacío. El servidor acompaña —sólo exige el
+      // dato si la clave vino—, así que con vitrina simplemente no viaja.
+      if (pideFicha) {
+        if (vista.pide === 'talles') {
+          datos.talles = { remera: form.remera, pantalon: form.pantalon, calzado: form.calzado }
+        } else {
+          datos.modelo_celular = form.modelo_celular
+        }
       }
 
       const r = await fetch(API, {
@@ -335,110 +331,21 @@ export function CanjePortal({ token }: { token: string | null }) {
 
   // ── Paso 1: elegir ────────────────────────────────────────────────────────────
   // Va antes de los datos porque es la parte que engancha. El botón de abajo no manda nada: la
-  // pasa al formulario, y recién ahí se guarda todo junto.
+  // pasa al formulario, y recién ahí se guarda todo junto. La pantalla vive en `PortalVitrina`;
+  // acá se queda el estado, que es lo que el paso 2 también necesita.
   if (paso === 'elegir' && vitrina) {
-    const plata = vitrina.modo === 'monto'
     return (
       <div style={caja}>
-        <h1 style={{ fontSize: 22, marginBottom: 4 }}>¡Hola! Somos {vista?.marca}</h1>
-        <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 16, lineHeight: 1.5 }}>
-          Elegí lo que más te guste. Después te pedimos la dirección y listo.
-        </p>
-
-        {/* Cuánto le queda, siempre a la vista: es la única regla que tiene que entender. */}
-        <div style={{
-          position: 'sticky', top: 0, zIndex: 2, background: '#eef2ff', color: '#3730a3',
-          borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 600, marginBottom: 16,
-        }}
-        >
-          {vitrina.tope == null
-            ? 'Elegí lo que quieras'
-            : plata
-              ? `Te quedan $${Math.max(0, restante ?? 0).toLocaleString('es-AR')} de $${vitrina.tope.toLocaleString('es-AR')}`
-              : `Te ${(restante ?? 0) === 1 ? 'queda' : 'quedan'} ${Math.max(0, restante ?? 0)} de ${vitrina.tope}`}
-        </div>
-
-        {carrito.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>Lo que elegiste</h2>
-            {carrito.map((e) => (
-              <div
-                key={`${e.item_id}-${e.opcion_id}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}
-              >
-                <div style={{ flex: 1, fontSize: 14, lineHeight: 1.35 }}>
-                  {porItem.get(e.item_id)?.nombre}
-                  <div style={{ color: '#6b7280', fontSize: 13 }}>{nombreDeLaOpcion(e)}</div>
-                </div>
-                <button onClick={() => restar(e)} style={contador} aria-label="Sacar uno">−</button>
-                <span style={{ minWidth: 18, textAlign: 'center', fontSize: 15 }}>{e.cantidad}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <h2 style={{ fontSize: 16, margin: '0 0 10px' }}>{vitrina.titulo || 'Para elegir'}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
-          {vitrina.items.map((item) => {
-            const lleno = !entra(item)
-            return (
-              <div key={item.id} style={{ opacity: lleno ? 0.45 : 1 }}>
-                <button
-                  onClick={() => setAbierto(abierto === item.id ? null : item.id)}
-                  disabled={lleno}
-                  style={{
-                    width: '100%', border: `1px solid ${abierto === item.id ? '#4f46e5' : '#e5e7eb'}`,
-                    background: '#fff', borderRadius: 12, padding: 6, textAlign: 'left',
-                    cursor: lleno ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  <div style={{ aspectRatio: '1 / 1', background: '#f5f5f7', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
-                    {item.foto
-                      ? <FotoTn src={item.foto} alt={item.nombre} ancho={150} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <span style={{ color: '#9ca3af', fontSize: 12 }}>sin foto</span>}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6, lineHeight: 1.3, color: '#1c1c1e' }}>{item.nombre}</div>
-                  {plata && item.pvp != null && (
-                    <div style={{ fontSize: 13, color: '#6b7280' }}>${Number(item.pvp).toLocaleString('es-AR')}</div>
-                  )}
-                </button>
-
-                {/* Las opciones, con la palabra que usa la tienda. No dice "modelo" ni "color":
-                    los ejes cambian producto por producto y ponerle nombre sería mentira la mitad
-                    de las veces. */}
-                {abierto === item.id && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {item.opciones.map((o) => (
-                      <button
-                        key={o.id}
-                        onClick={() => sumar(item, o)}
-                        style={{
-                          border: '1px solid #d1d5db', background: '#fff', borderRadius: 999,
-                          padding: '7px 12px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-                          color: '#1c1c1e',
-                        }}
-                      >
-                        {o.valores.filter(Boolean).join(' · ') || 'Elegir'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <button
-          onClick={() => setPaso('datos')}
-          disabled={!carrito.length}
-          style={{
-            width: '100%', padding: 15, fontSize: 16, fontWeight: 600, borderRadius: 10, marginTop: 24,
-            border: 'none', cursor: carrito.length ? 'pointer' : 'not-allowed',
-            background: carrito.length ? '#4f46e5' : '#d1d5db', color: '#fff',
-          }}
-        >
-          {carrito.length ? 'Seguir' : 'Elegí al menos uno'}
-        </button>
+        <PortalVitrina
+          marca={vista?.marca || ''}
+          vitrina={vitrina}
+          carrito={carrito}
+          restante={restante}
+          cuantosEntran={cuantosEntran}
+          sumar={sumar}
+          restar={restar}
+          onSeguir={() => setPaso('datos')}
+        />
       </div>
     )
   }
@@ -490,7 +397,10 @@ export function CanjePortal({ token }: { token: string | null }) {
         </div>
       )}
 
-      <h2 style={{ fontSize: 16, margin: '0 0 10px' }}>Cómo contactarte</h2>
+      <h2 style={{ fontSize: 16, margin: '0 0 4px' }}>Cómo contactarte</h2>
+      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 10, lineHeight: 1.5 }}>
+        Poné tu nombre y apellido como figuran en tu DNI: es el que va en la etiqueta del envío.
+      </p>
       <div style={fila}>
         <Campo titulo="Nombre" valor={form.nombre} onChange={set('nombre')} />
         <Campo titulo="Apellido" valor={form.apellido} onChange={set('apellido')} />
@@ -521,7 +431,7 @@ export function CanjePortal({ token }: { token: string | null }) {
         opcional
       />
 
-      {vista?.pide === 'talles' ? (
+      {!pideFicha ? null : vista?.pide === 'talles' ? (
         <>
           <h2 style={{ fontSize: 16, margin: '24px 0 4px' }}>Tus talles</h2>
           <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 10 }}>

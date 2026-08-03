@@ -117,6 +117,148 @@ export function paraVitrina(p: ProductoTn): ProductoParaVitrina | null {
   }
 }
 
+// ── La faceta: lo único por lo que ella puede filtrar ───────────────────────────
+
+/**
+ * Sin tildes, sin espacios de más y en mayúsculas. Para comparar valores de la tienda entre sí:
+ * `Único` y `UNICO` son el mismo talle y quien los cargó no lo pensó dos veces.
+ */
+export function normalizarValor(v: string): string {
+  return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().replace(/\s+/g, ' ').toUpperCase()
+}
+
+/**
+ * ¿Este valor es un modelo de celular?
+ *
+ * Se reconoce **por la forma del valor y no por su posición**: medido sobre los catálogos reales,
+ * en BDI hay 11 modelos que caen en la posición 1 y en Zattia los talles aparecen en las dos, así
+ * que "el primer valor es el modelo" es falso.
+ */
+export function esModeloDeCelular(v: string): boolean {
+  const n = normalizarValor(v)
+  return /\b(IPHONE|IPAD|SAMSUNG|GALAXY|MOTOROLA|MOTO|XIAOMI|REDMI|HUAWEI|HONOR|POCO)\b/.test(n)
+}
+
+/** El orden en el que se prueba la ropa, no el alfabético: `L` va después de `M`, no antes. */
+const TALLES_LETRA = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
+
+/**
+ * ¿Este valor es un talle? Las tres formas que aparecen de verdad: la letra (`XS…XXXL`), el número
+ * (`34…42`, y también los de calzado) y el talle único.
+ */
+export function esTalle(v: string): boolean {
+  const n = normalizarValor(v).replace(/^TALLE /, '')
+  if (!n) return false
+  return TALLES_LETRA.includes(n) || /^(U|UNICO)$/.test(n) || /^\d{1,3}$/.test(n)
+}
+
+export type ClaseDeFaceta = 'modelo' | 'talle'
+export type Faceta = { clase: ClaseDeFaceta; valores: string[] }
+
+export function esDeLaClase(v: string, clase: ClaseDeFaceta): boolean {
+  return clase === 'modelo' ? esModeloDeCelular(v) : esTalle(v)
+}
+
+/** Un item de la vitrina visto desde el filtro: sólo hacen falta los valores de cada opción. */
+export type ItemFiltrable = { opciones: { valores: string[] }[] }
+
+function ordenDeTalle(v: string): [number, number, string] {
+  const n = normalizarValor(v).replace(/^TALLE /, '')
+  const letra = TALLES_LETRA.indexOf(n)
+  if (letra >= 0) return [0, letra, n]
+  if (/^\d{1,3}$/.test(n)) return [1, Number(n), n]
+  // El único va al final: no compite con los otros, es la ausencia de talle.
+  if (/^(U|UNICO)$/.test(n)) return [3, 0, n]
+  return [2, 0, n]
+}
+
+/** Lo que hay antes del primer número (`IPHONE`, `SAMSUNG GALAXY S`) y ese número. */
+function ordenDeModelo(v: string): { marca: string; numero: number; texto: string } {
+  const texto = normalizarValor(v)
+  const m = texto.match(/\d+/)
+  if (!m) return { marca: texto, numero: -1, texto }
+  return { marca: texto.slice(0, m.index).trim(), numero: Number(m[0]), texto }
+}
+
+function comparaModelos(a: string, b: string): number {
+  const A = ordenDeModelo(a)
+  const B = ordenDeModelo(b)
+  // Los que no traen número no se pueden ordenar por generación: van al final, alfabéticos.
+  if ((A.numero < 0) !== (B.numero < 0)) return A.numero < 0 ? 1 : -1
+  if (A.numero < 0) return A.texto.localeCompare(B.texto)
+  // La marca primero para que los iPhone no queden intercalados con los Samsung por el número.
+  if (A.marca !== B.marca) return A.marca.localeCompare(B.marca)
+  // Del más nuevo al más viejo: el suyo lo busca arriba, no en el medio de una lista de veinte.
+  if (A.numero !== B.numero) return B.numero - A.numero
+  return A.texto.localeCompare(B.texto)
+}
+
+/**
+ * El eje por el que se puede filtrar esta vitrina, o `null` si no se reconoce ninguno.
+ *
+ * Los dos ejes **nunca conviven en una misma tienda** (BDI: 181 productos con modelo y 0 con talle;
+ * Zattia: 201 con talle y 0 con modelo), así que gana el que tenga más valores distintos. Hacen
+ * falta **dos**: un filtro con una sola opción no filtra nada y ocupa la mitad de la pantalla.
+ *
+ * ⚠️ Esto **no contradice** la regla de no ponerle nombre a las opciones de adentro de un producto:
+ * ahí el eje es desconocido y se muestra la palabra de la tienda. Acá la faceta se nombra sólo
+ * cuando se la reconoce por la forma, y cuando no se reconoce **no hay filtro**, no un filtro con
+ * un nombre inventado.
+ */
+export function facetaDeLaVitrina(items: ItemFiltrable[]): Faceta | null {
+  /** normalizado → cómo lo escribe la tienda, que es lo que se le muestra a ella. */
+  const modelos = new Map<string, string>()
+  const talles = new Map<string, string>()
+  for (const item of items || []) {
+    for (const o of item.opciones || []) {
+      for (const v of o.valores || []) {
+        const texto = String(v || '').trim()
+        if (!texto) continue
+        const clave = normalizarValor(texto)
+        if (esModeloDeCelular(texto)) {
+          if (!modelos.has(clave)) modelos.set(clave, texto)
+        } else if (esTalle(texto) && !talles.has(clave)) {
+          talles.set(clave, texto)
+        }
+      }
+    }
+  }
+  const clase: ClaseDeFaceta = modelos.size >= talles.size ? 'modelo' : 'talle'
+  const gana = clase === 'modelo' ? modelos : talles
+  if (gana.size < 2) return null
+  const valores = [...gana.values()]
+  valores.sort(clase === 'modelo'
+    ? comparaModelos
+    : (a, b) => {
+      const A = ordenDeTalle(a)
+      const B = ordenDeTalle(b)
+      return A[0] - B[0] || A[1] - B[1] || A[2].localeCompare(B[2])
+    })
+  return { clase, valores }
+}
+
+/**
+ * ¿Esta opción sobrevive al filtro?
+ *
+ * **Lo que no participa de la faceta se queda visible**: una opción sin ningún valor de esa clase
+ * —los accesorios de BDI que sólo tienen color— no es de otro modelo, es de ninguno. Filtrar
+ * esconde lo del **otro** modelo, no lo neutro.
+ */
+export function opcionPasa(valores: string[], faceta: Faceta | null, elegido: string | null): boolean {
+  if (!faceta || !elegido) return true
+  const propios = (valores || []).filter((v) => esDeLaClase(v, faceta.clase))
+  if (!propios.length) return true
+  const buscado = normalizarValor(elegido)
+  return propios.some((v) => normalizarValor(v) === buscado)
+}
+
+/** Un producto pasa si le queda al menos una opción para elegir. */
+export function itemPasa(item: ItemFiltrable, faceta: Faceta | null, elegido: string | null): boolean {
+  if (!faceta || !elegido) return true
+  return (item.opciones || []).some((o) => opcionPasa(o.valores, faceta, elegido))
+}
+
 export type CategoriaTn = { nombre: string; cuantos: number }
 
 /**

@@ -250,6 +250,9 @@ export function camposDeLaPersona(datos, store) {
   const falta = (k, comoSeLlama) => campos[k] !== undefined && !campos[k] ? comoSeLlama : null;
   const faltantes = [
     falta('nombre', 'tu nombre'),
+    // El apellido es obligatorio desde que el formulario dejó de prellenarlos: lo que había en la
+    // ficha lo tipeó el equipo, y estos dos son los que salen impresos en la etiqueta del envío.
+    falta('apellido', 'tu apellido'),
     falta('telefono', 'tu teléfono'),
     falta('dni', 'tu DNI (lo pide el correo)'),
     falta('calle', 'la calle'),
