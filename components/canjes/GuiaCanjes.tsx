@@ -51,8 +51,10 @@ export function GuiaCanjes({ cfg }: { cfg: CanjeConfig | null }) {
           <Quien>marketing · gerencia si hay que firmar</Quien>
         </>,
         <>
-          <b>Escribile por Instagram o WhatsApp</b> con ese mensaje. Desde que lo copiás, el canje
-          deja de decir &quot;falta escribirle&quot;.
+          <b>Escribile por Instagram o WhatsApp</b>, y son <b>dos mensajes, no uno</b>: primero el
+          que sólo pregunta si le interesa —no dice ni un número— y, cuando conteste que sí, el
+          segundo con la propuesta. Los dos salen del mismo modal. Desde que copiás el primero, el
+          canje deja de decir &quot;falta escribirle&quot;.
           <Quien>marketing</Quien>
         </>,
         <>

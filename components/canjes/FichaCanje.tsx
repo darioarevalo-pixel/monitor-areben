@@ -285,8 +285,8 @@ export function FichaCanje({
           <div style={{ marginTop: space[3] }}>
             <Notice tone={canje.contacto_estado === 'hecho' ? 'action' : 'warning'}>
               {canje.contacto_estado === 'hecho'
-                ? 'Ya se le escribió: esperando que conteste. Lo que se negocie por las redes se asienta con "Generar cambios".'
-                : 'La propuesta está armada pero todavía no se le escribió. Copiá el mensaje con "Ver el mensaje".'}
+                ? 'Ya se le escribió: esperando que conteste. Cuando conteste que le interesa, mandale la propuesta desde "Ver el mensaje". Lo que se negocie por las redes se asienta con "Generar cambios".'
+                : 'La propuesta está armada pero todavía no se le escribió. El primer mensaje sale de "Ver el mensaje" y sólo pregunta si le interesa.'}
             </Notice>
           </div>
         )}
@@ -360,7 +360,9 @@ export function FichaCanje({
           store={canje.store}
           canjeId={canje.id}
           estado={canje.estado}
-          texto={mensajePropuesta(persona, canje, entregables)}
+          propuesta={mensajePropuesta(persona, canje, entregables)}
+          titulo={canje.titulo}
+          conVitrina={canje.vitrina_id != null}
           onCerrar={() => { setMostrandoPropuesta(false); void recargar() }}
         />
       )}

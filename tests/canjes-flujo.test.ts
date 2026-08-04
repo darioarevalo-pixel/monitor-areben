@@ -19,7 +19,7 @@ import {
 } from '@/lib/canjes/tipos'
 import {
   listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeIntentoEntrega,
-  mensajeLinkDatos, mensajePropuesta, mensajeRecordatorio,
+  mensajeLinkDatos, mensajePropuesta, mensajeRecordatorio, mensajeSondeo,
 } from '@/lib/canjes/mensajes'
 // Los espejos del handler. Si divergen, el botón dice una cosa y el servidor hace otra.
 import {
@@ -521,7 +521,37 @@ describe('pideSeguimiento', () => {
 
 const lucia = { nombre: 'Lucía', apellido: 'Pérez', instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }
 
-describe('mensajePropuesta — el primer mensaje', () => {
+describe('mensajeSondeo — el PRIMER contacto', () => {
+  it('pregunta si le interesa sin decir ni un número: el trato es el segundo mensaje', () => {
+    const m = mensajeSondeo(lucia, 'bdi', { titulo: 'Girlhood Collection' })
+    expect(m).toContain('Lucía')
+    expect(m).toContain('Girlhood Collection')
+    expect(m).toContain('Si te interesa sumarte')
+    // Esta es LA barrera: si el sondeo empieza a decir el trato, dejan de ser dos pasos.
+    expect(m).not.toMatch(/\d/)
+  })
+
+  it('el nombre cambia con la persona, y sin nombre saluda por el @', () => {
+    expect(mensajeSondeo({ ...lucia, nombre: 'Mía' }, 'bdi')).toContain('¡Hola Mía!')
+    expect(mensajeSondeo({ instagram: 'lucia.mkp', instagram_raw: 'Lucia.MKP' }, 'bdi'))
+      .toContain('@Lucia.MKP')
+  })
+
+  it('sin título nombra la marca: si no, no dice de dónde le escriben', () => {
+    const m = mensajeSondeo(lucia, 'zattia')
+    expect(m).toContain('Zattia')
+    expect(m).not.toContain('lanzamiento')
+  })
+
+  it('el adelanto sólo aparece si se lo pide: prometerlo de algo publicado se nota', () => {
+    expect(mensajeSondeo(lucia, 'bdi', { titulo: 'Girlhood Collection' }))
+      .not.toContain('avance exclusivo')
+    expect(mensajeSondeo(lucia, 'bdi', { titulo: 'Girlhood Collection', adelanto: true }))
+      .toContain('avance exclusivo')
+  })
+})
+
+describe('mensajePropuesta — el segundo mensaje', () => {
   const pide = [
     { tipo: 'historia_ig' as const, cantidad_comprometida: 3 },
     { tipo: 'reel_ig' as const, cantidad_comprometida: 1 },

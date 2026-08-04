@@ -26,7 +26,7 @@ import {
 import { normalizeArgPhone } from '@/lib/crm/core'
 import { crearCanje, marcarContactada, type VitrinaEnLista } from '@/lib/canjes/cliente'
 import { instagramHref } from '@/lib/canjes/instagram'
-import { mensajePropuesta } from '@/lib/canjes/mensajes'
+import { mensajePropuesta, mensajeSondeo } from '@/lib/canjes/mensajes'
 import {
   CANJE_STORES, STORE_LABEL, TIPO_CANJE_LABEL, naceEn, nombrePersona, unidadDeLaMarca,
   type CanjeConfig, type CanjePersona, type CanjeStore, type EstadoCanje, type NivelAprobacion,
@@ -150,7 +150,9 @@ export function ProponerCanje({
         store={marca}
         canjeId={creado.id}
         estado={creado.estado}
-        texto={texto}
+        propuesta={texto}
+        titulo={titulo}
+        conVitrina={vitrinaElegida != null}
         onCerrar={() => void onListo(creado.id)}
       />
     )
@@ -315,27 +317,49 @@ export function ProponerCanje({
 // ── El mensaje ──────────────────────────────────────────────────────────────────
 
 /**
- * El mensaje que se le manda, apenas armada la propuesta.
+ * Los mensajes que se le mandan, apenas armada la propuesta.
  *
  * Se abre acá y no en la ficha por una razón práctica: el momento de escribirle es **ahora**, con
  * lo que se acaba de decidir a la vista. Si hay que ir a buscar el canje a un listado, se escribe
  * más tarde y con otras palabras.
  *
+ * 🔑 **El arranque son dos contactos** (Bruno, 4-ago-2026): primero el sondeo —"¿te interesa?", sin
+ * un solo número— y recién cuando contesta que sí, la propuesta con el trato. Por eso este modal
+ * abre en el sondeo y guarda la propuesta detrás del segundo botón, en vez de mostrar las dos como
+ * si diera igual cuál se manda: el orden ES la decisión.
+ *
  * Cualquiera de las tres acciones (copiar, Instagram, WhatsApp) marca el canje como contactado: no
  * hay un botón aparte de "ya le escribí" porque nadie lo tocaría.
  */
 export function MensajeParaCopiar({
-  persona, store, canjeId, estado, texto, onCerrar,
+  persona, store, canjeId, estado, propuesta, titulo, conVitrina, onCerrar,
 }: {
-  persona: Pick<CanjePersona, 'instagram' | 'telefono'>
+  persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw' | 'telefono'>
   store: CanjeStore
   canjeId: number
   estado: EstadoCanje
-  texto: string
+  /** El segundo contacto, ya armado con el trato de hoy. */
+  propuesta: string
+  /** De qué es la acción. Es lo que hace que el sondeo diga algo y no un "nos gusta tu perfil". */
+  titulo?: string | null
+  /** Hay vitrina colgada: se le puede ofrecer elegir, así que el adelanto arranca prendido. */
+  conVitrina?: boolean
   onCerrar: () => void
 }) {
   const [marcado, setMarcado] = useState(false)
+  const [paso, setPaso] = useState<'sondeo' | 'propuesta'>('sondeo')
+  /**
+   * "Todavía no está en la tienda". Arranca prendido si hay vitrina —que es el caso por el que este
+   * párrafo existe: el adelanto de lo que no salió— y se apaga con un click. **No lo decide el
+   * sistema**: la vitrina no sabe si sus productos están publicados, y prometer un adelanto de algo
+   * que ya está en la tienda se nota al toque.
+   */
+  const [adelanto, setAdelanto] = useState(conVitrina === true)
   const tel = normalizeArgPhone(persona.telefono)
+
+  const texto = paso === 'sondeo'
+    ? mensajeSondeo(persona, store, { titulo, adelanto })
+    : propuesta
 
   // Fire-and-forget, como `marcarAvisada` en el bloque de envío: si falla, el canje sigue estando
   // bien y lo peor que pasa es que el listado diga "falta escribirle" un rato de más.
@@ -365,14 +389,45 @@ export function MensajeParaCopiar({
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Mandale la propuesta"
+      titulo="Escribile"
       ancho="ancho"
       pie={<Button variant="solid" tone="brand" onClick={onCerrar}>Listo</Button>}
     >
-      <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
-        La negociación va por las redes. Si cambian las condiciones, después se asientan con
-        &quot;Generar cambios&quot; y el mensaje se rearma solo.
+      {/* Los dos pasos, en orden y con el número puesto: primero se pregunta, después se ofrece. */}
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
+        <Button
+          variant={paso === 'sondeo' ? 'soft' : 'outline'}
+          tone={paso === 'sondeo' ? 'brand' : undefined}
+          size="sm"
+          onClick={() => setPaso('sondeo')}
+        >
+          1. ¿Te interesa?
+        </Button>
+        <Button
+          variant={paso === 'propuesta' ? 'soft' : 'outline'}
+          tone={paso === 'propuesta' ? 'brand' : undefined}
+          size="sm"
+          onClick={() => setPaso('propuesta')}
+        >
+          2. La propuesta
+        </Button>
       </div>
+
+      <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
+        {paso === 'sondeo'
+          ? 'Este es el primero y no dice ni un número: sólo pregunta si le interesa. Cuando conteste que sí, volvés acá y mandás el segundo.'
+          : 'Este va cuando ya contestó que le interesa. Si las condiciones cambian, se asientan con “Generar cambios” y el mensaje se rearma solo.'}
+      </div>
+
+      {paso === 'sondeo' && (
+        <label style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', marginBottom: space[3], cursor: 'pointer' }}>
+          <input type="checkbox" checked={adelanto} onChange={(e) => setAdelanto(e.target.checked)} />
+          <span style={{ fontSize: font.sm, color: color.ink }}>
+            Todavía no está en la tienda
+            <span style={{ color: color.mut2 }}> — le ofrece un avance exclusivo para que elija</span>
+          </span>
+        </label>
+      )}
 
       <pre
         style={{

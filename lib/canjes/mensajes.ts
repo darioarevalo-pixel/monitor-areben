@@ -50,16 +50,83 @@ export function loQueLeMandamos(c: Pick<CanjeRow, 'tope_tipo' | 'tope_pvp' | 'to
   return c.tope_pvp != null ? `productos por hasta ${money(Number(c.tope_pvp))}` : 'lo que acordamos'
 }
 
-// ── La propuesta ────────────────────────────────────────────────────────────────
+// ── El sondeo: el PRIMER contacto ───────────────────────────────────────────────
 
 /**
- * El primer mensaje: el que se le manda para preguntarle si le interesa.
+ * "¿Te interesa?", **sin decir todavía qué le damos ni qué le pedimos**.
+ *
+ * El arranque son **dos contactos y no uno** (Bruno, 4-ago-2026): primero se le pregunta si le
+ * copa la idea, y sólo si contesta que sí se le manda la propuesta con los números. La razón es
+ * práctica: un primer mensaje que abre con "te damos 3 fundas a cambio de 2 historias" es una
+ * oferta a alguien que todavía no dijo que quiere hablar, y se contesta que no —o no se contesta—
+ * mucho más fácil que a una pregunta. Y si el número que se le tira primero queda corto, ya no hay
+ * vuelta atrás: la negociación arranca perdiendo.
+ *
+ * ⚠️ **Acá no va ni un número.** Todo lo que sea tope, cantidad o entregable vive en
+ * `mensajePropuesta`, que es el segundo. Si este mensaje empieza a decir el trato, dejan de ser dos
+ * pasos y vuelve a ser uno.
+ *
+ * El nombre sale de la ficha (`comoLaLlamamos`): es el nombre de pila si lo sabemos y el @ si no.
+ */
+export function mensajeSondeo(
+  persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
+  store: CanjeStore,
+  opts: {
+    /**
+     * De qué es la acción, tal como se cargó en la propuesta ("Girlhood Collection"). Es lo que
+     * hace que el mensaje diga algo: sin esto queda un "nos gusta tu perfil" genérico.
+     */
+    titulo?: string | null
+    /**
+     * Los productos todavía no están en la tienda. Cambia el mensaje de "te mandamos productos" a
+     * **"te mostramos algo que nadie vio"**, que es un motivo bastante mejor para contestar.
+     *
+     * ⚠️ Lo decide quien escribe, no el sistema: la vitrina no sabe si lo que tiene adentro salió a
+     * la venta o no, y prometer un adelanto de algo que ya está publicado se nota al toque.
+     */
+    adelanto?: boolean
+  } = {},
+): string {
+  const vos = comoLaLlamamos(persona)
+  const titulo = (opts.titulo || '').trim()
+
+  const lineas = [
+    `¡Hola ${vos}! 🖤 Esperamos que estés muy bien.`,
+    '',
+    titulo
+      ? `Estamos presentando nuestra nueva ${titulo} y nos encanta tu estilo, sentimos que conecta perfecto con el concepto del lanzamiento.`
+      // Sin título hay que nombrar la marca: si no, el mensaje no dice de dónde le escriben ni por
+      // qué. Por Instagram se ve de qué cuenta viene, pero por WhatsApp no.
+      : `Nos encanta tu estilo y sentimos que conecta perfecto con lo que estamos haciendo en ${STORE_LABEL[store]}.`,
+    '',
+    opts.adelanto
+      // "para que elijas lo que más te guste" y no "tus fundas favoritas": la unidad cambia por
+      // marca y la concordancia se rompe sola ("tus jeans favoritas"). Es la misma vuelta que ya da
+      // `mensajeLinkDatos`.
+      ? 'Nos gustaría hacer una colaboración por canje con vos. Como los productos todavía no fueron lanzados y no están en la tienda online, te enviaríamos un avance exclusivo para que elijas lo que más te guste.'
+      : 'Nos gustaría hacer una colaboración por canje con vos.',
+    '',
+    'Si te interesa sumarte, avisanos y armamos algo.',
+    '',
+    '¡Un saludo!',
+  ]
+  return lineas.join('\n')
+}
+
+// ── La propuesta: el SEGUNDO contacto ───────────────────────────────────────────
+
+/**
+ * El mensaje con el trato, el que se manda **cuando ya contestó que le interesa**.
  *
  * Dice **todo el trato en tres renglones** —qué le mandamos, qué esperamos de ella— porque la
  * negociación pasa por las redes y lo que no esté acá se termina hablando por audios. Y es lo que
  * después permite que "generar cambios" tenga sentido: se acordó sobre algo escrito.
  *
  * No pregunta por la dirección ni por el talle: eso va después, con el link, y sólo si dice que sí.
+ *
+ * ⚠️ Ya no es el primer mensaje: antes va `mensajeSondeo`. Sigue abriendo con "te escribimos de
+ * ${MARCA}" igual, porque entre el sondeo y este puede pasar una semana y se manda tal cual está
+ * cuando alguien retoma un canje viejo desde la ficha.
  */
 export function mensajePropuesta(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
