@@ -260,3 +260,41 @@ function veredictoDe(etapas: ResumenEtapa[], gastoTotal: number, totalAlAire: nu
 
 const cuantas = (e: ResumenEtapa) => `${e.alAire.length} ${e.alAire.length === 1 ? 'pauta' : 'pautas'}`
 const pct = (p: number) => `${Math.round(p * 100)}%`
+
+// ── Los overrides, del lado de la pantalla ───────────────────────────────────────────────────
+
+/**
+ * Las correcciones manuales como las quiere `diagnosticar()`: `campaign_id → etapa`.
+ *
+ * Se filtra lo que no sea una de las tres etapas en vez de confiar en la fila. La tabla la escribe
+ * el endpoint, que valida contra `ETAPAS`, pero un valor viejo de una versión anterior entraría al
+ * diagnóstico como una cuarta etapa fantasma y ninguna tarjeta la mostraría: la campaña
+ * desaparecería del reparto sin que nadie pueda notarlo.
+ */
+export function mapaOverrides(overrides: { campaign_id: string; etapa: string }[]): Record<string, Etapa> {
+  const out: Record<string, Etapa> = {}
+  for (const o of overrides || []) {
+    if (o && o.campaign_id && (ETAPAS as readonly string[]).includes(o.etapa)) out[o.campaign_id] = o.etapa as Etapa
+  }
+  return out
+}
+
+/**
+ * ¿Este override quedó viejo? Es decir: ¿le cambiaron el objetivo a la campaña desde que alguien la
+ * corrigió a mano?
+ *
+ * Corregir la etapa es un juicio sobre **una campaña concreta como estaba ese día**. Si después le
+ * cambian el objetivo, la corrección puede haber dejado de tener sentido y el diagnóstico seguiría
+ * mostrándola donde la pusieron, sin que nadie tenga forma de enterarse. Por eso la fila guarda el
+ * objetivo del momento: no es prolijidad, es lo que hace que el override pueda avisar que envejeció.
+ *
+ * Un override sin objetivo guardado (creado antes de que la columna se llenara) **no se marca**:
+ * gritar "quedó vieja" sobre algo que no se puede comparar sería ruido.
+ */
+export function overrideViejo(
+  o: { objetivo?: string | null },
+  campaña: { objetivo: string | null } | undefined,
+): boolean {
+  if (!o || !o.objetivo || !campaña) return false
+  return String(o.objetivo) !== String(campaña.objetivo || '')
+}

@@ -3,8 +3,10 @@ import {
   diagnosticar,
   etapaDeObjetivo,
   ETAPA_POR_OBJETIVO,
+  mapaOverrides,
   MARCA_POR_CUENTA,
   marcaDeCuentaAds,
+  overrideViejo,
   RESUMEN_ETAPA,
   UMBRALES_ETAPA,
 } from '@/lib/meta-ads/etapas'
@@ -235,6 +237,44 @@ describe('el override manual', () => {
     const d = diagnosticar([rara, ...alAire('tofu', 2)], { overrides: { [rara.id]: 'bofu' } })
     expect(d.sinClasificar).toHaveLength(0)
     expect(d.etapas.find((e) => e.etapa === 'bofu')!.alAire).toHaveLength(1)
+  })
+})
+
+describe('las filas del override → el mapa que come el diagnóstico', () => {
+  it('arma el mapa por campaña', () => {
+    const m = mapaOverrides([
+      { campaign_id: 'c1', etapa: 'mofu' },
+      { campaign_id: 'c2', etapa: 'bofu' },
+    ])
+    expect(m).toEqual({ c1: 'mofu', c2: 'bofu' })
+  })
+
+  it('descarta una etapa que no existe en vez de dejarla entrar', () => {
+    // Una fila vieja con un valor que ya no es etapa haría desaparecer a la campaña del reparto:
+    // no caería en ninguna de las tres tarjetas ni en "sin clasificar", y nadie podría notarlo.
+    const campañas = alAire('tofu', 3)
+    const m = mapaOverrides([{ campaign_id: campañas[0]!.id, etapa: 'zombie' }])
+    expect(m).toEqual({})
+    const d = diagnosticar(campañas, { overrides: m })
+    expect(d.etapas.find((e) => e.etapa === 'tofu')!.alAire).toHaveLength(3)
+    expect(d.sinClasificar).toHaveLength(0)
+  })
+
+  it('aguanta filas rotas y una lista vacía', () => {
+    expect(mapaOverrides([])).toEqual({})
+    expect(mapaOverrides([{ campaign_id: '', etapa: 'mofu' }])).toEqual({})
+  })
+
+  it('avisa cuando le cambiaron el objetivo a la campaña desde que la corrigieron', () => {
+    const c = camp({ objetivo: 'OUTCOME_SALES' })
+    expect(overrideViejo({ objetivo: 'OUTCOME_SALES' }, c)).toBe(false)
+    expect(overrideViejo({ objetivo: 'OUTCOME_TRAFFIC' }, c)).toBe(true)
+  })
+
+  it('no marca lo que no se puede comparar', () => {
+    const c = camp({ objetivo: 'OUTCOME_SALES' })
+    expect(overrideViejo({ objetivo: null }, c)).toBe(false)
+    expect(overrideViejo({ objetivo: 'OUTCOME_SALES' }, undefined)).toBe(false)
   })
 })
 

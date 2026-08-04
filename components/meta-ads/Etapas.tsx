@@ -22,21 +22,39 @@
  *  3. **Las siglas aparecen una sola vez**, chiquitas, al pie del popover de ayuda.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSesion } from '@/components/SesionProvider'
+import { TableroIdeas } from '@/components/meta-ads/TableroIdeas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { hoyIso, laQueAprieta, proximas, type EntradaCalendario } from '@/lib/calendario'
 import { leerCalendario } from '@/lib/calendario/persistencia'
 import { traerEtapas } from '@/lib/meta-ads/cliente'
-import { diagnosticar, ETIQUETA_ETAPA, RESUMEN_ETAPA, rotuloObjetivo, UMBRALES_ETAPA } from '@/lib/meta-ads/etapas'
+import {
+  diagnosticar, ETAPAS, ETIQUETA_ETAPA, mapaOverrides, overrideViejo, RESUMEN_ETAPA, rotuloObjetivo,
+  UMBRALES_ETAPA,
+} from '@/lib/meta-ads/etapas'
+import {
+  clasificarCampaña, desclasificarCampaña, leerIdeas,
+  type Idea, type OverrideEtapa, type PoderesIdeas,
+} from '@/lib/meta-ads/ideas'
 import type { CampañaEtapa, Diagnostico, Etapa, ResumenEtapa, RespuestaEtapas } from '@/lib/meta-ads/tipos'
 import {
-  Card, CopyButton, EmptyState, Notice, SectionCard, StatusPill, TBody, TableWrap, Td, Th, THead, Tr,
+  Button, Card, CopyButton, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
+  TBody, TableWrap, Td, Th, THead, Tr, useToast,
   color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
 
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
+
+/** Lo que hace falta para corregir la etapa de una campaña desde la tabla. */
+type Correccion = {
+  /** Las correcciones vigentes, por campaña. Vacío mientras no las lea nadie. */
+  porCampaña: Record<string, OverrideEtapa>
+  puedePautar: boolean
+  onCorregir: (c: CampañaEtapa) => void
+  onVolverAuto: (c: CampañaEtapa) => void
+}
 
 const nf = new Intl.NumberFormat('es-AR')
 const money = (v: number) => `$ ${nf.format(Math.round(v || 0))}`
@@ -46,10 +64,12 @@ const pct = (p: number) => `${Math.round((p || 0) * 100)}%`
 const TONO: Record<ResumenEtapa['estado'], Tone> = { ok: 'success', floja: 'warning', vacia: 'danger' }
 
 export function Etapas() {
-  const { marca } = useSesion()
+  const { marca, perfil } = useSesion()
+  const toast = useToast()
   const marcaLabel = marca === 'zattia' ? 'Zattia' : 'BDI'
   const [dias, setDias] = useState(UMBRALES_ETAPA.dias)
   const [r, setR] = useState<{ key: string; e: Cargable<RespuestaEtapas> } | null>(null)
+  const [corrigiendo, setCorrigiendo] = useState<CampañaEtapa | null>(null)
 
   const key = `${marca}|${dias}`
   useEffect(() => {
@@ -62,7 +82,57 @@ export function Etapas() {
   }, [marca, dias])
 
   const estado: Cargable<RespuestaEtapas> = !r || r.key !== key ? { fase: 'cargando' } : r.e
-  const fecha = useFechaQueAprieta(marca)
+  const fechas = useFechas(marca)
+  const fecha = useMemo(() => laQueAprieta(fechas), [fechas])
+  const funnel = useFunnel(marca)
+
+  const overrides = useMemo(() => mapaOverrides(funnel.overrides), [funnel.overrides])
+  const porCampaña = useMemo(
+    () => Object.fromEntries(funnel.overrides.map((o) => [o.campaign_id, o])) as Record<string, OverrideEtapa>,
+    [funnel.overrides],
+  )
+
+  // El diagnóstico se recalcula con las correcciones a mano puestas: sin esto, el override se
+  // guarda en la base y la pantalla sigue mostrando la clasificación automática, que es peor que
+  // no tener override (alguien lo corrigió y no pasó nada).
+  //
+  // Se calcula acá arriba y no adentro de `Contenido` porque el tablero de abajo necesita el mismo:
+  // la etapa que el veredicto está pidiendo es la que viene preelegida al anotar una idea.
+  const diag = useMemo(() => {
+    const e = !r || r.key !== key ? null : r.e
+    if (!e || e.fase !== 'ok' || e.data.cuentas.length === 0) return null
+    return diagnosticar(e.data.campañas, { overrides, marca: marcaLabel })
+  }, [r, key, overrides, marcaLabel])
+
+  async function corregir(c: CampañaEtapa, etapa: Etapa, motivo: string) {
+    try {
+      await clasificarCampaña(marca, {
+        campaignId: c.id, etapa, cuentaId: c.cuentaId, objetivo: c.objetivo, nombre: c.nombre, motivo,
+      })
+      setCorrigiendo(null)
+      toast.ok(`Ahora cuenta como «${ETIQUETA_ETAPA[etapa]}».`)
+      funnel.recargar()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo corregir la etapa.')
+    }
+  }
+
+  async function volverAuto(c: CampañaEtapa) {
+    try {
+      await desclasificarCampaña(marca, c.id)
+      toast.ok('Vuelve a clasificarse por su objetivo en Meta.')
+      funnel.recargar()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo volver a la clasificación automática.')
+    }
+  }
+
+  const correccion: Correccion = {
+    porCampaña,
+    puedePautar: funnel.puede.pautar || funnel.puede.admin,
+    onCorregir: setCorrigiendo,
+    onVolverAuto: volverAuto,
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -104,47 +174,133 @@ export function Etapas() {
         </Notice>
       )}
 
-      {estado.fase === 'ok' && <Contenido d={estado.data} marcaLabel={marcaLabel} fecha={fecha} />}
+      {estado.fase === 'ok' && (
+        <Contenido d={estado.data} diag={diag} marcaLabel={marcaLabel} fecha={fecha} correccion={correccion} />
+      )}
+
+      {/* El tablero va SIEMPRE, gane o pierda el diagnóstico. Se lee por `api/datos.js`, que no
+          habla con Meta: si el token vence justo cuando marketing tiene que craneаr las piezas, el
+          lugar donde se anotan no se puede haber caído con él. Es el motivo por el que las ideas
+          tienen su propio endpoint (`api/_meta-funnel.js`) y no viven en `api/meta-ads.js`. */}
+      <TableroIdeas
+        marca={marca}
+        ideas={funnel.ideas}
+        puede={funnel.puede}
+        quien={perfil?.name ?? null}
+        cargando={funnel.cargando}
+        caido={funnel.caido}
+        recargar={funnel.recargar}
+        campañas={diag ? diag.etapas.flatMap((e) => e.alAire) : []}
+        sugerida={diag?.veredicto.etapa ?? null}
+        fechas={fechas}
+      />
+
+      {corrigiendo && (
+        <ModalCorregir
+          c={corrigiendo}
+          override={porCampaña[corrigiendo.id] || null}
+          onCerrar={() => setCorrigiendo(null)}
+          onCorregir={(etapa, motivo) => corregir(corrigiendo, etapa, motivo)}
+        />
+      )}
     </div>
   )
 }
 
 /**
- * La fecha que aprieta, del calendario editorial.
+ * Las ideas y las correcciones de etapa, que viven en la base del monitor y no en Meta.
  *
- * Es lo que convierte el diagnóstico en un pedido: "no hay pauta de la segunda etapa" es un dato,
- * "no hay pauta de la segunda etapa **y el Día de la Madre es en 34 días**" es una tarea. Se pide
- * aparte y en silencio — si el calendario falla, la pantalla de Etapas tiene que seguir andando
- * igual, porque el diagnóstico se sostiene solo.
+ * Su falla **no tumba nada**: si la tabla todavía no está migrada en esta marca, el diagnóstico
+ * sigue siendo válido (clasificación automática) y lo único que se pierde es el tablero. Es la
+ * misma decisión que toma el calendario con el renglón "Etapas armadas".
  */
-function useFechaQueAprieta(marca: string): EntradaCalendario | null {
-  const [fecha, setFecha] = useState<EntradaCalendario | null>(null)
+function useFunnel(marca: string) {
+  const [nonce, setNonce] = useState(0)
+  const [d, setD] = useState<{
+    key: string
+    ideas: Idea[]
+    overrides: OverrideEtapa[]
+    puede: PoderesIdeas
+    caido: string | null
+  } | null>(null)
+
+  const key = `${marca}|${nonce}`
+  useEffect(() => {
+    let vivo = true
+    leerIdeas(marca as Parameters<typeof leerIdeas>[0])
+      .then((res) => {
+        if (vivo) setD({ key: `${marca}|${nonce}`, ...res, caido: null })
+      })
+      .catch((e) => {
+        if (vivo) {
+          setD({
+            key: `${marca}|${nonce}`,
+            ideas: [], overrides: [], puede: { pautar: false, admin: false },
+            caido: e instanceof Error ? e.message : 'no se pudieron leer',
+          })
+        }
+      })
+    return () => { vivo = false }
+  }, [marca, nonce])
+
+  const listo = d && d.key === key
+  return {
+    ideas: listo ? d.ideas : [],
+    overrides: listo ? d.overrides : EMPTY_OVERRIDES,
+    puede: listo ? d.puede : SIN_PODERES,
+    caido: listo ? d.caido : null,
+    cargando: !listo,
+    recargar: useCallback(() => setNonce((n) => n + 1), []),
+  }
+}
+
+/** Constantes de módulo: si fueran literales, cambiarían de identidad en cada render y los
+ *  `useMemo` que dependen de ellas se recalcularían siempre. */
+const EMPTY_OVERRIDES: OverrideEtapa[] = []
+const SIN_PODERES: PoderesIdeas = { pautar: false, admin: false }
+
+/**
+ * Las fechas que se vienen, del calendario editorial.
+ *
+ * Son lo que convierte el diagnóstico en un pedido: "no hay pauta de la segunda etapa" es un dato,
+ * "no hay pauta de la segunda etapa **y el Día de la Madre es en 34 días**" es una tarea. De la
+ * lista salen las dos cosas: la que aprieta, para el veredicto, y el desplegable de "para qué
+ * fecha" al anotar una idea. Se pide aparte y en silencio — si el calendario falla, esta pantalla
+ * tiene que seguir andando igual, porque el diagnóstico se sostiene solo.
+ */
+function useFechas(marca: string): EntradaCalendario[] {
+  const [d, setD] = useState<{ key: string; fechas: EntradaCalendario[] } | null>(null)
   useEffect(() => {
     let vivo = true
     const hoy = hoyIso()
     leerCalendario(marca as Parameters<typeof leerCalendario>[0])
       .then((cal) => {
         if (!vivo) return
-        setFecha(laQueAprieta(proximas(hoy, 90, { fijadas: cal.fijadas, hitos: cal.hitos })))
+        setD({ key: marca, fechas: proximas(hoy, 90, { fijadas: cal.fijadas, hitos: cal.hitos }) })
       })
-      .catch(() => { if (vivo) setFecha(null) })
+      .catch(() => { if (vivo) setD({ key: marca, fechas: [] }) })
     return () => { vivo = false }
   }, [marca])
-  return fecha
+  return d && d.key === marca ? d.fechas : SIN_FECHAS
 }
 
-function Contenido({ d, marcaLabel, fecha }: { d: RespuestaEtapas; marcaLabel: string; fecha: EntradaCalendario | null }) {
-  // Sin overrides todavía: los trae la tanda del tablero de ideas. Hasta entonces la clasificación
-  // es la automática y las correcciones se piden mirando "sin clasificar".
-  const diag = diagnosticar(d.campañas, { marca: marcaLabel })
+const SIN_FECHAS: EntradaCalendario[] = []
 
+function Contenido({ d, diag, marcaLabel, fecha, correccion }: {
+  d: RespuestaEtapas
+  /** Ya viene calculado de arriba, con los overrides puestos: el tablero necesita el mismo. */
+  diag: Diagnostico | null
+  marcaLabel: string
+  fecha: EntradaCalendario | null
+  correccion: Correccion
+}) {
   return (
     <>
       {/* Cuentas que Meta devolvió pero que no sabemos de quién son. Ruidoso a propósito: es
           preferible admitir que falta un dato antes que atribuirle a una marca plata que no es suya. */}
       {d.sinMarca.length > 0 && <AvisoSinMarca cuentas={d.sinMarca} />}
 
-      {d.cuentas.length === 0 ? (
+      {!diag ? (
         <EmptyState
           title={`No hay ninguna cuenta publicitaria asignada a ${marcaLabel}`}
           hint="Sin la asignación de cuentas no se puede armar el diagnóstico por marca. Ver el aviso de arriba."
@@ -156,7 +312,7 @@ function Contenido({ d, marcaLabel, fecha }: { d: RespuestaEtapas; marcaLabel: s
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: space[3] }}>
             {diag.etapas.map((e) => <TarjetaEtapa key={e.etapa} e={e} gastoTotal={diag.gastoTotal} />)}
           </div>
-          <Pautas diag={diag} />
+          <Pautas diag={diag} correccion={correccion} />
         </>
       )}
     </>
@@ -254,13 +410,16 @@ function TarjetaEtapa({ e, gastoTotal }: { e: ResumenEtapa; gastoTotal: number }
   )
 }
 
-function Pautas({ diag }: { diag: Diagnostico }) {
+function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccion }) {
   const [verSinEntrega, setVerSinEntrega] = useState(false)
   const [verSinClasificar, setVerSinClasificar] = useState(false)
   const sinEntrega = diag.etapas.flatMap((e) => e.sinEntrega)
 
   return (
-    <SectionCard title="Las pautas al aire" subtitle="Agrupadas por la etapa que les corresponde según su objetivo en Meta.">
+    <SectionCard
+      title="Las pautas al aire"
+      subtitle="Agrupadas por la etapa que les corresponde según su objetivo en Meta. La etapa es del PÚBLICO, no del objetivo: cuando el objetivo miente, se corrige a mano y la corrección manda."
+    >
       {diag.etapas.map((e) => (
         <div key={e.etapa} style={{ marginBottom: space[5] }}>
           <div style={{ fontSize: font.sm, fontWeight: weight.semibold, color: color.mut, marginBottom: space[2] }}>
@@ -269,7 +428,7 @@ function Pautas({ diag }: { diag: Diagnostico }) {
           {e.alAire.length === 0 ? (
             <div style={{ fontSize: font.base, color: color.mut2, fontStyle: 'italic' }}>Ninguna.</div>
           ) : (
-            <TablaCampañas filas={e.alAire} />
+            <TablaCampañas filas={e.alAire} correccion={correccion} />
           )}
         </div>
       ))}
@@ -281,7 +440,7 @@ function Pautas({ diag }: { diag: Diagnostico }) {
           titulo={`${sinEntrega.length} activa${sinEntrega.length === 1 ? '' : 's'} sin entrega`}
           ayuda="Están en ACTIVE pero no gastaron en la ventana: suele ser presupuesto en cero o todos los conjuntos pausados."
         >
-          <TablaCampañas filas={sinEntrega} />
+          <TablaCampañas filas={sinEntrega} correccion={correccion} />
         </Plegable>
       )}
 
@@ -290,16 +449,21 @@ function Pautas({ diag }: { diag: Diagnostico }) {
           abierto={verSinClasificar}
           onToggle={() => setVerSinClasificar((v) => !v)}
           titulo={`${diag.sinClasificar.length} sin clasificar`}
-          ayuda="Su objetivo en Meta no cae en ninguna etapa conocida, así que no se reparten a ninguna: asignarlas por descarte inventaría el diagnóstico."
+          ayuda="Su objetivo en Meta no cae en ninguna etapa conocida, así que no se reparten a ninguna: asignarlas por descarte inventaría el diagnóstico. Corregirlas a mano las devuelve al reparto."
         >
-          <TablaCampañas filas={diag.sinClasificar} />
+          <TablaCampañas filas={diag.sinClasificar} correccion={correccion} />
         </Plegable>
       )}
     </SectionCard>
   )
 }
 
-function TablaCampañas({ filas }: { filas: CampañaEtapa[] }) {
+function TablaCampañas({ filas, correccion }: { filas: CampañaEtapa[]; correccion: Correccion }) {
+  // La columna de correcciones aparece si hay algo que mostrar o alguien que pueda tocarla. Quien
+  // no puede corregir tampoco tiene por qué cargar con una columna vacía.
+  const hayOverride = filas.some((c) => correccion.porCampaña[c.id])
+  const columna = correccion.puedePautar || hayOverride
+
   return (
     <TableWrap>
       <THead>
@@ -309,6 +473,7 @@ function TablaCampañas({ filas }: { filas: CampañaEtapa[] }) {
           <Th align="right">Gasto</Th>
           <Th align="right">Compras</Th>
           <Th>Estado</Th>
+          {columna && <Th>Etapa</Th>}
         </Tr>
       </THead>
       <TBody>
@@ -319,10 +484,111 @@ function TablaCampañas({ filas }: { filas: CampañaEtapa[] }) {
             <Td align="right">{money(c.spend)}</Td>
             <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
             <Td><EstadoPill s={c.estado} /></Td>
+            {columna && <Td><CeldaEtapa c={c} correccion={correccion} /></Td>}
           </Tr>
         ))}
       </TBody>
     </TableWrap>
+  )
+}
+
+/**
+ * La celda de la corrección manual. Tiene tres estados y ninguno es decorativo:
+ *
+ *  - sin corregir → el botón para corregirla (solo para quien pautea);
+ *  - corregida → dice a qué etapa y quién la puso, con la vuelta a la automática al lado;
+ *  - corregida **y el objetivo cambió después** → ámbar. El override sigue mandando, pero el juicio
+ *    se hizo sobre otra campaña de la que hoy es, y eso hay que poder verlo.
+ */
+function CeldaEtapa({ c, correccion }: { c: CampañaEtapa; correccion: Correccion }) {
+  const o = correccion.porCampaña[c.id]
+
+  if (!o) {
+    if (!correccion.puedePautar) return <span style={{ color: color.mut2 }}>automática</span>
+    return (
+      <Button size="sm" variant="ghost" onClick={() => correccion.onCorregir(c)}>Corregir</Button>
+    )
+  }
+
+  const vieja = overrideViejo(o, c)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[1], alignItems: 'flex-start' }}>
+      <StatusPill tone={vieja ? 'warning' : 'brand'} label={`a mano: ${ETIQUETA_ETAPA[o.etapa]}`} />
+      <span style={{ fontSize: font.xs, color: color.mut2 }} title={o.motivo || undefined}>
+        la corrigió {o.por}
+      </span>
+      {vieja && (
+        <span style={{ fontSize: font.xs, color: color.warningInk, lineHeight: 1.4 }}>
+          Le cambiaron el objetivo desde entonces (era {rotuloObjetivo(o.objetivo)}): conviene revisarla.
+        </span>
+      )}
+      {correccion.puedePautar && (
+        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+          <Button size="sm" variant="ghost" onClick={() => correccion.onCorregir(c)}>Cambiar</Button>
+          <Button size="sm" variant="ghost" onClick={() => correccion.onVolverAuto(c)}>Volver a la automática</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Corregir la etapa de una campaña.
+ *
+ * El modal explica **por qué** existe esta corrección, y no por prolijidad: el que la usa tiene que
+ * saber que no está arreglando un error del monitor sino aportando lo único que la API no dice —a
+ * qué público le está hablando esa campaña—. Si se lee como "el sistema clasificó mal", se corrige
+ * una vez y no se vuelve a mirar.
+ */
+function ModalCorregir({ c, override, onCerrar, onCorregir }: {
+  c: CampañaEtapa
+  override: OverrideEtapa | null
+  onCerrar: () => void
+  onCorregir: (etapa: Etapa, motivo: string) => void
+}) {
+  const [etapa, setEtapa] = useState<Etapa>((override?.etapa as Etapa) || (c.etapaAuto === 'sin-clasificar' ? 'mofu' : c.etapaAuto))
+  const [motivo, setMotivo] = useState(override?.motivo || '')
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      cerrarConFondo={false}
+      titulo="Corregir la etapa de la campaña"
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button variant="solid" onClick={() => onCorregir(etapa, motivo.trim())}>Guardar la corrección</Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ fontSize: font.base, color: color.ink2, lineHeight: 1.5 }}>
+          <b>{c.nombre}</b>
+          <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[0.5] }}>
+            Objetivo en Meta: {rotuloObjetivo(c.objetivo)} · hoy cuenta como{' '}
+            {ETIQUETA_ETAPA[c.etapaAuto]}
+          </div>
+        </div>
+
+        <Field label="A qué etapa va de verdad" width={260}>
+          <Select value={etapa} onChange={(e) => setEtapa(e.target.value as Etapa)}>
+            {ETAPAS.map((x) => <option key={x} value={x}>{ETIQUETA_ETAPA[x]}</option>)}
+          </Select>
+        </Field>
+
+        <Field label="Por qué" hint="Opcional, pero es lo que le da sentido a la corrección dentro de seis meses.">
+          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Está apuntada a quienes ya vieron el video" />
+        </Field>
+
+        <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.5 }}>
+          La etapa es una propiedad del <b>público</b>, no del objetivo de la campaña: una de ventas
+          apuntada a gente que nunca te vio es primera etapa disfrazada de tercera, y con lo que la
+          API devuelve no hay forma de distinguirlo. Esta corrección es ese dato, y pisa a la
+          automática hasta que alguien la saque.
+        </div>
+      </div>
+    </Modal>
   )
 }
 
