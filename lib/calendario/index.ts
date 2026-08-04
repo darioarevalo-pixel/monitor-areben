@@ -19,8 +19,11 @@ import type {
   Hito,
   IdeaParaContar,
   Prioridad,
+  TipoFecha,
 } from './tipos'
 import {
+  apagaLaFila as apagaLaFilaJs,
+  caeEnFinDeSemana as caeEnFinDeSemanaJs,
   CLAVES_COMERCIALES as CLAVES_COMERCIALES_JS,
   CLAVES_PRIORIDAD as CLAVES_PRIORIDAD_JS,
   CLAVES_TIPO_HITO as CLAVES_TIPO_HITO_JS,
@@ -36,9 +39,11 @@ import {
   partirIdComercial as partirIdComercialJs,
   PRIORIDADES as PRIORIDADES_JS,
   prioridadDe as prioridadDeJs,
+  prioridadSugerida as prioridadSugeridaJs,
   resolverComercial as resolverComercialJs,
   sumarDias as sumarDiasJs,
   TIPOS_HITO as TIPOS_HITO_JS,
+  trasladarFeriado as trasladarFeriadoJs,
 } from './fechas.core.js'
 
 export const FECHAS_COMERCIALES = FECHAS_COMERCIALES_JS as FechaComercial[]
@@ -50,12 +55,19 @@ export const PRIORIDADES = PRIORIDADES_JS as {
   key: Prioridad
   label: string
   corto: string
+  /** Pide arranque, dibuja el renglón de etapas y entra en `laQueAprieta()`. Sólo suave y fuerte. */
   arrastraProduccion: boolean
+  /** La fila se dibuja atenuada. Sólo `pasamos` — `institucional` está decidida y se ve normal. */
+  apaga: boolean
   ayuda: string
 }[]
 export const CLAVES_PRIORIDAD = CLAVES_PRIORIDAD_JS as string[]
 export const prioridadDe = prioridadDeJs as (key: string | null) => (typeof PRIORIDADES)[number] | null
 export const juegaLaFecha = juegaLaFechaJs as (key: string | null) => boolean
+export const apagaLaFila = apagaLaFilaJs as (key: string | null) => boolean
+export const prioridadSugerida = prioridadSugeridaJs as (tipo: TipoFecha | null) => Prioridad
+export const trasladarFeriado = trasladarFeriadoJs as (fecha: string) => string
+export const caeEnFinDeSemana = caeEnFinDeSemanaJs as (fecha: string) => boolean
 export const idComercial = idComercialJs as (clave: string, anio: number) => string
 export const partirIdComercial = partirIdComercialJs as (id: string) => { clave: string; anio: number } | null
 
@@ -151,6 +163,8 @@ export function proximas(
         faltan: diasEntre(desde, fecha),
         anticipoDias: f.anticipoDias,
         arranqueSugerido: sumarDias(fecha, -f.anticipoDias),
+        tipo: f.tipo,
+        prioridadSugerida: prioridadSugerida(f.tipo),
         prioridad: decision?.prioridad || null,
         arrancar: decision?.arrancar || null,
         // Sólo hay cuenta regresiva de producción si una persona puso desde cuándo. El catálogo
@@ -158,7 +172,7 @@ export function proximas(
         arrancarEn: decision?.arrancar ? diasEntre(desde, decision.arrancar) : null,
         detalle: f.porQue,
         comoSeConfirma: f.comoSeConfirma,
-        tipo: null,
+        tipoHito: null,
         creadoPor: fijada?.por || null,
         cobertura: cobertura[id] || ceros(),
       })
@@ -180,11 +194,13 @@ export function proximas(
       // cargar, y el anticipo lo pone quien lo cargó eligiendo la fecha, no el catálogo.
       anticipoDias: 0,
       arranqueSugerido: null,
+      tipo: null,
+      prioridadSugerida: null,
       prioridad: null,
       arrancar: null,
       arrancarEn: null,
       detalle: h.nota || null,
-      tipo: h.tipo || null,
+      tipoHito: h.tipo || null,
       creadoPor: h.creadoPor || null,
       cobertura: cobertura[id] || ceros(),
     })

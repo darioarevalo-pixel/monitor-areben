@@ -7,8 +7,17 @@
 
 import type { Etapa } from '@/lib/meta-ads/tipos'
 
-/** Qué clase de fecha es, en el catálogo. */
+/** Cuánto se le puede creer a la fecha del catálogo. NO confundir con `TipoFecha`. */
 export type ClaseFecha = 'fija' | 'regla' | 'anunciada'
+
+/**
+ * Qué clase de cosa es la fecha. Es **ortogonal** a `ClaseFecha`, que responde otra pregunta: un
+ * feriado puede ser fijo (25-dic), regla (el traslado del 20-nov) o anunciado (un puente turístico).
+ *
+ * Decide con qué peldaño arranca la pregunta —una comercial sugiere `fuerte`, un feriado o una
+ * efeméride sugieren `institucional`— y si el renglón "Etapas armadas" se dibuja por defecto.
+ */
+export type TipoFecha = 'comercial' | 'feriado' | 'efemeride'
 
 /**
  * Cuánto se le puede creer a la fecha. Es el dato que decide si el calendario sirve o miente, así
@@ -27,8 +36,11 @@ export interface FechaComercial {
   clave: string
   titulo: string
   clase: ClaseFecha
+  tipo: TipoFecha
   anticipoDias: number
   resolver: (anio: number) => string | null
+  /** El año en que la regla deja de alcanzar y la fecha pasa a ser estimada (traslado de fin de semana). */
+  estimadaEn?: (anio: number) => boolean
   porQue: string
   comoSeConfirma?: string
 }
@@ -37,7 +49,7 @@ export interface FechaComercial {
  * Con cuánta fuerza jugamos una fecha. `null` es "todavía no lo decidimos", y es el default: no hay
  * fila en la base hasta que alguien elige. Ver el docblock de `PRIORIDADES` en `fechas.core.js`.
  */
-export type Prioridad = 'fuerte' | 'suave' | 'pasamos'
+export type Prioridad = 'fuerte' | 'suave' | 'institucional' | 'pasamos'
 
 /**
  * La decisión editorial sobre una fecha, para una marca y un año.
@@ -99,6 +111,10 @@ export interface EntradaCalendario {
   anticipoDias: number
   /** `YYYY-MM-DD` sugerido para arrancar (`fecha - anticipoDias`). Prellena el modal, nada más. */
   arranqueSugerido: string | null
+  /** Qué clase de cosa es: comercial, feriado o efeméride. Los hitos propios van en `null`. */
+  tipo: TipoFecha | null
+  /** El peldaño que se ofrece primero. Sugerencia del primer clic, no un techo. */
+  prioridadSugerida: Prioridad | null
   /** Con cuánta fuerza decidimos jugarla. `null` = nadie lo decidió todavía. */
   prioridad: Prioridad | null
   /** `YYYY-MM-DD` que puso una persona para empezar a producir, o `null`. */
@@ -114,7 +130,8 @@ export interface EntradaCalendario {
   /** Por qué esta fecha está en la lista (comerciales) o la nota que dejó quien la cargó (hitos). */
   detalle: string | null
   comoSeConfirma?: string
-  tipo: string | null
+  /** El tipo del hito propio (lanzamiento, sesión de fotos…). `null` en las comerciales. */
+  tipoHito: string | null
   creadoPor: string | null
   /** Ideas anotadas para esta fecha, por etapa. Todo ceros si nadie anotó nada todavía. */
   cobertura: CoberturaEtapas

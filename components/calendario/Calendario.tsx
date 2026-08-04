@@ -38,8 +38,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
-  diaDeSemanaDe, diasDelMes, diasEntre, fechaComercialDe, hoyIso, iso, juegaLaFecha, laQueAprieta,
-  PRIORIDADES, prioridadDe, proximas, sinDecidir, TIPOS_HITO,
+  apagaLaFila, diaDeSemanaDe, diasDelMes, diasEntre, fechaComercialDe, hoyIso, iso, juegaLaFecha,
+  laQueAprieta, PRIORIDADES, prioridadDe, proximas, sinDecidir, TIPOS_HITO,
   type DecisionFecha, type EntradaCalendario, type FechaFijada, type Hito, type Prioridad,
 } from '@/lib/calendario'
 import {
@@ -308,7 +308,7 @@ export function Calendario() {
           onAnotar={setAnotando}
           onConfirmar={setConfirmando}
           onPrioridad={elegirPrioridad}
-          onCambiar={(e) => setDecidiendo({ e, prioridad: e.prioridad || 'fuerte' })}
+          onCambiar={(e) => setDecidiendo({ e, prioridad: e.prioridad || e.prioridadSugerida || 'fuerte' })}
           onEditar={(id) => setEditando(hitos.find((h) => h.id === id) || null)}
         />
       ) : (
@@ -391,7 +391,8 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEd
   const urgente = juegaLaFecha(e.prioridad) && e.arrancarEn !== null && e.arrancarEn <= 0
   // Una fecha que dejamos pasar se apaga en vez de esconderse: sigue estando (para no volver a
   // discutirla) pero deja de competir por la atención con las que sí vamos a trabajar.
-  const apagada = e.prioridad === 'pasamos'
+  // ⚠️ `institucional` NO apaga: está decidida y se ve normal, sólo que no reclama producción.
+  const apagada = apagaLaFila(e.prioridad)
   return (
     <div
       style={{
@@ -414,7 +415,7 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEd
           <span style={{ fontSize: font.md, fontWeight: weight.bold, color: color.ink }}>{e.titulo}</span>
           <span style={{ fontSize: font.sm, color: color.mut }}>{rotuloFecha(e.fecha)}</span>
           <ChipCerteza e={e} />
-          {e.tipo && <span style={{ fontSize: font.xs, color: color.mut2 }}>{TIPOS_HITO.find((t) => t.key === e.tipo)?.label || e.tipo}</span>}
+          {e.tipoHito && <span style={{ fontSize: font.xs, color: color.mut2 }}>{TIPOS_HITO.find((t) => t.key === e.tipoHito)?.label || e.tipoHito}</span>}
         </div>
 
         {e.clase === 'comercial' && (
@@ -425,9 +426,11 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEd
 
         {e.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {e.creadoPor}</div>}
 
-        {/* Una fecha que dejamos pasar no necesita creativos: el renglón sobraría y encima haría
-            parecer que falta trabajo que nadie va a hacer. */}
-        {!sinIdeas && !apagada && <Cobertura e={e} />}
+        {/* El renglón de etapas se dibuja sólo cuando la fecha pide producción de verdad. Una que
+            dejamos pasar no necesita creativos, y un feriado en `institucional` tampoco: mostrarle
+            tres etapas vacías haría parecer que falta trabajo que nadie va a hacer. Sin decidir SÍ
+            se dibuja — es lo que hace que valga la pena decidir. */}
+        {!sinIdeas && (!e.prioridad || juegaLaFecha(e.prioridad)) && <Cobertura e={e} />}
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
@@ -457,11 +460,21 @@ function Decision({ e, urgente, onPrioridad, onCambiar }: {
   onCambiar: (e: EntradaCalendario) => void
 }) {
   if (!e.prioridad) {
+    // El peldaño sugerido va primero y resaltado; los otros tres quedan disponibles igual. Un
+    // feriado sugiere `institucional` y una comercial `fuerte`, pero ninguno de los dos es un techo:
+    // el 9 de julio en año de Mundial se sube a `fuerte` desde acá mismo.
+    const sug = e.prioridadSugerida
+    const orden = [...PRIORIDADES].sort((a, b) => Number(b.key === sug) - Number(a.key === sug))
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-        <span style={{ fontSize: font.sm, color: color.ink2, fontWeight: weight.semibold }}>¿Nos sumamos?</span>
-        {PRIORIDADES.map((p) => (
-          <Button key={p.key} size="sm" variant="ghost" title={p.ayuda} onClick={() => onPrioridad(e, p.key)}>
+        <span style={{ fontSize: font.sm, color: color.ink2, fontWeight: weight.semibold }}>
+          {e.tipo === 'feriado' || e.tipo === 'efemeride' ? '¿Subimos algo?' : '¿Nos sumamos?'}
+        </span>
+        {orden.map((p) => (
+          <Button
+            key={p.key} size="sm" variant={p.key === sug ? 'soft' : 'ghost'} title={p.ayuda}
+            onClick={() => onPrioridad(e, p.key)}
+          >
             {p.corto}
           </Button>
         ))}
@@ -476,7 +489,14 @@ function Decision({ e, urgente, onPrioridad, onCambiar }: {
             ignorar el número trece, que sí importaba.
           </p>
           <p>
-            Lo que elijas vale <b>para esta marca y este año</b>: el que viene se vuelve a preguntar.
+            Un feriado o una efeméride arrancan sugiriendo <b>algo institucional</b> —subimos una
+            pieza y listo—, pero eso no es un techo: si ese año la fecha vale la pena (un 9 de julio
+            en año de Mundial), se la sube a <b>suave</b> o <b>fuerte</b> y pide creativos como
+            cualquier otra.
+          </p>
+          <p>
+            Lo que elijas vale <b>para esta marca y este año</b>: el que viene se vuelve a preguntar,
+            así que lo que subiste una vez no queda subido para siempre.
           </p>
         </InfoPopover>
       </div>
@@ -486,7 +506,7 @@ function Decision({ e, urgente, onPrioridad, onCambiar }: {
   const p = prioridadDe(e.prioridad)!
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-      <StatusPill tone={e.prioridad === 'fuerte' ? 'success' : e.prioridad === 'suave' ? 'neutral' : 'neutral'} label={p.label.toLowerCase()} />
+      <StatusPill tone={e.prioridad === 'fuerte' ? 'success' : 'neutral'} label={p.label.toLowerCase()} />
       {p.arrastraProduccion && (
         <span
           style={{
@@ -938,7 +958,16 @@ function ModalDecidir({ entrada, prioridad: inicial, hoy, onCerrar, onGuardar, o
           </div>
         )}
 
-        {!juega && (
+        {prioridad === 'institucional' && (
+          <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
+            No pide fecha de arranque ni creativos de embudo: se resuelve en el día. La fila se sigue
+            viendo normal — está decidida, sólo que no reclama trabajo. Si más adelante esta fecha
+            resulta valer la pena, <b>subila a suave o fuerte</b> y pasa a comportarse como cualquier
+            comercial. Vale sólo para esta marca y este año.
+          </div>
+        )}
+
+        {prioridad === 'pasamos' && (
           <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
             Queda en la lista, apagada, para no volver a discutirla. No pide creativos ni aparece en
             el veredicto de Etapas de la pauta. Vale sólo para esta marca y este año.

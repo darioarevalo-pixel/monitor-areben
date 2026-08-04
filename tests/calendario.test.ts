@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import {
+  apagaLaFila,
+  caeEnFinDeSemana,
   diasEntre,
   hoyIso,
+  juegaLaFecha,
   laQueAprieta,
   nEsimoDiaDeSemana,
   proximas,
+  prioridadSugerida,
   resolverComercial,
   sinDecidir,
   sumarDias,
+  trasladarFeriado,
   FECHAS_COMERCIALES,
 } from '@/lib/calendario'
 import type { DecisionFecha, FechaFijada, Hito, IdeaParaContar, Prioridad } from '@/lib/calendario'
@@ -301,6 +306,111 @@ describe('hoyIso()', () => {
     const tarde = new Date(2026, 0, 1, 23, 0, 0)
     if (tarde.getTimezoneOffset() > 0) {
       expect(hoyIso(tarde)).not.toBe(tarde.toISOString().slice(0, 10))
+    }
+  })
+})
+
+
+describe('feriados: el traslado es una REGLA, no una fecha del almanaque', () => {
+  it('art. 6 de la Ley 27.399: martes y miércoles al lunes anterior, jueves y viernes al siguiente', () => {
+    expect(trasladarFeriado('2027-06-17')).toBe('2027-06-21')  // jue → lun siguiente
+    expect(trasladarFeriado('2026-11-20')).toBe('2026-11-23')  // vie → lun siguiente
+    expect(trasladarFeriado('2027-08-17')).toBe('2027-08-16')  // mar → lun anterior
+    expect(trasladarFeriado('2028-10-12')).toBe('2028-10-16')  // jue → lun siguiente
+    expect(trasladarFeriado('2026-08-17')).toBe('2026-08-17')  // ya es lunes, no se mueve
+  })
+
+  it('🔴 la Soberanía de 2026 NO es el 20: cae viernes y el feriado real es el lunes 23', () => {
+    // El error que este archivo existe para evitar: hardcodear "20 de noviembre" da bien un año y
+    // mal los otros. En 2026 el que no se trabaja es el 23.
+    expect(resolverComercial('soberania', 2026)?.fecha).toBe('2026-11-23')
+    expect(resolverComercial('san-martin', 2026)?.fecha).toBe('2026-08-17')
+    expect(resolverComercial('diversidad-cultural', 2026)?.fecha).toBe('2026-10-12')
+    expect(resolverComercial('inmaculada', 2026)?.fecha).toBe('2026-12-08')
+  })
+
+  it('cuando el trasladable cae fin de semana la regla NO alcanza y la fecha sale estimada', () => {
+    // El decreto 614/2025 dice que *podrán* moverse al lunes o viernes más cercano. "Podrán" no se
+    // computa: lo decide el Ejecutivo. Mostrarlo como firme sería inventar el día.
+    const finde = [2029, 2030, 2031, 2032, 2033, 2034].filter((a) => caeEnFinDeSemana(`${a}-11-20`))
+    expect(finde.length).toBeGreaterThan(0)
+    for (const a of finde) expect(resolverComercial('soberania', a)?.estimada, String(a)).toBe(true)
+    // Y en un año en que sí se puede calcular, es firme.
+    expect(resolverComercial('soberania', 2026)?.estimada).toBe(false)
+  })
+
+  it('el puente de diciembre sólo existe los años en que hay puente que estimar', () => {
+    // 8-dic-2026 cae martes → el puente es el lunes 7, y va estimado porque lo decreta el Ejecutivo.
+    expect(resolverComercial('puente-diciembre', 2026)?.fecha).toBe('2026-12-07')
+    expect(resolverComercial('puente-diciembre', 2026)?.estimada).toBe(true)
+    // 8-dic-2027 cae miércoles: no hay puente que inventar.
+    expect(resolverComercial('puente-diciembre', 2027)).toBe(null)
+  })
+})
+
+describe('el escalón institucional', () => {
+  it('un feriado sugiere institucional y una comercial sugiere fuerte', () => {
+    expect(prioridadSugerida('feriado')).toBe('institucional')
+    expect(prioridadSugerida('efemeride')).toBe('institucional')
+    expect(prioridadSugerida('comercial')).toBe('fuerte')
+    const r = proximas('2026-08-04', 30)
+    expect(r.find((e) => e.id === 'comercial:san-martin:2026')?.prioridadSugerida).toBe('institucional')
+    expect(r.find((e) => e.id === 'comercial:dia-nino:2026')?.prioridadSugerida).toBe('fuerte')
+  })
+
+  it('institucional no pide producción, pero TAMPOCO apaga la fila', () => {
+    // Es lo que no se podía expresar con un flag solo: decidida y visible, sin reclamar trabajo.
+    expect(juegaLaFecha('institucional')).toBe(false)
+    expect(apagaLaFila('institucional')).toBe(false)
+    expect(apagaLaFila('pasamos')).toBe(true)
+    expect(juegaLaFecha('fuerte')).toBe(true)
+    expect(apagaLaFila('fuerte')).toBe(false)
+  })
+
+  it('un feriado en institucional NO reclama creativos', () => {
+    const decisiones: DecisionFecha[] = [
+      { entradaId: 'comercial:san-martin:2026', prioridad: 'institucional', arrancar: null, por: 'Bruno' },
+    ]
+    expect(laQueAprieta(proximas('2026-08-04', 30, { decisiones }))).toBe(null)
+    // Pero está decidido: sale de la lista de pendientes.
+    expect(sinDecidir(proximas('2026-08-04', 30, { decisiones })).some((e) => e.id === 'comercial:san-martin:2026')).toBe(false)
+  })
+
+  it('🔑 subirlo un escalón SÍ lo mete: es toda la promoción que hace falta', () => {
+    // El caso del 9 de julio en año de Mundial, con San Martín de ejemplo.
+    const decisiones: DecisionFecha[] = [
+      { entradaId: 'comercial:san-martin:2026', prioridad: 'fuerte', arrancar: null, por: 'Bruno' },
+    ]
+    expect(laQueAprieta(proximas('2026-08-04', 30, { decisiones }))?.id).toBe('comercial:san-martin:2026')
+  })
+
+  it('y como la decisión es por año, al siguiente vuelve a nacer sin decidir', () => {
+    const decisiones: DecisionFecha[] = [
+      { entradaId: 'comercial:san-martin:2026', prioridad: 'fuerte', arrancar: null, por: 'Bruno' },
+    ]
+    const del27 = proximas('2027-08-01', 30, { decisiones }).find((e) => e.id === 'comercial:san-martin:2027')!
+    expect(del27.prioridad).toBe(null)
+    expect(del27.prioridadSugerida).toBe('institucional')
+  })
+})
+
+describe('el catálogo completo', () => {
+  it('toda fecha declara su tipo y su porQue', () => {
+    for (const f of FECHAS_COMERCIALES) {
+      expect(['comercial', 'feriado', 'efemeride'], f.clave).toContain(f.tipo)
+      expect(f.porQue, `${f.clave} no dice por qué está en la lista`).toBeTruthy()
+    }
+  })
+
+  it('no hay dos fechas con la misma clave', () => {
+    const claves = FECHAS_COMERCIALES.map((f) => f.clave)
+    expect(new Set(claves).size).toBe(claves.length)
+  })
+
+  it('de acá a fin de 2026 entran los feriados y las comerciales nuevas', () => {
+    const ids = proximas('2026-08-04', 150).map((e) => e.id)
+    for (const c of ['san-martin', 'empleado-comercio', 'diversidad-cultural', 'halloween']) {
+      expect(ids, c).toContain(`comercial:${c}:2026`)
     }
   })
 })
