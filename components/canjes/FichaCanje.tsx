@@ -11,8 +11,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  Badge, Button, Card, CopyButton, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
-  color, font, space, weight, useConfirmar, useToast, type Tone,
+  Badge, Button, Card, CopyButton, Field, Input, Modal, Notice, PasoCantidad, SectionCard, Select,
+  StatusPill, color, font, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
@@ -485,12 +485,13 @@ function EditarTrato({
         <div style={{ marginTop: space[3] }}>
           {unidades.map((u, i) => (
             <div key={i} style={{ display: 'flex', gap: space[2], marginBottom: space[2], alignItems: 'center' }}>
-              <Input
-                type="number"
+              {/* El mismo control que al proponer: acá se reasienta lo que se renegoció y no tiene
+                  por qué contarse distinto. */}
+              <PasoCantidad
+                valor={u.cantidad}
                 min={1}
-                value={String(u.cantidad)}
-                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x)))}
-                style={{ width: 80 }}
+                onCambio={(n) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: n } : x)))}
+                etiqueta={u.descripcion || 'productos'}
               />
               <Input
                 value={u.descripcion}

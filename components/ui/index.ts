@@ -10,6 +10,7 @@ export { Badge, StatusPill, type BadgeProps, type StatusPillProps } from '@/comp
 // fieldControlStyle/fieldRowGap se retiraron: el escape hatch ahora es la clase
 // `mo-input` de kit.css (un control ad-hoc le pone la clase y hereda foco y densidad).
 export { Field, Input, Select, NumberField, type FieldProps, type InputProps, type SelectProps, type NumberFieldProps } from '@/components/ui/Field'
+export { PasoCantidad, type PasoCantidadProps } from '@/components/ui/PasoCantidad'
 export { Toolbar, type ToolbarProps } from '@/components/ui/Toolbar'
 export { Tabs, type TabItem, type TabsProps } from '@/components/ui/Tabs'
 export { EmptyState, type EmptyStateProps } from '@/components/ui/EmptyState'

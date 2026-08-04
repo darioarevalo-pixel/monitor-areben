@@ -20,7 +20,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Button, CopyButton, Field, Input, Modal, Notice, Select,
+  Button, CopyButton, Field, Input, Modal, Notice, PasoCantidad, Select,
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
@@ -203,12 +203,13 @@ export function ProponerCanje({
           </div>
           {lineas.map((u, i) => (
             <div key={i} style={{ display: 'flex', gap: space[2], marginBottom: space[2], alignItems: 'center' }}>
-              <Input
-                type="number"
+              {/* El mismo control que cuenta las historias abajo: es el mismo gesto —"cuántos"— y
+                  Bruno lo pidió textual. Piso 1: una línea de cero productos no es una línea. */}
+              <PasoCantidad
+                valor={u.cantidad}
                 min={1}
-                value={String(u.cantidad)}
-                onChange={(e) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x)))}
-                style={{ width: 80 }}
+                onCambio={(n) => setUnidades((p) => p.map((x, j) => (j === i ? { ...x, cantidad: n } : x)))}
+                etiqueta={u.descripcion || unidadPorDefecto}
                 autoFocus={i === 0}
               />
               <Input

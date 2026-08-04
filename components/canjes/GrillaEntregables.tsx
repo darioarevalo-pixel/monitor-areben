@@ -11,7 +11,7 @@
  * una línea más un deploy, y una lista abierta se llena de `Reel` / `reel ig` / `REEL`.
  */
 
-import { Button, color, font, space, weight } from '@/components/ui'
+import { Button, PasoCantidad, color, space, weight } from '@/components/ui'
 import {
   ENTREGABLE_LABEL, ENTREGABLE_LABEL_PLURAL, entregableEnCriollo, TIPOS_ENTREGABLE,
   type TipoEntregable,
@@ -154,58 +154,17 @@ export function GrillaEntregables({
               </div>
             </div>
             {/* Los ± son para el teclado del celular, donde tipear un número en un input chico es
-                más trabajo que tocar dos veces. */}
-            <button
-              type="button"
-              aria-label={`Menos ${ENTREGABLE_LABEL[t]}`}
-              onClick={() => set(t, n - 1)}
-              disabled={n === 0}
-              style={botonPaso(n === 0)}
-            >
-              −
-            </button>
-            <input
-              type="number"
-              min={0}
-              value={String(n)}
-              onChange={(e) => set(t, parseInt(e.target.value, 10) || 0)}
-              aria-label={`Cuántas ${ENTREGABLE_LABEL_PLURAL[t]}`}
-              style={{
-                width: 56,
-                textAlign: 'center',
-                fontSize: font.md,
-                padding: space[1],
-                border: `1px solid ${color.line2}`,
-                borderRadius: 6,
-                background: color.surface,
-                color: color.ink,
-              }}
+                más trabajo que tocar dos veces. El control vive en el kit: es el mismo que cuenta
+                los productos al proponer. */}
+            <PasoCantidad
+              valor={n}
+              onCambio={(x) => set(t, x)}
+              etiqueta={ENTREGABLE_LABEL[t]}
+              etiquetaPlural={ENTREGABLE_LABEL_PLURAL[t]}
             />
-            <button
-              type="button"
-              aria-label={`Más ${ENTREGABLE_LABEL[t]}`}
-              onClick={() => set(t, n + 1)}
-              style={botonPaso(false)}
-            >
-              +
-            </button>
           </div>
         )
       })}
     </div>
   )
-}
-
-function botonPaso(deshabilitado: boolean): React.CSSProperties {
-  return {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    border: `1px solid ${color.line2}`,
-    background: color.surface,
-    color: deshabilitado ? color.mut2 : color.ink,
-    fontSize: font.md,
-    lineHeight: 1,
-    cursor: deshabilitado ? 'default' : 'pointer',
-  }
 }
