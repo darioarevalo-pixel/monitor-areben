@@ -6,10 +6,11 @@ import {
   nEsimoDiaDeSemana,
   proximas,
   resolverComercial,
+  sinDecidir,
   sumarDias,
   FECHAS_COMERCIALES,
 } from '@/lib/calendario'
-import type { FechaFijada, Hito, IdeaParaContar } from '@/lib/calendario'
+import type { DecisionFecha, FechaFijada, Hito, IdeaParaContar, Prioridad } from '@/lib/calendario'
 
 /**
  * El calendario editorial.
@@ -123,11 +124,18 @@ describe('proximas()', () => {
     expect(r.some((e) => e.id === 'comercial:san-valentin:2027')).toBe(true)
   })
 
-  it('calcula los días que faltan y cuándo hay que empezar', () => {
+  it('calcula los días que faltan, y el arranque queda en SUGERENCIA hasta que alguien decida', () => {
     const madre = proximas('2026-09-14', 60).find((e) => e.id === 'comercial:dia-madre:2026')!
     expect(madre.faltan).toBe(34)
     expect(madre.anticipoDias).toBe(30)
-    expect(madre.arrancarEn).toBe(4)
+    // El catálogo sugiere arrancar 30 días antes...
+    expect(madre.arranqueSugerido).toBe('2026-09-18')
+    // ...pero mientras nadie lo confirme NO hay cuenta regresiva de producción. Este null es el
+    // punto de todo: si acá saliera un número, la pantalla anunciaría urgencia sobre una fecha que
+    // el equipo ni miró, y un aviso que se ignora doce veces enseña a ignorar el número trece.
+    expect(madre.arrancarEn).toBe(null)
+    expect(madre.prioridad).toBe(null)
+    expect(madre.arrancar).toBe(null)
   })
 
   it('los hitos entran en la misma lista, con su certeza', () => {
@@ -138,8 +146,11 @@ describe('proximas()', () => {
     expect(h.certeza).toBe('proyectada')
     expect(h.titulo).toBe('Cápsula tejidos')
     expect(h.creadoPor).toBe('Nico')
-    // Un hito no tiene anticipo: la producción no la manda el calendario sino quien lo cargó.
-    expect(h.arrancarEn).toBe(h.faltan)
+    // Un hito propio ya es nuestro: no se decide ni se anticipa. La producción la manda quien lo
+    // cargó eligiendo la fecha, no el catálogo.
+    expect(h.arrancarEn).toBe(null)
+    expect(h.prioridad).toBe(null)
+    expect(h.arranqueSugerido).toBe(null)
   })
 
   it('un hito fuera de la ventana no aparece', () => {
@@ -182,22 +193,99 @@ describe('el enganche: cuántas ideas hay por etapa', () => {
   })
 })
 
+describe('la decisión: con cuánta fuerza jugamos cada fecha', () => {
+  const decision = (entradaId: string, prioridad: Prioridad, arrancar: string | null = null): DecisionFecha =>
+    ({ entradaId, prioridad, arrancar, por: 'Bruno' })
+
+  const con = (desde: string, decisiones: DecisionFecha[]) => proximas(desde, 90, { decisiones })
+
+  it('la prioridad y el arranque viajan hasta la entrada, y recién ahí hay cuenta regresiva', () => {
+    const r = con('2026-09-14', [decision('comercial:dia-madre:2026', 'fuerte', '2026-09-18')])
+    const madre = r.find((e) => e.id === 'comercial:dia-madre:2026')!
+    expect(madre.prioridad).toBe('fuerte')
+    expect(madre.arrancar).toBe('2026-09-18')
+    expect(madre.arrancarEn).toBe(4)
+  })
+
+  it('decidir que nos sumamos SIN poner desde cuándo no inventa un arranque', () => {
+    // El caso frecuente: "sí la jugamos, todavía no sabemos cuándo arrancamos". Si el motor cayera
+    // acá al `anticipoDias` del catálogo, el equipo vería una fecha de arranque que nadie eligió.
+    const madre = con('2026-09-14', [decision('comercial:dia-madre:2026', 'fuerte')])
+      .find((e) => e.id === 'comercial:dia-madre:2026')!
+    expect(madre.arrancar).toBe(null)
+    expect(madre.arrancarEn).toBe(null)
+    expect(madre.arranqueSugerido).toBe('2026-09-18')
+  })
+
+  it('una decisión es de UN año y de UNA marca: no arrastra al siguiente', () => {
+    const d = [decision('comercial:dia-madre:2026', 'fuerte', '2026-09-18')]
+    const del27 = proximas('2027-09-14', 60, { decisiones: d }).find((e) => e.id === 'comercial:dia-madre:2027')!
+    expect(del27.prioridad).toBe(null)
+  })
+})
+
 describe('laQueAprieta()', () => {
-  it('es la que ya entró en su anticipo, no la más cercana', () => {
-    // Parado el 1-nov-2026: el CyberMonday estimado es el 2 (mañana, anticipo ya vencido) y Black
-    // Friday el 27 con 21 días de anticipo. La que aprieta es la primera de las dos por fecha.
-    const r = proximas('2026-11-01', 60)
-    expect(laQueAprieta(r)?.id).toBe('comercial:cybermonday-ar:2026')
+  const decision = (entradaId: string, prioridad: Prioridad, arrancar: string | null = null): DecisionFecha =>
+    ({ entradaId, prioridad, arrancar, por: 'Bruno' })
+
+  it('se calla mientras nadie haya decidido nada, por más cerca que esté la fecha', () => {
+    // 🔴 El cambio de fondo. Parado el 1-nov-2026 el CyberMonday es mañana y Black Friday en 26
+    // días: con el criterio viejo —"la que ya entró en su anticipo"— esto reclamaba creativos para
+    // las dos. Pero nadie eligió trabajarlas todavía, así que no hay nada que reclamar.
+    expect(laQueAprieta(proximas('2026-11-01', 60))).toBe(null)
   })
 
-  it('se calla cuando todavía no hay nada que empezar', () => {
-    // 1-abr-2026: lo más cercano es el Hot Sale del 11-may, a 40 días, con 21 de anticipo.
-    expect(laQueAprieta(proximas('2026-04-01', 30))).toBe(null)
+  it('devuelve la más cercana de las que decidimos jugar', () => {
+    const decisiones = [
+      decision('comercial:cybermonday-ar:2026', 'fuerte'),
+      decision('comercial:black-friday:2026', 'fuerte'),
+    ]
+    expect(laQueAprieta(proximas('2026-11-01', 60, { decisiones }))?.id).toBe('comercial:cybermonday-ar:2026')
   })
 
-  it('nunca devuelve un hito: el que manda la producción es el anticipo, y un hito no tiene', () => {
+  it('una fecha que dejamos pasar NO reclama creativos, aunque sea la más cercana', () => {
+    // Sin esto, Etapas de la pauta mandaría a craneаr piezas para algo que ya dijimos que no.
+    const decisiones = [
+      decision('comercial:cybermonday-ar:2026', 'pasamos'),
+      decision('comercial:black-friday:2026', 'suave'),
+    ]
+    expect(laQueAprieta(proximas('2026-11-01', 60, { decisiones }))?.id).toBe('comercial:black-friday:2026')
+  })
+
+  it('la que tiene el arranque vencido se adelanta a una jugada más cercana', () => {
+    // Black Friday es más lejos que el CyberMonday, pero su arranque ya pasó y el otro no tiene.
+    const decisiones = [
+      decision('comercial:cybermonday-ar:2026', 'fuerte'),
+      decision('comercial:black-friday:2026', 'fuerte', '2026-10-25'),
+    ]
+    expect(laQueAprieta(proximas('2026-11-01', 60, { decisiones }))?.id).toBe('comercial:black-friday:2026')
+  })
+
+  it('nunca devuelve un hito: lo propio ya está decidido y no se prioriza', () => {
     const hitos = [hito({ id: 'ya', fecha: '2026-04-02' })]
     expect(laQueAprieta(proximas('2026-04-01', 30, { hitos }))).toBe(null)
+  })
+})
+
+describe('sinDecidir()', () => {
+  it('son las comerciales que nadie miró: es lo que la banda de arriba pide', () => {
+    const r = proximas('2026-11-01', 60)
+    const pend = sinDecidir(r)
+    expect(pend.length).toBe(r.filter((e) => e.clase === 'comercial').length)
+    expect(pend.every((e) => e.clase === 'comercial')).toBe(true)
+  })
+
+  it('dejar pasar una fecha TAMBIÉN es decidirla: sale de la lista de pendientes', () => {
+    const decisiones: DecisionFecha[] = [
+      { entradaId: 'comercial:cybermonday-ar:2026', prioridad: 'pasamos', arrancar: null, por: 'Bruno' },
+    ]
+    const pend = sinDecidir(proximas('2026-11-01', 60, { decisiones }))
+    expect(pend.some((e) => e.id === 'comercial:cybermonday-ar:2026')).toBe(false)
+  })
+
+  it('los hitos propios no se cuentan: ya son nuestros', () => {
+    const hitos = [hito({ id: 'a', fecha: '2026-11-10' })]
+    expect(sinDecidir(proximas('2026-11-01', 30, { hitos })).some((e) => e.clase === 'hito')).toBe(false)
   })
 })
 

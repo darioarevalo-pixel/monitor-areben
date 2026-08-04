@@ -33,6 +33,27 @@ export interface FechaComercial {
   comoSeConfirma?: string
 }
 
+/**
+ * Con cuánta fuerza jugamos una fecha. `null` es "todavía no lo decidimos", y es el default: no hay
+ * fila en la base hasta que alguien elige. Ver el docblock de `PRIORIDADES` en `fechas.core.js`.
+ */
+export type Prioridad = 'fuerte' | 'suave' | 'pasamos'
+
+/**
+ * La decisión editorial sobre una fecha, para una marca y un año.
+ *
+ * Va por `entradaId` (`comercial:<clave>:<año>`) y no por clave suelta a propósito: el Día del Niño
+ * del año que viene es otra decisión. Que BDI se sume y Zattia pase es normal, y por eso la tabla
+ * tiene `store` como en todas las demás.
+ */
+export interface DecisionFecha {
+  entradaId: string
+  prioridad: Prioridad
+  /** `YYYY-MM-DD`: cuándo hay que empezar a producir. `null` = se decidió jugarla y falta ponerlo. */
+  arrancar: string | null
+  por: string | null
+}
+
 /** Una fecha anunciada que alguien confirmó a mano, para un año concreto. */
 export interface FechaFijada {
   clave: string
@@ -74,9 +95,22 @@ export interface EntradaCalendario {
   certeza: Certeza
   /** Días desde `desde` hasta la fecha. 0 es hoy. */
   faltan: number
+  /** Lo que el catálogo **sugiere** de anticipo. No dispara nada solo: ver `PRIORIDADES`. */
   anticipoDias: number
-  /** Días hasta que hay que empezar a producir. Negativo o 0 = ya se debería estar craneando. */
-  arrancarEn: number
+  /** `YYYY-MM-DD` sugerido para arrancar (`fecha - anticipoDias`). Prellena el modal, nada más. */
+  arranqueSugerido: string | null
+  /** Con cuánta fuerza decidimos jugarla. `null` = nadie lo decidió todavía. */
+  prioridad: Prioridad | null
+  /** `YYYY-MM-DD` que puso una persona para empezar a producir, o `null`. */
+  arrancar: string | null
+  /**
+   * Días hasta ese arranque. Negativo o 0 = ya habría que estar produciendo.
+   *
+   * 🔴 **`null` mientras nadie lo haya puesto**, y ese null es el punto de todo el cambio: si sale
+   * de una resta del catálogo, la pantalla anuncia urgencia sobre fechas que el equipo ni pensaba
+   * trabajar. Sin decisión humana no hay número, y sin número no hay nada que gritar.
+   */
+  arrancarEn: number | null
   /** Por qué esta fecha está en la lista (comerciales) o la nota que dejó quien la cargó (hitos). */
   detalle: string | null
   comoSeConfirma?: string

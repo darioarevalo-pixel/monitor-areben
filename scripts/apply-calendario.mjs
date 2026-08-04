@@ -23,7 +23,7 @@ const env = Object.fromEntries(
 )
 
 const sql = readFileSync('sql/migrate-calendario.sql', 'utf8')
-const TABLAS = ['calendario_hitos', 'calendario_fechas_fijadas']
+const TABLAS = ['calendario_hitos', 'calendario_fechas_fijadas', 'calendario_decision']
 
 function parse(raw) {
   const afterProto = raw.slice(raw.indexOf('://') + 3)

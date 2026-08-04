@@ -276,7 +276,9 @@ function useFechas(marca: string): EntradaCalendario[] {
     leerCalendario(marca as Parameters<typeof leerCalendario>[0])
       .then((cal) => {
         if (!vivo) return
-        setD({ key: marca, fechas: proximas(hoy, 90, { fijadas: cal.fijadas, hitos: cal.hitos }) })
+        // `decisiones` no es opcional acá: `laQueAprieta()` sólo devuelve fechas que el equipo
+        // eligió jugar, así que sin ellas el veredicto se queda mudo para siempre.
+        setD({ key: marca, fechas: proximas(hoy, 90, { fijadas: cal.fijadas, hitos: cal.hitos, decisiones: cal.decisiones }) })
       })
       .catch(() => { if (vivo) setD({ key: marca, fechas: [] }) })
     return () => { vivo = false }
@@ -336,7 +338,9 @@ function Veredicto({ d, fecha }: { d: Diagnostico; fecha: EntradaCalendario | nu
             {' '}
             <b>
               Y {fecha.titulo} es en {fecha.faltan} {fecha.faltan === 1 ? 'día' : 'días'}
-              {fecha.arrancarEn <= 0 ? ': ya habría que estar produciendo' : ''}.
+              {/* Sólo si alguien puso una fecha de arranque y ya pasó. `fecha` de por sí ya es una
+                  que el equipo decidió jugar — `laQueAprieta()` no devuelve otras. */}
+              {fecha.arrancarEn !== null && fecha.arrancarEn <= 0 ? ': ya habría que estar produciendo' : ''}.
             </b>{' '}
             <Link href="/calendario" style={{ color: 'inherit' }}>Ver el calendario</Link>
           </>

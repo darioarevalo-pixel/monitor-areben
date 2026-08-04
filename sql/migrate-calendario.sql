@@ -15,6 +15,8 @@
 --                                  catálogo solo puede estimar. Mientras nadie la fije, la
 --                                  pantalla la muestra marcada como estimada: una fecha estimada
 --                                  presentada como firme es peor que no tener la fecha.
+--   `calendario_decision`        — con cuánta fuerza jugamos cada fecha, y desde cuándo hay que
+--                                  producirla. Ver el comentario largo más abajo.
 --
 -- Va en las DOS bases (hay una Supabase por marca), con columna `store` y PK compuesta, igual que
 -- `disenos` y `solicitudes`. `datos jsonb` es la fuente de verdad del hito y las columnas de al
@@ -51,5 +53,33 @@ create table if not exists calendario_fechas_fijadas (
   primary key (store, clave, anio)
 );
 
+-- Con cuánta fuerza jugamos cada fecha comercial.
+--
+-- El calendario nació deduciendo la urgencia de `anticipoDias` (un número del catálogo): la
+-- pantalla anunciaba "ya habría que estar produciendo" para toda fecha cuyo anticipo hubiera
+-- vencido, la trabajáramos o no. Es falso y encima es caro: un aviso que se ignora doce veces
+-- enseña a ignorar el aviso número trece, que sí importaba. Si estas dos marcas se suman al Día del
+-- Niño depende del stock, del público y de si hay manos esa semana — nada de eso está en el
+-- almanaque.
+--
+-- Por eso la decisión se guarda, y **la ausencia de fila es un estado de primera clase**: "todavía
+-- no lo decidimos" es la verdad más común y no merece ocupar lugar. La pantalla la muestra como la
+-- pregunta abierta que es, en vez de inventarle un default.
+--
+-- Va por `entrada_id` (`comercial:<clave>:<año>`) y no por clave suelta: el Día del Niño del año
+-- que viene es otra decisión, igual que en `calendario_fechas_fijadas`. Los hitos propios NO entran
+-- acá — un lanzamiento de colección ya es nuestro, preguntar si nos sumamos no tiene sentido.
+create table if not exists calendario_decision (
+  store       text not null,                          -- 'bdi' | 'zattia': una puede jugar y la otra pasar
+  entrada_id  text not null,                          -- 'comercial:dia-nino:2026'
+  prioridad   text not null,                          -- fuerte | suave | pasamos
+  arrancar    date,                                    -- cuándo empezar a producir; NULL = falta ponerlo
+  por         text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  primary key (store, entrada_id)
+);
+
 alter table calendario_hitos disable row level security;
 alter table calendario_fechas_fijadas disable row level security;
+alter table calendario_decision disable row level security;

@@ -12,22 +12,30 @@ import { ETAPAS } from '@/lib/meta-ads/etapas'
 import type { Etapa } from '@/lib/meta-ads/tipos'
 import type {
   CoberturaEtapas,
+  DecisionFecha,
   EntradaCalendario,
   FechaComercial,
   FechaFijada,
   Hito,
   IdeaParaContar,
+  Prioridad,
 } from './tipos'
 import {
   CLAVES_COMERCIALES as CLAVES_COMERCIALES_JS,
+  CLAVES_PRIORIDAD as CLAVES_PRIORIDAD_JS,
   CLAVES_TIPO_HITO as CLAVES_TIPO_HITO_JS,
   diaDeSemanaDe as diaDeSemanaDeJs,
   diasDelMes as diasDelMesJs,
   diasEntre as diasEntreJs,
   FECHAS_COMERCIALES as FECHAS_COMERCIALES_JS,
   fechaComercialDe as fechaComercialDeJs,
+  idComercial as idComercialJs,
   iso as isoJs,
+  juegaLaFecha as juegaLaFechaJs,
   nEsimoDiaDeSemana as nEsimoDiaDeSemanaJs,
+  partirIdComercial as partirIdComercialJs,
+  PRIORIDADES as PRIORIDADES_JS,
+  prioridadDe as prioridadDeJs,
   resolverComercial as resolverComercialJs,
   sumarDias as sumarDiasJs,
   TIPOS_HITO as TIPOS_HITO_JS,
@@ -37,6 +45,19 @@ export const FECHAS_COMERCIALES = FECHAS_COMERCIALES_JS as FechaComercial[]
 export const CLAVES_COMERCIALES = CLAVES_COMERCIALES_JS as string[]
 export const TIPOS_HITO = TIPOS_HITO_JS as { key: string; label: string }[]
 export const CLAVES_TIPO_HITO = CLAVES_TIPO_HITO_JS as string[]
+
+export const PRIORIDADES = PRIORIDADES_JS as {
+  key: Prioridad
+  label: string
+  corto: string
+  arrastraProduccion: boolean
+  ayuda: string
+}[]
+export const CLAVES_PRIORIDAD = CLAVES_PRIORIDAD_JS as string[]
+export const prioridadDe = prioridadDeJs as (key: string | null) => (typeof PRIORIDADES)[number] | null
+export const juegaLaFecha = juegaLaFechaJs as (key: string | null) => boolean
+export const idComercial = idComercialJs as (clave: string, anio: number) => string
+export const partirIdComercial = partirIdComercialJs as (id: string) => { clave: string; anio: number } | null
 
 export const iso = isoJs as (anio: number, mes: number, dia: number) => string
 export const diasDelMes = diasDelMesJs as (anio: number, mes: number) => number
@@ -87,15 +108,25 @@ function coberturaPorEvento(ideas: IdeaParaContar[]): Record<string, CoberturaEt
  *
  * Una fecha `fijada` **le gana siempre a la estimada** y pasa a ser firme: es el único punto donde
  * una persona le corrige la mano al catálogo, y si no ganara, confirmar no serviría de nada.
+ *
+ * `decisiones` es con cuánta fuerza el equipo eligió jugar cada fecha. Sin decisión, la entrada sale
+ * con `prioridad: null` y `arrancarEn: null`: el catálogo pone la fecha sobre la mesa y **no opina**
+ * sobre si hay que estar produciendo. Ver el docblock de `PRIORIDADES` en `fechas.core.js`.
  */
 export function proximas(
   desde: string,
   dias: number,
-  opts: { fijadas?: FechaFijada[]; hitos?: Hito[]; ideas?: IdeaParaContar[] } = {},
+  opts: {
+    fijadas?: FechaFijada[]
+    hitos?: Hito[]
+    ideas?: IdeaParaContar[]
+    decisiones?: DecisionFecha[]
+  } = {},
 ): EntradaCalendario[] {
   const hasta = sumarDias(desde, dias)
   const cobertura = coberturaPorEvento(opts.ideas || [])
   const fijadas = new Map((opts.fijadas || []).map((f) => [`${f.clave}:${f.anio}`, f]))
+  const decididas = new Map((opts.decisiones || []).map((d) => [d.entradaId, d]))
   const out: EntradaCalendario[] = []
 
   const anioDesde = Number(desde.slice(0, 4))
@@ -108,7 +139,8 @@ export function proximas(
       const fijada = fijadas.get(`${f.clave}:${anio}`)
       const fecha = fijada?.fecha || auto.fecha
       if (fecha < desde || fecha > hasta) continue
-      const id = `comercial:${f.clave}:${anio}`
+      const id = idComercial(f.clave, anio)
+      const decision = decididas.get(id) || null
       out.push({
         id,
         clase: 'comercial',
@@ -118,7 +150,12 @@ export function proximas(
         certeza: fijada ? 'firme' : auto.estimada ? 'estimada' : 'firme',
         faltan: diasEntre(desde, fecha),
         anticipoDias: f.anticipoDias,
-        arrancarEn: diasEntre(desde, fecha) - f.anticipoDias,
+        arranqueSugerido: sumarDias(fecha, -f.anticipoDias),
+        prioridad: decision?.prioridad || null,
+        arrancar: decision?.arrancar || null,
+        // Sólo hay cuenta regresiva de producción si una persona puso desde cuándo. El catálogo
+        // sugiere, no decide: sin `arrancar` esto queda en null y la pantalla no anuncia urgencia.
+        arrancarEn: decision?.arrancar ? diasEntre(desde, decision.arrancar) : null,
         detalle: f.porQue,
         comoSeConfirma: f.comoSeConfirma,
         tipo: null,
@@ -138,8 +175,14 @@ export function proximas(
       titulo: h.titulo,
       certeza: h.firme ? 'firme' : 'proyectada',
       faltan: diasEntre(desde, h.fecha),
+      // Un hito propio no se decide ni se anticipa: **ya es nuestro**. Preguntarle al equipo si se
+      // suma a su propio lanzamiento de colección sería pedirle que confirme lo que acaba de
+      // cargar, y el anticipo lo pone quien lo cargó eligiendo la fecha, no el catálogo.
       anticipoDias: 0,
-      arrancarEn: diasEntre(desde, h.fecha),
+      arranqueSugerido: null,
+      prioridad: null,
+      arrancar: null,
+      arrancarEn: null,
       detalle: h.nota || null,
       tipo: h.tipo || null,
       creadoPor: h.creadoPor || null,
@@ -152,13 +195,33 @@ export function proximas(
 }
 
 /**
- * La fecha que hay que meter en el veredicto de Etapas de la pauta: **la primera cuyo anticipo ya
- * arrancó o está por arrancar**, no la más cercana.
+ * La fecha que hay que meter en el veredicto de Etapas de la pauta: **la más cercana de las que
+ * decidimos jugar**.
  *
- * No es lo mismo. Navidad a 40 días con anticipo de 30 aprieta más que un Día del Amigo a 12 con
- * anticipo de 10, y decir "lo más cercano" mandaría a craneаr la pieza equivocada.
+ * 🔴 Antes era "la primera cuyo anticipo ya venció", calculado del catálogo. El problema no era el
+ * cálculo sino de dónde salía: mandaba a craneаr piezas para fechas que el equipo nunca pensó
+ * trabajar —el Día del Niño pesa poco para estas dos marcas— y una pantalla que reclama trabajo
+ * inventado se deja de mirar. Ahora aprieta porque **alguien eligió que apriete**.
+ *
+ * `pasamos` y "sin decidir" quedan afuera: una fecha que dijimos que dejamos pasar no puede
+ * reclamar creativos, y una que nadie miró todavía tampoco. Entre las jugadas gana la más cercana,
+ * y si una tiene arranque puesto y ya venció, ésa se adelanta a cualquier otra.
  */
 export function laQueAprieta(entradas: EntradaCalendario[]): EntradaCalendario | null {
-  const candidatas = entradas.filter((e) => e.clase === 'comercial' && e.arrancarEn <= 7)
-  return candidatas.length ? candidatas.reduce((a, b) => (a.fecha <= b.fecha ? a : b)) : null
+  const jugadas = entradas.filter((e) => e.clase === 'comercial' && juegaLaFecha(e.prioridad))
+  if (!jugadas.length) return null
+  const vencidas = jugadas.filter((e) => e.arrancarEn !== null && e.arrancarEn <= 0)
+  const candidatas = vencidas.length ? vencidas : jugadas
+  return candidatas.reduce((a, b) => (a.fecha <= b.fecha ? a : b))
+}
+
+/**
+ * Las comerciales de la ventana que nadie decidió todavía. Es lo que la banda de arriba anuncia.
+ *
+ * Reemplaza al aviso de urgencia calculada, y no es el mismo cartel con otro texto: pide **una
+ * decisión**, que es algo que una persona puede hacer en el momento, en vez de anunciar un atraso
+ * de producción que nadie eligió tener. Los hitos no entran: lo propio ya está decidido.
+ */
+export function sinDecidir(entradas: EntradaCalendario[]): EntradaCalendario[] {
+  return entradas.filter((e) => e.clase === 'comercial' && !e.prioridad)
 }

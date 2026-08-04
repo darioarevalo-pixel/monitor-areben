@@ -9,7 +9,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
-import type { FechaFijada, Hito } from './tipos'
+import type { DecisionFecha, FechaFijada, Hito, Prioridad } from './tipos'
 
 const API = '/api/datos?recurso=calendario'
 
@@ -18,11 +18,21 @@ export function nuevoIdHito(): string {
   return `h${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export async function leerCalendario(store: Marca): Promise<{ hitos: Hito[]; fijadas: FechaFijada[]; puede: { admin: boolean } }> {
+export async function leerCalendario(store: Marca): Promise<{
+  hitos: Hito[]
+  fijadas: FechaFijada[]
+  decisiones: DecisionFecha[]
+  puede: { admin: boolean }
+}> {
   const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer el calendario.')
-  return { hitos: (d.hitos || []) as Hito[], fijadas: (d.fijadas || []) as FechaFijada[], puede: d.puede || { admin: false } }
+  return {
+    hitos: (d.hitos || []) as Hito[],
+    fijadas: (d.fijadas || []) as FechaFijada[],
+    decisiones: (d.decisiones || []) as DecisionFecha[],
+    puede: d.puede || { admin: false },
+  }
 }
 
 async function postear(body: Record<string, unknown>, siFalla: string) {
@@ -59,4 +69,26 @@ export async function fijarFecha(store: Marca, clave: string, anio: number, fech
 /** Vuelve a la fecha estimada del catálogo (para cuando se confirmó mal). */
 export async function desfijarFecha(store: Marca, clave: string, anio: number): Promise<void> {
   await postear({ store, action: 'desfijar', clave, anio }, 'No se pudo volver a la fecha estimada.')
+}
+
+/**
+ * Con cuánta fuerza jugamos una fecha, y desde cuándo hay que producirla.
+ *
+ * `arrancar` es opcional a propósito: `pasamos` no tiene nada que producir, y el equipo tiene que
+ * poder marcar que se suma antes de saber desde cuándo. La sugerencia del catálogo (`anticipoDias`)
+ * prellena el campo en la pantalla, pero no se guarda sola: si nadie confirmó una fecha de arranque
+ * no hay ninguna, y sin fecha de arranque el calendario no anuncia urgencia.
+ */
+export async function decidirFecha(
+  store: Marca,
+  entradaId: string,
+  prioridad: Prioridad,
+  arrancar: string | null,
+): Promise<void> {
+  await postear({ store, action: 'decidir', entradaId, prioridad, arrancar }, 'No se pudo guardar la prioridad.')
+}
+
+/** Vuelve la fecha a "sin decidir" — que NO es lo mismo que dejarla pasar. */
+export async function indecidirFecha(store: Marca, entradaId: string): Promise<void> {
+  await postear({ store, action: 'indecidir', entradaId }, 'No se pudo volver a dejarla sin decidir.')
 }

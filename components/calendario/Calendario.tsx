@@ -15,7 +15,7 @@
  * el Día de la Madre y que **no hay ni una idea de la segunda etapa anotada**. Eso es lo único que
  * hace que alguien se ponga a craneаr hoy.
  *
- * # Las tres decisiones de diseño que no son cosméticas
+ * # Las cuatro decisiones de diseño que no son cosméticas
  *
  *  1. **Arranca en la lista, no en la grilla.** La lista es la que hace actuar (los días que faltan
  *     en grande, el pedido al lado); la grilla es contexto para ubicarse. Encima en el celular la
@@ -23,18 +23,29 @@
  *  2. **Una fecha estimada NUNCA se dibuja como firme.** Chip ámbar y botón para confirmarla. Una
  *     fecha inventada presentada como cierta es peor que no tener la fecha: el equipo planifica
  *     contra un dato falso y cuando se entera ya es tarde.
- *  3. **Los días que faltan van en grande y el "hay que empezar" abajo.** "Faltan 34 días" tranquiliza;
- *     "hay que empezar en 4 días" es la que mueve.
+ *  3. **Los días que faltan van en grande y la decisión abajo.** "Faltan 34 días" tranquiliza; con
+ *     cuánta fuerza la vamos a jugar es lo que mueve.
+ *  4. 🔴 **La urgencia NO se deduce: la pone una persona.** La pantalla nació anunciando "ya habría
+ *     que estar produciendo" cuando el `anticipoDias` del catálogo había vencido, sin que nadie
+ *     hubiera decidido trabajar esa fecha. Es falso —si estas marcas se suman al Día del Niño
+ *     depende del stock y de las manos que haya, no del almanaque— y encima es caro: un aviso que
+ *     se ignora doce veces enseña a ignorar el número trece, que sí importaba. Ahora el catálogo
+ *     pone las fechas sobre la mesa, alguien marca fuerte / suave / pasamos, y **la ausencia de
+ *     decisión se dibuja como la pregunta abierta que es**, no como un default inventado.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
-  diaDeSemanaDe, diasDelMes, diasEntre, fechaComercialDe, hoyIso, iso, laQueAprieta, proximas,
-  TIPOS_HITO, type EntradaCalendario, type FechaFijada, type Hito,
+  diaDeSemanaDe, diasDelMes, diasEntre, fechaComercialDe, hoyIso, iso, juegaLaFecha, laQueAprieta,
+  PRIORIDADES, prioridadDe, proximas, sinDecidir, TIPOS_HITO,
+  type DecisionFecha, type EntradaCalendario, type FechaFijada, type Hito, type Prioridad,
 } from '@/lib/calendario'
-import { borrarHito, desfijarFecha, fijarFecha, guardarHito, leerCalendario, nuevoIdHito } from '@/lib/calendario/persistencia'
+import {
+  borrarHito, decidirFecha, desfijarFecha, fijarFecha, guardarHito, indecidirFecha, leerCalendario,
+  nuevoIdHito,
+} from '@/lib/calendario/persistencia'
 import { ETIQUETA_ETAPA } from '@/lib/meta-ads/etapas'
 import { ETAPAS } from '@/lib/meta-ads/etapas'
 import type { Etapa } from '@/lib/meta-ads/tipos'
@@ -63,6 +74,7 @@ export function Calendario() {
   const [editando, setEditando] = useState<Partial<Hito> | null>(null)
   const [anotando, setAnotando] = useState<EntradaCalendario | null>(null)
   const [confirmando, setConfirmando] = useState<EntradaCalendario | null>(null)
+  const [decidiendo, setDecidiendo] = useState<{ e: EntradaCalendario; prioridad: Prioridad } | null>(null)
 
   // Todo lo cargado viaja en UN estado sellado con su clave, como en `Etapas.tsx`. Así el `setState`
   // vive siempre adentro de la promesa (nunca en el cuerpo del efecto, que dispara renders en
@@ -71,6 +83,7 @@ export function Calendario() {
     key: string
     hitos: Hito[]
     fijadas: FechaFijada[]
+    decisiones: DecisionFecha[]
     ideas: Idea[]
     ideasCaidas: boolean
     error: string | null
@@ -85,11 +98,13 @@ export function Calendario() {
     void (async () => {
       let hitos: Hito[] = []
       let fijadas: FechaFijada[] = []
+      let decisiones: DecisionFecha[] = []
       let error: string | null = null
       try {
         const cal = await leerCalendario(marca)
         hitos = cal.hitos
         fijadas = cal.fijadas
+        decisiones = cal.decisiones
       } catch (e) {
         error = e instanceof Error ? e.message : 'No se pudo leer el calendario.'
       }
@@ -103,7 +118,7 @@ export function Calendario() {
       } catch {
         ideasCaidas = true
       }
-      if (vivo) setDatos({ key: `${marca}|${nonce}`, hitos, fijadas, ideas, ideasCaidas, error })
+      if (vivo) setDatos({ key: `${marca}|${nonce}`, hitos, fijadas, decisiones, ideas, ideasCaidas, error })
     })()
     return () => { vivo = false }
   }, [marca, nonce])
@@ -113,7 +128,12 @@ export function Calendario() {
   const cargando = !datos || datos.key !== key
   const hitos = datos?.hitos ?? []
   const entradas = useMemo(
-    () => proximas(hoy, VENTANA, { fijadas: datos?.fijadas ?? [], hitos: datos?.hitos ?? [], ideas: datos?.ideas ?? [] }),
+    () => proximas(hoy, VENTANA, {
+      fijadas: datos?.fijadas ?? [],
+      hitos: datos?.hitos ?? [],
+      ideas: datos?.ideas ?? [],
+      decisiones: datos?.decisiones ?? [],
+    }),
     [hoy, datos],
   )
 
@@ -176,7 +196,40 @@ export function Calendario() {
     }
   }
 
+  /**
+   * `pasamos` guarda de una: no hay nada que producir, así que pedir una fecha de arranque sería
+   * pedir un dato que no existe. Jugarla abre el modal con el arranque sugerido para confirmar —
+   * el catálogo prellena, la persona decide.
+   */
+  async function elegirPrioridad(e: EntradaCalendario, prioridad: Prioridad) {
+    if (juegaLaFecha(prioridad)) return setDecidiendo({ e, prioridad })
+    await decidir(e, prioridad, null)
+  }
+
+  async function decidir(e: EntradaCalendario, prioridad: Prioridad, arrancar: string | null) {
+    try {
+      await decidirFecha(marca, e.id, prioridad, arrancar)
+      setDecidiendo(null)
+      toast.ok(`${e.titulo}: ${prioridadDe(prioridad)?.label.toLowerCase()}.`)
+      recargar()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la prioridad.')
+    }
+  }
+
+  async function indecidir(e: EntradaCalendario) {
+    try {
+      await indecidirFecha(marca, e.id)
+      setDecidiendo(null)
+      toast.ok(`${e.titulo} vuelve a quedar sin decidir.`)
+      recargar()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo volver atrás.')
+    }
+  }
+
   const aprieta = laQueAprieta(entradas)
+  const pendientes = useMemo(() => sinDecidir(entradas), [entradas])
   const error = datos?.error ?? null
   const ideasCaidas = !!datos?.ideasCaidas
 
@@ -206,14 +259,43 @@ export function Calendario() {
         </Notice>
       )}
 
+      {/*
+        La banda de arriba dice lo que decidimos, no lo que dedujo una resta.
+        Antes anunciaba "ya habría que estar produciendo" para cualquier fecha del catálogo cuyo
+        anticipo hubiera vencido — el Día del Niño incluido, que estas dos marcas casi no trabajan.
+        Un aviso que se ignora doce veces enseña a ignorar el número trece.
+      */}
       {aprieta && (
-        <Notice tone={aprieta.arrancarEn <= 0 ? 'warning' : 'neutral'}>
+        <Notice tone={aprieta.arrancarEn !== null && aprieta.arrancarEn <= 0 ? 'warning' : 'neutral'}>
           <div style={{ fontSize: font.md, fontWeight: weight.bold }}>
-            {aprieta.arrancarEn <= 0
-              ? `${aprieta.titulo} es en ${aprieta.faltan} ${aprieta.faltan === 1 ? 'día' : 'días'} y ya habría que estar produciendo.`
-              : `${aprieta.titulo} es en ${aprieta.faltan} días: hay que empezar en ${aprieta.arrancarEn}.`}
+            {aprieta.titulo} es en {aprieta.faltan} {aprieta.faltan === 1 ? 'día' : 'días'}
+            {aprieta.arrancarEn === null
+              ? ` y le vamos ${prioridadDe(aprieta.prioridad)?.corto.toLowerCase()}.`
+              : aprieta.arrancarEn <= 0
+                ? `: pusiste arrancar el ${rotuloFecha(aprieta.arrancar!)} y ya pasó.`
+                : `: pusiste arrancar en ${aprieta.arrancarEn} ${aprieta.arrancarEn === 1 ? 'día' : 'días'}.`}
           </div>
-          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>{aprieta.detalle}</div>
+          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
+            {aprieta.arrancarEn === null
+              ? 'Falta poner desde cuándo hay que producirla.'
+              : aprieta.detalle}
+          </div>
+        </Notice>
+      )}
+
+      {!cargando && pendientes.length > 0 && (
+        <Notice tone="neutral">
+          <div style={{ fontSize: font.md, fontWeight: weight.bold }}>
+            {pendientes.length === 1
+              ? 'Hay 1 fecha sin decidir en los próximos 90 días.'
+              : `Hay ${pendientes.length} fechas sin decidir en los próximos ${VENTANA} días.`}
+          </div>
+          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
+            {pendientes.slice(0, 4).map((e) => `${e.titulo} (${e.faltan} d)`).join(' · ')}
+            {pendientes.length > 4 ? ' y más abajo el resto' : ''}. Marcá con cuánta fuerza vamos a
+            cada una: sin eso, el calendario no puede decir qué aprieta ni pedirle creativos a
+            Etapas de la pauta.
+          </div>
         </Notice>
       )}
 
@@ -225,6 +307,8 @@ export function Calendario() {
           sinIdeas={ideasCaidas}
           onAnotar={setAnotando}
           onConfirmar={setConfirmando}
+          onPrioridad={elegirPrioridad}
+          onCambiar={(e) => setDecidiendo({ e, prioridad: e.prioridad || 'fuerte' })}
           onEditar={(id) => setEditando(hitos.find((h) => h.id === id) || null)}
         />
       ) : (
@@ -244,17 +328,30 @@ export function Calendario() {
       {anotando && <ModalIdea entrada={anotando} onCerrar={() => setAnotando(null)} onAnotar={anotar} />}
 
       {confirmando && <ModalConfirmarFecha entrada={confirmando} onCerrar={() => setConfirmando(null)} onConfirmar={confirmar} />}
+
+      {decidiendo && (
+        <ModalDecidir
+          entrada={decidiendo.e}
+          prioridad={decidiendo.prioridad}
+          hoy={hoy}
+          onCerrar={() => setDecidiendo(null)}
+          onGuardar={decidir}
+          onSoltar={() => indecidir(decidiendo.e)}
+        />
+      )}
     </div>
   )
 }
 
 // ── Lo que se viene ──────────────────────────────────────────────────────────────────────────
 
-function Lista({ entradas, sinIdeas, onAnotar, onConfirmar, onEditar }: {
+function Lista({ entradas, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
   entradas: EntradaCalendario[]
   sinIdeas: boolean
   onAnotar: (e: EntradaCalendario) => void
   onConfirmar: (e: EntradaCalendario) => void
+  onPrioridad: (e: EntradaCalendario, p: Prioridad) => void
+  onCambiar: (e: EntradaCalendario) => void
   onEditar: (id: string) => void
 }) {
   if (!entradas.length) {
@@ -269,26 +366,39 @@ function Lista({ entradas, sinIdeas, onAnotar, onConfirmar, onEditar }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
       {entradas.map((e) => (
-        <Fila key={e.id} e={e} sinIdeas={sinIdeas} onAnotar={onAnotar} onConfirmar={onConfirmar} onEditar={onEditar} />
+        <Fila
+          key={e.id} e={e} sinIdeas={sinIdeas}
+          onAnotar={onAnotar} onConfirmar={onConfirmar} onPrioridad={onPrioridad}
+          onCambiar={onCambiar} onEditar={onEditar}
+        />
       ))}
     </div>
   )
 }
 
-function Fila({ e, sinIdeas, onAnotar, onConfirmar, onEditar }: {
+function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
   e: EntradaCalendario
   sinIdeas: boolean
   onAnotar: (e: EntradaCalendario) => void
   onConfirmar: (e: EntradaCalendario) => void
+  onPrioridad: (e: EntradaCalendario, p: Prioridad) => void
+  onCambiar: (e: EntradaCalendario) => void
   onEditar: (id: string) => void
 }) {
-  const urgente = e.clase === 'comercial' && e.arrancarEn <= 0
+  // 🔴 Urgente sólo si una persona puso desde cuándo producir y esa fecha ya pasó. Antes salía de
+  // `faltan <= anticipoDias`, o sea del catálogo: la mitad de las filas aparecían en ámbar sin que
+  // nadie hubiera decidido trabajarlas.
+  const urgente = juegaLaFecha(e.prioridad) && e.arrancarEn !== null && e.arrancarEn <= 0
+  // Una fecha que dejamos pasar se apaga en vez de esconderse: sigue estando (para no volver a
+  // discutirla) pero deja de competir por la atención con las que sí vamos a trabajar.
+  const apagada = e.prioridad === 'pasamos'
   return (
     <div
       style={{
         display: 'flex', gap: space[4], alignItems: 'flex-start', flexWrap: 'wrap',
         border: `1px solid ${urgente ? color.warningBorder : color.line}`,
         background: color.surface, borderRadius: radius.xl, padding: space[4],
+        opacity: apagada ? 0.6 : 1,
       }}
     >
       {/* Los días que faltan, en grande. Es el dato que se busca al entrar. */}
@@ -308,18 +418,16 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onEditar }: {
         </div>
 
         {e.clase === 'comercial' && (
-          <div style={{ fontSize: font.sm, color: urgente ? color.warningInk : color.mut, fontWeight: urgente ? weight.semibold : weight.normal }}>
-            {e.arrancarEn > 0
-              ? `Hay que empezar en ${e.arrancarEn} ${e.arrancarEn === 1 ? 'día' : 'días'}`
-              : 'Ya habría que estar produciendo'}
-          </div>
+          <Decision e={e} urgente={urgente} onPrioridad={onPrioridad} onCambiar={onCambiar} />
         )}
 
         {e.detalle && <div style={{ fontSize: font.sm, color: color.mut2, lineHeight: 1.45 }}>{e.detalle}</div>}
 
         {e.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {e.creadoPor}</div>}
 
-        {!sinIdeas && <Cobertura e={e} />}
+        {/* Una fecha que dejamos pasar no necesita creativos: el renglón sobraría y encima haría
+            parecer que falta trabajo que nadie va a hacer. */}
+        {!sinIdeas && !apagada && <Cobertura e={e} />}
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
@@ -329,8 +437,72 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onEditar }: {
         {e.clase === 'hito' && (
           <Button size="sm" variant="ghost" onClick={() => onEditar(e.id.replace(/^hito:/, ''))}>Editar</Button>
         )}
-        <Button size="sm" variant="soft" onClick={() => onAnotar(e)}>Anotar idea</Button>
+        {!apagada && <Button size="sm" variant="soft" onClick={() => onAnotar(e)}>Anotar idea</Button>}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Con cuánta fuerza jugamos esta fecha — la decisión que antes tomaba una resta.
+ *
+ * Sin decidir **no se dibuja como un estado neutro**: se dibuja como la pregunta abierta que es, con
+ * los tres botones a la vista. Es lo único que la pantalla pide, y pedirlo con un `<Select>` que ya
+ * muestra un valor haría parecer que alguien decidió. La ausencia de decisión tiene que verse.
+ */
+function Decision({ e, urgente, onPrioridad, onCambiar }: {
+  e: EntradaCalendario
+  urgente: boolean
+  onPrioridad: (e: EntradaCalendario, p: Prioridad) => void
+  onCambiar: (e: EntradaCalendario) => void
+}) {
+  if (!e.prioridad) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+        <span style={{ fontSize: font.sm, color: color.ink2, fontWeight: weight.semibold }}>¿Nos sumamos?</span>
+        {PRIORIDADES.map((p) => (
+          <Button key={p.key} size="sm" variant="ghost" title={p.ayuda} onClick={() => onPrioridad(e, p.key)}>
+            {p.corto}
+          </Button>
+        ))}
+        <InfoPopover titulo="Por qué lo pregunta en vez de deducirlo">
+          <p>
+            El calendario sabe <b>cuándo</b> es cada fecha. No puede saber si estas marcas se suman:
+            eso depende del stock, de si la fecha le habla al público y de si hay manos esa semana.
+          </p>
+          <p>
+            Antes lo deducía de un anticipo del catálogo y avisaba «ya habría que estar produciendo»
+            para fechas que nadie pensaba trabajar. Un aviso que se ignora doce veces enseña a
+            ignorar el número trece, que sí importaba.
+          </p>
+          <p>
+            Lo que elijas vale <b>para esta marca y este año</b>: el que viene se vuelve a preguntar.
+          </p>
+        </InfoPopover>
+      </div>
+    )
+  }
+
+  const p = prioridadDe(e.prioridad)!
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+      <StatusPill tone={e.prioridad === 'fuerte' ? 'success' : e.prioridad === 'suave' ? 'neutral' : 'neutral'} label={p.label.toLowerCase()} />
+      {p.arrastraProduccion && (
+        <span
+          style={{
+            fontSize: font.sm,
+            color: urgente ? color.warningInk : color.mut,
+            fontWeight: urgente ? weight.semibold : weight.normal,
+          }}
+        >
+          {e.arrancar === null
+            ? 'falta poner desde cuándo producirla'
+            : urgente
+              ? `había que arrancar el ${rotuloFecha(e.arrancar)}`
+              : `arrancar el ${rotuloFecha(e.arrancar)}${e.arrancarEn !== null ? ` (en ${e.arrancarEn} ${e.arrancarEn === 1 ? 'día' : 'días'})` : ''}`}
+        </span>
+      )}
+      <Button size="sm" variant="ghost" onClick={() => onCambiar(e)}>Cambiar</Button>
     </div>
   )
 }
@@ -644,6 +816,134 @@ function ModalConfirmarFecha({ entrada, onCerrar, onConfirmar }: {
           Queda confirmada sólo para {anio}: el año que viene la vuelve a decidir la cámara y se
           muestra estimada de nuevo.
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Con cuánta fuerza jugamos la fecha, y desde cuándo hay que producirla.
+ *
+ * 🔑 **El arranque viene sugerido pero se guarda como propio.** El catálogo prellena el campo con
+ * `fecha − anticipoDias`, y ahí termina su intervención: lo que queda guardado es lo que confirmó
+ * una persona. La diferencia no es cosmética — un número que nadie miró disfrazado de decisión es
+ * exactamente lo que hacía que la pantalla reclamara producción que nadie había pedido.
+ *
+ * **Se puede dejar vacío.** "Nos sumamos pero todavía no sabemos desde cuándo" es un estado real y
+ * frecuente; obligar a poner una fecha ahí garantizaría que se tipee cualquiera con tal de cerrar
+ * el modal, y a partir de ahí el dato miente.
+ */
+function ModalDecidir({ entrada, prioridad: inicial, hoy, onCerrar, onGuardar, onSoltar }: {
+  entrada: EntradaCalendario
+  prioridad: Prioridad
+  hoy: string
+  onCerrar: () => void
+  onGuardar: (e: EntradaCalendario, p: Prioridad, arrancar: string | null) => void
+  onSoltar: () => void
+}) {
+  const [prioridad, setPrioridad] = useState<Prioridad>(inicial)
+  const [arrancar, setArrancar] = useState(entrada.arrancar || entrada.arranqueSugerido || '')
+
+  const juega = juegaLaFecha(prioridad)
+  const sugerido = entrada.arranqueSugerido
+  const esElSugerido = !!sugerido && arrancar === sugerido
+  const tarde = juega && !!arrancar && arrancar < hoy
+  const despues = juega && !!arrancar && arrancar > entrada.fecha
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo={`${entrada.titulo} — ¿nos sumamos?`}
+      pie={
+        <>
+          {entrada.prioridad && (
+            <Button variant="ghost" onClick={onSoltar} title="Vuelve a la pregunta abierta. No es lo mismo que dejarla pasar.">
+              Dejar sin decidir
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button variant="solid" disabled={despues} onClick={() => onGuardar(entrada, prioridad, juega ? (arrancar || null) : null)}>
+            Guardar
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>
+          {rotuloFecha(entrada.fecha)} · faltan {entrada.faltan} {entrada.faltan === 1 ? 'día' : 'días'}
+          {entrada.certeza === 'estimada' ? ' · la fecha todavía es estimada' : ''}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+          {PRIORIDADES.map((p) => {
+            const elegida = p.key === prioridad
+            return (
+              <label
+                key={p.key}
+                style={{
+                  display: 'flex', gap: space[2], alignItems: 'flex-start', cursor: 'pointer',
+                  border: `1px solid ${elegida ? color.brandBorder : color.line}`,
+                  background: elegida ? color.brandBg : 'transparent',
+                  borderRadius: radius.md, padding: space[3],
+                }}
+              >
+                <input
+                  type="radio"
+                  name="prioridad"
+                  checked={elegida}
+                  onChange={() => setPrioridad(p.key)}
+                  style={{ marginTop: 3 }}
+                />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: font.sm, fontWeight: weight.semibold, color: elegida ? color.brand : color.ink }}>
+                    {p.label}
+                  </span>
+                  <span style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>{p.ayuda}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+
+        {juega && (
+          <Field
+            label="¿Desde cuándo hay que producirla?"
+            hint={
+              sugerido
+                ? `Se puede dejar vacío. Viene sugerido el ${rotuloFecha(sugerido)}, que son ${entrada.anticipoDias} días antes — es sólo una sugerencia del catálogo.`
+                : 'Se puede dejar vacío si todavía no se sabe.'
+            }
+          >
+            <Input type="date" value={arrancar} onChange={(ev) => setArrancar(ev.target.value)} />
+          </Field>
+        )}
+
+        {despues && (
+          <div style={{ fontSize: font.sm, color: color.dangerInk }}>
+            El arranque cae <b>después</b> de la fecha: así no se llega a producir nada.
+          </div>
+        )}
+
+        {tarde && !despues && (
+          <div style={{ fontSize: font.sm, color: color.warningInk }}>
+            Esa fecha ya pasó: va a quedar marcada como que habría que estar produciendo.
+          </div>
+        )}
+
+        {juega && esElSugerido && !tarde && !despues && (
+          <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
+            Guardándola tal cual queda como <b>tu</b> fecha de arranque, no como una cuenta del
+            catálogo: de ahí en más el calendario avisa contra esto y no contra una estimación.
+          </div>
+        )}
+
+        {!juega && (
+          <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
+            Queda en la lista, apagada, para no volver a discutirla. No pide creativos ni aparece en
+            el veredicto de Etapas de la pauta. Vale sólo para esta marca y este año.
+          </div>
+        )}
       </div>
     </Modal>
   )

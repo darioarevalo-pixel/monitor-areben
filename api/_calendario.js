@@ -1,15 +1,18 @@
-// Calendario editorial — tablas `calendario_hitos` y `calendario_fechas_fijadas`
-// (ver sql/migrate-calendario.sql).
+// Calendario editorial — tablas `calendario_hitos`, `calendario_fechas_fijadas` y
+// `calendario_decision` (ver sql/migrate-calendario.sql).
 //
 //   GET  ?recurso=calendario&store=bdi|zattia
 //   POST { recurso:'calendario', store, hito:{...} }                       → alta / edición
 //   POST { recurso:'calendario', store, id, action:'borrar' }
 //   POST { recurso:'calendario', store, action:'fijar', clave, anio, fecha }
 //   POST { recurso:'calendario', store, action:'desfijar', clave, anio }
+//   POST { recurso:'calendario', store, action:'decidir', entradaId, prioridad, arrancar }
+//   POST { recurso:'calendario', store, action:'indecidir', entradaId }
 //
 // Las fechas comerciales NO se guardan: se calculan en `lib/calendario/fechas.core.js`. Acá vive
-// sólo lo que una persona decide y la máquina no puede saber sola — los hitos propios, y la fecha
-// real de una comercial anunciada (Hot Sale, CyberMonday, Día del Niño), que la define una cámara.
+// sólo lo que una persona decide y la máquina no puede saber sola — los hitos propios, la fecha
+// real de una comercial anunciada (Hot Sale, CyberMonday, Día del Niño), que la define una cámara,
+// y con cuánta fuerza el equipo elige jugar cada fecha.
 //
 // ⚠️ **Por qué no cuelga de api/meta-ads.js**: ese endpoint corta con 500 si falta o vence
 // `META_ADS_TOKEN`, y el calendario no tiene nada que ver con Meta. Que se caiga junto con el token
@@ -20,7 +23,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVer } from '../lib/permisos.core.js';
-import { CLAVES_COMERCIALES, CLAVES_TIPO_HITO } from '../lib/calendario/fechas.core.js';
+import {
+  CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, partirIdComercial,
+} from '../lib/calendario/fechas.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -62,16 +67,27 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const [h, f] = await Promise.all([
+      const [h, f, d] = await Promise.all([
         supabase.from('calendario_hitos').select('datos').eq('store', store).order('fecha', { ascending: true }),
         supabase.from('calendario_fechas_fijadas').select('clave, anio, fecha, por').eq('store', store),
+        supabase.from('calendario_decision').select('entrada_id, prioridad, arrancar, por').eq('store', store),
       ]);
       if (h.error) throw new Error(h.error.message);
       if (f.error) throw new Error(f.error.message);
+      // Las decisiones NO tumban el calendario si la tabla todavía no está migrada en esta marca:
+      // se pierde la prioridad y el resto sigue sirviendo. Es el mismo criterio que usa la pantalla
+      // con las ideas — una migración pendiente en una de las dos bases no puede dejar sin fechas a
+      // la marca que sí está al día.
       return res.status(200).json({
         ok: true,
         hitos: (h.data || []).map((r) => r.datos),
         fijadas: f.data || [],
+        decisiones: d.error ? [] : (d.data || []).map((r) => ({
+          entradaId: r.entrada_id,
+          prioridad: r.prioridad,
+          arrancar: r.arrancar,
+          por: r.por,
+        })),
         puede: { admin: esAdmin(perfil) },
       });
     }
@@ -101,6 +117,44 @@ export default async function handler(req, res) {
 
       const { error } = await supabase.from('calendario_fechas_fijadas')
         .upsert([{ store, clave, anio, fecha, por: yo, updated_at: ahora }], { onConflict: 'store,clave,anio' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Con cuánta fuerza jugamos una fecha. ───────────────────────────────────────────────────
+    //
+    // Es la decisión que el catálogo no puede tomar solo: si nos sumamos al Día del Niño depende
+    // del stock y de las manos que haya esa semana, no del almanaque. `indecidir` borra la fila y
+    // la fecha vuelve a "sin decidir", que es un estado real y no un `pasamos` disfrazado — el
+    // equipo tiene que poder decir "me equivoqué, esto lo volvemos a hablar".
+    if (b.action === 'decidir' || b.action === 'indecidir') {
+      const entradaId = String(b.entradaId || '');
+      // Se valida contra el catálogo: un id inventado guardaría una fila que no se muestra en
+      // ningún lado y nadie entendería por qué la decisión no tomó.
+      if (!partirIdComercial(entradaId)) {
+        return res.status(400).json({ error: `"${entradaId}" no es una fecha comercial conocida.` });
+      }
+
+      if (b.action === 'indecidir') {
+        const { error } = await supabase.from('calendario_decision')
+          .delete().eq('store', store).eq('entrada_id', entradaId);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      const prioridad = String(b.prioridad || '');
+      if (!CLAVES_PRIORIDAD.includes(prioridad)) {
+        return res.status(400).json({ error: `prioridad inválida (usá ${CLAVES_PRIORIDAD.join(', ')})` });
+      }
+      // `arrancar` es opcional: una fecha que dejamos pasar no tiene nada que producir, y una que
+      // jugamos puede quedar marcada antes de que alguien resuelva desde cuándo.
+      const arrancar = b.arrancar ? String(b.arrancar) : null;
+      if (arrancar && !ES_FECHA.test(arrancar)) return res.status(400).json({ error: 'el arranque va como YYYY-MM-DD' });
+
+      const { error } = await supabase.from('calendario_decision').upsert(
+        [{ store, entrada_id: entradaId, prioridad, arrancar, por: yo, updated_at: ahora }],
+        { onConflict: 'store,entrada_id' },
+      );
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
     }
