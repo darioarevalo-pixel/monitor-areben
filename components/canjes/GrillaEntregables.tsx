@@ -11,9 +11,10 @@
  * una línea más un deploy, y una lista abierta se llena de `Reel` / `reel ig` / `REEL`.
  */
 
-import { color, font, space, weight } from '@/components/ui'
+import { Button, color, font, space, weight } from '@/components/ui'
 import {
-  ENTREGABLE_LABEL, ENTREGABLE_LABEL_PLURAL, TIPOS_ENTREGABLE, type TipoEntregable,
+  ENTREGABLE_LABEL, ENTREGABLE_LABEL_PLURAL, entregableEnCriollo, TIPOS_ENTREGABLE,
+  type TipoEntregable,
 } from '@/lib/canjes/tipos'
 import type { EntregablePedido } from '@/lib/canjes/cliente'
 
@@ -45,6 +46,79 @@ export function listaAPedido(lista: { tipo: TipoEntregable; cantidad_comprometid
 
 export function totalPedido(p: PedidoPorTipo): number {
   return TIPOS_ENTREGABLE.reduce((a, t) => a + (Number(p[t]) || 0), 0)
+}
+
+// ── Los combos: lo que se pide casi siempre, de un toque ─────────────────────────
+
+/**
+ * Un pedido armado. **No es una plantilla nueva**: es exactamente lo que la grilla de abajo deja
+ * cargar a mano, puesto de una vez.
+ *
+ * Por qué existen: la grilla es completa pero parte de cero, y el 90% de los canjes se acuerdan con
+ * dos o tres combinaciones que se repiten. Tocar seis veces el `+` para llegar siempre al mismo
+ * lugar es el tipo de fricción que hace que alguien pida de menos para terminar antes.
+ *
+ * ⚠️ **Elegir un combo pisa lo que haya cargado**, no lo suma: es un punto de partida, y después se
+ * ajusta con los `±` de abajo. Sumar dejaría "2 historias" convertidas en 4 sin que se entienda por
+ * qué.
+ */
+export type ComboEntregables = { nombre: string; pedido: PedidoPorTipo }
+
+/** Se arma sobre el vacío para que agregar un tipo nuevo no obligue a tocar cada combo. */
+const combo = (p: Partial<PedidoPorTipo>): PedidoPorTipo => ({ ...PEDIDO_VACIO, ...p })
+
+export const COMBOS_ENTREGABLES: ComboEntregables[] = [
+  { nombre: '2 historias', pedido: combo({ historia_ig: 2 }) },
+  { nombre: '2 historias + reel', pedido: combo({ historia_ig: 2, reel_ig: 1 }) },
+  // El que pidió Bruno (4-ago-2026): es el acuerdo estándar cuando además se le pide material.
+  { nombre: '2 historias + TikTok + contenido', pedido: combo({ historia_ig: 2, video_tiktok: 1, contenido: 1 }) },
+  { nombre: 'Sólo contenido', pedido: combo({ contenido: 1 }) },
+]
+
+export function mismoPedido(a: PedidoPorTipo, b: PedidoPorTipo): boolean {
+  return TIPOS_ENTREGABLE.every((t) => (Number(a[t]) || 0) === (Number(b[t]) || 0))
+}
+
+/**
+ * Los combos como botones. Va **arriba** de la grilla: primero lo que se elige de un toque, después
+ * el detalle para el caso raro.
+ *
+ * Se monta sólo al proponer. En la ficha de un canje ya acordado el pedido es lo que se pactó con
+ * ella, y un botón que lo reemplaza entero de un click ahí es una forma de perder lo acordado.
+ */
+export function CombosEntregables({
+  valor, onElegir,
+}: {
+  valor: PedidoPorTipo
+  onElegir: (p: PedidoPorTipo) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
+      {COMBOS_ENTREGABLES.map((c) => {
+        const puesto = mismoPedido(valor, c.pedido)
+        return (
+          <Button
+            key={c.nombre}
+            variant={puesto ? 'soft' : 'outline'}
+            tone={puesto ? 'brand' : undefined}
+            size="sm"
+            onClick={() => onElegir(c.pedido)}
+            title={detalleDelCombo(c)}
+          >
+            {c.nombre}
+          </Button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** "2 historias de instagram · 1 video de tiktok": lo mismo que va a quedar marcado abajo. */
+function detalleDelCombo(c: ComboEntregables): string {
+  return TIPOS_ENTREGABLE
+    .filter((t) => Number(c.pedido[t]) > 0)
+    .map((t) => entregableEnCriollo(t, Number(c.pedido[t])))
+    .join(' · ')
 }
 
 export function GrillaEntregables({

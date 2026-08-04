@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buscarEnLaTienda, categoriasDeLaTienda, esModeloDeCelular, esTalle, facetaDeLaVitrina,
-  hayParaOfrecer, itemPasa, opcionPasa, paraVitrina, precioDeVitrina, revisarStock,
+  buscarEnLaTienda, categoriasDeLaTienda, esModeloDeCelular, estaOculto, esTalle, facetaDeLaVitrina,
+  hayParaOfrecer, idsOcultos, itemPasa, opcionPasa, paraVitrina, precioDeVitrina, revisarStock,
   type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { controlDelTope, opcionEnCriollo, puedeElegir, type CanjeItem } from '@/lib/canjes/tipos'
@@ -14,9 +14,9 @@ import { seVaDelTope } from '@/api/_canjes-reglas.js'
  *
  * Tres cosas se testean acá y las tres son barreras, no cálculos:
  *
- *  1. **Qué de la tienda entra.** Lo agotado y lo despublicado no se ofrecen, y los ejes de cada
- *     producto salen tal como los manda TN — que es lo que permite que la misma pantalla sirva para
- *     una funda de iPhone y para un jean.
+ *  1. **Qué de la tienda entra.** Lo agotado no se ofrece, lo despublicado sí pero aparte, y los
+ *     ejes de cada producto salen tal como los manda TN — que es lo que permite que la misma
+ *     pantalla sirva para una funda de iPhone y para un jean.
  *  2. **Qué sale a internet.** El portal es lo único abierto: en modo unidades no puede viajar un
  *     solo número de plata, y de la vitrina no pueden salir SKUs ni ids de producto.
  *  3. **Que el tope lo haga cumplir el servidor.** La misma función corre en los dos handlers y
@@ -95,8 +95,30 @@ describe('qué de Tienda Nube entra a la vitrina', () => {
     expect(paraVitrina(AGOTADO)).toBeNull()
   })
 
-  it('lo despublicado tampoco', () => {
-    expect(paraVitrina(DESPUBLICADO)).toBeNull()
+  it('lo despublicado SÍ se puede ofrecer: publicar y tener son cosas distintas', () => {
+    // `published:false` significa dos cosas que de afuera no se distinguen: "se agotó y lo
+    // escondimos" (que ya lo frena el stock) y "todavía no salió". Lo segundo es justo lo que un
+    // canje quiere ofrecer primero, y el producto sale del depósito a mano.
+    expect(paraVitrina(DESPUBLICADO)?.nombre).toBe('REMERA VIEJA')
+    expect(estaOculto(DESPUBLICADO)).toBe(true)
+    expect(estaOculto(CLEAR_CASE)).toBe(false)
+  })
+
+  it('pero no se mezcla con lo publicado: aparece sólo bajo el filtro de ocultos', () => {
+    // Su categoría no puede figurar en el desplegable ni él aparecer al traerla.
+    expect(categoriasDeLaTienda(TIENDA).find((c) => c.nombre === 'REMERAS')).toBeUndefined()
+    expect(buscarEnLaTienda(TIENDA, { texto: 'remera' })).toEqual([])
+    // Y con el filtro puesto vuelve él y NADA de lo publicado.
+    expect(buscarEnLaTienda(TIENDA, { ocultos: true }).map((p) => p.nombre)).toEqual(['REMERA VIEJA'])
+    expect(buscarEnLaTienda(TIENDA, { ocultos: true, texto: 'remera' })).toHaveLength(1)
+    expect(idsOcultos(TIENDA)).toEqual(new Set(['444']))
+  })
+
+  it('un oculto agotado tampoco entra: el stock manda igual que en lo publicado', () => {
+    expect(buscarEnLaTienda(
+      [{ ...DESPUBLICADO, variantes: [{ id: '3', valores: ['M'], stock: 0 }] }],
+      { ocultos: true },
+    )).toEqual([])
   })
 
   it('los ejes salen tal como los manda la tienda, sin llamarlos "modelo" ni "color"', () => {
@@ -398,13 +420,19 @@ describe('revisarStock — la vitrina contra la tienda de hoy', () => {
     { tn_product_id: '444', activo: true },  // REMERA VIEJA: despublicada
   ]
 
-  it('apaga lo agotado y lo despublicado, y refresca el resto', () => {
+  it('apaga lo agotado y refresca el resto', () => {
     // Es EL agujero que esto viene a tapar: traer de nuevo la categoría refresca sólo lo que vuelve
     // en la importación, y un producto agotado del todo ya no vuelve — su fila quedaba intacta y se
     // seguía ofreciendo para siempre.
     const { actualizar, apagar } = revisarStock(EN_LA_VITRINA, TIENDA)
-    expect(apagar.sort()).toEqual(['333', '444'])
-    expect(actualizar.map((a) => a.tn_product_id).sort()).toEqual(['111', '222'])
+    expect(apagar.sort()).toEqual(['333'])
+    expect(actualizar.map((a) => a.tn_product_id).sort()).toEqual(['111', '222', '444'])
+  })
+
+  it('NO apaga lo despublicado que tiene stock', () => {
+    // Una vitrina armada con el ingreso nuevo —que se carga oculto hasta que sale— se apagaba
+    // entera de un click. Lo que se despublica por haberse agotado igual cae, pero por el stock.
+    expect(revisarStock([{ tn_product_id: '444', activo: true }], TIENDA).apagar).toEqual([])
   })
 
   it('lo que se refresca trae las variantes de HOY, sin las que se agotaron', () => {

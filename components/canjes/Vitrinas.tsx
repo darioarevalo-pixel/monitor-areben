@@ -30,7 +30,8 @@ import {
   revisarStockDeVitrina, sacarDeVitrina, sumarAVitrina, type ProductoParaVitrina,
 } from '@/lib/canjes/cliente'
 import {
-  buscarEnLaTienda, categoriasDeLaTienda, revisarStock, type CategoriaTn, type ProductoTn,
+  buscarEnLaTienda, categoriasDeLaTienda, idsOcultos, revisarStock,
+  type CategoriaTn, type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { baseDeCostos } from '@/lib/canjes/tipos'
 import {
@@ -281,6 +282,12 @@ function ArmarVitrina({
   const [errorTienda, setErrorTienda] = useState<string | null>(null)
   const [categoria, setCategoria] = useState('')
   const [texto, setTexto] = useState('')
+  /**
+   * El filtro de los ocultos: cuando está prendido la pantalla muestra **sólo** lo despublicado.
+   * Es un mundo aparte y no un "incluir también" porque es a lo que se entra a propósito —el
+   * ingreso que todavía no salió— y porque casi nunca tiene categoría con la que llegarle.
+   */
+  const [soloOcultos, setSoloOcultos] = useState(false)
   const [elegidos, setElegidos] = useState<Set<string>>(new Set())
   const [guardando, setGuardando] = useState(false)
   const [revisando, setRevisando] = useState(false)
@@ -319,17 +326,27 @@ function ArmarVitrina({
 
   const categorias = useMemo<CategoriaTn[]>(() => categoriasDeLaTienda(tienda || []), [tienda])
 
+  /** Lo despublicado con stock. Se calcula siempre: es el número que va en el botón del filtro. */
+  const ocultos = useMemo<ProductoParaVitrina[]>(
+    () => (tienda ? buscarEnLaTienda(tienda, { ocultos: true }) : []),
+    [tienda],
+  )
+  const marcadosOcultos = useMemo(() => idsOcultos(tienda || []), [tienda])
+
   const yaEstan = useMemo(
     () => new Set((vitrina.items || []).map((i) => String(i.tn_product_id))),
     [vitrina.items],
   )
 
   // Sin categoría ni texto no se muestra nada: la tienda entera en pantalla es exactamente lo que
-  // esta pantalla existe para no hacer.
+  // esta pantalla existe para no hacer. Los ocultos son la excepción: son pocos y entrar al filtro
+  // ya es la decisión de verlos.
   const candidatos = useMemo<ProductoParaVitrina[]>(() => {
-    if (!tienda || (!categoria && texto.trim().length < 2)) return []
+    if (!tienda) return []
+    if (soloOcultos) return buscarEnLaTienda(tienda, { texto, ocultos: true })
+    if (!categoria && texto.trim().length < 2) return []
     return buscarEnLaTienda(tienda, { categoria, texto })
-  }, [tienda, categoria, texto])
+  }, [tienda, categoria, texto, soloOcultos])
 
   const nuevos = candidatos.filter((c) => !yaEstan.has(c.tn_product_id))
 
@@ -490,6 +507,7 @@ function ArmarVitrina({
                 nombre={i.nombre}
                 foto={i.foto_url}
                 pvp={i.pvp}
+                chapita={marcadosOcultos.has(String(i.tn_product_id)) ? 'oculto' : undefined}
                 pie={`${i.opciones.length} ${i.opciones.length === 1 ? 'opción' : 'opciones'}: ${i.opciones.slice(0, 3).map(opcionEnCriollo).filter(Boolean).join(', ') || '—'}${i.opciones.length > 3 ? '…' : ''}`}
                 accion={<Button variant="ghost" tone="danger" size="sm" onClick={() => void sacar(i)}>Sacar</Button>}
               />
@@ -521,7 +539,11 @@ function ArmarVitrina({
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[4] }}>
             <div style={{ minWidth: 240 }}>
               <Field label="Categoría de la tienda">
-                <Select value={categoria} onChange={(e) => { setCategoria(e.target.value); setElegidos(new Set()) }}>
+                <Select
+                  value={categoria}
+                  disabled={soloOcultos}
+                  onChange={(e) => { setCategoria(e.target.value); setElegidos(new Set()) }}
+                >
                   <option value="">— elegir —</option>
                   {categorias.map((c) => (
                     <option key={c.nombre} value={c.nombre}>{c.nombre} ({c.cuantos})</option>
@@ -549,16 +571,41 @@ function ArmarVitrina({
             </Button>
           </div>
 
+          {/* El ingreso nuevo se carga en TN despublicado y **sin categoría**: sin esta puerta no hay
+              forma de llegarle, ni por el desplegable ni acordándose del nombre de cada modelo. */}
+          {ocultos.length > 0 && (
+            <div style={{ marginBottom: space[4] }}>
+              <Button
+                variant={soloOcultos ? 'soft' : 'ghost'}
+                tone={soloOcultos ? 'brand' : undefined}
+                size="sm"
+                onClick={() => {
+                  setSoloOcultos((v) => !v)
+                  setCategoria('')
+                  setElegidos(new Set())
+                }}
+              >
+                {soloOcultos ? `← Volver a la tienda publicada` : `Ocultos en la tienda (${ocultos.length})`}
+              </Button>
+              {soloOcultos && (
+                <div style={{ color: color.mut, fontSize: font.sm, marginTop: space[2] }}>
+                  Están cargados en Tienda Nube pero todavía no se publicaron. Se pueden ofrecer igual:
+                  el producto sale del depósito a mano. Revisar el stock no los va a apagar.
+                </div>
+              )}
+            </div>
+          )}
+
           {bajando && !tienda ? (
             <Card>Bajando el catálogo de la tienda…</Card>
-          ) : !categoria && texto.trim().length < 2 ? (
+          ) : !soloOcultos && !categoria && texto.trim().length < 2 ? (
             <EmptyState
               dashed
               title="Elegí por dónde empezar"
               hint={categorias.length ? `La tienda tiene ${categorias.length} categorías. También podés buscar por nombre.` : 'Buscá un producto por nombre.'}
             />
           ) : !candidatos.length ? (
-            <EmptyState dashed title="No hay nada acá" hint="Puede que esté todo agotado o despublicado: eso no se ofrece." />
+            <EmptyState dashed title="No hay nada acá" hint="Puede que esté todo agotado: eso no se ofrece." />
           ) : (
             <>
               <div style={{ display: 'flex', gap: space[3], alignItems: 'center', marginBottom: space[3], flexWrap: 'wrap' }}>
@@ -588,6 +635,7 @@ function ArmarVitrina({
                       pvp={c.pvp}
                       atenuada={esta && !marcado}
                       marcada={marcado}
+                      chapita={marcadosOcultos.has(c.tn_product_id) ? 'oculto' : undefined}
                       onClick={() => alternar(c.tn_product_id)}
                       pie={`${c.opciones.length} ${c.opciones.length === 1 ? 'opción' : 'opciones'}${esta ? ' · ya está' : ''}`}
                     />
@@ -665,7 +713,7 @@ function Grilla({ children }: { children: React.ReactNode }) {
 }
 
 function Tarjeta({
-  nombre, foto, pvp, pie, accion, onClick, marcada, atenuada,
+  nombre, foto, pvp, pie, accion, onClick, marcada, atenuada, chapita,
 }: {
   nombre: string
   foto?: string | null
@@ -675,6 +723,8 @@ function Tarjeta({
   onClick?: () => void
   marcada?: boolean
   atenuada?: boolean
+  /** Una palabra sobre la foto. Hoy sólo "oculto": que no esté publicado se tiene que ver. */
+  chapita?: string
 }) {
   return (
     <div
@@ -691,11 +741,16 @@ function Tarjeta({
         gap: space[1],
       }}
     >
-      <div style={{ aspectRatio: '1 / 1', background: color.bg2, borderRadius: radius.lg, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: color.bg2, borderRadius: radius.lg, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
         {foto ? (
           <FotoTn src={foto} alt={nombre} ancho={150} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <span style={{ color: color.mut2, fontSize: font.xs }}>sin foto</span>
+        )}
+        {chapita && (
+          <div style={{ position: 'absolute', top: space[1], left: space[1] }}>
+            <Badge tone="warning">{chapita}</Badge>
+          </div>
         )}
       </div>
       <div style={{ fontSize: font.sm, fontWeight: weight.medium, color: color.ink, lineHeight: 1.3 }}>{nombre}</div>

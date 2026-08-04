@@ -73,20 +73,38 @@ export function hayParaOfrecer(v: VarianteTn): boolean {
 }
 
 /**
+ * ¿Está oculto en la tienda? No es lo mismo que "no se puede ofrecer".
+ *
+ * En BDI `published: false` significa **dos cosas distintas** y de afuera no se distinguen: la card
+ * "Ocultar agotados" despublica lo que se quedó sin stock, pero también se despublica lo que todavía
+ * no salió a la venta —el ingreso nuevo, la colección que se está fotografiando—. Lo primero ya lo
+ * frena el stock; lo segundo es exactamente lo que un canje quiere ofrecer primero, porque el
+ * producto sale del depósito a mano y no le hace falta estar publicado.
+ *
+ * Por eso la publicación **no decide si algo se puede ofrecer**: decide dónde aparece al armar la
+ * vitrina (sólo bajo el filtro de ocultos) y que se lo marque con una chapita.
+ */
+export function estaOculto(p: ProductoTn): boolean {
+  return p.published === false
+}
+
+/**
  * Un producto de la tienda, listo para congelarse en la vitrina. `null` si no se puede ofrecer.
  *
- * Se cae por tres motivos, y ninguno se le muestra a nadie como error: está despublicado, no tiene
- * ninguna variante con stock, o TN no le dio id a ninguna. **Lo agotado simplemente no entra**: es
- * la única forma honesta de no ofrecerlo, porque un stock congelado hace dos semanas miente y la
- * palabra "agotado" en la pantalla de ella es peor que no mostrar el producto.
+ * Se cae por dos motivos, y ninguno se le muestra a nadie como error: no tiene ninguna variante con
+ * stock, o TN no le dio id a ninguna. **Lo agotado simplemente no entra**: es la única forma honesta
+ * de no ofrecerlo, porque un stock congelado hace dos semanas miente y la palabra "agotado" en la
+ * pantalla de ella es peor que no mostrar el producto.
+ *
+ * ⚠️ **Lo despublicado sí entra**, y el que arma la vitrina lo ve marcado: ver `estaOculto`. Quien
+ * filtra por publicación es `buscarEnLaTienda`, que es donde importa —dónde aparece al buscarlo—, y
+ * no acá, que es donde se decide si se puede regalar.
  *
  * ⚠️ Los `valores` van tal como los manda la tienda. No se intenta separar "modelo" de "color": los
  * ejes cambian producto por producto (en BDI 181 productos tienen uno y 19 tienen dos; en Zattia
  * 495 y 42) y ponerle nombre a algo que la mitad de las veces no existe es peor que no ponérselo.
  */
 export function paraVitrina(p: ProductoTn): ProductoParaVitrina | null {
-  if (p.published === false) return null
-
   const opciones: OpcionVitrina[] = []
   for (const v of p.variantes || []) {
     if (!hayParaOfrecer(v)) continue
@@ -142,9 +160,13 @@ export type RevisionDeStock = {
 /**
  * Compara lo que la vitrina tiene **activo** contra el catálogo de hoy.
  *
- * Se apaga por tres motivos, y los tres significan lo mismo para ella —que no se lo podemos
- * ofrecer—: se agotaron todas sus variantes, lo despublicaron, o el producto ya no está en la
- * tienda. `paraVitrina` decide los dos primeros con las mismas reglas con las que entró.
+ * Se apaga por dos motivos, y los dos significan lo mismo para ella —que no se lo podemos ofrecer—:
+ * se agotaron todas sus variantes, o el producto ya no está en la tienda. `paraVitrina` decide el
+ * primero con las mismas reglas con las que entró.
+ *
+ * 🔑 **Manda el stock, no la publicación.** Que algo se haya despublicado no lo apaga: se ofrece
+ * porque hay, y lo que se despublica por haberse agotado ya cae por el stock. Sin esto, una vitrina
+ * armada con el ingreso nuevo —que se carga oculto hasta que sale— se apagaba entera de un click.
  *
  * ⚠️ Los que ya están apagados **no se miran**: alguien los apagó a mano y volver a prenderlos
  * porque hoy hay stock sería pisar una decisión con un chequeo automático.
@@ -323,7 +345,7 @@ export type CategoriaTn = { nombre: string; cuantos: number }
 export function categoriasDeLaTienda(productos: ProductoTn[]): CategoriaTn[] {
   const cuenta = new Map<string, number>()
   for (const p of productos) {
-    if (!paraVitrina(p)) continue
+    if (estaOculto(p) || !paraVitrina(p)) continue
     for (const c of p.categories || []) {
       const nombre = String(c || '').trim()
       if (!nombre) continue
@@ -341,18 +363,39 @@ export function categoriasDeLaTienda(productos: ProductoTn[]): CategoriaTn[] {
  * La búsqueda por texto no es un lujo: las categorías de Zattia son prolijas (`SWEATERS`, `JEANS`)
  * pero las de BDI mezclan `FUNDAS` con cada modelo de iPhone, así que ahí se llega antes por el
  * nombre del producto.
+ *
+ * 🔑 **`ocultos` parte la tienda en dos mundos que no se mezclan**: sin él vuelve sólo lo publicado
+ * (lo de siempre), y con él **sólo** lo despublicado con stock. No es un "incluir también": es el
+ * filtro con el que se llega al ingreso nuevo, que además suele entrar a TN **sin ninguna
+ * categoría** —los 20 modelos de fundas cargados el 3-ago-2026 en BDI no tenían ni una—, así que
+ * por categoría no hay forma de encontrarlo y por nombre hay que saberlo de memoria.
  */
 export function buscarEnLaTienda(
-  productos: ProductoTn[], opts: { categoria?: string | null; texto?: string | null },
+  productos: ProductoTn[],
+  opts: { categoria?: string | null; texto?: string | null; ocultos?: boolean },
 ): ProductoParaVitrina[] {
   const cat = (opts.categoria || '').trim()
   const q = (opts.texto || '').trim().toLowerCase()
+  const quiereOcultos = opts.ocultos === true
   const out: ProductoParaVitrina[] = []
   for (const p of productos) {
+    if (estaOculto(p) !== quiereOcultos) continue
     if (cat && !(p.categories || []).some((c) => String(c).trim() === cat)) continue
     if (q && !`${p.name || ''} ${p.sku || ''}`.toLowerCase().includes(q)) continue
     const listo = paraVitrina(p)
     if (listo) out.push(listo)
   }
   return out.sort((a, b) => a.nombre.localeCompare(b.nombre))
+}
+
+/**
+ * Los `tn_product_id` que están ocultos en la tienda, para marcarlos con la chapita.
+ *
+ * Se calcula sobre el catálogo entero y no sobre lo ofrecible: un producto que ya está en la vitrina
+ * y hoy está agotado igual tiene que verse marcado si además está despublicado.
+ */
+export function idsOcultos(productos: ProductoTn[]): Set<string> {
+  const out = new Set<string>()
+  for (const p of productos) if (estaOculto(p)) out.add(String(p.id))
+  return out
 }

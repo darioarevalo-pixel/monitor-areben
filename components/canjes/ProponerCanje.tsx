@@ -32,7 +32,10 @@ import {
   type CanjeConfig, type CanjePersona, type CanjeStore, type EstadoCanje, type NivelAprobacion,
   type TipoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
-import { GrillaEntregables, PEDIDO_VACIO, pedidoALista, totalPedido, type PedidoPorTipo } from './GrillaEntregables'
+import {
+  CombosEntregables, GrillaEntregables, PEDIDO_VACIO, pedidoALista, totalPedido,
+  type PedidoPorTipo,
+} from './GrillaEntregables'
 
 export function ProponerCanje({
   persona,
@@ -261,6 +264,9 @@ export function ProponerCanje({
       {/* ── Qué publica ── */}
       <div style={{ marginTop: space[5] }}>
         <div style={{ fontWeight: weight.medium, marginBottom: space[2] }}>Qué le pedimos a cambio</div>
+        {/* Los combos primero: son el 90% de los acuerdos y evitan tocar seis veces el `+` para
+            llegar siempre al mismo lugar. Elegir uno pisa lo cargado y después se ajusta abajo. */}
+        <CombosEntregables valor={pedido} onElegir={setPedido} />
         <GrillaEntregables valor={pedido} onCambio={setPedido} />
       </div>
 
