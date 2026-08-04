@@ -75,7 +75,26 @@ const VENTANAS = [
 const VENTANA_DEFAULT = '180'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+/**
+ * ⚠️ Indexado por `getDay()`, así que **el domingo va primero y este orden no se toca**: lo usa
+ * `rotuloFecha()` para todas las etiquetas de la lista. Para el encabezado de la grilla, que en
+ * Argentina arranca en lunes, está `DIAS_GRILLA` acá abajo — son dos cosas distintas.
+ */
 const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+/**
+ * El encabezado de la grilla del mes: **en Argentina la semana empieza el lunes y termina el
+ * domingo**, no como el `getDay()` de JavaScript, que es una convención de Estados Unidos.
+ *
+ * Va como array aparte —y no reordenando `DIAS_CORTOS`— porque aquél se indexa con `getDay()`: darlo
+ * vuelta rompería en silencio el día de la semana de cada fila de "lo que se viene".
+ */
+const DIAS_GRILLA = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom']
+
+/** `getDay()` (0=domingo) → columna de la grilla (0=lunes). El domingo se va al final. */
+function columnaDe(dow: number): number {
+  return (dow + 6) % 7
+}
 
 /** `180` → `los próximos 6 meses`. Para no repetir "en los próximos 180 días", que nadie piensa así. */
 function rotuloVentana(dias: number): string {
@@ -632,9 +651,11 @@ function Grilla({ entradas, hoy }: { entradas: EntradaCalendario[]; hoy: string 
   const porDia = new Map<string, EntradaCalendario[]>()
   for (const e of entradas) porDia.set(e.fecha, [...(porDia.get(e.fecha) || []), e])
 
-  const primerDow = diaDeSemanaDe(iso(anio, mes, 1))
+  // Cuántas celdas vacías van antes del día 1, contando desde el LUNES. Un mes que arranca domingo
+  // deja seis huecos, no cero: es el caso que delata si la conversión está bien.
+  const primerHueco = columnaDe(diaDeSemanaDe(iso(anio, mes, 1)))
   const total = diasDelMes(anio, mes)
-  const celdas: (number | null)[] = [...Array(primerDow).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)]
+  const celdas: (number | null)[] = [...Array(primerHueco).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -648,7 +669,7 @@ function Grilla({ entradas, hoy }: { entradas: EntradaCalendario[]; hoy: string 
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-        {DIAS_CORTOS.map((d) => (
+        {DIAS_GRILLA.map((d) => (
           <div key={d} style={{ fontSize: font.xs, color: color.mut2, textAlign: 'center', paddingBottom: 4 }}>{d}</div>
         ))}
         {celdas.map((d, i) => {
