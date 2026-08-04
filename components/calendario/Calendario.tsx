@@ -55,11 +55,33 @@ import {
   color, font, radius, space, weight,
 } from '@/components/ui'
 
-/** La ventana de "lo que se viene". 90 días es un trimestre: entra una temporada entera. */
-const VENTANA = 90
+/**
+ * Hasta dónde mira "lo que se viene".
+ *
+ * 🔴 **El default son 6 meses, no 3, y el cambio no es cosmético.** Arrancó en 90 días porque la
+ * pantalla servía para *avisar*: un trimestre alcanza para no llegar tarde a lo que viene. Desde que
+ * sirve para **decidir** con cuánta fuerza jugamos cada fecha, 90 días es un techo que estorba —
+ * parado en agosto cortaba el 2 de noviembre y no se podía decidir ni Black Friday ni Navidad, que
+ * son justamente las que hay que resolver con tiempo. No se puede decidir lo que no se ve.
+ *
+ * Sigue siendo elegible porque las dos lecturas son válidas: "qué tengo encima" y "qué queda por
+ * resolver este año".
+ */
+const VENTANAS = [
+  { key: '90', label: '3 meses', dias: 90 },
+  { key: '180', label: '6 meses', dias: 180 },
+  { key: '365', label: 'Todo el año', dias: 365 },
+]
+const VENTANA_DEFAULT = '180'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+/** `180` → `los próximos 6 meses`. Para no repetir "en los próximos 180 días", que nadie piensa así. */
+function rotuloVentana(dias: number): string {
+  if (dias >= 365) return 'los próximos 12 meses'
+  return `los próximos ${Math.round(dias / 30)} meses`
+}
 
 /** `2026-10-18` → `dom 18-oct`. Sin `toLocaleDateString`, que se corre de día por zona horaria. */
 function rotuloFecha(f: string): string {
@@ -71,6 +93,8 @@ export function Calendario() {
   const { marca, perfil } = useSesion()
   const toast = useToast()
   const [vista, setVista] = useState<'lista' | 'mes'>('lista')
+  const [ventana, setVentana] = useState(VENTANA_DEFAULT)
+  const dias = VENTANAS.find((v) => v.key === ventana)?.dias ?? 180
   const [editando, setEditando] = useState<Partial<Hito> | null>(null)
   const [anotando, setAnotando] = useState<EntradaCalendario | null>(null)
   const [confirmando, setConfirmando] = useState<EntradaCalendario | null>(null)
@@ -128,13 +152,13 @@ export function Calendario() {
   const cargando = !datos || datos.key !== key
   const hitos = datos?.hitos ?? []
   const entradas = useMemo(
-    () => proximas(hoy, VENTANA, {
+    () => proximas(hoy, dias, {
       fijadas: datos?.fijadas ?? [],
       hitos: datos?.hitos ?? [],
       ideas: datos?.ideas ?? [],
       decisiones: datos?.decisiones ?? [],
     }),
-    [hoy, datos],
+    [hoy, dias, datos],
   )
 
   async function guardar(h: Partial<Hito>) {
@@ -241,6 +265,9 @@ export function Calendario() {
           value={vista}
           onChange={(k) => setVista(k as 'lista' | 'mes')}
         />
+        <Select value={ventana} onChange={(e) => setVentana(e.target.value)} style={{ width: 140 }}>
+          {VENTANAS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+        </Select>
         <div style={{ flex: 1 }} />
         <Button variant="solid" onClick={() => setEditando({ fecha: hoy, firme: false, tipo: 'lanzamiento' })}>
           Cargar algo nuestro
@@ -287,12 +314,12 @@ export function Calendario() {
         <Notice tone="neutral">
           <div style={{ fontSize: font.md, fontWeight: weight.bold }}>
             {pendientes.length === 1
-              ? 'Hay 1 fecha sin decidir en los próximos 90 días.'
-              : `Hay ${pendientes.length} fechas sin decidir en los próximos ${VENTANA} días.`}
+              ? `Hay 1 fecha sin decidir en ${rotuloVentana(dias)}.`
+              : `Hay ${pendientes.length} fechas sin decidir en ${rotuloVentana(dias)}.`}
           </div>
           <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
             {pendientes.slice(0, 4).map((e) => `${e.titulo} (${e.faltan} d)`).join(' · ')}
-            {pendientes.length > 4 ? ' y más abajo el resto' : ''}. Marcá con cuánta fuerza vamos a
+            {pendientes.length > 4 ? ` y ${pendientes.length - 4} más abajo` : ''}. Marcá con cuánta fuerza vamos a
             cada una: sin eso, el calendario no puede decir qué aprieta ni pedirle creativos a
             Etapas de la pauta.
           </div>
@@ -304,6 +331,7 @@ export function Calendario() {
       ) : vista === 'lista' ? (
         <Lista
           entradas={entradas}
+          dias={dias}
           sinIdeas={ideasCaidas}
           onAnotar={setAnotando}
           onConfirmar={setConfirmando}
@@ -345,8 +373,9 @@ export function Calendario() {
 
 // ── Lo que se viene ──────────────────────────────────────────────────────────────────────────
 
-function Lista({ entradas, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
+function Lista({ entradas, dias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
   entradas: EntradaCalendario[]
+  dias: number
   sinIdeas: boolean
   onAnotar: (e: EntradaCalendario) => void
   onConfirmar: (e: EntradaCalendario) => void
@@ -357,7 +386,7 @@ function Lista({ entradas, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambi
   if (!entradas.length) {
     return (
       <EmptyState
-        title={`No hay nada en los próximos ${VENTANA} días`}
+        title={`No hay nada en ${rotuloVentana(dias)}`}
         hint="Las fechas comerciales se calculan solas; lo propio (lanzamientos, sesiones, llegada de mercadería) se carga con el botón de arriba."
         dashed
       />
