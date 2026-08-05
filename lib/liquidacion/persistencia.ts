@@ -1,0 +1,110 @@
+/**
+ * Liquidación, del lado del cliente (`/api/datos?recurso=liquidacion`).
+ *
+ * 🔑 **Las campañas y sus ítems se piden por separado, y es a propósito.** La lista de campañas
+ * trae sólo los conteos que arma el servidor; los ítems se bajan cuando se abre una. Una campaña de
+ * cuarenta productos son cuarenta fotos congeladas con ventas, stock y costo — bajar todas las de
+ * todas las campañas para dibujar una lista de cinco renglones sería pagar el payload entero para
+ * mostrar un número.
+ */
+
+import { apiFetch } from '@/lib/api-fetch'
+import type { Marca } from '@/lib/nav.datos'
+import type { EstadoCampania, EstadoItem, Liquidacion, LiquidacionItem } from './tipos'
+
+const API = '/api/datos?recurso=liquidacion'
+
+export interface Permisos {
+  /** Puede escribirle el precio a Gestión Nube (sub-permiso `liquidacion.aplicar`, tanda 3). */
+  aplicar: boolean
+  admin: boolean
+}
+
+async function postear(body: Record<string, unknown>, siFalla: string) {
+  const r = await apiFetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || siFalla)
+  return d
+}
+
+/** Las campañas de la marca, la más nueva arriba, con sus conteos. Sin los ítems. */
+export async function leerCampanias(store: Marca): Promise<{ campanias: Liquidacion[]; puede: Permisos }> {
+  const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las campañas de liquidación.')
+  return {
+    campanias: (d.campanias || []) as Liquidacion[],
+    puede: d.puede || { aplicar: false, admin: false },
+  }
+}
+
+/** Los ítems de una campaña, con la foto congelada de cada producto. */
+export async function leerItems(store: Marca, liqId: string): Promise<LiquidacionItem[]> {
+  const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los productos de la campaña.')
+  return (d.items || []) as LiquidacionItem[]
+}
+
+export async function crearCampania(
+  store: Marca,
+  campania: { id: string; nombre: string; desde?: string | null; hasta?: string | null; nota?: string | null },
+): Promise<Liquidacion> {
+  const d = await postear({ store, action: 'crear', campania }, 'No se pudo crear la campaña.')
+  return d.campania as Liquidacion
+}
+
+/** Cambia nombre, fechas o nota. Lo que no venga queda como estaba. */
+export async function renombrarCampania(
+  store: Marca,
+  id: string,
+  cambios: { nombre?: string; desde?: string | null; hasta?: string | null; nota?: string | null },
+): Promise<Liquidacion> {
+  const d = await postear({ store, action: 'renombrar', id, ...cambios }, 'No se pudo guardar la campaña.')
+  return d.campania as Liquidacion
+}
+
+export async function cambiarEstadoCampania(store: Marca, id: string, estado: EstadoCampania): Promise<void> {
+  await postear({ store, action: 'estado', id, estado }, 'No se pudo cambiar el estado de la campaña.')
+}
+
+/**
+ * Suma productos a una campaña. Los que ya estaban **no se pisan**.
+ *
+ * Es lo que hace "Mandar a liquidación" desde Análisis, y mandar dos veces el mismo producto es lo
+ * normal: la selección de allá sobrevive a filtros y páginas, así que nadie se acuerda de a quién
+ * ya mandó. Pisarlo le borraría el precio que alguien ya decidió; por eso el servidor inserta sólo
+ * los nuevos y devuelve cuántos entraron de verdad.
+ */
+export async function sumarItems(
+  store: Marca,
+  liqId: string,
+  items: LiquidacionItem[],
+): Promise<{ sumados: number; yaEstaban: number }> {
+  const d = await postear({ store, action: 'sumar-items', id: liqId, items }, 'No se pudieron sumar los productos.')
+  return { sumados: d.sumados || 0, yaEstaban: d.yaEstaban || 0 }
+}
+
+/** Guarda un ítem entero (una fila). Es lo que toca cada "Definir". */
+export async function guardarItem(store: Marca, liqId: string, item: LiquidacionItem): Promise<LiquidacionItem> {
+  const d = await postear({ store, action: 'guardar-item', id: liqId, item }, 'No se pudo guardar el producto.')
+  return d.item as LiquidacionItem
+}
+
+/** Cambia sólo el estado de un ítem (descartar, volver a pendiente). */
+export async function estadoItem(store: Marca, liqId: string, pid: string, estado: EstadoItem): Promise<void> {
+  await postear({ store, action: 'estado-item', id: liqId, pid, estado }, 'No se pudo cambiar el estado del producto.')
+}
+
+/** Saca el producto de la campaña. ⚠️ Distinto de descartarlo: descartar deja la huella. */
+export async function quitarItem(store: Marca, liqId: string, pid: string): Promise<void> {
+  await postear({ store, action: 'quitar-item', id: liqId, pid }, 'No se pudo quitar el producto.')
+}
+
+export async function borrarCampania(store: Marca, id: string): Promise<void> {
+  await postear({ store, action: 'borrar', id }, 'No se pudo borrar la campaña.')
+}

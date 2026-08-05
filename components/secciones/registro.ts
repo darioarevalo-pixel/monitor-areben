@@ -58,6 +58,7 @@ const CambiosLocal = dynamic(() => import('@/components/reclamos/ArmarCambio').t
 const ReclamosLocal = dynamic(() => import('@/components/reclamos/Reclamos').then((m) => m.ReclamosLocal), { loading: Cargando })
 const Canjes = dynamic(() => import('@/components/canjes/Canjes').then((m) => m.Canjes), { loading: Cargando })
 const Calendario = dynamic(() => import('@/components/calendario/Calendario').then((m) => m.Calendario), { loading: Cargando })
+const Liquidacion = dynamic(() => import('@/components/liquidacion/Liquidacion').then((m) => m.Liquidacion), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -328,6 +329,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // `/meta-ads/etapas` mira por el otro lado ("qué falta"): cada fecha muestra qué etapas tienen
   // ideas anotadas y cuáles no, que es lo que convierte una fecha en un pedido concreto.
   calendario: Calendario,
+  // Liquidación (Análisis). El cajón donde vive una campaña de sale de punta a punta: los productos
+  // entran desde "Por producto", el precio se decide adentro con el simulador de margen al lado, y
+  // queda guardado en la base. Hasta ahora la selección vivía en un `useState` que se perdía al
+  // recargar y la lista de precios, en el `localStorage` de una sola persona.
+  liquidacion: Liquidacion,
 }
 
 /**

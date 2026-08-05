@@ -8,6 +8,7 @@ import { Lightbox } from '@/components/productos/Lightbox'
 import { asegurarTnPromo, useTnImages } from '@/components/productos/useTnImages'
 import { generarReporteSale } from '@/components/productos/reporteSale'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
+import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
@@ -160,6 +161,15 @@ export function ProductosTable() {
         <>
           <HeaderAcciones>
             <BotonActualizarInventario />
+            {/*
+              El PDF queda: sigue siendo la forma de mirar la selección en papel o de mandársela a
+              alguien. "Mandar a liquidación" es el camino nuevo —la campaña se guarda en la base y
+              la ve todo el equipo—, y las dos salen de la MISMA selección.
+            */}
+            <MandarALiquidacion
+              seleccion={productos.filter((p) => outletSel.has(p.id))}
+              onListo={() => setOutletSel(new Set())}
+            />
             <Button variant="solid" tone="brand" onClick={() => void generarSale()} loading={generando} disabled={!outletSel.size}>
               Generar sale{outletSel.size ? ` (${outletSel.size})` : ''}
             </Button>

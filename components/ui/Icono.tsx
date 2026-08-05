@@ -184,6 +184,19 @@ const TRAZOS = {
       <circle cx="16.4" cy="16.4" r="2.4" />
     </>
   ),
+  /**
+   * Liquidación — la etiqueta de precio con la flecha para abajo. La etiqueta sola sería
+   * "productos"; la flecha es lo que dice de qué se trata la sección, que es bajar un precio a
+   * propósito y por un rato.
+   */
+  liquidacion: (
+    <>
+      <path d="M12.4 3.4H20.6v8.2l-8.8 8.8a1.4 1.4 0 0 1-2 0l-6.2-6.2a1.4 1.4 0 0 1 0-2z" />
+      <circle cx="16.6" cy="7.4" r="1.3" />
+      <path d="M9.4 9.4v5.6" />
+      <path d="m7.2 12.8 2.2 2.2 2.2-2.2" />
+    </>
+  ),
   /** Comisiones — billete. */
   comisiones: (
     <>

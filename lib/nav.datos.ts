@@ -237,6 +237,23 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "liquidacion",
+    "area": "analisis",
+    "label": "Liquidación",
+    "info": "Campañas de sale: los productos se mandan desde Por producto, se les define el precio uno por uno con el simulador de margen al lado, y la campaña queda guardada y compartida — no en el navegador de una persona.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "aplicar",
+        "label": "Puede escribir los precios en Gestión Nube",
+        "info": "Aplica la campaña: le escribe el precio promocional a cada producto en Gestión Nube, que es quien manda sobre el precio de la tienda. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      }
+    ]
+  },
+  {
     "key": "comisiones",
     "area": "analisis",
     "label": "Comisiones y margen",
@@ -663,6 +680,7 @@ export const NAV_CATS: NavCat[] = [
       "verif-ventas",
       "margenes",
       "comisiones",
+      "liquidacion",
       "colores",
       "talles"
     ]
