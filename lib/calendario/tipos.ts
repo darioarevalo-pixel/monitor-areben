@@ -6,6 +6,7 @@
  */
 
 import type { Etapa } from '@/lib/meta-ads/tipos'
+import type { Marca } from '@/lib/nav.datos'
 
 /** Cuánto se le puede creer a la fecha del catálogo. NO confundir con `TipoFecha`. */
 export type ClaseFecha = 'fija' | 'regla' | 'anunciada'
@@ -135,6 +136,44 @@ export interface EntradaCalendario {
   creadoPor: string | null
   /** Ideas anotadas para esta fecha, por etapa. Todo ceros si nadie anotó nada todavía. */
   cobertura: CoberturaEtapas
+}
+
+/**
+ * Lo que una fila del calendario unificado tiene **igual en las dos marcas**.
+ *
+ * 🔑 Es un `Pick` a propósito, y lo que deja afuera importa más que lo que trae: `prioridad`,
+ * `arrancar`, `arrancarEn` y `cobertura` son de cada marca. Si `base` fuera un `EntradaCalendario`
+ * entero, el render podría leerle la prioridad "de la fila" —que es la de la primera marca que
+ * llegó— y dibujar la decisión de BDI arriba del renglón de Zattia sin fallar nunca.
+ */
+export type BaseUnificada = Pick<
+  EntradaCalendario,
+  | 'id' | 'clase' | 'fecha' | 'titulo' | 'certeza' | 'faltan' | 'anticipoDias' | 'arranqueSugerido'
+  | 'tipo' | 'prioridadSugerida' | 'detalle' | 'comoSeConfirma' | 'tipoHito' | 'creadoPor'
+>
+
+/**
+ * Una fila de la pantalla unificada: la misma fecha, con lo que decidió **cada** marca.
+ *
+ * Marketing es un equipo solo, así que cruzar Zattia y BDI de memoria —cambiando el selector del
+ * header— era exactamente el trabajo que la pantalla vino a evitar. Una comercial sale en una fila
+ * con dos renglones de decisión; un hito propio, que existe en una base sola, sale con su chip.
+ */
+export interface FilaUnificada {
+  /**
+   * `${id}|${fecha}`, no `id` a secas: si una marca confirmó el Hot Sale y la otra todavía lo tiene
+   * estimado en otro día, son **dos fechas distintas del almanaque** y meterlas en una sola fila
+   * obligaría a mentir sobre cuántos días faltan. Ver `discrepa`.
+   */
+  key: string
+  id: string
+  fecha: string
+  base: BaseUnificada
+  /** Las marcas que tienen esta entrada, en el orden en que se pidieron. */
+  marcas: Marca[]
+  porMarca: Partial<Record<Marca, EntradaCalendario>>
+  /** La misma entrada quedó en días distintos según la marca (una confirmó y la otra no). */
+  discrepa: boolean
 }
 
 /** Lo mínimo que `proximas()` necesita saber de una idea para contar la cobertura. */

@@ -10,12 +10,15 @@
 
 import { ETAPAS } from '@/lib/meta-ads/etapas'
 import type { Etapa } from '@/lib/meta-ads/tipos'
+import type { Marca } from '@/lib/nav.datos'
 import type {
+  BaseUnificada,
   CoberturaEtapas,
   DecisionFecha,
   EntradaCalendario,
   FechaComercial,
   FechaFijada,
+  FilaUnificada,
   Hito,
   IdeaParaContar,
   Prioridad,
@@ -208,6 +211,62 @@ export function proximas(
 
   // Por fecha; a igual día, primero la comercial (es la que tiene anticipo y manda la producción).
   return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase) || a.titulo.localeCompare(b.titulo))
+}
+
+/**
+ * Cruza las listas de varias marcas en una sola, para que Marketing no tenga que cambiar de marca
+ * en el header y llevar las dos en la cabeza.
+ *
+ * 🔑 **`proximas()` no cambia de firma: se la llama una vez por marca y el cruce pasa acá.** Es
+ * deliberado. `laQueAprieta()` lo consume `components/meta-ads/Etapas.tsx`, que sigue siendo una
+ * pantalla de una marca por vez; meterle un eje de marca al motor rompería ese consumidor sin
+ * necesidad y a cambio de nada, porque unificar es una preocupación de presentación.
+ *
+ * **Lo que se comparte y lo que no.** La fecha, el título y por qué está en la lista son del
+ * almanaque y valen para las dos. La decisión (`prioridad`, `arrancar`) y las ideas anotadas son de
+ * cada marca —BDI le va fuerte al Día del Niño y Zattia pasa, y eso es normal— así que viajan en
+ * `porMarca` y el render dibuja un renglón por marca.
+ *
+ * 🔴 **Dos casos que parecen detalles y no lo son:**
+ *
+ *  1. Si una marca confirmó una fecha anunciada y la otra no, las dos entradas tienen el mismo `id`
+ *     pero **caen días distintos**. Se agrupan por `id|fecha`, así que salen en dos filas marcadas
+ *     con `discrepa` — juntarlas obligaría a elegir un día y mentir sobre el otro.
+ *  2. Con la misma fecha, gana la certeza **más floja**: si BDI la confirmó y Zattia la tiene
+ *     estimada, la fila se dibuja estimada. Mostrarla firme escondería que en una de las dos bases
+ *     nadie la confirmó, que es justo lo que el chip ámbar existe para no dejar pasar.
+ */
+export function unificar(porMarca: Partial<Record<Marca, EntradaCalendario[]>>, orden?: readonly Marca[]): FilaUnificada[] {
+  const marcas = (orden ?? (Object.keys(porMarca) as Marca[])).filter((m) => porMarca[m])
+  const filas = new Map<string, FilaUnificada>()
+
+  for (const marca of marcas) {
+    for (const e of porMarca[marca] || []) {
+      const key = `${e.id}|${e.fecha}`
+      const ya = filas.get(key)
+      if (!ya) {
+        const { id, clase, fecha, titulo, certeza, faltan, anticipoDias, arranqueSugerido, tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor } = e
+        const base: BaseUnificada = {
+          id, clase, fecha, titulo, certeza, faltan, anticipoDias, arranqueSugerido,
+          tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor,
+        }
+        filas.set(key, { key, id: e.id, fecha: e.fecha, base, marcas: [marca], porMarca: { [marca]: e }, discrepa: false })
+        continue
+      }
+      ya.marcas.push(marca)
+      ya.porMarca[marca] = e
+      // La menos cierta manda: basta que una marca no la haya confirmado para que la fila lo diga.
+      if (e.certeza === 'estimada') ya.base.certeza = 'estimada'
+    }
+  }
+
+  const cuantasFilas = new Map<string, number>()
+  for (const f of filas.values()) cuantasFilas.set(f.id, (cuantasFilas.get(f.id) || 0) + 1)
+
+  return [...filas.values()]
+    .map((f) => ({ ...f, discrepa: (cuantasFilas.get(f.id) || 0) > 1 }))
+    // Mismo orden que `proximas()`: por fecha y, a igual día, primero la comercial.
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.base.clase.localeCompare(b.base.clase) || a.base.titulo.localeCompare(b.base.titulo))
 }
 
 /**

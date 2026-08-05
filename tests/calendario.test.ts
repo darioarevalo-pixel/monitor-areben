@@ -13,6 +13,7 @@ import {
   sinDecidir,
   sumarDias,
   trasladarFeriado,
+  unificar,
   FECHAS_COMERCIALES,
 } from '@/lib/calendario'
 import type { DecisionFecha, FechaFijada, Hito, IdeaParaContar, Prioridad } from '@/lib/calendario'
@@ -412,5 +413,112 @@ describe('el catálogo completo', () => {
     for (const c of ['san-martin', 'empleado-comercio', 'diversidad-cultural', 'halloween']) {
       expect(ids, c).toContain(`comercial:${c}:2026`)
     }
+  })
+})
+
+/**
+ * La pantalla es una sola para las dos marcas porque Marketing es un equipo solo. Lo que estos
+ * tests protegen es que unificar **no borre la diferencia**: las fechas se comparten, las decisiones
+ * no. Una fila que mostrara la prioridad de una marca como si fuera de las dos sería peor que las
+ * dos pantallas separadas de antes, porque nadie dudaría de ella.
+ */
+describe('unificar(): una fila con lo que decidió cada marca', () => {
+  const decision = (entradaId: string, prioridad: Prioridad, arrancar: string | null = null): DecisionFecha =>
+    ({ entradaId, prioridad, arrancar, por: 'Bruno' })
+
+  const listas = (opts: { bdi?: Parameters<typeof proximas>[2]; zattia?: Parameters<typeof proximas>[2] } = {}) => ({
+    bdi: proximas('2026-09-14', 60, opts.bdi || {}),
+    zattia: proximas('2026-09-14', 60, opts.zattia || {}),
+  })
+
+  it('una comercial de las dos marcas es UNA fila con las dos decisiones', () => {
+    const filas = unificar(listas({
+      bdi: { decisiones: [decision('comercial:dia-madre:2026', 'fuerte', '2026-09-18')] },
+      zattia: { decisiones: [decision('comercial:dia-madre:2026', 'pasamos')] },
+    }), ['bdi', 'zattia'])
+
+    const madre = filas.filter((f) => f.id === 'comercial:dia-madre:2026')
+    expect(madre).toHaveLength(1)
+    expect(madre[0].marcas).toEqual(['bdi', 'zattia'])
+    expect(madre[0].porMarca.bdi?.prioridad).toBe('fuerte')
+    expect(madre[0].porMarca.zattia?.prioridad).toBe('pasamos')
+    expect(madre[0].base.titulo).toBe(madre[0].porMarca.bdi?.titulo)
+    expect(madre[0].discrepa).toBe(false)
+  })
+
+  it('un hito propio existe en UNA base y queda con su marca', () => {
+    const propio = hito({ id: 'zx', fecha: '2026-09-20', titulo: 'Cápsula tejidos' })
+    const filas = unificar({
+      bdi: proximas('2026-09-14', 60),
+      zattia: proximas('2026-09-14', 60, { hitos: [propio] }),
+    }, ['bdi', 'zattia'])
+
+    const fila = filas.find((f) => f.id === 'hito:zx')!
+    expect(fila.marcas).toEqual(['zattia'])
+    expect(fila.porMarca.bdi).toBeUndefined()
+    expect(fila.base.titulo).toBe('Cápsula tejidos')
+  })
+
+  it('con la misma fecha, gana la certeza MÁS FLOJA: si una marca no confirmó, la fila lo dice', () => {
+    // Empleado de Comercio es anunciada. BDI la confirma en el mismo día que la estimación, Zattia
+    // no la confirmó: si la fila saliera firme, escondería que en una de las dos bases nadie miró.
+    const estimada = proximas('2026-09-14', 60).find((e) => e.id === 'comercial:empleado-comercio:2026')!
+    const fijada: FechaFijada[] = [{ clave: 'empleado-comercio', anio: 2026, fecha: estimada.fecha, por: 'Bruno' }]
+
+    const filas = unificar(listas({ bdi: { fijadas: fijada } }), ['bdi', 'zattia'])
+    const fila = filas.find((f) => f.id === 'comercial:empleado-comercio:2026')!
+
+    expect(estimada.certeza).toBe('estimada')
+    expect(fila.porMarca.bdi?.certeza).toBe('firme')
+    expect(fila.base.certeza).toBe('estimada')
+  })
+
+  it('si una marca confirmó OTRO día, son dos filas y quedan marcadas', () => {
+    const estimada = proximas('2026-09-14', 60).find((e) => e.id === 'comercial:empleado-comercio:2026')!
+    const otroDia = sumarDias(estimada.fecha, 3)
+    const filas = unificar(listas({
+      bdi: { fijadas: [{ clave: 'empleado-comercio', anio: 2026, fecha: otroDia, por: 'Bruno' }] },
+    }), ['bdi', 'zattia'])
+
+    const dos = filas.filter((f) => f.id === 'comercial:empleado-comercio:2026')
+    expect(dos).toHaveLength(2)
+    expect(dos.every((f) => f.discrepa)).toBe(true)
+    expect(dos.map((f) => f.marcas)).toEqual(
+      expect.arrayContaining([['bdi'], ['zattia']]),
+    )
+    // Cada fila dice los días que faltan hasta SU día, no hasta un promedio inventado.
+    expect(dos.find((f) => f.fecha === otroDia)!.base.faltan).toBe(diasEntre('2026-09-14', otroDia))
+  })
+
+  it('las ideas anotadas son de cada marca y no se suman entre bases', () => {
+    const idea = (evento: string, etapa: string): IdeaParaContar => ({ evento, etapa, estado: 'propuesta' })
+    const filas = unificar(listas({
+      bdi: { ideas: [idea('comercial:dia-madre:2026', 'tofu')] },
+      zattia: { ideas: [idea('comercial:dia-madre:2026', 'bofu'), idea('comercial:dia-madre:2026', 'bofu')] },
+    }), ['bdi', 'zattia'])
+
+    const madre = filas.find((f) => f.id === 'comercial:dia-madre:2026')!
+    expect(madre.porMarca.bdi?.cobertura).toEqual({ tofu: 1, mofu: 0, bofu: 0 })
+    expect(madre.porMarca.zattia?.cobertura).toEqual({ tofu: 0, mofu: 0, bofu: 2 })
+  })
+
+  it('con una sola marca visible devuelve exactamente lo de esa marca, en el mismo orden', () => {
+    const sola = proximas('2026-09-14', 60)
+    const filas = unificar({ bdi: sola }, ['bdi'])
+    expect(filas.map((f) => f.id)).toEqual(sola.map((e) => e.id))
+    expect(filas.every((f) => f.marcas.length === 1 && !f.discrepa)).toBe(true)
+  })
+
+  it('una marca que falló (403) entra como lista vacía y no se lleva puesta a la otra', () => {
+    const filas = unificar({ bdi: [], zattia: proximas('2026-09-14', 60) }, ['bdi', 'zattia'])
+    expect(filas.length).toBeGreaterThan(0)
+    expect(filas.every((f) => f.marcas).valueOf()).toBe(true)
+    expect(filas.every((f) => f.marcas.includes('zattia') && !f.marcas.includes('bdi'))).toBe(true)
+  })
+
+  it('el orden lo manda el argumento, no el orden en que llegaron las respuestas', () => {
+    const l = listas()
+    expect(unificar(l, ['zattia', 'bdi'])[0].marcas).toEqual(['zattia', 'bdi'])
+    expect(unificar(l, ['bdi', 'zattia'])[0].marcas).toEqual(['bdi', 'zattia'])
   })
 })

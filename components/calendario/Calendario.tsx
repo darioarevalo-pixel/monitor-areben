@@ -15,7 +15,7 @@
  * el Día de la Madre y que **no hay ni una idea de la segunda etapa anotada**. Eso es lo único que
  * hace que alguien se ponga a craneаr hoy.
  *
- * # Las cuatro decisiones de diseño que no son cosméticas
+ * # Las cinco decisiones de diseño que no son cosméticas
  *
  *  1. **Arranca en la lista, no en la grilla.** La lista es la que hace actuar (los días que faltan
  *     en grande, el pedido al lado); la grilla es contexto para ubicarse. Encima en el celular la
@@ -32,19 +32,31 @@
  *     se ignora doce veces enseña a ignorar el número trece, que sí importaba. Ahora el catálogo
  *     pone las fechas sobre la mesa, alguien marca fuerte / suave / pasamos, y **la ausencia de
  *     decisión se dibuja como la pregunta abierta que es**, no como un default inventado.
+ *  5. **Una sola pantalla para las dos marcas, con las decisiones separadas.** Marketing es un
+ *     equipo solo: tener que cambiar el selector del header para ver lo de la otra marca era
+ *     cruzar dos listas de memoria, o sea el trabajo que esta pantalla vino a evitar. Pero
+ *     unificar la vista no es unificar la decisión: las fechas son del almanaque y valen para las
+ *     dos, mientras que con cuánta fuerza jugamos cada una es de cada marca (BDI le va fuerte al
+ *     Día del Niño y Zattia pasa, y eso es normal). Por eso una fila y **un renglón de decisión
+ *     por marca**. Las bases siguen siendo dos, una por marca: no se migró nada.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { MarcaChip } from '@/components/ui/MarcaChip'
+import { CUENTAS } from '@/lib/cuentas'
+import type { Marca } from '@/lib/nav.datos'
+import { marcasConAcceso } from '@/lib/permisos'
 import {
   apagaLaFila, diaDeSemanaDe, diasDelMes, diasEntre, fechaComercialDe, hoyIso, iso, juegaLaFecha,
-  laQueAprieta, PRIORIDADES, prioridadDe, proximas, sinDecidir, TIPOS_HITO,
-  type DecisionFecha, type EntradaCalendario, type FechaFijada, type Hito, type Prioridad,
+  laQueAprieta, PRIORIDADES, prioridadDe, proximas, sinDecidir, TIPOS_HITO, unificar,
+  type BaseUnificada, type DecisionFecha, type EntradaCalendario, type FechaFijada,
+  type FilaUnificada, type Hito, type Prioridad,
 } from '@/lib/calendario'
 import {
-  borrarHito, decidirFecha, desfijarFecha, fijarFecha, guardarHito, indecidirFecha, leerCalendario,
-  nuevoIdHito,
+  borrarHito, decidirFecha, desfijarFecha, fijarFecha, guardarHito, indecidirFecha,
+  leerCalendarioDeMarcas, nuevoIdHito,
 } from '@/lib/calendario/persistencia'
 import { ETIQUETA_ETAPA } from '@/lib/meta-ads/etapas'
 import { ETAPAS } from '@/lib/meta-ads/etapas'
@@ -108,81 +120,114 @@ function rotuloFecha(f: string): string {
   return `${DIAS_CORTOS[diaDeSemanaDe(f)]} ${d}-${MESES[m - 1].slice(0, 3)}`
 }
 
+const TODAS_LAS_MARCAS = Object.keys(CUENTAS) as Marca[]
+
+/** Lo que trajo cada marca. Se guarda por separado porque la decisión y las ideas son de cada una. */
+type DatosMarca = {
+  hitos: Hito[]
+  fijadas: FechaFijada[]
+  decisiones: DecisionFecha[]
+  ideas: Idea[]
+  ideasCaidas: boolean
+  error: string | null
+}
+
 export function Calendario() {
   const { marca, perfil } = useSesion()
   const toast = useToast()
   const [vista, setVista] = useState<'lista' | 'mes'>('lista')
   const [ventana, setVentana] = useState(VENTANA_DEFAULT)
   const dias = VENTANAS.find((v) => v.key === ventana)?.dias ?? 180
-  const [editando, setEditando] = useState<Partial<Hito> | null>(null)
-  const [anotando, setAnotando] = useState<EntradaCalendario | null>(null)
-  const [confirmando, setConfirmando] = useState<EntradaCalendario | null>(null)
-  const [decidiendo, setDecidiendo] = useState<{ e: EntradaCalendario; prioridad: Prioridad } | null>(null)
+  const [editando, setEditando] = useState<{ marca: Marca; hito: Partial<Hito> } | null>(null)
+  const [anotando, setAnotando] = useState<{ marca: Marca; e: EntradaCalendario } | null>(null)
+  const [confirmando, setConfirmando] = useState<FilaUnificada | null>(null)
+  const [decidiendo, setDecidiendo] = useState<{ marca: Marca; e: EntradaCalendario; prioridad: Prioridad } | null>(null)
+
+  /**
+   * 🔑 **Marketing es un equipo solo: la pantalla muestra las dos marcas juntas.**
+   *
+   * Antes era una marca por vez y había que cambiar el selector del header para ver lo de la otra,
+   * o sea cruzar dos listas de memoria — que es exactamente el trabajo que este calendario vino a
+   * sacarle a alguien de la cabeza.
+   *
+   * La regla de quién ve qué **se reusa, no se inventa**: `marcasConAcceso` es la misma que usan
+   * Inicio, Solicitudes y Gerencial. Respeta la cuenta fija (y le gana incluso al admin) y contempla
+   * que alguien vea Calendario en BDI y no en Zattia. La marca del header sigue mandando en dos
+   * cosas: va primera en cada fila y es el default de lo que se carga.
+   */
+  const marcas = useMemo(() => {
+    const puede = marcasConAcceso(perfil, 'calendario', TODAS_LAS_MARCAS)
+    const lista = puede.length ? puede : [marca]
+    return [...lista].sort((a, b) => Number(b === marca) - Number(a === marca))
+  }, [perfil, marca])
+  const varias = marcas.length > 1
 
   // Todo lo cargado viaja en UN estado sellado con su clave, como en `Etapas.tsx`. Así el `setState`
   // vive siempre adentro de la promesa (nunca en el cuerpo del efecto, que dispara renders en
   // cascada) y una respuesta vieja de la marca anterior no puede pisar a la nueva.
-  const [datos, setDatos] = useState<{
-    key: string
-    hitos: Hito[]
-    fijadas: FechaFijada[]
-    decisiones: DecisionFecha[]
-    ideas: Idea[]
-    ideasCaidas: boolean
-    error: string | null
-  } | null>(null)
+  const [datos, setDatos] = useState<{ key: string; porMarca: Partial<Record<Marca, DatosMarca>> } | null>(null)
   const [nonce, setNonce] = useState(0)
 
   const hoy = hoyIso()
-  const key = `${marca}|${nonce}`
+  const key = `${marcas.join(',')}|${nonce}`
 
   useEffect(() => {
     let vivo = true
     void (async () => {
-      let hitos: Hito[] = []
-      let fijadas: FechaFijada[] = []
-      let decisiones: DecisionFecha[] = []
-      let error: string | null = null
-      try {
-        const cal = await leerCalendario(marca)
-        hitos = cal.hitos
-        fijadas = cal.fijadas
-        decisiones = cal.decisiones
-      } catch (e) {
-        error = e instanceof Error ? e.message : 'No se pudo leer el calendario.'
-      }
       // Las ideas van aparte y su falla NO tumba el calendario: son el enganche, no el contenido.
-      // Si la tabla todavía no está migrada en esta marca, el calendario tiene que seguir sirviendo
-      // y lo único que se pierde es el renglón "Etapas armadas".
-      let ideas: Idea[] = []
-      let ideasCaidas = false
-      try {
-        ideas = (await leerIdeas(marca)).ideas
-      } catch {
-        ideasCaidas = true
+      // Si la tabla todavía no está migrada en una marca, el calendario tiene que seguir sirviendo
+      // y lo único que se pierde es el renglón "Etapas armadas" de esa marca.
+      const [cals, ideas] = await Promise.all([
+        leerCalendarioDeMarcas(marcas),
+        Promise.all(marcas.map(async (m) => {
+          try {
+            return { marca: m, ideas: (await leerIdeas(m)).ideas, caidas: false }
+          } catch {
+            return { marca: m, ideas: [] as Idea[], caidas: true }
+          }
+        })),
+      ])
+      const porMarca: Partial<Record<Marca, DatosMarca>> = {}
+      for (const c of cals) {
+        const i = ideas.find((x) => x.marca === c.marca)
+        porMarca[c.marca] = {
+          hitos: c.hitos,
+          fijadas: c.fijadas,
+          decisiones: c.decisiones,
+          ideas: i?.ideas ?? [],
+          ideasCaidas: !!i?.caidas,
+          error: c.error,
+        }
       }
-      if (vivo) setDatos({ key: `${marca}|${nonce}`, hitos, fijadas, decisiones, ideas, ideasCaidas, error })
+      if (vivo) setDatos({ key: `${marcas.join(',')}|${nonce}`, porMarca })
     })()
     return () => { vivo = false }
-  }, [marca, nonce])
+  }, [marcas, nonce])
 
   const recargar = useCallback(() => setNonce((n) => n + 1), [])
 
   const cargando = !datos || datos.key !== key
-  const hitos = datos?.hitos ?? []
-  const entradas = useMemo(
-    () => proximas(hoy, dias, {
-      fijadas: datos?.fijadas ?? [],
-      hitos: datos?.hitos ?? [],
-      ideas: datos?.ideas ?? [],
-      decisiones: datos?.decisiones ?? [],
-    }),
-    [hoy, dias, datos],
-  )
 
-  async function guardar(h: Partial<Hito>) {
+  /** Una lista por marca — `proximas()` sigue siendo de a una, ver el docblock de `unificar()`. */
+  const entradasPorMarca = useMemo(() => {
+    const out: Partial<Record<Marca, EntradaCalendario[]>> = {}
+    for (const m of marcas) {
+      const d = datos?.porMarca[m]
+      out[m] = proximas(hoy, dias, {
+        fijadas: d?.fijadas ?? [],
+        hitos: d?.hitos ?? [],
+        ideas: d?.ideas ?? [],
+        decisiones: d?.decisiones ?? [],
+      })
+    }
+    return out
+  }, [hoy, dias, datos, marcas])
+
+  const filas = useMemo(() => unificar(entradasPorMarca, marcas), [entradasPorMarca, marcas])
+
+  async function guardar(m: Marca, h: Partial<Hito>) {
     try {
-      await guardarHito(marca, {
+      await guardarHito(m, {
         ...h,
         id: h.id || nuevoIdHito(),
         titulo: String(h.titulo || ''),
@@ -196,9 +241,9 @@ export function Calendario() {
     }
   }
 
-  async function borrar(id: string) {
+  async function borrar(m: Marca, id: string) {
     try {
-      await borrarHito(marca, id)
+      await borrarHito(m, id)
       setEditando(null)
       toast.ok('Hito borrado.')
       recargar()
@@ -207,9 +252,9 @@ export function Calendario() {
     }
   }
 
-  async function anotar(e: EntradaCalendario, d: { etapa: Etapa; titulo: string; formato: string; gancho: string }) {
+  async function anotar(m: Marca, e: EntradaCalendario, d: { etapa: Etapa; titulo: string; formato: string; gancho: string }) {
     try {
-      await guardarIdea(marca, {
+      await guardarIdea(m, {
         id: nuevoIdIdea(),
         etapa: d.etapa,
         titulo: d.titulo,
@@ -225,12 +270,24 @@ export function Calendario() {
     }
   }
 
-  async function confirmar(e: EntradaCalendario, fecha: string) {
-    const clave = e.id.split(':')[1]
-    const anio = Number(e.id.split(':')[2])
+  /**
+   * Confirmar la fecha real **se escribe en todas las marcas que la tienen estimada**, y ésa es la
+   * única acción de la pantalla que no es por marca.
+   *
+   * No es una inconsistencia con la prioridad: son dos cosas distintas. Con cuánta fuerza jugamos el
+   * Día del Niño es una decisión, y BDI y Zattia pueden decidir distinto. Qué día cae el Hot Sale es
+   * un hecho del mundo que anunció una cámara — es el mismo día para las dos, y hacerlo tipear dos
+   * veces sólo agrega la chance de que una de las bases quede con la fecha vieja.
+   */
+  async function confirmar(fila: FilaUnificada, fecha: string) {
+    const clave = fila.id.split(':')[1]
+    const anio = Number(fila.id.split(':')[2])
+    const destino = marcasEstimadas(fila)
     try {
-      if (fecha) await fijarFecha(marca, clave, anio, fecha)
-      else await desfijarFecha(marca, clave, anio)
+      for (const m of destino) {
+        if (fecha) await fijarFecha(m, clave, anio, fecha)
+        else await desfijarFecha(m, clave, anio)
+      }
       setConfirmando(null)
       toast.ok(fecha ? 'Fecha confirmada.' : 'Vuelve a mostrarse como estimada.')
       recargar()
@@ -244,14 +301,14 @@ export function Calendario() {
    * pedir un dato que no existe. Jugarla abre el modal con el arranque sugerido para confirmar —
    * el catálogo prellena, la persona decide.
    */
-  async function elegirPrioridad(e: EntradaCalendario, prioridad: Prioridad) {
-    if (juegaLaFecha(prioridad)) return setDecidiendo({ e, prioridad })
-    await decidir(e, prioridad, null)
+  async function elegirPrioridad(m: Marca, e: EntradaCalendario, prioridad: Prioridad) {
+    if (juegaLaFecha(prioridad)) return setDecidiendo({ marca: m, e, prioridad })
+    await decidir(m, e, prioridad, null)
   }
 
-  async function decidir(e: EntradaCalendario, prioridad: Prioridad, arrancar: string | null) {
+  async function decidir(m: Marca, e: EntradaCalendario, prioridad: Prioridad, arrancar: string | null) {
     try {
-      await decidirFecha(marca, e.id, prioridad, arrancar)
+      await decidirFecha(m, e.id, prioridad, arrancar)
       setDecidiendo(null)
       toast.ok(`${e.titulo}: ${prioridadDe(prioridad)?.label.toLowerCase()}.`)
       recargar()
@@ -260,9 +317,9 @@ export function Calendario() {
     }
   }
 
-  async function indecidir(e: EntradaCalendario) {
+  async function indecidir(m: Marca, e: EntradaCalendario) {
     try {
-      await indecidirFecha(marca, e.id)
+      await indecidirFecha(m, e.id)
       setDecidiendo(null)
       toast.ok(`${e.titulo} vuelve a quedar sin decidir.`)
       recargar()
@@ -271,10 +328,22 @@ export function Calendario() {
     }
   }
 
-  const aprieta = laQueAprieta(entradas)
-  const pendientes = useMemo(() => sinDecidir(entradas), [entradas])
-  const error = datos?.error ?? null
-  const ideasCaidas = !!datos?.ideasCaidas
+  // Las bandas de arriba se calculan **por marca**: qué aprieta y cuánto falta por decidir son
+  // preguntas de cada una, y promediarlas daría un número que no es de nadie.
+  const aprietan = useMemo(
+    () => marcas
+      .map((m) => ({ marca: m, e: laQueAprieta(entradasPorMarca[m] ?? []) }))
+      .filter((x): x is { marca: Marca; e: EntradaCalendario } => !!x.e),
+    [marcas, entradasPorMarca],
+  )
+  const pendientes = useMemo(
+    () => marcas
+      .map((m) => ({ marca: m, lista: sinDecidir(entradasPorMarca[m] ?? []) }))
+      .filter((x) => x.lista.length > 0),
+    [marcas, entradasPorMarca],
+  )
+  const caidas = marcas.filter((m) => datos?.porMarca[m]?.error)
+  const sinIdeas = marcas.filter((m) => datos?.porMarca[m]?.ideasCaidas)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -288,17 +357,27 @@ export function Calendario() {
           {VENTANAS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
         </Select>
         <div style={{ flex: 1 }} />
-        <Button variant="solid" onClick={() => setEditando({ fecha: hoy, firme: false, tipo: 'lanzamiento' })}>
+        <Button variant="solid" onClick={() => setEditando({ marca, hito: { fecha: hoy, firme: false, tipo: 'lanzamiento' } })}>
           Cargar algo nuestro
         </Button>
       </div>
 
-      {error && <Notice tone="danger">{error}</Notice>}
+      {/* La marca que falló se nombra: si no, "no se pudo leer el calendario" con la otra media
+          pantalla llena parece que falló todo, y nadie sabe qué está viendo. */}
+      {caidas.map((m) => (
+        <Notice key={m} tone="danger">
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+            {varias && <MarcaChip marca={m} />}
+            <span>{datos?.porMarca[m]?.error}</span>
+          </div>
+        </Notice>
+      ))}
 
-      {ideasCaidas && (
+      {sinIdeas.length > 0 && (
         <Notice tone="neutral">
           <div style={{ fontSize: font.sm, lineHeight: 1.5 }}>
-            No se pudieron leer las ideas de creativos, así que el renglón <b>Etapas armadas</b> no
+            {varias && <b>{sinIdeas.map(nombreMarca).join(' y ')}: </b>}
+            no se pudieron leer las ideas de creativos, así que el renglón <b>Etapas armadas</b> no
             se muestra. El resto del calendario funciona igual. Si es la primera vez, puede faltar
             correr <code>node scripts/apply-meta-funnel.mjs</code>.
           </div>
@@ -311,36 +390,54 @@ export function Calendario() {
         anticipo hubiera vencido — el Día del Niño incluido, que estas dos marcas casi no trabajan.
         Un aviso que se ignora doce veces enseña a ignorar el número trece.
       */}
-      {aprieta && (
-        <Notice tone={aprieta.arrancarEn !== null && aprieta.arrancarEn <= 0 ? 'warning' : 'neutral'}>
-          <div style={{ fontSize: font.md, fontWeight: weight.bold }}>
-            {aprieta.titulo} es en {aprieta.faltan} {aprieta.faltan === 1 ? 'día' : 'días'}
-            {aprieta.arrancarEn === null
-              ? ` y le vamos ${prioridadDe(aprieta.prioridad)?.corto.toLowerCase()}.`
-              : aprieta.arrancarEn <= 0
-                ? `: pusiste arrancar el ${rotuloFecha(aprieta.arrancar!)} y ya pasó.`
-                : `: pusiste arrancar en ${aprieta.arrancarEn} ${aprieta.arrancarEn === 1 ? 'día' : 'días'}.`}
-          </div>
-          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
-            {aprieta.arrancarEn === null
-              ? 'Falta poner desde cuándo hay que producirla.'
-              : aprieta.detalle}
+      {aprietan.length > 0 && (
+        <Notice tone={aprietan.some((a) => a.e.arrancarEn !== null && a.e.arrancarEn <= 0) ? 'warning' : 'neutral'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+            {aprietan.map(({ marca: m, e }) => (
+              <div key={m}>
+                <div style={{ fontSize: font.md, fontWeight: weight.bold, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+                  {varias && <MarcaChip marca={m} />}
+                  <span>
+                    {e.titulo} es en {e.faltan} {e.faltan === 1 ? 'día' : 'días'}
+                    {e.arrancarEn === null
+                      ? ` y le vamos ${prioridadDe(e.prioridad)?.corto.toLowerCase()}.`
+                      : e.arrancarEn <= 0
+                        ? `: pusiste arrancar el ${rotuloFecha(e.arrancar!)} y ya pasó.`
+                        : `: pusiste arrancar en ${e.arrancarEn} ${e.arrancarEn === 1 ? 'día' : 'días'}.`}
+                  </span>
+                </div>
+                <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
+                  {e.arrancarEn === null ? 'Falta poner desde cuándo hay que producirla.' : e.detalle}
+                </div>
+              </div>
+            ))}
           </div>
         </Notice>
       )}
 
       {!cargando && pendientes.length > 0 && (
         <Notice tone="neutral">
-          <div style={{ fontSize: font.md, fontWeight: weight.bold }}>
-            {pendientes.length === 1
-              ? `Hay 1 fecha sin decidir en ${rotuloVentana(dias)}.`
-              : `Hay ${pendientes.length} fechas sin decidir en ${rotuloVentana(dias)}.`}
-          </div>
-          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
-            {pendientes.slice(0, 4).map((e) => `${e.titulo} (${e.faltan} d)`).join(' · ')}
-            {pendientes.length > 4 ? ` y ${pendientes.length - 4} más abajo` : ''}. Marcá con cuánta fuerza vamos a
-            cada una: sin eso, el calendario no puede decir qué aprieta ni pedirle creativos a
-            Etapas de la pauta.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+            {pendientes.map(({ marca: m, lista }) => (
+              <div key={m}>
+                <div style={{ fontSize: font.md, fontWeight: weight.bold, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+                  {varias && <MarcaChip marca={m} />}
+                  <span>
+                    {lista.length === 1
+                      ? `Hay 1 fecha sin decidir en ${rotuloVentana(dias)}.`
+                      : `Hay ${lista.length} fechas sin decidir en ${rotuloVentana(dias)}.`}
+                  </span>
+                </div>
+                <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
+                  {lista.slice(0, 4).map((e) => `${e.titulo} (${e.faltan} d)`).join(' · ')}
+                  {lista.length > 4 ? ` y ${lista.length - 4} más abajo` : ''}.
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize: font.sm, lineHeight: 1.5 }}>
+              Marcá con cuánta fuerza vamos a cada una: sin eso, el calendario no puede decir qué
+              aprieta ni pedirle creativos a Etapas de la pauta.
+            </div>
           </div>
         </Notice>
       )}
@@ -349,60 +446,87 @@ export function Calendario() {
         <Card style={{ color: color.mut2 }}>Leyendo el calendario…</Card>
       ) : vista === 'lista' ? (
         <Lista
-          entradas={entradas}
+          filas={filas}
           dias={dias}
-          sinIdeas={ideasCaidas}
-          onAnotar={setAnotando}
+          varias={varias}
+          sinIdeas={sinIdeas}
+          onAnotar={(m, e) => setAnotando({ marca: m, e })}
           onConfirmar={setConfirmando}
           onPrioridad={elegirPrioridad}
-          onCambiar={(e) => setDecidiendo({ e, prioridad: e.prioridad || e.prioridadSugerida || 'fuerte' })}
-          onEditar={(id) => setEditando(hitos.find((h) => h.id === id) || null)}
+          onCambiar={(m, e) => setDecidiendo({ marca: m, e, prioridad: e.prioridad || e.prioridadSugerida || 'fuerte' })}
+          onEditar={(m, id) => {
+            const h = (datos?.porMarca[m]?.hitos ?? []).find((x) => x.id === id)
+            if (h) setEditando({ marca: m, hito: h })
+          }}
         />
       ) : (
-        <Grilla entradas={entradas} hoy={hoy} />
+        <Grilla filas={filas} hoy={hoy} varias={varias} />
       )}
 
       {editando && (
         <ModalHito
-          hito={editando}
+          hito={editando.hito}
+          marca={editando.marca}
+          marcas={marcas}
+          onMarca={(m) => setEditando({ marca: m, hito: editando.hito })}
           onCerrar={() => setEditando(null)}
-          onGuardar={guardar}
-          onBorrar={editando.id ? () => borrar(String(editando.id)) : undefined}
-          puedeBorrar={!!editando.id && (String(editando.creadoPor || '') === String(perfil?.name || ''))}
+          onGuardar={(h) => guardar(editando.marca, h)}
+          onBorrar={editando.hito.id ? () => borrar(editando.marca, String(editando.hito.id)) : undefined}
+          puedeBorrar={!!editando.hito.id && (String(editando.hito.creadoPor || '') === String(perfil?.name || ''))}
         />
       )}
 
-      {anotando && <ModalIdea entrada={anotando} onCerrar={() => setAnotando(null)} onAnotar={anotar} />}
+      {anotando && (
+        <ModalIdea
+          entrada={anotando.e}
+          marca={anotando.marca}
+          varias={varias}
+          onCerrar={() => setAnotando(null)}
+          onAnotar={(e, d) => anotar(anotando.marca, e, d)}
+        />
+      )}
 
-      {confirmando && <ModalConfirmarFecha entrada={confirmando} onCerrar={() => setConfirmando(null)} onConfirmar={confirmar} />}
+      {confirmando && (
+        <ModalConfirmarFecha
+          fila={confirmando}
+          varias={varias}
+          onCerrar={() => setConfirmando(null)}
+          onConfirmar={confirmar}
+        />
+      )}
 
       {decidiendo && (
         <ModalDecidir
           entrada={decidiendo.e}
+          marca={decidiendo.marca}
+          varias={varias}
           prioridad={decidiendo.prioridad}
           hoy={hoy}
           onCerrar={() => setDecidiendo(null)}
-          onGuardar={decidir}
-          onSoltar={() => indecidir(decidiendo.e)}
+          onGuardar={(e, p, a) => decidir(decidiendo.marca, e, p, a)}
+          onSoltar={() => indecidir(decidiendo.marca, decidiendo.e)}
         />
       )}
     </div>
   )
 }
 
+const nombreMarca = (m: Marca) => (m === 'zattia' ? 'Zattia' : 'BDI')
+
 // ── Lo que se viene ──────────────────────────────────────────────────────────────────────────
 
-function Lista({ entradas, dias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
-  entradas: EntradaCalendario[]
+function Lista({ filas, dias, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
+  filas: FilaUnificada[]
   dias: number
-  sinIdeas: boolean
-  onAnotar: (e: EntradaCalendario) => void
-  onConfirmar: (e: EntradaCalendario) => void
-  onPrioridad: (e: EntradaCalendario, p: Prioridad) => void
-  onCambiar: (e: EntradaCalendario) => void
-  onEditar: (id: string) => void
+  varias: boolean
+  sinIdeas: Marca[]
+  onAnotar: (m: Marca, e: EntradaCalendario) => void
+  onConfirmar: (f: FilaUnificada) => void
+  onPrioridad: (m: Marca, e: EntradaCalendario, p: Prioridad) => void
+  onCambiar: (m: Marca, e: EntradaCalendario) => void
+  onEditar: (m: Marca, id: string) => void
 }) {
-  if (!entradas.length) {
+  if (!filas.length) {
     return (
       <EmptyState
         title={`No hay nada en ${rotuloVentana(dias)}`}
@@ -413,9 +537,9 @@ function Lista({ entradas, dias, sinIdeas, onAnotar, onConfirmar, onPrioridad, o
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-      {entradas.map((e) => (
+      {filas.map((f) => (
         <Fila
-          key={e.id} e={e} sinIdeas={sinIdeas}
+          key={f.key} fila={f} varias={varias} sinIdeas={sinIdeas}
           onAnotar={onAnotar} onConfirmar={onConfirmar} onPrioridad={onPrioridad}
           onCambiar={onCambiar} onEditar={onEditar}
         />
@@ -424,23 +548,42 @@ function Lista({ entradas, dias, sinIdeas, onAnotar, onConfirmar, onPrioridad, o
   )
 }
 
-function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
-  e: EntradaCalendario
-  sinIdeas: boolean
-  onAnotar: (e: EntradaCalendario) => void
-  onConfirmar: (e: EntradaCalendario) => void
-  onPrioridad: (e: EntradaCalendario, p: Prioridad) => void
-  onCambiar: (e: EntradaCalendario) => void
-  onEditar: (id: string) => void
+/**
+ * Una fecha, con **un renglón de decisión por marca**.
+ *
+ * 🔑 Lo de arriba (el día, el título, por qué está en la lista) es del almanaque y vale para las
+ * dos. Lo de abajo —con cuánta fuerza la jugamos y qué ideas hay anotadas— es de cada marca, y por
+ * eso va en bloques separados con su chip. Un solo renglón para las dos obligaría a elegir la
+ * decisión de una y mostrarla como si fuera del equipo entero.
+ *
+ * Con una sola marca visible no hay chips: la fila se lee igual que cuando la pantalla era de a una.
+ */
+function Fila({ fila, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEditar }: {
+  fila: FilaUnificada
+  varias: boolean
+  sinIdeas: Marca[]
+  onAnotar: (m: Marca, e: EntradaCalendario) => void
+  onConfirmar: (f: FilaUnificada) => void
+  onPrioridad: (m: Marca, e: EntradaCalendario, p: Prioridad) => void
+  onCambiar: (m: Marca, e: EntradaCalendario) => void
+  onEditar: (m: Marca, id: string) => void
 }) {
+  const b = fila.base
+  const entradas = fila.marcas.map((m) => ({ marca: m, e: fila.porMarca[m]! }))
+
   // 🔴 Urgente sólo si una persona puso desde cuándo producir y esa fecha ya pasó. Antes salía de
   // `faltan <= anticipoDias`, o sea del catálogo: la mitad de las filas aparecían en ámbar sin que
   // nadie hubiera decidido trabajarlas.
-  const urgente = juegaLaFecha(e.prioridad) && e.arrancarEn !== null && e.arrancarEn <= 0
+  const urgenteDe = (e: EntradaCalendario) => juegaLaFecha(e.prioridad) && e.arrancarEn !== null && e.arrancarEn <= 0
+  // Alcanza con que UNA marca esté apurada para que la fila se pinte: el borde ámbar es "acá hay
+  // algo atrasado", y el renglón de esa marca dice de quién.
+  const urgente = entradas.some((x) => urgenteDe(x.e))
   // Una fecha que dejamos pasar se apaga en vez de esconderse: sigue estando (para no volver a
-  // discutirla) pero deja de competir por la atención con las que sí vamos a trabajar.
+  // discutirla) pero deja de competir por la atención con las que sí vamos a trabajar. Con dos
+  // marcas se apaga sólo si **las dos** pasan: si una la juega, la fila es de las que importan.
   // ⚠️ `institucional` NO apaga: está decidida y se ve normal, sólo que no reclama producción.
-  const apagada = apagaLaFila(e.prioridad)
+  const apagada = entradas.every((x) => apagaLaFila(x.e.prioridad))
+
   return (
     <div
       style={{
@@ -453,45 +596,71 @@ function Fila({ e, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCambiar, onEd
       {/* Los días que faltan, en grande. Es el dato que se busca al entrar. */}
       <div style={{ minWidth: 68, textAlign: 'center' }}>
         <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: urgente ? color.warningInk : color.ink, lineHeight: 1 }}>
-          {e.faltan}
+          {b.faltan}
         </div>
-        <div style={{ fontSize: font.xs, color: color.mut2 }}>{e.faltan === 1 ? 'día' : 'días'}</div>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>{b.faltan === 1 ? 'día' : 'días'}</div>
       </div>
 
       <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: space[1.5] }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-          <span style={{ fontSize: font.md, fontWeight: weight.bold, color: color.ink }}>{e.titulo}</span>
-          <span style={{ fontSize: font.sm, color: color.mut }}>{rotuloFecha(e.fecha)}</span>
-          <ChipCerteza e={e} />
-          {e.tipoHito && <span style={{ fontSize: font.xs, color: color.mut2 }}>{TIPOS_HITO.find((t) => t.key === e.tipoHito)?.label || e.tipoHito}</span>}
+          <span style={{ fontSize: font.md, fontWeight: weight.bold, color: color.ink }}>{b.titulo}</span>
+          <span style={{ fontSize: font.sm, color: color.mut }}>{rotuloFecha(b.fecha)}</span>
+          <ChipCerteza base={b} marcas={marcasEstimadas(fila)} varias={varias} />
+          {/* Un hito es de una base sola: el chip acá arriba dice de quién es sin repetirlo abajo. */}
+          {varias && b.clase === 'hito' && <MarcaChip marca={fila.marcas[0]} />}
+          {b.tipoHito && <span style={{ fontSize: font.xs, color: color.mut2 }}>{TIPOS_HITO.find((t) => t.key === b.tipoHito)?.label || b.tipoHito}</span>}
         </div>
 
-        {e.clase === 'comercial' && (
-          <Decision e={e} urgente={urgente} onPrioridad={onPrioridad} onCambiar={onCambiar} />
+        {/* Dos marcas con la misma fecha confirmada en días distintos son dos filas. Decirlo acá
+            evita el "esto ya lo vi más arriba" y apunta a lo único que lo arregla. */}
+        {fila.discrepa && (
+          <div style={{ fontSize: font.xs, color: color.warningInk, lineHeight: 1.45 }}>
+            Esta fecha está confirmada en días distintos según la marca — por eso aparece dos veces.
+            Confirmala igual en las dos y vuelven a juntarse.
+          </div>
         )}
 
-        {e.detalle && <div style={{ fontSize: font.sm, color: color.mut2, lineHeight: 1.45 }}>{e.detalle}</div>}
+        {entradas.map(({ marca: m, e }) => {
+          const apagadaM = apagaLaFila(e.prioridad)
+          return (
+            <div key={m} style={{ display: 'flex', flexDirection: 'column', gap: space[1], opacity: apagadaM && !apagada ? 0.65 : 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+                {varias && b.clase === 'comercial' && <MarcaChip marca={m} />}
+                {b.clase === 'comercial' && (
+                  <Decision e={e} urgente={urgenteDe(e)} onPrioridad={(x, p) => onPrioridad(m, x, p)} onCambiar={(x) => onCambiar(m, x)} />
+                )}
+                {!apagadaM && <Button size="sm" variant="soft" onClick={() => onAnotar(m, e)}>Anotar idea</Button>}
+              </div>
 
-        {e.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {e.creadoPor}</div>}
+              {/* El renglón de etapas se dibuja sólo cuando la fecha pide producción de verdad. Una
+                  que dejamos pasar no necesita creativos, y un feriado en `institucional` tampoco:
+                  mostrarle tres etapas vacías haría parecer que falta trabajo que nadie va a hacer.
+                  Sin decidir SÍ se dibuja — es lo que hace que valga la pena decidir. */}
+              {!sinIdeas.includes(m) && (!e.prioridad || juegaLaFecha(e.prioridad)) && <Cobertura e={e} />}
+            </div>
+          )
+        })}
 
-        {/* El renglón de etapas se dibuja sólo cuando la fecha pide producción de verdad. Una que
-            dejamos pasar no necesita creativos, y un feriado en `institucional` tampoco: mostrarle
-            tres etapas vacías haría parecer que falta trabajo que nadie va a hacer. Sin decidir SÍ
-            se dibuja — es lo que hace que valga la pena decidir. */}
-        {!sinIdeas && (!e.prioridad || juegaLaFecha(e.prioridad)) && <Cobertura e={e} />}
+        {b.detalle && <div style={{ fontSize: font.sm, color: color.mut2, lineHeight: 1.45 }}>{b.detalle}</div>}
+
+        {b.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {b.creadoPor}</div>}
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        {e.certeza === 'estimada' && (
-          <Button size="sm" variant="ghost" tone="warning" onClick={() => onConfirmar(e)}>Confirmar fecha</Button>
+        {b.certeza === 'estimada' && (
+          <Button size="sm" variant="ghost" tone="warning" onClick={() => onConfirmar(fila)}>Confirmar fecha</Button>
         )}
-        {e.clase === 'hito' && (
-          <Button size="sm" variant="ghost" onClick={() => onEditar(e.id.replace(/^hito:/, ''))}>Editar</Button>
+        {b.clase === 'hito' && (
+          <Button size="sm" variant="ghost" onClick={() => onEditar(fila.marcas[0], b.id.replace(/^hito:/, ''))}>Editar</Button>
         )}
-        {!apagada && <Button size="sm" variant="soft" onClick={() => onAnotar(e)}>Anotar idea</Button>}
       </div>
     </div>
   )
+}
+
+/** Las marcas de la fila donde la fecha todavía está sin confirmar. */
+function marcasEstimadas(fila: FilaUnificada): Marca[] {
+  return fila.marcas.filter((m) => fila.porMarca[m]?.certeza === 'estimada')
 }
 
 /**
@@ -612,27 +781,39 @@ function Cobertura({ e }: { e: EntradaCalendario }) {
   )
 }
 
-function ChipCerteza({ e }: { e: EntradaCalendario }) {
-  if (e.certeza === 'estimada') {
+/**
+ * `marcas` son las que todavía la tienen estimada. Si una confirmó y la otra no, el chip **sigue
+ * puesto** y dice en cuál falta: dar por firme una fecha que en una de las dos bases nadie confirmó
+ * es la forma exacta de que alguien planifique contra un dato que no existe.
+ */
+function ChipCerteza({ base, marcas, varias }: { base: BaseUnificada; marcas: Marca[]; varias: boolean }) {
+  if (base.certeza === 'estimada') {
+    const parcial = varias && marcas.length === 1
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <StatusPill tone="warning" label="fecha estimada" />
+        <StatusPill tone="warning" label={parcial ? `sin confirmar en ${nombreMarca(marcas[0])}` : 'fecha estimada'} />
         <InfoPopover titulo="Por qué esta fecha no es segura">
           <p>
             Esta fecha <b>no la decide el calendario</b>: la anuncia una cámara y cambia todos los
             años. Lo que se muestra es la mejor estimación posible con la regla histórica, y por eso
             va marcada.
           </p>
-          {e.comoSeConfirma && <p>{e.comoSeConfirma}</p>}
+          {base.comoSeConfirma && <p>{base.comoSeConfirma}</p>}
           <p>
             Cuando salga la fecha real, <b>Confirmar fecha</b> la fija para este año y el chip se
             apaga. Planificar contra una estimación presentada como firme es cómo se llega tarde.
           </p>
+          {parcial && (
+            <p>
+              En la otra marca ya está confirmada. El chip queda hasta que lo esté en las dos, porque
+              la fecha se guarda en cada base por separado.
+            </p>
+          )}
         </InfoPopover>
       </span>
     )
   }
-  if (e.certeza === 'proyectada') return <StatusPill tone="neutral" label="proyectada" />
+  if (base.certeza === 'proyectada') return <StatusPill tone="neutral" label="proyectada" />
   return null
 }
 
@@ -642,14 +823,16 @@ function ChipCerteza({ e }: { e: EntradaCalendario }) {
  * Contexto, no acción: sirve para ubicarse ("¿cuánto hay entre el lanzamiento y Black Friday?").
  * Por eso no tiene botones y es la segunda pestaña — en el celular directamente no se lee bien.
  */
-function Grilla({ entradas, hoy }: { entradas: EntradaCalendario[]; hoy: string }) {
+function Grilla({ filas, hoy, varias }: { filas: FilaUnificada[]; hoy: string; varias: boolean }) {
   const [offset, setOffset] = useState(0)
   const base = new Date(Date.UTC(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - 1 + offset, 1))
   const anio = base.getUTCFullYear()
   const mes = base.getUTCMonth() + 1
 
-  const porDia = new Map<string, EntradaCalendario[]>()
-  for (const e of entradas) porDia.set(e.fecha, [...(porDia.get(e.fecha) || []), e])
+  // Una comercial que las dos marcas comparten ocupa **una** celda: en un cuadrito de 76 px, verla
+  // dos veces se lee como dos eventos distintos. De qué marca es sale del tooltip.
+  const porDia = new Map<string, FilaUnificada[]>()
+  for (const f of filas) porDia.set(f.fecha, [...(porDia.get(f.fecha) || []), f])
 
   // Cuántas celdas vacías van antes del día 1, contando desde el LUNES. Un mes que arranca domingo
   // deja seis huecos, no cero: es el caso que delata si la conversión está bien.
@@ -688,19 +871,23 @@ function Grilla({ entradas, hoy }: { entradas: EntradaCalendario[]; hoy: string 
               }}
             >
               <div style={{ fontSize: font.xs, color: esHoy ? color.brand : color.mut2, fontWeight: esHoy ? weight.bold : weight.normal }}>{d}</div>
-              {items.map((e) => (
+              {items.map((f) => (
                 <div
-                  key={e.id}
-                  title={`${e.titulo} — ${e.certeza === 'estimada' ? 'fecha estimada' : e.certeza === 'proyectada' ? 'proyectada' : rotuloFecha(e.fecha)}`}
+                  key={f.key}
+                  title={[
+                    f.base.titulo,
+                    varias ? f.marcas.map(nombreMarca).join(' y ') : '',
+                    f.base.certeza === 'estimada' ? 'fecha estimada' : f.base.certeza === 'proyectada' ? 'proyectada' : rotuloFecha(f.fecha),
+                  ].filter(Boolean).join(' — ')}
                   style={{
                     fontSize: font.xs, lineHeight: 1.25, padding: '2px 4px', borderRadius: 4,
-                    background: e.clase === 'comercial' ? color.brandBg : color.bg2,
-                    color: e.clase === 'comercial' ? color.brand : color.ink2,
-                    border: e.certeza === 'firme' ? '1px solid transparent' : `1px dashed ${color.warningBorder}`,
+                    background: f.base.clase === 'comercial' ? color.brandBg : color.bg2,
+                    color: f.base.clase === 'comercial' ? color.brand : color.ink2,
+                    border: f.base.certeza === 'firme' ? '1px solid transparent' : `1px dashed ${color.warningBorder}`,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                 >
-                  {e.titulo}
+                  {f.base.titulo}
                 </div>
               ))}
             </div>
@@ -713,8 +900,11 @@ function Grilla({ entradas, hoy }: { entradas: EntradaCalendario[]; hoy: string 
 
 // ── Los diálogos ─────────────────────────────────────────────────────────────────────────────
 
-function ModalHito({ hito, onCerrar, onGuardar, onBorrar, puedeBorrar }: {
+function ModalHito({ hito, marca, marcas, onMarca, onCerrar, onGuardar, onBorrar, puedeBorrar }: {
   hito: Partial<Hito>
+  marca: Marca
+  marcas: Marca[]
+  onMarca: (m: Marca) => void
   onCerrar: () => void
   onGuardar: (h: Partial<Hito>) => void
   onBorrar?: () => void
@@ -722,6 +912,9 @@ function ModalHito({ hito, onCerrar, onGuardar, onBorrar, puedeBorrar }: {
 }) {
   const [f, setF] = useState<Partial<Hito>>(hito)
   const listo = !!String(f.titulo || '').trim() && !!f.fecha
+  // Un hito vive en UNA base. Al crearlo se elige (viene la del header); al editarlo ya no se puede
+  // mover de marca — sería borrar de una base y crear en la otra, y el id se rompería.
+  const eligeMarca = marcas.length > 1 && !hito.id
 
   return (
     <Modal
@@ -755,7 +948,19 @@ function ModalHito({ hito, onCerrar, onGuardar, onBorrar, puedeBorrar }: {
               {TIPOS_HITO.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </Select>
           </Field>
+          {eligeMarca && (
+            <Field label="¿De qué marca?" width={180} hint="Viene la del header.">
+              <Select value={marca} onChange={(e) => onMarca(e.target.value as Marca)}>
+                {marcas.map((m) => <option key={m} value={m}>{nombreMarca(m)}</option>)}
+              </Select>
+            </Field>
+          )}
         </div>
+        {!eligeMarca && marcas.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.xs, color: color.mut2 }}>
+            <MarcaChip marca={marca} /> <span>Un hito propio vive en una sola marca y no se puede mudar.</span>
+          </div>
+        )}
         {/* Firme vs. proyectada. El default es proyectada porque una fecha que alguien tipeó sin
             decir nada casi nunca está cerrada, y mostrarla firme hace que otro planifique contra
             ella. Se puede mover después sin borrar nada. */}
@@ -786,8 +991,10 @@ function ModalHito({ hito, onCerrar, onGuardar, onBorrar, puedeBorrar }: {
  * La etapa arranca en la primera que no tiene nada anotado: es exactamente el hueco que la fila
  * acaba de mostrar, así que es lo que se viene a llenar.
  */
-function ModalIdea({ entrada, onCerrar, onAnotar }: {
+function ModalIdea({ entrada, marca, varias, onCerrar, onAnotar }: {
   entrada: EntradaCalendario
+  marca: Marca
+  varias: boolean
   onCerrar: () => void
   onAnotar: (e: EntradaCalendario, d: { etapa: Etapa; titulo: string; formato: string; gancho: string }) => void
 }) {
@@ -813,8 +1020,11 @@ function ModalIdea({ entrada, onCerrar, onAnotar }: {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-        <div style={{ fontSize: font.sm, color: color.mut2 }}>
-          {rotuloFecha(entrada.fecha)} · faltan {entrada.faltan} días
+        <div style={{ fontSize: font.sm, color: color.mut2, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+          {/* La idea entra en la base de UNA marca: decir cuál antes de escribirla evita anotar el
+              reel de Zattia en el embudo de BDI y enterarse en Etapas de la pauta. */}
+          {varias && <MarcaChip marca={marca} />}
+          <span>{rotuloFecha(entrada.fecha)} · faltan {entrada.faltan} días</span>
         </div>
         <Field label="Para qué etapa" hint="Viene elegida la que no tiene nada anotado para esta fecha.">
           <Select value={etapa} onChange={(e) => setEtapa(e.target.value as Etapa)}>
@@ -845,25 +1055,33 @@ function ModalIdea({ entrada, onCerrar, onAnotar }: {
   )
 }
 
-function ModalConfirmarFecha({ entrada, onCerrar, onConfirmar }: {
-  entrada: EntradaCalendario
+/**
+ * 🔑 **Confirmar escribe en todas las marcas que la tengan estimada, y es lo único que no es por
+ * marca.** Qué día cae el Hot Sale no es una decisión editorial: es un hecho que anunció una cámara
+ * y es el mismo para las dos. Hacerlo tipear una vez por marca sólo agregaría la chance de que una
+ * base quede con la fecha vieja y las dos listas se separen.
+ */
+function ModalConfirmarFecha({ fila, varias, onCerrar, onConfirmar }: {
+  fila: FilaUnificada
+  varias: boolean
   onCerrar: () => void
-  onConfirmar: (e: EntradaCalendario, fecha: string) => void
+  onConfirmar: (f: FilaUnificada, fecha: string) => void
 }) {
-  const [fecha, setFecha] = useState(entrada.fecha)
-  const anio = Number(entrada.id.split(':')[2])
-  const cat = fechaComercialDe(entrada.id.split(':')[1])
-  const mueve = diasEntre(entrada.fecha, fecha)
+  const [fecha, setFecha] = useState(fila.fecha)
+  const anio = Number(fila.id.split(':')[2])
+  const cat = fechaComercialDe(fila.id.split(':')[1])
+  const mueve = diasEntre(fila.fecha, fecha)
+  const destino = marcasEstimadas(fila)
 
   return (
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo={`Confirmar la fecha de ${entrada.titulo}`}
+      titulo={`Confirmar la fecha de ${fila.base.titulo}`}
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
-          <Button variant="solid" disabled={!fecha || Number(fecha.slice(0, 4)) !== anio} onClick={() => onConfirmar(entrada, fecha)}>
+          <Button variant="solid" disabled={!fecha || Number(fecha.slice(0, 4)) !== anio} onClick={() => onConfirmar(fila, fecha)}>
             Confirmar
           </Button>
         </>
@@ -871,7 +1089,7 @@ function ModalConfirmarFecha({ entrada, onCerrar, onConfirmar }: {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <div style={{ fontSize: font.sm, color: color.ink2, lineHeight: 1.5 }}>
-          Hoy se está mostrando <b>{rotuloFecha(entrada.fecha)}</b>, que es una estimación.
+          Hoy se está mostrando <b>{rotuloFecha(fila.fecha)}</b>, que es una estimación.
           {cat?.comoSeConfirma ? ` ${cat.comoSeConfirma}` : ''}
         </div>
         <Field label={`La fecha real de ${anio}`} required>
@@ -880,6 +1098,16 @@ function ModalConfirmarFecha({ entrada, onCerrar, onConfirmar }: {
         {!!mueve && Number(fecha.slice(0, 4)) === anio && (
           <div style={{ fontSize: font.sm, color: color.warningInk }}>
             Se corre {Math.abs(mueve)} {Math.abs(mueve) === 1 ? 'día' : 'días'} {mueve > 0 ? 'más adelante' : 'para atrás'}.
+          </div>
+        )}
+        {varias && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.xs, color: color.mut2 }}>
+            {destino.map((m) => <MarcaChip key={m} marca={m} />)}
+            <span>
+              {destino.length > 1
+                ? 'Se guarda en las dos: el día es el mismo para las dos marcas.'
+                : 'En la otra marca ya está confirmada.'}
+            </span>
           </div>
         )}
         <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
@@ -903,8 +1131,10 @@ function ModalConfirmarFecha({ entrada, onCerrar, onConfirmar }: {
  * frecuente; obligar a poner una fecha ahí garantizaría que se tipee cualquiera con tal de cerrar
  * el modal, y a partir de ahí el dato miente.
  */
-function ModalDecidir({ entrada, prioridad: inicial, hoy, onCerrar, onGuardar, onSoltar }: {
+function ModalDecidir({ entrada, marca, varias, prioridad: inicial, hoy, onCerrar, onGuardar, onSoltar }: {
   entrada: EntradaCalendario
+  marca: Marca
+  varias: boolean
   prioridad: Prioridad
   hoy: string
   onCerrar: () => void
@@ -924,7 +1154,7 @@ function ModalDecidir({ entrada, prioridad: inicial, hoy, onCerrar, onGuardar, o
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo={`${entrada.titulo} — ¿nos sumamos?`}
+      titulo={varias ? `${entrada.titulo} en ${nombreMarca(marca)} — ¿nos sumamos?` : `${entrada.titulo} — ¿nos sumamos?`}
       pie={
         <>
           {entrada.prioridad && (
@@ -940,9 +1170,13 @@ function ModalDecidir({ entrada, prioridad: inicial, hoy, onCerrar, onGuardar, o
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-        <div style={{ fontSize: font.sm, color: color.mut2 }}>
-          {rotuloFecha(entrada.fecha)} · faltan {entrada.faltan} {entrada.faltan === 1 ? 'día' : 'días'}
-          {entrada.certeza === 'estimada' ? ' · la fecha todavía es estimada' : ''}
+        <div style={{ fontSize: font.sm, color: color.mut2, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+          {/* La decisión es de esta marca sola: que BDI le vaya fuerte y Zattia pase es lo normal. */}
+          {varias && <MarcaChip marca={marca} />}
+          <span>
+            {rotuloFecha(entrada.fecha)} · faltan {entrada.faltan} {entrada.faltan === 1 ? 'día' : 'días'}
+            {entrada.certeza === 'estimada' ? ' · la fecha todavía es estimada' : ''}
+          </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>

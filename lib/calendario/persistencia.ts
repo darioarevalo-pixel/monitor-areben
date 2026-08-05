@@ -35,6 +35,48 @@ export async function leerCalendario(store: Marca): Promise<{
   }
 }
 
+/** Lo que devolvió una marca, con su error propio si esa marca falló. */
+export interface CalendarioDeMarca {
+  marca: Marca
+  hitos: Hito[]
+  fijadas: FechaFijada[]
+  decisiones: DecisionFecha[]
+  puede: { admin: boolean }
+  /** `null` si leyó bien. Si no, el mensaje — **de esta marca sola**. */
+  error: string | null
+}
+
+/**
+ * El calendario de varias marcas, en paralelo.
+ *
+ * 🔑 **La falla de una marca no puede tumbar a la otra.** Marketing es un equipo solo y la pantalla
+ * muestra las dos bases juntas, pero los permisos siguen siendo por marca: `api/_calendario.js`
+ * valida `puedeVer(perfil, store, 'calendario')` por su cuenta, así que alguien que ve Calendario en
+ * BDI y no en Zattia recibe un 403 de una de las dos. Si ese 403 rompiera el `Promise.all`, ese
+ * usuario se quedaría sin pantalla en vez de ver la mitad que le corresponde.
+ *
+ * El endpoint **no se toca**: se lo llama una vez por marca. Contador de funciones de Vercel igual.
+ */
+export async function leerCalendarioDeMarcas(marcas: readonly Marca[]): Promise<CalendarioDeMarca[]> {
+  return Promise.all(
+    marcas.map(async (marca): Promise<CalendarioDeMarca> => {
+      try {
+        const c = await leerCalendario(marca)
+        return { marca, ...c, error: null }
+      } catch (e) {
+        return {
+          marca,
+          hitos: [],
+          fijadas: [],
+          decisiones: [],
+          puede: { admin: false },
+          error: e instanceof Error ? e.message : 'No se pudo leer el calendario.',
+        }
+      }
+    }),
+  )
+}
+
 async function postear(body: Record<string, unknown>, siFalla: string) {
   const r = await apiFetch(API, {
     method: 'POST',
