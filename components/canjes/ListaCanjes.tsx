@@ -1,25 +1,36 @@
 'use client'
 
 /**
- * Los canjes de la marca. Dos vistas del mismo dato:
- *  - **Canjes**: todos, filtrables por estado.
+ * Los canjes. Dos vistas del mismo dato:
+ *  - **Canjes**: todos, filtrables por estado, marca, persona y fecha.
  *  - **Aprobaciones**: sólo lo que espera una firma. Es lo que más traba el flujo — sin aprobar no
  *    se genera el link, y sin link ella no manda la dirección.
  *
- * Los canjes de otras marcas **no aparecen acá**: esta lista es operativa, y sobre un canje de
- * otra marca no hay nada que hacer. Sí aparecen (en modo ciego) en la ficha de la persona, que es
- * donde importa saber que existieron.
+ * ⚠️ **La lista mezcla marcas**: el servidor manda los canjes de todas las que uno puede ver
+ * (`api/_canjes.js`, `.in('store', visibles)`), no los de la marca elegida arriba. Por eso hay una
+ * columna Marca y por eso el filtro de marca es real. Lo que **no** aparece acá son los canjes
+ * *ciegos* —los de una marca que uno no tiene permitida—: sobre esos no hay nada que hacer. Sí
+ * aparecen, en modo ciego, en la ficha de la persona, que es donde importa saber que existieron.
+ *
+ * El orden y el filtrado viven en `lib/canjes/lista.ts`, no acá: el orden de esta pantalla es una
+ * decisión de negocio ("primero lo que espera algo nuestro") y tiene que poder probarse sin montar
+ * un componente.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
-  Badge, Chips, EmptyState, StatusPill, TableWrap, THead, TBody, Tr, Th, Td,
+  Badge, BuscarInput, Chips, ContadorFiltro, EmptyState, FilterBar, Input, Select, StatusPill,
+  TableWrap, THead, TBody, Tr, Th, Td, useFiltroUrl,
   color, font, space, weight, type ChipOpt, type Tone,
 } from '@/components/ui'
 import { esCiego, type CanjeVencido, type CanjeVisible } from '@/lib/canjes/cliente'
 import {
-  STORE_LABEL, enTransito, estadoEnCriollo, nombrePersona, numeroCanje,
-  type CanjePersona, type CanjeRow, type EstadoCanje,
+  ABIERTOS, decorarCanjes, filtrarCanjes, ordenarCanjes,
+  type CtxLista, type FiltroEstado,
+} from '@/lib/canjes/lista'
+import {
+  CANJE_STORES, STORE_LABEL, enTransito, estadoEnCriollo, nombrePersona, numeroCanje,
+  type CanjePersona, type CanjeRow, type CanjeStore, type EstadoCanje,
 } from '@/lib/canjes/tipos'
 
 const ESTADO_TONE: Record<EstadoCanje, Tone> = {
@@ -34,59 +45,69 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
   cancelado: 'neutral',
 }
 
-type Filtro = 'abiertos' | 'respuesta' | 'aprobacion' | 'transito' | 'vencidos' | 'cerrados' | 'todos'
-
-/** Lo que sigue pidiendo trabajo de alguien. Es el default: la lista es para trabajar. */
-const ABIERTOS: EstadoCanje[] = ['propuesta', 'enviada', 'acuerdo', 'preparando', 'en_curso']
-
 export function ListaCanjes({
-  canjes, personas, vencidos, soloAprobaciones, onAbrir,
+  canjes, personas, vencidos, marcasVisibles, claveUrl, soloAprobaciones, onAbrir,
 }: {
   canjes: CanjeVisible[]
   personas: CanjePersona[]
   vencidos: CanjeVencido[]
-  /** La pestaña Aprobaciones: fija el filtro y saca los chips. */
+  /** Para el filtro de marca. Con una sola no se dibuja: sería un control que no hace nada. */
+  marcasVisibles: CanjeStore[]
+  /**
+   * El prefijo de las claves en la URL. Este componente se monta **dos veces** (Canjes y
+   * Aprobaciones) y `useFiltroUrl` lee la URL una sola vez al montar: sin prefijo, las dos pestañas
+   * se pisarían el filtro entre sí. Va de la mano del `key` con el que lo monta `Canjes.tsx`.
+   */
+  claveUrl: string
+  /** La pestaña Aprobaciones: fija el filtro de estado y saca los chips. */
   soloAprobaciones?: boolean
   onAbrir: (id: number) => void
 }) {
-  const [filtro, setFiltro] = useState<Filtro>('abiertos')
-  const nombrePorId = useMemo(() => new Map(personas.map((p) => [p.id, nombrePersona(p)])), [personas])
-  const vencidoPorCanje = useMemo(() => new Map(vencidos.map((v) => [v.canjeId, v.cuantas])), [vencidos])
+  const [filtro, setFiltro] = useFiltroUrl<FiltroEstado>(`${claveUrl}est`, 'abiertos')
+  const [marca, setMarca] = useFiltroUrl<CanjeStore | 'todas'>(`${claveUrl}marca`, 'todas')
+  const [q, setQ] = useFiltroUrl<string>(`${claveUrl}q`, '')
+  const [desde, setDesde] = useFiltroUrl<string>(`${claveUrl}desde`, '')
+  const [hasta, setHasta] = useFiltroUrl<string>(`${claveUrl}hasta`, '')
 
-  // Los ciegos se sacan de una: sobre un canje de otra marca no hay nada que hacer desde acá.
-  const propios = useMemo(() => canjes.filter((c) => !esCiego(c)) as CanjeRow[], [canjes])
+  const ctx = useMemo<CtxLista>(() => ({
+    personas: new Map(personas.map((p) => [p.id, { nombre: nombrePersona(p), instagram: p.instagram }])),
+    vencidos: new Map(vencidos.map((v) => [v.canjeId, v.cuantas])),
+  }), [personas, vencidos])
 
-  const chips = useMemo<ChipOpt<Filtro>[]>(() => [
-    { key: 'abiertos', label: 'Abiertos', n: propios.filter((c) => ABIERTOS.includes(c.estado)).length },
-    { key: 'respuesta', label: 'Esperando respuesta', n: propios.filter((c) => c.estado === 'enviada').length },
-    { key: 'aprobacion', label: 'Esperando firma', n: propios.filter((c) => c.estado === 'propuesta').length },
+  // Los ciegos se sacan de una: sobre un canje de una marca que no tenemos no hay nada que hacer
+  // desde acá. El cast se queda en este borde y `lib/canjes/lista.ts` no ve la unión nunca.
+  const propios = useMemo(
+    () => decorarCanjes(canjes.filter((c) => !esCiego(c)) as CanjeRow[], ctx),
+    [canjes, ctx],
+  )
+
+  // Los contadores de los chips miran lo filtrado por marca, texto y fecha, pero no por estado: son
+  // justamente lo que hay que mirar para elegir estado.
+  const sinEstado = useMemo(
+    () => filtrarCanjes(propios, { estado: 'todos', store: marca, q, desde, hasta }),
+    [propios, marca, q, desde, hasta],
+  )
+
+  const chips = useMemo<ChipOpt<FiltroEstado>[]>(() => [
+    { key: 'abiertos', label: 'Abiertos', n: sinEstado.filter((c) => ABIERTOS.includes(c._tramo)).length },
+    { key: 'respuesta', label: 'Esperando respuesta', n: sinEstado.filter((c) => c.estado === 'enviada').length },
+    { key: 'aprobacion', label: 'Esperando firma', n: sinEstado.filter((c) => c.estado === 'propuesta').length },
     // La cola de la encargada: despachado y sin llegar. No es un estado nuevo —`estadoEnCriollo` ya
     // los llama "En tránsito"— sino la lista que se revisa todos los días.
-    { key: 'transito', label: 'En tránsito', n: propios.filter(enTransito).length },
-    { key: 'vencidos', label: 'Con vencidos', n: propios.filter((c) => vencidoPorCanje.has(c.id)).length },
-    { key: 'cerrados', label: 'Cerrados', n: propios.filter((c) => c.estado === 'cerrado').length },
-    { key: 'todos', label: 'Todos', n: propios.length },
-  ], [propios, vencidoPorCanje])
+    { key: 'transito', label: 'En tránsito', n: sinEstado.filter(enTransito).length },
+    { key: 'vencidos', label: 'Con vencidos', n: sinEstado.filter((c) => c._vencidos > 0).length },
+    { key: 'cerrados', label: 'Cerrados', n: sinEstado.filter((c) => c.estado === 'cerrado').length },
+    { key: 'todos', label: 'Todos', n: sinEstado.length },
+  ], [sinEstado])
 
-  const visibles = useMemo(() => {
-    const f = soloAprobaciones ? 'aprobacion' : filtro
-    const lista = propios.filter((c) => {
-      if (f === 'abiertos') return ABIERTOS.includes(c.estado)
-      if (f === 'respuesta') return c.estado === 'enviada'
-      if (f === 'aprobacion') return c.estado === 'propuesta'
-      if (f === 'transito') return enTransito(c)
-      if (f === 'vencidos') return vencidoPorCanje.has(c.id)
-      if (f === 'cerrados') return c.estado === 'cerrado'
-      return true
-    })
-    // Lo más nuevo arriba, salvo en Aprobaciones: ahí lo que espera hace más tiempo va primero,
-    // porque es lo que más traba.
-    return lista.sort((a, b) =>
-      f === 'aprobacion'
-        ? Date.parse(a.created_at) - Date.parse(b.created_at)
-        : Date.parse(b.created_at) - Date.parse(a.created_at),
-    )
-  }, [propios, filtro, soloAprobaciones, vencidoPorCanje])
+  const visibles = useMemo(
+    () => ordenarCanjes(
+      filtrarCanjes(propios, {
+        estado: soloAprobaciones ? 'aprobacion' : filtro, store: marca, q, desde, hasta,
+      }),
+    ),
+    [propios, filtro, soloAprobaciones, marca, q, desde, hasta],
+  )
 
   if (!propios.length) {
     return (
@@ -100,8 +121,30 @@ export function ListaCanjes({
 
   return (
     <>
+      <FilterBar>
+        <BuscarInput value={q} onChange={setQ} placeholder="Buscar por persona, @ o Nº" />
+        {/* El selector de marca sólo aparece cuando hay más de una a la vista: con una sola sería
+            un control que no puede cambiar nada. */}
+        {marcasVisibles.length > 1 && (
+          <Select
+            value={marca}
+            aria-label="Filtrar por marca"
+            onChange={(e) => setMarca(e.target.value as CanjeStore | 'todas')}
+          >
+            <option value="todas">Todas las marcas</option>
+            {CANJE_STORES.filter((s) => marcasVisibles.includes(s)).map((s) => (
+              <option key={s} value={s}>{STORE_LABEL[s]}</option>
+            ))}
+          </Select>
+        )}
+        {/* El rango va contra la misma fecha que dibuja la columna "Desde" (`fechaDeLista`). */}
+        <Input type="date" value={desde} aria-label="Desde" onChange={(e) => setDesde(e.target.value)} />
+        <Input type="date" value={hasta} aria-label="Hasta" onChange={(e) => setHasta(e.target.value)} />
+        <ContadorFiltro n={visibles.length} singular="canje" plural="canjes" />
+      </FilterBar>
+
       {!soloAprobaciones && (
-        <div style={{ marginBottom: space[3] }}>
+        <div style={{ margin: `${space[3]} 0` }}>
           <Chips opciones={chips} value={filtro} onChange={setFiltro} />
         </div>
       )}
@@ -126,12 +169,12 @@ export function ListaCanjes({
           </THead>
           <TBody>
             {visibles.map((c) => {
-              const cuantas = vencidoPorCanje.get(c.id)
+              const cuantas = c._vencidos
               return (
                 <Tr key={c.id} onClick={() => onAbrir(c.id)} style={{ cursor: 'pointer' }}>
                   <Td mono strong>{c.numero || numeroCanje(c.id)}</Td>
                   <Td>
-                    {nombrePorId.get(c.persona_id) || '—'}
+                    {c._persona || '—'}
                     {c.titulo ? <span style={{ color: color.mut }}> · {c.titulo}</span> : null}
                   </Td>
                   <Td>
@@ -154,7 +197,9 @@ export function ListaCanjes({
                       ? (c.tope_pvp != null ? `$${Number(c.tope_pvp).toLocaleString('es-AR')}` : '—')
                       : `${(c.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0)} u.`}
                   </Td>
-                  <Td>{(c.acordado_at || c.created_at).slice(0, 10)}</Td>
+                  {/* La misma fecha contra la que corre el filtro de rango: si acá se dibujara otra,
+                      un canje se vería con fecha 3-ago y no entraría en un rango que la incluye. */}
+                  <Td>{c._fecha}</Td>
                 </Tr>
               )
             })}

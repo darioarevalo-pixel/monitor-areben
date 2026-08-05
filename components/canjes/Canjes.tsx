@@ -199,10 +199,15 @@ export function Canjes() {
           {/* Los estados en una línea: acá la pregunta no es "qué hago" sino "por qué este canje
               está en esta pila". */}
           {tab !== 'aprobaciones' && <LineaDeEstados />}
+          {/* El `key` remonta la lista al cambiar de pestaña, que es lo que hace que cada una lea
+              sus propios filtros de la URL: `useFiltroUrl` sólo mira la URL al montar. */}
           <ListaCanjes
+            key={tab}
+            claveUrl={tab === 'aprobaciones' ? 'aprob' : 'canjes'}
             canjes={est.canjes}
             personas={est.personas}
             vencidos={est.vencidos}
+            marcasVisibles={est.marcasVisibles}
             soloAprobaciones={tab === 'aprobaciones'}
             onAbrir={setCanjeAbierto}
           />

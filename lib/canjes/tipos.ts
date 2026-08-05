@@ -126,25 +126,87 @@ export function puedeIr(desde: EstadoCanje, hasta: EstadoCanje): boolean {
 }
 
 /**
+ * En qué está parado el canje **de verdad**, que no es lo mismo que su estado.
+ *
+ * Cuatro de los nueve tramos no son estados: salen de los *pendientes*. Un `preparando` puede estar
+ * esperando que alguien compre, que alguien despache, o al correo — tres trabajos distintos, de tres
+ * personas distintas, bajo el mismo enum.
+ *
+ * 🔑 **Esta es la única derivación.** La etiqueta que se lee (`estadoEnCriollo`) y el orden de la
+ * lista (`PESO_TRAMO`) salen las dos de acá. Escritas por separado, el día que se agregue un matiz
+ * la pantalla diría "Falta despachar" y lo ordenaría como si esperara a la creadora.
+ */
+export type TramoCanje =
+  | 'firma'
+  | 'escribirle'
+  | 'acordado'
+  | 'comprar'
+  | 'despachar'
+  | 'transito'
+  | 'respuesta'
+  | 'contenido'
+  | 'terminal'
+
+export function tramoDeCanje(
+  // `contacto_estado` va opcional a propósito: un canje ciego (el de otra marca) no lo trae, y sin
+  // él la respuesta correcta igual es "falta escribirle".
+  c: Pick<CanjeRow, 'estado' | 'compra_estado' | 'envio_estado'> & Partial<Pick<CanjeRow, 'contacto_estado'>>,
+): TramoCanje {
+  // Mientras no se le haya escrito, decir "esperando su respuesta" sería mentir: la pelota es
+  // nuestra. Es el mismo desdoble que hace `preparando` con la compra y el despacho.
+  if (c.estado === 'enviada') return c.contacto_estado === 'hecho' ? 'respuesta' : 'escribirle'
+  if (c.estado === 'preparando') {
+    if (c.compra_estado !== 'hecho') return 'comprar'
+    if (c.envio_estado !== 'hecho') return 'despachar'
+    return 'transito'
+  }
+  if (c.estado === 'propuesta') return 'firma'
+  if (c.estado === 'acuerdo') return 'acordado'
+  if (c.estado === 'en_curso') return 'contenido'
+  return 'terminal'
+}
+
+/**
+ * Cuánto traba cada tramo. **Arriba lo que espera algo NUESTRO**, abajo lo que espera a la creadora,
+ * y al fondo lo que ya terminó (decisión de Bruno, 5-ago-2026).
+ *
+ * `acordado` va con los nuestros: ella ya dijo que sí y nadie empezó a prepararlo, así que la pelota
+ * está de este lado aunque el estado no lo diga.
+ */
+export const PESO_TRAMO: Record<TramoCanje, number> = {
+  firma: 0, // sin firma no hay link, y sin link ella no manda la dirección: traba todo lo demás
+  escribirle: 1,
+  acordado: 2,
+  comprar: 3,
+  despachar: 4,
+  transito: 5,
+  respuesta: 6,
+  contenido: 7,
+  terminal: 8,
+}
+
+/** Sólo los ocho que siguen pidiendo trabajo de alguien. `terminal` se etiqueta por estado. */
+const TRAMO_LABEL: Record<Exclude<TramoCanje, 'terminal'>, string> = {
+  firma: ESTADO_CANJE_LABEL.propuesta,
+  escribirle: 'Falta escribirle',
+  acordado: ESTADO_CANJE_LABEL.acuerdo,
+  comprar: 'Falta comprar',
+  despachar: 'Falta despachar',
+  transito: 'En tránsito',
+  respuesta: ESTADO_CANJE_LABEL.enviada,
+  contenido: ESTADO_CANJE_LABEL.en_curso,
+}
+
+/**
  * El estado en criollo, con el matiz que el label solo no da. Mismo patrón que
  * `estadoEnCriollo` de `lib/reclamos/tipos.ts:163`: la UI muestra esto, no el enum.
  */
 export function estadoEnCriollo(
-  // `contacto_estado` va opcional a propósito: un canje ciego (el de otra marca) no lo trae, y sin
-  // él la respuesta correcta igual es "falta escribirle".
   c: Pick<CanjeRow, 'estado' | 'compra_estado' | 'envio_estado'> & Partial<Pick<CanjeRow, 'contacto_estado'>>,
 ): string {
-  // Mientras no se le haya escrito, decir "esperando su respuesta" sería mentir: la pelota es
-  // nuestra. Es el mismo desdoble que hace `preparando` con la compra y el despacho.
-  if (c.estado === 'enviada') {
-    return c.contacto_estado === 'hecho' ? 'Esperando su respuesta' : 'Falta escribirle'
-  }
-  if (c.estado === 'preparando') {
-    if (c.compra_estado !== 'hecho') return 'Falta comprar'
-    if (c.envio_estado !== 'hecho') return 'Falta despachar'
-    return 'En tránsito'
-  }
-  return ESTADO_CANJE_LABEL[c.estado] ?? c.estado
+  const tramo = tramoDeCanje(c)
+  if (tramo === 'terminal') return ESTADO_CANJE_LABEL[c.estado] ?? c.estado
+  return TRAMO_LABEL[tramo]
 }
 
 /**
