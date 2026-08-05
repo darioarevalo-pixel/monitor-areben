@@ -23,6 +23,7 @@ import {
   ETAPA_POR_OBJETIVO as ETAPA_POR_OBJETIVO_JS,
   ETIQUETA_ETAPA as ETIQUETA_ETAPA_JS,
   etapaDeObjetivo as etapaDeObjetivoJs,
+  estaAlAire as estaAlAireJs,
   UMBRALES_ETAPA as UMBRALES_ETAPA_JS,
 } from './etapas.core.js'
 
@@ -115,17 +116,10 @@ export function rotuloObjetivo(objetivo: string | null): string {
 }
 
 /**
- * ¿Está al aire? `effective_status === 'ACTIVE'` **y** `spend > 0`.
- *
- * Las dos condiciones, porque cada una sola miente en una dirección distinta:
- *  - `ACTIVE` sola: una campaña activa con todos sus conjuntos pausados figura activa y no entrega
- *    nada. Contarla taparía el hueco que la pantalla existe para mostrar.
- *  - `spend > 0` sola: una campaña que se pausó ayer sigue teniendo gasto en una ventana de 30 días
- *    y aparecería como si estuviera corriendo.
+ * ¿Está al aire? `ACTIVE` **y** gasto > 0 — la definición vive en el core (la comparte el censo del
+ * servidor, que con ella decide qué campañas sin marca se reclaman). Acá sólo se le ponen los tipos.
  */
-function estaAlAire(c: CampañaEtapa): boolean {
-  return c.estado === 'ACTIVE' && c.spend > 0
-}
+const estaAlAire = estaAlAireJs as (c: CampañaEtapa) => boolean
 
 function etapaEfectiva(c: CampañaEtapa, overrides: Record<string, Etapa>): EtapaOSin {
   return overrides[c.id] || c.etapaAuto

@@ -15,7 +15,7 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { marcasConAcceso, puedeSub, puedeVer } from '../lib/permisos.core.js';
 // La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
-import { etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
+import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 
@@ -202,7 +202,17 @@ async function etapas(res, perfil, diasPedidos) {
       if (lineas[fila.linea]) lineas[fila.linea].push(c);
       continue;
     }
-    sinAsignar.push({ ...c, sugerida: sugerirLinea(c.nombre), tuvoActividad: c.estado === 'ACTIVE' || c.spend > 0 });
+    // `tuvoActividad` es `estaAlAire` IMPORTADA, no una copia: este flag decide qué campañas se
+    // reclaman en ámbar, y reclamar con un criterio distinto del que después las cuenta es prometer
+    // un número que no va a moverse.
+    //
+    // Nació como un `||` y eso llenaba el cartel de publicaciones de Instagram promocionadas: Meta
+    // le arma una campaña a cada posteo y quedan `ACTIVE` para siempre aunque hace meses que no
+    // entregan. Eran 26 filas de $0 tapando las 5 que se llevaban toda la plata. ⛔ No filtrarlas
+    // por el nombre ni por el objetivo: el día que se promocione un posteo con plata de verdad, esa
+    // heurística esconde justo la que había que asignar. El gasto en la ventana no se puede fingir,
+    // y si una empieza a gastar vuelve sola al cartel.
+    sinAsignar.push({ ...c, sugerida: sugerirLinea(c.nombre), tuvoActividad: estaAlAire(c) });
   }
 
   return res.status(200).json({ ok: true, dias, cuentas, lineas, sinAsignar });

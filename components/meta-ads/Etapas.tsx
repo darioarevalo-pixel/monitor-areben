@@ -511,26 +511,48 @@ function GrillaLineas({ diagPorLinea, abierta, onAbrir }: {
 /**
  * Las campañas que todavía no tienen marca.
  *
- * ⚠️ **Su plata no la cuenta nadie.** Mientras haya campañas acá, todos los números de la grilla
- * están incompletos — y eso es a propósito: la versión anterior atribuía por cuenta publicitaria y,
- * como las tres marcas se pautean desde la misma cuenta, cualquier atribución automática le regalaba
- * a una la plata de las otras dos. Un número incompleto que se sabe incompleto es mejor que uno
- * completo que miente.
+ * ⚠️ **Su plata no la cuenta nadie.** Mientras haya campañas CON GASTO acá, todos los números de la
+ * grilla están incompletos — y eso es a propósito: la versión anterior atribuía por cuenta
+ * publicitaria y, como las tres marcas se pautean desde la misma cuenta, cualquier atribución
+ * automática le regalaba a una la plata de las otras dos. Un número incompleto que se sabe
+ * incompleto es mejor que uno completo que miente.
  *
- * Arranca sólo con las que tuvieron actividad: una campaña vieja y pausada sin gasto no mueve ningún
- * diagnóstico, así que no vale un click. El resto queda plegado.
+ * 🔑 **El ámbar se lo gana el gasto, no el estado.** `tuvoActividad` es `ACTIVE` **y** gasto > 0, la
+ * misma regla que «al aire». Con `ACTIVE` solo, las publicaciones de Instagram promocionadas —Meta
+ * le arma una campaña a cada posteo y quedan activas para siempre— llenaban el cartel de filas de
+ * $0: 26 tapando las 5 que se llevaban toda la plata. Las demás caen al plegable, donde se pueden
+ * asignar igual si alguien quiere; y si alguna vuelve a gastar, sube sola al cartel.
+ *
+ * 🔴 **Sin ninguna con gasto NO hay cartel ámbar.** El reclamo es por la plata que no está entrando
+ * a ningún diagnóstico; sin plata pendiente no hay nada que reclamar y un ámbar permanente sobre las
+ * dormidas enseña a ignorar el ámbar. Queda el plegable solo, en tono neutro.
  */
 function PendientesDeLinea({ campañas, correccion }: { campañas: CampañaSinLinea[]; correccion: Correccion }) {
   const [verTodas, setVerTodas] = useState(false)
   const activas = campañas.filter((c) => c.tuvoActividad)
   const dormidas = campañas.filter((c) => !c.tuvoActividad)
 
+  const plegable = dormidas.length > 0 && (
+    <Plegable
+      abierto={verTodas}
+      onToggle={() => setVerTodas((v) => !v)}
+      titulo={`${dormidas.length} sin gasto en la ventana`}
+      ayuda="Pausadas, o activas pero sin entregar nada —las publicaciones promocionadas quedan así—. No suman ni restan a ningún diagnóstico, así que asignarlas es opcional. Si alguna vuelve a gastar, aparece arriba sola."
+    >
+      <ListaPendientes campañas={dormidas} correccion={correccion} />
+    </Plegable>
+  )
+
+  if (activas.length === 0) {
+    return plegable ? <Card style={{ padding: space[3] }}>{plegable}</Card> : null
+  }
+
   return (
     <Notice tone="warning">
       <div style={{ fontWeight: weight.semibold }}>
         {activas.length === 1
-          ? 'Hay 1 campaña con actividad y sin marca asignada'
-          : `Hay ${activas.length} campañas con actividad y sin marca asignada`}
+          ? 'Hay 1 campaña gastando y sin marca asignada'
+          : `Hay ${activas.length} campañas gastando y sin marca asignada`}
       </div>
       <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
         Su plata no entra en ningún diagnóstico. Las tres marcas se pautean desde la misma cuenta
@@ -539,18 +561,9 @@ function PendientesDeLinea({ campañas, correccion }: { campañas: CampañaSinLi
         razonable estando mal.
       </div>
 
-      {activas.length > 0 && <ListaPendientes campañas={activas} correccion={correccion} />}
+      <ListaPendientes campañas={activas} correccion={correccion} />
 
-      {dormidas.length > 0 && (
-        <Plegable
-          abierto={verTodas}
-          onToggle={() => setVerTodas((v) => !v)}
-          titulo={`${dormidas.length} sin actividad`}
-          ayuda="Pausadas y sin gasto en la ventana: no suman ni restan a ningún diagnóstico, así que asignarlas es opcional."
-        >
-          <ListaPendientes campañas={dormidas} correccion={correccion} />
-        </Plegable>
-      )}
+      {plegable}
     </Notice>
   )
 }

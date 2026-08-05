@@ -8,7 +8,7 @@ import {
   RESUMEN_ETAPA,
   UMBRALES_ETAPA,
 } from '@/lib/meta-ads/etapas'
-import { OBJETIVOS_TRAFICO, OBJETIVOS_VENTA } from '@/lib/meta-ads/etapas.core.js'
+import { estaAlAire, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA } from '@/lib/meta-ads/etapas.core.js'
 import type { CampañaEtapa, Etapa } from '@/lib/meta-ads/tipos'
 
 /**
@@ -111,6 +111,20 @@ describe('qué cuenta como "al aire"', () => {
     expect(mofu.sinEntrega).toHaveLength(1)
     expect(bofu.alAire).toHaveLength(0)
     expect(bofu.sinEntrega).toHaveLength(0)
+  })
+
+  /**
+   * El censo del servidor (`api/meta-ads.js`) usa ESTA función para decidir qué campañas sin marca
+   * se reclaman en ámbar. Si las dos reglas se separan, la pantalla reclama campañas que después no
+   * cuenta: pasó con un `||` que metía en el cartel las publicaciones de Instagram promocionadas
+   * —Meta le arma una campaña a cada posteo y quedan `ACTIVE` para siempre—, 26 filas de $0 tapando
+   * las 5 que se llevaban toda la plata.
+   */
+  it('la misma regla la exporta el core, que es lo que importa el endpoint', () => {
+    const promocionada = camp({ objetivo: 'OUTCOME_TRAFFIC', estado: 'ACTIVE', spend: 0 })
+    expect(estaAlAire(promocionada)).toBe(false)
+    expect(estaAlAire(camp({ objetivo: 'OUTCOME_TRAFFIC', estado: 'PAUSED', spend: 5000 }))).toBe(false)
+    expect(estaAlAire(camp({ objetivo: 'OUTCOME_TRAFFIC', estado: 'ACTIVE', spend: 1 }))).toBe(true)
   })
 })
 
