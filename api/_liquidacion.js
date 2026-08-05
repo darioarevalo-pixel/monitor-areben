@@ -2,6 +2,7 @@
 //
 //   GET  ?recurso=liquidacion&store=bdi|zattia            → las campañas, con sus conteos
 //   GET  ?recurso=liquidacion&store=…&liq=<id>            → los ítems de una campaña
+//   GET  ?recurso=liquidacion&store=…&liq=<id>&solo=pids  → qué pid ya está y en qué estado
 //   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,desde,hasta,nota} }
 //   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
@@ -139,6 +140,23 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const liq = String(req.query.liq || '');
+
+      // Análisis pregunta "de estos productos, ¿cuáles ya mandé a esta campaña?". La respuesta son
+      // dos columnas por ítem, no la foto congelada entera: la tabla de productos sólo necesita
+      // atenuar la fila y decir en qué estado quedó. Mismo criterio que los conteos de acá abajo.
+      if (liq && String(req.query.solo || '') === 'pids') {
+        const [c, i] = await Promise.all([
+          supabase.from('liquidaciones').select('id, nombre, estado')
+            .eq('store', store).eq('id', liq).maybeSingle(),
+          supabase.from('liquidacion_items').select('pid, estado').eq('store', store).eq('liq_id', liq),
+        ]);
+        if (c.error) throw new Error(c.error.message);
+        if (i.error) throw new Error(i.error.message);
+        if (!c.data) return res.status(404).json({ error: 'La campaña no existe.' });
+        const pids = {};
+        for (const it of i.data || []) pids[it.pid] = it.estado;
+        return res.status(200).json({ ok: true, campania: c.data, pids, puede });
+      }
 
       if (liq) {
         const { data, error } = await supabase.from('liquidacion_items')

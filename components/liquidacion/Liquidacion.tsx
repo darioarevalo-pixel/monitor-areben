@@ -40,8 +40,10 @@
  * único control posible sobre una carga manual de cuarenta productos.
  */
 
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { puedeVer } from '@/lib/permisos'
 import {
   avisos, contar, nuevoIdLiquidacion, resumenCampania,
   type EstadoCampania, type EstadoItem, type Liquidacion as Campania, type LiquidacionItem,
@@ -292,9 +294,10 @@ function DetalleCampania({
   onEditar: () => void
   onCambio: () => void
 }) {
-  const { marca } = useSesion()
+  const { marca, perfil } = useSesion()
   const { confirmar } = useConfirmar()
   const toast = useToast()
+  const router = useRouter()
 
   const [items, setItems] = useState<LiquidacionItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -439,6 +442,20 @@ function DetalleCampania({
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
+          {/*
+            La otra puerta del "modo campaña". Una campaña no se arma de una sentada: se vuelve a
+            Análisis varias veces con filtros distintos, y hasta ahora no había forma de saber qué
+            ya se había mandado. Esto es sólo la navegación —el marcado lo hace `useCampaniaAbierta`
+            del otro lado—, y por eso la campaña viaja en la URL.
+
+            Se esconde sin el permiso de Análisis → Por producto: el shell rebota a Inicio a quien
+            no lo tenga (`app/[[...seccion]]/page.tsx`), así que el botón sería una trampa.
+          */}
+          {campania.estado !== 'cerrada' && puedeVer(perfil, marca, 'productos') && (
+            <Button variant="ghost" size="sm" onClick={() => router.push(`/productos?liq=${encodeURIComponent(campania.id)}`)}>
+              Agregar productos
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onEditar}>Editar</Button>
           {campania.estado === 'borrador' && (
             <Button variant="soft" tone="brand" size="sm" onClick={() => void cambiarEstado('en_curso')}>

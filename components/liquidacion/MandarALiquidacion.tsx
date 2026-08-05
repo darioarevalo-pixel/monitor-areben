@@ -23,7 +23,20 @@ import {
   Button, Field, Input, Modal, Notice, Select, useToast, color, font, space,
 } from '@/components/ui'
 
-export function MandarALiquidacion({ seleccion, onListo }: { seleccion: Producto[]; onListo: () => void }) {
+export function MandarALiquidacion({
+  seleccion,
+  onListo,
+  liqFijada,
+}: {
+  seleccion: Producto[]
+  onListo: () => void
+  /**
+   * La campaña activa del "modo campaña" de Análisis. Con esto puesto **no se elige destino**: ya
+   * estás adentro de una campaña, y ofrecer el selector es la forma de mandarle cuarenta productos
+   * a la equivocada. Sin la prop, el modal se comporta igual que siempre.
+   */
+  liqFijada?: { id: string; nombre: string } | null
+}) {
   const { marca } = useSesion()
   const toast = useToast()
 
@@ -39,6 +52,12 @@ export function MandarALiquidacion({ seleccion, onListo }: { seleccion: Producto
   async function abrir() {
     setAbierto(true)
     setError(null)
+    // Con la campaña fijada no hay nada que elegir: no se piden las campañas.
+    if (liqFijada) {
+      setCampanias([])
+      setElegida(liqFijada.id)
+      return
+    }
     setCampanias(null)
     try {
       const d = await leerCampanias(marca)
@@ -96,17 +115,18 @@ export function MandarALiquidacion({ seleccion, onListo }: { seleccion: Producto
 
   const esNueva = elegida === 'nueva'
   const sinCosto = seleccion.filter((p) => p.sinCosto).length
+  const rotuloBoton = liqFijada ? `Mandar a ${liqFijada.nombre}` : 'Mandar a liquidación'
 
   return (
     <>
       <Button variant="soft" tone="brand" onClick={() => void abrir()} disabled={!seleccion.length}>
-        Mandar a liquidación{seleccion.length ? ` (${seleccion.length})` : ''}
+        {rotuloBoton}{seleccion.length ? ` (${seleccion.length})` : ''}
       </Button>
 
       <Modal
         abierto={abierto}
         onCerrar={() => setAbierto(false)}
-        titulo={`Mandar ${seleccion.length} ${seleccion.length === 1 ? 'producto' : 'productos'} a liquidación`}
+        titulo={`Mandar ${seleccion.length} ${seleccion.length === 1 ? 'producto' : 'productos'} a ${liqFijada ? liqFijada.nombre : 'liquidación'}`}
         pie={
           <>
             <Button variant="ghost" onClick={() => setAbierto(false)}>Cancelar</Button>
@@ -128,16 +148,18 @@ export function MandarALiquidacion({ seleccion, onListo }: { seleccion: Producto
           <div style={{ color: color.mut, fontSize: font.sm }}>Buscando las campañas…</div>
         ) : (
           <>
-            <Field label="¿A qué campaña?">
-              <Select value={elegida} onChange={(e) => setElegida(e.target.value)} data-foco>
-                {campanias.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} ({c.conteo.total} {c.conteo.total === 1 ? 'producto' : 'productos'})
-                  </option>
-                ))}
-                <option value="nueva">➕ Campaña nueva…</option>
-              </Select>
-            </Field>
+            {!liqFijada && (
+              <Field label="¿A qué campaña?">
+                <Select value={elegida} onChange={(e) => setElegida(e.target.value)} data-foco>
+                  {campanias.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre} ({c.conteo.total} {c.conteo.total === 1 ? 'producto' : 'productos'})
+                    </option>
+                  ))}
+                  <option value="nueva">➕ Campaña nueva…</option>
+                </Select>
+              </Field>
+            )}
 
             {esNueva && (
               <Field label="Nombre de la campaña" hint="El que la va a identificar dentro de seis meses: «Sale invierno ago-2026».">

@@ -9,6 +9,8 @@ import { asegurarTnPromo, useTnImages } from '@/components/productos/useTnImages
 import { generarReporteSale } from '@/components/productos/reporteSale'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
+import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
+import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
 import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
@@ -33,6 +35,7 @@ import {
   FilterBar,
   MenuMulti,
   MiniBar,
+  Notice,
   Paginacion,
   Select,
   TBody,
@@ -43,8 +46,10 @@ import {
   Tr,
   color,
   font,
+  radius,
   space,
   useFiltroUrl,
+  useToast,
 } from '@/components/ui'
 
 /**
@@ -65,13 +70,31 @@ import {
 
 type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifespan' | 'stock'
 
+/** Cómo se ve un producto que ya está en la campaña activa. `aplicado` no llega desde acá. */
+const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
+  pendiente: 'ya está · sin definir',
+  definido: 'ya está · con precio',
+  descartado: 'ya está · descartado',
+  aplicado: 'ya está · aplicado',
+}
+
 export function ProductosTable() {
   const { datos, error, progreso, origen } = useDatosMonitor()
   const { marca } = useSesion()
   const tnIdx = useTnImages(marca)
+  const toast = useToast()
+
+  /**
+   * El "modo campaña": con una campaña de liquidación activa, la tabla marca qué productos ya se
+   * mandaron. Una campaña se arma en varias vueltas con filtros distintos, y sin esto la segunda
+   * vuelta se ve idéntica a la primera. Se entra por el selector de acá abajo o desde el botón
+   * «Agregar productos» de la campaña, que navega con `?liq=<id>`.
+   */
+  const camp = useCampaniaAbierta(marca)
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
+  const [enCampania, setEnCampania] = useState<'' | 'faltan' | 'estan'>('')
   const [proveedor, setProveedor] = useState('')
   const [ingresos, setIngresos] = useState<Set<string>>(new Set())
   const [ocultarSinStock, setOcultarSinStock] = useState(false)
@@ -90,7 +113,7 @@ export function ProductosTable() {
 
   // Volver a la página 1 cuando cambia el conjunto filtrado (el legacy resetea pageState
   // en cada handler de filtro). Un effect sobre la firma de los filtros.
-  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}`
+  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}|${camp.liq}|${enCampania}`
   const primeraRef = useRef(true)
   useEffect(() => {
     if (primeraRef.current) {
@@ -100,10 +123,22 @@ export function ProductosTable() {
     setPage(1)
   }, [firmaFiltros])
 
-  const filtrada = useMemo(
+  // Los seis filtros de siempre. El de campaña se aplica aparte porque los contadores de la barra
+  // se cuentan sobre esto: filtrando por "sin mandar", "N de M ya están" se leería siempre 0 de M.
+  const filtradaBase = useMemo(
     () => filtrarProductos(productos, { busqueda, estado, proveedor, ingresos, ocultarSinStock }),
     [productos, busqueda, estado, proveedor, ingresos, ocultarSinStock],
   )
+
+  const porFaltar = useMemo(
+    () => (camp.liq ? faltantes(filtradaBase, camp.yaEstan) : filtradaBase),
+    [camp.liq, filtradaBase, camp.yaEstan],
+  )
+
+  const filtrada = useMemo(() => {
+    if (!camp.liq || !enCampania) return filtradaBase
+    return enCampania === 'faltan' ? porFaltar : filtradaBase.filter((p) => camp.yaEstan[p.id])
+  }, [camp.liq, camp.yaEstan, enCampania, filtradaBase, porFaltar])
 
   // El legacy pisa `lifespan` con el valor del modo (sentinel si no hay dato) ANTES de
   // ordenar, así la columna "Vida útil" ordena por el modo elegido. Se replica sobre una
@@ -124,6 +159,23 @@ export function ProductosTable() {
       setDir(-1)
     }
     setPage(1)
+  }
+
+  /**
+   * Marca de una vez todos los del filtro actual que **no** están en la campaña.
+   *
+   * Suma a lo que ya haya marcado en vez de reemplazarlo: la selección sobrevive a filtros a
+   * propósito, y armar un sale es justamente ir juntando de a tandas (los de declive, después los
+   * dormidos de tal proveedor). El tope se avisa **antes**, con el número: sin esto, el error
+   * llegaría del servidor recién después de armar las trescientas fotos congeladas.
+   */
+  function marcarLosQueFaltan() {
+    const total = new Set([...outletSel, ...porFaltar.map((p) => p.id)])
+    if (total.size > TOPE_SUMAR) {
+      toast.error(`Quedarían ${total.size} marcados y el tope por vez es ${TOPE_SUMAR}. Achicá el filtro y andá por tandas.`)
+      return
+    }
+    setOutletSel(total)
   }
 
   function toggleOutlet(id: string, on: boolean) {
@@ -168,7 +220,13 @@ export function ProductosTable() {
             */}
             <MandarALiquidacion
               seleccion={productos.filter((p) => outletSel.has(p.id))}
-              onListo={() => setOutletSel(new Set())}
+              liqFijada={camp.campania}
+              onListo={() => {
+                setOutletSel(new Set())
+                // Sin esto, los que acaban de entrar seguirían viéndose como disponibles hasta
+                // recargar — que es exactamente el problema que este modo vino a resolver.
+                camp.recargar()
+              }}
             />
             <Button variant="solid" tone="brand" onClick={() => void generarSale()} loading={generando} disabled={!outletSel.size}>
               Generar sale{outletSel.size ? ` (${outletSel.size})` : ''}
@@ -212,7 +270,80 @@ export function ProductosTable() {
               <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
               Ocultar sin stock
             </label>
+
+            {/*
+              La lista de campañas se pide al tocar el selector, no al montar la tabla: casi ninguna
+              visita a "Por producto" va a liquidar algo, y sería un request por visita. Con `?liq=`
+              en la URL la campaña activa ya vino con su nombre, así que se puede dibujar sin lista.
+            */}
+            <Select
+              value={camp.liq}
+              onFocus={camp.pedirAbiertas}
+              onMouseDown={camp.pedirAbiertas}
+              onChange={(e) => camp.entrar(e.target.value)}
+              style={{ width: 230 }}
+              aria-label="Campaña de liquidación"
+            >
+              <option value="">Sin campaña</option>
+              {/* La activa se dibuja aunque la lista todavía no esté: si no, el selector se vería
+                  en "Sin campaña" mientras la tabla ya está marcando productos. */}
+              {camp.liq && !(camp.abiertas || []).some((c) => c.id === camp.liq) && (
+                <option value={camp.liq}>{camp.campania?.nombre || 'Cargando…'}</option>
+              )}
+              {(camp.abiertas || []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} ({c.conteo.total})
+                </option>
+              ))}
+            </Select>
+
+            {camp.liq && (
+              <Select
+                value={enCampania}
+                onChange={(e) => setEnCampania(e.target.value as '' | 'faltan' | 'estan')}
+                style={{ width: 190 }}
+                aria-label="Ya está en la campaña"
+              >
+                <option value="">Todos ({filtradaBase.length})</option>
+                <option value="faltan">Sin mandar ({porFaltar.length})</option>
+                <option value="estan">Ya en la campaña ({filtradaBase.length - porFaltar.length})</option>
+              </Select>
+            )}
           </FilterBar>
+
+          {camp.error && <Notice tone="warning" style={{ marginBottom: space[3] }}>{camp.error}</Notice>}
+
+          {camp.campania && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: space[3],
+                flexWrap: 'wrap',
+                marginBottom: space[3],
+                padding: '8px 12px',
+                background: color.bg2,
+                border: `1px solid ${color.line}`,
+                borderRadius: radius.lg,
+                fontSize: font.base,
+                color: color.ink,
+              }}
+            >
+              <span>
+                Sumando a <b>{camp.campania.nombre}</b>
+                <span style={{ color: color.mut }}>
+                  {' · '}
+                  {filtradaBase.length - porFaltar.length} de {filtradaBase.length} de este filtro ya están
+                </span>
+              </span>
+              <Button size="sm" variant="soft" tone="brand" onClick={marcarLosQueFaltan} disabled={!porFaltar.length}>
+                Marcar los que faltan ({porFaltar.length})
+              </Button>
+              <Button size="sm" variant="ghost" onClick={camp.salir} style={{ marginLeft: 'auto' }}>
+                Salir de la campaña
+              </Button>
+            </div>
+          )}
 
           {/* La selección sobrevive a filtros y páginas: si no se dice, se termina
               generando un PDF con productos que ya no están a la vista. */}
@@ -270,6 +401,7 @@ export function ProductosTable() {
                       tnIdx={tnIdx}
                       datos={d}
                       marcado={outletSel.has(p.id)}
+                      yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
                       onMarcar={(on) => toggleOutlet(p.id, on)}
                       expandido={expandido === p.id}
                       onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
@@ -296,6 +428,7 @@ function FilaProducto({
   tnIdx,
   datos,
   marcado,
+  yaEsta,
   onMarcar,
   expandido,
   onToggle,
@@ -306,6 +439,8 @@ function FilaProducto({
   tnIdx: IndiceTn | null
   datos: DatosETL
   marcado: boolean
+  /** En qué estado está este producto dentro de la campaña activa, si está. */
+  yaEsta?: EstadoItem
   onMarcar: (on: boolean) => void
   expandido: boolean
   onToggle: () => void
@@ -314,9 +449,18 @@ function FilaProducto({
   const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ')
   const lsStr = formatLifespan(lifespanDaysByMode(p, modoVU), p.stock)
   const foto = tnIdx ? imagenDe(p, tnIdx) : null
+  // Se atenúa pero **el checkbox sigue vivo**: el mismo tilde alimenta "Generar sale", y un
+  // producto que ya está en la campaña puede querer salir igual en el PDF. Mandarlo dos veces no
+  // rompe nada — `sumar-items` no pisa lo que ya está y avisa cuántos ya estaban.
   return (
     <>
-      <Tr onClick={onToggle} style={expandido ? { background: color.brandBg } : undefined}>
+      <Tr
+        onClick={onToggle}
+        style={{
+          ...(expandido ? { background: color.brandBg } : null),
+          ...(yaEsta && !marcado ? { opacity: 0.55 } : null),
+        }}
+      >
         <Td align="center" style={{ cursor: 'default' }}>
           <span onClick={(e) => e.stopPropagation()}>
             <input
@@ -363,6 +507,11 @@ function FilaProducto({
         <Td tall style={{ maxWidth: 240 }}>
           <div style={{ fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
           {meta ? <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 1 }}>{meta}</div> : null}
+          {yaEsta && (
+            <div style={{ fontSize: font.xs, color: yaEsta === 'descartado' ? color.mut2 : color.brand, marginTop: 2 }}>
+              {ROTULO_EN_CAMPANIA[yaEsta]}
+            </div>
+          )}
         </Td>
         <Td tall style={{ color: color.mut }}>
           {p.lastSale || <span style={{ color: color.mut2 }}>Sin ventas</span>}

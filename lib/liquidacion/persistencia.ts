@@ -50,6 +50,26 @@ export async function leerItems(store: Marca, liqId: string): Promise<Liquidacio
   return (d.items || []) as LiquidacionItem[]
 }
 
+/** Lo que la campaña tiene, en dos columnas: qué pid ya está y en qué estado quedó. */
+export interface PidsCampania {
+  campania: { id: string; nombre: string; estado: EstadoCampania }
+  pids: Record<string, EstadoItem>
+}
+
+/**
+ * Lo mismo que `leerItems` pero sin las fotos congeladas, para la tabla de Análisis.
+ *
+ * Análisis no pregunta "¿qué decidí?" sino "¿cuáles ya mandé?": con el pid y el estado alcanza para
+ * atenuar la fila. Bajar el ítem entero sería traer cuarenta fotos con ventas, stock y costo para
+ * dibujar un chip.
+ */
+export async function leerPidsCampania(store: Marca, liqId: string): Promise<PidsCampania> {
+  const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&solo=pids&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer qué productos ya están en la campaña.')
+  return { campania: d.campania, pids: (d.pids || {}) as Record<string, EstadoItem> }
+}
+
 export async function crearCampania(
   store: Marca,
   campania: { id: string; nombre: string; desde?: string | null; hasta?: string | null; nota?: string | null },

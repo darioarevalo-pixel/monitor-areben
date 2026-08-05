@@ -9,7 +9,7 @@
 
 import { armarItemSale, redondear90 } from '@/lib/comisiones/core'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
-import type { Aviso, ConteoCampania, DecisionItem, LiquidacionItem } from './tipos'
+import type { Aviso, ConteoCampania, DecisionItem, EstadoItem, LiquidacionItem } from './tipos'
 
 /** Id de campaña. Se genera en el cliente, como en `disenos` y el calendario. */
 export function nuevoIdLiquidacion(): string {
@@ -190,6 +190,26 @@ export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
 /** Los que están listos para escribirle el precio a Gestión Nube (tanda 3). */
 export function itemsAplicables(items: LiquidacionItem[]): LiquidacionItem[] {
   return items.filter((i) => i.estado === 'definido' && (i.decision.precioSale || 0) > 0)
+}
+
+/**
+ * El tope de un "Mandar a liquidación", espejo del que hace cumplir `api/_liquidacion.js`.
+ *
+ * Vive acá además de allá para poder avisar **antes** de mandar: sin esto, marcar de una tanda
+ * trescientos productos filtrados termina en un 400 después de armar las trescientas fotos, y lo
+ * que se ve es un error rojo en vez de un número.
+ */
+export const TOPE_SUMAR = 200
+
+/**
+ * De estos productos, los que **todavía no están** en la campaña.
+ *
+ * 🔑 Un producto descartado cuenta como presente. Ya se lo miró y se dijo que no: volver a
+ * ofrecerlo es pedir la misma decisión de nuevo, y es exactamente lo que el estado `descartado`
+ * existe para evitar (ver el docblock de `EstadoItem`).
+ */
+export function faltantes<T extends { id: string }>(productos: T[], yaEstan: Record<string, EstadoItem>): T[] {
+  return productos.filter((p) => !yaEstan[p.id])
 }
 
 /**

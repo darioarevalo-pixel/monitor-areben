@@ -6,11 +6,12 @@ import {
   contar,
   decidirItem,
   despejarItem,
+  faltantes,
   itemsAplicables,
   precioDeSale,
   resumenCampania,
 } from '@/lib/liquidacion'
-import type { LiquidacionItem } from '@/lib/liquidacion'
+import type { EstadoItem, LiquidacionItem } from '@/lib/liquidacion'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
 
 /**
@@ -264,5 +265,30 @@ describe('itemsAplicables', () => {
     const aplicado = { ...definido, pid: 'd', estado: 'aplicado' as const }
 
     expect(itemsAplicables([definido, pendiente, descartado, aplicado]).map((i) => i.pid)).toEqual(['a'])
+  })
+})
+
+describe('faltantes', () => {
+  const productos = [prod({ id: 'a' }), prod({ id: 'b' }), prod({ id: 'c' })]
+
+  it('sin campaña (mapa vacío) faltan todos', () => {
+    expect(faltantes(productos, {}).map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('saca los que ya están, sea cual sea su estado', () => {
+    const ya: Record<string, EstadoItem> = { a: 'pendiente', b: 'definido' }
+    expect(faltantes(productos, ya).map((p) => p.id)).toEqual(['c'])
+  })
+
+  it('🔑 un descartado cuenta como presente: ya se lo miró y se dijo que no', () => {
+    expect(faltantes(productos, { a: 'descartado' }).map((p) => p.id)).toEqual(['b', 'c'])
+  })
+
+  it('con todos adentro no falta ninguno', () => {
+    expect(faltantes(productos, { a: 'pendiente', b: 'definido', c: 'aplicado' })).toEqual([])
+  })
+
+  it('un pid de la campaña que ya no está en el ETL no inventa un producto', () => {
+    expect(faltantes(productos, { z: 'definido' }).map((p) => p.id)).toEqual(['a', 'b', 'c'])
   })
 })
