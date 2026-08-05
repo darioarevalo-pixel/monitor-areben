@@ -98,15 +98,21 @@ export function Etapas() {
 
   // Ya no viaja la marca: el censo es el mismo para las tres líneas (una sola cuenta publicitaria)
   // y el servidor devuelve sólo las que este perfil puede ver.
-  const key = `${dias}`
+  //
+  // `pedido` es lo que hace recargable a este censo: pedirlo de nuevo tiene que ser un cambio de
+  // DEPENDENCIA del efecto, no un borrado del resultado. Vaciar `r` deja la pantalla en «cargando»
+  // sin que salga ningún fetch —el efecto sólo miraba `dias`—, y eso es exactamente lo que dejaba
+  // el panel colgado después de asignar una campaña.
+  const [pedido, setPedido] = useState(0)
+  const key = `${dias}|${pedido}`
   useEffect(() => {
     let vivo = true
     traerEtapas(dias).then((res) => {
       if (!vivo) return
-      setR({ key: `${dias}`, e: res.ok ? { fase: 'ok', data: res.dato } : { fase: 'error', motivo: res.motivo } })
+      setR({ key: `${dias}|${pedido}`, e: res.ok ? { fase: 'ok', data: res.dato } : { fase: 'error', motivo: res.motivo } })
     })
     return () => { vivo = false }
-  }, [dias])
+  }, [dias, pedido])
 
   const estado: Cargable<RespuestaEtapas> = !r || r.key !== key ? { fase: 'cargando' } : r.e
   const fechas = useFechas(marca)
@@ -178,7 +184,7 @@ export function Etapas() {
   const recargarFunnel = funnel.recargar
   const recargarTodo = useCallback(() => {
     recargarFunnel()
-    setR(null)
+    setPedido((p) => p + 1)
   }, [recargarFunnel])
 
   // Se pregunta por la marca de la LÍNEA, no por la de la sesión: alguien parado en BDI que también
