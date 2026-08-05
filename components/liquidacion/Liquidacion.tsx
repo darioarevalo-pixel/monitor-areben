@@ -27,9 +27,10 @@
  *     costo cero**: con costo cero cualquier precio parece tener 100% de margen. En julio de 2026,
  *     428 productos de BDI quedaron costando cero en silencio. La grilla lo marca en la fila.
  *
- * ▶️ **Tanda 1 de 4.** Esto es el cajón: crear la campaña, mandarle productos, verlos y moverles el
- * estado. Ponerle el precio a cada uno es el modal de la tanda 2 (con el simulador de margen y
- * ←/→ para pasar al siguiente), y escribir el precio en Gestión Nube, la tanda 3.
+ * ▶️ **Tandas 1 y 2 de 4.** Esto es el cajón —crear la campaña, mandarle productos, verlos y
+ * moverles el estado— más el modal que le pone el precio a cada uno con el simulador de margen al
+ * lado (`DefinirPrecio.tsx`, y ←/→ para pasar al siguiente sin cerrar). Escribir esos precios en
+ * Gestión Nube es la tanda 3, y qué se vendió de lo liquidado, la 4.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -39,9 +40,10 @@ import {
   type EstadoCampania, type EstadoItem, type Liquidacion as Campania, type LiquidacionItem,
 } from '@/lib/liquidacion'
 import {
-  borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, leerCampanias, leerItems,
-  quitarItem, renombrarCampania, type Permisos,
+  borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, guardarItem, leerCampanias,
+  leerItems, quitarItem, renombrarCampania, type Permisos,
 } from '@/lib/liquidacion/persistencia'
+import { DefinirPrecio } from './DefinirPrecio'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
@@ -290,6 +292,14 @@ function DetalleCampania({
   const [error, setError] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [filtro, setFiltro] = useFiltroUrl<string>('f', '')
+  /**
+   * Qué producto está abierto en el modal, y en qué orden se recorren.
+   *
+   * 🔑 **El orden se congela al abrir.** La grilla ordena por estado (primero lo que falta
+   * decidir), así que guardar un precio mueve la fila de lugar: si el ←/→ leyera la lista viva, el
+   * "siguiente" sería otro producto cada vez que se guarda uno y se terminaría saltando la mitad.
+   */
+  const [definiendo, setDefiniendo] = useState<{ orden: string[]; i: number } | null>(null)
 
   const cargar = useCallback(async () => {
     setError(null)
@@ -330,6 +340,53 @@ function DetalleCampania({
       onCambio()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cambiar el estado.')
+    }
+  }
+
+  /**
+   * El producto que está abierto en el modal, buscado por pid en la lista viva: el `orden` guarda
+   * pid y no el ítem entero, así lo que se ve es lo último que contestó el servidor.
+   *
+   * Si no aparece —lo sacó otra persona mientras estaba abierto— el modal no se dibuja, que es lo
+   * mismo que cerrarlo. Se resuelve al dibujar y no con un efecto: un efecto que hace `setState`
+   * es una cascada de renders (y el lint del repo lo prohíbe).
+   */
+  const enModal = useMemo(() => {
+    if (!definiendo || !items) return null
+    return items.find((x) => x.pid === definiendo.orden[definiendo.i]) || null
+  }, [definiendo, items])
+
+  function irAlIndice(i: number) {
+    setDefiniendo((d) => (d && i >= 0 && i < d.orden.length ? { ...d, i } : d))
+  }
+
+  /**
+   * Descartar o volver a la pila desde el modal. Descartar **pasa al siguiente**: es una decisión
+   * tomada sobre ese producto y quedarse mirándolo no sirve para nada.
+   */
+  async function estadoDesdeModal(item: LiquidacionItem, estado: 'descartado' | 'pendiente') {
+    await moverEstado(item, estado)
+    if (estado !== 'descartado' || !definiendo) return
+    if (definiendo.i >= definiendo.orden.length - 1) setDefiniendo(null)
+    else irAlIndice(definiendo.i + 1)
+  }
+
+  /** Guarda la decisión de un producto. `seguir` pasa al que viene sin cerrar el modal. */
+  async function guardarDecision(item: LiquidacionItem, seguir: boolean) {
+    try {
+      await guardarItem(marca, campania.id, item)
+      await cargar()
+      onCambio()
+      if (!seguir) return void toast.ok(item.decision.precioSale ? 'Precio guardado.' : 'Precio borrado.')
+      const ultimo = !definiendo || definiendo.i >= definiendo.orden.length - 1
+      if (ultimo) {
+        setDefiniendo(null)
+        toast.ok('Era el último de la lista.')
+      } else {
+        irAlIndice(definiendo.i + 1)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el precio.')
     }
   }
 
@@ -455,11 +512,12 @@ function DetalleCampania({
                 </Tr>
               </THead>
               <TBody>
-                {visibles.map((i) => (
+                {visibles.map((i, n) => (
                   <FilaItem
                     key={i.pid}
                     item={i}
                     puedeMover={campania.estado !== 'cerrada'}
+                    onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
@@ -470,30 +528,45 @@ function DetalleCampania({
           )}
 
           {/*
-            El precio se pone en el modal producto por producto (tanda 2) y se escribe en Gestión
-            Nube en la 3. Decirlo acá es más honesto que dejar una pantalla que se ve terminada y
-            no hace lo que promete el nombre.
+            Escribir el precio en Gestión Nube es la tanda 3. Decirlo acá es más honesto que dejar
+            una pantalla que se ve terminada y no hace lo que promete el nombre.
           */}
           <Card style={{ marginTop: space[5], background: color.bg2 }}>
             <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.6 }}>
-              Definir el precio de cada producto con el simulador de margen al lado es lo que sigue
-              (tanda 2), y escribirlo en Gestión Nube, lo de después (tanda 3
+              Los precios decididos todavía <b>no están puestos en la tienda</b>: escribirlos en
+              Gestión Nube es el paso que sigue (tanda 3
               {puede.aplicar ? '' : ' — y pide el permiso «Puede escribir los precios en Gestión Nube»'}).
-              Por ahora la campaña sirve para juntar los productos, verlos con los números del día en
-              que entraron y descartar los que no van.
+              Hasta entonces, la campaña es la decisión tomada y compartida, no el precio aplicado.
             </div>
           </Card>
         </>
+      )}
+
+      {enModal && definiendo && (
+        <DefinirPrecio
+          // Remonta al pasar de producto: el formulario nace del ítem, sin efectos que lo rellenen.
+          key={enModal.pid}
+          item={enModal}
+          posicion={definiendo.i + 1}
+          total={definiendo.orden.length}
+          puedeEditar={campania.estado !== 'cerrada'}
+          onAnterior={definiendo.i > 0 ? () => irAlIndice(definiendo.i - 1) : null}
+          onSiguiente={definiendo.i < definiendo.orden.length - 1 ? () => irAlIndice(definiendo.i + 1) : null}
+          onGuardar={guardarDecision}
+          onEstado={(estado) => estadoDesdeModal(enModal, estado)}
+          onCerrar={() => setDefiniendo(null)}
+        />
       )}
     </>
   )
 }
 
 function FilaItem({
-  item, puedeMover, onDescartar, onVolver, onQuitar,
+  item, puedeMover, onDefinir, onDescartar, onVolver, onQuitar,
 }: {
   item: LiquidacionItem
   puedeMover: boolean
+  onDefinir: () => void
   onDescartar: () => void
   onVolver: () => void
   onQuitar: () => void
@@ -503,7 +576,7 @@ function FilaItem({
   const apagado = item.estado === 'descartado'
 
   return (
-    <Tr style={apagado ? { opacity: 0.55 } : undefined}>
+    <Tr onClick={onDefinir} style={apagado ? { opacity: 0.55 } : undefined}>
       <Td style={{ width: 48 }}>
         {item.foto.imagen ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -539,16 +612,23 @@ function FilaItem({
       <Td align="right">{item.foto.stock}</Td>
       <Td align="right">{item.foto.ventas90}</Td>
       <Td><StatusPill tone={rot.tono} label={rot.label} /></Td>
+      {/*
+        El `onClick` del kit no recibe el evento (`() => void`), así que el corte de la propagación
+        va en un span nativo: sin esto, descartar una fila abre además el modal de precio.
+      */}
       <Td align="right" style={{ whiteSpace: 'nowrap' }}>
+        <Button variant="soft" tone="brand" size="sm" onClick={onDefinir}>
+          {item.decision.precioSale ? 'Ver' : 'Definir'}
+        </Button>
         {puedeMover && item.estado !== 'aplicado' && (
-          <>
+          <span onClick={(e) => e.stopPropagation()}>
             {item.estado === 'descartado' ? (
               <Button variant="ghost" size="sm" onClick={onVolver}>Volver a la pila</Button>
             ) : (
               <Button variant="ghost" size="sm" onClick={onDescartar}>Descartar</Button>
             )}
             <Button variant="ghost" tone="danger" size="sm" onClick={onQuitar}>Sacar</Button>
-          </>
+          </span>
         )}
       </Td>
     </Tr>

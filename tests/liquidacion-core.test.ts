@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  anotarItem,
   armarItemDesdeProducto,
   avisos,
   contar,
   decidirItem,
   despejarItem,
   itemsAplicables,
+  precioDeSale,
   resumenCampania,
 } from '@/lib/liquidacion'
 import type { LiquidacionItem } from '@/lib/liquidacion'
@@ -120,6 +122,43 @@ describe('decidirItem', () => {
     expect(vuelto.estado).toBe('pendiente')
     expect(vuelto.decision.precioSale).toBeNull()
     expect(vuelto.decision.nota).toBe('ojo con el color')
+  })
+})
+
+describe('precioDeSale', () => {
+  it('es la MISMA regla que usa decidirItem: lo que el modal muestra es lo que se guarda', () => {
+    const base = armarItemDesdeProducto(prod())
+    for (const entrada of [{ pctDesc: 30 }, { pctDesc: 45.5 }, { precioSale: 34500 }, { precioSale: 12000.4 }]) {
+      expect(precioDeSale(base.foto.precioNormal, entrada)).toBe(decidirItem(base, entrada).decision.precioSale)
+    }
+  })
+
+  it('por porcentaje termina en 90 y por precio no se toca', () => {
+    expect(precioDeSale(49900, { pctDesc: 30 })).toBe(34890)
+    expect(precioDeSale(49900, { precioSale: 34500 })).toBe(34500)
+  })
+})
+
+describe('anotarItem', () => {
+  it('la nota va aparte de la decisión: se puede anotar uno sin precio', () => {
+    const i = anotarItem(armarItemDesdeProducto(prod()), '  fuera de temporada  ')
+    expect(i.decision.nota).toBe('fuera de temporada')
+    expect(i.decision.precioSale).toBeNull()
+    expect(i.estado).toBe('pendiente')
+  })
+
+  it('vaciar el campo deja null, no una cadena vacía (la grilla pregunta por null)', () => {
+    const conNota = anotarItem(armarItemDesdeProducto(prod()), 'algo')
+    expect(anotarItem(conNota, '   ').decision.nota).toBeNull()
+    expect(anotarItem(conNota, null).decision.nota).toBeNull()
+  })
+
+  it('no muta el original ni le toca el precio decidido', () => {
+    const decidido = decidirItem(armarItemDesdeProducto(prod()), { pctDesc: 30 })
+    const anotado = anotarItem(decidido, 'quedan 3')
+    expect(decidido.decision.nota).toBeNull()
+    expect(anotado.decision.precioSale).toBe(decidido.decision.precioSale)
+    expect(anotado.estado).toBe('definido')
   })
 })
 

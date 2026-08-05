@@ -87,9 +87,7 @@ export function decidirItem(
   quien?: string | null,
 ): LiquidacionItem {
   const { costo, precioNormal, nombre, sku } = item.foto
-  const precio = 'precioSale' in entrada
-    ? Math.round(entrada.precioSale)
-    : redondear90(precioNormal * (1 - entrada.pctDesc / 100))
+  const precio = precioDeSale(precioNormal, entrada)
 
   const calc = armarItemSale({ id: item.pid, name: nombre, sku }, precio, costo, precioNormal)
 
@@ -106,6 +104,27 @@ export function decidirItem(
       cuando: Date.now(),
     },
   }
+}
+
+/**
+ * El precio que sale de lo que se tipeó. **Una sola regla, un solo lugar**: la usa `decidirItem`
+ * para guardar y el modal para mostrar el precio mientras se escribe. Si el modal la calculara por
+ * su cuenta, lo que se ve antes de guardar y lo que queda guardado podrían no ser el mismo número.
+ */
+export function precioDeSale(precioNormal: number, entrada: { precioSale: number } | { pctDesc: number }): number {
+  return 'precioSale' in entrada
+    ? Math.round(entrada.precioSale)
+    : redondear90(precioNormal * (1 - entrada.pctDesc / 100))
+}
+
+/**
+ * La nota de quien miró el producto. Va aparte de `decidirItem` porque **no es parte de la
+ * decisión de precio**: se escribe también en uno que se descarta ("no va, está fuera de
+ * temporada") y sobrevive a despejarle el precio.
+ */
+export function anotarItem(item: LiquidacionItem, nota: string | null): LiquidacionItem {
+  const t = (nota || '').trim()
+  return { ...item, decision: { ...item.decision, nota: t || null } }
 }
 
 /** Sacarle la decisión a un ítem y devolverlo a la pila. La nota **se conserva**: es de la persona. */

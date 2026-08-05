@@ -2,37 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
-import { canales, comDefault, comNormalizar } from '@/lib/comisiones/core'
-import { guardarConfigCompartida, leerConfigCompartida } from '@/lib/comisiones/kv'
+import { guardarConfigCompartida } from '@/lib/comisiones/kv'
 import type { ComCfg, ItemSale } from '@/lib/comisiones/tipos'
 import type { ObtenerCred } from '@/lib/sesion'
+import { lsGet, lsSet, useCfgComisiones } from './simulador/useCfgComisiones'
 
 /**
  * Config de Comisiones + lista de sale. La config se guarda LOCAL (por cuenta) y,
  * si sos admin, también en el KV COMPARTIDO (todos ven lo mismo). Port de comLoad/
  * comCargarCompartida/comSave/comGuardarCompartida + saleLoad/saleSave
  * (index.html:6023-6062 / 6301-6321). Mismas claves de localStorage que el legacy.
+ *
+ * **Leer** la config es de `useCfgComisiones` (al lado del simulador): el modal de Liquidación
+ * calcula con los mismos números y no los edita. Acá queda lo que escribe.
  */
 
-const keyCfg = (marca: Marca) => `monitor_comisiones_${marca}`
 const keySale = (marca: Marca) => `monitor_sale_${marca}`
-
-function lsGet<T>(key: string, fallback: T): T {
-  try {
-    const r = localStorage.getItem(key)
-    return r ? (JSON.parse(r) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
-function lsSet(key: string, val: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(val))
-    return true
-  } catch {
-    return false
-  }
-}
 
 export type ShareStatus = { txt: string; color: string }
 
@@ -48,8 +33,7 @@ export type EstadoComisiones = {
 }
 
 export function useComisiones(marca: Marca, esAdmin: boolean, obtenerCred: ObtenerCred): EstadoComisiones {
-  const cans = canales(marca === 'zattia')
-  const [cfg, setCfg] = useState<ComCfg>(() => comDefault(cans))
+  const { cfg, setCfgLocal } = useCfgComisiones(marca)
   const [saleList, setSaleList] = useState<ItemSale[]>([])
   const [shareStatus, setShareStatus] = useState<ShareStatus>({ txt: '', color: '#6B7280' })
   const saveT = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -58,24 +42,14 @@ export function useComisiones(marca: Marca, esAdmin: boolean, obtenerCred: Obten
     marcaRef.current = marca
   }, [marca])
 
-  // Carga: local/default inmediato + compartida del KV (re-aplica si existe). En un
-  // IIFE async para no hacer setState sincrónico en el effect (lo marca el CI).
+  // La lista de sale sí vive sólo acá (y sólo en este navegador). En un IIFE async para no hacer
+  // setState sincrónico en el effect (lo marca el CI).
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      const local = lsGet<ComCfg | null>(keyCfg(marca), null)
-      const base = local ? comNormalizar(local, canales(marca === 'zattia')) : comDefault(canales(marca === 'zattia'))
       const sale = lsGet<ItemSale[]>(keySale(marca), [])
       if (!vivo) return
-      setCfg(base)
       setSaleList(sale)
-      const compartida = await leerConfigCompartida(marca)
-      if (!vivo || marcaRef.current !== marca) return
-      if (compartida) {
-        const norm = comNormalizar(compartida, canales(marca === 'zattia'))
-        setCfg(norm)
-        lsSet(keyCfg(marca), norm)
-      }
     })()
     return () => {
       vivo = false
@@ -84,8 +58,7 @@ export function useComisiones(marca: Marca, esAdmin: boolean, obtenerCred: Obten
 
   const guardar = useCallback(
     (next: ComCfg) => {
-      setCfg(next)
-      lsSet(keyCfg(marca), next)
+      setCfgLocal(next)
       if (!esAdmin) {
         setShareStatus({ txt: '', color: '#6B7280' })
         return
@@ -98,7 +71,7 @@ export function useComisiones(marca: Marca, esAdmin: boolean, obtenerCred: Obten
         setShareStatus(r.ok ? { txt: '✓ Guardado (lo ve tu socio)', color: '#16A34A' } : { txt: 'Error: ' + (r.error || ''), color: '#DC2626' })
       }, 600)
     },
-    [marca, esAdmin, obtenerCred],
+    [marca, esAdmin, obtenerCred, setCfgLocal],
   )
 
   const agregarSale = useCallback(
