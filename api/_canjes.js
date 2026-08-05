@@ -377,6 +377,9 @@ const TOPE_VITRINA = 120;
 /** Hasta cuántas variantes por producto. `PROTECTOR DE CÁMARA STRASS` (BDI) tiene 54; hay margen. */
 const TOPE_OPCIONES = 120;
 
+/** Cuántas fotos por producto. Espejo de `TOPE_FOTOS` en `lib/canjes/vitrina.ts`. */
+const TOPE_FOTOS = 8;
+
 /**
  * Un producto de la vitrina, saneado. Llega **ya congelado** desde el panel, que es el único lado
  * con sesión para preguntarle a la tienda.
@@ -404,11 +407,18 @@ function itemDeVitrinaDelBody(x) {
     .filter(Boolean);
   if (!opciones.length) return null;
 
+  // ⚠️ Esto es una lista blanca: **lo que no está acá se descarta sin un solo error**. Un campo
+  // nuevo que se agregue al congelado y no se sume acá viaja desde el panel y se pierde en silencio.
   return {
     tn_product_id,
     sku: texto(x.sku),
     nombre: nombre.slice(0, 200),
     foto_url: texto(x.foto_url),
+    // Sólo strings, y no `texto()`: aquél convierte lo que sea con `String(v)`, así que un número o
+    // un objeto entrarían como "3" y "[object Object]" y el visor pediría esa URL.
+    fotos: (Array.isArray(x.fotos) ? x.fotos : [])
+      .filter((f) => typeof f === 'string')
+      .map((f) => f.trim()).filter(Boolean).slice(0, TOPE_FOTOS),
     pvp: num(x.pvp),
     opciones,
   };
@@ -2041,6 +2051,6 @@ export default async function handler(req, res) {
 // que el portal público los use, y siguen saliendo por acá para no partir los tests en dos archivos
 // según dónde vive hoy cada función.
 export {
-  apilar, entregablesDelBody, MOTIVOS_NO_ACEPTO, normalizarInstagram, numeroCanje, puedeIr,
-  seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES,
+  apilar, entregablesDelBody, itemDeVitrinaDelBody, MOTIVOS_NO_ACEPTO, normalizarInstagram,
+  numeroCanje, puedeIr, seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES,
 };

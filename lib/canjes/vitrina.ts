@@ -63,6 +63,68 @@ export function precioDeVitrina(p: ProductoTn): number | null {
 }
 
 /**
+ * Cuántas fotos se congelan por producto.
+ *
+ * Hay tope por lo mismo que hay tope de productos: **la vitrina entera viaja al teléfono**. Ocho
+ * cubre de sobra lo que una tienda sube de una prenda, y 120 productos × 8 URLs son unos 40 KB de
+ * JSON — que con datos móviles ya se nota.
+ */
+export const TOPE_FOTOS = 8
+
+/**
+ * Todas las fotos del producto, para poder verlas grandes desde el link.
+ *
+ * **Por qué existe.** La creadora elige mirando una miniatura de 150 px en un teléfono. Con una
+ * funda alcanza; con una remera no: la foto que TN manda primero suele ser la de la percha, y lo
+ * que decide la elección es la de atrás o la puesta. La galería **ya venía** en la misma respuesta
+ * que la curación consume y se tiraba: se guardaba `images[0]` y listo.
+ *
+ * Primero las del producto y después las de las variantes, porque ese es el orden en que la tienda
+ * las muestra. El dedup no es adorno: la `image_url` de una variante casi siempre **ya está** entre
+ * las `images` del producto, y sin deduplicar el visor pasaría tres veces por la misma foto.
+ */
+export function fotosDeVitrina(p: ProductoTn, opciones: OpcionVitrina[]): string[] {
+  return sinRepetir([...(p.images || []), ...opciones.map((o) => o.foto)]).slice(0, TOPE_FOTOS)
+}
+
+/**
+ * Las fotos que muestra el visor, en orden.
+ *
+ * **La de la variante elegida va primera**: si está mirando el negro, la primera foto grande tiene
+ * que ser la del negro. Después la galería y, al final, la tapa.
+ *
+ * 🔑 **Con la galería vacía queda sólo la tapa**, y eso es lo que hace que las vitrinas armadas
+ * antes de que existiera la columna se comporten exactamente igual que antes: el visor abre con la
+ * única foto que hay, sin flechas ni tira.
+ *
+ * Recibe los tres campos sueltos y no un item entero a propósito: la misma función la usan el panel
+ * (`foto_url`) y el portal (`foto`), que le ponen nombres distintos al mismo dato. Y vive acá y no
+ * en `tipos.ts` porque **el portal no importa `tipos.ts`**: son 1.100 líneas que el chunk público no
+ * tiene por qué arrastrar.
+ */
+export function fotosParaVer(
+  tapa: string | null | undefined,
+  fotos: string[] | null | undefined,
+  deLaVariante?: string | null,
+): string[] {
+  return sinRepetir([deLaVariante, ...(fotos || []), tapa])
+}
+
+/** Sin vacíos y sin repetidos, respetando el orden. La `image_url` de una variante casi siempre ya
+ *  está entre las `images` del producto: sin esto el visor pasaría dos veces por la misma foto. */
+function sinRepetir(urls: Array<string | null | undefined>): string[] {
+  const vistas = new Set<string>()
+  const limpias: string[] = []
+  for (const f of urls) {
+    const url = String(f || '').trim()
+    if (!url || vistas.has(url)) continue
+    vistas.add(url)
+    limpias.push(url)
+  }
+  return limpias
+}
+
+/**
  * ¿Se puede ofrecer esta variante?
  *
  * `stock == null` es "TN no gestiona el stock de esto", que no es lo mismo que cero: hay que
@@ -129,7 +191,10 @@ export function paraVitrina(p: ProductoTn): ProductoParaVitrina | null {
     tn_product_id: String(p.id),
     sku: p.sku || null,
     nombre: p.name || '',
+    // La tapa: la de la grilla y la de la hoja. Se sigue derivando igual que siempre — la galería
+    // es un campo aparte, no un array cuyo `[0]` sea la tapa por convención tácita.
     foto_url: (p.images || []).filter(Boolean)[0] || opciones.find((o) => o.foto)?.foto || null,
+    fotos: fotosDeVitrina(p, opciones),
     pvp: precioDeVitrina(p),
     opciones,
   }

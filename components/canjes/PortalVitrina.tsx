@@ -26,7 +26,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { FotoTn } from '@/components/tncat/FotoTn'
-import { facetaDeLaVitrina, itemPasa, opcionPasa } from '@/lib/canjes/vitrina'
+import { facetaDeLaVitrina, fotosParaVer, itemPasa, opcionPasa } from '@/lib/canjes/vitrina'
+import { PortalFotos } from './PortalFotos'
 
 /** Una variante, como la manda la tienda: `['iPhone 12']`, `['Negro', 'XS']`. */
 export type Opcion = { id: string; valores: string[]; foto: string | null }
@@ -35,6 +36,8 @@ export type ProductoVitrina = {
   id: number
   nombre: string
   foto: string | null
+  /** Las demás fotos del producto. Vacío en las vitrinas armadas antes del 5-ago-2026. */
+  fotos?: string[]
   /** Sólo cuando el acuerdo es por monto: en modo unidades no viaja ni un peso. */
   pvp?: number | null
   opciones: Opcion[]
@@ -98,6 +101,16 @@ export function PortalVitrina({
   const [opcionId, setOpcionId] = useState<string | null>(null)
   const [cuantos, setCuantos] = useState(1)
 
+  /**
+   * El producto que se está mirando en grande. Vive **acá y no adentro del visor** porque esta
+   * pantalla es la dueña de las dos capas: si el visor tuviera su propio listener de Escape, los dos
+   * correrían y un Escape cerraría también la hoja, con lo elegido adentro.
+   */
+  const [mirando, setMirando] = useState<ProductoVitrina | null>(null)
+  const fotosDeLoQueMira = mirando
+    ? fotosParaVer(mirando.foto, mirando.fotos, mirando.opciones.find((o) => o.id === opcionId)?.foto)
+    : []
+
   const visibles = useMemo(
     () => vitrina.items.filter((i) => itemPasa(i, faceta, elegido)),
     [vitrina.items, faceta, elegido],
@@ -125,14 +138,23 @@ export function PortalVitrina({
   }
   const cerrar = () => { setAbierto(null); setOpcionId(null); setCuantos(1) }
 
-  // Escape cierra la hoja. Nada de `confirm()` acá ni en ningún lado del portal: un diálogo del
-  // navegador bloquea la pantalla y ella no tiene a quién preguntarle qué pasó.
+  // Escape cierra la capa de arriba: primero el visor de fotos, después la hoja. Nada de `confirm()`
+  // acá ni en ningún lado del portal: un diálogo del navegador bloquea la pantalla y ella no tiene a
+  // quién preguntarle qué pasó.
+  //
+  // ⚠️ El visor NO registra su propio listener, y por eso este `if` es la única defensa: dos
+  // listeners sobre `window` corren los dos, `stopPropagation` no los separa, y un Escape cerraría
+  // las dos capas de una — con lo que había elegido adentro.
   useEffect(() => {
-    if (!abierto) return
-    const alTecla = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrar() }
+    if (!abierto && !mirando) return
+    const alTecla = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (mirando) setMirando(null)
+      else cerrar()
+    }
     window.addEventListener('keydown', alTecla)
     return () => window.removeEventListener('keydown', alTecla)
-  }, [abierto])
+  }, [abierto, mirando])
 
   const topeDeLaHoja = abierto ? Math.max(1, cuantosEntran(abierto)) : 1
 
@@ -244,10 +266,26 @@ export function PortalVitrina({
                   cursor: lleno ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                 }}
               >
-                <div style={{ aspectRatio: '1 / 1', background: '#f5f5f7', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                <div style={{ position: 'relative', aspectRatio: '1 / 1', background: '#f5f5f7', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
                   {item.foto
                     ? <FotoTn src={item.foto} alt={item.nombre} ancho={150} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ color: '#9ca3af', fontSize: 12 }}>sin foto</span>}
+                  {/* Ver la foto en grande sin abrir la compra. La tarjeta entera es un botón que
+                      abre la hoja, así que esto frena el click; y son 40 px porque abajo de eso el
+                      dedo le pega a la tarjeta y termina en el carrito sin haberlo pedido. */}
+                  {item.foto && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMirando(item) }}
+                      aria-label={`Ver las fotos de ${item.nombre}`}
+                      style={{
+                        position: 'absolute', bottom: 6, right: 6, width: 40, height: 40,
+                        borderRadius: 999, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff',
+                        fontSize: 17, cursor: 'pointer', display: 'grid', placeItems: 'center', padding: 0,
+                      }}
+                    >
+                      ⤢
+                    </button>
+                  )}
                 </div>
                 {/* La chapita: hasta ahora no había ninguna señal de "esto ya lo elegí" y con veinte
                     fotos iguales de fundas se elegía dos veces la misma sin darse cuenta. */}
@@ -316,18 +354,40 @@ export function PortalVitrina({
             }}
           >
             <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
-              <div style={{ width: 96, height: 96, flexShrink: 0, background: '#f5f5f7', borderRadius: 10, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+              {/* La foto de la hoja se toca y se ve grande: acá ella ya decidió mirar este producto,
+                  así que es el camino natural. La chapita ⤢ existe porque una foto que se puede
+                  tocar y no lo parece es una foto que nadie toca. */}
+              <button
+                onClick={() => setMirando(abierto)}
+                aria-label={`Ver las fotos de ${abierto.nombre}`}
+                disabled={!(abierto.opciones.find((o) => o.id === opcionId)?.foto || abierto.foto)}
+                style={{
+                  position: 'relative', width: 120, height: 120, flexShrink: 0, background: '#f5f5f7',
+                  borderRadius: 10, overflow: 'hidden', display: 'grid', placeItems: 'center',
+                  border: 'none', padding: 0, cursor: 'zoom-in',
+                }}
+              >
                 {(abierto.opciones.find((o) => o.id === opcionId)?.foto || abierto.foto)
                   ? (
-                    <FotoTn
-                      src={(abierto.opciones.find((o) => o.id === opcionId)?.foto || abierto.foto) as string}
-                      alt={abierto.nombre}
-                      ancho={200}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    <>
+                      <FotoTn
+                        src={(abierto.opciones.find((o) => o.id === opcionId)?.foto || abierto.foto) as string}
+                        alt={abierto.nombre}
+                        ancho={240}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <span style={{
+                        position: 'absolute', bottom: 4, right: 4, width: 30, height: 30,
+                        borderRadius: 999, background: 'rgba(0,0,0,.45)', color: '#fff', fontSize: 14,
+                        display: 'grid', placeItems: 'center',
+                      }}
+                      >
+                        ⤢
+                      </span>
+                    </>
                   )
                   : <span style={{ color: '#9ca3af', fontSize: 12 }}>sin foto</span>}
-              </div>
+              </button>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.3 }}>{abierto.nombre}</div>
                 {plata && abierto.pvp != null && (
@@ -419,6 +479,16 @@ export function PortalVitrina({
             )}
           </div>
         </div>
+      )}
+
+      {/* Encima de todo, incluida la hoja. Se cierra solo y deja la hoja como estaba, con lo que
+          haya marcado: mirar una foto no puede costarle la elección. */}
+      {mirando && fotosDeLoQueMira.length > 0 && (
+        <PortalFotos
+          fotos={fotosDeLoQueMira}
+          nombre={mirando.nombre}
+          onCerrar={() => setMirando(null)}
+        />
       )}
     </>
   )

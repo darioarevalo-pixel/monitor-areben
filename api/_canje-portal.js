@@ -239,6 +239,10 @@ function laVitrina(canje, vitrina, items) {
           id: i.id,
           nombre: i.nombre || '',
           foto: i.foto_url || null,
+          // Las demás fotos del producto, para poder verlas grandes. Son las mismas que la tienda ya
+          // muestra en público, así que no hay nada acá que no se pueda ver entrando a la web.
+          // Una vitrina vieja las trae vacías y el visor cae a la tapa: se comporta como antes.
+          fotos: Array.isArray(i.fotos) ? i.fotos.filter(Boolean) : [],
           ...(porMonto ? { pvp: i.pvp == null ? null : Number(i.pvp) } : {}),
           // De cada variante sale lo justo para elegirla y verla: el id (que es lo que ella manda
           // de vuelta), cómo se llama y su foto. El SKU y el código de barras se quedan acá.
@@ -400,7 +404,7 @@ async function traerVitrina(supabase, vitrinaId) {
     .select('id, nombre, estado').eq('id', vitrinaId).maybeSingle();
   if (!v) return null;
   const { data: items } = await supabase.from('canje_vitrina_items')
-    .select('id, tn_product_id, sku, nombre, foto_url, pvp, opciones, activo')
+    .select('id, tn_product_id, sku, nombre, foto_url, fotos, pvp, opciones, activo')
     .eq('vitrina_id', vitrinaId).order('orden');
   return { ...v, items: items || [] };
 }

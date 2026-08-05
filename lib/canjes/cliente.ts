@@ -324,7 +324,10 @@ export type ProductoParaVitrina = {
   tn_product_id: string
   sku?: string | null
   nombre: string
+  /** La tapa: la de la grilla y la de la hoja. */
   foto_url?: string | null
+  /** Las demás fotos del producto, para verlas grandes desde el link. */
+  fotos?: string[]
   pvp?: number | null
   opciones: OpcionVitrina[]
 }

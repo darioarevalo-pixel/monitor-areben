@@ -567,3 +567,23 @@ alter table canje_vitrinas add column if not exists stock_at timestamptz;
 -- Es por marca porque BDI, Zattia y Stunned son tres tiendas distintas. Va en la config y no en el
 -- código por lo mismo que el cupón: cambiar una dirección de mail no puede costar un deploy.
 alter table canje_config add column if not exists email_pedido text;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 12. Las demás fotos del producto (5-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- La creadora elige desde el teléfono mirando una foto de 150 px. Con una funda eso alcanza; con
+-- una remera o un jean, no: la que manda Tienda Nube primero suele ser la de la percha, y lo que
+-- decide es la de atrás o la puesta. Las demás fotos **ya venían** en la misma respuesta que la
+-- curación consume (`p.images`) y se tiraban al congelar: se guardaba `images[0]` y nada más.
+--
+-- Columna nueva y no un array que reemplace a `foto_url`, por dos razones: `foto_url` ya está
+-- poblada en producción y se lee en cinco lugares, y sobre todo significan cosas distintas. La tapa
+-- es la de la grilla, la de la hoja y el fallback de una variante sin foto propia; la galería es lo
+-- que se mira al ampliar. Dos nombres para dos cosas es mejor que un array cuyo `[0]` es la tapa
+-- por una convención que nadie escribió.
+--
+-- Las vitrinas que ya están cargadas nacen con `[]` y siguen funcionando idénticas (el visor abre
+-- con la única foto que hay). Se rellenan al tocar **Revisar stock**, que es el único camino: el
+-- catálogo de TN sólo se puede leer desde el panel, así que un script de backfill no existe.
+alter table canje_vitrina_items add column if not exists fotos jsonb not null default '[]'::jsonb;

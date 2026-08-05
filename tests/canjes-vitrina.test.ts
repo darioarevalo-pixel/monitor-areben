@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   buscarEnLaTienda, categoriasDeLaTienda, esModeloDeCelular, estaOculto, esTalle, facetaDeLaVitrina,
-  hayParaOfrecer, idsOcultos, itemPasa, opcionPasa, paraVitrina, precioDeVitrina, revisarStock,
-  type ProductoTn,
+  fotosParaVer, hayParaOfrecer, idsOcultos, itemPasa, opcionPasa, paraVitrina, precioDeVitrina,
+  revisarStock, TOPE_FOTOS, type ProductoTn,
 } from '@/lib/canjes/vitrina'
 import { controlDelTope, opcionEnCriollo, puedeElegir, type CanjeItem } from '@/lib/canjes/tipos'
+import { direccionDelSwipe, moverIndice } from '@/lib/canjes/gestos'
 // Handlers JS de api/: sólo las funciones puras, sin tocar Supabase.
 import { eleccionesEnItems, paraLaPersona } from '@/api/_canje-portal.js'
+import { itemDeVitrinaDelBody } from '@/api/_canjes.js'
 import { seVaDelTope } from '@/api/_canjes-reglas.js'
 
 /**
@@ -297,6 +299,32 @@ describe('la vitrina vista desde el link público', () => {
     expect(salida.vitrina!.usado).toBe(1)
   })
 
+  it('las demás fotos viajan al link, y una vitrina vieja no rompe nada', () => {
+    const conGaleria = {
+      ...VITRINA_BASE,
+      items: [{ ...VITRINA_BASE.items[0], fotos: ['https://x/a.jpg', 'https://x/b.jpg'] }],
+    }
+    const salida = paraLaPersona(CANJE_UNIDADES, { nombre: 'Lu' }, null, conGaleria, [])
+    expect(salida.vitrina!.items[0].fotos).toEqual(['https://x/a.jpg', 'https://x/b.jpg'])
+
+    // La vitrina de antes de la columna: `fotos` no existe y sale como lista vacía, nunca como
+    // `undefined`. El portal cae a la tapa y se comporta igual que se comportaba.
+    const vieja = paraLaPersona(CANJE_UNIDADES, { nombre: 'Lu' }, null, VITRINA_BASE, [])
+    expect(vieja.vitrina!.items[0].fotos).toEqual([])
+  })
+
+  it('con la galería puesta sigue sin viajar un peso en modo unidades', () => {
+    // La regla vieja tiene que seguir valiendo con el campo nuevo: es la única pantalla abierta a
+    // internet y el precio de lo que se le regala no es asunto de nadie.
+    const conGaleria = {
+      ...VITRINA_BASE,
+      items: [{ ...VITRINA_BASE.items[0], fotos: ['https://x/a.jpg'] }],
+    }
+    const json = JSON.stringify(paraLaPersona(CANJE_UNIDADES, { nombre: 'Lu' }, null, conGaleria, []))
+    expect(json).not.toContain('6390')
+    expect(json).not.toContain('SECRETO')
+  })
+
   it('lo que ya eligió se le muestra aunque la vitrina se haya archivado', () => {
     const salida = paraLaPersona(
       { ...CANJE_UNIDADES, seleccion_cerrada_at: '2026-08-02T10:00:00Z' }, { nombre: 'Lu' }, null, null,
@@ -461,5 +489,127 @@ describe('revisarStock — la vitrina contra la tienda de hoy', () => {
     // todo" de "la lectura falló". Quien decide es la pantalla, que no llama a esto si el catálogo
     // vino vacío.
     expect(revisarStock(EN_LA_VITRINA, []).apagar).toHaveLength(4)
+  })
+})
+
+// ── Las fotos: verlas grandes desde el link ─────────────────────────────────────
+
+describe('fotosDeVitrina — la galería que antes se tiraba', () => {
+  it('guarda todas las del producto y las de las variantes, sin repetir', () => {
+    // La `image_url` de una variante casi siempre YA está entre las `images` del producto: sin
+    // deduplicar, el visor pasaría dos veces por la misma foto y se leería como que se trabó.
+    const deLaVariante = 'https://acdn-us.mitiendanube.com/x/v1.jpg'
+    const p: ProductoTn = { ...CLEAR_CASE, images: ['https://x/1.jpg', deLaVariante] }
+    // La de la variante ya venía entre las del producto: entra una sola vez y en su lugar.
+    expect(paraVitrina(p)!.fotos).toEqual(['https://x/1.jpg', deLaVariante])
+  })
+
+  it('suma la foto de una variante que no esté en la galería del producto', () => {
+    const p: ProductoTn = { ...CLEAR_CASE, images: ['https://x/1.jpg'] }
+    expect(paraVitrina(p)!.fotos).toContain('https://acdn-us.mitiendanube.com/x/v1.jpg')
+  })
+
+  it('sin fotos de producto cae a las de variante', () => {
+    const p: ProductoTn = { ...CLEAR_CASE, images: [] }
+    expect(paraVitrina(p)!.fotos).toEqual(['https://acdn-us.mitiendanube.com/x/v1.jpg'])
+  })
+
+  it('corta en el tope: la vitrina entera viaja al teléfono', () => {
+    const muchas = Array.from({ length: TOPE_FOTOS + 5 }, (_, i) => `https://x/${i}.jpg`)
+    expect(paraVitrina({ ...CLEAR_CASE, images: muchas })!.fotos).toHaveLength(TOPE_FOTOS)
+  })
+
+  it('los vacíos y los nulos no ocupan un lugar', () => {
+    const p = { ...CLEAR_CASE, images: ['', '  ', 'https://x/1.jpg'] } as ProductoTn
+    expect(paraVitrina(p)!.fotos).toEqual(['https://x/1.jpg', 'https://acdn-us.mitiendanube.com/x/v1.jpg'])
+  })
+
+  it('NO cambia la tapa: `foto_url` sigue dando exactamente lo mismo que antes', () => {
+    // La regresión que importa de esta tanda: la tapa se lee en cinco lugares y ya está poblada en
+    // producción. Si `foto_url` se moviera, cambiaría la foto de la grilla de todas las vitrinas.
+    expect(paraVitrina(CLEAR_CASE)!.foto_url).toBe('https://acdn-us.mitiendanube.com/x/clear-1024-1024.jpg')
+    expect(paraVitrina({ ...CLEAR_CASE, images: [] })!.foto_url).toBe('https://acdn-us.mitiendanube.com/x/v1.jpg')
+    expect(paraVitrina({ ...CLEAR_CASE, images: [], variantes: [{ id: '1', valores: ['X'], stock: 2 }] })!.foto_url).toBeNull()
+  })
+})
+
+describe('fotosParaVer — el orden del visor', () => {
+  it('la foto de la variante elegida va primera', () => {
+    // Si está mirando el negro, la primera foto grande tiene que ser la del negro.
+    expect(fotosParaVer('tapa.jpg', ['a.jpg', 'b.jpg'], 'b.jpg')).toEqual(['b.jpg', 'a.jpg', 'tapa.jpg'])
+  })
+
+  it('sin galería queda sólo la tapa: la vitrina vieja se comporta igual que antes', () => {
+    expect(fotosParaVer('tapa.jpg', [], null)).toEqual(['tapa.jpg'])
+    expect(fotosParaVer('tapa.jpg', undefined)).toEqual(['tapa.jpg'])
+  })
+
+  it('la tapa no se repite si ya está en la galería', () => {
+    expect(fotosParaVer('a.jpg', ['a.jpg', 'b.jpg'])).toEqual(['a.jpg', 'b.jpg'])
+  })
+
+  it('sin ninguna foto devuelve lista vacía, y el visor no abre', () => {
+    expect(fotosParaVer(null, [], null)).toEqual([])
+  })
+})
+
+describe('el saneo del servidor — el eslabón que se cae en silencio', () => {
+  const base = { tn_product_id: '111', nombre: 'CLEAR CASE', opciones: [{ id: '1', valores: ['iPhone 11'] }] }
+  /** El handler es JS: devuelve `null` si el producto no sirve, y acá siempre sirve. */
+  const sanear = (x: Record<string, unknown>) => itemDeVitrinaDelBody({ ...base, ...x })!
+
+  it('deja pasar la galería', () => {
+    expect(sanear({ fotos: ['https://x/1.jpg', 'https://x/2.jpg'] }).fotos)
+      .toEqual(['https://x/1.jpg', 'https://x/2.jpg'])
+  })
+
+  it('lo que no sea una lista de textos no entra', () => {
+    expect(sanear({ fotos: 'https://x/1.jpg' }).fotos).toEqual([])
+    expect(sanear({}).fotos).toEqual([])
+    expect(sanear({ fotos: [null, 3, { a: 1 }, 'https://x/ok.jpg'] }).fotos).toEqual(['https://x/ok.jpg'])
+  })
+
+  it('aplica el mismo tope que el congelado', () => {
+    const muchas = Array.from({ length: 40 }, (_, i) => `https://x/${i}.jpg`)
+    expect(sanear({ fotos: muchas }).fotos).toHaveLength(TOPE_FOTOS)
+  })
+
+  it('sigue siendo lista blanca: lo que no está declarado se descarta', () => {
+    // Es la razón por la que la galería tuvo que agregarse acá a mano: un campo nuevo que no se
+    // sume viaja desde el panel y se pierde sin un solo error.
+    expect(sanear({ costo_real: 1234, fotos: [] })).not.toHaveProperty('costo_real')
+  })
+})
+
+// ── El gesto ───────────────────────────────────────────────────────────────────
+
+describe('direccionDelSwipe — que scrollear no cambie de foto', () => {
+  it('un arrastre horizontal pasa de foto', () => {
+    expect(direccionDelSwipe({ x: 200, y: 100 }, { x: 100, y: 105 })).toBe(1)
+    expect(direccionDelSwipe({ x: 100, y: 100 }, { x: 200, y: 95 })).toBe(-1)
+  })
+
+  it('un toque que tiembla no es un gesto', () => {
+    expect(direccionDelSwipe({ x: 100, y: 100 }, { x: 108, y: 100 })).toBe(0)
+    expect(direccionDelSwipe({ x: 100, y: 100 }, { x: 100, y: 100 })).toBe(0)
+  })
+
+  it('arrastrar para leer más abajo NO pasa de foto', () => {
+    // Sin la dominancia horizontal, scrollear la hoja se llevaría puesta la foto que estaba mirando.
+    expect(direccionDelSwipe({ x: 100, y: 400 }, { x: 45, y: 100 })).toBe(0)
+  })
+})
+
+describe('moverIndice — el visor no da la vuelta', () => {
+  it('se queda en los extremos', () => {
+    // Volver de la última a la primera se lee como que se perdió el lugar; con cuatro fotos nadie
+    // está buscando un carrusel infinito.
+    expect(moverIndice(0, -1, 4)).toBe(0)
+    expect(moverIndice(3, 1, 4)).toBe(3)
+    expect(moverIndice(1, 1, 4)).toBe(2)
+  })
+
+  it('sin fotos no se va a un índice inventado', () => {
+    expect(moverIndice(0, 1, 0)).toBe(0)
   })
 })

@@ -721,7 +721,10 @@ export type CanjeVitrinaItem = {
   tn_product_id: string
   sku?: string | null
   nombre: string
+  /** La tapa: la de la grilla, la de la hoja y el fallback de una variante sin foto propia. */
   foto_url?: string | null
+  /** Las demás fotos del producto. Vacío en las vitrinas armadas antes del 5-ago-2026. */
+  fotos?: string[]
   /** Precio de lista, de TN. El **costo no está**: vive en Gestión Nube y no se cruza confiable. */
   pvp?: number | null
   opciones: OpcionVitrina[]

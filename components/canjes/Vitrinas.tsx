@@ -439,6 +439,8 @@ function ArmarVitrina({
   const items = vitrina.items || []
   const activos = items.filter((i) => i.activo)
   const apagados = items.filter((i) => !i.activo)
+  /** Cuántos se congelaron antes de que se guardaran las demás fotos del producto. */
+  const sinGaleria = activos.filter((i) => !(i.fotos || []).length).length
 
   return (
     <>
@@ -485,6 +487,23 @@ function ArmarVitrina({
           <Notice tone="neutral">
             Se está armando: todavía no se le puede colgar a un canje. Cuando esté lista, activala
             desde la lista de vitrinas.
+          </Notice>
+        </div>
+      )}
+
+      {/* Las vitrinas armadas antes del 5-ago-2026 se congelaron con una sola foto por producto.
+          Funcionan igual —el visor abre con la que hay—, pero desde el teléfono, con una prenda,
+          una sola foto no alcanza para elegir.
+          🔑 Se recomienda **revisar el stock** y no "actualizar la tienda": aquél recorre la vitrina
+          entera contra la tienda de hoy, y éste sólo refresca lo que venga en esa importación. */}
+      {sinGaleria > 0 && (
+        <div style={{ marginBottom: space[4] }}>
+          <Notice tone="warning">
+            {sinGaleria === 1
+              ? 'Hay 1 producto con una sola foto'
+              : `Hay ${sinGaleria} productos con una sola foto`}: se cargaron antes de que se
+            guardaran las demás. Tocá <strong>Revisar el stock</strong> y las trae de la tienda —
+            desde el link se van a poder ver todas.
           </Notice>
         </div>
       )}
