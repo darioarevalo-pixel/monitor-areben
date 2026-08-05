@@ -237,11 +237,19 @@ export default async function handler(req, res) {
       if (!ESTADOS_CAMPANIA.includes(estado)) {
         return res.status(400).json({ error: `estado inválido (usá ${ESTADOS_CAMPANIA.join(', ')})` });
       }
-      // `aplicada` la pone el aplicador cuando terminó de escribir en Gestión Nube, no una persona
-      // desde un desplegable: marcarla a mano diría que los precios están puestos cuando no lo
-      // están, y la próxima campaña se decidiría contra un dato inventado.
-      if (estado === 'aplicada') {
-        return res.status(400).json({ error: 'La campaña pasa a "aplicada" sola, cuando se escriben los precios.' });
+      // 🔑 **`aplicada` la marca una persona, y es un cambio de criterio respecto de la tanda 1.**
+      // Nació rechazada acá: la iba a poner el aplicador al terminar de escribir en Gestión Nube, y
+      // marcarla a mano habría dicho que los precios están puestos cuando no lo están. Pero ese
+      // aplicador no existe — `PATCH /api/v1/productos/{id}` contesta 403 «Invalid ability provided»
+      // con el token del Monitor, así que los precios se cargan a mano. Si nadie más lo va a
+      // escribir, el único que puede decirlo es quien lo cargó.
+      //
+      // Lo que sostiene la honestidad del dato ya no es esta guarda sino la pestaña Resultado, que
+      // contrasta la marca contra `venta_detalles.unit_price`: si se vendió a precio de lista, la
+      // pantalla lo dice aunque la campaña figure aplicada. Por eso pide el sub-permiso `aplicar` —
+      // es una afirmación sobre Gestión Nube, no un rótulo cosmético.
+      if (estado === 'aplicada' && !puede.aplicar) {
+        return res.status(403).json({ error: 'Marcar los precios como cargados pide el permiso «Puede escribir los precios en Gestión Nube».' });
       }
       const { error } = await supabase.from('liquidaciones')
         .update({ estado, updated_at: ahora }).eq('store', store).eq('id', id);

@@ -27,10 +27,17 @@
  *     costo cero**: con costo cero cualquier precio parece tener 100% de margen. En julio de 2026,
  *     428 productos de BDI quedaron costando cero en silencio. La grilla lo marca en la fila.
  *
- * ▶️ **Tandas 1 y 2 de 4.** Esto es el cajón —crear la campaña, mandarle productos, verlos y
- * moverles el estado— más el modal que le pone el precio a cada uno con el simulador de margen al
- * lado (`DefinirPrecio.tsx`, y ←/→ para pasar al siguiente sin cerrar). Escribir esos precios en
- * Gestión Nube es la tanda 3, y qué se vendió de lo liquidado, la 4.
+ * ▶️ **Tandas 1, 2 y 4 de 4.** El cajón (crear la campaña, mandarle productos, moverles el estado),
+ * el modal que le pone el precio a cada uno con el simulador al lado (`DefinirPrecio.tsx`, ←/→ para
+ * pasar al siguiente sin cerrar) y la pestaña **Resultado** (`Resultado.tsx`).
+ *
+ * 🔴 **La tanda 3 —escribir los precios en Gestión Nube— está trabada, y no por donde se creía.**
+ * No es que falte saber el nombre del campo del promocional: el token del Monitor **no tiene permiso
+ * para escribir productos**. `PATCH /api/v1/productos/{id}` contesta 403 «Invalid ability provided»
+ * (probado contra un producto real el 5-ago-2026), y el mismo token lee inventario y escribe
+ * observaciones sin problema. Hasta que Gestión Nube habilite esa ability, los precios se cargan a
+ * mano — y de ahí sale la razón de ser del Resultado: contrastar lo decidido contra lo cobrado es el
+ * único control posible sobre una carga manual de cuarenta productos.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -44,10 +51,11 @@ import {
   leerItems, quitarItem, renombrarCampania, type Permisos,
 } from '@/lib/liquidacion/persistencia'
 import { DefinirPrecio } from './DefinirPrecio'
+import { Resultado } from './Resultado'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
-  Notice, Select, StatusPill, TBody, THead, TableWrap, Td, Th, Tr, formatMoney, useConfirmar,
+  Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, formatMoney, useConfirmar,
   useFiltroUrl, useToast, color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
 
@@ -300,6 +308,7 @@ function DetalleCampania({
    * "siguiente" sería otro producto cada vez que se guarda uno y se terminaría saltando la mitad.
    */
   const [definiendo, setDefiniendo] = useState<{ orden: string[]; i: number } | null>(null)
+  const [pestania, setPestania] = useFiltroUrl<string>('t', 'productos')
 
   const cargar = useCallback(async () => {
     setError(null)
@@ -439,8 +448,25 @@ function DetalleCampania({
           {campania.estado === 'en_curso' && (
             <Button variant="ghost" size="sm" onClick={() => void cambiarEstado('borrador')}>Volver a borrador</Button>
           )}
-          {campania.estado === 'aplicada' && (
+          {/*
+            🔑 "Ya cargué los precios" la marca una persona, y es un cambio de criterio respecto de
+            la tanda 1: `aplicada` la iba a poner el aplicador cuando terminara de escribir en
+            Gestión Nube, pero ese aplicador no existe — el token del Monitor no tiene permiso para
+            escribir productos (`PATCH /productos/{id}` contesta 403 «Invalid ability provided»), así
+            que los precios se cargan a mano. Si nadie más lo va a escribir, el único que puede
+            decirlo es quien lo cargó. **No se le cree a ciegas**: la pestaña Resultado contrasta esa
+            marca contra el precio que se cobró de verdad.
+          */}
+          {campania.estado === 'en_curso' && puede.aplicar && (
+            <Button variant="soft" tone="brand" size="sm" onClick={() => void cambiarEstado('aplicada')}>
+              Ya cargué los precios
+            </Button>
+          )}
+          {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && (
             <Button variant="soft" size="sm" onClick={() => void cambiarEstado('cerrada')}>Cerrar campaña</Button>
+          )}
+          {campania.estado === 'cerrada' && (
+            <Button variant="ghost" size="sm" onClick={() => void cambiarEstado('en_curso')}>Reabrir</Button>
           )}
         </div>
       </div>
@@ -450,6 +476,29 @@ function DetalleCampania({
       {items === null ? (
         <Esqueleto forma="tabla" />
       ) : (
+        <Tabs
+          variant="underline"
+          style={{ marginBottom: space[4] }}
+          value={pestania === 'resultado' ? 'resultado' : 'productos'}
+          onChange={setPestania}
+          items={[
+            { key: 'productos', label: 'Productos', badge: resumen.total || undefined },
+            {
+              key: 'resultado',
+              label: 'Resultado',
+              // Sin fecha de inicio no hay período que mirar, y la pestaña lo dice adentro en vez
+              // de desaparecer: que el resultado exista es lo que empuja a ponerle la fecha.
+              hint: campania.desde
+                ? 'Qué se vendió de lo liquidado, y si el precio llegó a estar puesto'
+                : 'Necesita una fecha de inicio',
+            },
+          ]}
+        />
+      )}
+
+      {items !== null && pestania === 'resultado' && <Resultado campania={campania} items={items} />}
+
+      {items !== null && pestania !== 'resultado' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[3], marginBottom: space[4] }}>
             <KpiCard label="Productos" value={String(resumen.total)} sub={resumen.pendientes ? `${resumen.pendientes} sin definir` : 'todos definidos'} />
@@ -528,15 +577,20 @@ function DetalleCampania({
           )}
 
           {/*
-            Escribir el precio en Gestión Nube es la tanda 3. Decirlo acá es más honesto que dejar
-            una pantalla que se ve terminada y no hace lo que promete el nombre.
+            El Monitor no puede escribir los precios: el token no tiene permiso sobre productos
+            (`PATCH /productos/{id}` → 403 «Invalid ability provided»), así que se cargan a mano.
+            Decirlo acá es más honesto que dejar una pantalla que se ve terminada y no hace lo que
+            promete el nombre — y la pestaña Resultado es la que después verifica que se hayan
+            cargado de verdad.
           */}
           <Card style={{ marginTop: space[5], background: color.bg2 }}>
             <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.6 }}>
-              Los precios decididos todavía <b>no están puestos en la tienda</b>: escribirlos en
-              Gestión Nube es el paso que sigue (tanda 3
-              {puede.aplicar ? '' : ' — y pide el permiso «Puede escribir los precios en Gestión Nube»'}).
-              Hasta entonces, la campaña es la decisión tomada y compartida, no el precio aplicado.
+              Los precios decididos acá <b>se cargan a mano en Gestión Nube</b>: el Monitor todavía no
+              tiene permiso para escribirlos por API. Cuando termines de cargarlos, marcá la campaña
+              con «Ya cargué los precios»
+              {puede.aplicar ? '' : ' (pide el permiso «Puede escribir los precios en Gestión Nube»)'}
+              {' '}y la pestaña <b>Resultado</b> te va a mostrar, contra lo que se cobró de verdad,
+              cuáles quedaron puestos y cuáles se olvidaron.
             </div>
           </Card>
         </>

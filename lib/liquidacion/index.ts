@@ -4,4 +4,5 @@
  */
 
 export * from './core'
+export * from './resultado'
 export * from './tipos'
