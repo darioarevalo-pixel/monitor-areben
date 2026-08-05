@@ -131,10 +131,10 @@ describe('estimada vs. firme', () => {
     expect(lista.find((e) => e.id === 'comercial:navidad:2026')?.seConfirma).toBe(false)
     expect(lista.find((e) => e.id === 'comercial:san-martin:2026')?.seConfirma).toBe(false)
 
-    const hito = proximas('2026-08-01', 30, {
-      hitos: [{ id: 'h1', titulo: 'Lanzamiento', fecha: '2026-08-10', firme: true }],
+    const propio = proximas('2026-08-01', 30, {
+      hitos: [hito({ id: 'h1', fecha: '2026-08-10', firme: true, titulo: 'Lanzamiento' })],
     }).find((e) => e.clase === 'hito')
-    expect(hito?.seConfirma).toBe(false)
+    expect(propio?.seConfirma).toBe(false)
   })
 })
 
