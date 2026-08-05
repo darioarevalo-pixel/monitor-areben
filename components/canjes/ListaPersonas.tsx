@@ -62,12 +62,19 @@ function haceCuanto(dias: number | null): string {
 export function ListaPersonas({
   personas,
   store,
+  marcadas,
+  onMarcar,
+  onProponerALasMarcadas,
   onAbrir,
   onProponer,
   onBorrada,
 }: {
   personas: PersonaEnLista[]
   store: CanjeStore
+  /** A quiénes se les tildó la casilla, para proponerles el mismo canje a todas. */
+  marcadas: Set<number>
+  onMarcar: (ids: Set<number>) => void
+  onProponerALasMarcadas: () => void
   onAbrir: (id: number) => void
   /** El atajo de la fila: proponerle un canje sin abrir la ficha. */
   onProponer: (p: PersonaEnLista) => void
@@ -97,6 +104,10 @@ export function ListaPersonas({
     })
   }, [personas, q, filtro])
 
+  /** Las que se ven y se pueden marcar: la casilla de la cabecera trabaja sobre estas. */
+  const marcables = useMemo(() => visibles.filter((p) => !p.vetada), [visibles])
+  const todasMarcadas = marcables.length > 0 && marcables.every((p) => marcadas.has(p.id))
+
   if (!personas.length) {
     return (
       <EmptyState
@@ -117,12 +128,51 @@ export function ListaPersonas({
         </span>
       </div>
 
+      {/* La barra de la selección. Dice que las marcadas sobreviven a los filtros porque es
+          exactamente el malentendido que la barra existe para evitar: cambiar de chip y creer que
+          se está por proponerle un canje sólo a las que se ven. */}
+      {marcadas.size > 0 && (
+        <div style={{
+          display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap',
+          marginBottom: space[3], padding: space[3], borderRadius: 8,
+          background: color.bg2, border: `1px solid ${color.line}`,
+        }}
+        >
+          <span style={{ fontWeight: weight.medium }}>
+            {marcadas.size === 1 ? '1 persona marcada' : `${marcadas.size} personas marcadas`}
+          </span>
+          <span style={{ color: color.mut, fontSize: font.sm }}>
+            Siguen marcadas aunque cambies el filtro o el buscador.
+          </span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
+            <Button variant="ghost" size="sm" onClick={() => onMarcar(new Set())}>Limpiar</Button>
+            <Button variant="solid" tone="brand" size="sm" onClick={onProponerALasMarcadas}>
+              Proponerles un canje
+            </Button>
+          </span>
+        </div>
+      )}
+
       {!visibles.length ? (
         <EmptyState dashed title="Nadie coincide con eso" hint="Probá con otro texto o sacá los filtros." />
       ) : (
         <TableWrap>
           <THead>
             <Tr>
+              <Th width={36}>
+                {/* Tilda las que se están viendo, no el padrón entero: marcar 300 personas con un
+                    click no es algo que alguien quiera hacer sin querer. */}
+                <input
+                  type="checkbox"
+                  aria-label="Marcar las que se ven"
+                  checked={todasMarcadas}
+                  onChange={() => {
+                    const ids = new Set(marcadas)
+                    for (const p of marcables) { if (todasMarcadas) ids.delete(p.id); else ids.add(p.id) }
+                    onMarcar(ids)
+                  }}
+                />
+              </Th>
               <Th>Persona</Th>
               <Th>Última acción</Th>
               <Th>Marcas</Th>
@@ -135,6 +185,24 @@ export function ListaPersonas({
           <TBody>
             {visibles.map((p) => (
               <Tr key={p.id} onClick={() => onAbrir(p.id)} style={{ cursor: 'pointer' }}>
+                <Td>
+                  {/* Una vetada no se puede marcar, igual que no se le puede proponer de a una: el
+                      servidor la rechaza con un 403 y meterla al lote es mandar a alguien contra un
+                      error que ya sabemos. `stopPropagation` porque la fila abre la ficha. */}
+                  <input
+                    type="checkbox"
+                    aria-label={`Marcar a ${p._nombre}`}
+                    disabled={p.vetada}
+                    checked={marcadas.has(p.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const ids = new Set(marcadas)
+                      if (e.target.checked) ids.add(p.id)
+                      else ids.delete(p.id)
+                      onMarcar(ids)
+                    }}
+                  />
+                </Td>
                 <Td>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>

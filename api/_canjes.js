@@ -293,6 +293,74 @@ function entregablesDelBody(lista, cfg) {
   }
   return [...porTipo.values()];
 }
+
+// ── El alta de una persona ────────────────────────────────────────────────────
+
+/** El tope del alta masiva. Espejo del de `lib/canjes/alta-masiva.ts`, que lo avisa en pantalla. */
+const TOPE_ALTA_LOTE = 50;
+
+/**
+ * Cuántos canjes se pueden crear de una sola vez.
+ *
+ * Mucho más bajo que el de la vitrina (120) y no por capricho: aquél es **un** insert con 120 filas
+ * adentro, y esto son **dos idas a la base por canje**. Es la primera acción del módulo con costo
+ * O(N) dentro de un request, y pasada cierta cantidad el lote se muere por timeout habiendo escrito
+ * la mitad — que es el peor final posible, porque no hay transacción que lo desarme.
+ */
+const TOPE_CANJES_LOTE = 25;
+
+/**
+ * Dar de alta a UNA persona: normaliza el @, la busca, y si no está la crea.
+ *
+ * 🔑 **Una sola implementación, y la llaman las dos altas** (la de a una y la del lote). El dedup por
+ * @ normalizado y el fallback de carrera son la única defensa contra fichas duplicadas con
+ * historiales partidos: copiados en dos lugares, van a divergir el día que alguien toque uno — que
+ * es exactamente lo que el AGENTS.md de este repo dice de los permisos.
+ *
+ * Devuelve `{ persona, existia }`. Que ya exista **no es un error**: es el caso normal, la misma
+ * creadora vuelve.
+ */
+async function altaDeUnaPersona(supabase, b, usuario) {
+  const instagram = normalizarInstagram(b.instagram);
+  if (!instagram) return { error: 'falta el Instagram (es el único dato obligatorio)' };
+
+  const { data: previa, error: eBusca } = await supabase
+    .from('canje_personas').select(PERSONA_COLS).eq('instagram', instagram).maybeSingle();
+  if (eBusca) throw new Error(eBusca.message);
+  if (previa) return { persona: previa, existia: true };
+
+  const { data, error } = await supabase
+    .from('canje_personas').insert(filaDeAlta(b, instagram, usuario)).select(PERSONA_COLS).single();
+  if (error) {
+    // Carrera con otro operador dando de alta el mismo @ al mismo tiempo: el unique de la base es la
+    // última palabra, y devolver la fila que ganó es mejor que un 500.
+    if (/duplicate key|unique/i.test(error.message)) {
+      const { data: gano } = await supabase
+        .from('canje_personas').select(PERSONA_COLS).eq('instagram', instagram).maybeSingle();
+      if (gano) return { persona: gano, existia: true };
+    }
+    throw new Error(error.message);
+  }
+  return { persona: data, existia: false };
+}
+
+/** La fila tal como se inserta. Aparte para que el alta de a una y la del lote escriban lo mismo. */
+function filaDeAlta(b, instagram, usuario) {
+  return {
+    instagram,
+    instagram_raw: texto(b.instagram_raw || b.instagram),
+    nombre: texto(b.nombre),
+    apellido: texto(b.apellido),
+    telefono: texto(b.telefono),
+    email: texto(b.email),
+    tiktok: texto(b.tiktok),
+    ciudad: texto(b.ciudad),
+    cadencia_dias: num(b.cadencia_dias) || 90,
+    usuario,
+    historial: [{ at: new Date().toISOString(), usuario, nota: 'ficha creada' }],
+  };
+}
+
 // ── La vitrina ────────────────────────────────────────────────────────────────
 const ESTADOS_VITRINA = ['borrador', 'activa', 'archivada'];
 
@@ -601,40 +669,111 @@ export default async function handler(req, res) {
     // Un solo campo: el @. Que dar de alta cueste un renglón es lo que hace que el padrón se llene;
     // pedirle diez campos al operador es lo que hace que siga en la planilla.
     if (action === 'persona-crear') {
-      const instagram = normalizarInstagram(b.instagram);
-      if (!instagram) return res.status(400).json({ error: 'falta el Instagram (es el único dato obligatorio)' });
-
       // Si ya existe se devuelve la que hay, con `existia: true`, y la UI abre esa ficha en vez de
       // tirar un error. Es el caso normal, no el excepcional: la misma creadora vuelve.
-      const { data: previa, error: eBusca } = await supabase
-        .from('canje_personas').select(PERSONA_COLS).eq('instagram', instagram).maybeSingle();
-      if (eBusca) throw new Error(eBusca.message);
-      if (previa) return res.status(200).json({ ok: true, persona: previa, existia: true });
+      const r = await altaDeUnaPersona(supabase, b, usuario);
+      if (r.error) return res.status(400).json({ error: r.error });
+      return res.status(200).json({ ok: true, persona: r.persona, existia: r.existia });
+    }
 
-      const row = {
-        instagram,
-        instagram_raw: texto(b.instagram_raw || b.instagram),
-        nombre: texto(b.nombre),
-        apellido: texto(b.apellido),
-        telefono: texto(b.telefono),
-        email: texto(b.email),
-        tiktok: texto(b.tiktok),
-        ciudad: texto(b.ciudad),
-        cadencia_dias: num(b.cadencia_dias) || 90,
-        usuario,
-        historial: [{ at: ahora(), usuario, nota: 'ficha creada' }],
-      };
-      const { data, error } = await supabase.from('canje_personas').insert(row).select(PERSONA_COLS).single();
-      if (error) {
-        // Carrera con otro operador dando de alta el mismo @ al mismo tiempo: el unique de la base
-        // es la última palabra, y devolver la fila que ganó es mejor que un 500.
-        if (/duplicate key|unique/i.test(error.message)) {
-          const { data: gano } = await supabase.from('canje_personas').select(PERSONA_COLS).eq('instagram', instagram).maybeSingle();
-          if (gano) return res.status(200).json({ ok: true, persona: gano, existia: true });
-        }
-        throw new Error(error.message);
+    // ── Alta de varias, de una sola vez ───────────────────────────────────────
+    //
+    // Mismo criterio que el alta de a una, N veces: que una ya esté **no es un error**. Lo que
+    // cambia es que acá el resultado se informa fila por fila — con 40 personas, un "creadas: 35"
+    // pelado deja al operador sin saber cuáles de las cinco que faltan ya estaban y cuáles fallaron,
+    // y la única salida sería revisar el padrón a mano.
+    if (action === 'personas-crear-lote') {
+      const filas = Array.isArray(b.personas) ? b.personas : [];
+      if (!filas.length) return res.status(400).json({ error: 'no viene ninguna persona' });
+      if (filas.length > TOPE_ALTA_LOTE) {
+        // Se corta, no se trunca: cargar 80 y que entren 50 en silencio es peor que tener que
+        // partirlo en dos tandas sabiendo por qué.
+        return res.status(413).json({
+          error: `Son ${filas.length} y el máximo es ${TOPE_ALTA_LOTE}. Cargalas en tandas.`,
+        });
       }
-      return res.status(200).json({ ok: true, persona: data, existia: false });
+
+      // El @ normalizado manda, y el primero de dos repetidos gana: quien tipeó dos veces la misma
+      // creadora quiso cargarla una. El cliente ya deduplica, pero acá no se le puede creer.
+      const pedidos = [];
+      const yaPedido = new Set();
+      for (const f of filas) {
+        const instagram = normalizarInstagram(f?.instagram);
+        const crudo = texto(f?.instagram_raw || f?.instagram) || '';
+        if (!instagram) { pedidos.push({ crudo, instagram: '', estado: 'invalida' }); continue; }
+        if (yaPedido.has(instagram)) { pedidos.push({ crudo, instagram, estado: 'repetida' }); continue; }
+        yaPedido.add(instagram);
+        pedidos.push({ crudo, instagram, estado: 'nueva', fila: f });
+      }
+
+      // Una sola consulta para saber quiénes ya están, en vez de una por fila.
+      const aBuscar = pedidos.filter((p) => p.estado === 'nueva').map((p) => p.instagram);
+      if (aBuscar.length) {
+        const { data: previas, error: eBusca } = await supabase
+          .from('canje_personas').select(PERSONA_COLS).in('instagram', aBuscar);
+        if (eBusca) throw new Error(eBusca.message);
+        const porIg = new Map((previas || []).map((p) => [p.instagram, p]));
+        for (const p of pedidos) {
+          const ya = porIg.get(p.instagram);
+          if (p.estado === 'nueva' && ya) { p.estado = 'existia'; p.persona = ya; }
+        }
+      }
+
+      const nuevas = pedidos.filter((p) => p.estado === 'nueva');
+      if (nuevas.length) {
+        const { data, error } = await supabase
+          .from('canje_personas')
+          .insert(nuevas.map((p) => filaDeAlta(p.fila, p.instagram, usuario)))
+          .select(PERSONA_COLS);
+        if (error) {
+          // Un insert en lote muere ENTERO si una sola fila choca contra el unique (una carrera con
+          // otro operador). Se cae a una por una: es lento, pero pasa una vez cada muerte de obispo
+          // y el resto del lote no tiene por qué perderse.
+          if (/duplicate key|unique/i.test(error.message)) {
+            for (const p of nuevas) {
+              try {
+                const r = await altaDeUnaPersona(supabase, p.fila, usuario);
+                if (r.error) { p.estado = 'error'; p.error = r.error; continue; }
+                p.estado = r.existia ? 'existia' : 'creada';
+                p.persona = r.persona;
+              } catch (e) {
+                p.estado = 'error';
+                p.error = String(e?.message || e);
+              }
+            }
+          } else {
+            throw new Error(error.message);
+          }
+        } else {
+          const porIg = new Map((data || []).map((x) => [x.instagram, x]));
+          for (const p of nuevas) {
+            const creada = porIg.get(p.instagram);
+            if (creada) { p.estado = 'creada'; p.persona = creada; }
+            else { p.estado = 'error'; p.error = 'la base no la devolvió'; }
+          }
+        }
+      }
+
+      // Se responde en el mismo orden en que vinieron: la pantalla dibuja el resultado fila por
+      // fila contra lo que el operador tipeó, no contra lo que la previsualización había prometido.
+      const resultados = pedidos.map((p) => ({
+        instagram: p.instagram,
+        instagram_raw: p.crudo,
+        estado: p.estado,
+        id: p.persona?.id ?? null,
+        nombre: p.persona ? [p.persona.nombre, p.persona.apellido].filter(Boolean).join(' ') : null,
+        error: p.error || null,
+      }));
+      const cuenta = (e) => resultados.filter((r) => r.estado === e).length;
+      return res.status(200).json({
+        ok: true,
+        resultados,
+        creadas: cuenta('creada'),
+        existian: cuenta('existia'),
+        repetidas: cuenta('repetida'),
+        invalidas: cuenta('invalida'),
+        errores: cuenta('error'),
+      });
     }
 
     const id = parseInt(b.id, 10);
@@ -1011,6 +1150,95 @@ export default async function handler(req, res) {
 
     // ══ EL CANJE ══════════════════════════════════════════════════════════════
 
+    /**
+     * Lo compartido de la propuesta: todo menos de quién es.
+     *
+     * Se arma UNA vez y lo usan el alta de a una y la del lote. Nada de esto depende de la persona
+     * —ni siquiera el nivel de firma, que sale de `tipo`, `tope_pvp` y la config—, así que en un
+     * lote de veinticinco se valida una vez y no veinticinco.
+     */
+    async function baseDeLaPropuesta(cfgStore) {
+      const tope_tipo = TOPE_TIPOS.includes(b.tope_tipo) ? b.tope_tipo : 'unidades';
+      const tipo = TIPOS_CANJE.includes(b.tipo) ? b.tipo : 'producto';
+      // De qué vitrina va a elegir. Opcional: sin vitrina el canje sigue funcionando como siempre
+      // —los productos los carga el equipo— y el link sólo le pide los datos.
+      const vit = await vitrinaValida(b.vitrina_id, store);
+      if (vit.error) return { error: vit.error };
+      return {
+        row: {
+          store,
+          tipo,
+          vitrina_id: vit.id,
+          titulo: texto(b.titulo),
+          nota: texto(b.nota),
+          tope_tipo,
+          tope_pvp: tope_tipo === 'monto' ? num(b.tope_pvp) : null,
+          tope_unidades: tope_tipo === 'unidades' && Array.isArray(b.tope_unidades) ? b.tope_unidades : [],
+          monto_plata: tipo === 'producto_plata' ? num(b.monto_plata) : null,
+          // El pendiente de pago sólo existe si hay plata: si no, sería un pendiente que nunca se
+          // resuelve y que traba el cierre para siempre.
+          pago_estado: tipo === 'producto_plata' ? 'pendiente' : 'no_aplica',
+          usuario,
+        },
+        entregables: entregablesDelBody(b.entregables, cfgStore),
+      };
+    }
+
+    /**
+     * Crear UN canje con sus entregables. **La unidad de atomicidad del módulo.**
+     *
+     * El lote la llama N veces en vez de insertar N filas de una: así la compensación de acá abajo
+     * —si los entregables no entran, el canje no queda— vale igual para el lote sin escribirla dos
+     * veces, y un lote a medias son doce canjes válidos, no doce canjes rotos.
+     */
+    async function crearUnCanje(personaId, base, cfgStore) {
+      const row = { ...base.row, persona_id: personaId };
+
+      // ── La firma que se saltea sola ───────────────────────────────────────
+      // Espejo de `naceEn`. Si quien lo propone ya podía firmarlo, no tiene sentido mandarlo a una
+      // pestaña para que se apruebe a sí mismo. Que se saltee NO borra la firma: se estampa igual,
+      // porque de lo que sirve una aprobación es de saber quién se hizo cargo.
+      const nivel = subQueApruebe(row, [], cfgStore);
+      const firmaSola = puedeFirmar(perfil, store, nivel);
+      row.estado = firmaSola ? 'enviada' : 'propuesta';
+      row.contacto_estado = 'pendiente';
+      if (firmaSola) {
+        row.aprobado_por = usuario;
+        row.aprobado_at = ahora();
+        row.aprobacion_nivel = nivel;
+      }
+      row.historial = [{
+        estado: row.estado,
+        at: ahora(),
+        usuario,
+        nota: firmaSola ? 'propuesta armada' : 'propuesta armada, a la firma',
+      }];
+
+      const { data, error } = await supabase.from('canjes').insert(row).select('id').single();
+      if (error) throw new Error(error.message);
+
+      // Los entregables van en el MISMO request: hacerlo con N llamadas desde el browser deja un
+      // canje a medias si falla la tercera, y lo que se le prometió publicar es parte de la
+      // propuesta, no un agregado posterior.
+      if (base.entregables.length) {
+        const { error: e2 } = await supabase.from('canje_entregables')
+          // ⚠️ Sin `usuario`: `canje_entregables` no tiene esa columna (quién lo cargó vive en el
+          // historial del canje, que es donde se mira). Ponerla tira "Could not find the 'usuario'
+          // column ... in the schema cache".
+          .insert(base.entregables.map((e) => ({ ...e, canje_id: data.id })));
+        if (e2) {
+          // No hay transacción (supabase-js va por REST), así que se compensa a mano: **si los
+          // entregables no entran, el canje no queda**. Un canje sin lo que prometió publicar es
+          // exactamente lo que la propuesta en una sola pantalla vino a evitar, y peor todavía
+          // porque el que lo creó vio un error y se fue creyendo que no se había guardado nada.
+          await supabase.from('canjes').delete().eq('id', data.id);
+          throw new Error(e2.message);
+        }
+      }
+
+      return { id: data.id, numero: numeroCanje(data.id), estado: row.estado };
+    }
+
     if (action === 'canje-crear') {
       const personaId = parseInt(b.persona_id, 10);
       if (!personaId) return res.status(400).json({ error: 'falta la persona' });
@@ -1034,75 +1262,76 @@ export default async function handler(req, res) {
         if (bloqueo) return res.status(403).json({ error: bloqueo });
       }
 
-      const tope_tipo = TOPE_TIPOS.includes(b.tope_tipo) ? b.tope_tipo : 'unidades';
-      const tipo = TIPOS_CANJE.includes(b.tipo) ? b.tipo : 'producto';
-      // De qué vitrina va a elegir. Opcional: sin vitrina el canje sigue funcionando como siempre
-      // —los productos los carga el equipo— y el link sólo le pide los datos.
-      const vit = await vitrinaValida(b.vitrina_id, store);
-      if (vit.error) return res.status(400).json({ error: vit.error });
-      const row = {
-        persona_id: personaId,
-        store,
-        tipo,
-        vitrina_id: vit.id,
-        titulo: texto(b.titulo),
-        nota: texto(b.nota),
-        tope_tipo,
-        tope_pvp: tope_tipo === 'monto' ? num(b.tope_pvp) : null,
-        tope_unidades: tope_tipo === 'unidades' && Array.isArray(b.tope_unidades) ? b.tope_unidades : [],
-        monto_plata: tipo === 'producto_plata' ? num(b.monto_plata) : null,
-        // El pendiente de pago sólo existe si hay plata: si no, sería un pendiente que nunca se
-        // resuelve y que traba el cierre para siempre.
-        pago_estado: tipo === 'producto_plata' ? 'pendiente' : 'no_aplica',
-        usuario,
-      };
+      const base = await baseDeLaPropuesta(cfgStore);
+      if (base.error) return res.status(400).json({ error: base.error });
 
-      // ── La firma que se saltea sola ─────────────────────────────────────────
-      // Espejo de `naceEn`. Si quien lo propone ya podía firmarlo, no tiene sentido mandarlo a una
-      // pestaña para que se apruebe a sí mismo. Que se saltee NO borra la firma: se estampa igual,
-      // porque de lo que sirve una aprobación es de saber quién se hizo cargo.
-      const nivel = subQueApruebe(row, [], cfgStore);
-      const firmaSola = puedeFirmar(perfil, store, nivel);
-      row.estado = firmaSola ? 'enviada' : 'propuesta';
-      row.contacto_estado = 'pendiente';
-      if (firmaSola) {
-        row.aprobado_por = usuario;
-        row.aprobado_at = ahora();
-        row.aprobacion_nivel = nivel;
+      const creado = await crearUnCanje(personaId, base, cfgStore);
+      return res.status(200).json({ ok: true, ...creado });
+    }
+
+    // ── La misma propuesta, para varias personas ──────────────────────────────
+    //
+    // ⚠️ **Va ANTES del `parseInt(b.id)` de acá abajo**: esta acción no manda `id`, y puesta después
+    // moriría con "falta id" sin llegar nunca a su `if`.
+    //
+    // Dos fases. Primero se valida lo compartido —vitrina, tope, entregables— y si algo de eso está
+    // mal se corta sin escribir nada. Después se crean de a uno: **una persona vetada no aborta el
+    // lote**, va a `rechazadas` y las demás se crean igual. Quien eligió veinte no tiene por qué
+    // volver a elegirlas por una; lo que no puede pasar es que se la saltee en silencio, y por eso
+    // la pantalla las muestra con el motivo.
+    //
+    // ⚠️ Si esto se corta por timeout, reintentar crea canjes DUPLICADOS: no hay unique que lo
+    // impida. Por eso el cliente deshabilita el botón mientras guarda y, ante un error de red, dice
+    // "puede que algunos se hayan creado, actualizá y revisá" en vez de ofrecer reintentar.
+    if (action === 'canjes-crear-lote') {
+      const ids = [...new Set((Array.isArray(b.persona_ids) ? b.persona_ids : [])
+        .map((x) => parseInt(x, 10)).filter(Boolean))];
+      if (!ids.length) return res.status(400).json({ error: 'no viene ninguna persona' });
+      if (ids.length > TOPE_CANJES_LOTE) {
+        // El tope es mucho más bajo que el de la vitrina porque acá el costo es O(N): cada canje son
+        // dos idas a la base. Con cien, el lote se muere a mitad de camino habiendo escrito la mitad.
+        return res.status(413).json({
+          error: `Son ${ids.length} y el máximo es ${TOPE_CANJES_LOTE}. Hacelo en tandas.`,
+        });
       }
-      row.historial = [{
-        estado: row.estado,
-        at: ahora(),
-        usuario,
-        nota: firmaSola ? 'propuesta armada' : 'propuesta armada, a la firma',
-      }];
 
-      const { data, error } = await supabase.from('canjes').insert(row).select('id').single();
-      if (error) throw new Error(error.message);
+      const cfgStore = await configDe(store);
+      const base = await baseDeLaPropuesta(cfgStore);
+      if (base.error) return res.status(400).json({ error: base.error });
 
-      // Los entregables vienen en el MISMO request: hacerlo con N llamadas desde el browser deja un
-      // canje a medias si falla la tercera, y lo que se le prometió publicar es parte de la
-      // propuesta, no un agregado posterior.
-      const entregables = entregablesDelBody(b.entregables, cfgStore);
-      if (entregables.length) {
-        const { error: e2 } = await supabase.from('canje_entregables')
-          // ⚠️ Sin `usuario`: `canje_entregables` no tiene esa columna (quién lo cargó vive en el
-          // historial del canje, que es donde se mira). Ponerla tira "Could not find the 'usuario'
-          // column ... in the schema cache".
-          .insert(entregables.map((e) => ({ ...e, canje_id: data.id })));
-        if (e2) {
-          // No hay transacción (supabase-js va por REST), así que se compensa a mano: **si los
-          // entregables no entran, el canje no queda**. Un canje sin lo que prometió publicar es
-          // exactamente lo que la propuesta en una sola pantalla vino a evitar, y peor todavía
-          // porque el que lo creó vio un error y se fue creyendo que no se había guardado nada.
-          await supabase.from('canjes').delete().eq('id', data.id);
-          throw new Error(e2.message);
+      // Las N personas en una sola consulta, y los bloqueos en tres más (no en tres por persona).
+      const { data: personas, error: ePersonas } = await supabase.from('canje_personas')
+        .select('id, nombre, apellido, vetada, vetada_motivo').in('id', ids);
+      if (ePersonas) throw new Error(ePersonas.message);
+      const porId = new Map((personas || []).map((p) => [p.id, p]));
+      const bloqueos = cfgStore.bloquear_por_vencidos ? await motivosDeBloqueo(ids) : new Map();
+
+      const creados = [];
+      const rechazadas = [];
+      const errores = [];
+      for (const personaId of ids) {
+        const persona = porId.get(personaId);
+        if (!persona) { rechazadas.push({ persona_id: personaId, motivo: 'No existe esa persona.' }); continue; }
+        if (persona.vetada) {
+          rechazadas.push({
+            persona_id: personaId,
+            motivo: persona.vetada_motivo ? `Está vetada: ${persona.vetada_motivo}` : 'Está vetada.',
+          });
+          continue;
+        }
+        const bloqueo = bloqueos.get(personaId);
+        if (bloqueo) { rechazadas.push({ persona_id: personaId, motivo: bloqueo }); continue; }
+
+        try {
+          creados.push({ persona_id: personaId, ...(await crearUnCanje(personaId, base, cfgStore)) });
+        } catch (e) {
+          // El canje que falló ya se limpió solo (la compensación de `crearUnCanje`). Los demás del
+          // lote no tienen por qué caerse con él.
+          errores.push({ persona_id: personaId, error: String(e?.message || e) });
         }
       }
 
-      return res.status(200).json({
-        ok: true, id: data.id, numero: numeroCanje(data.id), estado: row.estado,
-      });
+      return res.status(200).json({ ok: true, creados, rechazadas, errores });
     }
 
     const canjeId = parseInt(b.id, 10);
@@ -1756,11 +1985,25 @@ export default async function handler(req, res) {
     }));
   }
 
-  async function motivoDeBloqueo(personaId) {
+  /**
+   * Por qué NO se le puede proponer un canje a cada una de estas personas. Devuelve un `Map` con el
+   * motivo en criollo, o `null` para las que están libres.
+   *
+   * 🔑 **Va en lote a propósito.** Son tres consultas, y son tres para una persona o para
+   * veinticinco: llamarla por fila plantaría 75 idas a la base adentro de un solo request, que es
+   * exactamente cómo se muere por timeout habiendo escrito la mitad del lote.
+   */
+  async function motivosDeBloqueo(personaIds) {
+    const motivos = new Map(personaIds.map((id) => [id, null]));
+    if (!personaIds.length) return motivos;
+
     const { data: suyos } = await supabase.from('canjes')
-      .select('id, estado').eq('persona_id', personaId).not('estado', 'in', '(rechazado,cerrado,cancelado)');
-    if (!suyos || !suyos.length) return null;
+      .select('id, persona_id, estado').in('persona_id', personaIds)
+      .not('estado', 'in', '(rechazado,cerrado,cancelado)');
+    if (!suyos || !suyos.length) return motivos;
+
     const ids = suyos.map((c) => c.id);
+    const dePersona = new Map(suyos.map((c) => [c.id, c.persona_id]));
     const [ents, evis] = await Promise.all([
       supabase.from('canje_entregables').select('*').in('canje_id', ids),
       supabase.from('canje_evidencias').select('canje_id, entregable_id, verificada').in('canje_id', ids),
@@ -1775,9 +2018,17 @@ export default async function handler(req, res) {
       if (!e.obligatorio || !e.vence_el || e.vence_el >= hoyISO) continue;
       const cumplidas = Math.min(verificadas.get(e.id) || 0, Number(e.cantidad_comprometida) || 0);
       if (cumplidas >= (Number(e.cantidad_comprometida) || 0)) continue;
-      return `Tiene entregables vencidos del canje ${numeroCanje(e.canje_id)}. Resolvelo antes de proponerle otro.`;
+      const persona = dePersona.get(e.canje_id);
+      // Gana el primero que aparece: alcanza con un vencido para no proponerle otro.
+      if (persona != null && !motivos.get(persona)) {
+        motivos.set(persona, `Tiene entregables vencidos del canje ${numeroCanje(e.canje_id)}. Resolvelo antes de proponerle otro.`);
+      }
     }
-    return null;
+    return motivos;
+  }
+
+  async function motivoDeBloqueo(personaId) {
+    return (await motivosDeBloqueo([personaId])).get(personaId) || null;
   }
 }
 

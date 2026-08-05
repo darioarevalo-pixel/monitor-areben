@@ -129,6 +129,50 @@ export async function crearPersona(
   return { persona: d.persona as CanjePersona, existia: d.existia === true }
 }
 
+/** Cómo terminó cada fila del alta masiva, en el mismo orden en que se tipearon. */
+export type ResultadoAlta = {
+  instagram: string
+  instagram_raw: string
+  estado: 'creada' | 'existia' | 'repetida' | 'invalida' | 'error'
+  id: number | null
+  /** De quién es la ficha, cuando ya estaba. */
+  nombre: string | null
+  error: string | null
+}
+
+export type ResumenLoteAlta = {
+  resultados: ResultadoAlta[]
+  creadas: number
+  existian: number
+  repetidas: number
+  invalidas: number
+  errores: number
+}
+
+/**
+ * El alta de varias de una sola vez.
+ *
+ * ⚠️ **Lo que devuelve esto es el resultado; lo que muestra la grilla mientras se tipea es una
+ * previsión.** Las dos usan normalizaciones distintas del @ —la de acá es TS, la que decide es la
+ * copia JS del handler— y una divergencia entre ellas es invisible en el alta de a una pero en un
+ * lote de cuarenta significa prometer 38 y crear 35. Por eso la pantalla de resultado se dibuja
+ * desde `resultados`, fila por fila.
+ */
+export async function crearPersonasLote(
+  store: CanjeStore,
+  personas: Array<{ instagram: string; instagram_raw?: string; nombre?: string; telefono?: string; ciudad?: string }>,
+): Promise<ResumenLoteAlta> {
+  const d = await postear({ store, action: 'personas-crear-lote', personas })
+  return {
+    resultados: (d.resultados as ResultadoAlta[]) || [],
+    creadas: Number(d.creadas) || 0,
+    existian: Number(d.existian) || 0,
+    repetidas: Number(d.repetidas) || 0,
+    invalidas: Number(d.invalidas) || 0,
+    errores: Number(d.errores) || 0,
+  }
+}
+
 export type CamposPersona = Partial<{
   instagram: string
   nombre: string | null
@@ -364,6 +408,38 @@ export async function crearCanje(
 ): Promise<{ id: number; numero: string; estado: EstadoCanje }> {
   const d = await postear({ store, action: 'canje-crear', ...datos })
   return { id: d.id as number, numero: d.numero as string, estado: d.estado as EstadoCanje }
+}
+
+/** La misma propuesta, sin de quién es: en el lote la persona la pone cada fila. */
+export type PropuestaSinPersona = Omit<NuevoCanje, 'persona_id'>
+
+export type CanjeDelLote = { persona_id: number; id: number; numero: string; estado: EstadoCanje }
+
+export type ResumenLoteCanjes = {
+  creados: CanjeDelLote[]
+  /** Las que el servidor dejó afuera, con el motivo ya escrito en criollo. */
+  rechazadas: Array<{ persona_id: number; motivo: string }>
+  errores: Array<{ persona_id: number; error: string }>
+}
+
+/**
+ * Un canje **igual** para varias personas: misma marca, misma vitrina, mismo tope y los mismos
+ * entregables. Cada una conserva su propio canje, su propio link y sus propios datos.
+ *
+ * Una persona vetada o con vencidos **no aborta el lote**: vuelve en `rechazadas` con el motivo.
+ *
+ * ⚠️ Si esto se corta por red o por timeout, **no reintentar**: no hay nada que impida crear los
+ * mismos canjes dos veces. Lo correcto es recargar y mirar qué quedó.
+ */
+export async function crearCanjesLote(
+  store: CanjeStore, personaIds: number[], datos: PropuestaSinPersona,
+): Promise<ResumenLoteCanjes> {
+  const d = await postear({ store, action: 'canjes-crear-lote', persona_ids: personaIds, ...datos })
+  return {
+    creados: (d.creados as CanjeDelLote[]) || [],
+    rechazadas: (d.rechazadas as ResumenLoteCanjes['rechazadas']) || [],
+    errores: (d.errores as ResumenLoteCanjes['errores']) || [],
+  }
 }
 
 export async function editarCanje(store: CanjeStore, id: number, campos: Partial<NuevoCanje>): Promise<void> {

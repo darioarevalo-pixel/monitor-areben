@@ -32,6 +32,8 @@ import { marcaDePermisos } from '@/lib/canjes/marcas.js'
 import { nivelesQueFirma, puedeConfigurarCanjes, veMarcaCanjes } from '@/lib/canjes/permisos'
 import { STORE_LABEL, type CanjePersona, type CanjeStore } from '@/lib/canjes/tipos'
 import { Ajustes } from './Ajustes'
+import { AltaMasiva } from './AltaMasiva'
+import { CanjeMasivo } from './CanjeMasivo'
 import { FichaCanje } from './FichaCanje'
 import { GuiaCanjes, LineaDeEstados } from './GuiaCanjes'
 import { FichaPersona } from './FichaPersona'
@@ -60,8 +62,15 @@ export function Canjes() {
   const [abierta, setAbierta] = useState<number | null>(null)
   const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
   const [dandoAlta, setDandoAlta] = useState(false)
+  const [cargandoVarias, setCargandoVarias] = useState(false)
   /** A quién se le está proponiendo algo desde la lista, sin entrar a su ficha. */
   const [proponiendoA, setProponiendoA] = useState<CanjePersona | null>(null)
+  /**
+   * A quiénes se les marcó la casilla en el padrón. Vive acá y no en `ListaPersonas` para que la
+   * selección sobreviva a cambiar de pestaña y volver.
+   */
+  const [marcadas, setMarcadas] = useState<Set<number>>(() => new Set())
+  const [proponiendoALote, setProponiendoALote] = useState(false)
 
   const est = useCanjes(store)
 
@@ -101,6 +110,11 @@ export function Canjes() {
       <HeaderAcciones>
         <Button variant="outline" onClick={() => void est.recargar()} disabled={est.cargando}>
           Actualizar
+        </Button>
+        {/* Dos botones y no un modo adentro del alta de a una: ésa es el camino caliente y su gracia
+            es que cuesta un renglón. */}
+        <Button variant="outline" onClick={() => setCargandoVarias(true)}>
+          Cargar varias
         </Button>
         <Button variant="solid" tone="brand" onClick={() => setDandoAlta(true)}>
           Agregar persona
@@ -175,6 +189,9 @@ export function Canjes() {
         <ListaPersonas
           personas={est.personas}
           store={store}
+          marcadas={marcadas}
+          onMarcar={setMarcadas}
+          onProponerALasMarcadas={() => setProponiendoALote(true)}
           onAbrir={abrir}
           onProponer={setProponiendoA}
           onBorrada={async () => {
@@ -229,6 +246,29 @@ export function Canjes() {
           onListo={canjeCreado}
         />
       )}
+
+      {/* El mismo canje para todas las marcadas. Cada una conserva su link: no es un canje con
+          varias personas adentro, son varios canjes iguales. */}
+      {proponiendoALote && (
+        <CanjeMasivo
+          personas={est.personas.filter((p) => marcadas.has(p.id))}
+          store={store}
+          configs={est.configs}
+          vitrinas={est.vitrinas}
+          marcasVisibles={est.marcasVisibles}
+          susNiveles={susNiveles}
+          onCerrar={() => { setProponiendoALote(false); setMarcadas(new Set()) }}
+          onListo={est.recargar}
+        />
+      )}
+
+      <AltaMasiva
+        abierto={cargandoVarias}
+        store={store}
+        personas={est.personas}
+        onCerrar={() => setCargandoVarias(false)}
+        onListo={est.recargar}
+      />
 
       <AltaPersona
         abierto={dandoAlta}

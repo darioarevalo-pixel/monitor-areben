@@ -128,6 +128,18 @@ describe('quienApruebaCanje — el gate de autorización', () => {
         .toBe(quienApruebaCanje(c, items, config))
     }
   })
+
+  it('el nivel de firma NO depende de la persona', () => {
+    // Es lo que permite que un lote de veinticinco calcule la firma una sola vez en vez de
+    // veinticinco. Si algún día el nivel pasara a mirar a la persona (su puntaje, sus vencidos),
+    // este test se cae y hay que volver a calcularlo por fila en `canjes-crear-lote`.
+    const config = cfg({ umbral_aprobacion_alta: 50000 })
+    const base = canje({ persona_id: 7 })
+    for (const personaId of [1, 99, 12345]) {
+      expect(subQueApruebe(canje({ ...base, persona_id: personaId }), [], config))
+        .toBe(subQueApruebe(base, [], config))
+    }
+  })
 })
 
 // ── El tope ──────────────────────────────────────────────────────────────────────
