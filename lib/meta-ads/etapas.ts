@@ -23,15 +23,12 @@ import {
   ETAPA_POR_OBJETIVO as ETAPA_POR_OBJETIVO_JS,
   ETIQUETA_ETAPA as ETIQUETA_ETAPA_JS,
   etapaDeObjetivo as etapaDeObjetivoJs,
-  marcaDeCuentaAds as marcaDeCuentaAdsJs,
-  MARCA_POR_CUENTA as MARCA_POR_CUENTA_JS,
   UMBRALES_ETAPA as UMBRALES_ETAPA_JS,
 } from './etapas.core.js'
 
 export const ETAPAS = ETAPAS_JS as readonly Etapa[]
 export const ETAPA_POR_OBJETIVO = ETAPA_POR_OBJETIVO_JS as Record<string, EtapaOSin>
 export const ETIQUETA_ETAPA = ETIQUETA_ETAPA_JS as Record<EtapaOSin, string>
-export const MARCA_POR_CUENTA = MARCA_POR_CUENTA_JS as Record<string, string>
 export const UMBRALES_ETAPA = UMBRALES_ETAPA_JS as {
   dias: number
   diasAmplio: number
@@ -42,7 +39,6 @@ export const UMBRALES_ETAPA = UMBRALES_ETAPA_JS as {
 }
 
 export const etapaDeObjetivo = etapaDeObjetivoJs as (objetivo: string | null | undefined) => EtapaOSin
-export const marcaDeCuentaAds = marcaDeCuentaAdsJs as (accountId: string) => string | null
 
 /**
  * Qué es cada etapa, explicado para quien tiene que craneаr el creativo — no para quien compra

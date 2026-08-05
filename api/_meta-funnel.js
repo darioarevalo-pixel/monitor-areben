@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeSub, puedeVer } from '../lib/permisos.core.js';
 import { ETAPAS } from '../lib/meta-ads/etapas.core.js';
+import { baseDeLinea, esLinea } from '../lib/meta-ads/lineas.core.js';
 import { conPaso, puedeEditarIdea, puedeTransicionar, SUB_PAUTAR } from '../lib/meta-ads/ideas.core.js';
 
 function cfgFor(store) {
@@ -36,6 +37,18 @@ function cfgFor(store) {
     url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co',
     key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
   };
+}
+
+/**
+ * La tabla de líneas vive en UNA sola base (la de BDI) y la leen las dos, sea cual sea el `store`
+ * que se pidió. De qué marca es una campaña es un hecho único, no una decisión de cada marca:
+ * guardarlo por base dejaría a una pantalla viendo «sin asignar» lo que la otra ya asignó, sin que
+ * ninguna de las dos vea el choque. El detalle está arriba de `sql/migrate-meta-ads-linea.sql`.
+ */
+function clienteLineas() {
+  const cfg = cfgFor('bdi');
+  if (!cfg.url || !cfg.key) return null;
+  return createClient(cfg.url, cfg.key);
 }
 
 /** Quién es esta persona, en una marca, para esta sección. Una sola lectura de permisos. */
@@ -87,6 +100,17 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message);
         out.overrides = data || [];
       }
+      if (que === 'lineas' || que === 'todo') {
+        // Sin `.eq('store', …)`: la tabla no tiene esa columna a propósito, y se lee entera desde
+        // la base de BDI aunque el pedido venga con store=zattia.
+        const sb = clienteLineas();
+        if (!sb) throw new Error('Faltan credenciales de Supabase para leer las líneas de pauta.');
+        const { data, error } = await sb
+          .from('meta_ads_campania_linea')
+          .select('campaign_id, linea, cuenta_id, nombre, objetivo, linea_previa, por, updated_at');
+        if (error) throw new Error(error.message);
+        out.lineas = data || [];
+      }
       return res.status(200).json(out);
     }
 
@@ -95,6 +119,60 @@ export default async function handler(req, res) {
     const b = req.body || {};
     const yo = quienEs(perfil);
     const ahora = new Date().toISOString();
+
+    // ── De qué marca es la campaña. Misma clase de acto que corregir la etapa: quien pautea. ────
+    //
+    // ⚠️ El permiso NO se apoya en el gate de `store` de arriba: se pregunta por la marca de la
+    // línea que se está tocando (`baseDeLinea`, que manda Stunned a Zattia). Alguien que sólo ve
+    // BDI no puede asignarle una campaña a Zattia aunque el pedido haya venido con store=bdi.
+    if (b.action === 'asignar-linea' || b.action === 'desasignar-linea') {
+      const campaignId = String(b.campaignId || '');
+      if (!campaignId) return res.status(400).json({ error: 'falta campaignId' });
+
+      const sb = clienteLineas();
+      if (!sb) return res.status(500).json({ error: 'Faltan credenciales de Supabase para guardar la línea.' });
+
+      const { data: previa, error: eLeer } = await sb
+        .from('meta_ads_campania_linea').select('linea').eq('campaign_id', campaignId).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+
+      // Sacarle una campaña a una marca es tan decisión como dársela a otra: para mover una que ya
+      // estaba asignada hay que poder pautar en las DOS puntas.
+      const puedeEn = (linea) => {
+        const base = baseDeLinea(linea);
+        return !!base && (esAdmin(perfil) || puedeSub(perfil, base, 'meta-ads', SUB_PAUTAR));
+      };
+      if (previa && !puedeEn(previa.linea)) {
+        return res.status(403).json({ error: `Esta campaña hoy es de ${previa.linea} y no tenés permiso para pautar ahí.` });
+      }
+
+      if (b.action === 'desasignar-linea') {
+        const { error } = await sb.from('meta_ads_campania_linea').delete().eq('campaign_id', campaignId);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      const linea = String(b.linea || '').toLowerCase();
+      if (!esLinea(linea)) return res.status(400).json({ error: 'línea inválida (usá bdi, zattia o stunned)' });
+      if (!puedeEn(linea)) {
+        return res.status(403).json({ error: 'Asignar la marca de una campaña lo hace quien tenga el permiso «Puede aprobar ideas» (meta-ads.pautar) en esa marca.' });
+      }
+
+      // `nombre` y `objetivo` se guardan como estaban AL ASIGNAR: si después la renombran, la
+      // pantalla puede avisar que la asignación quedó vieja en vez de mentir en silencio.
+      const { error } = await sb.from('meta_ads_campania_linea').upsert([{
+        campaign_id: campaignId,
+        linea,
+        cuenta_id: String(b.cuentaId || ''),
+        nombre: b.nombre ? String(b.nombre) : null,
+        objetivo: b.objetivo ? String(b.objetivo) : null,
+        linea_previa: previa && previa.linea !== linea ? previa.linea : null,
+        por: yo || 'desconocido',
+        updated_at: ahora,
+      }], { onConflict: 'campaign_id' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, linea });
+    }
 
     // ── El override de etapa. Es corregir el diagnóstico, así que lo hace quien pautea. ─────────
     if (b.action === 'clasificar' || b.action === 'desclasificar') {

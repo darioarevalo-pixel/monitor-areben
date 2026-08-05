@@ -7,7 +7,6 @@
  */
 
 import type { Marca } from '@/lib/nav.datos'
-import { marcaDeCuentaAds } from '@/lib/meta-ads/etapas'
 import type { Metricas } from '@/lib/meta-ads/tipos'
 import type { Accionable } from '../tipos'
 import type { Umbrales } from '../umbrales'
@@ -15,19 +14,22 @@ import type { Umbrales } from '../umbrales'
 export type CuentaAds = { id: string; nombre: string; moneda: string; totales: Metricas }
 
 /**
- * Marca de una cuenta publicitaria.
+ * Marca de una cuenta publicitaria. **Provisorio y se sabe que miente.**
  *
- * Lo correcto es el mapa explícito `MARCA_POR_CUENTA` (`lib/meta-ads/etapas.core.js`). La regex
- * sobre el nombre quedó como **respaldo de las cuentas todavía no mapeadas**, no como el camino
- * principal: adivinar mal le atribuye a una marca la plata de la otra, y el número se ve razonable
- * estando mal. Cuando el mapa esté completo, esta función deja de usar la regex sola.
+ * Este detector atribuye por totales de CUENTA, y las tres líneas (BDI, Zattia y Stunned) se
+ * pautean desde la misma cuenta publicitaria: no hay ninguna marca correcta para asignarle. La
+ * regex sobre el nombre cae a `bdi` cuando no matchea, que es justo el modo de fallar más peligroso
+ * — el número se ve razonable estando mal.
  *
- * (En la pantalla de Etapas no hay respaldo: una cuenta sin mapear se muestra aparte y no suma a
- * nadie. Acá sí lo hay porque este detector ya existía y sacarlo apagaría un aviso que funciona.)
+ * ⚠️ Se deja tal cual **a propósito**: hasta hoy convivía con `MARCA_POR_CUENTA`, que nunca llegó a
+ * cargarse, así que esta regex ya era el 100% del comportamiento y sacarla no arregla nada —
+ * apagaría un aviso que igual sirve. Lo que arregla esto es bajar el detector a nivel campaña y
+ * leer `meta_ads_campania_linea`, como ya hace la pantalla de Etapas
+ * (`lib/meta-ads/lineas.core.js`), y eso obliga a rehacer lo que le pasa `useGerencial.ts`.
+ *
+ * ▶️ Mientras tanto: los accionables de Ads dicen de qué CUENTA hablan, no de qué marca.
  */
-function marcaDeCuenta(id: string, nombre: string): Marca {
-  const mapeada = marcaDeCuentaAds(id)
-  if (mapeada === 'bdi' || mapeada === 'zattia') return mapeada
+function marcaDeCuenta(nombre: string): Marca {
   return /zattia|stunned/i.test(nombre) ? 'zattia' : 'bdi'
 }
 
@@ -39,7 +41,7 @@ export function detectarAds(cuentas: CuentaAds[], u: Umbrales): Accionable[] {
   const out: Accionable[] = []
   for (const c of cuentas) {
     const t = c.totales
-    const marca = marcaDeCuenta(c.id, c.nombre)
+    const marca = marcaDeCuenta(c.nombre)
 
     // 1. Gasto sin compras: plata quemada.
     if (t.spend >= u.gastoMinSinCompras && t.purchases === 0) {

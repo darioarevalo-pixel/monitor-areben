@@ -35,25 +35,37 @@ import {
   UMBRALES_ETAPA,
 } from '@/lib/meta-ads/etapas'
 import {
-  clasificarCampaña, desclasificarCampaña, leerIdeas,
+  asignarLinea, clasificarCampaña, desasignarLinea, desclasificarCampaña, leerIdeas, SUB_PAUTAR,
   type Idea, type OverrideEtapa, type PoderesIdeas,
 } from '@/lib/meta-ads/ideas'
-import type { CampañaEtapa, Diagnostico, Etapa, ResumenEtapa, RespuestaEtapas } from '@/lib/meta-ads/tipos'
+import { baseDeLinea, ETIQUETA_LINEA, LINEAS, lineasDeMarca } from '@/lib/meta-ads/lineas'
+import type {
+  AsignacionLinea, CampañaEtapa, CampañaSinLinea, Diagnostico, Etapa, LineaPauta, ResumenEtapa,
+  RespuestaEtapas,
+} from '@/lib/meta-ads/tipos'
+import type { Marca } from '@/lib/nav.datos'
+import { esAdmin, marcasConAcceso, puedeSub } from '@/lib/permisos'
 import {
-  Button, Card, CopyButton, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
+  Button, Card, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
   TBody, TableWrap, Td, Th, THead, Tr, useToast,
   color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
 
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
-/** Lo que hace falta para corregir la etapa de una campaña desde la tabla. */
+/** Lo que hace falta para corregir la etapa —y la marca— de una campaña desde la tabla. */
 type Correccion = {
   /** Las correcciones vigentes, por campaña. Vacío mientras no las lea nadie. */
   porCampaña: Record<string, OverrideEtapa>
   puedePautar: boolean
   onCorregir: (c: CampañaEtapa) => void
   onVolverAuto: (c: CampañaEtapa) => void
+  /** La línea asignada de cada campaña, por id. */
+  lineaPorCampaña: Record<string, AsignacionLinea>
+  /** Si esta persona puede mover plata HACIA esa línea. Se pregunta por línea, no por sesión. */
+  puedeAsignarEn: (linea: LineaPauta) => boolean
+  onAsignar: (c: CampañaEtapa, linea: LineaPauta) => void
+  onDesasignar: (c: CampañaEtapa) => void
 }
 
 const nf = new Intl.NumberFormat('es-AR')
@@ -66,43 +78,78 @@ const TONO: Record<ResumenEtapa['estado'], Tone> = { ok: 'success', floja: 'warn
 export function Etapas() {
   const { marca, perfil } = useSesion()
   const toast = useToast()
-  const marcaLabel = marca === 'zattia' ? 'Zattia' : 'BDI'
   const [dias, setDias] = useState(UMBRALES_ETAPA.dias)
   const [r, setR] = useState<{ key: string; e: Cargable<RespuestaEtapas> } | null>(null)
   const [corrigiendo, setCorrigiendo] = useState<CampañaEtapa | null>(null)
+  /**
+   * Qué línea está abierta abajo de la grilla. Arranca en la marca del header —que es donde la
+   * persona ya estaba parada— y de ahí en más la manda la grilla. **No filtra la grilla**: las tres
+   * líneas se ven siempre, porque el hueco de la que no estás mirando es justamente el que nadie ve.
+   *
+   * La marca viaja adentro de lo elegido y se compara al renderizar, en vez de resetearse con un
+   * efecto: cambiar de marca arriba tiene que volver al default de la marca nueva, y un efecto que
+   * lo corrige después deja un render intermedio mostrando la línea de la marca anterior.
+   */
+  const [elegida, setElegida] = useState<{ marca: string; linea: LineaPauta } | null>(null)
+  const lineaAbierta: LineaPauta = elegida && elegida.marca === marca
+    ? elegida.linea
+    : (marca === 'zattia' ? 'zattia' : 'bdi')
+  const abrirLinea = useCallback((l: LineaPauta) => setElegida({ marca, linea: l }), [marca])
 
-  const key = `${marca}|${dias}`
+  // Ya no viaja la marca: el censo es el mismo para las tres líneas (una sola cuenta publicitaria)
+  // y el servidor devuelve sólo las que este perfil puede ver.
+  const key = `${dias}`
   useEffect(() => {
     let vivo = true
-    traerEtapas(marca, dias).then((res) => {
+    traerEtapas(dias).then((res) => {
       if (!vivo) return
-      setR({ key: `${marca}|${dias}`, e: res.ok ? { fase: 'ok', data: res.dato } : { fase: 'error', motivo: res.motivo } })
+      setR({ key: `${dias}`, e: res.ok ? { fase: 'ok', data: res.dato } : { fase: 'error', motivo: res.motivo } })
     })
     return () => { vivo = false }
-  }, [marca, dias])
+  }, [dias])
 
   const estado: Cargable<RespuestaEtapas> = !r || r.key !== key ? { fase: 'cargando' } : r.e
   const fechas = useFechas(marca)
   const fecha = useMemo(() => laQueAprieta(fechas), [fechas])
-  const funnel = useFunnel(marca)
+  const visibles = useMemo(() => marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']), [perfil])
+  const funnel = useFunnel(marca, visibles)
 
   const overrides = useMemo(() => mapaOverrides(funnel.overrides), [funnel.overrides])
   const porCampaña = useMemo(
     () => Object.fromEntries(funnel.overrides.map((o) => [o.campaign_id, o])) as Record<string, OverrideEtapa>,
     [funnel.overrides],
   )
+  const lineaPorCampaña = useMemo(
+    () => Object.fromEntries(funnel.lineas.map((l) => [l.campaign_id, l])) as Record<string, AsignacionLinea>,
+    [funnel.lineas],
+  )
 
-  // El diagnóstico se recalcula con las correcciones a mano puestas: sin esto, el override se
+  // Un diagnóstico POR LÍNEA, todos con las correcciones a mano puestas: sin esto, el override se
   // guarda en la base y la pantalla sigue mostrando la clasificación automática, que es peor que
   // no tener override (alguien lo corrigió y no pasó nada).
   //
-  // Se calcula acá arriba y no adentro de `Contenido` porque el tablero de abajo necesita el mismo:
-  // la etapa que el veredicto está pidiendo es la que viene preelegida al anotar una idea.
-  const diag = useMemo(() => {
+  // Se calculan acá arriba y no adentro de `Contenido` porque la grilla y el tablero de abajo
+  // necesitan los mismos: la etapa que el veredicto está pidiendo es la que viene preelegida al
+  // anotar una idea.
+  const diagPorLinea = useMemo(() => {
     const e = !r || r.key !== key ? null : r.e
-    if (!e || e.fase !== 'ok' || e.data.cuentas.length === 0) return null
-    return diagnosticar(e.data.campañas, { overrides, marca: marcaLabel })
-  }, [r, key, overrides, marcaLabel])
+    if (!e || e.fase !== 'ok') return null
+    const out: Partial<Record<LineaPauta, Diagnostico>> = {}
+    for (const l of LINEAS) {
+      const suyas = e.data.lineas[l]
+      if (suyas) out[l] = diagnosticar(suyas, { overrides, marca: ETIQUETA_LINEA[l] })
+    }
+    return out
+  }, [r, key, overrides])
+
+  const diag = diagPorLinea?.[lineaAbierta] ?? null
+  // El tablero de ideas es de la MARCA, no de la línea: Stunned no tiene tablero propio y sus ideas
+  // se anotan en el de Zattia, que es de donde cuelga (ver `lineas.core.js`).
+  const diagDeLaMarca = diagPorLinea?.[marca as LineaPauta] ?? null
+  const campañasDeLaMarca = useMemo(
+    () => lineasDeMarca(marca as Marca).flatMap((l) => diagPorLinea?.[l]?.etapas.flatMap((e) => e.alAire) ?? []),
+    [diagPorLinea, marca],
+  )
 
   async function corregir(c: CampañaEtapa, etapa: Etapa, motivo: string) {
     try {
@@ -127,11 +174,52 @@ export function Etapas() {
     }
   }
 
+  /** Recargar las dos cosas: asignar mueve campañas de línea y eso cambia todos los diagnósticos. */
+  const recargarFunnel = funnel.recargar
+  const recargarTodo = useCallback(() => {
+    recargarFunnel()
+    setR(null)
+  }, [recargarFunnel])
+
+  // Se pregunta por la marca de la LÍNEA, no por la de la sesión: alguien parado en BDI que también
+  // pautea Zattia puede asignarle una campaña a Zattia sin cambiar de marca arriba. Es la misma
+  // función que usa el servidor (`lib/permisos.core.js`), importada, no copiada.
+  const puedeAsignarEn = useCallback((linea: LineaPauta) => {
+    const base = baseDeLinea(linea)
+    return !!base && (esAdmin(perfil) || puedeSub(perfil, base, 'meta-ads', SUB_PAUTAR))
+  }, [perfil])
+
+  async function asignar(c: CampañaEtapa, linea: LineaPauta) {
+    try {
+      await asignarLinea(marca as Marca, {
+        campaignId: c.id, linea, cuentaId: c.cuentaId, objetivo: c.objetivo, nombre: c.nombre,
+      })
+      toast.ok(`«${c.nombre}» ahora cuenta como ${ETIQUETA_LINEA[linea]}.`)
+      recargarTodo()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo asignar la marca.')
+    }
+  }
+
+  async function desasignar(c: CampañaEtapa) {
+    try {
+      await desasignarLinea(marca as Marca, c.id)
+      toast.ok('Vuelve a quedar sin marca: su plata no la cuenta nadie.')
+      recargarTodo()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo sacar la marca.')
+    }
+  }
+
   const correccion: Correccion = {
     porCampaña,
     puedePautar: funnel.puede.pautar || funnel.puede.admin,
     onCorregir: setCorrigiendo,
     onVolverAuto: volverAuto,
+    lineaPorCampaña,
+    puedeAsignarEn,
+    onAsignar: asignar,
+    onDesasignar: desasignar,
   }
 
   return (
@@ -175,7 +263,15 @@ export function Etapas() {
       )}
 
       {estado.fase === 'ok' && (
-        <Contenido d={estado.data} diag={diag} marcaLabel={marcaLabel} fecha={fecha} correccion={correccion} />
+        <Contenido
+          d={estado.data}
+          diagPorLinea={diagPorLinea}
+          diag={diag}
+          lineaAbierta={lineaAbierta}
+          onAbrir={abrirLinea}
+          fecha={fecha}
+          correccion={correccion}
+        />
       )}
 
       {/* El tablero va SIEMPRE, gane o pierda el diagnóstico. Se lee por `api/datos.js`, que no
@@ -190,8 +286,8 @@ export function Etapas() {
         cargando={funnel.cargando}
         caido={funnel.caido}
         recargar={funnel.recargar}
-        campañas={diag ? diag.etapas.flatMap((e) => e.alAire) : []}
-        sugerida={diag?.veredicto.etapa ?? null}
+        campañas={campañasDeLaMarca}
+        sugerida={diagDeLaMarca?.veredicto.etapa ?? null}
         fechas={fechas}
       />
 
@@ -214,39 +310,57 @@ export function Etapas() {
  * sigue siendo válido (clasificación automática) y lo único que se pierde es el tablero. Es la
  * misma decisión que toma el calendario con el renglón "Etapas armadas".
  */
-function useFunnel(marca: string) {
+function useFunnel(marca: string, visibles: readonly Marca[]) {
   const [nonce, setNonce] = useState(0)
   const [d, setD] = useState<{
     key: string
     ideas: Idea[]
     overrides: OverrideEtapa[]
+    lineas: AsignacionLinea[]
     puede: PoderesIdeas
     caido: string | null
   } | null>(null)
 
-  const key = `${marca}|${nonce}`
+  // Las correcciones de etapa viven en la base de CADA marca (`meta_ads_etapa` tiene columna
+  // `store`), pero la grilla muestra las tres líneas juntas: leyendo sólo la base de la marca del
+  // header, la fila de la otra saldría con la clasificación automática y el número de la grilla no
+  // coincidiría con el del detalle. Por eso se leen todas las marcas visibles y se juntan — los
+  // `campaign_id` son únicos en Meta, así que no hay riesgo de que se pisen.
+  const otras = visibles.filter((m) => m !== marca)
+  const keyOtras = otras.join(',')
+  const key = `${marca}|${keyOtras}|${nonce}`
   useEffect(() => {
     let vivo = true
-    leerIdeas(marca as Parameters<typeof leerIdeas>[0])
-      .then((res) => {
-        if (vivo) setD({ key: `${marca}|${nonce}`, ...res, caido: null })
+    const k = `${marca}|${keyOtras}|${nonce}`
+    const extra = keyOtras ? keyOtras.split(',') : []
+    Promise.all([
+      leerIdeas(marca as Parameters<typeof leerIdeas>[0]),
+      // Si la otra marca falla (tabla sin migrar, permiso raro), se pierden SUS overrides y nada
+      // más: el diagnóstico de la marca en la que estás parado no se cae por eso.
+      ...extra.map((m) => leerIdeas(m as Parameters<typeof leerIdeas>[0]).catch(() => null)),
+    ])
+      .then(([mia, ...resto]) => {
+        if (!vivo) return
+        const overrides = [...mia.overrides, ...resto.flatMap((x) => x?.overrides ?? [])]
+        setD({ key: k, ideas: mia.ideas, overrides, lineas: mia.lineas, puede: mia.puede, caido: null })
       })
       .catch((e) => {
         if (vivo) {
           setD({
-            key: `${marca}|${nonce}`,
-            ideas: [], overrides: [], puede: { pautar: false, admin: false },
+            key: k,
+            ideas: [], overrides: [], lineas: [], puede: { pautar: false, admin: false },
             caido: e instanceof Error ? e.message : 'no se pudieron leer',
           })
         }
       })
     return () => { vivo = false }
-  }, [marca, nonce])
+  }, [marca, keyOtras, nonce])
 
   const listo = d && d.key === key
   return {
     ideas: listo ? d.ideas : [],
     overrides: listo ? d.overrides : EMPTY_OVERRIDES,
+    lineas: listo ? d.lineas : EMPTY_LINEAS,
     puede: listo ? d.puede : SIN_PODERES,
     caido: listo ? d.caido : null,
     cargando: !listo,
@@ -257,6 +371,7 @@ function useFunnel(marca: string) {
 /** Constantes de módulo: si fueran literales, cambiarían de identidad en cada render y los
  *  `useMemo` que dependen de ellas se recalcularían siempre. */
 const EMPTY_OVERRIDES: OverrideEtapa[] = []
+const EMPTY_LINEAS: AsignacionLinea[] = []
 const SIN_PODERES: PoderesIdeas = { pautar: false, admin: false }
 
 /**
@@ -288,24 +403,33 @@ function useFechas(marca: string): EntradaCalendario[] {
 
 const SIN_FECHAS: EntradaCalendario[] = []
 
-function Contenido({ d, diag, marcaLabel, fecha, correccion }: {
+function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion }: {
   d: RespuestaEtapas
-  /** Ya viene calculado de arriba, con los overrides puestos: el tablero necesita el mismo. */
+  /** Ya vienen calculados de arriba, con los overrides puestos: el tablero necesita los mismos. */
+  diagPorLinea: Partial<Record<LineaPauta, Diagnostico>> | null
   diag: Diagnostico | null
-  marcaLabel: string
+  lineaAbierta: LineaPauta
+  onAbrir: (l: LineaPauta) => void
   fecha: EntradaCalendario | null
   correccion: Correccion
 }) {
+  const pendientes = d.sinAsignar
   return (
     <>
-      {/* Cuentas que Meta devolvió pero que no sabemos de quién son. Ruidoso a propósito: es
-          preferible admitir que falta un dato antes que atribuirle a una marca plata que no es suya. */}
-      {d.sinMarca.length > 0 && <AvisoSinMarca cuentas={d.sinMarca} />}
+      {/* Campañas que Meta devolvió y de las que no sabemos de quién es la plata. Ruidoso a
+          propósito: es preferible admitir que falta un dato antes que atribuirle a una marca plata
+          que no es suya. Va ARRIBA de la grilla porque, mientras haya pendientes, los números de
+          abajo están incompletos y hay que saberlo antes de leerlos. */}
+      {pendientes.length > 0 && <PendientesDeLinea campañas={pendientes} correccion={correccion} />}
+
+      {diagPorLinea && (
+        <GrillaLineas diagPorLinea={diagPorLinea} abierta={lineaAbierta} onAbrir={onAbrir} />
+      )}
 
       {!diag ? (
         <EmptyState
-          title={`No hay ninguna cuenta publicitaria asignada a ${marcaLabel}`}
-          hint="Sin la asignación de cuentas no se puede armar el diagnóstico por marca. Ver el aviso de arriba."
+          title={`No tenés permiso para ver ${ETIQUETA_LINEA[lineaAbierta]}`}
+          hint="Elegí una de las líneas de la grilla de arriba."
           dashed
         />
       ) : (
@@ -318,6 +442,175 @@ function Contenido({ d, diag, marcaLabel, fecha, correccion }: {
         </>
       )}
     </>
+  )
+}
+
+/**
+ * Las tres líneas × las tres etapas, un número por celda. **Es el pedido de creativos en una sola
+ * mirada.**
+ *
+ * Por qué esto y no un selector de línea: la pantalla existe para que el hueco se vea, y un hueco
+ * que hay que ir a buscar no se ve. Con las tres al lado, "Stunned no tiene nada en ninguna etapa"
+ * salta sin tocar nada. Por qué esto y no las tres fichas completas apiladas: serían nueve tarjetas
+ * grandes, tres veredictos y tres tablas, y volvería a haber que leer para sacar la conclusión.
+ *
+ * La celda vacía va **punteada**, igual que la tarjeta vacía de abajo: el cero se dibuja, no se lee.
+ */
+function GrillaLineas({ diagPorLinea, abierta, onAbrir }: {
+  diagPorLinea: Partial<Record<LineaPauta, Diagnostico>>
+  abierta: LineaPauta
+  onAbrir: (l: LineaPauta) => void
+}) {
+  const lineas = LINEAS.filter((l) => diagPorLinea[l])
+  if (lineas.length === 0) return null
+
+  return (
+    <SectionCard
+      title="Dónde está el hueco"
+      subtitle="Cuántas pautas hay al aire en cada etapa, por marca. Tocá una fila para ver el detalle abajo."
+    >
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Marca</Th>
+            {ETAPAS.map((e) => <Th key={e} align="right">{ETIQUETA_ETAPA[e]}</Th>)}
+          </Tr>
+        </THead>
+        <TBody>
+          {lineas.map((l) => {
+            const d = diagPorLinea[l] as Diagnostico
+            const esta = l === abierta
+            return (
+              <Tr key={l} onClick={() => onAbrir(l)} style={{ cursor: 'pointer', background: esta ? color.brandBg : undefined }}>
+                <Td strong>
+                  {esta ? '▸ ' : ''}{ETIQUETA_LINEA[l]}
+                </Td>
+                {d.etapas.map((e) => (
+                  <Td key={e.etapa} align="right">
+                    <span
+                      style={{
+                        display: 'inline-block', minWidth: 34, padding: '2px 8px',
+                        borderRadius: radius.md, fontWeight: weight.semibold,
+                        border: e.alAire.length === 0 ? `1px dashed ${color.dangerBorder}` : '1px solid transparent',
+                        color: e.alAire.length === 0 ? color.dangerInk : color.ink,
+                      }}
+                    >
+                      {e.alAire.length}
+                    </span>
+                  </Td>
+                ))}
+              </Tr>
+            )
+          })}
+        </TBody>
+      </TableWrap>
+    </SectionCard>
+  )
+}
+
+/**
+ * Las campañas que todavía no tienen marca.
+ *
+ * ⚠️ **Su plata no la cuenta nadie.** Mientras haya campañas acá, todos los números de la grilla
+ * están incompletos — y eso es a propósito: la versión anterior atribuía por cuenta publicitaria y,
+ * como las tres marcas se pautean desde la misma cuenta, cualquier atribución automática le regalaba
+ * a una la plata de las otras dos. Un número incompleto que se sabe incompleto es mejor que uno
+ * completo que miente.
+ *
+ * Arranca sólo con las que tuvieron actividad: una campaña vieja y pausada sin gasto no mueve ningún
+ * diagnóstico, así que no vale un click. El resto queda plegado.
+ */
+function PendientesDeLinea({ campañas, correccion }: { campañas: CampañaSinLinea[]; correccion: Correccion }) {
+  const [verTodas, setVerTodas] = useState(false)
+  const activas = campañas.filter((c) => c.tuvoActividad)
+  const dormidas = campañas.filter((c) => !c.tuvoActividad)
+
+  return (
+    <Notice tone="warning">
+      <div style={{ fontWeight: weight.semibold }}>
+        {activas.length === 1
+          ? 'Hay 1 campaña con actividad y sin marca asignada'
+          : `Hay ${activas.length} campañas con actividad y sin marca asignada`}
+      </div>
+      <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
+        Su plata no entra en ningún diagnóstico. Las tres marcas se pautean desde la misma cuenta
+        publicitaria, así que la marca <b>no se puede deducir</b>: si se adivinara por el nombre de la
+        cuenta, una marca cargaría con la pauta de las otras dos y el número se vería perfectamente
+        razonable estando mal.
+      </div>
+
+      {activas.length > 0 && <ListaPendientes campañas={activas} correccion={correccion} />}
+
+      {dormidas.length > 0 && (
+        <Plegable
+          abierto={verTodas}
+          onToggle={() => setVerTodas((v) => !v)}
+          titulo={`${dormidas.length} sin actividad`}
+          ayuda="Pausadas y sin gasto en la ventana: no suman ni restan a ningún diagnóstico, así que asignarlas es opcional."
+        >
+          <ListaPendientes campañas={dormidas} correccion={correccion} />
+        </Plegable>
+      )}
+    </Notice>
+  )
+}
+
+function ListaPendientes({ campañas, correccion }: { campañas: CampañaSinLinea[]; correccion: Correccion }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginTop: space[3] }}>
+      {campañas.map((c) => (
+        <div
+          key={c.id}
+          style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space[2],
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: font.sm, fontWeight: weight.semibold }}>{c.nombre}</div>
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              {rotuloObjetivo(c.objetivo)} · {money(c.spend)} · <code>{c.cuentaId}</code>
+            </div>
+          </div>
+          <BotonesDeLinea c={c} sugerida={c.sugerida} correccion={correccion} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Los tres botones de marca.
+ *
+ * La sugerencia sale del nombre de la campaña y **sólo se destaca**: prellena la mirada, no la
+ * decisión. Sigue haciendo falta el click, y ante un nombre ambiguo no se sugiere nada. Es la misma
+ * regla del calendario — el cálculo propone, la persona confirma — y acá pesa el doble, porque lo
+ * que se está decidiendo es de quién es la plata.
+ */
+function BotonesDeLinea({ c, sugerida, correccion }: {
+  c: CampañaEtapa
+  sugerida: LineaPauta | null
+  correccion: Correccion
+}) {
+  return (
+    <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+      {LINEAS.map((l) => {
+        const puede = correccion.puedeAsignarEn(l)
+        return (
+          <Button
+            key={l}
+            size="sm"
+            variant={l === sugerida ? 'soft' : 'ghost'}
+            disabled={!puede}
+            title={puede ? undefined : `No tenés permiso para pautar en ${ETIQUETA_LINEA[l]}`}
+            onClick={() => correccion.onAsignar(c, l)}
+          >
+            {ETIQUETA_LINEA[l]}
+            {l === sugerida ? ' ·' : ''}
+          </Button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -478,6 +771,7 @@ function TablaCampañas({ filas, correccion }: { filas: CampañaEtapa[]; correcc
           <Th align="right">Compras</Th>
           <Th>Estado</Th>
           {columna && <Th>Etapa</Th>}
+          {columna && <Th>Marca</Th>}
         </Tr>
       </THead>
       <TBody>
@@ -489,6 +783,7 @@ function TablaCampañas({ filas, correccion }: { filas: CampañaEtapa[]; correcc
             <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
             <Td><EstadoPill s={c.estado} /></Td>
             {columna && <Td><CeldaEtapa c={c} correccion={correccion} /></Td>}
+            {columna && <Td><CeldaLinea c={c} correccion={correccion} /></Td>}
           </Tr>
         ))}
       </TBody>
@@ -630,29 +925,33 @@ function Plegable({ abierto, onToggle, titulo, ayuda, children }: {
 }
 
 /**
- * El día 1 esto sale con TODAS las cuentas, porque `MARCA_POR_CUENTA` arranca vacío: los ids solo
- * se pueden leer con el token de producción. Es un estado visible y de una sola vez — se copian los
- * ids de acá, se cargan en `lib/meta-ads/etapas.core.js` y el aviso desaparece.
+ * La marca de una campaña ya asignada, desde la tabla de pautas. Hermana de `CeldaEtapa`.
+ *
+ * Reasignar es mover plata de una marca a otra, así que dice **quién** la asignó y desde cuándo. El
+ * servidor además exige permiso en las dos puntas: no alcanza con poder pautar en la marca a la que
+ * se la querés dar.
  */
-function AvisoSinMarca({ cuentas }: { cuentas: { id: string; nombre: string }[] }) {
+function CeldaLinea({ c, correccion }: { c: CampañaEtapa; correccion: Correccion }) {
+  const a = correccion.lineaPorCampaña[c.id]
+  if (!a) return <span style={{ color: color.mut2 }}>sin marca</span>
+
+  const renombrada = !!a.nombre && a.nombre !== c.nombre
+  const puede = correccion.puedeAsignarEn(a.linea)
   return (
-    <Notice tone="warning">
-      <div style={{ fontWeight: weight.semibold }}>
-        {cuentas.length === 1 ? 'Hay una cuenta publicitaria sin marca asignada' : `Hay ${cuentas.length} cuentas publicitarias sin marca asignada`}
-      </div>
-      <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.5 }}>
-        Su plata no entra en este diagnóstico. Para asignarlas hay que cargar el id en{' '}
-        <code>MARCA_POR_CUENTA</code> (<code>lib/meta-ads/etapas.core.js</code>) — no se adivinan por
-        el nombre a propósito: adivinar mal atribuye la pauta de una marca a la otra y el número se
-        ve razonable estando mal.
-      </div>
-      <ul style={{ margin: `${space[2]}px 0 0`, paddingLeft: 18, fontSize: font.sm }}>
-        {cuentas.map((c) => (
-          <li key={c.id} style={{ marginBottom: 2 }}>
-            {c.nombre} — <code>{c.id}</code> <CopyButton getText={() => c.id} label="Copiar id" />
-          </li>
-        ))}
-      </ul>
-    </Notice>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[1], alignItems: 'flex-start' }}>
+      <StatusPill tone={renombrada ? 'warning' : 'brand'} label={ETIQUETA_LINEA[a.linea]} />
+      <span style={{ fontSize: font.xs, color: color.mut2 }}>la asignó {a.por}</span>
+      {renombrada && (
+        <span style={{ fontSize: font.xs, color: color.warningInk, lineHeight: 1.4 }}>
+          La renombraron desde entonces (era «{a.nombre}»): conviene confirmar que sigue siendo de esta marca.
+        </span>
+      )}
+      {puede && (
+        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+          <BotonesDeLinea c={c} sugerida={null} correccion={correccion} />
+          <Button size="sm" variant="ghost" onClick={() => correccion.onDesasignar(c)}>Sacarle la marca</Button>
+        </div>
+      )}
+    </div>
   )
 }

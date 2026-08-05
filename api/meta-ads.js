@@ -3,17 +3,21 @@
 //   GET /api/meta-ads                         → lista las cuentas del token con su total (para el selector).
 //   GET /api/meta-ads?account=<id>&preset=... → DETALLE de una cuenta: totales + anuncios agrupables por
 //                                               campaña + serie diaria + desglose por plataforma/ubicación.
-//   GET /api/meta-ads?recurso=etapas&marca=…  → CENSO de campañas de una marca para el diagnóstico de
-//                                               etapas (TOFU/MOFU/BOFU). Incluye las pausadas.
+//   GET /api/meta-ads?recurso=etapas          → CENSO de campañas repartido por LÍNEA de pauta (bdi,
+//                                               zattia, stunned) para el diagnóstico de etapas
+//                                               (TOFU/MOFU/BOFU). Incluye las pausadas.
 // Rango por preset (last_30d default) o since/until.
 //
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
 // Token: META_ADS_TOKEN (system user, no vence). Si falta → 500.
+import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { puedeSub, puedeVer } from '../lib/permisos.core.js';
+import { marcasConAcceso, puedeSub, puedeVer } from '../lib/permisos.core.js';
 // La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
-import { etapaDeObjetivo, marcaDeCuentaAds, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
+import { etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
+// Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
+import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 
 const GRAPH = 'https://graph.facebook.com/v25.0';
 const TOKEN = process.env.META_ADS_TOKEN;
@@ -95,7 +99,10 @@ export default async function handler(req, res) {
 
   // Recursos que no son "métricas de una cuenta" entran por acá, como hace `api/datos.js`: el plan
   // Hobby admite 12 funciones y un archivo nuevo en `api/` las frena todas sin error visible.
-  if (q.recurso === 'etapas') return await etapas(res, perfil, q.marca, parseInt(q.dias, 10));
+  // Sin `&marca=`: devuelve las tres líneas de una, porque el censo que hay que pedirle a Meta es el
+  // mismo para todas (una sola cuenta publicitaria). Pedirlo tres veces sería triplicar el gasto de
+  // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
+  if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
 
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
@@ -103,7 +110,7 @@ export default async function handler(req, res) {
   return q.account ? await detalle(res, String(q.account), rango, rangoEco) : await overview(res, rango, rangoEco);
 }
 
-// ── Modo etapas: el censo de campañas de UNA marca (TOFU/MOFU/BOFU) ─────────────
+// ── Modo etapas: el censo de campañas, repartido por línea de pauta (TOFU/MOFU/BOFU) ────────────
 /**
  * Por qué esto no reusa el modo `detalle`:
  *
@@ -116,12 +123,13 @@ export default async function handler(req, res) {
  * La ventana es FIJA (30 días, o 90 si se pide) y no la del selector del Resumen: con "Hoy" a las 9
  * de la mañana todas las etapas darían cero y la pantalla gritaría un hueco falso todos los días.
  */
-async function etapas(res, perfil, marcaPedida, diasPedidos) {
-  const marca = String(marcaPedida || '').toLowerCase();
-  if (marca !== 'bdi' && marca !== 'zattia') return res.status(400).json({ error: 'marca inválida (bdi o zattia)' });
-  // Chequeo POR MARCA. El modo overview devuelve todas las cuentas del token a cualquiera que tenga
-  // meta-ads en alguna marca; acá, que el corte es por marca, se puede hacer bien.
-  if (!puedeVer(perfil, marca, 'meta-ads')) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads de esta marca.' });
+async function etapas(res, perfil, diasPedidos) {
+  // Qué líneas puede mirar esta persona. `marcasConAcceso` es la misma que usan Inicio, Solicitudes,
+  // Gerencial y el calendario: respeta la cuenta fija (y le gana al admin) y la excepción negativa.
+  // Stunned entra de la mano de Zattia, que es de donde cuelga.
+  const marcas = marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']);
+  if (!marcas.length) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
+  const visibles = new Set(marcas.flatMap((m) => lineasDeMarca(m)));
 
   const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
   const rango = `date_preset=last_${dias}d`;
@@ -130,18 +138,17 @@ async function etapas(res, perfil, marcaPedida, diasPedidos) {
   const cuentasRes = await graph('me/adaccounts?fields=account_id,name&limit=100');
   if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
 
-  // Una cuenta que no está en `MARCA_POR_CUENTA` NO se adivina: se devuelve aparte para que la
-  // pantalla la muestre con su id y se pueda mapear. Atribuirla por descarte es el bug que tenía
-  // el detector gerencial, y un número mal atribuido se ve razonable justo cuando está mal.
-  const mias = [], sinMarca = [];
-  for (const c of (cuentasRes.data && cuentasRes.data.data) || []) {
-    const fila = { id: String(c.account_id), nombre: nombreCuenta(c) };
-    const m = marcaDeCuentaAds(c.account_id);
-    if (!m) sinMarca.push(fila);
-    else if (m === marca) mias.push(fila);
+  // Ya no hay cuentas "de una marca": las tres líneas se pautean desde la MISMA cuenta publicitaria,
+  // así que se consultan todas las del token y el corte se hace campaña por campaña, más abajo.
+  const cuentas = ((cuentasRes.data && cuentasRes.data.data) || [])
+    .map((c) => ({ id: String(c.account_id), nombre: nombreCuenta(c) }));
+
+  const asignadas = await leerAsignaciones();
+  if (asignadas.error) {
+    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
   }
 
-  const porCuenta = await Promise.all(mias.map(async (cuenta) => {
+  const porCuenta = await Promise.all(cuentas.map(async (cuenta) => {
     const act = `act_${cuenta.id}`;
     const [censoRes, gastoRes] = await Promise.all([
       // El censo: TODAS las campañas, incluidas las pausadas (Meta ya excluye archivadas y borradas).
@@ -182,7 +189,48 @@ async function etapas(res, perfil, marcaPedida, diasPedidos) {
   }
 
   const campañas = porCuenta.flatMap((r) => r.campañas || []).sort((a, b) => b.spend - a.spend);
-  return res.status(200).json({ ok: true, marca, dias, cuentas: mias, sinMarca, campañas });
+
+  // El reparto. Una campaña sin fila NO cae en ninguna línea: su plata no se la queda nadie por
+  // descarte, que es exactamente el bug que este cambio vino a matar. Queda en `sinAsignar`, con lo
+  // que el nombre SUGIERE, y una persona confirma.
+  const lineas = {};
+  for (const l of visibles) lineas[l] = [];
+  const sinAsignar = [];
+  for (const c of campañas) {
+    const fila = asignadas.mapa.get(c.id);
+    if (fila) {
+      if (lineas[fila.linea]) lineas[fila.linea].push(c);
+      continue;
+    }
+    sinAsignar.push({ ...c, sugerida: sugerirLinea(c.nombre), tuvoActividad: c.estado === 'ACTIVE' || c.spend > 0 });
+  }
+
+  return res.status(200).json({ ok: true, dias, cuentas, lineas, sinAsignar });
+}
+
+/**
+ * La asignación campaña → línea, desde la base de BDI.
+ *
+ * ⚠️ Una sola base para las dos marcas, a propósito: de quién es una campaña es un hecho único y no
+ * una decisión editorial de cada marca. El razonamiento largo está arriba de
+ * `sql/migrate-meta-ads-linea.sql`.
+ *
+ * Si esto falla, el endpoint corta con 502 en vez de devolver el censo sin repartir: mostrar todas
+ * las campañas como "sin asignar" haría creer que se perdieron las asignaciones, y alguien las
+ * volvería a cargar encima.
+ */
+async function leerAsignaciones() {
+  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  if (!url || !key) return { error: 'Faltan credenciales de Supabase' };
+  try {
+    const supabase = createClient(url, key);
+    const { data, error } = await supabase.from('meta_ads_campania_linea').select('campaign_id, linea');
+    if (error) return { error: error.message };
+    return { mapa: new Map((data || []).map((r) => [String(r.campaign_id), r])) };
+  } catch (e) {
+    return { error: String((e && e.message) || e) };
+  }
 }
 
 // ── Mutación: pausar o activar un anuncio ───────────────────────────────────────

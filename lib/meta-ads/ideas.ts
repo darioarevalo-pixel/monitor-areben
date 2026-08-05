@@ -12,7 +12,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
-import type { Etapa } from './tipos'
+import type { AsignacionLinea, Etapa, LineaPauta } from './tipos'
 import {
   CLAVES_FORMATO as CLAVES_FORMATO_JS,
   conPaso as conPasoJs,
@@ -106,11 +106,23 @@ export function nuevoIdIdea(): string {
   return `i${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export async function leerIdeas(store: Marca): Promise<{ ideas: Idea[]; overrides: OverrideEtapa[]; puede: PoderesIdeas }> {
+export async function leerIdeas(store: Marca): Promise<{
+  ideas: Idea[]
+  overrides: OverrideEtapa[]
+  lineas: AsignacionLinea[]
+  puede: PoderesIdeas
+}> {
   const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las ideas.')
-  return { ideas: (d.ideas || []) as Idea[], overrides: (d.overrides || []) as OverrideEtapa[], puede: d.puede || { pautar: false, admin: false } }
+  return {
+    ideas: (d.ideas || []) as Idea[],
+    overrides: (d.overrides || []) as OverrideEtapa[],
+    // Las asignaciones de línea salen de la base de BDI, no de `store`: son cross-marca. Viajan acá
+    // y no en `/api/meta-ads` para que la pantalla sepa QUIÉN asignó cada una sin una llamada más.
+    lineas: (d.lineas || []) as AsignacionLinea[],
+    puede: d.puede || { pautar: false, admin: false },
+  }
 }
 
 async function postear(body: Record<string, unknown>, siFalla: string) {
@@ -153,4 +165,22 @@ export async function clasificarCampaña(
 
 export async function desclasificarCampaña(store: Marca, campaignId: string): Promise<void> {
   await postear({ store, action: 'desclasificar', campaignId }, 'No se pudo volver a la clasificación automática.')
+}
+
+/**
+ * Asigna una campaña a una línea de pauta: de qué marca es esa plata.
+ *
+ * El `store` que viaja es sólo el de la sesión (el handler lo usa para el gate de «¿ves Meta Ads?»);
+ * la fila se guarda en la base de BDI y el permiso se chequea contra la marca de **la línea**, no
+ * contra el store. Reasignar una ya asignada pide permiso en las dos puntas.
+ */
+export async function asignarLinea(
+  store: Marca,
+  datos: { campaignId: string; linea: LineaPauta; cuentaId?: string; objetivo?: string | null; nombre?: string | null },
+): Promise<void> {
+  await postear({ store, action: 'asignar-linea', ...datos }, 'No se pudo asignar la marca de la campaña.')
+}
+
+export async function desasignarLinea(store: Marca, campaignId: string): Promise<void> {
+  await postear({ store, action: 'desasignar-linea', campaignId }, 'No se pudo sacarle la marca a la campaña.')
 }

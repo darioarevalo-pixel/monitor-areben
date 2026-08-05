@@ -62,13 +62,15 @@ describe('traerDetalleCuenta', () => {
 })
 
 describe('traerEtapas', () => {
-  it('pide el recurso etapas por MARCA, no por cuenta', async () => {
-    const fetchMock = mockFetch(() => Promise.resolve(resp(200, { ok: true, marca: 'zattia', dias: 30, cuentas: [], sinMarca: [], campañas: [] })))
-    const r = await traerEtapas('zattia')
-    expect(r.ok && r.dato.marca).toBe('zattia')
+  it('NO manda marca: el censo es el mismo para las tres líneas', async () => {
+    // Las tres marcas se pautean desde la misma cuenta publicitaria, así que pedir el censo una vez
+    // por marca sería traer tres veces lo mismo. El corte por línea lo hace el servidor.
+    const fetchMock = mockFetch(() => Promise.resolve(resp(200, { ok: true, dias: 30, cuentas: [], lineas: { zattia: [] }, sinAsignar: [] })))
+    const r = await traerEtapas()
+    expect(r.ok && Object.keys(r.dato.lineas)).toEqual(['zattia'])
     const url = new URL('http://x' + fetchMock.mock.calls[0]![0])
     expect(url.searchParams.get('recurso')).toBe('etapas')
-    expect(url.searchParams.get('marca')).toBe('zattia')
+    expect(url.searchParams.get('marca')).toBeNull()
     // Sin `dias` explícito no se manda nada: el default lo decide el servidor (UMBRALES_ETAPA).
     expect(url.searchParams.get('dias')).toBeNull()
     // Y NO viaja el rango del selector del Resumen: la ventana de etapas es fija a propósito.
@@ -76,15 +78,15 @@ describe('traerEtapas', () => {
   })
 
   it('manda la ventana amplia cuando se la pide', async () => {
-    const fetchMock = mockFetch(() => Promise.resolve(resp(200, { ok: true, marca: 'bdi', dias: 90, cuentas: [], sinMarca: [], campañas: [] })))
-    await traerEtapas('bdi', 90)
+    const fetchMock = mockFetch(() => Promise.resolve(resp(200, { ok: true, dias: 90, cuentas: [], lineas: {}, sinAsignar: [] })))
+    await traerEtapas(90)
     const url = new URL('http://x' + fetchMock.mock.calls[0]![0])
     expect(url.searchParams.get('dias')).toBe('90')
   })
 
-  it('propaga el 403 de una marca que la persona no puede ver', async () => {
-    mockFetch(() => Promise.resolve(resp(403, { error: 'No tenés permiso para ver Meta Ads de esta marca.' })))
-    const r = await traerEtapas('bdi')
+  it('propaga el 403 de quien no puede ver Meta Ads en ninguna marca', async () => {
+    mockFetch(() => Promise.resolve(resp(403, { error: 'No tenés permiso para ver Meta Ads.' })))
+    const r = await traerEtapas()
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.motivo).toMatch(/permiso/)
   })

@@ -63,14 +63,18 @@ export function traerDetalleCuenta(accountId: string, opts: OpcionesMetaAds): Pr
 }
 
 /**
- * Censo de campañas de una marca para el diagnóstico de etapas (TOFU/MOFU/BOFU).
+ * Censo de campañas para el diagnóstico de etapas (TOFU/MOFU/BOFU), repartido por línea de pauta.
  *
- * Va por marca y no por cuenta a propósito: el embudo se piensa por marca, y una marca puede correr
- * más de una cuenta publicitaria. La ventana es fija (30 o 90 días, ver `UMBRALES_ETAPA`) y por eso
- * no toma el rango del selector del Resumen.
+ * **No lleva marca**: las tres líneas se pautean desde la misma cuenta publicitaria, así que el
+ * censo que hay que pedirle a Meta es idéntico para las tres y pedirlo una vez por marca sería
+ * triplicar el gasto de Graph para cortar los mismos datos. El servidor devuelve sólo las líneas que
+ * el perfil puede ver, así que el corte de permisos sigue siendo suyo, no de la pantalla.
+ *
+ * La ventana es fija (30 o 90 días, ver `UMBRALES_ETAPA`) y por eso no toma el rango del selector
+ * del Resumen.
  */
-export function traerEtapas(marca: string, dias?: number): Promise<Lectura<RespuestaEtapas>> {
-  const qs = new URLSearchParams({ recurso: 'etapas', marca })
+export function traerEtapas(dias?: number): Promise<Lectura<RespuestaEtapas>> {
+  const qs = new URLSearchParams({ recurso: 'etapas' })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaEtapas>(qs)
 }

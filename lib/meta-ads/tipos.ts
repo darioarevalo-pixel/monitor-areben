@@ -182,19 +182,49 @@ export type Diagnostico = {
   veredicto: Veredicto
 }
 
+/**
+ * Línea de pauta de una campaña. **No es una `Marca` del monitor**: Stunned es una línea adentro de
+ * Zattia y no tiene base propia. El porqué está en `lib/meta-ads/lineas.core.js`.
+ */
+export type LineaPauta = 'bdi' | 'zattia' | 'stunned'
+
+/** Una campaña que todavía no tiene línea asignada. Es un estado real, no una falla. */
+export type CampañaSinLinea = CampañaEtapa & {
+  /** Lo que el nombre PARECE decir. Prellena el botón; no se guarda hasta que alguien confirma. */
+  sugerida: LineaPauta | null
+  /** Activa o con gasto en la ventana. Las que no, quedan plegadas: no mueven ningún diagnóstico. */
+  tuvoActividad: boolean
+}
+
+/** Una asignación guardada, tal como la devuelve `?recurso=meta-funnel&que=lineas`. */
+export type AsignacionLinea = {
+  campaign_id: string
+  linea: LineaPauta
+  cuenta_id: string
+  nombre: string | null
+  objetivo: string | null
+  linea_previa: string | null
+  por: string
+  updated_at: string
+}
+
 /** Lo que devuelve `/api/meta-ads?recurso=etapas`. */
 export type RespuestaEtapas = {
-  marca: string
   /** Ventana usada, en días (fija: ver `UMBRALES_ETAPA`). */
   dias: number
-  /** Las cuentas de esa marca que se consultaron. */
+  /** Las cuentas publicitarias del token que se consultaron. */
   cuentas: { id: string; nombre: string }[]
   /**
-   * Cuentas que el token devolvió pero que no están en `MARCA_POR_CUENTA`. No se atribuyen a
-   * ninguna marca: la pantalla las muestra para poder mapearlas.
+   * Las campañas repartidas por línea, **con sólo las líneas que el perfil puede ver**. Una línea
+   * ausente de este objeto es una que no se tiene permiso de mirar, no una vacía.
    */
-  sinMarca: { id: string; nombre: string }[]
-  campañas: CampañaEtapa[]
+  lineas: Partial<Record<LineaPauta, CampañaEtapa[]>>
+  /**
+   * Campañas sin línea asignada. Su plata no entra en ningún diagnóstico: nadie la hereda por
+   * descarte. Las ve cualquiera con Meta Ads en alguna marca — es inevitable, porque alguien tiene
+   * que poder asignarlas.
+   */
+  sinAsignar: CampañaSinLinea[]
 }
 
 /** El detalle completo de una cuenta. */

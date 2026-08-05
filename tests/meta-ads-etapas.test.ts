@@ -4,8 +4,6 @@ import {
   etapaDeObjetivo,
   ETAPA_POR_OBJETIVO,
   mapaOverrides,
-  MARCA_POR_CUENTA,
-  marcaDeCuentaAds,
   overrideViejo,
   RESUMEN_ETAPA,
   UMBRALES_ETAPA,
@@ -94,33 +92,9 @@ describe('clasificación por objetivo', () => {
   })
 })
 
-describe('marca de una cuenta publicitaria', () => {
-  it('una cuenta no mapeada devuelve null, nunca una marca por defecto', () => {
-    // Es EL punto del mapa. La versión anterior (regex sobre el nombre) caía a 'bdi' en silencio,
-    // así que la pauta de otra marca se le sumaba a BDI y el número se veía perfectamente creíble.
-    expect(marcaDeCuentaAds('000000000000000')).toBeNull()
-    expect(marcaDeCuentaAds('')).toBeNull()
-  })
-
-  it('acepta el id con y sin el prefijo act_', () => {
-    // El overview devuelve `account_id` pelado y el resto de la Graph usa `act_<id>`: que el mapa
-    // dependa de cuál de los dos llegó sería una fuente de bugs mudos.
-    const [id, marca] = Object.entries(MARCA_POR_CUENTA)[0] ?? []
-    if (!id) return // todavía sin cargar: se cubre en el test de abajo
-    expect(marcaDeCuentaAds(id)).toBe(marca)
-    expect(marcaDeCuentaAds(`act_${id}`)).toBe(marca)
-  })
-
-  it('lo que haya cargado en el mapa es una marca real', () => {
-    // No se exige que el mapa esté lleno: los ids solo se pueden leer con el token de producción,
-    // y hasta que se carguen la pantalla los muestra para copiarlos. Lo que sí se exige es que lo
-    // que esté cargado sea válido — un typo acá manda la plata de una marca a la otra.
-    for (const [id, marca] of Object.entries(MARCA_POR_CUENTA)) {
-      expect(id, `el id '${id}' no parece un account_id de Meta`).toMatch(/^\d+$/)
-      expect(['bdi', 'zattia'], `la cuenta ${id} apunta a una marca inexistente`).toContain(marca)
-    }
-  })
-})
+// El mapa `cuenta publicitaria → marca` se borró el 5-ago-2026: las tres marcas se pautean desde la
+// MISMA cuenta, así que no existía ningún valor correcto para cargarle. La atribución bajó a nivel
+// campaña y sus tests viven en `tests/meta-ads-lineas.test.ts`.
 
 describe('qué cuenta como "al aire"', () => {
   it('exige activa Y con gasto', () => {
