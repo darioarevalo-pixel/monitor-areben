@@ -7,6 +7,7 @@ import {
   juegaLaFecha,
   laQueAprieta,
   nEsimoDiaDeSemana,
+  normalizarHora,
   proximas,
   prioridadSugerida,
   resolverComercial,
@@ -187,6 +188,60 @@ describe('proximas()', () => {
   it('un hito fuera de la ventana no aparece', () => {
     const hitos = [hito({ id: 'lejos', fecha: '2027-06-01' })]
     expect(proximas('2026-10-01', 30, { hitos }).some((e) => e.id === 'hito:lejos')).toBe(false)
+  })
+})
+
+/**
+ * La hora de un hito. Es opcional y **vacía no es medianoche**: una sesión de fotos empieza a las 9
+ * y una llegada de mercadería es del día. Rellenar la que falta ordenaría la lista por un momento
+ * que nadie eligió y mostraría "0:00" al lado de cosas que no tienen hora.
+ */
+describe('la hora del hito', () => {
+  it('normaliza lo que se pueda y rechaza lo que no, sin inventar medianoche', () => {
+    expect(normalizarHora('18:30')).toBe('18:30')
+    // El `<input type="time">` de Safari puede mandar segundos, y una hora tipeada a mano en la
+    // base viene sin el cero adelante. Ninguna de las dos es un error del que valga la pena avisar.
+    expect(normalizarHora('9:05')).toBe('09:05')
+    expect(normalizarHora('09:05:00')).toBe('09:05')
+    expect(normalizarHora('')).toBe(null)
+    expect(normalizarHora(null)).toBe(null)
+    expect(normalizarHora(undefined)).toBe(null)
+    expect(normalizarHora('24:00')).toBe(null)
+    expect(normalizarHora('10:75')).toBe(null)
+    expect(normalizarHora('mediodía')).toBe(null)
+  })
+
+  it('la hora viaja hasta la entrada, y una comercial nunca tiene', () => {
+    const hitos = [
+      hito({ id: 'a', fecha: '2026-10-05', titulo: 'Sesión de fotos', hora: '9:00' }),
+      hito({ id: 'b', fecha: '2026-10-05', titulo: 'Llegada de mercadería' }),
+    ]
+    const r = proximas('2026-10-01', 30, { hitos })
+    expect(r.find((e) => e.id === 'hito:a')!.hora).toBe('09:00')
+    // Los hitos cargados antes de que el campo existiera no traen la clave: `null`, no `undefined`.
+    expect(r.find((e) => e.id === 'hito:b')!.hora).toBe(null)
+    // El Día de la Madre no empieza a una hora. Ponerle una sería inventar un dato que se muestra.
+    expect(r.find((e) => e.id === 'comercial:dia-madre:2026')!.hora).toBe(null)
+  })
+
+  it('dentro del mismo día: primero lo del día entero, después por hora', () => {
+    const hitos = [
+      hito({ id: 'tarde', fecha: '2026-10-05', titulo: 'Envío del mail', hora: '18:30' }),
+      hito({ id: 'manana', fecha: '2026-10-05', titulo: 'Sesión de fotos', hora: '09:00' }),
+      hito({ id: 'dia', fecha: '2026-10-05', titulo: 'Llegada de mercadería' }),
+    ]
+    const r = proximas('2026-10-01', 30, { hitos }).filter((e) => e.fecha === '2026-10-05')
+    expect(r.map((e) => e.id)).toEqual(['hito:dia', 'hito:manana', 'hito:tarde'])
+  })
+
+  it('la hora llega a la fila unificada y ordena igual que en la lista de una marca', () => {
+    const hitos = [
+      hito({ id: 'tarde', fecha: '2026-10-05', titulo: 'Envío del mail', hora: '18:30' }),
+      hito({ id: 'manana', fecha: '2026-10-05', titulo: 'Sesión de fotos', hora: '09:00' }),
+    ]
+    const filas = unificar({ bdi: proximas('2026-10-01', 30, { hitos }) }, ['bdi'])
+      .filter((f) => f.fecha === '2026-10-05')
+    expect(filas.map((f) => f.base.hora)).toEqual(['09:00', '18:30'])
   })
 })
 

@@ -81,6 +81,13 @@ export interface Hito {
   id: string
   /** `YYYY-MM-DD` */
   fecha: string
+  /**
+   * `HH:MM` de 24 horas, o `null` si es del día entero. **Opcional**: los hitos cargados antes de
+   * que existiera el campo no traen la clave (viven en `datos jsonb`), así que se lee con `|| null`.
+   *
+   * `null` no es medianoche: es "ese día". Ver `normalizarHora()` en `fechas.core.js`.
+   */
+  hora?: string | null
   /** `false` = proyectada: la fecha todavía se puede mover. */
   firme: boolean
   titulo: string
@@ -104,6 +111,11 @@ export interface EntradaCalendario {
   clase: 'comercial' | 'hito'
   /** `YYYY-MM-DD` */
   fecha: string
+  /**
+   * `HH:MM`, o `null` si pasa en el día y nada más. **Siempre `null` en las comerciales**: el Día de
+   * la Madre no empieza a una hora, y ponerle uno sería inventar un dato que después se muestra.
+   */
+  hora: string | null
   titulo: string
   certeza: Certeza
   /**
@@ -156,6 +168,9 @@ export interface EntradaCalendario {
  * entero, el render podría leerle la prioridad "de la fila" —que es la de la primera marca que
  * llegó— y dibujar la decisión de BDI arriba del renglón de Zattia sin fallar nunca.
  *
+ * `hora` sí puede vivir acá: en las comerciales es `null` en las dos marcas (el almanaque no tiene
+ * horario) y un hito vive en una base sola, así que no hay dos valores posibles para la misma fila.
+ *
  * ⚠️ **`creadoPor` sólo es de la fila en los hitos.** Un hito vive en una base sola, así que ahí la
  * primera marca es la única. En una comercial es *quién confirmó la fecha*, y eso puede estar en una
  * base y no en la otra: leerlo de acá hacía aparecer y desaparecer el renglón según qué marca
@@ -163,7 +178,7 @@ export interface EntradaCalendario {
  */
 export type BaseUnificada = Pick<
   EntradaCalendario,
-  | 'id' | 'clase' | 'fecha' | 'titulo' | 'certeza' | 'seConfirma' | 'faltan' | 'anticipoDias'
+  | 'id' | 'clase' | 'fecha' | 'hora' | 'titulo' | 'certeza' | 'seConfirma' | 'faltan' | 'anticipoDias'
   | 'arranqueSugerido' | 'tipo' | 'prioridadSugerida' | 'detalle' | 'comoSeConfirma' | 'tipoHito'
   | 'creadoPor'
 >

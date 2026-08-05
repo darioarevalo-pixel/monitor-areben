@@ -627,7 +627,9 @@ function Fila({ fila, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCa
       <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: space[1.5] }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
           <span style={{ fontSize: font.md, fontWeight: weight.bold, color: color.ink }}>{b.titulo}</span>
-          <span style={{ fontSize: font.sm, color: color.mut }}>{rotuloFecha(b.fecha)}</span>
+          <span style={{ fontSize: font.sm, color: color.mut }}>
+            {rotuloFecha(b.fecha)}{b.hora ? ` · ${b.hora}` : ''}
+          </span>
           <ChipCerteza base={b} marcas={marcasEstimadas(fila)} varias={varias} />
           {/* Un hito es de una base sola: el chip acá arriba dice de quién es sin repetirlo abajo. */}
           {varias && b.clase === 'hito' && <MarcaChip marca={fila.marcas[0]} />}
@@ -935,7 +937,7 @@ function Grilla({ filas, hoy, varias }: { filas: FilaUnificada[]; hoy: string; v
                 <div
                   key={f.key}
                   title={[
-                    f.base.titulo,
+                    f.base.hora ? `${f.base.hora} ${f.base.titulo}` : f.base.titulo,
                     varias ? f.marcas.map(nombreMarca).join(' y ') : '',
                     f.base.certeza === 'estimada' ? 'fecha estimada' : f.base.certeza === 'proyectada' ? 'proyectada' : rotuloFecha(f.fecha),
                   ].filter(Boolean).join(' — ')}
@@ -947,6 +949,10 @@ function Grilla({ filas, hoy, varias }: { filas: FilaUnificada[]; hoy: string; v
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                 >
+                  {/* La hora adelante, como cualquier calendario: es lo que se busca de un vistazo
+                      cuando el día tiene dos cosas. Sin hora no se dibuja nada — un `00:00` diría
+                      que es a la medianoche. */}
+                  {f.base.hora && <span style={{ fontWeight: weight.bold }}>{f.base.hora} </span>}
                   {f.base.titulo}
                 </div>
               ))}
@@ -1002,6 +1008,15 @@ function ModalHito({ hito, marca, marcas, onMarca, onCerrar, onGuardar, onBorrar
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
           <Field label="Cuándo" required width={180}>
             <Input type="date" value={String(f.fecha || '')} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+          </Field>
+          {/* Opcional a propósito: vacía quiere decir "ese día", que es lo que pasa con una llegada
+              de mercadería. Poner 00:00 por defecto mostraría una hora que nadie eligió. */}
+          <Field label="Hora" width={140} hint="Opcional.">
+            <Input
+              type="time"
+              value={String(f.hora || '')}
+              onChange={(e) => setF({ ...f, hora: e.target.value || null })}
+            />
           </Field>
           <Field label="Tipo" width={200}>
             <Select value={String(f.tipo || 'otro')} onChange={(e) => setF({ ...f, tipo: e.target.value })}>

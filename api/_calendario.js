@@ -24,7 +24,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVer } from '../lib/permisos.core.js';
 import {
-  CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, partirIdComercial,
+  CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, normalizarHora, partirIdComercial,
 } from '../lib/calendario/fechas.core.js';
 
 function cfgFor(store) {
@@ -182,6 +182,10 @@ export default async function handler(req, res) {
     if (!ES_FECHA.test(String(entrada.fecha || ''))) return res.status(400).json({ error: 'la fecha va como YYYY-MM-DD' });
     const tipo = String(entrada.tipo || 'otro');
     if (!CLAVES_TIPO_HITO.includes(tipo)) return res.status(400).json({ error: `tipo inválido (usá ${CLAVES_TIPO_HITO.join(', ')})` });
+    // La hora es opcional: vacía es "ese día", no medianoche. Una escrita mal se rechaza en vez de
+    // guardarse en null — el hito se guardaría igual y nadie entendería por qué la hora no quedó.
+    const hora = normalizarHora(entrada.hora);
+    if (entrada.hora && !hora) return res.status(400).json({ error: 'la hora va como HH:MM' });
 
     const { data: previo, error: e1 } = await supabase.from('calendario_hitos')
       .select('datos, creado_por').eq('store', store).eq('id', String(entrada.id)).maybeSingle();
@@ -196,6 +200,7 @@ export default async function handler(req, res) {
       id: String(entrada.id),
       titulo,
       tipo,
+      hora,
       // `firme: false` es una fecha proyectada, que se puede mover sin borrar nada. Es el default de
       // la nada porque una fecha que alguien tipeó sin marcarla firme casi nunca lo es.
       firme: entrada.firme === true,

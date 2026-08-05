@@ -39,6 +39,7 @@ import {
   iso as isoJs,
   juegaLaFecha as juegaLaFechaJs,
   nEsimoDiaDeSemana as nEsimoDiaDeSemanaJs,
+  normalizarHora as normalizarHoraJs,
   partirIdComercial as partirIdComercialJs,
   PRIORIDADES as PRIORIDADES_JS,
   prioridadDe as prioridadDeJs,
@@ -80,6 +81,7 @@ export const nEsimoDiaDeSemana = nEsimoDiaDeSemanaJs as (anio: number, mes: numb
 export const sumarDias = sumarDiasJs as (fecha: string, n: number) => string
 export const diasEntre = diasEntreJs as (desde: string, hasta: string) => number
 export const diaDeSemanaDe = diaDeSemanaDeJs as (fecha: string) => number
+export const normalizarHora = normalizarHoraJs as (v: unknown) => string | null
 export const fechaComercialDe = fechaComercialDeJs as (clave: string) => FechaComercial | null
 export const resolverComercial = resolverComercialJs as (clave: string, anio: number) => { fecha: string; estimada: boolean } | null
 
@@ -160,6 +162,8 @@ export function proximas(
         id,
         clase: 'comercial',
         fecha,
+        // Una fecha del almanaque no tiene hora: el Día de la Madre es todo el día.
+        hora: null,
         titulo: f.titulo,
         // Confirmar una anunciada la vuelve firme; ese es todo el sentido de poder fijarla.
         certeza: fijada ? 'firme' : auto.estimada ? 'estimada' : 'firme',
@@ -192,6 +196,9 @@ export function proximas(
       id,
       clase: 'hito',
       fecha: h.fecha,
+      // Se normaliza acá y no al leer: los hitos viejos no traen la clave (viven en `datos jsonb`)
+      // y una hora escrita a mano en la base podría venir como `9:00` o con segundos.
+      hora: normalizarHora(h.hora),
       titulo: h.titulo,
       certeza: h.firme ? 'firme' : 'proyectada',
       // La fecha de un hito se corrige editándolo, no confirmándola: no la anuncia nadie de afuera.
@@ -215,7 +222,20 @@ export function proximas(
   }
 
   // Por fecha; a igual día, primero la comercial (es la que tiene anticipo y manda la producción).
-  return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase) || a.titulo.localeCompare(b.titulo))
+  return out.sort((a, b) => (
+    a.fecha.localeCompare(b.fecha) || a.clase.localeCompare(b.clase) || porHora(a, b) || a.titulo.localeCompare(b.titulo)
+  ))
+}
+
+/**
+ * Dentro del mismo día: **primero lo que no tiene hora, después por hora**.
+ *
+ * Lo del día entero va arriba porque enmarca la jornada —"hoy llega la mercadería"— y meterlo entre
+ * las 9 y las 18:30 obligaría a inventarle un momento. Es el orden que usa cualquier calendario y
+ * por eso no sorprende.
+ */
+function porHora(a: { hora: string | null }, b: { hora: string | null }): number {
+  return (a.hora ? 1 : 0) - (b.hora ? 1 : 0) || (a.hora || '').localeCompare(b.hora || '')
 }
 
 /**
@@ -250,9 +270,9 @@ export function unificar(porMarca: Partial<Record<Marca, EntradaCalendario[]>>, 
       const key = `${e.id}|${e.fecha}`
       const ya = filas.get(key)
       if (!ya) {
-        const { id, clase, fecha, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido, tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor } = e
+        const { id, clase, fecha, hora, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido, tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor } = e
         const base: BaseUnificada = {
-          id, clase, fecha, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido,
+          id, clase, fecha, hora, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido,
           tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor,
         }
         filas.set(key, { key, id: e.id, fecha: e.fecha, base, marcas: [marca], porMarca: { [marca]: e }, discrepa: false })
@@ -270,8 +290,14 @@ export function unificar(porMarca: Partial<Record<Marca, EntradaCalendario[]>>, 
 
   return [...filas.values()]
     .map((f) => ({ ...f, discrepa: (cuantasFilas.get(f.id) || 0) > 1 }))
-    // Mismo orden que `proximas()`: por fecha y, a igual día, primero la comercial.
-    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.base.clase.localeCompare(b.base.clase) || a.base.titulo.localeCompare(b.base.titulo))
+    // Mismo orden que `proximas()`: por fecha, a igual día primero la comercial, y entre los hitos
+    // primero los del día entero y después por hora.
+    .sort((a, b) => (
+      a.fecha.localeCompare(b.fecha)
+      || a.base.clase.localeCompare(b.base.clase)
+      || porHora(a.base, b.base)
+      || a.base.titulo.localeCompare(b.base.titulo)
+    ))
 }
 
 /**
