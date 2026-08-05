@@ -271,20 +271,24 @@ export function Calendario() {
   }
 
   /**
-   * Confirmar la fecha real **se escribe en todas las marcas que la tienen estimada**, y ésa es la
-   * única acción de la pantalla que no es por marca.
+   * Confirmar la fecha real **se escribe en todas las marcas de la fila**, y ésa es la única acción
+   * de la pantalla que no es por marca.
    *
    * No es una inconsistencia con la prioridad: son dos cosas distintas. Con cuánta fuerza jugamos el
    * Día del Niño es una decisión, y BDI y Zattia pueden decidir distinto. Qué día cae el Hot Sale es
    * un hecho del mundo que anunció una cámara — es el mismo día para las dos, y hacerlo tipear dos
    * veces sólo agrega la chance de que una de las bases quede con la fecha vieja.
+   *
+   * 🔴 **Va a todas las marcas, no sólo a las que la tienen estimada.** Mientras el destino salía de
+   * `marcasEstimadas()`, corregir era imposible: la marca que había confirmado quedaba afuera del
+   * lazo, así que el día viejo sobrevivía a la corrección y `desfijar` no borraba nada. Con `fecha`
+   * vacía esto vuelve a la estimación del catálogo; el DELETE de la que no tenía fila es un no-op.
    */
   async function confirmar(fila: FilaUnificada, fecha: string) {
     const clave = fila.id.split(':')[1]
     const anio = Number(fila.id.split(':')[2])
-    const destino = marcasEstimadas(fila)
     try {
-      for (const m of destino) {
+      for (const m of fila.marcas) {
         if (fecha) await fijarFecha(m, clave, anio, fecha)
         else await desfijarFecha(m, clave, anio)
       }
@@ -342,6 +346,25 @@ export function Calendario() {
       .filter((x) => x.lista.length > 0),
     [marcas, entradasPorMarca],
   )
+  /**
+   * Las marcas que deben exactamente lo mismo van en un renglón solo, con los dos chips.
+   *
+   * 🔑 El estado normal hoy es que ninguna decidió nada, así que la banda salía dos veces con el
+   * mismo número y los mismos cuatro nombres — dos párrafos idénticos antes de la primera fecha.
+   * Agrupar por la lista y no por el largo es a propósito: dos marcas pueden deber cuatro fechas
+   * **distintas**, y ahí decir "BDI y Zattia deben 4" sería un número que no es de ninguna de las
+   * dos. Se juntan cuando deben las mismas; si no, siguen separadas.
+   */
+  const gruposPendientes = useMemo(() => {
+    const porLista = new Map<string, { marcas: Marca[]; lista: EntradaCalendario[] }>()
+    for (const { marca: m, lista } of pendientes) {
+      const clave = lista.map((e) => e.id).join('|')
+      const ya = porLista.get(clave)
+      if (ya) ya.marcas.push(m)
+      else porLista.set(clave, { marcas: [m], lista })
+    }
+    return [...porLista.values()]
+  }, [pendientes])
   const caidas = marcas.filter((m) => datos?.porMarca[m]?.error)
   const sinIdeas = marcas.filter((m) => datos?.porMarca[m]?.ideasCaidas)
 
@@ -415,13 +438,13 @@ export function Calendario() {
         </Notice>
       )}
 
-      {!cargando && pendientes.length > 0 && (
+      {!cargando && gruposPendientes.length > 0 && (
         <Notice tone="neutral">
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-            {pendientes.map(({ marca: m, lista }) => (
-              <div key={m}>
+            {gruposPendientes.map(({ marcas: suyas, lista }) => (
+              <div key={suyas.join('|')}>
                 <div style={{ fontSize: font.md, fontWeight: weight.bold, display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-                  {varias && <MarcaChip marca={m} />}
+                  {varias && suyas.map((m) => <MarcaChip key={m} marca={m} />)}
                   <span>
                     {lista.length === 1
                       ? `Hay 1 fecha sin decidir en ${rotuloVentana(dias)}.`
@@ -643,12 +666,33 @@ function Fila({ fila, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCa
 
         {b.detalle && <div style={{ fontSize: font.sm, color: color.mut2, lineHeight: 1.45 }}>{b.detalle}</div>}
 
-        {b.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {b.creadoPor}</div>}
+        {/* Un hito lo cargó alguien; una comercial no la cargó nadie —la trae el catálogo— y lo
+            único que puso una persona es el día. Decir "cargado por" en las dos era contar algo que
+            no pasó, y encima salía de `base`, o sea de la marca que el header pusiera primera: el
+            renglón aparecía parado en BDI y desaparecía parado en Zattia. */}
+        {b.clase === 'hito'
+          ? b.creadoPor && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargado por {b.creadoPor}</div>
+          : confirmaronLaFecha(fila).length > 0 && (
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              Fecha confirmada por {confirmaronLaFecha(fila).join(' y ')}
+            </div>
+          )}
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        {b.certeza === 'estimada' && (
-          <Button size="sm" variant="ghost" tone="warning" onClick={() => onConfirmar(fila)}>Confirmar fecha</Button>
+        {/* Sale de `seConfirma`, no de la certeza: una fecha que pone una cámara se puede tocar
+            SIEMPRE. Con `certeza === 'estimada'` el botón desaparecía al confirmarla y una fecha
+            confirmada con el día equivocado apagaba el chip ámbar y no había forma de corregirla
+            desde la pantalla. Ámbar sólo mientras falte confirmarla: después ya no reclama nada. */}
+        {b.seConfirma && (
+          <Button
+            size="sm"
+            variant="ghost"
+            tone={b.certeza === 'estimada' ? 'warning' : 'neutral'}
+            onClick={() => onConfirmar(fila)}
+          >
+            {b.certeza === 'estimada' ? 'Confirmar fecha' : 'Corregir la fecha'}
+          </Button>
         )}
         {b.clase === 'hito' && (
           <Button size="sm" variant="ghost" onClick={() => onEditar(fila.marcas[0], b.id.replace(/^hito:/, ''))}>Editar</Button>
@@ -661,6 +705,22 @@ function Fila({ fila, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCa
 /** Las marcas de la fila donde la fecha todavía está sin confirmar. */
 function marcasEstimadas(fila: FilaUnificada): Marca[] {
   return fila.marcas.filter((m) => fila.porMarca[m]?.certeza === 'estimada')
+}
+
+/**
+ * Quién confirmó el día de una comercial, sin repetidos y **sin depender del orden del header**.
+ *
+ * Se lee de `porMarca` y se ordena: `base.creadoPor` es el de la primera marca que entró al mapa, y
+ * como la fecha puede estar confirmada en una base y no en la otra, leerlo de ahí hacía que el dato
+ * apareciera o desapareciera según qué marca estuviera seleccionada arriba.
+ */
+function confirmaronLaFecha(fila: FilaUnificada): string[] {
+  const nombres = new Set<string>()
+  for (const m of fila.marcas) {
+    const por = fila.porMarca[m]?.creadoPor
+    if (por) nombres.add(por)
+  }
+  return [...nombres].sort()
 }
 
 /**
@@ -1038,11 +1098,17 @@ function ModalIdea({ entrada, marca, varias, onCerrar, onAnotar }: {
         <Field label="La idea, en una línea" required>
           <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Testimonios de clientas sobre el talle" autoFocus />
         </Field>
-        <Field label="Formato" width={220}>
-          <Select value={formato} onChange={(e) => setFormato(e.target.value)}>
-            {FORMATOS_IDEA.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-          </Select>
-        </Field>
+        {/* ⚠️ La fila de afuera no sobra. `Field width` es `flex-basis`, y adentro de un contenedor
+            en COLUMNA el basis es el **alto**: `width={220}` le daba 220 px de alto al campo y
+            dejaba un pozo en blanco antes de "El gancho". Envuelto en una fila, el eje principal
+            vuelve a ser horizontal y el 220 es lo que dice ser. */}
+        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+          <Field label="Formato" width={220}>
+            <Select value={formato} onChange={(e) => setFormato(e.target.value)}>
+              {FORMATOS_IDEA.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+            </Select>
+          </Field>
+        </div>
         <Field label="El gancho" hint="Opcional. Los primeros dos segundos, o la frase que arranca.">
           <Input value={gancho} onChange={(e) => setGancho(e.target.value)} />
         </Field>
@@ -1071,25 +1137,37 @@ function ModalConfirmarFecha({ fila, varias, onCerrar, onConfirmar }: {
   const anio = Number(fila.id.split(':')[2])
   const cat = fechaComercialDe(fila.id.split(':')[1])
   const mueve = diasEntre(fila.fecha, fecha)
-  const destino = marcasEstimadas(fila)
+  // El día que se está mirando ya lo puso alguien en al menos una base: eso es lo que se puede
+  // corregir o soltar. Con las dos estimadas no hay nada que deshacer.
+  const yaConfirmada = fila.marcas.some((m) => fila.porMarca[m]?.certeza === 'firme')
 
   return (
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo={`Confirmar la fecha de ${fila.base.titulo}`}
+      titulo={`${yaConfirmada ? 'Corregir' : 'Confirmar'} la fecha de ${fila.base.titulo}`}
       pie={
         <>
+          {/* Soltar la fecha la devuelve a la estimación del catálogo. Está acá y no en la fila
+              porque es lo que hay que hacer cuando se confirmó mal, y ahí ya se está mirando el
+              día equivocado. */}
+          {yaConfirmada && (
+            <Button variant="ghost" onClick={() => onConfirmar(fila, '')}>Volver a la estimada</Button>
+          )}
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
           <Button variant="solid" disabled={!fecha || Number(fecha.slice(0, 4)) !== anio} onClick={() => onConfirmar(fila, fecha)}>
-            Confirmar
+            {yaConfirmada ? 'Guardar' : 'Confirmar'}
           </Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <div style={{ fontSize: font.sm, color: color.ink2, lineHeight: 1.5 }}>
-          Hoy se está mostrando <b>{rotuloFecha(fila.fecha)}</b>, que es una estimación.
+          {yaConfirmada ? (
+            <>Hoy se está mostrando <b>{rotuloFecha(fila.fecha)}</b>, que confirmó alguien del equipo.</>
+          ) : (
+            <>Hoy se está mostrando <b>{rotuloFecha(fila.fecha)}</b>, que es una estimación.</>
+          )}
           {cat?.comoSeConfirma ? ` ${cat.comoSeConfirma}` : ''}
         </div>
         <Field label={`La fecha real de ${anio}`} required>
@@ -1102,11 +1180,11 @@ function ModalConfirmarFecha({ fila, varias, onCerrar, onConfirmar }: {
         )}
         {varias && (
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.xs, color: color.mut2 }}>
-            {destino.map((m) => <MarcaChip key={m} marca={m} />)}
+            {fila.marcas.map((m) => <MarcaChip key={m} marca={m} />)}
             <span>
-              {destino.length > 1
+              {fila.marcas.length > 1
                 ? 'Se guarda en las dos: el día es el mismo para las dos marcas.'
-                : 'En la otra marca ya está confirmada.'}
+                : 'Sólo esta marca tiene la fecha en este día.'}
             </span>
           </div>
         )}

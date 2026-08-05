@@ -163,6 +163,9 @@ export function proximas(
         titulo: f.titulo,
         // Confirmar una anunciada la vuelve firme; ese es todo el sentido de poder fijarla.
         certeza: fijada ? 'firme' : auto.estimada ? 'estimada' : 'firme',
+        // Que el día lo ponga una persona es del catálogo y no cambia al confirmarlo: por eso sale
+        // de `auto` y no de `fijada`. Es lo que deja corregir una fecha confirmada mal.
+        seConfirma: auto.estimada,
         faltan: diasEntre(desde, fecha),
         anticipoDias: f.anticipoDias,
         arranqueSugerido: sumarDias(fecha, -f.anticipoDias),
@@ -191,6 +194,8 @@ export function proximas(
       fecha: h.fecha,
       titulo: h.titulo,
       certeza: h.firme ? 'firme' : 'proyectada',
+      // La fecha de un hito se corrige editándolo, no confirmándola: no la anuncia nadie de afuera.
+      seConfirma: false,
       faltan: diasEntre(desde, h.fecha),
       // Un hito propio no se decide ni se anticipa: **ya es nuestro**. Preguntarle al equipo si se
       // suma a su propio lanzamiento de colección sería pedirle que confirme lo que acaba de
@@ -245,9 +250,9 @@ export function unificar(porMarca: Partial<Record<Marca, EntradaCalendario[]>>, 
       const key = `${e.id}|${e.fecha}`
       const ya = filas.get(key)
       if (!ya) {
-        const { id, clase, fecha, titulo, certeza, faltan, anticipoDias, arranqueSugerido, tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor } = e
+        const { id, clase, fecha, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido, tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor } = e
         const base: BaseUnificada = {
-          id, clase, fecha, titulo, certeza, faltan, anticipoDias, arranqueSugerido,
+          id, clase, fecha, titulo, certeza, seConfirma, faltan, anticipoDias, arranqueSugerido,
           tipo, prioridadSugerida: sug, detalle, comoSeConfirma, tipoHito, creadoPor,
         }
         filas.set(key, { key, id: e.id, fecha: e.fecha, base, marcas: [marca], porMarca: { [marca]: e }, discrepa: false })

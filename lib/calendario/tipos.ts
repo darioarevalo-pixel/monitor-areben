@@ -106,6 +106,16 @@ export interface EntradaCalendario {
   fecha: string
   titulo: string
   certeza: Certeza
+  /**
+   * El día real lo fija una persona, no el almanaque — una anunciada (la define una cámara) o una
+   * regla que ese año dejó de ser calculable.
+   *
+   * 🔑 Va aparte de `certeza` y **no cambia al confirmarla**: `certeza` dice si hoy le creemos a la
+   * fecha, esto dice si alguien la puede tocar. Mientras la pantalla usó `certeza === 'estimada'`
+   * para dibujar el botón, confirmarla lo hacía desaparecer y una fecha mal confirmada no se podía
+   * corregir desde ningún lado.
+   */
+  seConfirma: boolean
   /** Días desde `desde` hasta la fecha. 0 es hoy. */
   faltan: number
   /** Lo que el catálogo **sugiere** de anticipo. No dispara nada solo: ver `PRIORIDADES`. */
@@ -145,11 +155,17 @@ export interface EntradaCalendario {
  * `arrancar`, `arrancarEn` y `cobertura` son de cada marca. Si `base` fuera un `EntradaCalendario`
  * entero, el render podría leerle la prioridad "de la fila" —que es la de la primera marca que
  * llegó— y dibujar la decisión de BDI arriba del renglón de Zattia sin fallar nunca.
+ *
+ * ⚠️ **`creadoPor` sólo es de la fila en los hitos.** Un hito vive en una base sola, así que ahí la
+ * primera marca es la única. En una comercial es *quién confirmó la fecha*, y eso puede estar en una
+ * base y no en la otra: leerlo de acá hacía aparecer y desaparecer el renglón según qué marca
+ * estuviera primera en el header. En las comerciales se lee de `porMarca`.
  */
 export type BaseUnificada = Pick<
   EntradaCalendario,
-  | 'id' | 'clase' | 'fecha' | 'titulo' | 'certeza' | 'faltan' | 'anticipoDias' | 'arranqueSugerido'
-  | 'tipo' | 'prioridadSugerida' | 'detalle' | 'comoSeConfirma' | 'tipoHito' | 'creadoPor'
+  | 'id' | 'clase' | 'fecha' | 'titulo' | 'certeza' | 'seConfirma' | 'faltan' | 'anticipoDias'
+  | 'arranqueSugerido' | 'tipo' | 'prioridadSugerida' | 'detalle' | 'comoSeConfirma' | 'tipoHito'
+  | 'creadoPor'
 >
 
 /**

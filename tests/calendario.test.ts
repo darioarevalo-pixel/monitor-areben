@@ -111,6 +111,31 @@ describe('estimada vs. firme', () => {
     const del27 = proximas('2027-04-01', 90, { fijadas }).find((e) => e.id === 'comercial:hot-sale:2027')
     expect(del27?.certeza).toBe('estimada')
   })
+
+  // Es lo que sostiene el botón de corregir: si `seConfirma` se apagara al confirmar, una fecha
+  // confirmada con el día equivocado quedaría sin forma de arreglarse desde la pantalla.
+  it('confirmar una fecha NO le saca el derecho a ser corregida', () => {
+    const fijadas: FechaFijada[] = [{ clave: 'hot-sale', anio: 2026, fecha: '2026-05-19', por: 'Bruno' }]
+    const conf = proximas('2026-04-01', 90, { fijadas }).find((e) => e.id === 'comercial:hot-sale:2026')
+    expect(conf?.certeza).toBe('firme')
+    expect(conf?.seConfirma).toBe(true)
+
+    const sin = proximas('2026-04-01', 90).find((e) => e.id === 'comercial:hot-sale:2026')
+    expect(sin?.seConfirma).toBe(true)
+  })
+
+  it('una fecha que sale del almanaque no se confirma: no la anuncia nadie', () => {
+    // Navidad es fija y San Martín 2026 cae lunes, así que la regla resuelve sola. Ninguna de las
+    // dos tiene nada que confirmar, y el botón no se les tiene que ofrecer.
+    const lista = proximas('2026-08-01', 200)
+    expect(lista.find((e) => e.id === 'comercial:navidad:2026')?.seConfirma).toBe(false)
+    expect(lista.find((e) => e.id === 'comercial:san-martin:2026')?.seConfirma).toBe(false)
+
+    const hito = proximas('2026-08-01', 30, {
+      hitos: [{ id: 'h1', titulo: 'Lanzamiento', fecha: '2026-08-10', firme: true }],
+    }).find((e) => e.clase === 'hito')
+    expect(hito?.seConfirma).toBe(false)
+  })
 })
 
 describe('proximas()', () => {
