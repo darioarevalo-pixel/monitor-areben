@@ -296,3 +296,59 @@ export type RespuestaCreativos = {
    */
   sinCreativo: string | null
 }
+
+// ── Diagnóstico del token: ¿se puede ESCRIBIR en Meta? ──────────────────────────
+
+/**
+ * El veredicto por cuenta. Son dos candados distintos y el punto del diagnóstico es no
+ * confundirlos: el scope del token y el permiso del system user sobre esa cuenta.
+ */
+export type VeredictoEscritura =
+  /** `user_tasks` incluye MANAGE, pero todavía no se probó a escribir (falta `?probar=1`). */
+  | 'permiso-de-cuenta-ok'
+  /** La escritura de prueba salió bien: esta cuenta se puede accionar. */
+  | 'escribe'
+  /** `user_tasks` es solo lectura, o Meta contestó (#272): falta "Administrar campañas". */
+  | 'sin-permiso-de-cuenta'
+  /** Meta contestó (#200): al token le falta el scope `ads_management`. */
+  | 'sin-scope'
+  /** (#190): el token venció o fue revocado. */
+  | 'token-invalido'
+  | 'rechazo-desconocido'
+  | 'no-se-pudo-leer'
+
+export type PruebaEscritura =
+  | { corrida: false; motivo: string }
+  | { corrida: true; ok: true; campania: string }
+  | { corrida: true; ok: false; codigo: number | null; campania: string; detalle: string }
+
+export type CuentaDiagnostico = {
+  id: string
+  nombre: string
+  veredicto: VeredictoEscritura
+  /** Sólo cuando el veredicto es `no-se-pudo-leer`. */
+  detalle?: string
+  /** Lo que el system user puede hacer sobre la cuenta: ANALYZE, ADVERTISE, MANAGE… */
+  tareas?: string[]
+  administra?: boolean
+  moneda?: string
+  /**
+   * ⚠️ **En la unidad menor de la moneda**: en ARS, `150000` es $1.500. Hay que dividir por 100
+   * al mostrar y multiplicar al escribir. Se deja crudo a propósito, para que la conversión sea
+   * una decisión visible y no un `/100` perdido en el medio.
+   */
+  minDiarioCrudo?: number
+  minDiarioAlto?: number
+  estadoCuenta?: number | null
+  motivoBaja?: number | null
+  prueba?: PruebaEscritura
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=diagnostico` (solo admin). */
+export type RespuestaDiagnostico = {
+  /** Scopes concedidos del token, o **null si Meta no los contestó** — que no es "ninguno". */
+  scopes: string[] | null
+  scopesMotivo: string | null
+  puedeEscribir: boolean
+  cuentas: CuentaDiagnostico[]
+}

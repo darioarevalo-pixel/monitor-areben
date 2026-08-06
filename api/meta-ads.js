@@ -17,7 +17,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { marcasConAcceso, puedeSub, puedeVer } from '../lib/permisos.core.js';
+import { esAdmin, marcasConAcceso, puedeSub, puedeVer } from '../lib/permisos.core.js';
 // La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
 import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
@@ -108,6 +108,7 @@ export default async function handler(req, res) {
   // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
   if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
+  if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
 
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
@@ -383,6 +384,93 @@ const ROTULO_CTA = {
   CONTACT_US: 'Contactarnos',
   NO_BUTTON: 'sin botón',
 };
+
+// ── Modo diagnóstico: ¿el token puede ESCRIBIR? (solo admin) ────────────────────
+/**
+ * Para accionar sobre la pauta (pausar, cambiar presupuesto, duplicar) hay que pasar **dos
+ * candados distintos**, y confundirlos cuesta horas:
+ *
+ *   1. El **scope del token**: `ads_management` además de `ads_read`. Si falta, Meta contesta
+ *      `(#200) Requires ads_management permission`.
+ *   2. El **permiso del system user sobre la cuenta**: "Administrar campañas" y no sólo "Ver
+ *      rendimiento". Si falta, Meta contesta `(#272) ... requires the user to be an admin`.
+ *
+ * `user_tasks` responde el candado 2 sin escribir nada: `["ANALYZE"]` es solo lectura, `MANAGE`
+ * es el objetivo. El candado 1 no se puede ver de otra forma que intentando, así que `?probar=1`
+ * hace la **escritura más inofensiva que existe**: pisar el nombre de una campaña con el nombre
+ * que ya tiene. No cambia nada y devuelve el código de error crudo, que es el que distingue los
+ * dos casos.
+ *
+ * `/me/permissions` va tolerado a propósito: con un token de system user Meta no siempre lo
+ * contesta, y que falle no significa nada sobre los scopes.
+ */
+async function diagnostico(res, perfil, probar) {
+  if (!esAdmin(perfil)) return res.status(403).json({ error: 'El diagnóstico del token es solo para administradores.' });
+
+  // Los campos de la lista son los MISMOS que ya usa `overview` y están probados en prod: un
+  // nombre de campo equivocado se lleva puesta la respuesta entera de Graph (pasó con
+  // `business{name}` en julio). Lo nuevo va en una llamada aparte, por cuenta y aislada.
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name&limit=100');
+  if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
+  const cuentas = (cuentasRes.data && cuentasRes.data.data) || [];
+
+  const permRes = await graph('me/permissions');
+  const scopes = permRes.ok && permRes.data && Array.isArray(permRes.data.data)
+    ? permRes.data.data.filter((p) => p.status === 'granted').map((p) => p.permission)
+    : null;
+
+  const filas = await Promise.all(cuentas.map((c) => diagnosticoCuenta(c, probar)));
+  return res.status(200).json({
+    ok: true,
+    scopes,                                    // null = Meta no lo contestó, NO "no tiene ninguno"
+    scopesMotivo: permRes.ok ? null : mensajeError(permRes),
+    puedeEscribir: filas.some((f) => f.veredicto === 'escribe'),
+    cuentas: filas,
+  });
+}
+
+async function diagnosticoCuenta(c, probar) {
+  const id = String(c.account_id || '');
+  const base = { id, nombre: nombreCuenta(c) };
+  const d = await graph(`act_${id}?fields=user_tasks,account_status,disable_reason,currency,min_daily_budget_low_freq,min_daily_budget_high_freq`);
+  if (!d.ok) return { ...base, veredicto: 'no-se-pudo-leer', detalle: mensajeError(d) };
+  const t = d.data || {};
+  const tareas = Array.isArray(t.user_tasks) ? t.user_tasks : [];
+  const fila = {
+    ...base,
+    tareas,
+    // ⚠️ Los mínimos vienen en la UNIDAD MENOR de la moneda: en ARS (2 decimales) `150000` es
+    // $1.500, no $150.000. Cualquier control de presupuesto tiene que dividir por 100 al mostrar
+    // y multiplicar al escribir. Se expone crudo y con el divisor al lado para que no se adivine.
+    moneda: t.currency || '',
+    minDiarioCrudo: num(t.min_daily_budget_low_freq),
+    minDiarioAlto: num(t.min_daily_budget_high_freq),
+    estadoCuenta: t.account_status ?? null,
+    motivoBaja: t.disable_reason ?? null,
+    administra: tareas.includes('MANAGE'),
+    veredicto: tareas.includes('MANAGE') ? 'permiso-de-cuenta-ok' : 'sin-permiso-de-cuenta',
+  };
+  if (!probar) return fila;
+  return { ...fila, ...(await pruebaDeEscritura(id)) };
+}
+
+/**
+ * La escritura idempotente: `POST /<campaign_id>` con el nombre que la campaña YA tiene.
+ * Es la única forma de saber si el scope alcanza sin arriesgar nada.
+ */
+async function pruebaDeEscritura(cuentaId) {
+  const camp = await graph(`act_${cuentaId}/campaigns?fields=id,name&limit=1`);
+  const c0 = camp.ok && camp.data && camp.data.data && camp.data.data[0];
+  if (!c0) return { prueba: { corrida: false, motivo: camp.ok ? 'la cuenta no tiene campañas para probar' : mensajeError(camp) } };
+
+  const w = await graphPost(c0.id, { name: c0.name });
+  if (w.ok) return { veredicto: 'escribe', prueba: { corrida: true, ok: true, campania: c0.name } };
+
+  const code = (w.error && w.error.code) ?? null;
+  // Los dos códigos que distinguen los candados. El resto se muestra crudo antes que adivinar.
+  const veredicto = code === 200 ? 'sin-scope' : code === 272 ? 'sin-permiso-de-cuenta' : code === 190 ? 'token-invalido' : 'rechazo-desconocido';
+  return { veredicto, prueba: { corrida: true, ok: false, codigo: code, campania: c0.name, detalle: mensajeError(w) } };
+}
 
 // ── Mutación: pausar o activar un anuncio ───────────────────────────────────────
 // Solo admin o quien tenga el sub-permiso `meta-ads.pausar` en alguna marca. Es una

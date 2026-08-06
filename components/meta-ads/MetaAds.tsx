@@ -6,9 +6,9 @@ import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, 
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Etapas } from '@/components/meta-ads/Etapas'
-import { puedeSub } from '@/lib/permisos'
-import { pausarAnuncio, traerDetalleCuenta, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
-import type { AdRow, Campaña, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila } from '@/lib/meta-ads/tipos'
+import { esAdmin, puedeSub } from '@/lib/permisos'
+import { pausarAnuncio, traerDetalleCuenta, traerDiagnostico, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
+import type { AdRow, Campaña, CuentaDiagnostico, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila, RespuestaDiagnostico, VeredictoEscritura } from '@/lib/meta-ads/tipos'
 import { Notice, chartColor, color as paleta } from '@/components/ui'
 
 /** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
@@ -223,6 +223,115 @@ function Resumen() {
           // conoce el portfolio dueño cuando la cuenta no tiene nombre propio.
           <Detalle d={detEstado.data} pausa={pausa} nombre={cuentas.find((c) => c.id === activaId)?.nombre} />
         )
+      )}
+
+      {esAdmin(perfil) && <DiagnosticoToken />}
+    </div>
+  )
+}
+
+/**
+ * ¿El token puede escribir en Meta? Solo admin, plegado y a pedido.
+ *
+ * Existe porque para accionar sobre la pauta hay que abrir **dos candados distintos** —el scope
+ * `ads_management` del token y el permiso "Administrar campañas" del system user sobre cada
+ * cuenta— y desde afuera fallan igual. Acá se ven separados: se arregla en Meta, se aprieta de
+ * nuevo, y el veredicto cambia.
+ *
+ * 🔑 **El sondeo de escritura NO corre solo.** Es una escritura de verdad (inofensiva: le pone a
+ * una campaña el nombre que ya tiene), y algo que escribe en Meta no puede dispararse por el solo
+ * hecho de que alguien abrió la pantalla.
+ */
+function DiagnosticoToken() {
+  const [r, setR] = useState<Cargable<RespuestaDiagnostico> | null>(null)
+  const [probando, setProbando] = useState(false)
+
+  async function pedir(probar: boolean) {
+    setProbando(probar)
+    setR({ fase: 'cargando' })
+    const d = await traerDiagnostico(probar)
+    setR(d.ok ? { fase: 'ok', data: d.dato } : { fase: 'error', motivo: d.motivo })
+    setProbando(false)
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: paleta.mut, letterSpacing: 0 }}>Diagnóstico del token de Meta</div>
+        <span style={{ fontSize: 11, color: paleta.mut2 }}>solo administradores</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={() => pedir(false)} style={{ height: 'auto', padding: '6px 12px', fontSize: 12, border: `1px solid ${paleta.line2}`, borderRadius: 8, background: paleta.bg2, cursor: 'pointer' }}>
+            Comprobar
+          </button>
+          {r?.fase === 'ok' && (
+            <button
+              onClick={() => pedir(true)}
+              title="Le pone a una campaña el nombre que ya tiene. No cambia nada, pero es una escritura real."
+              style={{ height: 'auto', padding: '6px 12px', fontSize: 12, border: `1px solid ${paleta.line2}`, borderRadius: 8, background: paleta.bg2, cursor: 'pointer' }}
+            >
+              {probando ? 'Probando…' : 'Probar a escribir'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {r?.fase === 'cargando' && <div style={{ fontSize: 12, color: paleta.mut2, marginTop: 10 }}>Preguntándole a Meta…</div>}
+      {r?.fase === 'error' && <div style={{ fontSize: 12, color: paleta.danger, marginTop: 10 }}>{r.motivo}</div>}
+
+      {r?.fase === 'ok' && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, color: paleta.ink2 }}>
+            <b>Scopes del token:</b>{' '}
+            {r.data.scopes === null
+              // Que Meta no conteste `/me/permissions` con un token de system user es normal y NO
+              // significa que no tenga scopes. Decir "ninguno" acá mandaría a arreglar lo que anda.
+              ? <span style={{ color: paleta.mut2 }}>Meta no los informó{r.data.scopesMotivo ? ` (${r.data.scopesMotivo})` : ''} — con un token de system user es normal; lo que manda es la prueba de abajo.</span>
+              : r.data.scopes.join(', ') || <span style={{ color: paleta.mut2 }}>ninguno</span>}
+          </div>
+          {r.data.cuentas.map((c) => <FilaDiagnostico key={c.id} c={c} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Qué hacer con cada veredicto, en castellano y con el paso siguiente. */
+const VEREDICTOS: Record<VeredictoEscritura, { txt: string; tono: 'ok' | 'mal' | 'medio'; que: string }> = {
+  'escribe': { txt: 'Escribe', tono: 'ok', que: 'Los dos candados están abiertos: esta cuenta se puede accionar desde el monitor.' },
+  'permiso-de-cuenta-ok': { txt: 'Puede administrar', tono: 'medio', que: 'El system user administra la cuenta. Falta probar el scope del token con «Probar a escribir».' },
+  'sin-permiso-de-cuenta': { txt: 'Solo lectura', tono: 'mal', que: 'En business.facebook.com, al system user monitor-ads subirle esta cuenta de «Ver rendimiento» a «Administrar campañas».' },
+  'sin-scope': { txt: 'Falta ads_management', tono: 'mal', que: 'El permiso de la cuenta está bien, pero al token le falta el scope. Generar uno nuevo con ads_read + ads_management y reemplazar META_ADS_TOKEN en Vercel.' },
+  'token-invalido': { txt: 'Token inválido', tono: 'mal', que: 'El token venció o fue revocado. Generar uno nuevo en el mismo system user.' },
+  'rechazo-desconocido': { txt: 'Meta lo rechazó', tono: 'mal', que: 'El código de error de abajo es el que hay que mirar: no es ninguno de los dos casos conocidos.' },
+  'no-se-pudo-leer': { txt: 'No se pudo leer', tono: 'mal', que: 'Ni siquiera se pudieron leer los permisos de esta cuenta.' },
+}
+
+function FilaDiagnostico({ c }: { c: CuentaDiagnostico }) {
+  const v = VEREDICTOS[c.veredicto]
+  const col = v.tono === 'ok' ? paleta.success : v.tono === 'mal' ? paleta.dangerInk : paleta.warningInk
+  const bg = v.tono === 'ok' ? paleta.successBg : v.tono === 'mal' ? paleta.dangerBg : paleta.warningBg
+  return (
+    <div style={{ border: `1px solid ${paleta.line2}`, borderRadius: 8, padding: '8px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{c.nombre}</span>
+        <Badge txt={v.txt} color={col} bg={bg} />
+        {c.tareas && c.tareas.length > 0 && <span style={{ fontSize: 11, color: paleta.mut2 }}>user_tasks: {c.tareas.join(', ')}</span>}
+        {/* El mínimo viene en la unidad menor de la moneda (ARS: 150000 = $1.500). Se muestra ya
+            convertido porque es el número con el que se va a validar el presupuesto. */}
+        {typeof c.minDiarioCrudo === 'number' && c.minDiarioCrudo > 0 && (
+          <span style={{ fontSize: 11, color: paleta.mut2 }}>mínimo diario: {money(c.minDiarioCrudo / 100, c.moneda || '')}</span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: paleta.ink2, marginTop: 4 }}>{v.que}</div>
+      {c.detalle && <div style={{ fontSize: 11, color: paleta.danger, marginTop: 4 }}>{c.detalle}</div>}
+      {c.prueba && (
+        <div style={{ fontSize: 11, color: paleta.mut2, marginTop: 4 }}>
+          {c.prueba.corrida === false
+            ? `No se pudo probar: ${c.prueba.motivo}`
+            : c.prueba.ok
+              ? `Prueba de escritura OK sobre «${c.prueba.campania}» (no se cambió nada).`
+              : `Meta rechazó la prueba sobre «${c.prueba.campania}»${c.prueba.codigo ? ` (#${c.prueba.codigo})` : ''}: ${c.prueba.detalle}`}
+        </div>
       )}
     </div>
   )

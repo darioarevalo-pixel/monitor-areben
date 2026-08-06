@@ -9,7 +9,7 @@
 
 import { apiFetch } from '../api-fetch'
 import type {
-  DetalleCuenta, PresetMetaAds, RespuestaCreativos, RespuestaEtapas, RespuestaOverview,
+  DetalleCuenta, PresetMetaAds, RespuestaCreativos, RespuestaDiagnostico, RespuestaEtapas, RespuestaOverview,
 } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
@@ -92,6 +92,20 @@ export function traerCreativos(campaignId: string, dias?: number): Promise<Lectu
   const qs = new URLSearchParams({ recurso: 'creativos', campania: campaignId })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaCreativos>(qs)
+}
+
+/**
+ * ¿El token puede escribir en Meta? Solo admin.
+ *
+ * Sin `probar` contesta lo que se puede saber sin tocar nada (`user_tasks` por cuenta y los
+ * scopes, si Meta los da). Con `probar` hace además una **escritura idempotente** —pisar el
+ * nombre de una campaña con el que ya tiene— que es la única forma de distinguir "falta el scope
+ * `ads_management`" de "falta el permiso de la cuenta", porque los dos fallan igual desde afuera.
+ */
+export function traerDiagnostico(probar = false): Promise<Lectura<RespuestaDiagnostico>> {
+  const qs = new URLSearchParams({ recurso: 'diagnostico' })
+  if (probar) qs.set('probar', '1')
+  return pedir<RespuestaDiagnostico>(qs)
 }
 
 /**
