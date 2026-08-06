@@ -224,6 +224,19 @@ describe('renombrar', () => {
   })
 })
 
+describe('duplicar: de cuál se copiaba nunca se pierde', () => {
+  it('🔴 un rechazo que muere antes de anotar el sufijo igual dice de cuál se copiaba', () => {
+    // El tope de avisos corta ANTES de escribir el sufijo, así que `pedido` queda vacío. La fila
+    // decía «no quedó registrado (es una acción anterior a que se guardara el pedido)» sobre algo de
+    // hace un minuto. El id del objeto copiado es el de la propia fila: no hay nada que perder.
+    const c = contar(fila({ accion: 'duplicar', resultado: 'rechazado', a: null, pedido: null }), 'ARS')
+    expect(c.clase).toBe('duplicar')
+    if (c.clase !== 'duplicar') throw new Error('clase')
+    expect(c.sinDato).toBe(false)
+    expect(c.deQuien).toBe('120250683011800505')
+  })
+})
+
 describe('duplicar', () => {
   it('cuenta la copia por su NOMBRE, que es con lo que se la encuentra después', () => {
     const c = contar(fila({

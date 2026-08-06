@@ -128,8 +128,12 @@ export type Contada =
       titulo: string
       /** El nombre de la copia que quedó en Meta. `null` si no llegó a crearse. */
       copia: string | null
-      /** El id del objeto copiado, que es lo que quedó registrado antes de llamar a Meta. */
+      /** El id del objeto copiado. Siempre se sabe: es el objeto de la fila. */
       deQuien: string | null
+      /** El sufijo con el que buscar la copia en Ads Manager, si se alcanzó a anotar. */
+      sufijo: string | null
+      /** No sabemos si Meta la creó (se cortó). Cambia lo que hay que ir a hacer. */
+      incierto: boolean
       sinDato: boolean
     }
   | { clase: 'otra'; titulo: string; sinDato: boolean }
@@ -234,15 +238,26 @@ export function contar(f: FilaAuditoria, moneda: string | null): Contada {
     // Ojo con la asimetría: acá `a` NO es «cómo quedó lo que toqué» sino «qué apareció». El original
     // no cambió en nada, y contarlo como un cambio suyo sería mentir sobre qué se tocó.
     const copia = (f.a && (f.a.nombre as string)) || null
-    const deQuien = (f.pedido && (f.pedido.copia_de as string)) || null
+    // 🔴 **`objetoId` es el último recurso, y siempre está.** Un rechazo que muere ANTES de anotar el
+    // sufijo —el tope de avisos, por ejemplo— dejaba `pedido` vacío, y la fila salía diciendo «no
+    // quedó registrado qué se quiso cambiar (es una acción anterior a que se guardara el pedido)»
+    // sobre algo que acababa de pasar hace un minuto. **De cuál se copiaba nunca se pierde**: es el
+    // objeto de la propia fila.
+    const deQuien = (f.pedido && (f.pedido.copia_de as string)) || f.objetoId || null
+    const sufijo = (f.pedido && (f.pedido.sufijo as string)) || null
+    // 🔑 Son DOS preguntas distintas y antes se contestaban con el mismo dato: «¿de cuál se copiaba?»
+    // (siempre se sabe) y «¿con qué nombre busco la copia?» (sólo importa si NO sabemos cómo quedó).
+    const incierto = f.resultado === 'error' || f.resultado === 'en-curso'
     return {
       clase: 'duplicar',
       titulo: salio ? `Duplicó ${el(f.nivel)}` : `Intentó duplicar ${el(f.nivel)}`,
       copia: copia || null,
       deQuien,
-      // Una copia que no salió igual dejó registrado el sufijo con el que buscarla: eso NO es «sin
-      // dato», es la pista. Sin `pedido` (o sea, sin sufijo) sí se perdió el rastro.
-      sinDato: !salio && !deQuien,
+      sufijo,
+      incierto,
+      // Sólo se perdió el rastro cuando la copia PUEDE existir y no hay sufijo con el que buscarla.
+      // Un rechazo no creó nada: no hay nada que ir a buscar, así que no es «sin dato».
+      sinDato: incierto && !sufijo,
     }
   }
 

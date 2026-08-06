@@ -29,8 +29,8 @@
 //   9. Releer y comparar: `ok:true` sólo si el valor quedó puesto de verdad.
 //  10. Cerrar la fila de auditoría, siempre, también cuando Meta rechaza.
 import {
-  CAMPOS_LECTURA, ETIQUETA_NIVEL, fotoDe, nivelReal, permiteAccion, quedoPuesto,
-  revisarPresupuesto, SIN_LINEA, validarPedido,
+  CAMPOS_LECTURA, ESTE_NIVEL, ETIQUETA_NIVEL, fotoDe, nivelReal, permiteAccion, PRONOMBRE_NIVEL,
+  quedoPuesto, revisarPresupuesto, SIN_LINEA, validarPedido,
 } from '../lib/meta-ads/acciones.core.js';
 import { codigoError, graph, graphPost, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
@@ -250,8 +250,8 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
   const cuantos = (cuenta.ok && cuenta.data && cuenta.data.summary && cuenta.data.summary.total_count) ?? null;
   if (cuantos !== null && cuantos > TOPE_ADS_SINCRONO) {
     return cerrar(409, 'rechazado', {
-      error: `Esta ${ETIQUETA_NIVEL[nivel]} tiene ${cuantos} avisos y Meta sólo copia hasta ${TOPE_ADS_SINCRONO} de una vez. Duplicala desde Ads Manager.`,
-    }, contexto);
+      error: `${ESTE_NIVEL[nivel]} tiene ${cuantos} avisos y Meta sólo copia hasta ${TOPE_ADS_SINCRONO} de una vez. Duplica${PRONOMBRE_NIVEL[nivel]} desde Ads Manager.`,
+    }, { ...contexto, pedido: { copia_de: objetoId } });
   }
 
   const sufijo = sufijoDeCopia();

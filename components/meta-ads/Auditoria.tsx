@@ -347,9 +347,19 @@ function Cambio({ c, moneda }: { c: Contada; moneda: string | null }) {
       )
     }
     if (c.sinDato) return <SinDato />
+    // 🔴 «No llegó a crearse» no se puede decir cuando NO SABEMOS si se creó. Un corte por tiempo
+    // deja a Meta pudiendo haberla creado igual, y ahí lo único útil es el sufijo con el que
+    // buscarla. Decirle a alguien que no se creó lo manda a apretar de nuevo y a quedarse con dos.
+    if (c.incierto) {
+      return (
+        <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>
+          Puede haberse creado igual: buscá <span style={{ ...caja, fontWeight: 600 }}>{c.sufijo?.trim()}</span> en Ads Manager.
+        </div>
+      )
+    }
     return (
       <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>
-        No llegó a crearse. Quedó registrado de cuál se copiaba (<code>{c.deQuien}</code>).
+        No llegó a crearse. Se copiaba de <code>{c.deQuien}</code>.
       </div>
     )
   }
