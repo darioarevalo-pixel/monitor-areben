@@ -268,6 +268,15 @@ export function Etapas() {
     [r, key],
   )
 
+  const cuentaDe = useCallback(
+    (cuentaId: string) => {
+      const e = !r || r.key !== key ? null : r.e
+      const c = e && e.fase === 'ok' ? e.data.cuentas.find((x) => x.id === cuentaId) : null
+      return c?.nombre || ''
+    },
+    [r, key],
+  )
+
   // El permiso se pregunta por la LÍNEA de cada campaña, no por la marca de la sesión: en una misma
   // tabla puede haber una campaña de BDI que esta persona acciona y una de Zattia que no. Es la
   // misma función que usa el servidor para contestar 403, importada, no copiada.
@@ -328,7 +337,7 @@ export function Etapas() {
           fecha={fecha}
           correccion={correccion}
           avisos={avisos}
-          palanca={{ acciones, conjuntos, monedaDe }}
+          palanca={{ acciones, conjuntos, monedaDe, cuentaDe }}
         />
       )}
 
@@ -486,6 +495,11 @@ type Palanca = {
   conjuntos: Conjuntos
   /** La moneda de la cuenta que corre cada campaña: define la unidad menor con la que Meta escribe. */
   monedaDe: (cuentaId: string) => string
+  /**
+   * El nombre de la cuenta publicitaria. Se usa **sólo para desempatar** dos campañas del mismo
+   * nombre: ver `TablaCampañas`. Mostrarlo siempre sería una columna de ruido.
+   */
+  cuentaDe: (cuentaId: string) => string
 }
 
 function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion, avisos, palanca }: {
@@ -902,6 +916,20 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
   })
   const anchoTotal = 5 + (columna ? 2 : 0) + (hayAcciones ? 1 : 0)
 
+  /**
+   * 🔴 **Dos campañas con el MISMO nombre en la misma tabla.** No es hipotético: «STUNNED - Tráfico a
+   * Perfil - Abril 2026» existe en dos cuentas publicitarias distintas y **no son la misma campaña**
+   * (una es la histórica apagada, la otra la que corre hoy). Se ven como dos filas idénticas con un
+   * botón «Reactivar» cada una, y prender la equivocada es plata gastada.
+   *
+   * Apareció recién cuando las pausadas se hicieron visibles: antes las dos ni se dibujaban. Se
+   * desempata con el nombre de la cuenta, y **sólo en las que repiten**: ponérselo a todas sería una
+   * línea de ruido en cada fila para resolver un caso que casi nunca pasa.
+   */
+  const repetidos = new Set(
+    filas.map((c) => c.nombre).filter((n, i, todos) => todos.indexOf(n) !== i),
+  )
+
   return (
     <TableWrap>
       <THead>
@@ -930,6 +958,14 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
               <Tr>
                 <Td wrap strong>
                   <BotonAvisos nombre={c.nombre} abierta={abierta} onToggle={() => avisos.alternar(c.id)} />
+                  {repetidos.has(c.nombre) && (
+                    <div
+                      style={{ fontSize: font.xs, color: color.mut2, fontWeight: weight.normal }}
+                      title={`Hay más de una campaña con este nombre. Esta corre en la cuenta ${c.cuentaId}.`}
+                    >
+                      en {palanca.cuentaDe(c.cuentaId) || `cuenta ${c.cuentaId.slice(-4)}`}
+                    </div>
+                  )}
                 </Td>
                 <Td>{rotuloObjetivo(c.objetivo)}</Td>
                 <Td align="right"><CeldaDiario c={c} moneda={moneda} /></Td>
