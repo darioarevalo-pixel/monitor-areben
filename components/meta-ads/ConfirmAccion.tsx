@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { accionarMeta, traerConjuntos } from '@/lib/meta-ads/cliente'
 import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, type ClaveAccion, type NivelAccion } from '@/lib/meta-ads/acciones'
+import { dondeVaElPresupuesto, segunLosConjuntos, type Presupuestable } from '@/lib/meta-ads/copia'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -581,13 +582,6 @@ export function ModalNombre({ o, onCerrar, onGuardar, guardando }: {
   )
 }
 
-/** Qué se le puede ofrecer de presupuesto a la copia, y dónde iría. */
-type Presupuestable =
-  | { fase: 'mirando' }
-  /** No hay un único lugar donde ponerlo. `motivo` es lo que se le muestra a la persona. */
-  | { fase: 'no-aplica'; motivo: string }
-  | { fase: 'listo'; destino: 'copia' | 'conjunto-unico'; baseCruda: number; donde: string }
-
 /**
  * **Duplicar y ajustar.**
  *
@@ -627,7 +621,7 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   const [tocado, setTocado] = useState(false)
   // Los tres `idem` nacen con el modal, no con el clic: dos clics rápidos serían dos copias.
   const [idems] = useState(() => ({ duplicar: nuevoIdem(), nombre: nuevoIdem(), presupuesto: nuevoIdem() }))
-  const [presu, setPresu] = useState<Presupuestable>(() => inicial(o, diarioCrudo, sinPresupuesto))
+  const [presu, setPresu] = useState<Presupuestable>(() => dondeVaElPresupuesto(o.nivel, diarioCrudo, sinPresupuesto))
 
   // Los conjuntos de la campaña, sólo cuando hace falta decidir dónde iría el presupuesto. Es una
   // lectura y no toca nada; `vivo` corta la carrera de cerrar el modal antes de que conteste.
@@ -636,7 +630,7 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
     let vivo = true
     traerConjuntos(o.id).then((r) => {
       if (!vivo) return
-      setPresu(deLosConjuntos(r))
+      setPresu(segunLosConjuntos(r))
     })
     return () => { vivo = false }
     // Corre una sola vez por modal: `presu` cambia de fase justo por este efecto, y volver a
@@ -772,53 +766,4 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
       </div>
     </Modal>
   )
-}
-
-/** En qué fase arranca el presupuesto según qué se está duplicando. */
-function inicial(o: ObjetoMeta, diarioCrudo: number, sinPresupuesto: boolean): Presupuestable {
-  if (sinPresupuesto) {
-    return {
-      fase: 'no-aplica',
-      motivo: o.nivel === 'conjunto'
-        ? 'El presupuesto de este conjunto lo maneja su campaña, así que la copia también lo va a heredar de ahí.'
-        : 'Este objeto no tiene un presupuesto diario propio que la copia pueda estrenar.',
-    }
-  }
-  // Un conjunto con diario propio, o una campaña con presupuesto de campaña (CBO): en los dos casos
-  // el lugar donde escribir es la copia misma y ya se sabe cuánto tiene hoy.
-  if (diarioCrudo > 0) {
-    return {
-      fase: 'listo',
-      destino: 'copia',
-      baseCruda: diarioCrudo,
-      donde: o.nivel === 'conjunto' ? 'Se le pone a la copia del conjunto.' : 'Se le pone a la copia de la campaña.',
-    }
-  }
-  // Una campaña sin presupuesto propio: la plata está en los conjuntos y hay que ir a contarlos.
-  if (o.nivel === 'campania') return { fase: 'mirando' }
-  return { fase: 'no-aplica', motivo: 'Este conjunto no tiene un presupuesto diario propio que la copia pueda estrenar.' }
-}
-
-/** Qué se puede ofrecer una vez que se sabe cuántos conjuntos tiene la campaña. */
-function deLosConjuntos(r: Awaited<ReturnType<typeof traerConjuntos>>): Presupuestable {
-  if (!r.ok) {
-    return { fase: 'no-aplica', motivo: `No se pudieron mirar los conjuntos (${r.motivo}). La copia sale con los mismos montos que el original.` }
-  }
-  const cs = r.dato.conjuntos
-  const conDiario = cs.filter((c) => c.diarioCrudo > 0)
-  if (cs.length === 1 && conDiario.length === 1) {
-    return {
-      fase: 'listo',
-      destino: 'conjunto-unico',
-      baseCruda: conDiario[0].diarioCrudo,
-      donde: `Se le pone al conjunto «${conDiario[0].nombre}» de la copia, que es donde vive la plata.`,
-    }
-  }
-  if (cs.length === 0) {
-    return { fase: 'no-aplica', motivo: 'Esta campaña no tiene conjuntos, así que no hay presupuesto que ajustar.' }
-  }
-  return {
-    fase: 'no-aplica',
-    motivo: `Esta campaña tiene ${cs.length} conjuntos: la copia sale con los mismos montos y se ajustan uno por uno desde la fila de cada conjunto.`,
-  }
 }
