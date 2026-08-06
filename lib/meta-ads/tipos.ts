@@ -248,3 +248,51 @@ export type DetalleCuenta = {
   daily: DailyPoint[]
   placements: Placement[]
 }
+
+/**
+ * Un aviso con su creativo, para la grilla que se despliega debajo de una campaña en Etapas.
+ *
+ * No es `AdRow`: aquel son las métricas de un anuncio dentro del detalle de cuenta. Esto es **con
+ * qué se está hablando** —la foto, el gancho, el botón—, que es lo que hace falta para pensar la
+ * pieza de la etapa que falta. Las métricas van igual, pero de acompañamiento.
+ */
+export type AvisoCreativo = {
+  id: string
+  nombre: string
+  /** `effective_status` del anuncio (ACTIVE, PAUSED, …), o null si Meta no lo trajo. */
+  estado: string | null
+  /** La imagen grande del creativo (o el póster, si es video). Null si no vino ninguna. */
+  imagen: string | null
+  /** La miniatura de 64 px: la única que Meta garantiza. Red por si la grande caducó. */
+  thumb: string | null
+  titulo: string | null
+  texto: string | null
+  /** El botón del aviso, ya en castellano («Comprar», «Más información»). */
+  cta: string | null
+  /** A dónde manda el aviso. */
+  destino: string | null
+  /** Las fotos de un carrusel (hasta 10). Vacío si no lo es. */
+  piezas: string[]
+  esVideo: boolean
+  /** El aviso publicado: permalink de Instagram, o la historia de Facebook. */
+  permalink: string | null
+  spend: number
+  impressions: number
+  clicks: number
+  purchases: number
+  revenue: number
+  /** Reproducciones de 3 s ÷ impresiones, en %. 0 si no es video o si no hubo datos. */
+  hookRate: number
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=creativos&campania=<id>`. */
+export type RespuestaCreativos = {
+  dias: number
+  ads: AvisoCreativo[]
+  /**
+   * Motivo por el que no se pudo traer el creativo rico (imagen grande, copy, botón), o null.
+   * Cuando viene, los avisos igual se listan pero con la miniatura y sin texto: la pantalla lo dice
+   * en vez de dar a entender que los avisos no tienen copy.
+   */
+  sinCreativo: string | null
+}

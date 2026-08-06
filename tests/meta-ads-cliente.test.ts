@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { traerEtapas, traerOverview, traerDetalleCuenta } from '@/lib/meta-ads/cliente'
+import { traerCreativos, traerEtapas, traerOverview, traerDetalleCuenta } from '@/lib/meta-ads/cliente'
 
 /**
  * El cliente de Meta Ads: que arme bien el request (preset / account) y traduzca
@@ -89,5 +89,34 @@ describe('traerEtapas', () => {
     const r = await traerEtapas()
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.motivo).toMatch(/permiso/)
+  })
+})
+
+describe('traerCreativos', () => {
+  it('pide los avisos de UNA campaña, con la misma ventana que el censo', async () => {
+    // La ventana viaja porque el gasto de cada aviso se lee al lado del de su campaña: con la de
+    // 30 días abajo del título de 90 los números no cerrarían y nadie sabría cuál está mal.
+    const fetchMock = mockFetch(() => Promise.resolve(resp(200, { ok: true, dias: 90, ads: [], sinCreativo: null })))
+    const r = await traerCreativos('120210000000000123', 90)
+    expect(r.ok).toBe(true)
+    const url = new URL('http://x' + fetchMock.mock.calls[0]![0])
+    expect(url.searchParams.get('recurso')).toBe('creativos')
+    expect(url.searchParams.get('campania')).toBe('120210000000000123')
+    expect(url.searchParams.get('dias')).toBe('90')
+  })
+
+  it('una campaña sin avisos es un éxito, no un error', async () => {
+    // Distinguirlos importa: "no tiene avisos" es un dato sobre la campaña (se armó y quedó vacía),
+    // y "no se pudo leer" es un problema del token. Mostrarlos igual haría buscar donde no es.
+    mockFetch(() => Promise.resolve(resp(200, { ok: true, dias: 30, ads: [], sinCreativo: null })))
+    const r = await traerCreativos('1')
+    expect(r.ok && r.dato.ads).toEqual([])
+  })
+
+  it('el 403 de una campaña de otra marca llega con su motivo', async () => {
+    mockFetch(() => Promise.resolve(resp(403, { error: 'Esa campaña es de una marca que no ves.' })))
+    const r = await traerCreativos('1')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.motivo).toMatch(/marca que no ves/)
   })
 })

@@ -6,6 +6,10 @@
 //   GET /api/meta-ads?recurso=etapas          → CENSO de campañas repartido por LÍNEA de pauta (bdi,
 //                                               zattia, stunned) para el diagnóstico de etapas
 //                                               (TOFU/MOFU/BOFU). Incluye las pausadas.
+//   GET /api/meta-ads?recurso=creativos&campania=<id>
+//                                             → los AVISOS de una campaña con su creativo (imagen,
+//                                               título, texto, botón) y su gasto. A demanda, para
+//                                               que Etapas muestre CON QUÉ se está hablando.
 // Rango por preset (last_30d default) o since/until.
 //
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
@@ -103,6 +107,7 @@ export default async function handler(req, res) {
   // mismo para todas (una sola cuenta publicitaria). Pedirlo tres veces sería triplicar el gasto de
   // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
   if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
+  if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
 
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
@@ -242,6 +247,142 @@ async function leerAsignaciones() {
     return { error: String((e && e.message) || e) };
   }
 }
+
+// ── Modo creativos: los avisos de UNA campaña, con qué se ve y qué dice ─────────
+/**
+ * Para qué existe, si el detalle de cuenta ya lista anuncios.
+ *
+ * La pantalla de Etapas es **la del que tiene que craneаr los creativos**, no la del que compra
+ * medios. Decirle "falta pauta de la segunda etapa" sin dejarle ver con qué pieza se está hablando
+ * hoy en la primera lo deja pensando en el aire: lo que hace falta para imaginar el paso siguiente
+ * es ver la foto, el gancho y el botón de lo que ya salió. Por eso esto trae el **creativo**, no
+ * una fila más de números.
+ *
+ * Se pide por campaña y a demanda —al desplegar una fila—, no de entrada: el censo de etapas son 2
+ * llamadas por cuenta y traer los creativos de las 176 campañas de una tirada lo volvería inusable.
+ *
+ * ⚠️ **No usa `GET /<ad_id>/previews`**, que es el iframe oficial de Meta. Ese endpoint devuelve un
+ * `<iframe src="…&t=<token>">` con el access token adentro de la URL, y este token es de un system
+ * user con lectura sobre TODAS las cuentas del portfolio: publicarlo en el HTML lo dejaría al
+ * alcance de cualquiera que abra las herramientas del navegador. La vista se arma acá con los
+ * campos del creativo (imagen, título, texto, botón) y el link al aviso publicado, que no filtra
+ * nada. Si algún día hace falta el iframe de verdad, primero hay que resolver el token.
+ */
+async function creativos(res, perfil, campaignId, diasPedidos) {
+  if (!/^\d+$/.test(campaignId)) return res.status(400).json({ error: 'campaña inválida' });
+
+  const marcas = marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']);
+  if (!marcas.length) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
+  const visibles = new Set(marcas.flatMap((m) => lineasDeMarca(m)));
+
+  // El corte por marca es el mismo que el del censo, y por el mismo motivo: las tres líneas salen
+  // de una sola cuenta publicitaria, así que "puede ver la cuenta" no alcanza para decidir. Una
+  // campaña sin asignar no se corta —se ve igual en el cartel de pendientes de la misma pantalla—.
+  const asignadas = await leerAsignaciones();
+  if (asignadas.error) {
+    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
+  }
+  const fila = asignadas.mapa.get(campaignId);
+  if (fila && !visibles.has(fila.linea)) {
+    return res.status(403).json({ error: 'Esa campaña es de una marca que no ves.' });
+  }
+
+  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+
+  // Tres llamadas, y las dos últimas son enriquecimientos AISLADOS: si Meta rechaza una, su dato
+  // queda vacío y los avisos igual se ven. La primera lleva EXACTAMENTE los campos que el modo
+  // `detalle` ya usa en producción (ver `statusRes`), que es lo único probado contra esta cuenta;
+  // los campos nuevos van todos en la segunda, para que un nombre de campo equivocado no se lleve
+  // puesta la respuesta entera —que es lo que pasó con `business{name}` en julio—.
+  const [baseRes, ricoRes, insRes] = await Promise.all([
+    graph(`${campaignId}/ads?fields=id,name,effective_status,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url}&limit=200`),
+    graph(`${campaignId}/ads?fields=id,creative{image_url,body,title,object_story_spec}&limit=200`),
+    insightsTodas(`${campaignId}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions,action_values,video_3_sec_watched_actions&date_preset=last_${dias}d&action_attribution_windows=${ATTR}&limit=200`),
+  ]);
+
+  if (!baseRes.ok) {
+    return res.status(502).json({ error: 'No se pudieron traer los avisos de la campaña', detalle: mensajeError(baseRes) });
+  }
+
+  const ricoPorId = new Map();
+  if (ricoRes.ok && ricoRes.data && Array.isArray(ricoRes.data.data)) {
+    for (const a of ricoRes.data.data) ricoPorId.set(String(a.id), a.creative || {});
+  }
+  const insPorId = new Map();
+  if (insRes.ok) for (const r of insRes.rows) insPorId.set(String(r.ad_id), r);
+
+  const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => {
+    const id = String(a.id);
+    const cr = { ...(a.creative || {}), ...(ricoPorId.get(id) || {}) };
+    const g = insPorId.get(id);
+    const impresiones = g ? num(g.impressions) : 0;
+    const plays3s = g ? sumaAcciones(g.video_3_sec_watched_actions) : 0;
+    return {
+      id,
+      nombre: a.name || '(sin nombre)',
+      estado: a.effective_status || null,
+      ...piezaDe(cr),
+      spend: g ? num(g.spend) : 0,
+      impressions: impresiones,
+      clicks: g ? num(g.clicks) : 0,
+      purchases: g ? accion(g.actions, COMPRA) : 0,
+      revenue: g ? accion(g.action_values, COMPRA) : 0,
+      hookRate: impresiones ? (plays3s / impresiones) * 100 : 0,
+    };
+  }).sort((x, y) => y.spend - x.spend);
+
+  // `sinCreativo` es diagnóstico, no adorno: si la llamada rica falla, todos los avisos quedan con
+  // la miniatura de 64 px y sin una palabra de copy, y la pantalla tiene que poder decir por qué en
+  // vez de dar a entender que los avisos no tienen texto.
+  return res.status(200).json({ ok: true, dias, ads, sinCreativo: !ricoRes.ok ? mensajeError(ricoRes) : null });
+}
+
+/**
+ * De lo que devuelve Meta a lo que se dibuja: imagen, título, texto y botón.
+ *
+ * La cadena de respaldos no es paranoia: el mismo campo vive en un lugar distinto según el formato.
+ * Un aviso de imagen trae `image_url` arriba; uno de video, el póster adentro de `video_data`; uno
+ * armado desde una publicación, sólo `link_data.picture`. Sin la cadena, la mitad de la grilla sale
+ * sin foto y parece que los avisos no tienen creativo.
+ */
+function piezaDe(cr) {
+  const spec = cr.object_story_spec || {};
+  const link = spec.link_data || {};
+  const video = spec.video_data || {};
+  const hijos = Array.isArray(link.child_attachments) ? link.child_attachments : [];
+  const cta = (link.call_to_action && link.call_to_action.type) || (video.call_to_action && video.call_to_action.type) || null;
+  const historia = cr.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null;
+  return {
+    imagen: cr.image_url || video.image_url || link.picture || (hijos[0] && hijos[0].picture) || cr.thumbnail_url || null,
+    // La miniatura viaja aparte: es la única que Meta garantiza, así que sirve de red si la grande
+    // no carga (las URLs de `scontent` caducan).
+    thumb: cr.thumbnail_url || null,
+    titulo: cr.title || link.name || video.title || null,
+    texto: cr.body || link.message || video.message || null,
+    cta: cta ? ROTULO_CTA[cta] || String(cta).toLowerCase().replace(/_/g, ' ') : null,
+    destino: link.link || null,
+    // Un carrusel se piensa distinto que una foto sola, así que las tarjetas se cuentan y se
+    // muestran. Tope de 10, que es el de Meta.
+    piezas: hijos.map((h) => h && h.picture).filter(Boolean).slice(0, 10),
+    esVideo: !!(video.video_id || video.image_url),
+    permalink: cr.instagram_permalink_url || historia || null,
+  };
+}
+
+/** Los botones de Meta, en castellano. Los que no estén caen al nombre crudo en minúsculas. */
+const ROTULO_CTA = {
+  SHOP_NOW: 'Comprar',
+  LEARN_MORE: 'Más información',
+  SIGN_UP: 'Registrarse',
+  BOOK_TRAVEL: 'Reservar',
+  ORDER_NOW: 'Pedir ahora',
+  GET_OFFER: 'Ver la oferta',
+  SEND_MESSAGE: 'Enviar mensaje',
+  WHATSAPP_MESSAGE: 'Escribir por WhatsApp',
+  SUBSCRIBE: 'Suscribirse',
+  CONTACT_US: 'Contactarnos',
+  NO_BUTTON: 'sin botón',
+};
 
 // ── Mutación: pausar o activar un anuncio ───────────────────────────────────────
 // Solo admin o quien tenga el sub-permiso `meta-ads.pausar` en alguna marca. Es una

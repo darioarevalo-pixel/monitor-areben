@@ -8,7 +8,9 @@
  */
 
 import { apiFetch } from '../api-fetch'
-import type { DetalleCuenta, PresetMetaAds, RespuestaEtapas, RespuestaOverview } from './tipos'
+import type {
+  DetalleCuenta, PresetMetaAds, RespuestaCreativos, RespuestaEtapas, RespuestaOverview,
+} from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
 
@@ -77,6 +79,19 @@ export function traerEtapas(dias?: number): Promise<Lectura<RespuestaEtapas>> {
   const qs = new URLSearchParams({ recurso: 'etapas' })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaEtapas>(qs)
+}
+
+/**
+ * Los avisos de UNA campaña, con su creativo: la imagen, el título, el texto y el botón.
+ *
+ * Va por campaña y a demanda —cuando alguien despliega la fila—, no junto con el censo: son tres
+ * llamadas a Graph por campaña, y el censo lista más de 170. La ventana es la misma del censo,
+ * porque el gasto de cada aviso se lee al lado del de su campaña y con otra ventana no cerrarían.
+ */
+export function traerCreativos(campaignId: string, dias?: number): Promise<Lectura<RespuestaCreativos>> {
+  const qs = new URLSearchParams({ recurso: 'creativos', campania: campaignId })
+  if (dias) qs.set('dias', String(dias))
+  return pedir<RespuestaCreativos>(qs)
 }
 
 /**

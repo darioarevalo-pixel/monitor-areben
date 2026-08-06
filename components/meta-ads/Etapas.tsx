@@ -22,9 +22,10 @@
  *  3. **Las siglas aparecen una sola vez**, chiquitas, al pie del popover de ayuda.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSesion } from '@/components/SesionProvider'
+import { BotonAvisos, PanelAvisos, useAvisos, type Avisos } from '@/components/meta-ads/Avisos'
 import { TableroIdeas } from '@/components/meta-ads/TableroIdeas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { hoyIso, laQueAprieta, proximas, type EntradaCalendario } from '@/lib/calendario'
@@ -115,6 +116,9 @@ export function Etapas() {
   }, [dias, pedido])
 
   const estado: Cargable<RespuestaEtapas> = !r || r.key !== key ? { fase: 'cargando' } : r.e
+  // Los avisos de cada campaña, a demanda. Cuelgan de `dias` porque su gasto se lee al lado del de
+  // la campaña y con otra ventana no cerrarían.
+  const avisos = useAvisos(dias)
   const fechas = useFechas(marca)
   const fecha = useMemo(() => laQueAprieta(fechas), [fechas])
   const visibles = useMemo(() => marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']), [perfil])
@@ -277,6 +281,7 @@ export function Etapas() {
           onAbrir={abrirLinea}
           fecha={fecha}
           correccion={correccion}
+          avisos={avisos}
         />
       )}
 
@@ -409,7 +414,7 @@ function useFechas(marca: string): EntradaCalendario[] {
 
 const SIN_FECHAS: EntradaCalendario[] = []
 
-function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion }: {
+function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion, avisos }: {
   d: RespuestaEtapas
   /** Ya vienen calculados de arriba, con los overrides puestos: el tablero necesita los mismos. */
   diagPorLinea: Partial<Record<LineaPauta, Diagnostico>> | null
@@ -418,6 +423,7 @@ function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correc
   onAbrir: (l: LineaPauta) => void
   fecha: EntradaCalendario | null
   correccion: Correccion
+  avisos: Avisos
 }) {
   const pendientes = d.sinAsignar
   return (
@@ -444,7 +450,7 @@ function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correc
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: space[3] }}>
             {diag.etapas.map((e) => <TarjetaEtapa key={e.etapa} e={e} gastoTotal={diag.gastoTotal} />)}
           </div>
-          <Pautas diag={diag} correccion={correccion} />
+          <Pautas diag={diag} correccion={correccion} avisos={avisos} />
         </>
       )}
     </>
@@ -726,7 +732,7 @@ function TarjetaEtapa({ e, gastoTotal }: { e: ResumenEtapa; gastoTotal: number }
   )
 }
 
-function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccion }) {
+function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: Correccion; avisos: Avisos }) {
   const [verSinEntrega, setVerSinEntrega] = useState(false)
   const [verSinClasificar, setVerSinClasificar] = useState(false)
   const sinEntrega = diag.etapas.flatMap((e) => e.sinEntrega)
@@ -734,7 +740,7 @@ function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccio
   return (
     <SectionCard
       title="Las pautas al aire"
-      subtitle="Agrupadas por la etapa que les corresponde según su objetivo en Meta. La etapa es del PÚBLICO, no del objetivo: cuando el objetivo miente, se corrige a mano y la corrección manda."
+      subtitle="Agrupadas por la etapa que les corresponde según su objetivo en Meta. Tocá el nombre de una campaña para ver con qué avisos está hablando. La etapa es del PÚBLICO, no del objetivo: cuando el objetivo miente, se corrige a mano y la corrección manda."
     >
       {diag.etapas.map((e) => (
         <div key={e.etapa} style={{ marginBottom: space[5] }}>
@@ -744,7 +750,7 @@ function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccio
           {e.alAire.length === 0 ? (
             <div style={{ fontSize: font.base, color: color.mut2, fontStyle: 'italic' }}>Ninguna.</div>
           ) : (
-            <TablaCampañas filas={e.alAire} correccion={correccion} />
+            <TablaCampañas filas={e.alAire} correccion={correccion} avisos={avisos} />
           )}
         </div>
       ))}
@@ -756,7 +762,7 @@ function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccio
           titulo={`${sinEntrega.length} activa${sinEntrega.length === 1 ? '' : 's'} sin entrega`}
           ayuda="Están en ACTIVE pero no gastaron en la ventana: suele ser presupuesto en cero o todos los conjuntos pausados."
         >
-          <TablaCampañas filas={sinEntrega} correccion={correccion} />
+          <TablaCampañas filas={sinEntrega} correccion={correccion} avisos={avisos} />
         </Plegable>
       )}
 
@@ -767,18 +773,28 @@ function Pautas({ diag, correccion }: { diag: Diagnostico; correccion: Correccio
           titulo={`${diag.sinClasificar.length} sin clasificar`}
           ayuda="Su objetivo en Meta no cae en ninguna etapa conocida, así que no se reparten a ninguna: asignarlas por descarte inventaría el diagnóstico. Corregirlas a mano las devuelve al reparto."
         >
-          <TablaCampañas filas={diag.sinClasificar} correccion={correccion} />
+          <TablaCampañas filas={diag.sinClasificar} correccion={correccion} avisos={avisos} />
         </Plegable>
       )}
     </SectionCard>
   )
 }
 
-function TablaCampañas({ filas, correccion }: { filas: CampañaEtapa[]; correccion: Correccion }) {
+/**
+ * La tabla de campañas de una etapa. **El nombre de la campaña despliega sus avisos** (ver
+ * `components/meta-ads/Avisos.tsx`): un nombre de campaña no se parece en nada al aviso, y esta
+ * pantalla existe para que alguien piense la pieza que falta mirando las que ya salieron.
+ */
+function TablaCampañas({ filas, correccion, avisos }: {
+  filas: CampañaEtapa[]
+  correccion: Correccion
+  avisos: Avisos
+}) {
   // La columna de correcciones aparece si hay algo que mostrar o alguien que pueda tocarla. Quien
   // no puede corregir tampoco tiene por qué cargar con una columna vacía.
   const hayOverride = filas.some((c) => correccion.porCampaña[c.id])
   const columna = correccion.puedePautar || hayOverride
+  const anchoTotal = 5 + (columna ? 2 : 0)
 
   return (
     <TableWrap>
@@ -794,17 +810,31 @@ function TablaCampañas({ filas, correccion }: { filas: CampañaEtapa[]; correcc
         </Tr>
       </THead>
       <TBody>
-        {filas.map((c) => (
-          <Tr key={c.id}>
-            <Td wrap strong>{c.nombre}</Td>
-            <Td>{rotuloObjetivo(c.objetivo)}</Td>
-            <Td align="right">{money(c.spend)}</Td>
-            <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
-            <Td><EstadoPill s={c.estado} /></Td>
-            {columna && <Td><CeldaEtapa c={c} correccion={correccion} /></Td>}
-            {columna && <Td><CeldaLinea c={c} correccion={correccion} /></Td>}
-          </Tr>
-        ))}
+        {filas.map((c) => {
+          const abierta = avisos.abiertas.has(c.id)
+          return (
+            <Fragment key={c.id}>
+              <Tr>
+                <Td wrap strong>
+                  <BotonAvisos nombre={c.nombre} abierta={abierta} onToggle={() => avisos.alternar(c.id)} />
+                </Td>
+                <Td>{rotuloObjetivo(c.objetivo)}</Td>
+                <Td align="right">{money(c.spend)}</Td>
+                <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
+                <Td><EstadoPill s={c.estado} /></Td>
+                {columna && <Td><CeldaEtapa c={c} correccion={correccion} /></Td>}
+                {columna && <Td><CeldaLinea c={c} correccion={correccion} /></Td>}
+              </Tr>
+              {abierta && (
+                <Tr>
+                  <Td colSpan={anchoTotal} wrap style={{ padding: 0, background: color.bg2 }}>
+                    <PanelAvisos estado={avisos.dato(c.id)} />
+                  </Td>
+                </Tr>
+              )}
+            </Fragment>
+          )
+        })}
       </TBody>
     </TableWrap>
   )
