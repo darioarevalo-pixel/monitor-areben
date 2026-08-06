@@ -100,8 +100,11 @@ describe('transicionesDesde() dibuja exactamente lo que el guard deja pasar', ()
     expect(transicionesDesde(bruno, 'propuesta').map((t) => t.a).sort()).toEqual(['aprobada', 'descartada'])
   })
 
-  it('pauteada es el final: no sale para ningún lado', () => {
-    expect(transicionesDesde(admin, 'pauteada')).toEqual([])
+  it('de pauteada sólo se sale reabriendo, y sólo la reabre quien pautea', () => {
+    // Es el estado que se marca a ojo ("ya la pauteé"), así que tiene que poder deshacerse sin
+    // borrar la idea. Volver a `lista` no: la pieza ya salió, y el paso queda en el historial.
+    expect(transicionesDesde(bruno, 'pauteada').map((t) => t.a)).toEqual(['propuesta'])
+    expect(transicionesDesde(marketing, 'pauteada')).toEqual([])
   })
 })
 

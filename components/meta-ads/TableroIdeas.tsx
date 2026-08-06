@@ -36,7 +36,8 @@ import {
   puedeEditarIdea, transicionesDesde, type EstadoIdea, type Idea, type PoderesIdeas, type Transicion,
 } from '@/lib/meta-ads/ideas'
 import {
-  Button, Chips, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill, useToast,
+  Button, Chips, EmptyState, Field, Input, Modal, Notice, SectionCard, Select, StatusPill,
+  useConfirmar, useToast,
   color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
 
@@ -120,6 +121,7 @@ export function TableroIdeas({
   marca, ideas, puede, quien, cargando, caido, recargar, campañas, sugerida, fechas,
 }: TableroIdeasProps) {
   const toast = useToast()
+  const { confirmar } = useConfirmar()
   const [filtro, setFiltro] = useState<'todas' | Etapa>('todas')
   const [verDescartadas, setVerDescartadas] = useState(false)
   const [editando, setEditando] = useState<Partial<Idea> | null>(null)
@@ -172,7 +174,32 @@ export function TableroIdeas({
     }
   }
 
+  /**
+   * Borrar **sí** pregunta, y descartar no.
+   *
+   * Parece al revés y no lo es: descartar deja la idea a la vista con su motivo y se puede reabrir,
+   * así que el motivo obligatorio es toda la ceremonia que necesita. Borrar es lo único acá adentro
+   * que no deja rastro —se lleva el historial entero de la pieza— y el botón está pegado a «Editar»,
+   * a un pixel de distancia. Sin este paso, un click de más borra sin decir nada y no hay deshacer.
+   */
   async function borrar(idea: Idea) {
+    const ok = await confirmar({
+      titulo: 'Borrar la idea',
+      tono: 'danger',
+      ok: 'Borrarla',
+      mensaje: (
+        <>
+          <div>
+            Se borra <b>«{idea.titulo}»</b> con todo su historial. No se puede deshacer.
+          </div>
+          <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm, lineHeight: 1.5 }}>
+            Si la idea no va, conviene <b>descartarla</b>: queda guardada con el motivo, quien la
+            anotó puede ver por qué no fue, y se reabre cuando haga falta.
+          </div>
+        </>
+      ),
+    })
+    if (!ok) return
     try {
       await borrarIdea(marca, idea.id)
       toast.ok('Idea borrada.')
@@ -239,8 +266,12 @@ export function TableroIdeas({
           dashed
         />
       ) : (
+        // `mo-scroll-x` (kit.css) deja la barra de scroll siempre a la vista: en macOS es overlay y
+        // se esconde hasta que alguien scrollea, así que la quinta columna cortada no avisaba que
+        // existía. El ancho mínimo de las columnas es lo que hace que casi nunca haga falta (ver
+        // `Columna`); esto es la red por debajo, para las pantallas donde igual no entren.
         !caido && (
-          <div style={{ display: 'flex', gap: space[2], overflowX: 'auto', alignItems: 'flex-start', paddingBottom: space[2] }}>
+          <div className="mo-scroll-x" style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', paddingBottom: space[2] }}>
             {COLUMNAS.map((estado) => (
               <Columna
                 key={estado}
@@ -338,7 +369,14 @@ function Columna({ estado, ideas, puede, quien, fechas, campañas, onTransicion,
     <div
       style={{
         flex: '1 1 0',
-        minWidth: 215,
+        /**
+         * 176, no 215. Con 215 las cinco columnas pedían 1107 px y a 1440 de ventana el contenido
+         * mide 1094: la quinta —«Pauteada», la que dice que la pieza salió— quedaba cortada, y en
+         * una notebook de 1280 se escondía casi entera. Como el `flex` las estira, en una pantalla
+         * ancha siguen midiendo lo mismo que antes (~212): el mínimo sólo decide **hasta dónde se
+         * dejan comprimir** antes de empujar el scroll, y a 1280 entran las cinco justas.
+         */
+        minWidth: 176,
         background: color.bg2,
         border: `1px solid ${color.line}`,
         borderRadius: radius.xl,
@@ -460,7 +498,12 @@ function TarjetaIdea({ idea, puede, quien, fechas, campañas, onTransicion, onEd
         {editable && (
           <>
             <Button size="sm" variant="ghost" onClick={() => onEditar(idea)}>Editar</Button>
-            <Button size="sm" variant="ghost" onClick={() => onBorrar(idea)}>Borrar</Button>
+            {/* Borrar se va al otro extremo: es lo único de la tarjeta que no deja rastro y estaba
+                pegado a «Editar». El `auto` lo empuja al borde de la columna, así que dejan de ser
+                dos botones grises consecutivos y hay que apuntarle. */}
+            <span style={{ marginLeft: 'auto' }}>
+              <Button size="sm" variant="ghost" onClick={() => onBorrar(idea)}>Borrar</Button>
+            </span>
           </>
         )}
       </div>

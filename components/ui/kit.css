@@ -530,3 +530,25 @@
     display: none !important;
   }
 }
+
+/* ══ Scroll horizontal que se ve ═════════════════════════════
+   En macOS la barra de scroll es overlay: aparece al scrollear y desaparece. En un contenedor
+   ancho —un tablero kanban, una tabla larga— eso significa que el contenido cortado a la derecha
+   no anuncia que está cortado, y quien mira concluye que no hay nada más. Acá la barra se dibuja
+   siempre, ocupando su lugar, y sólo mientras haya algo que scrollear. */
+.mo-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mo-line2) transparent;
+}
+.mo-scroll-x::-webkit-scrollbar {
+  height: 8px;
+  -webkit-appearance: none; /* sin esto, macOS le devuelve el modo overlay y vuelve a esconderse. */
+}
+.mo-scroll-x::-webkit-scrollbar-thumb {
+  background: var(--mo-line2);
+  border-radius: 4px;
+}
+.mo-scroll-x::-webkit-scrollbar-track {
+  background: transparent;
+}

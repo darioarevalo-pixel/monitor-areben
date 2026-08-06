@@ -224,7 +224,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Descartar una idea pide el motivo: quien la anotó tiene que poder entender por qué no va.' });
       }
 
-      const actualizada = conPaso({ ...idea, estado: a, campaignId: b.campaignId ? String(b.campaignId) : idea.campaignId || null }, {
+      // Reabrir le SACA la campaña. La única forma de llegar a `propuesta` desde otro estado es
+      // reabriendo, y una idea que volvió a la primera casilla no puede seguir diciendo "salió como
+      // tal campaña": si se reabrió porque el "Ya la pauteé" fue un clic errado, esa campaña es
+      // justamente la afirmación que se está deshaciendo. El paso queda igual en el historial.
+      const campaña = a === 'propuesta' ? null : (b.campaignId ? String(b.campaignId) : idea.campaignId || null);
+
+      const actualizada = conPaso({ ...idea, estado: a, campaignId: campaña }, {
         cuando: Date.now(), quien: yo, de: idea.estado, a, nota: nota || null,
       });
       const { error } = await supabase.from('meta_ads_ideas')
