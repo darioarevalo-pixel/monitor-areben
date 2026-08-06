@@ -111,6 +111,43 @@ describe('qué cuenta como "al aire"', () => {
     expect(mofu.sinEntrega).toHaveLength(1)
     expect(bofu.alAire).toHaveLength(0)
     expect(bofu.sinEntrega).toHaveLength(0)
+    // 🔴 La pausada tiene que caer en ALGÚN lado. Antes no caía en ninguno y desaparecía de la
+    // pantalla entera: ni al aire, ni «activa sin entrega», ni «sin asignar» (tiene marca).
+    expect(bofu.pausadas).toHaveLength(1)
+  })
+
+  /**
+   * 🔴 **La invariante que faltaba: ninguna campaña se cae de la pantalla.**
+   *
+   * `alAire` + `sinEntrega` + `pausadas` reparten TODAS las campañas clasificadas, y `sinClasificar`
+   * se lleva el resto. Sin `pausadas`, una campaña apagada no aparecía en ningún lado — y ese era el
+   * motivo de fondo de que «Reactivar» fuese código muerto a nivel campaña: el botón existía, pero
+   * la fila que lo dibuja nunca llegaba a la tabla.
+   */
+  it('los cortes reparten TODAS las campañas, sin dejar ninguna afuera', () => {
+    const campañas = [
+      ...alAire('tofu', 2),
+      camp({ objetivo: 'OUTCOME_LEADS', estado: 'ACTIVE', spend: 0 }),
+      camp({ objetivo: 'OUTCOME_SALES', estado: 'PAUSED', spend: 5000 }),
+      camp({ objetivo: 'OUTCOME_TRAFFIC', estado: 'PAUSED', spend: 0 }),
+      // Estados de Meta que no son ni ACTIVE ni PAUSED: también son «no está entregando».
+      camp({ objetivo: 'OUTCOME_TRAFFIC', estado: 'WITH_ISSUES', spend: 0 }),
+      camp({ objetivo: 'APP_INSTALLS', estado: 'PAUSED', spend: 0 }),
+    ]
+    const d = diagnosticar(campañas)
+    const vistas = d.etapas.flatMap((e) => [...e.alAire, ...e.sinEntrega, ...e.pausadas]).concat(d.sinClasificar)
+    expect(vistas).toHaveLength(campañas.length)
+    // Y ninguna aparece dos veces: los cortes son excluyentes, no solapados.
+    expect(new Set(vistas.map((c) => c.id)).size).toBe(campañas.length)
+  })
+
+  it('una pausada NO cuenta como pauta al aire ni mueve el veredicto', () => {
+    // Si contaran, apagar toda la pauta de una etapa dejaría el diagnóstico diciendo que está cubierta.
+    const conPausadas = diagnosticar([...alAire('tofu', 3), camp({ objetivo: 'OUTCOME_LEADS', estado: 'PAUSED', spend: 9000 })])
+    const sinEllas = diagnosticar(alAire('tofu', 3))
+    expect(conPausadas.etapas.find((e) => e.etapa === 'mofu')!.estado).toBe('vacia')
+    expect(conPausadas.veredicto.titulo).toBe(sinEllas.veredicto.titulo)
+    expect(conPausadas.totalAlAire).toBe(sinEllas.totalAlAire)
   })
 
   /**

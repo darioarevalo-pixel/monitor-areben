@@ -202,6 +202,16 @@ export type ResumenEtapa = {
   alAire: CampañaEtapa[]
   /** Activas pero sin entrega en la ventana. Dato útil aparte: no cuentan como "hay pauta". */
   sinEntrega: CampañaEtapa[]
+  /**
+   * Las que NO están activas. Es el complemento exacto de las otras dos: entre las tres está **toda**
+   * la pauta clasificada de la línea, y ninguna campaña se cae de la pantalla.
+   *
+   * 🔴 Antes no existían y una campaña pausada no aparecía en ningún lado: ni acá, ni en «activas sin
+   * entrega», ni en «sin asignar». O sea que era **invisible**, y de yapa no se podía reactivar —el
+   * botón existía pero su fila nunca llegaba a dibujarse—. No cuentan para el veredicto: una pauta
+   * apagada no es pauta al aire.
+   */
+  pausadas: CampañaEtapa[]
   spend: number
   /** Porción del gasto de la marca (0-1). */
   parte: number

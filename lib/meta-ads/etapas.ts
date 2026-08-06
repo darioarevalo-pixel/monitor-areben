@@ -153,9 +153,14 @@ export function diagnosticar(
     const suyas = campañas.filter((c) => etapaEfectiva(c, overrides) === etapa)
     const alAire = suyas.filter(estaAlAire).sort((a, b) => b.spend - a.spend)
     const sinEntrega = suyas.filter((c) => c.estado === 'ACTIVE' && c.spend <= 0)
+    // Todo lo que no está activo. Los tres cortes reparten `suyas` sin dejar resto: antes de esto,
+    // una campaña pausada no caía en ninguno y la pantalla directamente no la mostraba. Se ordenan
+    // por gasto porque una pausada con gasto en la ventana es una que se apagó hace poco, y esa es
+    // la que alguien está buscando cuando entra a reactivar.
+    const pausadas = suyas.filter((c) => c.estado !== 'ACTIVE').sort((a, b) => b.spend - a.spend)
     const spend = alAire.reduce((t, c) => t + c.spend, 0)
     const parte = gastoTotal > 0 ? spend / gastoTotal : 0
-    return { etapa, alAire, sinEntrega, spend, parte, estado: 'ok', gastoFlaco: false }
+    return { etapa, alAire, sinEntrega, pausadas, spend, parte, estado: 'ok', gastoFlaco: false }
   })
 
   const sinClasificar = campañas

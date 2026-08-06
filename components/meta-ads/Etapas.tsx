@@ -815,7 +815,11 @@ function Pautas({ diag, correccion, avisos, palanca }: {
 }) {
   const [verSinEntrega, setVerSinEntrega] = useState(false)
   const [verSinClasificar, setVerSinClasificar] = useState(false)
+  const [verPausadas, setVerPausadas] = useState(false)
   const sinEntrega = diag.etapas.flatMap((e) => e.sinEntrega)
+  // Las pausadas van juntas y no repartidas por etapa: apagadas no arman ningún embudo, y separarlas
+  // en tres grupos de una fila cada uno haría parecer que sí.
+  const pausadas = diag.etapas.flatMap((e) => e.pausadas)
 
   return (
     <SectionCard
@@ -843,6 +847,21 @@ function Pautas({ diag, correccion, avisos, palanca }: {
           ayuda="Están en ACTIVE pero no gastaron en la ventana: suele ser presupuesto en cero o todos los conjuntos pausados."
         >
           <TablaCampañas filas={sinEntrega} correccion={correccion} avisos={avisos} palanca={palanca} />
+        </Plegable>
+      )}
+
+      {/* 🔴 Sin este plegable, una campaña pausada NO aparecía en ninguna parte de la pantalla: no
+          está al aire, no es «activa sin entrega» y tiene marca asignada, así que tampoco caía en el
+          cartel de pendientes. Era invisible — y de yapa era el motivo de que «Reactivar» fuese código
+          muerto a nivel campaña: el botón estaba, pero su fila nunca se dibujaba. */}
+      {pausadas.length > 0 && (
+        <Plegable
+          abierto={verPausadas}
+          onToggle={() => setVerPausadas((v) => !v)}
+          titulo={`${pausadas.length} pausada${pausadas.length === 1 ? '' : 's'}`}
+          ayuda="No están entregando porque alguien las apagó. Se listan para poder mirarlas y volver a prenderlas; no cuentan para el diagnóstico, que mira la pauta al aire. El gasto que muestran es el que hicieron en la ventana antes de apagarse."
+        >
+          <TablaCampañas filas={pausadas} correccion={correccion} avisos={avisos} palanca={palanca} />
         </Plegable>
       )}
 
