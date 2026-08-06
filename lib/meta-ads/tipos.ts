@@ -3,6 +3,11 @@
  * overview (lista de cuentas) y detalle (una cuenta con anuncios/campañas + diaria + placements).
  */
 
+// El nivel se importa de `acciones` en vez de repetir el union acá: es la misma verdad que la tabla
+// de acciones y el `CAMPOS_LECTURA` del servidor, y escribirlo dos veces es cómo se despegan. El
+// ciclo de imports es sólo de tipos, así que se borra al compilar.
+import type { NivelAccion } from './acciones'
+
 /** Ventanas relativas que ofrece el selector (mapean 1:1 a date_preset de Meta). */
 export type PresetMetaAds =
   | 'today' | 'yesterday' | 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d'
@@ -406,4 +411,65 @@ export type RespuestaDiagnostico = {
   scopesMotivo: string | null
   puedeEscribir: boolean
   cuentas: CuentaDiagnostico[]
+}
+
+/**
+ * Cómo terminó una acción sobre la pauta.
+ *
+ * 🔑 **`rechazado` y `error` no son lo mismo, y confundirlos es lo peor que puede hacer esta
+ * pantalla.** `rechazado` es «no se tocó nada» —un permiso, una regla, un rechazo de Meta—:
+ * se puede volver a intentar sin mirar. `error` es «no sabemos cómo quedó»: Meta aceptó y la
+ * relectura no confirmó, o no llegó a leerse. `en-curso` es lo mismo pero peor: la escritura se
+ * cortó antes de que Meta contestara. Esas dos mandan a mirar Ads Manager antes de repetir.
+ */
+export type ResultadoAccionFila = 'en-curso' | 'ok' | 'rechazado' | 'error' | 'simulacro'
+
+/** Una fila del registro de acciones, tal como la devuelve `?recurso=auditoria`. */
+export type FilaAuditoria = {
+  id: number
+  /** ISO con zona (`timestamptz`). Se muestra en hora local. */
+  cuando: string
+  quien: string
+  accion: string
+  nivel: NivelAccion
+  objetoId: string
+  /** El nombre que tenía en Meta al accionar. `null` cuando el pedido murió antes de leerlo. */
+  objetoNombre: string | null
+  campaignId: string | null
+  /** `null` en los rechazos que murieron antes de resolver la marca. Esas filas las ve cualquiera. */
+  linea: LineaPauta | null
+  cuentaId: string | null
+  /** El valor de ANTES, leído de Meta. `null` si no se llegó a leer el objeto. */
+  de: Record<string, string | number | null> | null
+  /** El valor de DESPUÉS, **releído** de Meta. Nunca lo pedido; `null` si no se aplicó. */
+  a: Record<string, string | number | null> | null
+  /**
+   * Lo que se PIDIÓ, guardado al reservar el `idem`. Es lo único que sobrevive cuando la acción no
+   * llegó a aplicarse.
+   *
+   * ⚠️ **`null` en todo lo anterior al 6-ago-2026**: la columna se sumó después de la Tanda 1. En
+   * esas filas viejas, una acción rechazada no dice qué se quiso hacer, y eso se muestra tal cual.
+   */
+  pedido: Record<string, string | number | null> | null
+  resultado: ResultadoAccionFila
+  /** El motivo, cuando no salió. Es el texto que se le contestó a quien la mandó. */
+  detalle: string | null
+  /** Sólo para admin: la clave de idempotencia y el cupo de escritura que iba quedando en Meta. */
+  idem?: string
+  uso?: string | null
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=auditoria`. */
+export type RespuestaAuditoria = {
+  filas: FilaAuditoria[]
+  /** Hay más filas de las que entraron en `limite`. La pantalla lo dice en vez de mentir un total. */
+  hayMas: boolean
+  limite: number
+  /**
+   * `cuenta_id → moneda`, para poder mostrar los presupuestos: se guardan crudos, en la unidad menor
+   * de la moneda. Enriquecimiento **aislado**: si Meta no contestó viene vacío y el monto se muestra
+   * crudo, pero el registro se lee igual.
+   */
+  monedas: Record<string, string>
+  monedasMotivo: string | null
 }

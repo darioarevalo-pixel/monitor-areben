@@ -54,7 +54,7 @@ export default async function accionar(req, res, perfil) {
   // ── 2. Reservar el `idem` ANTES de llamar a Meta ────────────────────────────────────────────
   // Escribir la fila al final sería más prolijo y no serviría de nada: entre el clic y la respuesta
   // de Meta hay segundos, y es justo ahí donde entra el segundo clic.
-  const reserva = await reservar(sb, { idem, quien: quienEs(perfil), accion, nivel, objetoId });
+  const reserva = await reservar(sb, { idem, quien: quienEs(perfil), accion, nivel, objetoId, campos });
   if (reserva.repetida) return contestarRepetida(res, reserva.fila);
   if (reserva.error) {
     // Sin poder registrar no se acciona. No es prolijidad: el registro es también el candado del
@@ -207,11 +207,16 @@ async function escribir(def, id, campos) {
 /**
  * Reserva el `idem` con una fila en `en-curso`. El índice único es el que decide: si ya estaba, el
  * insert falla y se devuelve la fila anterior en vez de llamar a Meta otra vez.
+ *
+ * ⚠️ **`pedido` se guarda acá y no al cerrar la fila.** Es lo único que sobrevive cuando la acción
+ * no llega a aplicarse: `a` es lo releído de Meta, así que en un rechazo queda vacío y la fila decía
+ * "Fulano intentó cambiar el presupuesto" sin el número. Los `campos` ya pasaron por `validarPedido`
+ * en este punto, o sea que lo que se guarda es lo que de verdad se iba a mandar.
  */
-async function reservar(sb, { idem, quien, accion, nivel, objetoId }) {
+async function reservar(sb, { idem, quien, accion, nivel, objetoId, campos }) {
   try {
     const { error } = await sb.from(TABLA).insert([{
-      idem, quien, accion, nivel, objeto_id: objetoId, resultado: 'en-curso',
+      idem, quien, accion, nivel, objeto_id: objetoId, pedido: campos || null, resultado: 'en-curso',
     }]);
     if (!error) return { ok: true };
     // 23505 = unique_violation. Es el caso esperado del doble clic, no una falla.

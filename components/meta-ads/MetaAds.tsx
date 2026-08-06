@@ -6,6 +6,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, 
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Etapas } from '@/components/meta-ads/Etapas'
+import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { pausarAnuncio, traerDetalleCuenta, traerDiagnostico, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
 import { nuevoIdem } from '@/lib/meta-ads/acciones'
@@ -97,9 +98,10 @@ function Badge({ txt, color, bg }: { txt: string; color: string; bg: string }) {
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
 /**
- * La sección tiene dos vistas y la elige el 2º tramo de la URL (patrón de Tienda Nube):
- *   `/meta-ads`         → Resumen, los números de cada cuenta.
- *   `/meta-ads/etapas`  → Etapas de la pauta, a quién le está hablando la plata.
+ * La sección tiene tres vistas y la elige el 2º tramo de la URL (patrón de Tienda Nube):
+ *   `/meta-ads`           → Resumen, los números de cada cuenta.
+ *   `/meta-ads/etapas`    → Etapas de la pauta, a quién le está hablando la plata.
+ *   `/meta-ads/auditoria` → Qué se accionó sobre la pauta, quién y cómo terminó.
  *
  * El despacho vive en un componente aparte y no adentro de `Resumen` porque una salida temprana
  * después de un hook cambiaría la cantidad de hooks entre renders al navegar de una vista a la otra.
@@ -108,7 +110,9 @@ export function MetaAds() {
   const params = useParams()
   const partes = params.seccion
   const sub = Array.isArray(partes) ? partes[1] : null
-  return sub === 'etapas' ? <Etapas /> : <Resumen />
+  if (sub === 'etapas') return <Etapas />
+  if (sub === 'auditoria') return <Auditoria />
+  return <Resumen />
 }
 
 function Resumen() {

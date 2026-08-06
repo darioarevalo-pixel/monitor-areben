@@ -14,6 +14,8 @@
 //                                               estado y gasto. A demanda. Es también el modo que
 //                                               dice si la campaña es CBO.
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
+//   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
+//                                               `api/_meta-auditoria.js`.
 //   POST /api/meta-ads                        → accionar sobre la pauta. Ver `api/_meta-acciones.js`.
 // Rango por preset (last_30d default) o since/until.
 //
@@ -33,6 +35,7 @@ import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
 import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
+import auditoria from './_meta-auditoria.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // Ventana de atribución fija: cambia mucho los números de ventas/ROAS, así que la explicitamos.
@@ -58,9 +61,15 @@ const RE_SEGUIDOR = /(^|\.)follow|page_like|(^|\.)like$/i;
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-  if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
+
+  // 🔑 **La auditoría es la única lectura que no necesita el token**: sale de la base. Y es justo la
+  // que hay que poder abrir cuando el token se venció —el día que Meta deje de contestar, la pregunta
+  // es qué se llegó a hacer antes—. Por eso el guard va después de despacharla y no arriba de todo.
+  if (req.method === 'GET' && (req.query || {}).recurso === 'auditoria') return await auditoria(res, perfil, req.query || {});
+
+  if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 
   // POST = accionar sobre la pauta. Todo el despacho vive en `_meta-acciones.js`, que es un archivo
   // con guion bajo y por lo tanto no cuenta contra las 12 funciones del plan Hobby.
@@ -77,6 +86,7 @@ export default async function handler(req, res) {
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
   if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
+  // `auditoria` ya se despachó arriba, antes del guard del token. Ver el comentario de allá.
 
   const rango = rangoQS(q);
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');

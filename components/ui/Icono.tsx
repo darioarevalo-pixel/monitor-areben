@@ -309,6 +309,18 @@ const TRAZOS = {
     </>
   ),
   /**
+   * Qué se accionó sobre la pauta — el reloj con la flecha que vuelve. Es la forma con la que ya se
+   * lee "lo que pasó antes"; un candado o una planilla darían a entender permisos o carga, que es
+   * justo lo que esa pantalla NO es.
+   */
+  historial: (
+    <>
+      <path d="M3.6 12a8.4 8.4 0 1 0 2.6-6.1" />
+      <path d="M5.8 3.6v3.6h3.6" />
+      <path d="M12 7.8V12l3 1.9" />
+    </>
+  ),
+  /**
    * Calendario editorial — la hoja del almanaque con un día marcado. El punto no es decorativo: es
    * lo que separa "un calendario" de "la fecha que se te viene encima", que es de lo que habla la
    * pantalla.

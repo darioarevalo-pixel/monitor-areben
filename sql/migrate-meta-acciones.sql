@@ -42,6 +42,12 @@ create table if not exists meta_ads_accion (
   -- del hecho convertiría la auditoría en una lista de deseos.
   de             jsonb,
   a              jsonb,
+  -- Lo que se PIDIÓ, escrito al reservar el `idem` (o sea, antes de hablar con Meta).
+  --
+  -- No reemplaza a `a` —el hecho sigue siendo lo releído— pero sin esto **una acción rechazada no
+  -- dice qué se quiso hacer**: `a` queda vacío justo en las filas que más se miran. Se veía "Fulano
+  -- intentó cambiar el presupuesto" sin el número, que es la mitad de la pregunta.
+  pedido         jsonb,
   resultado      text not null,                   -- 'en-curso'|'ok'|'rechazado'|'error'|'simulacro'
   detalle        text,
   -- El header `X-Business-Use-Case-Usage` de Meta: cuánto queda del cupo de escritura. Viene en
@@ -49,6 +55,14 @@ create table if not exists meta_ads_accion (
   -- límite: se ve que se venía llenando, en vez de descubrirlo cuando ya no escribe.
   uso            text
 );
+
+-- `create table if not exists` no toca una tabla que ya está, así que las columnas que se suman
+-- después van por acá o no llegan nunca a la base donde importa. `if not exists` las hace
+-- re-corribles.
+--
+-- ⚠️ Esta columna la ESCRIBE `api/_meta-acciones.js` al reservar el `idem`: sin ella el insert falla
+-- y **no se puede accionar**. Correr esto ANTES de deployar, no después.
+alter table meta_ads_accion add column if not exists pedido jsonb;
 
 -- Las dos consultas reales: el historial de UNA campaña (el panel de la fila) y el último
 -- movimiento de la cuenta entera (¿quién tocó algo hoy?).

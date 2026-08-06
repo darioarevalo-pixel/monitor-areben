@@ -748,7 +748,8 @@ export const NAV_CATS: NavCat[] = [
         "keys": [],
         "items": [
           { "ruta": "/meta-ads", "label": "Resumen", "icono": "meta-ads", "key": "meta-ads" },
-          { "ruta": "/meta-ads/etapas", "label": "Etapas de la pauta", "icono": "etapas", "key": "meta-ads" }
+          { "ruta": "/meta-ads/etapas", "label": "Etapas de la pauta", "icono": "etapas", "key": "meta-ads" },
+          { "ruta": "/meta-ads/auditoria", "label": "Qué se accionó", "icono": "historial", "key": "meta-ads" }
         ]
       },
       {

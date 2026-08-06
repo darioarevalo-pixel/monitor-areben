@@ -10,8 +10,8 @@
 import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type {
-  DetalleCuenta, PresetMetaAds, RespuestaConjuntos, RespuestaCreativos, RespuestaDiagnostico,
-  RespuestaEtapas, RespuestaOverview,
+  DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
+  RespuestaDiagnostico, RespuestaEtapas, RespuestaOverview,
 } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
@@ -121,6 +121,23 @@ export function traerConjuntos(campaignId: string, dias?: number): Promise<Lectu
   const qs = new URLSearchParams({ recurso: 'conjuntos', campania: campaignId })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaConjuntos>(qs)
+}
+
+/**
+ * **Quién accionó sobre la pauta**: el registro de `meta_ads_accion`, de lo más nuevo a lo más viejo.
+ *
+ * Es la única lectura de Meta Ads que **no habla con Meta para contestar** —sale de la base—, así que
+ * se puede mirar aunque Graph esté caído. Lo único que pide allá son las monedas de las cuentas, para
+ * poder mostrar los presupuestos, y va como enriquecimiento aislado.
+ *
+ * Sin `campania` trae todo lo que este perfil puede ver; con ella, el historial de esa campaña sola
+ * (el índice de la tabla está puesto para esas dos consultas y no para otra).
+ */
+export function traerAuditoria(opts: { campania?: string; limite?: number } = {}): Promise<Lectura<RespuestaAuditoria>> {
+  const qs = new URLSearchParams({ recurso: 'auditoria' })
+  if (opts.campania) qs.set('campania', opts.campania)
+  if (opts.limite) qs.set('limite', String(opts.limite))
+  return pedir<RespuestaAuditoria>(qs)
 }
 
 /**
