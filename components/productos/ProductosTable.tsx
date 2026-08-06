@@ -97,7 +97,15 @@ export function ProductosTable() {
   const [enCampania, setEnCampania] = useState<'' | 'faltan' | 'estan'>('')
   const [proveedor, setProveedor] = useState('')
   const [ingresos, setIngresos] = useState<Set<string>>(new Set())
-  const [ocultarSinStock, setOcultarSinStock] = useState(false)
+  /**
+   * En modo campaña arranca prendido: un sale mueve mercadería parada, y un producto agotado no
+   * tiene nada que mover (uno con stock negativo es un error de inventario, tampoco se liquida).
+   * El valor inicial cubre la llegada por `?liq=` desde «Agregar productos», donde nadie toca el
+   * selector — se puede leer acá porque `camp.liq` sale de `useSearchParams()` y ya está resuelto
+   * en el primer render. Sigue siendo apagable: para sacar de la campaña uno que se agotó después
+   * de mandarlo, hay que poder verlo.
+   */
+  const [ocultarSinStock, setOcultarSinStock] = useState(() => !!camp.liq)
   const [modoVU, setModoVU] = useState<ModoVidaUtil>('30d')
   const [col, setCol] = useState<ColOrden>('sales30')
   const [dir, setDir] = useState(-1)
@@ -280,7 +288,12 @@ export function ProductosTable() {
               value={camp.liq}
               onFocus={camp.pedirAbiertas}
               onMouseDown={camp.pedirAbiertas}
-              onChange={(e) => camp.entrar(e.target.value)}
+              onChange={(e) => {
+                camp.entrar(e.target.value)
+                // Salir NO lo apaga: apagarle un filtro a alguien que lo dejó puesto a propósito
+                // es peor que dejarlo.
+                if (e.target.value) setOcultarSinStock(true)
+              }}
               style={{ width: 230 }}
               aria-label="Campaña de liquidación"
             >
@@ -334,6 +347,8 @@ export function ProductosTable() {
                 <span style={{ color: color.mut }}>
                   {' · '}
                   {filtradaBase.length - porFaltar.length} de {filtradaBase.length} de este filtro ya están
+                  {/* Si no se dice, los dos números no cierran con lo que uno tenía en la cabeza. */}
+                  {ocultarSinStock && ' · sin stock ocultos'}
                 </span>
               </span>
               <Button size="sm" variant="soft" tone="brand" onClick={marcarLosQueFaltan} disabled={!porFaltar.length}>

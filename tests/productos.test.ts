@@ -51,6 +51,13 @@ describe('filtrarProductos', () => {
   it('oculta sin stock', () => {
     expect(filtrarProductos(lista, { ...base, ocultarSinStock: true }).map((p) => p.id)).toEqual(['1', '3'])
   })
+  it('🔑 "sin stock" incluye el stock NEGATIVO, no sólo el cero', () => {
+    // Un stock negativo es un error de inventario, y a una campaña de sale no se le suma ni uno
+    // agotado ni uno que da -3. La regla es `!(stock > 0)`; escrita como `stock === 0` dejaría
+    // pasar los negativos en silencio, que es justo lo que Liquidación no quiere ver.
+    const conNegativo = [...lista, prod({ id: '4', name: 'Campera Rota', stock: -3 })]
+    expect(filtrarProductos(conNegativo, { ...base, ocultarSinStock: true }).map((p) => p.id)).toEqual(['1', '3'])
+  })
   it('combina filtros (AND)', () => {
     expect(filtrarProductos(lista, { ...base, busqueda: 'remera', proveedor: 'ACME', ocultarSinStock: true }).map((p) => p.id)).toEqual(['1', '3'])
   })
