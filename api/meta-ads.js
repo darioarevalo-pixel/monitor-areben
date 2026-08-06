@@ -448,7 +448,11 @@ async function diagnosticoCuenta(c, probar) {
     estadoCuenta: t.account_status ?? null,
     motivoBaja: t.disable_reason ?? null,
     administra: tareas.includes('MANAGE'),
-    veredicto: tareas.includes('MANAGE') ? 'permiso-de-cuenta-ok' : 'sin-permiso-de-cuenta',
+    // ⚠️ `user_tasks` VACÍO no es "no administra": con un token de system user Meta a veces no
+    // informa el campo. Decir "solo lectura" ahí mandaría a arreglar un permiso que puede estar
+    // bien, que es exactamente la confusión entre los dos candados que este modo existe para
+    // evitar. Sin el dato, se dice que no se sabe y lo resuelve la prueba de escritura.
+    veredicto: tareas.includes('MANAGE') ? 'permiso-de-cuenta-ok' : tareas.length ? 'sin-permiso-de-cuenta' : 'tareas-desconocidas',
   };
   if (!probar) return fila;
   return { ...fila, ...(await pruebaDeEscritura(id)) };

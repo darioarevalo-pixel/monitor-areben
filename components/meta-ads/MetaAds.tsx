@@ -316,6 +316,7 @@ const VEREDICTOS: Record<VeredictoEscritura, { txt: string; tono: 'ok' | 'mal' |
   'escribe': { txt: 'Escribe', tono: 'ok', que: 'Los dos candados están abiertos: esta cuenta se puede accionar desde el monitor.' },
   'permiso-de-cuenta-ok': { txt: 'Puede administrar', tono: 'medio', que: 'El system user administra la cuenta. Falta probar el scope del token con «Probar a escribir».' },
   'sin-permiso-de-cuenta': { txt: 'Solo lectura', tono: 'mal', que: 'En business.facebook.com, al system user monitor-ads subirle esta cuenta de «Ver rendimiento» a «Administrar campañas».' },
+  'tareas-desconocidas': { txt: 'No se sabe', tono: 'medio', que: 'Meta no informó user_tasks para este token, y vacío NO quiere decir que no administre: con system users suele venir así. Lo resuelve la prueba de escritura, una vez que el token tenga ads_management.' },
   'sin-scope': { txt: 'Falta ads_management', tono: 'mal', que: 'El permiso de la cuenta está bien, pero al token le falta el scope. Generar uno nuevo con ads_read + ads_management y reemplazar META_ADS_TOKEN en Vercel.' },
   'token-invalido': { txt: 'Token inválido', tono: 'mal', que: 'El token venció o fue revocado. Generar uno nuevo en el mismo system user.' },
   'rechazo-desconocido': { txt: 'Meta lo rechazó', tono: 'mal', que: 'El código de error de abajo es el que hay que mirar: no es ninguno de los dos casos conocidos.' },

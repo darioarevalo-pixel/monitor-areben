@@ -308,8 +308,13 @@ export type VeredictoEscritura =
   | 'permiso-de-cuenta-ok'
   /** La escritura de prueba salió bien: esta cuenta se puede accionar. */
   | 'escribe'
-  /** `user_tasks` es solo lectura, o Meta contestó (#272): falta "Administrar campañas". */
+  /** `user_tasks` vino con tareas y ninguna es MANAGE, o Meta contestó (#272). */
   | 'sin-permiso-de-cuenta'
+  /**
+   * Meta no informó `user_tasks`. **No significa que no administre**: con tokens de system user
+   * suele venir vacío. Lo resuelve la prueba de escritura, una vez que el scope esté puesto.
+   */
+  | 'tareas-desconocidas'
   /** Meta contestó (#200): al token le falta el scope `ads_management`. */
   | 'sin-scope'
   /** (#190): el token venció o fue revocado. */
