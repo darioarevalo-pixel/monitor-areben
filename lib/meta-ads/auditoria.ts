@@ -115,6 +115,15 @@ export type Contada =
       crudo: boolean
       sinDato: boolean
     }
+  | {
+      clase: 'duplicar'
+      titulo: string
+      /** El nombre de la copia que quedó en Meta. `null` si no llegó a crearse. */
+      copia: string | null
+      /** El id del objeto copiado, que es lo que quedó registrado antes de llamar a Meta. */
+      deQuien: string | null
+      sinDato: boolean
+    }
   | { clase: 'otra'; titulo: string; sinDato: boolean }
 
 /**
@@ -197,8 +206,24 @@ export function contar(f: FilaAuditoria, moneda: string | null): Contada {
     return { clase: 'presupuesto', titulo, desde, hasta, variacion, crudo: moneda === null, sinDato: false }
   }
 
-  // Las Tandas 2 y 3 suman `duplicar` y `crear` a la misma tabla. Que caigan acá con su nombre crudo
-  // es mejor que no aparecer: una acción nueva se ve el día uno, aunque se lea fea.
+  if (f.accion === 'duplicar') {
+    // Ojo con la asimetría: acá `a` NO es «cómo quedó lo que toqué» sino «qué apareció». El original
+    // no cambió en nada, y contarlo como un cambio suyo sería mentir sobre qué se tocó.
+    const copia = (f.a && (f.a.nombre as string)) || null
+    const deQuien = (f.pedido && (f.pedido.copia_de as string)) || null
+    return {
+      clase: 'duplicar',
+      titulo: salio ? `Duplicó ${el(f.nivel)}` : `Intentó duplicar ${el(f.nivel)}`,
+      copia: copia || null,
+      deQuien,
+      // Una copia que no salió igual dejó registrado el sufijo con el que buscarla: eso NO es «sin
+      // dato», es la pista. Sin `pedido` (o sea, sin sufijo) sí se perdió el rastro.
+      sinDato: !salio && !deQuien,
+    }
+  }
+
+  // La Tanda 3 suma `crear` a la misma tabla. Que caiga acá con su nombre crudo es mejor que no
+  // aparecer: una acción nueva se ve el día uno, aunque se lea fea.
   return {
     clase: 'otra',
     titulo: `${salio ? 'Hizo' : 'Intentó'} «${f.accion}» sobre ${el(f.nivel)}`,

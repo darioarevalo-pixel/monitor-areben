@@ -21,6 +21,52 @@ const perfil = (o: Partial<Perfil>): Perfil => ({
   name: 'Alguien', admin: false, cuenta: null, acceso: {}, ...o,
 } as Perfil)
 
+describe('duplicar (Tanda 2)', () => {
+  const pedido = { accion: 'duplicar', nivel: 'campania', objetoId: '123', campos: {}, idem: 'abcdefgh' }
+
+  it('⛔ NO es reintentable, y eso vive en la tabla', () => {
+    // Un reintento de duplicar no repite un valor: hace DOS campañas. Es la razón por la que
+    // `reintentable` es una propiedad de la acción y no el criterio de quien escribe el handler.
+    expect(ACCIONES.duplicar.reintentable).toBe(false)
+    expect(ACCIONES.estado.reintentable).toBe(true)
+  })
+
+  it('acepta un pedido sin campos', () => {
+    const v = validarPedido(pedido)
+    expect(v.ok).toBe(true)
+  })
+
+  it('🔴 RECHAZA cualquier campo, incluido `status`', () => {
+    // Si aceptara `status`, alguien podría pedir la copia ya activa y saltearse la única garantía de
+    // que duplicar no gasta: que nace pausada. La whitelist vacía es lo que lo hace imposible.
+    const v = validarPedido({ ...pedido, campos: { status: 'ACTIVE' } })
+    expect(v.ok).toBe(false)
+    if (v.ok) throw new Error('debería rechazar')
+    expect(v.status).toBe(400)
+  })
+
+  it('no se duplica un aviso: la copia no tendría dónde entregar', () => {
+    const v = validarPedido({ ...pedido, nivel: 'aviso' })
+    expect(v.ok).toBe(false)
+  })
+
+  it('sigue exigiendo campos a las acciones que SÍ los tienen', () => {
+    // El cambio que permitió una acción sin campos no podía aflojar las otras dos.
+    expect(validarPedido({ ...pedido, accion: 'estado' }).ok).toBe(false)
+    expect(validarPedido({ ...pedido, accion: 'presupuesto' }).ok).toBe(false)
+  })
+
+  it('lo habilita el sub `crear`, que es el mismo de la Tanda 3', () => {
+    const conCrear = perfil({ acceso: { bdi: { 'meta-ads': true, 'meta-ads.crear': true } } })
+    const soloPausar = perfil({ acceso: { bdi: { 'meta-ads': true, 'meta-ads.pausar': true } } })
+    expect(permiteAccion(conCrear, 'duplicar', 'bdi').ok).toBe(true)
+    expect(permiteAccion(soloPausar, 'duplicar', 'bdi').ok).toBe(false)
+    // Y no arrastra las otras: tener `crear` no da pausar ni presupuesto.
+    expect(permiteAccion(conCrear, 'estado', 'bdi').ok).toBe(false)
+    expect(permiteAccion(conCrear, 'presupuesto', 'bdi').ok).toBe(false)
+  })
+})
+
 /** Ve Meta Ads en las dos marcas y puede pausar en las dos. */
 const pausadorTotal = perfil({
   acceso: {

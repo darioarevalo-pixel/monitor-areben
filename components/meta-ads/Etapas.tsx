@@ -254,7 +254,7 @@ export function Etapas() {
     for (const id of conjuntos.abiertas) conjuntos.recargar(id)
   }, [conjuntos])
 
-  const { enCurso, mandar, cambiarEstado } = useAccionMeta(recargarTrasAccion)
+  const { enCurso, mandar, cambiarEstado, duplicarObjeto } = useAccionMeta(recargarTrasAccion)
 
   // La moneda de la cuenta que corre cada campaña. **No es un detalle**: Meta maneja los
   // presupuestos en la unidad MENOR de la moneda, así que sin esto no se pueden ni mostrar ni
@@ -285,7 +285,8 @@ export function Etapas() {
     enCurso,
     onEstado: (o: ObjetoMeta, estadoActual: string | null) => { void cambiarEstado(o, estadoActual) },
     onPresupuesto: (o: ObjetoMeta, diarioCrudo: number) => setPresu({ o, diarioCrudo }),
-  }), [perfil, enCurso, cambiarEstado])
+    onDuplicar: (o: ObjetoMeta) => { void duplicarObjeto(o) },
+  }), [perfil, enCurso, cambiarEstado, duplicarObjeto])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -912,7 +913,9 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
   // de la sesión. Si esta persona no puede accionar en ninguna de las que ve, la columna no va.
   const hayAcciones = filas.some((c) => {
     const linea = correccion.lineaPorCampaña[c.id]?.linea ?? null
-    return palanca.acciones.puede('estado', linea) || palanca.acciones.puede('presupuesto', linea)
+    return palanca.acciones.puede('estado', linea)
+      || palanca.acciones.puede('presupuesto', linea)
+      || palanca.acciones.puede('duplicar', linea)
   })
   const anchoTotal = 5 + (columna ? 2 : 0) + (hayAcciones ? 1 : 0)
 

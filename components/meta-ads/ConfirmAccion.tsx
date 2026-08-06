@@ -85,10 +85,24 @@ export function useAccionMeta(recargar: () => void) {
     const r = await accionarMeta({ accion, nivel: o.nivel, objetoId: o.id, campos, idem })
     setEnCurso(null)
     if (r.ok) {
-      // «Se registró» no es un detalle burocrático: cuando el log falla y Meta ya aplicó, la plata
-      // se movió igual y quien lo hizo tiene que saber que no quedó escrito quién fue.
-      if (r.dato.sinRegistro) toast.aviso(`${exito} ⚠️ No se pudo dejar registro de quién lo hizo.`)
-      else toast.ok(exito)
+      const copia = r.dato.copia
+      // 🔴 Una copia que NO nació pausada está gastando ahora mismo. Es lo único de este flujo que
+      // no puede quedarse en un toast verde: se avisa fuerte y se dice qué hacer.
+      if (copia && copia.estado && copia.estado !== 'PAUSED') {
+        toast.error(`Se creó «${copia.nombre}» pero figura ${copia.estado}, no pausada. Pausala ya desde esta misma tabla o en Ads Manager.`)
+      } else if (copia && !copia.estado) {
+        toast.aviso(`Se creó «${copia.nombre}», pero no se pudo confirmar que quedara pausada. Fijate en Ads Manager.`)
+      } else if (copia && !copia.conLinea) {
+        // Sin marca no se la puede accionar desde el monitor —ni siquiera quien la creó—, así que
+        // decir sólo «copia creada» dejaría a alguien buscando por qué no le aparecen los botones.
+        toast.aviso(`Se creó «${copia.nombre}», pausada, pero quedó SIN MARCA: asignala en la columna «Marca» para poder accionarla.`)
+      } else if (r.dato.sinRegistro) {
+        // «Se registró» no es un detalle burocrático: cuando el log falla y Meta ya aplicó, la plata
+        // se movió igual y quien lo hizo tiene que saber que no quedó escrito quién fue.
+        toast.aviso(`${exito} ⚠️ No se pudo dejar registro de quién lo hizo.`)
+      } else {
+        toast.ok(copia ? `${exito} «${copia.nombre}».` : exito)
+      }
       recargar()
       return true
     }
@@ -129,7 +143,49 @@ export function useAccionMeta(recargar: () => void) {
     return mandar(o, 'estado', { status: nuevo }, idem, activo ? 'Pausada.' : 'Reactivada.')
   }, [confirmar, mandar])
 
-  return { enCurso, mandar, cambiarEstado }
+  /**
+   * Duplicar. El cartel es más largo que el de pausar porque **lo que hay que decidir acá no es lo
+   * que la palabra "duplicar" sugiere**:
+   *
+   *  - Es la única acción que **no se deshace apretando otra vez**: deja un objeto nuevo en la
+   *    cuenta, y sacarlo es ir a borrarlo a Ads Manager.
+   *  - Y la que cambia la decisión: **la copia arranca en aprendizaje desde cero**. Es el costo real
+   *    de duplicar en vez de escalar la que ya anda, y es lo que casi nadie tiene presente.
+   *
+   * Lo que sí es tranquilizador va junto: nace pausada y con la marca del original, así que hasta
+   * que alguien la prenda a mano no gasta un peso.
+   */
+  const duplicarObjeto = useCallback(async (o: ObjetoMeta) => {
+    const idem = nuevoIdem()
+    const ok = await confirmar({
+      titulo: `¿Duplicar ${ROTULO_NIVEL[o.nivel]}?`,
+      tono: 'brand',
+      ok: 'Duplicar',
+      mensaje: (
+        <div>
+          <div style={{ marginBottom: space[2] }}>
+            Se crea una copia con sus conjuntos y avisos. <b>Nace pausada</b> y con la marca del
+            original, así que no gasta hasta que alguien la prenda.
+          </div>
+          <Notice tone="warning" style={{ marginBottom: space[2] }}>
+            La copia <b>arranca en aprendizaje desde cero</b>: Meta no le hereda nada de lo aprendido
+            a la original. Si lo que querés es más entrega de algo que ya funciona, sale más barato
+            subirle el presupuesto a esta que duplicarla.
+          </Notice>
+          <ConfirmDetalle label={ROTULO_NIVEL[o.nivel]} valor={o.nombre} />
+          {o.linea && <ConfirmDetalle label="Marca" valor={ETIQUETA_LINEA[o.linea]} />}
+          <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
+            Esto no se deshace desde el monitor: para sacar la copia hay que borrarla en Ads Manager.
+          </div>
+        </div>
+      ),
+    })
+    if (!ok) return false
+    // Sin campos: qué se copia y cómo lo decide el servidor, no quien aprieta. Ver `ACCIONES`.
+    return mandar(o, 'duplicar', {}, idem, 'Copia creada, pausada.')
+  }, [confirmar, mandar])
+
+  return { enCurso, mandar, cambiarEstado, duplicarObjeto }
 }
 
 /**
@@ -147,6 +203,7 @@ export type Acciones = {
   enCurso: string | null
   onEstado: (o: ObjetoMeta, estadoActual: string | null) => void
   onPresupuesto: (o: ObjetoMeta, diarioCrudo: number) => void
+  onDuplicar: (o: ObjetoMeta) => void
 }
 
 /**
@@ -173,9 +230,12 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
   const activo = estado === 'ACTIVE'
   const puedeEstado = acciones.puede('estado', objeto.linea)
   const puedePresupuesto = acciones.puede('presupuesto', objeto.linea)
+  // Un aviso no se duplica: la copia de un aviso suelto no tiene dónde entregar. Lo dice la tabla de
+  // acciones (`niveles`) y acá se respeta en vez de repetir el criterio.
+  const puedeDuplicar = objeto.nivel !== 'aviso' && acciones.puede('duplicar', objeto.linea)
   const trabajando = acciones.enCurso === objeto.id
 
-  if (!puedeEstado && !puedePresupuesto) return <span style={{ color: color.mut2 }}>—</span>
+  if (!puedeEstado && !puedePresupuesto && !puedeDuplicar) return <span style={{ color: color.mut2 }}>—</span>
   if (activo && inerte) return <span style={{ color: color.mut2 }} title={inerte}>—</span>
 
   return (
@@ -198,6 +258,17 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
           onClick={() => acciones.onPresupuesto(objeto, diarioCrudo)}
         >
           Presupuesto
+        </Button>
+      )}
+      {puedeDuplicar && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={trabajando}
+          onClick={() => acciones.onDuplicar(objeto)}
+          title="Crea una copia pausada, con sus conjuntos y avisos"
+        >
+          Duplicar
         </Button>
       )}
     </div>

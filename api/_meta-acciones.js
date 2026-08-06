@@ -123,6 +123,13 @@ export default async function accionar(req, res, perfil) {
   const permiso = permiteAccion(perfil, accion, linea);
   if (!permiso.ok) return cerrar(permiso.status, 'rechazado', { error: permiso.error }, contexto);
 
+  // ── 7 a 10 de duplicar: es otro camino y no una variante ────────────────────────────────────
+  // Lo que sigue abajo («escribir campos, releer, comparar») no le sirve: duplicar no cambia el
+  // objeto que se lee, **crea uno nuevo**, así que no hay campo que comparar y sí hay una copia que
+  // encontrar y adoptar. Meterlo a la fuerza en el mismo camino era la forma segura de que
+  // `quedoPuesto()` diera verde sin haber verificado nada.
+  if (accion === 'duplicar') return await duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea, contexto, quien: quienEs(perfil) });
+
   // ── 7. Reglas de negocio ────────────────────────────────────────────────────────────────────
   if (accion === 'presupuesto') {
     // El padre sólo hace falta para detectar CBO: si la campaña tiene el presupuesto, el del
@@ -181,6 +188,165 @@ export default async function accionar(req, res, perfil) {
     campaignId,
     linea,
   }, { ...contexto, de, a, uso: escrito.uso || null });
+}
+
+// ── Duplicar (Tanda 2) ────────────────────────────────────────────────────────────────────────
+/**
+ * El tope de anuncios que Meta copia en una llamada SÍNCRONA. Con más, la Graph API obliga a la vía
+ * asíncrona, que devuelve un `async_session_id` que hay que pollear hasta que termine.
+ *
+ * ⛔ Esa vía queda afuera a propósito: pollear no entra en una función de Vercel Hobby, y hacerlo a
+ * medias dejaría copias a medio crear sin nadie mirando. Se cuenta antes y se dice que no.
+ */
+const TOPE_ADS_SINCRONO = 3;
+
+/**
+ * Duplicar una campaña o un conjunto: `POST /<id>/copies`.
+ *
+ * Las cuatro decisiones que hacen que esto sea seguro:
+ *
+ * 1. **`status_option: 'PAUSED'`.** La copia NUNCA nace entregando. Es lo único que hace que un clic
+ *    de más cueste cero pesos, y por eso el estado tampoco es un campo que se pueda mandar.
+ * 2. **El sufijo del nombre lo generamos nosotros y es único.** No es cosmética: si la llamada se
+ *    corta sin respuesta, la recuperación no puede ser reintentar —haría dos campañas— sino
+ *    **buscar por ese nombre y adoptar** la que ya se creó.
+ * 3. 🔴 **La copia hereda la línea en la MISMA operación.** Sin eso nace sin marca y cae en el 409
+ *    de «esta campaña todavía no tiene marca»: quedaría un objeto nuevo en la cuenta que **nadie
+ *    puede accionar desde el monitor**, ni siquiera quien lo creó.
+ * 4. **Se relee la copia antes de contestar `ok`.** Igual que en el resto: lo que se afirma es lo
+ *    leído de Meta, no lo que el POST dijo que hizo.
+ */
+async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea, contexto, quien }) {
+  // Cuántos avisos cuelgan. `summary=true` da el total sin traer las filas.
+  const cuenta = await graph(`${objetoId}/ads?limit=1&summary=true`);
+  const cuantos = (cuenta.ok && cuenta.data && cuenta.data.summary && cuenta.data.summary.total_count) ?? null;
+  if (cuantos !== null && cuantos > TOPE_ADS_SINCRONO) {
+    return cerrar(409, 'rechazado', {
+      error: `Esta ${ETIQUETA_NIVEL[nivel]} tiene ${cuantos} avisos y Meta sólo copia hasta ${TOPE_ADS_SINCRONO} de una vez. Duplicala desde Ads Manager.`,
+    }, contexto);
+  }
+
+  const sufijo = sufijoDeCopia();
+  const cuerpo = {
+    deep_copy: true,
+    status_option: 'PAUSED',
+    rename_options: JSON.stringify({ rename_strategy: 'DEEP_RENAME', rename_suffix: sufijo }),
+  };
+
+  // 🔑 **El sufijo se anota ANTES del POST**, por el mismo motivo por el que el `idem` se reserva
+  // antes: si la llamada se corta sin respuesta, la copia puede haberse creado igual, y el sufijo es
+  // lo ÚNICO con lo que se la puede encontrar después. Anotarlo al cerrar lo perdería justo en el
+  // caso para el que existe. Su falla no frena nada, pero deja dicho que no se va a poder rastrear.
+  const anotado = await completar(sb, idem, { pedido: { copia_de: objetoId, sufijo } });
+
+  // ⛔ Sin reintento: lo dice la tabla (`reintentable: false`) y acá se respeta llamando a `graphPost`
+  // una sola vez. Un reintento no repetiría un valor, haría DOS campañas.
+  const escrito = await graphPost(`${objetoId}/copies`, cuerpo);
+  if (!escrito.ok) {
+    // 🔴 **`status: 0` es el corte por timeout, y NO es lo mismo que un rechazo.** Una copia profunda
+    // puede tardar más que los 8 s del `fetch`, y si se cortó del lado de acá **Meta pudo haberla
+    // creado igual**. Contestar «rechazó» ahí sería invitar a apretar de nuevo y terminar con dos
+    // campañas: se contesta `error` —el resultado que la auditoría lee como «no sabemos cómo
+    // quedó»— y se manda a buscar por el sufijo, que para eso se anotó antes.
+    const corte = escrito.status === 0;
+    return cerrar(502, corte ? 'error' : 'rechazado', {
+      error: corte
+        ? `Se cortó antes de que Meta contestara, así que la copia PUEDE haberse creado igual. Buscá «${sufijo.trim()}» en Ads Manager antes de volver a intentarlo.`
+        : 'Meta rechazó la copia.',
+      detalle: mensajeError(escrito),
+    }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, uso: escrito.uso || null });
+  }
+
+  // Meta devuelve el id nuevo con nombres distintos según el nivel; el `copied_*_id` es el que trae
+  // la copia profunda. Si ninguno vino, la copia PUEDE haberse hecho igual: se dice eso, que es la
+  // verdad, en vez de inventar un éxito o un fracaso.
+  const d = escrito.data || {};
+  const copiaId = String(d.copied_campaign_id || d.copied_adset_id || d.id || '');
+  if (!copiaId) {
+    return cerrar(502, 'error', {
+      error: `Meta aceptó la copia pero no dijo cuál es. Buscá «${sufijo.trim()}» en Ads Manager antes de volver a intentarlo.`,
+      // Si además el sufijo no se pudo anotar, quien lea esto tiene que saber que en el registro
+      // tampoco va a estar: es la diferencia entre buscar algo y buscar cualquier cosa.
+      ...(anotado.ok ? {} : { sinRastro: true }),
+    }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, uso: escrito.uso || null });
+  }
+
+  // Releer: `ok` sale de acá, no del POST. Y de paso confirma lo único que de verdad importa, que es
+  // que nació PAUSED.
+  const rel = await graph(`${copiaId}?fields=${CAMPOS_LECTURA[nivel]}`, 2);
+  const copia = (rel.ok && rel.data) || {};
+  const estadoCopia = String(copia.effective_status || copia.status || '');
+
+  // La línea, en la misma operación. La copia de un conjunto cuelga de la campaña del original, que
+  // ya tiene línea: sólo hace falta escribir fila nueva cuando lo copiado es una campaña.
+  let conLinea = true;
+  if (nivel === 'campania') {
+    const puesta = await heredarLinea({
+      campaignId: copiaId, linea, cuentaId: contexto.cuenta_id,
+      nombre: String(copia.name || `${nombre}${sufijo}`), objetivo: obj.objective || null, quien,
+    });
+    conLinea = puesta.ok;
+  }
+
+  const a = { copia_id: copiaId, nombre: String(copia.name || ''), estado: estadoCopia, con_linea: conLinea };
+  return cerrar(200, 'ok', {
+    ok: true,
+    quedo: {},
+    nivel,
+    objetoId,
+    objetoNombre: nombre,
+    campaignId: contexto.campaign_id,
+    linea,
+    copia: {
+      id: copiaId,
+      nombre: String(copia.name || ''),
+      // Sin relectura no se afirma que está pausada: se dice que no se sabe, y el cartel lo muestra.
+      estado: rel.ok ? estadoCopia : '',
+      conLinea,
+    },
+  }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, a, uso: escrito.uso || null });
+}
+
+/**
+ * El sufijo del nombre de la copia. **Único a propósito** (ver el punto 2 de arriba): es lo que
+ * permite encontrarla si la llamada se cortó sin respuesta, que es el único caso en el que duplicar
+ * se puede recuperar sin arriesgar una copia de más.
+ *
+ * Fecha local y no UTC: lo lee una persona y «copia 6/8» tiene que ser el 6 de agosto de acá.
+ */
+function sufijoDeCopia() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return ` — copia ${dd}/${mm} ${hh}:${mi}`;
+}
+
+/**
+ * La fila de `meta_ads_campania_linea` para la copia, con la línea del original.
+ *
+ * Su falla NO tumba la respuesta: la campaña ya existe en Meta y negarlo sería peor. Se contesta
+ * `conLinea: false` y la pantalla dice que hay que asignarla a mano en Etapas.
+ */
+async function heredarLinea({ campaignId, linea, cuentaId, nombre, objetivo, quien }) {
+  const sb = clienteBdi();
+  if (!sb) return { ok: false };
+  try {
+    const { error } = await sb.from('meta_ads_campania_linea').upsert([{
+      campaign_id: campaignId,
+      linea,
+      cuenta_id: cuentaId || '',
+      nombre,
+      objetivo,
+      linea_previa: null,
+      por: quien,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'campaign_id' });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /**

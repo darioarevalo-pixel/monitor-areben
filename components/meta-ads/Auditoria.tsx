@@ -323,6 +323,25 @@ function Cambio({ c, moneda }: { c: Contada; moneda: string | null }) {
     )
   }
 
+  if (c.clase === 'duplicar') {
+    // Lo que importa de una copia es CÓMO SE LLAMA: es lo único con lo que se la encuentra después,
+    // tanto acá como en Ads Manager.
+    if (c.copia) {
+      return (
+        <div style={{ display: 'flex', gap: space[1], alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: font.xs, color: color.mut2 }}>salió</span>
+          <span style={{ ...caja, fontWeight: 600 }}>{c.copia}</span>
+        </div>
+      )
+    }
+    if (c.sinDato) return <SinDato />
+    return (
+      <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>
+        No llegó a crearse. Quedó registrado de cuál se copiaba (<code>{c.deQuien}</code>).
+      </div>
+    )
+  }
+
   return c.sinDato ? <SinDato /> : null
 }
 

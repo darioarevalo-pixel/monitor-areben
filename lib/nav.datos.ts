@@ -580,6 +580,11 @@ export const PERM_CAT: PermCat[] = [
         "info": "Sube o baja el presupuesto DIARIO de una campaña o de un conjunto. Va aparte de pausar porque no es la misma clase de acto: pausar se deshace reactivando, pero subir un diario de $5.000 a $50.000 es plata gastada que no vuelve. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       },
       {
+        "key": "crear",
+        "label": "Puede duplicar y crear campañas",
+        "info": "Duplica una campaña o un conjunto que ya existe, con sus conjuntos y avisos. La copia nace SIEMPRE pausada y con la marca del original, así que no gasta hasta que alguien la prenda a mano. Va aparte de pausar y de presupuesto porque crea objetos nuevos en la cuenta: lo que hace no se deshace apretando otra vez, hay que ir a borrarlos. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      },
+      {
         "key": "pautar",
         "label": "Puede aprobar ideas y corregir la etapa de una campaña",
         "info": "En Etapas de la pauta: aprueba o descarta las ideas de creativos que anota el equipo, las marca como pauteadas, y corrige a mano la etapa de una campaña mal clasificada. Sin esto se pueden anotar ideas y moverlas por producción, pero no aprobarlas. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."

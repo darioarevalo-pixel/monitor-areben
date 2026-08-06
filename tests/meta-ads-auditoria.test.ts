@@ -188,13 +188,47 @@ describe('presupuesto', () => {
   })
 })
 
+describe('duplicar', () => {
+  it('cuenta la copia por su NOMBRE, que es con lo que se la encuentra después', () => {
+    const c = contar(fila({
+      accion: 'duplicar',
+      pedido: { copia_de: '120250683011800505', sufijo: ' — copia 06/08 15:40' },
+      a: { copia_id: '120250999', nombre: 'STUNNED - Tráfico a Perfil — copia 06/08 15:40' },
+    }), 'ARS')
+    expect(c.clase).toBe('duplicar')
+    if (c.clase !== 'duplicar') throw new Error('clase')
+    expect(c.titulo).toBe('Duplicó la campaña')
+    expect(c.copia).toBe('STUNNED - Tráfico a Perfil — copia 06/08 15:40')
+    expect(c.sinDato).toBe(false)
+  })
+
+  it('una copia que no salió NO es «sin dato»: el sufijo registrado es la pista para buscarla', () => {
+    // Es la diferencia entre «no sabemos qué pasó» y «no salió, y así se llama lo que habría que
+    // buscar en Ads Manager». El sufijo se anota ANTES del POST justo para este caso.
+    const c = contar(fila({
+      accion: 'duplicar', resultado: 'error', a: null,
+      pedido: { copia_de: '120250683011800505', sufijo: ' — copia 06/08 15:40' },
+    }), 'ARS')
+    if (c.clase !== 'duplicar') throw new Error('clase')
+    expect(c.titulo).toBe('Intentó duplicar la campaña')
+    expect(c.deQuien).toBe('120250683011800505')
+    expect(c.sinDato).toBe(false)
+  })
+
+  it('sin el sufijo registrado sí se perdió el rastro, y se dice', () => {
+    const c = contar(fila({ accion: 'duplicar', resultado: 'error', a: null, pedido: null }), 'ARS')
+    if (c.clase !== 'duplicar') throw new Error('clase')
+    expect(c.sinDato).toBe(true)
+  })
+})
+
 describe('lo que todavía no existe', () => {
   it('una acción de una tanda futura se ve el día uno, aunque se lea fea', () => {
-    // `duplicar` y `crear` entran a la misma tabla. Que la pantalla las esconda hasta que alguien se
-    // acuerde de agregarlas sería un agujero de auditoría, no un detalle de presentación.
-    const c = contar(fila({ accion: 'duplicar' }), 'ARS')
+    // `crear` entra a la misma tabla en la Tanda 3. Que la pantalla la esconda hasta que alguien se
+    // acuerde de agregarla sería un agujero de auditoría, no un detalle de presentación.
+    const c = contar(fila({ accion: 'crear' }), 'ARS')
     expect(c.clase).toBe('otra')
-    expect(c.titulo).toContain('duplicar')
+    expect(c.titulo).toContain('crear')
   })
 })
 

@@ -36,8 +36,8 @@ import {
 /** Los tres niveles de la jerarquía de Meta. */
 export type NivelAccion = 'campania' | 'conjunto' | 'aviso'
 
-/** Las acciones de la Tanda 1. Las Tandas 2 y 3 suman `duplicar` y `crear` a la misma tabla. */
-export type ClaveAccion = 'estado' | 'presupuesto'
+/** Las acciones que existen. La Tanda 3 suma `crear` a la misma tabla. */
+export type ClaveAccion = 'estado' | 'presupuesto' | 'duplicar'
 
 export type DefAccion = {
   /** El sub-permiso que la habilita (`meta-ads.<sub>`). */
@@ -76,6 +76,22 @@ export type ResultadoAccion = {
   sinRegistro?: boolean
   /** Cuando el `idem` ya se había usado: es la respuesta guardada, no una escritura nueva. */
   repetida?: boolean
+  /**
+   * Sólo al duplicar: el objeto NUEVO que quedó en Meta. Va aparte de `quedo` porque no es «cómo
+   * quedó lo que toqué» sino «qué apareció»: son dos objetos distintos y confundirlos haría que la
+   * pantalla mostrara el original como si hubiera cambiado.
+   */
+  copia?: {
+    id: string
+    nombre: string
+    /** Siempre `PAUSED`. Se devuelve leído de Meta, no asumido: es la garantía de que no gasta. */
+    estado: string
+    /**
+     * `false` si la copia quedó **sin marca**: existe en Meta pero nadie la puede accionar desde el
+     * monitor hasta asignarla en Etapas. Se avisa en vez de dejarla escondida.
+     */
+    conLinea: boolean
+  }
 }
 
 export const ACCIONES = ACCIONES_JS as Record<ClaveAccion, DefAccion>
