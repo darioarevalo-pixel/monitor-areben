@@ -280,6 +280,22 @@ function DiagnosticoToken() {
 
       {r?.fase === 'ok' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Si Meta informó los scopes, la respuesta ya está y no hace falta ni probar a
+              escribir: sin `ads_management` el token no escribe, sea cual sea el permiso de las
+              cuentas. Se dice arriba de todo para no hacer leer tres filas. */}
+          {r.data.scopes !== null && !r.data.scopes.includes('ads_management') && (
+            <Notice tone="warning">
+              <div style={{ fontSize: 12 }}>
+                <b>El token no puede escribir:</b> le falta el scope <code>ads_management</code>. Ninguna acción
+                sobre la pauta va a funcionar hasta que se reemplace, incluido el botón de pausar anuncios que ya está
+                en el detalle de cada cuenta.
+                <div style={{ color: paleta.mut2, marginTop: 4 }}>
+                  Se arregla generando un token nuevo en el system user <code>monitor-ads</code> con{' '}
+                  <code>ads_read</code> + <code>ads_management</code>, y reemplazando <code>META_ADS_TOKEN</code> en Vercel.
+                </div>
+              </div>
+            </Notice>
+          )}
           <div style={{ fontSize: 12, color: paleta.ink2 }}>
             <b>Scopes del token:</b>{' '}
             {r.data.scopes === null
@@ -321,6 +337,7 @@ function FilaDiagnostico({ c }: { c: CuentaDiagnostico }) {
         {typeof c.minDiarioCrudo === 'number' && c.minDiarioCrudo > 0 && (
           <span style={{ fontSize: 11, color: paleta.mut2 }}>mínimo diario: {money(c.minDiarioCrudo / 100, c.moneda || '')}</span>
         )}
+        {c.minimosMotivo && <span style={{ fontSize: 11, color: paleta.mut2 }} title={c.minimosMotivo}>sin mínimos</span>}
       </div>
       <div style={{ fontSize: 12, color: paleta.ink2, marginTop: 4 }}>{v.que}</div>
       {c.detalle && <div style={{ fontSize: 11, color: paleta.danger, marginTop: 4 }}>{c.detalle}</div>}

@@ -339,6 +339,8 @@ export type CuentaDiagnostico = {
    */
   minDiarioCrudo?: number
   minDiarioAlto?: number
+  /** Por qué no se pudieron leer los mínimos. Va aparte: que fallen no invalida el veredicto. */
+  minimosMotivo?: string
   estadoCuenta?: number | null
   motivoBaja?: number | null
   prueba?: PruebaEscritura

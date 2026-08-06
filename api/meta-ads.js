@@ -432,19 +432,19 @@ async function diagnostico(res, perfil, probar) {
 async function diagnosticoCuenta(c, probar) {
   const id = String(c.account_id || '');
   const base = { id, nombre: nombreCuenta(c) };
-  const d = await graph(`act_${id}?fields=user_tasks,account_status,disable_reason,currency,min_daily_budget_low_freq,min_daily_budget_high_freq`);
+  // Sólo campos DE la cuenta. Los mínimos de presupuesto NO son campos suyos —son un edge— y
+  // pedirlos acá devolvía `(#100) Tried accessing nonexisting field`, que se lleva puesta la
+  // respuesta entera y dejaba las tres cuentas en "no se pudo leer". Van aparte, abajo.
+  const d = await graph(`act_${id}?fields=user_tasks,account_status,disable_reason,currency`);
   if (!d.ok) return { ...base, veredicto: 'no-se-pudo-leer', detalle: mensajeError(d) };
   const t = d.data || {};
   const tareas = Array.isArray(t.user_tasks) ? t.user_tasks : [];
+  const mins = await minimosDe(id, t.currency);
   const fila = {
     ...base,
     tareas,
-    // ⚠️ Los mínimos vienen en la UNIDAD MENOR de la moneda: en ARS (2 decimales) `150000` es
-    // $1.500, no $150.000. Cualquier control de presupuesto tiene que dividir por 100 al mostrar
-    // y multiplicar al escribir. Se expone crudo y con el divisor al lado para que no se adivine.
     moneda: t.currency || '',
-    minDiarioCrudo: num(t.min_daily_budget_low_freq),
-    minDiarioAlto: num(t.min_daily_budget_high_freq),
+    ...mins,
     estadoCuenta: t.account_status ?? null,
     motivoBaja: t.disable_reason ?? null,
     administra: tareas.includes('MANAGE'),
@@ -452,6 +452,29 @@ async function diagnosticoCuenta(c, probar) {
   };
   if (!probar) return fila;
   return { ...fila, ...(await pruebaDeEscritura(id)) };
+}
+
+/**
+ * Los mínimos de presupuesto de la cuenta, que la Tanda 1 necesita para validar antes de
+ * mandarle a Meta un número que va a rechazar.
+ *
+ * Van en su propia llamada y no como campos de la cuenta porque **no son campos de la cuenta**:
+ * `minimum_budgets` es un edge, y pedir `min_daily_budget_low_freq` en el `?fields=` de `act_<id>`
+ * devuelve `(#100) Tried accessing nonexisting field` y anula la consulta ENTERA. Aislada, si
+ * falla, el diagnóstico igual contesta lo importante (que es `user_tasks`).
+ *
+ * ⚠️ Los valores vienen en la UNIDAD MENOR de la moneda: en ARS (2 decimales) `150000` es $1.500,
+ * no $150.000. Se devuelven crudos a propósito, para que la conversión sea una decisión visible y
+ * no un `/100` perdido en el medio.
+ */
+async function minimosDe(cuentaId, moneda) {
+  const r = await graph(`act_${cuentaId}/minimum_budgets?fields=currency,min_daily_budget_low_freq,min_daily_budget_high_freq`);
+  if (!r.ok) return { minimosMotivo: mensajeError(r) };
+  const filas = (r.data && r.data.data) || [];
+  // El edge devuelve una fila por moneda; la que importa es la de la cuenta.
+  const f = filas.find((x) => x.currency === moneda) || filas[0];
+  if (!f) return { minimosMotivo: 'Meta no devolvió mínimos para esta cuenta' };
+  return { minDiarioCrudo: num(f.min_daily_budget_low_freq), minDiarioAlto: num(f.min_daily_budget_high_freq) };
 }
 
 /**
