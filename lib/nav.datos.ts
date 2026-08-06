@@ -563,7 +563,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "meta-ads",
     "area": "marketing",
     "label": "Meta Ads",
-    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Solo lectura vía la API de Marketing.",
+    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Desde Etapas también se acciona sobre la pauta —pausar, reactivar y cambiar el presupuesto diario—, con permisos aparte y registro de quién lo hizo.",
     "brands": [
       "bdi",
       "zattia"
@@ -572,7 +572,12 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "pausar",
         "label": "Puede pausar y activar anuncios",
-        "info": "Pausa o reactiva un anuncio desde el Monitor: deja de mostrarse y de gastar en el acto. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+        "info": "Pausa o reactiva una campaña, un conjunto o un aviso desde el Monitor: deja de mostrarse y de gastar en el acto. Es reversible, y su peor caso es perder un día de entrega. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      },
+      {
+        "key": "presupuesto",
+        "label": "Puede cambiar el presupuesto",
+        "info": "Sube o baja el presupuesto DIARIO de una campaña o de un conjunto. Va aparte de pausar porque no es la misma clase de acto: pausar se deshace reactivando, pero subir un diario de $5.000 a $50.000 es plata gastada que no vuelve. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       },
       {
         "key": "pautar",

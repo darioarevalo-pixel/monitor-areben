@@ -8,8 +8,9 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Etapas } from '@/components/meta-ads/Etapas'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { pausarAnuncio, traerDetalleCuenta, traerDiagnostico, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
+import { nuevoIdem } from '@/lib/meta-ads/acciones'
 import type { AdRow, Campaña, CuentaDiagnostico, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila, RespuestaDiagnostico, VeredictoEscritura } from '@/lib/meta-ads/tipos'
-import { Notice, chartColor, color as paleta } from '@/components/ui'
+import { Notice, chartColor, color as paleta, useConfirmar } from '@/components/ui'
 
 /** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
 type EstadoPausa = { status?: string; pending?: boolean; error?: string }
@@ -112,6 +113,7 @@ export function MetaAds() {
 
 function Resumen() {
   const { perfil, marca } = useSesion()
+  const { confirmar } = useConfirmar()
   const puedePausar = puedeSub(perfil, marca, 'meta-ads', 'pausar')
   const [preset, setPreset] = useState<RangoUI>('last_30d')
   const [elegida, setElegida] = useState<string | null>(null)
@@ -155,18 +157,24 @@ function Resumen() {
     const efectivo = ovMap[adId]?.status ?? actual
     const activo = efectivo === 'ACTIVE'
     const next: 'ACTIVE' | 'PAUSED' = activo ? 'PAUSED' : 'ACTIVE'
-    const ok = window.confirm(
-      activo
-        ? '¿Pausar este anuncio? Deja de mostrarse y de gastar hasta que lo reactives.'
-        : '¿Activar este anuncio? Vuelve a mostrarse y a consumir presupuesto.',
-    )
+    // El `idem` se genera ACÁ, al apretar, no adentro de `pausarAnuncio`: si naciera al mandar, un
+    // doble clic serían dos claves distintas y dos escrituras. Ver `ConfirmAccion.tsx`.
+    const idem = nuevoIdem()
+    const ok = await confirmar({
+      titulo: activo ? '¿Pausar este anuncio?' : '¿Reactivar este anuncio?',
+      tono: activo ? 'warning' : 'brand',
+      ok: activo ? 'Pausar' : 'Reactivar',
+      mensaje: activo
+        ? 'Deja de mostrarse y de gastar en el acto, hasta que alguien lo vuelva a activar.'
+        : 'Vuelve a mostrarse y a consumir presupuesto en el acto.',
+    })
     if (!ok) return
     const set = (v: EstadoPausa) => setPausaOv((o) => {
       const base = o.key === detKey ? o.map : {}
       return { key: detKey, map: { ...base, [adId]: { ...base[adId], ...v } } }
     })
     set({ pending: true, error: undefined })
-    const r = await pausarAnuncio(adId, next)
+    const r = await pausarAnuncio(adId, next, idem)
     set(r.ok ? { status: r.dato.status, pending: false } : { pending: false, error: r.motivo })
   }
 

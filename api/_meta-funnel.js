@@ -25,6 +25,9 @@ import { esAdmin, puedeSub, puedeVer } from '../lib/permisos.core.js';
 import { ETAPAS } from '../lib/meta-ads/etapas.core.js';
 import { baseDeLinea, esLinea } from '../lib/meta-ads/lineas.core.js';
 import { conPaso, puedeEditarIdea, puedeTransicionar, SUB_PAUTAR } from '../lib/meta-ads/ideas.core.js';
+// La base donde viven las tablas cross-marca de Meta Ads. Una sola implementación: la comparte con
+// el censo de etapas y con las acciones sobre la pauta.
+import { clienteBdi } from './_meta-lineas.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -45,11 +48,7 @@ function cfgFor(store) {
  * guardarlo por base dejaría a una pantalla viendo «sin asignar» lo que la otra ya asignó, sin que
  * ninguna de las dos vea el choque. El detalle está arriba de `sql/migrate-meta-ads-linea.sql`.
  */
-function clienteLineas() {
-  const cfg = cfgFor('bdi');
-  if (!cfg.url || !cfg.key) return null;
-  return createClient(cfg.url, cfg.key);
-}
+const clienteLineas = clienteBdi;
 
 /** Quién es esta persona, en una marca, para esta sección. Una sola lectura de permisos. */
 function poderes(perfil, store) {

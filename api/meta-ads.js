@@ -1,5 +1,4 @@
-// Métricas de Meta Ads (API de Marketing, solo lectura, scope ads_read).
-// Tres modos:
+// Métricas de Meta Ads (API de Marketing). Lectura por GET; el POST escribe y vive aparte.
 //   GET /api/meta-ads                         → lista las cuentas del token con su total (para el selector).
 //   GET /api/meta-ads?account=<id>&preset=... → DETALLE de una cuenta: totales + anuncios agrupables por
 //                                               campaña + serie diaria + desglose por plataforma/ubicación.
@@ -10,21 +9,30 @@
 //                                             → los AVISOS de una campaña con su creativo (imagen,
 //                                               título, texto, botón) y su gasto. A demanda, para
 //                                               que Etapas muestre CON QUÉ se está hablando.
+//   GET /api/meta-ads?recurso=conjuntos&campania=<id>
+//                                             → los CONJUNTOS de una campaña con su presupuesto,
+//                                               estado y gasto. A demanda. Es también el modo que
+//                                               dice si la campaña es CBO.
+//   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
+//   POST /api/meta-ads                        → accionar sobre la pauta. Ver `api/_meta-acciones.js`.
 // Rango por preset (last_30d default) o since/until.
 //
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
 // Token: META_ADS_TOKEN (system user, no vence). Si falta → 500.
-import { createClient } from '@supabase/supabase-js';
+//
+// ⚠️ La plomería de Graph (`graph`, `graphPost`, `insightsTodas`, `mensajeError`) se mudó a
+// `lib/meta-ads/graph.core.js`: la Tanda 4 la necesita desde un script de `scripts/`, que no puede
+// importar de `api/`. Este archivo la usa, no la define.
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { esAdmin, marcasConAcceso, puedeSub, puedeVer } from '../lib/permisos.core.js';
+import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 // La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
 import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
-
-const GRAPH = 'https://graph.facebook.com/v25.0';
-const TOKEN = process.env.META_ADS_TOKEN;
+import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
+import { leerAsignaciones } from './_meta-lineas.js';
+import accionar from './_meta-acciones.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // Ventana de atribución fija: cambia mucho los números de ventas/ROAS, así que la explicitamos.
@@ -47,57 +55,16 @@ const RE_PERFIL = /profile_visit|profile_view|profile_engagement/i;
  */
 const RE_SEGUIDOR = /(^|\.)follow|page_like|(^|\.)like$/i;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function graph(path, tries = 4) {
-  const url = `${GRAPH}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(TOKEN)}`;
-  let last;
-  for (let a = 1; a <= tries; a++) {
-    try {
-      const r = await fetch(url);
-      const d = await r.json().catch(() => null);
-      if (r.ok) return { ok: true, data: d };
-      last = { ok: false, status: r.status, error: d && d.error };
-      const code = d && d.error && d.error.code;
-      if ((r.status === 429 || r.status >= 500 || code === 4 || code === 17 || code === 613) && a < tries) {
-        await sleep(1000 * a);
-        continue;
-      }
-      return last;
-    } catch (e) {
-      last = { ok: false, status: 0, error: { message: String((e && e.message) || e) } };
-      if (a < tries) { await sleep(1000 * a); continue; }
-      return last;
-    }
-  }
-  return last;
-}
-
-// Sigue la paginación por cursor `after` hasta agotar (tope de 20 páginas por las dudas).
-// Nació para insights y sirve para cualquier edge paginado de la Graph (lo usa también `/campaigns`).
-async function insightsTodas(path) {
-  let after = null, rows = [], guard = 0;
-  do {
-    const p = after ? `${path}&after=${encodeURIComponent(after)}` : path;
-    const r = await graph(p);
-    if (!r.ok) return { ok: false, error: mensajeError(r) };
-    const d = r.data || {};
-    if (Array.isArray(d.data)) rows = rows.concat(d.data);
-    after = d.paging && d.paging.next && d.paging.cursors ? d.paging.cursors.after : null;
-    guard++;
-  } while (after && guard < 20);
-  return { ok: true, rows };
-}
-
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-  if (!TOKEN) return res.status(500).json({ error: 'Meta Ads no configurado' });
+  if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
-  // POST = mutación (pausar/activar un anuncio). Requiere ads_management en el token.
-  if (req.method === 'POST') return await accionAd(req, res, perfil);
+  // POST = accionar sobre la pauta. Todo el despacho vive en `_meta-acciones.js`, que es un archivo
+  // con guion bajo y por lo tanto no cuenta contra las 12 funciones del plan Hobby.
+  if (req.method === 'POST') return await accionar(req, res, perfil);
 
   const q = req.query || {};
 
@@ -108,6 +75,7 @@ export default async function handler(req, res) {
   // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
   if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
+  if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
   if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
 
   const rango = rangoQS(q);
@@ -141,13 +109,16 @@ async function etapas(res, perfil, diasPedidos) {
   const rango = `date_preset=last_${dias}d`;
   const attr = `action_attribution_windows=${ATTR}`;
 
-  const cuentasRes = await graph('me/adaccounts?fields=account_id,name&limit=100');
+  // `currency` va acá y no en una llamada aparte porque ya lo pide `overview` con esta misma lista
+  // de campos y está probado en prod. Lo necesita la palanca de presupuesto: Meta maneja los montos
+  // en la unidad MENOR de la moneda, así que sin saber cuál es no se puede ni mostrar ni escribir.
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency&limit=100');
   if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
 
   // Ya no hay cuentas "de una marca": las tres líneas se pautean desde la MISMA cuenta publicitaria,
   // así que se consultan todas las del token y el corte se hace campaña por campaña, más abajo.
   const cuentas = ((cuentasRes.data && cuentasRes.data.data) || [])
-    .map((c) => ({ id: String(c.account_id), nombre: nombreCuenta(c) }));
+    .map((c) => ({ id: String(c.account_id), nombre: nombreCuenta(c), moneda: c.currency || '' }));
 
   const asignadas = await leerAsignaciones();
   if (asignadas.error) {
@@ -179,6 +150,16 @@ async function etapas(res, perfil, diasPedidos) {
           etapaAuto: etapaDeObjetivo(c.objective),
           // `effective_status` es el que manda: `status` dice ACTIVE aunque la cuenta esté frenada.
           estado: c.effective_status || c.status || null,
+          // El presupuesto ya venía en el `?fields=` de arriba y se tiraba en este `.map()`. Sin
+          // esto la palanca de escala no tiene qué mostrar: son los dos números que decide quien
+          // sube o baja el diario. ⚠️ Vienen en la UNIDAD MENOR de la moneda de la cuenta (en ARS,
+          // `1800000` es $18.000). Se pasan crudos a propósito; la conversión la hace la pantalla
+          // con `factorMoneda()`, para que sea una decisión visible y no un `/100` perdido.
+          //
+          // Una campaña con `daily_budget` propio es CBO: reparte sola entre sus conjuntos, y el
+          // presupuesto de los conjuntos no se puede tocar.
+          diarioCrudo: c.daily_budget ? num(c.daily_budget) : 0,
+          totalCrudo: c.lifetime_budget ? num(c.lifetime_budget) : 0,
           spend: g ? num(g.spend) : 0,
           impressions: g ? num(g.impressions) : 0,
           clicks: g ? num(g.clicks) : 0,
@@ -224,30 +205,13 @@ async function etapas(res, perfil, diasPedidos) {
   return res.status(200).json({ ok: true, dias, cuentas, lineas, sinAsignar });
 }
 
-/**
- * La asignación campaña → línea, desde la base de BDI.
- *
- * ⚠️ Una sola base para las dos marcas, a propósito: de quién es una campaña es un hecho único y no
- * una decisión editorial de cada marca. El razonamiento largo está arriba de
- * `sql/migrate-meta-ads-linea.sql`.
- *
- * Si esto falla, el endpoint corta con 502 en vez de devolver el censo sin repartir: mostrar todas
- * las campañas como "sin asignar" haría creer que se perdieron las asignaciones, y alguien las
- * volvería a cargar encima.
- */
-async function leerAsignaciones() {
-  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
-  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-  if (!url || !key) return { error: 'Faltan credenciales de Supabase' };
-  try {
-    const supabase = createClient(url, key);
-    const { data, error } = await supabase.from('meta_ads_campania_linea').select('campaign_id, linea');
-    if (error) return { error: error.message };
-    return { mapa: new Map((data || []).map((r) => [String(r.campaign_id), r])) };
-  } catch (e) {
-    return { error: String((e && e.message) || e) };
-  }
-}
+// `leerAsignaciones` (campaña → línea, desde la base de BDI) se mudó a `api/_meta-lineas.js`: la
+// necesitan también las acciones sobre la pauta, y `_meta-acciones.js` no la puede importar de acá
+// sin cerrar un círculo (es este archivo el que lo despacha).
+//
+// Si falla, el endpoint corta con 502 en vez de devolver el censo sin repartir: mostrar todas las
+// campañas como "sin asignar" haría creer que se perdieron las asignaciones, y alguien las volvería
+// a cargar encima.
 
 // ── Modo creativos: los avisos de UNA campaña, con qué se ve y qué dice ─────────
 /**
@@ -270,23 +234,8 @@ async function leerAsignaciones() {
  * nada. Si algún día hace falta el iframe de verdad, primero hay que resolver el token.
  */
 async function creativos(res, perfil, campaignId, diasPedidos) {
-  if (!/^\d+$/.test(campaignId)) return res.status(400).json({ error: 'campaña inválida' });
-
-  const marcas = marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']);
-  if (!marcas.length) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
-  const visibles = new Set(marcas.flatMap((m) => lineasDeMarca(m)));
-
-  // El corte por marca es el mismo que el del censo, y por el mismo motivo: las tres líneas salen
-  // de una sola cuenta publicitaria, así que "puede ver la cuenta" no alcanza para decidir. Una
-  // campaña sin asignar no se corta —se ve igual en el cartel de pendientes de la misma pantalla—.
-  const asignadas = await leerAsignaciones();
-  if (asignadas.error) {
-    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
-  }
-  const fila = asignadas.mapa.get(campaignId);
-  if (fila && !visibles.has(fila.linea)) {
-    return res.status(403).json({ error: 'Esa campaña es de una marca que no ves.' });
-  }
+  const gate = await gateCampaña(res, perfil, campaignId);
+  if (!gate) return;
 
   const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
 
@@ -336,6 +285,114 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   // la miniatura de 64 px y sin una palabra de copy, y la pantalla tiene que poder decir por qué en
   // vez de dar a entender que los avisos no tienen texto.
   return res.status(200).json({ ok: true, dias, ads, sinCreativo: !ricoRes.ok ? mensajeError(ricoRes) : null });
+}
+
+/**
+ * «¿Podés mirar ESTA campaña?» — el gate que comparten los dos modos por campaña.
+ *
+ * El corte por marca no lo puede hacer la cuenta: las tres líneas salen de una sola cuenta
+ * publicitaria, así que "puede ver la cuenta" no alcanza para decidir. Una campaña **sin asignar no
+ * se corta** —se ve igual en el cartel de pendientes de la misma pantalla—, y por eso devuelve la
+ * fila (o `null`) en vez de un booleano: quien acciona necesita saber si la hay.
+ *
+ * Contesta él mismo el error y devuelve `null`; el llamador sólo tiene que cortar.
+ */
+async function gateCampaña(res, perfil, campaignId) {
+  if (!/^\d+$/.test(campaignId)) {
+    res.status(400).json({ error: 'campaña inválida' });
+    return null;
+  }
+  const marcas = marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']);
+  if (!marcas.length) {
+    res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
+    return null;
+  }
+  const visibles = new Set(marcas.flatMap((m) => lineasDeMarca(m)));
+
+  const asignadas = await leerAsignaciones();
+  if (asignadas.error) {
+    res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
+    return null;
+  }
+  const fila = asignadas.mapa.get(campaignId) || null;
+  if (fila && !visibles.has(fila.linea)) {
+    res.status(403).json({ error: 'Esa campaña es de una marca que no ves.' });
+    return null;
+  }
+  return { fila };
+}
+
+// ── Modo conjuntos: los adsets de UNA campaña, con su presupuesto ───────────────
+/**
+ * Para qué existe: **no había ni un dato de conjunto en todo el sistema.** Ni el censo ni el
+ * detalle traen adsets, y accionar a nivel conjunto —que es donde vive el presupuesto cuando la
+ * campaña no es CBO— necesita una lectura nueva.
+ *
+ * Es también el modo que contesta **si la campaña es CBO**: si la campaña tiene `daily_budget`
+ * propio, reparte sola entre sus conjuntos y el presupuesto de los conjuntos no se toca. Eso no se
+ * puede saber mirando el conjunto: hay que mirar al padre, y acá se mira una sola vez.
+ *
+ * A demanda al desplegar la fila, calcado de `?recurso=creativos` y por el mismo motivo: el censo
+ * lista más de 170 campañas y pedirle los conjuntos a todas de una tirada lo volvería inusable.
+ *
+ * ⚠️ Los presupuestos van CRUDOS, en la unidad menor de la moneda. Ver `factorMoneda()`.
+ */
+async function conjuntos(res, perfil, campaignId, diasPedidos) {
+  const gate = await gateCampaña(res, perfil, campaignId);
+  if (!gate) return;
+
+  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+
+  // El gasto es un enriquecimiento AISLADO, igual que en el censo: si falla, los conjuntos igual se
+  // listan con 0 y se los puede accionar, que es a lo que se vino.
+  const [campRes, setsRes, insRes] = await Promise.all([
+    graph(`${campaignId}?fields=id,name,daily_budget,lifetime_budget`),
+    insightsTodas(`${campaignId}/adsets?fields=id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal&limit=200`),
+    insightsTodas(`${campaignId}/insights?level=adset&fields=adset_id,spend,impressions,clicks,actions,action_values&date_preset=last_${dias}d&action_attribution_windows=${ATTR}&limit=200`),
+  ]);
+
+  if (!setsRes.ok) {
+    return res.status(502).json({ error: 'No se pudieron traer los conjuntos de la campaña', detalle: setsRes.error });
+  }
+
+  const insPorId = new Map();
+  if (insRes.ok) for (const r of insRes.rows) insPorId.set(String(r.adset_id), r);
+
+  const camp = (campRes.ok && campRes.data) || {};
+  const diarioCampaña = num(camp.daily_budget);
+
+  const filas = setsRes.rows.map((s) => {
+    const g = insPorId.get(String(s.id));
+    return {
+      id: String(s.id),
+      nombre: s.name || '(sin nombre)',
+      estado: s.effective_status || s.status || null,
+      diarioCrudo: s.daily_budget ? num(s.daily_budget) : 0,
+      totalCrudo: s.lifetime_budget ? num(s.lifetime_budget) : 0,
+      objetivo: s.optimization_goal || null,
+      spend: g ? num(g.spend) : 0,
+      impressions: g ? num(g.impressions) : 0,
+      clicks: g ? num(g.clicks) : 0,
+      purchases: g ? accion(g.actions, COMPRA) : 0,
+      revenue: g ? accion(g.action_values, COMPRA) : 0,
+    };
+  }).sort((a, b) => b.spend - a.spend);
+
+  return res.status(200).json({
+    ok: true,
+    dias,
+    // `cbo` con el nombre que usa Meta en su interfaz ("presupuesto de la campaña"), porque es el
+    // que va a leer quien tenga que ir a tocarlo allá.
+    cbo: diarioCampaña > 0,
+    campania: {
+      id: campaignId,
+      nombre: camp.name || '',
+      diarioCrudo: diarioCampaña,
+      totalCrudo: num(camp.lifetime_budget),
+    },
+    conjuntos: filas,
+    sinCampania: !campRes.ok ? mensajeError(campRes) : null,
+  });
 }
 
 /**
@@ -474,28 +531,8 @@ async function diagnosticoCuenta(c, probar) {
   return { ...fila, ...(await pruebaDeEscritura(id)) };
 }
 
-/**
- * Los mínimos de presupuesto de la cuenta, que la Tanda 1 necesita para validar antes de
- * mandarle a Meta un número que va a rechazar.
- *
- * Van en su propia llamada y no como campos de la cuenta porque **no son campos de la cuenta**:
- * `minimum_budgets` es un edge, y pedir `min_daily_budget_low_freq` en el `?fields=` de `act_<id>`
- * devuelve `(#100) Tried accessing nonexisting field` y anula la consulta ENTERA. Aislada, si
- * falla, el diagnóstico igual contesta lo importante (que es `user_tasks`).
- *
- * ⚠️ Los valores vienen en la UNIDAD MENOR de la moneda: en ARS (2 decimales) `150000` es $1.500,
- * no $150.000. Se devuelven crudos a propósito, para que la conversión sea una decisión visible y
- * no un `/100` perdido en el medio.
- */
-async function minimosDe(cuentaId, moneda) {
-  const r = await graph(`act_${cuentaId}/minimum_budgets?fields=currency,min_daily_budget_low_freq,min_daily_budget_high_freq`);
-  if (!r.ok) return { minimosMotivo: mensajeError(r) };
-  const filas = (r.data && r.data.data) || [];
-  // El edge devuelve una fila por moneda; la que importa es la de la cuenta.
-  const f = filas.find((x) => x.currency === moneda) || filas[0];
-  if (!f) return { minimosMotivo: 'Meta no devolvió mínimos para esta cuenta' };
-  return { minDiarioCrudo: num(f.min_daily_budget_low_freq), minDiarioAlto: num(f.min_daily_budget_high_freq) };
-}
+// `minimosDe` se mudó a `lib/meta-ads/graph.core.js`: la palanca de presupuesto lo necesita para
+// validar antes de mandarle a Meta un número que va a rechazar, y ese chequeo vive del otro lado.
 
 /**
  * La escritura idempotente: `POST /<campaign_id>` con el nombre que la campaña YA tiene.
@@ -509,51 +546,16 @@ async function pruebaDeEscritura(cuentaId) {
   const w = await graphPost(c0.id, { name: c0.name });
   if (w.ok) return { veredicto: 'escribe', prueba: { corrida: true, ok: true, campania: c0.name } };
 
-  const code = (w.error && w.error.code) ?? null;
+  const code = codigoError(w);
   // Los dos códigos que distinguen los candados. El resto se muestra crudo antes que adivinar.
   const veredicto = code === 200 ? 'sin-scope' : code === 272 ? 'sin-permiso-de-cuenta' : code === 190 ? 'token-invalido' : 'rechazo-desconocido';
   return { veredicto, prueba: { corrida: true, ok: false, codigo: code, campania: c0.name, detalle: mensajeError(w) } };
 }
 
-// ── Mutación: pausar o activar un anuncio ───────────────────────────────────────
-// Solo admin o quien tenga el sub-permiso `meta-ads.pausar` en alguna marca. Es una
-// escritura que afecta la entrega/gasto en vivo, pero reversible (se vuelve a activar).
-// El token debe tener scope ads_management; si es ads_read, Meta contesta con su error.
-function puedePausar(perfil) {
-  // Con `puedeSub` en vez de leer `acceso` a mano se respeta la excepción negativa
-  // (`'-meta-ads.pausar'`), que la versión anterior ignoraba: a alguien a quien se le había SACADO
-  // el permiso, el servidor igual lo dejaba pausar campañas.
-  return ['bdi', 'zattia'].some((marca) => puedeSub(perfil, marca, 'meta-ads', 'pausar'));
-}
-
-async function graphPost(path, params) {
-  const body = new URLSearchParams({ ...params, access_token: TOKEN });
-  try {
-    const r = await fetch(`${GRAPH}/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    const d = await r.json().catch(() => null);
-    if (r.ok) return { ok: true, data: d };
-    return { ok: false, status: r.status, error: d && d.error };
-  } catch (e) {
-    return { ok: false, status: 0, error: { message: String((e && e.message) || e) } };
-  }
-}
-
-async function accionAd(req, res, perfil) {
-  if (!puedePausar(perfil)) return res.status(403).json({ error: 'No tenés permiso para pausar o activar anuncios.' });
-  const b = req.body || {};
-  const adId = String(b.ad_id || '').trim();
-  const status = String(b.status || '').trim().toUpperCase();
-  if (!/^\d+$/.test(adId)) return res.status(400).json({ error: 'ad_id inválido' });
-  if (status !== 'ACTIVE' && status !== 'PAUSED') return res.status(400).json({ error: 'status inválido (ACTIVE o PAUSED)' });
-
-  const r = await graphPost(adId, { status });
-  if (!r.ok) return res.status(502).json({ error: 'Meta rechazó el cambio', detalle: mensajeError(r) });
-  return res.status(200).json({ ok: true, status });
-}
+// La mutación (pausar/activar, presupuesto) se mudó ENTERA a `api/_meta-acciones.js`. Lo que había
+// acá era un solo camino —pausar UN anuncio— con un gate que era un booleano global: `.some()`
+// sobre las dos marcas, sin mirar de quién era la campaña. Con las tres líneas en una sola cuenta
+// publicitaria eso alcanzaba para que alguien de una marca pausara la pauta de otra.
 
 /**
  * Nombre presentable de una cuenta publicitaria.
@@ -886,8 +888,5 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function mensajeError(r) {
-  const e = r && r.error;
-  const msg = (e && (e.error_user_msg || e.message)) || `HTTP ${r && r.status}`;
-  return String(msg).slice(0, 200);
-}
+// `mensajeError` (que prioriza `error_user_msg`, el texto que Meta escribe para una persona) se
+// mudó a `lib/meta-ads/graph.core.js` junto con el resto de la plomería.

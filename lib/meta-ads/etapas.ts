@@ -118,8 +118,13 @@ export function rotuloObjetivo(objetivo: string | null): string {
 /**
  * ¿Está al aire? `ACTIVE` **y** gasto > 0 — la definición vive en el core (la comparte el censo del
  * servidor, que con ella decide qué campañas sin marca se reclaman). Acá sólo se le ponen los tipos.
+ *
+ * Se exporta porque también decide **a qué campañas se les dibujan los botones de acción**. Con un
+ * `||` en vez del `&&` del core, la columna se llenaría con las publicaciones de Instagram
+ * promocionadas —Meta le arma una campaña a cada posteo y quedan `ACTIVE` para siempre sin entregar
+ * nada— y taparía las cinco que se llevan la plata.
  */
-const estaAlAire = estaAlAireJs as (c: CampañaEtapa) => boolean
+export const estaAlAire = estaAlAireJs as (c: CampañaEtapa) => boolean
 
 function etapaEfectiva(c: CampañaEtapa, overrides: Record<string, Etapa>): EtapaOSin {
   return overrides[c.id] || c.etapaAuto

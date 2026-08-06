@@ -139,11 +139,55 @@ export type CampañaEtapa = {
   etapaAuto: EtapaOSin
   /** `effective_status` de Meta (ACTIVE, PAUSED, …). Es lo que dice si está al aire de verdad. */
   estado: string | null
+  /**
+   * Presupuesto diario de la campaña, **en la unidad menor de la moneda** (en ARS, `1800000` es
+   * $18.000). Cero cuando no lo tiene a nivel campaña.
+   *
+   * Que sea > 0 significa además que la campaña es **CBO**: reparte sola entre sus conjuntos, y el
+   * presupuesto de los conjuntos no se puede tocar. Ver `factorMoneda()` en `acciones.core.js`.
+   */
+  diarioCrudo?: number
+  /** Presupuesto total (lifetime), crudo. Con esto puesto, el diario se muestra pero no se edita. */
+  totalCrudo?: number
   spend: number
   impressions: number
   clicks: number
   purchases: number
   revenue: number
+}
+
+/** Un conjunto de anuncios (adset) de una campaña, tal como lo devuelve `?recurso=conjuntos`. */
+export type ConjuntoMeta = {
+  id: string
+  nombre: string
+  /** `effective_status` de Meta. */
+  estado: string | null
+  /** Presupuesto diario, CRUDO (unidad menor de la moneda). Cero si no tiene propio. */
+  diarioCrudo: number
+  /** Presupuesto total, crudo. */
+  totalCrudo: number
+  /** Para qué optimiza el conjunto (OFFSITE_CONVERSIONS, LINK_CLICKS…). */
+  objetivo: string | null
+  spend: number
+  impressions: number
+  clicks: number
+  purchases: number
+  revenue: number
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=conjuntos&campania=<id>`. */
+export type RespuestaConjuntos = {
+  dias: number
+  /**
+   * La campaña tiene el presupuesto (lo que Meta llama «presupuesto de la campaña», CBO): reparte
+   * sola entre sus conjuntos y el de los conjuntos no se toca. Se decide mirando al PADRE, que es
+   * lo que no se puede saber mirando el conjunto.
+   */
+  cbo: boolean
+  campania: { id: string; nombre: string; diarioCrudo: number; totalCrudo: number }
+  conjuntos: ConjuntoMeta[]
+  /** Por qué no se pudo leer la campaña padre. Los conjuntos igual se listan. */
+  sinCampania: string | null
 }
 
 /** Cómo le va a una etapa dentro de una marca. */
@@ -212,8 +256,12 @@ export type AsignacionLinea = {
 export type RespuestaEtapas = {
   /** Ventana usada, en días (fija: ver `UMBRALES_ETAPA`). */
   dias: number
-  /** Las cuentas publicitarias del token que se consultaron. */
-  cuentas: { id: string; nombre: string }[]
+  /**
+   * Las cuentas publicitarias del token que se consultaron. `moneda` no es adorno: Meta maneja los
+   * presupuestos en la unidad MENOR de la moneda, así que sin ella no se pueden ni mostrar ni
+   * escribir. Ver `factorMoneda()` en `acciones.core.js`.
+   */
+  cuentas: { id: string; nombre: string; moneda?: string }[]
   /**
    * Las campañas repartidas por línea, **con sólo las líneas que el perfil puede ver**. Una línea
    * ausente de este objeto es una que no se tiene permiso de mirar, no una vacía.

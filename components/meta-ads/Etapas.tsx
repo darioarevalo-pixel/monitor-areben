@@ -26,14 +26,19 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSesion } from '@/components/SesionProvider'
 import { BotonAvisos, PanelAvisos, useAvisos, type Avisos } from '@/components/meta-ads/Avisos'
+import { PanelConjuntos, useConjuntos, type Conjuntos } from '@/components/meta-ads/Conjuntos'
+import {
+  BotonesAccion, ModalPresupuesto, useAccionMeta, type Acciones, type ObjetoMeta,
+} from '@/components/meta-ads/ConfirmAccion'
 import { TableroIdeas } from '@/components/meta-ads/TableroIdeas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { hoyIso, laQueAprieta, proximas, type EntradaCalendario } from '@/lib/calendario'
 import { leerCalendario } from '@/lib/calendario/persistencia'
 import { traerEtapas } from '@/lib/meta-ads/cliente'
+import { aMonto, permiteAccion, type ClaveAccion } from '@/lib/meta-ads/acciones'
 import {
-  diagnosticar, ETAPAS, ETIQUETA_ETAPA, mapaOverrides, overrideViejo, RESUMEN_ETAPA, rotuloObjetivo,
-  UMBRALES_ETAPA,
+  diagnosticar, estaAlAire, ETAPAS, ETIQUETA_ETAPA, mapaOverrides, overrideViejo, RESUMEN_ETAPA,
+  rotuloObjetivo, UMBRALES_ETAPA,
 } from '@/lib/meta-ads/etapas'
 import {
   asignarLinea, clasificarCampaña, desasignarLinea, desclasificarCampaña, leerIdeas, SUB_PAUTAR,
@@ -68,6 +73,9 @@ type Correccion = {
   onAsignar: (c: CampañaEtapa, linea: LineaPauta) => void
   onDesasignar: (c: CampañaEtapa) => void
 }
+
+/** Por qué una campaña que figura activa igual no ofrece botones. Ver `estaAlAire`. */
+const INERTE = 'Figura activa pero no entregó nada en la ventana: suele ser una publicación de Instagram promocionada, que Meta deja ACTIVE para siempre.'
 
 const nf = new Intl.NumberFormat('es-AR')
 const money = (v: number) => `$ ${nf.format(Math.round(v || 0))}`
@@ -232,6 +240,44 @@ export function Etapas() {
     onDesasignar: desasignar,
   }
 
+  // ── Accionar sobre la pauta ───────────────────────────────────────────────────────────────────
+  // Los conjuntos de una campaña, a demanda al desplegar la fila. Van acá arriba y no adentro de la
+  // tabla porque después de accionar sobre uno hay que volver a pedirlos.
+  const conjuntos = useConjuntos(dias)
+  const [presu, setPresu] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
+
+  // Recargar el censo Y los conjuntos abiertos de esa campaña: Meta devuelve el valor releído del
+  // objeto tocado, pero los subtotales por etapa, el diagnóstico y el reparto por marca salen del
+  // censo. Parchear una fila a mano dejaría todo lo demás mintiendo.
+  const recargarTrasAccion = useCallback(() => {
+    setPedido((p) => p + 1)
+    for (const id of conjuntos.abiertas) conjuntos.recargar(id)
+  }, [conjuntos])
+
+  const { enCurso, mandar, cambiarEstado } = useAccionMeta(recargarTrasAccion)
+
+  // La moneda de la cuenta que corre cada campaña. **No es un detalle**: Meta maneja los
+  // presupuestos en la unidad MENOR de la moneda, así que sin esto no se pueden ni mostrar ni
+  // escribir. Viene del censo, en el mismo `?fields=` que ya pedía el nombre de la cuenta.
+  const monedaDe = useCallback(
+    (cuentaId: string) => {
+      const e = !r || r.key !== key ? null : r.e
+      const c = e && e.fase === 'ok' ? e.data.cuentas.find((x) => x.id === cuentaId) : null
+      return c?.moneda || 'ARS'
+    },
+    [r, key],
+  )
+
+  // El permiso se pregunta por la LÍNEA de cada campaña, no por la marca de la sesión: en una misma
+  // tabla puede haber una campaña de BDI que esta persona acciona y una de Zattia que no. Es la
+  // misma función que usa el servidor para contestar 403, importada, no copiada.
+  const acciones: Acciones = useMemo(() => ({
+    puede: (accion: ClaveAccion, linea: LineaPauta | null) => !!linea && permiteAccion(perfil, accion, linea).ok,
+    enCurso,
+    onEstado: (o: ObjetoMeta, estadoActual: string | null) => { void cambiarEstado(o, estadoActual) },
+    onPresupuesto: (o: ObjetoMeta, diarioCrudo: number) => setPresu({ o, diarioCrudo }),
+  }), [perfil, enCurso, cambiarEstado])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
@@ -282,6 +328,23 @@ export function Etapas() {
           fecha={fecha}
           correccion={correccion}
           avisos={avisos}
+          palanca={{ acciones, conjuntos, monedaDe }}
+        />
+      )}
+
+      {presu && (
+        <ModalPresupuesto
+          o={presu.o}
+          diarioCrudo={presu.diarioCrudo}
+          guardando={enCurso === presu.o.id}
+          onCerrar={() => setPresu(null)}
+          onGuardar={async (nuevoCrudo, idem) => {
+            // `aMonto` y no un `/100`: el factor depende de la moneda de la cuenta y hardcodearlo es
+            // la trampa número uno de esta tanda.
+            const monto = money(aMonto(nuevoCrudo, presu.o.moneda))
+            const hecho = await mandar(presu.o, 'presupuesto', { daily_budget: nuevoCrudo }, idem, `Presupuesto diario en ${monto}.`)
+            if (hecho) setPresu(null)
+          }}
         />
       )}
 
@@ -414,7 +477,18 @@ function useFechas(marca: string): EntradaCalendario[] {
 
 const SIN_FECHAS: EntradaCalendario[] = []
 
-function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion, avisos }: {
+/**
+ * Lo que hace falta para accionar desde la tabla. Va junto y no como tres props sueltas porque las
+ * tres viajan siempre a la misma profundidad y las tres son inútiles por separado.
+ */
+type Palanca = {
+  acciones: Acciones
+  conjuntos: Conjuntos
+  /** La moneda de la cuenta que corre cada campaña: define la unidad menor con la que Meta escribe. */
+  monedaDe: (cuentaId: string) => string
+}
+
+function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correccion, avisos, palanca }: {
   d: RespuestaEtapas
   /** Ya vienen calculados de arriba, con los overrides puestos: el tablero necesita los mismos. */
   diagPorLinea: Partial<Record<LineaPauta, Diagnostico>> | null
@@ -424,6 +498,7 @@ function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correc
   fecha: EntradaCalendario | null
   correccion: Correccion
   avisos: Avisos
+  palanca: Palanca
 }) {
   const pendientes = d.sinAsignar
   return (
@@ -450,7 +525,7 @@ function Contenido({ d, diagPorLinea, diag, lineaAbierta, onAbrir, fecha, correc
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: space[3] }}>
             {diag.etapas.map((e) => <TarjetaEtapa key={e.etapa} e={e} gastoTotal={diag.gastoTotal} />)}
           </div>
-          <Pautas diag={diag} correccion={correccion} avisos={avisos} />
+          <Pautas diag={diag} correccion={correccion} avisos={avisos} palanca={palanca} />
         </>
       )}
     </>
@@ -732,7 +807,12 @@ function TarjetaEtapa({ e, gastoTotal }: { e: ResumenEtapa; gastoTotal: number }
   )
 }
 
-function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: Correccion; avisos: Avisos }) {
+function Pautas({ diag, correccion, avisos, palanca }: {
+  diag: Diagnostico
+  correccion: Correccion
+  avisos: Avisos
+  palanca: Palanca
+}) {
   const [verSinEntrega, setVerSinEntrega] = useState(false)
   const [verSinClasificar, setVerSinClasificar] = useState(false)
   const sinEntrega = diag.etapas.flatMap((e) => e.sinEntrega)
@@ -750,7 +830,7 @@ function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: C
           {e.alAire.length === 0 ? (
             <div style={{ fontSize: font.base, color: color.mut2, fontStyle: 'italic' }}>Ninguna.</div>
           ) : (
-            <TablaCampañas filas={e.alAire} correccion={correccion} avisos={avisos} />
+            <TablaCampañas filas={e.alAire} correccion={correccion} avisos={avisos} palanca={palanca} />
           )}
         </div>
       ))}
@@ -762,7 +842,7 @@ function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: C
           titulo={`${sinEntrega.length} activa${sinEntrega.length === 1 ? '' : 's'} sin entrega`}
           ayuda="Están en ACTIVE pero no gastaron en la ventana: suele ser presupuesto en cero o todos los conjuntos pausados."
         >
-          <TablaCampañas filas={sinEntrega} correccion={correccion} avisos={avisos} />
+          <TablaCampañas filas={sinEntrega} correccion={correccion} avisos={avisos} palanca={palanca} />
         </Plegable>
       )}
 
@@ -773,7 +853,7 @@ function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: C
           titulo={`${diag.sinClasificar.length} sin clasificar`}
           ayuda="Su objetivo en Meta no cae en ninguna etapa conocida, así que no se reparten a ninguna: asignarlas por descarte inventaría el diagnóstico. Corregirlas a mano las devuelve al reparto."
         >
-          <TablaCampañas filas={diag.sinClasificar} correccion={correccion} avisos={avisos} />
+          <TablaCampañas filas={diag.sinClasificar} correccion={correccion} avisos={avisos} palanca={palanca} />
         </Plegable>
       )}
     </SectionCard>
@@ -785,16 +865,23 @@ function Pautas({ diag, correccion, avisos }: { diag: Diagnostico; correccion: C
  * `components/meta-ads/Avisos.tsx`): un nombre de campaña no se parece en nada al aviso, y esta
  * pantalla existe para que alguien piense la pieza que falta mirando las que ya salieron.
  */
-function TablaCampañas({ filas, correccion, avisos }: {
+function TablaCampañas({ filas, correccion, avisos, palanca }: {
   filas: CampañaEtapa[]
   correccion: Correccion
   avisos: Avisos
+  palanca: Palanca
 }) {
   // La columna de correcciones aparece si hay algo que mostrar o alguien que pueda tocarla. Quien
   // no puede corregir tampoco tiene por qué cargar con una columna vacía.
   const hayOverride = filas.some((c) => correccion.porCampaña[c.id])
   const columna = correccion.puedePautar || hayOverride
-  const anchoTotal = 5 + (columna ? 2 : 0)
+  // Ídem con las acciones: se pregunta por la LÍNEA de cada campaña de esta tabla, no por la marca
+  // de la sesión. Si esta persona no puede accionar en ninguna de las que ve, la columna no va.
+  const hayAcciones = filas.some((c) => {
+    const linea = correccion.lineaPorCampaña[c.id]?.linea ?? null
+    return palanca.acciones.puede('estado', linea) || palanca.acciones.puede('presupuesto', linea)
+  })
+  const anchoTotal = 5 + (columna ? 2 : 0) + (hayAcciones ? 1 : 0)
 
   return (
     <TableWrap>
@@ -802,16 +889,23 @@ function TablaCampañas({ filas, correccion, avisos }: {
         <Tr>
           <Th>Campaña</Th>
           <Th>Objetivo en Meta</Th>
+          <Th align="right">Diario</Th>
           <Th align="right">Gasto</Th>
           <Th align="right">Compras</Th>
           <Th>Estado</Th>
           {columna && <Th>Etapa</Th>}
           {columna && <Th>Marca</Th>}
+          {hayAcciones && <Th>Acciones</Th>}
         </Tr>
       </THead>
       <TBody>
         {filas.map((c) => {
           const abierta = avisos.abiertas.has(c.id)
+          const conjuntosAbiertos = palanca.conjuntos.abiertas.has(c.id)
+          const linea = correccion.lineaPorCampaña[c.id]?.linea ?? null
+          const moneda = palanca.monedaDe(c.cuentaId)
+          const objeto: ObjetoMeta = { nivel: 'campania', id: c.id, nombre: c.nombre, linea, moneda }
+          const diarioCrudo = c.diarioCrudo ?? 0
           return (
             <Fragment key={c.id}>
               <Tr>
@@ -819,16 +913,52 @@ function TablaCampañas({ filas, correccion, avisos }: {
                   <BotonAvisos nombre={c.nombre} abierta={abierta} onToggle={() => avisos.alternar(c.id)} />
                 </Td>
                 <Td>{rotuloObjetivo(c.objetivo)}</Td>
+                <Td align="right"><CeldaDiario c={c} moneda={moneda} /></Td>
                 <Td align="right">{money(c.spend)}</Td>
                 <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
                 <Td><EstadoPill s={c.estado} /></Td>
                 {columna && <Td><CeldaEtapa c={c} correccion={correccion} /></Td>}
                 {columna && <Td><CeldaLinea c={c} correccion={correccion} /></Td>}
+                {hayAcciones && (
+                  <Td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: space[1], alignItems: 'flex-start' }}>
+                      <BotonesAccion
+                        objeto={objeto}
+                        estado={c.estado}
+                        diarioCrudo={diarioCrudo}
+                        // Sin diario propio, el presupuesto vive en los conjuntos: el botón de acá
+                        // no tendría qué tocar y el de la fila de cada conjunto sí.
+                        sinPresupuesto={diarioCrudo <= 0}
+                        // 🔴 `estaAlAire` IMPORTADA (`ACTIVE` **y** gasto > 0), no un `||`. Con un
+                        // `||`, las 171 publicaciones de Instagram promocionadas —que Meta deja
+                        // ACTIVE para siempre y hace meses que no entregan— se llenarían de botones
+                        // y taparían las cinco campañas que se llevan la plata.
+                        inerte={estaAlAire(c) ? null : INERTE}
+                        acciones={palanca.acciones}
+                      />
+                      <Button size="sm" variant="ghost" onClick={() => palanca.conjuntos.alternar(c.id)}>
+                        {conjuntosAbiertos ? '▾ Conjuntos' : '▸ Conjuntos'}
+                      </Button>
+                    </div>
+                  </Td>
+                )}
               </Tr>
               {abierta && (
                 <Tr>
                   <Td colSpan={anchoTotal} wrap style={{ padding: 0, background: color.bg2 }}>
                     <PanelAvisos estado={avisos.dato(c.id)} />
+                  </Td>
+                </Tr>
+              )}
+              {conjuntosAbiertos && (
+                <Tr>
+                  <Td colSpan={anchoTotal} wrap style={{ padding: 0, background: color.bg2 }}>
+                    <PanelConjuntos
+                      estado={palanca.conjuntos.dato(c.id)}
+                      moneda={moneda}
+                      linea={linea}
+                      acciones={palanca.acciones}
+                    />
                   </Td>
                 </Tr>
               )}
@@ -838,6 +968,32 @@ function TablaCampañas({ filas, correccion, avisos }: {
       </TBody>
     </TableWrap>
   )
+}
+
+/**
+ * El presupuesto diario de la campaña.
+ *
+ * Tres estados distintos que **no** son intercambiables, y por eso ninguno se dibuja como «$0»:
+ *  - un diario propio ⇒ la campaña es CBO y reparte sola entre sus conjuntos;
+ *  - un presupuesto total (lifetime) ⇒ se muestra y no se edita desde acá;
+ *  - nada ⇒ el presupuesto vive en los conjuntos, y ahí se toca.
+ */
+function CeldaDiario({ c, moneda }: { c: CampañaEtapa; moneda: string }) {
+  if (c.diarioCrudo) {
+    return (
+      <span title="Presupuesto a nivel campaña: Meta lo reparte solo entre los conjuntos">
+        {money(aMonto(c.diarioCrudo, moneda))}
+      </span>
+    )
+  }
+  if (c.totalCrudo) {
+    return (
+      <span style={{ color: color.mut2, fontSize: font.xs }} title="Presupuesto total: se muestra pero no se edita desde acá">
+        total {money(aMonto(c.totalCrudo, moneda))}
+      </span>
+    )
+  }
+  return <span style={{ color: color.mut2, fontSize: font.xs }} title="El presupuesto está en los conjuntos">en conjuntos</span>
 }
 
 /**

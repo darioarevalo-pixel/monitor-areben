@@ -8,8 +8,10 @@
  */
 
 import { apiFetch } from '../api-fetch'
+import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type {
-  DetalleCuenta, PresetMetaAds, RespuestaCreativos, RespuestaDiagnostico, RespuestaEtapas, RespuestaOverview,
+  DetalleCuenta, PresetMetaAds, RespuestaConjuntos, RespuestaCreativos, RespuestaDiagnostico,
+  RespuestaEtapas, RespuestaOverview,
 } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
@@ -109,29 +111,79 @@ export function traerDiagnostico(probar = false): Promise<Lectura<RespuestaDiagn
 }
 
 /**
- * Pausa o activa un anuncio (POST, escribe en Meta). Requiere token con
- * ads_management y permiso (admin o `meta-ads.pausar`). Devuelve el nuevo status
- * o el motivo del fallo (incluye el detalle real de Meta si lo hay).
+ * Los conjuntos de UNA campaña, con su presupuesto, su estado y su gasto.
+ *
+ * A demanda al desplegar la fila, igual que los creativos: el censo lista más de 170 campañas.
+ * Es también el modo que dice si la campaña es **CBO** —si tiene el presupuesto a nivel campaña—,
+ * que es lo único que no se puede saber mirando el conjunto.
  */
-export async function pausarAnuncio(adId: string, status: 'ACTIVE' | 'PAUSED'): Promise<Lectura<{ status: string }>> {
+export function traerConjuntos(campaignId: string, dias?: number): Promise<Lectura<RespuestaConjuntos>> {
+  const qs = new URLSearchParams({ recurso: 'conjuntos', campania: campaignId })
+  if (dias) qs.set('dias', String(dias))
+  return pedir<RespuestaConjuntos>(qs)
+}
+
+/**
+ * **Escribe en Meta.** El único camino de escritura del monitor: pausar/activar y cambiar el
+ * presupuesto, a nivel campaña, conjunto o aviso.
+ *
+ * Lo que se manda es sólo la intención; el servidor lee el objeto, verifica el nivel, resuelve de
+ * qué marca es la campaña, chequea el permiso EN ESA MARCA y recién ahí escribe —y después relee
+ * para confirmar que quedó puesto—. Ver `api/_meta-acciones.js`.
+ *
+ * El `idem` va en el pedido y lo genera la pantalla **al apretar el botón** (`nuevoIdem()`): es lo
+ * que hace que un doble clic no se convierta en dos escrituras.
+ *
+ * `sinLinea` en la respuesta de error distingue el 409 de «esta campaña no tiene marca» de
+ * cualquier otro rechazo: es el único que se arregla asignándola, y por eso la pantalla le pone un
+ * botón en vez de un cartel rojo.
+ */
+export type FalloAccion = { ok: false; motivo: string; sinLinea?: boolean; campaignId?: string }
+
+export async function accionarMeta(pedido: PedidoAccion): Promise<{ ok: true; dato: ResultadoAccion } | FalloAccion> {
   try {
     const r = await apiFetch('/api/meta-ads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ad_id: adId, status }),
+      body: JSON.stringify(pedido),
     })
-    let d: { ok?: boolean; status?: string; error?: unknown; detalle?: unknown } | null = null
+    let d: (Partial<ResultadoAccion> & { ok?: boolean; error?: unknown; detalle?: unknown; sinLinea?: boolean; campaignId?: string }) | null = null
     try {
       d = await r.json()
     } catch {
       return { ok: false, motivo: `respuesta no-JSON (HTTP ${r.status})` }
     }
     if (!r.ok || !d || d.ok !== true) {
+      // `detalle` trae el mensaje REAL de Meta (`error_user_msg` cuando lo hay). El error de arriba
+      // es el nuestro, en castellano; el de abajo es el que sirve para entender qué pasó allá.
       const extra = d?.detalle ? ` — ${String(d.detalle).slice(0, 200)}` : ''
-      return { ok: false, motivo: `HTTP ${r.status}: ${String(d?.error ?? '').slice(0, 150)}${extra}` }
+      return {
+        ok: false,
+        motivo: `${String(d?.error ?? `HTTP ${r.status}`).slice(0, 200)}${extra}`,
+        sinLinea: d?.sinLinea,
+        campaignId: d?.campaignId,
+      }
     }
-    return { ok: true, dato: { status: String(d.status || status) } }
+    return { ok: true, dato: d as ResultadoAccion }
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/**
+ * Pausa o activa un anuncio. Envoltorio de `accionarMeta` para no tocar al llamador del Resumen.
+ *
+ * ⚠️ Ya **no** es un camino propio: el gate viejo era un booleano global (`.some()` sobre las dos
+ * marcas, sin mirar de quién era la campaña) y con las tres líneas en una sola cuenta eso alcanzaba
+ * para que alguien de una marca pausara la pauta de otra. Ahora pasa por el mismo guard que el
+ * resto, incluido el 409 de «esta campaña todavía no tiene marca».
+ */
+export async function pausarAnuncio(
+  adId: string,
+  status: 'ACTIVE' | 'PAUSED',
+  idem: string,
+): Promise<Lectura<{ status: string }>> {
+  const r = await accionarMeta({ accion: 'estado', nivel: 'aviso', objetoId: adId, campos: { status }, idem })
+  if (!r.ok) return { ok: false, motivo: r.motivo }
+  return { ok: true, dato: { status: String(r.dato.quedo?.status ?? status) } }
 }
