@@ -21,6 +21,7 @@ import {
   ETIQUETA_NIVEL as ETIQUETA_NIVEL_JS,
   factorMoneda as factorMonedaJs,
   fotoDe as fotoDeJs,
+  LARGO_NOMBRE as LARGO_NOMBRE_JS,
   lineasQuePuede as lineasQuePuedeJs,
   MARCAS_META as MARCAS_META_JS,
   NIVELES as NIVELES_JS,
@@ -36,8 +37,8 @@ import {
 /** Los tres niveles de la jerarquía de Meta. */
 export type NivelAccion = 'campania' | 'conjunto' | 'aviso'
 
-/** Las acciones que existen. La Tanda 3 suma `crear` a la misma tabla. */
-export type ClaveAccion = 'estado' | 'presupuesto' | 'duplicar'
+/** Las acciones que existen. Crear desde cero sumaría `crear` a la misma tabla. */
+export type ClaveAccion = 'estado' | 'presupuesto' | 'nombre' | 'duplicar'
 
 export type DefAccion = {
   /** El sub-permiso que la habilita (`meta-ads.<sub>`). */
@@ -101,6 +102,8 @@ export const ETIQUETA_NIVEL = ETIQUETA_NIVEL_JS as Record<NivelAccion, string>
 export const CAMPOS_LECTURA = CAMPOS_LECTURA_JS as Record<NivelAccion, string>
 export const MARCAS_META = MARCAS_META_JS as string[]
 export const SIN_LINEA = SIN_LINEA_JS as string
+/** El tope de largo de un nombre. Es nuestro, no de Meta: ver el comentario en el core. */
+export const LARGO_NOMBRE = LARGO_NOMBRE_JS as number
 
 export const lineasQuePuede = lineasQuePuedeJs as (perfil: Perfil | null, sub: string) => LineaPauta[]
 export const permiteAccion = permiteAccionJs as (perfil: Perfil | null, accion: string, linea: LineaPauta) => Veredicto

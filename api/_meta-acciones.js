@@ -178,6 +178,14 @@ export default async function accionar(req, res, perfil) {
     }, { ...contexto, de, a, uso: escrito.uso || null });
   }
 
+  // Renombrar una campaña deja desactualizado el nombre que guarda `meta_ads_campania_linea`, que es
+  // el que muestran la auditoría y el historial de la asignación. No es cosmético: leer «renombró
+  // Ventas mayo» debajo de una fila que ya se llama distinto es lo que hace dudar del registro. Va
+  // best-effort y con el nombre RELEÍDO: si falla, Meta ya quedó bien y eso es lo que vale.
+  if (accion === 'nombre' && nivel === 'campania') {
+    await renombrarLinea(campaignId, String(despues.name || ''));
+  }
+
   // ── 10. Cerrar la fila con lo RELEÍDO, no con lo pedido ─────────────────────────────────────
   return cerrar(200, 'ok', {
     ok: true,
@@ -349,6 +357,26 @@ async function heredarLinea({ campaignId, linea, cuentaId, nombre, objetivo, qui
       por: quien,
       updated_at: new Date().toISOString(),
     }], { onConflict: 'campaign_id' });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Deja el nombre de la campaña al día en `meta_ads_campania_linea`. Es una copia denormalizada —el
+ * nombre que manda es el de Meta— y por eso su falla no tumba nada: se actualiza si se puede.
+ *
+ * ⚠️ `update` y no `upsert`: si la campaña no tiene fila de línea, acá no se llega nunca (el 409 de
+ * `SIN_LINEA` corta mucho antes), así que un `upsert` sólo podría crear una fila sin línea.
+ */
+async function renombrarLinea(campaignId, nombre) {
+  const sb = clienteBdi();
+  if (!sb || !campaignId || !nombre) return { ok: false };
+  try {
+    const { error } = await sb.from('meta_ads_campania_linea')
+      .update({ nombre, updated_at: new Date().toISOString() })
+      .eq('campaign_id', campaignId);
     return { ok: !error };
   } catch {
     return { ok: false };

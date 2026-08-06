@@ -188,6 +188,42 @@ describe('presupuesto', () => {
   })
 })
 
+describe('renombrar', () => {
+  const renombre = (o: Partial<FilaAuditoria> = {}) => fila({
+    accion: 'nombre',
+    de: { name: 'VENTAS - STUNNED - 5/8' },
+    a: { name: 'VENTAS - STUNNED - AGOSTO' },
+    pedido: { name: 'VENTAS - STUNNED - AGOSTO' },
+    ...o,
+  })
+
+  it('🔑 guarda el nombre VIEJO, que después ya no existe en ninguna otra parte', () => {
+    // En Meta el nombre anterior se pierde en el momento de escribir. Si la fila no lo guarda, nadie
+    // puede saber después qué campaña era la que se llamaba así.
+    const c = contar(renombre(), 'ARS')
+    expect(c.clase).toBe('nombre')
+    if (c.clase !== 'nombre') throw new Error('clase')
+    expect(c.titulo).toBe('Renombró la campaña')
+    expect(c.desde).toBe('VENTAS - STUNNED - 5/8')
+    expect(c.hasta).toBe('VENTAS - STUNNED - AGOSTO')
+    expect(c.sinDato).toBe(false)
+  })
+
+  it('un rechazo igual dice qué nombre se quiso poner: sale de `pedido`, no de `a`', () => {
+    const c = contar(renombre({ resultado: 'rechazado', a: null }), 'ARS')
+    if (c.clase !== 'nombre') throw new Error('clase')
+    expect(c.titulo).toBe('Intentó renombrar la campaña')
+    expect(c.hasta).toBe('VENTAS - STUNNED - AGOSTO')
+    expect(c.sinDato).toBe(false)
+  })
+
+  it('sin `pedido` ni `a` no se le inventa la intención a nadie', () => {
+    const c = contar(renombre({ resultado: 'rechazado', a: null, pedido: null }), 'ARS')
+    if (c.clase !== 'nombre') throw new Error('clase')
+    expect(c.sinDato).toBe(true)
+  })
+})
+
 describe('duplicar', () => {
   it('cuenta la copia por su NOMBRE, que es con lo que se la encuentra después', () => {
     const c = contar(fila({

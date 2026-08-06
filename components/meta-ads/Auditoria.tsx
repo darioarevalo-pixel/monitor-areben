@@ -323,6 +323,18 @@ function Cambio({ c, moneda }: { c: Contada; moneda: string | null }) {
     )
   }
 
+  if (c.clase === 'nombre') {
+    if (c.sinDato) return <SinDato />
+    return (
+      <div style={{ display: 'flex', gap: space[1], alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+        {/* El nombre viejo va entero y no recortado: es el único lugar donde sigue existiendo. */}
+        {c.desde && <span style={caja}>{c.desde}</span>}
+        {c.desde && <span style={{ color: color.mut2, fontSize: font.xs }}>→</span>}
+        <span style={{ ...caja, fontWeight: 600 }}>{c.hasta}</span>
+      </div>
+    )
+  }
+
   if (c.clase === 'duplicar') {
     // Lo que importa de una copia es CÓMO SE LLAMA: es lo único con lo que se la encuentra después,
     // tanto acá como en Ads Manager.

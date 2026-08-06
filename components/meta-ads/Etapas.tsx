@@ -28,7 +28,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { BotonAvisos, PanelAvisos, useAvisos, type Avisos } from '@/components/meta-ads/Avisos'
 import { PanelConjuntos, useConjuntos, type Conjuntos } from '@/components/meta-ads/Conjuntos'
 import {
-  BotonesAccion, ModalPresupuesto, useAccionMeta, type Acciones, type ObjetoMeta,
+  BotonesAccion, ModalDuplicar, ModalNombre, ModalPresupuesto, useAccionMeta, type Acciones, type ObjetoMeta,
 } from '@/components/meta-ads/ConfirmAccion'
 import { TableroIdeas } from '@/components/meta-ads/TableroIdeas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -245,6 +245,8 @@ export function Etapas() {
   // tabla porque después de accionar sobre uno hay que volver a pedirlos.
   const conjuntos = useConjuntos(dias)
   const [presu, setPresu] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
+  const [dup, setDup] = useState<{ o: ObjetoMeta; diarioCrudo: number; sinPresupuesto: boolean } | null>(null)
+  const [ren, setRen] = useState<ObjetoMeta | null>(null)
 
   // Recargar el censo, LAS ASIGNACIONES y los conjuntos abiertos: Meta devuelve el valor releído del
   // objeto tocado, pero los subtotales por etapa, el diagnóstico y el reparto por marca salen del
@@ -263,7 +265,7 @@ export function Etapas() {
     for (const id of conjuntos.abiertas) conjuntos.recargar(id)
   }, [conjuntos, recargarFunnelRef])
 
-  const { enCurso, mandar, cambiarEstado, duplicarObjeto } = useAccionMeta(recargarTrasAccion)
+  const { enCurso, mandar, cambiarEstado, duplicarYAjustar } = useAccionMeta(recargarTrasAccion)
 
   // La moneda de la cuenta que corre cada campaña. **No es un detalle**: Meta maneja los
   // presupuestos en la unidad MENOR de la moneda, así que sin esto no se pueden ni mostrar ni
@@ -294,8 +296,9 @@ export function Etapas() {
     enCurso,
     onEstado: (o: ObjetoMeta, estadoActual: string | null) => { void cambiarEstado(o, estadoActual) },
     onPresupuesto: (o: ObjetoMeta, diarioCrudo: number) => setPresu({ o, diarioCrudo }),
-    onDuplicar: (o: ObjetoMeta) => { void duplicarObjeto(o) },
-  }), [perfil, enCurso, cambiarEstado, duplicarObjeto])
+    onNombre: (o: ObjetoMeta) => setRen(o),
+    onDuplicar: (o: ObjetoMeta, diarioCrudo: number, sinPresupuesto: boolean) => setDup({ o, diarioCrudo, sinPresupuesto }),
+  }), [perfil, enCurso, cambiarEstado])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -363,6 +366,32 @@ export function Etapas() {
             const monto = money(aMonto(nuevoCrudo, presu.o.moneda))
             const hecho = await mandar(presu.o, 'presupuesto', { daily_budget: nuevoCrudo }, idem, `Presupuesto diario en ${monto}.`)
             if (hecho) setPresu(null)
+          }}
+        />
+      )}
+
+      {ren && (
+        <ModalNombre
+          o={ren}
+          guardando={enCurso === ren.id}
+          onCerrar={() => setRen(null)}
+          onGuardar={async (nombre, idem) => {
+            const hecho = await mandar(ren, 'nombre', { name: nombre }, idem, `Ahora se llama «${nombre}».`)
+            if (hecho) setRen(null)
+          }}
+        />
+      )}
+
+      {dup && (
+        <ModalDuplicar
+          o={dup.o}
+          diarioCrudo={dup.diarioCrudo}
+          sinPresupuesto={dup.sinPresupuesto}
+          trabajando={enCurso === dup.o.id}
+          onCerrar={() => setDup(null)}
+          onDuplicar={async (ajustes) => {
+            const hecho = await duplicarYAjustar(dup.o, ajustes)
+            if (hecho) setDup(null)
           }}
         />
       )}
@@ -925,6 +954,7 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
     return palanca.acciones.puede('estado', linea)
       || palanca.acciones.puede('presupuesto', linea)
       || palanca.acciones.puede('duplicar', linea)
+      || palanca.acciones.puede('nombre', linea)
   })
   const anchoTotal = 5 + (columna ? 2 : 0) + (hayAcciones ? 1 : 0)
 

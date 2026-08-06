@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   ACCIONES, aCrudo, accionesQuePuede, aMonto, CAMPOS_LECTURA, CLAVES_ACCION, factorMoneda, fotoDe,
-  lineasQuePuede, NIVELES, nivelReal, permiteAccion, quedoPuesto, revisarPresupuesto, validarPedido,
-  validarValores,
+  LARGO_NOMBRE, lineasQuePuede, NIVELES, nivelReal, permiteAccion, quedoPuesto, revisarPresupuesto,
+  validarPedido, validarValores,
 } from '@/lib/meta-ads/acciones'
 import type { Perfil } from '@/lib/permisos'
 
@@ -64,6 +64,76 @@ describe('duplicar (Tanda 2)', () => {
     // Y no arrastra las otras: tener `crear` no da pausar ni presupuesto.
     expect(permiteAccion(conCrear, 'estado', 'bdi').ok).toBe(false)
     expect(permiteAccion(conCrear, 'presupuesto', 'bdi').ok).toBe(false)
+  })
+})
+
+describe('renombrar: el segundo paso de «duplicar y ajustar»', () => {
+  const pedido = { accion: 'nombre', nivel: 'campania', objetoId: '123', campos: { name: 'VENTAS - BDI - AGO' }, idem: 'abcdefgh' }
+
+  it('SÍ es reintentable, al revés que duplicar', () => {
+    // Poner un nombre ABSOLUTO se puede repetir: el segundo intento deja lo mismo que el primero.
+    // Duplicar no, porque un reintento hace dos campañas. Por eso vive en la tabla y no en el
+    // criterio de quien escribe el handler.
+    expect(ACCIONES.nombre.reintentable).toBe(true)
+    expect(ACCIONES.duplicar.reintentable).toBe(false)
+  })
+
+  it('sólo acepta `name`: nada de colar un `status` en el mismo pedido', () => {
+    expect(validarPedido(pedido).ok).toBe(true)
+    const v = validarPedido({ ...pedido, campos: { name: 'X', status: 'ACTIVE' } })
+    expect(v.ok).toBe(false)
+    if (v.ok) throw new Error('debería rechazar')
+    expect(v.status).toBe(400)
+  })
+
+  it('va en los tres niveles: un aviso mal nombrado es tan ilegible como una campaña', () => {
+    for (const nivel of NIVELES) expect(validarPedido({ ...pedido, nivel }).ok).toBe(true)
+  })
+
+  it('un nombre vacío —o todo espacios— no es un nombre', () => {
+    for (const name of ['', '   ', '\t']) {
+      const v = validarPedido({ ...pedido, campos: { name } })
+      expect(v.ok).toBe(false)
+      if (v.ok) throw new Error('debería rechazar')
+      expect(v.status).toBe(400)
+    }
+  })
+
+  it('🔴 un nombre en dos renglones no pasa: rompe el buscador de Ads Manager', () => {
+    // El nombre es lo único con lo que después se encuentra la campaña allá. Un `\n` la vuelve
+    // imposible de buscar justo cuando hace falta —por ejemplo, para hallar una copia—.
+    expect(validarPedido({ ...pedido, campos: { name: 'VENTAS\nBDI' } }).ok).toBe(false)
+  })
+
+  it('hay un tope de largo, y es nuestro', () => {
+    expect(validarPedido({ ...pedido, campos: { name: 'x'.repeat(LARGO_NOMBRE) } }).ok).toBe(true)
+    expect(validarPedido({ ...pedido, campos: { name: 'x'.repeat(LARGO_NOMBRE + 1) } }).ok).toBe(false)
+  })
+
+  it('🔑 lo que sale del validador va RECORTADO, y es lo que se manda y lo que se audita', () => {
+    // Meta recorta los espacios de los extremos al guardar. Sin este `trim`, la relectura no
+    // coincidiría con lo pedido y la respuesta diría «Meta aceptó el cambio pero no lo aplicó»,
+    // que es exactamente lo contrario de lo que pasó.
+    const v = validarPedido({ ...pedido, campos: { name: '  VENTAS - BDI - AGO  ' } })
+    expect(v.ok).toBe(true)
+    if (!v.ok) throw new Error('debería pasar')
+    expect(v.campos).toEqual({ name: 'VENTAS - BDI - AGO' })
+  })
+
+  it('y la comparación de la relectura recorta de los dos lados', () => {
+    expect(quedoPuesto({ name: 'Ventas ago' }, { name: 'Ventas ago' }).ok).toBe(true)
+    expect(quedoPuesto({ name: 'Ventas ago' }, { name: '  Ventas ago  ' }).ok).toBe(true)
+    expect(quedoPuesto({ name: 'Ventas ago' }, { name: 'Ventas jul' }).ok).toBe(false)
+  })
+
+  it('lo habilita el mismo sub que duplicar, porque es la otra mitad de la misma operación', () => {
+    // Un sub propio serían dos tildes más por persona y por marca para habilitar la mitad de
+    // «duplicar y ajustar»: quien puede duplicar tiene que poder terminarlo.
+    expect(ACCIONES.nombre.sub).toBe(ACCIONES.duplicar.sub)
+    const conCrear = perfil({ acceso: { bdi: { 'meta-ads': true, 'meta-ads.crear': true } } })
+    const soloPausar = perfil({ acceso: { bdi: { 'meta-ads': true, 'meta-ads.pausar': true } } })
+    expect(permiteAccion(conCrear, 'nombre', 'bdi').ok).toBe(true)
+    expect(permiteAccion(soloPausar, 'nombre', 'bdi').ok).toBe(false)
   })
 })
 

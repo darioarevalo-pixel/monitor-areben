@@ -563,7 +563,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "meta-ads",
     "area": "marketing",
     "label": "Meta Ads",
-    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Desde Etapas también se acciona sobre la pauta —pausar, reactivar y cambiar el presupuesto diario—, con permisos aparte y registro de quién lo hizo.",
+    "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Desde Etapas también se acciona sobre la pauta —pausar, reactivar, cambiar el presupuesto diario, renombrar y duplicar ajustando la copia—, con permisos aparte y registro de quién lo hizo.",
     "brands": [
       "bdi",
       "zattia"
@@ -582,7 +582,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "crear",
         "label": "Puede duplicar y crear campañas",
-        "info": "Duplica una campaña o un conjunto que ya existe, con sus conjuntos y avisos. La copia nace SIEMPRE pausada y con la marca del original, así que no gasta hasta que alguien la prenda a mano. Va aparte de pausar y de presupuesto porque crea objetos nuevos en la cuenta: lo que hace no se deshace apretando otra vez, hay que ir a borrarlos. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+        "info": "Duplica una campaña o un conjunto que ya existe, con sus conjuntos y avisos, y le pone a la copia el nombre y el presupuesto diario que se le digan. La copia nace SIEMPRE pausada y con la marca del original, así que no gasta hasta que alguien la prenda a mano. Habilita además renombrar cualquier campaña, conjunto o aviso, que es la otra mitad de la misma operación. Va aparte de pausar y de presupuesto porque crea objetos nuevos en la cuenta: lo que hace no se deshace apretando otra vez, hay que ir a borrarlos. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       },
       {
         "key": "pautar",

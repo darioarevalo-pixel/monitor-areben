@@ -116,6 +116,14 @@ export type Contada =
       sinDato: boolean
     }
   | {
+      clase: 'nombre'
+      titulo: string
+      /** Cómo se llamaba antes. `null` si no se llegó a leer el objeto. */
+      desde: string | null
+      hasta: string | null
+      sinDato: boolean
+    }
+  | {
       clase: 'duplicar'
       titulo: string
       /** El nombre de la copia que quedó en Meta. `null` si no llegó a crearse. */
@@ -206,6 +214,22 @@ export function contar(f: FilaAuditoria, moneda: string | null): Contada {
     return { clase: 'presupuesto', titulo, desde, hasta, variacion, crudo: moneda === null, sinDato: false }
   }
 
+  if (f.accion === 'nombre') {
+    // El nombre viejo sale de `de` —la foto que se saca al leer el objeto, antes de escribir— y es
+    // justo el dato que se pierde para siempre si no queda acá: en Meta ya no existe, y quien lea la
+    // fila mañana necesita saber qué se llamaba así.
+    const desde = (f.de && (f.de.name as string)) || null
+    const hasta = buscado(f, 'name')
+    const nuevo = hasta === null ? null : String(hasta)
+    return {
+      clase: 'nombre',
+      titulo: salio ? `Renombró ${el(f.nivel)}` : `Intentó renombrar ${el(f.nivel)}`,
+      desde,
+      hasta: nuevo,
+      sinDato: nuevo === null,
+    }
+  }
+
   if (f.accion === 'duplicar') {
     // Ojo con la asimetría: acá `a` NO es «cómo quedó lo que toqué» sino «qué apareció». El original
     // no cambió en nada, y contarlo como un cambio suyo sería mentir sobre qué se tocó.
@@ -222,8 +246,8 @@ export function contar(f: FilaAuditoria, moneda: string | null): Contada {
     }
   }
 
-  // La Tanda 3 suma `crear` a la misma tabla. Que caiga acá con su nombre crudo es mejor que no
-  // aparecer: una acción nueva se ve el día uno, aunque se lea fea.
+  // Crear desde cero sumaría `crear` a la misma tabla. Que caiga acá con su nombre crudo es mejor
+  // que no aparecer: una acción nueva se ve el día uno, aunque se lea fea.
   return {
     clase: 'otra',
     titulo: `${salio ? 'Hizo' : 'Intentó'} «${f.accion}» sobre ${el(f.nivel)}`,
