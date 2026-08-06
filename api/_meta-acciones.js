@@ -41,6 +41,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Quién firmó la acción. `perfil.name` es el campo que usa el resto de los handlers. */
 const quienEs = (perfil) => (perfil && perfil.name) || 'desconocido';
 
+/**
+ * Lo que se guarda en `detalle`: **nuestro mensaje y el de Meta**, en ese orden.
+ *
+ * El nuestro dice qué pasó en castellano; el de Meta (`error_user_msg`) dice qué hay que ir a
+ * arreglar. Guardar uno solo deja la fila sin la mitad que sirve.
+ */
+function motivoLargo(cuerpo) {
+  const partes = [cuerpo && cuerpo.error, cuerpo && cuerpo.detalle].filter(Boolean).map(String);
+  if (!partes.length) return null;
+  // Sin repetirse: hay salidas donde los dos son el mismo texto.
+  const unicas = partes.filter((p, i) => partes.indexOf(p) === i);
+  return unicas.join(' — ').slice(0, 500);
+}
+
 export default async function accionar(req, res, perfil) {
   const pedido = normalizar(req.body || {});
 
@@ -68,7 +82,13 @@ export default async function accionar(req, res, perfil) {
 
   /** Cierra la fila reservada y contesta. Toda salida de acá para abajo pasa por esta función. */
   const cerrar = async (status, resultado, cuerpo, extra = {}) => {
-    const guardado = await completar(sb, idem, { resultado, detalle: cuerpo.error || cuerpo.detalle || null, ...extra });
+    // 🔴 **Los DOS mensajes, no el primero que haya.** Acá decía `cuerpo.error || cuerpo.detalle`, y
+    // cuando venían los dos —que es siempre que Meta rechaza— guardaba el nuestro y TIRABA el de
+    // Meta. La fila quedaba diciendo «Meta rechazó la copia», que no le sirve a nadie: lo que dice
+    // qué hay que arreglar es el otro («la cuenta publicitaria no tiene acceso a esta cuenta de
+    // Instagram»). En la pantalla se ve una vez, en un toast que se va; en la fila queda para
+    // siempre, y era justo ahí donde se perdía.
+    const guardado = await completar(sb, idem, { resultado, detalle: motivoLargo(cuerpo), ...extra });
     // Si el log falla pero Meta ya aplicó, se contesta ok con advertencia: la plata ya se movió y
     // negarlo es peor que admitir que no quedó escrito.
     const sinRegistro = !guardado.ok && resultado === 'ok';
