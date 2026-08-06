@@ -429,6 +429,22 @@ async function diagnostico(res, perfil, probar) {
   });
 }
 
+/**
+ * ¿Estas `user_tasks` alcanzan para accionar sobre la pauta?
+ *
+ * 🔑 **La tarea que da "Administrar campañas (anuncios)" es `ADVERTISE`, no `MANAGE`.** `MANAGE`
+ * corresponde a "Administrar cuentas publicitarias", el acceso TOTAL que también controla las
+ * finanzas y los permisos de la cuenta — a propósito no se lo dimos al system user. Medido el
+ * 6-ago-2026: las tres cuentas quedaron en `DRAFT, ANALYZE, ADVERTISE` y las dos que pudieron
+ * probar escribieron bien, así que `ADVERTISE` es suficiente y `MANAGE` era de más.
+ *
+ * Buscar `MANAGE` dejaba a la única cuenta sin campañas —la que no puede correr la prueba de
+ * escritura— marcada como "solo lectura", mandando a arreglar un permiso que ya estaba bien.
+ */
+function puedePautar(tareas) {
+  return tareas.includes('ADVERTISE') || tareas.includes('MANAGE');
+}
+
 async function diagnosticoCuenta(c, probar) {
   const id = String(c.account_id || '');
   const base = { id, nombre: nombreCuenta(c) };
@@ -447,12 +463,12 @@ async function diagnosticoCuenta(c, probar) {
     ...mins,
     estadoCuenta: t.account_status ?? null,
     motivoBaja: t.disable_reason ?? null,
-    administra: tareas.includes('MANAGE'),
+    administra: puedePautar(tareas),
     // ⚠️ `user_tasks` VACÍO no es "no administra": con un token de system user Meta a veces no
     // informa el campo. Decir "solo lectura" ahí mandaría a arreglar un permiso que puede estar
     // bien, que es exactamente la confusión entre los dos candados que este modo existe para
     // evitar. Sin el dato, se dice que no se sabe y lo resuelve la prueba de escritura.
-    veredicto: tareas.includes('MANAGE') ? 'permiso-de-cuenta-ok' : tareas.length ? 'sin-permiso-de-cuenta' : 'tareas-desconocidas',
+    veredicto: puedePautar(tareas) ? 'permiso-de-cuenta-ok' : tareas.length ? 'sin-permiso-de-cuenta' : 'tareas-desconocidas',
   };
   if (!probar) return fila;
   return { ...fila, ...(await pruebaDeEscritura(id)) };
