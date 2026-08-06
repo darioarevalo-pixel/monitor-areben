@@ -307,20 +307,26 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
   }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, a, uso: escrito.uso || null });
 }
 
+/** La zona en la que trabaja la gente que lee estos nombres. Ver `sufijoDeCopia`. */
+const ZONA = 'America/Argentina/Buenos_Aires';
+
 /**
  * El sufijo del nombre de la copia. **Único a propósito** (ver el punto 2 de arriba): es lo que
  * permite encontrarla si la llamada se cortó sin respuesta, que es el único caso en el que duplicar
  * se puede recuperar sin arriesgar una copia de más.
  *
- * Fecha local y no UTC: lo lee una persona y «copia 6/8» tiene que ser el 6 de agosto de acá.
+ * 🔴 **La hora va en la zona de Buenos Aires, forzada.** La primera versión usaba `getHours()`
+ * "porque es la hora local", y eso es cierto en una máquina de acá y falso en el servidor: las
+ * funciones de Vercel corren en **UTC**. La copia de prueba salió llamándose «copia 06/08 19:47»
+ * cuando acá eran las 16:47, o sea que el nombre con el que hay que buscarla en Ads Manager no es el
+ * de la hora en que se hizo — y este sufijo existe justamente para poder encontrarla.
  */
 function sufijoDeCopia() {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return ` — copia ${dd}/${mm} ${hh}:${mi}`;
+  const f = new Intl.DateTimeFormat('es-AR', {
+    timeZone: ZONA, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const p = (t) => (f.find((x) => x.type === t) || {}).value || '00';
+  return ` — copia ${p('day')}/${p('month')} ${p('hour')}:${p('minute')}`;
 }
 
 /**

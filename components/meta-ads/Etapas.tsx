@@ -246,13 +246,22 @@ export function Etapas() {
   const conjuntos = useConjuntos(dias)
   const [presu, setPresu] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
 
-  // Recargar el censo Y los conjuntos abiertos de esa campaña: Meta devuelve el valor releído del
+  // Recargar el censo, LAS ASIGNACIONES y los conjuntos abiertos: Meta devuelve el valor releído del
   // objeto tocado, pero los subtotales por etapa, el diagnóstico y el reparto por marca salen del
   // censo. Parchear una fila a mano dejaría todo lo demás mintiendo.
+  //
+  // 🔴 **Las asignaciones también, y esto se vio recién al duplicar en prod.** Duplicar escribe una
+  // fila NUEVA en `meta_ads_campania_linea` (la copia hereda la línea del original), y el censo la
+  // reparte bien enseguida — pero la columna «Marca» y los botones se dibujan con `funnel.lineas`,
+  // que no se estaba recargando. Resultado: la copia recién creada aparecía «sin marca» y sin
+  // acciones hasta que alguien recargara la página a mano, que es justo lo contrario de lo que la
+  // herencia de línea existe para evitar.
+  const recargarFunnelRef = funnel.recargar
   const recargarTrasAccion = useCallback(() => {
     setPedido((p) => p + 1)
+    recargarFunnelRef()
     for (const id of conjuntos.abiertas) conjuntos.recargar(id)
-  }, [conjuntos])
+  }, [conjuntos, recargarFunnelRef])
 
   const { enCurso, mandar, cambiarEstado, duplicarObjeto } = useAccionMeta(recargarTrasAccion)
 
@@ -954,7 +963,13 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
           const conjuntosAbiertos = palanca.conjuntos.abiertas.has(c.id)
           const linea = correccion.lineaPorCampaña[c.id]?.linea ?? null
           const moneda = palanca.monedaDe(c.cuentaId)
-          const objeto: ObjetoMeta = { nivel: 'campania', id: c.id, nombre: c.nombre, linea, moneda }
+          // La cuenta viaja al cartel **sólo si el nombre se repite**: es la última pantalla antes de
+          // escribir, y con dos campañas homónimas el nombre solo no alcanza para saber cuál se toca.
+          // Cuando no hay ambigüedad, un renglón más sería ruido en cada confirmación.
+          const objeto: ObjetoMeta = {
+            nivel: 'campania', id: c.id, nombre: c.nombre, linea, moneda,
+            cuenta: repetidos.has(c.nombre) ? (palanca.cuentaDe(c.cuentaId) || `cuenta ${c.cuentaId.slice(-4)}`) : undefined,
+          }
           const diarioCrudo = c.diarioCrudo ?? 0
           return (
             <Fragment key={c.id}>

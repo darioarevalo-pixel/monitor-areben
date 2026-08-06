@@ -45,6 +45,15 @@ export type ObjetoMeta = {
   linea: LineaPauta | null
   /** Moneda de la cuenta: define la unidad menor con la que Meta maneja los montos. */
   moneda: string
+  /**
+   * De qué cuenta publicitaria es. Sólo para MOSTRARLO en el cartel, y sólo cuando hace falta.
+   *
+   * 🔴 Hay campañas con el MISMO nombre en cuentas distintas —«STUNNED - Tráfico a Perfil» existe dos
+   * veces y no son la misma: una está apagada con $436.937 encima y la otra es la que corre—. La
+   * tabla ya las desempata, pero el cartel es la última pantalla antes de escribir, y ahí decía sólo
+   * el nombre: quien lo abriera desde la fila equivocada no tenía cómo darse cuenta.
+   */
+  cuenta?: string
 }
 
 const ROTULO_NIVEL: Record<NivelAccion, string> = { campania: 'la campaña', conjunto: 'el conjunto', aviso: 'el aviso' }
@@ -134,6 +143,7 @@ export function useAccionMeta(recargar: () => void) {
               : 'Vuelve a mostrarse y a consumir presupuesto en el acto.'}
           </div>
           <ConfirmDetalle label={ROTULO_NIVEL[o.nivel]} valor={o.nombre} />
+          {o.cuenta && <ConfirmDetalle label="Cuenta" valor={o.cuenta} />}
           {o.linea && <ConfirmDetalle label="Marca" valor={ETIQUETA_LINEA[o.linea]} />}
           <ConfirmDetalle label="Estado" valor={`${activo ? 'Activa' : 'Pausada'} → ${activo ? 'Pausada' : 'Activa'}`} />
         </div>
@@ -173,6 +183,7 @@ export function useAccionMeta(recargar: () => void) {
             subirle el presupuesto a esta que duplicarla.
           </Notice>
           <ConfirmDetalle label={ROTULO_NIVEL[o.nivel]} valor={o.nombre} />
+          {o.cuenta && <ConfirmDetalle label="Cuenta" valor={o.cuenta} />}
           {o.linea && <ConfirmDetalle label="Marca" valor={ETIQUETA_LINEA[o.linea]} />}
           <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
             Esto no se deshace desde el monitor: para sacar la copia hay que borrarla en Ads Manager.
