@@ -6,6 +6,7 @@ import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
 import { LoginScreen } from '@/components/LoginScreen'
 import { ReclamoPublico } from '@/components/reclamos/ReclamoPublico'
 import { CanjePortal } from '@/components/canjes/CanjePortal'
+import { LegalPublico } from '@/components/legal/LegalPublico'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { AccionesProvider } from '@/components/layout/acciones'
@@ -50,8 +51,12 @@ export default function Seccion() {
    * son secciones del monitor: no están en el nav, no tienen permiso y los abre gente sin cuenta.
    * Hay que sacarlos del camino ANTES del guard de secciones y también del efecto que redirige — si
    * no, a cualquiera con sesión abierta el shell lo manda a Inicio antes de que llegue a verlos.
+   *
+   * `/legal/<pagina>` va por el mismo camino, y por un motivo más fuerte todavía: las páginas
+   * legales las tiene que poder abrir un revisor de Meta **sin cuenta**, y una política de
+   * privacidad detrás de un login no es una política de privacidad.
    */
-  const esPortalCliente = key === 'reclamo' || key === 'canje'
+  const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal'
 
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
@@ -71,6 +76,7 @@ export default function Seccion() {
   // antes del gate de login a propósito: se defiende con el token, no con la sesión.
   if (esPortalCliente) {
     const token = Array.isArray(partes) ? partes[1] ?? null : null
+    if (key === 'legal') return <LegalPublico pagina={token} />
     return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} />
   }
 
