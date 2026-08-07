@@ -538,8 +538,12 @@
    siempre, ocupando su lugar, y sólo mientras haya algo que scrollear. */
 .mo-scroll-x {
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--mo-line2) transparent;
+  /* ⛔ Acá estaban `scrollbar-width: thin` y `scrollbar-color`, y eran justo lo que rompía esto:
+     en Chrome moderno, declarar cualquiera de los dos **desactiva los `::-webkit-scrollbar`** de
+     abajo, así que la barra volvía a ser el overlay de macOS. Medido el 6-ago-2026 con el
+     contenedor forzado a 800 px: había overflow y `offsetHeight − clientHeight` daba 0, o sea no
+     reservaba alto. Son dos formas de pedir lo mismo y no conviven: gana la estándar, que en macOS
+     no sabe dejar la barra fija. */
 }
 .mo-scroll-x::-webkit-scrollbar {
   height: 8px;

@@ -243,6 +243,16 @@ async function etapas(res, perfil, diasPedidos) {
  * campos del creativo (imagen, título, texto, botón) y el link al aviso publicado, que no filtra
  * nada. Si algún día hace falta el iframe de verdad, primero hay que resolver el token.
  */
+
+/**
+ * El lado con que se le pide la miniatura a Meta. El default de `thumbnail_url` son **64 px**, y
+ * para los avisos que salen de una publicación de Instagram esa miniatura es lo ÚNICO que llega:
+ * no traen `image_url` ni `object_story_spec`, así que quedaban como una estampilla de 64 px
+ * centrada en un cuadro de 190. La pantalla existe para mirar la pieza; con la foto ilegible no
+ * cumple. 600 da margen para el cuadro de 190 en pantalla retina sin pedir un archivo enorme.
+ */
+const LADO_MINIATURA = 600;
+
 async function creativos(res, perfil, campaignId, diasPedidos) {
   const gate = await gateCampaña(res, perfil, campaignId);
   if (!gate) return;
@@ -254,9 +264,15 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   // `detalle` ya usa en producción (ver `statusRes`), que es lo único probado contra esta cuenta;
   // los campos nuevos van todos en la segunda, para que un nombre de campo equivocado no se lleve
   // puesta la respuesta entera —que es lo que pasó con `business{name}` en julio—.
+  //
+  // 🔑 `thumbnail_width`/`thumbnail_height` van en la SEGUNDA aunque `thumbnail_url` ya venga en la
+  // primera, y el motivo es el mismo: son query params (no modificadores de campo, ver la doc de
+  // AdCreative) y **no está documentado que se apliquen a un `creative{}` anidado en el edge
+  // `/ads`**. Puestos en la llamada probada, un rechazo dejaría la grilla entera sin avisos; acá lo
+  // peor que pasa es que la miniatura siga midiendo los 64 px de siempre.
   const [baseRes, ricoRes, insRes] = await Promise.all([
     graph(`${campaignId}/ads?fields=id,name,effective_status,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url}&limit=200`),
-    graph(`${campaignId}/ads?fields=id,creative{image_url,body,title,object_story_spec}&limit=200`),
+    graph(`${campaignId}/ads?fields=id,creative{image_url,body,title,object_story_spec,thumbnail_url}&limit=200&thumbnail_width=${LADO_MINIATURA}&thumbnail_height=${LADO_MINIATURA}`),
     insightsTodas(`${campaignId}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions,action_values,video_3_sec_watched_actions&date_preset=last_${dias}d&action_attribution_windows=${ATTR}&limit=200`),
   ]);
 
@@ -273,7 +289,11 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
 
   const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => {
     const id = String(a.id);
-    const cr = { ...(a.creative || {}), ...(ricoPorId.get(id) || {}) };
+    const base = a.creative || {};
+    // El `thumbnail_url` de la llamada rica pisa al de la base, y eso es lo que se busca: es el
+    // mismo campo pedido en grande. Pero la chica se guarda aparte porque sigue cumpliendo su
+    // función de red —es la única URL que Meta garantiza— y una sola clave no puede ser las dos.
+    const cr = { ...base, ...(ricoPorId.get(id) || {}), thumbnail_chico: base.thumbnail_url || null };
     const g = insPorId.get(id);
     const impresiones = g ? num(g.impressions) : 0;
     const plays3s = g ? sumaAcciones(g.video_3_sec_watched_actions) : 0;
@@ -423,8 +443,9 @@ function piezaDe(cr) {
   return {
     imagen: cr.image_url || video.image_url || link.picture || (hijos[0] && hijos[0].picture) || cr.thumbnail_url || null,
     // La miniatura viaja aparte: es la única que Meta garantiza, así que sirve de red si la grande
-    // no carga (las URLs de `scontent` caducan).
-    thumb: cr.thumbnail_url || null,
+    // no carga (las URLs de `scontent` caducan). Va la CHICA a propósito: la grande ya es el último
+    // eslabón de `imagen`, y usarla también de red haría que las dos fallen juntas.
+    thumb: cr.thumbnail_chico || cr.thumbnail_url || null,
     titulo: cr.title || link.name || video.title || null,
     texto: cr.body || link.message || video.message || null,
     cta: cta ? ROTULO_CTA[cta] || String(cta).toLowerCase().replace(/_/g, ' ') : null,
