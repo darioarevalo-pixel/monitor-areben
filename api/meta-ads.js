@@ -265,14 +265,14 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   // los campos nuevos van todos en la segunda, para que un nombre de campo equivocado no se lleve
   // puesta la respuesta entera —que es lo que pasó con `business{name}` en julio—.
   //
-  // 🔑 `thumbnail_width`/`thumbnail_height` van en la SEGUNDA aunque `thumbnail_url` ya venga en la
-  // primera, y el motivo es el mismo: son query params (no modificadores de campo, ver la doc de
-  // AdCreative) y **no está documentado que se apliquen a un `creative{}` anidado en el edge
-  // `/ads`**. Puestos en la llamada probada, un rechazo dejaría la grilla entera sin avisos; acá lo
-  // peor que pasa es que la miniatura siga midiendo los 64 px de siempre.
+  // 🔴 **`thumbnail_width`/`thumbnail_height` NO sirven acá, medido en prod el 6-ago-2026.** Son
+  // query params de primer nivel (no modificadores de campo) y sobre un `creative{}` anidado en el
+  // edge `/ads` Meta **los ignora en silencio**: no rechaza nada —`sinCreativo` vino `null`— y
+  // devuelve los 64 px de siempre. Por eso el rescate es la cuarta llamada de abajo, contra el
+  // creative directo, que es donde el parámetro sí es de primer nivel.
   const [baseRes, ricoRes, insRes] = await Promise.all([
     graph(`${campaignId}/ads?fields=id,name,effective_status,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url}&limit=200`),
-    graph(`${campaignId}/ads?fields=id,creative{image_url,body,title,object_story_spec,thumbnail_url}&limit=200&thumbnail_width=${LADO_MINIATURA}&thumbnail_height=${LADO_MINIATURA}`),
+    graph(`${campaignId}/ads?fields=id,creative{id,image_url,body,title,object_story_spec}&limit=200`),
     insightsTodas(`${campaignId}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions,action_values,video_3_sec_watched_actions&date_preset=last_${dias}d&action_attribution_windows=${ATTR}&limit=200`),
   ]);
 
@@ -290,10 +290,7 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => {
     const id = String(a.id);
     const base = a.creative || {};
-    // El `thumbnail_url` de la llamada rica pisa al de la base, y eso es lo que se busca: es el
-    // mismo campo pedido en grande. Pero la chica se guarda aparte porque sigue cumpliendo su
-    // función de red —es la única URL que Meta garantiza— y una sola clave no puede ser las dos.
-    const cr = { ...base, ...(ricoPorId.get(id) || {}), thumbnail_chico: base.thumbnail_url || null };
+    const cr = { ...base, ...(ricoPorId.get(id) || {}) };
     const g = insPorId.get(id);
     const impresiones = g ? num(g.impressions) : 0;
     const plays3s = g ? sumaAcciones(g.video_3_sec_watched_actions) : 0;
@@ -310,6 +307,8 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
       hookRate: impresiones ? (plays3s / impresiones) * 100 : 0,
     };
   }).sort((x, y) => y.spend - x.spend);
+
+  await rescatarMiniaturas(ads, ricoPorId);
 
   // `sinCreativo` es diagnóstico, no adorno: si la llamada rica falla, todos los avisos quedan con
   // la miniatura de 64 px y sin una palabra de copy, y la pantalla tiene que poder decir por qué en
@@ -426,6 +425,56 @@ async function conjuntos(res, perfil, campaignId, diasPedidos) {
 }
 
 /**
+ * Cuántos creatives entran en un `?ids=`. Graph corta arriba de 50 y prefiere números chicos; con
+ * más avisos que eso se rescatan los primeros, que están ordenados por gasto: si hay que elegir a
+ * cuáles verles la cara, son los que se están llevando la plata.
+ */
+const TOPE_IDS_MINIATURA = 50;
+
+/**
+ * La cuarta llamada, aislada y CONDICIONAL: los avisos que quedaron con la estampilla de 64 px.
+ *
+ * 🔑 **El problema es de quién tiene la foto, no de la pantalla.** Un aviso armado desde una
+ * publicación de Instagram no trae `image_url` ni `object_story_spec`: referencia un
+ * `effective_object_story_id` y lo único que llega es el `thumbnail_url`, que por defecto son 64 px.
+ * Eran 5 de 11 avisos en Zattia y 3 de 5 en BDI — casi la mitad de la grilla dibujada con una
+ * estampilla centrada en un cuadro de 190.
+ *
+ * 🔴 **Pedir el tamaño en la llamada de los avisos NO funciona** (medido: Meta ignora los params en
+ * silencio sobre un `creative{}` anidado). Contra el creative directo sí son de primer nivel, y con
+ * `?ids=` entran todos en UNA llamada en vez de una por aviso.
+ *
+ * Va después y no en el `Promise.all` porque necesita los `creative.id`, que salen de la rica.
+ * Cuesta un viaje más de latencia y sólo cuando hay a quién rescatar: si todos los avisos tienen su
+ * foto propia —lo normal en los armados desde Ads Manager— no sale ninguna llamada extra.
+ *
+ * Nunca rompe nada: si Meta rechaza, los avisos se quedan con la miniatura que ya tenían.
+ */
+async function rescatarMiniaturas(ads, ricoPorId) {
+  // Quedó con la estampilla el que terminó usando su propia miniatura como foto grande: la cadena
+  // de respaldos de `piezaDe` ya probó todos los lugares donde podría haber una imagen de verdad.
+  const flacos = ads.filter((a) => a.imagen && a.imagen === a.thumb);
+  if (!flacos.length) return;
+
+  const porCreative = new Map();
+  for (const a of flacos) {
+    const cid = String((ricoPorId.get(a.id) || {}).id || '');
+    if (cid && porCreative.size < TOPE_IDS_MINIATURA) porCreative.set(cid, a);
+  }
+  if (!porCreative.size) return;
+
+  const ids = [...porCreative.keys()].join(',');
+  const r = await graph(`?ids=${ids}&fields=thumbnail_url&thumbnail_width=${LADO_MINIATURA}&thumbnail_height=${LADO_MINIATURA}`);
+  if (!r.ok || !r.data) return;
+
+  for (const [cid, aviso] of porCreative) {
+    const grande = r.data[cid] && r.data[cid].thumbnail_url;
+    // El `thumb` no se toca: sigue siendo la chica, que es la red si esta URL no carga.
+    if (grande) aviso.imagen = grande;
+  }
+}
+
+/**
  * De lo que devuelve Meta a lo que se dibuja: imagen, título, texto y botón.
  *
  * La cadena de respaldos no es paranoia: el mismo campo vive en un lugar distinto según el formato.
@@ -445,7 +494,7 @@ function piezaDe(cr) {
     // La miniatura viaja aparte: es la única que Meta garantiza, así que sirve de red si la grande
     // no carga (las URLs de `scontent` caducan). Va la CHICA a propósito: la grande ya es el último
     // eslabón de `imagen`, y usarla también de red haría que las dos fallen juntas.
-    thumb: cr.thumbnail_chico || cr.thumbnail_url || null,
+    thumb: cr.thumbnail_url || null,
     titulo: cr.title || link.name || video.title || null,
     texto: cr.body || link.message || video.message || null,
     cta: cta ? ROTULO_CTA[cta] || String(cta).toLowerCase().replace(/_/g, ' ') : null,
