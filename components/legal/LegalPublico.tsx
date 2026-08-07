@@ -94,7 +94,7 @@ function Privacidad() {
       <H>Qué datos recibimos de Meta y para qué</H>
       <P>
         El Monitor se conecta a la Marketing API de Meta con un usuario del sistema propio, para leer
-        y administrar <b>únicamente las cuentas publicitarias de {RAZON_SOCIAL}</b>. Con esa conexión
+        y administrar <b>únicamente las cuentas publicitarias de la empresa</b>. Con esa conexión
         accedemos a:
       </P>
       <Ul>
@@ -241,8 +241,8 @@ function Datos() {
 
       <H>Datos de Meta</H>
       <P>
-        Los datos que el Monitor obtiene de Meta corresponden a las cuentas publicitarias de{' '}
-        {RAZON_SOCIAL}. Para revocar el acceso de la aplicación a esas cuentas, se quita el permiso
+        Los datos que el Monitor obtiene de Meta corresponden a las cuentas publicitarias de la
+        empresa. Para revocar el acceso de la aplicación a esas cuentas, se quita el permiso
         desde el Administrador Comercial de Meta; a partir de ese momento el Monitor deja de poder
         leerlas. Los identificadores de campañas guardados localmente se eliminan a pedido por la vía
         indicada arriba.
