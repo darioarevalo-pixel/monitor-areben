@@ -5,7 +5,7 @@
  *
  * # Por qué existe
  *
- * El diagnóstico de arriba dice **qué falta** ("no hay ni una pauta de la segunda etapa"). Eso solo
+ * El diagnóstico del Embudo dice **qué falta** ("no hay ni una pauta de la segunda etapa"). Eso solo
  * es un dato; sin un lugar donde anotar la pieza que lo llena, se lee, se asiente y no pasa nada.
  * Acá la pelota **se ve** cambiar de mano: marketing anota, Bruno aprueba, marketing produce, Bruno
  * pautea. Cada columna deja a alguien esperando algo concreto de alguien concreto, que es lo único
@@ -13,7 +13,7 @@
  *
  * # Tres decisiones que parecen de forma y no lo son
  *
- *  1. **El tablero se dibuja aunque Meta se caiga.** Vive adentro de esta pantalla pero no cuelga
+ *  1. **El tablero se dibuja aunque Meta se caiga.** Vive adentro de la sección pero no cuelga
  *     del diagnóstico: se lee por `api/datos.js?recurso=meta-funnel`, que no habla con Meta. Si el
  *     token vence justo cuando marketing tiene que craneаr las piezas, el tablero sigue en pie —es
  *     exactamente el motivo por el que el endpoint está separado (`api/_meta-funnel.js`).
@@ -248,7 +248,7 @@ export function TableroIdeas({
         <Notice tone="warning" style={{ marginBottom: space[3] }}>
           No se pudieron leer las ideas: {caido}
           <div style={{ fontSize: font.sm, marginTop: space[1] }}>
-            El diagnóstico de arriba no depende de esto y sigue siendo válido.
+            El diagnóstico del Embudo no depende de esto y sigue siendo válido.
           </div>
         </Notice>
       )}
@@ -260,7 +260,7 @@ export function TableroIdeas({
           title="Todavía no hay ninguna idea anotada"
           hint={
             sugerida
-              ? `El diagnóstico de arriba está pidiendo piezas de «${ETIQUETA_ETAPA[sugerida]}». Anotá la primera: alcanza con el título y el formato, lo demás se completa después.`
+              ? `El Embudo está pidiendo piezas de «${ETIQUETA_ETAPA[sugerida]}». Anotá la primera: alcanza con el título y el formato, lo demás se completa después.`
               : 'Anotá la primera: alcanza con el título y el formato, lo demás se completa después. También se pueden anotar desde el calendario, colgadas de una fecha.'
           }
           dashed
