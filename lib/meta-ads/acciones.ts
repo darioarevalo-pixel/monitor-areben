@@ -30,6 +30,7 @@ import {
   quedoPuesto as quedoPuestoJs,
   revisarPresupuesto as revisarPresupuestoJs,
   SIN_LINEA as SIN_LINEA_JS,
+  TOPE_ADS_SINCRONO as TOPE_ADS_SINCRONO_JS,
   validarPedido as validarPedidoJs,
   validarValores as validarValoresJs,
 } from './acciones.core.js'
@@ -85,8 +86,17 @@ export type ResultadoAccion = {
   copia?: {
     id: string
     nombre: string
-    /** Siempre `PAUSED`. Se devuelve leído de Meta, no asumido: es la garantía de que no gasta. */
+    /**
+     * Siempre `PAUSED`. Es el `status` releído de Meta, no asumido: es la garantía de que no gasta.
+     *
+     * 🔴 **Es el `status` y no el `effective_status`, medido el 8-ago-2026.** Una copia recién creada
+     * viene con `effective_status: 'IN_PROCESS'` —Meta la está armando— y `status: 'PAUSED'`. Cuando
+     * acá llegaba el efectivo, el cartel gritaba en rojo «figura IN_PROCESS, no pausada, pausala ya»
+     * sobre una copia que había nacido perfecta.
+     */
     estado: string
+    /** El `effective_status`, sólo si dice algo distinto (`IN_PROCESS`). Es contexto, no un problema. */
+    efectivo?: string | null
     /**
      * `false` si la copia quedó **sin marca**: existe en Meta pero nadie la puede accionar desde el
      * monitor hasta asignarla en Etapas. Se avisa en vez de dejarla escondida.
@@ -104,6 +114,8 @@ export const MARCAS_META = MARCAS_META_JS as string[]
 export const SIN_LINEA = SIN_LINEA_JS as string
 /** El tope de largo de un nombre. Es nuestro, no de Meta: ver el comentario en el core. */
 export const LARGO_NOMBRE = LARGO_NOMBRE_JS as number
+/** Cuántos avisos copia Meta en una llamada síncrona. La pantalla lo nombra y el servidor lo hace cumplir. */
+export const TOPE_ADS_SINCRONO = TOPE_ADS_SINCRONO_JS as number
 
 export const lineasQuePuede = lineasQuePuedeJs as (perfil: Perfil | null, sub: string) => LineaPauta[]
 export const permiteAccion = permiteAccionJs as (perfil: Perfil | null, accion: string, linea: LineaPauta) => Veredicto

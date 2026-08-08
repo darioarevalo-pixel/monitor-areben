@@ -30,7 +30,7 @@
 //  10. Cerrar la fila de auditoría, siempre, también cuando Meta rechaza.
 import {
   CAMPOS_LECTURA, ESTE_NIVEL, ETIQUETA_NIVEL, fotoDe, nivelReal, permiteAccion, PRONOMBRE_NIVEL,
-  quedoPuesto, revisarPresupuesto, SIN_LINEA, validarPedido,
+  quedoPuesto, revisarPresupuesto, SIN_LINEA, TOPE_ADS_SINCRONO, validarPedido,
 } from '../lib/meta-ads/acciones.core.js';
 import { codigoError, graph, graphPost, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
@@ -220,13 +220,11 @@ export default async function accionar(req, res, perfil) {
 
 // ── Duplicar (Tanda 2) ────────────────────────────────────────────────────────────────────────
 /**
- * El tope de anuncios que Meta copia en una llamada SÍNCRONA. Con más, la Graph API obliga a la vía
- * asíncrona, que devuelve un `async_session_id` que hay que pollear hasta que termine.
- *
- * ⛔ Esa vía queda afuera a propósito: pollear no entra en una función de Vercel Hobby, y hacerlo a
- * medias dejaría copias a medio crear sin nadie mirando. Se cuenta antes y se dice que no.
+ * ⛔ La vía asíncrona (`/asyncbatch`) queda afuera a propósito: hacerla a medias dejaría copias a
+ * medio crear sin nadie mirando. Se cuenta antes y se dice que no. El tope (`TOPE_ADS_SINCRONO`) se
+ * importa de `acciones.core.js` porque **el modal de duplicar lo nombra antes de gastar la
+ * escritura**: dos números distintos serían un cartel que promete lo que este handler niega.
  */
-const TOPE_ADS_SINCRONO = 3;
 
 /**
  * Duplicar una campaña o un conjunto: `POST /<id>/copies`.
@@ -303,7 +301,15 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
   // que nació PAUSED.
   const rel = await graph(`${copiaId}?fields=${CAMPOS_LECTURA[nivel]}`, 2);
   const copia = (rel.ok && rel.data) || {};
-  const estadoCopia = String(copia.effective_status || copia.status || '');
+  // 🔴 **El `status`, NO el `effective_status`, y medirlo lo demostró (8-ago-2026).** Acá decía
+  // `effective_status || status`, y una copia recién creada viene con `effective_status:
+  // 'IN_PROCESS'` —Meta todavía la está armando— y `status: 'PAUSED'`. La pantalla compara este
+  // campo contra `'PAUSED'` y grita en ROJO «figura IN_PROCESS, no pausada, pausala ya»: una alarma
+  // de plata sobre una copia que nació perfecta. Lo que `status_option: 'PAUSED'` promete es el
+  // `status`, así que es el `status` lo que se verifica; el efectivo se manda al lado, como
+  // contexto, porque «Meta la está procesando» es información y no un problema.
+  const estadoCopia = String(copia.status || '');
+  const efectivoCopia = String(copia.effective_status || '');
 
   // La línea, en la misma operación. La copia de un conjunto cuelga de la campaña del original, que
   // ya tiene línea: sólo hace falta escribir fila nueva cuando lo copiado es una campaña.
@@ -316,7 +322,13 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
     conLinea = puesta.ok;
   }
 
-  const a = { copia_id: copiaId, nombre: String(copia.name || ''), estado: estadoCopia, con_linea: conLinea };
+  const a = {
+    copia_id: copiaId, nombre: String(copia.name || ''), estado: estadoCopia, con_linea: conLinea,
+    // En la auditoría el efectivo se guarda sólo si dice algo distinto: una fila con `PAUSED` dos
+    // veces no informa, y una con `PAUSED` + `IN_PROCESS` explica por qué la copia todavía no se
+    // comporta como el resto.
+    ...(efectivoCopia && efectivoCopia !== estadoCopia ? { efectivo: efectivoCopia } : {}),
+  };
   return cerrar(200, 'ok', {
     ok: true,
     quedo: {},
@@ -330,6 +342,9 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
       nombre: String(copia.name || ''),
       // Sin relectura no se afirma que está pausada: se dice que no se sabe, y el cartel lo muestra.
       estado: rel.ok ? estadoCopia : '',
+      // `IN_PROCESS` mientras Meta la termina de armar. Va aparte del estado justamente para que el
+      // cartel pueda contarlo como una demora y no como una copia encendida.
+      efectivo: rel.ok && efectivoCopia !== estadoCopia ? efectivoCopia : null,
       conLinea,
     },
   }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, a, uso: escrito.uso || null });

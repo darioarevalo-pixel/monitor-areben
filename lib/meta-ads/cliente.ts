@@ -11,7 +11,7 @@ import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
-  RespuestaDiagnostico, RespuestaEtapas, RespuestaOverview,
+  RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
 } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
@@ -121,6 +121,20 @@ export function traerConjuntos(campaignId: string, dias?: number): Promise<Lectu
   const qs = new URLSearchParams({ recurso: 'conjuntos', campania: campaignId })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaConjuntos>(qs)
+}
+
+/**
+ * Cuáles avisos de una campaña llevan el campo de «mejoras estándar» que Meta deprecó.
+ *
+ * Se pide **al abrir el modal de duplicar**, que es el momento en que la respuesta cambia una
+ * decisión: con un solo aviso que lo lleve, Meta rechaza la copia entera, y sin preguntar eso se
+ * descubre gastando una escritura de cupo. No se pide al desplegar una fila —sería un viaje a Meta
+ * por cada campaña que alguien mire— ni junto al censo.
+ *
+ * Va por campaña porque así lo contesta Graph; el corte por conjunto lo hace el servidor.
+ */
+export function traerMejoras(campaignId: string): Promise<Lectura<RespuestaMejoras>> {
+  return pedir<RespuestaMejoras>(new URLSearchParams({ recurso: 'mejoras', campania: campaignId }))
 }
 
 /**

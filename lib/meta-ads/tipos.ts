@@ -165,8 +165,17 @@ export type CampañaEtapa = {
 export type ConjuntoMeta = {
   id: string
   nombre: string
-  /** `effective_status` de Meta. */
+  /** `effective_status` de Meta: dice si ENTREGA, y arrastra el estado de sus padres (`CAMPAIGN_PAUSED`). */
   estado: string | null
+  /**
+   * `status` de Meta: qué se le pidió a ESTE conjunto, que es lo que se acciona.
+   *
+   * 🔑 Va aparte del efectivo porque los dos se separan justo cuando importa: una copia recién creada
+   * figura `IN_PROCESS` con `status: 'PAUSED'`, y un conjunto activo dentro de una campaña pausada
+   * figura `CAMPAIGN_PAUSED` con `status: 'ACTIVE'`. Mirando sólo el efectivo, el botón ofrece la
+   * acción del estado que no es.
+   */
+  configurado: string | null
   /** Presupuesto diario, CRUDO (unidad menor de la moneda). Cero si no tiene propio. */
   diarioCrudo: number
   /** Presupuesto total, crudo. */
@@ -358,6 +367,55 @@ export type RespuestaCreativos = {
    * en vez de dar a entender que los avisos no tienen copy.
    */
   sinCreativo: string | null
+}
+
+// ── Mejoras del creativo: ¿por qué Meta no deja copiar estos avisos? ────────────
+
+/** Un aviso, con lo que decide si su creativo se puede copiar. Ver `?recurso=mejoras`. */
+export type AvisoMejoras = {
+  id: string
+  nombre: string
+  /** De qué conjunto cuelga. Es el corte que importa: se duplica el conjunto, no el aviso. */
+  conjunto: string | null
+  estado: string | null
+  creativo: string | null
+  /** `created_time` de Meta, ISO. Sirvió para matar la hipótesis de que el corte era temporal. */
+  creado: string | null
+  /**
+   * Lleva el campo `standard_enhancements` que Meta deprecó ⇒ **la copia va a ser rechazada**.
+   *
+   * 🔑 El veredicto es la PRESENCIA del campo, no que esté prendido: Meta no dice «está prendido»,
+   * dice «incluir el campo quedó obsoleto». `enroll` guarda el matiz, sin medir todavía.
+   */
+  obsoleto: boolean
+  /** `OPT_IN` / `OPT_OUT`, o null si el campo no está. */
+  enroll: string | null
+  /** El `degrees_of_freedom_spec` crudo de Meta, para no depender de nuestra lectura de sus nombres. */
+  spec: unknown
+}
+
+/** El corte por conjunto, que es lo que se duplica. */
+export type ConjuntoMejoras = {
+  id: string
+  avisos: number
+  /** Cuántos llevan el campo obsoleto. Con uno solo, Meta rechaza la copia ENTERA. */
+  obsoletos: number
+  optIn: number
+  optOut: number
+  /** Cuántos quedaron sin spec porque Meta no lo devolvió. */
+  sinSpec: number
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=mejoras&campania=<id>`. */
+export type RespuestaMejoras = {
+  campania: string
+  ads: AvisoMejoras[]
+  conjuntos: ConjuntoMejoras[]
+  /** Cuántos creativos se alcanzaron a consultar y cuántos hay: el tope de `?ids=` es 50. */
+  creativosConsultados: number
+  creativosTotales: number
+  /** Por qué no se pudieron leer los specs, o null. Sin esto, «0 obsoletos» se leería como «ninguno». */
+  sinSpec: string | null
 }
 
 // ── Diagnóstico del token: ¿se puede ESCRIBIR en Meta? ──────────────────────────

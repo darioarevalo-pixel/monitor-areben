@@ -137,7 +137,7 @@ export function PanelConjuntos({ estado, moneda, linea, acciones }: {
         </THead>
         <TBody>
           {conjuntos.map((c) => (
-            <FilaConjunto key={c.id} c={c} moneda={moneda} linea={linea} cbo={cbo} acciones={acciones} />
+            <FilaConjunto key={c.id} c={c} campania={campania.id} moneda={moneda} linea={linea} cbo={cbo} acciones={acciones} />
           ))}
         </TBody>
       </TableWrap>
@@ -145,14 +145,16 @@ export function PanelConjuntos({ estado, moneda, linea, acciones }: {
   )
 }
 
-function FilaConjunto({ c, moneda, linea, cbo, acciones }: {
+function FilaConjunto({ c, campania, moneda, linea, cbo, acciones }: {
   c: ConjuntoMeta
+  /** La campaña de la que cuelga: es por campaña que se pregunta si sus creativos se pueden copiar. */
+  campania: string
   moneda: string
   linea: LineaPauta | null
   cbo: boolean
   acciones: Acciones
 }) {
-  const objeto = { nivel: 'conjunto' as const, id: c.id, nombre: c.nombre, linea, moneda }
+  const objeto = { nivel: 'conjunto' as const, id: c.id, nombre: c.nombre, linea, moneda, campania }
   return (
     <Tr>
       <Td wrap strong>{c.nombre}</Td>
@@ -171,11 +173,16 @@ function FilaConjunto({ c, moneda, linea, cbo, acciones }: {
       </Td>
       <Td align="right">{money(c.spend, moneda)}</Td>
       <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
-      <Td><EstadoConjunto s={c.estado} /></Td>
+      <Td><EstadoConjunto s={c.estado} configurado={c.configurado} /></Td>
       <Td>
         <BotonesAccion
           objeto={objeto}
-          estado={c.estado}
+          // 🔑 **El botón se decide con el estado CONFIGURADO, no con el efectivo.** Un conjunto
+          // `status: 'ACTIVE'` dentro de una campaña pausada figura `CAMPAIGN_PAUSED`, y con el
+          // efectivo el botón ofrecía «Reactivar» —una escritura que no cambia nada y contesta que
+          // sí—. Y una copia recién nacida figura `IN_PROCESS` con `status: 'PAUSED'`. Lo que se
+          // acciona es el estado de ESTE objeto.
+          estado={c.configurado ?? c.estado}
           diarioCrudo={c.diarioCrudo}
           // CBO manda: el botón de presupuesto no se dibuja, porque no hay nada que tocar acá.
           sinPresupuesto={cbo}
@@ -186,7 +193,29 @@ function FilaConjunto({ c, moneda, linea, cbo, acciones }: {
   )
 }
 
-function EstadoConjunto({ s }: { s: string | null }) {
+/**
+ * El estado de un conjunto: el efectivo manda, salvo cuando no dice nada del conjunto.
+ *
+ * 🔴 **`IN_PROCESS` era la trampa.** Una copia recién creada viene con `effective_status:
+ * 'IN_PROCESS'` y `status: 'PAUSED'`, y la tabla mostraba «in process»: un estado que no está en
+ * ninguna parte de la cabeza de quien mira, justo arriba de un botón que decía «Reactivar». Ahora se
+ * muestra lo que el conjunto ES (pausado) y al lado, chiquito, que Meta lo está terminando de armar.
+ */
+function EstadoConjunto({ s, configurado }: { s: string | null; configurado?: string | null }) {
+  if (s === 'IN_PROCESS' && configurado) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: space[1], flexWrap: 'wrap' }}>
+        <Pastilla s={configurado} />
+        <span style={{ fontSize: font.xs, color: color.mut2 }} title="Meta está terminando de armarlo (pasa con las copias recién hechas)">
+          en proceso
+        </span>
+      </span>
+    )
+  }
+  return <Pastilla s={s} />
+}
+
+function Pastilla({ s }: { s: string | null }) {
   if (!s) return <span style={{ color: color.mut2 }}>—</span>
   if (s === 'ACTIVE') return <StatusPill tone="success" label="Activo" />
   if (s.includes('PAUSED')) return <StatusPill tone="neutral" label="Pausado" />

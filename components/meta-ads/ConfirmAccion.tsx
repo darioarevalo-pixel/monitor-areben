@@ -28,9 +28,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { accionarMeta, traerConjuntos } from '@/lib/meta-ads/cliente'
-import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, type ClaveAccion, type NivelAccion } from '@/lib/meta-ads/acciones'
+import { accionarMeta, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
+import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, TOPE_ADS_SINCRONO, type ClaveAccion, type NivelAccion } from '@/lib/meta-ads/acciones'
 import { dondeVaElPresupuesto, segunLosConjuntos, type Presupuestable } from '@/lib/meta-ads/copia'
+import { bloqueoDeLaCopia, copiaCondenada, type BloqueoCopia } from '@/lib/meta-ads/mejoras'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -55,6 +56,14 @@ export type ObjetoMeta = {
    * el nombre: quien lo abriera desde la fila equivocada no tenía cómo darse cuenta.
    */
   cuenta?: string
+  /**
+   * La campaña de la que cuelga (para una campaña, ella misma).
+   *
+   * La necesita el modal de duplicar: lo que dice si Meta va a aceptar la copia se pregunta **por
+   * campaña** (`?recurso=mejoras`), porque así lo contesta Graph, y desde la fila de un conjunto el
+   * id de su campaña no se puede deducir.
+   */
+  campania?: string
 }
 
 const ROTULO_NIVEL: Record<NivelAccion, string> = { campania: 'la campaña', conjunto: 'el conjunto', aviso: 'el aviso' }
@@ -246,7 +255,12 @@ export function useAccionMeta(recargar: () => void) {
       }
 
       const conPlata = logros.length ? `, ${logros.join(' y ')}` : ''
-      const cola = pendientes.length ? ` ${pendientes.join(' ')}` : ''
+      // `IN_PROCESS` es Meta terminando de armar la copia, no un problema: se cuenta al final, para
+      // que quien la busque en la tabla y la vea rara sepa que en un rato se acomoda sola.
+      const procesando = copia.efectivo === 'IN_PROCESS'
+        ? ' Meta todavía la está armando, así que por un rato va a figurar «en proceso».'
+        : ''
+      const cola = `${pendientes.length ? ` ${pendientes.join(' ')}` : ''}${procesando}`
       // 🔴 Una copia que NO nació pausada está gastando ahora mismo: va primero y en rojo, aunque
       // todo lo demás haya salido bien.
       if (copia.estado && copia.estado !== 'PAUSED') {
@@ -260,7 +274,7 @@ export function useAccionMeta(recargar: () => void) {
       } else if (pendientes.length) {
         toast.aviso(`Se creó «${nombreFinal}», pausada${conPlata}.${cola}`)
       } else {
-        toast.ok(`Copia creada: «${nombreFinal}», pausada${conPlata}.`)
+        toast.ok(`Copia creada: «${nombreFinal}», pausada${conPlata}.${procesando}`)
       }
       return true
     } finally {
@@ -272,6 +286,74 @@ export function useAccionMeta(recargar: () => void) {
   }, [enviar, recargar, toast])
 
   return { enCurso, mandar, cambiarEstado, duplicarYAjustar }
+}
+
+/**
+ * **Lo que Meta va a contestar, dicho antes de apretar.**
+ *
+ * Los dos motivos por los que una copia se rechaza se ven igual desde afuera —«no se pudo
+ * duplicar»— y ninguno se arregla reintentando:
+ *
+ *  1. **El tope de la vía síncrona**: más de `TOPE_ADS_SINCRONO` avisos y el servidor lo rechaza sin
+ *     tocar Meta. Va primero porque es el que corta primero.
+ *  2. **El campo de «mejoras estándar»**, que Meta deprecó. Un solo aviso alcanza para tumbar la
+ *     copia entera, y no lo controla el monitor: `POST /copies` no manda el creativo, lo copia Meta.
+ *
+ * 🔑 **Cuando NO hay bloqueo también se dice.** Un cartel que sólo aparece con malas noticias deja a
+ * la persona sin saber si el silencio es «está todo bien» o «no se miró» — y acá hay un tercer estado
+ * real («Meta no devolvió los creativos») que es justo el que no se puede confundir con los otros dos.
+ */
+function AvisoBloqueo({ b, nivel }: { b: BloqueoCopia; nivel: NivelAccion }) {
+  const rotulo = ROTULO_NIVEL[nivel]
+  const Rotulo = rotulo.charAt(0).toUpperCase() + rotulo.slice(1)
+
+  if (b.fase === 'mirando') {
+    return <div style={{ fontSize: font.sm, color: color.mut2 }}>Mirando si Meta va a aceptar la copia…</div>
+  }
+  if (b.fase === 'sin-datos') {
+    return <div style={{ fontSize: font.sm, color: color.mut }}>{b.motivo} Se puede intentar igual.</div>
+  }
+
+  if (b.pasaElTope) {
+    return (
+      <Notice tone="danger">
+        {Rotulo} tiene <b>{b.avisos} avisos</b> y Meta copia hasta {TOPE_ADS_SINCRONO} de una vez:
+        el pedido se rechaza sin tocar nada. Para esto hay que duplicarlo desde Ads Manager.
+        {b.obsoletos > 0 && ' (Y además hay avisos con el campo de mejoras estándar, que también lo frena.)'}
+      </Notice>
+    )
+  }
+
+  if (b.obsoletos > 0) {
+    return (
+      <Notice tone="danger">
+        <b>{b.obsoletos === b.avisos ? `Sus ${b.avisos === 1 ? 'único aviso lleva' : `${b.avisos} avisos llevan`}` : `${b.obsoletos} de sus ${b.avisos} avisos llevan`} el campo de «mejoras estándar» que Meta dejó de aceptar</b>, así que
+        va a rechazar la copia. No lo controla el monitor: la copia la arma Meta con el creativo del
+        original. Se arregla rearmando esos avisos en Ads Manager, eligiendo las funciones una por una.
+        {b.nombres.length > 0 && (
+          <div style={{ marginTop: space[1], fontSize: font.sm }}>
+            {b.nombres.join(' · ')}{b.obsoletos > b.nombres.length && ` y ${b.obsoletos - b.nombres.length} más`}
+          </div>
+        )}
+      </Notice>
+    )
+  }
+
+  if (b.avisos === 0) {
+    return (
+      <div style={{ fontSize: font.sm, color: color.mut }}>
+        No tiene avisos, así que la copia no crea ninguno: Meta la va a aceptar.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ fontSize: font.sm, color: color.mut }}>
+      {b.avisos === 1 ? 'Su único aviso no lleva' : `Sus ${b.avisos} avisos no llevan`} el campo que
+      Meta deprecó{b.sinSpec > 0 ? ` (de ${b.sinSpec} no se pudo confirmar)` : ''}, así que la copia
+      debería salir.
+    </div>
+  )
 }
 
 /**
@@ -622,6 +704,27 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   // Los tres `idem` nacen con el modal, no con el clic: dos clics rápidos serían dos copias.
   const [idems] = useState(() => ({ duplicar: nuevoIdem(), nombre: nuevoIdem(), presupuesto: nuevoIdem() }))
   const [presu, setPresu] = useState<Presupuestable>(() => dondeVaElPresupuesto(o.nivel, diarioCrudo, sinPresupuesto))
+  // Sin la campaña no se puede preguntar, y decirlo es mejor que dibujar un cartel vacío para siempre.
+  const [bloqueo, setBloqueo] = useState<BloqueoCopia>(() => (
+    o.campania ? { fase: 'mirando' } : { fase: 'sin-datos', motivo: 'No se pudo mirar si los creativos se pueden copiar.' }
+  ))
+
+  /**
+   * ¿Meta va a aceptar esta copia? Una lectura, al abrir el modal.
+   *
+   * 🔑 **Acá y no al desplegar la fila.** Es el único momento en que la respuesta cambia una decisión;
+   * pedirlo al desplegar sería un viaje a Meta por cada campaña que alguien mire de paso. Y no toca
+   * nada: si falla, duplicar sigue habilitado y el modal dice que no se pudo averiguar.
+   */
+  useEffect(() => {
+    const camp = o.campania
+    if (!camp) return
+    let vivo = true
+    traerMejoras(camp).then((r) => {
+      if (vivo) setBloqueo(bloqueoDeLaCopia(o.nivel, o.id, r))
+    })
+    return () => { vivo = false }
+  }, [o.campania, o.nivel, o.id])
 
   // Los conjuntos de la campaña, sólo cuando hace falta decidir dónde iría el presupuesto. Es una
   // lectura y no toca nada; `vivo` corta la carrera de cerrar el modal antes de que conteste.
@@ -674,7 +777,11 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
               idemPresupuesto: idems.presupuesto,
             })}
           >
-            {trabajando ? 'Creando la copia en Meta…' : ajusta ? 'Duplicar y ajustar' : 'Duplicar'}
+            {trabajando ? 'Creando la copia en Meta…'
+              // El botón dice lo que va a pasar. Con el cartel rojo arriba, «Duplicar» a secas
+              // invitaría a apretar como si nada; «igual» es la palabra que reconoce el aviso.
+              : copiaCondenada(bloqueo) ? 'Duplicar igual'
+                : ajusta ? 'Duplicar y ajustar' : 'Duplicar'}
           </Button>
         </>
       }
@@ -684,6 +791,8 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
           Se crea una copia con sus conjuntos y avisos. <b>Nace pausada</b> y con la marca del
           original, así que no gasta hasta que alguien la prenda.
         </div>
+
+        <AvisoBloqueo b={bloqueo} nivel={o.nivel} />
 
         <Notice tone="warning">
           La copia <b>arranca en aprendizaje desde cero</b>: Meta no le hereda nada de lo aprendido a

@@ -997,7 +997,9 @@ function TablaCampañas({ filas, correccion, avisos, palanca }: {
           // escribir, y con dos campañas homónimas el nombre solo no alcanza para saber cuál se toca.
           // Cuando no hay ambigüedad, un renglón más sería ruido en cada confirmación.
           const objeto: ObjetoMeta = {
-            nivel: 'campania', id: c.id, nombre: c.nombre, linea, moneda,
+            // Para una campaña, la campaña es ella misma: es lo que le deja al modal de duplicar
+            // preguntar si Meta va a aceptar la copia de sus avisos.
+            nivel: 'campania', id: c.id, nombre: c.nombre, linea, moneda, campania: c.id,
             cuenta: repetidos.has(c.nombre) ? (palanca.cuentaDe(c.cuentaId) || `cuenta ${c.cuentaId.slice(-4)}`) : undefined,
           }
           const diarioCrudo = c.diarioCrudo ?? 0

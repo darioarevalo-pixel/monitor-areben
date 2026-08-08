@@ -401,6 +401,13 @@ async function conjuntos(res, perfil, campaignId, diasPedidos) {
       id: String(s.id),
       nombre: s.name || '(sin nombre)',
       estado: s.effective_status || s.status || null,
+      // 🔑 **El estado CONFIGURADO va aparte del efectivo, y no es un detalle.** Una copia recién
+      // creada viene `effective_status: 'IN_PROCESS'` con `status: 'PAUSED'`: mostrando sólo el
+      // efectivo, la tabla dice «in process» de algo que está pausado, y el botón ofrece la acción
+      // que corresponde al estado que no es. El efectivo dice si ENTREGA (y arrastra el estado de sus
+      // padres: `CAMPAIGN_PAUSED`); el configurado dice qué se le pidió a ESTE objeto, que es lo que
+      // se acciona.
+      configurado: s.status || null,
       diarioCrudo: s.daily_budget ? num(s.daily_budget) : 0,
       totalCrudo: s.lifetime_budget ? num(s.lifetime_budget) : 0,
       objetivo: s.optimization_goal || null,
