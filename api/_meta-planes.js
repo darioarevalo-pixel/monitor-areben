@@ -64,7 +64,7 @@ export async function planesGet(res, perfil, q) {
     const leido = await leerPlan(sb, id);
     if (leido.error) return res.status(leido.status || 502).json({ error: leido.error });
     if (!visibles.includes(leido.plan.linea)) return res.status(403).json({ error: 'Ese plan es de una marca que no ves.' });
-    return res.status(200).json({ plan: aVista(leido.plan, leido.pasos) });
+    return res.status(200).json({ ok: true, plan: aVista(leido.plan, leido.pasos) });
   }
 
   // La lista. Por defecto sólo lo que sigue vivo: un plan terminado no es una tarea pendiente y el
@@ -82,7 +82,7 @@ export async function planesGet(res, perfil, q) {
     if (!porPlan.has(p.plan_id)) porPlan.set(p.plan_id, []);
     porPlan.get(p.plan_id).push(p);
   }
-  return res.status(200).json({ planes: (data || []).map((p) => aVista(p, porPlan.get(p.id) || [])) });
+  return res.status(200).json({ ok: true, planes: (data || []).map((p) => aVista(p, porPlan.get(p.id) || [])) });
 }
 
 async function leerPlan(sb, id) {
@@ -145,7 +145,7 @@ async function crear(res, perfil, b) {
   if (yaEsta) {
     const leido = await leerPlan(sb, yaEsta.id);
     if (leido.error) return res.status(leido.status || 502).json({ error: leido.error });
-    return res.status(200).json({ plan: aVista(leido.plan, leido.pasos), repetido: true });
+    return res.status(200).json({ ok: true, plan: aVista(leido.plan, leido.pasos), repetido: true });
   }
 
   const marcador = marcadorDe(idem);
@@ -179,7 +179,7 @@ async function crear(res, perfil, b) {
   }
 
   const leido = await leerPlan(sb, fila.id);
-  return res.status(200).json({ plan: aVista(leido.plan || fila, leido.pasos || []) });
+  return res.status(200).json({ ok: true, plan: aVista(leido.plan || fila, leido.pasos || []) });
 }
 
 /**
@@ -415,6 +415,7 @@ async function avanzar(res, perfil, b) {
 
   const fin = await leerPlan(sb, plan.id);
   return res.status(200).json({
+    ok: true,
     plan: aVista(fin.plan || plan, fin.pasos || []),
     // `seguir` es «volvé a llamarme», no «terminó mal». El cliente vuelve hasta que sea `false`.
     seguir: quedan,
@@ -668,5 +669,5 @@ async function cancelar(res, perfil, b) {
   }).eq('id', id);
 
   const fin = await leerPlan(sb, id);
-  return res.status(200).json({ plan: aVista(fin.plan || leido.plan, fin.pasos || leido.pasos), hechosAntes: hechos });
+  return res.status(200).json({ ok: true, plan: aVista(fin.plan || leido.plan, fin.pasos || leido.pasos), hechosAntes: hechos });
 }

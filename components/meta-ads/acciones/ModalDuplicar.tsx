@@ -18,11 +18,26 @@
  * mirar cuántos conjuntos tiene: con uno solo ofrece el campo y dice a cuál se lo va a poner; con
  * varios no lo ofrece y explica que la copia sale con los mismos montos. Ofrecer un campo que
  * después se aplica a "alguno" de los conjuntos sería peor que no ofrecerlo.
+ *
+ * # La segunda salida: armar un PLAN (tanda 3)
+ *
+ * Cuando el aviso de arriba dice que Meta va a rechazar la copia —por el tope de 3 avisos o por el
+ * campo de «mejoras estándar»— el camino de una sola llamada no tiene arreglo: los dos rechazos
+ * salen de que `POST /copies` copia el creativo entero y no lo controlamos.
+ *
+ * 🔑 **El plan los esquiva a los dos con la misma decisión**: copia *shallow* (sin avisos, que es un
+ * POST chico que Meta no rechaza) y después crea cada aviso reusando el `creative_id` del original,
+ * que nunca arrastra el campo obsoleto. Por eso el botón grande pasa a ser «Armar un plan» cuando la
+ * copia está condenada: «Duplicar igual» sobre un cartel rojo es invitar a gastar una escritura de
+ * cupo para recibir el mismo no. Queda igual, en chico, porque el diagnóstico puede fallar.
  */
 
 import { useEffect, useState } from 'react'
-import { traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
+import { cancelarPlan, crearPlan, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
 import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, TOPE_ADS_SINCRONO, type NivelAccion } from '@/lib/meta-ads/acciones'
+import { nuevoIdemPlan, type Plan } from '@/lib/meta-ads/planes'
+import { ProgresoPlan } from '@/components/meta-ads/planes/ProgresoPlan'
+import { avanzarHasta } from '@/components/meta-ads/planes/usePlanes'
 import { dondeVaElPresupuesto, segunLosConjuntos, type Presupuestable } from '@/lib/meta-ads/copia'
 import { money } from '@/lib/meta-ads/formato'
 import { bloqueoDeLaCopia, copiaCondenada, type BloqueoCopia } from '@/lib/meta-ads/mejoras'
@@ -121,6 +136,14 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   // Los tres `idem` nacen con el modal, no con el clic: dos clics rápidos serían dos copias.
   const [idems] = useState(() => ({ duplicar: nuevoIdem(), nombre: nuevoIdem(), presupuesto: nuevoIdem() }))
   const [presu, setPresu] = useState<Presupuestable>(() => dondeVaElPresupuesto(o.nivel, diarioCrudo, sinPresupuesto))
+  // El plan, cuando se elige esa salida. Nace con el modal abierto y se sigue desde acá: mandar a
+  // buscarlo al Panel después de armarlo perdería a la persona justo en el medio de la operación.
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [enPlan, setEnPlan] = useState(false)
+  const [motivoPlan, setMotivoPlan] = useState<string | null>(null)
+  // Su propio `idem`, nacido con el modal igual que los otros tres: de él se deriva el marcador con
+  // el que la sonda encuentra lo que el plan cree, así que dos clics tienen que dar el mismo.
+  const [idemPlan] = useState(() => nuevoIdemPlan())
   // Sin la campaña no se puede preguntar, y decirlo es mejor que dibujar un cartel vacío para siempre.
   const [bloqueo, setBloqueo] = useState<BloqueoCopia>(() => (
     o.campania ? { fase: 'mirando' } : { fase: 'sin-datos', motivo: 'No se pudo mirar si los creativos se pueden copiar.' }
@@ -169,6 +192,63 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   const cambiaPlata = presu.fase === 'listo' && !montoInvalido && aCrudo(nuevoMonto, o.moneda) !== presu.baseCruda
   const ajusta = (!!limpio && !nombreLargo) || cambiaPlata
   const delta = nuevoMonto - base
+  const condenada = copiaCondenada(bloqueo)
+
+  /**
+   * Arma el plan. ⚠️ **No escribe en Meta**: deja los pasos guardados para poder leerlos antes de
+   * ejecutarlos, que es la mitad del valor de tener un plan. Lo que escribe es «Empezar».
+   */
+  const armarPlan = async () => {
+    setEnPlan(true)
+    setMotivoPlan(null)
+    const r = await crearPlan({
+      tipo: 'duplicar',
+      idem: idemPlan,
+      nivel: o.nivel,
+      objetoId: o.id,
+      copias: 1,
+      nombre: limpio || null,
+      presupuestoCrudo: cambiaPlata ? aCrudo(nuevoMonto, o.moneda) : null,
+    })
+    setEnPlan(false)
+    if (!r.ok) { setMotivoPlan(r.motivo); return }
+    setPlan(r.dato.plan)
+  }
+
+  // Con el plan armado, el modal deja de ser un formulario y pasa a ser el progreso: mandar a
+  // buscarlo al Panel perdería a la persona justo en el medio de la operación.
+  if (plan) {
+    return (
+      <Modal
+        abierto
+        onCerrar={onCerrar}
+        cerrarConFondo={false}
+        titulo={`Plan · ${ROTULO_NIVEL[o.nivel]}`}
+        pie={<Button variant="ghost" onClick={onCerrar}>Cerrar</Button>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+          <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.5 }}>
+            La copia se arma en pasos chicos: primero el objeto vacío y después un aviso por vez,
+            reusando el creativo del original. <b>Se puede cerrar esto</b>: el plan queda en el Panel y
+            el avance se retoma desde donde quedó.
+          </div>
+          <ProgresoPlan
+            plan={plan}
+            avanzando={enPlan}
+            motivo={motivoPlan}
+            onSeguir={() => {
+              setEnPlan(true)
+              setMotivoPlan(null)
+              void avanzarHasta(plan.id, setPlan).then((m) => { setMotivoPlan(m); setEnPlan(false) })
+            }}
+            onCancelar={() => {
+              void cancelarPlan(plan.id).then((r) => { if (r.ok) setPlan(r.dato.plan) })
+            }}
+          />
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal
@@ -178,11 +258,24 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
       titulo={`Duplicar · ${ROTULO_NIVEL[o.nivel]}`}
       pie={
         <>
-          <Button variant="ghost" onClick={onCerrar} disabled={trabajando}>Cancelar</Button>
+          <Button variant="ghost" onClick={onCerrar} disabled={trabajando || enPlan}>Cancelar</Button>
+          {/* 🔑 Con la copia condenada, el botón grande es el plan: «Duplicar igual» sobre un cartel
+              rojo es gastar una escritura de cupo para recibir el mismo no. Queda igual, en chico,
+              porque el diagnóstico puede fallar. */}
+          {condenada && (
+            <Button
+              variant="solid"
+              tone="brand"
+              disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
+              onClick={() => void armarPlan()}
+            >
+              {enPlan ? 'Armando el plan…' : 'Armar un plan'}
+            </Button>
+          )}
           <Button
-            variant="solid"
+            variant={condenada ? 'ghost' : 'solid'}
             tone="brand"
-            disabled={trabajando || nombreLargo || montoInvalido || presu.fase === 'mirando'}
+            disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
             onClick={() => onDuplicar({
               nombre: limpio || null,
               // Sólo se manda si de verdad cambia: mandar el mismo número sería una escritura más en
@@ -197,7 +290,7 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
             {trabajando ? 'Creando la copia en Meta…'
               // El botón dice lo que va a pasar. Con el cartel rojo arriba, «Duplicar» a secas
               // invitaría a apretar como si nada; «igual» es la palabra que reconoce el aviso.
-              : copiaCondenada(bloqueo) ? 'Duplicar igual'
+              : condenada ? 'Duplicar igual'
                 : ajusta ? 'Duplicar y ajustar' : 'Duplicar'}
           </Button>
         </>
@@ -210,6 +303,16 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
         </div>
 
         <AvisoBloqueo b={bloqueo} nivel={o.nivel} />
+
+        {condenada && (
+          <Notice tone="brand">
+            <b>Hay otra salida: armar un plan.</b> En vez de pedirle a Meta la copia entera de una,
+            copia el {ROTULO_NIVEL[o.nivel]} vacío y después crea cada aviso por separado reusando el
+            creativo del original. Así ni el tope de {TOPE_ADS_SINCRONO} avisos ni el campo de
+            «mejoras estándar» lo frenan, y si se corta a la mitad se retoma donde quedó.
+          </Notice>
+        )}
+        {motivoPlan && <Notice tone="danger">No se pudo armar el plan: {motivoPlan}</Notice>}
 
         <Notice tone="warning">
           La copia <b>arranca en aprendizaje desde cero</b>: Meta no le hereda nada de lo aprendido a

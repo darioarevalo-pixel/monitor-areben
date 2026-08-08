@@ -9,6 +9,7 @@
 
 import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
+import type { AvanceDePlan, Plan } from './planes'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
   RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
@@ -270,6 +271,76 @@ export async function reconciliarCopia(idem: string): Promise<Reconciliacion> {
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
   }
+}
+
+// ── Planes por pasos ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Los planes vivos —pendientes, en curso y atascados— de las líneas que este perfil puede ver.
+ *
+ * Como la auditoría, **sale de la base y no habla con Meta**: se puede mirar aunque Graph esté
+ * caído, que es justo cuando importa saber qué quedó a medias. Con `estado: 'todos'` trae también
+ * los terminados y los cancelados, que es lo que mira el Registro.
+ */
+export function traerPlanes(estado?: 'todos'): Promise<Lectura<{ planes: Plan[] }>> {
+  const qs = new URLSearchParams({ recurso: 'planes' })
+  if (estado) qs.set('estado', estado)
+  return pedir<{ planes: Plan[] }>(qs)
+}
+
+export function traerPlan(id: number): Promise<Lectura<{ plan: Plan }>> {
+  return pedir<{ plan: Plan }>(new URLSearchParams({ recurso: 'plan', id: String(id) }))
+}
+
+async function postPlan<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {
+  try {
+    const r = await apiFetch('/api/meta-ads?recurso=plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || d.ok !== true) {
+      const extra = d?.detalle ? ` — ${String(d.detalle).slice(0, 200)}` : ''
+      return { ok: false, motivo: `${String(d?.error ?? `HTTP ${r.status}`).slice(0, 200)}${extra}` }
+    }
+    return { ok: true, dato: d as T }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * Arma un plan. **No escribe en Meta**: lo persiste con sus pasos para que se pueda leer antes de
+ * ejecutarlo, que es la mitad del valor de tener un plan.
+ *
+ * El `idem` lo genera la pantalla al apretar el botón (`nuevoIdemPlan()`), igual que en una acción
+ * suelta y por el mismo motivo: generarlo al mandar haría dos claves con un doble clic. Y acá pesa
+ * más, porque el **marcador** —con el que la sonda encuentra lo que el plan creó— se deriva de él.
+ */
+export function crearPlan(cuerpo: Record<string, unknown>): Promise<Lectura<{ plan: Plan; repetido?: boolean }>> {
+  return postPlan<{ plan: Plan; repetido?: boolean }>({ accion: 'crear', ...cuerpo })
+}
+
+/**
+ * Ejecuta los pasos que entren en el tiempo del request y devuelve cómo quedó.
+ *
+ * 🔑 **`seguir` es «volvé a llamarme», no «terminó mal»**, y con `pausa` el que vuelve no tiene que
+ * ser el bucle: significa que quedan pasos pero que el freno lo arregla el tiempo (Meta armando la
+ * copia, una llamada cortada), así que volver enseguida gasta llamadas para recibir el mismo
+ * «todavía no».
+ */
+export function avanzarPlan(id: number): Promise<Lectura<AvanceDePlan>> {
+  return postPlan<AvanceDePlan>({ accion: 'avanzar', id })
+}
+
+/**
+ * ⚠️ **Cancelar no deshace: deja de avanzar.** Lo que el plan ya creó sigue en Meta —pausado, porque
+ * todo nace PAUSED— y lo que ya movió de presupuesto sigue movido. `hechosAntes` es cuántos pasos
+ * habían corrido, para poder decirlo con un número en vez de con un «puede que algo haya quedado».
+ */
+export function cancelarPlan(id: number): Promise<Lectura<{ plan: Plan; hechosAntes: number }>> {
+  return postPlan<{ plan: Plan; hechosAntes: number }>({ accion: 'cancelar', id })
 }
 
 /**

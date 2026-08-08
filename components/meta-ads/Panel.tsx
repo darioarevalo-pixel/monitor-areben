@@ -15,12 +15,17 @@
  *
  * # Lo que NO está acá, a propósito
  *
- * Ni «Planes en curso» ni «Empezar (Crear · Duplicar · Escalar)»: el motor de planes es la tanda
- * siguiente. Un bloque vacío prometiendo algo que no existe es peor que no tenerlo — es la misma
- * regla del ámbar permanente.
+ * «Empezar (Crear · Duplicar · Escalar)»: crear desde cero es la tanda que sigue. Un bloque vacío
+ * prometiendo algo que no existe es peor que no tenerlo — es la misma regla del ámbar permanente.
+ *
+ * 🔑 **«Planes en curso» sí está, y va ARRIBA de todo** (desde la tanda 3), pero **sólo cuando hay
+ * alguno**: es lo único de esta pantalla que está a medio hacer en Meta ahora mismo, y un plan a
+ * medias es una tarea pendiente de la cuenta, no un detalle de quien lo armó. Se dibuja antes que el
+ * diagnóstico porque el diagnóstico describe lo que ya está, y esto describe lo que quedó colgado.
  */
 
 import Link from 'next/link'
+import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
 import { useCampanias, type Campanias } from '@/components/meta-ads/useCampanias'
 import { VentanaEtapas } from '@/components/meta-ads/VentanaEtapas'
 import { plata } from '@/lib/meta-ads/formato'
@@ -39,6 +44,10 @@ export function Panel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <VentanaEtapas dias={m.dias} setDias={m.setDias} />
+
+      {/* Va antes que todo lo demás y no depende del censo: sale de la base, así que se ve aunque
+          Meta esté caído — que es justo cuando importa saber qué quedó a medias. */}
+      <PlanesEnCurso />
 
       {m.estado.fase === 'cargando' && <Card style={{ color: color.mut2 }}>Leyendo las campañas de Meta…</Card>}
 
