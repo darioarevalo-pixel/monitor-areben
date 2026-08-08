@@ -497,7 +497,12 @@ function sufijoDeCopia() {
   const f = new Intl.DateTimeFormat('es-AR', {
     timeZone: ZONA, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date());
-  const p = (t) => (f.find((x) => x.type === t) || {}).value || '00';
+  // ⚠️ **`2-digit` acá es un pedido, no una garantía**: medido el 8-ago-2026, `es-AR` devuelve el día
+  // y el mes SIN rellenar en esta combinación de campos (`8/8`, no `08/08`) y sí rellena la hora. El
+  // relleno se hace a mano para que el nombre sea el mismo siempre — el modal muestra un ejemplo del
+  // formato para que se sepa qué buscar en Ads Manager, y un ejemplo que no coincide con lo que sale
+  // hace perder justo la búsqueda para la que existe el sufijo.
+  const p = (t) => String((f.find((x) => x.type === t) || {}).value || '0').padStart(2, '0');
   return ` — copia ${p('day')}/${p('month')} ${p('hour')}:${p('minute')}`;
 }
 

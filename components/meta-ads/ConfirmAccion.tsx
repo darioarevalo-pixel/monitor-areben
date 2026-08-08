@@ -831,7 +831,9 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
 
         <Field
           label="Nombre de la copia"
-          hint="Dejalo vacío y queda el del original con la fecha y la hora («— copia 06/08 17:03»)."
+          // El ejemplo tiene que ser IGUAL al que genera `sufijoDeCopia()`: es lo que alguien va a
+          // tipear en el buscador de Ads Manager si la copia hay que ir a encontrarla.
+          hint="Dejalo vacío y queda el del original con la fecha y la hora («— copia 08/08 17:03»)."
         >
           <Input
             value={nombre}
