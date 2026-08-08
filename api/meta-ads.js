@@ -37,30 +37,20 @@ import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRAL
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
+// Y cómo se leen los números de una fila de insights. Salió de acá adentro cuando la foto diaria
+// (`scripts/snapshot-meta.mjs`) necesitó leerlas igual desde un script: dos lecturas distintas de
+// `omni_purchase` no fallan ruidosamente, devuelven dos cifras de ventas parecidas y distintas.
+import { accion, accionRe, ATTR, COMPRA, metricasDe, num, RE_PERFIL, RE_SEGUIDOR, sumaAcciones } from '../lib/meta-ads/metricas.core.js';
 import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
-// Ventana de atribución fija: cambia mucho los números de ventas/ROAS, así que la explicitamos.
-const ATTR = encodeURIComponent(JSON.stringify(['7d_click', '1d_view']));
-// Compras dedup cross-surface (pixel + CAPI + on-Meta): la fuente única de verdad de ventas.
-const COMPRA = 'omni_purchase';
-// `OBJETIVOS_VENTA` / `OBJETIVOS_TRAFICO` se mudaron a `lib/meta-ads/etapas.core.js` (importados
+// `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
+// mudaron a `lib/meta-ads/metricas.core.js` junto con las funciones que los usan, por el mismo
+// motivo por el que `mensajeError` se fue a `graph.core.js`: los necesita un script de `scripts/`.
+// `OBJETIVOS_VENTA` / `OBJETIVOS_TRAFICO` viven en `lib/meta-ads/etapas.core.js` (importados
 // arriba): son la misma verdad que el mapa de etapas y ahí un test amarra que no se despeguen.
-/**
- * Visitas al perfil (Instagram/Facebook). El `action_type` exacto de Meta cambia entre versiones
- * y no está documentado de forma estable, así que NO se hardcodea un nombre: se busca por patrón
- * sobre las acciones que devuelve la fila. Si Meta lo llama distinto, el dato queda en 0 en vez
- * de romper — mismo criterio que el resto de los enriquecimientos.
- */
-const RE_PERFIL = /profile_visit|profile_view|profile_engagement/i;
-/**
- * Seguidores nuevos. Mismo criterio y mismo cuidado que RE_PERFIL: Meta los nombra distinto
- * según la superficie (`follow` de Instagram, `like`/`page_like` de una página de Facebook), así
- * que se matchea por patrón. `like` va anclado para no comerse `post_reaction` ni parecidos.
- */
-const RE_SEGUIDOR = /(^|\.)follow|page_like|(^|\.)like$/i;
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
@@ -967,24 +957,7 @@ function rangoQS(q) {
   return `date_preset=${PRESETS.has(q.preset) ? q.preset : 'last_30d'}`;
 }
 
-// Lee el value de un action_type dentro de un array {action_type, value} (actions / action_values / purchase_roas).
-function accion(arr, type) {
-  if (!Array.isArray(arr)) return 0;
-  const hit = arr.find((a) => a && a.action_type === type);
-  return hit ? num(hit.value) : 0;
-}
-
-// Suma los `value` de un array de acciones (métricas de video: [{action_type,value}]).
-function sumaAcciones(arr) {
-  if (!Array.isArray(arr)) return 0;
-  return arr.reduce((s, a) => s + num(a && a.value), 0);
-}
-
-// Suma los `value` de todas las acciones cuyo action_type matchea un patrón (ver RE_PERFIL).
-function accionRe(arr, re) {
-  if (!Array.isArray(arr)) return 0;
-  return arr.reduce((s, a) => s + (a && re.test(String(a.action_type || '')) ? num(a.value) : 0), 0);
-}
+// `accion`, `sumaAcciones` y `accionRe` viven en `lib/meta-ads/metricas.core.js` (importadas arriba).
 
 // Pasos del embudo de compra, en orden, con su action_type de Meta.
 const FUNNEL = [
@@ -1014,24 +987,7 @@ function ventaDe(row) {
   return { spend: num(row.spend), purchases: accion(row.actions, COMPRA), revenue: accion(row.action_values, COMPRA) };
 }
 
-// Métricas de una fila de insights (nivel cuenta o campaña), con ventas/ROAS ya resueltas.
-function metricasDe(row) {
-  return {
-    spend: num(row.spend),
-    impressions: num(row.impressions),
-    reach: num(row.reach),
-    frequency: num(row.frequency),
-    clicks: num(row.clicks),
-    ctr: num(row.ctr),
-    cpc: num(row.cpc),
-    cpm: num(row.cpm),
-    purchases: accion(row.actions, COMPRA),
-    revenue: accion(row.action_values, COMPRA),
-    roas: accion(row.purchase_roas, COMPRA),
-    perfil: accionRe(row.actions, RE_PERFIL),
-    seguidores: accionRe(row.actions, RE_SEGUIDOR),
-  };
-}
+// `metricasDe` vive en `lib/meta-ads/metricas.core.js` (importada arriba).
 
 // Una fila de anuncio (level=ad).
 function adDe(row) {
@@ -1088,10 +1044,6 @@ function esRangoCorto(rangoEco) {
   return Math.abs(b - a) <= 2 * 86400000;
 }
 
-function num(v) {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// `mensajeError` (que prioriza `error_user_msg`, el texto que Meta escribe para una persona) se
-// mudó a `lib/meta-ads/graph.core.js` junto con el resto de la plomería.
+// `num` se mudó a `lib/meta-ads/metricas.core.js` (importada arriba), y `mensajeError` —que
+// prioriza `error_user_msg`, el texto que Meta escribe para una persona— a `graph.core.js` junto
+// con el resto de la plomería.

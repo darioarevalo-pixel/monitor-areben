@@ -1,0 +1,53 @@
+name: Foto diaria de Meta Ads
+
+# 06:30 UTC = 03:30 en Argentina: media hora después del sync diario, y con el día de ayer ya
+# cerrado en la zona de las cuentas. Corre acá y no en Vercel porque son decenas de llamadas
+# paginadas a Graph por cuenta y Hobby corta a los 10 s.
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Días hacia atrás (vacío = la ventana de relectura normal)'
+        required: false
+        default: ''
+      cuenta:
+        description: 'Una sola cuenta publicitaria (vacío = todas las del token)'
+        required: false
+        default: ''
+      simular:
+        description: 'true = no escribe, sólo dice qué escribiría'
+        required: false
+        default: 'false'
+
+jobs:
+  foto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Sacar la foto
+        env:
+          # ⚠️ META_ADS_TOKEN vive sólo en Vercel: hay que darlo de alta como secret de este repo o
+          # el job termina en verde sin traer nada. El script chequea que exista y corta si falta.
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          # La base de BDI: la tabla es cross-marca porque las cuentas publicitarias son compartidas.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ENTRADA_BACKFILL: ${{ inputs.backfill }}
+          ENTRADA_CUENTA: ${{ inputs.cuenta }}
+          ENTRADA_SIMULAR: ${{ inputs.simular }}
+        run: |
+          args=""
+          [ -n "$ENTRADA_BACKFILL" ] && args="$args --backfill $ENTRADA_BACKFILL"
+          [ -n "$ENTRADA_CUENTA" ] && args="$args --cuenta $ENTRADA_CUENTA"
+          [ "$ENTRADA_SIMULAR" = "true" ] && args="$args --simular"
+          node scripts/snapshot-meta.mjs $args
