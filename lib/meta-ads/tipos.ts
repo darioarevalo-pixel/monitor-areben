@@ -358,6 +358,16 @@ export type RespuestaCreativos = {
    * en vez de dar a entender que los avisos no tienen copy.
    */
   sinCreativo: string | null
+  /**
+   * Motivo por el que no se pudieron traer las tarjetas de los carruseles, o null.
+   *
+   * A diferencia de `sinCreativo` **no se dibuja en pantalla a propósito**: lo único que se pierde
+   * es el chip `⧉ N` de unas pocas tarjetas, y un cartel por cada cosa que Meta no contestó enseña
+   * a ignorar los carteles. Viaja igual porque el rescate lee un **posteo** y no un aviso —es la
+   * única lectura fuera del dominio de anuncios—, así que si el token se queda sin permiso de
+   * página hace falta poder verlo en la respuesta en vez de deducirlo de que no hay carruseles.
+   */
+  sinPiezas: string | null
 }
 
 // ── Diagnóstico del token: ¿se puede ESCRIBIR en Meta? ──────────────────────────
