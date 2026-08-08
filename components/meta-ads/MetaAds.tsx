@@ -124,10 +124,15 @@ function Resumen() {
 
   const ovEstado: Cargable<CuentaMetaAds[]> = !ov || ov.preset !== preset ? { fase: 'cargando' } : ov.r
   const cuentas = ovEstado.fase === 'ok' ? ovEstado.data : []
-  // El detalle es de UNA cuenta: el endpoint no agrega varias. Con el eje en «Todas» se abre la
-  // primera, que es como venía andando. Los chips de abajo escriben en el eje —no en un estado
-  // local— para que el desplegable de arriba y ellos no puedan decir cosas distintas.
-  const activaId = (cuentaEje !== 'todas' && cuentas.some((c) => c.id === cuentaEje) ? cuentaEje : cuentas[0]?.id) ?? null
+  // El detalle es de UNA cuenta: el endpoint no agrega varias. Con el eje en «Todas» se abre **la
+  // que más gastó en el rango**, no la primera que devolvió Meta — así se abría `BDI ACCESORIOS`,
+  // que no gastó un peso, habiendo una cuenta con $608.503 (medido en prod el 8-ago-2026). La
+  // pantalla vacía por default enseña que la sección no anda.
+  //
+  // Los chips escriben en el eje —no en un estado local— para que el desplegable de arriba y ellos
+  // no puedan decir cosas distintas.
+  const conMasGasto = cuentas.reduce<CuentaMetaAds | null>((mejor, c) => ((c.spend ?? 0) > (mejor?.spend ?? -1) ? c : mejor), null)
+  const activaId = (cuentaEje !== 'todas' && cuentas.some((c) => c.id === cuentaEje) ? cuentaEje : conMasGasto?.id) ?? null
 
   const [det, setDet] = useState<{ key: string; r: Cargable<DetalleCuenta> } | null>(null)
   useEffect(() => {

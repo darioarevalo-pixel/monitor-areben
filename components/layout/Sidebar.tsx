@@ -260,7 +260,12 @@ export function Sidebar({
  * no cierra al otro.
  */
 function Subgrupo({ grupo, activa, sub, children }: { grupo: NavGrupo; activa: string; sub?: string | null; children: React.ReactNode }) {
-  const tieneActiva = grupo.keys.includes(activa) || (grupo.items ?? []).some((it) => rutaActiva(it, activa, sub))
+  // Se abre si la sección activa está adentro, y eso se pregunta por KEY, no por ruta exacta: una
+  // subsección con nombre viejo que todavía funciona por alias (`/meta-ads/etapas`) no matchea
+  // ninguna ruta del menú, y el grupo se veía CERRADO — o sea que el bookmark de siempre parecía
+  // haber perdido la sección del menú. La ruta exacta sigue decidiendo cuál entrada se resalta.
+  const tieneActiva = grupo.keys.includes(activa)
+    || (grupo.items ?? []).some((it) => it.key === activa || rutaActiva(it, activa, sub))
   const [abierto, setAbierto] = useState<boolean | null>(null)
   const open = abierto ?? tieneActiva
 
