@@ -28,7 +28,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { accionarMeta, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
+import { accionarMeta, reconciliarCopia, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
 import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, TOPE_ADS_SINCRONO, type ClaveAccion, type NivelAccion } from '@/lib/meta-ads/acciones'
 import { dondeVaElPresupuesto, segunLosConjuntos, type Presupuestable } from '@/lib/meta-ads/copia'
 import { bloqueoDeLaCopia, copiaCondenada, type BloqueoCopia } from '@/lib/meta-ads/mejoras'
@@ -214,13 +214,33 @@ export function useAccionMeta(recargar: () => void) {
     setEnCurso(o.id)
     try {
       const dup = await enviar(o, 'duplicar', {}, aj.idemDuplicar)
-      if (!dup.ok) {
+
+      /**
+       * 🔑 **El corte por tiempo NO es un final.** Duplicar algo con avisos tarda más que los 8 s del
+       * `fetch` (medido el 8-ago-2026), o sea que este camino es el normal y no el raro: la copia se
+       * creó y del lado de acá se cortó. Reintentar haría dos copias; lo que se hace es **ir a
+       * buscarla por el sufijo** —una lectura— y, si está, seguir con el nombre y el presupuesto como
+       * si nada hubiera pasado. Si todavía no aparece, se dice eso, que no es «no se creó».
+       */
+      let copia = dup.ok ? dup.dato.copia : undefined
+      if (!dup.ok && dup.puedeExistir) {
+        const rec = await reconciliarCopia(aj.idemDuplicar)
+        if (rec.ok && rec.encontrada) copia = rec.copia
+        else {
+          // No se la encontró (o no se pudo mirar): la única respuesta honesta es «no sabemos», con
+          // el nombre para buscarla. Decir «no se creó» sería invitar a apretar de nuevo.
+          const donde = dup.sufijo ? ` Buscá «${dup.sufijo}» en Ads Manager antes de volver a intentarlo.` : ''
+          toast.aviso(`${rec.ok ? rec.motivo : `No se pudo confirmar si la copia se creó (${rec.motivo}).`}${donde}`)
+          return false
+        }
+      }
+
+      if (!dup.ok && !copia) {
         if (dup.sinLinea) toast.error('Esta campaña todavía no tiene marca. Asignala en la columna «Marca» de esta tabla y volvé.')
         else toast.error(dup.motivo)
         return false
       }
 
-      const copia = dup.dato.copia
       if (!copia || !copia.id) {
         // Es lo que contesta un `idem` repetido: el servidor devuelve lo guardado del primer intento
         // y ahí no viene el objeto nuevo. La copia existe; encadenarle ajustes a ciegas sería
@@ -260,7 +280,10 @@ export function useAccionMeta(recargar: () => void) {
       const procesando = copia.efectivo === 'IN_PROCESS'
         ? ' Meta todavía la está armando, así que por un rato va a figurar «en proceso».'
         : ''
-      const cola = `${pendientes.length ? ` ${pendientes.join(' ')}` : ''}${procesando}`
+      // Que la copia se haya adoptado después de un corte no cambia el resultado, pero sí explica por
+      // qué tardó tanto y por qué en la auditoría la fila dice que se encontró por su nombre.
+      const adoptada = dup.ok ? '' : ' (Meta tardó más de lo que esperamos y la copia se encontró por su nombre.)'
+      const cola = `${pendientes.length ? ` ${pendientes.join(' ')}` : ''}${procesando}${adoptada}`
       // 🔴 Una copia que NO nació pausada está gastando ahora mismo: va primero y en rojo, aunque
       // todo lo demás haya salido bien.
       if (copia.estado && copia.estado !== 'PAUSED') {
@@ -274,7 +297,7 @@ export function useAccionMeta(recargar: () => void) {
       } else if (pendientes.length) {
         toast.aviso(`Se creó «${nombreFinal}», pausada${conPlata}.${cola}`)
       } else {
-        toast.ok(`Copia creada: «${nombreFinal}», pausada${conPlata}.${procesando}`)
+        toast.ok(`Copia creada: «${nombreFinal}», pausada${conPlata}.${procesando}${adoptada}`)
       }
       return true
     } finally {

@@ -32,7 +32,7 @@ import {
   CAMPOS_LECTURA, ESTE_NIVEL, ETIQUETA_NIVEL, fotoDe, nivelReal, permiteAccion, PRONOMBRE_NIVEL,
   quedoPuesto, revisarPresupuesto, SIN_LINEA, TOPE_ADS_SINCRONO, validarPedido,
 } from '../lib/meta-ads/acciones.core.js';
-import { codigoError, graph, graphPost, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
+import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
 
 const TABLA = 'meta_ads_accion';
@@ -56,6 +56,12 @@ function motivoLargo(cuerpo) {
 }
 
 export default async function accionar(req, res, perfil) {
+  // «¿La copia que quedó sin confirmar existe?» no es una acción más: no escribe en Meta, no lleva
+  // `idem` nuevo —trabaja sobre el de la copia que se cortó— y por lo tanto no puede pasar por
+  // `validarPedido`, que exige acción, nivel y objeto. Se despacha antes.
+  const idemADoptar = req.body && req.body.reconciliar;
+  if (idemADoptar) return await reconciliar(res, perfil, String(idemADoptar));
+
   const pedido = normalizar(req.body || {});
 
   const v = validarPedido(pedido);
@@ -280,6 +286,12 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
         ? `Se cortó antes de que Meta contestara, así que la copia PUEDE haberse creado igual. Buscá «${sufijo.trim()}» en Ads Manager antes de volver a intentarlo.`
         : 'Meta rechazó la copia.',
       detalle: mensajeError(escrito),
+      // 🔑 **La bandera es lo que deja que la pantalla siga sola.** Sin ella, «puede haberse creado»
+      // es una frase que alguien tiene que leer y actuar; con ella, la pantalla pide la
+      // reconciliación (`{reconciliar: idem}`) y, si la copia está, sigue con el nombre y el
+      // presupuesto como si el corte no hubiera pasado. Medido el 8-ago: duplicar un conjunto CON
+      // avisos **tarda más que los 8 s**, o sea que este camino es el normal, no el raro.
+      ...(corte ? { puedeExistir: true, sufijo: sufijo.trim() } : {}),
     }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, uso: escrito.uso || null });
   }
 
@@ -348,6 +360,123 @@ async function duplicar({ sb, idem, cerrar, nivel, objetoId, obj, nombre, linea,
       conLinea,
     },
   }, { ...contexto, pedido: { copia_de: objetoId, sufijo }, a, uso: escrito.uso || null });
+}
+
+// ── Reconciliar: la copia que quedó sin confirmar ─────────────────────────────────────────────
+/**
+ * **«Se cortó antes de que Meta contestara» → andá a ver si la copia está.**
+ *
+ * # Por qué esto hacía falta
+ *
+ * Medido el 8-ago-2026: **duplicar un conjunto CON avisos tarda más que los 8 s** de `TIMEOUT_MS`.
+ * La copia se creó perfecta y la fila quedó en `error` («no sabemos cómo quedó»), o sea que **el
+ * camino feliz se reportaba como un problema, y siempre**. El respaldo del sufijo funcionaba, pero
+ * lo caminaba una persona: buscar en Ads Manager, comprobar, y encima quedarse sin los ajustes de
+ * «duplicar y ajustar», que necesitan el id de la copia.
+ *
+ * ⛔ **Subir el timeout no era la salida**: 8 s de los 10 que da Hobby ya están casi al tope, y
+ * esperar más no es un plan, es esperar más.
+ *
+ * # Por qué es seguro, si duplicar no es reintentable
+ *
+ * Porque **esto no escribe en Meta: LEE**. Busca entre los hijos del padre el que lleva el sufijo
+ * único que se anotó antes del POST. No puede crear una segunda copia ni siquiera si se lo llama
+ * cien veces; y si la copia no está, no inventa: deja la fila como estaba.
+ *
+ * 🔑 **«No la encontré» NO es «no se creó».** Justo después del corte, Meta puede seguir armándola.
+ * Por eso ese caso deja el `error` intacto y contesta que se vuelva a mirar, en vez de cerrar la fila
+ * como rechazada — que es lo que invitaría a apretar de nuevo y terminar con dos copias.
+ */
+async function reconciliar(res, perfil, idem) {
+  const sb = clienteBdi();
+  if (!sb) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
+
+  const { data: fila, error } = await sb.from(TABLA)
+    .select('idem, accion, nivel, objeto_id, objeto_nombre, campaign_id, cuenta_id, linea, pedido, resultado, a, quien')
+    .eq('idem', idem).maybeSingle();
+  if (error) return res.status(502).json({ error: 'No se pudo leer el registro de la acción.', detalle: error.message });
+  if (!fila) return res.status(404).json({ error: 'No hay ninguna acción con esa clave.' });
+  if (fila.accion !== 'duplicar') return res.status(400).json({ error: 'Sólo una copia se puede reconciliar.' });
+
+  // Ya cerrada como buena: se devuelve lo guardado. Es lo mismo que hace el candado del doble clic, y
+  // por el mismo motivo — quien pregunta dos veces tiene que recibir dos veces la misma respuesta.
+  if (fila.resultado === 'ok') {
+    const a = fila.a || {};
+    return res.status(200).json({
+      ok: true, yaEstaba: true, encontrada: !!a.copia_id,
+      copia: a.copia_id ? { id: String(a.copia_id), nombre: String(a.nombre || ''), estado: String(a.estado || ''), efectivo: a.efectivo || null, conLinea: a.con_linea !== false } : null,
+    });
+  }
+
+  // El permiso se pregunta igual que al duplicar: por la LÍNEA de la campaña, no por la sesión. Sin
+  // línea no se reconcilia nada — es el mismo 409 que corta la escritura, y la copia sin marca sigue
+  // sin poder accionarse hasta que alguien la asigne.
+  if (!fila.linea) return res.status(409).json({ error: SIN_LINEA, sinLinea: true, campaignId: fila.campaign_id || null });
+  const permiso = permiteAccion(perfil, 'duplicar', fila.linea);
+  if (!permiso.ok) return res.status(permiso.status).json({ error: permiso.error });
+
+  const sufijo = String((fila.pedido && fila.pedido.sufijo) || '').trim();
+  if (!sufijo) {
+    // Sin sufijo anotado no hay con qué buscar. Pasa con las filas viejas y con las que se cortaron
+    // antes de poder anotarlo; decirlo es mejor que devolver «no la encontré», que suena a que no está.
+    return res.status(409).json({ error: 'Esa copia no dejó anotado el nombre con el que buscarla, así que hay que mirarla en Ads Manager.' });
+  }
+
+  const padre = fila.nivel === 'campania' ? `act_${fila.cuenta_id}/campaigns` : `${fila.campaign_id}/adsets`;
+  if (fila.nivel === 'campania' ? !fila.cuenta_id : !fila.campaign_id) {
+    return res.status(409).json({ error: 'No quedó registrado dónde buscar la copia, así que hay que mirarla en Ads Manager.' });
+  }
+
+  const hijos = await insightsTodas(`${padre}?fields=id,name,status,effective_status&limit=200`);
+  if (!hijos.ok) return res.status(502).json({ error: 'No se pudo mirar en Meta si la copia existe.', detalle: hijos.error });
+
+  const candidatos = hijos.rows.filter((h) => String(h.name || '').includes(sufijo));
+  if (!candidatos.length) {
+    return res.status(200).json({
+      ok: true,
+      encontrada: false,
+      // La frase importa: NO afirma que no se creó. Ver el comentario de arriba.
+      motivo: `Todavía no aparece ninguna copia llamada «${sufijo}». Puede que Meta la esté armando: mirá de nuevo en un momento antes de volver a duplicar.`,
+    });
+  }
+  if (candidatos.length > 1) {
+    // Dos con el mismo sufijo sólo puede salir de dos intentos, y elegir una sería adoptar la mitad
+    // de un problema. Se dice cuántas hay y se manda a mirarlas.
+    return res.status(409).json({
+      error: `Aparecieron ${candidatos.length} copias llamadas «${sufijo}». Mirá en Ads Manager cuál dejar antes de seguir.`,
+    });
+  }
+
+  const copia = candidatos[0];
+  const copiaId = String(copia.id);
+  const estado = String(copia.status || '');
+  const efectivo = String(copia.effective_status || '');
+
+  // La línea, igual que en el camino normal: sólo una campaña copiada necesita fila propia, porque la
+  // copia de un conjunto cuelga de la campaña del original, que ya la tiene.
+  let conLinea = true;
+  if (fila.nivel === 'campania') {
+    const puesta = await heredarLinea({
+      campaignId: copiaId, linea: fila.linea, cuentaId: fila.cuenta_id,
+      nombre: String(copia.name || ''), objetivo: null, quien: fila.quien || 'desconocido',
+    });
+    conLinea = puesta.ok;
+  }
+
+  const a = {
+    copia_id: copiaId, nombre: String(copia.name || ''), estado, con_linea: conLinea,
+    ...(efectivo && efectivo !== estado ? { efectivo } : {}),
+    // Queda dicho en la fila que se cerró mirando, no contestando: es la diferencia entre «Meta dijo
+    // que la hizo» y «la fui a buscar y estaba».
+    adoptada: true,
+  };
+  await completar(sb, idem, { resultado: 'ok', a, detalle: `Se cortó la llamada y la copia se encontró después por su nombre («${sufijo}»).` });
+
+  return res.status(200).json({
+    ok: true,
+    encontrada: true,
+    copia: { id: copiaId, nombre: String(copia.name || ''), estado, efectivo: efectivo !== estado ? efectivo : null, conLinea },
+  });
 }
 
 /** La zona en la que trabaja la gente que lee estos nombres. Ver `sufijoDeCopia`. */

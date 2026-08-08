@@ -169,7 +169,20 @@ export function traerAuditoria(opts: { campania?: string; limite?: number } = {}
  * cualquier otro rechazo: es el único que se arregla asignándola, y por eso la pantalla le pone un
  * botón en vez de un cartel rojo.
  */
-export type FalloAccion = { ok: false; motivo: string; sinLinea?: boolean; campaignId?: string }
+export type FalloAccion = {
+  ok: false
+  motivo: string
+  sinLinea?: boolean
+  campaignId?: string
+  /**
+   * Duplicar se cortó por tiempo: **la copia puede existir igual** y hay que ir a buscarla por su
+   * sufijo (`reconciliarCopia`). No es un error que se arregle reintentando —reintentar haría dos
+   * copias— y medido el 8-ago-2026 es el camino NORMAL cuando lo que se copia tiene avisos.
+   */
+  puedeExistir?: boolean
+  /** El nombre con el que se la puede encontrar, ya recortado. */
+  sufijo?: string
+}
 
 export async function accionarMeta(pedido: PedidoAccion): Promise<{ ok: true; dato: ResultadoAccion } | FalloAccion> {
   try {
@@ -178,7 +191,10 @@ export async function accionarMeta(pedido: PedidoAccion): Promise<{ ok: true; da
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pedido),
     })
-    let d: (Partial<ResultadoAccion> & { ok?: boolean; error?: unknown; detalle?: unknown; sinLinea?: boolean; campaignId?: string }) | null = null
+    let d: (Partial<ResultadoAccion> & {
+      ok?: boolean; error?: unknown; detalle?: unknown; sinLinea?: boolean; campaignId?: string
+      puedeExistir?: boolean; sufijo?: string
+    }) | null = null
     try {
       d = await r.json()
     } catch {
@@ -193,9 +209,53 @@ export async function accionarMeta(pedido: PedidoAccion): Promise<{ ok: true; da
         motivo: `${String(d?.error ?? `HTTP ${r.status}`).slice(0, 200)}${extra}`,
         sinLinea: d?.sinLinea,
         campaignId: d?.campaignId,
+        puedeExistir: d?.puedeExistir,
+        sufijo: d?.sufijo,
       }
     }
     return { ok: true, dato: d as ResultadoAccion }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** Lo que contesta la reconciliación: la copia apareció, no apareció (todavía), o no se pudo mirar. */
+export type Reconciliacion =
+  | { ok: true; encontrada: true; copia: CopiaEncontrada }
+  | { ok: true; encontrada: false; motivo: string }
+  | { ok: false; motivo: string }
+
+export type CopiaEncontrada = {
+  id: string
+  nombre: string
+  /** El `status` de Meta. Siempre `PAUSED` si la copia salió como se pidió. */
+  estado: string
+  /** El `effective_status`, sólo si dice algo distinto (`IN_PROCESS`). */
+  efectivo: string | null
+  conLinea: boolean
+}
+
+/**
+ * **¿La copia que quedó sin confirmar existe?** Se le pregunta al servidor por el `idem` de la
+ * duplicación que se cortó.
+ *
+ * ⚠️ **No es un reintento y no puede crear una segunda copia**: el servidor sólo LEE los hijos del
+ * padre buscando el sufijo único que anotó antes de llamar a Meta. Duplicar no es reintentable;
+ * esto es la otra mitad de esa decisión — la que permite no reintentar.
+ */
+export async function reconciliarCopia(idem: string): Promise<Reconciliacion> {
+  try {
+    const r = await apiFetch('/api/meta-ads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reconciliar: idem }),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || d.ok !== true) {
+      return { ok: false, motivo: String(d?.error ?? `HTTP ${r.status}`).slice(0, 200) }
+    }
+    if (!d.encontrada || !d.copia) return { ok: true, encontrada: false, motivo: String(d.motivo || '') }
+    return { ok: true, encontrada: true, copia: d.copia as CopiaEncontrada }
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
   }
