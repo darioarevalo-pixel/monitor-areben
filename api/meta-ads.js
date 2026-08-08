@@ -13,6 +13,10 @@
 //                                             → los CONJUNTOS de una campaña con su presupuesto,
 //                                               estado y gasto. A demanda. Es también el modo que
 //                                               dice si la campaña es CBO.
+//   GET /api/meta-ads?recurso=mejoras&campania=<id>
+//                                             → ¿cuáles de sus avisos llevan el campo de «mejoras
+//                                               estándar» que Meta deprecó? Es lo que hace que
+//                                               duplicar un conjunto CON avisos sea rechazado.
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
 //   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
 //                                               `api/_meta-auditoria.js`.
@@ -85,6 +89,7 @@ export default async function handler(req, res) {
   if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
+  if (q.recurso === 'mejoras') return await mejoras(res, perfil, String(q.campania || ''));
   if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
   // `auditoria` ya se despachó arriba, antes del guard del token. Ver el comentario de allá.
 
@@ -424,12 +429,102 @@ async function conjuntos(res, perfil, campaignId, diasPedidos) {
   });
 }
 
+// ── Modo mejoras: ¿por qué Meta no deja copiar los avisos de esta campaña? ──────
+/**
+ * Contesta una pregunta concreta y medible: **cuáles de los avisos que hay hoy llevan el campo de
+ * «mejoras estándar» que Meta deprecó**. Es el muro que apareció el 7-ago-2026, apenas se publicó la
+ * app y cayó el del modo desarrollo, al duplicar un conjunto CON avisos:
+ *
+ *   «Incluir el campo de mejoras estándar en el contenido quedó obsoleto. En su lugar, elige
+ *    configurar funciones individuales.»
+ *
+ * 🔑 **Preguntar sale mucho más barato que probar.** La alternativa era duplicar conjunto por
+ * conjunto hasta ver cuáles fallan: cada intento come cupo de escritura, contesta por UN conjunto y
+ * —cuando sale bien— deja una copia que alguien tiene que ir a borrar a mano a Ads Manager, porque
+ * el monitor no borra. Esto contesta por toda la campaña con dos lecturas y sin escribir nada.
+ *
+ * ⚠️ **`degrees_of_freedom_spec` se le pide al CREATIVE directo con `?ids=`, no anidado en
+ * `creative{}` dentro del edge `/ads`.** Ese anidado ya mordió una vez: los `thumbnail_width` que
+ * Meta **ignora en silencio** ahí y sí respeta contra el creative. Un campo ignorado no se distingue
+ * de un campo vacío, así que se pide donde está probado que se respeta.
+ *
+ * La primera llamada lleva sólo campos que los modos `creativos`/`conjuntos` ya usan en prod
+ * (`id,name,adset_id,effective_status,creative{id}`); el campo nuevo va SOLO en la segunda, aislado,
+ * para que un nombre equivocado no se lleve puesta la respuesta entera —lo de `business{name}`—.
+ * Si esa segunda falla, se devuelven los avisos igual y el motivo va en `sinSpec`.
+ */
+async function mejoras(res, perfil, campaignId) {
+  const gate = await gateCampaña(res, perfil, campaignId);
+  if (!gate) return;
+
+  const baseRes = await graph(`${campaignId}/ads?fields=id,name,adset_id,effective_status,creative{id}&limit=200`);
+  if (!baseRes.ok) {
+    return res.status(502).json({ error: 'No se pudieron traer los avisos de la campaña', detalle: mensajeError(baseRes) });
+  }
+
+  const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => ({
+    id: String(a.id),
+    nombre: a.name || '(sin nombre)',
+    conjunto: a.adset_id ? String(a.adset_id) : null,
+    estado: a.effective_status || null,
+    creativo: (a.creative && a.creative.id) ? String(a.creative.id) : null,
+  }));
+
+  const ids = [...new Set(ads.map((a) => a.creativo).filter(Boolean))].slice(0, TOPE_IDS_GRAPH);
+  let sinSpec = null;
+  const specPorCreativo = new Map();
+  if (ids.length) {
+    const r = await graph(`?ids=${ids.join(',')}&fields=degrees_of_freedom_spec`);
+    if (r.ok && r.data) {
+      for (const [cid, c] of Object.entries(r.data)) specPorCreativo.set(String(cid), (c && c.degrees_of_freedom_spec) || null);
+    } else {
+      sinSpec = mensajeError(r);
+    }
+  }
+
+  for (const a of ads) {
+    const spec = a.creativo ? (specPorCreativo.get(a.creativo) || null) : null;
+    // El spec CRUDO va en la respuesta a propósito: el veredicto de abajo es una lectura mía de cómo
+    // Meta nombra hoy lo que deprecó, y si el nombre fuera otro habría que poder verlo en vez de
+    // creerle a un booleano. Es chico (un objeto de banderas), así que no hay razón para resumirlo.
+    a.spec = spec;
+    a.obsoleto = !!(spec && spec.creative_features_spec && spec.creative_features_spec.standard_enhancements);
+  }
+
+  // El corte por conjunto es el que importa: **se duplica el conjunto, no el aviso**, y un solo aviso
+  // con el campo obsoleto alcanza para que Meta rechace la copia entera. Se suma también cuántos
+  // avisos cuelgan, porque el otro motivo por el que una copia no sale es el tope de 3 de la vía
+  // síncrona, y desde afuera los dos se ven igual: «no se pudo duplicar».
+  const porConjunto = new Map();
+  for (const a of ads) {
+    const k = a.conjunto || '(sin conjunto)';
+    const c = porConjunto.get(k) || { id: k, avisos: 0, obsoletos: 0, sinSpec: 0 };
+    c.avisos++;
+    if (a.obsoleto) c.obsoletos++;
+    if (!a.spec) c.sinSpec++;
+    porConjunto.set(k, c);
+  }
+
+  return res.status(200).json({
+    ok: true,
+    campania: campaignId,
+    ads,
+    conjuntos: [...porConjunto.values()],
+    // Cuántos quedaron sin consultar por el tope de `?ids=`: sin esto, «0 obsoletos» de una campaña
+    // con 60 avisos se leería como «ninguno», cuando son «los primeros 50, ordenados por lo que trajo
+    // Graph». Un recorte que no se anuncia se lee como cobertura completa.
+    creativosConsultados: ids.length,
+    creativosTotales: new Set(ads.map((a) => a.creativo).filter(Boolean)).size,
+    sinSpec,
+  });
+}
+
 /**
  * Cuántos creatives entran en un `?ids=`. Graph corta arriba de 50 y prefiere números chicos; con
- * más avisos que eso se rescatan los primeros, que están ordenados por gasto: si hay que elegir a
+ * más avisos que eso se atienden los primeros, que están ordenados por gasto: si hay que elegir a
  * cuáles verles la cara, son los que se están llevando la plata.
  */
-const TOPE_IDS_MINIATURA = 50;
+const TOPE_IDS_GRAPH = 50;
 
 /**
  * La cuarta llamada, aislada y CONDICIONAL: los avisos que quedaron con la estampilla de 64 px.
@@ -459,7 +554,7 @@ async function rescatarMiniaturas(ads, ricoPorId) {
   const porCreative = new Map();
   for (const a of flacos) {
     const cid = String((ricoPorId.get(a.id) || {}).id || '');
-    if (cid && porCreative.size < TOPE_IDS_MINIATURA) porCreative.set(cid, a);
+    if (cid && porCreative.size < TOPE_IDS_GRAPH) porCreative.set(cid, a);
   }
   if (!porCreative.size) return;
 
