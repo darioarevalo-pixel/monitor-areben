@@ -28,6 +28,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { traerCreativos } from '@/lib/meta-ads/cliente'
+import { entero, plata } from '@/lib/meta-ads/formato'
 import type { AvisoCreativo, RespuestaCreativos } from '@/lib/meta-ads/tipos'
 import { Notice, color, font, radius, space, weight } from '@/components/ui'
 
@@ -40,9 +41,6 @@ export type Avisos = {
   /** Lo traído para una campaña en la ventana vigente, o null si nunca se pidió. */
   dato: (campaignId: string) => Cargable<RespuestaCreativos> | null
 }
-
-const nf = new Intl.NumberFormat('es-AR')
-const money = (v: number) => `$ ${nf.format(Math.round(v || 0))}`
 
 /**
  * El estado de los desplegables y su caché.
@@ -258,8 +256,8 @@ function Tarjeta({ a }: { a: AvisoCreativo }) {
 
         {/* El pie: chiquito a propósito. La pieza es lo que se vino a ver; el número es contexto. */}
         <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.5, marginTop: space[0.5] }}>
-          {money(a.spend)}
-          {a.purchases > 0 && ` · ${nf.format(a.purchases)} compra${a.purchases === 1 ? '' : 's'}`}
+          {plata(a.spend)}
+          {a.purchases > 0 && ` · ${entero(a.purchases)} compra${a.purchases === 1 ? '' : 's'}`}
           {a.hookRate > 0 && ` · hook ${Math.round(a.hookRate)}%`}
         </div>
         <div style={{ fontSize: font.xs, color: color.mut2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.nombre}>

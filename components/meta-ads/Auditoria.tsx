@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { traerAuditoria } from '@/lib/meta-ads/cliente'
 import { contar, cuandoLegible, inciertas, leerResultado, leerUso, ROTULO_TIER, rotuloEstado } from '@/lib/meta-ads/auditoria'
+import { money, pctFirmado } from '@/lib/meta-ads/formato'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import { esAdmin } from '@/lib/permisos'
 import type { Contada } from '@/lib/meta-ads/auditoria'
@@ -42,17 +43,6 @@ type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { 
 /** Los cortes que de verdad se piden. `incierto` es el que existe para actuar, no para mirar. */
 type Corte = 'todo' | 'hechas' | 'no' | 'incierto'
 
-const nf = new Intl.NumberFormat('es-AR')
-const money = (v: number, moneda: string | null) => {
-  if (moneda === null) return nf.format(Math.round(v))
-  const cur = /^[A-Z]{3}$/.test(moneda) ? moneda : 'ARS'
-  try {
-    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(v)
-  } catch {
-    return `${cur} ${nf.format(Math.round(v))}`
-  }
-}
-const pct = (v: number) => `${v > 0 ? '+' : ''}${nf.format(Math.round(v * 1000) / 10)}%`
 
 export function Auditoria() {
   const { perfil } = useSesion()
@@ -311,7 +301,7 @@ function Cambio({ c, moneda }: { c: Contada; moneda: string | null }) {
         <span style={{ ...caja, fontWeight: 600 }}>{money(c.hasta!, moneda)}</span>
         {c.variacion !== null && c.variacion !== 0 && (
           <span style={{ fontSize: font.xs, color: c.variacion > 0 ? color.warningInk : color.mut }}>
-            {pct(c.variacion)}
+            {pctFirmado(c.variacion)}
           </span>
         )}
         {c.crudo && (

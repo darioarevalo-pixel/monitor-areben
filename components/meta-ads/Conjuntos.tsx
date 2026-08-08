@@ -23,9 +23,9 @@
 import { useCallback, useRef, useState } from 'react'
 import { traerConjuntos } from '@/lib/meta-ads/cliente'
 import { aMonto } from '@/lib/meta-ads/acciones'
+import { entero, money } from '@/lib/meta-ads/formato'
 import type { ConjuntoMeta, LineaPauta, RespuestaConjuntos } from '@/lib/meta-ads/tipos'
-import type { Acciones } from '@/components/meta-ads/ConfirmAccion'
-import { BotonesAccion } from '@/components/meta-ads/ConfirmAccion'
+import { BotonesAccion, type Acciones } from '@/components/meta-ads/acciones'
 import {
   Notice, TBody, TableWrap, Td, Th, THead, Tr, StatusPill, color, font, space,
 } from '@/components/ui'
@@ -38,16 +38,6 @@ export type Conjuntos = {
   dato: (campaignId: string) => Cargable<RespuestaConjuntos> | null
   /** Vuelve a pedir los conjuntos de una campaña. Lo llama quien accionó sobre uno. */
   recargar: (campaignId: string) => void
-}
-
-const nf = new Intl.NumberFormat('es-AR')
-const money = (v: number, moneda: string) => {
-  const cur = /^[A-Z]{3}$/.test(moneda) ? moneda : 'ARS'
-  try {
-    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(v)
-  } catch {
-    return `${cur} ${nf.format(Math.round(v))}`
-  }
 }
 
 const VACIO: ReadonlySet<string> = new Set()
@@ -172,7 +162,7 @@ function FilaConjunto({ c, campania, moneda, linea, cbo, acciones }: {
               : '—'}
       </Td>
       <Td align="right">{money(c.spend, moneda)}</Td>
-      <Td align="right">{c.purchases ? nf.format(c.purchases) : '—'}</Td>
+      <Td align="right">{c.purchases ? entero(c.purchases) : '—'}</Td>
       <Td><EstadoConjunto s={c.estado} configurado={c.configurado} /></Td>
       <Td>
         <BotonesAccion
