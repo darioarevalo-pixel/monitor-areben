@@ -24,7 +24,13 @@
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
 //   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
 //                                               `api/_meta-auditoria.js`.
+//   GET /api/meta-ads?recurso=planes[&estado=todos]
+//   GET /api/meta-ads?recurso=plan&id=<n>     → los PLANES por pasos: qué se está armando y por dónde
+//                                               va. Salen de la base, así que andan sin token.
 //   POST /api/meta-ads                        → accionar sobre la pauta. Ver `api/_meta-acciones.js`.
+//   POST /api/meta-ads?recurso=plan           → crear / avanzar / cancelar un plan por pasos, que es
+//                                               lo que hace que duplicar sobreviva a que se corte la
+//                                               llamada. Ver `api/_meta-planes.js`.
 // Rango por preset (last_30d default) o since/until.
 //
 // Seguridad: exige un usuario válido del Monitor (patrón observaciones.js).
@@ -51,6 +57,7 @@ import { accion, accionRe, ATTR, COMPRA, metricasDe, num, RE_PERFIL, RE_SEGUIDOR
 import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
+import planes, { planesGet } from './_meta-planes.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
@@ -65,16 +72,20 @@ export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
-  // 🔑 **La auditoría es la única lectura que no necesita el token**: sale de la base. Y es justo la
-  // que hay que poder abrir cuando el token se venció —el día que Meta deje de contestar, la pregunta
-  // es qué se llegó a hacer antes—. Por eso el guard va después de despacharla y no arriba de todo.
-  if (req.method === 'GET' && (req.query || {}).recurso === 'auditoria') return await auditoria(res, perfil, req.query || {});
+  // 🔑 **Las lecturas que salen de la BASE no necesitan el token**: la auditoría y los planes. Y son
+  // justo las que hay que poder abrir cuando el token se venció —el día que Meta deje de contestar,
+  // la pregunta es qué se llegó a hacer antes, y qué quedó a medias—. Por eso el guard va después de
+  // despacharlas y no arriba de todo.
+  const recurso = (req.query || {}).recurso;
+  if (req.method === 'GET' && recurso === 'auditoria') return await auditoria(res, perfil, req.query || {});
+  if (req.method === 'GET' && (recurso === 'plan' || recurso === 'planes')) return await planesGet(res, perfil, req.query || {});
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 
-  // POST = accionar sobre la pauta. Todo el despacho vive en `_meta-acciones.js`, que es un archivo
-  // con guion bajo y por lo tanto no cuenta contra las 12 funciones del plan Hobby.
-  if (req.method === 'POST') return await accionar(req, res, perfil);
+  // POST = escribir sobre la pauta. Dos puertas: una acción suelta (`_meta-acciones.js`) o un plan
+  // por pasos (`_meta-planes.js`). Los dos son archivos con guion bajo y no cuentan contra las 12
+  // funciones del plan Hobby.
+  if (req.method === 'POST') return recurso === 'plan' ? await planes(req, res, perfil) : await accionar(req, res, perfil);
 
   const q = req.query || {};
 
