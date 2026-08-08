@@ -35,7 +35,9 @@ export async function leerAsignaciones() {
   const supabase = clienteBdi();
   if (!supabase) return { error: 'Faltan credenciales de Supabase' };
   try {
-    const { data, error } = await supabase.from('meta_ads_campania_linea').select('campaign_id, linea');
+    // `cuenta_id` va en el select desde que existe el eje cuenta × línea: qué línea vive en qué
+    // cuenta se MIDE agrupando esta columna, nunca se hardcodea (ver `lib/meta-ads/cuentas.ts`).
+    const { data, error } = await supabase.from('meta_ads_campania_linea').select('campaign_id, linea, cuenta_id');
     if (error) return { error: error.message };
     return { mapa: new Map((data || []).map((r) => [String(r.campaign_id), r])) };
   } catch (e) {

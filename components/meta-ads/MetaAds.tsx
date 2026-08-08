@@ -5,12 +5,15 @@ import { useParams } from 'next/navigation'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useSesion } from '@/components/SesionProvider'
 import { InfoPopover } from '@/components/ui/InfoPopover'
+import { ProveedorMeta, useMeta } from '@/components/meta-ads/ContextoMeta'
+import { SelectorMeta } from '@/components/meta-ads/SelectorMeta'
 import { Etapas } from '@/components/meta-ads/Etapas'
 import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { esAdmin, puedeSub } from '@/lib/permisos'
-import { pausarAnuncio, traerDetalleCuenta, traerDiagnostico, traerOverview, type OpcionesMetaAds } from '@/lib/meta-ads/cliente'
+import { pausarAnuncio, traerDetalleCuenta, traerDiagnostico, traerOverview } from '@/lib/meta-ads/cliente'
 import { nuevoIdem } from '@/lib/meta-ads/acciones'
-import type { AdRow, Campaña, CuentaDiagnostico, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, PresetMetaAds, RegionFila, RespuestaDiagnostico, VeredictoEscritura } from '@/lib/meta-ads/tipos'
+import { opcionesDe, RANGOS, RANGOS_CORTOS, type RangoUI } from '@/lib/meta-ads/rango'
+import type { AdRow, Campaña, CuentaDiagnostico, CuentaMetaAds, DemografiaFila, DetalleCuenta, FunnelPaso, Metricas, RegionFila, RespuestaDiagnostico, VeredictoEscritura } from '@/lib/meta-ads/tipos'
 import { Notice, chartColor, color as paleta, useConfirmar } from '@/components/ui'
 
 /** Estado de la mutación pausar/activar, compartido hacia las filas de anuncio. */
@@ -21,40 +24,8 @@ type CtxPausa = {
   onToggle: (adId: string, actual: string | null | undefined) => void
 }
 
-/**
- * El rango del selector. Es un superconjunto de los `date_preset` de Meta porque **"Hoy y ayer"
- * no existe como preset**: Meta tiene `today` y `yesterday` sueltos, y sus rangos relativos
- * (`last_7d` y compañía) no incluyen el día en curso. Se resuelve como rango con fechas.
- */
-type RangoUI = PresetMetaAds | 'hoy_ayer'
-
-const RANGOS: { k: RangoUI; label: string }[] = [
-  { k: 'today', label: 'Hoy' },
-  { k: 'hoy_ayer', label: 'Hoy y ayer' },
-  { k: 'yesterday', label: 'Ayer' },
-  { k: 'last_7d', label: 'Últimos 7 días' },
-  { k: 'last_14d', label: 'Últimos 14 días' },
-  { k: 'last_30d', label: 'Últimos 30 días' },
-  { k: 'last_90d', label: 'Últimos 90 días' },
-  { k: 'this_month', label: 'Este mes' },
-  { k: 'last_month', label: 'Mes pasado' },
-  { k: 'maximum', label: 'Todo el historial' },
-]
-
-/**
- * Fecha en formato ISO tomando el día LOCAL. `toISOString()` no sirve: es UTC, así que en
- * Argentina después de las 21 h devolvería el día siguiente y "hoy" saldría corrido.
- */
-const isoLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-/** Traduce el rango de la pantalla a lo que entiende el endpoint. */
-function opcionesDe(r: RangoUI): OpcionesMetaAds {
-  if (r !== 'hoy_ayer') return { preset: r }
-  const hoy = new Date()
-  const ayer = new Date(hoy)
-  ayer.setDate(hoy.getDate() - 1)
-  return { since: isoLocal(ayer), until: isoLocal(hoy) }
-}
+// El rango (`RangoUI`, `RANGOS`, `opcionesDe`, `isoLocal`) se mudó a `lib/meta-ads/rango.ts`: ahora
+// vive en la URL junto con la cuenta y la línea, así que lo necesitan el provider y esta pantalla.
 
 const nf = new Intl.NumberFormat('es-AR')
 const nf1 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
@@ -98,29 +69,45 @@ function Badge({ txt, color, bg }: { txt: string; color: string; bg: string }) {
 type Cargable<T> = { fase: 'cargando' } | { fase: 'error'; motivo: string } | { fase: 'ok'; data: T }
 
 /**
- * La sección tiene tres vistas y la elige el 2º tramo de la URL (patrón de Tienda Nube):
- *   `/meta-ads`           → Resumen, los números de cada cuenta.
- *   `/meta-ads/etapas`    → Etapas de la pauta, a quién le está hablando la plata.
- *   `/meta-ads/auditoria` → Qué se accionó sobre la pauta, quién y cómo terminó.
+ * Las vistas de la sección, elegidas por el 2º tramo de la URL (patrón de Tienda Nube):
+ *   `/meta-ads`             → Rendimiento, los números de cada cuenta.
+ *   `/meta-ads/embudo`      → el diagnóstico de etapas: a quién le está hablando la plata.
+ *   `/meta-ads/registro`    → qué se accionó sobre la pauta, quién y cómo terminó.
  *
+ * ⚠️ **Los nombres viejos siguen andando** (`/meta-ads/etapas` y `/meta-ads/auditoria`): están en
+ * bookmarks, en comentarios del repo y en las notas de trabajo. Son un alias de una línea, no un
+ * redirect: un redirect obliga a un viaje más y le cambia la URL a alguien que la escribió bien.
+ */
+const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro', rendimiento: '' }
+
+/**
  * El despacho vive en un componente aparte y no adentro de `Resumen` porque una salida temprana
  * después de un hook cambiaría la cantidad de hooks entre renders al navegar de una vista a la otra.
+ *
+ * 🔑 **El provider envuelve a las tres**: el eje (cuenta × línea × rango) es de la SECCIÓN, no de
+ * una pantalla, y `useFiltroUrl` sólo mira la URL al montar — si cada vista lo leyera por su cuenta,
+ * navegar entre ellas perdería lo elegido.
  */
 export function MetaAds() {
   const params = useParams()
   const partes = params.seccion
-  const sub = Array.isArray(partes) ? partes[1] : null
-  if (sub === 'etapas') return <Etapas />
-  if (sub === 'auditoria') return <Auditoria />
-  return <Resumen />
+  const crudo = Array.isArray(partes) ? partes[1] : null
+  const vista = crudo ? ALIAS[crudo] ?? crudo : ''
+  return (
+    <ProveedorMeta>
+      <SelectorMeta />
+      {vista === 'embudo' ? <Etapas /> : vista === 'registro' ? <Auditoria /> : <Resumen />}
+    </ProveedorMeta>
+  )
 }
 
 function Resumen() {
   const { perfil, marca } = useSesion()
   const { confirmar } = useConfirmar()
   const puedePausar = puedeSub(perfil, marca, 'meta-ads', 'pausar')
-  const [preset, setPreset] = useState<RangoUI>('last_30d')
-  const [elegida, setElegida] = useState<string | null>(null)
+  // El rango y la cuenta salen del eje de la sección (y de la URL), no de un estado local: son lo
+  // que hace que un link reproduzca la pantalla exacta.
+  const { rango: preset, setRango: setPreset, cuenta: cuentaEje, setCuenta } = useMeta()
   // Estados optimistas de pausa/activación, keyeados por cuenta+rango: al cambiar de
   // vista, `ovMap` vuelve a {} solo, sin efecto (evita setState-en-effect).
   const [pausaOv, setPausaOv] = useState<{ key: string; map: Record<string, EstadoPausa> }>({ key: '', map: {} })
@@ -137,7 +124,10 @@ function Resumen() {
 
   const ovEstado: Cargable<CuentaMetaAds[]> = !ov || ov.preset !== preset ? { fase: 'cargando' } : ov.r
   const cuentas = ovEstado.fase === 'ok' ? ovEstado.data : []
-  const activaId = elegida ?? cuentas[0]?.id ?? null
+  // El detalle es de UNA cuenta: el endpoint no agrega varias. Con el eje en «Todas» se abre la
+  // primera, que es como venía andando. Los chips de abajo escriben en el eje —no en un estado
+  // local— para que el desplegable de arriba y ellos no puedan decir cosas distintas.
+  const activaId = (cuentaEje !== 'todas' && cuentas.some((c) => c.id === cuentaEje) ? cuentaEje : cuentas[0]?.id) ?? null
 
   const [det, setDet] = useState<{ key: string; r: Cargable<DetalleCuenta> } | null>(null)
   useEffect(() => {
@@ -197,7 +187,7 @@ function Resumen() {
         </label>
         {/* En rangos cortos la zona horaria de la cuenta ES el dato: "Hoy" lo resuelve Meta allá,
             así que si la cuenta está en otro huso, el corte del día no es el de acá. */}
-        {(preset === 'today' || preset === 'yesterday' || preset === 'hoy_ayer') && zonaActiva && (
+        {RANGOS_CORTOS.has(preset) && zonaActiva && (
           <span style={{ fontSize: 12, color: paleta.mut2 }} title="El día lo corta Meta en la zona horaria de la cuenta publicitaria, no en la tuya">
             en hora de {zonaActiva}
           </span>
@@ -219,7 +209,7 @@ function Resumen() {
           {ovEstado.fase === 'cargando' ? (
             <span style={{ fontSize: 13, color: paleta.mut2 }}>Cargando cuentas…</span>
           ) : (
-            cuentas.map((c) => <ChipCuenta key={c.id} c={c} activa={c.id === activaId} onClick={() => setElegida(c.id)} />)
+            cuentas.map((c) => <ChipCuenta key={c.id} c={c} activa={c.id === activaId} onClick={() => setCuenta(c.id)} />)
           )}
         </div>
       )}

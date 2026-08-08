@@ -2,6 +2,10 @@
 //   GET /api/meta-ads                         → lista las cuentas del token con su total (para el selector).
 //   GET /api/meta-ads?account=<id>&preset=... → DETALLE de una cuenta: totales + anuncios agrupables por
 //                                               campaña + serie diaria + desglose por plataforma/ubicación.
+//   GET /api/meta-ads?recurso=cuentas         → el EJE de la sección: las cuentas del token con su
+//                                               moneda, zona, cuántas campañas tienen y qué líneas
+//                                               de pauta viven adentro. **Sin insights**: es el que
+//                                               llena el selector, y no hace falta gasto para eso.
 //   GET /api/meta-ads?recurso=etapas          → CENSO de campañas repartido por LÍNEA de pauta (bdi,
 //                                               zattia, stunned) para el diagnóstico de etapas
 //                                               (TOFU/MOFU/BOFU). Incluye las pausadas.
@@ -36,6 +40,9 @@ import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
+// Qué líneas puede MIRAR un perfil: la misma función con la que la pantalla dibuja el selector, para
+// que no ofrezca una vista que el servidor después corta con 403.
+import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
 // Y cómo se leen los números de una fila de insights. Salió de acá adentro cuando la foto diaria
 // (`scripts/snapshot-meta.mjs`) necesitó leerlas igual desde un script: dos lecturas distintas de
@@ -76,6 +83,7 @@ export default async function handler(req, res) {
   // Sin `&marca=`: devuelve las tres líneas de una, porque el censo que hay que pedirle a Meta es el
   // mismo para todas (una sola cuenta publicitaria). Pedirlo tres veces sería triplicar el gasto de
   // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
+  if (q.recurso === 'cuentas') return await cuentas(res, perfil);
   if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
@@ -87,6 +95,92 @@ export default async function handler(req, res) {
   const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
 
   return q.account ? await detalle(res, String(q.account), rango, rangoEco) : await overview(res, rango, rangoEco);
+}
+
+// ── Modo cuentas: el EJE de la sección (cuenta × línea), sin insights ────────────────────────────
+/**
+ * Qué devuelve y por qué no reusa `overview`:
+ *
+ * `overview` existe para MOSTRAR NÚMEROS y paga **una llamada de insights por cuenta** para armar el
+ * chip con el gasto. Este modo existe para ELEGIR, y para elegir no hace falta el gasto: hace falta
+ * saber qué cuentas hay, en qué moneda y zona corren, cuántas campañas tienen y **qué líneas de
+ * pauta viven adentro**. Insights es lo caro de Graph, así que el selector deja de pagarlo.
+ *
+ * 🔑 **Las líneas de cada cuenta se MIDEN, no se deducen**: salen de agrupar
+ * `meta_ads_campania_linea.cuenta_id`, o sea de lo que una persona asignó campaña por campaña. Un
+ * mapa fijo cuenta→marca no tiene ningún valor correcto mientras BDI y Zattia compartan cuenta, y
+ * eso ya se pagó una vez (ver `lib/meta-ads/lineas.core.js`).
+ *
+ * Los tres enriquecimientos por cuenta van en llamadas **aisladas**, y el motivo es el de siempre:
+ * un campo equivocado no se ignora, se lleva puesta la respuesta entera. Si alguno falla, esa cuenta
+ * se lista igual con el dato en `null` y la pantalla lo dice.
+ */
+async function cuentas(res, perfil) {
+  const visibles = lineasQueVe(perfil);
+  if (!visibles.length) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
+
+  // Los mismos campos que `overview`, probados en prod. ⚠️ NO sumar `business{name}`: exige
+  // `business_management` y Meta rechaza la consulta ENTERA (pasó el 26-jul-2026).
+  const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency,timezone_name&limit=100');
+  if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
+  const lista = (cuentasRes.data && cuentasRes.data.data) || [];
+
+  const asignadas = await leerAsignaciones();
+  // Un 502 y no un `lineas: []` silencioso: sin esto TODAS las cuentas dirían «ninguna campaña
+  // asignada», que es el estado que la pantalla reclama arreglar — y se arreglaría dos veces.
+  if (asignadas.error) {
+    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
+  }
+
+  // Agrupado por cuenta: qué líneas hay y cuántas campañas ya tienen una.
+  const porCuenta = new Map();
+  for (const a of asignadas.mapa.values()) {
+    const id = String(a.cuenta_id || '');
+    if (!id) continue;
+    const acc = porCuenta.get(id) || { lineas: new Set(), asignadas: 0 };
+    // Recortado a lo que este perfil puede ver: quien no ve Zattia tampoco ve que ahí hay Stunned.
+    if (visibles.includes(a.linea)) acc.lineas.add(a.linea);
+    acc.asignadas += 1;
+    porCuenta.set(id, acc);
+  }
+
+  const filas = await Promise.all(lista.map(async (c) => {
+    const id = String(c.account_id || '');
+    const moneda = c.currency || '';
+    const agrupado = porCuenta.get(id) || { lineas: new Set(), asignadas: 0 };
+    const [tareasRes, censoRes, mins] = await Promise.all([
+      // Sólo `user_tasks`, que es campo DE la cuenta y ya está probado en `diagnostico`.
+      graph(`act_${id}?fields=user_tasks`),
+      // `summary=true` da el total sin traer las filas: una cuenta con 173 campañas cuesta lo mismo
+      // que una vacía. Es lo único que distingue «no pautea» de «no se pudo leer».
+      graph(`act_${id}/campaigns?fields=id&limit=1&summary=true`),
+      minimosDe(id, moneda),
+    ]);
+    const tareas = tareasRes.ok && Array.isArray(tareasRes.data && tareasRes.data.user_tasks) ? tareasRes.data.user_tasks : [];
+    const total = (censoRes.ok && censoRes.data && censoRes.data.summary && censoRes.data.summary.total_count);
+    return {
+      id,
+      nombre: nombreCuenta(c),
+      moneda,
+      // La zona es de la CUENTA: `date_preset=today` lo resuelve Meta allá, así que «hoy» puede no
+      // ser el hoy de quien mira. Viaja para que el selector lo pueda decir.
+      zona: c.timezone_name || '',
+      campanias: typeof total === 'number' ? total : 0,
+      asignadas: agrupado.asignadas,
+      lineas: [...agrupado.lineas],
+      // ⚠️ `user_tasks` vacío NO es «no administra»: con un system user Meta a veces no lo informa.
+      // Acá eso queda en `false` y el veredicto real lo da `?recurso=diagnostico`, que es la pantalla
+      // que existe para distinguir los dos candados. Este campo sólo apaga botones, no acusa a nadie.
+      administra: puedePautar(tareas),
+      minDiarioCrudo: typeof mins.minDiarioCrudo === 'number' ? mins.minDiarioCrudo : null,
+      minimosMotivo: mins.minimosMotivo || null,
+      // Lo que falló de ESTA cuenta, sin tumbar la lista. El censo es el único que importa contar:
+      // sin él, `campanias: 0` haría que la cuenta se hunda al fondo como si estuviera vacía.
+      error: censoRes.ok ? null : mensajeError(censoRes),
+    };
+  }));
+
+  return res.status(200).json({ ok: true, cuentas: filas, visibles });
 }
 
 // ── Modo etapas: el censo de campañas, repartido por línea de pauta (TOFU/MOFU/BOFU) ────────────

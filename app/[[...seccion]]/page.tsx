@@ -14,8 +14,8 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
-import { esDeMarca, esKeyValida, tituloDesde } from '@/lib/nav'
-import { esAdmin, puedeVer } from '@/lib/permisos'
+import { esDeMarca, esKeyValida, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
+import { esAdmin, marcasConAcceso, puedeVer } from '@/lib/permisos'
 
 /** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
 const DEFAULT_TAB = 'productos'
@@ -60,11 +60,21 @@ export default function Seccion() {
 
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
+  //
+  // ⚠️ La rama de `KEYS_CROSS_MARCA` no es una excepción de permisos, es de EJE: son secciones donde
+  // la marca del sidebar no decide qué se ve (Meta Ads: una cuenta publicitaria trae dos marcas).
+  // Preguntarles `puedeVer(…, marca, …)` rebotaba a Inicio a quien tiene la sección en la otra marca,
+  // sin que adentro hubiera nada que dependiera de esa marca. El corte fino lo hace el servidor.
   const permitida =
     !!perfil &&
     esKeyValida(key) &&
     esDeMarca(key, marca) &&
-    (key === 'usuarios' ? esAdmin(perfil) : key === 'inicio' || puedeVer(perfil, marca, key))
+    (key === 'usuarios'
+      ? esAdmin(perfil)
+      : key === 'inicio'
+        || (KEYS_CROSS_MARCA.has(key)
+          ? marcasConAcceso(perfil, key, ['bdi', 'zattia']).length > 0
+          : puedeVer(perfil, marca, key)))
 
   useEffect(() => {
     if (esPortalCliente) return

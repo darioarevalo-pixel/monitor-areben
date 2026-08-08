@@ -30,6 +30,23 @@ export function keysDeCat(cat: NavCat): string[] {
 /** 'usuarios' es caso especial: vive en NAV_CATS (adminOnly) pero no en PERM_CAT. */
 export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen'])
 
+/**
+ * Secciones cuyo eje **no es la marca del sidebar**.
+ *
+ * Meta Ads es la primera: BDI y Zattia se pautean desde la misma cuenta publicitaria y Stunned —que
+ * ni siquiera es una `Marca` del monitor— tiene la suya, así que adentro de la sección la marca de
+ * arriba no decide nada; el eje propio es cuenta × línea de pauta.
+ *
+ * 🔑 **Sin esto, quien tiene Meta Ads en una sola marca rebota a Inicio por estar parado en la
+ * otra** — y adentro no había nada que dependiera de esa marca, así que el rebote era puro daño
+ * colateral del eje viejo. Acá se pregunta si tiene la sección en ALGUNA marca; el corte fino lo
+ * sigue haciendo el servidor, línea por línea (`marcasConAcceso` en `api/meta-ads.js`).
+ *
+ * ⚠️ No es una puerta de atrás: una key acá adentro igual tiene que estar en `PERM_CAT` y tener más
+ * de una marca, y `tests/nav-cross-marca.test.ts` lo amarra.
+ */
+export const KEYS_CROSS_MARCA = new Set(['meta-ads'])
+
 const PERM_POR_KEY = new Map<string, PermCat>(PERM_CAT.map((p) => [p.key, p]))
 
 export function permDe(key: string): PermCat | undefined {

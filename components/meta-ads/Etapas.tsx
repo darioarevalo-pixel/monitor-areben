@@ -25,6 +25,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSesion } from '@/components/SesionProvider'
+import { useMeta } from '@/components/meta-ads/ContextoMeta'
 import { BotonAvisos, PanelAvisos, useAvisos, type Avisos } from '@/components/meta-ads/Avisos'
 import { PanelConjuntos, useConjuntos, type Conjuntos } from '@/components/meta-ads/Conjuntos'
 import {
@@ -85,25 +86,35 @@ const pct = (p: number) => `${Math.round((p || 0) * 100)}%`
 const TONO: Record<ResumenEtapa['estado'], Tone> = { ok: 'success', floja: 'warning', vacia: 'danger' }
 
 export function Etapas() {
-  const { marca, perfil } = useSesion()
+  const { perfil } = useSesion()
+  const { linea: lineaEje, setLinea } = useMeta()
   const toast = useToast()
   const [dias, setDias] = useState(UMBRALES_ETAPA.dias)
   const [r, setR] = useState<{ key: string; e: Cargable<RespuestaEtapas> } | null>(null)
   const [corrigiendo, setCorrigiendo] = useState<CampañaEtapa | null>(null)
+  const visibles = useMemo(() => marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']), [perfil])
   /**
-   * Qué línea está abierta abajo de la grilla. Arranca en la marca del header —que es donde la
-   * persona ya estaba parada— y de ahí en más la manda la grilla. **No filtra la grilla**: las tres
-   * líneas se ven siempre, porque el hueco de la que no estás mirando es justamente el que nadie ve.
+   * Qué línea está abierta abajo de la grilla: la del selector de la sección, y con «Todas» la
+   * primera que esta persona pueda ver.
    *
-   * La marca viaja adentro de lo elegido y se compara al renderizar, en vez de resetearse con un
-   * efecto: cambiar de marca arriba tiene que volver al default de la marca nueva, y un efecto que
-   * lo corrige después deja un render intermedio mostrando la línea de la marca anterior.
+   * ⛔ **No filtra la grilla**, ni con una línea elegida: las tres se ven siempre, porque el hueco de
+   * la que NO estás mirando es justamente el que nadie ve — es el punto entero de esta pantalla.
+   * Elegir una línea abre su detalle, no esconde a las otras.
+   *
+   * 🔑 Antes esto arrancaba en la marca del sidebar, que no es ninguno de los ejes de Meta: BDI y
+   * Zattia comparten cuenta publicitaria. Ahora el eje es propio (ver `ContextoMeta.tsx`) y tocar
+   * una fila de la grilla lo mueve, así que la grilla y el selector no pueden decir cosas distintas.
    */
-  const [elegida, setElegida] = useState<{ marca: string; linea: LineaPauta } | null>(null)
-  const lineaAbierta: LineaPauta = elegida && elegida.marca === marca
-    ? elegida.linea
-    : (marca === 'zattia' ? 'zattia' : 'bdi')
-  const abrirLinea = useCallback((l: LineaPauta) => setElegida({ marca, linea: l }), [marca])
+  const lineaAbierta: LineaPauta = lineaEje !== 'todas'
+    ? lineaEje
+    : (visibles.includes('bdi') ? 'bdi' : 'zattia')
+  const abrirLinea = useCallback((l: LineaPauta) => setLinea(l), [setLinea])
+  /**
+   * La marca del monitor de la que sale la BASE: las ideas y las correcciones de etapa viven en
+   * Supabase por store, y Stunned no tiene base propia (cuelga de Zattia). Es lo ÚNICO para lo que
+   * hacía falta una marca acá adentro, y se deriva de la línea en vez de leerse del sidebar.
+   */
+  const marca = (baseDeLinea(lineaAbierta) ?? visibles[0] ?? 'bdi') as Marca
 
   // Ya no viaja la marca: el censo es el mismo para las tres líneas (una sola cuenta publicitaria)
   // y el servidor devuelve sólo las que este perfil puede ver.
@@ -129,7 +140,6 @@ export function Etapas() {
   const avisos = useAvisos(dias)
   const fechas = useFechas(marca)
   const fecha = useMemo(() => laQueAprieta(fechas), [fechas])
-  const visibles = useMemo(() => marcasConAcceso(perfil, 'meta-ads', ['bdi', 'zattia']), [perfil])
   const funnel = useFunnel(marca, visibles)
 
   const overrides = useMemo(() => mapaOverrides(funnel.overrides), [funnel.overrides])
@@ -165,7 +175,7 @@ export function Etapas() {
   // se anotan en el de Zattia, que es de donde cuelga (ver `lineas.core.js`).
   const diagDeLaMarca = diagPorLinea?.[marca as LineaPauta] ?? null
   const campañasDeLaMarca = useMemo(
-    () => lineasDeMarca(marca as Marca).flatMap((l) => diagPorLinea?.[l]?.etapas.flatMap((e) => e.alAire) ?? []),
+    () => lineasDeMarca(marca).flatMap((l) => diagPorLinea?.[l]?.etapas.flatMap((e) => e.alAire) ?? []),
     [diagPorLinea, marca],
   )
 
@@ -209,7 +219,7 @@ export function Etapas() {
 
   async function asignar(c: CampañaEtapa, linea: LineaPauta) {
     try {
-      await asignarLinea(marca as Marca, {
+      await asignarLinea(marca, {
         campaignId: c.id, linea, cuentaId: c.cuentaId, objetivo: c.objetivo, nombre: c.nombre,
       })
       toast.ok(`«${c.nombre}» ahora cuenta como ${ETIQUETA_LINEA[linea]}.`)
@@ -221,7 +231,7 @@ export function Etapas() {
 
   async function desasignar(c: CampañaEtapa) {
     try {
-      await desasignarLinea(marca as Marca, c.id)
+      await desasignarLinea(marca, c.id)
       toast.ok('Vuelve a quedar sin marca: su plata no la cuenta nadie.')
       recargarTodo()
     } catch (e) {

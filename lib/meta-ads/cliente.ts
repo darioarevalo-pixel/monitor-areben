@@ -11,7 +11,7 @@ import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
-  RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
+  RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
 } from './tipos'
 
 export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
@@ -64,6 +64,17 @@ export function traerDetalleCuenta(accountId: string, opts: OpcionesMetaAds): Pr
   const qs = rangoQS(opts)
   qs.set('account', accountId)
   return pedir<DetalleCuenta>(qs)
+}
+
+/**
+ * El eje de la sección: las cuentas del token con su moneda, su zona, cuántas campañas tienen y qué
+ * líneas de pauta viven adentro.
+ *
+ * 🔑 **No pide insights.** Es lo que llena el selector, y para elegir no hace falta el gasto — que
+ * es justo lo caro de Graph. El `overview` sigue existiendo para la pantalla que muestra números.
+ */
+export function traerCuentas(): Promise<Lectura<RespuestaCuentas>> {
+  return pedir<RespuestaCuentas>(new URLSearchParams({ recurso: 'cuentas' }))
 }
 
 /**

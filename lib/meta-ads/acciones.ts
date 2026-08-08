@@ -23,6 +23,7 @@ import {
   fotoDe as fotoDeJs,
   LARGO_NOMBRE as LARGO_NOMBRE_JS,
   lineasQuePuede as lineasQuePuedeJs,
+  lineasQueVe as lineasQueVeJs,
   MARCAS_META as MARCAS_META_JS,
   NIVELES as NIVELES_JS,
   nivelReal as nivelRealJs,
@@ -118,6 +119,9 @@ export const LARGO_NOMBRE = LARGO_NOMBRE_JS as number
 export const TOPE_ADS_SINCRONO = TOPE_ADS_SINCRONO_JS as number
 
 export const lineasQuePuede = lineasQuePuedeJs as (perfil: Perfil | null, sub: string) => LineaPauta[]
+
+/** Las líneas que este perfil puede MIRAR: el eje del selector. Ver `acciones.core.js`. */
+export const lineasQueVe = lineasQueVeJs as (perfil: Perfil | null) => LineaPauta[]
 export const permiteAccion = permiteAccionJs as (perfil: Perfil | null, accion: string, linea: LineaPauta) => Veredicto
 export const accionesQuePuede = accionesQuePuedeJs as (perfil: Perfil | null, linea: LineaPauta) => ClaveAccion[]
 export const validarPedido = validarPedidoJs as (p: unknown) =>

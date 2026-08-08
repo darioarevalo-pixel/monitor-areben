@@ -562,7 +562,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "meta-ads",
     "area": "marketing",
-    "label": "Meta Ads",
+    "label": "Meta",
     "info": "Gasto y rendimiento de Meta Ads (Facebook/Instagram) por cuenta publicitaria: inversión, impresiones, clics, CTR, CPC, alcance. Y las Etapas de la pauta: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Desde Etapas también se acciona sobre la pauta —pausar, reactivar, cambiar el presupuesto diario, renombrar y duplicar ajustando la copia—, con permisos aparte y registro de quién lo hizo.",
     "brands": [
       "bdi",
@@ -749,12 +749,12 @@ export const NAV_CATS: NavCat[] = [
       {
         "id": "meta-ads",
       "icono": "meta-ads",
-        "label": "Meta Ads",
+        "label": "Meta",
         "keys": [],
         "items": [
-          { "ruta": "/meta-ads", "label": "Resumen", "icono": "meta-ads", "key": "meta-ads" },
-          { "ruta": "/meta-ads/etapas", "label": "Etapas de la pauta", "icono": "etapas", "key": "meta-ads" },
-          { "ruta": "/meta-ads/auditoria", "label": "Qué se accionó", "icono": "historial", "key": "meta-ads" }
+          { "ruta": "/meta-ads", "label": "Rendimiento", "icono": "meta-ads", "key": "meta-ads" },
+          { "ruta": "/meta-ads/embudo", "label": "Embudo", "icono": "etapas", "key": "meta-ads" },
+          { "ruta": "/meta-ads/registro", "label": "Registro", "icono": "historial", "key": "meta-ads" }
         ]
       },
       {

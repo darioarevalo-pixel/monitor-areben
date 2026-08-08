@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useAvisos } from '@/store/useAvisos'
-import { esDeMarca, estaEnVariosGrupos, iconoDe, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
-import { esAdmin, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
+import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esAdmin, marcasConAcceso, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { color } from '@/components/ui/tokens'
@@ -60,6 +60,10 @@ export function Sidebar({
     if (!esDeMarca(k, marca)) return false
     if (k === 'usuarios') return esAdmin(perfil)
     if (k === 'inicio') return true
+    // Las secciones cuyo eje no es la marca del sidebar (Meta Ads) se ven si se tienen en ALGUNA
+    // marca: adentro no hay nada que dependa de la de arriba. Mismo criterio que el guard de
+    // `page.tsx`, y tiene que ser el mismo — si no, el link se esconde y la URL igual entra.
+    if (KEYS_CROSS_MARCA.has(k)) return marcasConAcceso(perfil, k, ['bdi', 'zattia']).length > 0
     return puedeVer(perfil, marca, k)
   }
 

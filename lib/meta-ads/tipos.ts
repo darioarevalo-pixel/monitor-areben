@@ -264,6 +264,44 @@ export type CampañaSinLinea = CampañaEtapa & {
   tuvoActividad: boolean
 }
 
+/**
+ * Una cuenta publicitaria vista como **eje**, no como reporte: lo que hace falta para elegirla y
+ * para saber qué se puede hacer adentro. Lo devuelve `?recurso=cuentas`, que **no pide insights**
+ * (el selector de hoy paga una llamada de insights por cuenta sólo para llenarse).
+ */
+export type CuentaMeta = {
+  /** account_id (sin `act_`). */
+  id: string
+  nombre: string
+  moneda: string
+  /** Zona horaria de la cuenta: es la que define qué es «hoy» para Meta, no la del navegador. */
+  zona: string
+  /** Cuántas campañas tiene (censo, incluidas las pausadas). `0` = cuenta vacía, y se hunde. */
+  campanias: number
+  /** De cuántas de ellas ya se sabe la línea. La resta son las que no cuenta ningún diagnóstico. */
+  asignadas: number
+  /**
+   * Las líneas que hay en esta cuenta, **medidas** de `meta_ads_campania_linea.cuenta_id` y
+   * recortadas a las que este perfil puede ver. Nunca deducidas del nombre de la cuenta.
+   */
+  lineas: LineaPauta[]
+  /** `user_tasks` incluye ADVERTISE (o MANAGE): desde acá se puede accionar. Ver el diagnóstico. */
+  administra: boolean
+  /** Mínimo diario que impone Meta, en la unidad MENOR de la moneda. `null` = no se pudo leer. */
+  minDiarioCrudo: number | null
+  /** Por qué no se pudo leer el mínimo, si es que no se pudo. */
+  minimosMotivo?: string | null
+  /** Falló algún enriquecimiento AISLADO de esta cuenta. La cuenta igual se lista. */
+  error?: string | null
+}
+
+/** Lo que devuelve `/api/meta-ads?recurso=cuentas`. */
+export type RespuestaCuentas = {
+  cuentas: CuentaMeta[]
+  /** Las líneas que este perfil puede ver. El selector no dibuja las otras. */
+  visibles: LineaPauta[]
+}
+
 /** Una asignación guardada, tal como la devuelve `?recurso=meta-funnel&que=lineas`. */
 export type AsignacionLinea = {
   campaign_id: string
