@@ -41,17 +41,24 @@ const PINTA_PLAN: Record<Plan['estado'], { label: string; tone: 'success' | 'war
   cancelado: { label: 'Cancelado', tone: 'neutral' },
 }
 
-export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onCancelar }: {
+export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, onCancelar }: {
   plan: Plan
   avanzando: boolean
   motivo: string | null
   onSeguir: () => void
+  /** Manda de nuevo el paso que falló. Sólo se dibuja si ese paso lo permite. */
+  onReintentar: (orden: number) => void
   onCancelar: () => void
 }) {
   const [confirmando, setConfirmando] = useState(false)
   const hechos = plan.pasos.filter((p) => p.estado === 'hecho' || p.estado === 'salteado').length
   const terminado = plan.estado === 'hecho' || plan.estado === 'cancelado'
   const pinta = PINTA_PLAN[plan.estado]
+  // 🔴 En un plan atascado, «Seguir» no hace nada: el motor no repite un paso fallado por su cuenta
+  // —si lo hiciera, un rechazo permanente sería un bucle—. Un botón que no hace nada se lee como que
+  // la sección está rota, así que ahí el botón es OTRO y dice qué paso va a mandar de nuevo.
+  const trabado = plan.pasos.find((p) => p.estado === 'fallado') || null
+  const atascado = plan.estado === 'atascado'
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -67,7 +74,12 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onCancelar }: 
           </div>
         </div>
         <div style={{ display: 'flex', gap: space[2] }}>
-          {!terminado && (
+          {!terminado && atascado && trabado?.puedeReintentar && (
+            <Button size="sm" variant="solid" tone="brand" onClick={() => onReintentar(trabado.orden)} disabled={avanzando}>
+              {avanzando ? 'Mandando de nuevo…' : `Reintentar el paso ${trabado.orden}`}
+            </Button>
+          )}
+          {!terminado && !atascado && (
             <Button size="sm" variant="solid" tone="brand" onClick={onSeguir} disabled={avanzando}>
               {avanzando ? 'Avanzando…' : hechos ? 'Seguir' : 'Empezar'}
             </Button>
@@ -104,8 +116,24 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onCancelar }: 
         </Notice>
       )}
 
-      {plan.estado === 'atascado' && plan.detalle && <Notice tone="danger">{plan.detalle}</Notice>}
-      {plan.estado !== 'atascado' && motivo && <Notice tone="brand">{motivo}</Notice>}
+      {atascado && plan.detalle && (
+        <Notice tone="danger">
+          {plan.detalle}
+          {trabado?.puedeReintentar && (
+            <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.45 }}>
+              Meta contestó que no <b>antes de crear nada</b>, así que no quedó nada a medias. Arreglá
+              eso en Ads Manager y mandá el paso de nuevo: <b>lo que ya salió no se rehace</b>.
+            </div>
+          )}
+          {trabado && !trabado.puedeReintentar && (
+            <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.45 }}>
+              Este no se puede volver a mandar desde acá: hay que mirar en Ads Manager cómo quedó
+              antes de tocar nada.
+            </div>
+          )}
+        </Notice>
+      )}
+      {!atascado && motivo && <Notice tone="brand">{motivo}</Notice>}
 
       <ol style={{ display: 'flex', flexDirection: 'column', gap: space[1], margin: 0, padding: 0, listStyle: 'none' }}>
         {plan.pasos.map((p) => <Paso key={p.orden} paso={p} />)}

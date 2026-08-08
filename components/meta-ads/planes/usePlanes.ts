@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { avanzarPlan, cancelarPlan, traerPlanes } from '@/lib/meta-ads/cliente'
+import { avanzarPlan, cancelarPlan, reintentarPaso, traerPlanes } from '@/lib/meta-ads/cliente'
 import type { Plan } from '@/lib/meta-ads/planes'
 
 /** Cuántas vueltas seguidas da el bucle antes de soltar. Es un tope, no un objetivo. */
@@ -67,6 +67,8 @@ export type Planes = {
   recargar: () => void
   /** Avanza hasta que no queden pasos o hasta que el servidor pida esperar. */
   seguir: (id: number) => Promise<void>
+  /** Manda de nuevo un paso fallado y sigue: lo que ya salió no se rehace. */
+  reintentar: (id: number, orden: number) => Promise<void>
   cancelar: (id: number) => Promise<{ ok: boolean; motivo?: string; hechosAntes?: number }>
 }
 
@@ -119,6 +121,26 @@ export function usePlanes(): Planes {
     }
   }, [pisar])
 
+  /**
+   * Reintentar y avanzar son **un solo gesto**: quien arregló afuera lo que Meta pedía quiere que
+   * siga, no destrabar el paso y tener que apretar otra vez. Si el reintento no se puede, se dice y
+   * no se avanza — avanzar sobre un plan que sigue atascado sólo repetiría el mismo cartel.
+   */
+  const reintentar = useCallback(async (id: number, orden: number) => {
+    setAvanzando(id)
+    setMotivo(null)
+    try {
+      const r = await reintentarPaso(id, orden)
+      if (!vivo.current) return
+      if (!r.ok) { setMotivo({ id, texto: r.motivo }); return }
+      pisar(r.dato.plan)
+      const texto = await avanzarHasta(id, pisar, () => vivo.current)
+      if (vivo.current) setMotivo(texto ? { id, texto } : null)
+    } finally {
+      if (vivo.current) setAvanzando(null)
+    }
+  }, [pisar])
+
   const cancelar = useCallback(async (id: number) => {
     const r = await cancelarPlan(id)
     if (!r.ok) return { ok: false, motivo: r.motivo }
@@ -130,5 +152,5 @@ export function usePlanes(): Planes {
     return { ok: true, hechosAntes: r.dato.hechosAntes }
   }, [])
 
-  return { estado, planes, avanzando, motivo, recargar, seguir, cancelar }
+  return { estado, planes, avanzando, motivo, recargar, seguir, reintentar, cancelar }
 }

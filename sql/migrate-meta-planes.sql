@@ -82,6 +82,21 @@ create table if not exists meta_ads_plan_paso (
   unique (plan_id, orden)
 );
 
+-- `create table if not exists` no toca una tabla que ya está, así que las columnas que se suman
+-- después van por acá o no llegan nunca a la base donde importa. `if not exists` las hace
+-- re-corribles. (Misma nota que en `migrate-meta-acciones.sql`.)
+--
+-- ¿Este paso fallado se puede volver a mandar a mano?
+--
+-- 🔑 **No es lo mismo que `reintentable`.** Aquélla dice si el MOTOR puede repetir un paso solo;
+-- ésta, si una PERSONA puede mandarlo de nuevo después de arreglar algo afuera. Un rechazo de
+-- validación de Meta —«te falta tildar Explorar»— es determinístico: no creó nada, así que
+-- reintentarlo cuando el problema está resuelto no puede duplicar nada. Ver `marcarFallado`.
+--
+-- ⛔ Va en `false` cuando el paso murió por AMBIGÜEDAD (la sonda encontró más de un candidato con la
+-- misma marca): ahí no se sabe cuál es el bueno, y mandarlo de nuevo agregaría un tercero.
+alter table meta_ads_plan_paso add column if not exists puede_reintentar boolean not null default false;
+
 -- Las tres consultas reales: los planes vivos del Panel, el detalle de uno, y la sonda buscando por
 -- marcador.
 create index if not exists idx_meta_ads_plan_estado on meta_ads_plan (estado, creado desc);

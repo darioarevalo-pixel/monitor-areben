@@ -56,6 +56,7 @@ export function PlanesEnCurso() {
             avanzando={p.avanzando === plan.id}
             motivo={p.motivo && p.motivo.id === plan.id ? p.motivo.texto : null}
             onSeguir={() => void p.seguir(plan.id)}
+            onReintentar={(orden) => void p.reintentar(plan.id, orden)}
             onCancelar={() => void p.cancelar(plan.id)}
           />
         ))}

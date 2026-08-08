@@ -105,6 +105,7 @@ const aPaso = (f) => ({
   orden: f.orden, tipo: f.tipo, rotulo: f.rotulo, estado: f.estado, intentos: f.intentos || 0,
   pedido: f.pedido || null, resultadoId: f.resultado_id || null, marca: f.marca || null,
   detalle: f.detalle || null, ultimoEn: f.ultimo_en || null,
+  puedeReintentar: !!f.puede_reintentar,
 });
 
 const aVista = (p, pasos) => ({
@@ -121,6 +122,7 @@ export default async function planes(req, res, perfil) {
   const accion = String(b.accion || '');
   if (accion === 'crear') return await crear(res, perfil, b);
   if (accion === 'avanzar') return await avanzar(res, perfil, b);
+  if (accion === 'reintentar') return await reintentar(res, perfil, b);
   if (accion === 'cancelar') return await cancelar(res, perfil, b);
   return res.status(400).json({ error: `No existe «${accion || '(vacía)'}» sobre un plan.` });
 }
@@ -390,7 +392,11 @@ async function avanzar(res, perfil, b) {
 
     if (politica === 'esperar') { motivo = 'Meta todavía está armando lo del paso anterior. Volvé a apretar Seguir en un momento.'; break; }
     if (politica === 'rendirse') {
-      await guardarPaso(sb, plan.id, paso.orden, { estado: 'fallado', detalle: paso.detalle || 'Se agotaron los intentos.' });
+      // Se puede reintentar a mano: que el motor se haya rendido después de tres vueltas no
+      // significa que el problema no se pueda arreglar afuera. Lo que no se hace solo es insistir.
+      await guardarPaso(sb, plan.id, paso.orden, {
+        estado: 'fallado', puede_reintentar: true, detalle: paso.detalle || 'Se agotaron los intentos.',
+      });
       pasos = pasos.map((p) => (p.orden === paso.orden ? { ...p, estado: 'fallado' } : p));
       motivo = `El paso ${paso.orden} («${paso.rotulo}») no se pudo completar.`;
       break;
@@ -436,7 +442,12 @@ async function avanzar(res, perfil, b) {
 async function ejecutar(sb, plan, paso, contexto) {
   const sus = sustituir(paso.pedido || {}, contexto);
   if (!sus.ok) {
-    await guardarPaso(sb, plan.id, paso.orden, { estado: 'fallado', detalle: `Falta el resultado del paso ${sus.faltan.join(', ')}.` });
+    // ⛔ Sin reintento manual: lo que falta no es de este paso sino del anterior, y mandarlo de
+    // nuevo sin ese id daría el mismo error. Lo que hay que reintentar es el otro.
+    await guardarPaso(sb, plan.id, paso.orden, {
+      estado: 'fallado', puede_reintentar: false,
+      detalle: `Falta el resultado del paso ${sus.faltan.join(', ')}.`,
+    });
     return { paso: { estado: 'fallado' }, cortar: true, motivo: 'Un paso anterior no dejó el id que este necesita.' };
   }
   const pedido = sus.pedido;
@@ -475,7 +486,15 @@ async function ejecutar(sb, plan, paso, contexto) {
 
   // Un rechazo de verdad (Meta contestó que no): el paso falla y el plan queda atascado con el
   // motivo de Meta, que es el que dice qué hay que ir a arreglar.
-  await guardarPaso(sb, plan.id, paso.orden, { estado: 'fallado', detalle: r.error || 'Meta lo rechazó.', uso: r.uso || null });
+  //
+  // 🔑 **Y se puede reintentar a mano.** Un rechazo de validación es determinístico y **no creó
+  // nada**: cuando el motivo que Meta nombró se arregla afuera —tildar un emplazamiento, rearmar un
+  // aviso— mandar el paso de nuevo no puede duplicar nada. Sin esto, un plan de 9 pasos con el
+  // último rechazado obliga a rehacer los 8 que ya salieron.
+  await guardarPaso(sb, plan.id, paso.orden, {
+    estado: 'fallado', puede_reintentar: true,
+    detalle: r.error || 'Meta lo rechazó.', uso: r.uso || null,
+  });
   return { paso: { estado: 'fallado' }, cortar: true, motivo: `Meta rechazó el paso ${paso.orden}: ${r.error || 'sin motivo'}` };
 }
 
@@ -597,7 +616,12 @@ async function sondar(sb, plan, paso, contexto) {
     };
   }
   if (candidatos.length > 1) {
-    await guardarPaso(sb, plan.id, paso.orden, { estado: 'fallado', detalle: `Aparecieron ${candidatos.length} con la marca «${marca}».` });
+    // ⛔ **Sin reintento manual, y es el único caso que lo prohíbe de plano.** No se sabe cuál de los
+    // que aparecieron es el bueno, así que mandarlo de nuevo agregaría un tercero al problema.
+    await guardarPaso(sb, plan.id, paso.orden, {
+      estado: 'fallado', puede_reintentar: false,
+      detalle: `Aparecieron ${candidatos.length} con la marca «${marca}».`,
+    });
     return {
       paso: { estado: 'fallado' }, cortar: true,
       motivo: `Aparecieron ${candidatos.length} objetos con la marca «${marca}». Mirá en Ads Manager cuál dejar antes de seguir.`,
@@ -636,6 +660,61 @@ async function heredarLinea({ campaignId, linea, cuentaId, nombre, quien }) {
   } catch {
     return { ok: false };
   }
+}
+
+// ── Reintentar un paso fallado ────────────────────────────────────────────────────────────────
+
+/**
+ * **«Ya arreglé lo que Meta pedía, mandalo de nuevo.»**
+ *
+ * Deja el paso `pendiente` con los intentos en cero y el plan vuelve a estar vivo. Lo que ya salió
+ * **no se rehace**: el plan sigue desde donde quedó, que es la mitad del punto de tener pasos.
+ *
+ * # Por qué esto no puede duplicar nada
+ *
+ * Porque sólo alcanza a los pasos marcados `puede_reintentar`, y esa marca se pone **únicamente
+ * cuando Meta contestó que NO**: un rechazo de validación es determinístico y no creó nada. El corte
+ * sin respuesta —el único caso donde el objeto puede existir igual— no llega nunca acá: ese deja el
+ * paso `en-curso` y lo resuelve la sonda, que lee y adopta.
+ *
+ * ⛔ El paso que murió por ambigüedad (dos objetos con la misma marca) queda **afuera a propósito**:
+ * ahí no se sabe cuál es el bueno y mandarlo de nuevo agregaría un tercero.
+ *
+ * ⚠️ **Es siempre una persona la que lo pide.** El motor no reintenta un `fallado` por su cuenta —si
+ * lo hiciera, un rechazo permanente sería un bucle— y por eso los intentos se ponen en cero: quien
+ * aprieta ya sabe que el de antes falló.
+ */
+async function reintentar(res, perfil, b) {
+  const sb = clienteBdi();
+  if (!sb) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
+  const id = parseInt(b.id, 10);
+  const orden = parseInt(b.orden, 10);
+  if (!Number.isFinite(id) || !Number.isFinite(orden)) {
+    return res.status(400).json({ error: 'Falta decir qué plan y qué paso reintentar.' });
+  }
+
+  const leido = await leerPlan(sb, id);
+  if (leido.error) return res.status(leido.status || 502).json({ error: leido.error });
+  const permiso = permitePlan(perfil, leido.plan.tipo, leido.plan.linea);
+  if (!permiso.ok) return res.status(permiso.status).json({ error: permiso.error });
+  if (leido.plan.estado === 'cancelado') return res.status(409).json({ error: 'Ese plan está cancelado.' });
+
+  const paso = leido.pasos.find((p) => p.orden === orden);
+  if (!paso) return res.status(404).json({ error: 'Ese plan no tiene ese paso.' });
+  if (paso.estado !== 'fallado') return res.status(409).json({ error: 'Ese paso no está fallado, así que no hay nada que reintentar.' });
+  if (!paso.puede_reintentar) {
+    return res.status(409).json({
+      error: 'Ese paso no se puede volver a mandar desde acá: hay que mirar en Ads Manager cómo quedó antes de tocar nada.',
+    });
+  }
+
+  await sb.from(TABLA_PASO)
+    .update({ estado: 'pendiente', intentos: 0, detalle: `Lo mandó de nuevo ${quienEs(perfil)} después de un rechazo de Meta.` })
+    .eq('plan_id', id).eq('orden', orden);
+  await sb.from(TABLA).update({ estado: 'en-curso', detalle: null, lock_hasta: null, actualizado: ahoraIso() }).eq('id', id);
+
+  const fin = await leerPlan(sb, id);
+  return res.status(200).json({ ok: true, plan: aVista(fin.plan || leido.plan, fin.pasos || leido.pasos) });
 }
 
 // ── Cancelar ──────────────────────────────────────────────────────────────────────────────────

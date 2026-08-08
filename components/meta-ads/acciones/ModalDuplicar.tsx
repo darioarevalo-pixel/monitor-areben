@@ -33,7 +33,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { cancelarPlan, crearPlan, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
+import { cancelarPlan, crearPlan, reintentarPaso, traerConjuntos, traerMejoras } from '@/lib/meta-ads/cliente'
 import { aCrudo, aMonto, LARGO_NOMBRE, nuevoIdem, TOPE_ADS_SINCRONO, type NivelAccion } from '@/lib/meta-ads/acciones'
 import { nuevoIdemPlan, type Plan } from '@/lib/meta-ads/planes'
 import { ProgresoPlan } from '@/components/meta-ads/planes/ProgresoPlan'
@@ -240,6 +240,17 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
               setEnPlan(true)
               setMotivoPlan(null)
               void avanzarHasta(plan.id, setPlan).then((m) => { setMotivoPlan(m); setEnPlan(false) })
+            }}
+            onReintentar={(orden) => {
+              setEnPlan(true)
+              setMotivoPlan(null)
+              void reintentarPaso(plan.id, orden).then((r) => {
+                if (!r.ok) { setMotivoPlan(r.motivo); setEnPlan(false); return }
+                setPlan(r.dato.plan)
+                // Reintentar y avanzar son un solo gesto: el que arregló afuera lo que Meta pedía
+                // quiere que siga, no destrabar el paso y tener que apretar otra vez.
+                return avanzarHasta(plan.id, setPlan).then((m) => { setMotivoPlan(m); setEnPlan(false) })
+              })
             }}
             onCancelar={() => {
               void cancelarPlan(plan.id).then((r) => { if (r.ok) setPlan(r.dato.plan) })

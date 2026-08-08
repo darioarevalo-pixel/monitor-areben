@@ -335,6 +335,17 @@ export function avanzarPlan(id: number): Promise<Lectura<AvanceDePlan>> {
 }
 
 /**
+ * **«Ya arreglé lo que Meta pedía, mandá ese paso de nuevo.»** Lo que ya salió no se rehace.
+ *
+ * ⚠️ Sólo alcanza a los pasos que el servidor marcó `puedeReintentar`, y esa marca se pone
+ * únicamente cuando **Meta contestó que no** —un rechazo determinístico que no creó nada—. El corte
+ * sin respuesta no llega nunca acá: ése lo resuelve la sonda, que lee y adopta.
+ */
+export function reintentarPaso(id: number, orden: number): Promise<Lectura<{ plan: Plan }>> {
+  return postPlan<{ plan: Plan }>({ accion: 'reintentar', id, orden })
+}
+
+/**
  * ⚠️ **Cancelar no deshace: deja de avanzar.** Lo que el plan ya creó sigue en Meta —pausado, porque
  * todo nace PAUSED— y lo que ya movió de presupuesto sigue movido. `hechosAntes` es cuántos pasos
  * habían corrido, para poder decirlo con un número en vez de con un «puede que algo haya quedado».

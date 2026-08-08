@@ -59,6 +59,15 @@ export type PasoPlan = {
   marca: string | null
   detalle: string | null
   ultimoEn: string | null
+  /**
+   * ¿Este paso fallado se puede volver a mandar a mano?
+   *
+   * 🔑 **No es lo mismo que `reintentable` de `TIPOS_PASO`**: aquélla dice si el MOTOR lo puede
+   * repetir solo; ésta, si una PERSONA lo puede mandar de nuevo después de arreglar afuera lo que
+   * Meta pidió. Va en `true` sólo cuando Meta contestó que no —determinístico, no creó nada— y en
+   * `false` cuando el paso murió por ambigüedad, que es el único caso donde insistir empeora.
+   */
+  puedeReintentar: boolean
 }
 
 export type Plan = {
