@@ -124,7 +124,7 @@ export function PanelAvisos({ estado }: { estado: Cargable<RespuestaCreativos> |
     )
   }
 
-  const { ads, sinCreativo, sinPiezas } = estado.data
+  const { ads, sinCreativo } = estado.data
   if (ads.length === 0) {
     return (
       <div style={{ color: color.mut2, fontSize: font.sm, padding: space[3], fontStyle: 'italic' }}>
@@ -135,16 +135,11 @@ export function PanelAvisos({ estado }: { estado: Cargable<RespuestaCreativos> |
 
   return (
     <div style={{ padding: space[3], display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      {/* Lo que Meta no contestó va en UN solo cartel, con una línea por motivo. Los dos dicen lo
-          mismo en el fondo —"esto que no ves no es que no exista, es que no se pudo leer"— y dos
-          ámbares apilados sobre la misma grilla enseñan a ignorar el ámbar.
-          Sin esto, la llamada rica caída se lee como "estos avisos no tienen texto" y el rescate de
-          las tarjetas caído se lee como "ninguno es carrusel", que son las dos conclusiones
-          equivocadas que el cartel viene a evitar. */}
-      {(sinCreativo || sinPiezas) && (
+      {/* Si la llamada rica falló, los avisos quedan con la miniatura y sin copy. Decirlo evita la
+          conclusión equivocada —"estos avisos no tienen texto"— sobre un dato que no se pudo leer. */}
+      {sinCreativo && (
         <Notice tone="warning">
-          {sinCreativo && <div>Se ven los avisos pero no su texto ni la imagen grande: {sinCreativo}</div>}
-          {sinPiezas && <div>No se pudo contar las tarjetas de los carruseles: {sinPiezas}</div>}
+          Se ven los avisos pero no su texto ni la imagen grande: {sinCreativo}
         </Notice>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: space[3] }}>

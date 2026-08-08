@@ -358,17 +358,6 @@ export type RespuestaCreativos = {
    * en vez de dar a entender que los avisos no tienen copy.
    */
   sinCreativo: string | null
-  /**
-   * Motivo por el que no se pudieron traer las tarjetas de los carruseles, o null.
-   *
-   * Importa poder verlo porque el rescate lee un **posteo** y no un aviso —es la única lectura
-   * fuera del dominio de anuncios—, así que puede rebotar por permisos de página aunque el resto de
-   * la pantalla funcione. Sin decirlo, un rescate caído se lee como «ninguno es carrusel».
-   *
-   * Se dibuja en el MISMO cartel que `sinCreativo`, con una línea por motivo: son la misma clase de
-   * aviso y dos ámbares apilados sobre la misma grilla enseñan a ignorar el ámbar.
-   */
-  sinPiezas: string | null
 }
 
 // ── Diagnóstico del token: ¿se puede ESCRIBIR en Meta? ──────────────────────────

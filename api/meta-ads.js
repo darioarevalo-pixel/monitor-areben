@@ -33,8 +33,6 @@ import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRAL
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
-// A quién hay que rescatarle las tarjetas del carrusel y cómo se lee lo que Meta contesta.
-import { historiasARescatar, tarjetasPorHistoria } from '../lib/meta-ads/tarjetas.core.js';
 import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
@@ -289,15 +287,10 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   const insPorId = new Map();
   if (insRes.ok) for (const r of insRes.rows) insPorId.set(String(r.ad_id), r);
 
-  // De qué publicación sale cada aviso. Se anota acá porque `piezaDe` se queda con el permalink y
-  // tira el id, y el rescate de las tarjetas necesita el id para poder preguntarle a la publicación.
-  const historiaPorId = new Map();
-
   const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => {
     const id = String(a.id);
     const base = a.creative || {};
     const cr = { ...base, ...(ricoPorId.get(id) || {}) };
-    if (cr.effective_object_story_id) historiaPorId.set(id, String(cr.effective_object_story_id));
     const g = insPorId.get(id);
     const impresiones = g ? num(g.impressions) : 0;
     const plays3s = g ? sumaAcciones(g.video_3_sec_watched_actions) : 0;
@@ -315,17 +308,12 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
     };
   }).sort((x, y) => y.spend - x.spend);
 
-  // Los dos rescates van juntos: son independientes —uno pisa `imagen`, el otro `piezas`— y cada
-  // uno es un viaje a Meta, así que en serie se pagaría la latencia dos veces por nada.
-  const [, sinPiezas] = await Promise.all([
-    rescatarMiniaturas(ads, ricoPorId),
-    rescatarTarjetas(ads, historiaPorId),
-  ]);
+  await rescatarMiniaturas(ads, ricoPorId);
 
   // `sinCreativo` es diagnóstico, no adorno: si la llamada rica falla, todos los avisos quedan con
   // la miniatura de 64 px y sin una palabra de copy, y la pantalla tiene que poder decir por qué en
   // vez de dar a entender que los avisos no tienen texto.
-  return res.status(200).json({ ok: true, dias, ads, sinCreativo: !ricoRes.ok ? mensajeError(ricoRes) : null, sinPiezas });
+  return res.status(200).json({ ok: true, dias, ads, sinCreativo: !ricoRes.ok ? mensajeError(ricoRes) : null });
 }
 
 /**
@@ -437,14 +425,11 @@ async function conjuntos(res, perfil, campaignId, diasPedidos) {
 }
 
 /**
- * Cuántos nodos entran en un `?ids=`. Graph corta arriba de 50 y prefiere números chicos; con más
- * avisos que eso se rescatan los primeros, que están ordenados por gasto: si hay que elegir a
+ * Cuántos creatives entran en un `?ids=`. Graph corta arriba de 50 y prefiere números chicos; con
+ * más avisos que eso se rescatan los primeros, que están ordenados por gasto: si hay que elegir a
  * cuáles verles la cara, son los que se están llevando la plata.
- *
- * Lo comparten los dos rescates —las miniaturas grandes y las tarjetas del carrusel— porque el
- * límite es del batch de Graph, no de lo que se está pidiendo.
  */
-const TOPE_IDS_GRAPH = 50;
+const TOPE_IDS_MINIATURA = 50;
 
 /**
  * La cuarta llamada, aislada y CONDICIONAL: los avisos que quedaron con la estampilla de 64 px.
@@ -474,7 +459,7 @@ async function rescatarMiniaturas(ads, ricoPorId) {
   const porCreative = new Map();
   for (const a of flacos) {
     const cid = String((ricoPorId.get(a.id) || {}).id || '');
-    if (cid && porCreative.size < TOPE_IDS_GRAPH) porCreative.set(cid, a);
+    if (cid && porCreative.size < TOPE_IDS_MINIATURA) porCreative.set(cid, a);
   }
   if (!porCreative.size) return;
 
@@ -487,42 +472,6 @@ async function rescatarMiniaturas(ads, ricoPorId) {
     // El `thumb` no se toca: sigue siendo la chica, que es la red si esta URL no carga.
     if (grande) aviso.imagen = grande;
   }
-}
-
-/**
- * La quinta llamada, aislada y CONDICIONAL: las tarjetas de los carruseles que no vienen con el
- * aviso.
- *
- * 🔑 **El carrusel no está donde lo busca `piezaDe`.** Un aviso armado desde una publicación de
- * Instagram no trae `child_attachments` —ni `object_story_spec` siquiera—, así que un carrusel de
- * verdad llegaba con `piezas: []` y el chip `⧉ N` no se dibujaba nunca. Medido el 6-ago-2026: los
- * dos avisos `SWEATERS - CARROUSEL RAYADOS` daban `piezas: 0` siendo carruseles.
- *
- * Se le pregunta a la **publicación**, que es la que tiene las tarjetas, y de nuevo con `?ids=`:
- * una llamada para todas, no una por aviso.
- *
- * ⚠️ **Ésta es la primera lectura del monitor que sale del dominio de anuncios.** `attachments` es
- * un campo de posteo, no de aviso, y el token es de un system user con `ads_read`: puede contestar
- * un error de permisos de página aunque el resto de la pantalla funcione. Por eso devuelve el
- * motivo en vez de tragárselo — si Meta rebota, los avisos se ven exactamente igual que hoy y el
- * `sinPiezas` de la respuesta dice por qué, que es la única forma de enterarse (un rescate que
- * falla en silencio se lee como «no hay carruseles»).
- */
-async function rescatarTarjetas(ads, historiaPorId) {
-  const porHistoria = historiasARescatar(ads, historiaPorId, TOPE_IDS_GRAPH);
-  if (!porHistoria.size) return null;
-
-  const ids = [...porHistoria.keys()].join(',');
-  const r = await graph(`?ids=${ids}&fields=attachments{subattachments}`);
-  if (!r.ok) return mensajeError(r);
-
-  const tarjetas = tarjetasPorHistoria(r.data);
-  for (const [historia, avisos] of porHistoria) {
-    const fotos = tarjetas.get(historia);
-    if (!fotos) continue;
-    for (const aviso of avisos) aviso.piezas = fotos;
-  }
-  return null;
 }
 
 /**
