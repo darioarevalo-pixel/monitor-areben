@@ -457,9 +457,22 @@ async function mejoras(res, perfil, campaignId) {
   const gate = await gateCampaña(res, perfil, campaignId);
   if (!gate) return;
 
-  const baseRes = await graph(`${campaignId}/ads?fields=id,name,adset_id,effective_status,creative{id}&limit=200`);
+  // La fecha de creación va en su propia llamada por la misma razón que el spec: es un campo que
+  // ningún modo probado usa. Y no es un adorno — el patrón sólo se ve con ella: si el campo obsoleto
+  // aparece en todo lo creado antes de una fecha y en nada de lo posterior, «los creativos viejos» es
+  // una medición; sin ella es una deducción a partir del nombre del aviso, que lo escribió una
+  // persona y puede decir cualquier cosa.
+  const [baseRes, fechaRes] = await Promise.all([
+    graph(`${campaignId}/ads?fields=id,name,adset_id,effective_status,creative{id}&limit=200`),
+    graph(`${campaignId}/ads?fields=id,created_time&limit=200`),
+  ]);
   if (!baseRes.ok) {
     return res.status(502).json({ error: 'No se pudieron traer los avisos de la campaña', detalle: mensajeError(baseRes) });
+  }
+
+  const fechaPorAd = new Map();
+  if (fechaRes.ok && fechaRes.data && Array.isArray(fechaRes.data.data)) {
+    for (const a of fechaRes.data.data) if (a.created_time) fechaPorAd.set(String(a.id), String(a.created_time));
   }
 
   const ads = ((baseRes.data && baseRes.data.data) || []).map((a) => ({
@@ -468,6 +481,7 @@ async function mejoras(res, perfil, campaignId) {
     conjunto: a.adset_id ? String(a.adset_id) : null,
     estado: a.effective_status || null,
     creativo: (a.creative && a.creative.id) ? String(a.creative.id) : null,
+    creado: fechaPorAd.get(String(a.id)) || null,
   }));
 
   const ids = [...new Set(ads.map((a) => a.creativo).filter(Boolean))].slice(0, TOPE_IDS_GRAPH);
@@ -488,7 +502,14 @@ async function mejoras(res, perfil, campaignId) {
     // Meta nombra hoy lo que deprecó, y si el nombre fuera otro habría que poder verlo en vez de
     // creerle a un booleano. Es chico (un objeto de banderas), así que no hay razón para resumirlo.
     a.spec = spec;
-    a.obsoleto = !!(spec && spec.creative_features_spec && spec.creative_features_spec.standard_enhancements);
+    const se = spec && spec.creative_features_spec && spec.creative_features_spec.standard_enhancements;
+    // 🔑 **El veredicto es la PRESENCIA del campo, y el `enroll_status` va aparte.** Meta no dice
+    // «está prendido», dice «incluir el campo quedó obsoleto», así que un `OPT_OUT` también lo
+    // incluye. Se separan porque la diferencia todavía no está medida: hay 4 avisos en `OPT_OUT`
+    // sobre 55, y hasta que uno de ellos se intente copiar, «presencia» es la lectura prudente
+    // —dice «puede fallar» de un aviso que quizá copie bien, y no al revés—.
+    a.obsoleto = !!se;
+    a.enroll = se ? (se.enroll_status || null) : null;
   }
 
   // El corte por conjunto es el que importa: **se duplica el conjunto, no el aviso**, y un solo aviso
@@ -498,9 +519,11 @@ async function mejoras(res, perfil, campaignId) {
   const porConjunto = new Map();
   for (const a of ads) {
     const k = a.conjunto || '(sin conjunto)';
-    const c = porConjunto.get(k) || { id: k, avisos: 0, obsoletos: 0, sinSpec: 0 };
+    const c = porConjunto.get(k) || { id: k, avisos: 0, obsoletos: 0, optIn: 0, optOut: 0, sinSpec: 0 };
     c.avisos++;
     if (a.obsoleto) c.obsoletos++;
+    if (a.enroll === 'OPT_IN') c.optIn++;
+    else if (a.enroll) c.optOut++;
     if (!a.spec) c.sinSpec++;
     porConjunto.set(k, c);
   }
