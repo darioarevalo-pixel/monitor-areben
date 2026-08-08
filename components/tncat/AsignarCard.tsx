@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib/tncat/cliente'
 import { nombresDeFilas } from '@/lib/tncat/excel'
+import { tomarPuenteAsignar } from '@/lib/tncat/puente'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
 import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
 
@@ -20,8 +21,13 @@ export function AsignarCard({ marca }: { marca: Marca }) {
   const toast = useToast()
   const [categorias, setCategorias] = useState<Categoria[] | null>(null)
   const [catId, setCatId] = useState('')
-  const [nombres, setNombres] = useState<string[]>([])
-  const [info, setInfo] = useState('')
+  // Puente desde Comisiones: la lista de precios de sale manda sus nombres ya cargados, sin
+  // pasar por el Excel. Se toma UNA vez al montar (`tomar` consume) y en el inicializador,
+  // no en un efecto, para que el doble montaje de StrictMode no se lo lleve puesto.
+  const [dePuente] = useState<string[] | null>(() => tomarPuenteAsignar())
+  const [nombres, setNombres] = useState<string[]>(dePuente ?? [])
+  const [info, setInfo] = useState(dePuente?.length ? `${dePuente.length} producto(s) traídos de la lista de sale` : '')
+  const caja = useRef<HTMLDivElement>(null)
   const [preview, setPreview] = useState<AsigPreview | null>(null)
   const [prevMsg, setPrevMsg] = useState<React.ReactNode>(null)
   const [matched, setMatched] = useState<AsigMatched[]>([])
@@ -97,6 +103,17 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     previsualizar(id, nombres)
   }
 
+  // Si los nombres vinieron de Comisiones, la card puede quedar abajo del fondo (arriba está
+  // Explorar categoría): se trae a la vista y se previsualiza, que con la categoría todavía
+  // sin elegir es lo que muestra el "Elegí una categoría" — el único paso que falta.
+  useEffect(() => {
+    if (!dePuente?.length) return
+    caja.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    previsualizar('', dePuente)
+    // Corre una sola vez al montar: `dePuente` ya viene consumido y no vuelve a cambiar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const aplicar = async () => {
     if (!matched.length) return
     const ok = await confirmar({
@@ -167,7 +184,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     ) : null
 
   return (
-    <Card>
+    <Card ref={caja}>
       <div style={{ fontSize: 16, fontWeight: 700 }}>Asignar categoría (Excel)</div>
       <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px', maxWidth: 680 }}>
         Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.

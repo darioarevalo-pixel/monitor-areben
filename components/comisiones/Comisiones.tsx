@@ -1,10 +1,12 @@
 'use client'
 
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
-import { esAdmin as esAdminFn } from '@/lib/permisos'
+import { esAdmin as esAdminFn, puedeSub } from '@/lib/permisos'
+import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { credencialConPrompt } from '@/lib/sesion'
 import { matchTn, type IndiceTn } from '@/lib/tn'
 import { useComisiones } from './useComisiones'
@@ -32,8 +34,13 @@ const num = (s: string) => parseFloat(s) || 0
 export function Comisiones() {
   const { avisar, confirmar, pedirTexto } = useConfirmar()
   const toast = useToast()
+  const router = useRouter()
   const { marca, perfil } = useSesion()
   const admin = esAdminFn(perfil)
+  // La asignación masiva por lista existe sólo en Zattia y detrás de su sub-permiso: el botón
+  // aparece con la misma condición con la que la card existe del otro lado, así que no puede
+  // llevar a una pantalla donde no esté (el legacy navegaba igual y avisaba después).
+  const verAsig = marca === 'zattia' && (admin || puedeSub(perfil, marca, 'tncat', 'asignar'))
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(marca)
   const com = useComisiones(marca, admin, obtenerCred)
@@ -256,6 +263,23 @@ export function Comisiones() {
             <Button size="sm" variant="outline" onClick={() => exportarSalePDF(com.saleList, marca).catch(() => toast.error('No se pudo exportar el PDF.'))} disabled={!com.saleList.length}>
               PDF
             </Button>
+            {verAsig && (
+              <Button
+                size="sm"
+                variant="soft"
+                tone="brand"
+                disabled={!com.saleList.length}
+                title="Lleva estos productos a Asignar categoría de Tienda Nube, con los nombres ya cargados"
+                onClick={() => {
+                  const nn = [...new Set(com.saleList.map((x) => x.name.trim()).filter(Boolean))]
+                  if (!nn.length) return void avisar('Los productos de la lista no tienen nombre, así que no hay con qué cruzarlos contra Tienda Nube.')
+                  ponerPuenteAsignar(nn)
+                  router.push('/tncat/categorias')
+                }}
+              >
+                🗂️ Asignar categoría en TN
+              </Button>
+            )}
             <Button size="sm" variant="ghost" tone="danger" onClick={com.vaciarSale} disabled={!com.saleList.length}>Vaciar</Button>
           </div>
         </div>
