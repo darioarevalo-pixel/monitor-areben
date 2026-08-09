@@ -67,8 +67,10 @@ export function Biblioteca() {
           dejaría a la Biblioteca mintiendo por omisión, y el arreglo es de una vez. */}
       {d.sinLinea > 0 && (
         <Notice tone="brand">
-          {d.sinLinea} aviso{d.sinLinea === 1 ? '' : 's'} no se muestra{d.sinLinea === 1 ? '' : 'n'} porque
-          su campaña todavía no tiene marca asignada. Se les asigna en <strong>Campañas</strong>, al pie.
+          {d.sinLinea === 1
+            ? <>1 aviso no se muestra porque su campaña todavía no tiene marca asignada. Se le asigna</>
+            : <>{d.sinLinea} avisos no se muestran porque sus campañas todavía no tienen marca asignada. Se les asigna</>}
+          {' '}en <strong>Campañas</strong>, al pie.
         </Notice>
       )}
 
