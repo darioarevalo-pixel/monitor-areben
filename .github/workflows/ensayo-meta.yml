@@ -1,0 +1,62 @@
+name: Ensayo real de escritura en Meta
+
+# El ensayo que `validate_only` no puede hacer: crear un conjunto DE VERDAD, mirarlo campo por campo
+# y borrarlo. Ver la cabecera de `scripts/crear-y-borrar-meta.mjs`.
+#
+# 🔑 **Corre acá y no en la máquina de Bruno por una sola razón: el token.** `META_ADS_TOKEN` ya está
+# en los secrets de este repo desde el 8-ago, y su valor no se puede recuperar ni de Vercel ni de
+# Actions. Hacerlo localmente obligaría a generar un token más en el system user `monitor-ads` —una
+# credencial viva más, para siempre, por un ensayo que se corre cada tanto—. Acá no hace falta
+# ninguno nuevo.
+#
+# ⛔ Sólo `workflow_dispatch`: esto ESCRIBE en una cuenta publicitaria real. Nunca por cron.
+on:
+  workflow_dispatch:
+    inputs:
+      conjunto:
+        description: 'Id del conjunto que se usa de referencia (vacío + cuenta = listar los activos)'
+        required: false
+        default: ''
+      cuenta:
+        description: 'Cuenta publicitaria, sólo para listar conjuntos y elegir uno'
+        required: false
+        default: ''
+      crear:
+        description: 'true = CREA el conjunto de verdad (pausado) y después lo borra. false = sólo valida.'
+        required: false
+        default: 'false'
+      dejar:
+        description: 'true = no lo borra al terminar. Queda pausado y hay que borrarlo a mano.'
+        required: false
+        default: 'false'
+
+jobs:
+  ensayo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Correr el ensayo
+        env:
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          ENTRADA_CONJUNTO: ${{ inputs.conjunto }}
+          ENTRADA_CUENTA: ${{ inputs.cuenta }}
+          ENTRADA_CREAR: ${{ inputs.crear }}
+          ENTRADA_DEJAR: ${{ inputs.dejar }}
+        run: |
+          args=""
+          if [ -n "$ENTRADA_CONJUNTO" ]; then
+            args="--conjunto $ENTRADA_CONJUNTO"
+            [ "$ENTRADA_CREAR" = "true" ] && args="$args --crear"
+            [ "$ENTRADA_DEJAR" = "true" ] && args="$args --dejar"
+          else
+            args="--listar --cuenta $ENTRADA_CUENTA"
+          fi
+          node scripts/crear-y-borrar-meta.mjs $args
