@@ -18,13 +18,21 @@
  * lo dejaría en dos lugares: el mismo número dividido dos veces, o ninguna.
  */
 
+import * as core from '@/lib/meta-ads/formato.core.js'
 import type { Tone } from '@/components/ui/tokens'
 
 const nf = new Intl.NumberFormat('es-AR')
-const nf1 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
+
+/**
+ * Los cuatro que también necesita el servidor viven en `formato.core.js` y se re-exportan tipados
+ * desde acá. Motivo: `reglas.core.js` es `.js` (lo importan un handler y un script de Actions) y
+ * escribe plata adentro del `motivo` de cada hallazgo — sin esta bajada, sería la séptima
+ * implementación de `money`, que es justo lo que este archivo vino a terminar. Mismo patrón que
+ * `permisos.core.js`/`permisos.ts`.
+ */
 
 /** Un entero redondeado con separador de miles. `undefined` cuenta como 0. */
-export const entero = (v?: number | null): string => nf.format(Math.round(v ?? 0))
+export const entero = (v?: number | null): string => core.entero(v)
 
 /**
  * Plata **sin moneda**: `$ 12.345`.
@@ -33,7 +41,10 @@ export const entero = (v?: number | null): string => nf.format(Math.round(v ?? 0
  * gasto al pie de cada aviso). No es un descuido que no diga ARS: son montos de una sola cuenta a
  * la vez y el símbolo alcanza. Donde la moneda SÍ está, va `money`.
  */
-export const plata = (v?: number | null): string => `$ ${entero(v)}`
+export const plata = (v?: number | null): string => core.plata(v)
+
+/** Un número con a lo sumo un decimal (una frecuencia de 3,42 → `3,4`). */
+export const decimal = (v?: number | null): string => core.decimal(v)
 
 /**
  * Plata **con la moneda de la cuenta**.
@@ -54,7 +65,7 @@ export const money = (v: number | undefined | null, moneda: string | null): stri
 }
 
 /** El retorno, con la cruz de multiplicar. Sin retorno se dibuja el guion, no un `0×`. */
-export const roas = (v?: number | null): string => (v ? `${nf1.format(v)}×` : '—')
+export const roas = (v?: number | null): string => core.roas(v)
 
 /**
  * Un porcentaje que llega como **proporción** (0,43 → `43%`). Redondeado a entero: es lo que se
@@ -63,7 +74,7 @@ export const roas = (v?: number | null): string => (v ? `${nf1.format(v)}×` : '
 export const pctUno = (p?: number | null): string => `${Math.round((p ?? 0) * 100)}%`
 
 /** Un porcentaje que llega **ya en porcentaje** (2,34 → `2,3%`), como los CTR que devuelve Meta. */
-export const pctCien = (v?: number | null): string => `${nf1.format(v ?? 0)}%`
+export const pctCien = (v?: number | null): string => core.pctCien(v)
 
 /**
  * Una variación, con su signo (0,053 → `+5,3%`). El `+` es el dato: en la auditoría lo que importa
