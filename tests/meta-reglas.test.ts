@@ -514,6 +514,103 @@ describe('reglas — el calibrador', () => {
   })
 })
 
+/**
+ * 🔴 **La forma REAL del dato, que ningún test de este archivo tenía**: la configuración (`estado`,
+ * `estado_real`, `diario_crudo`) se escribe **sólo en la fila del día en que se sacó la foto**, así
+ * que las filas del backfill traen métricas y el estado en `null`. Todas las series de arriba usan
+ * `fila()`, que pone `estado: 'ACTIVE'` en las 30 — y por eso los 43 tests pasaban con el calibrador
+ * ciego.
+ *
+ * Medido contra la pauta real el 9-ago-2026: de 90 días de foto, **2 tenían la configuración escrita**.
+ * `freno-emergencia` reportaba 8 saltos en 2 días donde había 86 en 41; `ganador-escalar` con el ROAS
+ * en 1,5×, 1 salto en 1 día donde había 34 en 27. La herramienta que existe para elegir un umbral
+ * mirando la historia estaba mirando anteayer, y contestaba un número chico en vez de decir que no
+ * veía.
+ *
+ * Ver la cabecera de `agrupar()`. El mismo patrón que el día en curso en los escalones: no lo caza
+ * un test más, lo caza un test con **la forma del dato de producción** adentro.
+ */
+describe('reglas — la configuración vive en una sola fila, y el calibrador tiene que verla igual', () => {
+  /** N días de métricas donde SÓLO los últimos `conConfig` traen estado, como en la tabla de verdad. */
+  function serieComoEnProduccion(n: number, conConfig: number, over: (i: number) => Partial<FilaRegla> = () => ({})): FilaRegla[] {
+    return ventanaDe(HOY, n).reverse().map((fecha, i) => fila({
+      fecha,
+      ...over(i),
+      // Los viejos: métricas sí, configuración no. Es lo que devuelve el backfill.
+      ...(i < n - conConfig ? { estado: null, estado_efectivo: null, estado_real: null, diario_crudo: null } : {}),
+    }))
+  }
+
+  it('agrupar separa la última fila de la VENTANA de la última foto de CONFIGURACIÓN', () => {
+    const filas = serieComoEnProduccion(10, 1, () => ({ spend: 100 }))
+    // Una ventana que termina antes del único día con configuración.
+    const [g] = agrupar(filas, 'aviso', ventanaDe('2026-08-04', 3))
+    expect(g.ultima.fecha).toBe('2026-08-04')
+    expect(g.ultima.estado_efectivo).toBeNull()
+    // `actual` sale de fuera de la ventana: es la pregunta «¿esto está al aire?», que es sobre ahora.
+    expect(g.actual.fecha).toBe(HOY)
+    expect(g.actual.estado_efectivo).toBe('ACTIVE')
+  })
+
+  it('sin ninguna fila con configuración, `actual` cae en la última de la ventana', () => {
+    const filas = serieComoEnProduccion(5, 0, () => ({ spend: 100 }))
+    const [g] = agrupar(filas, 'aviso', ventanaDe(HOY, 5))
+    expect(g.actual.fecha).toBe(g.ultima.fecha)
+  })
+
+  /**
+   * 🎯 **El test que caza el defecto.** Con `g.ultima` da 1 (sólo el día que tiene estado escrito);
+   * con `g.actual`, los 24 días en que la condición se cumplía.
+   */
+  it('el calibrador ve los 30 días aunque el estado esté escrito en uno solo', () => {
+    const filas = serieComoEnProduccion(30, 1, () => ({ spend: 1000, compras: 1, revenue: 1000 }))
+    const c = calibrar(regla('gastos-hormiga', { roas_objetivo: 5 }), { filas, umbralLinea: null, hasta: HOY, dias: 30 })
+    if (!c.ok) throw new Error('falló')
+    // Con el defecto puesto esto valía 1: el único día con configuración escrita.
+    expect(c.total).toBeGreaterThan(20)
+  })
+
+  it('el freno de emergencia también, y con el gasto mínimo derivado de la propia serie', () => {
+    const filas = serieComoEnProduccion(30, 1, () => ({ spend: 1000, compras: 0, revenue: 0 }))
+    // Sin una sola compra en la línea el CPA no existe, así que se le da el umbral a mano.
+    const c = calibrar(regla('freno-emergencia', { gasto_minimo: 500 }), { filas, umbralLinea: null, hasta: HOY, dias: 30 })
+    if (!c.ok) throw new Error('falló')
+    expect(c.total).toBeGreaterThan(20)
+  })
+
+  it('el ganador para escalar lee el diario de la foto de configuración, no de la fila vieja', () => {
+    // 🔴 Este preset es de nivel `conjunto`, no `aviso`: con el nivel de más arriba `agrupar()` no
+    // encuentra ningún grupo y el test daría cero por un motivo que no es el que se está probando.
+    const filas = serieComoEnProduccion(30, 1, () => ({ nivel: 'conjunto', spend: 1000, compras: 1, revenue: 5000, diario_crudo: 100000 }))
+    const c = calibrar(regla('ganador-escalar', { roas_objetivo: 1.5, techo_diario_crudo: 999999 }), { filas, umbralLinea: null, hasta: HOY, dias: 30 })
+    if (!c.ok) throw new Error('falló')
+    expect(c.total).toBeGreaterThan(20)
+  })
+
+  /**
+   * 🔴 **Y la contracara: el radar de atribución tardía NO puede usar `actual`.** Él detecta una
+   * transición adentro de la ventana; leerle el estado de hoy sería decir «se apagó el jueves» porque
+   * hoy está pausado. Tiene que seguir viendo el objeto como ACTIVO cuando la ventana termina en un
+   * día en que lo estaba, aunque hoy figure apagado.
+   */
+  it('el radar de atribución tardía sigue mirando la ventana y no el estado de hoy', () => {
+    const filas = [
+      ...ventanaDe('2026-08-05', 3).reverse().map((fecha) => fila({ fecha, spend: 500, estado: 'ACTIVE', estado_efectivo: 'ACTIVE' })),
+      fila({ fecha: '2026-08-06', spend: 0, compras: 2, revenue: 4000, estado: 'PAUSED', estado_efectivo: 'PAUSED' }),
+      fila({ fecha: HOY, spend: 0, compras: 0, revenue: 0, estado: 'PAUSED', estado_efectivo: 'PAUSED' }),
+    ]
+    // Ventana que termina el 06: ahí adentro pasó de activo a apagado y sumó compras. Salta.
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: '2026-08-06' })
+    if (!r.ok) throw new Error('falló')
+    expect(r.apagada).toBe(false)
+    expect(r.hallazgos).toHaveLength(1)
+    // Ventana que termina el 05, cuando todavía estaba al aire: no hay transición que contar.
+    const antes = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: '2026-08-05' })
+    if (!antes.ok) throw new Error('falló')
+    expect(antes.hallazgos).toHaveLength(0)
+  })
+})
+
 describe('reglas — el borde', () => {
   it('un preset que no existe es un 400, no una excepción', () => {
     const r = evaluarRegla({ preset: 'inventado' as ClavePreset, linea: 'bdi', cuentaId: null, parametros: {} }, { filas: [], umbralLinea: null, hasta: HOY })

@@ -173,7 +173,13 @@ export type Grupo = {
   objeto_id: string
   nivel: NivelRegla
   filas: FilaRegla[]
+  /** La última fila **de la ventana**. Para preguntas sobre el período que se está mirando. */
   ultima: FilaRegla
+  /**
+   * 🔴 La última fila **con configuración escrita** del objeto, esté o no en la ventana. Para
+   * preguntas sobre AHORA («¿está al aire?», «¿cuánto gasta por día?»). Ver `agrupar()`.
+   */
+  actual: FilaRegla
   nombre: string
   linea: string | null
   cuenta_id: string | null
