@@ -29,6 +29,10 @@ on:
         description: 'true = no lo borra al terminar. Queda pausado y hay que borrarlo a mano.'
         required: false
         default: 'false'
+      probar_rojo:
+        description: 'true = le mete un defecto a la relectura. El job TIENE que fallar: es la prueba de que el ensayo sabe dar rojo.'
+        required: false
+        default: 'false'
 
 jobs:
   ensayo:
@@ -50,12 +54,14 @@ jobs:
           ENTRADA_CUENTA: ${{ inputs.cuenta }}
           ENTRADA_CREAR: ${{ inputs.crear }}
           ENTRADA_DEJAR: ${{ inputs.dejar }}
+          ENTRADA_PROBAR_ROJO: ${{ inputs.probar_rojo }}
         run: |
           args=""
           if [ -n "$ENTRADA_CONJUNTO" ]; then
             args="--conjunto $ENTRADA_CONJUNTO"
             [ "$ENTRADA_CREAR" = "true" ] && args="$args --crear"
             [ "$ENTRADA_DEJAR" = "true" ] && args="$args --dejar"
+            [ "$ENTRADA_PROBAR_ROJO" = "true" ] && args="$args --probar-rojo"
           else
             args="--listar --cuenta $ENTRADA_CUENTA"
           fi

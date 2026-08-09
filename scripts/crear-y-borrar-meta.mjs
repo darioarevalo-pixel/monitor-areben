@@ -75,6 +75,20 @@ const CONJUNTO = valor('--conjunto')
 const CREAR = flag('--crear')
 const DEJAR = flag('--dejar')
 
+/**
+ * **La prueba de que el ensayo sabe dar rojo.**
+ *
+ * Un ensayo que sale verde no dice nada hasta que se probó que también sale rojo — y probarlo con
+ * tests unitarios prueba la función, no el ensayo: quedan afuera el cableado (¿el cotejo recibe lo
+ * que Meta devolvió?), el reporte y el código de salida. Con `--probar-rojo` se le mete un defecto
+ * **a la relectura**, después de que Meta contestó, y el ensayo tiene que cazarlo y terminar en 1.
+ *
+ * Se ensucia la relectura y no el pedido a propósito: si se mutara el cuerpo del POST, Meta guardaría
+ * el valor mutado y el cotejo saldría verde con toda razón. Lo que se está simulando es lo único que
+ * este ensayo existe para cazar: **Meta acepta algo y guarda otra cosa.**
+ */
+const PROBAR_ROJO = flag('--probar-rojo')
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** ⚠️ Secuencial y espaciado: 48 POST en paralelo llenaron el cupo de la cuenta el 9-ago. */
@@ -241,7 +255,17 @@ async function main() {
         salida = 1
       }
 
-      const dif = cotejarCuerpo(val.cuerpo, quedo)
+      // El defecto se inyecta acá, sobre una COPIA de lo que Meta devolvió: el objeto real no se
+      // toca, así que el borrado de abajo sigue mirando el conjunto tal como está.
+      const paraCotejar = { ...quedo }
+      if (PROBAR_ROJO) {
+        console.log('\n🧪 --probar-rojo: se le saca `billing_event` y se le cambia el diario a la relectura.')
+        console.log('   Si abajo no aparecen una FALTA y un CAMBIÓ, el ensayo no sirve para nada.')
+        delete paraCotejar.billing_event
+        paraCotejar.daily_budget = '1'
+      }
+
+      const dif = cotejarCuerpo(val.cuerpo, paraCotejar)
       console.log('\n── Lo que se pidió contra lo que quedó ──')
       if (sinDiferencias(dif)) console.log('✅ Los campos pedidos quedaron todos, con el mismo valor.')
       for (const f of dif.falta) { console.log(`🔴 FALTA   ${f.ruta}: se pidió ${corto(f.pedido)} y no está.`); salida = 1 }
