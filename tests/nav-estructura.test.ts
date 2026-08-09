@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { keysDeCat, iconoDe, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { keysDeCat, itemsDeCat, iconoDe, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
 import { hayIcono } from '@/components/ui/Icono'
 
 /**
@@ -67,22 +67,33 @@ describe('estructura del nav', () => {
     expect(keysDeCat({ id: 'z', label: 'Z', keys: ['a'] })).toEqual(['a'])
   })
 
+  it('keysDeCat incluye las entradas propias de la categoría (Meta no tiene keys sueltas)', () => {
+    // Una categoría-módulo lista pantallas de UNA sección, así que `keys` está vacío y todo cuelga
+    // de `items`. Si `keysDeCat` no las mirara, esa sección quedaría fuera del menú y —peor— fuera
+    // de las tres redes de arriba, que recorren `keysDeCat`.
+    const cat = { id: 'm', label: 'M', keys: [], items: [
+      { ruta: '/m', label: 'Panel', key: 'meta-ads' },
+      { ruta: '/m/x', label: 'Otra', key: 'meta-ads' },
+    ] }
+    expect(keysDeCat(cat)).toEqual(['meta-ads'])
+  })
+
   it('las subáreas del menú apuntan a una sección real y se gatean con un permiso real', () => {
     // La ruta y el permiso pueden NO coincidir: "Tabla de talles" vive en `/tncat/descripciones`
     // (la pantalla es de Tienda Nube) pero se habilita con el permiso `gen-talles`, que es el
     // que el equipo ya tenía asignado. Lo que sí tiene que valer: las dos existen.
     const validas = new Set(todasLasKeys())
     for (const cat of NAV_CATS) {
-      for (const g of cat.grupos ?? []) {
-        for (const it of g.items ?? []) {
-          const destino = it.ruta.split('/')[1]
-          expect(validas.has(destino), `'${it.label}' apunta a /${destino}, que no es una sección`).toBe(true)
-          expect(validas.has(it.key), `'${it.label}' se gatea con '${it.key}', que no es una sección`).toBe(true)
-          const subs = it.sub ? (Array.isArray(it.sub) ? it.sub : [it.sub]) : []
-          for (const s of subs) {
-            const existe = (PERM_CAT.find((p) => p.key === it.key)?.subs ?? []).some((x) => x.key === s)
-            expect(existe, `'${it.label}' pide el sub-permiso '${it.key}.${s}', que no existe`).toBe(true)
-          }
+      // `itemsDeCat` mira los dos niveles: las de la categoría y las de sus subgrupos. Recorrer
+      // sólo `grupos[].items` dejaba a Meta sin cubrir sin que nada se pusiera en rojo.
+      for (const it of itemsDeCat(cat)) {
+        const destino = it.ruta.split('/')[1]
+        expect(validas.has(destino), `'${it.label}' apunta a /${destino}, que no es una sección`).toBe(true)
+        expect(validas.has(it.key), `'${it.label}' se gatea con '${it.key}', que no es una sección`).toBe(true)
+        const subs = it.sub ? (Array.isArray(it.sub) ? it.sub : [it.sub]) : []
+        for (const s of subs) {
+          const existe = (PERM_CAT.find((p) => p.key === it.key)?.subs ?? []).some((x) => x.key === s)
+          expect(existe, `'${it.label}' pide el sub-permiso '${it.key}.${s}', que no existe`).toBe(true)
         }
       }
     }
@@ -100,9 +111,9 @@ describe('estructura del nav', () => {
       if (!hayIcono(cat.icono)) rotos.push(`grupo '${cat.label}' (icono: ${cat.icono ?? '—'})`)
       for (const g of cat.grupos ?? []) {
         if (!hayIcono(g.icono)) rotos.push(`subgrupo '${g.label}' (icono: ${g.icono ?? '—'})`)
-        for (const it of g.items ?? []) {
-          if (!hayIcono(it.icono)) rotos.push(`entrada '${it.label}' (icono: ${it.icono ?? '—'})`)
-        }
+      }
+      for (const it of itemsDeCat(cat)) {
+        if (!hayIcono(it.icono)) rotos.push(`entrada '${it.label}' (icono: ${it.icono ?? '—'})`)
       }
     }
     expect(rotos).toEqual([])

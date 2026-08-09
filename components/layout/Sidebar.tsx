@@ -69,28 +69,33 @@ export function Sidebar({
 
   // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
   // desaparece entero si no queda ninguna sección visible adentro.
+  // Una entrada de subárea se ve si se ve su sección y, cuando pide sub-permisos, si tiene alguno.
+  // Vale igual para las de un subgrupo y para las que cuelgan derecho de la categoría (Meta).
+  const itemVisible = (it: NavItem) => {
+    if (!visible(it.key)) return false
+    if (!it.sub) return true
+    // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
+    // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
+    const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
+    return esAdmin(perfil) || subs.some((s) => puedeSub(perfil, marca, it.key, s))
+  }
+
   const cats = NAV_CATS.map((cat) => {
     if (cat.adminOnly && !esAdmin(perfil)) return null
     const keys = cat.keys.filter(visible)
+    const items = (cat.items ?? []).filter(itemVisible)
     const grupos = (cat.grupos ?? [])
-      .map((g) => ({
-        ...g,
-        keys: g.keys.filter(visible),
-        items: (g.items ?? []).filter((it) => {
-          if (!visible(it.key)) return false
-          if (!it.sub) return true
-          // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
-          // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
-          const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
-          return esAdmin(perfil) || subs.some((s) => puedeSub(perfil, marca, it.key, s))
-        }),
-      }))
+      .map((g) => ({ ...g, keys: g.keys.filter(visible), items: (g.items ?? []).filter(itemVisible) }))
       .filter((g) => g.keys.length > 0 || g.items.length > 0)
-    return keys.length || grupos.length ? { ...cat, keys, grupos } : null
+    // 🔴 `items` va en la condición: una categoría que es un módulo (Meta) no tiene keys sueltas ni
+    // subgrupos, así que sin esto desaparecería entera del menú para todo el mundo.
+    return keys.length || items.length || grupos.length ? { ...cat, keys, items, grupos } : null
   }).filter((c): c is NonNullable<typeof c> => c !== null)
 
   const contieneActiva = (c: (typeof cats)[number]) =>
-    c.keys.includes(activa) || c.grupos.some((g) => g.keys.includes(activa) || g.items.some((it) => it.key === activa))
+    c.keys.includes(activa)
+    || c.items.some((it) => it.key === activa)
+    || c.grupos.some((g) => g.keys.includes(activa) || g.items.some((it) => it.key === activa))
 
   /**
    * UN grupo activo, no todos los que contengan la sección.
@@ -191,6 +196,19 @@ export function Sidebar({
                 {cat.labels?.[k] ?? label(k)}
               </Link>
             )
+            // Una entrada de subárea. Es la misma pinta cuelgue de la categoría (Meta) o de un
+            // subgrupo (Tienda Nube): una sola función para que no se despeguen.
+            const optItem = (it: NavItem) => (
+              <Link
+                key={it.ruta + it.label}
+                href={it.ruta}
+                className={`nav-opt${rutaActiva(it, activa, sub) ? ' active' : ''}${cat.accent === 'marketing' ? ' nav-accent-mkt' : ''}`}
+                onClick={onNavegar}
+              >
+                {hayIcono(it.icono) && <Icono nombre={it.icono} size={15} />}
+                {it.label}
+              </Link>
+            )
             return (
               <div key={cat.id} className={`nav-group${open ? ' open' : ''}`}>
                 <button
@@ -203,20 +221,11 @@ export function Sidebar({
                 </button>
                 <div className="nav-menu">
                   {cat.keys.map(opt)}
+                  {cat.items.map(optItem)}
                   {cat.grupos.map((g) => (
                     <Subgrupo key={g.id} grupo={g} activa={activa} sub={sub}>
                       {g.keys.map(opt)}
-                      {(g.items ?? []).map((it) => (
-                        <Link
-                          key={it.ruta + it.label}
-                          href={it.ruta}
-                          className={`nav-opt${rutaActiva(it, activa, sub) ? ' active' : ''}${cat.accent === 'marketing' ? ' nav-accent-mkt' : ''}`}
-                          onClick={onNavegar}
-                        >
-                          {hayIcono(it.icono) && <Icono nombre={it.icono} size={15} />}
-                          {it.label}
-                        </Link>
-                      ))}
+                      {(g.items ?? []).map(optItem)}
                     </Subgrupo>
                   ))}
                 </div>

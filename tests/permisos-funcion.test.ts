@@ -53,6 +53,26 @@ describe('permisos — precedencia de puedeVer', () => {
     expect(puedeVer(perfil(), 'bdi', 'cupones')).toBe(false)
     expect(puedeVer(null, 'bdi', 'cupones')).toBe(false)
   })
+
+  /**
+   * 🔴 Meta salió de adentro de Marketing y pasó a ser área propia (`meta`) el 9-ago-2026.
+   *
+   * Mover el área es quitar el acceso: `seccionesDeFuncion()` expande por área, así que si la
+   * función `marketing` no lista también `'meta'`, todo el equipo de marketing pierde Meta de un
+   * deploy para el otro. No se leería como un permiso faltante sino como «Meta desapareció», que
+   * es la clase de bug que nadie reporta bien.
+   *
+   * 🔑 Y **el espejo `PERM_CAT.area` ↔ `SECCION_AREA` no lo caza**: las dos dirían `'meta'`
+   * felizmente. Por eso el test va acá, contra el efecto —quién la ve— y no contra la estructura.
+   */
+  it('quien tiene la función marketing sigue viendo Meta después de sacarla de Marketing', () => {
+    const u = perfil({ funcion: ['marketing'] })
+    expect(puedeVer(u, 'bdi', 'meta-ads')).toBe(true)
+    expect(puedeVer(u, 'zattia', 'meta-ads')).toBe(true)
+    // Y no perdió nada de lo que ya tenía en su área vieja.
+    expect(puedeVer(u, 'bdi', 'canjes')).toBe(true)
+    expect(puedeVer(u, 'bdi', 'calendario')).toBe(true)
+  })
 })
 
 describe('permisos — qué da cada función', () => {

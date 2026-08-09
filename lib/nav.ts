@@ -4,14 +4,28 @@ export { NAV_CATS, PERM_CAT }
 export type { Marca, NavCat, NavGrupo, NavItem, PermCat }
 
 /**
- * Todas las keys de un grupo del menú: las sueltas más las de sus subgrupos. Usarla
- * siempre en vez de `cat.keys` a secas — si no, una sección que vive en un subgrupo
- * (ej. `Local > Actividades`) queda invisible para el sidebar, el eyebrow y los tests.
+ * Todas las keys de un grupo del menú: las sueltas, las de sus entradas directas y las de sus
+ * subgrupos. Usarla siempre en vez de `cat.keys` a secas — si no, una sección que vive en un
+ * subgrupo (ej. `Local > Actividades`) o que es un módulo de entradas sin keys sueltas (Meta)
+ * queda invisible para el sidebar, el eyebrow y los tests.
  */
 export function keysDeCat(cat: NavCat): string[] {
-  if (!cat.grupos?.length) return cat.keys
+  const propias = (cat.items ?? []).map((it) => it.key)
+  if (!cat.grupos?.length) return propias.length ? [...new Set([...cat.keys, ...propias])] : cat.keys
   const deGrupos = cat.grupos.flatMap((g) => [...g.keys, ...(g.items ?? []).map((it) => it.key)])
-  return [...new Set([...cat.keys, ...deGrupos])]
+  return [...new Set([...cat.keys, ...propias, ...deGrupos])]
+}
+
+/**
+ * Todas las entradas de subárea de una categoría: las suyas y las de sus subgrupos.
+ *
+ * Existe para que los tests y el sidebar no tengan que acordarse de mirar los dos niveles. Cuando
+ * `NavCat.items` apareció, las dos redes que recorren entradas (que el destino sea una sección
+ * real, que cada una tenga ícono) miraban sólo `grupos[].items` y **habrían dejado a Meta sin
+ * cubrir en silencio**, que es exactamente lo que esos tests existen para impedir.
+ */
+export function itemsDeCat(cat: NavCat): NavItem[] {
+  return [...(cat.items ?? []), ...(cat.grupos ?? []).flatMap((g) => g.items ?? [])]
 }
 
 /**
