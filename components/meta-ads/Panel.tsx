@@ -24,9 +24,11 @@
  * diagnóstico porque el diagnóstico describe lo que ya está, y esto describe lo que quedó colgado.
  */
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
 import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
+import { PodaPendiente, usePoda, type Resumen } from '@/components/meta-ads/reglas/PodaPendiente'
 import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { ComoViene } from '@/components/meta-ads/tendencia/ComoViene'
 import { useCampanias, type Campanias } from '@/components/meta-ads/useCampanias'
@@ -47,6 +49,14 @@ export function Panel() {
   // 🔑 Los hallazgos salen de la BASE, no de Meta: se ven aunque el censo falle. Por eso viajan
   // aparte de `m.estado` y se dibujan afuera del `fase === 'ok'`.
   const r = useReglas()
+  // Las marcas cuya pauta se ve. Salen de las reglas y no del censo por lo mismo: la poda mira la
+  // foto diaria, así que tiene que poder dibujarse con Meta caído.
+  const estadoReglas = r.estado
+  const lineasVisibles = useMemo(
+    () => (estadoReglas.fase === 'ok' ? LINEAS.filter((l) => l in estadoReglas.data.contexto) : []),
+    [estadoReglas],
+  )
+  const poda = usePoda(lineasVisibles)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -80,12 +90,14 @@ export function Panel() {
             sinMarcaConGasto={m.estado.data.sinAsignar.filter((c) => c.tuvoActividad).length}
             hallazgos={r.hallazgos}
             quitarHallazgo={r.quitar}
+            poda={poda}
           />
         </>
-      ) : r.hallazgos.length > 0 && (
+      ) : (r.hallazgos.length > 0 || poda.resumenes.length > 0) && (
         <SectionCard title="Qué hay que decidir" subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
             <HallazgosPanel hallazgos={r.hallazgos} quitar={r.quitar} />
+            <PodaPendiente resumenes={poda.resumenes} recargar={poda.recargar} />
           </div>
         </SectionCard>
       )}
@@ -108,12 +120,13 @@ export function Panel() {
  * nada que decidir, se dice explícito: un bloque que sólo aparece con malas noticias deja sin saber
  * si el silencio es «está todo bien» o «no se miró».
  */
-function QueDecidir({ m, diagPorLinea, sinMarcaConGasto, hallazgos, quitarHallazgo }: {
+function QueDecidir({ m, diagPorLinea, sinMarcaConGasto, hallazgos, quitarHallazgo, poda }: {
   m: Campanias
   diagPorLinea: Partial<Record<LineaPauta, Diagnostico>>
   sinMarcaConGasto: number
   hallazgos: Hallazgo[]
   quitarHallazgo: (id: number) => void
+  poda: { resumenes: Resumen[]; recargar: () => void }
 }) {
   const huecos = LINEAS.flatMap((l) => {
     const d = diagPorLinea[l]
@@ -123,6 +136,7 @@ function QueDecidir({ m, diagPorLinea, sinMarcaConGasto, hallazgos, quitarHallaz
   })
   const listas = m.funnel.ideas.filter((i) => i.estado === 'lista').length
   const nada = sinMarcaConGasto === 0 && huecos.length === 0 && listas === 0 && hallazgos.length === 0
+    && poda.resumenes.length === 0
 
   return (
     <SectionCard title="Qué hay que decidir" subtitle="Lo que está esperando a que alguien haga algo.">
@@ -151,6 +165,10 @@ function QueDecidir({ m, diagPorLinea, sinMarcaConGasto, hallazgos, quitarHallaz
           )}
 
           <HallazgosPanel hallazgos={hallazgos} quitar={quitarHallazgo} />
+
+          {/* Va con los hallazgos y arriba de los huecos: nombra plata que se está yendo hoy, que es
+              más urgente que una etapa vacía. */}
+          <PodaPendiente resumenes={poda.resumenes} recargar={poda.recargar} />
 
           {huecos.map((h) => (
             <Renglon

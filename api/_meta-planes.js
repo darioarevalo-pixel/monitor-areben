@@ -30,11 +30,13 @@ import {
   CAMPOS_LECTURA, ETIQUETA_NIVEL, lineasQueVe, nivelReal, quedoPuesto, revisarPresupuesto, SIN_LINEA,
 } from '../lib/meta-ads/acciones.core.js';
 import {
-  armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, entraOtroPaso, estadoDePlan,
-  marcaDePaso, marcadorDe, nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir,
-  TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
+  armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, armarPlanPodar, entraOtroPaso,
+  estadoDePlan, marcaDePaso, marcadorDe, nombreConMarca, permitePlan, politicaReintento, siguientePaso,
+  sustituir, TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
+import { contextoDePoda, correrPoda } from '../lib/meta-ads/correr-poda.core.js';
+import { candidatosAPodar, CLAVES_MOTIVO, faltanParaPodar, MOTIVOS_PODA } from '../lib/meta-ads/podado.core.js';
 import { leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js';
 import {
   estaEsperando, faltanParaEscalar, HORAS_ESCALON_DEFECTO, proximoEn, ultimoDiaCerrado,
@@ -94,6 +96,37 @@ export async function planesGet(res, perfil, q) {
       diasSeguidos: Number(u.dias_seguidos) || 0,
       faltan,
       motivo: faltan.length ? motivoApagada('ganador-escalar', faltan) : null,
+    });
+  }
+
+  /**
+   * La lista de candidatos a poda, **medida en el servidor**.
+   *
+   * 🔑 Sale de `candidatosAPodar()`, que es la misma cuenta que después hace el guardarraíl. Armarla
+   * en el browser con otra fuente sería ofrecer cinco y saltear tres sin que nadie entienda por qué.
+   *
+   * Va por GET y no por POST porque **no toca Meta ni escribe nada**: lee la foto y contesta.
+   */
+  if (q.recurso === 'poda') {
+    const linea = String(q.linea || '');
+    if (!visibles.includes(linea)) return res.status(403).json({ error: 'No ves la pauta de esa marca.' });
+    const motivo = CLAVES_MOTIVO.includes(String(q.motivo)) ? String(q.motivo) : 'sin-ventas';
+    const hasta = diaDeCorte();
+    const ctx = await contextoDePoda(sb, linea, hasta);
+    if (ctx.error) return res.status(502).json({ error: ctx.error });
+    const r = candidatosAPodar({ filas: ctx.filas, umbrales: ctx.umbrales, hasta, motivo });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    return res.status(200).json({
+      ok: true,
+      motivo,
+      hasta,
+      // El permiso se contesta acá para que el modal no ofrezca un botón que el POST va a rechazar.
+      puede: permitePlan(perfil, 'podar', linea).ok,
+      faltan: r.faltan || [],
+      detalle: r.detalle || null,
+      candidatos: r.candidatos,
+      gastoMinimo: Number(ctx.umbrales.gasto_minimo) || 0,
+      roasObjetivo: Number(ctx.umbrales.roas_objetivo) || 0,
     });
   }
 
@@ -197,7 +230,8 @@ async function crear(res, perfil, b) {
   const armado = tipo === 'duplicar' ? await prepararDuplicar(perfil, b, marcador)
     : tipo === 'crear' ? await prepararCrear(perfil, b, marcador)
       : tipo === 'escalar' ? await prepararEscalar(perfil, b)
-        : await prepararMoverPlata(perfil, b);
+        : tipo === 'podar' ? await prepararPodar(perfil, b)
+          : await prepararMoverPlata(perfil, b);
   if (!armado.ok) return res.status(armado.status || 400).json({ error: armado.error, ...(armado.extra || {}) });
 
   const { data: fila, error } = await sb.from(TABLA).insert([{
@@ -637,6 +671,71 @@ async function prepararEscalar(perfil, b) {
   };
 }
 
+/**
+ * Todo lo que hay que medir antes de armar una poda.
+ *
+ * 🔑 **La lista NO se acepta del cliente tal cual.** Llegan ids; lo que se apaga son los que el
+ * servidor **vuelve a medir** contra la foto y encuentra en la lista de candidatos. Sin eso, un POST
+ * armado a mano apagaría cualquier cosa con sólo mandar su id, y el permiso `pausar` pasaría de
+ * «puede apagar lo que no rinde» a «puede apagar la pauta entera de una llamada».
+ *
+ * ⚠️ Y de paso resuelve el caso aburrido: la lista que se ve en pantalla puede tener minutos, y en
+ * esos minutos algo pudo empezar a vender. Lo que se descarta acá se lo dice al que aprieta **antes**
+ * de armar el plan, en vez de dejarle cinco pasos de los cuales tres se saltean.
+ */
+async function prepararPodar(perfil, b) {
+  const linea = String(b.linea || '');
+  if (!linea) return { ok: false, status: 400, error: 'Falta la marca de la poda.' };
+  const permiso = permitePlan(perfil, 'podar', linea);
+  if (!permiso.ok) return { ok: false, ...permiso };
+
+  const motivo = CLAVES_MOTIVO.includes(String(b.motivo)) ? String(b.motivo) : 'sin-ventas';
+  const pedidos = Array.isArray(b.objetos) ? b.objetos.map((o) => String((o && o.objetoId) || o || '')) : [];
+  if (!pedidos.length) return { ok: false, status: 400, error: 'No hay nada seleccionado para apagar.' };
+
+  const sb = clienteBdi();
+  if (!sb) return { ok: false, status: 500, error: 'Faltan credenciales de Supabase.' };
+  const hasta = diaDeCorte();
+  const ctx = await contextoDePoda(sb, linea, hasta);
+  if (ctx.error) return { ok: false, status: 502, error: ctx.error };
+
+  const faltan = faltanParaPodar(ctx.umbrales, motivo);
+  if (faltan.length) {
+    return {
+      ok: false, status: 409,
+      error: `${motivoApagada(MOTIVOS_PODA[motivo].preset, faltan)} Cargalos en Automatizaciones y volvé a intentarlo.`,
+      extra: { faltanUmbrales: faltan },
+    };
+  }
+
+  const medidos = candidatosAPodar({ filas: ctx.filas, umbrales: ctx.umbrales, hasta, motivo });
+  if (!medidos.ok) return { ok: false, status: 400, error: medidos.error };
+  const porId = new Map(medidos.candidatos.map((c) => [String(c.objetoId), c]));
+
+  const objetos = [];
+  const descartados = [];
+  for (const id of pedidos) {
+    const c = porId.get(id);
+    if (c) objetos.push({ objetoId: c.objetoId, nivel: c.nivel, nombre: c.nombre, motivo });
+    else descartados.push(id);
+  }
+  if (!objetos.length) {
+    return {
+      ok: false, status: 409,
+      error: 'Ninguno de los seleccionados sigue cumpliendo la condición: puede que Meta les haya atribuido compras, o que alguien ya los haya apagado. Volvé a abrir la lista.',
+      extra: { descartados },
+    };
+  }
+
+  const armado = armarPlanPodar({ objetos });
+  if (!armado.ok) return armado;
+  const cuentaId = String((porId.get(objetos[0].objetoId) || {}).cuentaId || '');
+  return {
+    ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea,
+    entrada: { motivo, hasta, objetos, descartados, gastoMinimo: Number(ctx.umbrales.gasto_minimo) || 0 },
+  };
+}
+
 /** Cada cuántas horas va un escalón de este plan. Se congeló en la entrada al armarlo. */
 const horasDe = (plan) => Number((plan.entrada || {}).horas) || HORAS_ESCALON_DEFECTO;
 
@@ -828,6 +927,43 @@ async function ejecutar(sb, plan, paso, contexto) {
       esperarHasta: proximoEn(Date.now(), horasDe(plan)),
       motivo: `Escalón dado. El próximo, en ${horasDe(plan)} horas.`,
     };
+  }
+
+  /**
+   * La poda, que como el escalón puede terminar **`salteado`** — y acá el salteo es todavía más
+   * frecuente y más valioso: «no lo apagué porque el martes vendió dos» es exactamente lo que hay
+   * que poder leer después.
+   *
+   * ⚠️ **Sin `esperarHasta`, a diferencia del escalón.** Una escalada corre el reloj después de cada
+   * paso porque el siguiente necesita ver el efecto; una poda no espera nada de sí misma, así que los
+   * pasos que queden siguen en la misma corrida.
+   */
+  if (paso.tipo === 'poda') {
+    const p = await correrPoda(sb, {
+      pedido, linea: plan.linea, hasta: diaDeCorte(), simulacro: !!plan.simulacro, timeoutMs: TIMEOUT_PASO_MS,
+    });
+
+    if (p.salteado) {
+      await guardarPaso(sb, plan.id, paso.orden, { estado: 'salteado', detalle: p.motivo });
+      return { paso: { estado: 'salteado' }, motivo: `No se apagó: ${p.motivo}` };
+    }
+
+    if (p.corte) {
+      await guardarPaso(sb, plan.id, paso.orden, { estado: 'en-curso', detalle: p.error, uso: p.uso || null });
+      return { paso: { estado: 'en-curso' }, cortar: true, motivo: `${p.error} Apretá Seguir para reintentarlo.` };
+    }
+
+    if (!p.ok) {
+      await guardarPaso(sb, plan.id, paso.orden, {
+        estado: 'fallado', puede_reintentar: true, detalle: p.error || 'Meta lo rechazó.', uso: p.uso || null,
+      });
+      return { paso: { estado: 'fallado' }, cortar: true, motivo: `Meta rechazó apagarlo: ${p.error || 'sin motivo'}` };
+    }
+
+    await guardarPaso(sb, plan.id, paso.orden, {
+      estado: 'hecho', resultado_id: p.id || null, detalle: p.detalle || null, uso: p.uso || null,
+    });
+    return { paso: { estado: 'hecho' }, resultadoId: p.id || null, hecho: true };
   }
 
   // Simulacro: arma y no escribe. Es el pre-vuelo de cualquier plan antes de gastar una escritura.

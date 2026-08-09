@@ -11,6 +11,7 @@ import {
   armarPlanCrear as armarPlanCrearJs,
   armarPlanDuplicar as armarPlanDuplicarJs,
   armarPlanEscalar as armarPlanEscalarJs,
+  armarPlanPodar as armarPlanPodarJs,
   armarPlanMoverPlata as armarPlanMoverPlataJs,
   CLAVES_PLAN as CLAVES_PLAN_JS,
   entraOtroPaso as entraOtroPasoJs,
@@ -31,7 +32,7 @@ import {
   TOPE_COPIAS as TOPE_COPIAS_JS,
 } from './planes.core.js'
 
-export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata' | 'escalar'
+export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata' | 'escalar' | 'podar'
 
 export type TipoPaso =
   | 'copiar-campania'
@@ -43,6 +44,8 @@ export type TipoPaso =
   | 'presupuesto'
   /** Sube el diario **sólo si el guardarraíl deja**. Puede terminar `salteado` con el motivo escrito. */
   | 'escalon'
+  /** Apaga **sólo si el guardarraíl deja**: si Meta le atribuyó compras desde que entró en la lista, no. */
+  | 'poda'
   | 'nombre'
   | 'heredar-linea'
 
@@ -165,6 +168,11 @@ export const armarPlanMoverPlata = armarPlanMoverPlataJs as (entrada: unknown) =
  * PREVISIÓN: cada escalón recalcula desde el diario releído y desde la foto de ese día.
  */
 export const armarPlanEscalar = armarPlanEscalarJs as (entrada: unknown) => Armado
+/**
+ * Un paso por objeto a apagar, todos ahora: una poda no espera nada de sí misma. Cada paso vuelve a
+ * preguntarle al guardarraíl, así que la lista es una propuesta y no una orden.
+ */
+export const armarPlanPodar = armarPlanPodarJs as (entrada: unknown) => Armado
 export const repartir = repartirJs as (
   deActual: number,
   aActual: number,

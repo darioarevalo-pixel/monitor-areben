@@ -11,6 +11,7 @@ import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
+import type { Candidato, MotivoPoda } from './podado'
 import type { RangoUI } from './rango'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
@@ -312,6 +313,31 @@ export type ContextoEscalada = {
  */
 export function traerContextoEscalada(linea: string): Promise<Lectura<ContextoEscalada>> {
   return pedir<ContextoEscalada>(new URLSearchParams({ recurso: 'escalada', linea }))
+}
+
+/** La lista de candidatos a poda, medida en el servidor. */
+export type ContextoPoda = {
+  motivo: MotivoPoda
+  hasta: string
+  puede: boolean
+  faltan: ClaveUmbral[]
+  detalle: string | null
+  candidatos: Candidato[]
+  gastoMinimo: number
+  roasObjetivo: number
+}
+
+/**
+ * 🔑 **La lista la mide el servidor, no el browser.** Es la misma función que después usa el
+ * guardarraíl de cada paso: si se armara acá con otra fuente, el modal podría ofrecer cinco y el
+ * motor saltear tres, y eso se lee como que la herramienta está rota.
+ *
+ * ⚠️ Y no es una promesa: entre que se dibuja y que se aprieta pueden pasar minutos, y en esos
+ * minutos Meta puede atribuir una compra. El servidor vuelve a medir al armar el plan, y cada paso
+ * vuelve a preguntar.
+ */
+export function traerCandidatosAPodar(linea: string, motivo: MotivoPoda = 'sin-ventas'): Promise<Lectura<ContextoPoda>> {
+  return pedir<ContextoPoda>(new URLSearchParams({ recurso: 'poda', linea, motivo }))
 }
 
 async function postPlan<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {
