@@ -93,4 +93,10 @@ export type Acciones = {
   onNombre: (o: ObjetoMeta) => void
   /** Abre «duplicar y ajustar». Necesita el presupuesto de la fila para poder ofrecer el campo. */
   onDuplicar: (o: ObjetoMeta, diarioCrudo: number, sinPresupuesto: boolean) => void
+  /**
+   * Abre «nueva campaña con esta segmentación». Sólo desde un CONJUNTO: es de donde se lee el
+   * `targeting`, y desde una campaña habría que elegir cuál de sus conjuntos, que es una pregunta
+   * que la fila no puede contestar.
+   */
+  onCrear: (o: ObjetoMeta, diarioCrudo: number) => void
 }

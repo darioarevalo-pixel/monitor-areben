@@ -15,6 +15,9 @@ import {
   escalonesDeDiario as escalonesDeDiarioJs,
   esRechazoDePresupuesto as esRechazoDePresupuestoJs,
   minimoDeMensaje as minimoDeMensajeJs,
+  objetivoUsable as objetivoUsableJs,
+  OBJETIVOS_VIVOS as OBJETIVOS_VIVOS_JS,
+  recetaDeCampania as recetaDeCampaniaJs,
   recetaDeConjunto as recetaDeConjuntoJs,
   repartoDePresupuesto as repartoDePresupuestoJs,
   SENTINELAS as SENTINELAS_JS,
@@ -88,6 +91,12 @@ export const escalonesDeDiario = escalonesDeDiarioJs as (
   mensaje: string,
   minimos: { minDiarioCrudo?: number; minDiarioAlto?: number } | null,
 ) => number[]
+export const OBJETIVOS_VIVOS = OBJETIVOS_VIVOS_JS as string[]
+export const objetivoUsable = objetivoUsableJs as (objetivo: string | null | undefined) => boolean
+export const recetaDeCampania = recetaDeCampaniaJs as (
+  e: { objetivo?: string | null; categorias?: string[] | null },
+) => { ok: true; cuerpo: CuerpoReceta } | Falla
+
 export const conDiario = conDiarioJs as (
   cuerpo: CuerpoReceta,
   valor: number,

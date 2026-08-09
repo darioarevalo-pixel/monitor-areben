@@ -30,13 +30,14 @@ import {
   CAMPOS_LECTURA, ETIQUETA_NIVEL, lineasQueVe, nivelReal, quedoPuesto, revisarPresupuesto, SIN_LINEA,
 } from '../lib/meta-ads/acciones.core.js';
 import {
-  armarPlanDuplicar, armarPlanMoverPlata, entraOtroPaso, estadoDePlan, marcaDePaso, marcadorDe,
+  armarPlanCrear, armarPlanDuplicar, armarPlanMoverPlata, entraOtroPaso, estadoDePlan, marcaDePaso, marcadorDe,
   nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir, TIMEOUT_PASO_MS,
   TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
 import {
-  CAMPOS_RECETA, conDiario, escalonesDeDiario, esRechazoDePresupuesto, recetaDeConjunto, VALIDAR_SOLO,
+  CAMPOS_RECETA, conDiario, escalonesDeDiario, esRechazoDePresupuesto, recetaDeCampania,
+  recetaDeConjunto, VALIDAR_SOLO,
 } from '../lib/meta-ads/receta.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
 
@@ -154,9 +155,9 @@ async function crear(res, perfil, b) {
   }
 
   const marcador = marcadorDe(idem);
-  const armado = tipo === 'duplicar'
-    ? await prepararDuplicar(perfil, b, marcador)
-    : await prepararMoverPlata(perfil, b);
+  const armado = tipo === 'duplicar' ? await prepararDuplicar(perfil, b, marcador)
+    : tipo === 'crear' ? await prepararCrear(perfil, b, marcador)
+      : await prepararMoverPlata(perfil, b);
   if (!armado.ok) return res.status(armado.status || 400).json({ error: armado.error, ...(armado.extra || {}) });
 
   const { data: fila, error } = await sb.from(TABLA).insert([{
@@ -289,6 +290,114 @@ async function prepararDuplicar(perfil, b, marcador) {
     ])],
   };
   const armado = armarPlanDuplicar(entrada, marcador);
+  if (!armado.ok) return armado;
+  return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: linea.linea, entrada };
+}
+
+/** Cuántos avisos entran en una campaña nueva. El tope es nuestro: más que esto no se revisa a ojo. */
+const TOPE_CREATIVOS = 10;
+
+/**
+ * **Crear una campaña nueva a partir de una receta.**
+ *
+ * Todo lo que puede ser rechazado se copia de un conjunto que **está entregando hoy** —segmentación,
+ * optimización, cobro, píxel— y lo único que se elige es nombre, presupuesto y qué creativos. Ver el
+ * comentario largo de `armarPlanCrear`.
+ *
+ * 🔑 **Los tres POST se validan contra Meta antes de guardar el plan**, y el del conjunto y el del
+ * aviso se validan **contra los objetos de referencia**: el conjunto todavía no existe cuando se
+ * arma. Vale porque lo que Meta chequea ahí es la legalidad de la configuración bajo ESE objetivo, y
+ * la campaña nueva nace con el mismo — que es justo el motivo por el que el objetivo no se elige.
+ */
+async function prepararCrear(perfil, b, marcador) {
+  const referencia = String(b.referenciaId || '');
+  if (!/^\d+$/.test(referencia)) {
+    return { ok: false, status: 400, error: 'Falta el conjunto de referencia: es de donde sale la segmentación.' };
+  }
+  const nombre = String(b.nombre || '').trim();
+  if (!nombre) return { ok: false, status: 400, error: 'Falta el nombre de la campaña.' };
+
+  const ref = await graph(`${referencia}?fields=${CAMPOS_RECETA}`);
+  if (!ref.ok) {
+    const code = codigoError(ref);
+    return {
+      ok: false, status: code === 100 ? 400 : 502,
+      error: code === 100 ? 'Ese id no parece ser un conjunto de Meta.' : 'No se pudo leer el conjunto de referencia en Meta, así que no se armó nada.',
+    };
+  }
+  if (nivelReal(ref.data) !== 'conjunto') {
+    return { ok: false, status: 400, error: 'La referencia tiene que ser un CONJUNTO: es de donde se lee la segmentación.' };
+  }
+  const cuentaId = String(ref.data.account_id || '');
+  const campaniaRef = String(ref.data.campaign_id || '');
+
+  // La línea sale de la campaña de referencia, nunca del cliente — igual que en duplicar. Crear
+  // pauta de otra marca es elegir una referencia de esa marca, no tildar un campo.
+  const linea = await lineaDe(campaniaRef);
+  if (!linea.ok) return linea;
+  const permiso = permitePlan(perfil, 'crear', linea.linea);
+  if (!permiso.ok) return { ok: false, ...permiso };
+
+  // 🔑 Los creativos NO se eligen de una lista: son los que el conjunto de referencia tiene HOY. Es
+  // la misma decisión que la segmentación —se parte de algo que ya entrega— y además evita una
+  // pantalla de selección para el caso que nadie pidió. Lo que se va a crear se lee igual antes de
+  // «Empezar», porque los pasos del plan llevan el nombre de cada aviso.
+  const ads = await insightsTodas(`${referencia}/ads?fields=id,name,creative{id}&limit=200`);
+  if (!ads.ok) return { ok: false, status: 502, error: `No se pudieron leer los avisos de la referencia (${ads.error}).` };
+  const creativos = ads.rows
+    .map((a) => ({ creativeId: String((a.creative && a.creative.id) || ''), nombre: String(a.name || 'aviso') }))
+    .filter((c) => /^\d+$/.test(c.creativeId));
+  if (!creativos.length) {
+    return {
+      ok: false, status: 409,
+      error: 'Ese conjunto no tiene ningún aviso con creativo legible, así que la campaña nueva nacería sin nada que entregar. Elegí otro de referencia.',
+    };
+  }
+  if (creativos.length > TOPE_CREATIVOS) {
+    return { ok: false, status: 409, error: `Ese conjunto tiene ${creativos.length} avisos y se crean hasta ${TOPE_CREATIVOS} de una.` };
+  }
+
+  const cab = await graph(`${campaniaRef}?fields=id,name,objective,special_ad_categories`);
+  if (!cab.ok) return { ok: false, status: 502, error: 'No se pudo leer la campaña de la referencia, así que no se armó nada.' };
+  const campania = recetaDeCampania({
+    objetivo: cab.data.objective,
+    categorias: cab.data.special_ad_categories,
+  });
+  if (!campania.ok) return campania;
+
+  const minimos = await minimosDe(cuentaId);
+  const diarioPedido = b.presupuestoCrudo ? Math.round(Number(b.presupuestoCrudo)) : null;
+  const rec = await recetaValidada(cuentaId, referencia, campaniaRef, { diarioPedido, minimos });
+  if (!rec.ok) return rec;
+
+  // Los otros dos POST, preguntados igual. El del aviso va contra el conjunto de referencia porque
+  // el nuevo no existe todavía; lo que se chequea es que el creativo se pueda reusar.
+  const [vCamp, ...vAvisos] = await Promise.all([
+    graphPost(`act_${cuentaId}/campaigns`, {
+      ...campania.cuerpo, name: NOMBRE_VALIDACION, status: 'PAUSED', ...VALIDAR_SOLO,
+    }, TIMEOUT_PASO_MS),
+    ...creativos.map((c) => graphPost(`act_${cuentaId}/ads`, {
+      name: NOMBRE_VALIDACION, adset_id: referencia,
+      creative: JSON.stringify({ creative_id: c.creativeId }), status: 'PAUSED', ...VALIDAR_SOLO,
+    }, TIMEOUT_PASO_MS)),
+  ]);
+  if (!vCamp.ok) return { ok: false, status: 409, error: `Meta no acepta crear la campaña: ${mensajeError(vCamp)}` };
+  const iMal = vAvisos.findIndex((v) => !v.ok);
+  if (iMal >= 0) {
+    return {
+      ok: false, status: 409,
+      error: `Meta no acepta el creativo de «${creativos[iMal].nombre || creativos[iMal].creativeId}»: ${mensajeError(vAvisos[iMal])}`,
+    };
+  }
+
+  const entrada = {
+    referenciaId: referencia, referenciaNombre: String(ref.data.name || ''),
+    cuentaId, nombre, linea: linea.linea, objetivo: cab.data.objective,
+    presupuestoCrudo: diarioPedido, creativos,
+    campania: campania, receta: rec.receta,
+    avisos: [...new Set(rec.receta.notas || [])],
+  };
+  const armado = armarPlanCrear(entrada, marcador);
   if (!armado.ok) return armado;
   return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: linea.linea, entrada };
 }
@@ -605,6 +714,20 @@ async function correr(plan, paso, pedido) {
     const id = String(d.copied_campaign_id || d.copied_adset_id || d.id || '');
     // Sin id no se afirma nada: el paso queda para la sonda, que lo va a buscar por la marca.
     if (!id) return { ok: false, corte: true, error: 'Meta aceptó la copia pero no dijo cuál es.', uso: r.uso };
+    return { ok: true, id, uso: r.uso };
+  }
+
+  // Una campaña NUEVA (no una copia). Mismo cuidado que abajo: el nombre y el estado van después
+  // del cuerpo y lo pisan.
+  if (paso.tipo === 'crear-campania') {
+    const r = await graphPost(`act_${pedido.cuentaId}/campaigns`, {
+      ...(pedido.cuerpo || {}),
+      name: nombreConMarca(pedido.nombreBase, marca),
+      status: 'PAUSED',
+    }, TIMEOUT_PASO_MS);
+    if (!r.ok) return fallo(r);
+    const id = String((r.data && r.data.id) || '');
+    if (!id) return { ok: false, corte: true, error: 'Meta aceptó la campaña pero no dijo cuál es.', uso: r.uso };
     return { ok: true, id, uso: r.uso };
   }
 

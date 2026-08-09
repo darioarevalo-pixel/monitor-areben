@@ -32,9 +32,12 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
   // Un aviso no se duplica: la copia de un aviso suelto no tiene dónde entregar. Lo dice la tabla de
   // acciones (`niveles`) y acá se respeta en vez de repetir el criterio.
   const puedeDuplicar = objeto.nivel !== 'aviso' && acciones.puede('duplicar', objeto.linea)
+  // Sólo desde un conjunto: es de donde se lee la segmentación. Pide el mismo permiso que duplicar,
+  // porque hace lo mismo —crear objetos en Meta— y un sub propio sería una tilde más que dar.
+  const puedeCrear = objeto.nivel === 'conjunto' && acciones.puede('duplicar', objeto.linea)
   const trabajando = acciones.enCurso === objeto.id
 
-  if (!puedeEstado && !puedePresupuesto && !puedeNombre && !puedeDuplicar) return <span style={{ color: color.mut2 }}>—</span>
+  if (!puedeEstado && !puedePresupuesto && !puedeNombre && !puedeDuplicar && !puedeCrear) return <span style={{ color: color.mut2 }}>—</span>
   if (activo && inerte) return <span style={{ color: color.mut2 }} title={inerte}>—</span>
 
   return (
@@ -68,6 +71,17 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
           title="Crea una copia pausada, con sus conjuntos y avisos, y le pone el nombre y el presupuesto que le digas"
         >
           Duplicar
+        </Button>
+      )}
+      {puedeCrear && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={trabajando}
+          onClick={() => acciones.onCrear(objeto, diarioCrudo)}
+          title="Crea una campaña NUEVA, pausada, con esta misma segmentación y estos mismos avisos. Duplicar, en cambio, deja la copia adentro de la campaña actual"
+        >
+          Nueva campaña
         </Button>
       )}
       {/* Renombrar va último: es lo único de esta columna que no cambia lo que Meta hace, y ponerlo

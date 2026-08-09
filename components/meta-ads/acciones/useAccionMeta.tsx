@@ -41,6 +41,8 @@ export type ModalesAccion = {
   presu: { o: ObjetoMeta; diarioCrudo: number } | null
   ren: ObjetoMeta | null
   dup: { o: ObjetoMeta; diarioCrudo: number; sinPresupuesto: boolean } | null
+  /** «Nueva campaña con esta segmentación», siempre sobre un conjunto. */
+  nueva: { o: ObjetoMeta; diarioCrudo: number } | null
   enCurso: string | null
   cerrar: () => void
   guardarPresupuesto: (nuevoCrudo: number, idem: string) => void
@@ -69,6 +71,7 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
   const [enCurso, setEnCurso] = useState<string | null>(null)
   const [presu, setPresu] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
   const [dup, setDup] = useState<{ o: ObjetoMeta; diarioCrudo: number; sinPresupuesto: boolean } | null>(null)
+  const [nueva, setNueva] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
   const [ren, setRen] = useState<ObjetoMeta | null>(null)
 
   /**
@@ -275,9 +278,10 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
     onPresupuesto: (o: ObjetoMeta, diarioCrudo: number) => setPresu({ o, diarioCrudo }),
     onNombre: (o: ObjetoMeta) => setRen(o),
     onDuplicar: (o: ObjetoMeta, diarioCrudo: number, sinPresupuesto: boolean) => setDup({ o, diarioCrudo, sinPresupuesto }),
+    onCrear: (o: ObjetoMeta, diarioCrudo: number) => setNueva({ o, diarioCrudo }),
   }), [perfil, enCurso, cambiarEstado])
 
-  const cerrar = useCallback(() => { setPresu(null); setRen(null); setDup(null) }, [])
+  const cerrar = useCallback(() => { setPresu(null); setRen(null); setDup(null); setNueva(null) }, [])
 
   const guardarPresupuesto = useCallback(async (nuevoCrudo: number, idem: string) => {
     if (!presu) return
@@ -297,7 +301,10 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
     if (await duplicarYAjustar(dup.o, aj)) setDup(null)
   }, [dup, duplicarYAjustar])
 
-  const modales: ModalesAccion = { presu, ren, dup, enCurso, cerrar, guardarPresupuesto, guardarNombre, duplicar }
+  // ⚠️ `nueva` no lleva handler de guardado, y no es una asimetría descuidada: crear una campaña
+  // NO pasa por `mandar`. Es un plan de punta a punta —lo arma el modal y lo ejecuta el motor—, así
+  // que lo único que hace falta acá es saber si está abierto y sobre qué conjunto.
+  const modales: ModalesAccion = { presu, ren, dup, nueva, enCurso, cerrar, guardarPresupuesto, guardarNombre, duplicar }
   return { enCurso, acciones, modales }
 }
 

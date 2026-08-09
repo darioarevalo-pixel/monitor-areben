@@ -8,6 +8,7 @@
 
 import type { LineaPauta } from './tipos'
 import {
+  armarPlanCrear as armarPlanCrearJs,
   armarPlanDuplicar as armarPlanDuplicarJs,
   armarPlanMoverPlata as armarPlanMoverPlataJs,
   CLAVES_PLAN as CLAVES_PLAN_JS,
@@ -29,10 +30,11 @@ import {
   TOPE_COPIAS as TOPE_COPIAS_JS,
 } from './planes.core.js'
 
-export type TipoPlan = 'duplicar' | 'mover-plata'
+export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata'
 
 export type TipoPaso =
   | 'copiar-campania'
+  | 'crear-campania'
   /** ⚠️ Ya no se genera; sigue acá porque los planes viejos de la base lo referencian. */
   | 'copiar-conjunto'
   | 'crear-conjunto'
@@ -139,6 +141,8 @@ type Armado =
   | { ok: false; status: number; error: string }
 
 export const armarPlanDuplicar = armarPlanDuplicarJs as (entrada: unknown, marcador: string) => Armado
+/** Una campaña NUEVA a partir de una receta: nada se edita, todo se copia de algo que ya entrega. */
+export const armarPlanCrear = armarPlanCrearJs as (entrada: unknown, marcador: string) => Armado
 /** Sin marcador: mover plata no crea ningún objeto, así que no hay nombre en el que anotarla. */
 export const armarPlanMoverPlata = armarPlanMoverPlataJs as (entrada: unknown) => Armado
 export const repartir = repartirJs as (

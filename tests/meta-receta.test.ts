@@ -5,12 +5,15 @@ import {
   escalonesDeDiario,
   esRechazoDePresupuesto,
   minimoDeMensaje,
+  objetivoUsable,
+  OBJETIVOS_VIVOS,
+  recetaDeCampania,
   recetaDeConjunto,
   tieneValor,
   VALIDAR_SOLO,
   type ConjuntoLeido,
 } from '@/lib/meta-ads/receta'
-import { armarPlanDuplicar } from '@/lib/meta-ads/planes'
+import { armarPlanCrear, armarPlanDuplicar } from '@/lib/meta-ads/planes'
 
 /** La huella exacta que rompe `/copies` en la pauta real, medida el 9-ago-2026. */
 const IG_ROTO = ['stream', 'story', 'reels', 'explore_home', 'profile_feed', 'ig_search']
@@ -227,6 +230,92 @@ describe('conDiario', () => {
 describe('VALIDAR_SOLO', () => {
   it('es el parámetro que convierte el POST en una pregunta', () => {
     expect(JSON.parse(VALIDAR_SOLO.execution_options)).toEqual(['validate_only'])
+  })
+})
+
+describe('recetaDeCampania', () => {
+  it('🔴 LINK_CLICKS está retirado: no se puede crear una campaña así, y se dice antes', () => {
+    const r = recetaDeCampania({ objetivo: 'LINK_CLICKS' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      // El mensaje tiene que decir cuáles SÍ: «no se puede» sin la salida es un callejón.
+      expect(r.error).toContain('OUTCOME_SALES')
+    }
+  })
+
+  it('los cuatro objetivos vivos arman', () => {
+    for (const o of OBJETIVOS_VIVOS) expect(recetaDeCampania({ objetivo: o }).ok).toBe(true)
+  })
+
+  it('⚠️ manda is_adset_budget_sharing_enabled, que Meta pasó a exigir', () => {
+    const r = recetaDeCampania({ objetivo: 'OUTCOME_SALES' })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.cuerpo.is_adset_budget_sharing_enabled).toBe('false')
+    expect(r.cuerpo.buying_type).toBe('AUCTION')
+  })
+
+  it('⛔ sólo ABO: la campaña nace sin presupuesto propio, porque lo lleva la receta del conjunto', () => {
+    const r = recetaDeCampania({ objetivo: 'OUTCOME_SALES' })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.cuerpo.daily_budget).toBeUndefined()
+    expect(r.cuerpo.lifetime_budget).toBeUndefined()
+  })
+
+  it('sin objetivo tampoco arma', () => {
+    expect(recetaDeCampania({}).ok).toBe(false)
+    expect(objetivoUsable(null)).toBe(false)
+  })
+})
+
+describe('armarPlanCrear', () => {
+  const receta = { cuerpo: { targeting: '{}', daily_budget: '600000' }, notas: [] }
+  const campania = { cuerpo: { objective: 'OUTCOME_SALES', buying_type: 'AUCTION' } }
+  const base = {
+    cuentaId: '999', nombre: 'GIRLHOOD CALOR', linea: 'bdi', campania, receta,
+    creativos: [{ creativeId: '1', nombre: 'Pieza A' }, { creativeId: '2', nombre: 'Pieza B' }],
+  }
+
+  it('el orden es campaña → marca → conjunto → avisos', () => {
+    const r = ok(armarPlanCrear(base, ' · #abc1234'))
+    expect(r.pasos.map((p) => p.tipo)).toEqual([
+      'crear-campania', 'heredar-linea', 'crear-conjunto', 'crear-aviso', 'crear-aviso',
+    ])
+  })
+
+  it('🔴 la marca va ENSEGUIDA de la campaña: un corte ahí deja algo accionable', () => {
+    const r = ok(armarPlanCrear(base, ' · #abc1234'))
+    expect(r.pasos[1].tipo).toBe('heredar-linea')
+    expect((r.pasos[1].pedido as Record<string, unknown>).campaignId).toBe('{{1}}')
+  })
+
+  it('el conjunto cuelga de la campaña del paso 1 y los avisos del conjunto del paso 3', () => {
+    const r = ok(armarPlanCrear(base, ' · #abc1234'))
+    expect((r.pasos[2].pedido as Record<string, unknown>).campaignId).toBe('{{1}}')
+    for (const a of r.pasos.filter((p) => p.tipo === 'crear-aviso')) {
+      expect((a.pedido as Record<string, unknown>).adsetId).toBe('{{3}}')
+    }
+  })
+
+  it('⛔ sin creativos no arma nada: una campaña sin avisos no entrega', () => {
+    expect(armarPlanCrear({ ...base, creativos: [] }, ' · #abc1234').ok).toBe(false)
+    expect(armarPlanCrear({ ...base, creativos: [{ nombre: 'sin id' }] }, ' · #abc1234').ok).toBe(false)
+  })
+
+  it('sin nombre, sin receta o sin campaña tampoco', () => {
+    expect(armarPlanCrear({ ...base, nombre: '  ' }, ' · #abc1234').ok).toBe(false)
+    expect(armarPlanCrear({ ...base, receta: null }, ' · #abc1234').ok).toBe(false)
+    expect(armarPlanCrear({ ...base, campania: null }, ' · #abc1234').ok).toBe(false)
+  })
+
+  it('la segmentación es LA de la referencia, sin tocar', () => {
+    const r = ok(armarPlanCrear(base, ' · #abc1234'))
+    expect((r.pasos[2].pedido as Record<string, unknown>).cuerpo).toEqual(receta.cuerpo)
+  })
+
+  it('sólo los pasos que CREAN llevan marca propia', () => {
+    const r = ok(armarPlanCrear(base, ' · #abc1234'))
+    expect(r.pasos.map((p) => Boolean(p.marca))).toEqual([true, false, true, true, true])
   })
 })
 

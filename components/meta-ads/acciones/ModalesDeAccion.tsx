@@ -1,15 +1,16 @@
 'use client'
 
 /**
- * Los tres modales de escritura, dibujados desde el estado que devuelve `useAccionMeta`.
+ * Los cuatro modales de escritura, dibujados desde el estado que devuelve `useAccionMeta`.
  *
  * 🔑 **Una sola línea por pantalla.** Cada pantalla de Meta que pueda accionar pone `<ModalesDeAccion
- * m={a.modales} />` y ya tiene los tres, con sus `idem`, sus conversiones de moneda y su recarga.
+ * m={a.modales} />` y ya tiene los cuatro, con sus `idem`, sus conversiones de moneda y su recarga.
  * Antes esto eran tres `useState` y tres handlers sueltos en `Etapas.tsx`, así que **Etapas era la
  * única pantalla desde la que se podía accionar**: repartirla habría significado copiar el `/100` a
  * los dos lados, que es exactamente el cálculo que no puede estar dos veces.
  */
 
+import { ModalCrear } from '@/components/meta-ads/acciones/ModalCrear'
 import { ModalDuplicar } from '@/components/meta-ads/acciones/ModalDuplicar'
 import { ModalNombre } from '@/components/meta-ads/acciones/ModalNombre'
 import { ModalPresupuesto } from '@/components/meta-ads/acciones/ModalPresupuesto'
@@ -45,6 +46,14 @@ export function ModalesDeAccion({ m }: { m: ModalesAccion }) {
           trabajando={m.enCurso === m.dup.o.id}
           onCerrar={m.cerrar}
           onDuplicar={m.duplicar}
+        />
+      )}
+
+      {m.nueva && (
+        <ModalCrear
+          o={m.nueva.o}
+          diarioCrudo={m.nueva.diarioCrudo}
+          onCerrar={m.cerrar}
         />
       )}
     </>

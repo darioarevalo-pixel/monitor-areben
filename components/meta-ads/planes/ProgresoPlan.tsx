@@ -193,6 +193,12 @@ function titulo(plan: Plan): string {
     const nombre = String(e.nombreOriginal || '')
     return `Duplicar ${que}${copias > 1 ? ` ${copias} veces` : ''}${nombre ? ` «${nombre}»` : ''}`
   }
+  if (plan.tipo === 'crear') {
+    // El nombre de la campaña nueva Y el de la referencia: sin el segundo, un plan atascado no dice
+    // de dónde salió la segmentación, que es lo primero que hay que ir a mirar.
+    const ref = String(e.referenciaNombre || '')
+    return `Crear la campaña «${String(e.nombre || '')}»${ref ? ` a partir de «${ref}»` : ''}`
+  }
   if (plan.tipo === 'mover-plata') {
     return `Mover presupuesto de «${String(e.deNombre || '')}» a «${String(e.aNombre || '')}»`
   }
