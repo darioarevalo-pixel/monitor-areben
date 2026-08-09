@@ -90,7 +90,7 @@ export default async function handler(req, res) {
   // despacharlas y no arriba de todo.
   const recurso = (req.query || {}).recurso;
   if (req.method === 'GET' && recurso === 'auditoria') return await auditoria(res, perfil, req.query || {});
-  if (req.method === 'GET' && (recurso === 'plan' || recurso === 'planes')) return await planesGet(res, perfil, req.query || {});
+  if (req.method === 'GET' && (recurso === 'plan' || recurso === 'planes' || recurso === 'escalada')) return await planesGet(res, perfil, req.query || {});
   // Las automatizaciones leen la foto diaria de la base, nunca Graph. Van acá arriba por el mismo
   // motivo: el día que el token se venza, la pregunta sigue siendo qué hay que decidir.
   if (req.method === 'GET' && (recurso === 'reglas' || recurso === 'hallazgos')) return await reglasGet(res, perfil, req.query || {});

@@ -28,7 +28,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { accionarMeta, reconciliarCopia, traerConjuntos } from '@/lib/meta-ads/cliente'
+import { accionarMeta, reconciliarCopia, traerConjuntos, traerContextoEscalada } from '@/lib/meta-ads/cliente'
 import { aMonto, nuevoIdem, permiteAccion, type ClaveAccion } from '@/lib/meta-ads/acciones'
 import { money } from '@/lib/meta-ads/formato'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
@@ -43,6 +43,14 @@ export type ModalesAccion = {
   dup: { o: ObjetoMeta; diarioCrudo: number; sinPresupuesto: boolean } | null
   /** «Nueva campaña con esta segmentación», siempre sobre un conjunto. */
   nueva: { o: ObjetoMeta; diarioCrudo: number } | null
+  /**
+   * «Escalar por escalones». Trae el `techoCrudo` de la marca **ya leído del servidor**: el modal no
+   * lo tipea ni lo adivina, porque es el mismo número con el que después se va a frenar cada escalón.
+   * `null` mientras se lo está pidiendo, para que el modal no dibuje una previsión con un techo en 0.
+   */
+  esc: { o: ObjetoMeta; diarioCrudo: number; techoCrudo: number } | null
+  /** Se está pidiendo el techo para abrir la escalada de este objeto. */
+  abriendoEscalada: string | null
   enCurso: string | null
   cerrar: () => void
   guardarPresupuesto: (nuevoCrudo: number, idem: string) => void
@@ -72,6 +80,8 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
   const [presu, setPresu] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
   const [dup, setDup] = useState<{ o: ObjetoMeta; diarioCrudo: number; sinPresupuesto: boolean } | null>(null)
   const [nueva, setNueva] = useState<{ o: ObjetoMeta; diarioCrudo: number } | null>(null)
+  const [esc, setEsc] = useState<{ o: ObjetoMeta; diarioCrudo: number; techoCrudo: number } | null>(null)
+  const [abriendoEscalada, setAbriendoEscalada] = useState<string | null>(null)
   const [ren, setRen] = useState<ObjetoMeta | null>(null)
 
   /**
@@ -267,6 +277,25 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
   }, [enviar, recargar, toast])
 
   /**
+   * Abrir la escalada pide primero el techo de la marca.
+   *
+   * 🔑 **Se pregunta al abrir y no al armar**, y esa es toda la diferencia entre un modal que dice
+   * «falta definir el techo, cargalo en Automatizaciones» y uno que deja llenar un formulario para
+   * después rechazarlo. Es una consulta chica —los umbrales de una línea— y la contesta la misma
+   * tabla con la que después se va a frenar cada escalón.
+   */
+  const abrirEscalada = useCallback(async (o: ObjetoMeta, diarioCrudo: number) => {
+    if (!o.linea) { toast.error('Esta campaña todavía no tiene marca: asignala antes de escalar.'); return }
+    setAbriendoEscalada(o.id)
+    const r = await traerContextoEscalada(o.linea)
+    setAbriendoEscalada(null)
+    if (!r.ok) { toast.error(`No se pudo leer el techo de presupuesto de la marca: ${r.motivo}`); return }
+    // ⚠️ Se abre IGUAL sin techo: el modal es el lugar donde se explica qué falta y dónde se carga.
+    // Un toast de error dejaría a alguien sin saber que eso se arregla en dos minutos.
+    setEsc({ o, diarioCrudo, techoCrudo: r.dato.techoCrudo })
+  }, [toast])
+
+  /**
    * El permiso se pregunta por la LÍNEA de cada objeto, no por la marca de la sesión: en una misma
    * tabla puede haber una campaña de BDI que esta persona acciona y una de Zattia que no. Es la
    * misma función que usa el servidor para contestar 403, importada, no copiada.
@@ -279,9 +308,10 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
     onNombre: (o: ObjetoMeta) => setRen(o),
     onDuplicar: (o: ObjetoMeta, diarioCrudo: number, sinPresupuesto: boolean) => setDup({ o, diarioCrudo, sinPresupuesto }),
     onCrear: (o: ObjetoMeta, diarioCrudo: number) => setNueva({ o, diarioCrudo }),
-  }), [perfil, enCurso, cambiarEstado])
+    onEscalar: (o: ObjetoMeta, diarioCrudo: number) => { void abrirEscalada(o, diarioCrudo) },
+  }), [perfil, enCurso, cambiarEstado, abrirEscalada])
 
-  const cerrar = useCallback(() => { setPresu(null); setRen(null); setDup(null); setNueva(null) }, [])
+  const cerrar = useCallback(() => { setPresu(null); setRen(null); setDup(null); setNueva(null); setEsc(null) }, [])
 
   const guardarPresupuesto = useCallback(async (nuevoCrudo: number, idem: string) => {
     if (!presu) return
@@ -301,10 +331,12 @@ export function useAccionMeta(recargar: () => void): AccionMeta {
     if (await duplicarYAjustar(dup.o, aj)) setDup(null)
   }, [dup, duplicarYAjustar])
 
-  // ⚠️ `nueva` no lleva handler de guardado, y no es una asimetría descuidada: crear una campaña
-  // NO pasa por `mandar`. Es un plan de punta a punta —lo arma el modal y lo ejecuta el motor—, así
-  // que lo único que hace falta acá es saber si está abierto y sobre qué conjunto.
-  const modales: ModalesAccion = { presu, ren, dup, nueva, enCurso, cerrar, guardarPresupuesto, guardarNombre, duplicar }
+  // ⚠️ `nueva` y `esc` no llevan handler de guardado, y no es una asimetría descuidada: ni crear una
+  // campaña ni escalar pasan por `mandar`. Son planes de punta a punta —los arma el modal y los
+  // ejecuta el motor—, así que lo único que hace falta acá es saber si están abiertos y sobre qué.
+  const modales: ModalesAccion = {
+    presu, ren, dup, nueva, esc, abriendoEscalada, enCurso, cerrar, guardarPresupuesto, guardarNombre, duplicar,
+  }
   return { enCurso, acciones, modales }
 }
 

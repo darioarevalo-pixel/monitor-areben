@@ -22,7 +22,9 @@ import {
   evaluarRegla as evaluarReglaJs,
   faltanUmbrales as faltanUmbralesJs,
   frecuenciaPico as frecuenciaPicoJs,
+  hayRacha as hayRachaJs,
   motivoApagada as motivoApagadaJs,
+  proximoDiario as proximoDiarioJs,
   NIVEL_TOTALES as NIVEL_TOTALES_JS,
   PASO_ESCALON as PASO_ESCALON_JS,
   permiteAccionarHallazgo as permiteAccionarHallazgoJs,
@@ -281,6 +283,16 @@ export const compararCtr = compararCtrJs as (
   filas: FilaRegla[],
 ) => { antes: number; despues: number; cae: boolean } | null
 export const diasSeguidosPorEncima = diasSeguidosPorEncimaJs as (filas: FilaRegla[], objetivo: number) => number
+/**
+ * La racha, contada una sola vez para los dos que la miran: el detector que PROPONE escalar y el
+ * guardarraíl que deja pasar el escalón horas después. Ver `hayRacha()` en el `.core.js`.
+ */
+export const hayRacha = hayRachaJs as (
+  filas: FilaRegla[],
+  u: Partial<Umbrales>,
+) => { seguidos: number; piden: number; ok: boolean }
+/** El diario que sigue, cortado contra el techo. `null` cuando ya no hay adónde subir. */
+export const proximoDiario = proximoDiarioJs as (actualCrudo: number, techoCrudo: number) => number | null
 /** El índice del primer día apagado tras el último activo, o `null` si nunca estuvo activo acá. */
 export const apagadoEn = apagadoEnJs as (filas: FilaRegla[]) => number | null
 /** Cuántos días de la ventana tienen el estado escrito. La serie de estados la arma el cron. */

@@ -30,10 +30,16 @@ import {
   CAMPOS_LECTURA, ETIQUETA_NIVEL, lineasQueVe, nivelReal, quedoPuesto, revisarPresupuesto, SIN_LINEA,
 } from '../lib/meta-ads/acciones.core.js';
 import {
-  armarPlanCrear, armarPlanDuplicar, armarPlanMoverPlata, entraOtroPaso, estadoDePlan, marcaDePaso, marcadorDe,
-  nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir, TIMEOUT_PASO_MS,
-  TIPOS_PASO, TIPOS_PLAN,
+  armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, entraOtroPaso, estadoDePlan,
+  marcaDePaso, marcadorDe, nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir,
+  TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
+import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
+import { leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js';
+import {
+  estaEsperando, faltanParaEscalar, HORAS_ESCALON_DEFECTO, proximoEn, ultimoDiaCerrado,
+} from '../lib/meta-ads/escalado.core.js';
+import { motivoApagada } from '../lib/meta-ads/reglas.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
 import {
   CAMPOS_RECETA, conDiario, escalonesDeDiario, esRechazoDePresupuesto, recetaDeCampania,
@@ -49,6 +55,12 @@ const LOCK_MS = 25000;
 
 const quienEs = (perfil) => (perfil && perfil.name) || 'desconocido';
 const ahoraIso = () => new Date().toISOString();
+/**
+ * 🔴 El último día **cerrado**, que es hasta dónde mira el guardarraíl. No es hoy, y la diferencia no
+ * es cosmética: la foto del día en curso trae lo poco que se juntó a las 06:30 y corta toda racha.
+ * Ver `ultimoDiaCerrado()`.
+ */
+const diaDeCorte = () => ultimoDiaCerrado(Date.now());
 
 // ── Lectura ───────────────────────────────────────────────────────────────────────────────────
 
@@ -61,6 +73,29 @@ export async function planesGet(res, perfil, q) {
   if (!sb) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
   const visibles = lineasQueVe(perfil);
   if (!visibles.length) return res.status(403).json({ error: 'No tenés acceso a la pauta de ninguna marca.' });
+
+  /**
+   * Lo que hace falta saber ANTES de ofrecer una escalada: el techo de la marca y si falta definir
+   * algo. Es una consulta chica —los umbrales de la marca, nada más— y existe para que el modal
+   * dibuje la previsión y el cartel de «falta esto» con **los mismos números con los que el servidor
+   * va a decidir**. Calcularlos en el browser con otra fuente sería ofrecer una escalera y armar otra.
+   */
+  if (q.recurso === 'escalada') {
+    const linea = String(q.linea || '');
+    if (!visibles.includes(linea)) return res.status(403).json({ error: 'No ves la pauta de esa marca.' });
+    const { mapa, error } = await leerUmbrales(sb);
+    if (error) return res.status(502).json({ error: 'No se pudieron leer los umbrales.', detalle: error });
+    const u = mapa.get(linea) || {};
+    const faltan = faltanParaEscalar(u);
+    return res.status(200).json({
+      ok: true,
+      techoCrudo: Number(u.techo_diario_crudo) || 0,
+      roasObjetivo: Number(u.roas_objetivo) || 0,
+      diasSeguidos: Number(u.dias_seguidos) || 0,
+      faltan,
+      motivo: faltan.length ? motivoApagada('ganador-escalar', faltan) : null,
+    });
+  }
 
   if (q.recurso === 'plan') {
     const id = parseInt(q.id, 10);
@@ -116,6 +151,10 @@ const aVista = (p, pasos) => ({
   id: p.id, idem: p.idem, marcador: p.marcador, creado: p.creado, quien: p.quien, tipo: p.tipo,
   variante: p.variante, cuentaId: p.cuenta_id, linea: p.linea, entrada: p.entrada || {},
   contexto: p.contexto || {}, simulacro: !!p.simulacro, estado: p.estado, detalle: p.detalle || null,
+  // Sólo lo usan las escaladas: mientras esté en el futuro, el motor no avanza y la pantalla dice
+  // cuándo vuelve. Va en la vista y no derivado en el cliente porque el reloj que manda es el del
+  // servidor: el de la máquina de quien mira puede estar corrido.
+  proximoEn: p.proximo_en || null,
   pasos: (pasos || []).map(aPaso),
 });
 
@@ -157,7 +196,8 @@ async function crear(res, perfil, b) {
   const marcador = marcadorDe(idem);
   const armado = tipo === 'duplicar' ? await prepararDuplicar(perfil, b, marcador)
     : tipo === 'crear' ? await prepararCrear(perfil, b, marcador)
-      : await prepararMoverPlata(perfil, b);
+      : tipo === 'escalar' ? await prepararEscalar(perfil, b)
+        : await prepararMoverPlata(perfil, b);
   if (!armado.ok) return res.status(armado.status || 400).json({ error: armado.error, ...(armado.extra || {}) });
 
   const { data: fila, error } = await sb.from(TABLA).insert([{
@@ -518,6 +558,88 @@ async function prepararMoverPlata(perfil, b) {
   return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: lineaDeOrigen.linea, entrada };
 }
 
+/**
+ * Todo lo que hay que medir antes de armar una escalada.
+ *
+ * 🔑 **El techo NO se pide al cliente**: sale de `meta_ads_umbral` de la marca. Es la diferencia
+ * entre un freno y un campo de formulario — un techo que se tipea al armar el plan es un techo que se
+ * puede subir tipeando otro número, y entonces no frena nada.
+ *
+ * ⚠️ **Y no se congela**: el plan lo guarda para mostrar la previsión, pero cada escalón lo vuelve a
+ * leer. Bajar el techo de una marca frena las escaladas que ya están corriendo.
+ */
+async function prepararEscalar(perfil, b) {
+  const nivel = String(b.nivel || 'conjunto');
+  const objetoId = String(b.objetoId || '');
+  if (nivel !== 'conjunto' && nivel !== 'campania') {
+    return { ok: false, status: 400, error: 'Sólo se escala un conjunto o una campaña.' };
+  }
+  if (!/^\d+$/.test(objetoId)) return { ok: false, status: 400, error: 'El id del objeto tiene que ser un número de Meta.' };
+
+  const lectura = await graph(`${objetoId}?fields=${CAMPOS_LECTURA[nivel]}`);
+  if (!lectura.ok) {
+    return { ok: false, status: 502, error: 'No se pudo leer eso en Meta, así que no se armó nada.' };
+  }
+  const obj = lectura.data || {};
+  if (nivelReal(obj) !== nivel) {
+    return { ok: false, status: 400, error: `Ese id no es ${ETIQUETA_NIVEL[nivel] || nivel}.` };
+  }
+
+  const campaignId = nivel === 'campania' ? objetoId : String(obj.campaign_id || '');
+  const suLinea = await lineaDe(campaignId);
+  if (!suLinea.ok) return suLinea;
+  const permiso = permitePlan(perfil, 'escalar', suLinea.linea);
+  if (!permiso.ok) return { ok: false, ...permiso };
+
+  // Las mismas reglas que corta una acción suelta de presupuesto: CBO y presupuesto total. Un
+  // conjunto que hereda el diario de su campaña no tiene escalón que dar.
+  const padreId = nivel === 'conjunto' ? String(obj.campaign_id || '') : '';
+  let padre = null;
+  if (padreId) {
+    const p = await graph(`${padreId}?fields=id,daily_budget,lifetime_budget`);
+    if (p.ok) padre = p.data || null;
+  }
+  const reglas = revisarPresupuesto(nivel, obj, padre, null, Number(obj.daily_budget) || 0);
+  if (!reglas.ok) return { ok: false, status: reglas.status, error: reglas.error };
+
+  const sb = clienteBdi();
+  if (!sb) return { ok: false, status: 500, error: 'Faltan credenciales de Supabase.' };
+  const ctx = await contextoDeEscalon(sb, suLinea.linea, diaDeCorte());
+  if (ctx.error) return { ok: false, status: 502, error: ctx.error };
+
+  // 🔴 El cartel de qué falta, ANTES de armar nada. Sin techo y sin ROAS objetivo, cada escalón se
+  // saltearía diciendo lo mismo y el plan sería un recordatorio disfrazado de plan.
+  const faltan = faltanParaEscalar(ctx.umbrales);
+  if (faltan.length) {
+    return {
+      ok: false, status: 409,
+      error: `${motivoApagada('ganador-escalar', faltan)} Cargalos en Automatizaciones y volvé a intentarlo.`,
+      extra: { faltanUmbrales: faltan },
+    };
+  }
+
+  const entrada = {
+    objetoId, nivel, nombre: String(obj.name || ''),
+    // 🔑 El «desde» se lee de Meta, no se acepta del cliente: es la misma regla que en mover plata.
+    desdeCrudo: Number(obj.daily_budget) || 0,
+    escalones: Number(b.escalones) || 0,
+    horas: Number(b.horas) || HORAS_ESCALON_DEFECTO,
+    techoCrudo: Number(ctx.umbrales.techo_diario_crudo) || 0,
+    roasObjetivo: Number(ctx.umbrales.roas_objetivo) || 0,
+    diasSeguidos: Number(ctx.umbrales.dias_seguidos) || 0,
+  };
+  const armado = armarPlanEscalar(entrada);
+  if (!armado.ok) return armado;
+  return {
+    ok: true, pasos: armado.pasos, variante: armado.variante,
+    cuentaId: String(obj.account_id || ''), linea: suLinea.linea,
+    entrada: { ...entrada, previsto: armado.previsto },
+  };
+}
+
+/** Cada cuántas horas va un escalón de este plan. Se congeló en la entrada al armarlo. */
+const horasDe = (plan) => Number((plan.entrada || {}).horas) || HORAS_ESCALON_DEFECTO;
+
 /** De qué marca es esta plata. Sale de la campaña, nunca de lo que dice el cliente. */
 async function lineaDe(campaignId) {
   if (!campaignId) return { ok: false, status: 409, error: SIN_LINEA, extra: { sinLinea: true } };
@@ -551,6 +673,18 @@ async function avanzar(res, perfil, b) {
   const permiso = permitePlan(perfil, plan.tipo, plan.linea);
   if (!permiso.ok) return res.status(permiso.status).json({ error: permiso.error });
 
+  // 🔑 **El plan que está esperando su próximo escalón no se avanza, ni siquiera a mano.** No es una
+  // traba de la pantalla: el sentido de un escalón es dejar pasar un día para ver qué hizo el
+  // anterior, y darlos todos seguidos porque alguien apretó cuatro veces convierte una escalada
+  // graduada en un aumento del 100% de una. Se contesta 200 y no un error: no hay nada roto.
+  if (estaEsperando(plan, Date.now())) {
+    return res.status(200).json({
+      ok: true, plan: aVista(plan, leido.pasos), seguir: true, hechos: 0, pausa: true,
+      motivo: `El próximo escalón es el ${new Date(plan.proximo_en).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}. Hasta entonces no se toca.`,
+      esperando: plan.proximo_en,
+    });
+  }
+
   // El lock. Si otro avance lo tiene tomado se contesta que espere, en vez de correr los dos.
   const ahora = Date.now();
   if (plan.lock_hasta && new Date(plan.lock_hasta).getTime() > ahora) {
@@ -573,6 +707,8 @@ async function avanzar(res, perfil, b) {
   const contexto = { ...(plan.contexto || {}) };
   let hechos = 0;
   let motivo = null;
+  /** Cuándo vuelve a tocarse este plan. Lo pone un escalón y lo lee el cron de la hora. */
+  let espera = null;
 
   while (entraOtroPaso(Date.now() - inicio)) {
     const paso = siguientePaso(pasos);
@@ -598,6 +734,8 @@ async function avanzar(res, perfil, b) {
     pasos = pasos.map((p) => (p.orden === paso.orden ? { ...p, ...r.paso } : p));
     if (r.resultadoId) contexto[String(paso.orden)] = r.resultadoId;
     if (r.hecho) hechos++;
+    // Un escalón que se dio (o que se salteó) corre el reloj: el siguiente es mañana, no ahora mismo.
+    if (r.esperarHasta) { espera = r.esperarHasta; motivo = r.motivo || null; break; }
     if (r.cortar) { motivo = r.motivo || null; break; }
   }
 
@@ -605,6 +743,10 @@ async function avanzar(res, perfil, b) {
   const quedan = !!siguientePaso(pasos) && estado !== 'atascado';
   await sb.from(TABLA).update({
     contexto, estado, lock_hasta: null, actualizado: ahoraIso(),
+    // Sólo se escribe cuando lo hay **y todavía queda algo que hacer**: pisarlo con `null` en cada
+    // avance borraría la espera de una escalada cada vez que alguien mira el Panel, y escribirlo en
+    // el último escalón dejaría un plan terminado diciendo que le falta uno.
+    ...(espera && quedan ? { proximo_en: espera } : {}),
     ...(motivo ? { detalle: motivo } : {}),
   }).eq('id', plan.id);
 
@@ -644,6 +786,49 @@ async function ejecutar(sb, plan, paso, contexto) {
   await guardarPaso(sb, plan.id, paso.orden, {
     estado: 'en-curso', intentos: (paso.intentos || 0) + 1, ultimo_en: ahoraIso(),
   });
+
+  // 🔑 El escalón tiene su propio camino porque puede terminar **`salteado`**, que ningún otro paso
+  // puede: el guardarraíl mira la foto de hoy y decide que no corresponde subir. Salteado no es
+  // fallado —el plan sigue vivo y el escalón siguiente se pregunta lo suyo— y lo que lo hace útil es
+  // que el motivo queda escrito en la fila.
+  if (paso.tipo === 'escalon') {
+    const e = await correrEscalon(sb, {
+      pedido, linea: plan.linea, hasta: diaDeCorte(), simulacro: !!plan.simulacro, timeoutMs: TIMEOUT_PASO_MS,
+    });
+
+    if (e.salteado) {
+      await guardarPaso(sb, plan.id, paso.orden, { estado: 'salteado', detalle: e.motivo });
+      return {
+        paso: { estado: 'salteado' },
+        // ⚠️ Se corre el reloj IGUAL que si se hubiera dado. Sin esto, un escalón que frena hoy
+        // dejaría al plan reintentando los que quedan en la misma corrida, y el segundo diría lo
+        // mismo que el primero — porque la foto no cambió entre uno y otro.
+        esperarHasta: proximoEn(Date.now(), horasDe(plan)),
+        motivo: e.llegoAlTecho ? e.motivo : `El escalón ${paso.orden} no se dio: ${e.motivo}`,
+      };
+    }
+
+    if (e.corte) {
+      await guardarPaso(sb, plan.id, paso.orden, { estado: 'en-curso', detalle: e.error, uso: e.uso || null });
+      return { paso: { estado: 'en-curso' }, cortar: true, motivo: `${e.error} Apretá Seguir para reintentarlo.` };
+    }
+
+    if (!e.ok) {
+      await guardarPaso(sb, plan.id, paso.orden, {
+        estado: 'fallado', puede_reintentar: true, detalle: e.error || 'Meta lo rechazó.', uso: e.uso || null,
+      });
+      return { paso: { estado: 'fallado' }, cortar: true, motivo: `Meta rechazó el escalón ${paso.orden}: ${e.error || 'sin motivo'}` };
+    }
+
+    await guardarPaso(sb, plan.id, paso.orden, {
+      estado: 'hecho', resultado_id: e.id || null, detalle: e.detalle || null, uso: e.uso || null,
+    });
+    return {
+      paso: { estado: 'hecho' }, resultadoId: e.id || null, hecho: true,
+      esperarHasta: proximoEn(Date.now(), horasDe(plan)),
+      motivo: `Escalón dado. El próximo, en ${horasDe(plan)} horas.`,
+    };
+  }
 
   // Simulacro: arma y no escribe. Es el pre-vuelo de cualquier plan antes de gastar una escritura.
   if (plan.simulacro) {

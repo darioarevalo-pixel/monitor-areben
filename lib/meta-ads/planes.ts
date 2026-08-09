@@ -10,6 +10,7 @@ import type { LineaPauta } from './tipos'
 import {
   armarPlanCrear as armarPlanCrearJs,
   armarPlanDuplicar as armarPlanDuplicarJs,
+  armarPlanEscalar as armarPlanEscalarJs,
   armarPlanMoverPlata as armarPlanMoverPlataJs,
   CLAVES_PLAN as CLAVES_PLAN_JS,
   entraOtroPaso as entraOtroPasoJs,
@@ -30,7 +31,7 @@ import {
   TOPE_COPIAS as TOPE_COPIAS_JS,
 } from './planes.core.js'
 
-export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata'
+export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata' | 'escalar'
 
 export type TipoPaso =
   | 'copiar-campania'
@@ -40,6 +41,8 @@ export type TipoPaso =
   | 'crear-conjunto'
   | 'crear-aviso'
   | 'presupuesto'
+  /** Sube el diario **sólo si el guardarraíl deja**. Puede terminar `salteado` con el motivo escrito. */
+  | 'escalon'
   | 'nombre'
   | 'heredar-linea'
 
@@ -89,6 +92,11 @@ export type Plan = {
   simulacro: boolean
   estado: EstadoPlan
   detalle: string | null
+  /**
+   * Hasta cuándo no se toca. Sólo lo usan las escaladas: mientras esté en el futuro, el motor no
+   * avanza y la pantalla muestra cuándo vuelve. `null` = ya.
+   */
+  proximoEn: string | null
   pasos: PasoPlan[]
 }
 
@@ -109,7 +117,7 @@ export type AvanceDePlan = {
   motivo?: string
 }
 
-export type DefPaso = { rotulo: string; reintentable: boolean; crea: boolean; sondaEn?: string }
+export type DefPaso = { rotulo: string; reintentable: boolean; crea: boolean; sondaEn?: string; guardarrail?: boolean }
 export type DefPlan = { sub: string; rotulo: string; rotuloPermiso: string }
 
 export const TIPOS_PASO = TIPOS_PASO_JS as Record<TipoPaso, DefPaso>
@@ -137,7 +145,14 @@ export const sustituir = sustituirJs as (
 ) => { ok: true; pedido: Record<string, string> } | { ok: false; faltan: string[] }
 
 type Armado =
-  | { ok: true; pasos: Array<Omit<PasoPlan, 'estado' | 'intentos' | 'resultadoId' | 'detalle' | 'ultimoEn'>>; variante: string; reparto?: { deNuevo: number; aNuevo: number } }
+  | {
+      ok: true
+      pasos: Array<Omit<PasoPlan, 'estado' | 'intentos' | 'resultadoId' | 'detalle' | 'ultimoEn'>>
+      variante: string
+      reparto?: { deNuevo: number; aNuevo: number }
+      /** Sólo al escalar: adónde llegaría si todo sale bien. **Previsión, no promesa.** */
+      previsto?: { desdeCrudo: number; valores: number[]; techoCrudo: number; horas: number; recortada: boolean }
+    }
   | { ok: false; status: number; error: string }
 
 export const armarPlanDuplicar = armarPlanDuplicarJs as (entrada: unknown, marcador: string) => Armado
@@ -145,6 +160,11 @@ export const armarPlanDuplicar = armarPlanDuplicarJs as (entrada: unknown, marca
 export const armarPlanCrear = armarPlanCrearJs as (entrada: unknown, marcador: string) => Armado
 /** Sin marcador: mover plata no crea ningún objeto, así que no hay nombre en el que anotarla. */
 export const armarPlanMoverPlata = armarPlanMoverPlataJs as (entrada: unknown) => Armado
+/**
+ * N escalones sobre el mismo objeto, separados en el tiempo. Los valores de los pasos son una
+ * PREVISIÓN: cada escalón recalcula desde el diario releído y desde la foto de ese día.
+ */
+export const armarPlanEscalar = armarPlanEscalarJs as (entrada: unknown) => Armado
 export const repartir = repartirJs as (
   deActual: number,
   aActual: number,

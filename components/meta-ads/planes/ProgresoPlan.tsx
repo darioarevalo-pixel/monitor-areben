@@ -15,6 +15,11 @@
  *
  * ⚠️ **Cancelar no deshace**, y el cartel lo dice con todas las letras antes de apretar. Meta no
  * tiene transacciones y fingir que sí sería la mentira más cara de esta sección.
+ *
+ * 🔑 **Un escalón «salteado» no es un paso que falló ni uno que se perdió**: es el guardarraíl
+ * diciendo que hoy no corresponde subir, con el motivo escrito. Se dibuja con su renglón y su texto
+ * completo —no plegado— porque **ese texto ES el valor de la pieza**: una escalada que frena y no
+ * cuenta por qué es indistinguible de una que no corrió.
  */
 
 import { useState } from 'react'
@@ -30,7 +35,8 @@ const PINTA: Record<EstadoPaso, { label: string; tone: 'success' | 'warning' | '
   // Ámbar y no rojo: ver el comentario de arriba.
   dudoso: { label: 'Esperando a Meta', tone: 'warning' },
   fallado: { label: 'Falló', tone: 'danger' },
-  salteado: { label: 'Salteado', tone: 'neutral' },
+  // Ni rojo ni verde: un escalón salteado es una decisión, no un fallo ni un éxito. Ver la cabecera.
+  salteado: { label: 'No se dio', tone: 'warning' },
 }
 
 const PINTA_PLAN: Record<Plan['estado'], { label: string; tone: 'success' | 'warning' | 'danger' | 'brand' | 'neutral' }> = {
@@ -39,6 +45,16 @@ const PINTA_PLAN: Record<Plan['estado'], { label: string; tone: 'success' | 'war
   hecho: { label: 'Terminado', tone: 'success' },
   atascado: { label: 'Atascado', tone: 'danger' },
   cancelado: { label: 'Cancelado', tone: 'neutral' },
+}
+
+/** Cuándo vuelve a tocarse, escrito como se lee. `null` si no está esperando. */
+function esperaDe(plan: Plan): string | null {
+  if (!plan.proximoEn) return null
+  const t = Date.parse(plan.proximoEn)
+  if (!Number.isFinite(t) || t <= Date.now()) return null
+  return new Date(t).toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
 }
 
 export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, onCancelar }: {
@@ -60,6 +76,9 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
   const trabado = plan.pasos.find((p) => p.estado === 'fallado') || null
   const avisos = avisosDe(plan)
   const atascado = plan.estado === 'atascado'
+  // 🔴 Mientras espera, «Seguir» no se dibuja: el servidor lo rechaza igual, y un botón que contesta
+  // «todavía no» es peor que no tenerlo. Lo que va en su lugar es CUÁNDO vuelve.
+  const espera = esperaDe(plan)
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -80,7 +99,7 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
               {avanzando ? 'Mandando de nuevo…' : `Reintentar el paso ${trabado.orden}`}
             </Button>
           )}
-          {!terminado && !atascado && (
+          {!terminado && !atascado && !espera && (
             <Button size="sm" variant="solid" tone="brand" onClick={onSeguir} disabled={avanzando}>
               {avanzando ? 'Avanzando…' : hechos ? 'Seguir' : 'Empezar'}
             </Button>
@@ -149,6 +168,18 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
           )}
         </Notice>
       )}
+      {/* 🔑 Que la escalada siga sola es información, no un detalle: si la pantalla no lo dijera,
+          alguien apretaría Seguir todos los días creyendo que sin él no pasa nada. */}
+      {!terminado && espera && (
+        <Notice tone="brand">
+          <div style={{ fontWeight: weight.semibold }}>El próximo escalón es el {espera}.</div>
+          <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.45 }}>
+            Se da solo: no hace falta volver a entrar. Antes de subir, el motor relee el presupuesto en
+            Meta y mira cómo viniste esos días — si no corresponde, el escalón no se da y acá vas a
+            leer por qué.
+          </div>
+        </Notice>
+      )}
       {!atascado && motivo && <Notice tone="brand">{motivo}</Notice>}
 
       <ol style={{ display: 'flex', flexDirection: 'column', gap: space[1], margin: 0, padding: 0, listStyle: 'none' }}>
@@ -201,6 +232,12 @@ function titulo(plan: Plan): string {
   }
   if (plan.tipo === 'mover-plata') {
     return `Mover presupuesto de «${String(e.deNombre || '')}» a «${String(e.aNombre || '')}»`
+  }
+  if (plan.tipo === 'escalar') {
+    const n = plan.pasos.length
+    const horas = Number(e.horas) || 24
+    const cada = horas === 24 ? 'por día' : `cada ${horas} h`
+    return `Escalar «${String(e.nombre || '')}»: ${n} ${n === 1 ? 'escalón' : 'escalones'}, uno ${cada}`
   }
   return plan.tipo
 }

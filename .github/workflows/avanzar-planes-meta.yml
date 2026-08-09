@@ -1,0 +1,56 @@
+name: Escaladas de Meta Ads
+
+# Cada hora, en el minuto 20: lejos de las 06:30 de la foto y de las 07:00 de las reglas, para que
+# la corrida que arranca el día encuentre la foto de hoy ya escrita en vez de decidir con la de ayer.
+#
+# 🔑 **Esto es lo único del módulo que ESCRIBE en Meta sin que nadie lo apriete**, y por eso el
+# guardarraíl vive adentro del paso y no en el momento de armar el plan: antes de cada escalón se
+# relee el diario de Meta, se mira la foto diaria y se pregunta si todavía corresponde. Si no, el
+# paso queda `salteado` con el motivo escrito. Ver `lib/meta-ads/escalado.core.js`.
+#
+# ⛔ **Sólo avanza planes de tipo `escalar`.** Duplicar y crear siguen siendo del Panel: crean
+# objetos, y un plan que se atasca creando cosas tiene que atascarse delante de alguien.
+#
+# ⚠️ A diferencia de `meta-reglas.yml`, éste **sí** necesita `META_ADS_TOKEN`.
+on:
+  schedule:
+    - cron: '20 * * * *'
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: 'true = decide todo pero no escribe en Meta'
+        required: false
+        default: 'false'
+      plan:
+        description: 'Avanzar un solo plan, por id (vacío = todos los vencidos)'
+        required: false
+        default: ''
+
+jobs:
+  escalar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Dar los escalones vencidos
+        env:
+          # La base de BDI: las tablas del motor son cross-marca porque las cuentas son compartidas.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # 🔴 Este script escribe: sin el token se corta antes de leer nada, para no consumirle los
+          # reintentos a una escalada por una credencial que falta.
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          ENTRADA_PLAN: ${{ inputs.plan }}
+        run: |
+          args=""
+          [ "$ENTRADA_SIMULACRO" = "true" ] && args="$args --simulacro"
+          [ -n "$ENTRADA_PLAN" ] && args="$args --plan $ENTRADA_PLAN"
+          node scripts/avanzar-planes-meta.mjs $args

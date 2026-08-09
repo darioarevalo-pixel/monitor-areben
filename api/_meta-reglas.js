@@ -23,7 +23,7 @@
 // Salen de la base y no hablan con Meta. Es la misma razón que la auditoría y los planes: el día
 // que el token se venza, la pregunta es qué hay que decidir, y eso no depende de Graph.
 import { lineasQuePuede, lineasQueVe } from '../lib/meta-ads/acciones.core.js';
-import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
+import { COLS_REGLA, leerSnapshot, leerUmbrales, TABLA_UMBRAL } from '../lib/meta-ads/leer-snapshot.core.js';
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
 } from '../lib/meta-ads/reglas.core.js';
@@ -31,17 +31,9 @@ import { clienteBdi } from './_meta-lineas.js';
 
 const TABLA = 'meta_ads_regla';
 const TABLA_HALLAZGO = 'meta_ads_hallazgo';
-const TABLA_UMBRAL = 'meta_ads_umbral';
 
 /** Cuántos días se leen del snapshot. Los mismos 90 en todos los caminos: ver `evaluar-reglas-meta.mjs`. */
 const DIAS_VENTANA = 90;
-
-/** Las columnas del snapshot que necesitan las reglas. Explícitas: a nivel aviso son decenas de miles. */
-const COLS_SNAP = [
-  'fecha', 'nivel', 'objeto_id', 'cuenta_id', 'nombre', 'linea',
-  'estado', 'estado_efectivo', 'estado_real', 'diario_crudo',
-  'spend', 'impresiones', 'frecuencia', 'clicks', 'compras', 'revenue',
-].join(',');
 
 const quienEs = (perfil) => (perfil && perfil.name) || 'desconocido';
 const hoyIso = () => new Date().toISOString().slice(0, 10);
@@ -62,14 +54,13 @@ const desdeIso = (dias) => {
  * corrida evalúa reglas de campaña y de aviso.
  */
 function traerSnapshots(sb, lineas, dias = DIAS_VENTANA) {
-  return leerSnapshot(sb, { cols: COLS_SNAP, desde: desdeIso(dias), lineas });
+  return leerSnapshot(sb, { cols: COLS_REGLA, desde: desdeIso(dias), lineas });
 }
 
-async function traerUmbrales(sb) {
-  const { data, error } = await sb.from(TABLA_UMBRAL).select('*');
-  if (error) return { error: error.message };
-  return { mapa: new Map((data || []).map((u) => [u.linea, u])) };
-}
+// La lectura de umbrales vive en `leer-snapshot.core.js` desde que la pidieron tres lugares —éste,
+// el script de reglas y el guardarraíl de los escalones—: tres copias de un `select` son tres
+// filtros que se despegan el día que la tabla crezca una columna.
+const traerUmbrales = leerUmbrales;
 
 /** De fila de la base a lo que consume la pantalla. El mapeo vive en UN lado: acá. */
 const aVistaRegla = (r) => ({

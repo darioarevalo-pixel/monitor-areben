@@ -99,4 +99,9 @@ export type Acciones = {
    * que la fila no puede contestar.
    */
   onCrear: (o: ObjetoMeta, diarioCrudo: number) => void
+  /**
+   * Abre «escalar por escalones»: N subas del 20% separadas en el tiempo, que da el cron. Sólo donde
+   * hay un diario propio que subir — con CBO el escalón habría que dárselo a la campaña.
+   */
+  onEscalar: (o: ObjetoMeta, diarioCrudo: number) => void
 }

@@ -34,7 +34,7 @@ import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { plata, roas as roasTxt } from '../lib/meta-ads/formato.core.js'
-import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js'
+import { COLS_REGLA, leerSnapshot, leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS, UMBRALES,
@@ -84,31 +84,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 // ── Lecturas ─────────────────────────────────────────────────────────────────
 
 /**
- * Las columnas del snapshot que necesitan las reglas. Explícitas y no `*`: a nivel aviso son
- * decenas de miles de filas y las que no se usan igual viajan por la red.
- */
-const COLS = [
-  'fecha', 'nivel', 'objeto_id', 'cuenta_id', 'nombre', 'linea',
-  'estado', 'estado_efectivo', 'estado_real', 'diario_crudo',
-  'spend', 'impresiones', 'frecuencia', 'clicks', 'compras', 'revenue',
-].join(',')
-
-/**
  * Las filas del snapshot desde una fecha.
  *
  * ⚠️ El paginado —y el porqué— vive en `leerSnapshot()`. Sin él las reglas mirarían un pedazo del
  * pasado creyendo que es todo, y una regla que mira menos días encuentra menos, en silencio.
  */
 async function traerFilas(desde, hasta) {
-  const { filas, error } = await leerSnapshot(supabase, { cols: COLS, desde, hasta })
+  const { filas, error } = await leerSnapshot(supabase, { cols: COLS_REGLA, desde, hasta })
   if (error) anotar('leer snapshots', error)
   return filas || []
 }
 
+// El `select` vive en `leer-snapshot.core.js`: lo piden este script, `api/_meta-reglas.js` y el
+// guardarraíl de los escalones, y tres copias de una lectura son tres filtros que se despegan.
 async function traerUmbrales() {
-  const { data, error } = await supabase.from('meta_ads_umbral').select('*')
-  if (error) { anotar('leer umbrales', error.message); return new Map() }
-  return new Map((data || []).map((u) => [u.linea, u]))
+  const { mapa, error } = await leerUmbrales(supabase)
+  if (error) anotar('leer umbrales', error)
+  return mapa
 }
 
 async function traerReglas() {

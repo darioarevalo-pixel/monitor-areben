@@ -7,6 +7,9 @@
  *  - **Reactivar** aparece en lo que está pausado; **Pausar**, en lo que está entregando.
  *  - **Presupuesto** sólo donde hay un diario propio que tocar. Si el presupuesto está a nivel
  *    campaña (CBO) o es un total (lifetime), no se dibuja: sería un botón que Meta rechaza.
+ *  - **Escalar** donde va Presupuesto, y por lo mismo: son N pasos de presupuesto separados en el
+ *    tiempo. Va al lado y no adentro del modal de presupuesto porque son dos cosas distintas —una
+ *    pone un número hoy, la otra arma un plan de varios días que corre solo.
  *  - `inerte` es el caso de las publicaciones de Instagram promocionadas: figuran ACTIVE para
  *    siempre y no entregan nada hace meses. Son cientos, y llenarlas de botones taparía las cinco
  *    campañas que se llevan la plata. Se dice por qué en el `title` en vez de esconderlo.
@@ -35,6 +38,9 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
   // Sólo desde un conjunto: es de donde se lee la segmentación. Pide el mismo permiso que duplicar,
   // porque hace lo mismo —crear objetos en Meta— y un sub propio sería una tilde más que dar.
   const puedeCrear = objeto.nivel === 'conjunto' && acciones.puede('duplicar', objeto.linea)
+  // Escalar es N pasos de presupuesto: pide el mismo permiso y aparece donde aparece «Presupuesto».
+  // Sobre un aviso no existe —no tiene diario propio— y con CBO el escalón iría a la campaña.
+  const puedeEscalar = objeto.nivel !== 'aviso' && puedePresupuesto
   const trabajando = acciones.enCurso === objeto.id
 
   if (!puedeEstado && !puedePresupuesto && !puedeNombre && !puedeDuplicar && !puedeCrear) return <span style={{ color: color.mut2 }}>—</span>
@@ -60,6 +66,17 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
           onClick={() => acciones.onPresupuesto(objeto, diarioCrudo)}
         >
           Presupuesto
+        </Button>
+      )}
+      {puedeEscalar && !sinPresupuesto && diarioCrudo > 0 && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={trabajando}
+          onClick={() => acciones.onEscalar(objeto, diarioCrudo)}
+          title="Sube el presupuesto de a 20%, un escalón por día, y se frena solo si deja de rendir o llega al techo de la marca. Los escalones se dan aunque nadie entre al monitor"
+        >
+          Escalar
         </Button>
       )}
       {puedeDuplicar && (

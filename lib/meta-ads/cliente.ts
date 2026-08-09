@@ -296,6 +296,24 @@ export function traerPlan(id: number): Promise<Lectura<{ plan: Plan }>> {
   return pedir<{ plan: Plan }>(new URLSearchParams({ recurso: 'plan', id: String(id) }))
 }
 
+/** Lo que hace falta para dibujar una escalada: el techo de la marca, y qué umbral falta si falta. */
+export type ContextoEscalada = {
+  techoCrudo: number
+  roasObjetivo: number
+  diasSeguidos: number
+  faltan: ClaveUmbral[]
+  motivo: string | null
+}
+
+/**
+ * 🔑 El techo sale del servidor y **no se tipea en el modal**: un techo que se elige al armar el
+ * plan es un techo que se puede subir eligiendo otro número, y entonces no frena nada. Viene de la
+ * misma tabla con la que después se va a decidir cada escalón.
+ */
+export function traerContextoEscalada(linea: string): Promise<Lectura<ContextoEscalada>> {
+  return pedir<ContextoEscalada>(new URLSearchParams({ recurso: 'escalada', linea }))
+}
+
 async function postPlan<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {
   try {
     const r = await apiFetch('/api/meta-ads?recurso=plan', {
