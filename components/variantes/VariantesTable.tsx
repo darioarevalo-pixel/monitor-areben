@@ -93,6 +93,7 @@ export function VariantesTable() {
             <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar variante…" />
             <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 200 }} aria-label="Estado">
               <option value="">Todos los estados</option>
+              <option value="nuevo">Nuevo</option>
               <option value="crecimiento">Crecimiento</option>
               <option value="madurez">Madurez</option>
               <option value="declive">Declive</option>

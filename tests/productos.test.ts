@@ -20,7 +20,9 @@ function prod(over: Partial<Producto>): Producto {
   return {
     id: 'x', name: 'X', sku: null, proveedor: null, category: null,
     retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null,
-    ingresoMes: null, firstSale: null, lastSale: null, daysSinceLast: 0,
+    // diasVivo null = "no se sabe la edad", que es como se comportaba antes de que existiera:
+    // las ventanas dividen por su largo completo. Los tests que miden la corrección lo pasan.
+    ingresoMes: null, diasVivo: null, firstSale: null, lastSale: null, daysSinceLast: 0,
     sales7: 0, sales15: 0, sales30: 0, sales60: 0, sales90: 0, totalSales: 0,
     monthlySales: [], stock: 0, lifespan: LIFESPAN_SIN_DATO, lifespanFirst: LIFESPAN_SIN_DATO,
     phase: { label: 'madurez', cls: 'badge-info' },
@@ -79,6 +81,55 @@ describe('lifespanDaysByMode', () => {
   })
   it('sin ventas en el período → null', () => {
     expect(lifespanDaysByMode(prod({ stock: 10, sales30: 0 }), '30d')).toBeNull()
+  })
+})
+
+/**
+ * El caso que originó el arreglo: fundas con 6 días de vida a las que la tabla les anunciaba
+ * meses de stock, porque sus ventas se repartían entre los 30 días de la ventana en vez de entre
+ * los 6 que llevaban a la venta.
+ *
+ * Los números son los reales del 9-ago-2026 (captura de "Por producto", BDI). Si alguien vuelve a
+ * dividir por el largo de la ventana, estos cuatro casos se ponen en rojo con el número viejo.
+ */
+describe('vida útil · un producto nuevo se divide por los días que vivió, no por la ventana', () => {
+  const casos = [
+    { nombre: 'SHINY CASE', stock: 634, vendidas: 243, esperado: 16, viejo: 78 },
+    { nombre: 'STELLAR CASE', stock: 282, vendidas: 193, esperado: 9, viejo: 44 },
+    { nombre: 'SAM CASE', stock: 845, vendidas: 151, esperado: 34, viejo: 168 },
+    { nombre: 'TIARA CASE', stock: 304, vendidas: 149, esperado: 12, viejo: 61 },
+  ]
+
+  it.each(casos)('$nombre: $esperado días, no $viejo', ({ stock, vendidas, esperado, viejo }) => {
+    // 6 días de vida y todas las ventas dentro de la semana: sales7 === sales30.
+    const p = prod({ stock, sales7: vendidas, sales30: vendidas, diasVivo: 6 })
+    expect(lifespanDaysByMode(p, '30d')).toBe(esperado)
+    expect(lifespanDaysByMode(p, '30d')).not.toBe(viejo)
+    // La ventana elegida deja de importar cuando el producto es más joven que todas: los 7d y los
+    // 30d dividen por los mismos 6 días y contestan lo mismo. Antes daban 18 y 78.
+    expect(lifespanDaysByMode(p, '7d')).toBe(esperado)
+  })
+
+  it('un producto viejo no se mueve: min(30, 240) sigue siendo 30', () => {
+    const viejo = prod({ stock: 60, sales30: 30, diasVivo: 240 })
+    expect(lifespanDaysByMode(viejo, '30d')).toBe(lifespanDays(60, 30))
+    expect(lifespanDaysByMode(viejo, '30d')).toBe(60)
+  })
+
+  it('sin edad conocida se comporta como antes del arreglo', () => {
+    const p = prod({ stock: 634, sales30: 243, diasVivo: null })
+    expect(lifespanDaysByMode(p, '30d')).toBe(lifespanDays(634, 243))
+  })
+
+  it('un producto que se dio de alta hoy y ya vendió no divide por cero', () => {
+    const p = prod({ stock: 100, sales7: 20, sales30: 20, diasVivo: 0 })
+    expect(lifespanDaysByMode(p, '30d')).toBe(5) // 100/20 * 1 día de piso
+  })
+
+  it('la edad recorta la ventana, nunca la estira', () => {
+    // 45 días de vida contra una ventana de 30: manda la ventana, no la edad.
+    const p = prod({ stock: 60, sales30: 30, diasVivo: 45 })
+    expect(lifespanDaysByMode(p, '30d')).toBe(60)
   })
 })
 

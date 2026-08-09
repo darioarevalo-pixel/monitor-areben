@@ -69,17 +69,38 @@ describe.each(['bdi', 'zattia'])('ETL %s: legacy vs port', (cuenta) => {
     expect(normalizar(port[campo])).toEqual(normalizar(legacy[campo]))
   })
 
-  // allProductos: igual que el legacy una vez sacado `sinCosto`, que el legacy no computa.
-  // El port lo agrega para poder distinguir "el costo no vino de GN" de "el costo es 0" — el
-  // legacy hace `parseFloat(...) || 0` y pierde esa diferencia para siempre.
-  it('allProductos (sin el campo nuevo sinCosto)', () => {
+  // allProductos: igual que el legacy una vez sacados los campos que el legacy no computa.
+  // `sinCosto` distingue "el costo no vino de GN" de "el costo es 0" — el legacy hace
+  // `parseFloat(...) || 0` y pierde esa diferencia para siempre.
+  // `diasVivo` es la edad del producto, que el legacy no mira, y `phase` cambia con ella: los
+  // productos de menos de 30 días ahora dicen "nuevo" donde el legacy decía otra cosa. Por eso
+  // `phase` sale de esta comparación y se verifica aparte, abajo, en los dos sentidos.
+  it('allProductos (sin los campos nuevos sinCosto/diasVivo/phase)', () => {
     const sinNuevos = (ps: DatosETL['allProductos']) =>
       ps.map((p) => {
         const copia: Record<string, unknown> = { ...p }
         delete copia.sinCosto
+        delete copia.diasVivo
+        delete copia.phase
         return copia
       })
     expect(normalizar(sinNuevos(port.allProductos))).toEqual(normalizar(sinNuevos(legacy.allProductos)))
+  })
+
+  // La fase sigue siendo la del legacy en todo producto que NO sea nuevo. Sin esto, sacar `phase`
+  // de la comparación de arriba dejaría la fórmula entera sin cubrir.
+  it('phase: idéntica al legacy en los productos que no son nuevos', () => {
+    const legacyPorId = new Map(legacy.allProductos.map((p) => [p.id, p.phase]))
+    const noNuevos = port.allProductos.filter((p) => p.phase.label !== 'nuevo')
+    expect(noNuevos.length).toBeGreaterThan(0) // si fueran todos nuevos, esto no probaría nada
+    for (const p of noNuevos) expect(p.phase).toEqual(legacyPorId.get(p.id))
+  })
+
+  // Y el otro sentido: "nuevo" aparece exactamente donde el producto tiene menos de 30 días.
+  it('phase: "nuevo" está exactamente en los de menos de 30 días', () => {
+    for (const p of port.allProductos) {
+      expect(p.phase.label === 'nuevo').toBe(p.diasVivo !== null && p.diasVivo < 30)
+    }
   })
 
   // `sinCosto` tiene que mirar el dato CRUDO, no el normalizado: si se calculara desde
@@ -95,12 +116,14 @@ describe.each(['bdi', 'zattia'])('ETL %s: legacy vs port', (cuenta) => {
 
   // allVariantes: mismos campos que el legacy una vez sacados local/deposito (que
   // el legacy no computa), y el split nuevo tiene que sumar exactamente el stock.
-  it('allVariantes (sin los campos nuevos local/deposito)', () => {
+  // `phase` sale por lo mismo que en allProductos: la variante hereda la edad de su producto.
+  it('allVariantes (sin los campos nuevos local/deposito/phase)', () => {
     const sinNuevos = (vs: DatosETL['allVariantes']) =>
       vs.map((v) => {
         const copia: Record<string, unknown> = { ...v }
         delete copia.local
         delete copia.deposito
+        delete copia.phase
         return copia
       })
     expect(normalizar(sinNuevos(port.allVariantes))).toEqual(normalizar(sinNuevos(legacy.allVariantes)))

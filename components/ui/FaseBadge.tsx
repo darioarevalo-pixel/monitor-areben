@@ -2,7 +2,7 @@
 
 /**
  * FaseBadge — la etiqueta de estado del ciclo de vida de un producto o variante
- * (crecimiento / madurez / declive / dormido / obsoleto).
+ * (nuevo / crecimiento / madurez / declive / dormido / obsoleto).
  *
  * El ETL devuelve la fase con una clase CSS del legacy (`badge-success`, `badge-warning`…)
  * en `lib/etl/helpers.ts`. Ese acoplamiento entre la lógica y una clase de CSS es de la

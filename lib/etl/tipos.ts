@@ -92,9 +92,15 @@ export type SyncMeta = {
 
 // ── Salida del ETL ────────────────────────────────────────────────────────────
 
-/** getPhase (index.html:2144). `cls` es la clase CSS del legacy; se porta tal cual. */
+/**
+ * getPhase (index.html:2144). `cls` es la clase CSS del legacy; se porta tal cual.
+ *
+ * `nuevo` no está en el legacy: se agregó porque un producto recién ingresado no tiene con qué
+ * compararse (el ratio mira los 30 días anteriores, que están vacíos) y caía SIEMPRE en
+ * "crecimiento" sin que eso significara nada.
+ */
 export type Fase = {
-  label: 'obsoleto' | 'dormido' | 'crecimiento' | 'madurez' | 'declive'
+  label: 'obsoleto' | 'dormido' | 'nuevo' | 'crecimiento' | 'madurez' | 'declive'
   cls: string
 }
 
@@ -127,6 +133,15 @@ export type Producto = {
   /** Recargo sobre costo, en %. null si no hay costo. */
   markup: number | null
   ingresoMes: string | null
+  /**
+   * Días que el producto lleva vivo, desde el alta en Gestión Nube (o desde la primera venta si no
+   * hay alta). `null` si no se sabe.
+   *
+   * Es el denominador honesto de la vida útil: sin esto, un producto de 6 días con 243 ventas se
+   * divide igual por los 30 de la ventana y el ritmo sale 5 veces más lento del que es. `ingresoMes`
+   * no sirve para esto porque recorta el alta al mes y pierde el día.
+   */
+  diasVivo: number | null
   firstSale: string | null
   lastSale: string | null
   daysSinceLast: number

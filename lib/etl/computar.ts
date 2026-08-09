@@ -205,6 +205,11 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     const ls = lifespanDays(stock, d.s30)
     const lsFirst = lifespanDaysFromFirst(stock, d.total, d.first, today)
     const ingresoMes = p.created_at ? p.created_at.substring(0, 7) : null
+    // Días que el producto lleva vivo. El alta en GN manda; si no vino, la primera venta es la
+    // mejor cota que queda (subestima la edad, nunca la inventa). `daysSince` devuelve 999 con
+    // entrada vacía, así que el null se decide antes de llamarla.
+    const inicioVida = p.created_at ? p.created_at.substring(0, 10) : d.first || null
+    const diasVivo = inicioVida ? Math.max(0, daysSince(inicioVida, today)) : null
     const rp = num(p.retailer_price)
     const uc = num(p.unit_cost)
     return {
@@ -221,6 +226,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       margin: rp > 0 ? ((rp - uc) / rp) * 100 : null, // margen sobre PVP
       markup: uc > 0 ? (rp / uc - 1) * 100 : null, // recargo sobre costo
       ingresoMes,
+      diasVivo,
       firstSale: d.first || null,
       lastSale: d.last || null,
       daysSinceLast: dsl,
@@ -230,7 +236,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       stock,
       lifespan: ls === null ? LIFESPAN_SIN_DATO : ls,
       lifespanFirst: lsFirst === null ? LIFESPAN_SIN_DATO : lsFirst,
-      phase: getPhase(d.s60, d.s30, dsl),
+      phase: getPhase(d.s60, d.s30, dsl, diasVivo),
     }
   })
 
@@ -258,6 +264,10 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
   })
 
   const activeProductIds = new Set(allProductos.map((p) => p.id))
+  // La edad es del producto, no de la variante: un color nuevo de una funda vieja no es un
+  // producto nuevo. Sin esto la misma funda diría "nuevo" en Por producto y "crecimiento" en
+  // Variantes.
+  const diasVivoPorPid = new Map(allProductos.map((p) => [p.id, p.diasVivo]))
 
   const conVentas = (v: VarBase): Variante => {
     const d = vvar[v.id] || vacioVar()
@@ -270,7 +280,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       sales7: d.s7, sales15: d.s15, sales30: d.s30, sales60: d.s60, sales90: d.s90,
       totalSales: d.total,
       lifespan: ls === null ? LIFESPAN_SIN_DATO : ls,
-      phase: getPhase(d.s60, d.s30, dsl),
+      phase: getPhase(d.s60, d.s30, dsl, diasVivoPorPid.get(v.pid) ?? null),
     }
   }
 

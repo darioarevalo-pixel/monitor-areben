@@ -26,6 +26,29 @@ export function lifespanDaysGeneric(stock: number, sales: number, periodDays: nu
 }
 
 /**
+ * Vida útil dividiendo por los días que el producto **estuvo realmente a la venta**, no por los de
+ * la ventana. No es un port: corrige a `lifespanDaysGeneric`, que se deja intacta porque los tests
+ * de paridad con el legacy la miden.
+ *
+ * El problema que arregla: una funda de 6 días con 243 vendidas y 634 de stock daba "3 meses"
+ * porque las 243 se repartían entre los 30 días de la ventana en vez de entre los 6 que vivió. El
+ * ritmo real es 40,5 por día, no 8,1, y el stock dura 16 días, no 78.
+ *
+ * Para un producto viejo no cambia nada: `min(30, 240)` sigue siendo 30.
+ */
+export function lifespanDaysEfectivo(
+  stock: number,
+  sales: number,
+  periodDays: number,
+  diasVivo: number | null,
+): number | null {
+  if (!sales || sales <= 0) return null
+  // El piso de 1 evita dividir por cero el día que el producto se da de alta y vende.
+  const dias = Math.max(1, Math.min(periodDays, diasVivo ?? periodDays))
+  return Math.round((stock / sales) * dias)
+}
+
+/**
  * Texto de vida útil estimada. Port de formatLifespan (index.html:2143): sin dato
  * → "Sin movimiento" si hay stock, "—" si no; y buckets de +1 año / meses / días.
  */
@@ -49,11 +72,22 @@ export function lifespanDaysFromFirst(
   return Math.round((stock / total) * days)
 }
 
+/** Por debajo de esto un producto es "nuevo": no tiene 30 días previos contra los cuales medirse. */
+export const DIAS_PRODUCTO_NUEVO = 30
+
 /**
  * getPhase (index.html:2144). El orden importa: obsoleto y dormido ganan por
  * antigüedad antes de que se mire el ritmo de ventas.
+ *
+ * `nuevo` se agregó al port y va **primero de todo**, porque a un producto recién ingresado las
+ * otras cuatro etiquetas le mienten en las dos direcciones: si vendió cae siempre en "crecimiento"
+ * (el ratio compara contra los 30 días anteriores, que están vacíos, y se fija en 2), y si todavía
+ * no vendió cae en "obsoleto" con `dsl` en 999. Ninguna de las dos dice nada.
  */
-export function getPhase(salesPrev: number, salesCurr: number, dsl: number): Fase {
+export function getPhase(salesPrev: number, salesCurr: number, dsl: number, diasVivo: number | null): Fase {
+  // Gris a propósito: "nuevo" no es una buena ni una mala noticia, es que todavía no hay con qué
+  // medir. Si fuera badge-info se vería igual que "madurez", que sí es un juicio.
+  if (diasVivo !== null && diasVivo < DIAS_PRODUCTO_NUEVO) return { label: 'nuevo', cls: 'badge-gray' }
   if (dsl > 60) return { label: 'obsoleto', cls: 'badge-danger' }
   if (dsl > 30) return { label: 'dormido', cls: 'badge-warning' }
   const ratio = salesPrev > 0 ? salesCurr / salesPrev : salesCurr > 0 ? 2 : 0

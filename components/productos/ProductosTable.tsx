@@ -11,7 +11,7 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
-import { formatLifespan } from '@/lib/etl/helpers'
+import { DIAS_PRODUCTO_NUEVO, formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
 import {
@@ -245,6 +245,7 @@ export function ProductosTable() {
             <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
             <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
               <option value="">Todos los estados</option>
+              <option value="nuevo">Nuevo</option>
               <option value="crecimiento">Crecimiento</option>
               <option value="madurez">Madurez</option>
               <option value="declive">Declive</option>
@@ -539,7 +540,19 @@ function FilaProducto({
           {p.sales30}
         </Td>
         <Td align="right">{p.sales90}</Td>
-        <Td style={{ color: color.mut, fontSize: font.sm }}>{lsStr}</Td>
+        {/*
+          En un producto nuevo se aclara sobre cuántos días de venta está hecha la cuenta. Es el
+          dato que hacía falta para creerle al número: "16 días" a partir de 6 días de ventas se
+          lee distinto que "16 días" a partir de un mes.
+        */}
+        <Td style={{ color: color.mut, fontSize: font.sm }}>
+          {lsStr}
+          {p.diasVivo !== null && p.diasVivo < DIAS_PRODUCTO_NUEVO && (
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              {p.diasVivo === 0 ? 'ingresó hoy' : `sobre ${p.diasVivo}d de venta`}
+            </div>
+          )}
+        </Td>
         <Td align="right" tall>
           {p.stock}
           <MiniBar pct={p.stock / 2} tono={colorStock(p.stock)} derecha />

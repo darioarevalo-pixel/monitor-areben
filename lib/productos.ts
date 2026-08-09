@@ -7,22 +7,28 @@
  */
 
 import { LIFESPAN_SIN_DATO, type Producto } from './etl/tipos'
-import { lifespanDays, lifespanDaysGeneric } from './etl/helpers'
+import { lifespanDaysEfectivo } from './etl/helpers'
 
 /** Los 4 modos del selector de vida útil (index.html:396-400). */
 export type ModoVidaUtil = '7d' | '15d' | '30d' | 'firstSale'
 
 /**
- * Vida útil en días según el modo elegido. Port de lifespanDaysByMode
- * (index.html:2837). El modo `firstSale` (contra el promedio desde la primera
- * venta) ya viene precomputado en `p.lifespanFirst` con la misma fórmula y la misma
- * fecha del ETL → se reusa el sentinel `LIFESPAN_SIN_DATO` en vez de arrastrar `today`.
+ * Vida útil en días según el modo elegido. Port de lifespanDaysByMode (index.html:2837), con **una**
+ * corrección sobre el legacy: las tres ventanas fijas dividen por los días que el producto estuvo
+ * realmente a la venta, no por el largo de la ventana.
+ *
+ * Sin eso, una funda de 6 días repartía sus 243 ventas entre 30 días y la tabla anunciaba "3 meses"
+ * de stock cuando quedaban 16 días. `lifespanDaysGeneric` y `lifespanDays` siguen intactas en
+ * `etl/helpers` porque los tests de paridad con el legacy las miden.
+ *
+ * El modo `firstSale` no cambia: ya viene precomputado en `p.lifespanFirst` dividiendo por los días
+ * transcurridos desde la primera venta, que es el mismo criterio.
  */
 export function lifespanDaysByMode(p: Producto, mode: ModoVidaUtil): number | null {
   if (mode === 'firstSale') return p.lifespanFirst === LIFESPAN_SIN_DATO ? null : p.lifespanFirst
-  if (mode === '7d') return lifespanDaysGeneric(p.stock, p.sales7, 7)
-  if (mode === '15d') return lifespanDaysGeneric(p.stock, p.sales15, 15)
-  return lifespanDays(p.stock, p.sales30)
+  if (mode === '7d') return lifespanDaysEfectivo(p.stock, p.sales7, 7, p.diasVivo)
+  if (mode === '15d') return lifespanDaysEfectivo(p.stock, p.sales15, 15, p.diasVivo)
+  return lifespanDaysEfectivo(p.stock, p.sales30, 30, p.diasVivo)
 }
 
 export type FiltrosProductos = {
