@@ -4,6 +4,10 @@
  * El router de la sección Meta. **Sólo despacha**: era un archivo de 811 líneas donde el router
  * convivía con toda la pantalla de Rendimiento.
  *
+ * ⚠️ **Al sumar una vista hay que releer los textos que la CUENTAN.** El `info` de `PERM_CAT` y la
+ * descripción de `lib/nav.ts` decían «en seis pantallas» y quedaron mintiendo en silencio al entrar
+ * Automatizaciones — mismo defecto que ya mordió en la tanda 2 con los «arriba» y «abajo».
+ *
  * Las vistas se eligen por el 2º tramo de la URL (patrón de Tienda Nube):
  *
  *   `/meta-ads`             → **Panel**: qué está al aire y qué hay que decidir. La entrada.
