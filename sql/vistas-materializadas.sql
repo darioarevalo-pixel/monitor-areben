@@ -110,7 +110,9 @@ SELECT
 FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 WHERE v.date_sale IS NOT NULL
-  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas). Espeja `esVentaTecnica` de
+  -- lib/etl/helpers.ts; no chequea channel_id 12 porque en BDI da idéntico (medido: 15 y 15) y
+  -- Zattia no expone el campo. El canal vacío es venta REAL en los dos lados.
 GROUP BY mes, v.channel
 ORDER BY mes, v.channel;
 
@@ -136,7 +138,9 @@ FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 LEFT JOIN productos p ON p.id = d.product_id
 WHERE v.date_sale IS NOT NULL
-  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas). Espeja `esVentaTecnica` de
+  -- lib/etl/helpers.ts; no chequea channel_id 12 porque en BDI da idéntico (medido: 15 y 15) y
+  -- Zattia no expone el campo. El canal vacío es venta REAL en los dos lados.
 GROUP BY mes, categoria
 ORDER BY mes, categoria;
 
@@ -161,7 +165,9 @@ FROM ventas v
 JOIN venta_detalles d ON d.sale_id = v.id
 LEFT JOIN productos p ON p.id = d.product_id
 WHERE v.date_sale IS NOT NULL
-  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas, canal "Ninguno")
+  AND coalesce(v.channel, '') <> 'Ninguno'  -- excluir ventas técnicas del Monitor (Sesión de Fotos / Fallas). Espeja `esVentaTecnica` de
+  -- lib/etl/helpers.ts; no chequea channel_id 12 porque en BDI da idéntico (medido: 15 y 15) y
+  -- Zattia no expone el campo. El canal vacío es venta REAL en los dos lados.
   AND upper(trim(p.category)) IN ('FUNDAS', 'MAYORISTA', 'MINORISTA')
   AND normalize_iphone_model(d.size) IS NOT NULL
 GROUP BY mes, modelo, d.product_id, d.product_name

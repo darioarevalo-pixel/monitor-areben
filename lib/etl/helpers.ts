@@ -72,6 +72,28 @@ export function lifespanDaysFromFirst(
   return Math.round((stock / total) * days)
 }
 
+/**
+ * Una venta TÉCNICA del propio Monitor: Sesión de Fotos, Fallas, Solicitudes internas y los
+ * reemplazos de Reclamos. Se crean en Gestión Nube a precio 0 sólo para descontar stock, así que
+ * no son ventas y no tienen que entrar en ninguna analítica.
+ *
+ * **Se identifican en positivo, nunca por ausencia de dato.** Un `channel` vacío es "no sabemos el
+ * canal", no "es técnica": si GN dejara de mandar el campo en una tanda, un criterio por ausencia
+ * borraría ventas reales sin que nadie se entere — que es exactamente lo que pasó cuando el token
+ * perdió `costs:read` y 428 productos quedaron "costando cero" (ver `sinCosto` en tipos.ts).
+ *
+ * El texto sirve para las dos marcas; el `channel_id` cubre BDI por las dudas. Medido contra los
+ * fixtures reales el 9-ago-2026: en BDI los dos criterios coinciden exactamente (15 y 15), y Zattia
+ * no expone `channel_id`, así que ahí manda el texto (37 ventas).
+ *
+ * ⚠️ `canalDe` de `lib/liquidacion/resultado.ts` **no** usa esto, y está bien: ahí la pregunta es
+ * otra —"¿este canal cuenta para el precio promedio minorista?"— y para eso el canal desconocido se
+ * descarta a propósito. Son dos preguntas distintas, no dos copias de la misma.
+ */
+export function esVentaTecnica(v: { channel?: string | null; channel_id?: number | string | null }): boolean {
+  return v.channel === 'Ninguno' || Number(v.channel_id) === 12
+}
+
 /** Por debajo de esto un producto es "nuevo": no tiene 30 días previos contra los cuales medirse. */
 export const DIAS_PRODUCTO_NUEVO = 30
 

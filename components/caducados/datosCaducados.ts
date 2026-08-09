@@ -7,11 +7,12 @@
 
 import { CUENTAS } from '@/lib/cuentas'
 import { fetchAll } from '@/lib/supabase/rest'
+import { esVentaTecnica } from '@/lib/etl/helpers'
 import type { Marca } from '@/lib/nav'
 import type { StockPorDeposito, UltimaVenta } from '@/lib/caducados'
 
 type FilaInv = { product_id: number | string; available_quantity: number | null; store_name: string | null }
-type FilaVenta = { id: number; date_sale: string | null }
+type FilaVenta = { id: number; date_sale: string | null; channel: string | null; channel_id?: number | string | null }
 type FilaDetalle = { sale_id: number; product_id: number | string }
 
 export async function cargarDatosCaducados(marca: Marca): Promise<{ stock: StockPorDeposito; ultimaVenta: UltimaVenta }> {
@@ -35,13 +36,22 @@ export async function cargarDatosCaducados(marca: Marca): Promise<{ stock: Stock
   })
 
   // Última venta por producto — ventana amplia (~2 años) para la última venta real.
+  //
+  // **Las ventas técnicas se descartan acá o la sección hace lo contrario de lo que promete**: una
+  // sesión de fotos o una falla sacada del depósito le renovaba la "última venta" al producto y lo
+  // hacía desaparecer de la lista de caducados, que es justo donde tenía que estar. Por eso se pide
+  // `channel`, que antes no se traía. `channel_id` sólo existe en BDI (Zattia no lo expone).
   const ultimaVenta: UltimaVenta = {}
   try {
     const desde = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10)
-    const ventas = await fetchAll<FilaVenta>(cuenta, 'ventas', `select=id,date_sale&date_sale=gte.${desde}&order=id`)
+    const campos = marca === 'zattia' ? 'id,date_sale,channel' : 'id,date_sale,channel,channel_id'
+    const ventas = await fetchAll<FilaVenta>(cuenta, 'ventas', `select=${campos}&date_sale=gte.${desde}&order=id`)
     if (ventas.length) {
       const fechaById: Record<string, string> = {}
-      ventas.forEach((v) => { fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10) })
+      ventas.forEach((v) => {
+        if (esVentaTecnica(v)) return
+        fechaById[String(v.id)] = (v.date_sale || '').slice(0, 10)
+      })
       const minId = Math.min(...ventas.map((v) => v.id))
       const det = await fetchAll<FilaDetalle>(cuenta, 'venta_detalles', `select=sale_id,product_id&sale_id=gte.${minId}&order=sale_id`)
       det.forEach((d) => {

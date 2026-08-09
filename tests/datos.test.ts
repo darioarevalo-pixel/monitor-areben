@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { traerDatos } from '@/lib/datos'
 import { CUENTAS } from '@/lib/cuentas'
+import { esVentaTecnica } from '@/lib/etl/helpers'
 
 /**
  * Paridad de la capa de datos: que traerDatos le pida a Supabase EXACTAMENTE lo
@@ -251,5 +252,37 @@ describe('el payload tiene el contrato que espera el caché del legacy', () => {
     expect(Object.keys(datos).sort()).toEqual(
       ['colorManual', 'detalles', 'inventario', 'productos', 'syncMeta', 'ventas', 'vmCat', 'vmFundas', 'vmMes'].sort(),
     )
+  })
+})
+
+/**
+ * El filtro de ventas técnicas no tenía ni un caso hasta acá, y es el que decide qué se cuenta
+ * como venta en TODA la analítica. Las tres implementaciones que existían (esta, las vistas
+ * materializadas y `canalDe` de liquidación) discrepaban justo en el canal vacío.
+ */
+describe('esVentaTecnica', () => {
+  it('reconoce las dos formas en que llega una venta técnica', () => {
+    expect(esVentaTecnica({ channel: 'Ninguno' })).toBe(true) // las dos marcas
+    expect(esVentaTecnica({ channel: null, channel_id: 12 })).toBe(true) // BDI, si faltara el texto
+    expect(esVentaTecnica({ channel: 'Ninguno', channel_id: 12 })).toBe(true) // como llega en BDI
+  })
+
+  it('el canal desconocido es una venta REAL, no una técnica', () => {
+    // Identificar por ausencia de dato es el modo de falla que dejó 428 productos "costando cero"
+    // cuando GN dejó de mandar el costo. Acá borraría ventas en silencio.
+    expect(esVentaTecnica({ channel: null })).toBe(false)
+    expect(esVentaTecnica({ channel: '' })).toBe(false)
+    expect(esVentaTecnica({})).toBe(false)
+  })
+
+  it('los canales de venta de verdad no se tocan', () => {
+    for (const c of ['Tienda Nube', 'Mi Local', 'Mayorista', 'Showroom', 'Whatsapp', 'Mercadolibre', 'Otro Canal']) {
+      expect(esVentaTecnica({ channel: c })).toBe(false)
+    }
+  })
+
+  it('no confunde el 12 con otros channel_id', () => {
+    expect(esVentaTecnica({ channel: 'Mayorista', channel_id: 10 })).toBe(false)
+    expect(esVentaTecnica({ channel: 'Otro Canal', channel_id: 13 })).toBe(false) // el canal de Cambios
   })
 })

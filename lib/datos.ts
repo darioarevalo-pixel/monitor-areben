@@ -9,6 +9,7 @@
 
 import { CUENTAS, GH_REPO, type Cuenta } from './cuentas'
 import { fetchAll, sbFetch } from './supabase/rest'
+import { esVentaTecnica } from './etl/helpers'
 import type { Marca } from './nav.datos'
 import type {
   FilaColorManual,
@@ -206,13 +207,11 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
   }
   onTiempos?.({ tablas: msTablas, detalles: msDetalles, total: performance.now() - t0 })
 
-  // Excluir las ventas TÉCNICAS del Monitor (Sesión de Fotos y Fallas): precio 0, canal "Ninguno"
-  // (channel_id 12). No son ventas reales — solo descuentan stock — así que inflaban la analítica de
-  // rotación y KPIs. Se descartan la venta y sus detalles antes de pasar al ETL. El texto `channel`
-  // sirve cross-marca (Zattia no expone channel_id); el channel_id cubre BDI por las dudas.
-  const idsTecnicas = new Set(
-    ventas.filter((v) => v.channel === 'Ninguno' || Number(v.channel_id) === 12).map((v) => String(v.id)),
-  )
+  // Excluir las ventas TÉCNICAS del Monitor (Sesión de Fotos y Fallas): no son ventas reales, sólo
+  // descuentan stock, así que inflaban la analítica de rotación y los KPIs. Se descartan la venta y
+  // sus detalles antes de pasar al ETL. El criterio vive en `esVentaTecnica` — es el mismo que usan
+  // Caducados y el CRM, y ahí está explicado por qué se identifican en positivo.
+  const idsTecnicas = new Set(ventas.filter(esVentaTecnica).map((v) => String(v.id)))
   const ventasReales = idsTecnicas.size ? ventas.filter((v) => !idsTecnicas.has(String(v.id))) : ventas
   const detallesReales = idsTecnicas.size ? detalles.filter((d) => !idsTecnicas.has(String(d.sale_id))) : detalles
 

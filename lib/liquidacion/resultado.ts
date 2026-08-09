@@ -42,6 +42,14 @@ export const CANALES_MINORISTAS: readonly Canal[] = ['local', 'online', 'otro']
  *
  * Se compara por texto y no por `channel_id` porque Zattia no expone el id — el mismo criterio que
  * usa Reposición para partir local/online.
+ *
+ * ⚠️ **Esto NO es una copia de `esVentaTecnica` y no hay que unificarlas.** Acá el canal vacío cae
+ * en `tecnica` a propósito: la pregunta de esta función es "¿esta unidad cuenta para el precio
+ * promedio minorista?", y un canal desconocido no debería mover ese promedio. `esVentaTecnica`
+ * contesta otra —"¿la creó el Monitor para descontar stock?"— y ahí el dato faltante tiene que
+ * seguir siendo una venta real, para no borrar ventas en silencio si GN deja de mandar el campo.
+ * Medido el 9-ago-2026 sobre los fixtures de las dos marcas: hoy no existe ninguna venta con el
+ * canal vacío, así que la diferencia todavía no cambia ningún número.
  */
 export function canalDe(nombre: string | null): Canal {
   const n = (nombre || '').toLowerCase()

@@ -11,6 +11,7 @@
 
 import { CUENTAS } from '../cuentas'
 import { fetchAll } from '../supabase/rest'
+import { esVentaTecnica } from '../etl/helpers'
 import type { FilaCliente, FilaDetalle, FilaVenta, MapaSeguimiento } from './tipos'
 
 /** Los select textuales del legacy (13200, 13250, 13814). Un campo de menos y el agregado computa otra cosa. */
@@ -43,12 +44,17 @@ export type ModoCanal = typeof CANAL_MAYORISTA | 'all'
  * ⚠️ Todo con `fetchAll`, que pagina. PostgREST corta en 1000 filas sin avisar, y
  * el legacy pedía este lote con `sbFetch` (sin paginar): eran 445 ventas y $12,5M
  * sin contar. Arreglado en el legacy en f8977ca; acá nace bien de entrada.
+ *
+ * ⚠️ Las ventas técnicas se descartan siempre. Los clientes internos de Gestión Nube —"Sesión de
+ * fotos", "Falla", "Cambio"— tienen `client_id` como cualquier persona, así que sin este filtro
+ * entraban al padrón como clientes con decenas de compras de $0.
  */
 export async function traerVentas(modo: ModoCanal, crmSeg: MapaSeguimiento): Promise<FilaVenta[]> {
   const cuenta = CUENTAS[MARCA]
 
   if (modo === 'all') {
-    return fetchAll<FilaVenta>(cuenta, 'ventas', `${SEL_VENTAS}&client_id=not.is.null&order=date_sale.desc`)
+    const todas = await fetchAll<FilaVenta>(cuenta, 'ventas', `${SEL_VENTAS}&client_id=not.is.null&order=date_sale.desc`)
+    return todas.filter((v) => !esVentaTecnica(v))
   }
 
   const flagged = Object.keys(crmSeg).filter((id) => crmSeg[id] && crmSeg[id].es_mayorista)
@@ -68,7 +74,9 @@ export async function traerVentas(modo: ModoCanal, crmSeg: MapaSeguimiento): Pro
 
   const porId = new Map<number, FilaVenta>()
   for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v)
-  return [...porId.values()]
+  // `porMarcados` trae TODAS las ventas del cliente ★, sin filtro de canal, así que puede arrastrar
+  // técnicas igual que el modo "todos". `porCanal` ya viene limpio por el eq.10.
+  return [...porId.values()].filter((v) => !esVentaTecnica(v))
 }
 
 /** Los clientes de esas ventas, en lotes de 200 para no romper la URL (13249). */
