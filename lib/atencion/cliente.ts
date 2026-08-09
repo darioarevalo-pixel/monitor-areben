@@ -42,20 +42,25 @@ export async function leerAtencion(store: Marca): Promise<DatosAtencion & { pued
   }
 }
 
-export async function guardarItems(store: Marca, items: ItemAtencion[]): Promise<void> {
+/**
+ * ⚠️ El `Content-Type: application/json` NO es opcional. Sin él, Vercel no parsea el cuerpo, el
+ * handler recibe un `req.body` vacío y contesta "store inválido" — que suena a un error del que
+ * llama y en realidad es esto. Mismo arreglo que `postear` en lib/calendario/persistencia.ts.
+ */
+async function postear(body: Record<string, unknown>, siFalla: string): Promise<void> {
   const r = await apiFetch(API, {
     method: 'POST',
-    body: JSON.stringify({ recurso: 'atencion', store, items }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
   const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo guardar.')
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || siFalla)
 }
 
-export async function borrarItem(store: Marca, id: string): Promise<void> {
-  const r = await apiFetch(API, {
-    method: 'POST',
-    body: JSON.stringify({ recurso: 'atencion', store, id, action: 'borrar' }),
-  })
-  const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo borrar.')
+export function guardarItems(store: Marca, items: ItemAtencion[]): Promise<void> {
+  return postear({ recurso: 'atencion', store, items }, 'No se pudo guardar.')
+}
+
+export function borrarItem(store: Marca, id: string): Promise<void> {
+  return postear({ recurso: 'atencion', store, id, action: 'borrar' }, 'No se pudo borrar.')
 }
