@@ -10,7 +10,9 @@
 import type { LineaPauta } from './tipos'
 import {
   agrupar as agruparJs,
+  apagadoEn as apagadoEnJs,
   calibrar as calibrarJs,
+  diasConEstado as diasConEstadoJs,
   CLAVES_PRESET as CLAVES_PRESET_JS,
   compararCtr as compararCtrJs,
   contextoUmbrales as contextoUmbralesJs,
@@ -75,6 +77,13 @@ export type DefPreset = {
   /** El sub-permiso que hace falta para ACCIONAR el hallazgo. No es uno propio: es el de la acción. */
   sub: string
   proponeAccion: boolean
+  /**
+   * 🔴 Detecta una TRANSICIÓN, así que necesita al menos dos días con estado escrito. El estado
+   * sólo existe en la fila del día en que se sacó cada foto —Meta no expone la configuración hacia
+   * atrás—, o sea que la serie la construye el cron hacia adelante. Sin esto, la regla mostraría
+   * «0 saltos en 90 días», que se lee como «esto no pasa» en vez de «todavía no se puede saber».
+   */
+  requiereHistorialEstado?: boolean
 }
 
 export type Umbrales = Record<ClaveUmbral, number | null>
@@ -186,9 +195,11 @@ export type Evaluacion =
   | { ok: false; status: number; error: string }
   | {
     ok: true
-    /** No es un error: es una regla que pide un umbral que nadie definió, con el motivo escrito. */
+    /** No es un error: es una regla que no puede correr, con el motivo escrito. */
     apagada: boolean
     faltan: ClaveUmbral[]
+    /** Apagada por falta de HISTORIAL, no de umbrales: se destraba sola con los días de cron. */
+    sinHistorial?: boolean
     umbrales: Umbrales
     detalle: string | null
     hallazgos: HallazgoNuevo[]
@@ -200,6 +211,7 @@ export type Calibracion =
     ok: true
     apagada: boolean
     faltan?: ClaveUmbral[]
+    sinHistorial?: boolean
     detalle?: string | null
     dias: number
     /** Cuántas veces habría saltado en total: el ruido real que se leería en el Panel. */
@@ -247,6 +259,10 @@ export const compararCtr = compararCtrJs as (
   filas: FilaRegla[],
 ) => { antes: number; despues: number; cae: boolean } | null
 export const diasSeguidosPorEncima = diasSeguidosPorEncimaJs as (filas: FilaRegla[], objetivo: number) => number
+/** El índice del primer día apagado tras el último activo, o `null` si nunca estuvo activo acá. */
+export const apagadoEn = apagadoEnJs as (filas: FilaRegla[]) => number | null
+/** Cuántos días de la ventana tienen el estado escrito. La serie de estados la arma el cron. */
+export const diasConEstado = diasConEstadoJs as (filas: FilaRegla[], fechas: string[]) => number
 
 /**
  * Lo mínimo que hace falta para evaluar: no una `Regla` entera, porque la pantalla calibra reglas

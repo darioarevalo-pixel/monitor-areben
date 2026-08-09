@@ -1,0 +1,61 @@
+name: Automatizaciones de Meta Ads
+
+# 07:00 UTC = 04:00 en Argentina: media hora después de `meta-snapshot.yml`, que es de quien depende.
+# Si la foto de hoy todavía no está, las reglas evaluarían la de ayer y el Panel amanecería con un
+# día de atraso sin decirlo.
+#
+# 🔑 A diferencia de la foto, esto NO habla con Meta: lee `meta_ads_snapshot_dia` de Supabase y nada
+# más. No necesita `META_ADS_TOKEN`, no consume cupo de Graph, y sigue andando el día que Meta se
+# caiga o el token venza. Corre acá igual porque es trabajo de fondo y Hobby corta a los 10 s.
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      calibrar:
+        description: 'true = corre TODOS los presets hacia atrás y no escribe nada'
+        required: false
+        default: 'false'
+      simulacro:
+        description: 'true = evalúa las reglas activas pero no guarda los hallazgos'
+        required: false
+        default: 'false'
+      linea:
+        description: 'Una sola marca: bdi | zattia | stunned (vacío = todas)'
+        required: false
+        default: ''
+      dias:
+        description: 'Días de ventana para el calibrador (default 90)'
+        required: false
+        default: ''
+
+jobs:
+  reglas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Evaluar las reglas
+        env:
+          # La base de BDI: las tres tablas son cross-marca porque las cuentas son compartidas.
+          # No va META_ADS_TOKEN a propósito — este script no habla con Meta.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ENTRADA_CALIBRAR: ${{ inputs.calibrar }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          ENTRADA_LINEA: ${{ inputs.linea }}
+          ENTRADA_DIAS: ${{ inputs.dias }}
+        run: |
+          args=""
+          [ "$ENTRADA_CALIBRAR" = "true" ] && args="$args --calibrar"
+          [ "$ENTRADA_SIMULACRO" = "true" ] && args="$args --simulacro"
+          [ -n "$ENTRADA_LINEA" ] && args="$args --linea $ENTRADA_LINEA"
+          [ -n "$ENTRADA_DIAS" ] && args="$args --dias $ENTRADA_DIAS"
+          node scripts/evaluar-reglas-meta.mjs $args

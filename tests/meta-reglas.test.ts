@@ -253,18 +253,33 @@ describe('reglas — la regla apagada', () => {
     expect(r.detalle).toContain('ROAS objetivo')
   })
 
-  /** La contracara: los tres sin umbral tienen que producir con la tabla de umbrales VACÍA. */
-  it('los tres presets sin umbral corren aunque no haya nada definido', () => {
-    const filas = [
-      fila({ nivel: 'conjunto', objeto_id: 's1', estado_real: 'avisos-desactivados' }),
-      ...dias(7, () => ({ objeto_id: 'a-pausado', estado_efectivo: 'PAUSED', compras: 1, revenue: 8000 })),
-    ]
-    for (const preset of ['sin-avisos', 'atribucion-tardia'] as ClavePreset[]) {
-      const r = evaluarRegla(regla(preset), { filas, umbralLinea: null, hasta: HOY })
-      if (!r.ok) throw new Error(r.error)
-      expect(r.apagada, `${preset} quedó apagada`).toBe(false)
-      expect(r.hallazgos.length, `${preset} no encontró nada`).toBeGreaterThan(0)
-    }
+  /** La contracara: los que no piden umbral tienen que producir con la tabla de umbrales VACÍA. */
+  it('«se quedó sin avisos» corre aunque no haya nada definido', () => {
+    const filas = [fila({ nivel: 'conjunto', objeto_id: 's1', estado_real: 'avisos-desactivados' })]
+    const r = evaluarRegla(regla('sin-avisos'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.apagada).toBe(false)
+    expect(r.hallazgos).toHaveLength(1)
+  })
+
+  /**
+   * 🔴 El estado sólo se escribe en la fila del día en que se sacó la foto: Meta no expone la
+   * configuración hacia atrás, así que el backfill de 90 días trajo métricas y **un solo día** de
+   * estado. Una regla que detecta una transición no puede decir nada con eso — y decir «0 saltos en
+   * 90 días» sería peor que callarse, porque se lee como «esto no pasa nunca».
+   */
+  it('el radar avisa que le falta historial en vez de mostrar un cero que miente', () => {
+    const filas = dias(7, (i) => ({
+      objeto_id: 'a1', compras: 1, revenue: 8000,
+      // Sólo el último día trae estado, como pasa después de un backfill.
+      estado: i === 6 ? 'PAUSED' : null, estado_efectivo: i === 6 ? 'PAUSED' : null,
+    }))
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.apagada).toBe(true)
+    expect(r.faltan).toEqual([])
+    expect(r.detalle).toContain('un solo día de historial')
+    expect(r.detalle).toContain('el cron')
   })
 
   /**
@@ -294,6 +309,66 @@ describe('reglas — la regla apagada', () => {
     if (!r.ok) throw new Error(r.error)
     expect(r.apagada).toBe(true)
     expect(r.faltan).toEqual(['gasto_minimo'])
+  })
+})
+
+describe('reglas — el radar de atribución tardía es un EVENTO, no un estado', () => {
+  /**
+   * 🔴 **El defecto que sólo apareció corriendo el calibrador contra los 90 días reales**, y que
+   * ningún test previo cazaba: la primera versión decía «está pausado y tuvo compras», que es cierto
+   * PARA SIEMPRE. Un aviso saltaba **81 días seguidos** y otro 76. Una regla que grita todos los
+   * días se deja de mirar, y ahí se pierde también la que tenía razón.
+   *
+   * Lo que la vuelve un evento es que la pausa haya pasado adentro de la ventana.
+   */
+  it('no grita por algo que está apagado desde antes de la ventana', () => {
+    const filas = dias(7, () => ({
+      objeto_id: 'a-viejo', estado: 'PAUSED', estado_efectivo: 'PAUSED', compras: 2, revenue: 90000,
+    }))
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.apagada).toBe(false)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  it('sí grita cuando lo pausaste adentro de la ventana y siguió vendiendo', () => {
+    const filas = dias(7, (i) => ({
+      objeto_id: 'a-recien',
+      estado: i < 4 ? 'ACTIVE' : 'PAUSED',
+      estado_efectivo: i < 4 ? 'ACTIVE' : 'PAUSED',
+      spend: i < 4 ? 3000 : 0,
+      // Las compras de los días apagados son las que cuentan.
+      compras: i >= 4 ? 1 : 0,
+      revenue: i >= 4 ? 20000 : 0,
+    }))
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toHaveLength(1)
+    expect(r.hallazgos[0].motivo).toContain('Lo pausaste hace 3 días')
+    expect(r.hallazgos[0].evidencia).toMatchObject({ compras: 3, dias_apagado: 3 })
+    expect(r.hallazgos[0].sugerencia).toMatchObject({ accion: 'estado', status: 'ACTIVE' })
+  })
+
+  /** Vender MIENTRAS estaba al aire no es atribución tardía: es haber pausado algo que andaba. */
+  it('no cuenta las compras de cuando todavía estaba al aire', () => {
+    const filas = dias(7, (i) => ({
+      objeto_id: 'a-vendia',
+      estado: i < 4 ? 'ACTIVE' : 'PAUSED',
+      estado_efectivo: i < 4 ? 'ACTIVE' : 'PAUSED',
+      spend: i < 4 ? 3000 : 0,
+      compras: i < 4 ? 5 : 0,
+      revenue: i < 4 ? 90000 : 0,
+    }))
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  it('y no grita por algo que sigue al aire', () => {
+    const filas = dias(7, () => ({ objeto_id: 'a-viva', spend: 3000, compras: 2, revenue: 50000 }))
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
   })
 })
 
