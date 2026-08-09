@@ -205,10 +205,11 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     const ls = lifespanDays(stock, d.s30)
     const lsFirst = lifespanDaysFromFirst(stock, d.total, d.first, today)
     const ingresoMes = p.created_at ? p.created_at.substring(0, 7) : null
+    const ingresoFecha = p.created_at ? p.created_at.substring(0, 10) : null
     // Días que el producto lleva vivo. El alta en GN manda; si no vino, la primera venta es la
     // mejor cota que queda (subestima la edad, nunca la inventa). `daysSince` devuelve 999 con
     // entrada vacía, así que el null se decide antes de llamarla.
-    const inicioVida = p.created_at ? p.created_at.substring(0, 10) : d.first || null
+    const inicioVida = ingresoFecha || d.first || null
     const diasVivo = inicioVida ? Math.max(0, daysSince(inicioVida, today)) : null
     const rp = num(p.retailer_price)
     const uc = num(p.unit_cost)
@@ -226,6 +227,7 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       margin: rp > 0 ? ((rp - uc) / rp) * 100 : null, // margen sobre PVP
       markup: uc > 0 ? (rp / uc - 1) * 100 : null, // recargo sobre costo
       ingresoMes,
+      ingresoFecha,
       diasVivo,
       firstSale: d.first || null,
       lastSale: d.last || null,

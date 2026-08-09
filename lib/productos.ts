@@ -92,6 +92,30 @@ export function mesLabel(m: string): string {
   return MONTH_NAMES[parseInt(mo) - 1] + ' ' + y
 }
 
+/** `YYYY-MM-DD` → `3 Ago 2026`. Se arma a mano y no con `Date`, que corre la fecha por zona horaria. */
+export function fechaCorta(iso: string | null): string {
+  if (!iso) return ''
+  const [y, mo, d] = iso.split('-')
+  const nombre = MONTH_NAMES[parseInt(mo) - 1]
+  if (!nombre || !d) return iso
+  return `${parseInt(d)} ${nombre} ${y}`
+}
+
+/**
+ * Cuánto hace que existe, en la unidad que se entiende de un vistazo: días hasta el mes y medio,
+ * meses hasta los dos años, años después. Mismos cortes que `formatLifespan`, para que las dos
+ * columnas se lean con la misma vara.
+ */
+export function antiguedad(dias: number | null): string {
+  if (dias === null) return ''
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias <= 45) return `hace ${dias} días`
+  if (dias <= 730) return `hace ${Math.round(dias / 30)} meses`
+  const a = Math.round((dias / 365) * 10) / 10
+  return `hace ${String(a).replace('.', ',')} años`
+}
+
 /** Umbral de color de la mini-barra de stock (index.html:2882): <5 rojo, <20 ámbar, resto verde. */
 export function colorStock(stock: number): string {
   return stock < 5 ? '#e24b4a' : stock < 20 ? '#ef9f27' : '#1d9e75'

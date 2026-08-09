@@ -11,11 +11,13 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
-import { DIAS_PRODUCTO_NUEVO, formatLifespan } from '@/lib/etl/helpers'
+import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
 import {
+  antiguedad,
   colorStock,
+  fechaCorta,
   filtrarProductos,
   lifespanDaysByMode,
   mesLabel,
@@ -523,6 +525,19 @@ function FilaProducto({
         <Td tall style={{ maxWidth: 240 }}>
           <div style={{ fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
           {meta ? <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 1 }}>{meta}</div> : null}
+          {/*
+            Desde cuándo existe el producto. Va acá y no en una columna aparte porque es un dato de
+            identidad, no una medición: contesta "¿esto es nuevo o lo tenemos hace un año?" antes de
+            que uno mire una sola venta. Y es lo que le da sentido a la vida útil de al lado — 16
+            días de stock a partir de una funda que ingresó anteayer se lee distinto que a partir de
+            una de hace ocho meses.
+          */}
+          {p.ingresoFecha && (
+            <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 1 }}>
+              {fechaCorta(p.ingresoFecha)}
+              {p.diasVivo !== null && <span style={{ opacity: 0.75 }}> · {antiguedad(p.diasVivo)}</span>}
+            </div>
+          )}
           {yaEsta && (
             <div style={{ fontSize: font.xs, color: yaEsta === 'descartado' ? color.mut2 : color.brand, marginTop: 2 }}>
               {ROTULO_EN_CAMPANIA[yaEsta]}
@@ -541,18 +556,11 @@ function FilaProducto({
         </Td>
         <Td align="right">{p.sales90}</Td>
         {/*
-          En un producto nuevo se aclara sobre cuántos días de venta está hecha la cuenta. Es el
-          dato que hacía falta para creerle al número: "16 días" a partir de 6 días de ventas se
-          lee distinto que "16 días" a partir de un mes.
+          Sin subtexto: la antigüedad que explica sobre cuántos días está hecha esta cuenta ya está
+          debajo del nombre, y para TODOS los productos, no sólo los nuevos. Repetirla acá era el
+          mismo dato dos veces en la misma fila.
         */}
-        <Td style={{ color: color.mut, fontSize: font.sm }}>
-          {lsStr}
-          {p.diasVivo !== null && p.diasVivo < DIAS_PRODUCTO_NUEVO && (
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              {p.diasVivo === 0 ? 'ingresó hoy' : `sobre ${p.diasVivo}d de venta`}
-            </div>
-          )}
-        </Td>
+        <Td style={{ color: color.mut, fontSize: font.sm }}>{lsStr}</Td>
         <Td align="right" tall>
           {p.stock}
           <MiniBar pct={p.stock / 2} tono={colorStock(p.stock)} derecha />

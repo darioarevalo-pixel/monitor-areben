@@ -7,7 +7,7 @@ function prod(over: Partial<Producto>): Producto {
   return {
     id: 'x', name: 'X', sku: null, proveedor: null, category: null,
     retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null,
-    ingresoMes: null, diasVivo: null, firstSale: null, lastSale: null, daysSinceLast: 0,
+    ingresoMes: null, ingresoFecha: null, diasVivo: null, firstSale: null, lastSale: null, daysSinceLast: 0,
     sales7: 0, sales15: 0, sales30: 0, sales60: 0, sales90: 0, totalSales: 0,
     monthlySales: [], stock: 0, lifespan: LIFESPAN_SIN_DATO, lifespanFirst: LIFESPAN_SIN_DATO,
     phase: { label: 'madurez', cls: 'badge-info' },

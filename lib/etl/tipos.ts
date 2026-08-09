@@ -134,6 +134,13 @@ export type Producto = {
   markup: number | null
   ingresoMes: string | null
   /**
+   * La fecha de alta en Gestión Nube, `YYYY-MM-DD`. `null` si GN no la mandó.
+   *
+   * A diferencia de `diasVivo`, acá **no** se cae a la primera venta: es el dato o nada. Una fecha
+   * de ingreso inventada a partir de una venta se lee como un hecho y no lo es.
+   */
+  ingresoFecha: string | null
+  /**
    * Días que el producto lleva vivo, desde el alta en Gestión Nube (o desde la primera venta si no
    * hay alta). `null` si no se sabe.
    *

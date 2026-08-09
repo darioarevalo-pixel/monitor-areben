@@ -75,12 +75,13 @@ describe.each(['bdi', 'zattia'])('ETL %s: legacy vs port', (cuenta) => {
   // `diasVivo` es la edad del producto, que el legacy no mira, y `phase` cambia con ella: los
   // productos de menos de 30 días ahora dicen "nuevo" donde el legacy decía otra cosa. Por eso
   // `phase` sale de esta comparación y se verifica aparte, abajo, en los dos sentidos.
-  it('allProductos (sin los campos nuevos sinCosto/diasVivo/phase)', () => {
+  it('allProductos (sin los campos nuevos sinCosto/diasVivo/ingresoFecha/phase)', () => {
     const sinNuevos = (ps: DatosETL['allProductos']) =>
       ps.map((p) => {
         const copia: Record<string, unknown> = { ...p }
         delete copia.sinCosto
         delete copia.diasVivo
+        delete copia.ingresoFecha
         delete copia.phase
         return copia
       })

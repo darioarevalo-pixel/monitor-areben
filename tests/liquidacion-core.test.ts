@@ -39,7 +39,7 @@ function prod(over: Partial<Producto> = {}): Producto {
     sinCosto: false,
     margin: null,
     markup: null,
-    ingresoMes: null, diasVivo: null,
+    ingresoMes: null, ingresoFecha: null, diasVivo: null,
     firstSale: null,
     lastSale: '2026-06-05',
     daysSinceLast: 61,

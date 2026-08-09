@@ -7,7 +7,7 @@ const MADUREZ: Fase = { label: 'madurez', cls: '' }
 
 const prod = (over: Partial<Producto>): Producto => ({
   id: '1', name: 'Prod', sku: null, proveedor: null, category: null,
-  retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null, ingresoMes: null, diasVivo: null,
+  retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null, ingresoMes: null, ingresoFecha: null, diasVivo: null,
   firstSale: null, lastSale: null, daysSinceLast: 0, sales7: 0, sales15: 0, sales30: 0,
   sales60: 0, sales90: 0, totalSales: 0, monthlySales: [], stock: 0, lifespan: 0,
   lifespanFirst: 0, phase: MADUREZ, ...over,
