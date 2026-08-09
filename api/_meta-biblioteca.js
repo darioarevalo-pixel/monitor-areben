@@ -25,7 +25,7 @@
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { agruparAvisos, ventanaDe } from '../lib/meta-ads/biblioteca.core.js';
 import { piezasDeCuenta, rescatarMiniaturas } from '../lib/meta-ads/creativos.core.js';
-import { mensajeError, tokenMeta } from '../lib/meta-ads/graph.core.js';
+import { tokenMeta } from '../lib/meta-ads/graph.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 
 const TABLA_FAV = 'meta_ads_favorito';
@@ -152,11 +152,18 @@ async function traerPiezas(avisos) {
 
   const rs = await Promise.all(cuentas.map((c) => piezasDeCuenta(c)));
   const fallaron = [];
+  const sinCopy = [];
   rs.forEach((r, i) => {
-    if (!r.ok) { fallaron.push(`${cuentas[i]}: ${mensajeError(r.error)}`); return; }
+    if (!r.ok) { fallaron.push(`${cuentas[i]}: ${r.motivo}`); return; }
+    // La rica es un enriquecimiento aparte: si falla, los avisos igual se listan pero con la
+    // miniatura chica y sin copy. Es un cartel distinto del de «no hay piezas».
+    if (r.sinRico) sinCopy.push(`${cuentas[i]}: ${r.sinRico}`);
     for (const p of r.piezas) piezas.set(p.id, p);
   });
-  return { piezas, sinPiezas: fallaron.length ? `No se pudieron traer las piezas de ${fallaron.join(' · ')}` : null };
+  const partes = [];
+  if (fallaron.length) partes.push(`No se pudieron traer las piezas de ${fallaron.join(' · ')}`);
+  if (sinCopy.length) partes.push(`Sin el texto ni la imagen grande de ${sinCopy.join(' · ')}`);
+  return { piezas, sinPiezas: partes.length ? partes.join('. ') : null };
 }
 
 // ── Escritura: marcar y desmarcar ─────────────────────────────────────────────────────────────
