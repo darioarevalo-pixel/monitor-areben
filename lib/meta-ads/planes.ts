@@ -33,7 +33,9 @@ export type TipoPlan = 'duplicar' | 'mover-plata'
 
 export type TipoPaso =
   | 'copiar-campania'
+  /** ⚠️ Ya no se genera; sigue acá porque los planes viejos de la base lo referencian. */
   | 'copiar-conjunto'
+  | 'crear-conjunto'
   | 'crear-aviso'
   | 'presupuesto'
   | 'nombre'
@@ -145,6 +147,19 @@ export const repartir = repartirJs as (
   monto: number,
   minDiarioCrudo: number | null,
 ) => { ok: true; deNuevo: number; aNuevo: number } | { ok: false; status: number; error: string }
+
+/**
+ * Lo que la receta tuvo que corregir para que Meta acepte la copia — un emplazamiento que falta, un
+ * campo que Meta eliminó, un diario que subió al mínimo.
+ *
+ * 🔑 **Se lee ANTES de «Empezar», no después.** Una corrección silenciosa sobre la configuración de
+ * algo que gasta plata es exactamente lo que nadie puede auditar más tarde. Sale de `entrada`, que
+ * es `jsonb` y llega sin tipo, así que se filtra en vez de castearse.
+ */
+export function avisosDe(plan: Plan | null | undefined): string[] {
+  const a = plan?.entrada?.avisos
+  return Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
+}
 
 /**
  * La clave de idempotencia de un plan. Se genera **al apretar el botón**, igual que la de una acción

@@ -270,21 +270,20 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar} disabled={trabajando || enPlan}>Cancelar</Button>
-          {/* 🔑 Con la copia condenada, el botón grande es el plan: «Duplicar igual» sobre un cartel
-              rojo es gastar una escritura de cupo para recibir el mismo no. Queda igual, en chico,
-              porque el diagnóstico puede fallar. */}
-          {condenada && (
-            <Button
-              variant="solid"
-              tone="brand"
-              disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
-              onClick={() => void armarPlan()}
-            >
-              {enPlan ? 'Armando el plan…' : 'Armar un plan'}
-            </Button>
-          )}
+          {/* 🔑 **El plan es el botón grande SIEMPRE, no sólo cuando la copia está condenada.**
+              Medido el 9-ago-2026 con `validate_only` sobre los 43 conjuntos activos de la cuenta:
+              `POST /copies` pasa 4 de 16 y la receta, 20 de 20 de la pauta real. El camino viejo
+              queda en chico porque todavía no tiene una semana de uso, no porque sea mejor. */}
           <Button
-            variant={condenada ? 'ghost' : 'solid'}
+            variant="solid"
+            tone="brand"
+            disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
+            onClick={() => void armarPlan()}
+          >
+            {enPlan ? 'Armando el plan…' : 'Armar un plan'}
+          </Button>
+          <Button
+            variant="ghost"
             tone="brand"
             disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
             onClick={() => onDuplicar({
@@ -315,14 +314,21 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
 
         <AvisoBloqueo b={bloqueo} nivel={o.nivel} />
 
-        {condenada && (
-          <Notice tone="brand">
-            <b>Hay otra salida: armar un plan.</b> En vez de pedirle a Meta la copia entera de una,
-            copia el {ROTULO_NIVEL[o.nivel]} vacío y después crea cada aviso por separado reusando el
-            creativo del original. Así ni el tope de {TOPE_ADS_SINCRONO} avisos ni el campo de
-            «mejoras estándar» lo frenan, y si se corta a la mitad se retoma donde quedó.
-          </Notice>
-        )}
+        <Notice tone="brand">
+          <b>El plan es el camino recomendado.</b> En vez de pedirle a Meta la fotocopia, lee cómo
+          está armado el {ROTULO_NIVEL[o.nivel]}, le corrige lo que Meta ya no acepta y lo crea desde
+          cero, con un aviso por paso reusando el creativo del original. Así ni el tope de{' '}
+          {TOPE_ADS_SINCRONO} avisos ni el campo de «mejoras estándar» lo frenan, si se corta a la
+          mitad se retoma donde quedó, y <b>antes de escribir nada le pregunta a Meta si lo va a
+          aceptar</b>.
+          {condenada && <> Acá además hace falta: la copia directa ya está condenada.</>}
+        </Notice>
+        <Notice tone="warning">
+          <b>La fotocopia de Meta casi nunca sale.</b> Sobre los conjuntos activos de la cuenta,
+          medido el 9-ago: <b>pasa 4 de cada 16</b>. Los conjuntos se armaron con reglas viejas y Meta
+          revalida la copia con las de hoy — los que ya están al aire siguen andando porque a ésos no
+          los vuelve a examinar.
+        </Notice>
         {motivoPlan && <Notice tone="danger">No se pudo armar el plan: {motivoPlan}</Notice>}
 
         <Notice tone="warning">

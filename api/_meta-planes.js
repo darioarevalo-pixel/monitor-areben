@@ -35,6 +35,9 @@ import {
   TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe } from '../lib/meta-ads/graph.core.js';
+import {
+  CAMPOS_RECETA, conDiario, escalonesDeDiario, esRechazoDePresupuesto, recetaDeConjunto, VALIDAR_SOLO,
+} from '../lib/meta-ads/receta.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
 
 const TABLA = 'meta_ads_plan';
@@ -249,16 +252,93 @@ async function prepararDuplicar(perfil, b, marcador) {
     };
   }
 
+  // Las recetas: la configuración de cada conjunto, corregida y **ya validada contra Meta**. Es lo
+  // que hace que armar un plan deje de ser una promesa — ver `recetaValidada`.
+  const minimos = await minimosDe(cuentaId);
+  const diarioPedido = b.presupuestoCrudo ? Math.round(Number(b.presupuestoCrudo)) : null;
+  let receta = null;
+  if (nivel === 'conjunto') {
+    const r = await recetaValidada(cuentaId, objetoId, campaignId, { diarioPedido, minimos });
+    if (!r.ok) return r;
+    receta = r.receta;
+  } else {
+    const rs = await Promise.all((censo.conjuntos || []).map((c) => recetaValidada(cuentaId, c.id, objetoId, {
+      // El diario pedido sólo se aplica cuando hay UN conjunto: repartirlo entre varios sería
+      // inventar un criterio de reparto que nadie pidió.
+      diarioPedido: (censo.conjuntos || []).length === 1 ? diarioPedido : null,
+      minimos,
+    })));
+    const mala = rs.find((r) => !r.ok);
+    if (mala) return mala;
+    (censo.conjuntos || []).forEach((c, i) => { c.receta = rs[i].receta; });
+  }
+
   const entrada = {
     nivel, objetoId, cuentaId, campaignId, nombreOriginal: String(obj.name || ''),
     copias: Number(b.copias) || 1,
     nombre: b.nombre ? String(b.nombre).trim() : null,
-    presupuestoCrudo: b.presupuestoCrudo ? Math.round(Number(b.presupuestoCrudo)) : null,
+    presupuestoCrudo: diarioPedido,
     censo,
+    receta,
+    // Lo que la receta tuvo que tocar, junto, para que la pantalla lo pueda mostrar ANTES de
+    // «Empezar». Una corrección silenciosa sobre la segmentación de algo que gasta plata es
+    // exactamente lo que después nadie puede auditar.
+    avisos: [...new Set([
+      ...((receta && receta.notas) || []),
+      ...[].concat(...(censo.conjuntos || []).map((c) => (c.receta && c.receta.notas) || [])),
+    ])],
   };
   const armado = armarPlanDuplicar(entrada, marcador);
   if (!armado.ok) return armado;
   return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: linea.linea, entrada };
+}
+
+/**
+ * El nombre con el que se valida. **No se crea nada con él** —`validate_only` no escribe—, pero si
+ * alguna vez apareciera en Ads Manager sería la prueba de que Meta dejó de honrar el flag, y por eso
+ * se dice en el nombre en vez de usar uno cualquiera.
+ */
+const NOMBRE_VALIDACION = 'validación del monitor · no se crea nada con este nombre';
+
+/**
+ * La receta de UN conjunto: leída de Meta, corregida, y **preguntada a Meta antes de prometer nada**.
+ *
+ * 🔑 `validate_only` es lo que cambia la naturaleza de armar un plan. Antes, `crear` sólo leía el
+ * censo y escribía los pasos, así que un plan podía nacer «listo» y morir en el paso 1 contra un
+ * rechazo que se sabía de entrada — que es exactamente lo que pasó el 8-ago con el emplazamiento
+ * «Explorar». Ahora, un plan armado es un plan que Meta ya dijo que acepta.
+ *
+ * Y el diario, cuando hace falta subirlo, **no se calcula: se prueba escalón por escalón de menor a
+ * mayor**, así la copia nace lo más parecida posible al original. Ver `escalonesDeDiario()`.
+ */
+async function recetaValidada(cuentaId, adsetId, campaignIdValidacion, opciones) {
+  const o = opciones || {};
+  const l = await graph(`${adsetId}?fields=${CAMPOS_RECETA}`);
+  if (!l.ok) {
+    return { ok: false, status: 502, error: `No se pudo leer la configuración del conjunto en Meta (${mensajeError(l)}), así que no se armó nada.` };
+  }
+  const arm = recetaDeConjunto(l.data);
+  if (!arm.ok) return arm;
+
+  const nombre = String(l.data.name || adsetId);
+  const cuerpo = { ...arm.cuerpo };
+  if (o.diarioPedido) cuerpo.daily_budget = String(o.diarioPedido);
+
+  const fijos = { name: NOMBRE_VALIDACION, campaign_id: String(campaignIdValidacion), status: 'PAUSED' };
+  const primero = await graphPost(`act_${cuentaId}/adsets`, { ...cuerpo, ...fijos, ...VALIDAR_SOLO }, TIMEOUT_PASO_MS);
+  if (primero.ok) return { ok: true, receta: { cuerpo, notas: arm.notas } };
+
+  const noVa = { ok: false, status: 409, error: `Meta no acepta recrear «${nombre}» como está: ${mensajeError(primero)}` };
+  // ⛔ Si el diario lo eligió una persona, no se le cambia por atrás: se le dice qué contestó Meta.
+  if (o.diarioPedido || !esRechazoDePresupuesto(primero.error)) return noVa;
+
+  for (const escalon of escalonesDeDiario(mensajeError(primero), o.minimos)) {
+    const suba = conDiario(cuerpo, escalon);
+    if (!suba.ok) continue;
+    const v = await graphPost(`act_${cuentaId}/adsets`, { ...suba.cuerpo, ...fijos, ...VALIDAR_SOLO }, TIMEOUT_PASO_MS);
+    if (v.ok) return { ok: true, receta: { cuerpo: suba.cuerpo, notas: [...arm.notas, suba.nota] } };
+  }
+  return noVa;
 }
 
 const aAvisoCenso = (a) => ({
@@ -525,6 +605,22 @@ async function correr(plan, paso, pedido) {
     const id = String(d.copied_campaign_id || d.copied_adset_id || d.id || '');
     // Sin id no se afirma nada: el paso queda para la sonda, que lo va a buscar por la marca.
     if (!id) return { ok: false, corte: true, error: 'Meta aceptó la copia pero no dijo cuál es.', uso: r.uso };
+    return { ok: true, id, uso: r.uso };
+  }
+
+  // El conjunto se ARMA, no se fotocopia: el cuerpo es la receta que ya se validó al armar el plan.
+  // ⚠️ `status`, `name` y `campaign_id` van DESPUÉS del cuerpo y pisan lo que traiga: que la copia
+  // nazca pausada y con su marca son invariantes del motor, no datos del original.
+  if (paso.tipo === 'crear-conjunto') {
+    const r = await graphPost(`act_${pedido.cuentaId}/adsets`, {
+      ...(pedido.cuerpo || {}),
+      name: nombreConMarca(pedido.nombreBase, marca),
+      campaign_id: String(pedido.campaignId),
+      status: 'PAUSED',
+    }, TIMEOUT_PASO_MS);
+    if (!r.ok) return fallo(r);
+    const id = String((r.data && r.data.id) || '');
+    if (!id) return { ok: false, corte: true, error: 'Meta aceptó el conjunto pero no dijo cuál es.', uso: r.uso };
     return { ok: true, id, uso: r.uso };
   }
 

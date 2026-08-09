@@ -18,7 +18,7 @@
  */
 
 import { useState } from 'react'
-import type { EstadoPaso, PasoPlan, Plan } from '@/lib/meta-ads/planes'
+import { avisosDe, type EstadoPaso, type PasoPlan, type Plan } from '@/lib/meta-ads/planes'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import { Button, Card, Notice, StatusPill, color, font, radius, space, weight } from '@/components/ui'
 
@@ -58,6 +58,7 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
   // —si lo hiciera, un rechazo permanente sería un bucle—. Un botón que no hace nada se lee como que
   // la sección está rota, así que ahí el botón es OTRO y dice qué paso va a mandar de nuevo.
   const trabado = plan.pasos.find((p) => p.estado === 'fallado') || null
+  const avisos = avisosDe(plan)
   const atascado = plan.estado === 'atascado'
 
   return (
@@ -98,6 +99,21 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
         Todo lo que crea este plan lleva <code style={{ fontWeight: weight.semibold }}>{plan.marcador}</code> en el
         nombre. Buscá eso en Ads Manager para verlo junto.
       </div>
+
+      {/* 🔑 Lo que la receta corrigió, ANTES de «Empezar». El conjunto no se fotocopia: se vuelve a
+          armar, y Meta ya no acepta todo lo que aceptaba cuando el original nació. Que la copia
+          salga distinta del original en algún campo no es un detalle de implementación — sobre todo
+          cuando el campo es el presupuesto. */}
+      {avisos.length > 0 && (
+        <Notice tone="warning">
+          <div style={{ fontWeight: weight.semibold }}>
+            La copia no sale idéntica: hubo que corregir {avisos.length === 1 ? 'una cosa' : `${avisos.length} cosas`} para que Meta la acepte.
+          </div>
+          <ul style={{ fontSize: font.sm, margin: `${space[1]} 0 0`, paddingLeft: space[4], lineHeight: 1.45 }}>
+            {avisos.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </Notice>
+      )}
 
       {confirmando && (
         <Notice tone="warning">

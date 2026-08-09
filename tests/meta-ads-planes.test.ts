@@ -159,9 +159,13 @@ describe('el presupuesto de tiempo', () => {
 
 describe('armarPlanDuplicar', () => {
   const marcador = marcadorDe('pdup')
+  // La receta la arma el handler leyendo Meta y la valida antes de que el plan exista; acá entra ya
+  // resuelta, que es todo lo que el generador necesita saber de ella. Ver `lib/meta-ads/receta.core.js`.
+  const receta = { cuerpo: { targeting: '{}', daily_budget: '600000' }, notas: [] }
   const conjunto = {
     nivel: 'conjunto', objetoId: '111', cuentaId: '999', campaignId: '100', nombreOriginal: 'Conj A',
     copias: 1, censo: { avisos: [{ id: 'a1', nombre: 'Aviso 1', creativeId: 'c1' }, { id: 'a2', nombre: 'Aviso 2', creativeId: 'c2' }] },
+    receta,
   }
 
   it('🔑 el tope de 3 avisos deja de existir: la copia es shallow + un paso por aviso', () => {
@@ -171,13 +175,13 @@ describe('armarPlanDuplicar', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) throw new Error(r.error)
     expect(r.pasos.filter((p) => p.tipo === 'crear-aviso')).toHaveLength(6)
-    expect(r.pasos.filter((p) => p.tipo === 'copiar-conjunto')).toHaveLength(1)
+    expect(r.pasos.filter((p) => p.tipo === 'crear-conjunto')).toHaveLength(1)
   })
 
   it('cada aviso se crea contra el conjunto que devolvió el paso anterior', () => {
     const r = armarPlanDuplicar(conjunto, marcador)
     if (!r.ok) throw new Error(r.error)
-    const copia = r.pasos.find((p) => p.tipo === 'copiar-conjunto')!
+    const copia = r.pasos.find((p) => p.tipo === 'crear-conjunto')!
     for (const a of r.pasos.filter((p) => p.tipo === 'crear-aviso')) {
       expect(a.pedido!.adsetId).toBe(`{{${copia.orden}}}`)
     }
@@ -188,7 +192,7 @@ describe('armarPlanDuplicar', () => {
     // accionar desde el monitor, ni siquiera quien lo creó.
     const r = armarPlanDuplicar({
       nivel: 'campania', objetoId: '100', cuentaId: '999', campaignId: '100', nombreOriginal: 'Camp',
-      copias: 1, censo: { conjuntos: [{ id: 'c1', nombre: 'Conj', avisos: [{ id: 'a1', nombre: 'Av', creativeId: 'cr1' }] }] },
+      copias: 1, censo: { conjuntos: [{ id: 'c1', nombre: 'Conj', receta, avisos: [{ id: 'a1', nombre: 'Av', creativeId: 'cr1' }] }] },
     }, marcador)
     if (!r.ok) throw new Error(r.error)
     expect(r.pasos[0].tipo).toBe('copiar-campania')
@@ -206,7 +210,7 @@ describe('armarPlanDuplicar', () => {
   it('N copias arman N veces la secuencia, y los órdenes no se repiten', () => {
     const r = armarPlanDuplicar({ ...conjunto, copias: 3 }, marcador)
     if (!r.ok) throw new Error(r.error)
-    expect(r.pasos.filter((p) => p.tipo === 'copiar-conjunto')).toHaveLength(3)
+    expect(r.pasos.filter((p) => p.tipo === 'crear-conjunto')).toHaveLength(3)
     const ordenes = r.pasos.map((p) => p.orden)
     expect(new Set(ordenes).size).toBe(ordenes.length)
   })
