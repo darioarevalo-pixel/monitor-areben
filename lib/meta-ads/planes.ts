@@ -10,16 +10,20 @@ import type { LineaPauta } from './tipos'
 import {
   armarPlanCrear as armarPlanCrearJs,
   armarPlanDuplicar as armarPlanDuplicarJs,
+  armarPlanPiezas as armarPlanPiezasJs,
   armarPlanEscalar as armarPlanEscalarJs,
   armarPlanPodar as armarPlanPodarJs,
   armarPlanMoverPlata as armarPlanMoverPlataJs,
   CLAVES_PLAN as CLAVES_PLAN_JS,
   entraOtroPaso as entraOtroPasoJs,
+  ESPERA_PIEZA_MS as ESPERA_PIEZA_MS_JS,
   ESPERA_SONDA_MS as ESPERA_SONDA_MS_JS,
   estadoDePlan as estadoDePlanJs,
   marcadorDe as marcadorDeJs,
   marcaDePaso as marcaDePasoJs,
+  maxIntentosDe as maxIntentosDeJs,
   MAX_INTENTOS as MAX_INTENTOS_JS,
+  MAX_INTENTOS_DEMORA as MAX_INTENTOS_DEMORA_JS,
   nombreConMarca as nombreConMarcaJs,
   politicaReintento as politicaReintentoJs,
   PRESUPUESTO_MS as PRESUPUESTO_MS_JS,
@@ -32,7 +36,7 @@ import {
   TOPE_COPIAS as TOPE_COPIAS_JS,
 } from './planes.core.js'
 
-export type TipoPlan = 'duplicar' | 'crear' | 'mover-plata' | 'escalar' | 'podar'
+export type TipoPlan = 'duplicar' | 'crear' | 'piezas' | 'mover-plata' | 'escalar' | 'podar'
 
 export type TipoPaso =
   | 'copiar-campania'
@@ -41,6 +45,12 @@ export type TipoPaso =
   | 'copiar-conjunto'
   | 'crear-conjunto'
   | 'crear-aviso'
+  /** Sube un video nuevo a la videoteca de la cuenta desde la URL del Blob: Meta lo baja él. */
+  | 'subir-pieza'
+  /** El único paso con `demora`: pregunta si Meta terminó de procesar, y un «todavía no» no es error. */
+  | 'esperar-pieza'
+  /** La pieza recién subida con el copy del aviso modelo. Lo único que separaba al motor de probar. */
+  | 'crear-creativo'
   | 'presupuesto'
   /** Sube el diario **sólo si el guardarraíl deja**. Puede terminar `salteado` con el motivo escrito. */
   | 'escalon'
@@ -120,7 +130,15 @@ export type AvanceDePlan = {
   motivo?: string
 }
 
-export type DefPaso = { rotulo: string; reintentable: boolean; crea: boolean; sondaEn?: string; guardarrail?: boolean }
+export type DefPaso = {
+  rotulo: string
+  reintentable: boolean
+  crea: boolean
+  sondaEn?: string
+  guardarrail?: boolean
+  /** Espera algo que Meta está haciendo: tiene su propio techo de intentos (`MAX_INTENTOS_DEMORA`). */
+  demora?: boolean
+}
 export type DefPlan = { sub: string; rotulo: string; rotuloPermiso: string }
 
 export const TIPOS_PASO = TIPOS_PASO_JS as Record<TipoPaso, DefPaso>
@@ -128,7 +146,11 @@ export const TIPOS_PLAN = TIPOS_PLAN_JS as Record<TipoPlan, DefPlan>
 export const CLAVES_PLAN = CLAVES_PLAN_JS as TipoPlan[]
 export const TOPE_COPIAS = TOPE_COPIAS_JS as number
 export const MAX_INTENTOS = MAX_INTENTOS_JS as number
+export const MAX_INTENTOS_DEMORA = MAX_INTENTOS_DEMORA_JS as number
 export const ESPERA_SONDA_MS = ESPERA_SONDA_MS_JS as number
+export const ESPERA_PIEZA_MS = ESPERA_PIEZA_MS_JS as number
+/** El techo de intentos de ESTE paso. No es una constante sola: ver `MAX_INTENTOS_DEMORA`. */
+export const maxIntentosDe = maxIntentosDeJs as (tipo: TipoPaso) => number
 export const TIMEOUT_PASO_MS = TIMEOUT_PASO_MS_JS as number
 export const PRESUPUESTO_MS = PRESUPUESTO_MS_JS as number
 
@@ -161,6 +183,11 @@ type Armado =
 export const armarPlanDuplicar = armarPlanDuplicarJs as (entrada: unknown, marcador: string) => Armado
 /** Una campaña NUEVA a partir de una receta: nada se edita, todo se copia de algo que ya entrega. */
 export const armarPlanCrear = armarPlanCrearJs as (entrada: unknown, marcador: string) => Armado
+/**
+ * Una pieza, un conjunto propio, un aviso — con la segmentación y el copy de algo que ya entrega.
+ * Lo único que cambia entre un conjunto y el otro es el archivo.
+ */
+export const armarPlanPiezas = armarPlanPiezasJs as (entrada: unknown, marcador: string) => Armado
 /** Sin marcador: mover plata no crea ningún objeto, así que no hay nombre en el que anotarla. */
 export const armarPlanMoverPlata = armarPlanMoverPlataJs as (entrada: unknown) => Armado
 /**

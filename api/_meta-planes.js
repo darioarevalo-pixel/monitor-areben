@@ -30,10 +30,14 @@ import {
   CAMPOS_LECTURA, ETIQUETA_NIVEL, lineasQueVe, nivelReal, quedoPuesto, revisarPresupuesto, SIN_LINEA,
 } from '../lib/meta-ads/acciones.core.js';
 import {
-  armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, armarPlanPodar, entraOtroPaso,
-  estadoDePlan, marcaDePaso, marcadorDe, nombreConMarca, permitePlan, politicaReintento, siguientePaso,
-  sustituir, TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
+  armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, armarPlanPiezas,
+  armarPlanPodar, entraOtroPaso, ESPERA_PIEZA_MS, estadoDePlan, marcaDePaso, marcadorDe,
+  nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir, TIMEOUT_PASO_MS,
+  TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
+import {
+  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, validarPiezas,
+} from '../lib/meta-ads/pieza.core.js';
 import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
 import { contextoDePoda, correrPoda } from '../lib/meta-ads/correr-poda.core.js';
 import { candidatosAPodar, CLAVES_MOTIVO, faltanParaPodar, MOTIVOS_PODA } from '../lib/meta-ads/podado.core.js';
@@ -56,6 +60,8 @@ const TABLA_PASO = 'meta_ads_plan_paso';
 const LOCK_MS = 25000;
 
 const quienEs = (perfil) => (perfil && perfil.name) || 'desconocido';
+/** Una hora en la zona de acá. El servidor corre en UTC y el cartel lo lee alguien en Buenos Aires. */
+const cuando = (iso) => new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
 const ahoraIso = () => new Date().toISOString();
 /**
  * 🔴 El último día **cerrado**, que es hasta dónde mira el guardarraíl. No es hoy, y la diferencia no
@@ -229,9 +235,10 @@ async function crear(res, perfil, b) {
   const marcador = marcadorDe(idem);
   const armado = tipo === 'duplicar' ? await prepararDuplicar(perfil, b, marcador)
     : tipo === 'crear' ? await prepararCrear(perfil, b, marcador)
-      : tipo === 'escalar' ? await prepararEscalar(perfil, b)
-        : tipo === 'podar' ? await prepararPodar(perfil, b)
-          : await prepararMoverPlata(perfil, b);
+      : tipo === 'piezas' ? await prepararPiezas(perfil, b, marcador)
+        : tipo === 'escalar' ? await prepararEscalar(perfil, b)
+          : tipo === 'podar' ? await prepararPodar(perfil, b)
+            : await prepararMoverPlata(perfil, b);
   if (!armado.ok) return res.status(armado.status || 400).json({ error: armado.error, ...(armado.extra || {}) });
 
   const { data: fila, error } = await sb.from(TABLA).insert([{
@@ -472,6 +479,116 @@ async function prepararCrear(perfil, b, marcador) {
     avisos: [...new Set(rec.receta.notas || [])],
   };
   const armado = armarPlanCrear(entrada, marcador);
+  if (!armado.ok) return armado;
+  return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: linea.linea, entrada };
+}
+
+/**
+ * Todo lo que hay que MEDIR en Meta antes de armar una tanda de piezas.
+ *
+ * El orden es el de siempre y cada paso está antes del que le sigue por un motivo:
+ *
+ *   1. Las piezas, que es lo único que no depende de Meta: una extensión que no se reconoce se
+ *      rechaza sin gastar una sola lectura.
+ *   2. El conjunto de referencia → de ahí salen la cuenta y la segmentación.
+ *   3. La campaña de destino → **de ahí sale la línea**, no de la referencia y no del cliente. La
+ *      plata se va a gastar en esa campaña, así que el permiso se pregunta por la marca de ÉSA.
+ *   4. El aviso modelo → el copy.
+ *   5. 🔑 **La página**, que es superficie nueva: hasta ahora el motor creaba avisos reusando un
+ *      `creative_id` y nunca tocaba la página. Un creativo nuevo lleva `page_id` adentro y exige que
+ *      el system user la tenga asignada. Preguntarlo acá cuesta una lectura y evita un plan que
+ *      falla recién en el tercer paso, con videos ya subidos.
+ *   6. La receta, validada con `validate_only` como en `crear`.
+ */
+async function prepararPiezas(perfil, b, marcador) {
+  const val = validarPiezas(b.piezas);
+  if (!val.ok) return val;
+
+  const nombre = String(b.nombre || '').trim();
+  if (!nombre) return { ok: false, status: 400, error: 'Falta el nombre de la tanda.' };
+  const referencia = String(b.referenciaId || '');
+  if (!/^\d+$/.test(referencia)) {
+    return { ok: false, status: 400, error: 'Falta el conjunto de referencia: es de donde sale la segmentación.' };
+  }
+  const campaniaDestino = String(b.campaignId || '');
+  if (!/^\d+$/.test(campaniaDestino)) {
+    return { ok: false, status: 400, error: 'Falta la campaña donde van los conjuntos nuevos.' };
+  }
+  const modeloId = String(b.modeloId || '');
+  if (!/^\d+$/.test(modeloId)) {
+    return { ok: false, status: 400, error: 'Falta el aviso modelo: es de donde sale el texto.' };
+  }
+
+  const ref = await graph(`${referencia}?fields=${CAMPOS_RECETA}`);
+  if (!ref.ok) {
+    const code = codigoError(ref);
+    return {
+      ok: false, status: code === 100 ? 400 : 502,
+      error: code === 100 ? 'Ese id no parece ser un conjunto de Meta.' : 'No se pudo leer el conjunto de referencia en Meta, así que no se armó nada.',
+    };
+  }
+  if (nivelReal(ref.data) !== 'conjunto') {
+    return { ok: false, status: 400, error: 'La referencia tiene que ser un CONJUNTO: es de donde se lee la segmentación.' };
+  }
+  const cuentaId = String(ref.data.account_id || '');
+
+  const dest = await graph(`${campaniaDestino}?fields=id,name,account_id`);
+  if (!dest.ok) return { ok: false, status: 502, error: 'No se pudo leer la campaña de destino en Meta, así que no se armó nada.' };
+  // ⛔ Con las marcas pautando desde cuentas distintas, una referencia de una cuenta y una campaña de
+  // otra crearía los conjuntos donde nadie los espera —y con el presupuesto de la marca equivocada—.
+  // Es 409 y no un arreglo: cuál es la cuenta correcta no se puede deducir.
+  if (String(dest.data.account_id || '') !== cuentaId) {
+    return {
+      ok: false, status: 409,
+      error: 'El conjunto de referencia y la campaña de destino son de cuentas publicitarias distintas. Elegí una referencia de la misma cuenta.',
+    };
+  }
+
+  // La línea sale de la campaña DONDE VA A GASTAR, no de la referencia: es la que define de qué
+  // marca es la plata. Misma regla que en duplicar y en crear.
+  const linea = await lineaDe(campaniaDestino);
+  if (!linea.ok) return linea;
+  const permiso = permitePlan(perfil, 'piezas', linea.linea);
+  if (!permiso.ok) return { ok: false, ...permiso };
+
+  const mod = await graph(`${modeloId}?fields=id,name,creative{${CAMPOS_CREATIVO_MODELO}}`);
+  if (!mod.ok) {
+    const code = codigoError(mod);
+    return {
+      ok: false, status: code === 100 ? 400 : 502,
+      error: code === 100 ? 'Ese id no parece ser un aviso de Meta.' : 'No se pudo leer el aviso modelo en Meta, así que no se armó nada.',
+    };
+  }
+  const leido = copyDeCreativo((mod.data && mod.data.creative) || null);
+  if (!leido.ok) return leido;
+
+  // 🔑 La página, preguntada. Un 190/200 acá dice «el system user no tiene esa página asignada», que
+  // se arregla en el Business Manager en un minuto — y es infinitamente más barato de leer ahora que
+  // como un rechazo del paso 3 con tres videos ya subidos.
+  const pag = await graph(`${leido.copy.pageId}?fields=id,name`, 2);
+  if (!pag.ok) {
+    return {
+      ok: false, status: 409,
+      error: `El token no puede ver la página del aviso modelo (${mensajeError(pag)}). Asignale la página al usuario del sistema en el Business Manager y volvé a intentar.`,
+    };
+  }
+
+  const minimos = await minimosDe(cuentaId);
+  const diarioPedido = b.presupuestoCrudo ? Math.round(Number(b.presupuestoCrudo)) : null;
+  const rec = await recetaValidada(cuentaId, referencia, campaniaDestino, { diarioPedido, minimos });
+  if (!rec.ok) return rec;
+
+  const entrada = {
+    referenciaId: referencia, referenciaNombre: String(ref.data.name || ''),
+    campaignId: campaniaDestino, campaniaNombre: String(dest.data.name || ''),
+    modeloId, modeloNombre: String(mod.data.name || ''),
+    cuentaId, nombre, linea: linea.linea,
+    presupuestoCrudo: diarioPedido,
+    piezas: val.piezas, copy: leido.copy, paginaNombre: String(pag.data.name || ''),
+    receta: rec.receta,
+    avisos: [...new Set(rec.receta.notas || [])],
+  };
+  const armado = armarPlanPiezas(entrada, marcador);
   if (!armado.ok) return armado;
   return { ok: true, pasos: armado.pasos, variante: armado.variante, cuentaId, linea: linea.linea, entrada };
 }
@@ -779,7 +896,12 @@ async function avanzar(res, perfil, b) {
   if (estaEsperando(plan, Date.now())) {
     return res.status(200).json({
       ok: true, plan: aVista(plan, leido.pasos), seguir: true, hechos: 0, pausa: true,
-      motivo: `El próximo escalón es el ${new Date(plan.proximo_en).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}. Hasta entonces no se toca.`,
+      // ⚠️ El reloj lo corren dos cosas distintas y el cartel tiene que decir cuál: un escalón que
+      // espera un día, y un video que Meta está procesando. Decirle «el próximo escalón» a quien
+      // subió una pieza lo manda a buscar una escalada que no existe.
+      motivo: plan.tipo === 'escalar'
+        ? `El próximo escalón es el ${cuando(plan.proximo_en)}. Hasta entonces no se toca.`
+        : `Meta está trabajando. El plan se mueve de nuevo a las ${cuando(plan.proximo_en)}.`,
       esperando: plan.proximo_en,
     });
   }
@@ -981,6 +1103,26 @@ async function ejecutar(sb, plan, paso, contexto) {
     return { paso: { estado: 'hecho', resultadoId: r.id || null }, resultadoId: r.id || null, hecho: true };
   }
 
+  /**
+   * 🔑 **«Todavía no» no es un error, y confundirlo con uno es el defecto que esta rama evita.**
+   *
+   * Un video recién subido tarda de segundos a minutos en procesarse. Sin esta rama, cada pregunta
+   * caería en el `corte` de abajo, el motivo diría «se cortó antes de que Meta contestara» —que es
+   * falso, Meta contestó perfecto— y el plan terminaría atascado por algo que iba bien.
+   *
+   * Corre el reloj del plan igual que un escalón: mientras `proximo_en` esté en el futuro nadie lo
+   * toca, ni el cron ni el botón. Es lo que impide que la pantalla pregunte cien veces por segundo
+   * mientras Meta trabaja.
+   */
+  if (r.espera) {
+    await guardarPaso(sb, plan.id, paso.orden, { estado: 'en-curso', detalle: r.error, uso: r.uso || null });
+    return {
+      paso: { estado: 'en-curso' },
+      esperarHasta: new Date(Date.now() + ESPERA_PIEZA_MS).toISOString(),
+      motivo: r.error,
+    };
+  }
+
   // 🔴 **El corte (`status: 0`) NO es un rechazo.** Meta pudo haberlo aplicado igual. El paso queda
   // `en-curso` —que es «no sabemos»— y la próxima vuelta lo sondea o lo repite según su tipo. Marcarlo
   // fallado acá invitaría a rearmar el plan y terminar con dos objetos.
@@ -1068,6 +1210,81 @@ async function correr(plan, paso, pedido) {
     return { ok: true, id, uso: r.uso };
   }
 
+  /**
+   * Subir un video a la videoteca de la cuenta. **Meta lo baja él**: lo único que viaja es la URL
+   * pública del Blob, así que un archivo de 200 MB no toca ni el body de 4,5 MB de Vercel ni los
+   * 10 s de la función.
+   *
+   * ⚠️ La marca va en `title` porque un `AdVideo` no tiene `name`. Se manda igual en los dos: el
+   * `name` es lo que se lee en la biblioteca de Ads Manager y el `title` es por donde sondea el
+   * motor. Escribir uno solo dejaría o la sonda ciega o la biblioteca ilegible.
+   */
+  if (paso.tipo === 'subir-pieza') {
+    const nombre = nombreConMarca(pedido.nombreBase, marca);
+    const r = await graphPost(`act_${pedido.cuentaId}/advideos`, {
+      file_url: String(pedido.url),
+      title: nombre,
+      name: nombre,
+    }, TIMEOUT_PASO_MS);
+    if (!r.ok) return fallo(r);
+    const id = String((r.data && r.data.id) || '');
+    if (!id) return { ok: false, corte: true, error: 'Meta aceptó el video pero no dijo cuál es.', uso: r.uso };
+    return { ok: true, id, uso: r.uso };
+  }
+
+  /**
+   * ¿Meta ya terminó de procesar el video?
+   *
+   * 🔑 **Las tres respuestas son distintas y ninguna se puede confundir con otra**: `ready` sigue,
+   * `error` es un rechazo de verdad (el archivo no sirve y volver a preguntar no lo arregla), y
+   * cualquier otra cosa es «todavía», que **no es un error** y por eso vuelve con `espera` en vez
+   * de con `corte`. Tratar el «todavía» como fallo dejaría el plan atascado mientras el video se
+   * está subiendo bien, que es exactamente el defecto que `MAX_INTENTOS_DEMORA` existe para evitar.
+   */
+  if (paso.tipo === 'esperar-pieza') {
+    const r = await graph(`${pedido.videoId}?fields=id,status`, 2);
+    if (!r.ok) return fallo(r);
+    const st = (r.data && r.data.status) || {};
+    const estado = String(st.video_status || '');
+    if (estado === 'ready') return { ok: true, id: String(pedido.videoId) };
+    if (estado === 'error') {
+      return { ok: false, error: `Meta no pudo procesar ese video${st.processing_progress ? ` (llegó al ${st.processing_progress}%)` : ''}. Probá con otro archivo.` };
+    }
+    return {
+      ok: false, espera: true,
+      error: `Meta todavía está procesando el video${st.processing_progress ? ` (${st.processing_progress}%)` : ''}.`,
+    };
+  }
+
+  /**
+   * El creativo nuevo: la pieza recién subida con el copy del aviso modelo.
+   *
+   * ⚠️ **La miniatura se lee acá y no se guarda en el plan**, aunque el paso anterior ya sabía que el
+   * video estaba listo. Meta genera las miniaturas al terminar de procesar y sus URLs caducan: una
+   * guardada al armar el plan puede estar muerta cuando el paso llega a correr.
+   */
+  if (paso.tipo === 'crear-creativo') {
+    let pieza;
+    if (pedido.clase === 'video') {
+      const mini = await miniaturaDe(pedido.videoId);
+      if (!mini.ok) return mini;
+      pieza = { clase: 'video', videoId: String(pedido.videoId), miniatura: mini.url };
+    } else {
+      pieza = { clase: 'imagen', url: String(pedido.url) };
+    }
+    const arm = cuerpoDeCreativo(pedido.copy || null, pieza);
+    if (!arm.ok) return { ok: false, error: arm.error };
+
+    const r = await graphPost(`act_${pedido.cuentaId}/adcreatives`, {
+      ...arm.cuerpo,
+      name: nombreConMarca(pedido.nombreBase, marca),
+    }, TIMEOUT_PASO_MS);
+    if (!r.ok) return fallo(r);
+    const id = String((r.data && r.data.id) || '');
+    if (!id) return { ok: false, corte: true, error: 'Meta aceptó el creativo pero no dijo cuál es.', uso: r.uso };
+    return { ok: true, id, uso: r.uso };
+  }
+
   if (paso.tipo === 'crear-aviso') {
     const r = await graphPost(`act_${pedido.cuentaId}/ads`, {
       name: nombreConMarca(pedido.nombreBase, marca),
@@ -1118,6 +1335,26 @@ async function correr(plan, paso, pedido) {
 const fallo = (r) => ({ ok: false, corte: r.status === 0, error: mensajeError(r), uso: r.uso });
 
 /**
+ * La miniatura de un video ya procesado. **Es de dónde sale el `image_url` del creativo**, sin el
+ * cual Meta rechaza cualquier `video_data`.
+ *
+ * Se pide la que Meta marcó como preferida; si ninguna lo está, la primera. Que no haya ninguna no
+ * es un rechazo definitivo —puede estar terminando de generarlas— así que vuelve como `corte`, que
+ * es «no sabemos, apretá Seguir», y no como un fallo que atasca el plan.
+ */
+async function miniaturaDe(videoId) {
+  const r = await graph(`${videoId}/thumbnails?fields=uri,is_preferred`, 2);
+  if (!r.ok) return { ok: false, corte: true, error: `No se pudieron leer las miniaturas del video (${mensajeError(r)}).` };
+  const filas = (r.data && r.data.data) || [];
+  const elegida = filas.find((t) => t && t.is_preferred) || filas[0];
+  const url = elegida && elegida.uri ? String(elegida.uri) : '';
+  if (!url) {
+    return { ok: false, corte: true, error: 'Meta todavía no generó ninguna miniatura para ese video. Apretá Seguir en un momento.' };
+  }
+  return { ok: true, url };
+}
+
+/**
  * **La sonda: ir a mirar si Meta lo hizo, SIN escribir.**
  *
  * Es lo que permite adoptar en vez de reintentar. No puede crear un segundo objeto ni aunque se la
@@ -1139,14 +1376,21 @@ async function sondar(sb, plan, paso, contexto) {
   const marca = paso.marca || marcaDePaso(plan.marcador, paso.orden);
 
   const donde = def.sondaEn === 'cuenta' ? `act_${plan.cuenta_id}/campaigns`
-    : def.sondaEn === 'campania' ? `${pedido.campaignId}/adsets`
-      : `${pedido.adsetId}/ads`;
+    : def.sondaEn === 'videos' ? `act_${plan.cuenta_id}/advideos`
+      : def.sondaEn === 'creativos' ? `act_${plan.cuenta_id}/adcreatives`
+        : def.sondaEn === 'campania' ? `${pedido.campaignId}/adsets`
+          : `${pedido.adsetId}/ads`;
 
-  const hijos = await insightsTodas(`${donde}?fields=id,name&limit=200`);
+  // ⚠️ **Un `AdVideo` no tiene `name`**: su marca vive en el `title`. Pedirle `name` a la videoteca
+  // devuelve la lista entera sin ese campo, o sea que ningún candidato coincide y la sonda decide
+  // «no se creó» sobre un video que sí está. Es el único paso que mira otro campo.
+  const campo = def.sondaEn === 'videos' ? 'title' : 'name';
+
+  const hijos = await insightsTodas(`${donde}?fields=id,${campo}&limit=200`);
   if (!hijos.ok) {
     return { paso: {}, cortar: true, motivo: `No se pudo mirar en Meta si el paso ${paso.orden} quedó hecho (${hijos.error}).` };
   }
-  const candidatos = hijos.rows.filter((h) => String(h.name || '').includes(marca));
+  const candidatos = hijos.rows.filter((h) => String(h[campo] || '').includes(marca));
 
   if (!candidatos.length) {
     await guardarPaso(sb, plan.id, paso.orden, { estado: 'dudoso', ultimo_en: ahoraIso(), detalle: `Todavía no aparece nada llamado «${marca}».` });

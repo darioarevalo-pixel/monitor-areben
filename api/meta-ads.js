@@ -754,7 +754,29 @@ async function diagnosticoCuenta(c, probar) {
     veredicto: puedePautar(tareas) ? 'permiso-de-cuenta-ok' : tareas.length ? 'sin-permiso-de-cuenta' : 'tareas-desconocidas',
   };
   if (!probar) return fila;
-  return { ...fila, ...(await pruebaDeEscritura(id)) };
+  return { ...fila, ...(await pruebaDeEscritura(id)), ...(await paginasDe(id)) };
+}
+
+/**
+ * Las páginas que el token puede usar para PUBLICAR en esta cuenta.
+ *
+ * 🔑 **Es superficie nueva desde que existe «probar piezas».** Todo lo que el motor creó hasta ahora
+ * —campañas, conjuntos, avisos— reusa un `creative_id` que ya existe, y eso nunca toca la página. Un
+ * creativo NUEVO lleva `page_id` adentro y exige que la página esté asignada al usuario del sistema.
+ * O sea: un token que escribe perfecto en todo lo demás puede no poder armar una pieza.
+ *
+ * ⚠️ Va en una llamada aparte y no como un campo más de `act_<id>?fields=…`, por la trampa de
+ * siempre: un campo bloqueado se lleva puesta la respuesta ENTERA y dejaría las cuatro cuentas en
+ * «no se pudo leer». Mismo criterio que `minimosDe`.
+ *
+ * Una lista vacía **no es** «no tiene ninguna»: puede ser que Meta no lo informe. Por eso se
+ * devuelve el motivo al lado en vez de un booleano que afirme de más.
+ */
+async function paginasDe(cuentaId) {
+  const r = await graph(`act_${cuentaId}/promote_pages?fields=id,name&limit=25`);
+  if (!r.ok) return { paginas: null, paginasMotivo: mensajeError(r) };
+  const filas = (r.data && r.data.data) || [];
+  return { paginas: filas.map((p) => ({ id: String(p.id), nombre: String(p.name || '') })), paginasMotivo: null };
 }
 
 // `minimosDe` se mudó a `lib/meta-ads/graph.core.js`: la palanca de presupuesto lo necesita para

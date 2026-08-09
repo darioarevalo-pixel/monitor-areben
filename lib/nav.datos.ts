@@ -67,7 +67,7 @@ export type NavCat = {
    * Entradas que apuntan a una SUBÁREA, al mismo nivel que las `keys` sueltas.
    *
    * Es lo mismo que `NavGrupo.items` pero un piso más arriba, y existe por Meta: es **una sola
-   * sección con ocho pantallas**, así que no tiene `keys` que listar —todas son `meta-ads`— y
+   * sección con nueve pantallas**, así que no tiene `keys` que listar —todas son `meta-ads`— y
    * meterla en un subgrupo la dejaba a dos clicks, que es justo lo que se venía a arreglar. Con
    * esto, una categoría puede ser un módulo con sus pantallas en vez de una bolsa de secciones.
    */
@@ -589,7 +589,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "meta-ads",
     "area": "meta",
     "label": "Meta",
-    "info": "La pauta de Meta (Facebook/Instagram), en ocho pantallas. Panel: qué está al aire y qué hay que decidir. Campañas: todas las de una marca ordenadas por gasto, con los botones para accionar —pausar, reactivar, cambiar el presupuesto diario, renombrar y duplicar ajustando la copia—, bajando hasta el conjunto y el aviso. Biblioteca: todos los avisos de todas las cuentas en una grilla, con la pieza a la vista y sus números al lado, para poder ordenar por gasto o por retorno y decidir qué creativo producir después. Automatizaciones: seis reglas que miran solas la foto diaria y avisan qué se quedó sin avisos, qué gastó sin vender, qué se está quemando y qué conviene escalar. Ninguna toca la pauta: dejan el aviso en el Panel y accionar sigue siendo apretar un botón. Embudo: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Ideas: el tablero de las piezas que hay que producir. Rendimiento: los números de una cuenta publicitaria (inversión, impresiones, clics, CTR, CPC, alcance, ROAS). Registro: qué se accionó, quién y cómo terminó. Accionar tiene permisos aparte y deja registro.",
+    "info": "La pauta de Meta (Facebook/Instagram), en nueve pantallas. Panel: qué está al aire y qué hay que decidir. Campañas: todas las de una marca ordenadas por gasto, con los botones para accionar —pausar, reactivar, cambiar el presupuesto diario, renombrar y duplicar ajustando la copia—, bajando hasta el conjunto y el aviso. Biblioteca: todos los avisos de todas las cuentas en una grilla, con la pieza a la vista y sus números al lado, para poder ordenar por gasto o por retorno y decidir qué creativo producir después. Automatizaciones: seis reglas que miran solas la foto diaria y avisan qué se quedó sin avisos, qué gastó sin vender, qué se está quemando y qué conviene escalar. Ninguna toca la pauta: dejan el aviso en el Panel y accionar sigue siendo apretar un botón. Piezas: se arrastran los videos y las fotos nuevas y sale una tanda donde cada pieza va a su propio conjunto, con la segmentación de un conjunto que ya entrega y el texto de un aviso que ya está al aire; todo nace pausado. Embudo: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Ideas: el tablero de las piezas que hay que producir. Rendimiento: los números de una cuenta publicitaria (inversión, impresiones, clics, CTR, CPC, alcance, ROAS). Registro: qué se accionó, quién y cómo terminó. Accionar tiene permisos aparte y deja registro.",
     "brands": [
       "bdi",
       "zattia"
@@ -780,6 +780,7 @@ export const NAV_CATS: NavCat[] = [
       { "ruta": "/meta-ads", "label": "Panel", "icono": "meta-ads", "key": "meta-ads" },
       { "ruta": "/meta-ads/campanias", "label": "Campañas", "icono": "marketing", "key": "meta-ads" },
       { "ruta": "/meta-ads/biblioteca", "label": "Biblioteca", "icono": "tn-fotos", "key": "meta-ads" },
+      { "ruta": "/meta-ads/piezas", "label": "Piezas", "icono": "disenos", "key": "meta-ads" },
       { "ruta": "/meta-ads/automatizaciones", "label": "Automatizaciones", "icono": "integraciones", "key": "meta-ads" },
       { "ruta": "/meta-ads/embudo", "label": "Embudo", "icono": "etapas", "key": "meta-ads" },
       { "ruta": "/meta-ads/ideas", "label": "Ideas", "icono": "actividades", "key": "meta-ads" },

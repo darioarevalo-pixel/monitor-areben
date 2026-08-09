@@ -7,7 +7,8 @@
  * ⚠️ **Al sumar una vista hay que releer los textos que la CUENTAN.** El `info` de `PERM_CAT` y la
  * descripción de `lib/nav.ts` decían «en seis pantallas» y quedaron mintiendo en silencio al entrar
  * Automatizaciones — mismo defecto que ya mordió en la tanda 2 con los «arriba» y «abajo». Al entrar
- * Biblioteca volvieron a estar los dos, más este comentario: son OCHO.
+ * Biblioteca volvieron a estar los dos, más este comentario. Al entrar Piezas, los tres otra vez:
+ * son NUEVE.
  *
  * Las vistas se eligen por el 2º tramo de la URL (patrón de Tienda Nube):
  *
@@ -15,6 +16,8 @@
  *   `/meta-ads/campanias`   → **Campañas**: todas juntas, ordenadas por gasto, para accionar.
  *   `/meta-ads/biblioteca`  → **Biblioteca**: todos los avisos de todas las cuentas con la pieza a
  *                            la vista y sus números al lado. Los números salen de la foto diaria.
+ *   `/meta-ads/piezas`      → **Piezas**: se arrastran los archivos y sale una tanda de conjuntos,
+ *                            uno por pieza. Lo único que cambia entre uno y otro es el archivo.
  *   `/meta-ads/automatizaciones` → **Automatizaciones**: las reglas que miran la foto diaria y
  *                            proponen. ⛔ Ninguna ejecuta: dejan renglones en el Panel.
  *   `/meta-ads/embudo`      → **Embudo**: a quién le está hablando la plata, y dónde está el hueco.
@@ -42,6 +45,7 @@ import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { Campanias } from '@/components/meta-ads/campanias/Campanias'
 import { Automatizaciones } from '@/components/meta-ads/reglas/Automatizaciones'
 import { Biblioteca } from '@/components/meta-ads/biblioteca/Biblioteca'
+import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
 const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' }
@@ -49,6 +53,7 @@ const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' 
 const VISTAS: Record<string, () => React.ReactElement> = {
   campanias: Campanias,
   biblioteca: Biblioteca,
+  piezas: CargarPiezas,
   automatizaciones: Automatizaciones,
   embudo: Embudo,
   ideas: Ideas,

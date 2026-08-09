@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  armarPlanDuplicar, armarPlanMoverPlata, entraOtroPaso, ESPERA_SONDA_MS, estadoDePlan, marcaDePaso,
-  marcadorDe, MAX_INTENTOS, nombreConMarca, politicaReintento, PRESUPUESTO_MS, repartir,
-  siguientePaso, sustituir, TIMEOUT_PASO_MS, TIPOS_PASO, TOPE_COPIAS,
+  armarPlanDuplicar, armarPlanMoverPlata, armarPlanPiezas, entraOtroPaso, ESPERA_SONDA_MS,
+  estadoDePlan, marcaDePaso, marcadorDe, MAX_INTENTOS, MAX_INTENTOS_DEMORA, maxIntentosDe,
+  nombreConMarca, politicaReintento, PRESUPUESTO_MS, repartir, siguientePaso, sustituir,
+  TIMEOUT_PASO_MS, TIPOS_PASO, TOPE_COPIAS,
 } from '@/lib/meta-ads/planes'
 import type { PasoPlan, TipoPaso } from '@/lib/meta-ads/planes'
 import { LARGO_NOMBRE } from '@/lib/meta-ads/acciones'
@@ -261,5 +262,140 @@ describe('armarPlanMoverPlata', () => {
       if (!r.ok) throw new Error(r.error)
       expect(r.deNuevo + r.aNuevo).toBe(500000)
     }
+  })
+})
+
+describe('armarPlanPiezas — una pieza, un conjunto propio, un aviso', () => {
+  const COPY = {
+    pageId: '102030405060708', instagramId: '17841400000000000',
+    mensaje: 'Bajamos los precios', titulo: 'Hasta 40% off', descripcion: null,
+    destino: 'https://bdi.com.ar/frio', cta: 'SHOP_NOW',
+  }
+  const base = {
+    cuentaId: '1145878766790149',
+    campaignId: '120238696262900478',
+    nombre: 'PIEZAS 12/8',
+    copy: COPY,
+    receta: { cuerpo: { daily_budget: '180000', optimization_goal: 'OFFSITE_CONVERSIONS' }, notas: [] },
+    piezas: [{ nombre: 'reel-uno.mp4', url: 'https://blob.vercel-storage.com/a.mp4', clase: 'video' }],
+  }
+  const MARCADOR = ' · #abc1234'
+
+  it('un video son cinco pasos, y la pieza va ANTES que el conjunto', () => {
+    // 🔴 El orden es la decisión, no un detalle: al revés, un video que Meta rechaza dejaría un
+    // conjunto vacío ya creado que alguien tiene que ir a borrar a mano.
+    const r = armarPlanPiezas(base, MARCADOR)
+    expect(r.ok).toBe(true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pasos.map((p) => p.tipo)).toEqual([
+      'subir-pieza', 'esperar-pieza', 'crear-creativo', 'crear-conjunto', 'crear-aviso',
+    ])
+  })
+
+  it('una imagen NO tiene subida ni espera: Meta baja la foto de la URL sola', () => {
+    const r = armarPlanPiezas(
+      { ...base, piezas: [{ nombre: 'foto.jpg', url: 'https://blob.vercel-storage.com/b.jpg', clase: 'imagen' }] },
+      MARCADOR,
+    )
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pasos.map((p) => p.tipo)).toEqual(['crear-creativo', 'crear-conjunto', 'crear-aviso'])
+  })
+
+  it('🔴 el largo del plan NO es piezas × 5: una tanda mixta tiene pasos distintos por pieza', () => {
+    const r = armarPlanPiezas({
+      ...base,
+      piezas: [
+        { nombre: 'a.mp4', url: 'https://blob.vercel-storage.com/a.mp4', clase: 'video' },
+        { nombre: 'b.jpg', url: 'https://blob.vercel-storage.com/b.jpg', clase: 'imagen' },
+      ],
+    }, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pasos).toHaveLength(8)
+  })
+
+  it('🔑 las subidas van TODAS primero: los videos se procesan en paralelo del lado de Meta', () => {
+    // Intercaladas, la espera de la pieza 2 arranca recién cuando terminó la 1, y una tanda de ocho
+    // se vuelve media hora de reloj con la pestaña abierta.
+    const r = armarPlanPiezas({
+      ...base,
+      piezas: [
+        { nombre: 'a.mp4', url: 'https://blob.vercel-storage.com/a.mp4', clase: 'video' },
+        { nombre: 'b.mp4', url: 'https://blob.vercel-storage.com/b.mp4', clase: 'video' },
+      ],
+    }, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pasos.slice(0, 2).map((p) => p.tipo)).toEqual(['subir-pieza', 'subir-pieza'])
+  })
+
+  it('cada pieza encadena SU creativo con SU conjunto, y nunca con el de la otra', () => {
+    // El defecto que esto caza: un `{{n}}` mal calculado hace que las dos piezas terminen en el
+    // mismo conjunto, que es exactamente lo que este plan existe para NO hacer.
+    const r = armarPlanPiezas({
+      ...base,
+      piezas: [
+        { nombre: 'a.mp4', url: 'https://blob.vercel-storage.com/a.mp4', clase: 'video' },
+        { nombre: 'b.mp4', url: 'https://blob.vercel-storage.com/b.mp4', clase: 'video' },
+      ],
+    }, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    const avisos = r.pasos.filter((p) => p.tipo === 'crear-aviso')
+    const esperas = r.pasos.filter((p) => p.tipo === 'esperar-pieza')
+    expect(avisos).toHaveLength(2)
+    // Cada espera mira el video de SU subida: la primera el paso 1, la segunda el paso 2.
+    expect(esperas.map((p) => p.pedido!.videoId)).toEqual(['{{1}}', '{{2}}'])
+    expect(avisos[0].pedido!.creativeId).toBe('{{4}}')
+    expect(avisos[0].pedido!.adsetId).toBe('{{5}}')
+    expect(avisos[1].pedido!.creativeId).toBe('{{8}}')
+    expect(avisos[1].pedido!.adsetId).toBe('{{9}}')
+  })
+
+  it('la campaña va LITERAL: este plan no crea campañas', () => {
+    const r = armarPlanPiezas(base, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    const conj = r.pasos.find((p) => p.tipo === 'crear-conjunto')!
+    expect(conj.pedido!.campaignId).toBe('120238696262900478')
+    expect(r.pasos.some((p) => p.tipo === 'crear-campania')).toBe(false)
+  })
+
+  it('todo lo que crea lleva marca; lo que espera, no', () => {
+    const r = armarPlanPiezas(base, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    for (const p of r.pasos) {
+      expect(Boolean(p.marca)).toBe(TIPOS_PASO[p.tipo].crea)
+    }
+  })
+
+  it('el nombre de cada conjunto sale del archivo, sin la extensión', () => {
+    const r = armarPlanPiezas(base, MARCADOR)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pasos.find((p) => p.tipo === 'crear-conjunto')!.pedido!.nombreBase)
+      .toBe('PIEZAS 12/8 · reel-uno')
+  })
+
+  it('se planta sin campaña, sin receta, sin copy y sin piezas', () => {
+    expect(armarPlanPiezas({ ...base, campaignId: '' }, MARCADOR).ok).toBe(false)
+    expect(armarPlanPiezas({ ...base, receta: null }, MARCADOR).ok).toBe(false)
+    expect(armarPlanPiezas({ ...base, copy: null }, MARCADOR).ok).toBe(false)
+    expect(armarPlanPiezas({ ...base, piezas: [] }, MARCADOR).ok).toBe(false)
+    expect(armarPlanPiezas({ ...base, nombre: '' }, MARCADOR).ok).toBe(false)
+  })
+})
+
+describe('maxIntentosDe — un «todavía no» de Meta no es un error', () => {
+  it('el paso que espera pregunta muchas más veces que el que escribe', () => {
+    expect(maxIntentosDe('esperar-pieza')).toBe(MAX_INTENTOS_DEMORA)
+    expect(maxIntentosDe('crear-aviso')).toBe(MAX_INTENTOS)
+    expect(MAX_INTENTOS_DEMORA).toBeGreaterThan(MAX_INTENTOS)
+  })
+
+  it('🔴 con los 3 de siempre, esperar un video quedaría atascado antes de que Meta termine', () => {
+    // Éste es el defecto que la propiedad `demora` evita, escrito como caso.
+    const esperando = paso({ tipo: 'esperar-pieza', estado: 'en-curso', intentos: MAX_INTENTOS })
+    expect(politicaReintento(esperando, AHORA)).toBe('ejecutar')
+  })
+
+  it('⛔ pero no es infinito: al techo se rinde y el plan queda atascado delante de alguien', () => {
+    const agotado = paso({ tipo: 'esperar-pieza', estado: 'en-curso', intentos: MAX_INTENTOS_DEMORA })
+    expect(politicaReintento(agotado, AHORA)).toBe('rendirse')
   })
 })
