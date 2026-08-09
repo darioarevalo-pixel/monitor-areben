@@ -86,6 +86,10 @@ const DEJAR = flag('--dejar')
  * Se ensucia la relectura y no el pedido a propósito: si se mutara el cuerpo del POST, Meta guardaría
  * el valor mutado y el cotejo saldría verde con toda razón. Lo que se está simulando es lo único que
  * este ensayo existe para cazar: **Meta acepta algo y guarda otra cosa.**
+ *
+ * 🔑 **Con esta bandera el resultado bueno está dado vuelta**: cazar los dos defectos es salida 0.
+ * Lo que da rojo es NO cazarlos. Así la prueba no deja una corrida fallada en el historial, que es
+ * un aviso que no significa nada y que enseña a ignorar los que sí.
  */
 const PROBAR_ROJO = flag('--probar-rojo')
 
@@ -268,8 +272,26 @@ async function main() {
       const dif = cotejarCuerpo(val.cuerpo, paraCotejar)
       console.log('\n── Lo que se pidió contra lo que quedó ──')
       if (sinDiferencias(dif)) console.log('✅ Los campos pedidos quedaron todos, con el mismo valor.')
-      for (const f of dif.falta) { console.log(`🔴 FALTA   ${f.ruta}: se pidió ${corto(f.pedido)} y no está.`); salida = 1 }
-      for (const c of dif.cambio) { console.log(`🔴 CAMBIÓ  ${c.ruta}: se pidió ${corto(c.pedido)} · quedó ${corto(c.quedo)}`); salida = 1 }
+      for (const f of dif.falta) console.log(`🔴 FALTA   ${f.ruta}: se pidió ${corto(f.pedido)} y no está.`)
+      for (const c of dif.cambio) console.log(`🔴 CAMBIÓ  ${c.ruta}: se pidió ${corto(c.pedido)} · quedó ${corto(c.quedo)}`)
+
+      // 🔑 Con `--probar-rojo` el resultado bueno está DADO VUELTA: encontrar los dos defectos
+      // inyectados es el verde, y no encontrarlos es el rojo. Así la prueba de que el ensayo sabe
+      // fallar no deja una corrida en rojo colgada en el historial ni manda un aviso que después
+      // enseña a ignorar los avisos. Se exigen **los dos**, cada uno con su ruta: un cotejo que
+      // devolviera «todo mal» pasaría un chequeo de «¿hubo alguna diferencia?».
+      if (PROBAR_ROJO) {
+        const cazoFalta = dif.falta.some((f) => f.ruta === 'billing_event')
+        const cazoCambio = dif.cambio.some((c) => c.ruta === 'daily_budget' && String(c.quedo) === '1')
+        if (cazoFalta && cazoCambio) {
+          console.log('\n✅ El ensayo cazó los DOS defectos inyectados: sabe dar rojo. Eso es lo que se estaba probando.')
+        } else {
+          console.log(`\n🔴 EL ENSAYO NO SIRVE: se le inyectaron dos defectos y ${!cazoFalta && !cazoCambio ? 'no cazó ninguno' : `sólo cazó ${cazoFalta ? 'la falta' : 'el cambio'}`}.`)
+          salida = 1
+        }
+      } else if (!sinDiferencias(dif)) {
+        salida = 1
+      }
       if (dif.agrega.length) {
         console.log(`\nℹ️  ${dif.agrega.length} campos que Meta agregó por su cuenta (normalización y defaults):`)
         for (const a of dif.agrega) console.log(`   + ${a.ruta} = ${corto(a.quedo)}`)

@@ -30,7 +30,7 @@ on:
         required: false
         default: 'false'
       probar_rojo:
-        description: 'true = le mete un defecto a la relectura. El job TIENE que fallar: es la prueba de que el ensayo sabe dar rojo.'
+        description: 'true = le mete un defecto a la relectura para probar que el ensayo lo caza. Verde = lo cazó.'
         required: false
         default: 'false'
 
