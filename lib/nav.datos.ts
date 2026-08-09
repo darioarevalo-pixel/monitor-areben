@@ -486,6 +486,23 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "atencion",
+    "area": "local",
+    "label": "Atención al cliente",
+    "info": "Links y mensajes listos para copiar y pegar mientras se atiende por Instagram o WhatsApp. Las fundas por modelo de celular se arman solas desde el menú de la tienda —cuando entra un iPhone nuevo aparece solo—, y al lado va lo que carga el equipo: envíos, cambios, talles, promos.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "editar",
+        "label": "Puede cargar y borrar links",
+        "info": "Puede AGREGAR, editar y borrar links y mensajes, y cambiar el texto con el que se arma el mensaje de las fundas. Sin este permiso solo se copia y se pega — que es lo que necesita quien está atendiendo."
+      }
+    ]
+  },
+  {
     "key": "cupones",
     "area": "local",
     "label": "Cupones",
@@ -709,6 +726,7 @@ export const NAV_CATS: NavCat[] = [
       "icono": "local",
     "label": "Local",
     "keys": [
+      "atencion",
       "solicitudes",
       "cupones",
       "postventa-local",

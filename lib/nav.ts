@@ -137,6 +137,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   talles: 'talles',
   // Local / Depósito
   solicitudes: 'solicitudes',
+  atencion: 'clientes',
   cupones: 'cupones',
   'postventa-local': 'postventa',
   'postventa-deposito': 'postventa',
@@ -277,6 +278,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',
   disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
   etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',
+  atencion: 'Links y mensajes listos para copiar y pegar en Instagram y WhatsApp.',
   cupones: 'Descuentos por cliente para el local (no toca la tienda online).',
   'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',
   solicitudes: 'Estado unificado de todas las solicitudes (fotos + internas), filtrado por tu función.',

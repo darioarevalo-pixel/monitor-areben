@@ -37,6 +37,7 @@ const Colores = dynamic(() => import('@/components/colores/Colores').then((m) =>
 const SolicitudesInternas = dynamic(() => import('@/components/solicitudes-internas/SolicitudesInternas').then((m) => m.SolicitudesInternas), { loading: Cargando })
 const Solicitudes = dynamic(() => import('@/components/solicitudes/Solicitudes').then((m) => m.Solicitudes), { loading: Cargando })
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), { loading: Cargando })
+const Atencion = dynamic(() => import('@/components/atencion/Atencion').then((m) => m.Atencion), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
@@ -253,6 +254,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // iframe → sin migración de datos; merge por-cupón con `cargado`). Gate de creación
   // por `cupones.crear`; borrar solo admin. No toca la tienda online. Rollback: mover
   // esta línea de vuelta a SOMBRAS.
+  atencion: Atencion,
   cupones: Cupones,
   // El flip de Etiquetas (18-jul-2026, Tanda B #4): `/etiquetas` lo sirve el shell.
   // Impresión de etiquetas con código de barras (Code 128): depósito/local/promo/SKU

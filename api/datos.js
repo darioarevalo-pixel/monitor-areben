@@ -10,13 +10,14 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario|liquidacion&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario|liquidacion|atencion&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
 import metaFunnel from './_meta-funnel.js';
 import calendario from './_calendario.js';
 import liquidacion from './_liquidacion.js';
+import atencion from './_atencion.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel` y `calendario` entran por acá y NO por api/meta-ads.js, aunque el tema sea el
@@ -30,6 +31,7 @@ const RECURSOS = {
   'meta-funnel': metaFunnel,
   calendario,
   liquidacion,
+  atencion,
 };
 
 export default async function handler(req, res) {
