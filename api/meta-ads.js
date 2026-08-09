@@ -69,6 +69,7 @@ import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
 import reglasPost, { reglasGet } from './_meta-reglas.js';
 import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
+import tendenciaGet from './_meta-tendencia.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
@@ -101,6 +102,9 @@ export default async function handler(req, res) {
   // Por eso entra acá arriba y el guard de abajo la mataría. Marcar un favorito tampoco toca Meta.
   if (req.method === 'GET' && recurso === 'biblioteca') return await bibliotecaGet(res, perfil, req.query || {});
   if (req.method === 'POST' && recurso === 'favorito') return await favoritoPost(req, res, perfil);
+  // «Cómo viene» del Panel: sale entero de la foto diaria. Es lo único de esa pantalla que sabe de
+  // historia, y por eso es lo que sigue contestando cuando Graph no contesta.
+  if (req.method === 'GET' && recurso === 'tendencia') return await tendenciaGet(res, perfil, req.query || {});
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 

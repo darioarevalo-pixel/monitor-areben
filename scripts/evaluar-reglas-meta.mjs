@@ -34,6 +34,7 @@ import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { plata, roas as roasTxt } from '../lib/meta-ads/formato.core.js'
+import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS, UMBRALES,
@@ -93,29 +94,15 @@ const COLS = [
 ].join(',')
 
 /**
- * Las filas del snapshot desde una fecha, paginadas.
+ * Las filas del snapshot desde una fecha.
  *
- * ⚠️ **PostgREST corta en 1.000 filas por defecto y no avisa**: devuelve las primeras mil como si
- * fueran todas. Con 90 días a nivel aviso son decenas de miles, así que sin la paginación las
- * reglas mirarían un pedazo del pasado creyendo que es todo — y una regla que mira menos días
- * encuentra menos, en silencio.
+ * ⚠️ El paginado —y el porqué— vive en `leerSnapshot()`. Sin él las reglas mirarían un pedazo del
+ * pasado creyendo que es todo, y una regla que mira menos días encuentra menos, en silencio.
  */
 async function traerFilas(desde, hasta) {
-  const filas = []
-  const PAGINA = 1000
-  for (let inicio = 0; ; inicio += PAGINA) {
-    const { data, error } = await supabase
-      .from('meta_ads_snapshot_dia')
-      .select(COLS)
-      .gte('fecha', desde)
-      .lte('fecha', hasta)
-      .order('fecha', { ascending: true })
-      .range(inicio, inicio + PAGINA - 1)
-    if (error) { anotar('leer snapshots', error.message); return filas }
-    filas.push(...(data || []))
-    if (!data || data.length < PAGINA) break
-  }
-  return filas
+  const { filas, error } = await leerSnapshot(supabase, { cols: COLS, desde, hasta })
+  if (error) anotar('leer snapshots', error)
+  return filas || []
 }
 
 async function traerUmbrales() {

@@ -28,6 +28,7 @@ import Link from 'next/link'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
 import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
 import { useReglas } from '@/components/meta-ads/reglas/useReglas'
+import { ComoViene } from '@/components/meta-ads/tendencia/ComoViene'
 import { useCampanias, type Campanias } from '@/components/meta-ads/useCampanias'
 import { VentanaEtapas } from '@/components/meta-ads/VentanaEtapas'
 import { plata } from '@/lib/meta-ads/formato'
@@ -80,7 +81,6 @@ export function Panel() {
             hallazgos={r.hallazgos}
             quitarHallazgo={r.quitar}
           />
-          <AlAire diagPorLinea={d} />
         </>
       ) : r.hallazgos.length > 0 && (
         <SectionCard title="Qué hay que decidir" subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste.">
@@ -89,6 +89,14 @@ export function Panel() {
           </div>
         </SectionCard>
       )}
+
+      {/* 🔑 Afuera del `fase === 'ok'`, como los planes y los hallazgos: sale de la foto diaria y no
+          de Graph. Es lo ÚNICO del Panel que sabe de historia —Graph no contesta «cómo venía»— así
+          que el día que el token se venza, ésta es la pantalla que sigue diciendo algo.
+          Va después de «qué hay que decidir» porque es contexto, no una tarea. */}
+      <ComoViene dias={m.dias} />
+
+      {m.estado.fase === 'ok' && d && <AlAire diagPorLinea={d} />}
     </div>
   )
 }

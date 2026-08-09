@@ -23,6 +23,7 @@
 // Salen de la base y no hablan con Meta. Es la misma razón que la auditoría y los planes: el día
 // que el token se venza, la pregunta es qué hay que decidir, y eso no depende de Graph.
 import { lineasQuePuede, lineasQueVe } from '../lib/meta-ads/acciones.core.js';
+import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
 } from '../lib/meta-ads/reglas.core.js';
@@ -52,29 +53,16 @@ const desdeIso = (dias) => {
 };
 
 /**
- * Las filas del snapshot de una ventana, paginadas.
+ * Las filas del snapshot de una ventana, para las reglas.
  *
- * ⚠️ **PostgREST corta en 1.000 filas y no avisa**: devuelve las primeras mil como si fueran todas.
- * Con 90 días a nivel aviso son decenas de miles, así que sin esto el calibrador miraría un pedazo
- * del pasado creyendo que es todo — y una regla que mira menos días encuentra menos, en silencio.
+ * ⚠️ El paginado —y el porqué— vive en `leerSnapshot()`: sin él el calibrador miraría un pedazo del
+ * pasado creyendo que es todo, y una regla que mira menos días encuentra menos, en silencio.
+ *
+ * Sin filtrar por nivel a propósito: `agrupar()` reparte los cuatro en memoria, porque una misma
+ * corrida evalúa reglas de campaña y de aviso.
  */
-async function traerSnapshots(sb, lineas, dias = DIAS_VENTANA) {
-  const filas = [];
-  const PAGINA = 1000;
-  const desde = desdeIso(dias);
-  for (let inicio = 0; ; inicio += PAGINA) {
-    const { data, error } = await sb
-      .from('meta_ads_snapshot_dia')
-      .select(COLS_SNAP)
-      .in('linea', lineas)
-      .gte('fecha', desde)
-      .order('fecha', { ascending: true })
-      .range(inicio, inicio + PAGINA - 1);
-    if (error) return { error: error.message };
-    filas.push(...(data || []));
-    if (!data || data.length < PAGINA) break;
-  }
-  return { filas };
+function traerSnapshots(sb, lineas, dias = DIAS_VENTANA) {
+  return leerSnapshot(sb, { cols: COLS_SNAP, desde: desdeIso(dias), lineas });
 }
 
 async function traerUmbrales(sb) {

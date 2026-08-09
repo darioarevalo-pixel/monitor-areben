@@ -13,6 +13,7 @@ import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
 import type { RangoUI } from './rango'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
+import type { RespuestaTendencia } from './tendencia'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
   RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
@@ -484,6 +485,19 @@ export function resolverHallazgo(id: number, estado: 'accionado' | 'ignorado'): 
  */
 export function traerBiblioteca(rango: RangoUI): Promise<Lectura<RespuestaBiblioteca>> {
   return pedir<RespuestaBiblioteca>(new URLSearchParams({ recurso: 'biblioteca', rango }))
+}
+
+/**
+ * «Cómo viene»: la ventana actual contra la anterior, del Panel.
+ *
+ * 🔑 **Sale de la foto diaria, no de Graph.** Por eso contesta aunque el token esté vencido, y por
+ * eso sus números pueden diferir unos pesos de los del censo que está al lado: Meta reatribuye hacia
+ * atrás unos días y la foto de un día viejo es la que se leyó, no la de hoy.
+ *
+ * `dias` son los mismos dos del selector del Panel (30 o 90). El servidor no cree cualquier número.
+ */
+export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia>> {
+  return pedir<RespuestaTendencia>(new URLSearchParams({ recurso: 'tendencia', dias: String(dias) }))
 }
 
 /**

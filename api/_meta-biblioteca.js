@@ -26,6 +26,7 @@ import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { agruparAvisos, ventanaDe } from '../lib/meta-ads/biblioteca.core.js';
 import { piezasDeCuenta, rescatarMiniaturas } from '../lib/meta-ads/creativos.core.js';
 import { tokenMeta } from '../lib/meta-ads/graph.core.js';
+import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 
 const TABLA_FAV = 'meta_ads_favorito';
@@ -42,27 +43,6 @@ const RANGO_DEFAULT = 'last_30d';
 
 const quienEs = (perfil) => (perfil && perfil.name) || 'desconocido';
 
-/**
- * Las filas del snapshot de una ventana, paginadas.
- *
- * ⚠️ **PostgREST corta en 1.000 filas y no avisa**: devuelve las primeras mil como si fueran todas.
- * A nivel aviso son ~1.100 en 90 días y van a seguir creciendo, así que sin esto la Biblioteca
- * perdería los avisos más viejos en silencio — y «no está» es indistinguible de «no existió».
- */
-async function traerFilas(sb, desde, hasta) {
-  const filas = [];
-  const PAGINA = 1000;
-  for (let inicio = 0; ; inicio += PAGINA) {
-    let q = sb.from('meta_ads_snapshot_dia').select(COLS).eq('nivel', 'aviso').lte('fecha', hasta);
-    if (desde) q = q.gte('fecha', desde);
-    const { data, error } = await q.order('fecha', { ascending: true }).range(inicio, inicio + PAGINA - 1);
-    if (error) return { error: error.message };
-    filas.push(...(data || []));
-    if (!data || data.length < PAGINA) break;
-  }
-  return { filas };
-}
-
 // ── Lectura ───────────────────────────────────────────────────────────────────────────────────
 
 export async function bibliotecaGet(res, perfil, q) {
@@ -74,7 +54,7 @@ export async function bibliotecaGet(res, perfil, q) {
   const rango = RANGOS.has(String(q.rango)) ? String(q.rango) : RANGO_DEFAULT;
   const ventana = ventanaDe(rango);
 
-  const snap = await traerFilas(sb, ventana.desde, ventana.hasta);
+  const snap = await leerSnapshot(sb, { cols: COLS, desde: ventana.desde, hasta: ventana.hasta, nivel: 'aviso' });
   if (snap.error) return res.status(502).json({ error: 'No se pudo leer la foto diaria.', detalle: snap.error });
 
   // El corte por permiso se hace acá y no en la consulta a propósito: hace falta poder CONTAR los
