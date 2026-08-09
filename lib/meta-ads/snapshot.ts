@@ -12,6 +12,7 @@ import {
   DIAS_POR_TRAMO as DIAS_POR_TRAMO_JS,
   DIAS_RELECTURA as DIAS_RELECTURA_JS,
   NIVELES_SNAPSHOT as NIVELES_SNAPSHOT_JS,
+  entregando as entregandoJs,
   estadoRealDe as estadoRealDeJs,
   filaSnapshot as filaSnapshotJs,
   isoDia as isoDiaJs,
@@ -97,3 +98,5 @@ export const filaSnapshot = filaSnapshotJs as (
   extras?: Partial<Record<string, unknown>>,
 ) => FilaSnapshot | null
 export const sumarDias = sumarDiasJs as (filas: Partial<FilaSnapshot>[]) => TotalVentana
+/** ¿Puede entregar todavía? `false` con `null` — pero eso es «no se sabe», no «pausado». */
+export const entregando = entregandoJs as (estado: string | null | undefined) => boolean

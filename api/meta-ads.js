@@ -21,6 +21,11 @@
 //                                             → ¿cuáles de sus avisos llevan el campo de «mejoras
 //                                               estándar» que Meta deprecó? Es lo que hace que
 //                                               duplicar un conjunto CON avisos sea rechazado.
+//   GET /api/meta-ads?recurso=biblioteca[&rango=…]
+//                                             → TODOS los avisos de todas las cuentas que ve el
+//                                               perfil, con sus números de la foto diaria y su
+//                                               pieza. Ver `api/_meta-biblioteca.js`.
+//   POST /api/meta-ads?recurso=favorito       → marcar/desmarcar una pieza. No toca Meta.
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
 //   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
 //                                               `api/_meta-auditoria.js`.
@@ -50,6 +55,10 @@ import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 // que no ofrezca una vista que el servidor después corta con 403.
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { codigoError, graph, graphPost, insightsTodas, mensajeError, minimosDe, tokenMeta } from '../lib/meta-ads/graph.core.js';
+// Cómo se lee la PIEZA de un aviso. Salió de acá adentro cuando la Biblioteca necesitó lo mismo
+// sobre todos los avisos de una cuenta: dos lecturas del mismo creativo no fallan ruidosamente,
+// dibujan dos veces la misma pieza con dos formatos distintos.
+import { piezaDe, rescatarMiniaturas, TOPE_IDS_GRAPH } from '../lib/meta-ads/creativos.core.js';
 // Y cómo se leen los números de una fila de insights. Salió de acá adentro cuando la foto diaria
 // (`scripts/snapshot-meta.mjs`) necesitó leerlas igual desde un script: dos lecturas distintas de
 // `omni_purchase` no fallan ruidosamente, devuelven dos cifras de ventas parecidas y distintas.
@@ -59,6 +68,7 @@ import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
 import reglasPost, { reglasGet } from './_meta-reglas.js';
+import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
@@ -86,6 +96,11 @@ export default async function handler(req, res) {
   // El POST de reglas tampoco toca Meta: guarda una regla, unos umbrales, corre el calibrador o
   // marca un hallazgo. Ejecutar es el POST de acciones de más abajo, con su permiso y su registro.
   if (req.method === 'POST' && recurso === 'regla') return await reglasPost(req, res, perfil);
+  // La Biblioteca **saca los números de la base y las piezas de Meta**, y la mitad de la base
+  // sobrevive sola: sin token contesta igual, con la grilla completa y sin fotos, diciendo por qué.
+  // Por eso entra acá arriba y el guard de abajo la mataría. Marcar un favorito tampoco toca Meta.
+  if (req.method === 'GET' && recurso === 'biblioteca') return await bibliotecaGet(res, perfil, req.query || {});
+  if (req.method === 'POST' && recurso === 'favorito') return await favoritoPost(req, res, perfil);
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 
@@ -351,15 +366,6 @@ async function etapas(res, perfil, diasPedidos) {
  * nada. Si algún día hace falta el iframe de verdad, primero hay que resolver el token.
  */
 
-/**
- * El lado con que se le pide la miniatura a Meta. El default de `thumbnail_url` son **64 px**, y
- * para los avisos que salen de una publicación de Instagram esa miniatura es lo ÚNICO que llega:
- * no traen `image_url` ni `object_story_spec`, así que quedaban como una estampilla de 64 px
- * centrada en un cuadro de 190. La pantalla existe para mirar la pieza; con la foto ilegible no
- * cumple. 600 da margen para el cuadro de 190 en pantalla retina sin pedir un archivo enorme.
- */
-const LADO_MINIATURA = 600;
-
 async function creativos(res, perfil, campaignId, diasPedidos) {
   const gate = await gateCampaña(res, perfil, campaignId);
   if (!gate) return;
@@ -415,7 +421,7 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
     };
   }).sort((x, y) => y.spend - x.spend);
 
-  await rescatarMiniaturas(ads, ricoPorId);
+  await rescatarMiniaturas(ads, (a) => (ricoPorId.get(a.id) || {}).id);
 
   // `sinCreativo` es diagnóstico, no adorno: si la llamada rica falla, todos los avisos quedan con
   // la miniatura de 64 px y sin una palabra de copy, y la pantalla tiene que poder decir por qué en
@@ -651,103 +657,9 @@ async function mejoras(res, perfil, campaignId) {
   });
 }
 
-/**
- * Cuántos creatives entran en un `?ids=`. Graph corta arriba de 50 y prefiere números chicos; con
- * más avisos que eso se atienden los primeros, que están ordenados por gasto: si hay que elegir a
- * cuáles verles la cara, son los que se están llevando la plata.
- */
-const TOPE_IDS_GRAPH = 50;
-
-/**
- * La cuarta llamada, aislada y CONDICIONAL: los avisos que quedaron con la estampilla de 64 px.
- *
- * 🔑 **El problema es de quién tiene la foto, no de la pantalla.** Un aviso armado desde una
- * publicación de Instagram no trae `image_url` ni `object_story_spec`: referencia un
- * `effective_object_story_id` y lo único que llega es el `thumbnail_url`, que por defecto son 64 px.
- * Eran 5 de 11 avisos en Zattia y 3 de 5 en BDI — casi la mitad de la grilla dibujada con una
- * estampilla centrada en un cuadro de 190.
- *
- * 🔴 **Pedir el tamaño en la llamada de los avisos NO funciona** (medido: Meta ignora los params en
- * silencio sobre un `creative{}` anidado). Contra el creative directo sí son de primer nivel, y con
- * `?ids=` entran todos en UNA llamada en vez de una por aviso.
- *
- * Va después y no en el `Promise.all` porque necesita los `creative.id`, que salen de la rica.
- * Cuesta un viaje más de latencia y sólo cuando hay a quién rescatar: si todos los avisos tienen su
- * foto propia —lo normal en los armados desde Ads Manager— no sale ninguna llamada extra.
- *
- * Nunca rompe nada: si Meta rechaza, los avisos se quedan con la miniatura que ya tenían.
- */
-async function rescatarMiniaturas(ads, ricoPorId) {
-  // Quedó con la estampilla el que terminó usando su propia miniatura como foto grande: la cadena
-  // de respaldos de `piezaDe` ya probó todos los lugares donde podría haber una imagen de verdad.
-  const flacos = ads.filter((a) => a.imagen && a.imagen === a.thumb);
-  if (!flacos.length) return;
-
-  const porCreative = new Map();
-  for (const a of flacos) {
-    const cid = String((ricoPorId.get(a.id) || {}).id || '');
-    if (cid && porCreative.size < TOPE_IDS_GRAPH) porCreative.set(cid, a);
-  }
-  if (!porCreative.size) return;
-
-  const ids = [...porCreative.keys()].join(',');
-  const r = await graph(`?ids=${ids}&fields=thumbnail_url&thumbnail_width=${LADO_MINIATURA}&thumbnail_height=${LADO_MINIATURA}`);
-  if (!r.ok || !r.data) return;
-
-  for (const [cid, aviso] of porCreative) {
-    const grande = r.data[cid] && r.data[cid].thumbnail_url;
-    // El `thumb` no se toca: sigue siendo la chica, que es la red si esta URL no carga.
-    if (grande) aviso.imagen = grande;
-  }
-}
-
-/**
- * De lo que devuelve Meta a lo que se dibuja: imagen, título, texto y botón.
- *
- * La cadena de respaldos no es paranoia: el mismo campo vive en un lugar distinto según el formato.
- * Un aviso de imagen trae `image_url` arriba; uno de video, el póster adentro de `video_data`; uno
- * armado desde una publicación, sólo `link_data.picture`. Sin la cadena, la mitad de la grilla sale
- * sin foto y parece que los avisos no tienen creativo.
- */
-function piezaDe(cr) {
-  const spec = cr.object_story_spec || {};
-  const link = spec.link_data || {};
-  const video = spec.video_data || {};
-  const hijos = Array.isArray(link.child_attachments) ? link.child_attachments : [];
-  const cta = (link.call_to_action && link.call_to_action.type) || (video.call_to_action && video.call_to_action.type) || null;
-  const historia = cr.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null;
-  return {
-    imagen: cr.image_url || video.image_url || link.picture || (hijos[0] && hijos[0].picture) || cr.thumbnail_url || null,
-    // La miniatura viaja aparte: es la única que Meta garantiza, así que sirve de red si la grande
-    // no carga (las URLs de `scontent` caducan). Va la CHICA a propósito: la grande ya es el último
-    // eslabón de `imagen`, y usarla también de red haría que las dos fallen juntas.
-    thumb: cr.thumbnail_url || null,
-    titulo: cr.title || link.name || video.title || null,
-    texto: cr.body || link.message || video.message || null,
-    cta: cta ? ROTULO_CTA[cta] || String(cta).toLowerCase().replace(/_/g, ' ') : null,
-    destino: link.link || null,
-    // Un carrusel se piensa distinto que una foto sola, así que las tarjetas se cuentan y se
-    // muestran. Tope de 10, que es el de Meta.
-    piezas: hijos.map((h) => h && h.picture).filter(Boolean).slice(0, 10),
-    esVideo: !!(video.video_id || video.image_url),
-    permalink: cr.instagram_permalink_url || historia || null,
-  };
-}
-
-/** Los botones de Meta, en castellano. Los que no estén caen al nombre crudo en minúsculas. */
-const ROTULO_CTA = {
-  SHOP_NOW: 'Comprar',
-  LEARN_MORE: 'Más información',
-  SIGN_UP: 'Registrarse',
-  BOOK_TRAVEL: 'Reservar',
-  ORDER_NOW: 'Pedir ahora',
-  GET_OFFER: 'Ver la oferta',
-  SEND_MESSAGE: 'Enviar mensaje',
-  WHATSAPP_MESSAGE: 'Escribir por WhatsApp',
-  SUBSCRIBE: 'Suscribirse',
-  CONTACT_US: 'Contactarnos',
-  NO_BUTTON: 'sin botón',
-};
+// La lectura de la PIEZA (`piezaDe`, `rescatarMiniaturas`, los rótulos de los botones) bajó a
+// `lib/meta-ads/creativos.core.js`: la Biblioteca pregunta lo mismo sobre todos los avisos de una
+// cuenta y su handler no puede importar de acá sin cerrar un círculo. Ver la cabecera de ese archivo.
 
 // ── Modo diagnóstico: ¿el token puede ESCRIBIR? (solo admin) ────────────────────
 /**

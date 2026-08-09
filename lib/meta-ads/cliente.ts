@@ -9,7 +9,9 @@
 
 import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
+import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
+import type { RangoUI } from './rango'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
@@ -465,4 +467,42 @@ export function calibrarRegla(cuerpo: {
  */
 export function resolverHallazgo(id: number, estado: 'accionado' | 'ignorado'): Promise<Lectura<Record<string, never>>> {
   return postRegla<Record<string, never>>({ accion: 'resolver', id, estado })
+}
+
+// ── Biblioteca de anuncios ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Todos los avisos de todas las cuentas que ve el perfil, con sus números y su pieza.
+ *
+ * **No lleva cuenta ni línea**: el corte por permiso lo hace el servidor y el de la pantalla se hace
+ * en el browser, sobre la lista completa. Son ~60 avisos: pedirle al servidor cada cambio de filtro
+ * sería un viaje por click para algo que se resuelve en un `filter`.
+ *
+ * 🔑 **La mitad de la base sobrevive sola**: si Meta no contesta, `avisos` viene igual con todos los
+ * números y `sinPiezas` dice por qué no hay fotos. Un `{ok:false}` acá significa que no se pudo leer
+ * ni la foto diaria, que es lo único que deja la pantalla sin nada que mostrar.
+ */
+export function traerBiblioteca(rango: RangoUI): Promise<Lectura<RespuestaBiblioteca>> {
+  return pedir<RespuestaBiblioteca>(new URLSearchParams({ recurso: 'biblioteca', rango }))
+}
+
+/**
+ * Marca o desmarca una pieza. **No toca Meta**: por eso no pide ningún sub-permiso de accionar
+ * sobre la pauta, sólo poder ver la línea del aviso.
+ */
+export async function marcarFavorito(objetoId: string, marcar: boolean): Promise<Lectura<{ favorito: MarcaFavorito | null }>> {
+  try {
+    const r = await apiFetch('/api/meta-ads?recurso=favorito', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ objetoId, marcar }),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || d.ok !== true) {
+      return { ok: false, motivo: String(d?.error ?? `HTTP ${r.status}`).slice(0, 200) }
+    }
+    return { ok: true, dato: { favorito: (d.favorito as MarcaFavorito | null) ?? null } }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
 }

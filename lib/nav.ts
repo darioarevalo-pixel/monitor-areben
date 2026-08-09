@@ -290,7 +290,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
   'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
   'conteo-estandar-stunned': 'Conteo del local de Stunned (SKU STU): exhibido por escáner + depósito a mano.',
-  'meta-ads': 'La pauta de Meta en siete pantallas: qué hay que decidir, las campañas con sus acciones, las automatizaciones que avisan solas, en qué etapa del embudo está cada una, las ideas de creativos, los números por cuenta y el registro de lo accionado.',
+  'meta-ads': 'La pauta de Meta en ocho pantallas: qué hay que decidir, las campañas con sus acciones, la biblioteca de todos los avisos con su rendimiento, las automatizaciones que avisan solas, en qué etapa del embudo está cada una, las ideas de creativos, los números por cuenta y el registro de lo accionado.',
   calendario: 'Las fechas comerciales y los hitos propios, con cuánto falta y qué etapas ya tienen ideas anotadas.',
   liquidacion: 'Campañas de sale: mandás los productos desde Por producto, les definís el precio uno por uno y queda guardado para todo el equipo.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
