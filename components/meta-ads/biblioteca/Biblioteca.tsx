@@ -85,9 +85,13 @@ export function Biblioteca() {
             onChange={(v: string) => b.setFiltros({ ...b.filtros, texto: v })}
             placeholder="Buscar en el nombre y en el texto del aviso…"
           />
+          {/* Los `width` fijos no son cosmética: `.mo-filterbar` es un flex con `wrap`, y un
+              `<select>` sin ancho se estira a la fila entera y apila los filtros uno por renglón. */}
+          <span style={{ fontSize: font.sm, color: color.mut }}>Ordenar por</span>
           <Select
             value={b.orden}
             onChange={(e) => b.setOrden(e.target.value as ClaveOrden)}
+            style={{ width: 190 }}
             aria-label="Ordenar por"
           >
             {ORDENES.map((o) => <option key={o.k} value={o.k}>{o.label}</option>)}
@@ -95,6 +99,7 @@ export function Biblioteca() {
           <Select
             value={b.filtros.estado}
             onChange={(e) => b.setFiltros({ ...b.filtros, estado: e.target.value as FiltroEstado })}
+            style={{ width: 190 }}
             aria-label="Estado"
           >
             {ESTADOS.map((o) => <option key={o.k} value={o.k}>{o.label}</option>)}
@@ -102,6 +107,7 @@ export function Biblioteca() {
           <Select
             value={b.filtros.formato}
             onChange={(e) => b.setFiltros({ ...b.filtros, formato: e.target.value as FormatoCreativo | 'todos' })}
+            style={{ width: 190 }}
             aria-label="Formato"
           >
             <option value="todos">Todos los formatos</option>

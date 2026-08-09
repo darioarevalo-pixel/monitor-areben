@@ -138,7 +138,7 @@ export function ordenar(avisos: AvisoBiblioteca[], k: ClaveOrden): AvisoBibliote
 export type FiltroEstado = 'todos' | 'entregando' | 'pausado' | 'ausente'
 
 export const ESTADOS: { k: FiltroEstado; label: string }[] = [
-  { k: 'todos', label: 'Todos' },
+  { k: 'todos', label: 'Todos los estados' },
   { k: 'entregando', label: 'Entregando' },
   { k: 'pausado', label: 'Pausados' },
   { k: 'ausente', label: 'Ya no están en Meta' },
