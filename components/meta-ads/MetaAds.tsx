@@ -8,6 +8,8 @@
  *
  *   `/meta-ads`             → **Panel**: qué está al aire y qué hay que decidir. La entrada.
  *   `/meta-ads/campanias`   → **Campañas**: todas juntas, ordenadas por gasto, para accionar.
+ *   `/meta-ads/automatizaciones` → **Automatizaciones**: las reglas que miran la foto diaria y
+ *                            proponen. ⛔ Ninguna ejecuta: dejan renglones en el Panel.
  *   `/meta-ads/embudo`      → **Embudo**: a quién le está hablando la plata, y dónde está el hueco.
  *   `/meta-ads/ideas`       → **Ideas**: el tablero de las piezas que hay que producir.
  *   `/meta-ads/rendimiento` → **Rendimiento**: los números de una cuenta publicitaria.
@@ -31,12 +33,14 @@ import { Ideas } from '@/components/meta-ads/Ideas'
 import { Rendimiento } from '@/components/meta-ads/Rendimiento'
 import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { Campanias } from '@/components/meta-ads/campanias/Campanias'
+import { Automatizaciones } from '@/components/meta-ads/reglas/Automatizaciones'
 
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
 const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' }
 
 const VISTAS: Record<string, () => React.ReactElement> = {
   campanias: Campanias,
+  automatizaciones: Automatizaciones,
   embudo: Embudo,
   ideas: Ideas,
   rendimiento: Rendimiento,

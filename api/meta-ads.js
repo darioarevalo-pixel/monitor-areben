@@ -58,6 +58,7 @@ import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
+import reglasPost, { reglasGet } from './_meta-reglas.js';
 
 const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
 // `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
@@ -79,6 +80,12 @@ export default async function handler(req, res) {
   const recurso = (req.query || {}).recurso;
   if (req.method === 'GET' && recurso === 'auditoria') return await auditoria(res, perfil, req.query || {});
   if (req.method === 'GET' && (recurso === 'plan' || recurso === 'planes')) return await planesGet(res, perfil, req.query || {});
+  // Las automatizaciones leen la foto diaria de la base, nunca Graph. Van acá arriba por el mismo
+  // motivo: el día que el token se venza, la pregunta sigue siendo qué hay que decidir.
+  if (req.method === 'GET' && (recurso === 'reglas' || recurso === 'hallazgos')) return await reglasGet(res, perfil, req.query || {});
+  // El POST de reglas tampoco toca Meta: guarda una regla, unos umbrales, corre el calibrador o
+  // marca un hallazgo. Ejecutar es el POST de acciones de más abajo, con su permiso y su registro.
+  if (req.method === 'POST' && recurso === 'regla') return await reglasPost(req, res, perfil);
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 

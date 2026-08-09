@@ -26,11 +26,14 @@
 
 import Link from 'next/link'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
+import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
+import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { useCampanias, type Campanias } from '@/components/meta-ads/useCampanias'
 import { VentanaEtapas } from '@/components/meta-ads/VentanaEtapas'
 import { plata } from '@/lib/meta-ads/formato'
 import { ETIQUETA_ETAPA } from '@/lib/meta-ads/etapas'
 import { ETIQUETA_LINEA, LINEAS } from '@/lib/meta-ads/lineas'
+import type { Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Diagnostico, LineaPauta } from '@/lib/meta-ads/tipos'
 import {
   Card, EmptyState, Notice, SectionCard, StatusPill, TBody, TableWrap, Td, Th, THead, Tr,
@@ -40,6 +43,9 @@ import {
 export function Panel() {
   const m = useCampanias()
   const d = m.diagPorLinea
+  // 🔑 Los hallazgos salen de la BASE, no de Meta: se ven aunque el censo falle. Por eso viajan
+  // aparte de `m.estado` y se dibujan afuera del `fase === 'ok'`.
+  const r = useReglas()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -62,15 +68,26 @@ export function Panel() {
         </Notice>
       )}
 
-      {m.estado.fase === 'ok' && d && (
+      {/* Lo que detectaron las automatizaciones va adentro de «Qué hay que decidir», que es el
+          bloque que ya existe para eso. Pero si Meta se cayó, ese bloque no se dibuja —depende del
+          censo— y los hallazgos igual tienen que verse: por eso hay una versión suelta. */}
+      {m.estado.fase === 'ok' && d ? (
         <>
           <QueDecidir
             m={m}
             diagPorLinea={d}
             sinMarcaConGasto={m.estado.data.sinAsignar.filter((c) => c.tuvoActividad).length}
+            hallazgos={r.hallazgos}
+            quitarHallazgo={r.quitar}
           />
           <AlAire diagPorLinea={d} />
         </>
+      ) : r.hallazgos.length > 0 && (
+        <SectionCard title="Qué hay que decidir" subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+            <HallazgosPanel hallazgos={r.hallazgos} quitar={r.quitar} />
+          </div>
+        </SectionCard>
       )}
     </div>
   )
@@ -83,10 +100,12 @@ export function Panel() {
  * nada que decidir, se dice explícito: un bloque que sólo aparece con malas noticias deja sin saber
  * si el silencio es «está todo bien» o «no se miró».
  */
-function QueDecidir({ m, diagPorLinea, sinMarcaConGasto }: {
+function QueDecidir({ m, diagPorLinea, sinMarcaConGasto, hallazgos, quitarHallazgo }: {
   m: Campanias
   diagPorLinea: Partial<Record<LineaPauta, Diagnostico>>
   sinMarcaConGasto: number
+  hallazgos: Hallazgo[]
+  quitarHallazgo: (id: number) => void
 }) {
   const huecos = LINEAS.flatMap((l) => {
     const d = diagPorLinea[l]
@@ -95,7 +114,7 @@ function QueDecidir({ m, diagPorLinea, sinMarcaConGasto }: {
     return vacias.length ? [{ linea: l, etapas: vacias.map((e) => ETIQUETA_ETAPA[e.etapa]) }] : []
   })
   const listas = m.funnel.ideas.filter((i) => i.estado === 'lista').length
-  const nada = sinMarcaConGasto === 0 && huecos.length === 0 && listas === 0
+  const nada = sinMarcaConGasto === 0 && huecos.length === 0 && listas === 0 && hallazgos.length === 0
 
   return (
     <SectionCard title="Qué hay que decidir" subtitle="Lo que está esperando a que alguien haga algo.">
@@ -106,6 +125,9 @@ function QueDecidir({ m, diagPorLinea, sinMarcaConGasto }: {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+          {/* Lo que detectaron las reglas va arriba de los huecos y abajo de la plata sin atribuir:
+              nombra objetos concretos con un botón al lado, así que es lo más accionable de la
+              lista — pero sigue sin ganarle a «hay plata que no entra en ningún diagnóstico». */}
           {/* 🔴 Va primero porque es el único que hace que los demás números estén MAL: mientras haya
               plata sin marca, ningún diagnóstico de abajo está completo. */}
           {sinMarcaConGasto > 0 && (
@@ -119,6 +141,8 @@ function QueDecidir({ m, diagPorLinea, sinMarcaConGasto }: {
               accion="Asignarles marca"
             />
           )}
+
+          <HallazgosPanel hallazgos={hallazgos} quitar={quitarHallazgo} />
 
           {huecos.map((h) => (
             <Renglon

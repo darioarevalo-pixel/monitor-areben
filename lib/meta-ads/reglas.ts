@@ -222,6 +222,28 @@ export type Calibracion =
     ejemplos: Array<{ objeto_id: string; objeto_nombre: string | null; motivo: string; veces: number }>
   }
 
+/** Los números MEDIDOS de una línea, para elegir un umbral mirando en vez de adivinando. */
+export type ContextoLinea = {
+  dias: number
+  campanias: number
+  gastoTotal: number
+  roasMedio: number
+  cpaMedio: number | null
+  frecuenciaPico: number
+}
+
+/** Lo que contesta `?recurso=reglas`. Trae el catálogo con la respuesta para que la pantalla no se quede con una copia vieja. */
+export type RespuestaReglas = {
+  reglas: Regla[]
+  umbrales: Record<string, Partial<Umbrales>>
+  contexto: Record<string, ContextoLinea>
+  presets: Array<DefPreset & { clave: ClavePreset }>
+  definicionUmbrales: Record<ClaveUmbral, DefUmbral>
+  /** Qué líneas puede EDITAR, que no es lo mismo que cuáles ve. */
+  puedeEditar: string[]
+  dias: number
+}
+
 export const PRESETS = PRESETS_JS as Record<ClavePreset, DefPreset>
 export const CLAVES_PRESET = CLAVES_PRESET_JS as ClavePreset[]
 export const UMBRALES = UMBRALES_JS as Record<ClaveUmbral, DefUmbral>

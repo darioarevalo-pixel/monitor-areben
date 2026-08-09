@@ -10,6 +10,7 @@
 import { apiFetch } from '../api-fetch'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type { AvanceDePlan, Plan } from './planes'
+import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
   RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
@@ -370,4 +371,98 @@ export async function pausarAnuncio(
   const r = await accionarMeta({ accion: 'estado', nivel: 'aviso', objetoId: adId, campos: { status }, idem })
   if (!r.ok) return { ok: false, motivo: r.motivo }
   return { ok: true, dato: { status: String(r.dato.quedo?.status ?? status) } }
+}
+
+// ── Automatizaciones ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Las reglas, los umbrales y el contexto medido de cada línea.
+ *
+ * Como los planes y la auditoría, **sale de la base y no habla con Meta**: las automatizaciones
+ * leen la foto diaria, así que la pantalla abre aunque Graph esté caído o el token vencido.
+ *
+ * El `contexto` viene calculado del lado del servidor a propósito: sale de las mismas 90 días de
+ * filas que ya se leyeron para todo lo demás, y mandarlas al browser serían megabytes.
+ */
+export function traerReglas(): Promise<Lectura<RespuestaReglas>> {
+  return pedir<RespuestaReglas>(new URLSearchParams({ recurso: 'reglas' }))
+}
+
+/**
+ * Lo que detectaron las reglas. **Uno por objeto, el más reciente**, con `veces` diciendo cuántos
+ * días seguidos lleva: la lista completa está en el historial de la regla, y lo que hay que decidir
+ * es una cosa por objeto.
+ */
+export function traerHallazgos(estado?: 'todos' | 'nuevo' | 'accionado' | 'ignorado', regla?: number): Promise<Lectura<{ hallazgos: Hallazgo[] }>> {
+  const qs = new URLSearchParams({ recurso: 'hallazgos' })
+  if (estado) qs.set('estado', estado)
+  if (regla) qs.set('regla', String(regla))
+  return pedir<{ hallazgos: Hallazgo[] }>(qs)
+}
+
+async function postRegla<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {
+  try {
+    const r = await apiFetch('/api/meta-ads?recurso=regla', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || d.ok !== true) {
+      const extra = d?.detalle ? ` — ${String(d.detalle).slice(0, 200)}` : ''
+      return { ok: false, motivo: `${String(d?.error ?? `HTTP ${r.status}`).slice(0, 200)}${extra}` }
+    }
+    return { ok: true, dato: d as T }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** Crea o actualiza la regla de un preset en una marca. Hay una sola por (preset, línea). */
+export function guardarRegla(cuerpo: {
+  preset: ClavePreset
+  linea: string
+  cuentaId?: string | null
+  parametros?: Partial<Record<ClaveUmbral, number>>
+  activa: boolean
+}): Promise<Lectura<{ regla: Regla }>> {
+  return postRegla<{ regla: Regla }>({ accion: 'guardar', ...cuerpo })
+}
+
+/**
+ * Los umbrales de una marca.
+ *
+ * ⚠️ Manda el objeto ENTERO: lo que no venga se guarda en `null`. Es lo que permite BORRAR un
+ * umbral desde la pantalla — con un `PATCH` parcial, vaciar el campo no vaciaría nada y la regla
+ * seguiría corriendo con un número que la persona cree que sacó.
+ */
+export function guardarUmbrales(linea: string, umbrales: Partial<Record<ClaveUmbral, number | ''>>): Promise<Lectura<{ umbral: unknown }>> {
+  return postRegla<{ umbral: unknown }>({ accion: 'umbrales', linea, umbrales })
+}
+
+/**
+ * 🎯 El calibrador: qué habría hecho este preset en los últimos 90 días con estos umbrales.
+ *
+ * No guarda nada y no necesita que la regla exista: la gracia es poder mover el dial ANTES de
+ * crearla. Pide sólo ver la línea, no editarla — mirar qué pasaría no cambia nada.
+ */
+export function calibrarRegla(cuerpo: {
+  preset: ClavePreset
+  linea: string
+  cuentaId?: string | null
+  parametros?: Partial<Record<ClaveUmbral, number>>
+}): Promise<Lectura<Calibracion & { ok: true }>> {
+  return postRegla<Calibracion & { ok: true }>({ accion: 'calibrar', ...cuerpo })
+}
+
+/**
+ * Marca un hallazgo como accionado o ignorado.
+ *
+ * ⚠️ **No ejecuta nada.** Para accionar hay que llamar antes a `accionarMeta`, que es el camino que
+ * ya tiene el permiso, el `idem`, la relectura y el registro. Esto sólo mueve el estado, y va
+ * DESPUÉS: si falla, la acción igual pasó y el hallazgo se vuelve a proponer, que es la dirección
+ * barata del error.
+ */
+export function resolverHallazgo(id: number, estado: 'accionado' | 'ignorado'): Promise<Lectura<Record<string, never>>> {
+  return postRegla<Record<string, never>>({ accion: 'resolver', id, estado })
 }
