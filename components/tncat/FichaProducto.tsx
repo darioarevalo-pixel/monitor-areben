@@ -25,12 +25,8 @@ import type { IndiceStock } from '@/lib/tncat/stock-variante'
 import { referenciaDe, type FilaAuditoria } from '@/lib/tncat/prioridad'
 import type { ImagenFchk } from '@/lib/tncat/tipos'
 import type { Marca } from '@/lib/nav'
+import { linkProducto } from '@/lib/tienda'
 import { FotoTn } from './FotoTn'
-
-const TIENDA: Record<Marca, string> = {
-  bdi: 'https://www.bdiaccesorios.com.ar/productos',
-  zattia: 'https://www.zattia.com.ar/productos',
-}
 
 export type AccionFicha = {
   /** Vincula la foto al color. Devuelve el mensaje de error, o null si salió bien. */
@@ -150,7 +146,7 @@ export function FichaProducto({
             )}
             {p.handle && (
               <a
-                href={`${TIENDA[marca]}/${p.handle}`}
+                href={linkProducto(marca, p.handle) || undefined}
                 target="_blank"
                 rel="noreferrer"
                 style={{ fontSize: font.sm, color: paleta.brand, alignSelf: 'center' }}

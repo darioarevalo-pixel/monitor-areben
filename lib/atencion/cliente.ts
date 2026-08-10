@@ -8,16 +8,11 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
+import { TIENDA_BASE } from '@/lib/tienda'
 import { semillaDe } from './modelos'
 import type { DatosAtencion, ItemAtencion } from './tipos'
 
 const API = '/api/datos?recurso=atencion'
-
-/** El dominio público de cada tienda. Espeja `linkTienda` de lib/marketing/core.ts. */
-const TIENDA: Record<Marca, string> = {
-  bdi: 'https://www.bdiaccesorios.com.ar',
-  zattia: 'https://zattia.com.ar',
-}
 
 /** Id nuevo, generado en el cliente para pintar la fila sin esperar al servidor (igual que `disenos`). */
 export function nuevoId(): string {
@@ -32,7 +27,7 @@ export async function leerAtencion(store: Marca): Promise<DatosAtencion & { pued
   // Si la tienda no contestó, la semilla — pero sólo en BDI, que es la que tiene esta estructura de
   // categorías. En Zattia una lista vacía es la respuesta correcta, no una falla que haya que tapar.
   const desdeSemilla = !!d.desdeSemilla
-  const modelos = desdeSemilla && store === 'bdi' ? semillaDe(TIENDA.bdi) : d.modelos || []
+  const modelos = desdeSemilla && store === 'bdi' ? semillaDe(TIENDA_BASE.bdi) : d.modelos || []
 
   return {
     items: (d.items || []) as ItemAtencion[],

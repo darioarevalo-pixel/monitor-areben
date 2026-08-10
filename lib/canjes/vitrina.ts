@@ -9,6 +9,7 @@
  * se copia lo que se quiere ofrecer y la venta después se tipea a mano en el admin de TN.
  */
 
+import { precioVigente } from '@/lib/tienda'
 import type { ProductoParaVitrina } from './cliente'
 import type { OpcionVitrina } from './tipos'
 
@@ -47,20 +48,15 @@ export type VarianteTn = {
 /**
  * El precio que se le muestra: **lo que la tienda cobra hoy**.
  *
- * `promo_price` gana cuando existe. Medido sobre los dos catálogos: 35 productos de BDI y 202 de
- * Zattia están en promo, y en los 237 casos el precio de la variante **es** el de promo — o sea que
- * el de promo es el que la tienda está cobrando de verdad. Cargarle el precio tachado le daría
- * menos productos por el mismo acuerdo que a un cliente con el mismo dinero.
+ * La regla (la promo gana, y por qué) se mudó a `lib/tienda.core.js` cuando el buscador de Atención
+ * al cliente necesitó el mismo número: el precio que se le cotiza a alguien por WhatsApp y el que
+ * se le congela en la vitrina tienen que ser el mismo. El nombre se conserva porque acá el sentido
+ * es "el precio con el que entra a la vitrina", y los tests de canjes lo llaman así.
  *
- * Se toma a nivel producto y no de variante porque las variantes de un mismo producto **nunca**
- * tienen precios distintos: 0 de 235 en BDI y 0 de 661 en Zattia.
+ * Cargarle el precio tachado le daría menos productos por el mismo acuerdo que a un cliente con el
+ * mismo dinero.
  */
-export function precioDeVitrina(p: ProductoTn): number | null {
-  const promo = p.promo_price == null ? null : Number(p.promo_price)
-  if (promo != null && Number.isFinite(promo) && promo > 0) return promo
-  const lista = p.price == null ? null : Number(p.price)
-  return lista != null && Number.isFinite(lista) && lista > 0 ? lista : null
-}
+export const precioDeVitrina = precioVigente
 
 /**
  * Cuántas fotos se congelan por producto.

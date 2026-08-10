@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVer, puedeSub } from '../lib/permisos.core.js';
 import { modelosDelMenu } from '../lib/atencion/modelos.core.js';
+import { TIENDA_BASE } from '../lib/tienda.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -28,9 +29,6 @@ function cfgFor(store) {
   };
 }
 
-/** El dominio público de cada tienda. Mismo par que `linkTienda` de lib/marketing/core.ts. */
-const TIENDA = { bdi: 'https://www.bdiaccesorios.com.ar', zattia: 'https://zattia.com.ar' };
-
 /**
  * Los modelos del menú de la tienda. Si no contesta se devuelve `null` y el llamador cae a la
  * semilla: quien está atendiendo a alguien no se puede quedar con la pantalla vacía por un timeout.
@@ -39,7 +37,7 @@ const TIENDA = { bdi: 'https://www.bdiaccesorios.com.ar', zattia: 'https://zatti
  * está resuelta; no vale la pena arriesgar el request completo por el menú.
  */
 async function traerModelos(store) {
-  const base = TIENDA[store];
+  const base = TIENDA_BASE[store];
   if (!base) return null;
   try {
     const ctrl = new AbortController();

@@ -30,8 +30,8 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { ponerPuenteFotos } from '@/lib/sesionfotos/puente'
 import type { Variante } from '@/lib/etl/tipos'
+import { adminBaseUrl, linkProducto } from '@/lib/tienda'
 import {
-  adminBaseUrl,
   aplicaTalles,
   buildLista,
   calcularStats,
@@ -41,7 +41,6 @@ import {
   mesLabelCorto,
   mesLabelLargo,
   tieneTabla,
-  tiendaBaseUrl,
   type Columna,
   type FiltroCalidad,
   type Filtros,
@@ -670,7 +669,7 @@ function Fila({
           <span style={{ display: 'inline-flex', gap: 10, fontSize: font.sm }}>
             {handle ? (
               <a
-                href={`${tiendaBaseUrl(marca)}/productos/${handle}`}
+                href={linkProducto(marca, handle) || undefined}
                 target="_blank"
                 rel="noreferrer"
                 title="Ver en la tienda"

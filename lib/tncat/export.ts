@@ -14,14 +14,10 @@
 import { fichaDe, type EstadoFotos } from './auditoria'
 import type { IndiceStock } from './stock-variante'
 import type { Marca } from '@/lib/nav'
+import { linkProducto } from '@/lib/tienda'
 import type { ProductoFchk } from './tipos'
 
 const hoy = () => new Date().toISOString().slice(0, 10)
-
-const TIENDA: Record<Marca, string> = {
-  bdi: 'https://www.bdiaccesorios.com.ar/productos',
-  zattia: 'https://www.zattia.com.ar/productos',
-}
 
 export type FilaExport = { producto: ProductoFchk; estado: EstadoFotos }
 
@@ -40,7 +36,7 @@ export async function exportarPendientesXLSX(filas: FilaExport[], marca: Marca, 
   ]
 
   for (const { producto: p, estado } of filas) {
-    const link = p.handle ? `${TIENDA[marca]}/${p.handle}` : ''
+    const link = linkProducto(marca, p.handle) || ''
     const categoria = (p.categories || []).join(' · ')
     const colores = fichaDe(p, idx).filter((c) => c.variantesSinFoto > 0)
 

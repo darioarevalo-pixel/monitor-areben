@@ -213,15 +213,14 @@ export function ventasPorCanal(
   return { local, online }
 }
 
-/** URLs públicas (tienda) y de admin de TN, por marca. Port de los base de mktRender. */
-export function tiendaBaseUrl(marca: Marca): string {
-  return marca === 'zattia' ? 'https://zattia.com.ar' : 'https://bdiaccesorios.com.ar'
-}
-export function adminBaseUrl(marca: Marca): string {
-  return marca === 'zattia'
-    ? 'https://zattiaco.mitiendanube.com/admin/products'
-    : 'https://bdiaccesorios4.mitiendanube.com/admin/products'
-}
+/**
+ * URLs públicas (tienda) y de admin de TN, por marca.
+ *
+ * Se mudaron a `lib/tienda.core.js` — "cómo se llama la tienda de cada marca" no es marketing: lo
+ * usan también atención, tncat y canjes, y tenerlo acá obligaba a esas pantallas a arrastrar este
+ * core entero al chunk. Siguen re-exportadas para no tocar a quien ya importa de acá.
+ */
+export { adminBaseUrl, tiendaBaseUrl } from '@/lib/tienda'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
