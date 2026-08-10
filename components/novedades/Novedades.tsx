@@ -19,11 +19,24 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { EditorNovedad } from './EditorNovedad'
 import { useSistema } from '@/store/useSistema'
 import { borrarNovedad, cambiarEstado, leerLecturas, nuevoId } from '@/lib/novedades/cliente'
-import { NUEVA, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { NUEVA, type Destino, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { FUNCIONES } from '@/lib/permisos'
+import { tituloLimpio } from '@/lib/nav'
 import {
   Badge, Button, EmptyState, Esqueleto, Markdown, Notice, Plegable, SectionCard,
   color, font, space, useConfirmar, useToast,
 } from '@/components/ui'
+
+/**
+ * A quién le llegó, en una frase. Sólo se muestra cuando está acotada: "A todo el equipo" en cada
+ * tarjeta sería ruido en el 90% de los casos.
+ */
+function aQuien(d?: Destino): string | null {
+  if (!d || d.tipo === 'todos') return null
+  if (d.tipo === 'seccion') return `A quien usa ${tituloLimpio(d.key)}`
+  const nombres = d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r)
+  return `A ${nombres.join(', ')}`
+}
 
 /** "9 de agosto", sin el año cuando es de este año: es una novedad, no un expediente. */
 function cuando(iso?: string | null): string {
@@ -99,9 +112,11 @@ export function Novedades() {
 
   // Al entrar, todo lo publicado que se está viendo queda leído. Se hace en un efecto y no al
   // pintar cada tarjeta para que no dependa de si la persona scrolleó hasta el final.
+  // Sólo las propias: quien publica ve también las que mandó a otro grupo, y marcarlas como leídas
+  // por él ensuciaría el registro de quién la leyó con alguien a quien no iba dirigida.
   useEffect(() => {
     if (!cargado) return
-    for (const n of novedades) if (n.estado === 'publicada') void marcar(n)
+    for (const n of novedades) if (n.estado === 'publicada' && n.paraMi !== false) void marcar(n)
   }, [cargado, novedades, marcar])
 
   const leidaSet = useMemo(
@@ -146,7 +161,8 @@ export function Novedades() {
         <strong style={{ fontSize: font.md, color: color.ink }}>{n.titulo}</strong>
         {n.estado === 'borrador' && <Badge tone="warning">Borrador</Badge>}
         {n.importante && n.estado === 'publicada' && <Badge tone="brand">Importante</Badge>}
-        {n.estado === 'publicada' && !leidaSet.has(`${n.id}|${n.version}`) && <Badge tone="brand" subtle>Nueva</Badge>}
+        {n.estado === 'publicada' && n.paraMi !== false && !leidaSet.has(`${n.id}|${n.version}`) && <Badge tone="brand" subtle>Nueva</Badge>}
+        {aQuien(n.destino) && <Badge tone="neutral" subtle>{aQuien(n.destino)}</Badge>}
         <span style={{ marginLeft: 'auto', fontSize: font.xs, color: color.mut2 }}>
           {cuando(n.publicada_at || n.created_at)}
           {n.autor ? ` · ${n.autor}` : ''}

@@ -22,10 +22,17 @@ create table if not exists novedades (
   version      integer not null default 1,
   autor        text,                                -- perfil.name de quien publicó
   publicada_at timestamptz,
+  -- A quién le llega: {tipo:'todos'} | {tipo:'seccion',key} | {tipo:'roles',roles[]}.
+  -- Ver lib/novedades/destino.core.js. El filtro corre en el SERVIDOR: si sólo filtrara la
+  -- pantalla, una novedad que no es para vos igual te encendería el badge y te frenaría el cartel.
+  destino      jsonb not null default '{"tipo":"todos"}'::jsonb,
   datos        jsonb not null default '{}'::jsonb,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Para las bases donde la tabla ya existía sin la columna (la de BDI, creada el 9-ago-2026).
+alter table novedades add column if not exists destino jsonb not null default '{"tipo":"todos"}'::jsonb;
 
 create index if not exists idx_novedades_estado on novedades (estado, publicada_at desc);
 

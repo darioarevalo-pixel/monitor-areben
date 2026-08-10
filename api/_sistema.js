@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 import { esEstado } from '../lib/novedades/estados.core.js';
+import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -43,7 +44,7 @@ function puedePublicar(perfil) {
   return marcasConAcceso(perfil, 'novedades.publicar', ['bdi', 'zattia']).length > 0;
 }
 
-const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicada_at, created_at, updated_at';
+const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicada_at, destino, created_at, updated_at';
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -86,9 +87,16 @@ export default async function handler(req, res) {
       if (nov.error) throw new Error(nov.error.message);
       if (lec.error) throw new Error(lec.error.message);
 
+      // `paraMi` se calcula ACÁ y no en la pantalla, y son dos preguntas distintas:
+      //  - quien publica RECIBE la lista entera, porque la tiene que administrar;
+      //  - `paraMi` dice si además le toca a él, que es lo que mira el badge y el cartel.
+      // A quien no publica se le sacan directamente las que no son suyas: que no le lleguen ni por
+      // la red es más barato de razonar que confiar en que la pantalla las esconda.
+      const conDestino = (nov.data || []).map((n) => ({ ...n, paraMi: esParaMi(n.destino, perfil) }));
+
       return res.status(200).json({
         ok: true,
-        novedades: nov.data || [],
+        novedades: publicar ? conDestino : conDestino.filter((n) => n.paraMi),
         leidas: lec.data || [],
         puede: { publicar },
       });
@@ -129,7 +137,15 @@ export default async function handler(req, res) {
       // borrador y se publica con `novedad-estado`, que es un acto aparte y explícito. Si el estado
       // pudiera venir del body, el script que las carga podría publicarlas solo — que es justo el
       // agujero que este diseño viene a cerrar.
-      const campos = { titulo, cuerpo, importante: !!n.importante, updated_at: new Date().toISOString() };
+      // El destino sí viaja en el cuerpo (a diferencia del estado): es parte de lo que se escribe,
+      // no un permiso. `normalizarDestino` lo deja en algo válido pase lo que pase.
+      const campos = {
+        titulo,
+        cuerpo,
+        importante: !!n.importante,
+        destino: normalizarDestino(n.destino),
+        updated_at: new Date().toISOString(),
+      };
 
       if (!ya) {
         const { error } = await supabase.from('novedades').insert([{ id, estado: 'borrador', version: 1, ...campos }]);

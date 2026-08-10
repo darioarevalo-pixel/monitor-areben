@@ -7,7 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { esEstado, ESTADOS, sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { esEstado, ESTADOS, normalizarDestino, sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { esParaMi } from '@/lib/novedades/destino.core.js'
 
 const nov = (id: string, extra: Partial<Novedad> = {}): Novedad => ({
   id,
@@ -62,5 +63,52 @@ describe('sinLeer', () => {
 
   it('sin nada no explota', () => {
     expect(sinLeer([], [])).toEqual([])
+  })
+})
+
+describe('destino: a quién le llega', () => {
+  const perfil = (extra: Record<string, unknown> = {}) => ({ name: 'Ana', acceso: {}, ...extra }) as never
+
+  it('sin destino, o con "todos", le llega a cualquiera', () => {
+    expect(esParaMi(undefined, perfil())).toBe(true)
+    expect(esParaMi({ tipo: 'todos' }, perfil())).toBe(true)
+  })
+
+  it('por rol: le llega a quien tiene alguno de esos roles', () => {
+    const d = { tipo: 'roles', roles: ['local', 'deposito'] }
+    expect(esParaMi(d, perfil({ funcion: ['local'] }))).toBe(true)
+    expect(esParaMi(d, perfil({ funcion: ['marketing'] }))).toBe(false)
+    expect(esParaMi(d, perfil())).toBe(false) // sin rol asignado no recibe: está avisado en la UI
+  })
+
+  it('por pantalla: le llega a quien puede verla en alguna marca', () => {
+    const d = { tipo: 'seccion', key: 'atencion' }
+    expect(esParaMi(d, perfil({ acceso: { bdi: { atencion: true } } }))).toBe(true)
+    expect(esParaMi(d, perfil({ acceso: { bdi: { cupones: true } } }))).toBe(false)
+    // Por función también, que es como lo tiene casi todo el equipo.
+    expect(esParaMi(d, perfil({ funcion: ['local'] }))).toBe(true)
+  })
+
+  it('el admin recibe todo: es el que se tiene que dar cuenta si algo se mandó al grupo equivocado', () => {
+    expect(esParaMi({ tipo: 'roles', roles: ['deposito'] }, perfil({ admin: true }))).toBe(true)
+  })
+
+  it('sin perfil no le llega nada', () => {
+    expect(esParaMi({ tipo: 'todos' }, null)).toBe(false)
+  })
+
+  it('una lista de roles vacía se cae a «todos», no a «a nadie»', () => {
+    expect(normalizarDestino({ tipo: 'roles', roles: [] })).toEqual({ tipo: 'todos' })
+    expect(normalizarDestino({ tipo: 'seccion' })).toEqual({ tipo: 'todos' })
+    expect(normalizarDestino('cualquier cosa')).toEqual({ tipo: 'todos' })
+  })
+})
+
+describe('sinLeer y el destino', () => {
+  it('una novedad que no es para mí no enciende el badge, aunque la reciba', () => {
+    // Quien publica recibe la lista entera para administrarla. Si esto no filtrara, tendría el
+    // badge prendido por lo que le mandó a otro grupo.
+    const r = sinLeer([nov('a', { paraMi: false }), nov('b', { paraMi: true })], [])
+    expect(r.map((n) => n.id)).toEqual(['b'])
   })
 })
