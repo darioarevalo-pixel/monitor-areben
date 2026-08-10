@@ -685,6 +685,23 @@ export const PERM_CAT: PermCat[] = [
       "bdi",
       "zattia"
     ]
+  },
+  {
+    "key": "novedades",
+    "area": "sistema",
+    "label": "Novedades",
+    "info": "Qué cambió en los sistemas, en un solo lugar. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_SIN_PERMISO, así que tildar o destildar esta fila NO cambia nada — es la contracara de que exista, una novedad que no le llega a alguien no sirve. Lo único que se puede dar acá es el permiso de publicar.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "publicar",
+        "label": "Puede publicar novedades",
+        "info": "Puede escribir, editar, publicar, archivar y borrar. Sin esto sólo se leen — que es lo que necesita el resto del equipo. Como una novedad no tiene marca, alcanza con tenerlo tildado en cualquiera de las dos."
+      }
+    ]
   }
 ]
 
@@ -695,6 +712,14 @@ export const NAV_CATS: NavCat[] = [
     "label": "Inicio",
     "keys": [
       "inicio"
+    ]
+  },
+  {
+    "id": "sistema",
+      "icono": "novedades",
+    "label": "Novedades",
+    "keys": [
+      "novedades"
     ]
   },
   {

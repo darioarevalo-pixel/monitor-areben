@@ -41,8 +41,20 @@ export function itemsDeCat(cat: NavCat): NavItem[] {
  * pueden importar los tests del dominio.
  */
 
-/** 'usuarios' es caso especial: vive en NAV_CATS (adminOnly) pero no en PERM_CAT. */
-export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen'])
+/**
+ * Secciones que ve cualquiera que entre, sin permiso que valga.
+ *
+ * 'usuarios' es caso especial: vive en NAV_CATS (adminOnly) pero no en PERM_CAT.
+ *
+ * ⚠️ **Esto es una puerta abierta por definición**: lo que entra acá lo ve todo el mundo, incluidos
+ * los puestos compartidos (`Local`, `Depósito`), y no hay permiso que lo tape. 'novedades' está acá
+ * a propósito y es la contracara de que exista: una novedad que no le llega a alguien no sirve. El
+ * sub-permiso `novedades.publicar` sí se tilda, porque escribir es otra cosa que leer.
+ *
+ * `tests/nav-estructura.test.ts` exige que el set tenga exactamente estas keys: sumar una quinta
+ * rompe, y eso es lo que obliga a pensarla.
+ */
+export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen', 'novedades'])
 
 /**
  * Secciones cuyo eje **no es la marca del sidebar**.
@@ -124,6 +136,7 @@ export function labelDeMenu(key: string): string {
  */
 const ICONO_POR_KEY: Record<string, string> = {
   inicio: 'inicio',
+  novedades: 'novedades',
   gerencial: 'gerencial',
   // Análisis
   productos: 'productos',
@@ -259,6 +272,7 @@ export function tituloDesde(key: string, grupoId?: string | null): string {
  */
 export const DESCRIPCIONES: Record<string, string> = {
   inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
+  novedades: 'Qué cambió en los sistemas, de lo más nuevo a lo más viejo.',
   usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',
   resumen: 'Panel principal con los KPIs del negocio.',
   productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',

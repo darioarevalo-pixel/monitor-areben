@@ -27,6 +27,21 @@ const TRAZOS = {
       <path d="M9.8 20v-5.2h4.4V20" />
     </>
   ),
+  /** Sistema — megáfono: el grupo de lo que hay que contarle al equipo. */
+  sistema: (
+    <>
+      <path d="M4.5 10.2v3.6h3.1l2.1 4h1.8l-1.4-4 7.2 3.1V7.1L9.7 10.2H4.5Z" />
+      <path d="M19.6 10.6a2.4 2.4 0 0 1 0 2.8" />
+    </>
+  ),
+  /** Novedades — campana. */
+  novedades: (
+    <>
+      <path d="M6.6 16.4h10.8l-1.5-2.3V10a3.9 3.9 0 0 0-7.8 0v4.1l-1.5 2.3Z" />
+      <path d="M10.2 18.6a2 2 0 0 0 3.6 0" />
+      <path d="M12 6.1V4.4" />
+    </>
+  ),
   /** Dirección — diana: es el grupo de los objetivos del negocio. */
   direccion: (
     <>

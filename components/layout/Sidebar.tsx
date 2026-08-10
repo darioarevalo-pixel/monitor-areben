@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useAvisos } from '@/store/useAvisos'
+import { contarSinLeer, useSistema } from '@/store/useSistema'
 import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
@@ -27,7 +28,10 @@ function rutaActiva(it: NavItem, activa: string, sub?: string | null): boolean {
 }
 
 /** Grupos homónimos con un solo destino: se muestran como ítem directo (sin doble clic). */
-const APLANAR = new Set(['inicio', 'clientes'])
+// `sistema` está acá pero la condición mira además que el grupo tenga UNA sola key: hoy es
+// Novedades y se dibuja como una entrada suelta; el día que se le sume Manuales pasa a ser un
+// grupo desplegable solo, sin tocar esta línea.
+const APLANAR = new Set(['inicio', 'clientes', 'sistema'])
 
 export function Sidebar({
   activa,
@@ -48,6 +52,7 @@ export function Sidebar({
   const { perfil, marca, setMarca, salir } = useSesion()
   // Lo único que el menú lee de los datos. El refresco lo hace el shell (useAvisosPoll), no acá.
   const nuevos = useAvisos((st) => st.nuevos)
+  const sinLeerN = useSistema((st) => contarSinLeer(st))
   const [abierto, setAbierto] = useState<string | null>(null)
   const [menuMarca, setMenuMarca] = useState(false)
   const { confirmar } = useConfirmar()
@@ -173,6 +178,17 @@ export function Sidebar({
                     {k === 'inicio' && nuevos > 0 && (
                       <span className="nav-badge" title={`${nuevos} ${nuevos === 1 ? 'aviso nuevo' : 'avisos nuevos'}`}>
                         {nuevos > 99 ? '99+' : nuevos}
+                      </span>
+                    )}
+                    {/*
+                      El de novedades es OTRO contador y cuelga de Novedades, que es adonde lleva el
+                      clic. No se junta con el de avisos: aquél se deriva y se marca visto en el
+                      navegador; éste es una fila en el servidor, por usuario. En un mismo número
+                      bajarían por dos reglas distintas.
+                    */}
+                    {k === 'novedades' && sinLeerN > 0 && (
+                      <span className="nav-badge" title={`${sinLeerN} ${sinLeerN === 1 ? 'novedad sin leer' : 'novedades sin leer'}`}>
+                        {sinLeerN > 99 ? '99+' : sinLeerN}
                       </span>
                     )}
                   </Link>

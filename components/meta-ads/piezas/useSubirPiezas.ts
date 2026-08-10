@@ -89,10 +89,11 @@ export function useSubirPiezas(): SubidaPiezas {
       marcar(p.key, { estado: 'subiendo' })
       try {
         const ext = p.nombre.toLowerCase().split('.').pop() || ''
-        // 🔴 La sesión viaja acá y no en un header: `upload()` hace su propia llamada a
-        // `/api/blob-upload` y no deja meterle cabeceras. Sin esto el servidor contesta 403 y el
-        // SDK lo traduce a «Failed to retrieve the client token» — un cartel que no menciona la
-        // sesión por ningún lado. Pasó en prod el 9-ago-2026 y dejó la subida muerta entera.
+        // 🔴 **La sesión hay que pasársela a mano.** `upload()` no usa `apiFetch`: hace su propia
+        // llamada a `/api/blob-upload` para pedir el permiso, y ahí el header no viaja solo. Sin
+        // esto el servidor contesta 403 a un usuario perfectamente logueado y el SDK lo traduce a
+        // «Failed to retrieve the client token», un cartel que no menciona la sesión por ningún
+        // lado. Pasó en prod el 9-ago-2026 y dejó la subida de piezas muerta entera.
         const sobre = await sobreDeAuth()
         if (!sobre) {
           marcar(p.key, { estado: 'fallada', motivo: 'No encuentro tu sesión del Monitor. Entrá de nuevo y volvé a probar.' })
@@ -101,7 +102,7 @@ export function useSubirPiezas(): SubidaPiezas {
         const blob = await upload(`piezas/${p.nombre}`, file, {
           access: 'public',
           handleUploadUrl: '/api/blob-upload',
-          clientPayload: sobre,
+          headers: { 'x-monitor-auth': sobre },
           contentType: MIME[ext],
           // ⚠️ Sin esto, un archivo grande sube en un solo PUT y una red que se corta a los 300 MB
           // vuelve a empezar de cero. Con multipart, el SDK lo parte y reintenta sólo el pedazo.
