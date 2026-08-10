@@ -20,6 +20,7 @@ export { MoneyText, formatMoney, type MoneyTextProps } from '@/components/ui/Mon
 export { Notice, type NoticeProps } from '@/components/ui/Notice'
 export { Plegable, type PlegableProps } from '@/components/ui/Plegable'
 export { Instructivo, type InstructivoProps } from '@/components/ui/Instructivo'
+export { Markdown, type MarkdownProps } from '@/components/ui/Markdown'
 export { CopyButton, type CopyButtonProps } from '@/components/ui/CopyButton'
 
 // ── Rediseño jul-2026 ──
