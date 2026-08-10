@@ -19,7 +19,12 @@ export async function leerSistema(): Promise<DatosSistema> {
   const r = await apiFetch(`${API}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las novedades.')
-  return { novedades: d.novedades || [], leidas: d.leidas || [], puede: d.puede || { publicar: false } }
+  return {
+    novedades: d.novedades || [],
+    leidas: d.leidas || [],
+    manuales: d.manuales || [],
+    puede: d.puede || { publicar: false, editarManuales: false },
+  }
 }
 
 /**

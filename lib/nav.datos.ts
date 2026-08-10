@@ -702,6 +702,23 @@ export const PERM_CAT: PermCat[] = [
         "info": "Puede escribir, editar, publicar, archivar y borrar. Sin esto sólo se leen — que es lo que necesita el resto del equipo. Como una novedad no tiene marca, alcanza con tenerlo tildado en cualquiera de las dos."
       }
     ]
+  },
+  {
+    "key": "manuales",
+    "area": "sistema",
+    "label": "Manuales",
+    "info": "Cómo se hace cada cosa: el procedimiento de trabajo, no el paso a paso de la pantalla. El manual de una sección se lee desde esa misma sección, con el botón «Cómo se usa» del encabezado; acá están todos juntos, más los que no son de ninguna pantalla (cerrar la caja, dónde están las contraseñas). LOS VE TODO EL EQUIPO SIEMPRE: tildar o destildar esta fila NO cambia nada.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "editar",
+        "label": "Puede escribir manuales",
+        "info": "Puede crear, editar, publicar y borrar manuales. Sin esto sólo se leen. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque un manual no tiene marca."
+      }
+    ]
   }
 ]
 
@@ -716,10 +733,11 @@ export const NAV_CATS: NavCat[] = [
   },
   {
     "id": "sistema",
-      "icono": "novedades",
-    "label": "Novedades",
+      "icono": "sistema",
+    "label": "Sistema",
     "keys": [
-      "novedades"
+      "novedades",
+      "manuales"
     ]
   },
   {

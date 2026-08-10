@@ -44,6 +44,10 @@ function puedePublicar(perfil) {
   return marcasConAcceso(perfil, 'novedades.publicar', ['bdi', 'zattia']).length > 0;
 }
 
+function puedeEditarManuales(perfil) {
+  return marcasConAcceso(perfil, 'manuales.editar', ['bdi', 'zattia']).length > 0;
+}
+
 const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicada_at, destino, created_at, updated_at';
 
 export default async function handler(req, res) {
@@ -57,8 +61,20 @@ export default async function handler(req, res) {
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
   const supabase = createClient(cfg.url, cfg.key);
   const publicar = puedePublicar(perfil);
+  const editarManuales = puedeEditarManuales(perfil);
 
   try {
+    if (req.method === 'GET' && String(req.query.vista || '') === 'manual') {
+      // El CUERPO de un manual, al abrirlo. El índice ya viajó con el GET general.
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      const { data, error } = await supabase.from('manuales').select('*').eq('id', id).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return res.status(404).json({ error: 'ese manual ya no existe' });
+      if (!data.publicado && !editarManuales) return res.status(403).json({ error: 'ese manual todavía no está publicado' });
+      return res.status(200).json({ ok: true, manual: data });
+    }
+
     if (req.method === 'GET' && String(req.query.vista || '') === 'lecturas') {
       // Quién leyó una novedad. Va aparte del GET general y bajo demanda: no tiene sentido que todo
       // el equipo se baje quién leyó qué cada vez que abre el monitor.
@@ -80,12 +96,16 @@ export default async function handler(req, res) {
       let q = supabase.from('novedades').select(CAMPOS).order('publicada_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
       if (!publicar) q = q.eq('estado', 'publicada');
 
-      const [nov, lec] = await Promise.all([
+      // El ÍNDICE de manuales (sin cuerpo) viaja acá para que `SeccionHeader` sepa si dibujar el
+      // botón "Cómo se usa" sin hacer una request por sección. Son ~40 filas de cuatro campos.
+      const [nov, lec, man] = await Promise.all([
         q,
         supabase.from('novedades_leidas').select('novedad_id, version, leida_at').eq('usuario', yo),
+        supabase.from('manuales').select('id, seccion, titulo, publicado').order('orden').order('titulo'),
       ]);
       if (nov.error) throw new Error(nov.error.message);
       if (lec.error) throw new Error(lec.error.message);
+      if (man.error) throw new Error(man.error.message);
 
       // `paraMi` se calcula ACÁ y no en la pantalla, y son dos preguntas distintas:
       //  - quien publica RECIBE la lista entera, porque la tiene que administrar;
@@ -98,7 +118,9 @@ export default async function handler(req, res) {
         ok: true,
         novedades: publicar ? conDestino : conDestino.filter((n) => n.paraMi),
         leidas: lec.data || [],
-        puede: { publicar },
+        // Los manuales sin publicar sólo los ve quien los edita: uno a medio escribir no ayuda.
+        manuales: (man.data || []).filter((m) => m.publicado || editarManuales),
+        puede: { publicar, editarManuales },
       });
     }
 
@@ -118,6 +140,51 @@ export default async function handler(req, res) {
         .upsert([{ novedad_id: id, usuario: yo, version }], { onConflict: 'novedad_id,usuario,version' });
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'manual-guardar' || action === 'manual-borrar') {
+      if (!editarManuales) return res.status(403).json({ error: 'No tenés permiso para editar los manuales.' });
+
+      if (action === 'manual-borrar') {
+        const id = String(b.id || '');
+        if (!id) return res.status(400).json({ error: 'falta id' });
+        const { error } = await supabase.from('manuales').delete().eq('id', id);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true });
+      }
+
+      const m = b.manual || {};
+      const id = String(m.id || '');
+      const titulo = String(m.titulo || '').trim();
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      if (!titulo) return res.status(400).json({ error: 'falta el título' });
+
+      // La sección NO se puede validar acá contra las keys reales: este archivo es JS plano y
+      // `lib/nav.ts` es TypeScript. Se valida donde importa —el editor ofrece un desplegable con
+      // las keys de verdad— y `tests/manuales.test.ts` amarra que lo cargado sea una key válida.
+      // Acá sólo se corta lo absurdo, para que no entre un texto largo por error.
+      const seccion = m.seccion ? String(m.seccion).slice(0, 60) : null;
+
+      const fila = {
+        id,
+        seccion,
+        titulo,
+        cuerpo: String(m.cuerpo || ''),
+        orden: Number.isFinite(Number(m.orden)) ? Number(m.orden) : 0,
+        publicado: !!m.publicado,
+        autor: yo,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from('manuales').upsert([fila], { onConflict: 'id' });
+      if (error) {
+        // El índice único parcial es el que impide dos manuales para la misma pantalla. Sin este
+        // mensaje, Postgres contesta su texto crudo y el editor muestra un 500 indescifrable.
+        if (String(error.message).includes('idx_manuales_seccion')) {
+          return res.status(409).json({ error: 'Esa pantalla ya tiene un manual. Editá el que existe en vez de crear otro.' });
+        }
+        throw new Error(error.message);
+      }
+      return res.status(200).json({ ok: true, id });
     }
 
     if (!publicar) return res.status(403).json({ error: 'No tenés permiso para publicar novedades.' });

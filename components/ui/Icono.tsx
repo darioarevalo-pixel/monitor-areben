@@ -42,6 +42,13 @@ const TRAZOS = {
       <path d="M12 6.1V4.4" />
     </>
   ),
+  /** Manuales — libro abierto. */
+  manuales: (
+    <>
+      <path d="M12 7.4C10.3 6.3 8.2 5.9 5.2 6.1v11.6c3-.2 5.1.2 6.8 1.3 1.7-1.1 3.8-1.5 6.8-1.3V6.1c-3-.2-5.1.2-6.8 1.3Z" />
+      <path d="M12 7.4V19" />
+    </>
+  ),
   /** Dirección — diana: es el grupo de los objetivos del negocio. */
   direccion: (
     <>

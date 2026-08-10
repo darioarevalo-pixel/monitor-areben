@@ -2,6 +2,7 @@
 
 import { ESTADOS as ESTADOS_JS, esEstado as esEstadoJs, sinLeer as sinLeerJs } from './estados.core.js'
 import { normalizarDestino as normalizarDestinoJs, TODOS as TODOS_JS } from './destino.core.js'
+import type { ManualIndice } from '@/lib/manuales/tipos'
 
 export type EstadoNovedad = 'borrador' | 'publicada' | 'archivada'
 
@@ -40,7 +41,8 @@ export type Lectura = { novedad_id: string; version: number; usuario?: string; l
 export type DatosSistema = {
   novedades: Novedad[]
   leidas: Lectura[]
-  puede: { publicar: boolean }
+  manuales: ManualIndice[]
+  puede: { publicar: boolean; editarManuales: boolean }
 }
 
 export const ESTADOS = ESTADOS_JS as readonly EstadoNovedad[]

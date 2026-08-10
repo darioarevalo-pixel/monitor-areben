@@ -3,6 +3,7 @@
  * Sin red y sin DOM.
  */
 
+import { normalizar } from '@/lib/texto'
 import type { ItemAtencion, ModeloTienda, ProductoTienda } from './tipos'
 
 /**
@@ -110,13 +111,9 @@ export function filtrarProductos(
   return { hallados: todos.slice(0, tope), total: todos.length }
 }
 
-function normalizar(s: string): string {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .trim()
-}
+// Vive en `lib/texto.ts` desde que lo necesitó el tercer módulo (atención, manuales y la búsqueda
+// de productos). Se re-exporta para no tocar a quien ya lo importaba de acá.
+export { normalizar } from '@/lib/texto'
 
 /** Los items agrupados para pintar, respetando el orden de carga dentro de cada grupo. */
 export function porGrupo(items: ItemAtencion[]): { grupo: string; items: ItemAtencion[] }[] {

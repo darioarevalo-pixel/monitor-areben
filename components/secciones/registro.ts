@@ -39,6 +39,7 @@ const Solicitudes = dynamic(() => import('@/components/solicitudes/Solicitudes')
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), { loading: Cargando })
 const Atencion = dynamic(() => import('@/components/atencion/Atencion').then((m) => m.Atencion), { loading: Cargando })
 const Novedades = dynamic(() => import('@/components/novedades/Novedades').then((m) => m.Novedades), { loading: Cargando })
+const Manuales = dynamic(() => import('@/components/manuales/Manuales').then((m) => m.Manuales), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
@@ -259,6 +260,8 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Novedades del sistema. La ve todo el equipo (KEYS_SIN_PERMISO); publicar es un sub-permiso.
   // No tiene marca: lee y escribe siempre en la base de BDI, vía `?recurso=sistema`.
   novedades: Novedades,
+  // Los manuales. Mismo endpoint que las novedades (`?recurso=sistema`), misma base, sin marca.
+  manuales: Manuales,
   cupones: Cupones,
   // El flip de Etiquetas (18-jul-2026, Tanda B #4): `/etiquetas` lo sirve el shell.
   // Impresión de etiquetas con código de barras (Code 128): depósito/local/promo/SKU

@@ -78,7 +78,7 @@ secciones joinean contra el producto. Los cachés de IndexedDB anteriores al cam
 
 ## Mapa de secciones
 
-43 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+45 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -104,7 +104,11 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Dirección** — `gerencial` · **Integraciones** — `integraciones`
 
-**Sin permiso (todos las ven)** — `inicio` · `usuarios`
+**Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en
+la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
+`scripts/novedad.mjs` y se publican a mano; el manual de una sección lo muestra `SeccionHeader`.
+
+**Sin permiso (todos las ven)** — `inicio` · `usuarios` · `novedades` · `manuales`
 
 El menú y los permisos se definen a mano en `lib/nav.datos.ts`: `PERM_CAT` (qué secciones existen,
 con su área y sus sub-permisos) y `NAV_CATS` (cómo se agrupan en el sidebar).

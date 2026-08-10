@@ -3,6 +3,7 @@
 import { useCallback } from 'react'
 import { categoriaDesde, descripcionDe, tituloDesde } from '@/lib/nav'
 import { useRegistrarSlot } from '@/components/layout/acciones'
+import { BotonManual } from '@/components/layout/BotonManual'
 
 /**
  * Encabezado uniforme de cada sección servida por el shell: eyebrow de categoría +
@@ -39,6 +40,12 @@ export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: str
         {eyebrow && <div className="seccion-eyebrow">{eyebrow}</div>}
         <h1 className="seccion-titulo">{titulo}</h1>
         {desc && <p className="seccion-desc">{desc}</p>}
+        {/*
+          El manual de esta pantalla, si lo hay. Va ACÁ y no adentro de `seccion-acciones`: ese div
+          es un portal que llenan las secciones, y meterle un hijo fijo haría que el orden de los
+          botones dependa de quién montó primero. Se dibuja solo si hay manual publicado.
+        */}
+        <BotonManual seccion={seccion} />
       </div>
       <div className="seccion-acciones" ref={ref} />
     </header>

@@ -21,11 +21,14 @@
 import { create } from 'zustand'
 import { leerSistema, marcarLeida } from '@/lib/novedades/cliente'
 import { sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import type { ManualIndice } from '@/lib/manuales/tipos'
 
 type SistemaState = {
   novedades: Novedad[]
   leidas: Lectura[]
-  puede: { publicar: boolean }
+  /** Índice sin cuerpo. Lo lee `SeccionHeader` para saber si dibujar "Cómo se usa", sin fetch. */
+  manuales: ManualIndice[]
+  puede: { publicar: boolean; editarManuales: boolean }
   cargado: boolean
   cargando: boolean
   cargar: () => Promise<void>
@@ -37,7 +40,8 @@ type SistemaState = {
 export const useSistema = create<SistemaState>((set, get) => ({
   novedades: [],
   leidas: [],
-  puede: { publicar: false },
+  manuales: [],
+  puede: { publicar: false, editarManuales: false },
   cargado: false,
   cargando: false,
 
@@ -46,7 +50,7 @@ export const useSistema = create<SistemaState>((set, get) => ({
     set({ cargando: true })
     try {
       const d = await leerSistema()
-      set({ novedades: d.novedades, leidas: d.leidas, puede: d.puede, cargado: true, cargando: false })
+      set({ novedades: d.novedades, leidas: d.leidas, manuales: d.manuales, puede: d.puede, cargado: true, cargando: false })
     } catch {
       // Un fallo deja el badge apagado y la sección con su propio error. Que no se puedan leer las
       // novedades no puede romper el shell entero.
@@ -64,7 +68,7 @@ export const useSistema = create<SistemaState>((set, get) => ({
   },
 
   limpiar() {
-    set({ novedades: [], leidas: [], puede: { publicar: false }, cargado: false, cargando: false })
+    set({ novedades: [], leidas: [], manuales: [], puede: { publicar: false, editarManuales: false }, cargado: false, cargando: false })
   },
 }))
 
