@@ -590,7 +590,7 @@ async function prepararPiezas(perfil, b, marcador) {
     modeloId, modeloNombre: String(mod.data.name || ''),
     cuentaId, nombre, linea: linea.linea,
     presupuestoCrudo: diarioPedido,
-    piezas: val.piezas, copy: leido.copy, paginaNombre: String(pag.data.name || ''),
+    piezas: val.piezas, copy: leido.copy, paginaNombre: puede.nombre || '',
     receta: rec.receta,
     avisos: [...new Set(rec.receta.notas || [])],
   };

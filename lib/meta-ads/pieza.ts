@@ -108,7 +108,7 @@ export const destinoDe = destinoDeJs as (
 export const puedeUsarLaPagina = puedeUsarLaPaginaJs as (
   pageId: string | null | undefined,
   paginas: { id?: string; nombre?: string }[] | null,
-) => { ok: true; verificado: boolean } | { ok: false; verificado: boolean; error: string }
+) => { ok: true; verificado: boolean; nombre: string | null } | { ok: false; verificado: boolean; error: string }
 
 export const validarPiezas = validarPiezasJs as (
   piezas: unknown,
