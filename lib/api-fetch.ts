@@ -50,6 +50,19 @@ async function asegurarPass(): Promise<void> {
   await pidiendoPass
 }
 
+/**
+ * El sobre `base64(JSON)` con la sesión, listo para viajar.
+ *
+ * 🔑 **Se exporta porque no siempre viaja en un header.** `upload()` de `@vercel/blob/client` hace
+ * su propia llamada a `/api/blob-upload` y no admite headers nuestros: ahí el mismo sobre va como
+ * `clientPayload`. Del otro lado lo abre `sobreDeCredenciales()` de `api/_auth.js`, que es también
+ * el que abre el header — una sola forma de decir quién sos, viaje por donde viaje.
+ */
+export async function sobreDeAuth(): Promise<string | null> {
+  await asegurarPass()
+  return authHeader()
+}
+
 async function authHeader(): Promise<string | null> {
   const cred = await credencialActual()
   if (!cred) return null

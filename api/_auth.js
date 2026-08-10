@@ -46,22 +46,42 @@ export function credenciales(req) {
   const b = req.body || {};
 
   const raw = h['x-monitor-auth'];
-  if (raw) {
-    try {
-      const json = Buffer.from(String(raw), 'base64').toString('utf8');
-      const d = JSON.parse(json);
-      if (d.token) return { user: '', pass: '', token: String(d.token) };
-      return { user: String(d.user || '').trim(), pass: String(d.pass || ''), token: '' };
-    } catch {
-      return { user: '', pass: '', token: '' };
-    }
-  }
+  if (raw) return sobreDeCredenciales(raw);
 
   return {
     user: String(b.user || b.adminUser || '').trim(),
     pass: String(b.pass || b.adminPass || ''),
     token: String(b.token || b.adminToken || ''),
   };
+}
+
+/**
+ * Abre el sobre `base64(JSON)` en el que viaja la sesión del Monitor.
+ *
+ * 🔑 **Existe aparte de `credenciales(req)` porque el sobre no siempre llega en un header.** La
+ * subida de piezas de Meta lo manda en el cuerpo: `upload()` de `@vercel/blob/client` le pide el
+ * permiso de subida a `/api/blob-upload` **con su propio `fetch`**, y ese fetch no admite headers
+ * nuestros — sólo el `clientPayload`. Sin este camino, el endpoint contestaba **403** y la subida
+ * moría antes de empezar (medido en prod el 9-ago-2026).
+ *
+ * ⚠️ El sobre es el MISMO en los dos casos, y por eso hay una sola función que lo abre: si el
+ * cuerpo y el header se decodificaran distinto, una sesión válida entraría por un lado y no por el
+ * otro, que es el peor modo de falla posible para algo que decide quién puede escribir.
+ *
+ * ⛔ Que viaje en el cuerpo **no lo hace menos exigente**: sigue pasando por `usuarioValido` contra
+ * el KV, y `soloMismoOrigen` sigue cortando a cualquiera que no sea el propio Monitor. El sobre no
+ * es un secreto nuevo: es el mismo que ya viaja en cada llamada de la app.
+ */
+export function sobreDeCredenciales(sobre) {
+  if (!sobre) return { user: '', pass: '', token: '' };
+  try {
+    const json = Buffer.from(String(sobre), 'base64').toString('utf8');
+    const d = JSON.parse(json);
+    if (d.token) return { user: '', pass: '', token: String(d.token) };
+    return { user: String(d.user || '').trim(), pass: String(d.pass || ''), token: '' };
+  } catch {
+    return { user: '', pass: '', token: '' };
+  }
 }
 
 /**

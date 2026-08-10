@@ -26,7 +26,7 @@
 // Si el Blob no está configurado, responde 500 y el cliente cae a guardar base64 (degradación).
 import { handleUpload } from '@vercel/blob/client';
 import { hayBlob, subirDataUrl } from './_blob.js';
-import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { exigirUsuario, soloMismoOrigen, sobreDeCredenciales, usuarioValido } from './_auth.js';
 
 const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
 
@@ -57,16 +57,22 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
   if (!hayBlob()) return res.status(500).json({ error: 'Blob no configurado' });
 
-  // Sin usuario válido no se sube (va antes de tocar el body, como observaciones.js). Vale para los
-  // dos caminos: firmar un permiso de subida es tan sensible como subir.
-  if (!(await exigirUsuario(req, res))) return;
-
   const body = req.body || {};
 
   // El camino de cliente se reconoce por el sobre que manda el SDK, no por un parámetro nuestro.
+  //
+  // 🔴 **Su sesión NO puede exigirse acá arriba**, y eso costó una subida rota en prod: la llamada
+  // la hace el `fetch` interno de `@vercel/blob/client`, que no lleva el header `x-monitor-auth`.
+  // El guard de arriba contestaba **403** a un usuario perfectamente logueado y el SDK lo traducía
+  // a «Failed to retrieve the client token», un cartel que no dice nada de sesiones. La sesión de
+  // este camino se exige adentro de `onBeforeGenerateToken`, con el sobre que viaja en el cuerpo:
+  // el mismo KV, la misma respuesta, otro sobre.
   if (typeof body.type === 'string' && body.type.startsWith('blob.')) {
     return await permisoDeSubida(req, res, body);
   }
+
+  // Sin usuario válido no se sube (va antes de tocar el body, como observaciones.js).
+  if (!(await exigirUsuario(req, res))) return;
 
   const prefix = PREFIJOS.has(body.prefix) ? body.prefix : 'fundas';
   const r = await subirDataUrl(body.dataUrl, prefix);
@@ -81,13 +87,23 @@ export default async function handler(req, res) {
  * decir cualquier cosa; lo único que se acepta es que empiece con `piezas/`. Sin este chequeo, una
  * sesión del Monitor sirve para escribir en cualquier carpeta del Blob, incluidas las de Fundas y
  * las de los reclamos.
+ *
+ * ⛔ **Y la sesión se exige acá adentro, no antes.** Es el único lugar donde el sobre está a mano:
+ * el SDK lo trae como `clientPayload`. Firmar un permiso de subida es tan sensible como subir, así
+ * que la pregunta al KV es la misma que hace `exigirUsuario` — lo único que cambia es de dónde sale
+ * el sobre. Que esto viva adentro del callback y no en el handler es lo que hace que un fallo de
+ * sesión llegue al browser como un cartel legible en vez de como un 403 mudo del SDK.
  */
 async function permisoDeSubida(req, res, body) {
   try {
     const salida = await handleUpload({
       request: req,
       body,
-      onBeforeGenerateToken: async (pathname) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        const { user, pass, token } = sobreDeCredenciales(clientPayload);
+        if (!(await usuarioValido(user, pass, token))) {
+          throw new Error('Necesitás estar logueado en el Monitor para subir una pieza.');
+        }
         if (!String(pathname || '').startsWith(`${CARPETA_PIEZAS}/`)) {
           throw new Error(`Las piezas van en la carpeta «${CARPETA_PIEZAS}».`);
         }
