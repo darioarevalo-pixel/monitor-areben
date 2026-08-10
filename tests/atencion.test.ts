@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { armarMensaje, filtrarItems, filtrarModelos, porGrupo, textoDeItem } from '@/lib/atencion/core'
+import {
+  armarMensaje, filtrarItems, filtrarModelos, filtrarProductos, interpolar, porGrupo, textoDeItem, textoDeProducto,
+} from '@/lib/atencion/core'
 import { modelosDelMenu, nombreDesdeSlug, semillaDe, SEMILLA_BDI } from '@/lib/atencion/modelos'
-import { PLANTILLA_MODELO_DEFECTO, type ItemAtencion } from '@/lib/atencion/tipos'
+import { PLANTILLA_MODELO_DEFECTO, PLANTILLA_PRODUCTO_DEFECTO, type ItemAtencion } from '@/lib/atencion/tipos'
 
 const BASE = 'https://bdiaccesorios.com.ar'
 
@@ -169,5 +171,70 @@ describe('filtrarItems / porGrupo', () => {
 
   it('dentro del grupo respeta el orden de carga', () => {
     expect(porGrupo(items)[1].items.map((i) => i.id)).toEqual(['1', '2'])
+  })
+})
+
+describe('interpolar', () => {
+  it('reemplaza cada marcador donde esté, y todas las veces', () => {
+    expect(interpolar('{a} y {a} y {b}', { a: 'uno', b: 'dos' })).toBe('uno y uno y dos')
+  })
+
+  it('el marcador que no existe se deja tal cual, nunca se borra', () => {
+    // Si alguien escribe {Producto} con mayúscula, verlo en el mensaje copiado dice qué pasó.
+    expect(interpolar('{Producto} sale {precio}', { producto: 'x', precio: '$10' })).toBe('{Producto} sale $10')
+  })
+
+  it('un valor vacío sí reemplaza, por vacío', () => {
+    expect(interpolar('sale {precio}', { precio: '' })).toBe('sale ')
+  })
+})
+
+describe('textoDeProducto', () => {
+  const P = { producto: 'Corset Bianca', link: 'https://zattia.com.ar/productos/corset-bianca', precio: '$39.990', sku: 'ZT-1043' }
+
+  it('arma el mensaje de la plantilla de fábrica', () => {
+    expect(textoDeProducto(PLANTILLA_PRODUCTO_DEFECTO, P)).toBe(
+      '¡Hola! Mirá, esta es la Corset Bianca 💛\n$39.990\nhttps://zattia.com.ar/productos/corset-bianca',
+    )
+  })
+
+  it('sin precio, el renglón del precio se cae en vez de quedar en blanco', () => {
+    // El modo de falla que evita: un renglón vacío en el medio de un WhatsApp. Y jamás un "$0".
+    const t = textoDeProducto(PLANTILLA_PRODUCTO_DEFECTO, { ...P, precio: '' })
+    expect(t).toBe('¡Hola! Mirá, esta es la Corset Bianca 💛\nhttps://zattia.com.ar/productos/corset-bianca')
+    expect(t).not.toContain('$0')
+  })
+
+  it('un renglón que ya venía vacío en la plantilla se respeta', () => {
+    // Ahí alguien quiso separar dos párrafos; no es un hueco que dejó un marcador.
+    expect(textoDeProducto('Hola\n\n{link}', P)).toBe(`Hola\n\n${P.link}`)
+  })
+})
+
+describe('filtrarProductos', () => {
+  const CATALOGO = [
+    { id: 1, name: 'Corset Bianca', sku: 'ZT-1043' },
+    { id: 2, name: 'Corset Lola', sku: 'ZT-1044' },
+    { id: 3, name: 'Pantalón Cargo', sku: 'ZT-2001' },
+  ]
+
+  it('busca por nombre, sin tildes y en cualquier orden', () => {
+    expect(filtrarProductos(CATALOGO, 'pantalon').hallados.map((p) => p.id)).toEqual([3])
+    expect(filtrarProductos(CATALOGO, 'bianca corset').hallados.map((p) => p.id)).toEqual([1])
+  })
+
+  it('busca por SKU', () => {
+    expect(filtrarProductos(CATALOGO, 'zt-2001').hallados.map((p) => p.id)).toEqual([3])
+  })
+
+  it('con menos de dos letras no devuelve nada: la tienda entera en pantalla es lo que hay que evitar', () => {
+    expect(filtrarProductos(CATALOGO, '').hallados).toEqual([])
+    expect(filtrarProductos(CATALOGO, 'c').hallados).toEqual([])
+  })
+
+  it('corta en el tope pero informa el total, para poder decir «y N más»', () => {
+    const r = filtrarProductos(CATALOGO, 'corset', 1)
+    expect(r.hallados).toHaveLength(1)
+    expect(r.total).toBe(2)
   })
 })

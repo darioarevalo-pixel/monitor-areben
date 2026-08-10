@@ -3,18 +3,51 @@
  * Sin red y sin DOM.
  */
 
-import type { ItemAtencion, ModeloTienda } from './tipos'
+import type { ItemAtencion, ModeloTienda, ProductoTienda } from './tipos'
 
 /**
- * Reemplaza `{modelo}` y `{link}` en la plantilla.
+ * Reemplaza los marcadores `{asi}` de una plantilla.
  *
- * Los marcadores que no existen se dejan tal cual en vez de borrarse: si alguien escribe `{Modelo}`
- * con mayúscula, verlo en el mensaje copiado dice qué pasó; un hueco en blanco, no.
+ * Los marcadores que no están en `valores` se dejan tal cual en vez de borrarse: si alguien escribe
+ * `{Modelo}` con mayúscula, verlo en el mensaje copiado dice qué pasó; un hueco en blanco, no.
+ *
+ * Un valor vacío **sí** se reemplaza, por vacío. Es el caso de un producto sin precio: mejor una
+ * línea de menos que un `{precio}` crudo viajando a un WhatsApp.
  */
+export function interpolar(plantilla: string, valores: Record<string, string>): string {
+  let out = String(plantilla || '')
+  for (const [clave, valor] of Object.entries(valores)) {
+    out = out.split(`{${clave}}`).join(valor)
+  }
+  return out
+}
+
+/** El mensaje de un modelo de celular: `{modelo}` y `{link}`. */
 export function armarMensaje(plantilla: string, m: { nombre: string; url: string }): string {
+  return interpolar(plantilla, { modelo: m.nombre, link: m.url })
+}
+
+/**
+ * El mensaje de un producto: `{producto}`, `{link}`, `{precio}` y `{sku}`.
+ *
+ * El precio llega **ya formateado** y no como número: formatearlo es cosa del kit (`formatMoney`) y
+ * este archivo es lógica pura. Cuando no hay precio llega vacío — nunca `$0`, que en un WhatsApp es
+ * un problema comercial y no un detalle de formato.
+ *
+ * Un renglón que **tenía** algo escrito y quedó vacío al interpolar se cae. La plantilla de fábrica
+ * pone el precio en una línea propia: sin precio dejaría un renglón en blanco en el medio del
+ * mensaje. Un renglón que ya venía vacío en la plantilla se respeta — ahí alguien quiso separar.
+ */
+export function textoDeProducto(
+  plantilla: string,
+  v: { producto: string; link: string; precio: string; sku: string },
+): string {
   return String(plantilla || '')
-    .replace(/\{modelo\}/g, m.nombre)
-    .replace(/\{link\}/g, m.url)
+    .split('\n')
+    .map((linea) => ({ antes: linea.trim(), despues: interpolar(linea, v) }))
+    .filter(({ antes, despues }) => antes === '' || despues.trim() !== '')
+    .map(({ despues }) => despues)
+    .join('\n')
 }
 
 /** Lo que se copia de un item: el mensaje con el link pegado abajo, o sólo uno de los dos. */
@@ -47,6 +80,34 @@ export function filtrarItems(items: ItemAtencion[], q: string): ItemAtencion[] {
     const heno = normalizar(`${i.titulo} ${i.grupo || ''} ${i.texto || ''} ${i.url || ''}`)
     return palabras.every((p) => heno.includes(p))
   })
+}
+
+/**
+ * Cuántos productos se muestran a la vez. Quien atiende necesita **uno**: si la búsqueda trae 200,
+ * el problema no se arregla scrolleando, se arregla escribiendo dos palabras más. La pantalla dice
+ * cuántos quedaron afuera en vez de cortar en silencio.
+ */
+export const TOPE_PRODUCTOS = 30
+
+/**
+ * Mismo criterio que los modelos, sobre el nombre y el SKU del producto.
+ *
+ * **Con menos de dos letras no devuelve nada**, y eso es a propósito: la tienda entera en pantalla
+ * es justo lo que esta sección existe para no hacer. Devuelve también cuántos hubo en total, que es
+ * lo que se necesita para decir "y N más".
+ */
+export function filtrarProductos(
+  productos: ProductoTienda[],
+  q: string,
+  tope = TOPE_PRODUCTOS,
+): { hallados: ProductoTienda[]; total: number } {
+  const palabras = normalizar(q).split(/\s+/).filter(Boolean)
+  if (normalizar(q).length < 2) return { hallados: [], total: 0 }
+  const todos = productos.filter((p) => {
+    const heno = normalizar(`${p.name} ${p.sku || ''}`)
+    return palabras.every((w) => heno.includes(w))
+  })
+  return { hallados: todos.slice(0, tope), total: todos.length }
 }
 
 function normalizar(s: string): string {
