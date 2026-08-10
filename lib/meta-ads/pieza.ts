@@ -13,6 +13,7 @@ import {
   CLASE_POR_EXTENSION as CLASE_POR_EXTENSION_JS,
   copyDeCreativo as copyDeCreativoJs,
   cuerpoDeCreativo as cuerpoDeCreativoJs,
+  destinoDe as destinoDeJs,
   TOPE_PIEZAS as TOPE_PIEZAS_JS,
   validarPiezas as validarPiezasJs,
 } from './pieza.core.js'
@@ -91,6 +92,14 @@ export const cuerpoDeCreativo = cuerpoDeCreativoJs as (
   copy: CopyDeAviso | null,
   pieza: PiezaEnMeta | null,
 ) => { ok: true; cuerpo: Record<string, string> } | Falla
+/**
+ * A dónde manda un aviso. La MISMA lectura que dibuja la vista previa (`piezaDe`) y que valida el
+ * guard: en un aviso de video el destino está adentro del botón. Ver `pieza.core.js`.
+ */
+export const destinoDe = destinoDeJs as (
+  spec: CreativoLeido['object_story_spec'] | null | undefined,
+) => string | null
+
 export const validarPiezas = validarPiezasJs as (
   piezas: unknown,
 ) => { ok: true; piezas: PiezaCargada[] } | Falla

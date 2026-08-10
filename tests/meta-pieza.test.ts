@@ -3,10 +3,12 @@ import {
   claseDePieza,
   copyDeCreativo,
   cuerpoDeCreativo,
+  destinoDe,
   TOPE_PIEZAS,
   validarPiezas,
   type CreativoLeido,
 } from '@/lib/meta-ads/pieza'
+import { piezaDe } from '@/lib/meta-ads/creativos.core.js'
 
 /**
  * El guard de la pieza nueva.
@@ -240,5 +242,40 @@ describe('validarPiezas — se valida antes de armar un solo paso', () => {
     const r = validarPiezas([{ nombre: 'catalogo.pdf', url: 'https://blob.vercel-storage.com/c.pdf' }])
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toContain('mp4')
+  })
+})
+
+/**
+ * El espejo entre lo que la pantalla DIBUJA y lo que el servidor VALIDA.
+ *
+ * 🔴 Nació de un defecto medido en prod el 9-ago-2026: `piezaDe()` leía el destino sólo de
+ * `link_data.link`, así que los **5 avisos de video de BDI** —los únicos que sirven de modelo—
+ * salían con «Sin destino legible» mientras `copyDeCreativo()` los aceptaba. 0 de 18 avisos
+ * mostraban destino en las dos campañas.
+ *
+ * Lo que amarra este bloque no es el valor de un campo: es que **las dos lecturas sean la misma
+ * función**. Si vuelven a separarse, la pantalla va a desaconsejar modelos que sirven.
+ */
+describe('destinoDe — una sola lectura para la vista previa y para el guard', () => {
+  it('🔴 en un aviso de video, el destino está ADENTRO del botón', () => {
+    expect(destinoDe(MODELO_VIDEO.object_story_spec)).toBe('https://stunned.com.ar/nueva')
+  })
+
+  it('en uno de imagen sigue saliendo de `link_data.link`', () => {
+    expect(destinoDe(MODELO_IMAGEN.object_story_spec)).toBe('https://bdi.com.ar/colecciones/frio')
+  })
+
+  it('sin destino en ningún lado devuelve null, que es lo que dispara el rechazo', () => {
+    expect(destinoDe({ page_id: '1', video_data: { video_id: '9' } })).toBeNull()
+    expect(destinoDe(undefined)).toBeNull()
+  })
+
+  it('🔑 lo que dibuja `piezaDe` y lo que valida `copyDeCreativo` coinciden', () => {
+    for (const modelo of [MODELO_IMAGEN, MODELO_VIDEO]) {
+      const dibujado = piezaDe(modelo).destino
+      const validado = copyDeCreativo(modelo)
+      expect(validado.ok).toBe(true)
+      if (validado.ok) expect(dibujado).toBe(validado.copy.destino)
+    }
   })
 })
