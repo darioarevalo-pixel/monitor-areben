@@ -565,11 +565,16 @@ async function prepararPiezas(perfil, b, marcador) {
   // 🔑 La página, preguntada. Un 190/200 acá dice «el system user no tiene esa página asignada», que
   // se arregla en el Business Manager en un minuto — y es infinitamente más barato de leer ahora que
   // como un rechazo del paso 3 con tres videos ya subidos.
+  //
+  // 🔴 **El id va EN EL CARTEL, y no es un detalle técnico de más.** Sin él, «no puede ver la página
+  // del aviso modelo» manda a asignar páginas en el Business Manager — y la primera vez que pasó de
+  // verdad (9-ago-2026) las tres páginas YA estaban asignadas: el id que pedía era otro. Un error que
+  // nombra la acción pero no el objeto manda a arreglar lo que ya está bien.
   const pag = await graph(`${leido.copy.pageId}?fields=id,name`, 2);
   if (!pag.ok) {
     return {
       ok: false, status: 409,
-      error: `El token no puede ver la página del aviso modelo (${mensajeError(pag)}). Asignale la página al usuario del sistema en el Business Manager y volvé a intentar.`,
+      error: `El token no puede ver la página ${leido.copy.pageId}, que es la del aviso modelo (${mensajeError(pag)}). Fijate en el Business Manager si esa página está asignada al usuario del sistema monitor-ads.`,
     };
   }
 
