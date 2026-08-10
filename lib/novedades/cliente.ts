@@ -6,7 +6,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { DatosSistema, EstadoNovedad, Novedad } from './tipos'
+import type { DatosSistema, EstadoNovedad, Lectura, Novedad } from './tipos'
 
 const API = '/api/datos?recurso=sistema'
 
@@ -20,6 +20,25 @@ export async function leerSistema(): Promise<DatosSistema> {
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las novedades.')
   return { novedades: d.novedades || [], leidas: d.leidas || [], puede: d.puede || { publicar: false } }
+}
+
+/**
+ * Quién leyó una novedad. Bajo demanda y sólo para quien publica.
+ *
+ * ⚠️ Contesta quién LEYÓ, nunca quién falta: el padrón de usuarios vive en el KV de bdi-catalogo y
+ * no en esta base, así que "todavía no la leyeron: …" no se puede armar sin traer el padrón. Es una
+ * lista de presentes, no de ausentes, y la pantalla lo tiene que decir así.
+ */
+export async function leerLecturas(id: string): Promise<Lectura[]> {
+  const r = await apiFetch(`${API}&vista=lecturas&id=${encodeURIComponent(id)}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo ver quién la leyó.')
+  return (d.lecturas || []).map((l: { usuario: string; version: number; leida_at: string }) => ({
+    novedad_id: id,
+    usuario: l.usuario,
+    version: l.version,
+    leida_at: l.leida_at,
+  }))
 }
 
 /**

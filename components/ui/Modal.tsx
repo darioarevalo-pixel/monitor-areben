@@ -21,10 +21,22 @@ export type ModalProps = {
   ancho?: 'normal' | 'ancho'
   /** Clic en el fondo cierra. Se apaga en diálogos donde perder lo tipeado dolería. */
   cerrarConFondo?: boolean
+  /**
+   * Escape cierra. Se apaga en los diálogos que tienen que **bloquear** de verdad — el cartel de
+   * una novedad importante, que existe justamente para que no se pueda esquivar sin leerlo.
+   *
+   * Vino después que `cerrarConFondo` y con default `true` para que las ~15 pantallas que ya usan
+   * el kit, y `Confirm`, no cambien en nada. Sin esto, apagar el fondo no alcanzaba: el Escape
+   * seguía siendo una salida y el cartel no bloqueaba nada.
+   */
+  cerrarConEscape?: boolean
   children: React.ReactNode
 }
 
-export function Modal({ abierto, onCerrar, titulo, pie, ancho = 'normal', cerrarConFondo = true, children }: ModalProps) {
+export function Modal({
+  abierto, onCerrar, titulo, pie, ancho = 'normal',
+  cerrarConFondo = true, cerrarConEscape = true, children,
+}: ModalProps) {
   const caja = useRef<HTMLDivElement>(null)
   const foco = useRef<Element | null>(null)
 
@@ -37,7 +49,7 @@ export function Modal({ abierto, onCerrar, titulo, pie, ancho = 'normal', cerrar
     document.body.style.overflow = 'hidden'
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && cerrarConEscape) {
         e.stopPropagation()
         cerrar()
       }
@@ -53,7 +65,7 @@ export function Modal({ abierto, onCerrar, titulo, pie, ancho = 'normal', cerrar
       document.body.style.overflow = overflow
       ;(foco.current as HTMLElement | null)?.focus?.()
     }
-  }, [abierto, cerrar])
+  }, [abierto, cerrar, cerrarConEscape])
 
   if (!abierto) return null
 

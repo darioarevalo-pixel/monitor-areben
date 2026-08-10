@@ -9,6 +9,7 @@ import { CanjePortal } from '@/components/canjes/CanjePortal'
 import { LegalPublico } from '@/components/legal/LegalPublico'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
+import { CartelNovedad } from '@/components/novedades/CartelNovedad'
 import { AccionesProvider } from '@/components/layout/acciones'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
@@ -116,6 +117,14 @@ export default function Seccion() {
             onNavegar={() => setMenuAbierto(false)}
           />
           {menuAbierto && <div className="sidebar-tapa" onClick={() => setMenuAbierto(false)} />}
+          {/*
+            Va acá y no adentro de una sección: una novedad importante tiene que aparecer estés
+            donde estés. Y va DESPUÉS del gate de login y fuera de `AccionesProvider` —el portal de
+            acciones es del encabezado de la sección, y esto no pertenece a ninguna—. Los portales
+            públicos (`/reclamo/<token>`, `/canje/<token>`) salen del componente mucho antes, así
+            que un cliente nunca lo puede llegar a ver.
+          */}
+          <CartelNovedad />
           <div className="shell-main">
             {/* Topbar: solo existe abajo de 900px (la regla vive en globals.css). Es la
                 puerta al menú cuando el sidebar se convirtió en cajón. */}

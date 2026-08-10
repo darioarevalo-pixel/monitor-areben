@@ -18,8 +18,8 @@ import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { EditorNovedad } from './EditorNovedad'
 import { useSistema } from '@/store/useSistema'
-import { borrarNovedad, cambiarEstado, nuevoId } from '@/lib/novedades/cliente'
-import { NUEVA, type Novedad } from '@/lib/novedades/tipos'
+import { borrarNovedad, cambiarEstado, leerLecturas, nuevoId } from '@/lib/novedades/cliente'
+import { NUEVA, type Lectura, type Novedad } from '@/lib/novedades/tipos'
 import {
   Badge, Button, EmptyState, Esqueleto, Markdown, Notice, Plegable, SectionCard,
   color, font, space, useConfirmar, useToast,
@@ -31,6 +31,57 @@ function cuando(iso?: string | null): string {
   const d = new Date(iso)
   const esteAnio = d.getFullYear() === new Date().getFullYear()
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', ...(esteAnio ? {} : { year: 'numeric' }) })
+}
+
+/**
+ * Quién leyó esta novedad. Se pide al abrirlo, no con la lista: no tiene sentido que todo el equipo
+ * se baje quién leyó qué cada vez que entra.
+ *
+ * ⚠️ **Es una lista de presentes, no de ausentes.** No se puede decir "todavía no la leyeron: …"
+ * porque el padrón de usuarios vive en el KV de bdi-catalogo y no en esta base. Y `Local` y
+ * `Depósito` son puestos compartidos: que el puesto haya marcado leído no dice que una persona en
+ * particular se enteró. Las dos cosas van escritas en la pantalla, porque si no este número se usa
+ * como prueba de algo que no prueba.
+ */
+function QuienLaLeyo({ id }: { id: string }) {
+  const [abierto, setAbierto] = useState(false)
+  const [lecturas, setLecturas] = useState<Lectura[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const abrir = () => {
+    const va = !abierto
+    setAbierto(va)
+    if (!va || lecturas) return
+    leerLecturas(id)
+      .then(setLecturas)
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo.'))
+  }
+
+  return (
+    <Plegable
+      abierto={abierto}
+      onToggle={abrir}
+      titulo={lecturas ? `La leyeron ${lecturas.length}` : 'Quién la leyó'}
+      ayuda="Quiénes la abrieron desde que se publicó. «Local» y «Depósito» son puestos compartidos: que el puesto la haya leído no dice qué persona estaba adelante."
+    >
+      {error ? (
+        <Notice tone="warning">{error}</Notice>
+      ) : !lecturas ? (
+        <span style={{ fontSize: font.sm, color: color.mut2 }}>Buscando…</span>
+      ) : lecturas.length === 0 ? (
+        <span style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no la abrió nadie.</span>
+      ) : (
+        <div style={{ display: 'grid', gap: 2, fontSize: font.sm, color: color.ink2 }}>
+          {lecturas.map((l) => (
+            <div key={`${l.usuario}|${l.version}`}>
+              {l.usuario} · {cuando(l.leida_at)}
+              {l.version > 1 ? ` · v${l.version}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+    </Plegable>
+  )
 }
 
 export function Novedades() {
@@ -104,6 +155,8 @@ export function Novedades() {
       </div>
 
       <Markdown texto={n.cuerpo} />
+
+      {puede.publicar && n.estado !== 'borrador' && <QuienLaLeyo id={n.id} />}
 
       {puede.publicar && (
         <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginTop: space[1] }}>

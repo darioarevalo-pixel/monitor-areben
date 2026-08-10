@@ -58,6 +58,21 @@ export default async function handler(req, res) {
   const publicar = puedePublicar(perfil);
 
   try {
+    if (req.method === 'GET' && String(req.query.vista || '') === 'lecturas') {
+      // Quién leyó una novedad. Va aparte del GET general y bajo demanda: no tiene sentido que todo
+      // el equipo se baje quién leyó qué cada vez que abre el monitor.
+      if (!publicar) return res.status(403).json({ error: 'No tenés permiso para ver esto.' });
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      const { data, error } = await supabase
+        .from('novedades_leidas')
+        .select('usuario, version, leida_at')
+        .eq('novedad_id', id)
+        .order('leida_at', { ascending: true });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, lecturas: data || [] });
+    }
+
     if (req.method === 'GET') {
       // Quien no publica no ve los borradores: un borrador es un texto a medio escribir, y verlo
       // en la lista se leería como una novedad más.
