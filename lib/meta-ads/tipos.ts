@@ -517,6 +517,16 @@ export type RespuestaDiagnostico = {
   scopesMotivo: string | null
   puedeEscribir: boolean
   cuentas: CuentaDiagnostico[]
+  /**
+   * Las páginas que el token dice manejar (`/me/accounts`), o null si Meta no contestó.
+   *
+   * 🔑 Va por el canal que habilita `pages_show_list`. **Leer la ficha de una página es otro
+   * permiso** (`pages_read_engagement`), así que un `(#100) missing permission` sobre el nodo NO
+   * significa que la página le falte al system user — pasó el 9-ago-2026 con la de BDI, que estaba
+   * asignada. Esta lista es la que hay que mirar antes de ir a tocar el Business Manager.
+   */
+  paginasToken: { id: string; nombre: string; tareas: string[] }[] | null
+  paginasTokenMotivo: string | null
 }
 
 /**

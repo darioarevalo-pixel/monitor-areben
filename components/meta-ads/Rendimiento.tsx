@@ -251,6 +251,17 @@ function DiagnosticoToken() {
               ? <span style={{ color: paleta.mut2 }}>Meta no los informó{r.data.scopesMotivo ? ` (${r.data.scopesMotivo})` : ''} — con un token de system user es normal; lo que manda es la prueba de abajo.</span>
               : r.data.scopes.join(', ') || <span style={{ color: paleta.mut2 }}>ninguno</span>}
           </div>
+          {/* Las páginas van al lado de los scopes y no adentro de cada cuenta: son del TOKEN, no de
+              la cuenta publicitaria. Sin esta línea, «no puede ver la página X» mandaba a revisar
+              asignaciones en el Business Manager que ya estaban bien. */}
+          <div style={{ fontSize: 12, color: paleta.ink2 }}>
+            <b>Páginas que maneja el token:</b>{' '}
+            {r.data.paginasToken === null
+              ? <span style={{ color: paleta.mut2 }}>Meta no las contestó{r.data.paginasTokenMotivo ? ` (${r.data.paginasTokenMotivo})` : ''}</span>
+              : r.data.paginasToken.length === 0
+                ? <span style={{ color: paleta.mut2 }}>ninguna — sin una página asignada, el system user no puede armar creativos nuevos</span>
+                : r.data.paginasToken.map((p) => `${p.nombre} (${p.id})`).join(' · ')}
+          </div>
           {r.data.cuentas.map((c) => <FilaDiagnostico key={c.id} c={c} />)}
         </div>
       )}

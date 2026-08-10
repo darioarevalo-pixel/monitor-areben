@@ -709,7 +709,39 @@ async function diagnostico(res, perfil, probar) {
     scopesMotivo: permRes.ok ? null : mensajeError(permRes),
     puedeEscribir: filas.some((f) => f.veredicto === 'escribe'),
     cuentas: filas,
+    ...(await paginasDelToken()),
   });
+}
+
+/**
+ * Las páginas que el token dice manejar, preguntadas **por el canal que sus scopes permiten**.
+ *
+ * 🔴 Nació de un diagnóstico que costó una hora el 9-ago-2026. Armar una pieza fallaba con
+ * *«El token no puede ver la página 264601567300555»* —que es la de BDI Accesorios—, y en el
+ * Business Manager esa página figuraba **«Ya se asignó»** al system user. Las dos cosas eran
+ * ciertas: el activo estaba, y el token igual no podía **leer la ficha** de la página.
+ *
+ * 🔑 **Son permisos distintos.** `GET /<page_id>?fields=…` lee el nodo Página y pide
+ * `pages_read_engagement`; el token tiene `pages_show_list`, que habilita **listar** las páginas
+ * (`/me/accounts`) y nada más. ⇒ preguntar por el nodo es preguntar por la puerta equivocada, y la
+ * respuesta —`(#100) missing permission`— manda a arreglar una asignación que ya está bien.
+ *
+ * ⚠️ Esto **no** dice si se puede crear un creativo con esa página: crear va con `ads_management` y
+ * el activo asignado, sin leer nada. Dice si el token la ve por donde puede verla, que es lo que
+ * hacía falta para dejar de adivinar.
+ */
+async function paginasDelToken() {
+  const r = await graph('me/accounts?fields=id,name,tasks&limit=100');
+  if (!r.ok) return { paginasToken: null, paginasTokenMotivo: mensajeError(r) };
+  const filas = (r.data && r.data.data) || [];
+  return {
+    paginasToken: filas.map((p) => ({
+      id: String(p.id),
+      nombre: String(p.name || ''),
+      tareas: Array.isArray(p.tasks) ? p.tasks : [],
+    })),
+    paginasTokenMotivo: null,
+  };
 }
 
 /**
