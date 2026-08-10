@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { esEstado, ESTADOS, normalizarDestino, sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { esEstado, ESTADOS, normalizarDestino, seMarcanAlEntrar, sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
 import { esParaMi } from '@/lib/novedades/destino.core.js'
 
 const nov = (id: string, extra: Partial<Novedad> = {}): Novedad => ({
@@ -110,5 +110,24 @@ describe('sinLeer y el destino', () => {
     // badge prendido por lo que le mandó a otro grupo.
     const r = sinLeer([nov('a', { paraMi: false }), nov('b', { paraMi: true })], [])
     expect(r.map((n) => n.id)).toEqual(['b'])
+  })
+})
+
+describe('qué se marca leído con sólo abrir la sección', () => {
+  // 🔴 El defecto que esto amarra es el que se comió al cartel en la primera prueba en vivo: el
+  // badge lleva a Novedades, la sección marcaba TODO al abrirse, y la importante quedaba leída sin
+  // que nadie hubiera visto el cartel. O sea que no se disparaba nunca para quien entra por el
+  // badge — que es por donde entra todo el mundo.
+  it('una IMPORTANTE no se marca por entrar: sólo con «Entendido» en el cartel', () => {
+    const r = seMarcanAlEntrar([nov('a', { importante: true }), nov('b')])
+    expect(r.map((n) => n.id)).toEqual(['b'])
+  })
+
+  it('las que no son para mí tampoco', () => {
+    expect(seMarcanAlEntrar([nov('a', { paraMi: false })])).toEqual([])
+  })
+
+  it('ni los borradores ni las archivadas', () => {
+    expect(seMarcanAlEntrar([nov('a', { estado: 'borrador' }), nov('b', { estado: 'archivada' })])).toEqual([])
   })
 })

@@ -1,6 +1,11 @@
 /** Novedades: qué cambió en los sistemas, y quién lo leyó. */
 
-import { ESTADOS as ESTADOS_JS, esEstado as esEstadoJs, sinLeer as sinLeerJs } from './estados.core.js'
+import {
+  ESTADOS as ESTADOS_JS,
+  esEstado as esEstadoJs,
+  seMarcanAlEntrar as seMarcanAlEntrarJs,
+  sinLeer as sinLeerJs,
+} from './estados.core.js'
 import { normalizarDestino as normalizarDestinoJs, TODOS as TODOS_JS } from './destino.core.js'
 import type { ManualIndice } from '@/lib/manuales/tipos'
 
@@ -50,6 +55,9 @@ export const esEstado = esEstadoJs as (v: unknown) => boolean
 
 /** Las publicadas que esta persona todavía no leyó en la versión de hoy. */
 export const sinLeer = sinLeerJs as (novedades: Novedad[], leidas: Lectura[]) => Novedad[]
+
+/** Las que se dan por leídas con sólo abrir la sección. ⚠️ Las importantes NO: ver el core. */
+export const seMarcanAlEntrar = seMarcanAlEntrarJs as (novedades: Novedad[]) => Novedad[]
 
 export const TODOS = TODOS_JS as Destino
 export const normalizarDestino = normalizarDestinoJs as (d: unknown) => Destino

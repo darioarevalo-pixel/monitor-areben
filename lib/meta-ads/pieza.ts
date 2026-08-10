@@ -14,6 +14,7 @@ import {
   copyDeCreativo as copyDeCreativoJs,
   cuerpoDeCreativo as cuerpoDeCreativoJs,
   destinoDe as destinoDeJs,
+  puedeUsarLaPagina as puedeUsarLaPaginaJs,
   TOPE_PIEZAS as TOPE_PIEZAS_JS,
   validarPiezas as validarPiezasJs,
 } from './pieza.core.js'
@@ -99,6 +100,15 @@ export const cuerpoDeCreativo = cuerpoDeCreativoJs as (
 export const destinoDe = destinoDeJs as (
   spec: CreativoLeido['object_story_spec'] | null | undefined,
 ) => string | null
+
+/**
+ * ¿El token puede publicar desde esta página? Se contesta contra la lista de `/me/accounts`, NO
+ * leyendo el nodo Página: son permisos distintos. `null` = no se pudo preguntar ⇒ no se frena.
+ */
+export const puedeUsarLaPagina = puedeUsarLaPaginaJs as (
+  pageId: string | null | undefined,
+  paginas: { id?: string; nombre?: string }[] | null,
+) => { ok: true; verificado: boolean } | { ok: false; verificado: boolean; error: string }
 
 export const validarPiezas = validarPiezasJs as (
   piezas: unknown,

@@ -4,6 +4,7 @@ import {
   copyDeCreativo,
   cuerpoDeCreativo,
   destinoDe,
+  puedeUsarLaPagina,
   TOPE_PIEZAS,
   validarPiezas,
   type CreativoLeido,
@@ -277,5 +278,50 @@ describe('destinoDe — una sola lectura para la vista previa y para el guard', 
       expect(validado.ok).toBe(true)
       if (validado.ok) expect(dibujado).toBe(validado.copy.destino)
     }
+  })
+})
+
+/**
+ * 🔴 El guardarraíl de la página, que el 9-ago-2026 frenó lo que estaba bien.
+ *
+ * Armar una pieza de BDI fallaba con «(#100) missing permission» sobre la página `264601567300555`,
+ * y en el Business Manager esa página decía **«Ya se asignó»** al usuario del sistema. Las dos cosas
+ * eran ciertas: el chequeo hacía `GET /<page_id>`, que lee el NODO y exige `pages_read_engagement`,
+ * cuando el token sólo tiene `pages_show_list` — o sea, **preguntaba por una puerta que ese token
+ * nunca iba a poder abrir**, y su «missing permission» no decía nada sobre si la página estaba.
+ *
+ * Lo que este bloque amarra es la lección: la lista manda, y **«no se pudo preguntar» no frena**.
+ */
+describe('puedeUsarLaPagina — la lista de /me/accounts, no el nodo Página', () => {
+  const PAGINAS = [
+    { id: '992484813957797', nombre: 'Stunned co' },
+    { id: '470118182844894', nombre: 'Zattia' },
+    { id: '264601567300555', nombre: 'BDI Accesorios' },
+  ]
+
+  it('deja pasar la página que el token maneja', () => {
+    const r = puedeUsarLaPagina('264601567300555', PAGINAS)
+    expect(r.ok).toBe(true)
+    expect(r.verificado).toBe(true)
+  })
+
+  it('frena la que no maneja, y dice cuáles sí', () => {
+    const r = puedeUsarLaPagina('111111111111111', PAGINAS)
+    expect(r.ok).toBe(false)
+    // El listado ES el valor: sin él, el cartel manda a adivinar en el Business Manager.
+    if (!r.ok) expect(r.error).toContain('BDI Accesorios')
+  })
+
+  it('🔴 si no se pudo preguntar, NO frena', () => {
+    // `null` es «no sé», y un guardarraíl que convierte «no sé» en «no» es el que costó la hora.
+    const r = puedeUsarLaPagina('264601567300555', null)
+    expect(r.ok).toBe(true)
+    expect(r.verificado).toBe(false)
+  })
+
+  it('sin ninguna página asignada, frena y lo dice', () => {
+    const r = puedeUsarLaPagina('264601567300555', [])
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('ninguna')
   })
 })

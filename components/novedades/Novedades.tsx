@@ -19,7 +19,7 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { EditorNovedad } from './EditorNovedad'
 import { useSistema } from '@/store/useSistema'
 import { borrarNovedad, cambiarEstado, leerLecturas, nuevoId } from '@/lib/novedades/cliente'
-import { NUEVA, type Destino, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import { NUEVA, seMarcanAlEntrar, type Destino, type Lectura, type Novedad } from '@/lib/novedades/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 import { tituloLimpio } from '@/lib/nav'
 import {
@@ -112,11 +112,11 @@ export function Novedades() {
 
   // Al entrar, todo lo publicado que se está viendo queda leído. Se hace en un efecto y no al
   // pintar cada tarjeta para que no dependa de si la persona scrolleó hasta el final.
-  // Sólo las propias: quien publica ve también las que mandó a otro grupo, y marcarlas como leídas
-  // por él ensuciaría el registro de quién la leyó con alguien a quien no iba dirigida.
+  // Qué se marca y qué no está en `seMarcanAlEntrar`: quedan afuera las que no son para uno y —lo
+  // que importa— **las importantes**, que sólo se marcan apretando «Entendido» en el cartel.
   useEffect(() => {
     if (!cargado) return
-    for (const n of novedades) if (n.estado === 'publicada' && n.paraMi !== false) void marcar(n)
+    for (const n of seMarcanAlEntrar(novedades)) void marcar(n)
   }, [cargado, novedades, marcar])
 
   const leidaSet = useMemo(

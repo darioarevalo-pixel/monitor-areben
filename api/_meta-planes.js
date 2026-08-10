@@ -36,7 +36,7 @@ import {
   TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import {
-  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, validarPiezas,
+  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, puedeUsarLaPagina, validarPiezas,
 } from '../lib/meta-ads/pieza.core.js';
 import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
 import { contextoDePoda, correrPoda } from '../lib/meta-ads/correr-poda.core.js';
@@ -562,21 +562,22 @@ async function prepararPiezas(perfil, b, marcador) {
   const leido = copyDeCreativo((mod.data && mod.data.creative) || null);
   if (!leido.ok) return leido;
 
-  // 🔑 La página, preguntada. Un 190/200 acá dice «el system user no tiene esa página asignada», que
-  // se arregla en el Business Manager en un minuto — y es infinitamente más barato de leer ahora que
-  // como un rechazo del paso 3 con tres videos ya subidos.
+  // 🔑 La página, preguntada por el canal correcto. Que el system user no la maneje se arregla en el
+  // Business Manager en un minuto, y es infinitamente más barato de leer ahora que como un rechazo
+  // del paso 3 con tres videos ya subidos.
   //
-  // 🔴 **El id va EN EL CARTEL, y no es un detalle técnico de más.** Sin él, «no puede ver la página
-  // del aviso modelo» manda a asignar páginas en el Business Manager — y la primera vez que pasó de
-  // verdad (9-ago-2026) las tres páginas YA estaban asignadas: el id que pedía era otro. Un error que
-  // nombra la acción pero no el objeto manda a arreglar lo que ya está bien.
-  const pag = await graph(`${leido.copy.pageId}?fields=id,name`, 2);
-  if (!pag.ok) {
-    return {
-      ok: false, status: 409,
-      error: `El token no puede ver la página ${leido.copy.pageId}, que es la del aviso modelo (${mensajeError(pag)}). Fijate en el Business Manager si esa página está asignada al usuario del sistema monitor-ads.`,
-    };
-  }
+  // 🔴 **Acá NO va `GET /<page_id>`, y la diferencia costó una hora el 9-ago-2026.** Ese camino lee
+  // el nodo Página y exige `pages_read_engagement`; el token tiene `pages_show_list`, que sólo
+  // habilita `/me/accounts`. Preguntando por el nodo, armar una pieza de BDI fallaba con
+  // «(#100) missing permission» sobre una página que en el Business Manager decía «Ya se asignó» —
+  // y las dos cosas eran ciertas. El chequeo era más exigente que la operación que protegía: crear
+  // un creativo va con `ads_management` y el activo asignado, sin leer la página.
+  const mias = await graph('me/accounts?fields=id,name&limit=100', 2);
+  const puede = puedeUsarLaPagina(
+    leido.copy.pageId,
+    mias.ok ? ((mias.data && mias.data.data) || []).map((p) => ({ id: p.id, nombre: p.name })) : null,
+  );
+  if (!puede.ok) return { ok: false, status: 409, error: puede.error };
 
   const minimos = await minimosDe(cuentaId);
   const diarioPedido = b.presupuestoCrudo ? Math.round(Number(b.presupuestoCrudo)) : null;
