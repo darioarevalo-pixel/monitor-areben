@@ -39,11 +39,24 @@ import { mimeDePieza } from '@/lib/meta-ads/pieza'
 
 /* ── Las credenciales ──────────────────────────────────────────────────────── */
 
-/** El Client ID de OAuth **nuevo** de `Areben Identidad`, tipo «Aplicación web». */
-export const DRIVE_CLIENT_ID = ''
+/**
+ * El Client ID de OAuth de `Areben Identidad`, creado el 11-ago-2026 como «Monitor · Picker de
+ * Drive». Es **uno nuevo al lado** del que ya existía: ⛔ el del SSO (`Areben SSO`) no se toca, que
+ * es el que usa Supabase para el login con Google de dashboard, producción y monitor.
+ *
+ * ⚠️ Google generó además un **secreto de cliente** junto con esto. **Acá no se usa** —el Picker
+ * saca el token en el browser, sin backend— y por eso no está en el repo.
+ */
+export const DRIVE_CLIENT_ID = '219989173598-lck58dttu942h2tddoof88lkbef1k1re.apps.googleusercontent.com'
 
-/** La clave de API, restringida a `monitor.arebensrl.com` y a la Google Picker API. */
-export const DRIVE_API_KEY = ''
+/**
+ * La clave de API, creada el 11-ago-2026 como «Monitor · Picker de Drive».
+ *
+ * Está restringida **por sitio** (los tres orígenes del monitor, con `/*`) y **a la Google Picker
+ * API sola**: eso es lo que la hace inservible en otra página, no el hecho de esconderla. Va
+ * literal por el mismo motivo que las de `lib/identidad.ts` — viaja en cada llamada del Picker.
+ */
+export const DRIVE_API_KEY = 'AIzaSyBs6XoKZ9WwYgkM7zLNFBfj7kOIUZ8ccKo'
 
 /**
  * El **número** del proyecto `areben-identidad` (no el id de texto). El Picker lo exige como
