@@ -26,7 +26,7 @@ import { instagramParaMostrar } from '@/lib/canjes/instagram'
 import {
   MOTIVOS_NO_ACEPTO, MOTIVOS_RECHAZO, STORE_LABEL, TIPO_CANJE_LABEL,
   costoEstimado, esTerminal, estadoEnCriollo, nombrePersona, quienApruebaCanje,
-  type CanjeStore, type EstadoCanje, type TopeTipo, type TopeUnidad,
+  type CanjeRow, type CanjeStore, type EstadoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
 import { BloqueSeleccion } from './BloqueSeleccion'
 import { BloqueEnvio } from './BloqueEnvio'
@@ -320,15 +320,20 @@ export function FichaCanje({
         onCambio={() => void recargar()}
         editable={editable}
       />
-      {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada. */}
+      {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada.
+          Y si lo retira en el local no hay envío en absoluto: la orden de Tienda Nube, el despacho y
+          la entrega los reemplaza un solo acto en el mostrador. Dejar el bloque visible sería
+          ofrecer dos caminos para lo mismo y alguien terminaría tipeando una orden al pedo. */}
       {!['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado) && (
-        <BloqueEnvio
-          canje={canje}
-          persona={persona}
-          items={items}
-          config={config}
-          onCambio={() => void recargar()}
-        />
+        canje.retiro_local ? <BloqueRetiroLocal canje={canje} /> : (
+          <BloqueEnvio
+            canje={canje}
+            persona={persona}
+            items={items}
+            config={config}
+            onCambio={() => void recargar()}
+          />
+        )
       )}
       {(canje.estado === 'en_curso' || canje.estado === 'cerrado') && (
         <CierreBalance
@@ -593,6 +598,33 @@ function NoAcepto({
           : 'El canje queda cerrado. Para volver a intentarlo se arma uno nuevo.'}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * El reemplazo del bloque de envío cuando lo retira en el local.
+ *
+ * No tiene ni un botón a propósito: **desde acá no se entrega**. El que entrega es el que tiene la
+ * mercadería y la persona enfrente, y lo hace desde su pantalla (Cupones y canjes). Un botón acá
+ * sería marcar entregado algo que todavía nadie entregó, y encima crearía la venta en Gestión Nube,
+ * que no se puede deshacer.
+ */
+function BloqueRetiroLocal({ canje }: { canje: CanjeRow }) {
+  return (
+    <SectionCard title="Cómo lo recibe">
+      {canje.entregado_at ? (
+        <Notice tone="success">
+          Lo retiró en el local el {canje.entregado_at.slice(0, 10)}
+          {canje.gn_venta_number ? ` — venta ${canje.gn_venta_number} en Gestión Nube` : ''}.
+        </Notice>
+      ) : (
+        <Notice tone="neutral">
+          <b>Lo retira en el local.</b> No hay que cargar orden de Tienda Nube ni despachar nada: la
+          persona elige en el mostrador y el local se lo entrega desde <b>Cupones y canjes</b>. Ahí
+          se descuenta el stock y se registra acá solo.
+        </Notice>
+      )}
+    </SectionCard>
   )
 }
 

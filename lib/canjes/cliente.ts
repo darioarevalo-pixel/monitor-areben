@@ -10,6 +10,8 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
+import type { Credencial } from '@/lib/sesion'
 import { baseDeCostos, numeroCanje } from './tipos'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
@@ -399,6 +401,8 @@ export type NuevoCanje = {
   entregables?: EntregablePedido[]
   /** De qué vitrina elige. `null` = ninguna: los productos los carga el equipo, como siempre. */
   vitrina_id?: number | null
+  /** Lo retira en el local en vez de recibirlo por correo. Sólo BDI (`retiroLocalDisponible`). */
+  retiro_local?: boolean
 }
 
 /**
@@ -574,6 +578,81 @@ export async function anotarIntentoEntrega(
 /** ⚠️ Es el pivote: acá el servidor **congela** el `vence_el` de cada entregable. */
 export async function marcarEntregado(store: CanjeStore, id: number): Promise<void> {
   await postear({ store, action: 'entregado', id })
+}
+
+// ── Retiro en el local ──────────────────────────────────────────────────────────
+
+/** Lo que el local ve del mostrador: sin plata, sin balance, sin historial. */
+export type CanjeEnElLocal = {
+  id: number
+  numero: string
+  store: CanjeStore
+  estado: EstadoCanje
+  titulo: string | null
+  acordado_at: string | null
+  persona: { id: number; nombre: string | null; apellido: string | null; instagram: string | null; telefono: string | null }
+  tope_tipo: TopeTipo
+  tope_unidades: TopeUnidad[]
+  unidad: string
+  items: CanjeItem[]
+}
+
+/** Los canjes que hay para entregar en el mostrador. La lista sale filtrada del servidor. */
+export async function leerCanjesDelLocal(): Promise<CanjeEnElLocal[]> {
+  const d = await leer('vista=local')
+  return (d.canjes || []) as CanjeEnElLocal[]
+}
+
+/**
+ * Entregarlo en el mostrador: **crea la venta a $0 en Gestión Nube y recién después la registra**.
+ *
+ * Ese orden es el de `registrarVentaGN` (Fallas) y no es casual: si primero se marcara entregado y
+ * la venta fallara, el canje quedaría cerrado con el stock sin descontar y nadie se enteraría. Al
+ * revés, el error se ve y la venta existe con su número.
+ *
+ * 🔴 **La venta de GN es irreversible por API** —GN no permite anularla— así que si el registro
+ * falla, la venta ya está hecha. El mensaje lo dice con el número, que es lo único que sirve para
+ * arreglarlo a mano en GN.
+ *
+ * La credencial va adentro del pedido porque `/api/crear-venta` valida la identidad server-side, y
+ * apunta siempre a producción: los tokens de ventas de GN viven sólo ahí.
+ */
+export async function entregarEnLocal(
+  canje: Pick<CanjeEnElLocal, 'id' | 'numero' | 'store'>,
+  items: CanjeItem[],
+  persona: { nombre?: string | null; apellido?: string | null },
+  cred: Credencial,
+): Promise<{ gn_venta_number: string | null }> {
+  const quien = [persona.nombre, persona.apellido].filter(Boolean).join(' ').trim() || 'sin nombre'
+  const r = await enviarVentaFetch({
+    store: canje.store,
+    origen: 'local',
+    proposito: 'canje',
+    items: items.map((i) => ({
+      product_id: i.product_id ?? null,
+      size_id: i.size_id ?? null,
+      quantity: Number(i.cantidad) || 1,
+      unit_price: i.pvp_unit ?? 0,
+    })),
+    comments: `Canje ${canje.numero} — ${quien} — retiro en el local (Monitor)`.slice(0, 500),
+    solicitudId: `canje-${canje.id}`,
+    ...cred,
+  })
+  if (!r.ok) throw new Error(`No se pudo crear la venta en Gestión Nube — ${r.error || ''}`)
+
+  const numero = r.venta?.number != null ? String(r.venta.number) : null
+  try {
+    await postear({
+      store: canje.store, action: 'entrega-local', id: canje.id,
+      gn_venta_id: r.venta?.id ?? null, gn_venta_number: numero,
+    })
+  } catch (e) {
+    throw new Error(
+      `La venta se creó en Gestión Nube (nº ${numero || '?'}) pero no se pudo registrar en el canje: ` +
+      `${(e as Error)?.message || e}. Anulala a mano en GN antes de reintentar.`,
+    )
+  }
+  return { gn_venta_number: numero }
 }
 
 // ── Entregables y evidencias ────────────────────────────────────────────────────

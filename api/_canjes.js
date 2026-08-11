@@ -53,6 +53,8 @@
 //   POST { action:'envio', id, via, seguimiento, costo }         → despacho.
 //   POST { action:'intento-entrega', id, nota? }                 → el correo pasó y no había nadie. NO cambia el estado.
 //   POST { action:'entregado', id }                              → CONGELA los `vence_el`.
+//   POST { action:'entrega-local', id, gn_venta_* }              → se lo llevó del local (lo hace EL LOCAL).
+//   GET  ?vista=local                                            → el mostrador: sin plata, sólo BDI.
 //   POST { action:'entregable-agregar'|'entregable-quitar', … }  → lo que prometió publicar.
 //   POST { action:'evidencia-agregar', id, entregable_id, … }    → la carga el EQUIPO, no ella.
 //   POST { action:'evidencia-verificar', id, evidencia_id, ok }  → sin verificar, no cuenta.
@@ -68,12 +70,12 @@ import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: es la única implementación, la misma que usa la app.
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
-import { esAdmin, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
+import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
 import { marcaDePermisos, marcasVisiblesCanjes } from '../lib/canjes/marcas.js';
 // El grafo de estados y el tope viven aparte porque **el portal público también los usa** desde la
 // tanda 2 (ella elige productos desde el link y hay que frenarla si se pasa del acuerdo), y ese
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
-import { ESTADOS, puedeIr, seVaDelTope, TERMINALES, TRANSICIONES } from './_canjes-reglas.js';
+import { ESTADOS, noSePuedeEntregar, puedeIr, retiroLocalDisponible, seVaDelTope, TERMINALES, TRANSICIONES } from './_canjes-reglas.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -131,7 +133,7 @@ const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
   aprobado_por, aprobado_at, aprobacion_nivel, rechazado_motivo, rechazado_por, rechazado_at, acordado_at,
   contacto_estado, contacto_at, respuesta_motivo, respuesta_nota, respuesta_at,
   token_vence, datos_confirmados_at,
-  tn_orden, compra_estado, compra_at, compra_por, gn_venta_number, stock_estado,
+  retiro_local, tn_orden, compra_estado, compra_at, compra_por, gn_venta_number, gn_venta_id, stock_estado,
   envio_via, envio_seguimiento, envio_costo, envio_estado, envio_at, envio_direccion,
   aviso_estado, aviso_at, entregado_at, intentos, cupon_codigo, cupon_desde, cupon_hasta,
   balance_costo_productos, balance_costo_envio, balance_costo_plata, balance_costo_total,
@@ -464,10 +466,29 @@ export default async function handler(req, res) {
   //    serviría de nada) y los canjes ajenos ya salen ciegos por `canjesDePersona`, desde el
   //    servidor: filtrar plata en la UI significa que la plata ya viajó al browser.
   //  - ESCRIBIR: hay que ver ESA marca. No se toca un canje de una marca que no te toca.
-  if (!visibles.length) {
+  // ── La puerta chica del local ───────────────────────────────────────────────
+  //
+  // La chica del mostrador NO tiene la sección Canjes (es de Marketing), así que `visibles` le da
+  // vacío y los dos gates de abajo la echan. Esta es la única excepción, y es **una rendija, no una
+  // puerta**: la abre `puedeAtenderRetiroLocal` (que cuelga de `cupones` en BDI) y deja pasar
+  // exactamente una vista de lectura acotada y tres acciones, siempre sobre BDI.
+  //
+  // Que la acción esté en la lista no alcanza: `traerCanje` vuelve a exigir que ESE canje sea de
+  // retiro y no esté entregado. Sin eso, un `item-agregar` con un id cualquiera dejaría al local
+  // tocando canjes que se mandan por correo.
+  const ACCIONES_DEL_LOCAL = ['entrega-local', 'item-agregar', 'item-quitar'];
+  const pideElLocal = puedeAtenderRetiroLocal(perfil) && store === 'bdi' && (
+    req.method === 'GET'
+      ? String(req.query.vista || '') === 'local'
+      : ACCIONES_DEL_LOCAL.includes((req.body || {}).action)
+  );
+  /** Está entrando SÓLO por la rendija: no tiene Canjes en esta marca por la puerta grande. */
+  const soloLocal = pideElLocal && !visibles.includes(store);
+
+  if (!visibles.length && !pideElLocal) {
     return res.status(403).json({ error: 'No tenés acceso a Canjes. Pedí el permiso en Config.' });
   }
-  if (req.method === 'POST' && !visibles.includes(store)) {
+  if (req.method === 'POST' && !visibles.includes(store) && !pideElLocal) {
     return res.status(403).json({ error: 'No tenés acceso a esa marca.' });
   }
 
@@ -513,7 +534,11 @@ export default async function handler(req, res) {
     if (error) throw new Error(error.message);
     if (!data) return { error: res.status(404).json({ error: 'no existe ese canje' }) };
     if (!visibles.includes(data.store)) {
-      return { error: res.status(403).json({ error: 'Ese canje es de otra marca.' }) };
+      // La rendija del local: sólo canjes de retiro que todavía no se entregaron. Se chequea acá y
+      // no en cada acción para que agregar una acción a `ACCIONES_DEL_LOCAL` no pueda saltearlo.
+      if (!(soloLocal && data.retiro_local && !data.entregado_at)) {
+        return { error: res.status(403).json({ error: 'Ese canje es de otra marca.' }) };
+      }
     }
     return { canje: data };
   }
@@ -559,6 +584,53 @@ export default async function handler(req, res) {
         const { data, error } = await supabase.from('canje_config').select('*').eq('store', store).maybeSingle();
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true, config: data || null });
+      }
+
+      /**
+       * El mostrador: los canjes de BDI que se retiran en el local y todavía no se entregaron.
+       *
+       * **Es una vista aparte y no un filtro de la lista** porque el que la pide puede no tener
+       * Canjes: la chica del local ve esto y nada más. Por eso las columnas se enumeran a mano en
+       * vez de reusar `CANJE_COLS` —que trae balance, historial y la plata del acuerdo— y por eso
+       * de la persona salen cuatro campos y no el `PERSONA_COLS` entero, que incluye el domicilio.
+       *
+       * `tope_unidades` sí viaja: es literalmente lo que el local tiene que leer ("3 fundas").
+       * `tope_pvp` NO, aunque el canje sea por monto: en el mostrador nadie necesita saber por
+       * cuánta plata se acordó, y el tope igual lo hace cumplir el servidor.
+       */
+      if (vista === 'local') {
+        const { data: filas, error } = await supabase.from('canjes')
+          .select('id, persona_id, store, estado, titulo, acordado_at, tope_tipo, tope_unidades, created_at')
+          .eq('store', store).eq('retiro_local', true).is('entregado_at', null)
+          .in('estado', ['acuerdo', 'preparando'])
+          .order('acordado_at', { ascending: true });
+        if (error) throw new Error(error.message);
+        const canjes = filas || [];
+        if (!canjes.length) return res.status(200).json({ ok: true, canjes: [] });
+
+        const [personas, items, cfgLocal] = await Promise.all([
+          supabase.from('canje_personas').select('id, nombre, apellido, instagram, telefono')
+            .in('id', [...new Set(canjes.map((c) => c.persona_id))]),
+          supabase.from('canje_items').select('*').in('canje_id', canjes.map((c) => c.id)),
+          configDe(store),
+        ]);
+        const porPersona = new Map((personas.data || []).map((p) => [p.id, p]));
+        const porCanje = new Map();
+        for (const i of items.data || []) {
+          if (!porCanje.has(i.canje_id)) porCanje.set(i.canje_id, []);
+          porCanje.get(i.canje_id).push(i);
+        }
+        return res.status(200).json({
+          ok: true,
+          canjes: canjes.map((c) => ({
+            ...c,
+            numero: numeroCanje(c.id),
+            persona: porPersona.get(c.persona_id) || null,
+            items: porCanje.get(c.id) || [],
+            // La palabra de la marca ("fundas"), para que el cartel no diga "3 productos".
+            unidad: cfgLocal.unidad_default || 'productos',
+          })),
+        });
       }
 
       if (vista === 'persona') {
@@ -1188,6 +1260,9 @@ export default async function handler(req, res) {
           // El pendiente de pago sólo existe si hay plata: si no, sería un pendiente que nunca se
           // resuelve y que traba el cierre para siempre.
           pago_estado: tipo === 'producto_plata' ? 'pendiente' : 'no_aplica',
+          // Lo retira en el local. Se decide acá, al proponer, porque de eso dependen qué le pide el
+          // portal y qué pantalla lo muestra. `retiroLocalDisponible` es la única marca con local.
+          retiro_local: !!b.retiro_local && retiroLocalDisponible(store),
           usuario,
         },
         entregables: entregablesDelBody(b.entregables, cfgStore),
@@ -1371,6 +1446,9 @@ export default async function handler(req, res) {
       if (b.tope_tipo !== undefined && TOPE_TIPOS.includes(b.tope_tipo)) campos.tope_tipo = b.tope_tipo;
       if (b.tope_pvp !== undefined) campos.tope_pvp = num(b.tope_pvp);
       if (b.tope_unidades !== undefined && Array.isArray(b.tope_unidades)) campos.tope_unidades = b.tope_unidades;
+      // Se puede corregir mientras la conversación siga abierta: acordar el envío y después que
+      // ella diga «paso por el local» es el caso normal, no una excepción.
+      if (b.retiro_local !== undefined) campos.retiro_local = !!b.retiro_local && retiroLocalDisponible(canje.store);
 
       // Los entregables se reemplazan enteros, porque lo que cambió en la negociación es el trato
       // completo ("me hacés 2 historias en vez de 3"), no una fila suelta. Se borran y se insertan
@@ -1770,6 +1848,58 @@ export default async function handler(req, res) {
       }
       await apilar(supabase, 'canjes', canjeId, { estado: 'en_curso', at, usuario, nota: 'le llegó el pedido' }, {
         estado: 'en_curso', entregado_at: at,
+      });
+      return res.status(200).json({ ok: true, entregables: entregables.length });
+    }
+
+    /**
+     * Se lo llevó del local. **Colapsa compra, envío y entrega en un solo acto**, porque en el
+     * mostrador son un solo acto: no hay orden de Tienda Nube que tipear ni nada que despachar.
+     *
+     * ⚠️ **La venta en Gestión Nube ya está hecha cuando esto corre.** La crea el cliente
+     * (`entregarEnLocal`) contra `/api/crear-venta`, que es donde viven los tokens de ventas, y acá
+     * sólo se registra el número. Por eso el 409 de `entregado_at` importa tanto: es lo único que
+     * frena una segunda venta si alguien aprieta dos veces, y GN **no permite anular por API**.
+     *
+     * El resto es idéntico a `entregado`, incluido el congelamiento de los `vence_el`: que se
+     * retire en el local no cambia en nada cuándo tiene que publicar.
+     */
+    if (action === 'entrega-local') {
+      const items = await itemsDe(canjeId);
+      const motivo = noSePuedeEntregar(canje, items);
+      if (motivo) return res.status(409).json({ error: motivo });
+
+      const at = ahora();
+      const entregables = await entregablesDe(canjeId);
+      const base = new Date(at);
+      for (const e of entregables) {
+        const dias = e.plazo_dias == null ? Number(cfgCanje.plazo_entregable_dias_default) : Number(e.plazo_dias);
+        const d = new Date(base);
+        d.setDate(d.getDate() + (Number.isFinite(dias) ? dias : 10));
+        await supabase.from('canje_entregables')
+          .update({ vence_el: fechaISO(d), updated_at: at }).eq('id', e.id);
+      }
+
+      const gnNumero = texto(b.gn_venta_number);
+      const gnId = parseInt(b.gn_venta_id, 10) || null;
+      await apilar(supabase, 'canjes', canjeId, {
+        estado: 'en_curso', at, usuario,
+        nota: `retiró en el local${gnNumero ? ` — venta ${gnNumero}` : ''}`,
+      }, {
+        estado: 'en_curso',
+        entregado_at: at,
+        gn_venta_number: gnNumero,
+        gn_venta_id: gnId,
+        // No hay orden de TN y no hay despacho: los dos pendientes se cierran acá para que el canje
+        // no quede pidiendo pasos que en el local no existen.
+        compra_estado: 'hecho',
+        compra_at: at,
+        compra_por: usuario,
+        envio_via: 'presencial',
+        envio_estado: 'hecho',
+        envio_at: at,
+        stock_estado: 'hecho',
+        aviso_estado: 'no_aplica',
       });
       return res.status(200).json({ ok: true, entregables: entregables.length });
     }

@@ -221,6 +221,53 @@ export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): 
   return c.envio_estado === 'hecho' && !c.entregado_at
 }
 
+// ── Retiro en el local ──────────────────────────────────────────────────────────
+
+/**
+ * Qué marcas pueden ofrecer "lo retira en el local". Hoy **sólo BDI**: es el único que tiene local
+ * (Rosario), y la venta a $0 se crea contra el `store_id` de ese local en Gestión Nube.
+ *
+ * Es una función y no una constante suelta para que la pantalla y el servidor pregunten lo mismo:
+ * si un día Zattia abre local, se agrega acá y no en dos lados.
+ *
+ * ⚠️ Espejo en `api/_canjes-reglas.js`.
+ */
+export function retiroLocalDisponible(store: string | null | undefined): boolean {
+  return store === 'bdi'
+}
+
+/**
+ * Si el local ya puede entregarlo. **De acá salen el botón habilitado y la validación del handler**,
+ * que es todo el punto: escritas por separado, la pantalla ofrece algo que el servidor rechaza.
+ *
+ * Los items tienen que estar linkeados a Gestión Nube (`product_id` + `size_id`) porque sin eso la
+ * venta no se puede crear y el stock no baja: entregar sin descontar es peor que no entregar.
+ *
+ * ⛔ **No exige llegar al tope.** Si se autorizaron 3 fundas y se lleva 2, se cierra con 2 — el tope
+ * es un techo, no una cuota.
+ *
+ * ⚠️ Espejo en `api/_canjes-reglas.js`.
+ */
+export function listoParaEntregar(
+  c: Pick<CanjeRow, 'store' | 'estado' | 'retiro_local' | 'entregado_at' | 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
+  items: CanjeItem[],
+): { ok: boolean; motivo: string | null } {
+  if (!c.retiro_local) return { ok: false, motivo: 'Este canje no es de retiro en el local.' }
+  if (!retiroLocalDisponible(c.store)) return { ok: false, motivo: 'Esta marca no tiene local.' }
+  if (c.entregado_at) return { ok: false, motivo: 'Este canje ya figura entregado.' }
+  if (c.estado !== 'acuerdo' && c.estado !== 'preparando') {
+    return { ok: false, motivo: 'Todavía no está acordado.' }
+  }
+  const vivos = itemsVivos(items)
+  if (!vivos.length) return { ok: false, motivo: 'Cargá lo que se lleva antes de entregarlo.' }
+  if (vivos.some((i) => !i.product_id || !i.size_id)) {
+    return { ok: false, motivo: 'Hay un producto sin artículo de Gestión Nube: sin eso no se puede descontar el stock.' }
+  }
+  const tope = controlDelTope(c, items)
+  if (!tope.ok) return { ok: false, motivo: tope.mensaje }
+  return { ok: true, motivo: null }
+}
+
 /**
  * El número que ve la gente. Derivado del id, **no es una columna**: mismo criterio (y misma deuda
  * de espejo TS/JS) que `numeroReclamo` en `lib/reclamos/tipos.ts:799`.
@@ -479,11 +526,20 @@ export type CanjeRow = {
   /** Cuándo mandó su elección. Al mandar se cierra: si vuelve a entrar, la ve en lectura. */
   seleccion_cerrada_at?: string | null
 
+  /**
+   * Lo retira en el local en vez de recibirlo por correo. **Se decide al proponer**, y de eso
+   * dependen tres cosas: la ficha no ofrece cargar una orden de Tienda Nube ni despachar, el portal
+   * no le pide la dirección, y el canje aparece en la pantalla del local.
+   */
+  retiro_local?: boolean | null
+
   tn_orden?: string | null
   compra_estado: Pendiente
   compra_at?: string | null
   compra_por?: string | null
   gn_venta_number?: string | null
+  /** El `id` interno de GN, con el que se le puede preguntar si la venta sigue viva. */
+  gn_venta_id?: number | null
   stock_estado: Pendiente
 
   envio_via?: string | null

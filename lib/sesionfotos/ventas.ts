@@ -36,8 +36,8 @@ export type PedidoVenta = {
   items: { product_id: string | null; size_id: string | null; quantity: number; unit_price?: number | null }[]
   comments: string
   solicitudId: string
-  /** Marca la venta como técnica del Monitor → crear-venta usa el cliente propio de GN (Falla/Cambio). */
-  proposito?: 'falla' | 'cambio'
+  /** Marca la venta como técnica del Monitor → crear-venta usa el cliente propio de GN (Falla/Cambio/Canje). */
+  proposito?: 'falla' | 'cambio' | 'canje'
 } & Credencial
 
 /**

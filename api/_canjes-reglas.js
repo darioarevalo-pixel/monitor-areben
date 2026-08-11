@@ -79,6 +79,33 @@ export function seVaDelTope(canje, items) {
     : null;
 }
 
+/** Espejo de `retiroLocalDisponible`. Hoy sólo BDI: es la única marca con local. */
+export function retiroLocalDisponible(store) {
+  return store === 'bdi';
+}
+
+/**
+ * Espejo de `listoParaEntregar`. Devuelve `null` si el local ya puede entregarlo, o el motivo.
+ *
+ * Devuelve el motivo y no un booleano por lo mismo que `seVaDelTope`: el que lo lee es alguien
+ * parado en el mostrador con la persona enfrente, y "no se puede" sin decir por qué lo deja
+ * llamando por teléfono.
+ *
+ * ⛔ **No exige llegar al tope**: autorizar 3 y entregar 2 es un caso normal, no un error.
+ */
+export function noSePuedeEntregar(canje, items) {
+  if (!canje.retiro_local) return 'Este canje no es de retiro en el local.';
+  if (!retiroLocalDisponible(canje.store)) return 'Esta marca no tiene local.';
+  if (canje.entregado_at) return 'Este canje ya figura entregado.';
+  if (canje.estado !== 'acuerdo' && canje.estado !== 'preparando') return 'Todavía no está acordado.';
+  const vivos = itemsVivos(items);
+  if (!vivos.length) return 'Cargá lo que se lleva antes de entregarlo.';
+  if (vivos.some((i) => !i.product_id || !i.size_id)) {
+    return 'Hay un producto sin artículo de Gestión Nube: sin eso no se puede descontar el stock.';
+  }
+  return seVaDelTope(canje, items);
+}
+
 /**
  * Cuánto le queda, para mostrárselo mientras elige. Es `controlDelTope` visto desde su lado.
  *

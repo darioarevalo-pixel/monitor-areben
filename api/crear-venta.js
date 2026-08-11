@@ -18,6 +18,19 @@ const SF_CFG = {
 const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
 // Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
 const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
+// Ídem para las entregas de CANJES en el local (payload proposito:'canje'). Es el cliente
+// "PUBLICIDAD BDI" que ya existía en GN (id verificado contra la tabla `clientes` del espejo): un
+// canje con una influencer ES publicidad, así que no se creó uno nuevo. Sólo BDI: es la única marca
+// con local. Sin id, el handler corta con un error explícito en vez de caer al cliente de fotos —
+// una venta atribuida al cliente equivocado no se puede corregir por API.
+const CANJE_CLIENT = { bdi: 159249 };
+// El canal de la entrega de un canje. Hoy 12 = "Ninguno", o sea VENTA TÉCNICA: `esVentaTecnica()`
+// la reconoce y `lib/datos.ts` la descarta antes del ETL, así que esas unidades NO aparecen en
+// rotación, vida útil, caducados ni CRM. Es la decisión de Bruno (11-ago-2026), tomada sabiendo eso.
+// 🔑 Está acá y no sale de `cfg.channel_id` para que revertirla cueste una línea: el día que exista
+// un canal propio "Canje" en GN, se cambia este número y se agrega `if (n.includes('canje')) return
+// 'tecnica'` en `canalDe` (lib/liquidacion/resultado.ts) para que no ensucie el precio promedio.
+const CANJE_CHANNEL = { bdi: 12 };
 // Fase B.4 — venta REAL del cambio (accion:'cambio_real'): usa un canal NORMAL (para que CUENTE en la
 // analítica, NO el 12 "Ninguno") y la forma de pago real. IDs descubiertos escaneando ventas de GN
 // (Bruno eligió: canal "Otro Canal" 13; Tarjeta → MercadoPago 2; Transferencia → Transferencia Bancaria 5).
@@ -123,28 +136,38 @@ export default async function handler(req, res) {
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
 
   const store_id = cfg.store[b.origen];
+  // El canje se corta ACÁ si la marca no tiene cliente configurado: caer al de fotos dejaría la
+  // venta atribuida a "Sesión de fotos" y GN no permite corregir eso por API.
+  if (b.proposito === 'canje' && !CANJE_CLIENT[store]) {
+    return res.status(400).json({ error: `No hay cliente de GN configurado para los canjes de ${store} (CANJE_CLIENT).` });
+  }
   // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
   const clientId =
     (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] :
     (b.proposito === 'cambio' && CAMBIO_CLIENT[store]) ? CAMBIO_CLIENT[store] :
+    (b.proposito === 'canje' && CANJE_CLIENT[store]) ? CANJE_CLIENT[store] :
     cfg.client_id;
   // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
   // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock).
-  // Falla (proposito:'falla'): precio de LISTA + 100% de descuento → total $0, pero valuada con el precio real.
+  // Falla (proposito:'falla') y canje entregado en el local (proposito:'canje'): precio de LISTA +
+  // 100% de descuento → total $0, pero valuada con el precio real. Lo que se regaló tiene un costo y
+  // a precio 0 el histórico de GN no dice cuánto.
   // Fotos: precio 0 y sin descuento, idéntico a antes.
   const esFalla = b.proposito === 'falla';
+  const esCanje = b.proposito === 'canje';
+  const valuadaCero = esFalla || esCanje;
   const lineItems = items.map(it => ({
     product_id: parseInt(it.product_id, 10),
     size_id: parseInt(it.size_id, 10),
     quantity: parseInt(it.quantity, 10),
-    unit_price: (esReingreso || esFalla) ? (Number(it.unit_price) || 0) : 0,
+    unit_price: (esReingreso || valuadaCero) ? (Number(it.unit_price) || 0) : 0,
     store_id,
   }));
   const payload = {
-    client_id: clientId, channel_id: cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+    client_id: clientId, channel_id: esCanje ? CANJE_CHANNEL[store] : cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
     store_id, discount_inventory: true,
     comments: String(b.comments || '').slice(0, 500),
-    integration_source: 'monitor-sesion-fotos',
+    integration_source: esCanje ? 'monitor-canje' : 'monitor-sesion-fotos',
     integration_id: `${b.solicitudId || 'sf'}-${b.origen}`,
     items: lineItems,
   };
@@ -152,7 +175,7 @@ export default async function handler(req, res) {
     // discount a nivel venta = subtotal (negativo) → total 0. is_exchange marca el movimiento como cambio.
     payload.discount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
     payload.is_exchange = true;
-  } else if (esFalla) {
+  } else if (valuadaCero) {
     // 100% de descuento A NIVEL VENTA (`discount_amount` = subtotal) → total 0, mostrando el precio de lista.
     payload.discount_amount = lineItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
   }

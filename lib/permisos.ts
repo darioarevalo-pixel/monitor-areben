@@ -17,6 +17,7 @@ import {
   estaExcluido as estaExcluidoJs,
   marcaExcluir as marcaExcluirJs,
   marcasConAcceso as marcasConAccesoJs,
+  puedeAtenderRetiroLocal as puedeAtenderRetiroLocalJs,
   puedeSub as puedeSubJs,
   puedeVer as puedeVerJs,
   seccionesDeFuncion as seccionesDeFuncionJs,
@@ -105,6 +106,14 @@ export function puedeSub(perfil: Perfil | null, marca: Marca, key: string, sub: 
 /** En qué marcas este perfil ve la sección `key`. La cuenta fija acota. */
 export function marcasConAcceso(perfil: Perfil | null, key: string, marcas: readonly Marca[]): Marca[] {
   return marcasConAccesoJs(perfil, key, [...marcas]) as Marca[]
+}
+
+/**
+ * ¿Atiende el mostrador de los canjes que se retiran en el local? Cuelga de `cupones` en BDI, no de
+ * un sub propio: un sub habría que tildarlo usuario por usuario. Ver el docblock del core.
+ */
+export function puedeAtenderRetiroLocal(perfil: Perfil | null): boolean {
+  return puedeAtenderRetiroLocalJs(perfil)
 }
 
 /** Port de _userRole() (index.html:9324): el legacy lo usa para limitar la carga de datos. */

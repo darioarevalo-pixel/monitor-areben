@@ -52,7 +52,7 @@ const ABIERTO = ['acuerdo', 'preparando', 'en_curso'];
 
 /** Las únicas columnas del canje que se leen. */
 const CANJE_COLS = `id, store, estado, persona_id, token_vence, datos_confirmados_at, envio_estado, entregado_at,
-  envio_via, envio_seguimiento, intentos,
+  envio_via, envio_seguimiento, intentos, retiro_local,
   vitrina_id, seleccion_cerrada_at, tope_tipo, tope_pvp, tope_unidades`;
 
 /**
@@ -171,6 +171,8 @@ export function paraLaPersona(canje, persona, cfg, vitrina, items) {
     numero: numeroCanje(canje.id),
     marca: STORE_LABEL[store] || store,
     pide,
+    // Lo retira en el local: la pantalla no le pide el domicilio y le dice dónde pasar a buscarlo.
+    retiroLocal: !!canje.retiro_local,
     // Ya despachado: los datos no cambian nada y dejarla editarlos sería mentirle. Se muestra en
     // modo lectura con el aviso, en vez de un 404 que la haría escribirnos para nada.
     despachado: canje.envio_estado === 'hecho' || !!canje.entregado_at || canje.estado === 'en_curso',
@@ -268,7 +270,7 @@ function laVitrina(canje, vitrina, items) {
  *
  * @returns {{ campos?: Record<string, any>, error?: string }}
  */
-export function camposDeLaPersona(datos, store) {
+export function camposDeLaPersona(datos, store, retiroLocal) {
   const d = (datos && typeof datos === 'object') ? datos : {};
   /** @type {Record<string, any>} */
   const campos = {};
@@ -304,12 +306,19 @@ export function camposDeLaPersona(datos, store) {
     // va al padrón y es con lo que se la vuelve a contactar dentro de seis meses. Un dato de
     // contacto que la mitad de las fichas no tiene no sirve para nada.
     falta('email', 'tu email'),
-    falta('dni', 'tu DNI (lo pide el correo)'),
-    falta('calle', 'la calle'),
-    falta('numero', 'la altura'),
-    falta('cp', 'el código postal'),
-    falta('localidad', 'la localidad'),
-    falta('provincia', 'la provincia'),
+    // El DNI se pide igual: en el correo lo exige el despacho y en el local es con lo que se
+    // identifica a quien pasa a buscarlo.
+    falta('dni', retiroLocal ? 'tu DNI' : 'tu DNI (lo pide el correo)'),
+    // El domicilio SÓLO si se le manda. Si lo retira en el local no hay a dónde despachar nada, y
+    // pedirle la dirección es la forma más barata de que abandone el formulario — y de quedarse con
+    // un dato que nadie va a usar.
+    ...(retiroLocal ? [] : [
+      falta('calle', 'la calle'),
+      falta('numero', 'la altura'),
+      falta('cp', 'el código postal'),
+      falta('localidad', 'la localidad'),
+      falta('provincia', 'la provincia'),
+    ]),
   ].filter(Boolean);
   if (faltantes.length) {
     const lista = faltantes.length === 1
@@ -464,7 +473,7 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: 'Tu pedido ya salió, así que los datos quedaron como estaban. Si algo no coincide, escribinos.' });
     }
 
-    const { campos, error: eValida } = camposDeLaPersona((req.body || {}).datos, canje.store);
+    const { campos, error: eValida } = camposDeLaPersona((req.body || {}).datos, canje.store, canje.retiro_local);
     if (eValida) return res.status(400).json({ error: eValida });
 
     // ── Lo que eligió ─────────────────────────────────────────────────────────

@@ -587,3 +587,34 @@ alter table canje_config add column if not exists email_pedido text;
 -- con la única foto que hay). Se rellenan al tocar **Revisar stock**, que es el único camino: el
 -- catálogo de TN sólo se puede leer desde el panel, así que un script de backfill no existe.
 alter table canje_vitrina_items add column if not exists fotos jsonb not null default '[]'::jsonb;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 13. Retiro en el local (11-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Hasta acá todo canje terminaba en un envío: se tipeaba la orden a $0 en Tienda Nube y se
+-- despachaba. Ahora la persona puede pasar por el local a buscarlo, y ahí el circuito es otro:
+-- marketing autoriza **cuántas** fundas sin decir cuáles, ella elige en el mostrador, y el local
+-- carga lo que se llevó y lo entrega en el mismo acto.
+--
+-- Es una columna del canje y no una vía de envío porque **se decide al proponer, no al despachar**.
+-- `envio_via` contesta "cómo se lo hicimos llegar" y se completa al final; esto contesta "quién lo
+-- va a entregar", y de esa respuesta depende qué pantalla lo muestra y qué bloques de la ficha
+-- tienen sentido. Con `envio_via` habría que adivinar la intención antes de que el dato exista.
+--
+-- Booleano y no un texto con la sucursal: hay un solo local (Rosario) y es sólo de BDI. El día que
+-- haya dos, esto se convierte en el `id` de una tabla de locales y la migración es aditiva.
+alter table canjes add column if not exists retiro_local boolean not null default false;
+
+-- Índice parcial: la pantalla del local pregunta siempre lo mismo —los de esta marca que se retiran
+-- y todavía no se entregaron— y esa lista es cortísima contra una tabla que sólo crece.
+create index if not exists canjes_retiro_local_idx
+  on canjes (store, retiro_local) where retiro_local and entregado_at is null;
+
+-- El `id` interno de la venta de Gestión Nube, al lado del número que ya se guardaba.
+--
+-- El número es el que se lee y se busca a mano; el id es con el que se le pregunta a GN si esa venta
+-- sigue viva (`GET /ventas/{id}`). Hacen falta los dos y por eso son dos columnas: Fallas ya pasó
+-- por esto —guardaba sólo el número y no podía chequear si alguien la había anulado— y acá la venta
+-- del canje se puede anular a mano igual, porque **GN no permite deshacerla por API**.
+alter table canjes add column if not exists gn_venta_id bigint;

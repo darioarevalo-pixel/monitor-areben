@@ -74,6 +74,8 @@ type Vista = {
   numero: string
   marca: string
   pide: 'talles' | 'modelo_celular'
+  /** Lo retira en el local: no se le pide el domicilio, porque no hay a dónde mandar nada. */
+  retiroLocal: boolean
   despachado: boolean
   confirmadoAt: string | null
   driveUrl: string | null
@@ -444,7 +446,9 @@ export function CanjePortal({ token }: { token: string | null }) {
 
       <h2 style={{ fontSize: 16, margin: '0 0 4px' }}>Cómo contactarte</h2>
       <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 10, lineHeight: 1.5 }}>
-        Poné tu nombre y apellido como figuran en tu DNI: es el que va en la etiqueta del envío.
+        {vista?.retiroLocal
+          ? 'Poné tu nombre y apellido como figuran en tu DNI: con eso te lo entregamos en el local.'
+          : 'Poné tu nombre y apellido como figuran en tu DNI: es el que va en la etiqueta del envío.'}
       </p>
       <div style={fila}>
         <Campo titulo="Nombre" valor={form.nombre} onChange={set('nombre')} />
@@ -452,29 +456,46 @@ export function CanjePortal({ token }: { token: string | null }) {
       </div>
       <Campo titulo="Teléfono" valor={form.telefono} onChange={set('telefono')} tipo="tel" placeholder="11 5555 5555" />
       <Campo titulo="Email" valor={form.email} onChange={set('email')} tipo="email" />
-      <Campo titulo="DNI" valor={form.dni} onChange={set('dni')} tipo="tel" placeholder="Lo pide el correo para entregarte" />
-
-      <h2 style={{ fontSize: 16, margin: '24px 0 10px' }}>A dónde te lo mandamos</h2>
-      <div style={fila}>
-        <Campo titulo="Calle" valor={form.calle} onChange={set('calle')} ancho={2} />
-        <Campo titulo="Altura" valor={form.numero} onChange={set('numero')} />
-      </div>
-      <div style={fila}>
-        <Campo titulo="Piso" valor={form.piso} onChange={set('piso')} opcional />
-        <Campo titulo="Depto" valor={form.depto} onChange={set('depto')} opcional />
-        <Campo titulo="Código postal" valor={form.cp} onChange={set('cp')} />
-      </div>
-      <div style={fila}>
-        <Campo titulo="Localidad" valor={form.localidad} onChange={set('localidad')} />
-        <Campo titulo="Provincia" valor={form.provincia} onChange={set('provincia')} />
-      </div>
       <Campo
-        titulo="Alguna referencia"
-        valor={form.direccion_nota}
-        onChange={set('direccion_nota')}
-        placeholder="Entre calles, portero, horarios…"
-        opcional
+        titulo="DNI"
+        valor={form.dni}
+        onChange={set('dni')}
+        tipo="tel"
+        placeholder={vista?.retiroLocal ? 'Para identificarte al retirarlo' : 'Lo pide el correo para entregarte'}
       />
+
+      {/* El domicilio sólo si se le manda. Si lo retira en el local no hay a dónde despachar nada, y
+          pedirle la dirección es pedirle un dato que nadie va a usar. El servidor tampoco lo exige. */}
+      {vista?.retiroLocal ? (
+        <p style={{ color: '#6b7280', fontSize: 14, margin: '20px 0 0', lineHeight: 1.5 }}>
+          <b style={{ color: '#374151' }}>Lo retirás en el local.</b> Ahí elegís lo que te llevás y te
+          lo entregamos en el momento — no hace falta que nos pases una dirección.
+        </p>
+      ) : (
+        <>
+          <h2 style={{ fontSize: 16, margin: '24px 0 10px' }}>A dónde te lo mandamos</h2>
+          <div style={fila}>
+            <Campo titulo="Calle" valor={form.calle} onChange={set('calle')} ancho={2} />
+            <Campo titulo="Altura" valor={form.numero} onChange={set('numero')} />
+          </div>
+          <div style={fila}>
+            <Campo titulo="Piso" valor={form.piso} onChange={set('piso')} opcional />
+            <Campo titulo="Depto" valor={form.depto} onChange={set('depto')} opcional />
+            <Campo titulo="Código postal" valor={form.cp} onChange={set('cp')} />
+          </div>
+          <div style={fila}>
+            <Campo titulo="Localidad" valor={form.localidad} onChange={set('localidad')} />
+            <Campo titulo="Provincia" valor={form.provincia} onChange={set('provincia')} />
+          </div>
+          <Campo
+            titulo="Alguna referencia"
+            valor={form.direccion_nota}
+            onChange={set('direccion_nota')}
+            placeholder="Entre calles, portero, horarios…"
+            opcional
+          />
+        </>
+      )}
 
       {!pideFicha ? null : vista?.pide === 'talles' ? (
         <>

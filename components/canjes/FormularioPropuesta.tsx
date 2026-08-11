@@ -26,7 +26,7 @@ import {
 } from '@/components/ui'
 import type { PropuestaSinPersona, VitrinaEnLista } from '@/lib/canjes/cliente'
 import {
-  CANJE_STORES, STORE_LABEL, TIPO_CANJE_LABEL, naceEn, unidadDeLaMarca,
+  CANJE_STORES, STORE_LABEL, TIPO_CANJE_LABEL, naceEn, retiroLocalDisponible, unidadDeLaMarca,
   type CanjeConfig, type CanjeStore, type EstadoCanje, type NivelAprobacion,
   type TipoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
@@ -58,6 +58,9 @@ export function useFormularioPropuesta({
   const [montoPlata, setMontoPlata] = useState('')
   const [pedido, setPedido] = useState<PedidoPorTipo>(PEDIDO_VACIO)
   const [vitrinaId, setVitrinaId] = useState<number | null>(null)
+  // Cómo lo recibe. Se guarda crudo y se deriva contra la marca: al pasar de BDI a Zattia el retiro
+  // no puede quedar prendido en silencio, pero volver a BDI sí tiene que recordar lo que se eligió.
+  const [retiroCrudo, setRetiroCrudo] = useState(false)
   // La unidad arranca en la de la marca y se re-arma si la cambian, pero sin pisar lo que hayan
   // escrito a mano: por eso el estado guarda la línea y no sólo el número.
   const [unidades, setUnidades] = useState<TopeUnidad[]>([{ cantidad: 1, descripcion: '' }])
@@ -69,6 +72,9 @@ export function useFormularioPropuesta({
   )
   // Cambiar de marca invalida la vitrina elegida: son de una marca cada una.
   const vitrinaElegida = vitrinasDeLaMarca.some((v) => v.id === vitrinaId) ? vitrinaId : null
+
+  const hayLocal = retiroLocalDisponible(marca)
+  const retiroLocal = hayLocal && retiroCrudo
 
   const cfg = useMemo(() => configs.find((c) => c.store === marca) || null, [configs, marca])
   const unidadPorDefecto = unidadDeLaMarca(cfg)
@@ -106,6 +112,7 @@ export function useFormularioPropuesta({
       monto_plata: tipo === 'producto_plata' && montoPlata !== '' ? Number(montoPlata) : null,
       entregables: pedidoALista(pedido),
       vitrina_id: vitrinaElegida,
+      retiro_local: retiroLocal,
     },
   }
 
@@ -114,6 +121,7 @@ export function useFormularioPropuesta({
     campos: {
       marca, setMarca, tipo, setTipo, setTitulo, topeTipo, setTopeTipo, topePvp, setTopePvp,
       montoPlata, setMontoPlata, setPedido, vitrinaId, setVitrinaId, unidades, setUnidades,
+      retiroLocal, setRetiroCrudo, hayLocal,
       lineas, unidadPorDefecto, vitrinasDeLaMarca, sugeridas: cfg?.unidades_sugeridas || [],
     },
   }
@@ -130,6 +138,7 @@ export function FormularioPropuesta({
   const {
     marca, setMarca, tipo, setTipo, setTitulo, topeTipo, setTopeTipo, topePvp, setTopePvp,
     montoPlata, setMontoPlata, setPedido, vitrinaId, setVitrinaId, setUnidades,
+    retiroLocal, setRetiroCrudo, hayLocal,
     lineas, unidadPorDefecto, vitrinasDeLaMarca, sugeridas,
   } = estado.campos
   const [detalles, setDetalles] = useState(false)
@@ -151,6 +160,19 @@ export function FormularioPropuesta({
             <option value="monto">Por monto (&quot;hasta $80.000&quot;)</option>
           </Select>
         </Field>
+        {/* Sólo aparece en las marcas que tienen local. Donde no lo hay, un desplegable con una sola
+            opción es ruido. */}
+        {hayLocal && (
+          <Field
+            label="Cómo lo recibe"
+            hint={retiroLocal ? 'Elige las fundas en el mostrador y el local se las entrega.' : undefined}
+          >
+            <Select value={retiroLocal ? 'local' : 'envio'} onChange={(e) => setRetiroCrudo(e.target.value === 'local')}>
+              <option value="envio">Se lo enviamos</option>
+              <option value="local">Retira en el local</option>
+            </Select>
+          </Field>
+        )}
       </div>
 
       {topeTipo === 'monto' ? (

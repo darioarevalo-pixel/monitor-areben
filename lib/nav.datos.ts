@@ -505,8 +505,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "cupones",
     "area": "local",
-    "label": "Cupones",
-    "info": "Cupones y descuentos por cliente para aplicar en las ventas del local. Guardás el cupón (nombre, descuento, vencimiento) y la empleada lo busca por nombre al momento de cobrar.",
+    "label": "Cupones y canjes",
+    "info": "Lo que el mostrador entrega por fuera de una venta normal. CUPONES: descuentos por cliente para aplicar al cobrar (nombre, descuento, vencimiento) — la empleada lo busca por nombre. CANJES (solo BDI): las creadoras que pasan por el local a buscar lo suyo; se carga qué se lleva y al entregarlo se descuenta el stock con una venta a $0 en Gestión Nube.",
     "brands": [
       "bdi",
       "zattia"
