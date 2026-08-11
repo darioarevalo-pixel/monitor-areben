@@ -37,6 +37,18 @@ const ORDEN_IPHONE = [
   'iPhone 18', 'iPhone 18 Air', 'iPhone 18 Pro', 'iPhone 18 Pro Max',
 ]
 
+/**
+ * ¿El orden canónico conoce este modelo? Los que no, `iphoneModelSort` los manda al fondo — pero
+ * eso sólo se ve desde adentro, y quien quiera ordenar al revés (del más nuevo al más viejo) no
+ * puede simplemente invertir: los invertiría también, y aparecerían primero.
+ *
+ * Caso real: la variante `iPhone 16 E` del catálogo de BDI, que en `ORDEN_IPHONE` figura como
+ * `iPhone 16e`. Sin esto encabezaba el desplegable de modelos de Canjes.
+ */
+export function conoceElModelo(m: string): boolean {
+  return ORDEN_IPHONE.includes(m)
+}
+
 export function iphoneModelSort(a: string, b: string): number {
   const ia = ORDEN_IPHONE.indexOf(a)
   const ib = ORDEN_IPHONE.indexOf(b)

@@ -21,6 +21,7 @@ import {
   noSePuedeEntregar, retiroLocalDisponible as retiroLocalDisponibleJS,
 } from '../api/_canjes-reglas.js'
 import { puedeAtenderRetiroLocal } from '@/lib/permisos.core.js'
+import { fundasPorModelo, stockDelModelo } from '@/lib/canjes/modelos'
 
 function canje(p: Partial<CanjeRow> = {}): CanjeRow {
   return {
@@ -160,6 +161,85 @@ describe('leerCanjesDelLocal — la URL', () => {
     expect(visto).toHaveLength(1)
     expect(visto[0]).toContain('vista=local')
     expect(visto[0]).toContain('store=bdi')
+  })
+})
+
+/**
+ * 🔴 De acá salió un problema con plata adentro: **se cayeron dos canjes** por acordar con alguien
+ * que tenía un celular viejo del que no había fundas. El modelo era texto libre y nadie lo cruzaba.
+ *
+ * Lo que se prueba es lo que decide ese "sí o no": que agrupar por variante encuentre las fundas y
+ * deje afuera lo que no lo es, que el local se cuente aparte del depósito, y que un modelo tipeado
+ * de cualquier forma matchee — un "no tenemos" falso es exactamente el error que esto viene a
+ * evitar, en el otro sentido.
+ */
+describe('fundasPorModelo', () => {
+  const inv = (size: string | null, store: string, n: number) =>
+    ({ size_name: size, store_name: store, available_quantity: n })
+
+  it('agrupa por modelo sumando las ubicaciones, y cuenta el local aparte', () => {
+    const r = fundasPorModelo([
+      inv('iPhone 15', 'Local', 4),
+      inv('iPhone 15', 'Deposito Minorista', 10),
+      inv('iPhone 15', 'Deposito Mayorista', 6),
+    ])
+    expect(r).toEqual([{ modelo: 'iPhone 15', total: 20, local: 4 }])
+  })
+
+  it('lo que no es una funda queda afuera: la variante no es un modelo', () => {
+    expect(fundasPorModelo([
+      inv('Variante Única', 'Local', 7),
+      inv('Rosa', 'Local', 3),
+      inv(null, 'Local', 5),
+    ])).toEqual([])
+  })
+
+  it('un modelo en cero no entra: para el que decide es lo mismo que no venderlo', () => {
+    expect(fundasPorModelo([inv('iPhone 12', 'Local', 0)])).toEqual([])
+  })
+
+  it('ordena del más nuevo al más viejo, que es como se pregunta', () => {
+    const r = fundasPorModelo([
+      inv('iPhone 12', 'Local', 1),
+      inv('iPhone 16 Pro', 'Local', 1),
+      inv('iPhone 14', 'Local', 1),
+    ])
+    expect(r.map((m) => m.modelo)).toEqual(['iPhone 16 Pro', 'iPhone 14', 'iPhone 12'])
+  })
+
+  it('🔴 un modelo que el orden canónico no conoce va al FONDO, no al tope', () => {
+    // Caso real del catálogo: la variante dice `iPhone 16 E` y `ORDEN_IPHONE` tiene `iPhone 16e`.
+    // Invirtiendo el comparador a secas encabezaba el desplegable, arriba del iPhone 17.
+    const r = fundasPorModelo([
+      inv('iPhone 16 E', 'Local', 20),
+      inv('iPhone 17 Pro', 'Local', 5),
+      inv('iPhone 13', 'Local', 5),
+    ])
+    expect(r.map((m) => m.modelo)).toEqual(['iPhone 17 Pro', 'iPhone 13', 'iPhone 16 E'])
+  })
+})
+
+describe('stockDelModelo', () => {
+  const lista = [{ modelo: 'iPhone 13', total: 12, local: 3 }]
+
+  it('encuentra el modelo aunque se tipee distinto', () => {
+    for (const t of ['iPhone 13', 'iphone 13', 'IPHONE 13', ' iphone13 ']) {
+      expect(stockDelModelo(lista, t)?.total, t).toBe(12)
+    }
+  })
+
+  it('un modelo del que no hay devuelve null: es el cartel rojo', () => {
+    expect(stockDelModelo(lista, 'iPhone 8')).toBeNull()
+  })
+
+  it('sin modelo cargado no dice ni que sí ni que no', () => {
+    expect(stockDelModelo(lista, '')).toBeNull()
+    expect(stockDelModelo(lista, null)).toBeNull()
+  })
+
+  it('🔴 NO confunde un modelo con otro que lo contiene', () => {
+    // "iPhone 1" no puede matchear la fila de "iPhone 13", ni al revés.
+    expect(stockDelModelo(lista, 'iPhone 1')).toBeNull()
   })
 })
 
