@@ -590,7 +590,12 @@ export type CanjeEnElLocal = {
   estado: EstadoCanje
   titulo: string | null
   acordado_at: string | null
-  persona: { id: number; nombre: string | null; apellido: string | null; instagram: string | null; telefono: string | null }
+  persona: {
+    id: number; nombre: string | null; apellido: string | null
+    instagram: string | null; telefono: string | null
+    /** Qué celular tiene: es lo que dice QUÉ funda va. Lo carga marketing antes de confirmar. */
+    modelo_celular: string | null
+  }
   tope_tipo: TopeTipo
   tope_unidades: TopeUnidad[]
   unidad: string

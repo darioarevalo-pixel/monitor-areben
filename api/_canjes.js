@@ -604,13 +604,16 @@ export default async function handler(req, res) {
           .select('id, persona_id, store, estado, titulo, acordado_at, tope_tipo, tope_unidades, created_at')
           .eq('store', store).eq('retiro_local', true).is('entregado_at', null)
           .in('estado', ['acuerdo', 'preparando'])
+          // 🔑 El filtro es `acuerdo`/`preparando`, o sea **que ella haya aceptado**: eso es la
+          // confirmación y no hace falta ninguna otra (decisión de Bruno, 11-ago). Lo que todavía
+          // está en `propuesta` o `enviada` no es un canje, es una oferta.
           .order('acordado_at', { ascending: true });
         if (error) throw new Error(error.message);
         const canjes = filas || [];
         if (!canjes.length) return res.status(200).json({ ok: true, canjes: [] });
 
         const [personas, items, cfgLocal] = await Promise.all([
-          supabase.from('canje_personas').select('id, nombre, apellido, instagram, telefono')
+          supabase.from('canje_personas').select('id, nombre, apellido, instagram, telefono, modelo_celular')
             .in('id', [...new Set(canjes.map((c) => c.persona_id))]),
           supabase.from('canje_items').select('*').in('canje_id', canjes.map((c) => c.id)),
           configDe(store),

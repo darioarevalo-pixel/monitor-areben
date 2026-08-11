@@ -72,7 +72,7 @@ export function CanjesLocal() {
       <EmptyState
         icon="🤝"
         title="No hay nada para entregar"
-        hint="Acá aparecen las creadoras que pasan por el local a buscar lo suyo. Los arma Marketing desde Canjes."
+        hint="Acá aparecen las creadoras que aceptaron un canje y lo pasan a buscar por el local. Los arma Marketing desde Canjes."
         dashed
       />
     )
@@ -202,6 +202,14 @@ function FilaCanje({
         <div>
           <div style={{ color: color.mut, fontSize: font.sm }}>Se lleva</div>
           <div style={{ fontWeight: weight.semibold }}>{llevados}</div>
+        </div>
+        {/* El modelo es lo que dice QUÉ funda va. Lo pregunta y lo carga marketing antes de
+            confirmar; si igual falta, se le pregunta a ella que está enfrente. */}
+        <div>
+          <div style={{ color: color.mut, fontSize: font.sm }}>Qué celular tiene</div>
+          <div style={{ fontWeight: weight.semibold }}>
+            {canje.persona?.modelo_celular || <span style={{ color: color.mut2 }}>preguntale</span>}
+          </div>
         </div>
         {canje.titulo && (
           <div>

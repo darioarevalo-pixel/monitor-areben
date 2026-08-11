@@ -219,8 +219,17 @@ export function FichaCanje({
               <Button variant="solid" tone="brand" onClick={() => void acepto()}>Aceptó</Button>
             </>
           )}
+          {/* Con retiro en el local el link es un paso de más: no hay dirección que pedirle y los
+              datos se completan en el mostrador. Sigue accesible desde "Ver el link" si hiciera
+              falta, pero deja de ser el botón que la pantalla empuja. */}
           {canje.estado === 'acuerdo' && (
-            <Button variant="solid" tone="brand" onClick={() => setMostrandoLink(true)}>Mandarle el link</Button>
+            <Button
+              variant={canje.retiro_local ? 'outline' : 'solid'}
+              tone="brand"
+              onClick={() => setMostrandoLink(true)}
+            >
+              {canje.retiro_local ? 'Ver el link' : 'Mandarle el link'}
+            </Button>
           )}
           {editable && (
             <Button variant="ghost" tone="danger" onClick={() => void cancelar()}>Cancelar</Button>
@@ -664,15 +673,28 @@ function BloqueEntrega({
           </Field>
           {canje.retiro_local && (
             <div style={{ marginTop: space[3] }}>
-              <Notice tone="neutral">
-                <b>Lo retira en el local.</b> No hay que cargar orden de Tienda Nube ni despachar
-                nada: la persona elige en el mostrador y el local se lo entrega desde{' '}
-                <b>Cupones y canjes</b>. Ahí se descuenta el stock y se registra acá solo.
-                {canje.tn_orden && (
-                  <> ⚠️ Ojo: este canje ya tiene cargada la orden <b>{canje.tn_orden}</b> de Tienda
-                  Nube — si ya no se envía, anulala allá.</>
+              {/* 🔑 No hay ningún paso más: **que ella acepte ES la confirmación**. En cuanto el
+                  canje pasa a `acuerdo`, le aparece a la chica del mostrador. */}
+              <Notice tone={canje.estado === 'acuerdo' || canje.estado === 'preparando' ? 'neutral' : 'warning'}>
+                {canje.estado === 'acuerdo' || canje.estado === 'preparando' ? (
+                  <>
+                    <b>Lo retira en el local.</b> Ya le aparece en <b>Cupones y canjes</b>, con el
+                    nombre y cuántas unidades tiene autorizadas. No hay que cargar orden de Tienda
+                    Nube ni despachar nada: elige en el mostrador, ahí se descuenta el stock y se
+                    registra acá solo.
+                  </>
+                ) : (
+                  <><b>Lo retira en el local.</b> Le va a aparecer al local en cuanto acepte el canje.</>
                 )}
               </Notice>
+              {canje.tn_orden && (
+                <div style={{ marginTop: space[3] }}>
+                  <Notice tone="warning">
+                    Ojo: este canje ya tiene cargada la orden <b>{canje.tn_orden}</b> de Tienda Nube.
+                    Si ya no se envía, anulala allá.
+                  </Notice>
+                </div>
+              )}
             </div>
           )}
         </>
