@@ -309,11 +309,18 @@ export async function bajarDeDrive(
     return { ok: false, motivo: 'Se cortó la conexión con Drive.' }
   }
 
-  if (r.status === 401 || r.status === 403) {
-    olvidarTokenDrive()
-    return { ok: false, motivo: 'Se venció el permiso de Drive. Volvé a elegir el archivo.' }
+  if (!r.ok) {
+    // 🔴 **401 y 403 NO son lo mismo, y juntarlos costó una vuelta entera.** Con los dos traducidos
+    // a «se venció el permiso», un 403 de *«Google Drive API has not been used in project…»*
+    // —o sea, una API apagada en la consola— mandaba a volver a elegir el archivo, que es
+    // exactamente lo que no iba a arreglarlo nunca. Sólo el 401 es un token vencido.
+    const dijo = await motivoDeDrive(r)
+    if (r.status === 401) {
+      olvidarTokenDrive()
+      return { ok: false, motivo: `Se venció el permiso de Drive. Volvé a elegir el archivo.${dijo}` }
+    }
+    return { ok: false, motivo: `Drive no dejó bajar «${doc.name}» (${r.status}).${dijo}` }
   }
-  if (!r.ok) return { ok: false, motivo: `Drive contestó ${r.status} al bajar «${doc.name}».` }
 
   const total = Number(r.headers.get('content-length')) || tamanioDeDrive(doc)
   const cuerpo = r.body
@@ -324,6 +331,25 @@ export async function bajarDeDrive(
   // El `type` sale de la tabla y de la extensión, NO del que informó Drive: el permiso del Blob
   // acepta una lista corta y un archivo de Drive puede llegar como `application/octet-stream`.
   return { ok: true, file: new File([bytes], nom.nombre, { type: mimeDePieza(nom.nombre) || '' }) }
+}
+
+/**
+ * Lo que Drive dijo, tal cual, para pegarlo al cartel.
+ *
+ * 🔑 **El texto de Google se muestra sin traducir a propósito.** Dice cosas como *«Google Drive API
+ * has not been used in project 219989173598 before or it is disabled»*, que es feo de leer y es
+ * **la instrucción exacta** de qué hay que ir a tocar. Reemplazarlo por un «no se pudo bajar» es
+ * quedarse con lo lindo y tirar lo único que servía.
+ */
+async function motivoDeDrive(r: Response): Promise<string> {
+  try {
+    const t = await r.text()
+    const j = JSON.parse(t) as { error?: { message?: string } }
+    const m = j?.error?.message || t
+    return m ? ` Google dijo: «${String(m).slice(0, 300)}»` : ''
+  } catch {
+    return ''
+  }
 }
 
 async function leerConAvance(
