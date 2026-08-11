@@ -53,6 +53,7 @@
 //   POST { action:'envio', id, via, seguimiento, costo }         → despacho.
 //   POST { action:'intento-entrega', id, nota? }                 → el correo pasó y no había nadie. NO cambia el estado.
 //   POST { action:'entregado', id }                              → CONGELA los `vence_el`.
+//   POST { action:'retiro', id, retiro_local }                   → envío ↔ retiro en el local.
 //   POST { action:'entrega-local', id, gn_venta_* }              → se lo llevó del local (lo hace EL LOCAL).
 //   GET  ?vista=local                                            → el mostrador: sin plata, sólo BDI.
 //   POST { action:'entregable-agregar'|'entregable-quitar', … }  → lo que prometió publicar.
@@ -1864,6 +1865,34 @@ export default async function handler(req, res) {
      * El resto es idéntico a `entregado`, incluido el congelamiento de los `vence_el`: que se
      * retire en el local no cambia en nada cuándo tiene que publicar.
      */
+    /**
+     * Cambiar entre "se lo enviamos" y "lo retira en el local". **Acción propia y no parte de
+     * `canje-editar`**, que sólo corre en `propuesta`/`enviada` porque protege lo PACTADO.
+     *
+     * Esto no es el trato: es logística. "Ya lo acordamos y después me dice que pasa por el local"
+     * es el caso normal, no una excepción, y mandarlo a cancelar y armar otro por eso sería absurdo.
+     *
+     * El corte es **haber salido**, no el estado: una vez despachado o entregado, cambiarlo sería
+     * reescribir lo que ya pasó.
+     */
+    if (action === 'retiro') {
+      if (TERMINALES.includes(canje.estado)) {
+        return res.status(409).json({ error: 'Este canje ya está cerrado.' });
+      }
+      if (canje.entregado_at || canje.envio_estado === 'hecho') {
+        return res.status(409).json({ error: 'Esto ya salió: no se puede cambiar cómo lo recibe.' });
+      }
+      const quiere = !!b.retiro_local;
+      if (quiere && !retiroLocalDisponible(canje.store)) {
+        return res.status(409).json({ error: 'Esta marca no tiene local.' });
+      }
+      await apilar(supabase, 'canjes', canjeId, {
+        at: ahora(), usuario,
+        nota: quiere ? 'pasa a retirarlo en el local' : 'pasa a envío',
+      }, { retiro_local: quiere });
+      return res.status(200).json({ ok: true, retiro_local: quiere });
+    }
+
     if (action === 'entrega-local') {
       const items = await itemsDe(canjeId);
       const motivo = noSePuedeEntregar(canje, items);

@@ -597,6 +597,16 @@ export type CanjeEnElLocal = {
   items: CanjeItem[]
 }
 
+/**
+ * Cambiar entre "se lo enviamos" y "lo retira en el local".
+ *
+ * Va por su propia acción y no por `editarCanje`: eso último sólo corre antes del acuerdo porque
+ * protege lo pactado, y esto es logística. Se puede cambiar mientras no haya salido.
+ */
+export async function cambiarRetiroLocal(store: CanjeStore, id: number, retiroLocal: boolean): Promise<void> {
+  await postear({ store, action: 'retiro', id, retiro_local: retiroLocal })
+}
+
 /** Los canjes que hay para entregar en el mostrador. La lista sale filtrada del servidor. */
 export async function leerCanjesDelLocal(): Promise<CanjeEnElLocal[]> {
   const d = await leer('vista=local')

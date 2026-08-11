@@ -16,7 +16,7 @@ import {
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  aprobarCanje, borrarCanje, cambiarEstadoCanje, editarCanje, leerCanje, leerToken, linkDelPortal,
+  aprobarCanje, borrarCanje, cambiarEstadoCanje, cambiarRetiroLocal, editarCanje, leerCanje, leerToken, linkDelPortal,
   queSeLlevaElCanje, rechazarCanje, registrarRespuesta,
   type FichaCanjeDatos, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
@@ -25,7 +25,7 @@ import { puedeAprobar, puedeCerrarIncompleto } from '@/lib/canjes/permisos'
 import { instagramParaMostrar } from '@/lib/canjes/instagram'
 import {
   MOTIVOS_NO_ACEPTO, MOTIVOS_RECHAZO, STORE_LABEL, TIPO_CANJE_LABEL,
-  costoEstimado, esTerminal, estadoEnCriollo, nombrePersona, quienApruebaCanje,
+  costoEstimado, esTerminal, estadoEnCriollo, nombrePersona, quienApruebaCanje, retiroLocalDisponible,
   type CanjeRow, type CanjeStore, type EstadoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
 import { BloqueSeleccion } from './BloqueSeleccion'
@@ -320,20 +320,25 @@ export function FichaCanje({
         onCambio={() => void recargar()}
         editable={editable}
       />
+      {/* Cómo lo recibe. Va ARRIBA del envío y desde la propuesta, no sólo al proponer: "ya lo
+          acordamos y después me dice que pasa por el local" es el caso normal. Sólo en las marcas
+          que tienen local; en las demás no hay nada que elegir. */}
+      {!esTerminal(canje.estado) && retiroLocalDisponible(store) && (
+        <BloqueEntrega store={store} canje={canje} onCambio={() => void recargar()} />
+      )}
+
       {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada.
           Y si lo retira en el local no hay envío en absoluto: la orden de Tienda Nube, el despacho y
           la entrega los reemplaza un solo acto en el mostrador. Dejar el bloque visible sería
           ofrecer dos caminos para lo mismo y alguien terminaría tipeando una orden al pedo. */}
-      {!['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado) && (
-        canje.retiro_local ? <BloqueRetiroLocal canje={canje} /> : (
-          <BloqueEnvio
-            canje={canje}
-            persona={persona}
-            items={items}
-            config={config}
-            onCambio={() => void recargar()}
-          />
-        )
+      {!['propuesta', 'enviada', 'rechazado', 'no_acepto'].includes(canje.estado) && !canje.retiro_local && (
+        <BloqueEnvio
+          canje={canje}
+          persona={persona}
+          items={items}
+          config={config}
+          onCambio={() => void recargar()}
+        />
       )}
       {(canje.estado === 'en_curso' || canje.estado === 'cerrado') && (
         <CierreBalance
@@ -602,27 +607,75 @@ function NoAcepto({
 }
 
 /**
- * El reemplazo del bloque de envío cuando lo retira en el local.
+ * Envío o retiro en el local, y el cambio entre los dos.
  *
- * No tiene ni un botón a propósito: **desde acá no se entrega**. El que entrega es el que tiene la
- * mercadería y la persona enfrente, y lo hace desde su pantalla (Cupones y canjes). Un botón acá
- * sería marcar entregado algo que todavía nadie entregó, y encima crearía la venta en Gestión Nube,
+ * **Se puede cambiar hasta que salga**, no sólo al proponer: la creadora avisa que pasa por el local
+ * después de haber acordado, y mandar a cancelar y armar otro canje por eso sería absurdo. El
+ * servidor corta por lo mismo —despachado o entregado— y no por el estado.
+ *
+ * No tiene botón de entregar a propósito: **desde acá no se entrega**. El que entrega es el que
+ * tiene la mercadería y la persona enfrente, y lo hace desde su pantalla (Cupones y canjes). Un
+ * botón acá marcaría entregado algo que nadie entregó, y encima crearía la venta en Gestión Nube,
  * que no se puede deshacer.
  */
-function BloqueRetiroLocal({ canje }: { canje: CanjeRow }) {
+function BloqueEntrega({
+  store, canje, onCambio,
+}: {
+  store: CanjeStore
+  canje: CanjeRow
+  onCambio: () => void
+}) {
+  const toast = useToast()
+  const [guardando, setGuardando] = useState(false)
+  const salio = !!canje.entregado_at || canje.envio_estado === 'hecho'
+
+  async function cambiar(aRetiro: boolean) {
+    setGuardando(true)
+    try {
+      await cambiarRetiroLocal(store, canje.id, aRetiro)
+      onCambio()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   return (
     <SectionCard title="Cómo lo recibe">
-      {canje.entregado_at ? (
-        <Notice tone="success">
-          Lo retiró en el local el {canje.entregado_at.slice(0, 10)}
-          {canje.gn_venta_number ? ` — venta ${canje.gn_venta_number} en Gestión Nube` : ''}.
-        </Notice>
+      {salio ? (
+        canje.retiro_local ? (
+          <Notice tone="success">
+            Lo retiró en el local{canje.entregado_at ? ` el ${canje.entregado_at.slice(0, 10)}` : ''}
+            {canje.gn_venta_number ? ` — venta ${canje.gn_venta_number} en Gestión Nube` : ''}.
+          </Notice>
+        ) : null
       ) : (
-        <Notice tone="neutral">
-          <b>Lo retira en el local.</b> No hay que cargar orden de Tienda Nube ni despachar nada: la
-          persona elige en el mostrador y el local se lo entrega desde <b>Cupones y canjes</b>. Ahí
-          se descuenta el stock y se registra acá solo.
-        </Notice>
+        <>
+          <Field label="Cómo lo recibe" hint="Se puede cambiar hasta que salga.">
+            <Select
+              value={canje.retiro_local ? 'local' : 'envio'}
+              disabled={guardando}
+              onChange={(e) => void cambiar(e.target.value === 'local')}
+            >
+              <option value="envio">Se lo enviamos</option>
+              <option value="local">Retira en el local</option>
+            </Select>
+          </Field>
+          {canje.retiro_local && (
+            <div style={{ marginTop: space[3] }}>
+              <Notice tone="neutral">
+                <b>Lo retira en el local.</b> No hay que cargar orden de Tienda Nube ni despachar
+                nada: la persona elige en el mostrador y el local se lo entrega desde{' '}
+                <b>Cupones y canjes</b>. Ahí se descuenta el stock y se registra acá solo.
+                {canje.tn_orden && (
+                  <> ⚠️ Ojo: este canje ya tiene cargada la orden <b>{canje.tn_orden}</b> de Tienda
+                  Nube — si ya no se envía, anulala allá.</>
+                )}
+              </Notice>
+            </div>
+          )}
+        </>
       )}
     </SectionCard>
   )
