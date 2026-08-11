@@ -20,17 +20,16 @@ import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { leerSnapshot, primeraFecha, ultimaFecha } from '../lib/meta-ads/leer-snapshot.core.js';
 import { NIVEL_TOTALES } from '../lib/meta-ads/snapshot.core.js';
 import { comparar, hoyIso, ventanasDe } from '../lib/meta-ads/tendencia.core.js';
+import { elegirDias } from '../lib/meta-ads/ventana.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 
 /** Las columnas que necesita la comparación. Explícitas: la tabla tiene 25. */
 const COLS = 'fecha,nivel,objeto_id,linea,spend,impresiones,clicks,compras,revenue';
 
-/**
- * Los días que puede pedir el Panel. Son los mismos dos del selector de etapas (`UMBRALES_ETAPA`),
- * y lo que venga de afuera no se cree: un `dias=100000` haría un escaneo de la tabla entera.
- */
-const DIAS = new Set([30, 90]);
-const DIAS_DEFECTO = 30;
+// Los días que puede pedir el Panel salen de `ventana.core.js`: son los mismos dos del selector de
+// etapas y lo que venga de afuera no se cree —un `dias=100000` haría un escaneo de la tabla
+// entera—. Acá estaban escritos a mano y **con los números adentro**, así que subir la ventana
+// amplia en `UMBRALES_ETAPA` dejaba esta copia mirando 90 para siempre.
 
 export default async function tendenciaGet(res, perfil, q) {
   const sb = clienteBdi();
@@ -38,8 +37,9 @@ export default async function tendenciaGet(res, perfil, q) {
   const visibles = lineasQueVe(perfil);
   if (!visibles.length) return res.status(403).json({ error: 'No tenés acceso a la pauta de ninguna marca.' });
 
-  const pedidos = parseInt(q.dias, 10);
-  const dias = DIAS.has(pedidos) ? pedidos : DIAS_DEFECTO;
+  const ventana = elegirDias(q.dias);
+  if (ventana.error) return res.status(400).json({ error: ventana.error });
+  const dias = ventana.dias;
 
   // Desde cuándo hay foto A NIVEL CAMPAÑA, que es el nivel del que salen los totales. Preguntar por
   // la tabla entera daría el día en que arrancó el nivel `cuenta`, que es anterior, y prometería una

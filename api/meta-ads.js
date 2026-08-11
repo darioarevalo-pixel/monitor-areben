@@ -48,7 +48,10 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 // La clasificación por etapa TAMBIÉN se importa, por el mismo motivo y desde un `.js` gemelo.
-import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA, UMBRALES_ETAPA } from '../lib/meta-ads/etapas.core.js';
+import { estaAlAire, etapaDeObjetivo, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA } from '../lib/meta-ads/etapas.core.js';
+// Qué ventana se puede pedir. Vale la pena leer el encabezado de ese archivo: las cuatro copias que
+// reemplaza contestaban una ventana distinta de la pedida sin decirlo.
+import { elegirDias, elegirRango } from '../lib/meta-ads/ventana.core.js';
 // Y las líneas de pauta, que son las que dicen de qué marca es cada campaña.
 import { lineasDeMarca, sugerirLinea } from '../lib/meta-ads/lineas.core.js';
 // Qué líneas puede MIRAR un perfil: la misma función con la que la pantalla dibuja el selector, para
@@ -71,7 +74,9 @@ import reglasPost, { reglasGet } from './_meta-reglas.js';
 import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
 import tendenciaGet from './_meta-tendencia.js';
 
-const PRESETS = new Set(['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'maximum']);
+// La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
+// cuatro copias de la misma decisión y las cuatro contestaban otra ventana en silencio cuando les
+// pedían una que no tenían.
 // `ATTR` (la ventana de atribución), `COMPRA` (`omni_purchase`), `RE_PERFIL` y `RE_SEGUIDOR` se
 // mudaron a `lib/meta-ads/metricas.core.js` junto con las funciones que los usan, por el mismo
 // motivo por el que `mensajeError` se fue a `graph.core.js`: los necesita un script de `scripts/`.
@@ -124,17 +129,25 @@ export default async function handler(req, res) {
   // mismo para todas (una sola cuenta publicitaria). Pedirlo tres veces sería triplicar el gasto de
   // Graph para cortar los mismos datos; el corte por permiso igual se hace del lado del servidor.
   if (q.recurso === 'cuentas') return await cuentas(res, perfil);
-  if (q.recurso === 'etapas') return await etapas(res, perfil, parseInt(q.dias, 10));
-  if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
-  if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), parseInt(q.dias, 10));
+  // ⚠️ El `dias` viaja CRUDO: parsearlo acá borra la diferencia entre «no pidió nada» y «pidió una
+  // ventana que no existe», que es justo la que decide entre el defecto y un 400. Ver
+  // `lib/meta-ads/ventana.core.js`.
+  if (q.recurso === 'etapas') return await etapas(res, perfil, q.dias);
+  if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), q.dias);
+  if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'mejoras') return await mejoras(res, perfil, String(q.campania || ''));
   if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
   // `auditoria` ya se despachó arriba, antes del guard del token. Ver el comentario de allá.
 
-  const rango = rangoQS(q);
-  const rangoEco = q.since && q.until ? { since: q.since, until: q.until } : (PRESETS.has(q.preset) ? q.preset : 'last_30d');
+  // El rango sale de UNA sola lectura de la query: `qs` es lo que viaja a Graph y `eco` lo que se
+  // devuelve en el cuerpo. Antes eran dos expresiones distintas leyendo lo mismo, y esa es la forma
+  // en que dos lecturas del mismo dato se despegan.
+  const elegido = elegirRango(q);
+  if (elegido.error) return res.status(400).json({ error: elegido.error });
 
-  return q.account ? await detalle(res, String(q.account), rango, rangoEco) : await overview(res, rango, rangoEco);
+  return q.account
+    ? await detalle(res, String(q.account), elegido.qs, elegido.eco)
+    : await overview(res, elegido.qs, elegido.eco);
 }
 
 // ── Modo cuentas: el EJE de la sección (cuenta × línea), sin insights ────────────────────────────
@@ -244,7 +257,9 @@ async function etapas(res, perfil, diasPedidos) {
   if (!marcas.length) return res.status(403).json({ error: 'No tenés permiso para ver Meta Ads.' });
   const visibles = new Set(marcas.flatMap((m) => lineasDeMarca(m)));
 
-  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+  const ventana = elegirDias(diasPedidos);
+  if (ventana.error) return res.status(400).json({ error: ventana.error });
+  const dias = ventana.dias;
   const rango = `date_preset=last_${dias}d`;
   const attr = `action_attribution_windows=${ATTR}`;
 
@@ -377,7 +392,9 @@ async function creativos(res, perfil, campaignId, diasPedidos) {
   const gate = await gateCampaña(res, perfil, campaignId);
   if (!gate) return;
 
-  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+  const ventana = elegirDias(diasPedidos);
+  if (ventana.error) return res.status(400).json({ error: ventana.error });
+  const dias = ventana.dias;
 
   // Tres llamadas, y las dos últimas son enriquecimientos AISLADOS: si Meta rechaza una, su dato
   // queda vacío y los avisos igual se ven. La primera lleva EXACTAMENTE los campos que el modo
@@ -490,7 +507,9 @@ async function conjuntos(res, perfil, campaignId, diasPedidos) {
   const gate = await gateCampaña(res, perfil, campaignId);
   if (!gate) return;
 
-  const dias = diasPedidos === UMBRALES_ETAPA.diasAmplio ? UMBRALES_ETAPA.diasAmplio : UMBRALES_ETAPA.dias;
+  const ventana = elegirDias(diasPedidos);
+  if (ventana.error) return res.status(400).json({ error: ventana.error });
+  const dias = ventana.dias;
 
   // El gasto es un enriquecimiento AISLADO, igual que en el censo: si falla, los conjuntos igual se
   // listan con 0 y se los puede accionar, que es a lo que se vino.
@@ -1035,12 +1054,8 @@ async function detalle(res, account, rango, rangoEco) {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
-function rangoQS(q) {
-  if (q.since && q.until && /^\d{4}-\d{2}-\d{2}$/.test(q.since) && /^\d{4}-\d{2}-\d{2}$/.test(q.until)) {
-    return `time_range=${encodeURIComponent(JSON.stringify({ since: q.since, until: q.until }))}`;
-  }
-  return `date_preset=${PRESETS.has(q.preset) ? q.preset : 'last_30d'}`;
-}
+// `rangoQS` se mudó a `lib/meta-ads/ventana.core.js` como `elegirRango`, que además devuelve el eco
+// y contesta con un motivo en vez de sustituir el rango pedido por otro.
 
 // `accion`, `sumaAcciones` y `accionRe` viven en `lib/meta-ads/metricas.core.js` (importadas arriba).
 
