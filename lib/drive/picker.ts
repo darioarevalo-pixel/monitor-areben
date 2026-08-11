@@ -88,7 +88,13 @@ interface ClienteToken {
 
 interface Constructor<T> { new (...args: unknown[]): T }
 
-interface VistaPicker { setIncludeFolders: (v: boolean) => VistaPicker; setEnableDrives: (v: boolean) => VistaPicker }
+interface VistaPicker {
+  setIncludeFolders: (v: boolean) => VistaPicker
+  /** ⚠️ En `true` la vista pasa a mostrar **unidades compartidas**, no «Mi unidad». */
+  setEnableDrives: (v: boolean) => VistaPicker
+  /** `false` = los que NO son tuyos, o sea «Compartidos conmigo». */
+  setOwnedByMe: (v: boolean) => VistaPicker
+}
 
 interface ArmadorPicker {
   addView: (v: VistaPicker) => ArmadorPicker
@@ -224,12 +230,26 @@ export async function elegirDeDrive(): Promise<Elegidos> {
   const picker = await cargarPicker()
 
   return new Promise<Elegidos>((listo) => {
-    const vista = (id: string) =>
-      new picker.DocsView(picker.ViewId[id]).setIncludeFolders(true).setEnableDrives(true)
+    const vista = (id: string) => new picker.DocsView(picker.ViewId[id]).setIncludeFolders(true)
 
     const armado = new picker.PickerBuilder()
+      // 🔴 **Las cuatro vistas son cuatro LUGARES distintos de Drive, y ninguna ve las otras.** Un
+      // archivo que vive en una carpeta que te compartieron NO aparece en «Videos», por más que sea
+      // un video: esa vista es «Mi unidad» y nada más.
+      //
+      // 🔴 **`setEnableDrives(true)` NO agrega las unidades compartidas: REEMPLAZA el lugar.** Con
+      // eso puesto en las dos primeras, el Picker abría con dos solapas llamadas «Shared drives» y
+      // un «No videos» sobre un Drive lleno. Medido en prod el 11-ago-2026.
+      //
+      // ⚠️ El nombre de cada solapa lo pone el tipo de vista y **no se puede cambiar**: `setLabel`
+      // está deprecado. Por eso cada una usa un `ViewId` distinto — dos vistas del mismo tipo salen
+      // con el mismo nombre y no hay forma de distinguirlas.
       .addView(vista('DOCS_VIDEOS'))
       .addView(vista('DOCS_IMAGES'))
+      // Lo que te compartieron: la carpeta la creó otro y por eso no está en «Mi unidad».
+      .addView(new picker.DocsView(picker.ViewId.DOCS_IMAGES_AND_VIDEOS).setIncludeFolders(true).setOwnedByMe(false))
+      // Las unidades compartidas del equipo, que son un lugar aparte de todo lo anterior.
+      .addView(new picker.DocsView(picker.ViewId.DOCS).setIncludeFolders(true).setEnableDrives(true))
       .enableFeature(picker.Feature.MULTISELECT_ENABLED)
       .setOAuthToken(token)
       .setDeveloperKey(DRIVE_API_KEY)
