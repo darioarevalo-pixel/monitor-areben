@@ -16,7 +16,8 @@ import {
 } from '@/components/ui'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  aprobarCanje, borrarCanje, cambiarEstadoCanje, cambiarRetiroLocal, editarCanje, leerCanje, leerToken, linkDelPortal,
+  aprobarCanje, borrarCanje, cambiarEstadoCanje, cambiarRetiroLocal, editarCanje, editarPersona,
+  leerCanje, leerToken, linkDelPortal,
   queSeLlevaElCanje, rechazarCanje, registrarRespuesta,
   type FichaCanjeDatos, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
@@ -333,7 +334,7 @@ export function FichaCanje({
           acordamos y después me dice que pasa por el local" es el caso normal. Sólo en las marcas
           que tienen local; en las demás no hay nada que elegir. */}
       {!esTerminal(canje.estado) && retiroLocalDisponible(store) && (
-        <BloqueEntrega store={store} canje={canje} onCambio={() => void recargar()} />
+        <BloqueEntrega store={store} canje={canje} persona={persona} onCambio={() => void recargar()} />
       )}
 
       {/* El envío recién tiene sentido con el acuerdo hecho: antes no hay a dónde mandar nada.
@@ -628,14 +629,16 @@ function NoAcepto({
  * que no se puede deshacer.
  */
 function BloqueEntrega({
-  store, canje, onCambio,
+  store, canje, persona, onCambio,
 }: {
   store: CanjeStore
   canje: CanjeRow
+  persona: FichaCanjeDatos['persona']
   onCambio: () => void
 }) {
   const toast = useToast()
   const [guardando, setGuardando] = useState(false)
+  const [modelo, setModelo] = useState(persona?.modelo_celular || '')
   const salio = !!canje.entregado_at || canje.envio_estado === 'hecho'
 
   async function cambiar(aRetiro: boolean) {
@@ -643,6 +646,29 @@ function BloqueEntrega({
     try {
       await cambiarRetiroLocal(store, canje.id, aRetiro)
       onCambio()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  /**
+   * El modelo se carga acá porque **con retiro en el local nadie más lo carga**: el link es un paso
+   * de más (no hay dirección que pedirle) y es justo lo que se le pregunta por WhatsApp para ver si
+   * hay disponible. Antes sólo salía del portal o de Editar ficha en el padrón.
+   *
+   * Se guarda en la PERSONA y no en el canje: es un dato de ella y sirve para el próximo también.
+   */
+  async function guardarModelo() {
+    if (!persona) return
+    const limpio = modelo.trim()
+    if (limpio === (persona.modelo_celular || '')) return
+    setGuardando(true)
+    try {
+      await editarPersona(store, persona.id, { modelo_celular: limpio || null })
+      onCambio()
+      toast.ok(limpio ? `Anotado: ${limpio}. Ya lo ve el local.` : 'Modelo borrado.')
     } catch (e) {
       toast.error(String((e as Error)?.message || e))
     } finally {
@@ -687,6 +713,24 @@ function BloqueEntrega({
                   <><b>Lo retira en el local.</b> Le va a aparecer al local en cuanto acepte el canje.</>
                 )}
               </Notice>
+              {/* Qué celular tiene: es lo que dice QUÉ funda va, y lo que el local lee en el
+                  mostrador. Se pregunta por WhatsApp antes, para ver si hay disponible. */}
+              <div style={{ marginTop: space[3], maxWidth: 320 }}>
+                <Field
+                  label="Qué celular tiene"
+                  hint="Es lo que ve el local para saber qué funda darle. Queda en su ficha."
+                >
+                  <Input
+                    value={modelo}
+                    disabled={!persona || guardando}
+                    placeholder="iPhone 13"
+                    onChange={(e) => setModelo(e.target.value)}
+                    onBlur={() => void guardarModelo()}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void guardarModelo() }}
+                  />
+                </Field>
+              </div>
+
               {canje.tn_orden && (
                 <div style={{ marginTop: space[3] }}>
                   <Notice tone="warning">
