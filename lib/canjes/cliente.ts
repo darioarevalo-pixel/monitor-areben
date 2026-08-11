@@ -609,7 +609,9 @@ export async function cambiarRetiroLocal(store: CanjeStore, id: number, retiroLo
 
 /** Los canjes que hay para entregar en el mostrador. La lista sale filtrada del servidor. */
 export async function leerCanjesDelLocal(): Promise<CanjeEnElLocal[]> {
-  const d = await leer('vista=local')
+  // `store` va explícito aunque la vista sea sólo de BDI: el handler lo exige SIEMPRE, antes de
+  // mirar la vista, y sin él contesta "store inválido".
+  const d = await leer('vista=local&store=bdi')
   return (d.canjes || []) as CanjeEnElLocal[]
 }
 

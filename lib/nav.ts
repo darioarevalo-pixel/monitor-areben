@@ -295,7 +295,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
   etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',
   atencion: 'Links y mensajes listos para copiar y pegar en Instagram y WhatsApp.',
-  cupones: 'Descuentos por cliente para el local (no toca la tienda online).',
+  cupones: 'Descuentos por cliente y los canjes que se retiran en el local.',
   'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',
   solicitudes: 'Estado unificado de todas las solicitudes (fotos + internas), filtrado por tu función.',
   clientes: 'Clientes mayoristas: ranking, seguimiento y banco de mensajes.',

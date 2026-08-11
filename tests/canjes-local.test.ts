@@ -138,6 +138,31 @@ describe('listoParaEntregar', () => {
   })
 })
 
+/**
+ * 🔴 Esto salió de un fallo real: `leerCanjesDelLocal` no mandaba `store` y la pestaña abría con
+ * "store inválido (usá bdi, zattia o stunned)". El handler lo exige **antes** de mirar la vista, así
+ * que ninguna lectura sirve sin él — y una vista nueva es justo donde se olvida.
+ */
+describe('leerCanjesDelLocal — la URL', () => {
+  it('manda `store`, que el handler exige siempre', async () => {
+    const visto: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (url: string) => {
+      visto.push(String(url))
+      return { ok: true, json: async () => ({ ok: true, canjes: [] }) } as unknown as Response
+    }) as typeof fetch
+    try {
+      const { leerCanjesDelLocal } = await import('@/lib/canjes/cliente')
+      await leerCanjesDelLocal()
+    } finally {
+      globalThis.fetch = original
+    }
+    expect(visto).toHaveLength(1)
+    expect(visto[0]).toContain('vista=local')
+    expect(visto[0]).toContain('store=bdi')
+  })
+})
+
 describe('puedeAtenderRetiroLocal', () => {
   it('quien ve Cupones en BDI atiende el mostrador', () => {
     expect(puedeAtenderRetiroLocal(perfil({ bdi: { cupones: true } }))).toBe(true)
