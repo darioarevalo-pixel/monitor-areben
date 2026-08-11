@@ -12,6 +12,10 @@ import {
   claseDePieza as claseDePiezaJs,
   CLASE_POR_EXTENSION as CLASE_POR_EXTENSION_JS,
   copyDeCreativo as copyDeCreativoJs,
+  extensionDe as extensionDeJs,
+  mimeDePieza as mimeDePiezaJs,
+  MIME_POR_EXTENSION as MIME_POR_EXTENSION_JS,
+  TIPOS_PIEZA as TIPOS_PIEZA_JS,
   cuerpoDeCreativo as cuerpoDeCreativoJs,
   destinoDe as destinoDeJs,
   puedeUsarLaPagina as puedeUsarLaPaginaJs,
@@ -83,9 +87,16 @@ type Falla = { ok: false; status: number; error: string }
 
 export const CAMPOS_CREATIVO_MODELO = CAMPOS_CREATIVO_MODELO_JS as string
 export const CLASE_POR_EXTENSION = CLASE_POR_EXTENSION_JS as Record<string, ClasePieza>
+/** La tabla única de la que salen la clase, el `contentType` y los tipos que el Blob deja pasar. */
+export const MIME_POR_EXTENSION = MIME_POR_EXTENSION_JS as Record<string, string>
+/** Los MIME que el permiso de subida deja pasar. Es lo que usa `api/blob-upload.js`. */
+export const TIPOS_PIEZA = TIPOS_PIEZA_JS as string[]
 export const TOPE_PIEZAS = TOPE_PIEZAS_JS as number
 
 export const claseDePieza = claseDePiezaJs as (nombre: string) => ClasePieza | null
+export const extensionDe = extensionDeJs as (nombre: string) => string
+/** El `contentType` con el que sube este archivo, o `null` si la extensión no está en la tabla. */
+export const mimeDePieza = mimeDePiezaJs as (nombre: string) => string | null
 export const copyDeCreativo = copyDeCreativoJs as (
   cr: CreativoLeido | null | undefined,
 ) => { ok: true; copy: CopyDeAviso } | Falla

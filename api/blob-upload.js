@@ -27,23 +27,21 @@
 import { handleUpload } from '@vercel/blob/client';
 import { hayBlob, subirDataUrl } from './_blob.js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { TIPOS_PIEZA } from '../lib/meta-ads/pieza.core.js';
 
 const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
 
 /** La carpeta del Blob donde viven las piezas de Meta. Es la única que admite el camino de cliente. */
 const CARPETA_PIEZAS = 'piezas';
 
-/**
- * Lo que Meta acepta como pieza, en tipos MIME.
- *
- * ⚠️ **La lista es estricta y el cliente manda el `contentType` a mano** (lo deduce de la extensión
- * con `claseDePieza`). Un archivo que llega de Drive puede venir como `application/octet-stream`, y
- * si eso se aceptara acá, cualquier cosa podría subirse al Blob con una sesión del Monitor.
- */
-const TIPOS_PIEZA = [
-  'video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm', 'video/x-msvideo',
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-];
+// Lo que Meta acepta como pieza, en tipos MIME, sale de `MIME_POR_EXTENSION` (`pieza.core.js`) y no
+// de una lista propia: es la misma tabla de la que el cliente deduce el `contentType` que manda a
+// mano. Escrita dos veces, agregar un formato de un solo lado deja un archivo que la pantalla
+// acepta y el servidor rechaza con un cartel del SDK que no nombra el tipo.
+//
+// ⚠️ **La lista es estricta a propósito.** Un archivo que llega de Drive puede venir como
+// `application/octet-stream`, y si eso se aceptara acá, cualquier cosa podría subirse al Blob con
+// una sesión del Monitor.
 
 /**
  * El techo de una pieza. Meta admite bastante más, pero el que sube es un browser con la red de la
