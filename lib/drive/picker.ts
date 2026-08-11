@@ -1,0 +1,309 @@
+'use client'
+
+/**
+ * **Traer piezas desde Google Drive**, sin que los bytes toquen una función de Vercel.
+ *
+ * # Por qué esto no gastó ninguna de las 12 funciones
+ *
+ * El plan viejo decía «Drive necesita OAuth ⇒ un callback ⇒ una ruta nueva», y con 9 de 12 funciones
+ * usadas eso era caro. No hace falta: el **Google Picker** con el scope `drive.file` saca el token
+ * **en el browser** (popup de Identity Services, sin `redirect_uri`), y los bytes se bajan de
+ * `googleapis.com` directo al browser y de ahí van al Blob por la cañería que ya existe. **Cero
+ * funciones nuevas, cero rutas nuevas.**
+ *
+ * 🔑 **`drive.file` no es un scope sensible**: sólo ve los archivos que la persona eligió a mano en
+ * el Picker. Por eso no dispara la verificación de Google que sí exige `drive.readonly` — y como la
+ * pantalla de consentimiento del proyecto es **Interna** (sólo cuentas de `arebensrl.com`), tampoco
+ * hay revisión que esperar.
+ *
+ * # ⛔ Va en el proyecto de Google Cloud que YA existe: `Areben Identidad`
+ *
+ * Es donde vive el OAuth del SSO de las tres apps. Reusarlo ahorra la pantalla de consentimiento
+ * entera. **El Client ID del SSO NO se toca**: ese lo usa Supabase para el login con Google de
+ * dashboard, producción y monitor. Acá va uno **nuevo al lado**, de tipo «Aplicación web».
+ *
+ * # Por qué las claves van literales
+ *
+ * Mismo criterio que `lib/identidad.ts` y `lib/cuentas.ts`: las tres viajan en el browser por
+ * definición —el Client ID va en la URL del consentimiento y la clave de API va en cada llamada del
+ * Picker—, así que `NEXT_PUBLIC_*` no esconde nada (Next las inlinea en el bundle igual) y sólo
+ * agrega un modo de falla: si la variable falta en Vercel, la app deploya y el botón no anda sin que
+ * nadie sepa por qué. Además el proyecto vive en el Vercel de Darío.
+ *
+ * La clave de API se restringe **por sitio** (`monitor.arebensrl.com`) y **a la Picker API**: eso es
+ * lo que la hace inservible fuera de acá, no el hecho de esconderla.
+ */
+
+import { nombreDeDrive, tamanioDeDrive, type DocDrive } from '@/lib/drive/archivos'
+import { mimeDePieza } from '@/lib/meta-ads/pieza'
+
+/* ── Las credenciales ──────────────────────────────────────────────────────── */
+
+/** El Client ID de OAuth **nuevo** de `Areben Identidad`, tipo «Aplicación web». */
+export const DRIVE_CLIENT_ID = ''
+
+/** La clave de API, restringida a `monitor.arebensrl.com` y a la Google Picker API. */
+export const DRIVE_API_KEY = ''
+
+/**
+ * El **número** del proyecto `areben-identidad` (no el id de texto). El Picker lo exige como
+ * `setAppId`: es lo que le dice a Drive a qué app darle acceso a los archivos elegidos.
+ */
+export const DRIVE_APP_ID = '219989173598'
+
+/** Lo mínimo que hace falta: ver y bajar **sólo** los archivos que la persona elija en el Picker. */
+const SCOPE = 'https://www.googleapis.com/auth/drive.file'
+
+/** ¿Están cargadas las credenciales? Sin esto el botón no se ofrece, en vez de fallar al apretarlo. */
+export function hayDrive(): boolean {
+  return !!DRIVE_CLIENT_ID && !!DRIVE_API_KEY
+}
+
+/* ── Los dos scripts de Google ─────────────────────────────────────────────── */
+
+interface ClienteToken {
+  callback: (r: { access_token?: string; expires_in?: number; error?: string }) => void
+  error_callback?: (e: { type?: string; message?: string }) => void
+  requestAccessToken: (opts?: { prompt?: string }) => void
+}
+
+interface Constructor<T> { new (...args: unknown[]): T }
+
+interface VistaPicker { setIncludeFolders: (v: boolean) => VistaPicker; setEnableDrives: (v: boolean) => VistaPicker }
+
+interface ArmadorPicker {
+  addView: (v: VistaPicker) => ArmadorPicker
+  enableFeature: (f: string) => ArmadorPicker
+  setOAuthToken: (t: string) => ArmadorPicker
+  setDeveloperKey: (k: string) => ArmadorPicker
+  setAppId: (a: string) => ArmadorPicker
+  setOrigin: (o: string) => ArmadorPicker
+  setCallback: (cb: (data: Record<string, unknown>) => void) => ArmadorPicker
+  build: () => { setVisible: (v: boolean) => void }
+}
+
+interface GoogleGlobal {
+  accounts: { oauth2: { initTokenClient: (o: Record<string, unknown>) => ClienteToken } }
+  picker: {
+    PickerBuilder: Constructor<ArmadorPicker>
+    DocsView: Constructor<VistaPicker>
+    ViewId: Record<string, string>
+    Feature: Record<string, string>
+    Action: Record<string, string>
+    Response: Record<string, string>
+    Document: Record<string, string>
+  }
+}
+
+interface GapiGlobal { load: (nombre: string, cb: (() => void) | { callback: () => void; onerror?: () => void }) => void }
+
+declare global {
+  interface Window { gapi?: GapiGlobal; google?: GoogleGlobal }
+}
+
+/**
+ * Carga un `<script>` una sola vez. La promesa se guarda, así que dos clics seguidos comparten la
+ * misma carga en vez de meter dos etiquetas y pisarse.
+ */
+const cargas = new Map<string, Promise<void>>()
+
+function cargarScript(src: string): Promise<void> {
+  const guardada = cargas.get(src)
+  if (guardada) return guardada
+  const p = new Promise<void>((listo, falla) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => listo()
+    s.onerror = () => {
+      // Sin esto, un bloqueador de anuncios deja la promesa colgada para siempre y el botón se queda
+      // en «Abriendo Drive…» sin decir nada.
+      cargas.delete(src)
+      falla(new Error('No se pudo cargar Google Drive. ¿Hay algún bloqueador de anuncios activo?'))
+    }
+    document.head.appendChild(s)
+  })
+  cargas.set(src, p)
+  return p
+}
+
+async function cargarPicker(): Promise<GoogleGlobal['picker']> {
+  await cargarScript('https://apis.google.com/js/api.js')
+  const gapi = window.gapi
+  if (!gapi) throw new Error('No se pudo cargar Google Drive.')
+  await new Promise<void>((listo, falla) => {
+    gapi.load('picker', { callback: () => listo(), onerror: () => falla(new Error('No se pudo cargar el selector de Drive.')) })
+  })
+  const picker = window.google?.picker
+  if (!picker) throw new Error('No se pudo cargar el selector de Drive.')
+  return picker
+}
+
+/* ── El token ──────────────────────────────────────────────────────────────── */
+
+let cliente: ClienteToken | null = null
+let guardado: { token: string; vence: number } | null = null
+
+/**
+ * Un access token con `drive.file`. Se guarda hasta un minuto antes de vencer: sin eso, elegir dos
+ * tandas seguidas abre el popup de Google dos veces.
+ *
+ * ⚠️ **El popup lo tiene que disparar un clic.** Por eso esto se llama desde el `onClick` y no desde
+ * un efecto: llamado fuera del gesto, el navegador lo bloquea y Google contesta
+ * `popup_failed_to_open`, que acá se traduce a un cartel que nombra el bloqueo.
+ */
+async function pedirToken(): Promise<string> {
+  if (guardado && guardado.vence > Date.now()) return guardado.token
+
+  await cargarScript('https://accounts.google.com/gsi/client')
+  const oauth2 = window.google?.accounts?.oauth2
+  if (!oauth2) throw new Error('No se pudo cargar el ingreso de Google.')
+
+  if (!cliente) {
+    cliente = oauth2.initTokenClient({ client_id: DRIVE_CLIENT_ID, scope: SCOPE, callback: () => {} })
+  }
+  const c = cliente
+
+  return new Promise<string>((listo, falla) => {
+    c.callback = (r) => {
+      if (r.error || !r.access_token) return falla(new Error(motivoDeGoogle(r.error)))
+      guardado = { token: r.access_token, vence: Date.now() + Math.max(0, (r.expires_in || 3600) - 60) * 1000 }
+      listo(r.access_token)
+    }
+    c.error_callback = (e) => falla(new Error(motivoDeGoogle(e?.type)))
+    // `prompt: ''` deja que Google resuelva sin mostrar nada cuando el permiso ya está dado. La
+    // primera vez muestra el consentimiento igual, que es lo que se quiere.
+    c.requestAccessToken({ prompt: '' })
+  })
+}
+
+function motivoDeGoogle(tipo?: string): string {
+  if (tipo === 'popup_failed_to_open') return 'El navegador bloqueó la ventana de Google. Permitile los pop-ups a esta página y probá de nuevo.'
+  if (tipo === 'popup_closed') return 'Se cerró la ventana de Google sin dar el permiso.'
+  if (tipo === 'access_denied') return 'Google no dio el permiso para leer los archivos elegidos.'
+  return tipo ? `Google contestó «${tipo}».` : 'No se pudo pedir el permiso a Google.'
+}
+
+/** Se olvida el token guardado. Se llama cuando Drive contesta 401 en plena bajada. */
+export function olvidarTokenDrive(): void {
+  guardado = null
+}
+
+/* ── Elegir ────────────────────────────────────────────────────────────────── */
+
+export interface Elegidos {
+  token: string
+  docs: DocDrive[]
+}
+
+/**
+ * Abre el Picker y devuelve lo elegido. `docs: []` es «se cerró sin elegir nada», que **no es un
+ * error**: no hay nada que avisar cuando alguien se arrepiente.
+ */
+export async function elegirDeDrive(): Promise<Elegidos> {
+  const token = await pedirToken()
+  const picker = await cargarPicker()
+
+  return new Promise<Elegidos>((listo) => {
+    const vista = (id: string) =>
+      new picker.DocsView(picker.ViewId[id]).setIncludeFolders(true).setEnableDrives(true)
+
+    const armado = new picker.PickerBuilder()
+      .addView(vista('DOCS_VIDEOS'))
+      .addView(vista('DOCS_IMAGES'))
+      .enableFeature(picker.Feature.MULTISELECT_ENABLED)
+      .setOAuthToken(token)
+      .setDeveloperKey(DRIVE_API_KEY)
+      // Sin `setAppId` el Picker abre igual y los archivos elegidos **no quedan accesibles**: es lo
+      // que le dice a Drive a qué app darle el permiso por archivo del scope `drive.file`.
+      .setAppId(DRIVE_APP_ID)
+      .setOrigin(window.location.origin)
+      .setCallback((data) => {
+        const accion = String(data[picker.Response.ACTION] || '')
+        if (accion !== picker.Action.PICKED) {
+          if (accion === picker.Action.CANCEL) listo({ token, docs: [] })
+          return
+        }
+        const crudos = (data[picker.Response.DOCUMENTS] as Record<string, unknown>[]) || []
+        listo({
+          token,
+          docs: crudos.map((d) => ({
+            id: String(d[picker.Document.ID] || ''),
+            name: String(d[picker.Document.NAME] || ''),
+            mimeType: String(d[picker.Document.MIME_TYPE] || ''),
+            sizeBytes: d[picker.Document.SIZE_BYTES] as string | undefined,
+          })),
+        })
+      })
+      .build()
+
+    armado.setVisible(true)
+  })
+}
+
+/* ── Bajar los bytes ───────────────────────────────────────────────────────── */
+
+/**
+ * Baja un archivo de Drive y lo devuelve como `File`, listo para la misma subida que un archivo
+ * arrastrado. **Medido el 11-ago-2026**: el preflight de `www.googleapis.com` contesta 200 al origen
+ * `https://monitor.arebensrl.com` con el header `authorization`, y expone `Content-Length` — que es
+ * lo que permite mostrar el avance en vez de un «bajando…» que no se mueve.
+ *
+ * ⚠️ **El `type` del File se pone con el MIME de la tabla, deducido de la extensión** (lo hace
+ * `useSubirPiezas`), no con el que informa Drive: el servidor del Blob acepta una lista corta y un
+ * archivo de Drive puede llegar como `application/octet-stream`.
+ */
+export async function bajarDeDrive(
+  doc: DocDrive,
+  token: string,
+  onAvance?: (pct: number | null) => void,
+): Promise<{ ok: true; file: File } | { ok: false; motivo: string }> {
+  const nom = nombreDeDrive(doc.name, doc.mimeType)
+  if (!nom.ok) return { ok: false, motivo: nom.motivo }
+
+  let r: Response
+  try {
+    r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    return { ok: false, motivo: 'Se cortó la conexión con Drive.' }
+  }
+
+  if (r.status === 401 || r.status === 403) {
+    olvidarTokenDrive()
+    return { ok: false, motivo: 'Se venció el permiso de Drive. Volvé a elegir el archivo.' }
+  }
+  if (!r.ok) return { ok: false, motivo: `Drive contestó ${r.status} al bajar «${doc.name}».` }
+
+  const total = Number(r.headers.get('content-length')) || tamanioDeDrive(doc)
+  const cuerpo = r.body
+
+  // Sin `body` legible (un navegador viejo) se baja de una: se pierde el avance, no el archivo.
+  const bytes = cuerpo ? await leerConAvance(cuerpo, total, onAvance) : await r.blob()
+
+  // El `type` sale de la tabla y de la extensión, NO del que informó Drive: el permiso del Blob
+  // acepta una lista corta y un archivo de Drive puede llegar como `application/octet-stream`.
+  return { ok: true, file: new File([bytes], nom.nombre, { type: mimeDePieza(nom.nombre) || '' }) }
+}
+
+async function leerConAvance(
+  cuerpo: ReadableStream<Uint8Array>,
+  total: number,
+  onAvance?: (pct: number | null) => void,
+): Promise<Blob> {
+  const lector = cuerpo.getReader()
+  const partes: BlobPart[] = []
+  let leidos = 0
+  for (;;) {
+    const { done, value } = await lector.read()
+    if (done) break
+    if (value) {
+      partes.push(value as BlobPart)
+      leidos += value.length
+      // `null` cuando Drive no dijo el tamaño: la pantalla muestra «bajando…» sin inventar un número.
+      onAvance?.(total > 0 ? Math.min(99, Math.round((leidos / total) * 100)) : null)
+    }
+  }
+  return new Blob(partes)
+}

@@ -39,6 +39,7 @@ import { avanzarHasta } from '@/components/meta-ads/planes/usePlanes'
 import {
   cancelarPlan, crearPlan, reintentarPaso, traerConjuntos, traerCreativos, traerEtapas,
 } from '@/lib/meta-ads/cliente'
+import { elegirDeDrive, hayDrive } from '@/lib/drive/picker'
 import { aCrudo, aMonto, LARGO_NOMBRE } from '@/lib/meta-ads/acciones'
 import { nuevoIdemPlan, type Plan } from '@/lib/meta-ads/planes'
 import { TOPE_PIEZAS } from '@/lib/meta-ads/pieza'
@@ -342,11 +343,66 @@ function VistaDelCopy({ modelo }: { modelo: AvisoCreativo }) {
   )
 }
 
+/**
+ * Traer las piezas de **Google Drive**, que es donde viven los videos que edita el equipo.
+ *
+ * Los bytes no pasan por ningún servidor nuestro: el Picker devuelve los archivos elegidos, el
+ * browser se los baja a Google y de ahí salen al Blob por la misma cañería que un archivo
+ * arrastrado. Ver `lib/drive/picker.ts`.
+ *
+ * ⚠️ **El botón sólo aparece con las credenciales cargadas.** Un botón que existe y falla siempre
+ * es peor que uno que no está: acá, cuando faltan, se dice qué falta y adónde se carga.
+ */
+function DesdeDrive({ subida }: { subida: ReturnType<typeof useSubirPiezas> }) {
+  const [abriendo, setAbriendo] = useState(false)
+  const [motivo, setMotivo] = useState<string | null>(null)
+
+  if (!hayDrive()) {
+    return (
+      <Notice tone="warning">
+        <b>Google Drive todavía no está conectado.</b> Faltan las dos credenciales del proyecto{' '}
+        <b>Areben Identidad</b>: un ID de cliente de OAuth para <b>monitor.arebensrl.com</b> y una
+        clave de API restringida a la Picker API. Mientras tanto los archivos se arrastran de la
+        computadora.
+      </Notice>
+    )
+  }
+
+  const abrir = async () => {
+    setAbriendo(true)
+    setMotivo(null)
+    try {
+      const { token, docs } = await elegirDeDrive()
+      // Cerrar el Picker sin elegir nada no es una falla: no hay nada que avisar.
+      if (docs.length) subida.agregarDeDrive(docs, token)
+    } catch (e) {
+      setMotivo((e as Error)?.message || 'No se pudo abrir Google Drive.')
+    } finally {
+      setAbriendo(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+        <Button variant="outline" onClick={() => void abrir()} disabled={abriendo}>
+          {abriendo ? 'Abriendo Drive…' : 'Traer de Google Drive'}
+        </Button>
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          Se ven <b>sólo los archivos que elijas</b>: el Monitor no mira el resto de tu Drive.
+        </span>
+      </div>
+      {motivo && <Notice tone="danger">{motivo}</Notice>}
+    </div>
+  )
+}
+
 /** Elegir y soltar archivos, con el estado de cada subida a la vista. */
 function ZonaDeArchivos({ subida }: { subida: ReturnType<typeof useSubirPiezas> }) {
   const [encima, setEncima] = useState(false)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+      <DesdeDrive subida={subida} />
       <label
         onDragOver={(e) => { e.preventDefault(); setEncima(true) }}
         onDragLeave={() => setEncima(false)}
@@ -393,6 +449,7 @@ function ZonaDeArchivos({ subida }: { subida: ReturnType<typeof useSubirPiezas> 
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
             <div style={{ fontSize: font.sm, color: p.estado === 'fallada' ? color.danger : color.mut }}>
               {p.estado === 'esperando' && 'En la cola…'}
+              {p.estado === 'bajando' && (p.avance === null ? 'Bajando de Drive…' : `Bajando de Drive… ${p.avance}%`)}
               {p.estado === 'subiendo' && 'Subiendo…'}
               {p.estado === 'lista' && `Lista · ${p.clase === 'video' ? 'video' : 'imagen'} · ${(p.tamanio / 1048576).toFixed(1)} MB`}
               {p.estado === 'fallada' && p.motivo}
