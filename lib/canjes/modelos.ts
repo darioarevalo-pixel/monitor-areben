@@ -16,6 +16,7 @@
 
 import { conoceElModelo, iphoneModelSort } from '@/lib/fundas/ranking'
 import { modeloDe } from '@/lib/reposicion/grupos'
+import { facetaDeLaVitrina, normalizarValor, type ItemFiltrable } from './vitrina'
 
 /** Una fila del espejo `inventario`: hay una por variante **y por ubicación**. */
 export type FilaInventario = {
@@ -76,4 +77,64 @@ export function stockDelModelo(lista: StockDeModelo[], texto: string | null | un
   const modelo = modeloDe(String(texto || ''))
   if (!modelo) return null
   return (lista || []).find((m) => m.modelo === modelo) || null
+}
+
+// ── Cuando el canje tiene una VITRINA ───────────────────────────────────────────
+
+/**
+ * 🔑 **De dónde sale la respuesta depende de por dónde elige.** No es lo mismo el stock de Gestión
+ * Nube que lo que se le está ofreciendo:
+ *
+ *  - **Retiro en el local** → manda el stock del LOCAL. El mostrador carga con el buscador de GN,
+ *    no con la vitrina, así que la vitrina no pinta nada aunque esté colgada.
+ *  - **Envío CON vitrina** → manda la vitrina. Ella elige de ahí y de ningún otro lado: decirle a
+ *    marketing "hay 2.945 fundas" cuando en esa vitrina no hay ninguna de su modelo es la misma
+ *    mentira que el texto libre, con más números.
+ *  - **Envío SIN vitrina** → manda el stock total de GN, que es de donde carga el equipo.
+ */
+export type DeDondeElige = 'local' | 'vitrina' | 'stock'
+
+export function deDondeElige(retiroLocal: boolean, tieneVitrina: boolean): DeDondeElige {
+  if (retiroLocal) return 'local'
+  return tieneVitrina ? 'vitrina' : 'stock'
+}
+
+/** Lo que hace falta de un item de la vitrina para contestar por el modelo. */
+export type ItemDeVitrina = ItemFiltrable & { activo?: boolean | null }
+
+/**
+ * Los modelos que esta vitrina ofrece, y de cuántos productos.
+ *
+ * Sale de la MISMA faceta que ve la creadora en el link (`facetaDeLaVitrina`), así que la lista de
+ * acá y la de su teléfono no se pueden despegar. Los apagados a mano no cuentan: no se los ofrece.
+ *
+ * ⚠️ Devuelve `[]` cuando la vitrina no factea por modelo (una de ropa, o con menos de dos valores):
+ * ahí no hay nada que contestar y quien llama tiene que caer al stock.
+ */
+export function modelosDeLaVitrina(items: ItemDeVitrina[]): StockDeModelo[] {
+  const vivos = (items || []).filter((i) => i?.activo !== false)
+  const faceta = facetaDeLaVitrina(vivos)
+  if (!faceta || faceta.clase !== 'modelo') return []
+  return faceta.valores.map((v) => {
+    // `itemPasa` deja pasar lo NEUTRO (un accesorio que sólo tiene color no es de otro modelo). Acá
+    // se cuenta lo que es DE ese modelo, que es la pregunta: "¿hay funda para su celular?".
+    const cuantos = vivos.filter((i) => (i.opciones || []).some((o) =>
+      (o.valores || []).some((x) => normalizarValor(x) === normalizarValor(v)))).length
+    // La vitrina no lleva unidades: lo que se sabe es cuántos productos se le ofrecen de ese
+    // modelo. Va en los dos campos para no inventar una distinción que acá no existe.
+    return { modelo: v, total: cuantos, local: cuantos }
+  }).filter((m) => m.total > 0)
+}
+
+/**
+ * Lo que la vitrina ofrece para el modelo que dice tener, o `null`.
+ *
+ * El match es por `normalizarValor` —el de la vitrina— y no por `modeloDe`: los valores acá vienen
+ * **con la palabra de la tienda** (`iPhone 11/12`, `iPhone 15 Pro Max`), no normalizados a un
+ * modelo canónico, así que pasarlos por `modeloDe` los rompería.
+ */
+export function modeloEnLaVitrina(lista: StockDeModelo[], texto: string | null | undefined): StockDeModelo | null {
+  const buscado = normalizarValor(String(texto || ''))
+  if (!buscado) return null
+  return (lista || []).find((m) => normalizarValor(m.modelo) === buscado) || null
 }

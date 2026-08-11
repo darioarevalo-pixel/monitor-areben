@@ -21,7 +21,9 @@ import {
   noSePuedeEntregar, retiroLocalDisponible as retiroLocalDisponibleJS,
 } from '../api/_canjes-reglas.js'
 import { puedeAtenderRetiroLocal } from '@/lib/permisos.core.js'
-import { fundasPorModelo, stockDelModelo } from '@/lib/canjes/modelos'
+import {
+  deDondeElige, fundasPorModelo, modeloEnLaVitrina, modelosDeLaVitrina, stockDelModelo,
+} from '@/lib/canjes/modelos'
 
 function canje(p: Partial<CanjeRow> = {}): CanjeRow {
   return {
@@ -240,6 +242,76 @@ describe('stockDelModelo', () => {
   it('🔴 NO confunde un modelo con otro que lo contiene', () => {
     // "iPhone 1" no puede matchear la fila de "iPhone 13", ni al revés.
     expect(stockDelModelo(lista, 'iPhone 1')).toBeNull()
+  })
+})
+
+/**
+ * 🔑 Bruno lo cazó al toque: **si el canje tiene vitrina, ella elige de ahí y de ningún otro lado**.
+ * Contestar con el stock general —"hay 2.945 fundas"— cuando esa vitrina no tiene ninguna de su
+ * modelo es la misma mentira que el texto libre, con más números encima.
+ */
+describe('deDondeElige', () => {
+  it('con retiro manda el local, aunque tenga vitrina colgada', () => {
+    // El mostrador carga con el buscador de Gestión Nube; la vitrina no interviene.
+    expect(deDondeElige(true, true)).toBe('local')
+    expect(deDondeElige(true, false)).toBe('local')
+  })
+
+  it('con envío manda la vitrina si la hay, y el stock si no', () => {
+    expect(deDondeElige(false, true)).toBe('vitrina')
+    expect(deDondeElige(false, false)).toBe('stock')
+  })
+})
+
+describe('modelosDeLaVitrina', () => {
+  const item = (valores: string[], activo = true) => ({ activo, opciones: [{ valores }] })
+
+  it('lista los modelos que ofrece, con de cuántos productos', () => {
+    const r = modelosDeLaVitrina([
+      item(['iPhone 15']),
+      item(['iPhone 15']),
+      item(['iPhone 13']),
+    ])
+    // El orden es el de la vitrina (`facetaDeLaVitrina`): del más nuevo al más viejo, el mismo que
+    // ve ella en el link. No se re-ordena acá, justamente para que no se despeguen.
+    expect(r).toEqual([
+      { modelo: 'iPhone 15', total: 2, local: 2 },
+      { modelo: 'iPhone 13', total: 1, local: 1 },
+    ])
+  })
+
+  it('lo apagado a mano no cuenta: no se lo ofrece', () => {
+    const r = modelosDeLaVitrina([item(['iPhone 15']), item(['iPhone 13'], false), item(['iPhone 12'])])
+    expect(r.map((m) => m.modelo)).toEqual(['iPhone 15', 'iPhone 12'])
+  })
+
+  it('lo NEUTRO no suma a ningún modelo', () => {
+    // Los accesorios de BDI que sólo tienen color no son de ningún modelo: se pueden ofrecer igual,
+    // pero no son "una funda para su celular", que es la pregunta.
+    const r = modelosDeLaVitrina([item(['iPhone 15']), item(['iPhone 13']), item(['Rosa'])])
+    expect(r.reduce((a, m) => a + m.total, 0)).toBe(2)
+  })
+
+  it('una vitrina que no factea por modelo devuelve vacío, y la pregunta vuelve al stock', () => {
+    expect(modelosDeLaVitrina([item(['S']), item(['M']), item(['L'])])).toEqual([])
+    // Con un solo modelo tampoco hay faceta (`facetaDeLaVitrina` pide dos).
+    expect(modelosDeLaVitrina([item(['iPhone 15'])])).toEqual([])
+  })
+})
+
+describe('modeloEnLaVitrina', () => {
+  const lista = [{ modelo: 'iPhone 11/12', total: 3, local: 3 }, { modelo: 'iPhone 15 Pro', total: 1, local: 1 }]
+
+  it('🔑 respeta la palabra de la tienda: `iPhone 11/12` no es un modelo canónico', () => {
+    // Pasarlo por `modeloDe` lo rompería (devolvería "iPhone 11"), y ese valor es el que la
+    // creadora ve y elige en el link.
+    expect(modeloEnLaVitrina(lista, 'iPhone 11/12')?.total).toBe(3)
+    expect(modeloEnLaVitrina(lista, 'iphone 11/12')?.total).toBe(3)
+  })
+
+  it('un modelo que la vitrina no ofrece devuelve null: es el cartel rojo', () => {
+    expect(modeloEnLaVitrina(lista, 'iPhone 8')).toBeNull()
+    expect(modeloEnLaVitrina(lista, '')).toBeNull()
   })
 })
 

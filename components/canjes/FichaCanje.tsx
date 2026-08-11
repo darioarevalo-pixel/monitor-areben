@@ -342,7 +342,8 @@ export function FichaCanje({
         <SectionCard title="Qué celular tiene">
           <SelectorModelo
             valor={persona.modelo_celular}
-            paraElLocal={!!canje.retiro_local}
+            retiroLocal={!!canje.retiro_local}
+            vitrina={vitrina ? { nombre: vitrina.nombre, items: vitrina.items || [] } : null}
             onGuardar={async (m) => {
               await editarPersona(store, persona.id, { modelo_celular: m })
               await recargar()
