@@ -44,10 +44,16 @@ import { mimeDePieza } from '@/lib/meta-ads/pieza'
  * Drive». Es **uno nuevo al lado** del que ya existía: ⛔ el del SSO (`Areben SSO`) no se toca, que
  * es el que usa Supabase para el login con Google de dashboard, producción y monitor.
  *
+ * 🔴 **Los dos clientes del proyecto empiezan igual**, con el número `219989173598-`, y en la lista
+ * de la consola se ve sólo ese prefijo: `219989173598-lck5…`. Ese es el del **SSO** y no es éste.
+ * Confundirlos no rompe el login —el Picker sólo lo lee— pero da
+ * *«no registered origin · Error 401: invalid_client»*, un cartel que suena a origen mal cargado y
+ * manda a revisar la lista de orígenes, que está bien. Si aparece: mirá **cuál de los dos** es.
+ *
  * ⚠️ Google generó además un **secreto de cliente** junto con esto. **Acá no se usa** —el Picker
  * saca el token en el browser, sin backend— y por eso no está en el repo.
  */
-export const DRIVE_CLIENT_ID = '219989173598-lck58dttu942h2tddoof88lkbef1k1re.apps.googleusercontent.com'
+export const DRIVE_CLIENT_ID = '219989173598-2o46hp1kg31llgsvlvj8tceqmcvuin3v.apps.googleusercontent.com'
 
 /**
  * La clave de API, creada el 11-ago-2026 como «Monitor · Picker de Drive».
