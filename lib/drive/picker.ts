@@ -167,18 +167,54 @@ async function cargarPicker(): Promise<GoogleGlobal['picker']> {
 /* ── El token ──────────────────────────────────────────────────────────────── */
 
 let cliente: ClienteToken | null = null
-let guardado: { token: string; vence: number } | null = null
 
 /**
- * Un access token con `drive.file`. Se guarda hasta un minuto antes de vencer: sin eso, elegir dos
- * tandas seguidas abre el popup de Google dos veces.
+ * Dónde vive el token entre recargas.
+ *
+ * 🔑 **`sessionStorage` y no una variable de módulo.** Guardado sólo en memoria, cada F5 lo perdía y
+ * el botón volvía a abrir el popup de Google — «cada vez que actualizo tengo que iniciar sesión»,
+ * medido por Bruno el 11-ago-2026. El token dura una hora; la variable duraba lo que durara la
+ * página, que armando una tanda son minutos.
+ *
+ * ⛔ **`sessionStorage` y no `localStorage`, a propósito**: se borra al cerrar la pestaña. Un token
+ * de acceso no tiene por qué sobrevivir a la pestaña que lo pidió, y de todas formas vence en una
+ * hora — persistirlo más tiempo sería guardar algo que ya no sirve.
+ */
+const CLAVE_TOKEN = 'monitor-drive-token'
+
+function tokenGuardado(): string | null {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_TOKEN)
+    if (!crudo) return null
+    const g = JSON.parse(crudo) as { token?: string; vence?: number }
+    return g?.token && Number(g.vence) > Date.now() ? g.token : null
+  } catch {
+    // Sin sessionStorage (modo privado, permisos raros) se pide el token cada vez. Molesta, anda.
+    return null
+  }
+}
+
+function guardarToken(token: string, segundos: number): void {
+  try {
+    // El minuto de margen evita el caso feo: un token que se cree vigente y vence a mitad de la
+    // bajada de un video de 90 MB, que es cuando más caro sale volver a empezar.
+    const vence = Date.now() + Math.max(0, segundos - 60) * 1000
+    sessionStorage.setItem(CLAVE_TOKEN, JSON.stringify({ token, vence }))
+  } catch {
+    /* si no se puede guardar, el único costo es volver a pedirlo */
+  }
+}
+
+/**
+ * Un access token con `drive.file`, reusado hasta un minuto antes de vencer.
  *
  * ⚠️ **El popup lo tiene que disparar un clic.** Por eso esto se llama desde el `onClick` y no desde
  * un efecto: llamado fuera del gesto, el navegador lo bloquea y Google contesta
  * `popup_failed_to_open`, que acá se traduce a un cartel que nombra el bloqueo.
  */
 async function pedirToken(): Promise<string> {
-  if (guardado && guardado.vence > Date.now()) return guardado.token
+  const vigente = tokenGuardado()
+  if (vigente) return vigente
 
   await cargarScript('https://accounts.google.com/gsi/client')
   const oauth2 = window.google?.accounts?.oauth2
@@ -192,7 +228,7 @@ async function pedirToken(): Promise<string> {
   return new Promise<string>((listo, falla) => {
     c.callback = (r) => {
       if (r.error || !r.access_token) return falla(new Error(motivoDeGoogle(r.error)))
-      guardado = { token: r.access_token, vence: Date.now() + Math.max(0, (r.expires_in || 3600) - 60) * 1000 }
+      guardarToken(r.access_token, r.expires_in || 3600)
       listo(r.access_token)
     }
     c.error_callback = (e) => falla(new Error(motivoDeGoogle(e?.type)))
@@ -211,7 +247,11 @@ function motivoDeGoogle(tipo?: string): string {
 
 /** Se olvida el token guardado. Se llama cuando Drive contesta 401 en plena bajada. */
 export function olvidarTokenDrive(): void {
-  guardado = null
+  try {
+    sessionStorage.removeItem(CLAVE_TOKEN)
+  } catch {
+    /* si no se puede borrar es porque tampoco se pudo guardar */
+  }
 }
 
 /* ── Elegir ────────────────────────────────────────────────────────────────── */
