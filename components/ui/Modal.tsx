@@ -18,7 +18,12 @@ export type ModalProps = {
   titulo?: React.ReactNode
   /** Botones del pie. Van a la derecha; la acción principal, última. */
   pie?: React.ReactNode
-  ancho?: 'normal' | 'ancho'
+  /**
+   * `xl` es para el diálogo que se parte en dos columnas y no puede pedir scroll — hoy, definir el
+   * precio de una liquidación: son cuarenta productos seguidos y bajar en cada uno se paga cuarenta
+   * veces. No es "un poco más ancho": es lo que permite que el contenido deje de ser una sola tira.
+   */
+  ancho?: 'normal' | 'ancho' | 'xl'
   /** Clic en el fondo cierra. Se apaga en diálogos donde perder lo tipeado dolería. */
   cerrarConFondo?: boolean
   /**
@@ -73,7 +78,7 @@ export function Modal({
     <div className="mo-backdrop" onMouseDown={(e) => cerrarConFondo && e.target === e.currentTarget && cerrar()}>
       <div
         ref={caja}
-        className={`mo-modal${ancho === 'ancho' ? ' mo-modal--wide' : ''}`}
+        className={`mo-modal${ancho === 'ancho' ? ' mo-modal--wide' : ancho === 'xl' ? ' mo-modal--xl' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={typeof titulo === 'string' ? titulo : undefined}

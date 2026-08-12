@@ -410,6 +410,11 @@
 .mo-modal--wide {
   max-width: 760px;
 }
+/* Dos columnas en vez de una tira que hay que bajar. La media query de abajo (≤900px) lo vuelve
+   ancho completo, y las columnas de adentro se apilan solas por `flex-wrap`. */
+.mo-modal--xl {
+  max-width: 1180px;
+}
 .mo-modal-head {
   padding: 18px 20px 0;
 }

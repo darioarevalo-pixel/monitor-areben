@@ -21,10 +21,14 @@
  *     lo sabemos, y con costo cero cualquier precio parece tener 100% de margen. En julio de 2026,
  *     428 productos de BDI quedaron costando cero en silencio. La matriz se reemplaza por el aviso.
  *  4. **Pasar al siguiente con un precio sin guardar pregunta.** Un precio tipeado es una decisión
- *     de una persona: ni se guarda solo por pasar de largo, ni se tira sin avisar.
- *  5. **El margen de la matriz es NETO por forma de pago × canal (doce números) y no se guarda.**
- *     Lo que queda guardado es el margen bruto sobre el precio de sale, el mismo de la lista de
- *     Comisiones. Guardar uno de los doce sería elegir por quien mira.
+ *     de una persona: ni se guarda solo por pasar de largo, ni se tira sin avisar. Ojo: el precio
+ *     **precargado** no cuenta como tipeado — ver `tocado`.
+ *  5. **El margen de la matriz es NETO por forma de pago × canal y no se guarda.** Son 18 números en
+ *     BDI y 12 en Zattia (6 formas × sus canales). Lo que queda guardado es el margen bruto sobre el
+ *     precio de sale, el mismo de la lista de Comisiones: guardar uno de los 18 sería elegir por
+ *     quien mira.
+ *  6. **La columna de los márgenes muestra una cosa por vez** (matriz · detalle · breakeven · piso).
+ *     El modal se pasa producto por producto y no puede pedir scroll; ver el docblock de `cara`.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -48,6 +52,13 @@ const numOrNull = (s: string): number | null => {
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : null
 }
+
+/** Qué está mostrando la columna de los márgenes. Una por vez: ver el docblock de `cara`. */
+type Cara =
+  | { tipo: 'matriz' }
+  | { tipo: 'detalle'; forma: string; canal: string }
+  | { tipo: 'breakeven' }
+  | { tipo: 'piso' }
 
 export function DefinirPrecio({
   item, posicion, total, puedeEditar, onAnterior, onSiguiente, onGuardar, onEstado, onCerrar,
@@ -75,14 +86,54 @@ export function DefinirPrecio({
   // El formulario nace del ítem guardado. El padre monta este componente con `key={pid}`, así que
   // pasar al siguiente lo remonta y el estado nace del producto correcto sin ningún efecto.
   const guardado = item.decision
-  const [pctTxt, setPctTxt] = useState(guardado.pctDesc != null ? String(Math.round(guardado.pctDesc)) : '')
-  const [precioTxt, setPrecioTxt] = useState(guardado.precioSale != null ? String(guardado.precioSale) : '')
-  const [porDonde, setPorDonde] = useState<'pct' | 'precio'>(guardado.precioSale != null ? 'precio' : 'pct')
+
+  // 🔑 **El descuento que el producto ya tiene hoy es el punto de partida, no un dato de color.**
+  // Al abrir, la pregunta real no es "¿cuánto vale?" sino "¿lo bajo más o lo dejo acá?", y tipear de
+  // nuevo un número que ya existe es trabajo que la pantalla podía ahorrar. Precarga sólo si:
+  //  - **nadie decidió nada todavía en la campaña** — un precio ya decidido gana siempre, o volver a
+  //    revisar un producto borraría la decisión de otro; y
+  //  - el número es un descuento de verdad. Una "oferta" que no baja del precio de lista no es un
+  //    punto de partida, es un dato roto, y arrancar ahí propondría un descuento negativo.
+  const promoUtil =
+    promoPrevia != null && promoPrevia > 0 && precioNormal > 0 && promoPrevia < precioNormal ? promoPrevia : null
+  const arranque = guardado.precioSale == null ? promoUtil : null
+
+  /** El formulario como nace: precargado en la oferta de hoy, o en blanco si no hay ninguna. */
+  const enBlanco = () => {
+    setPrecioTxt(promoUtil != null ? String(promoUtil) : '')
+    setPctTxt(promoUtil != null ? String(Math.round((1 - promoUtil / precioNormal) * 100)) : '')
+    setPorDonde(promoUtil != null ? 'precio' : 'pct')
+    setTocado(false)
+  }
+
+  const [pctTxt, setPctTxt] = useState(
+    guardado.pctDesc != null ? String(Math.round(guardado.pctDesc))
+      : arranque != null ? String(Math.round((1 - arranque / precioNormal) * 100))
+      : '',
+  )
+  const [precioTxt, setPrecioTxt] = useState(
+    guardado.precioSale != null ? String(guardado.precioSale)
+      : arranque != null ? String(arranque)
+      : '',
+  )
+  const [porDonde, setPorDonde] = useState<'pct' | 'precio'>(
+    guardado.precioSale != null || arranque != null ? 'precio' : 'pct',
+  )
+  // 🔑 Precargar no es haber tocado nada. Sin esto, `hayCambios` daría `true` apenas se abre y
+  // cerrar preguntaría «hay un precio sin guardar» sin que nadie apretara una tecla — cuarenta veces
+  // seguidas, que es exactamente el largo de una campaña.
+  const [tocado, setTocado] = useState(false)
   const [nota, setNota] = useState(guardado.nota || '')
-  const [celda, setCelda] = useState<{ forma: string; canal: string } | null>(null)
-  const [verPiso, setVerPiso] = useState(false)
   const [pisoObj, setPisoObj] = useState('40')
+  const [verCeldas, setVerCeldas] = useState(false)
   const [guardando, setGuardando] = useState(false)
+
+  // 🔑 **La columna de la derecha es UNA caja con cuatro caras, no cuatro bloques apilados.** El
+  // pedido era que no haya que bajar nunca, y eso no se consigue plegando: el breakeven abierto mide
+  // solo ~340px y el detalle ~360, así que cualquier combinación de dos de ellos se pasa del alto de
+  // la pantalla. Mostrando una por vez, con un «← volver» siempre igual, el modal mide lo mismo
+  // mires lo que mires, y es un mecanismo en vez de dos.
+  const [cara, setCara] = useState<Cara>({ tipo: 'matriz' })
 
   // Los dos campos son la misma decisión escrita de dos formas ("30% off en toda la línea" y "este
   // lo quiero a 34.900"), así que cada uno completa al otro. Cuál se tocó último importa: por
@@ -90,6 +141,7 @@ export function DefinirPrecio({
   function escribirPct(v: string) {
     setPctTxt(v)
     setPorDonde('pct')
+    setTocado(true)
     const n = numOrNull(v)
     setPrecioTxt(n != null && precioNormal > 0 ? String(precioDeSale(precioNormal, { pctDesc: n })) : '')
   }
@@ -97,6 +149,7 @@ export function DefinirPrecio({
   function escribirPrecio(v: string) {
     setPrecioTxt(v)
     setPorDonde('precio')
+    setTocado(true)
     const n = numOrNull(v)
     setPctTxt(n != null && precioNormal > 0 ? String(Math.round((1 - n / precioNormal) * 100)) : '')
   }
@@ -118,11 +171,18 @@ export function DefinirPrecio({
 
   const d = propuesta?.decision ?? null
   const pvpSim = d?.precioSale || precioNormal
-  const misAvisos = useMemo(() => avisos(propuesta || item), [propuesta, item])
+  const misAvisos = useMemo(() => {
+    const todos = avisos(propuesta || item)
+    // Con el campo precargado en la oferta de hoy, «este precio no lo baja» no advierte nada:
+    // describe el punto de partida, y sale solo en los cuarenta productos seguidos. Vuelve en cuanto
+    // se toca el precio, que es cuando pasa a ser una decisión de alguien.
+    return arranque != null && !tocado ? todos.filter((a) => a.clave !== 'ya-en-oferta') : todos
+  }, [propuesta, item, arranque, tocado])
   const frena = misAvisos.some((a) => a.nivel === 'alto')
 
   const hayCambios =
-    (d?.precioSale ?? null) !== (guardado.precioSale ?? null) || (nota.trim() || null) !== (guardado.nota || null)
+    tocado &&
+    ((d?.precioSale ?? null) !== (guardado.precioSale ?? null) || (nota.trim() || null) !== (guardado.nota || null))
 
   async function confirmarSalida(): Promise<boolean> {
     if (!hayCambios) return true
@@ -158,6 +218,12 @@ export function DefinirPrecio({
     setGuardando(true)
     try {
       await onGuardar(anotarItem(despejarItem(item), nota), false)
+      // 🔑 **Borrar el precio tiene que dejar el formulario como recién abierto.** El modal no se
+      // remonta al borrar (el padre lo monta con `key={pid}`, y el pid no cambió), así que sin esto
+      // los campos conservan el número que se acaba de borrar: el cartel pasa a decir «arranca en la
+      // oferta de hoy» mientras se ve otro número, y un toque a «Guardar» vuelve a escribir el
+      // precio borrado sin que nadie haya tipeado nada.
+      enBlanco()
     } finally {
       setGuardando(false)
     }
@@ -182,7 +248,7 @@ export function DefinirPrecio({
   return (
     <Modal
       abierto
-      ancho="ancho"
+      ancho="xl"
       onCerrar={() => void cerrar()}
       // Un clic al costado no puede tirar un precio recién tipeado.
       cerrarConFondo={false}
@@ -226,90 +292,149 @@ export function DefinirPrecio({
         </>
       }
     >
-      <FichaProducto item={item} />
+      {/* Dos columnas: a la izquierda se decide, a la derecha se mira. `flexWrap` + `minWidth` las
+          apila solas en pantalla angosta, sin ninguna media query nueva. */}
+      <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 400px', minWidth: 300 }}>
+          <FichaProducto item={item} />
 
-      {misAvisos.map((a, n) => (
-        <Notice key={n} tone={a.nivel === 'alto' ? 'danger' : 'warning'} style={{ marginBottom: space[2] }}>
-          {a.texto}
-        </Notice>
-      ))}
+          {misAvisos.map((a) => (
+            <Notice key={a.clave} tone={a.nivel === 'alto' ? 'danger' : 'warning'} style={{ marginBottom: space[2] }}>
+              {a.texto}
+            </Notice>
+          ))}
 
-      {puedeEditar ? (
-        <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: space[3], marginTop: space[3] }}>
-          <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <Field label="% de descuento" hint="Sobre el precio de lista. El precio se redondea a terminar en 90.">
-              <Input
-                type="number"
-                value={pctTxt}
-                onChange={(e) => escribirPct(e.target.value)}
-                placeholder="30"
-                style={{ width: 100 }}
-                data-foco
-              />
-            </Field>
-            <Field label="Precio de sale" hint="Si lo escribís vos, se respeta tal cual.">
-              <Input
-                type="number"
-                value={precioTxt}
-                onChange={(e) => escribirPrecio(e.target.value)}
-                placeholder="$"
-                style={{ width: 130 }}
-              />
-            </Field>
-            <div style={{ display: 'flex', gap: space[1], paddingBottom: space[3], flexWrap: 'wrap' }}>
-              {ATAJOS.map((p) => (
-                <Button key={p} size="sm" variant="outline" onClick={() => escribirPct(String(p))}>−{p}%</Button>
-              ))}
+          {puedeEditar ? (
+            <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: space[3] }}>
+              {/* ⚠️ Los `hint` van AFUERA de los `Field`, en una línea sola. Adentro, cada uno le
+                  pide a su campo el ancho de su texto (`Field` sin `width` no fija `flex-basis`) y
+                  los dos controles se apilan: medido, 284px de caja para dos inputs de 40. */}
+              <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <Field label="% de descuento" width={90}>
+                  <Input
+                    type="number"
+                    value={pctTxt}
+                    onChange={(e) => escribirPct(e.target.value)}
+                    placeholder="30"
+                    data-foco
+                  />
+                </Field>
+                <Field label="Precio de sale" width={120}>
+                  <Input
+                    type="number"
+                    value={precioTxt}
+                    onChange={(e) => escribirPrecio(e.target.value)}
+                    placeholder="$"
+                  />
+                </Field>
+                <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+                  {ATAJOS.map((p) => (
+                    <Button key={p} size="sm" variant="outline" onClick={() => escribirPct(String(p))}>−{p}%</Button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[2], lineHeight: 1.4 }}>
+                {arranque != null && !tocado
+                  ? 'Arranca en la oferta que ya tiene hoy. Por % se redondea a terminar en 90; el precio que escribís vos se respeta tal cual.'
+                  : 'Por % se redondea a terminar en 90; el precio que escribís vos se respeta tal cual.'}
+              </div>
+
+              <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', marginTop: space[3], alignItems: 'baseline' }}>
+                <Dato rotulo="Queda en" valor={d?.precioSale ? formatMoney(d.precioSale) : '—'} grande />
+                <Dato rotulo="Descuento real" valor={d?.pctDesc != null ? `${Math.round(d.pctDesc)}%` : '—'} />
+                <Dato rotulo="Markup" valor={d?.markup != null ? `${Math.round(d.markup)}%` : '—'} />
+                <Dato
+                  rotulo="Margen bruto"
+                  valor={hayMargen && d?.margen != null ? `${Math.round(d.margen)}%` : '—'}
+                  tono={d?.margen != null && d.margen < 0 ? color.danger : undefined}
+                />
+              </div>
+              {frena && (
+                <div style={{ fontSize: font.sm, color: color.dangerInk, marginTop: space[2] }}>
+                  Se puede guardar igual, pero eso de arriba hay que mirarlo antes.
+                </div>
+              )}
             </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap', marginTop: space[2], alignItems: 'baseline' }}>
-            <Dato rotulo="Queda en" valor={d?.precioSale ? formatMoney(d.precioSale) : '—'} grande />
-            <Dato rotulo="Descuento real" valor={d?.pctDesc != null ? `${Math.round(d.pctDesc)}%` : '—'} />
-            <Dato rotulo="Markup" valor={d?.markup != null ? `${Math.round(d.markup)}%` : '—'} />
-            <Dato
-              rotulo="Margen bruto"
-              valor={hayMargen && d?.margen != null ? `${Math.round(d.margen)}%` : '—'}
-              tono={d?.margen != null && d.margen < 0 ? color.danger : undefined}
-            />
-          </div>
-          {frena && (
-            <div style={{ fontSize: font.sm, color: color.dangerInk, marginTop: space[2] }}>
-              Se puede guardar igual, pero eso de arriba hay que mirarlo antes.
-            </div>
+          ) : (
+            <Notice tone="neutral">
+              La campaña está cerrada: los precios se miran, no se cambian.
+            </Notice>
           )}
-        </div>
-      ) : (
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>
-          La campaña está cerrada: los precios se miran, no se cambian.
-        </Notice>
-      )}
 
-      <div style={{ marginTop: space[4] }}>
-        <div style={{ fontSize: font.xs, fontWeight: weight.bold, color: color.mut, marginBottom: space[2] }}>
-          MARGEN NETO A {formatMoney(pvpSim)}{!d?.precioSale && ' (el precio de lista, todavía sin descuento)'}
+          <Field label="Nota" style={{ marginTop: space[3] }}>
+            <Input
+              value={nota}
+              onChange={(e) => { setNota(e.target.value); setTocado(true) }}
+              placeholder="Por qué este precio, o por qué no va"
+              disabled={!puedeEditar}
+            />
+          </Field>
+
+          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[2], lineHeight: 1.4 }}>
+            Los números son los del día en que entró a la campaña, no los de hoy, y el margen que
+            queda guardado es el <b>bruto</b>.
+            {(onAnterior || onSiguiente) && ' ←/→ pasan de producto (⌥←/⌥→ adentro de un campo).'}
+          </div>
         </div>
-        {hayMargen ? (
-          <>
-            <MatrizSim cfg={cfg} cans={cans} costo={costo} pvp={pvpSim} onCelda={(forma, canal) => setCelda({ forma, canal })} />
-            {celda && (
-              <Detalle
+
+        <div style={{ flex: '1 1 520px', minWidth: 320 }}>
+          <div style={{ fontSize: font.xs, fontWeight: weight.bold, color: color.mut }}>
+            MARGEN NETO A {formatMoney(pvpSim)}{!d?.precioSale && ' (el precio de lista, todavía sin descuento)'}
+          </div>
+          {/* Vive acá y no en el pie de la izquierda: es lo que hay que saber ANTES de leer la
+              matriz, no un descargo al final. */}
+          <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2], lineHeight: 1.4 }}>
+            Son {cfg.formas.length * cans.length} números y no se guarda ninguno: dependen de cómo
+            pague el cliente.
+          </div>
+          {!hayMargen ? (
+            <Notice tone="danger">
+              Sin el costo no hay margen que mostrar. Cargalo en Gestión Nube y volvé: mientras tanto,
+              cualquier número que dibujara esta pantalla sería inventado.
+            </Notice>
+          ) : cara.tipo === 'matriz' ? (
+            <>
+              <MatrizSim
                 cfg={cfg}
+                cans={cans}
                 costo={costo}
                 pvp={pvpSim}
-                forma={celda.forma}
-                canal={celda.canal}
-                onCerrar={() => setCelda(null)}
+                detalleCelda={verCeldas ? 'una-linea' : 'ninguno'}
+                onCelda={(forma, canal) => setCara({ tipo: 'detalle', forma, canal })}
               />
-            )}
-            <Breakeven cfg={cfg} cans={cans} costo={costo} markup={d?.markup != null ? String(d.markup) : ''} />
-
-            <div style={{ marginTop: space[3] }}>
-              <Button variant="ghost" size="sm" onClick={() => setVerPiso((v) => !v)}>
-                {verPiso ? 'Ocultar' : '¿Hasta dónde puedo bajar?'}
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
+                <Button variant="ghost" size="sm" onClick={() => setVerCeldas((v) => !v)}>
+                  {verCeldas ? '⊟ Ocultar el detalle de cada celda' : '⊞ Ver % · días · IVA recuperado'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCara({ tipo: 'breakeven' })}>
+                  Markup de equilibrio
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCara({ tipo: 'piso' })}>
+                  ¿Hasta dónde puedo bajar?
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setCara({ tipo: 'matriz' })}>
+                ← Volver a la matriz
               </Button>
-              {verPiso && (
-                <div style={{ marginTop: space[2] }}>
+              {cara.tipo === 'detalle' && (
+                <Detalle
+                  cfg={cfg}
+                  costo={costo}
+                  pvp={pvpSim}
+                  forma={cara.forma}
+                  canal={cara.canal}
+                  onCerrar={() => setCara({ tipo: 'matriz' })}
+                />
+              )}
+              {cara.tipo === 'breakeven' && (
+                <Breakeven cfg={cfg} cans={cans} costo={costo} markup={d?.markup != null ? String(d.markup) : ''} />
+              )}
+              {cara.tipo === 'piso' && (
+                <div style={{ marginTop: space[3] }}>
                   <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>
                     Precio mínimo para dejar un margen de{' '}
                     <input
@@ -324,35 +449,9 @@ export function DefinirPrecio({
                   <Piso cfg={cfg} cans={cans} costo={costo} objetivo={(numOrNull(pisoObj) || 0) / 100} />
                 </div>
               )}
-            </div>
-          </>
-        ) : (
-          <Notice tone="danger">
-            Sin el costo no hay margen que mostrar. Cargalo en Gestión Nube y volvé: mientras tanto,
-            cualquier número que dibujara esta pantalla sería inventado.
-          </Notice>
-        )}
-      </div>
-
-      <Field
-        label="Nota"
-        hint="Para el que lo mire después: por qué este precio, o por qué no va."
-        style={{ marginTop: space[4] }}
-      >
-        <Input
-          value={nota}
-          onChange={(e) => setNota(e.target.value)}
-          placeholder="Quedan 3, van con el combo de invierno"
-          disabled={!puedeEditar}
-        />
-      </Field>
-
-      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[3], lineHeight: 1.6 }}>
-        Los números son los del día en que el producto entró a la campaña, no los de hoy.
-        {promoPrevia != null && ` Ya estaba en oferta a ${formatMoney(promoPrevia)} cuando entró.`}
-        {' '}El margen que queda guardado es el <b>bruto</b> sobre el precio de sale; el neto de la
-        matriz depende de cómo pague el cliente y son doce números, no uno.
-        {(onAnterior || onSiguiente) && ' · ←/→ pasan de producto (adentro de un campo, ⌥←/⌥→).'}
+            </>
+          )}
+        </div>
       </div>
     </Modal>
   )
@@ -368,10 +467,10 @@ function FichaProducto({ item }: { item: LiquidacionItem }) {
         <img
           src={f.imagen}
           alt=""
-          style={{ width: 88, height: 88, objectFit: 'cover', borderRadius: radius.md, flex: 'none', border: `1px solid ${color.line}` }}
+          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: radius.md, flex: 'none', border: `1px solid ${color.line}` }}
         />
       ) : (
-        <div style={{ width: 88, height: 88, borderRadius: radius.md, background: color.bg2, border: `1px solid ${color.line}`, flex: 'none' }} />
+        <div style={{ width: 64, height: 64, borderRadius: radius.md, background: color.bg2, border: `1px solid ${color.line}`, flex: 'none' }} />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[2] }}>
@@ -381,7 +480,7 @@ function FichaProducto({ item }: { item: LiquidacionItem }) {
             label={item.estado === 'pendiente' ? 'Sin definir' : item.estado === 'definido' ? 'Definido' : item.estado === 'aplicado' ? 'Aplicado' : 'Descartado'}
           />
         </div>
-        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: space[3], rowGap: space[2], flexWrap: 'wrap' }}>
           <Dato rotulo="Precio de lista" valor={formatMoney(f.precioNormal)} />
           <Dato rotulo="Costo" valor={f.sinCosto ? 'no vino de GN' : formatMoney(f.costo)} tono={f.sinCosto ? color.dangerInk : undefined} />
           <Dato rotulo="Stock" valor={String(f.stock)} />

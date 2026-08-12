@@ -116,7 +116,25 @@ export interface LiquidacionItem {
 /** Qué tan grave es un aviso. `alto` es el que frena: no se define un precio sin resolverlo. */
 export type NivelAviso = 'alto' | 'medio'
 
+/**
+ * Qué aviso es, para poder tratarlo distinto sin mirarle el texto.
+ *
+ * 🔑 Existe porque el modal necesita **ocultar `ya-en-oferta` mientras el precio está precargado y
+ * nadie lo tocó**: ahí ese aviso no advierte nada, describe el punto de partida. Filtrar por el
+ * texto sería atarse a una redacción — cambiar una palabra del cartel rompería el filtro en
+ * silencio, y el aviso volvería a aparecer sin que ningún test se entere.
+ */
+export type ClaveAviso =
+  | 'sin-costo'
+  | 'costo-cero'
+  | 'sin-lista'
+  | 'bajo-costo'
+  | 'no-es-descuento'
+  | 'ya-en-oferta'
+  | 'sin-stock'
+
 export interface Aviso {
+  clave: ClaveAviso
   nivel: NivelAviso
   texto: string
 }

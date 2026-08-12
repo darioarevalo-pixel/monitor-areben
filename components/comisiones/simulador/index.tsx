@@ -20,8 +20,19 @@ import { breakevenMarkup, calcular, comFmt, pisoPvp } from '@/lib/comisiones/cor
 import type { ComCfg, ResultadoMargen } from '@/lib/comisiones/tipos'
 import { color } from '@/components/ui'
 
+/**
+ * Cuánto de cada celda se dibuja bajo el margen en pesos.
+ *
+ * `completo` son los tres renglones históricos (el `%· Nd`, los tags y el `IVA recup.`) y es el
+ * default, así que **Comisiones no cambia en nada**. Los otros dos nacieron para el modal de
+ * Liquidación, que se pasa producto por producto y no puede pedir scroll: medido, esos tres
+ * renglones llevan la tabla de 251px a 457. `una-linea` dice lo mismo en un renglón (~300px) y
+ * `ninguno` deja sólo el margen.
+ */
+export type DetalleCelda = 'completo' | 'una-linea' | 'ninguno'
+
 /** La matriz de margen neto: una celda por forma de pago × canal. Tocar una abre el detalle. */
-export function MatrizSim({ cfg, cans, costo, pvp, onCelda }: { cfg: ComCfg; cans: string[]; costo: number; pvp: number; onCelda: (forma: string, canal: string) => void }) {
+export function MatrizSim({ cfg, cans, costo, pvp, onCelda, detalleCelda = 'completo' }: { cfg: ComCfg; cans: string[]; costo: number; pvp: number; onCelda: (forma: string, canal: string) => void; detalleCelda?: DetalleCelda }) {
   const cells = cfg.formas.flatMap((f) => cans.map((c) => ({ f, c, m: calcular(cfg, costo, pvp, f, c).margen })))
   const best = cells.length ? cells.reduce((a, b) => (b.m > a.m ? b : a)) : null
   const worst = cells.length ? cells.reduce((a, b) => (b.m < a.m ? b : a)) : null
@@ -43,9 +54,20 @@ export function MatrizSim({ cfg, cans, costo, pvp, onCelda }: { cfg: ComCfg; can
                 return (
                   <td key={c} onClick={() => onCelda(f, c)} title="Ver detalle" style={{ textAlign: 'center', padding: '6px 10px', borderTop: `1px solid ${color.line}`, cursor: 'pointer', background: bg }}>
                     <div style={{ fontWeight: 700, color: r.margen < 0 ? color.danger : '#111' }}>{comFmt(r.margen)}</div>
-                    <div style={{ fontSize: 11, color: color.mut }}>{r.margenPct.toFixed(1)}% · {r.dias}d</div>
-                    {tags.length > 0 && <div style={{ fontSize: 10, color: color.brand }}>{tags.join(' · ')}</div>}
-                    {cfg.saldoIva && <div style={{ fontSize: 10, color: color.brandSolid }}>IVA recup. {comFmt(r.ivaRecuperado)}</div>}
+                    {detalleCelda === 'completo' && (
+                      <>
+                        <div style={{ fontSize: 11, color: color.mut }}>{r.margenPct.toFixed(1)}% · {r.dias}d</div>
+                        {tags.length > 0 && <div style={{ fontSize: 10, color: color.brand }}>{tags.join(' · ')}</div>}
+                        {cfg.saldoIva && <div style={{ fontSize: 10, color: color.brandSolid }}>IVA recup. {comFmt(r.ivaRecuperado)}</div>}
+                      </>
+                    )}
+                    {detalleCelda === 'una-linea' && (
+                      <div style={{ fontSize: 10, color: color.mut }}>
+                        {r.margenPct.toFixed(1)}% · {r.dias}d
+                        {tags.length > 0 && <span style={{ color: color.brand }}> · {tags.join(' · ')}</span>}
+                        {cfg.saldoIva && <span style={{ color: color.brandSolid }}> · IVA {comFmt(r.ivaRecuperado)}</span>}
+                      </div>
+                    )}
                   </td>
                 )
               })}
@@ -53,7 +75,11 @@ export function MatrizSim({ cfg, cans, costo, pvp, onCelda }: { cfg: ComCfg; can
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · &quot;d&quot; = días de acreditación{cfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</div>
+      <div style={{ fontSize: 11, color: color.mut2, marginTop: 8 }}>
+        {detalleCelda === 'ninguno'
+          ? <>🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen neto en $</>
+          : <>🟩 mejor · 🟥 peor · <b>tocá una celda para ver el detalle</b> · margen $ y % · &quot;d&quot; = días de acreditación{cfg.saldoIva ? ' · IVA recup. = saldo a favor que recuperás (no es costo)' : ' · IVA descontado como costo (saldo agotado)'}</>}
+      </div>
     </div>
   )
 }

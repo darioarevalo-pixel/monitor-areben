@@ -226,29 +226,29 @@ export function avisos(item: LiquidacionItem): Aviso[] {
   const sale = item.decision.precioSale
 
   if (sinCosto) {
-    out.push({ nivel: 'alto', texto: 'El costo no vino de Gestión Nube: no es que cueste $0, es que no lo sabemos. Cualquier margen que muestre esta pantalla es falso.' })
+    out.push({ clave: 'sin-costo', nivel: 'alto', texto: 'El costo no vino de Gestión Nube: no es que cueste $0, es que no lo sabemos. Cualquier margen que muestre esta pantalla es falso.' })
   } else if (!(costo > 0)) {
-    out.push({ nivel: 'alto', texto: 'Este producto tiene costo $0 cargado en Gestión Nube.' })
+    out.push({ clave: 'costo-cero', nivel: 'alto', texto: 'Este producto tiene costo $0 cargado en Gestión Nube.' })
   }
 
   if (!(precioNormal > 0)) {
-    out.push({ nivel: 'alto', texto: 'No tiene precio de lista: no hay contra qué calcular el descuento.' })
+    out.push({ clave: 'sin-lista', nivel: 'alto', texto: 'No tiene precio de lista: no hay contra qué calcular el descuento.' })
   }
 
   if (sale != null && sale > 0) {
     if (!sinCosto && costo > 0 && sale <= costo) {
-      out.push({ nivel: 'alto', texto: 'El precio de sale está por debajo del costo: cada unidad que se venda pierde plata.' })
+      out.push({ clave: 'bajo-costo', nivel: 'alto', texto: 'El precio de sale está por debajo del costo: cada unidad que se venda pierde plata.' })
     }
     if (precioNormal > 0 && sale >= precioNormal) {
-      out.push({ nivel: 'alto', texto: 'El precio de sale no es menor que el de lista.' })
+      out.push({ clave: 'no-es-descuento', nivel: 'alto', texto: 'El precio de sale no es menor que el de lista.' })
     }
     if (promoPrevia != null && sale >= promoPrevia) {
-      out.push({ nivel: 'medio', texto: `Hoy ya está en oferta a $${Math.round(promoPrevia).toLocaleString('es-AR')}: este precio no lo baja.` })
+      out.push({ clave: 'ya-en-oferta', nivel: 'medio', texto: `Hoy ya está en oferta a $${Math.round(promoPrevia).toLocaleString('es-AR')}: este precio no lo baja.` })
     }
   }
 
   if (!(stock > 0)) {
-    out.push({ nivel: 'medio', texto: 'No queda stock: liquidarlo no mueve nada.' })
+    out.push({ clave: 'sin-stock', nivel: 'medio', texto: 'No queda stock: liquidarlo no mueve nada.' })
   }
 
   return out

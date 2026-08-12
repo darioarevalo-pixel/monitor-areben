@@ -205,6 +205,25 @@ describe('avisos', () => {
     const i = decidirItem(armarItemDesdeProducto(prod()), { pctDesc: 30 })
     expect(avisos(i)).toEqual([])
   })
+
+  it('🔑 cada aviso viaja con su clave: el modal lo filtra por identidad, no por texto', () => {
+    // El de `ya-en-oferta` se oculta mientras el precio está precargado y nadie lo tocó (ahí no
+    // advierte nada: describe el punto de partida). Si eso se filtrara por el texto, cambiarle una
+    // palabra al cartel lo haría reaparecer en silencio y ningún test se enteraría.
+    const base = armarItemDesdeProducto(prod(), { promo: 32000 })
+    const i = decidirItem(base, { precioSale: 32000 })
+    expect(avisos(i).map((x) => x.clave)).toContain('ya-en-oferta')
+
+    // Y las claves son únicas dentro de una misma tanda: se usan de `key` al dibujarlas.
+    const roto = decidirItem(armarItemDesdeProducto(prod({ sinCosto: true, unit_cost: 0, stock: 0 })), { precioSale: 99000 })
+    const claves = avisos(roto).map((x) => x.clave)
+    expect(new Set(claves).size).toBe(claves.length)
+  })
+
+  it('las dos ramas del costo no comparten clave: `sin-costo` no es `costo-cero`', () => {
+    expect(avisos(armarItemDesdeProducto(prod({ sinCosto: true, unit_cost: 0 }))).map((x) => x.clave)).toContain('sin-costo')
+    expect(avisos(armarItemDesdeProducto(prod({ sinCosto: false, unit_cost: 0 }))).map((x) => x.clave)).toContain('costo-cero')
+  })
 })
 
 describe('resumenCampania', () => {
