@@ -11,6 +11,12 @@
  *
  * **Abrir esta pantalla marca como leídas las que se ven.** No hay botón de "marcar leído": si
  * alguien entró, se enteró. Las importantes son otra cosa y tienen su propio cartel.
+ *
+ * ⚠️ Eso sigue valiendo aunque el detalle esté **plegado**: se marca al entrar, no al abrir la
+ * tarjeta. Atarlo a abrir suena más honesto y es peor — el badge del sidebar quedaría prendido para
+ * siempre para quien mira la lista y decide que nada le hace falta. Lo que no se marca al entrar
+ * sigue siendo lo mismo que antes (`seMarcanAlEntrar`): las importantes, que sólo se apagan con
+ * «Entendido» en el cartel.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -105,6 +111,17 @@ export function Novedades() {
 
   const [editando, setEditando] = useState<Novedad | null>(null)
   const [verViejas, setVerViejas] = useState(false)
+  // ⚠️ Qué tarjeta está abierta vive ACÁ y no adentro de `Tarjeta`: `Tarjeta` está declarada dentro
+  // de este componente, así que es un tipo nuevo en cada render y React la remonta — un `useState`
+  // adentro se cerraría solo al primer cambio de la lista. Se puede tener más de una abierta.
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
+
+  const alternar = (id: string) =>
+    setAbiertas((s) => {
+      const n = new Set(s)
+      if (!n.delete(id)) n.add(id)
+      return n
+    })
 
   useEffect(() => {
     if (!cargado) void cargar()
@@ -150,58 +167,80 @@ export function Novedades() {
 
   if (!cargado) return <Esqueleto />
 
-  const Tarjeta = ({ n }: { n: Novedad }) => (
-    <div
-      style={{
-        border: `1px solid ${color.line}`, borderRadius: 12, padding: space[4],
-        background: color.bg, display: 'grid', gap: space[2],
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: font.md, color: color.ink }}>{n.titulo}</strong>
-        {n.estado === 'borrador' && <Badge tone="warning">Borrador</Badge>}
-        {n.importante && n.estado === 'publicada' && <Badge tone="brand">Importante</Badge>}
-        {n.estado === 'publicada' && n.paraMi !== false && !leidaSet.has(`${n.id}|${n.version}`) && <Badge tone="brand" subtle>Nueva</Badge>}
-        {aQuien(n.destino) && <Badge tone="neutral" subtle>{aQuien(n.destino)}</Badge>}
-        <span style={{ marginLeft: 'auto', fontSize: font.xs, color: color.mut2 }}>
-          {cuando(n.publicada_at || n.created_at)}
-          {n.autor ? ` · ${n.autor}` : ''}
-          {n.version > 1 ? ` · v${n.version}` : ''}
-        </span>
+  const Tarjeta = ({ n }: { n: Novedad }) => {
+    const abierta = abiertas.has(n.id)
+    return (
+      <div
+        style={{
+          border: `1px solid ${color.line}`, borderRadius: 12, padding: space[4],
+          background: color.bg, display: 'grid', gap: space[2],
+        }}
+      >
+        {/*
+          El renglón entero es el botón que abre: el título es el resumen —"que se entienda solo, sin
+          abrir" dice el editor— y los chips contestan si esto me toca a mí antes de decidir abrirlo.
+          `height: 'auto'` no es de adorno: la regla legacy `.shell-content button` le fija a todo
+          botón la altura de un renglón, y este envuelve en dos.
+        */}
+        <button
+          onClick={() => alternar(n.id)}
+          aria-expanded={abierta}
+          style={{
+            height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+            textAlign: 'left', width: '100%',
+            display: 'flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ color: color.mut2, fontSize: font.sm }}>{abierta ? '▾' : '▸'}</span>
+          <strong style={{ fontSize: font.md, color: color.ink }}>{n.titulo}</strong>
+          {n.estado === 'borrador' && <Badge tone="warning">Borrador</Badge>}
+          {n.importante && n.estado === 'publicada' && <Badge tone="brand">Importante</Badge>}
+          {n.estado === 'publicada' && n.paraMi !== false && !leidaSet.has(`${n.id}|${n.version}`) && <Badge tone="brand" subtle>Nueva</Badge>}
+          {aQuien(n.destino) && <Badge tone="neutral" subtle>{aQuien(n.destino)}</Badge>}
+          <span style={{ marginLeft: 'auto', fontSize: font.xs, color: color.mut2 }}>
+            {cuando(n.publicada_at || n.created_at)}
+            {n.autor ? ` · ${n.autor}` : ''}
+            {n.version > 1 ? ` · v${n.version}` : ''}
+          </span>
+        </button>
+
+        {abierta && (
+          <>
+            <Markdown texto={n.cuerpo} />
+
+            {puede.publicar && n.estado !== 'borrador' && <QuienLaLeyo id={n.id} />}
+
+            {puede.publicar && (
+              <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginTop: space[1] }}>
+                {n.estado !== 'publicada' && (
+                  <Button size="sm" onClick={() => void accion(() => cambiarEstado(n.id, 'publicada'), 'Publicada. Ya la ve el equipo.')}>
+                    Publicar
+                  </Button>
+                )}
+                {n.estado === 'publicada' && (
+                  <>
+                    <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'borrador'), 'Vuelve a ser un borrador.')}>
+                      Despublicar
+                    </Button>
+                    <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'archivada'), 'Archivada.')}>
+                      Archivar
+                    </Button>
+                  </>
+                )}
+                {n.estado === 'archivada' && (
+                  <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'publicada'), 'Volvió a la lista.')}>
+                    Desarchivar
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" iconLeft="✏️" onClick={() => setEditando(n)}>Editar</Button>
+                <Button size="sm" variant="ghost" tone="danger" iconLeft="🗑" onClick={() => onBorrar(n)}>Borrar</Button>
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      <Markdown texto={n.cuerpo} />
-
-      {puede.publicar && n.estado !== 'borrador' && <QuienLaLeyo id={n.id} />}
-
-      {puede.publicar && (
-        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginTop: space[1] }}>
-          {n.estado !== 'publicada' && (
-            <Button size="sm" onClick={() => void accion(() => cambiarEstado(n.id, 'publicada'), 'Publicada. Ya la ve el equipo.')}>
-              Publicar
-            </Button>
-          )}
-          {n.estado === 'publicada' && (
-            <>
-              <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'borrador'), 'Vuelve a ser un borrador.')}>
-                Despublicar
-              </Button>
-              <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'archivada'), 'Archivada.')}>
-                Archivar
-              </Button>
-            </>
-          )}
-          {n.estado === 'archivada' && (
-            <Button size="sm" variant="soft" onClick={() => void accion(() => cambiarEstado(n.id, 'publicada'), 'Volvió a la lista.')}>
-              Desarchivar
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" iconLeft="✏️" onClick={() => setEditando(n)}>Editar</Button>
-          <Button size="sm" variant="ghost" tone="danger" iconLeft="🗑" onClick={() => onBorrar(n)}>Borrar</Button>
-        </div>
-      )}
-    </div>
-  )
+    )
+  }
 
   return (
     <>
@@ -221,7 +260,7 @@ export function Novedades() {
         </SectionCard>
       )}
 
-      <SectionCard title="Lo último" subtitle="Lo que cambió en los sistemas, de lo más nuevo a lo más viejo.">
+      <SectionCard title="Lo último" subtitle="Lo que cambió en los sistemas, de lo más nuevo a lo más viejo. Tocá el título para ver el detalle.">
         {vigentes.length === 0 ? (
           <EmptyState
             icon="📣"

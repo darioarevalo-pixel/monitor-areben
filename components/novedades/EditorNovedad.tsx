@@ -1,22 +1,46 @@
 'use client'
 
 /**
- * Escribir o corregir una novedad, con la vista previa al lado.
+ * Escribir o corregir una novedad, con la barra de formato arriba y la vista previa abajo.
  *
  * La previa no es un lujo: el markdown es un subconjunto chico y propio, y la única forma de saber
  * si algo entró es verlo. Un `**` sin cerrar se ve como dos asteriscos, y eso hay que poder notarlo
  * antes de publicar, no después.
  *
+ * 🔑 **La barra escribe los caracteres, no reemplaza al markdown.** Lo que se guarda sigue siendo
+ * texto —el mismo que acepta `scripts/novedad.mjs`— y el textarea sigue a la vista: se puede tipear
+ * a mano, y lo que pone un botón se puede borrar con la tecla de borrar. Un editor que esconde el
+ * texto (contentEditable) devuelve HTML, y todo el camino de las novedades está hecho para no tener
+ * HTML en ningún tramo. Qué le hace cada botón al texto vive en `lib/markdown/barra.ts`, que es
+ * donde se puede probar sin DOM.
+ *
  * **Guardar nunca publica.** El estado no viaja en el cuerpo —el handler lo ignora— así que desde
  * acá una novedad nueva nace siempre en borrador. Publicar es un botón aparte, en la tarjeta.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { guardarNovedad } from '@/lib/novedades/cliente'
+import { aplicar, AYUDA, type Marca } from '@/lib/markdown/barra'
 import type { Destino, Novedad } from '@/lib/novedades/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { Button, Field, Input, Markdown, Modal, Select, color, font, radius, space, useToast } from '@/components/ui'
+
+/**
+ * La barra, en el orden en que se usa: primero lo de adentro de una frase, después lo que arma la
+ * estructura. Cada botón se muestra **con la pinta de lo que hace** (la negrita en negrita), que es
+ * más rápido de leer que su nombre.
+ */
+const BOTONES: { m: Marca; label: string; estilo?: React.CSSProperties }[] = [
+  { m: 'negrita', label: 'B', estilo: { fontWeight: 800 } },
+  { m: 'italica', label: 'I', estilo: { fontStyle: 'italic' } },
+  { m: 'codigo', label: '‹›', estilo: { fontFamily: 'ui-monospace, monospace' } },
+  { m: 'link', label: 'Link' },
+  { m: 'titulo', label: 'Título' },
+  { m: 'subtitulo', label: 'Subtítulo' },
+  { m: 'lista', label: '• Lista' },
+  { m: 'numerada', label: '1. Lista' },
+]
 
 export function EditorNovedad({
   novedad,
@@ -28,6 +52,7 @@ export function EditorNovedad({
   onGuardado: () => void
 }) {
   const toast = useToast()
+  const caja = useRef<HTMLTextAreaElement>(null)
   const [titulo, setTitulo] = useState(novedad.titulo)
   const [cuerpo, setCuerpo] = useState(novedad.cuerpo)
   const [importante, setImportante] = useState(novedad.importante)
@@ -50,6 +75,32 @@ export function EditorNovedad({
     // Destildar el último vuelve a "todos": una novedad para cero roles no le llega a nadie, y eso
     // no es lo que nadie quiso escribir.
     setDestino(nuevos.length ? { tipo: 'roles', roles: nuevos } : { tipo: 'todos' })
+  }
+
+  /**
+   * Un botón de la barra. La selección se lee y se repone sobre el textarea de verdad: sin eso, cada
+   * toque manda el cursor al final y hay que volver a marcar la palabra siguiente a mano.
+   */
+  const marcar = (m: Marca) => {
+    const el = caja.current
+    if (!el) return
+    const r = aplicar(el.value, el.selectionStart, el.selectionEnd, m)
+    setCuerpo(r.texto)
+    // Después del `setCuerpo` el valor del textarea todavía es el viejo: reponer la selección va en
+    // el frame siguiente, cuando React ya lo pintó.
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(r.ini, r.fin)
+    })
+  }
+
+  const atajos = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!(e.metaKey || e.ctrlKey)) return
+    const k = e.key.toLowerCase()
+    const m: Marca | null = k === 'b' ? 'negrita' : k === 'i' ? 'italica' : k === 'k' ? 'link' : null
+    if (!m) return
+    e.preventDefault()
+    marcar(m)
   }
 
   const guardar = async () => {
@@ -87,13 +138,30 @@ export function EditorNovedad({
 
       <Field
         label="El texto"
-        hint="Entra ## y ### para títulos, - para listas, **negrita**, `código` y [texto](link)."
+        hint="Marcá lo que quieras y tocá un botón. También se puede escribir a mano: ⌘B negrita, ⌘I cursiva, ⌘K link."
       >
+        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginBottom: space[2] }}>
+          {BOTONES.map((b) => (
+            <Button
+              key={b.m}
+              type="button"
+              size="sm"
+              variant="ghost"
+              title={AYUDA[b.m]}
+              onClick={() => marcar(b.m)}
+              style={b.estilo}
+            >
+              {b.label}
+            </Button>
+          ))}
+        </div>
         <textarea
+          ref={caja}
           className="mo-input mo-input--multi"
           rows={12}
           value={cuerpo}
           onChange={(e) => setCuerpo(e.target.value)}
+          onKeyDown={atajos}
           style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', fontSize: font.sm }}
         />
       </Field>

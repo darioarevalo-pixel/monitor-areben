@@ -88,6 +88,7 @@ function Trozos({ ts }: { ts: Trozo[] }) {
     <>
       {ts.map((t, i) => {
         if (t.t === 'negrita') return <strong key={i} style={{ fontWeight: weight.semibold, color: color.ink }}>{t.v}</strong>
+        if (t.t === 'italica') return <em key={i}>{t.v}</em>
         if (t.t === 'codigo') {
           return (
             <code

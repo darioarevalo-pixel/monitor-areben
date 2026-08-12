@@ -82,8 +82,21 @@ describe('trozos', () => {
     expect(parsearTrozos('queda **así')).toEqual([{ t: 'texto', v: 'queda **así' }])
   })
 
-  it('itálica no existe: un * suelto es un asterisco', () => {
+  it('la itálica es con guion bajo; el asterisco simple sigue siendo un asterisco', () => {
+    expect(parsearTrozos('_sí_')).toEqual([{ t: 'italica', v: 'sí' }])
     expect(parsearTrozos('*no*')).toEqual([{ t: 'texto', v: '*no*' }])
+  })
+
+  it('un guion bajo en medio de una palabra no abre cursiva', () => {
+    expect(parsearTrozos('el campo publicada_at de la tabla')).toEqual([
+      { t: 'texto', v: 'el campo publicada_at de la tabla' },
+    ])
+    expect(parsearTrozos('mirá api/_sistema.js')).toEqual([{ t: 'texto', v: 'mirá api/_sistema.js' }])
+  })
+
+  it('un _ sin cerrar, o con espacio pegado, se ve tal cual', () => {
+    expect(parsearTrozos('queda _así')).toEqual([{ t: 'texto', v: 'queda _así' }])
+    expect(parsearTrozos('esto _ y esto _ no')).toEqual([{ t: 'texto', v: 'esto _ y esto _ no' }])
   })
 
   it('los links http y https son externos', () => {

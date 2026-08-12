@@ -20,12 +20,15 @@
  *   `## Título` · `### Subtítulo` (el `#` de un solo `#` NO: el `<h1>` es el de la sección)
  *   párrafos (dos saltos separan; un salto simple une)
  *   `- item` / `* item` · `1. item` (sin anidar)
- *   `**negrita**` · `` `código` `` · ```` ``` ```` para un bloque
+ *   `**negrita**` · `_cursiva_` · `` `código` `` · ```` ``` ```` para un bloque
  *   `[texto](url)` con http://, https:// o una ruta interna `/…`
  *
- * Y nada más: sin itálica (`*x*` choca con `* item` y no aporta), sin tablas, sin imágenes, sin
- * citas, sin HTML, sin listas anidadas, sin tachado. Las URL sueltas **no** se autolinkean: si
- * querés un link, corchetes.
+ * Y nada más: sin tablas, sin imágenes, sin citas, sin HTML, sin listas anidadas, sin tachado. Las
+ * URL sueltas **no** se autolinkean: si querés un link, corchetes.
+ *
+ * ⚠️ La cursiva es con **guion bajo y no con asterisco simple**: `*x*` choca con el `* item` de las
+ * listas. Entró con la barra de formato del editor (`lib/markdown/barra.ts`) — un botón de cursiva
+ * que escribiera algo que el parser no entiende sería peor que no tener el botón.
  *
  * **Regla de oro: lo que no matchea se muestra tal cual, nunca se borra.** Un `**` sin cerrar se ve
  * como dos asteriscos; un `[x](javascript:…)` se ve como ese texto. Es la misma regla que tiene
@@ -34,7 +37,7 @@
  */
 
 export type Trozo =
-  | { t: 'texto' | 'negrita' | 'codigo'; v: string }
+  | { t: 'texto' | 'negrita' | 'italica' | 'codigo'; v: string }
   | { t: 'link'; v: string; href: string; externo: boolean }
 
 export type Bloque =
@@ -134,6 +137,19 @@ export function parsearTrozos(s: string): Trozo[] {
         continue
       }
     }
+    // La cursiva pide más condiciones que el resto porque el guion bajo aparece en texto de verdad
+    // (`api/_sistema.js`, `snake_case`). Se exige que abra pegado a una palabra por la izquierda NO,
+    // que cierre en el mismo renglón, y que lo de adentro no arranque ni termine en espacio.
+    if (s[i] === '_' && !esPalabra(s[i - 1])) {
+      const fin = s.indexOf('_', i + 1)
+      const dentro = fin > i + 1 ? s.slice(i + 1, fin) : ''
+      if (dentro && !/^\s|\s$/.test(dentro) && !esPalabra(s[fin + 1])) {
+        soltar()
+        out.push({ t: 'italica', v: dentro })
+        i = fin + 1
+        continue
+      }
+    }
     if (s[i] === '`') {
       const fin = s.indexOf('`', i + 1)
       if (fin > i) {
@@ -165,6 +181,11 @@ export function parsearTrozos(s: string): Trozo[] {
 
   soltar()
   return out
+}
+
+/** Si el carácter es letra o número (con acentos y ñ), o sea: si el `_` está en medio de una palabra. */
+function esPalabra(c: string | undefined): boolean {
+  return !!c && /[\p{L}\p{N}]/u.test(c)
 }
 
 /**
