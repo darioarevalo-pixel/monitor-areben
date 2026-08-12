@@ -14,6 +14,7 @@ import type { AvanceDePlan, Plan } from './planes'
 import type { Candidato, MotivoPoda } from './podado'
 import type { RangoUI } from './rango'
 import type { DecisionVista, RespuestaDecisiones } from './decisiones'
+import type { Informe, InformeResumen, RespuestaInforme, RespuestaInformes } from './informes'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
 import type {
@@ -599,6 +600,76 @@ export async function marcarFavorito(objetoId: string, marcar: boolean): Promise
       return { ok: false, motivo: String(d?.error ?? `HTTP ${r.status}`).slice(0, 200) }
     }
     return { ok: true, dato: { favorito: (d.favorito as MarcaFavorito | null) ?? null } }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// ── Informes del analista ─────────────────────────────────────────────────────────────────────
+
+/**
+ * El historial de informes. **Sin el HTML**: son ~40 KB cada uno y la lista sólo necesita la fecha,
+ * la marca, el título y el resumen. El cuerpo viaja recién al abrir uno.
+ *
+ * ⚠️ El literal `recurso: 'informes'` de acá abajo es lo que hace fallar a
+ * `tests/meta-ads-despacho.test.ts` si alguien olvida sumar la palabra en el despacho de
+ * `api/meta-ads.js`. Ver el comentario de `traerDecisiones()`: es el freno contra el bug que ya
+ * llegó a prod con `poda`, donde el módulo entero era inalcanzable con el CI en verde.
+ */
+export function traerInformes(linea?: string): Promise<Lectura<RespuestaInformes>> {
+  const qs = new URLSearchParams({ recurso: 'informes' })
+  if (linea) qs.set('linea', linea)
+  return pedir<RespuestaInformes>(qs)
+}
+
+/** Un informe con su cuerpo, para dibujarlo. */
+export function traerInforme(id: number): Promise<Lectura<RespuestaInforme>> {
+  return pedir<RespuestaInforme>(new URLSearchParams({ recurso: 'informe', id: String(id) }))
+}
+
+/**
+ * Publica un informe o lo devuelve a borrador. Es un acto aparte del guardado a propósito: corregir
+ * una coma no puede mandarle un informe al equipo, ni sacar de circulación uno ya publicado.
+ */
+export function publicarInforme(id: number, publicado: boolean): Promise<Lectura<{ informe: InformeResumen }>> {
+  return postInforme<{ informe: InformeResumen }>({ accion: 'publicar', id, publicado })
+}
+
+/** Borra un informe. Es para el que se subió por error: uno viejo se despublica, no se borra. */
+export function borrarInforme(id: number): Promise<Lectura<{ borrado: number }>> {
+  return postInforme<{ borrado: number }>({ accion: 'borrar', id })
+}
+
+/**
+ * Sube o corrige un informe. Lo usa el script del analista; la pantalla sólo publica y borra.
+ *
+ * `pisar` es explícito porque la clave es `(fecha, línea)` y el historial vale por no pisarse: sin
+ * él, volver a subir la misma fecha contesta 409 diciendo cuál es el que ya está.
+ */
+export function guardarInforme(cuerpo: {
+  fecha: string
+  linea: string
+  titulo: string
+  resumen?: string
+  html: string
+  pisar?: boolean
+}): Promise<Lectura<{ informe: Informe; reemplazo: boolean; avisos: string[] }>> {
+  return postInforme<{ informe: Informe; reemplazo: boolean; avisos: string[] }>({ accion: 'guardar', ...cuerpo })
+}
+
+async function postInforme<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {
+  try {
+    const r = await apiFetch('/api/meta-ads?recurso=informe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || d.ok !== true) {
+      const extra = d?.detalle ? ` — ${String(d.detalle).slice(0, 200)}` : ''
+      return { ok: false, motivo: `${String(d?.error ?? `HTTP ${r.status}`).slice(0, 200)}${extra}` }
+    }
+    return { ok: true, dato: d as T }
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
   }

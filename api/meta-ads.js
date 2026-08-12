@@ -32,6 +32,11 @@
 //   GET /api/meta-ads?recurso=planes[&estado=todos]
 //   GET /api/meta-ads?recurso=plan&id=<n>     → los PLANES por pasos: qué se está armando y por dónde
 //                                               va. Salen de la base, así que andan sin token.
+//   GET /api/meta-ads?recurso=informes[&linea=…]
+//   GET /api/meta-ads?recurso=informe&id=<n>  → los INFORMES del analista de pauta: el diagnóstico
+//                                               en prosa, guardado. Sale entero de la base. Ver
+//                                               `api/_meta-informes.js`.
+//   POST /api/meta-ads?recurso=informe        → subir / publicar / borrar un informe. No toca Meta.
 //   POST /api/meta-ads                        → accionar sobre la pauta. Ver `api/_meta-acciones.js`.
 //   POST /api/meta-ads?recurso=plan           → crear / avanzar / cancelar un plan por pasos, que es
 //                                               lo que hace que duplicar sobreviva a que se corte la
@@ -72,6 +77,7 @@ import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
 import reglasPost, { reglasGet } from './_meta-reglas.js';
 import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
+import informesPost, { informesGet } from './_meta-informes.js';
 import tendenciaGet from './_meta-tendencia.js';
 
 // La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
@@ -113,6 +119,12 @@ export default async function handler(req, res) {
   // «Cómo viene» del Panel: sale entero de la foto diaria. Es lo único de esa pantalla que sabe de
   // historia, y por eso es lo que sigue contestando cuando Graph no contesta.
   if (req.method === 'GET' && recurso === 'tendencia') return await tendenciaGet(res, perfil, req.query || {});
+  // Los informes del analista: prosa guardada en la base, cero llamadas a Meta. Es la lectura que
+  // MÁS falta cuando Graph no contesta —el último informe es lo que explica qué estaba pasando—, así
+  // que va arriba del guard por el mismo motivo que las reglas y el registro. El POST tampoco toca
+  // Meta: guarda un HTML, lo publica o lo borra.
+  if (req.method === 'GET' && (recurso === 'informes' || recurso === 'informe')) return await informesGet(res, perfil, req.query || {});
+  if (req.method === 'POST' && recurso === 'informe') return await informesPost(req, res, perfil);
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });
 
