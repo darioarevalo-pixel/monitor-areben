@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario|liquidacion|atencion|sistema&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario|liquidacion|atencion|sistema|agenda&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -19,6 +19,7 @@ import calendario from './_calendario.js';
 import liquidacion from './_liquidacion.js';
 import atencion from './_atencion.js';
 import sistema from './_sistema.js';
+import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
 import { soloMismoOrigen } from './_auth.js';
 
@@ -34,9 +35,11 @@ const RECURSOS = {
   calendario,
   liquidacion,
   atencion,
-  // `sistema` es el único que no tiene marca: novedades y manuales son del sistema, no de BDI ni de
-  // Zattia, y por eso su handler no valida `store`.
+  // `sistema` y `agenda` son los que no tienen marca: novedades, manuales y las promociones
+  // bancarias no son de BDI ni de Zattia, y por eso sus handlers no validan `store`. En la agenda,
+  // que una promo valga sólo para una marca se dice con su columna `marcas`, que es una lista.
   sistema,
+  agenda,
   // Ledger del sync de ventas TN→GN (Stunned). Entra por acá y no por un archivo propio en `api/`
   // porque el repo está a 3 funciones del límite del plan Hobby.
   'sync-tn': syncTn,

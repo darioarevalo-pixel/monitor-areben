@@ -719,6 +719,23 @@ export const PERM_CAT: PermCat[] = [
         "info": "Puede crear, editar, publicar y borrar manuales. Sin esto sólo se leen. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque un manual no tiene marca."
       }
     ]
+  },
+  {
+    "key": "agenda",
+    "area": "agenda",
+    "label": "Agenda",
+    "info": "Lo que hay que hacer o saber HOY: qué promoción bancaria corre hoy y cómo se cobra, con sus condiciones y el paso a paso. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_SIN_PERMISO, así que tildar o destildar esta fila NO cambia nada — una promo que no le llega a quien cobra no sirve. Lo único que se da acá es el permiso de cargar. Es distinta del Calendario, que es de Marketing y habla de fechas comerciales.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "cargar",
+        "label": "Puede cargar en la agenda",
+        "info": "Puede dar de alta, editar, apagar y borrar las promociones bancarias. Sin esto sólo se leen — que es lo que necesita el mostrador. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque una promo la define el banco y no tiene marca. ⚠️ Un sub NO se hereda de la función: si no se lo tildás a alguien a mano, nadie puede cargar nada."
+      }
+    ]
   }
 ]
 
@@ -729,6 +746,14 @@ export const NAV_CATS: NavCat[] = [
     "label": "Inicio",
     "keys": [
       "inicio"
+    ]
+  },
+  {
+    "id": "agenda",
+      "icono": "agenda",
+    "label": "Agenda",
+    "keys": [
+      "agenda"
     ]
   },
   {

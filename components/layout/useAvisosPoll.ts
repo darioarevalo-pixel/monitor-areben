@@ -10,6 +10,7 @@
 
 import { useEffect } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { useAgenda } from '@/store/useAgenda'
 import { POLL_AVISOS_MS, useAvisos } from '@/store/useAvisos'
 import { useSistema } from '@/store/useSistema'
 
@@ -17,6 +18,7 @@ export function useAvisosPoll(): void {
   const { perfil, marca } = useSesion()
   const cargar = useAvisos((s) => s.cargar)
   const cargarSistema = useSistema((s) => s.cargar)
+  const cargarAgenda = useAgenda((s) => s.cargar)
 
   useEffect(() => {
     if (!perfil) return
@@ -35,4 +37,13 @@ export function useAvisosPoll(): void {
     if (!perfil) return
     void cargarSistema()
   }, [perfil, cargarSistema])
+
+  // La agenda, por lo mismo y con un motivo propio: la promo de hoy se dibuja en el mostrador
+  // (`components/cupones`) además de en su sección, y eso no puede costar un fetch por lugar donde
+  // se muestra. Sin intervalo: una promo se carga con días de anticipación y no cambia mientras
+  // alguien está cobrando.
+  useEffect(() => {
+    if (!perfil) return
+    void cargarAgenda()
+  }, [perfil, cargarAgenda])
 }

@@ -27,6 +27,20 @@ const TRAZOS = {
       <path d="M9.8 20v-5.2h4.4V20" />
     </>
   ),
+  /**
+   * Agenda — una hoja de almanaque con el día marcado.
+   *
+   * Es a propósito un almanaque y no un reloj ni un check: lo que la sección contesta es "qué corre
+   * HOY", y el día es el eje. El calendario editorial no compite: ése no está en el sidebar de todos.
+   */
+  agenda: (
+    <>
+      <rect x="3.8" y="5.4" width="16.4" height="14.2" rx="2.2" />
+      <path d="M3.8 9.6h16.4" />
+      <path d="M8.4 3.8v3.2M15.6 3.8v3.2" />
+      <circle cx="12" cy="14.4" r="1.9" />
+    </>
+  ),
   /** Sistema — megáfono: el grupo de lo que hay que contarle al equipo. */
   sistema: (
     <>

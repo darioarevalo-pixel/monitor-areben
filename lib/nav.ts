@@ -47,14 +47,15 @@ export function itemsDeCat(cat: NavCat): NavItem[] {
  * 'usuarios' es caso especial: vive en NAV_CATS (adminOnly) pero no en PERM_CAT.
  *
  * ⚠️ **Esto es una puerta abierta por definición**: lo que entra acá lo ve todo el mundo, incluidos
- * los puestos compartidos (`Local`, `Depósito`), y no hay permiso que lo tape. 'novedades' y 'manuales' están acá
- * a propósito y es la contracara de que exista: una novedad que no le llega a alguien no sirve. El
- * sub-permiso `novedades.publicar` sí se tilda, porque escribir es otra cosa que leer.
+ * los puestos compartidos (`Local`, `Depósito`), y no hay permiso que lo tape. 'novedades', 'manuales' y 'agenda'
+ * están acá a propósito y es la contracara de que existan: una novedad que no le llega a alguien no
+ * sirve, y una promo bancaria que no le llega a quien cobra, tampoco. Los sub-permisos
+ * (`novedades.publicar`, `agenda.cargar`) sí se tildan, porque escribir es otra cosa que leer.
  *
- * `tests/nav-estructura.test.ts` exige que el set tenga exactamente estas keys: sumar una quinta
+ * `tests/nav-estructura.test.ts` exige que el set tenga exactamente estas keys: sumar una más
  * rompe, y eso es lo que obliga a pensarla.
  */
-export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen', 'novedades', 'manuales'])
+export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen', 'novedades', 'manuales', 'agenda'])
 
 /**
  * Secciones cuyo eje **no es la marca del sidebar**.
@@ -136,6 +137,7 @@ export function labelDeMenu(key: string): string {
  */
 const ICONO_POR_KEY: Record<string, string> = {
   inicio: 'inicio',
+  agenda: 'agenda',
   novedades: 'novedades',
   manuales: 'manuales',
   gerencial: 'gerencial',
@@ -273,6 +275,7 @@ export function tituloDesde(key: string, grupoId?: string | null): string {
  */
 export const DESCRIPCIONES: Record<string, string> = {
   inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
+  agenda: 'Qué corre hoy: las promociones bancarias vigentes, con sus condiciones y cómo se cobran.',
   novedades: 'Qué cambió en los sistemas, de lo más nuevo a lo más viejo.',
   manuales: 'Cómo se hace cada cosa: los procedimientos de trabajo, escritos.',
   usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',
