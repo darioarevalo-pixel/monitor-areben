@@ -5,6 +5,7 @@ import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
+import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -56,6 +57,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Reintentos: errores de red (fetch failed, ECONNRESET, timeouts) y HTTP 5xx
 async function gnFetch(path, retries = 5) {
+  // El corte por límite de solicitudes lleva su propio presupuesto: esperar un minuto no
+  // es "un intento fallido más", y gastarlo del de arriba dejaba el sync sin reintentos
+  // reales para los 5xx. Ver scripts/lib/gn-rate-limit.mjs.
+  let cortes = 0;
   for (let attempt = 1; attempt <= retries; attempt++) {
     let res, text;
     try {
@@ -75,7 +80,7 @@ async function gnFetch(path, retries = 5) {
     let data;
     try { data = JSON.parse(text); }
     catch {
-      if (res.status >= 500 && attempt < retries) {
+      if ((res.status >= 500 || esRateLimit(res, null)) && attempt < retries) {
         console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
         await sleep(2000 * attempt);
         continue;
@@ -83,6 +88,14 @@ async function gnFetch(path, retries = 5) {
       throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 200)}`);
     }
     if (!res.ok) {
+      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
+        cortes++;
+        const wait = esperaRateLimit(res, cortes);
+        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+        await sleep(wait);
+        attempt--; // el corte no gasta el presupuesto de reintentos de arriba
+        continue;
+      }
       if (res.status >= 500 && attempt < retries) {
         console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
         await sleep(2000 * attempt);
