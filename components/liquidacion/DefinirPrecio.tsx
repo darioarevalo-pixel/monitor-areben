@@ -35,6 +35,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Breakeven, Detalle, MatrizSim, Piso } from '@/components/comisiones/simulador'
 import { useCfgComisiones } from '@/components/comisiones/simulador/useCfgComisiones'
+import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { canales as canalesDe } from '@/lib/comisiones/core'
 import {
   anotarItem, avisos, decidirItem, despejarItem, precioDeSale,
@@ -47,6 +48,34 @@ import {
 
 /** Los descuentos que se piden de verdad. Es un atajo, el campo sigue aceptando cualquiera. */
 const ATAJOS = [20, 30, 40, 50]
+
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/** `2026-06-23` → `23-jun-26`. Sin `Date`: la fecha viene en día local y `new Date('…')` la corre. */
+function fechaCorta(iso: string): string {
+  const [a, m, d] = iso.split('-')
+  return `${Number(d)}-${MESES[Number(m) - 1] ?? '?'}-${a.slice(2)}`
+}
+
+/**
+ * El contexto que **no** va en la foto congelada, y por qué cada uno.
+ *
+ * 🔑 **La fecha de alta no se congela porque no se mueve.** La foto existe para que el margen que se
+ * aprobó no cambie debajo de la decisión; una fecha de ingreso es la misma hoy que en marzo, así que
+ * congelarla no protege nada y en cambio dejaría sin dato a los productos que ya entraron a una
+ * campaña (los 265 de la de agosto se congelaron sin este campo).
+ *
+ * 🔑 **Los talles se muestran a propósito COMO ESTÁN HOY.** Acá la pregunta no es con qué números se
+ * decidió, es "¿esto está clavado en serio?" — y un producto al que sólo le quedan dos talles raros
+ * no está clavado, está terminado. Por eso van rotulados «hoy» y no se comparan contra el stock de
+ * la foto.
+ */
+type Contexto = {
+  ingresoFecha: string | null
+  diasVivo: number | null
+  talles: { size: string; stock: number; deposito: number }[]
+  stockHoy: number | null
+}
 
 const numOrNull = (s: string): number | null => {
   const n = parseFloat(s)
@@ -79,6 +108,26 @@ export function DefinirPrecio({
   const { confirmar } = useConfirmar()
   const { cfg } = useCfgComisiones(marca)
   const cans = useMemo(() => canalesDe(marca === 'zattia'), [marca])
+
+  // ⚠️ El ETL puede no estar cargado todavía (a Liquidación se puede entrar directo, sin pasar por
+  // Análisis). No se espera ni se bloquea: lo de acá es **contexto**, no la decisión, así que
+  // mientras no esté se muestra «—» y aparece solo cuando el store publica. Ver el docblock de
+  // `Contexto` para por qué estos dos datos no viven en la foto congelada.
+  const { datos } = useDatosMonitor()
+  const ctx = useMemo<Contexto>(() => {
+    const p = datos?.allProductos?.find((x) => x.id === item.pid)
+    const vs = (datos?.allVariantes ?? []).filter((v) => v.pid === item.pid)
+    return {
+      ingresoFecha: p?.ingresoFecha ?? null,
+      diasVivo: p?.diasVivo ?? null,
+      // Con stock primero y el resto después: el que quedó en 0 también dice algo ("se agotó el
+      // talle que se vendía"), pero no puede tapar al que todavía se puede vender.
+      talles: vs
+        .map((v) => ({ size: v.size || '—', stock: v.stock, deposito: v.deposito }))
+        .sort((a, b) => (b.stock > 0 ? 1 : 0) - (a.stock > 0 ? 1 : 0) || b.stock - a.stock),
+      stockHoy: vs.length ? vs.reduce((s, v) => s + v.stock, 0) : null,
+    }
+  }, [datos, item.pid])
 
   const { costo, sinCosto, precioNormal, promoPrevia } = item.foto
   const hayMargen = !sinCosto && costo > 0
@@ -296,7 +345,7 @@ export function DefinirPrecio({
           apila solas en pantalla angosta, sin ninguna media query nueva. */}
       <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '1 1 400px', minWidth: 300 }}>
-          <FichaProducto item={item} />
+          <FichaProducto item={item} ctx={ctx} />
 
           {misAvisos.map((a) => (
             <Notice key={a.clave} tone={a.nivel === 'alto' ? 'danger' : 'warning'} style={{ marginBottom: space[2] }}>
@@ -458,8 +507,10 @@ export function DefinirPrecio({
 }
 
 /** La foto congelada: lo que se mira para decidir si este producto va a la liquidación. */
-function FichaProducto({ item }: { item: LiquidacionItem }) {
+function FichaProducto({ item, ctx }: { item: LiquidacionItem; ctx: Contexto }) {
   const f = item.foto
+  const conStock = ctx.talles.filter((t) => t.stock > 0)
+  const enDeposito = conStock.reduce((s, t) => s + t.deposito, 0)
   return (
     <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', marginBottom: space[3] }}>
       {f.imagen ? (
@@ -485,9 +536,37 @@ function FichaProducto({ item }: { item: LiquidacionItem }) {
           <Dato rotulo="Costo" valor={f.sinCosto ? 'no vino de GN' : formatMoney(f.costo)} tono={f.sinCosto ? color.dangerInk : undefined} />
           <Dato rotulo="Stock" valor={String(f.stock)} />
           <Dato rotulo="Ventas 90 d" valor={String(f.ventas90)} />
+          {/* Al lado de las ventas a propósito: los dos juntos son la pregunta completa. "4 ventas en
+              90 días" no dice lo mismo si el producto entró hace tres semanas que si está desde
+              marzo — en el primer caso todavía no arrancó, en el segundo está clavado. */}
+          <Dato
+            rotulo="Ingresó"
+            valor={ctx.ingresoFecha ? fechaCorta(ctx.ingresoFecha) : '—'}
+            tono={ctx.diasVivo != null && ctx.diasVivo < 60 ? color.warningInk : undefined}
+          />
           <Dato rotulo="Sin vender hace" valor={f.diasSinVender > 0 ? `${f.diasSinVender} d` : '—'} />
           <Dato rotulo="Vida útil" valor={f.vidaUtil != null ? `${Math.round(f.vidaUtil)} d` : '—'} />
         </div>
+
+        {ctx.talles.length > 0 && (
+          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[2], lineHeight: 1.5 }}>
+            {conStock.length === 0 ? (
+              'Sin stock en ningún talle hoy.'
+            ) : (
+              <>
+                <b style={{ fontWeight: weight.medium }}>Talles hoy:</b>{' '}
+                {conStock.map((t) => `${t.size} ${t.stock}`).join(' · ')}
+                {ctx.talles.length > conStock.length && (
+                  <> — agotados: {ctx.talles.filter((t) => t.stock === 0).map((t) => t.size).join(', ')}</>
+                )}
+                {ctx.stockHoy != null && ctx.stockHoy !== f.stock && (
+                  <> · <b style={{ fontWeight: weight.medium }}>{ctx.stockHoy} en total hoy</b>, eran {f.stock} al entrar a la campaña</>
+                )}
+                {enDeposito > 0 && <> · {enDeposito} en depósito</>}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
