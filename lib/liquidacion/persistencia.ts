@@ -115,6 +115,15 @@ export async function guardarItem(store: Marca, liqId: string, item: Liquidacion
   return d.item as LiquidacionItem
 }
 
+/**
+ * La segunda mirada. Va por su propia acción y no por `guardarItem` porque **pide admin**: si el
+ * estado `confirmado` pudiera viajar en un guardado común, quien pone el precio se confirmaría solo.
+ */
+export async function revisarItem(store: Marca, liqId: string, item: LiquidacionItem): Promise<LiquidacionItem> {
+  const d = await postear({ store, action: 'revisar', id: liqId, item }, 'No se pudo guardar la revisión.')
+  return d.item as LiquidacionItem
+}
+
 /** Cambia sólo el estado de un ítem (descartar, volver a pendiente). */
 export async function estadoItem(store: Marca, liqId: string, pid: string, estado: EstadoItem): Promise<void> {
   await postear({ store, action: 'estado-item', id: liqId, pid, estado }, 'No se pudo cambiar el estado del producto.')

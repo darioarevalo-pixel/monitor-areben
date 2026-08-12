@@ -76,6 +76,7 @@ type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifesp
 const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
   pendiente: 'ya está · sin definir',
   definido: 'ya está · con precio',
+  confirmado: 'ya está · precio confirmado',
   descartado: 'ya está · descartado',
   aplicado: 'ya está · aplicado',
 }

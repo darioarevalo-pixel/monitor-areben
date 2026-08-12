@@ -286,8 +286,10 @@ export function resultadoCampania(
     }
   })
 
+  // `confirmado` es un `definido` con segunda mirada: para el resultado son lo mismo, se les decidió
+  // un precio. Dejarlo afuera vaciaría la tabla de una campaña que pasó por revisión.
   const liquidados = resultados.filter(
-    (r) => (r.estado === 'definido' || r.estado === 'aplicado') && (r.precioDecidido || 0) > 0,
+    (r) => (r.estado === 'definido' || r.estado === 'confirmado' || r.estado === 'aplicado') && (r.precioDecidido || 0) > 0,
   )
   const control = resultados.filter((r) => r.estado === 'descartado')
 

@@ -50,10 +50,12 @@ import {
 } from '@/lib/liquidacion'
 import {
   borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, guardarItem, leerCampanias,
-  leerItems, quitarItem, renombrarCampania, type Permisos,
+  leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
+import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { DefinirPrecio } from './DefinirPrecio'
 import { Resultado } from './Resultado'
+import { Revision } from './Revision'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
@@ -71,6 +73,7 @@ const ROTULO_CAMPANIA: Record<EstadoCampania, { label: string; tono: Tone }> = {
 const ROTULO_ITEM: Record<EstadoItem, { label: string; tono: Tone }> = {
   pendiente: { label: 'Sin definir', tono: 'warning' },
   definido: { label: 'Definido', tono: 'brand' },
+  confirmado: { label: 'Confirmado', tono: 'success' },
   descartado: { label: 'Descartado', tono: 'neutral' },
   aplicado: { label: 'Aplicado', tono: 'success' },
 }
@@ -155,7 +158,7 @@ export function Liquidacion() {
     const ok = await confirmar({
       titulo: 'Borrar la campaña',
       mensaje: c.conteo.total
-        ? `"${c.nombre}" tiene ${c.conteo.total} ${c.conteo.total === 1 ? 'producto' : 'productos'}${c.conteo.definidos ? `, ${c.conteo.definidos} con precio decidido` : ''}. Se borra todo.`
+        ? `"${c.nombre}" tiene ${c.conteo.total} ${c.conteo.total === 1 ? 'producto' : 'productos'}${c.conteo.definidos + c.conteo.confirmados ? `, ${c.conteo.definidos + c.conteo.confirmados} con precio decidido` : ''}. Se borra todo.`
         : `Se borra "${c.nombre}".`,
       ok: 'Borrar',
       tono: 'danger',
@@ -259,7 +262,7 @@ function ListaCampanias({
               <Td><StatusPill tone={r.tono} label={r.label} /></Td>
               <Td align="right">{c.conteo.total}</Td>
               <Td align="right">
-                {c.conteo.definidos + c.conteo.aplicados}
+                {c.conteo.definidos + c.conteo.confirmados + c.conteo.aplicados}
                 {c.conteo.pendientes > 0 && (
                   <span style={{ color: color.mut, fontSize: font.sm }}> · {c.conteo.pendientes} sin definir</span>
                 )}
@@ -340,10 +343,37 @@ function DetalleCampania({
       // Primero lo que espera una decisión nuestra; dentro de cada grupo, el que tiene más plata
       // parada arriba. Ordenar por nombre pondría a la vista lo que da lo mismo mirar primero.
       .sort((a, b) => {
-        const peso = (e: EstadoItem) => (e === 'pendiente' ? 0 : e === 'definido' ? 1 : e === 'aplicado' ? 2 : 3)
+        // `confirmado` pesa lo mismo que `definido`: para esta grilla los dos son "ya tiene
+        // precio", y separarlos mandaría al fondo justo los que un revisor acaba de mirar.
+        const peso = (e: EstadoItem) =>
+          e === 'pendiente' ? 0 : e === 'definido' || e === 'confirmado' ? 1 : e === 'aplicado' ? 2 : 3
         return peso(a.estado) - peso(b.estado) || b.foto.costo * b.foto.stock - a.foto.costo * a.foto.stock
       })
   }, [items, busqueda, filtro])
+
+  /**
+   * La fecha de alta del producto, del ETL. No está en la foto congelada y no hace falta que esté:
+   * no se mueve nunca (ver el docblock de `Contexto` en `DefinirPrecio`). Si el ETL todavía no
+   * cargó devuelve `null` y la columna muestra «—» — es contexto, no frena la revisión.
+   */
+  const { datos } = useDatosMonitor()
+  const ingresos = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const p of datos?.allProductos ?? []) if (p.ingresoFecha) m[p.id] = p.ingresoFecha
+    return m
+  }, [datos])
+  const ingresoDe = useCallback((pid: string) => ingresos[pid] ?? null, [ingresos])
+
+  async function guardarRevision(item: LiquidacionItem) {
+    try {
+      await revisarItem(marca, campania.id, item)
+      await cargar()
+      onCambio()
+      toast.ok(item.estado === 'confirmado' ? 'Precio confirmado.' : 'Devuelto con el motivo.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la revisión.')
+    }
+  }
 
   async function moverEstado(item: LiquidacionItem, estado: EstadoItem) {
     try {
@@ -474,9 +504,26 @@ function DetalleCampania({
             decirlo es quien lo cargó. **No se le cree a ciegas**: la pestaña Resultado contrasta esa
             marca contra el precio que se cobró de verdad.
           */}
+          {/*
+            🔑 **Frenado mientras falte revisar un precio.** Es la mitad visible de la puerta; la
+            otra está en el handler, porque deshabilitar un botón no impide nada — se saltea
+            recargando en otro estado. El cartel dice cuántos faltan y adónde ir: un botón apagado
+            sin motivo es lo que hace pensar que la pantalla está rota.
+          */}
           {campania.estado === 'en_curso' && puede.aplicar && (
-            <Button variant="soft" tone="brand" size="sm" onClick={() => void cambiarEstado('aplicada')}>
-              Ya cargué los precios
+            <Button
+              variant="soft"
+              tone="brand"
+              size="sm"
+              disabled={resumen.definidos > 0}
+              title={
+                resumen.definidos > 0
+                  ? `Faltan revisar ${resumen.definidos} ${resumen.definidos === 1 ? 'precio' : 'precios'} en la pestaña Revisión.`
+                  : undefined
+              }
+              onClick={() => void cambiarEstado('aplicada')}
+            >
+              {resumen.definidos > 0 ? `Faltan revisar ${resumen.definidos}` : 'Ya cargué los precios'}
             </Button>
           )}
           {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && (
@@ -496,10 +543,20 @@ function DetalleCampania({
         <Tabs
           variant="underline"
           style={{ marginBottom: space[4] }}
-          value={pestania === 'resultado' ? 'resultado' : 'productos'}
+          value={pestania === 'resultado' || pestania === 'revision' ? pestania : 'productos'}
           onChange={setPestania}
           items={[
             { key: 'productos', label: 'Productos', badge: resumen.total || undefined },
+            {
+              key: 'revision',
+              label: 'Revisión',
+              // El badge cuenta los que **esperan una mirada**, no los que ya pasaron: es un
+              // pendiente, y un número que no baja nunca deja de mirarse a la semana.
+              badge: resumen.definidos || undefined,
+              hint: resumen.definidos
+                ? `${resumen.definidos} ${resumen.definidos === 1 ? 'precio espera' : 'precios esperan'} una segunda mirada`
+                : 'Todos los precios decididos ya están revisados',
+            },
             {
               key: 'resultado',
               label: 'Resultado',
@@ -515,7 +572,16 @@ function DetalleCampania({
 
       {items !== null && pestania === 'resultado' && <Resultado campania={campania} items={items} />}
 
-      {items !== null && pestania !== 'resultado' && (
+      {items !== null && pestania === 'revision' && (
+        <Revision
+          items={items}
+          puedeRevisar={puede.admin && campania.estado !== 'cerrada'}
+          ingresoDe={ingresoDe}
+          onRevisar={guardarRevision}
+        />
+      )}
+
+      {items !== null && pestania !== 'resultado' && pestania !== 'revision' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[3], marginBottom: space[4] }}>
             <KpiCard label="Productos" value={String(resumen.total)} sub={resumen.pendientes ? `${resumen.pendientes} sin definir` : 'todos definidos'} />
@@ -547,6 +613,7 @@ function DetalleCampania({
               <option value="">Todos ({resumen.total})</option>
               <option value="pendiente">Sin definir ({resumen.pendientes})</option>
               <option value="definido">Definidos ({resumen.definidos})</option>
+              <option value="confirmado">Confirmados ({resumen.confirmados})</option>
               <option value="descartado">Descartados ({resumen.descartados})</option>
               <option value="aplicado">Aplicados ({resumen.aplicados})</option>
             </Select>

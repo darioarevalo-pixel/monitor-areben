@@ -9,7 +9,7 @@
 
 import { armarItemSale, redondear90 } from '@/lib/comisiones/core'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
-import type { Aviso, ConteoCampania, DecisionItem, EstadoItem, LiquidacionItem } from './tipos'
+import type { Aviso, ConteoCampania, DecisionItem, EstadoItem, LiquidacionItem, RevisionItem } from './tipos'
 
 /** Id de campaña. Se genera en el cliente, como en `disenos` y el calendario. */
 export function nuevoIdLiquidacion(): string {
@@ -27,6 +27,11 @@ const DECISION_VACIA = (): DecisionItem => ({
 })
 
 const APLICACION_VACIA = () => ({ aplicadoEn: null, variantesEscritas: null, categoriaSaleAgregada: false })
+
+const REVISION_VACIA = (): RevisionItem => ({ porQuien: null, cuando: null, objecion: null, precioAnterior: null })
+
+/** La revisión de un ítem, tolerando los que se guardaron antes de que existiera. */
+export const revisionDe = (item: LiquidacionItem): RevisionItem => item.revision ?? REVISION_VACIA()
 
 /**
  * La foto del producto en este momento. Se congela al mandarlo desde Análisis y no se vuelve a
@@ -62,6 +67,7 @@ export function armarItemDesdeProducto(
       imagen: tn?.imagen || null,
     },
     decision: DECISION_VACIA(),
+    revision: REVISION_VACIA(),
     aplicacion: APLICACION_VACIA(),
   }
 }
@@ -103,7 +109,62 @@ export function decidirItem(
       porQuien: quien ?? item.decision.porQuien,
       cuando: Date.now(),
     },
+    // 🔑 **Un precio nuevo borra la revisión, en los dos sentidos.** Si estaba objetado, la
+    // objeción era contra el número viejo y dejarla pegada al nuevo acusa de algo que ya no está;
+    // si estaba confirmado, alguien confirmó otro precio y seguir mostrándolo como revisado sería
+    // exactamente la mentira que la pestaña Revisión existe para evitar. Vuelve a la cola.
+    revision: REVISION_VACIA(),
   }
+}
+
+/**
+ * La segunda mirada, con o sin cambio de precio.
+ *
+ * El revisor puede tocar el número y confirmar en un solo paso (decisión de Bruno: el ida y vuelta
+ * por un precio que está diez pesos corrido no paga). Cuando lo toca, se guarda **contra qué lo
+ * cambió**: `decidirItem` ya reescribió `decision.porQuien` con el nombre del revisor, así que sin
+ * `precioAnterior` el que lo había puesto no tiene forma de ver qué le movieron.
+ */
+export function confirmarItem(
+  item: LiquidacionItem,
+  quien: string | null,
+  precio?: { precioSale: number } | { pctDesc: number },
+): LiquidacionItem {
+  const antes = item.decision.precioSale
+  const base = precio ? decidirItem(item, precio, quien) : item
+  const cambio = precio != null && base.decision.precioSale !== antes
+  return {
+    ...base,
+    estado: 'confirmado',
+    revision: { porQuien: quien, cuando: Date.now(), objecion: null, precioAnterior: cambio ? antes : null },
+  }
+}
+
+/**
+ * Objetar: el ítem **vuelve a `definido`** con el motivo escrito, no a `pendiente`.
+ *
+ * El precio se conserva a propósito. Objetar no es borrar: quien lo puso tiene que poder ver qué
+ * número se cuestionó, y volverlo a `pendiente` le haría empezar de cero sobre un producto que ya
+ * había mirado.
+ */
+export function objetarItem(item: LiquidacionItem, quien: string | null, motivo: string): LiquidacionItem {
+  const m = (motivo || '').trim()
+  if (!m) throw new Error('Objetar pide un motivo.')
+  return {
+    ...item,
+    estado: 'definido',
+    revision: { porQuien: quien, cuando: Date.now(), objecion: m, precioAnterior: null },
+  }
+}
+
+/** Los que tienen precio y todavía nadie miró (incluye los objetados: siguen sin resolverse). */
+export function faltanRevisar(items: LiquidacionItem[]): LiquidacionItem[] {
+  return items.filter((i) => i.estado === 'definido')
+}
+
+/** Los que un revisor devolvió con motivo. Son los que le vuelven a la pila al que puso el precio. */
+export function objetados(items: LiquidacionItem[]): LiquidacionItem[] {
+  return items.filter((i) => i.estado === 'definido' && !!revisionDe(i).objecion)
 }
 
 /**
@@ -133,6 +194,8 @@ export function despejarItem(item: LiquidacionItem): LiquidacionItem {
     ...item,
     estado: 'pendiente',
     decision: { ...DECISION_VACIA(), nota: item.decision.nota },
+    // Sin precio no hay nada que revisar: la revisión se va con él, igual que en `decidirItem`.
+    revision: REVISION_VACIA(),
   }
 }
 
@@ -141,6 +204,7 @@ export function contar(items: LiquidacionItem[]): ConteoCampania {
     total: items.length,
     pendientes: items.filter((i) => i.estado === 'pendiente').length,
     definidos: items.filter((i) => i.estado === 'definido').length,
+    confirmados: items.filter((i) => i.estado === 'confirmado').length,
     descartados: items.filter((i) => i.estado === 'descartado').length,
     aplicados: items.filter((i) => i.estado === 'aplicado').length,
   }
@@ -166,7 +230,10 @@ export interface ResumenCampania extends ConteoCampania {
  */
 export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
   const vivos = items.filter((i) => i.estado !== 'descartado')
-  const definidos = items.filter((i) => (i.estado === 'definido' || i.estado === 'aplicado') && i.decision.precioSale)
+  // `confirmado` cuenta como definido para las plata: es el mismo precio, mirado por otra persona.
+  const definidos = items.filter(
+    (i) => (i.estado === 'definido' || i.estado === 'confirmado' || i.estado === 'aplicado') && i.decision.precioSale,
+  )
 
   let unidades = 0
   let sumaDesc = 0
@@ -187,9 +254,15 @@ export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
   }
 }
 
-/** Los que están listos para escribirle el precio a Gestión Nube (tanda 3). */
+/**
+ * Los que están listos para escribirle el precio a Gestión Nube (tanda 3).
+ *
+ * 🔑 **Pide `confirmado`, no `definido`.** Desde que existe la revisión, un precio sin segunda
+ * mirada no está listo para cargarse: si acá entrara un `definido`, la pestaña Revisión sería un
+ * cartel y no una puerta.
+ */
 export function itemsAplicables(items: LiquidacionItem[]): LiquidacionItem[] {
-  return items.filter((i) => i.estado === 'definido' && (i.decision.precioSale || 0) > 0)
+  return items.filter((i) => i.estado === 'confirmado' && (i.decision.precioSale || 0) > 0)
 }
 
 /**

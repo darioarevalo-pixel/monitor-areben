@@ -39,7 +39,7 @@ function cfgFor(store) {
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const ESTADOS_CAMPANIA = ['borrador', 'en_curso', 'aplicada', 'cerrada'];
-const ESTADOS_ITEM = ['pendiente', 'definido', 'descartado', 'aplicado'];
+const ESTADOS_ITEM = ['pendiente', 'definido', 'confirmado', 'descartado', 'aplicado'];
 
 // El tope de un "Mandar a liquidación". No es capricho: son N inserts en un request, y esta es la
 // primera acción del módulo con costo O(N). Con la tabla de Análisis paginada de a 50, mandar 200
@@ -61,7 +61,7 @@ function aCampania(row, conteo) {
     nota: d.nota || null,
     creadoPor: d.creadoPor || null,
     creado: d.creado || null,
-    conteo: conteo || { total: 0, pendientes: 0, definidos: 0, descartados: 0, aplicados: 0 },
+    conteo: conteo || { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 },
   };
 }
 
@@ -78,6 +78,7 @@ function itemDelBody(raw) {
   const f = raw.foto || {};
   const d = raw.decision || {};
   const a = raw.aplicacion || {};
+  const r = raw.revision || {};
   const estado = ESTADOS_ITEM.includes(raw.estado) ? raw.estado : 'pendiente';
   return {
     pid: String(raw.pid),
@@ -106,6 +107,12 @@ function itemDelBody(raw) {
       nota: txtOrNull(d.nota),
       porQuien: txtOrNull(d.porQuien),
       cuando: d.cuando == null ? null : num(d.cuando),
+    },
+    revision: {
+      porQuien: txtOrNull(r.porQuien),
+      cuando: r.cuando == null ? null : num(r.cuando),
+      objecion: txtOrNull(r.objecion),
+      precioAnterior: r.precioAnterior == null ? null : num(r.precioAnterior),
     },
     aplicacion: {
       aplicadoEn: a.aplicadoEn == null ? null : num(a.aplicadoEn),
@@ -175,10 +182,11 @@ export default async function handler(req, res) {
 
       const conteos = {};
       for (const it of i.data || []) {
-        const k = conteos[it.liq_id] || (conteos[it.liq_id] = { total: 0, pendientes: 0, definidos: 0, descartados: 0, aplicados: 0 });
+        const k = conteos[it.liq_id] || (conteos[it.liq_id] = { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 });
         k.total += 1;
         if (it.estado === 'pendiente') k.pendientes += 1;
         else if (it.estado === 'definido') k.definidos += 1;
+        else if (it.estado === 'confirmado') k.confirmados += 1;
         else if (it.estado === 'descartado') k.descartados += 1;
         else if (it.estado === 'aplicado') k.aplicados += 1;
       }
@@ -269,6 +277,21 @@ export default async function handler(req, res) {
       if (estado === 'aplicada' && !puede.aplicar) {
         return res.status(403).json({ error: 'Marcar los precios como cargados pide el permiso «Puede escribir los precios en Gestión Nube».' });
       }
+      // 🔑 **La revisión frena acá, no sólo en el botón.** Deshabilitar el botón es una comodidad;
+      // la puerta tiene que estar del lado del servidor o alcanza con recargar en otro estado para
+      // saltearla. Es una consulta de una columna y sólo en esta acción, que se aprieta una vez por
+      // campaña. Los objetados también son `definido`: siguen sin resolverse.
+      if (estado === 'aplicada') {
+        const { data: sinRevisar, error: e0 } = await supabase.from('liquidacion_items')
+          .select('pid').eq('store', store).eq('liq_id', id).eq('estado', 'definido');
+        if (e0) throw new Error(e0.message);
+        const n = (sinRevisar || []).length;
+        if (n > 0) {
+          return res.status(400).json({
+            error: `Faltan revisar ${n} ${n === 1 ? 'precio' : 'precios'}. Miralos en la pestaña Revisión antes de marcarla como cargada.`,
+          });
+        }
+      }
       const { error } = await supabase.from('liquidaciones')
         .update({ estado, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);
@@ -326,6 +349,13 @@ export default async function handler(req, res) {
       if (item.estado === 'aplicado') {
         return res.status(400).json({ error: 'Un producto pasa a "aplicado" solo, cuando se le escribe el precio.' });
       }
+      // 🔴 **`confirmado` NO entra por acá, y es la guarda que sostiene toda la revisión.** Este
+      // handler lo puede llamar cualquiera con acceso a la sección; si el estado viajara en el body,
+      // el que pone el precio se confirma a sí mismo y la segunda mirada deja de existir sin que
+      // nada falle. Se confirma por `action:'revisar'`, que pide admin.
+      if (item.estado === 'confirmado') {
+        return res.status(400).json({ error: 'Confirmar un precio va por la pestaña Revisión.' });
+      }
       const { error } = await supabase.from('liquidacion_items').upsert(
         [{ liq_id: id, store, pid: item.pid, estado: item.estado, datos: item, updated_at: ahora }],
         { onConflict: 'store,liq_id,pid' },
@@ -339,8 +369,11 @@ export default async function handler(req, res) {
       const pid = String(b.pid || '');
       const estado = String(b.estado || '');
       if (!pid) return res.status(400).json({ error: 'falta el producto' });
-      if (!ESTADOS_ITEM.includes(estado) || estado === 'aplicado') {
-        return res.status(400).json({ error: `estado inválido (usá ${ESTADOS_ITEM.filter((e) => e !== 'aplicado').join(', ')})` });
+      // `aplicado` y `confirmado` no se ponen a mano desde acá: el primero lo escribe el aplicador,
+      // el segundo va por `action:'revisar'` porque pide admin (ver la guarda de `guardar-item`).
+      const A_MANO = ESTADOS_ITEM.filter((e) => e !== 'aplicado' && e !== 'confirmado');
+      if (!A_MANO.includes(estado)) {
+        return res.status(400).json({ error: `estado inválido (usá ${A_MANO.join(', ')})` });
       }
       const { data: previo, error: e0 } = await supabase.from('liquidacion_items')
         .select('datos').eq('store', store).eq('liq_id', id).eq('pid', pid).maybeSingle();
@@ -352,6 +385,38 @@ export default async function handler(req, res) {
         .update({ estado, datos, updated_at: ahora }).eq('store', store).eq('liq_id', id).eq('pid', pid);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    // ── La segunda mirada: confirmar u objetar un precio. Sólo admin. ──────────────────────────
+    //
+    // Va aparte de `guardar-item` justamente por el permiso: aquel lo puede llamar cualquiera con
+    // acceso a la sección, y si `confirmado` pudiera viajar en ese body, quien pone el precio se
+    // confirmaría a sí mismo. El ítem llega armado por `confirmarItem`/`objetarItem` (mismo patrón
+    // que el resto del módulo: la lógica pura vive en `lib/liquidacion/core.ts` y se testea sola).
+    if (b.action === 'revisar') {
+      if (!puede.admin) {
+        return res.status(403).json({ error: 'Confirmar u objetar un precio lo puede hacer un admin.' });
+      }
+      const item = itemDelBody(b.item);
+      if (!item) return res.status(400).json({ error: 'falta el producto (o no tiene id)' });
+      if (item.estado !== 'confirmado' && item.estado !== 'definido') {
+        return res.status(400).json({ error: 'una revisión deja el producto en "confirmado" o en "definido"' });
+      }
+      // Objetar sin motivo es lo mismo que no contestar: el que puso el precio ve que volvió y no
+      // sabe por qué. El cliente lo exige y acá se vuelve a exigir, que es donde no se puede saltear.
+      if (item.estado === 'definido' && !item.revision.objecion) {
+        return res.status(400).json({ error: 'devolver un precio pide un motivo' });
+      }
+      const { data: previo, error: e0 } = await supabase.from('liquidacion_items')
+        .select('pid').eq('store', store).eq('liq_id', id).eq('pid', item.pid).maybeSingle();
+      if (e0) throw new Error(e0.message);
+      if (!previo) return res.status(404).json({ error: 'ese producto no está en la campaña' });
+
+      const { error } = await supabase.from('liquidacion_items')
+        .update({ estado: item.estado, datos: item, updated_at: ahora })
+        .eq('store', store).eq('liq_id', id).eq('pid', item.pid);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, item });
     }
 
     // ── Sacar un producto de la campaña. ⚠️ Distinto de descartarlo. ───────────────────────────

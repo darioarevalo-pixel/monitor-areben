@@ -3,13 +3,18 @@ import {
   anotarItem,
   armarItemDesdeProducto,
   avisos,
+  confirmarItem,
   contar,
   decidirItem,
   despejarItem,
+  faltanRevisar,
   faltantes,
   itemsAplicables,
+  objetados,
+  objetarItem,
   precioDeSale,
   resumenCampania,
+  revisionDe,
 } from '@/lib/liquidacion'
 import type { EstadoItem, LiquidacionItem } from '@/lib/liquidacion'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
@@ -238,7 +243,7 @@ describe('resumenCampania', () => {
       item({ id: 'b' }, { pctDesc: 30 }),
       { ...item({ id: 'c' }), estado: 'descartado' as const },
     ]
-    expect(contar(items)).toEqual({ total: 3, pendientes: 1, definidos: 1, descartados: 1, aplicados: 0 })
+    expect(contar(items)).toEqual({ total: 3, pendientes: 1, definidos: 1, confirmados: 0, descartados: 1, aplicados: 0 })
   })
 
   it('🔑 el descuento promedio va ponderado por STOCK, no por producto', () => {
@@ -277,13 +282,95 @@ describe('resumenCampania', () => {
 })
 
 describe('itemsAplicables', () => {
-  it('sólo los definidos con precio: un pendiente o un descartado no se escriben en Gestión Nube', () => {
+  it('🔑 pide CONFIRMADO: un precio sin segunda mirada no se escribe en Gestión Nube', () => {
+    // Si acá entrara un `definido`, la pestaña Revisión sería un cartel y no una puerta.
     const definido = decidirItem(armarItemDesdeProducto(prod({ id: 'a' })), { pctDesc: 30 })
+    const confirmado = confirmarItem({ ...definido, pid: 'e' }, 'Darío')
     const pendiente = armarItemDesdeProducto(prod({ id: 'b' }))
     const descartado = { ...decidirItem(armarItemDesdeProducto(prod({ id: 'c' })), { pctDesc: 30 }), estado: 'descartado' as const }
     const aplicado = { ...definido, pid: 'd', estado: 'aplicado' as const }
 
-    expect(itemsAplicables([definido, pendiente, descartado, aplicado]).map((i) => i.pid)).toEqual(['a'])
+    expect(itemsAplicables([definido, confirmado, pendiente, descartado, aplicado]).map((i) => i.pid)).toEqual(['e'])
+  })
+})
+
+describe('la segunda mirada', () => {
+  const conPrecio = (id: string) => decidirItem(armarItemDesdeProducto(prod({ id })), { pctDesc: 30 }, 'Bruno')
+
+  it('confirmar sin tocar el precio no lo mueve, y deja quién y cuándo', () => {
+    const i = conPrecio('a')
+    const c = confirmarItem(i, 'Darío')
+    expect(c.estado).toBe('confirmado')
+    expect(c.decision.precioSale).toBe(i.decision.precioSale)
+    expect(revisionDe(c).porQuien).toBe('Darío')
+    expect(revisionDe(c).cuando).toBeTypeOf('number')
+    expect(revisionDe(c).precioAnterior).toBeNull()
+  })
+
+  it('🔑 confirmar cambiando el precio guarda contra qué lo cambió', () => {
+    // Sin `precioAnterior`, `decision.porQuien` ya quedó pisado con el nombre del revisor y el que
+    // lo había puesto no tiene forma de ver qué le movieron.
+    const i = conPrecio('a')
+    const c = confirmarItem(i, 'Darío', { precioSale: 19990 })
+    expect(c.estado).toBe('confirmado')
+    expect(c.decision.precioSale).toBe(19990)
+    expect(revisionDe(c).precioAnterior).toBe(i.decision.precioSale)
+  })
+
+  it('confirmar con el MISMO precio no inventa un cambio', () => {
+    const i = conPrecio('a')
+    const c = confirmarItem(i, 'Darío', { precioSale: i.decision.precioSale! })
+    expect(revisionDe(c).precioAnterior).toBeNull()
+  })
+
+  it('objetar deja el precio donde está y lo devuelve a definido, no a pendiente', () => {
+    // Objetar no es borrar: quien lo puso tiene que ver qué número se cuestionó.
+    const i = conPrecio('a')
+    const o = objetarItem(i, 'Darío', 'queda abajo del costo con la comisión de TN')
+    expect(o.estado).toBe('definido')
+    expect(o.decision.precioSale).toBe(i.decision.precioSale)
+    expect(revisionDe(o).objecion).toBe('queda abajo del costo con la comisión de TN')
+  })
+
+  it('objetar sin motivo no se puede: una devolución muda se lee igual que "no lo miré"', () => {
+    expect(() => objetarItem(conPrecio('a'), 'Darío', '   ')).toThrow()
+  })
+
+  it('🔴 un precio nuevo BORRA la revisión, venga de una confirmación o de una objeción', () => {
+    // Si la objeción quedara pegada, acusaría al número nuevo de algo que era del viejo; y una
+    // confirmación que sobrevive a un cambio de precio dice que alguien miró lo que nunca vio.
+    const objetado = objetarItem(conPrecio('a'), 'Darío', 'muy bajo')
+    const reprecio = decidirItem(objetado, { pctDesc: 20 }, 'Bruno')
+    expect(reprecio.estado).toBe('definido')
+    expect(revisionDe(reprecio).objecion).toBeNull()
+
+    const confirmado = confirmarItem(conPrecio('b'), 'Darío')
+    const recambiado = decidirItem(confirmado, { pctDesc: 25 }, 'Bruno')
+    expect(recambiado.estado).toBe('definido')
+    expect(revisionDe(recambiado).porQuien).toBeNull()
+  })
+
+  it('despejar el precio también se lleva la revisión', () => {
+    const c = confirmarItem(conPrecio('a'), 'Darío')
+    expect(revisionDe(despejarItem(c)).porQuien).toBeNull()
+  })
+
+  it('faltanRevisar cuenta los definidos, objetados incluidos; los confirmados no', () => {
+    const sinMirar = conPrecio('a')
+    const objetado = objetarItem(conPrecio('b'), 'Darío', 'muy bajo')
+    const confirmado = confirmarItem(conPrecio('c'), 'Darío')
+    const pendiente = armarItemDesdeProducto(prod({ id: 'd' }))
+    const items = [sinMirar, objetado, confirmado, pendiente]
+
+    expect(faltanRevisar(items).map((i) => i.pid)).toEqual(['a', 'b'])
+    expect(objetados(items).map((i) => i.pid)).toEqual(['b'])
+  })
+
+  it('un ítem viejo sin el campo `revision` no rompe', () => {
+    const viejo = { ...conPrecio('a') } as LiquidacionItem
+    delete viejo.revision
+    expect(revisionDe(viejo).porQuien).toBeNull()
+    expect(faltanRevisar([viejo]).map((i) => i.pid)).toEqual(['a'])
   })
 })
 

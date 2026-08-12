@@ -23,11 +23,15 @@ export type EstadoCampania = 'borrador' | 'en_curso' | 'aplicada' | 'cerrada'
  *
  * 🔑 `descartado` **no** es borrarlo. Que un producto se haya mirado y no vaya es información: sin
  * ese estado, el mismo producto vuelve a aparecer en la próxima pasada y se lo vuelve a evaluar.
+ *
+ * 🔑 `confirmado` es `definido` **mirado por otra persona**. Existe porque el precio lo pone uno y
+ * lo carga otro en Gestión Nube, y sin un estado propio no hay forma de distinguir "todavía no lo
+ * revisé" de "lo revisé y está bien": el silencio se lee igual en los dos casos. Ver `RevisionItem`.
  */
-export type EstadoItem = 'pendiente' | 'definido' | 'descartado' | 'aplicado'
+export type EstadoItem = 'pendiente' | 'definido' | 'confirmado' | 'descartado' | 'aplicado'
 
 export const ESTADOS_CAMPANIA: readonly EstadoCampania[] = ['borrador', 'en_curso', 'aplicada', 'cerrada']
-export const ESTADOS_ITEM: readonly EstadoItem[] = ['pendiente', 'definido', 'descartado', 'aplicado']
+export const ESTADOS_ITEM: readonly EstadoItem[] = ['pendiente', 'definido', 'confirmado', 'descartado', 'aplicado']
 
 /** Una campaña. Los conteos los arma el servidor: la pantalla no baja los ítems para contarlos. */
 export interface Liquidacion {
@@ -48,6 +52,7 @@ export interface ConteoCampania {
   total: number
   pendientes: number
   definidos: number
+  confirmados: number
   descartados: number
   aplicados: number
 }
@@ -98,6 +103,28 @@ export interface DecisionItem {
   cuando: number | null
 }
 
+/**
+ * La segunda mirada: quién revisó este precio y qué dijo.
+ *
+ * 🔑 **La objeción va acá y no en la nota.** `decision.nota` es de quien puso el precio y sobrevive
+ * a todo; la objeción es de otra persona, tiene que poder contestarse, y sobre todo **se limpia
+ * sola** cuando el precio se vuelve a guardar. Metida en la misma nota, quedaría una objeción vieja
+ * pegada a un precio nuevo, que es peor que no tener objeción.
+ *
+ * 🔑 **`precioAnterior` existe porque el revisor puede cambiar el precio.** Confirmar tocando el
+ * número es un solo paso y evita el ida y vuelta, pero sin guardar contra qué se cambió, el que lo
+ * había puesto se entera sólo si se acuerda del número que había escrito.
+ */
+export interface RevisionItem {
+  /** Quién lo miró. `null` = todavía no pasó por revisión. */
+  porQuien: string | null
+  cuando: number | null
+  /** El motivo, si en vez de confirmar objetó. Obligatorio al objetar. */
+  objecion: string | null
+  /** Qué precio había antes, si el revisor lo cambió al confirmar. */
+  precioAnterior: number | null
+}
+
 /** Lo que pasó al escribir el precio en Gestión Nube. Se llena en la tanda 3. */
 export interface AplicacionItem {
   aplicadoEn: number | null
@@ -110,6 +137,8 @@ export interface LiquidacionItem {
   estado: EstadoItem
   foto: FotoDelMomento
   decision: DecisionItem
+  /** Opcional: los ítems guardados antes de que existiera la revisión no la traen. */
+  revision?: RevisionItem
   aplicacion: AplicacionItem
 }
 
