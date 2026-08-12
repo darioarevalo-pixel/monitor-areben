@@ -24,9 +24,21 @@
  * un script no tiene por qué correr adentro del monitor. La contra, dicha en voz alta: **un iframe
  * sandboxeado no puede avisar su alto**, así que el informe scrollea adentro de su marco en vez de
  * estirar la página. Se eligió eso antes que abrirle la puerta a los scripts para ganar un scroll.
+ *
+ * 🔴 **El contenido se pone DESPUÉS de que el marco está en el DOM, y no como prop `srcDoc`.**
+ *
+ * Con `srcDoc` en el JSX, el marco salió a producción **en blanco**: la pantalla dibujaba, el
+ * atributo estaba y medía sus 40 KB, y adentro no había nada. El motivo es que el documento se
+ * carga antes de que el `sandbox` termine de aplicarse, y cuando el atributo llega Chrome descarta
+ * lo que ya había cargado. Se confirmó en prod volviendo a escribir el mismo `srcdoc` sobre el
+ * mismo iframe: con el sandbox ya puesto, el informe apareció entero.
+ *
+ * ⚠️ Por eso `srcDoc` no puede volver al JSX «para simplificar»: el defecto no da ningún error, ni
+ * en consola ni en el CI. Se ve mirando la pantalla, y sólo si uno sabe que ahí tenía que haber
+ * algo.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   borrarInforme, publicarInforme, traerInforme, traerInformes,
 } from '@/lib/meta-ads/cliente'
@@ -51,6 +63,7 @@ export function Informes() {
   const [elegido, setElegido] = useState<number | null>(null)
   const [cuerpo, setCuerpo] = useState<Informe | null>(null)
   const [ocupada, setOcupada] = useState<number | null>(null)
+  const marco = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     let vivo = true
@@ -84,6 +97,13 @@ export function Informes() {
     })
     return () => { vivo = false }
   }, [abiertoId, toast, pedido])
+
+  // El informe entra al marco recién acá, con el `sandbox` ya aplicado. Ver el encabezado: como
+  // prop `srcDoc` el marco sale en blanco, sin un solo error que lo diga.
+  useEffect(() => {
+    const el = marco.current
+    if (el && abierto) el.setAttribute('srcdoc', abierto.html)
+  }, [abierto])
 
   const recargar = useCallback(() => setPedido((p) => p + 1), [])
 
@@ -183,10 +203,11 @@ export function Informes() {
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => descargar(abierto)}>Descargar</Button>
                 </div>
-                {/* `sandbox` vacío: sin scripts, sin same-origin, sin formularios. Ver el encabezado. */}
+                {/* `sandbox` vacío: sin scripts, sin same-origin, sin formularios. Y el contenido
+                    NO va acá — lo pone el efecto de arriba. Ver el encabezado. */}
                 <iframe
+                  ref={marco}
                   title={abierto.titulo}
-                  srcDoc={abierto.html}
                   sandbox=""
                   style={{
                     width: '100%', height: ALTO_MARCO, border: `1px solid ${color.line}`,
