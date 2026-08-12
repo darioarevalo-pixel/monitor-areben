@@ -7,7 +7,8 @@
  *    y sube propuestas SIN validar. El sync solo usa las validadas. "Validar verdes" valida de una
  *    todo lo confiable (match por SKU/código de barras).
  *  - **Stock (dry-run)**: compara, por cada variante validada, el stock de GN vs el de TN y muestra
- *    qué ESCRIBIRÍA el sync (TN = GN). Es de SOLO LECTURA: no escribe nada.
+ *    qué ESCRIBIRÍA el sync (TN = GN). Correr la comparación no escribe nada; el botón "Aplicar" de
+ *    cada fila sí: escribe el stock absoluto en esa variante de TN.
  *  - **Ventas (dry-run)**: las órdenes de la tienda de Stunned que HOY no llegan a Gestión Nube
  *    (alguien las carga a mano como si fueran del local), y qué venta crearía el sync por cada una.
  *    Con `ESCRITURA_HABILITADA` en true suma un botón "Importar" por fila, que crea la venta en GN.
@@ -564,8 +565,18 @@ export function Integraciones() {
         </>
       ) : (
         <>
-          <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
-            Simulación de <b>solo lectura</b>: muestra qué ventas crearía en Gestión Nube por las órdenes de la tienda de Stunned. <b>No escribe nada.</b>
+          <Notice tone={ESCRITURA_HABILITADA ? 'warning' : 'neutral'} icon={ESCRITURA_HABILITADA ? '⚠' : 'ℹ'} style={{ marginBottom: space[3] }}>
+            Muestra qué ventas crearía en Gestión Nube por las órdenes de la tienda de Stunned.{' '}
+            {ESCRITURA_HABILITADA ? (
+              <>
+                <b>Correr el dry-run no escribe nada</b>, pero cada fila tiene su botón <b>Importar</b>, y ese sí crea la venta en Gestión Nube. Se importa de a una y
+                Gestión Nube <b>no permite anularla desde acá</b>: si queda duplicada, hay que borrarla a mano en la web de GN.
+              </>
+            ) : (
+              <>
+                Es una simulación de <b>solo lectura</b>: <b>no escribe nada</b>.
+              </>
+            )}
             {CORTE_STUNNED ? (
               <>
                 {' '}
