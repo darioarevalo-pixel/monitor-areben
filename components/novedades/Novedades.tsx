@@ -191,7 +191,8 @@ export function Novedades() {
             display: 'flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap',
           }}
         >
-          <span style={{ color: color.mut2, fontSize: font.sm }}>{abierta ? '▾' : '▸'}</span>
+          {/* Los triangulitos se pintan chicos: a `font.sm` se leen como un punto y no como «esto abre». */}
+          <span style={{ color: color.mut2, fontSize: font.lg, lineHeight: 1, width: 12 }}>{abierta ? '▾' : '▸'}</span>
           <strong style={{ fontSize: font.md, color: color.ink }}>{n.titulo}</strong>
           {n.estado === 'borrador' && <Badge tone="warning">Borrador</Badge>}
           {n.importante && n.estado === 'publicada' && <Badge tone="brand">Importante</Badge>}
