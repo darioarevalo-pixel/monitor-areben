@@ -44,12 +44,12 @@ const ESCRITURA_HABILITADA = false
 /** Tope del rango de fechas del dry-run de ventas: TN es lento y el endpoint corta a los 20 s. */
 const RANGO_MAX_DIAS = 31
 
-const hoyIso = () => new Date().toISOString().slice(0, 10)
-function hace(dias: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - dias)
-  return d.toISOString().slice(0, 10)
-}
+// Buenos Aires es UTC-3 fijo. `toISOString()` a secas da el día UTC, así que a la noche de acá
+// proponía como "hasta" el día de MAÑANA. Se resta el offset antes de recortar.
+const AR_OFFSET_MS = 3 * 3_600_000
+const diaAr = (t: number) => new Date(t - AR_OFFSET_MS).toISOString().slice(0, 10)
+const hoyIso = () => diaAr(Date.now())
+const hace = (dias: number) => diaAr(Date.now() - dias * 86_400_000)
 const diasEntre = (a: string, b: string) => Math.abs(Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000
 
 const TONO_MOTIVO: Record<MotivoCola, 'success' | 'warning' | 'danger' | 'action' | 'neutral'> = {

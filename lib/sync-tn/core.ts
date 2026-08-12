@@ -24,10 +24,28 @@ import type { SkuMapRow } from '../sku-map/tipos'
 
 const norm = (s?: string | null) => String(s ?? '').toLowerCase().trim()
 
-/** El día en hora de Buenos Aires. Se recorta del ISO en vez de parsearlo: TN ya lo manda con el
- * offset -03:00, y construir un Date acá haría que el día dependiera de dónde corre el código. */
+/** Buenos Aires es UTC-3 fijo (Argentina no tiene horario de verano desde 2009). */
+const AR_OFFSET_MS = 3 * 3_600_000
+
+/**
+ * El día **en hora de Buenos Aires**.
+ *
+ * 🔴 No se puede recortar el ISO y listo: **Tienda Nube manda las fechas en UTC**
+ * (`2026-08-11T23:50:14+0000`, verificado contra órdenes reales de Stunned), así que todo lo que
+ * pasa después de las 21:00 de Argentina cae al día siguiente si se lo lee de los primeros 10
+ * caracteres. Eso corría el corte un día y desalineaba el cruce contra las ventas de GN.
+ *
+ * Gestión Nube, en cambio, manda `date_sale` como fecha pelada (`2026-07-31`) y **ya está en hora
+ * local**: a esa NO hay que restarle nada, o se va un día para atrás. Por eso el caso sin hora se
+ * devuelve tal cual.
+ */
 export function diaDe(iso?: string | null): string {
-  return String(iso ?? '').slice(0, 10)
+  const s = String(iso ?? '').trim()
+  if (!s) return ''
+  if (!s.includes('T') && !s.includes(' ')) return s.slice(0, 10) // fecha pelada de GN: ya es local
+  const ms = Date.parse(s)
+  if (Number.isNaN(ms)) return s.slice(0, 10)
+  return new Date(ms - AR_OFFSET_MS).toISOString().slice(0, 10)
 }
 
 /** Distancia en días entre dos YYYY-MM-DD. Devuelve Infinity si alguno no es una fecha. */
@@ -154,7 +172,23 @@ export function planificar(e: {
     if (l.tipo && l.tipo !== 'venta') continue
     ledger.set(String(l.ref_id), l)
   }
-  const enGn = new Set(e.ventasGn.filter((v) => v.active !== false && v.archived !== true).map((v) => String(v.tn_order ?? '')).filter(Boolean))
+  // Qué números de orden de TN ya están en GN. Dos fuentes:
+  //   - `integration_id` de una venta que creó ESTE sync: es exacta, es nuestra.
+  //   - `tn_order`, que llena la integración NATIVA de TN en GN. ⚠️ Hoy esa integración está atada
+  //     a la tienda de ZATTIA, no a la de Stunned, así que sus números son de otra numeración
+  //     (Zattia va por 6.700, Stunned por 112). Se deja igual porque es el cinturón para el día en
+  //     que GN se conecte de verdad a la tienda de Stunned —ahí sería el dato bueno— y porque
+  //     equivocarse acá deja una venta sin importar, no una duplicada. La colisión pide que las dos
+  //     numeraciones se crucen el mismo día: lejos, pero no imposible para siempre.
+  const enGn = new Set(
+    e.ventasGn
+      .filter((v) => v.active !== false && v.archived !== true)
+      .flatMap((v) => [
+        v.integration_source === 'monitor-sync-tn' ? String(v.integration_id ?? '') : '',
+        String(v.tn_order ?? ''),
+      ])
+      .filter(Boolean),
+  )
 
   const crear: PlanVenta[] = []
   const cola: ItemCola[] = []

@@ -42,8 +42,17 @@ const planDe = (o: OrdenTN[], extra: { ventasGn?: VentaGN[]; procesados?: Ledger
   })
 
 describe('helpers', () => {
-  it('diaDe recorta el día sin construir un Date (el offset ya viene de TN)', () => {
+  it('diaDe pasa el ISO de TN a día de Buenos Aires (TN manda UTC)', () => {
+    // Caso real de Stunned: 23:50 UTC del 11 es 20:50 del 11 en Argentina.
+    expect(diaDe('2026-08-11T23:50:14+0000')).toBe('2026-08-11')
+    // 00:30 UTC del 12 es todavía el 11 acá — recortar los 10 primeros caracteres daría el 12.
+    expect(diaDe('2026-08-12T00:30:00+0000')).toBe('2026-08-11')
+    // Y si TN mandara el offset local, tiene que dar lo mismo.
     expect(diaDe('2026-08-05T23:40:00-03:00')).toBe('2026-08-05')
+  })
+
+  it('diaDe NO le resta 3 horas a la fecha pelada de GN (ya es local)', () => {
+    expect(diaDe('2026-07-31')).toBe('2026-07-31')
     expect(diaDe(null)).toBe('')
   })
 
@@ -149,6 +158,16 @@ describe('planificar — motivos de exclusión', () => {
     const p = planDe([orden()], { ventasGn })
     expect(p.crear).toHaveLength(0)
     expect(p.cola[0].motivo).toBe('ya_en_gn')
+  })
+
+  it('ya en GN por integration_id: la venta la creó este mismo sync', () => {
+    const ventasGn: VentaGN[] = [{ id: 5, tn_order: '', integration_source: 'monitor-sync-tn', integration_id: '1001', date_sale: '2026-08-05', detalles: [] }]
+    expect(planDe([orden()], { ventasGn }).cola[0].motivo).toBe('ya_en_gn')
+  })
+
+  it('un integration_id de OTRO origen no bloquea', () => {
+    const ventasGn: VentaGN[] = [{ id: 5, tn_order: '', integration_source: 'monitor-cambio', integration_id: '1001', date_sale: '2026-08-05', detalles: [] }]
+    expect(planDe([orden()], { ventasGn }).crear).toHaveLength(1)
   })
 
   it('una venta de GN anulada no cuenta como "ya en GN"', () => {
