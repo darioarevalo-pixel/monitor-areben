@@ -2,8 +2,9 @@
  * Dispara el sync rápido de stock en el servidor de GN y espera a que termine.
  * Port del núcleo compartido por dispararSyncInv (index.html:10588) y cadActualizarGN
  * (12477): toma el run de referencia, hace el POST y hace polling (~cada 8s, hasta 7
- * min) hasta ver un run nuevo `completed`. Devuelve `true` si terminó, `false` si se
- * agotó el tiempo. NO recarga datos: eso lo decide cada llamador (uno recarga el
+ * min) hasta ver un run nuevo `completed`. Devuelve `true` si terminó BIEN, `false` si se
+ * agotó el tiempo, y TIRA si el sync terminó en falla — los cinco llamadores lo agarran y
+ * muestran el error en rojo. NO recarga datos: eso lo decide cada llamador (uno recarga el
  * store, otro sus propios fetches).
  *
  * Sólo DISPARA el sync de la plataforma; no escribe stock ni ventas.
@@ -45,12 +46,28 @@ export async function dispararSyncStock(marca: Marca, setLabel: (t: string) => v
     await new Promise((res) => setTimeout(res, 8000))
     const secs = Math.round((Date.now() - t0) / 1000)
     setLabel(`⏳ Actualizando… ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`)
+    let run: { id: string; status: string; conclusion: string | null } | null = null
     try {
       const rr = await apiFetch(`${SYNC_API}?store=${marca}&nc=${secs}`)
       const dd = await rr.json()
-      if (dd.run && dd.run.id !== baseId && dd.run.status === 'completed') return true
+      run = dd.run ?? null
     } catch {
-      /* reintenta */
+      /* falla de red mirando el estado: se reintenta en la próxima vuelta */
+    }
+    if (run && run.id !== baseId && run.status === 'completed') {
+      // `status: 'completed'` sólo dice que el run TERMINÓ, no que haya salido bien. Mirar sólo
+      // eso es lo que el 12-ago-2026 dejó a Reposición mostrando el stock del día anterior con el
+      // botón en verde: GN cortó por límite de solicitudes, el sync murió a mitad de camino sin
+      // escribir una fila (baja el inventario entero a memoria y recién al final lo guarda), y acá
+      // se lo daba por hecho. El corte ya se aguanta en los scripts (`scripts/lib/gn-rate-limit.mjs`),
+      // pero eso no arregla el aviso: cualquier otra falla del sync se seguía viendo como éxito.
+      if (run.conclusion !== 'success') {
+        throw new Error(
+          `la sincronización con Gestión Nube falló (${run.conclusion || 'sin resultado'}). ` +
+            'Lo que ves sigue siendo lo de la última sincronización buena.',
+        )
+      }
+      return true
     }
   }
   return false
