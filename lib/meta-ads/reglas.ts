@@ -7,6 +7,7 @@
  * aporta los tipos.
  */
 
+import type { Decision, Silenciado } from './decisiones'
 import type { LineaPauta } from './tipos'
 import {
   agrupar as agruparJs,
@@ -197,6 +198,11 @@ export type Contexto = {
   filas: FilaRegla[]
   umbralLinea: Partial<Umbrales> | null
   hasta: string
+  /**
+   * El índice de decisiones humanas de `indexar()`, o `null` para no callar nada. Opcional a
+   * propósito: quien no sabe de decisiones sigue obteniendo exactamente lo de antes.
+   */
+  decisiones?: Map<string, Decision[]> | null
 }
 
 export type Evaluacion =
@@ -211,6 +217,12 @@ export type Evaluacion =
     umbrales: Umbrales
     detalle: string | null
     hallazgos: HallazgoNuevo[]
+    /**
+     * 🔑 Los que una decisión humana calló. **`hallazgos.length + silenciados.length` es lo que
+     * detectó la regla**: nada desaparece en silencio, o una decisión vieja se comería una alarma
+     * real y no habría forma de enterarse.
+     */
+    silenciados: Silenciado<HallazgoNuevo>[]
   }
 
 export type Calibracion =

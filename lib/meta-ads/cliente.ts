@@ -13,6 +13,7 @@ import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
 import type { Candidato, MotivoPoda } from './podado'
 import type { RangoUI } from './rango'
+import type { DecisionVista, RespuestaDecisiones } from './decisiones'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
 import type {
@@ -445,6 +446,44 @@ export function traerHallazgos(estado?: 'todos' | 'nuevo' | 'accionado' | 'ignor
   if (estado) qs.set('estado', estado)
   if (regla) qs.set('regla', String(regla))
   return pedir<{ hallazgos: Hallazgo[] }>(qs)
+}
+
+/**
+ * Las decisiones humanas sobre la pauta, y los objetos contra los que se puede anotar una nueva.
+ *
+ * ⚠️ El literal `recurso: 'decisiones'` de acá abajo es lo que hace fallar a
+ * `tests/meta-ads-despacho.test.ts` si alguien olvida sumar la palabra en el despacho de
+ * `api/meta-ads.js`. Es el único freno contra el bug que ya llegó a prod con `poda`: un recurso que
+ * no figura en el despacho no falla ruidosamente, contesta otra cosa.
+ */
+export function traerDecisiones(): Promise<Lectura<RespuestaDecisiones>> {
+  return pedir<RespuestaDecisiones>(new URLSearchParams({ recurso: 'decisiones' }))
+}
+
+/**
+ * Anota una decisión con su motivo. Devuelve además cuántos hallazgos vivos quedaron resueltos: la
+ * decisión apaga lo que ya estaba gritando, no sólo lo que vendría.
+ */
+export function guardarDecision(cuerpo: {
+  linea: string
+  clase?: 'silencio' | 'nota'
+  fecha?: string
+  nivel?: string
+  objetoId?: string | null
+  objetoNombre?: string | null
+  cuentaId?: string | null
+  accionTomada?: string
+  motivo: string
+  preset?: string | null
+  vence?: string | null
+  hallazgoId?: number | null
+}): Promise<Lectura<{ decision: DecisionVista; hallazgosResueltos: number }>> {
+  return postRegla<{ decision: DecisionVista; hallazgosResueltos: number }>({ accion: 'decidir', ...cuerpo })
+}
+
+/** Deja de callar, y conserva el motivo: por qué se decidió y por qué se dejó de sostener van juntos. */
+export function revocarDecision(id: number): Promise<Lectura<{ decision: DecisionVista }>> {
+  return postRegla<{ decision: DecisionVista }>({ accion: 'revocar', id })
 }
 
 async function postRegla<T>(cuerpo: Record<string, unknown>): Promise<Lectura<T>> {

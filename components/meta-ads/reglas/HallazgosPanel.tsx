@@ -10,6 +10,16 @@
  * la forma más común en que un sistema de avisos deja de servir. Los hallazgos entran como un
  * renglón más, al lado de las campañas sin marca y de las ideas listas.
  *
+ * # 🔴 Por qué «Ignorar» pasó a pedir un motivo
+ *
+ * El botón decía «Ignorar» y **no ignoraba**: el `unique` de `meta_ads_hallazgo` es
+ * `(regla_id, fecha, objeto_id)`, así que resolvía el renglón de hoy y la corrida de mañana lo
+ * volvía a insertar con fecha nueva. Una afirmación que la pantalla no podía cumplir.
+ *
+ * Ahora abre el diálogo de decisiones: se escribe por qué no hay que hacer nada, y eso sí calla la
+ * regla mientras la decisión valga. Cancelar no hace nada — y está bien: el renglón sigue ahí porque
+ * efectivamente no se decidió nada.
+ *
  * # Accionar son DOS llamadas, y el orden es el barato
  *
  * Primero la acción de verdad (`accionarMeta`, el camino que ya tiene permiso, `idem`, relectura y
@@ -19,6 +29,7 @@
  */
 
 import { useCallback, useState } from 'react'
+import { DialogoDecision } from '@/components/meta-ads/decisiones/DialogoDecision'
 import { accionarMeta, resolverHallazgo } from '@/lib/meta-ads/cliente'
 import { nuevoIdem } from '@/lib/meta-ads/acciones'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
@@ -50,6 +61,7 @@ export function HallazgosPanel({ hallazgos, quitar }: { hallazgos: Hallazgo[]; q
 function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void }) {
   const toast = useToast()
   const [ocupado, setOcupado] = useState(false)
+  const [decidiendo, setDecidiendo] = useState(false)
 
   const accionar = useCallback(async () => {
     const s = h.sugerencia
@@ -83,14 +95,6 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
     quitar(h.id)
   }, [h, toast, quitar])
 
-  const ignorar = useCallback(async () => {
-    setOcupado(true)
-    const m = await resolverHallazgo(h.id, 'ignorado')
-    setOcupado(false)
-    if (!m.ok) { toast.error(m.motivo); return }
-    quitar(h.id)
-  }, [h, toast, quitar])
-
   const rotulo = rotuloAccion(h)
 
   return (
@@ -115,10 +119,31 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
             {ocupado ? 'Un segundo…' : rotulo}
           </Button>
         )}
-        <Button variant="ghost" size="sm" disabled={ocupado} onClick={() => void ignorar()}>
-          Ignorar
+        <Button variant="ghost" size="sm" disabled={ocupado} onClick={() => setDecidiendo(true)}>
+          No hay que hacer nada
         </Button>
       </div>
+
+      {decidiendo && (
+        <DialogoDecision
+          abierto={decidiendo}
+          onCerrar={() => setDecidiendo(false)}
+          onGuardada={() => { setDecidiendo(false); toast.ok('Anotado. No lo vuelve a proponer.'); quitar(h.id) }}
+          objetoFijo={{
+            objetoId: h.objetoId,
+            objetoNombre: h.objetoNombre,
+            nivel: h.nivel,
+            linea: h.linea,
+            cuentaId: h.cuentaId,
+            preset: h.preset,
+            hallazgoId: h.id,
+          }}
+          // El catálogo de presets no lo tiene esta pantalla: el diálogo arma la única opción que
+          // hace falta a partir del preset del hallazgo.
+          presets={[]}
+          lineasEditables={[h.linea]}
+        />
+      )}
     </div>
   )
 }

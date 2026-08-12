@@ -25,6 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Decisiones } from '@/components/meta-ads/decisiones/Decisiones'
 import { useSesion } from '@/components/SesionProvider'
 import { traerAuditoria } from '@/lib/meta-ads/cliente'
 import { contar, cuandoLegible, inciertas, leerResultado, leerUso, ROTULO_TIER, rotuloEstado } from '@/lib/meta-ads/auditoria'
@@ -73,6 +74,10 @@ export function Auditoria() {
       {estado.fase === 'error' && (
         <Notice tone="danger">No se pudo leer el registro de acciones: {estado.motivo}</Notice>
       )}
+      {/* Va arriba de la tabla a propósito: contesta la misma pregunta —qué se hizo con esta pauta y
+          por qué— y es la mitad que hasta hoy no estaba en ningún lado. La de abajo es lo que
+          escribió el monitor; ésta, lo que decidió una persona. */}
+      <Decisiones />
       {estado.fase === 'ok' && <Contenido d={estado.data} admin={admin} onMas={() => setLimite(500)} />}
     </div>
   )

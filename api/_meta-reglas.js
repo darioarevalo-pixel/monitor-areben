@@ -2,7 +2,9 @@
 //
 //   GET  /api/meta-ads?recurso=reglas             → las reglas, los umbrales y el contexto medido
 //   GET  /api/meta-ads?recurso=hallazgos[&estado=…] → lo que detectaron, para el Panel
-//   POST /api/meta-ads?recurso=regla  { accion: 'guardar' | 'umbrales' | 'calibrar' | 'resolver', … }
+//   GET  /api/meta-ads?recurso=decisiones         → las decisiones humanas + los objetos del selector
+//   POST /api/meta-ads?recurso=regla  { accion: 'guardar' | 'umbrales' | 'calibrar' | 'resolver'
+//                                              | 'decidir' | 'revocar', … }
 //
 // ⚠️ Archivo `_`: no es una ruta y no cuenta contra las 12 funciones del plan Hobby.
 //
@@ -23,7 +25,10 @@
 // Salen de la base y no hablan con Meta. Es la misma razón que la auditoría y los planes: el día
 // que el token se venza, la pregunta es qué hay que decidir, y eso no depende de Graph.
 import { lineasQuePuede, lineasQueVe } from '../lib/meta-ads/acciones.core.js';
-import { COLS_REGLA, leerSnapshot, leerUmbrales, TABLA_UMBRAL } from '../lib/meta-ads/leer-snapshot.core.js';
+import { indexar } from '../lib/meta-ads/decisiones.core.js';
+import {
+  COLS_REGLA, leerDecisiones, leerSnapshot, leerUmbrales, TABLA_DECISION, TABLA_UMBRAL,
+} from '../lib/meta-ads/leer-snapshot.core.js';
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
 } from '../lib/meta-ads/reglas.core.js';
@@ -103,6 +108,7 @@ export async function reglasGet(res, perfil, q) {
   if (!visibles.length) return res.status(403).json({ error: 'No tenés acceso a la pauta de ninguna marca.' });
 
   if (q.recurso === 'hallazgos') return await hallazgos(res, sb, visibles, q);
+  if (q.recurso === 'decisiones') return await decisiones(res, sb, perfil, visibles);
 
   const [reglas, umbrales, snap] = await Promise.all([
     sb.from(TABLA).select('*').in('linea', visibles).order('id'),
@@ -168,6 +174,85 @@ async function hallazgos(res, sb, visibles, q) {
   });
 }
 
+/** Cuántos días atrás se buscan los objetos que se pueden elegir al anotar una decisión. */
+const DIAS_SELECTOR = 30;
+
+const aVistaDecision = (d) => ({
+  id: d.id,
+  creada: d.creada,
+  quien: d.quien,
+  clase: d.clase,
+  fecha: d.fecha,
+  linea: d.linea,
+  nivel: d.nivel,
+  objetoId: d.objeto_id,
+  objetoNombre: d.objeto_nombre,
+  cuentaId: d.cuenta_id,
+  accion: d.accion,
+  motivo: d.motivo,
+  preset: d.preset,
+  vence: d.vence,
+  estado: d.estado,
+  revocadaPor: d.revocada_por,
+  revocadaEn: d.revocada_en,
+  origen: d.origen,
+  hallazgoId: d.hallazgo_id,
+});
+
+/**
+ * Las decisiones humanas, y los objetos contra los que se puede anotar una nueva.
+ *
+ * ⚠️ Devuelve **todas**, vigentes y revocadas, y no sólo las que callan: la pantalla es un registro
+ * para leer, y una decisión revocada con su motivo es justamente lo que evita volver a discutir algo
+ * que ya se discutió. `leerDecisiones()` filtra las vigentes porque su consumidor es el motor; acá
+ * la pregunta es otra.
+ *
+ * Los objetos viajan en la misma respuesta y no en un recurso aparte: es una lista corta que sale
+ * de filas ya leídas, y un recurso más es una línea más en el despacho de `api/meta-ads.js`, que es
+ * lo único del módulo sin test.
+ */
+async function decisiones(res, sb, perfil, visibles) {
+  const [filas, snap] = await Promise.all([
+    sb.from(TABLA_DECISION).select('*').in('linea', visibles).order('fecha', { ascending: false }).limit(300),
+    traerSnapshots(sb, visibles, DIAS_SELECTOR),
+  ]);
+  if (filas.error) return res.status(502).json({ error: 'No se pudieron leer las decisiones.', detalle: filas.error.message });
+
+  /**
+   * Un objeto por id, con el nombre MÁS RECIENTE que tenga en la foto.
+   *
+   * `leerSnapshot` devuelve ordenado por fecha ascendente, así que la última pasada gana. Importa:
+   * un aviso renombrado la semana pasada tiene que aparecer en el selector con el nombre que hoy se
+   * lee en Ads Manager, o quien anota la decisión no lo va a encontrar.
+   */
+  const objetos = new Map();
+  for (const f of snap.filas || []) {
+    if (!f.objeto_id || f.nivel === 'cuenta') continue;
+    objetos.set(String(f.objeto_id), {
+      objetoId: String(f.objeto_id),
+      objetoNombre: f.nombre || null,
+      nivel: f.nivel,
+      linea: f.linea,
+      cuentaId: f.cuenta_id || null,
+    });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    decisiones: (filas.data || []).map(aVistaDecision),
+    objetos: [...objetos.values()].sort((a, b) => String(a.objetoNombre || '').localeCompare(String(b.objetoNombre || ''))),
+    // Igual que en el GET de reglas: la pantalla muestra el selector completo y apaga los botones
+    // donde no se puede escribir, en vez de esconder marcas.
+    puedeEditar: lineasQuePuede(perfil, 'pautar'),
+    // El catálogo de presets viaja también acá para que el desplegable de alcance no tenga que
+    // pedir el otro recurso sólo para poder rotular «Radar de atribución tardía».
+    presets: CLAVES_PRESET.map((k) => ({ clave: k, rotulo: PRESETS[k].rotulo })),
+    // ⚠️ Puede venir con `error`: la foto no es esencial para LEER las decisiones, sólo para el
+    // selector. Se avisa en vez de tirar un 502 que dejaría la pantalla en blanco por un selector.
+    problemaFoto: snap.error || null,
+  });
+}
+
 // ── Escritura ─────────────────────────────────────────────────────────────────────────────────
 
 export default async function reglasPost(req, res, perfil) {
@@ -180,6 +265,8 @@ export default async function reglasPost(req, res, perfil) {
   if (accion === 'umbrales') return await guardarUmbrales(res, sb, perfil, body);
   if (accion === 'calibrar') return await correrCalibrador(res, sb, perfil, body);
   if (accion === 'resolver') return await resolver(res, sb, perfil, body);
+  if (accion === 'decidir') return await decidir(res, sb, perfil, body);
+  if (accion === 'revocar') return await revocar(res, sb, perfil, body);
   return res.status(400).json({ error: `Acción desconocida: «${accion}».` });
 }
 
@@ -260,13 +347,26 @@ async function correrCalibrador(res, sb, perfil, body) {
   if (!PRESETS[preset]) return res.status(400).json({ error: `No existe la automatización «${preset}».` });
   if (!lineasQueVe(perfil).includes(linea)) return res.status(403).json({ error: 'No ves la pauta de esa marca.' });
 
-  const [umbrales, snap] = await Promise.all([traerUmbrales(sb), traerSnapshots(sb, [linea])]);
+  // 🎯 Las decisiones entran también acá. El dial de la pantalla y la corrida del cron tienen que
+  // dar el mismo número: si el calibrador contara los gritos que hoy están callados, el umbral se
+  // elegiría contra un ruido que ya no existe.
+  const [umbrales, snap, dec] = await Promise.all([
+    traerUmbrales(sb), traerSnapshots(sb, [linea]), leerDecisiones(sb, [linea]),
+  ]);
   if (umbrales.error) return res.status(502).json({ error: 'No se pudieron leer los umbrales.', detalle: umbrales.error });
   if (snap.error) return res.status(502).json({ error: 'No se pudo leer la foto diaria.', detalle: snap.error });
 
   const r = calibrar(
     { preset, linea, cuentaId: body.cuentaId || null, parametros: limpiarParametros(body.parametros) },
-    { filas: snap.filas, umbralLinea: umbrales.mapa.get(linea) || null, hasta: hoyIso(), dias: DIAS_VENTANA },
+    {
+      filas: snap.filas,
+      umbralLinea: umbrales.mapa.get(linea) || null,
+      hasta: hoyIso(),
+      dias: DIAS_VENTANA,
+      // Un error leyendo decisiones no frena el dial: se calibra sin callar nada, o sea contando de
+      // más. Es la dirección barata, la misma que toma el cron.
+      decisiones: indexar(dec.filas),
+    },
   );
   if (!r.ok) return res.status(r.status || 400).json({ error: r.error });
   return res.status(200).json({ ok: true, ...r });
@@ -311,4 +411,118 @@ async function resolver(res, sb, perfil, body) {
     .eq('estado', 'nuevo');
   if (e2) return res.status(502).json({ error: 'No se pudo marcar el hallazgo.', detalle: e2.message });
   return res.status(200).json({ ok: true });
+}
+
+/**
+ * Anota una decisión humana sobre la pauta, con su motivo.
+ *
+ * 🔑 **La toma el mismo permiso que guardar una regla (`pautar`)**, y no uno propio: decidir que algo
+ * no se toca es la misma clase de acto que definir cuándo avisar. Un sub nuevo serían dos tildes más
+ * por persona y por marca para habilitar algo que ya se podía decidir.
+ */
+async function decidir(res, sb, perfil, body) {
+  const linea = String(body.linea || '');
+  const permiso = puedePautar(perfil, linea);
+  if (!permiso.ok) return res.status(permiso.status).json({ error: permiso.error });
+
+  const clase = body.clase === 'nota' ? 'nota' : 'silencio';
+  const motivo = String(body.motivo || '').trim();
+  // ⚠️ El motivo es lo ÚNICO por lo que existe la tabla. Una decisión sin motivo es una fila que
+  // dentro de un mes no le va a explicar nada a nadie, así que se rechaza acá y no se guarda a medias.
+  if (!motivo) return res.status(400).json({ error: 'Falta el motivo: es el campo por el que existe el registro.' });
+
+  const objetoId = body.objetoId ? String(body.objetoId) : null;
+  // Un silencio sin objeto no callaría nada y quedaría de adorno. Si no hay objeto, es una nota.
+  if (clase === 'silencio' && !objetoId) {
+    return res.status(400).json({ error: 'Para callar una regla hace falta elegir el objeto. Si es una decisión sin objeto, va como nota.' });
+  }
+  const preset = body.preset ? String(body.preset) : null;
+  if (preset && !PRESETS[preset]) return res.status(400).json({ error: `No existe la automatización «${preset}».` });
+
+  const fila = {
+    quien: quienEs(perfil),
+    clase,
+    fecha: String(body.fecha || hoyIso()),
+    linea,
+    nivel: String(body.nivel || (clase === 'nota' ? 'cuenta' : 'aviso')),
+    objeto_id: objetoId,
+    objeto_nombre: body.objetoNombre ? String(body.objetoNombre) : null,
+    cuenta_id: body.cuentaId ? String(body.cuentaId) : null,
+    accion: String(body.accionTomada || 'otra'),
+    motivo,
+    preset,
+    vence: body.vence ? String(body.vence) : null,
+    origen: body.hallazgoId ? 'hallazgo' : 'manual',
+    hallazgo_id: body.hallazgoId ? parseInt(body.hallazgoId, 10) : null,
+  };
+
+  const { data, error } = await sb.from(TABLA_DECISION).insert(fila).select('*').maybeSingle();
+  if (error) {
+    // El índice único parcial es el que impide dos decisiones vivas sobre el mismo alcance. Se
+    // traduce acá porque «duplicate key value violates unique constraint» no le dice nada a nadie.
+    if (String(error.message || '').includes('uq_meta_decision_viva')) {
+      return res.status(409).json({ error: 'Ya hay una decisión vigente sobre eso. Revocá la anterior si cambió el motivo.' });
+    }
+    return res.status(502).json({ error: 'No se pudo guardar la decisión.', detalle: error.message });
+  }
+
+  /**
+   * 🔑 La decisión también apaga lo que ya estaba gritando, no sólo lo que vendría.
+   *
+   * El silencio del motor actúa cuando el cron evalúa, o sea mañana. Sin esto, anotar «esto se apagó
+   * a propósito» dejaría el renglón en el Panel hasta la próxima corrida, y quien lo anotó vería que
+   * no pasó nada — que es la forma más rápida de que deje de usarse el registro.
+   */
+  let resueltos = 0;
+  if (clase === 'silencio' && objetoId) {
+    let upd = sb
+      .from(TABLA_HALLAZGO)
+      .update({ estado: 'ignorado', resuelto_por: quienEs(perfil), resuelto_en: new Date().toISOString() })
+      .eq('objeto_id', objetoId)
+      .eq('estado', 'nuevo');
+    // Acotado al preset cuando la decisión lo acota: si el silencio es sólo para el radar de
+    // atribución tardía, el freno de emergencia sobre ese mismo objeto tiene que seguir a la vista.
+    if (preset) {
+      const { data: reglasDelPreset } = await sb.from(TABLA).select('id').eq('preset', preset).eq('linea', linea);
+      const ids = (reglasDelPreset || []).map((r) => r.id);
+      if (!ids.length) upd = null;
+      else upd = upd.in('regla_id', ids);
+    }
+    if (upd) {
+      const { data: tocados } = await upd.select('id');
+      resueltos = (tocados || []).length;
+    }
+  }
+
+  return res.status(200).json({ ok: true, decision: aVistaDecision(data), hallazgosResueltos: resueltos });
+}
+
+/**
+ * Revoca una decisión: deja de callar, y **conserva el motivo**.
+ *
+ * No se borra la fila a propósito. Por qué se decidió algo y por qué se dejó de sostener son las dos
+ * mitades de la misma historia, y la segunda sin la primera no se entiende.
+ */
+async function revocar(res, sb, perfil, body) {
+  const id = parseInt(body.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Falta el id de la decisión.' });
+
+  const { data: d, error: e1 } = await sb.from(TABLA_DECISION).select('*').eq('id', id).maybeSingle();
+  if (e1) return res.status(502).json({ error: 'No se pudo leer la decisión.', detalle: e1.message });
+  if (!d) return res.status(404).json({ error: 'Esa decisión no existe.' });
+
+  // El permiso se pregunta por la línea DE LA DECISIÓN, no por la que mande el cliente. Mismo
+  // criterio que `resolver()`.
+  const permiso = puedePautar(perfil, d.linea);
+  if (!permiso.ok) return res.status(permiso.status).json({ error: permiso.error });
+  if (d.estado !== 'vigente') return res.status(409).json({ error: 'Esa decisión ya estaba revocada.' });
+
+  const { data, error } = await sb
+    .from(TABLA_DECISION)
+    .update({ estado: 'revocada', revocada_por: quienEs(perfil), revocada_en: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error) return res.status(502).json({ error: 'No se pudo revocar la decisión.', detalle: error.message });
+  return res.status(200).json({ ok: true, decision: aVistaDecision(data) });
 }

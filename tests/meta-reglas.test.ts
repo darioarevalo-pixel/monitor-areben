@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { indexar, type Decision } from '@/lib/meta-ads/decisiones'
 import {
   agrupar,
   calibrar,
@@ -648,5 +649,87 @@ describe('reglas — el espejo de umbrales', () => {
   it('el tipo y la tabla tienen las mismas claves', () => {
     const vacio: Umbrales = umbralesEfectivos(null, null, null)
     expect(Object.keys(vacio).sort()).toEqual(Object.keys(UMBRALES).sort())
+  })
+})
+
+/**
+ * 🔑 Las decisiones humanas callando una regla. Es la pieza que evita que el radar de atribución
+ * tardía proponga reactivar TODOS LOS DÍAS el aviso que se apagó porque se acabó el stock — un
+ * motivo que no existe en ninguna métrica de Meta.
+ *
+ * Lo que se prueba acá no es que calle (eso está en `meta-decisiones.test.ts`), sino que la regla y
+ * el calibrador lo hagan **igual**: un dial que contara los gritos que hoy están callados mandaría a
+ * mover un umbral para arreglar un ruido que ya no existe.
+ */
+describe('reglas — las decisiones humanas', () => {
+  /** Un aviso que estuvo al aire, se apagó dentro de la ventana y siguió sumando compras. */
+  function avisoReatribuido(objetoId: string): FilaRegla[] {
+    return dias(7, (i) => ({
+      objeto_id: objetoId,
+      estado: i < 4 ? 'ACTIVE' : 'PAUSED',
+      estado_efectivo: i < 4 ? 'ACTIVE' : 'PAUSED',
+      spend: i < 4 ? 5000 : 0,
+      compras: i >= 4 ? 1 : 0,
+      revenue: i >= 4 ? 30000 : 0,
+    }))
+  }
+
+  const decision = (over: Record<string, unknown> = {}) => ({
+    id: 1, creada: `${HOY}T12:00:00Z`, quien: 'bruno', clase: 'silencio', fecha: HOY,
+    linea: 'bdi', nivel: 'aviso', objeto_id: 'a1', objeto_nombre: 'AD 04', cuenta_id: null,
+    accion: 'apagado', motivo: 'sin stock: fundas discontinuadas. NO reactivar',
+    preset: 'atribucion-tardia', vence: null, estado: 'vigente',
+    revocada_por: null, revocada_en: null, origen: 'manual', hallazgo_id: null, ...over,
+  }) as unknown as Decision
+
+  it('sin decisiones devuelve exactamente lo de antes', () => {
+    // La retrocompatibilidad no es cortesía: `decisiones` es opcional justamente para que los 40
+    // casos de este archivo sigan valiendo como red.
+    const filas = [...totalLinea(90000, 9, 400000), ...avisoReatribuido('a1')]
+    const r = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos.length).toBeGreaterThan(0)
+    expect(r.silenciados).toEqual([])
+  })
+
+  it('una decisión calla el hallazgo y lo deja a la vista en silenciados', () => {
+    const filas = [...totalLinea(90000, 9, 400000), ...avisoReatribuido('a1')]
+    const sin = evaluarRegla(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY })
+    const con = evaluarRegla(regla('atribucion-tardia'), {
+      filas, umbralLinea: null, hasta: HOY, decisiones: indexar([decision()]),
+    })
+    if (!sin.ok || !con.ok) throw new Error('no evaluó')
+    expect(con.hallazgos).toEqual([])
+    // 🔴 Nada desaparece: lo que dejó de gritar sigue contándose.
+    expect(con.silenciados).toHaveLength(sin.hallazgos.length)
+    expect(con.silenciados[0].decision.motivo).toContain('sin stock')
+  })
+
+  it('🎯 el calibrador baja igual que el Panel, no queda mintiendo', () => {
+    // Si el filtro viviera en el script que guarda en vez de acá, el dial diría «7 saltos» donde el
+    // Panel muestra 0, y el umbral se elegiría contra un ruido inventado.
+    const filas = [...totalLinea(90000, 9, 400000), ...avisoReatribuido('a1')]
+    const sin = calibrar(regla('atribucion-tardia'), { filas, umbralLinea: null, hasta: HOY, dias: 7 })
+    const con = calibrar(regla('atribucion-tardia'), {
+      filas, umbralLinea: null, hasta: HOY, dias: 7, decisiones: indexar([decision()]),
+    })
+    if (!sin.ok || !con.ok) throw new Error('no calibró')
+    expect(sin.total).toBeGreaterThan(0)
+    expect(con.total).toBe(0)
+    expect(con.objetos).toBe(0)
+  })
+
+  it('🔑 una decisión de un preset NO calla a otro sobre el mismo objeto', () => {
+    // «No reactivar por falta de stock» no puede tapar que ese mismo aviso esté quemando plata.
+    const filas = [
+      ...totalLinea(90000, 9, 400000),
+      ...dias(7, () => ({ objeto_id: 'a1', spend: 9000, compras: 0 })),
+    ]
+    const r = evaluarRegla(regla('freno-emergencia'), {
+      filas, umbralLinea: null, hasta: HOY, decisiones: indexar([decision({ preset: 'atribucion-tardia' })]),
+    })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos.map((h) => h.objeto_id)).toEqual(['a1'])
+    expect(r.silenciados).toEqual([])
   })
 })

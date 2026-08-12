@@ -34,7 +34,8 @@ import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { plata, roas as roasTxt } from '../lib/meta-ads/formato.core.js'
-import { COLS_REGLA, leerSnapshot, leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js'
+import { indexar, porQueCallado } from '../lib/meta-ads/decisiones.core.js'
+import { COLS_REGLA, leerDecisiones, leerSnapshot, leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS, UMBRALES,
@@ -103,6 +104,19 @@ async function traerUmbrales() {
   return mapa
 }
 
+/**
+ * Las decisiones humanas vigentes, ya indexadas por objeto.
+ *
+ * ⚠️ Un error de lectura **no** frena la corrida: se anota y se sigue con el índice vacío, o sea
+ * gritando de más. Es la dirección barata del error — una alarma repetida molesta, una alarma que
+ * no aparece porque no se pudo leer la tabla de silencios es una que nadie va a echar de menos.
+ */
+async function traerDecisiones() {
+  const { filas, error } = await leerDecisiones(supabase, LINEA_UNICA ? [LINEA_UNICA] : null)
+  if (error) anotar('leer decisiones', error)
+  return { indice: indexar(filas), cuantas: filas.length }
+}
+
 async function traerReglas() {
   let q = supabase.from('meta_ads_regla').select('*').eq('activa', true)
   if (LINEA_UNICA) q = q.eq('linea', LINEA_UNICA)
@@ -152,7 +166,7 @@ async function marcarCorrida(reglaId, detalle) {
  * No mira `meta_ads_regla`: la gracia es poder ver qué haría un preset **antes** de crear la regla.
  * Es el mismo camino que alimenta el dial de la pantalla.
  */
-async function modoCalibrar(filas, umbrales) {
+async function modoCalibrar(filas, umbrales, decisiones) {
   const lineas = LINEA_UNICA
     ? [LINEA_UNICA]
     : [...new Set(filas.map((f) => f.linea).filter(Boolean))].sort()
@@ -172,7 +186,7 @@ async function modoCalibrar(filas, umbrales) {
       const def = PRESETS[preset]
       const r = calibrar(
         { preset, linea, parametros: {} },
-        { filas: suyas, umbralLinea: umbrales.get(linea) || null, hasta: HASTA, dias: DIAS },
+        { filas: suyas, umbralLinea: umbrales.get(linea) || null, hasta: HASTA, dias: DIAS, decisiones },
       )
       if (!r.ok) { anotar(`calibrar ${preset} de ${linea}`, r.error); continue }
       if (r.apagada) {
@@ -193,7 +207,7 @@ async function modoCalibrar(filas, umbrales) {
 }
 
 /** La corrida diaria: las reglas activas, un día, y a la base. */
-async function modoDiario(filas, umbrales) {
+async function modoDiario(filas, umbrales, decisiones) {
   const reglas = await traerReglas()
   if (!reglas.length) {
     console.log('\nNo hay ninguna regla activa. Se prenden desde /meta-ads/automatizaciones.')
@@ -208,6 +222,7 @@ async function modoDiario(filas, umbrales) {
       filas,
       umbralLinea: umbrales.get(regla.linea) || null,
       hasta: HASTA,
+      decisiones,
     })
     if (!r.ok) { anotar(nombre, r.error); continue }
     if (r.apagada) {
@@ -217,12 +232,25 @@ async function modoDiario(filas, umbrales) {
     }
     const nuevos = await guardar(regla.id, r.hallazgos)
     total += nuevos
-    const detalle = r.hallazgos.length === 0
+    // ⚠️ «Nada que reportar» y «todo callado por una decisión» son cosas distintas y la pantalla lee
+    // esta frase: sin la segunda mitad, una regla enteramente silenciada se vería igual que una que
+    // no encontró nada, y nadie sabría que hay una decisión vieja tapándola.
+    const callados = r.silenciados.length
+      ? ` ${r.silenciados.length} callado${r.silenciados.length === 1 ? '' : 's'} por una decisión.`
+      : ''
+    const detalle = (r.hallazgos.length === 0
       ? 'Nada que reportar.'
-      : `${r.hallazgos.length} detectado${r.hallazgos.length === 1 ? '' : 's'}, ${nuevos} nuevo${nuevos === 1 ? '' : 's'}.`
+      : `${r.hallazgos.length} detectado${r.hallazgos.length === 1 ? '' : 's'}, ${nuevos} nuevo${nuevos === 1 ? '' : 's'}.`) + callados
     console.log(`  ${r.hallazgos.length ? '●' : '·'} ${nombre}: ${detalle}`)
     for (const h of r.hallazgos.slice(0, 5)) {
       console.log(`      · ${(h.objeto_nombre || h.objeto_id).slice(0, 62)} — ${h.motivo}`)
+    }
+    // 🔑 Lo callado se imprime SIEMPRE. Un silencio que no se ve en el log es exactamente el
+    // agujero negro que la tabla de decisiones está pensada para no ser: si mañana algo real deja de
+    // avisar, el rastro tiene que estar acá.
+    for (const s of r.silenciados) {
+      console.log(`      ⊘ ${(s.objeto_nombre || s.objeto_id).slice(0, 62)}`)
+      console.log(`        ${porQueCallado(s.decision)}`)
     }
     await marcarCorrida(regla.id, detalle)
   }
@@ -243,14 +271,19 @@ async function main() {
 
   console.log(`Reglas de Meta · ventana ${desde} → ${HASTA}${SIMULACRO ? '  [SIMULACRO: no escribe nada]' : ''}${CALIBRAR ? '  [CALIBRADOR]' : ''}`)
 
-  const [filas, umbrales] = await Promise.all([traerFilas(desde, HASTA), traerUmbrales()])
-  console.log(`${filas.length} filas de snapshot · ${umbrales.size} línea${umbrales.size === 1 ? '' : 's'} con umbrales cargados`)
+  const [filas, umbrales, decisiones] = await Promise.all([
+    traerFilas(desde, HASTA), traerUmbrales(), traerDecisiones(),
+  ])
+  // «decisión» pierde la tilde en plural: la palabra entera va en el ternario, no el sufijo.
+  const dec = decisiones.cuantas === 1 ? '1 decisión vigente' : `${decisiones.cuantas} decisiones vigentes`
+  console.log(`${filas.length} filas de snapshot · ${umbrales.size} línea${umbrales.size === 1 ? '' : 's'} con umbrales cargados · ${dec}`)
   if (!filas.length) {
     anotar('snapshots', 'no hay ninguna fila en la ventana: ¿corrió `snapshot-meta.mjs`?')
   } else if (CALIBRAR) {
-    await modoCalibrar(filas, umbrales)
+    // Las mismas decisiones en los dos modos: el dial tiene que decir lo que va a decir el Panel.
+    await modoCalibrar(filas, umbrales, decisiones.indice)
   } else {
-    await modoDiario(filas, umbrales)
+    await modoDiario(filas, umbrales, decisiones.indice)
   }
 
   console.log(`\nListo en ${((Date.now() - t0) / 1000).toFixed(1)} s.`)
