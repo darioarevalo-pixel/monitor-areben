@@ -28,6 +28,7 @@ import { borrarNovedad, cambiarEstado, leerLecturas, nuevoId } from '@/lib/noved
 import { NUEVA, seMarcanAlEntrar, type Destino, type Lectura, type Novedad } from '@/lib/novedades/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 import { tituloLimpio } from '@/lib/nav'
+import { CUENTAS } from '@/lib/cuentas'
 import {
   Badge, Button, EmptyState, Esqueleto, Markdown, Notice, Plegable, SectionCard,
   color, font, space, useConfirmar, useToast,
@@ -36,12 +37,22 @@ import {
 /**
  * A quién le llegó, en una frase. Sólo se muestra cuando está acotada: "A todo el equipo" en cada
  * tarjeta sería ruido en el 90% de los casos.
+ *
+ * ⚠️ **La marca tiene que entrar acá.** Es un filtro aparte del rol, así que una tarjeta que dijera
+ * sólo "A Local" mentiría sobre a quién le llegó justo en el caso que se agregó para arreglar: la
+ * novedad del local de Zattia que le aparecía al local de BDI.
  */
 function aQuien(d?: Destino): string | null {
-  if (!d || d.tipo === 'todos') return null
-  if (d.tipo === 'seccion') return `A quien usa ${tituloLimpio(d.key)}`
-  const nombres = d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r)
-  return `A ${nombres.join(', ')}`
+  if (!d) return null
+  const marca = d.marca ? CUENTAS[d.marca].nombre : null
+  const quien =
+    d.tipo === 'todos'
+      ? null
+      : d.tipo === 'seccion'
+        ? `A quien usa ${tituloLimpio(d.key)}`
+        : `A ${d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r).join(', ')}`
+  if (!quien) return marca ? `A todo el equipo de ${marca}` : null
+  return marca ? `${quien} · ${marca}` : quien
 }
 
 /** "9 de agosto", sin el año cuando es de este año: es una novedad, no un expediente. */

@@ -8,14 +8,20 @@ import {
 } from './estados.core.js'
 import { normalizarDestino as normalizarDestinoJs, TODOS as TODOS_JS } from './destino.core.js'
 import type { ManualIndice } from '@/lib/manuales/tipos'
+import type { Marca } from '@/lib/nav.datos'
 
 export type EstadoNovedad = 'borrador' | 'publicada' | 'archivada'
 
-/** A quién le llega. Ver `destino.core.js`: el filtro corre en el servidor, no en la pantalla. */
+/**
+ * A quién le llega. Ver `destino.core.js`: el filtro corre en el servidor, no en la pantalla.
+ *
+ * `marca` es ortogonal al tipo y **ausente significa las dos**: acota a quién le llega, no de quién
+ * es la novedad, que sigue siendo una sola fila sin marca.
+ */
 export type Destino =
-  | { tipo: 'todos' }
-  | { tipo: 'seccion'; key: string }
-  | { tipo: 'roles'; roles: string[] }
+  | { tipo: 'todos'; marca?: Marca }
+  | { tipo: 'seccion'; key: string; marca?: Marca }
+  | { tipo: 'roles'; roles: string[]; marca?: Marca }
 
 export type Novedad = {
   id: string

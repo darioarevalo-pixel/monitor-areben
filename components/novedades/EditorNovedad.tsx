@@ -24,6 +24,9 @@ import { aplicar, AYUDA, type Marca } from '@/lib/markdown/barra'
 import type { Destino, Novedad } from '@/lib/novedades/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
+import { CUENTAS } from '@/lib/cuentas'
+// `Marca` acá arriba es la del markdown (negrita, itálica). Ésta es la de la tienda.
+import type { Marca as MarcaTienda } from '@/lib/nav.datos'
 import { Button, Field, Input, Markdown, Modal, Select, color, font, radius, space, useToast } from '@/components/ui'
 
 /**
@@ -73,8 +76,9 @@ export function EditorNovedad({
     const actuales = destino.tipo === 'roles' ? destino.roles : []
     const nuevos = actuales.includes(rol) ? actuales.filter((r) => r !== rol) : [...actuales, rol]
     // Destildar el último vuelve a "todos": una novedad para cero roles no le llega a nadie, y eso
-    // no es lo que nadie quiso escribir.
-    setDestino(nuevos.length ? { tipo: 'roles', roles: nuevos } : { tipo: 'todos' })
+    // no es lo que nadie quiso escribir. La marca no se toca acá: es un filtro aparte.
+    const { marca } = destino
+    setDestino(nuevos.length ? { tipo: 'roles', roles: nuevos, marca } : { tipo: 'todos', marca })
   }
 
   /**
@@ -180,7 +184,8 @@ export function EditorNovedad({
             value={destino.tipo}
             onChange={(e) => {
               const t = e.target.value
-              setDestino(t === 'seccion' ? { tipo: 'seccion', key: 'atencion' } : t === 'roles' ? { tipo: 'roles', roles: ['local'] } : { tipo: 'todos' })
+              const { marca } = destino
+              setDestino(t === 'seccion' ? { tipo: 'seccion', key: 'atencion', marca } : t === 'roles' ? { tipo: 'roles', roles: ['local'], marca } : { tipo: 'todos', marca })
             }}
           >
             <option value="todos">A todo el equipo</option>
@@ -192,9 +197,9 @@ export function EditorNovedad({
         {destino.tipo === 'seccion' && (
           <Field
             label="¿De qué pantalla habla?"
-            hint="Le llega a quien tenga permiso de verla, en cualquiera de las dos marcas. Si mañana alguien gana o pierde ese permiso, la lista se ajusta sola."
+            hint="Le llega a quien tenga permiso de verla. Si mañana alguien gana o pierde ese permiso, la lista se ajusta sola."
           >
-            <Select value={destino.key} onChange={(e) => setDestino({ tipo: 'seccion', key: e.target.value })}>
+            <Select value={destino.key} onChange={(e) => setDestino({ ...destino, key: e.target.value })}>
               {secciones.map((s) => (
                 <option key={s.k} value={s.k}>{s.label}</option>
               ))}
@@ -218,6 +223,28 @@ export function EditorNovedad({
             </div>
           </Field>
         )}
+
+        {/* La marca es un filtro aparte y se combina con lo de arriba: "Local + Zattia" es la que
+            faltaba, porque el rol `local` solo no distingue de qué local se habla. Queda afuera
+            sólo quien está clavado a la otra marca — a quien ve las dos le llega igual, porque
+            trabaja en las dos. */}
+        <Field
+          label="¿De qué marca?"
+          hint="Se suma a lo de arriba. A quien trabaja en las dos marcas le llega igual: sólo queda afuera el que está clavado a la otra."
+        >
+          <Select
+            value={destino.marca ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              setDestino({ ...destino, marca: v ? (v as MarcaTienda) : undefined })
+            }}
+          >
+            <option value="">Las dos</option>
+            {(Object.keys(CUENTAS) as MarcaTienda[]).map((m) => (
+              <option key={m} value={m}>Sólo {CUENTAS[m].nombre}</option>
+            ))}
+          </Select>
+        </Field>
       </div>
 
       <label style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', marginTop: space[4], fontSize: font.sm, color: color.ink2 }}>

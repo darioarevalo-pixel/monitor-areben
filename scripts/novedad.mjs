@@ -4,7 +4,7 @@
 // no dependan de que alguien se acuerde: yo la escribo al terminar un cambio, Bruno la publica de
 // un click cuando la mira.
 //
-//   node scripts/novedad.mjs "Título" cuerpo.md [--importante] [--dry] [--destino=…]
+//   node scripts/novedad.mjs "Título" cuerpo.md [--importante] [--dry] [--destino=…] [--marca=…]
 //   node scripts/novedad.mjs --listar
 //
 // # A quién le llega (--destino)
@@ -16,6 +16,16 @@
 //   --destino=seccion:canjes        → a quien puede VER esa pantalla (los destinatarios salen de
 //                                     los permisos que ya existen, así que se ajusta solo).
 //   --destino=roles:local,deposito  → a quien tenga alguna de esas funciones.
+//
+// # De qué marca (--marca)
+//
+// Es un filtro APARTE, que se combina con el de arriba y que ausente significa las dos:
+//
+//   --destino=roles:local --marca=zattia   → al local de Zattia, y NO al de BDI.
+//   --marca=bdi                            → a todo el equipo de BDI.
+//
+// Queda afuera sólo quien está clavado a la otra marca (`cuenta` fija en el padrón): a quien
+// trabaja en las dos le llega igual, porque le hace falta igual.
 //
 // ⚠️ El admin recibe TODO igual, por diseño (ver `esParaMi` en lib/novedades/destino.core.js): es
 // el que se tiene que dar cuenta si algo salió al grupo equivocado.
@@ -46,16 +56,29 @@ const importante = args.includes('--importante')
 const listar = args.includes('--listar')
 const sueltos = args.filter((a) => !a.startsWith('--'))
 
+/** `--marca=bdi` · `--marca=zattia` · ausente = las dos. Es un filtro APARTE del `--destino`. */
+function marcaDeArgs() {
+  const arg = args.find((a) => a.startsWith('--marca='))
+  if (!arg) return null
+  const v = arg.slice('--marca='.length)
+  if (v === 'bdi' || v === 'zattia') return v
+  console.error(`✗ --marca inválida: "${v}". Usá bdi o zattia.`)
+  process.exit(1)
+}
+
 /** `--destino=seccion:canjes` · `--destino=roles:local,marketing` · ausente = todos. */
 function destinoDeArgs() {
+  const marca = marcaDeArgs()
+  const conMarca = (d) => (marca ? { ...d, marca } : d)
   const arg = args.find((a) => a.startsWith('--destino='))
-  if (!arg) return undefined
+  // Sin `--destino` pero con `--marca` sigue habiendo algo que decir: a todo el equipo de esa marca.
+  if (!arg) return marca ? { tipo: 'todos', marca } : undefined
   const v = arg.slice('--destino='.length)
   const [tipo, resto = ''] = v.split(':')
-  if (tipo === 'seccion' && resto) return { tipo: 'seccion', key: resto }
+  if (tipo === 'seccion' && resto) return conMarca({ tipo: 'seccion', key: resto })
   if (tipo === 'roles') {
     const roles = resto.split(',').map((r) => r.trim()).filter(Boolean)
-    if (roles.length) return { tipo: 'roles', roles }
+    if (roles.length) return conMarca({ tipo: 'roles', roles })
   }
   console.error(`✗ --destino inválido: "${v}". Usá seccion:<key> o roles:<a,b>.`)
   process.exit(1)

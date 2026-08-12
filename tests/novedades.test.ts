@@ -104,6 +104,64 @@ describe('destino: a quién le llega', () => {
   })
 })
 
+describe('destino: la marca', () => {
+  const perfil = (extra: Record<string, unknown> = {}) => ({ name: 'Ana', acceso: {}, ...extra }) as never
+
+  it('🔴 la novedad del local de Zattia NO le llega al local de BDI', () => {
+    // Es el bug que se vino a arreglar: el rol `local` solo no distingue de qué local se habla.
+    const d = { tipo: 'roles', roles: ['local'], marca: 'zattia' }
+    expect(esParaMi(d, perfil({ funcion: ['local'], cuenta: 'zattia' }))).toBe(true)
+    expect(esParaMi(d, perfil({ funcion: ['local'], cuenta: 'bdi' }))).toBe(false)
+  })
+
+  it('a quien trabaja en las dos marcas le llega igual', () => {
+    // Sólo queda afuera el que está CLAVADO a la otra. Quien puede cambiar de marca en el header
+    // trabaja en las dos, y la novedad del local de Zattia también es asunto suyo.
+    const d = { tipo: 'roles', roles: ['local'], marca: 'zattia' }
+    expect(esParaMi(d, perfil({ funcion: ['local'], cuenta: null }))).toBe(true)
+    expect(esParaMi(d, perfil({ funcion: ['local'] }))).toBe(true)
+  })
+
+  it('la marca sola, sin rol: a todo el equipo de esa marca', () => {
+    const d = { tipo: 'todos', marca: 'bdi' }
+    expect(esParaMi(d, perfil({ cuenta: 'bdi' }))).toBe(true)
+    expect(esParaMi(d, perfil())).toBe(true)
+    expect(esParaMi(d, perfil({ cuenta: 'zattia' }))).toBe(false)
+  })
+
+  it('por pantalla, la marca acota ANTES de mirar el permiso', () => {
+    // Quien tiene Atención tildada sólo en BDI no recibe la de "Atención en Zattia", aunque pueda
+    // cambiar de marca: ahí no atiende.
+    const soloBdi = perfil({ acceso: { bdi: { atencion: true } } })
+    expect(esParaMi({ tipo: 'seccion', key: 'atencion', marca: 'bdi' }, soloBdi)).toBe(true)
+    expect(esParaMi({ tipo: 'seccion', key: 'atencion', marca: 'zattia' }, soloBdi)).toBe(false)
+    // Sin marca sigue alcanzando con verla en alguna.
+    expect(esParaMi({ tipo: 'seccion', key: 'atencion' }, soloBdi)).toBe(true)
+  })
+
+  it('sin marca le llega a todos, que es como están las ya publicadas', () => {
+    // Las novedades de antes de este campo no lo traen: no puede significar "a nadie".
+    const d = { tipo: 'roles', roles: ['local'] }
+    expect(esParaMi(d, perfil({ funcion: ['local'], cuenta: 'bdi' }))).toBe(true)
+    expect(esParaMi(d, perfil({ funcion: ['local'], cuenta: 'zattia' }))).toBe(true)
+  })
+
+  it('el admin recibe también las de la otra marca', () => {
+    expect(esParaMi({ tipo: 'todos', marca: 'zattia' }, perfil({ admin: true, cuenta: 'bdi' }))).toBe(true)
+  })
+
+  it('una marca inventada se descarta: sin marca son las dos, nunca ninguna', () => {
+    expect(normalizarDestino({ tipo: 'roles', roles: ['local'], marca: 'stunned' })).toEqual({ tipo: 'roles', roles: ['local'] })
+    expect(normalizarDestino({ tipo: 'todos', marca: 'zattia' })).toEqual({ tipo: 'todos', marca: 'zattia' })
+  })
+
+  it('la marca sobrevive cuando la lista de roles vacía cae a «todos»', () => {
+    // Destildar el último rol no puede ampliar el reparto a la otra marca: "para Zattia" es lo
+    // único que quedó dicho, y sigue valiendo.
+    expect(normalizarDestino({ tipo: 'roles', roles: [], marca: 'zattia' })).toEqual({ tipo: 'todos', marca: 'zattia' })
+  })
+})
+
 describe('sinLeer y el destino', () => {
   it('una novedad que no es para mí no enciende el badge, aunque la reciba', () => {
     // Quien publica recibe la lista entera para administrarla. Si esto no filtrara, tendría el
