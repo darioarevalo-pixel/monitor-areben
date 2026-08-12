@@ -41,7 +41,7 @@ export function UsuarioCard({
   /** El alta guiada puede pedir abrir directo en el ajuste fino ("Crear y ajustar a mano"). */
   ajusteAbierto?: boolean
   onToggleOpen: () => void
-  onCampo: (campo: 'name' | 'pass' | 'email', val: string) => void
+  onCampo: (campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple', val: string) => void
   onAdmin: (val: boolean) => void
   onCuenta: (val: string) => void
   onPerm: (brand: Marca, clave: string, val: boolean) => void
@@ -81,6 +81,23 @@ export function UsuarioCard({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, alignItems: 'end', margin: '6px 0 14px' }}>
             <Field label="Usuario">
               <Input value={u.name} onChange={(e) => onCampo('name', e.target.value)} />
+            </Field>
+            {/* Cómo le decimos. Es lo único de esta pantalla que la persona ve de sí misma: el
+                Inicio la recibe con esto. Va aparte del usuario porque el usuario es la llave de
+                login —y en los puestos compartidos es `bdilocal`, que no saluda a nadie—. Vacío
+                cae al usuario, así que dejarlo así nunca deja el saludo en blanco. */}
+            <Field label="Cómo le decimos">
+              <Input placeholder={u.name || 'el usuario'} value={u.apodo || ''} onChange={(e) => onCampo('apodo', e.target.value)} />
+            </Field>
+            {/* Sin año: se guarda `MM-DD` porque lo único que se hace con esto es saludar.
+                `type="date"` pide un año igual, así que se le pone uno fijo para mostrar y se
+                recorta al guardar; el año que se ve no significa nada y no se guarda. */}
+            <Field label="Cumpleaños">
+              <Input
+                type="date"
+                value={u.cumple ? `2000-${u.cumple}` : ''}
+                onChange={(e) => onCampo('cumple', e.target.value.slice(5))}
+              />
             </Field>
             {/* Las contraseñas se guardan hasheadas: no se pueden volver a leer, ni acá
                 ni en el KV. Así que este campo no muestra la actual —muestra si hay una— y

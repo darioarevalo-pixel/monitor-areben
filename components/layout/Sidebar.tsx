@@ -4,7 +4,10 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useAvisos } from '@/store/useAvisos'
+import { useAgenda } from '@/store/useAgenda'
 import { contarSinLeer, useSistema } from '@/store/useSistema'
+import { contarSinTildar, hoyIso } from '@/lib/agenda'
+import { comoLeLlamamos } from '@/lib/inicio/core'
 import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
@@ -31,7 +34,7 @@ function rutaActiva(it: NavItem, activa: string, sub?: string | null): boolean {
 // `sistema` está acá pero la condición mira además que el grupo tenga UNA sola key: hoy es
 // Novedades y se dibuja como una entrada suelta; el día que se le sume Manuales pasa a ser un
 // grupo desplegable solo, sin tocar esta línea.
-const APLANAR = new Set(['inicio', 'clientes', 'sistema'])
+const APLANAR = new Set(['inicio', 'clientes', 'sistema', 'agenda'])
 
 export function Sidebar({
   activa,
@@ -53,11 +56,17 @@ export function Sidebar({
   // Lo único que el menú lee de los datos. El refresco lo hace el shell (useAvisosPoll), no acá.
   const nuevos = useAvisos((st) => st.nuevos)
   const sinLeerN = useSistema((st) => contarSinLeer(st))
+  const itemsAgenda = useAgenda((st) => st.items)
+  const hechosAgenda = useAgenda((st) => st.hechos)
   const [abierto, setAbierto] = useState<string | null>(null)
   const [menuMarca, setMenuMarca] = useState(false)
   const { confirmar } = useConfirmar()
 
   if (!perfil) return null
+
+  // El día lo pone el navegador, no el servidor: en UTC, a las 21:00 de acá el badge se apagaría
+  // solo tres horas antes de tiempo.
+  const sinTildar = contarSinTildar(itemsAgenda, hechosAgenda, hoyIso(), { marca })
 
   // Mismo criterio que aplicarVisibilidadTabs + renderNav del legacy: una sección
   // se ve si es de esta marca Y el perfil tiene permiso.
@@ -191,6 +200,20 @@ export function Sidebar({
                         {sinLeerN > 99 ? '99+' : sinLeerN}
                       </span>
                     )}
+                    {/*
+                      Y el tercero, el de la agenda: **sólo pendientes de hoy sin tildar**, ni promos
+                      ni avisos. Un número que aparece todos los días y no se puede apagar deja de
+                      leerse en una semana; éste se apaga tildando, que es el trabajo real.
+
+                      Sale de `contarSinTildar`, la misma función que dibuja la lista de Hoy y el
+                      bloque de Inicio: un contador con criterio propio marcaría un 1 que no se
+                      corresponde con ninguna fila de ninguna pantalla.
+                    */}
+                    {k === 'agenda' && sinTildar > 0 && (
+                      <span className="nav-badge" title={`${sinTildar} ${sinTildar === 1 ? 'pendiente de hoy sin tildar' : 'pendientes de hoy sin tildar'}`}>
+                        {sinTildar > 99 ? '99+' : sinTildar}
+                      </span>
+                    )}
                   </Link>
                 </div>
               )
@@ -256,17 +279,22 @@ export function Sidebar({
         <div className="user-foot">
           <span className="side-user">
             {/* La inicial identifica de un vistazo con quién está abierta la sesión: en el
-                local se comparte la máquina y eso importa. */}
+                local se comparte la máquina y eso importa.
+
+                Por `comoLeLlamamos` y no por `perfil.name` directo, para decir el mismo nombre que
+                el saludo de Inicio: leer "Hola, Mari" arriba y "mariana.local" al pie es la misma
+                sesión contada de dos formas. Las cuentas de puesto no tienen apodo y siguen
+                mostrando el usuario, que es lo correcto: ahí no hay una persona a la que nombrar. */}
             <span className="side-avatar" aria-hidden>
-              {(perfil.name || '?').trim().charAt(0)}
+              {(comoLeLlamamos(perfil) || '?').charAt(0)}
             </span>
-            <span className="side-user-nombre">{perfil.name}</span>
+            <span className="side-user-nombre">{comoLeLlamamos(perfil)}</span>
           </span>
           <button
             className="side-salir"
             onClick={() => {
               void (async () => {
-                if (await confirmar({ titulo: 'Cerrar sesión', mensaje: `¿Cerrás la sesión de ${perfil.name}?`, ok: 'Cerrar sesión' })) salir()
+                if (await confirmar({ titulo: 'Cerrar sesión', mensaje: `¿Cerrás la sesión de ${comoLeLlamamos(perfil)}?`, ok: 'Cerrar sesión' })) salir()
               })()
             }}
           >

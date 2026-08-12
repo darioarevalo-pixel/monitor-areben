@@ -65,6 +65,14 @@ export type Perfil = {
    * bdilocal): esas no pueden tener casilla y entran con contraseña.
    */
   email?: string | null
+  /**
+   * Cómo le decimos, para que el Monitor la reciba por su nombre. Opcional a propósito: sin
+   * apodo se cae al `name`, que es el usuario de login (`bdilocal`, `deposito`) y por eso no
+   * alcanza solo. Se lee SIEMPRE por `comoLeLlamamos()` (`lib/inicio/core.ts`), nunca a mano.
+   */
+  apodo?: string | null
+  /** Cumpleaños como `MM-DD`, sin año: para saludar, no para saber la edad. */
+  cumple?: string | null
 }
 
 /** Las secciones que trae puesta una función (expandiendo sus áreas). */

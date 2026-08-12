@@ -58,7 +58,7 @@ export function Usuarios() {
   if (!admin) return <div style={{ padding: 16, color: color.mut2 }}>Solo un administrador puede gestionar usuarios.</div>
 
   const mut = (i: number, fn: (u: UsuarioConfig) => UsuarioConfig) => setUsers((prev) => (prev ? prev.map((u, j) => (j === i ? fn(u) : u)) : prev))
-  const onCampo = (i: number, campo: 'name' | 'pass' | 'email', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
+  const onCampo = (i: number, campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
   const onAdmin = (i: number, val: boolean) => mut(i, (u) => ({ ...u, admin: val }))
   const onCuenta = (i: number, val: string) => mut(i, (u) => ({ ...u, cuenta: (val || null) as Marca | null }))
   const onPerm = (i: number, brand: Marca, key: string, val: boolean) => mut(i, (u) => togglePerm(u, brand, key, val))

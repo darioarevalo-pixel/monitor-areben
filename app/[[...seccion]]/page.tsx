@@ -18,8 +18,15 @@ import { componenteDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeVer } from '@/lib/permisos'
 
-/** Sección por defecto: la misma que abre el legacy hoy (_currentTabId, index.html:6525). */
-const DEFAULT_TAB = 'productos'
+/**
+ * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
+ *
+ * Era `productos`, que es lo que abría el legacy (`_currentTabId`, index.html:6525). Con eso, el
+ * único que entraba a Inicio a propósito era quien NO podía ver productos: Local y Depósito caían
+ * ahí de rebote, por el `FALLBACK_TAB`. O sea que la pantalla que resume el día de cada uno era la
+ * que nadie abría, y la tabla de productos —que no le habla a casi ningún rol— era la casa.
+ */
+const DEFAULT_TAB = 'inicio'
 /**
  * Rescate cuando la sección no está permitida (o el default `productos` no lo ve este
  * usuario). `inicio` no requiere permiso (KEYS_SIN_PERMISO) → visible para todos, así

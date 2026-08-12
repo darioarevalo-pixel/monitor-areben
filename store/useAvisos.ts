@@ -36,6 +36,13 @@ type AvisosState = {
   /** Los resúmenes crudos, para que Inicio y Solicitudes no vuelvan a pedirlos. */
   resumenes: ResumenSolicitud[]
   cargando: boolean
+  /**
+   * Cuándo se leyeron por última vez, para poder decirlo en pantalla ("actualizado hace 2 min").
+   * Sin esto, Inicio muestra una lista que se refresca sola cada 3 minutos y no tiene forma de
+   * distinguirse de una congelada — y una pantalla en la que no se sabe si lo que se ve es de
+   * ahora es exactamente una en la que no se confía.
+   */
+  cargadoEn: number
   /** Cuántos aparecieron después de la última visita. Es el número del sidebar. */
   nuevos: number
   cargar: (perfil: Perfil | null, marca: Marca) => Promise<void>
@@ -75,11 +82,12 @@ export const useAvisos = create<AvisosState>((set, get) => ({
   avisos: [],
   resumenes: [],
   cargando: false,
+  cargadoEn: 0,
   nuevos: 0,
 
   async cargar(perfil, marca) {
     if (!perfil) {
-      set({ avisos: [], resumenes: [], nuevos: 0, cargando: false })
+      set({ avisos: [], resumenes: [], nuevos: 0, cargadoEn: 0, cargando: false })
       return
     }
     set({ cargando: true })
@@ -117,7 +125,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...canjes,
       ])
 
-      set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargando: false })
+      set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargadoEn: Date.now(), cargando: false })
     } catch {
       // Un refresco que falla deja lo anterior en pantalla: es un aviso, no un dato crítico.
       set({ cargando: false })
@@ -129,6 +137,6 @@ export const useAvisos = create<AvisosState>((set, get) => ({
   },
 
   limpiar() {
-    set({ avisos: [], resumenes: [], nuevos: 0, cargando: false })
+    set({ avisos: [], resumenes: [], nuevos: 0, cargadoEn: 0, cargando: false })
   },
 }))

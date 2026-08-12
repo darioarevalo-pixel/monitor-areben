@@ -7,6 +7,10 @@
 import { CUENTAS } from '@/lib/cuentas'
 import { esAdmin, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
 import { marcasQueVe, type ResumenSolicitud } from '@/lib/solicitudes/overview'
+import { ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { TIPO_LABEL, type Aviso, type TipoAviso } from '@/lib/notificaciones/tipos'
+import { sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import type { Tone } from '@/components/ui/tokens'
 import type { Marca } from '@/lib/nav'
 import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 
@@ -144,4 +148,105 @@ export function horaLabel(creado: number, fecha: string, hoy: Date = new Date())
   const mm = String(d.getMinutes()).padStart(2, '0')
   const dia = d.toDateString() === hoy.toDateString() ? 'hoy' : d.toDateString() === ayer.toDateString() ? 'ayer' : d.toLocaleDateString('es-AR')
   return `${dia} ${hh}:${mm}`
+}
+
+// ── El saludo ────────────────────────────────────────────────────────────────────
+
+/**
+ * Cómo le decimos a quien está mirando.
+ *
+ * **Es el único lugar donde se decide**, y por eso lo usan tanto el Inicio como el sidebar: si
+ * cada pantalla eligiera por su cuenta, la misma persona sería "Mari" en una y "mariana.local" en
+ * la otra. Cae al `name` cuando no hay apodo, que es el caso de los puestos compartidos
+ * (`bdilocal`, `deposito`): son cuentas de puesto y no de persona, y no tienen a quién saludar.
+ */
+export function comoLeLlamamos(perfil: Perfil | null): string {
+  // Cada candidato se recorta ANTES de elegir, no después: un apodo de puros espacios es truthy y
+  // ganaba la comparación, y recién el trim final lo dejaba vacío — o sea, "Hola, !".
+  return (perfil?.apodo || '').trim() || (perfil?.name || '').trim()
+}
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+/**
+ * "miércoles 12 de agosto". Con arrays propios y no con `toLocaleDateString('es-AR', …)` porque
+ * este texto es la primera línea que lee todo el equipo: no puede depender de qué datos de idioma
+ * tenga instalados el navegador ni el runtime de los tests.
+ *
+ * `hoy` entra por parámetro, como en `horaLabel`, por lo mismo que documenta `store/useAgenda.ts`:
+ * **el día lo decide quien mira**. El server es UTC y a las 21:00 de Argentina ya es mañana.
+ */
+export function fechaLarga(hoy: Date = new Date()): string {
+  return `${DIAS_SEMANA[hoy.getDay()]} ${hoy.getDate()} de ${MESES[hoy.getMonth()]}`
+}
+
+// ── Los avisos, agrupados para la pantalla ───────────────────────────────────────
+
+/** Un tipo de aviso con sus filas: es lo que se dibuja como bloque en Inicio. */
+export type GrupoAvisos = {
+  tipo: TipoAviso
+  /** El rótulo ya escrito en `TIPO_LABEL`: no hay una segunda lista de nombres. */
+  label: string
+  /** El peor tono del grupo — el que le pone color al encabezado. */
+  tono: Tone
+  avisos: Aviso[]
+}
+
+/** Qué tan fuerte grita cada tono. Es el orden en que se leen los bloques. */
+const PESO_TONO: Record<string, number> = { danger: 0, warning: 1, brand: 2, action: 3, success: 4, neutral: 5 }
+
+/** El orden en que se muestran los bloques cuando empatan en tono: el del catálogo de tipos. */
+const ORDEN_TIPO = Object.keys(TIPO_LABEL) as TipoAviso[]
+
+/**
+ * Los avisos partidos en bloques por tipo, listos para pintar.
+ *
+ * 🔑 **Recibe los MISMOS avisos que cuenta el badge del sidebar y no filtra ninguno.** Ese es todo
+ * el punto: antes Inicio leía las solicitudes crudas (`resumenes`) en vez de `avisos`, así que el
+ * badge decía "6" y al entrar se veían tres — los canjes por firmar, las fallas por llevar al
+ * depósito y lo que salió sin volver no se veían en ninguna pantalla. Un contador que no se puede
+ * vaciar mirando enseña a ignorar el contador. `tests/inicio.test.ts` amarra que las dos cuentas
+ * den lo mismo; si algún día hace falta esconder un tipo, se esconde en el derivador, no acá.
+ *
+ * Adentro de cada bloque manda `ordenarAvisos` (lo más nuevo arriba), que es el mismo orden que ya
+ * usa el store. Entre bloques manda el tono: lo que está en rojo se lee antes.
+ */
+export function agruparAvisos(avisos: Aviso[]): GrupoAvisos[] {
+  const porTipo = new Map<TipoAviso, Aviso[]>()
+  for (const a of avisos) {
+    const ya = porTipo.get(a.tipo)
+    if (ya) ya.push(a)
+    else porTipo.set(a.tipo, [a])
+  }
+  return [...porTipo.entries()]
+    .map(([tipo, lista]) => {
+      const tono = lista.reduce<Tone>((peor, a) => ((PESO_TONO[a.tono] ?? 9) < (PESO_TONO[peor] ?? 9) ? a.tono : peor), lista[0].tono)
+      return { tipo, label: TIPO_LABEL[tipo], tono, avisos: ordenarAvisos(lista) }
+    })
+    .sort((a, b) => (PESO_TONO[a.tono] ?? 9) - (PESO_TONO[b.tono] ?? 9) || ORDEN_TIPO.indexOf(a.tipo) - ORDEN_TIPO.indexOf(b.tipo))
+}
+
+// ── Las novedades del pie ────────────────────────────────────────────────────────
+
+/** Una novedad como la muestra Inicio: la fila más el "todavía no la leíste". */
+export type NovedadDeInicio = { novedad: Novedad; nueva: boolean }
+
+/**
+ * Las últimas novedades que le tocan a esta persona.
+ *
+ * **El filtro por rol ya vino hecho**: el servidor calcula `paraMi` según el `destino` de cada una
+ * (todos / una sección / ciertos roles) y a quien no publica ni se las manda. Acá sólo se recorta
+ * a las publicadas y se ordena — la lista cruda del store trae también los borradores de quien
+ * puede publicar, que no van al pie de Inicio de nadie.
+ *
+ * `nueva` sale de `sinLeer`, que compara **por versión**: una novedad reeditada vuelve a contar.
+ */
+export function novedadesDeInicio(novedades: Novedad[], leidas: Lectura[], max = 3): NovedadDeInicio[] {
+  const nuevas = new Set(sinLeer(novedades, leidas).map((n) => n.id))
+  return (novedades || [])
+    .filter((n) => n.estado === 'publicada' && n.paraMi !== false)
+    .sort((a, b) => Date.parse(b.publicada_at || b.created_at || '') - Date.parse(a.publicada_at || a.created_at || ''))
+    .slice(0, max)
+    .map((n) => ({ novedad: n, nueva: nuevas.has(n.id) }))
 }
