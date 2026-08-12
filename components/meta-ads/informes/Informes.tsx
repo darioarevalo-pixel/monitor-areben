@@ -25,20 +25,23 @@
  * sandboxeado no puede avisar su alto**, así que el informe scrollea adentro de su marco en vez de
  * estirar la página. Se eligió eso antes que abrirle la puerta a los scripts para ganar un scroll.
  *
- * 🔴 **El contenido se pone DESPUÉS de que el marco está en el DOM, y no como prop `srcDoc`.**
+ * 🔴 **El informe entra por `src` con un blob, NUNCA por `srcDoc`.**
  *
- * Con `srcDoc` en el JSX, el marco salió a producción **en blanco**: la pantalla dibujaba, el
- * atributo estaba y medía sus 40 KB, y adentro no había nada. El motivo es que el documento se
- * carga antes de que el `sandbox` termine de aplicarse, y cuando el atributo llega Chrome descarta
- * lo que ya había cargado. Se confirmó en prod volviendo a escribir el mismo `srcdoc` sobre el
- * mismo iframe: con el sandbox ya puesto, el informe apareció entero.
+ * Con `srcDoc` el marco salió a producción **en blanco**: la pantalla dibujaba, el atributo estaba
+ * y medía sus 40 KB, y adentro no había nada. Se midió en prod probando las combinaciones una por
+ * una: con este informe, **`srcdoc` + cualquier `sandbox` no pinta**; `srcdoc` sin sandbox pinta;
+ * y un **blob como `src` pinta con el sandbox puesto**. Así que el aislamiento se queda y lo que
+ * cambia es cómo entra el documento.
  *
- * ⚠️ Por eso `srcDoc` no puede volver al JSX «para simplificar»: el defecto no da ningún error, ni
- * en consola ni en el CI. Se ve mirando la pantalla, y sólo si uno sabe que ahí tenía que haber
- * algo.
+ * ⚠️ Y el blob declara `charset=utf-8`, que no es opcional: un marco sandboxeado tiene origen
+ * opaco y **no hereda la codificación del padre**. Sin eso, el mismo informe que afuera muestra
+ * «·» adentro muestra «Â·». Se vio en la prueba, no se dedujo.
+ *
+ * ⚠️ `srcDoc` no puede volver «para simplificar»: el defecto no da ningún error, ni en consola ni
+ * en el CI. Se ve mirando la pantalla, y sólo si uno sabe que ahí tenía que haber algo.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   borrarInforme, publicarInforme, traerInforme, traerInformes,
 } from '@/lib/meta-ads/cliente'
@@ -53,6 +56,9 @@ import {
 /** Cuánto mide el marco del informe. Alto fijo porque el iframe no puede decir el suyo (ver arriba). */
 const ALTO_MARCO = 720
 
+/** El charset va SIEMPRE: un marco sandboxeado no hereda el del padre. Ver el encabezado. */
+const TIPO_HTML = 'text/html;charset=utf-8'
+
 export function Informes() {
   const toast = useToast()
   const { confirmar } = useConfirmar()
@@ -63,7 +69,6 @@ export function Informes() {
   const [elegido, setElegido] = useState<number | null>(null)
   const [cuerpo, setCuerpo] = useState<Informe | null>(null)
   const [ocupada, setOcupada] = useState<number | null>(null)
-  const marco = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     let vivo = true
@@ -98,12 +103,14 @@ export function Informes() {
     return () => { vivo = false }
   }, [abiertoId, toast, pedido])
 
-  // El informe entra al marco recién acá, con el `sandbox` ya aplicado. Ver el encabezado: como
-  // prop `srcDoc` el marco sale en blanco, sin un solo error que lo diga.
-  useEffect(() => {
-    const el = marco.current
-    if (el && abierto) el.setAttribute('srcdoc', abierto.html)
-  }, [abierto])
+  /** El informe como documento propio. Ver el encabezado: por `srcDoc` el marco sale en blanco. */
+  const urlMarco = useMemo(
+    () => (abierto ? URL.createObjectURL(new Blob([abierto.html], { type: TIPO_HTML })) : null),
+    [abierto],
+  )
+  // Un blob vive hasta que se lo suelta. Sin esto, leer diez informes deja diez documentos de 40 KB
+  // colgados en memoria hasta recargar la pantalla.
+  useEffect(() => () => { if (urlMarco) URL.revokeObjectURL(urlMarco) }, [urlMarco])
 
   const recargar = useCallback(() => setPedido((p) => p + 1), [])
 
@@ -136,7 +143,7 @@ export function Informes() {
   }, [confirmar, toast, recargar, abiertoId])
 
   const descargar = useCallback((inf: Informe) => {
-    const url = URL.createObjectURL(new Blob([inf.html], { type: 'text/html' }))
+    const url = URL.createObjectURL(new Blob([inf.html], { type: TIPO_HTML }))
     const a = document.createElement('a')
     a.href = url
     a.download = nombreArchivo(inf)
@@ -203,11 +210,12 @@ export function Informes() {
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => descargar(abierto)}>Descargar</Button>
                 </div>
-                {/* `sandbox` vacío: sin scripts, sin same-origin, sin formularios. Y el contenido
-                    NO va acá — lo pone el efecto de arriba. Ver el encabezado. */}
+                {/* `sandbox` vacío: sin scripts, sin same-origin, sin formularios. El `key` fuerza un
+                    marco nuevo por informe en vez de mutarle el `src` a uno que ya navegó. */}
                 <iframe
-                  ref={marco}
+                  key={abierto.id}
                   title={abierto.titulo}
+                  src={urlMarco ?? undefined}
                   sandbox=""
                   style={{
                     width: '100%', height: ALTO_MARCO, border: `1px solid ${color.line}`,
