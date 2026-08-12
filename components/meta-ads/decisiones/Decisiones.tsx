@@ -85,10 +85,14 @@ export function Decisiones() {
   if (!d) return null
 
   const hoy = hoyIso()
-  const vigentes = d.decisiones.filter((x) => x.estado === 'vigente' && vigenteAl(x, hoy))
+  // ⚠️ Una NOTA está al día aunque no calle nada: `vigenteAl` le dice que no porque su pregunta es
+  // «¿esto silencia una regla?», y la de acá es «¿esto sigue valiendo?». Sin distinguirlas, la nota
+  // de los borradores se dibujaba como «Venció» — y no venció: nunca calló nada, a propósito.
+  const alDia = (x: DecisionVista) => x.estado === 'vigente' && (x.clase === 'nota' || vigenteAl(x, hoy))
+  const vigentes = d.decisiones.filter(alDia)
   // Vencidas y revocadas van juntas abajo: las dos son «ya no calla», y la diferencia se lee en el
   // renglón. Separarlas en tres grupos sería una taxonomía que nadie pidió.
-  const pasadas = d.decisiones.filter((x) => !(x.estado === 'vigente' && vigenteAl(x, hoy)))
+  const pasadas = d.decisiones.filter((x) => !alDia(x))
   const puede = d.puedeEditar.length > 0
 
   return (
@@ -156,8 +160,10 @@ function Fila({
   onRevocar: (id: number) => void
 }) {
   const hoy = hoyIso()
-  const viva = d.estado === 'vigente' && vigenteAl(d, hoy)
-  const vencida = d.estado === 'vigente' && !viva
+  const esNota = d.clase === 'nota'
+  // Una nota está al día siempre: no calla nada y por eso no puede vencer. Ver `alDia` arriba.
+  const viva = d.estado === 'vigente' && (esNota || vigenteAl(d, hoy))
+  const vencida = d.estado === 'vigente' && !esNota && !viva
 
   return (
     <div
@@ -170,7 +176,7 @@ function Fila({
     >
       <div style={{ minWidth: 0, flex: '1 1 340px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[1.5], flexWrap: 'wrap' }}>
-          {viva && <StatusPill tone="neutral" label={d.clase === 'nota' ? 'Nota' : 'Vigente'} />}
+          {viva && <StatusPill tone="neutral" label={esNota ? 'Nota' : 'Vigente'} />}
           {vencida && <StatusPill tone="neutral" label="Venció" />}
           {d.estado === 'revocada' && <StatusPill tone="neutral" label="Revocada" />}
           <span style={{ fontSize: font.base, fontWeight: weight.semibold }}>
@@ -185,6 +191,8 @@ function Fila({
 
         <div style={{ fontSize: font.sm, color: color.mut2, marginTop: space[1] }}>
           {d.fecha} · {d.quien}
+          {/* Una nota lo dice: si no, un renglón sin alcance se lee como uno al que le falta el dato. */}
+          {esNota && <> · queda escrita, no calla ninguna regla</>}
           {d.clase === 'silencio' && <> · {alcanceDe(d, rotulos)}</>}
           {/* «Sin vencimiento» se escribe: un silencio permanente tiene que verse, no deducirse de
               que no diga nada. */}

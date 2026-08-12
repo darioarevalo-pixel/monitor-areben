@@ -6,13 +6,17 @@
 import type { ConfigSync } from './tipos'
 
 /**
- * 🔴 A DEFINIR CON BRUNO. Desde este día (inclusive) el sync se hace cargo de las ventas online
- * de Stunned, y desde este día quien hoy las carga a mano en GN **deja de cargarlas**. Todo lo
- * anterior queda en la cola como `anterior_al_corte`: ya está en GN, cargado como "Mi Local".
+ * Desde este día (inclusive) el sync se hace cargo de las ventas online de Stunned, y desde este
+ * día quien hoy las carga a mano en GN **deja de cargarlas**. Todo lo anterior queda en la cola
+ * como `anterior_al_corte`: ya está en GN, cargado como "Mi Local".
  *
- * Mientras esté vacío, el dry-run no propone crear NADA — es la posición segura.
+ * 🔴 **Es un acuerdo con una persona, no sólo una constante.** Si nadie le avisa a quien carga,
+ * lo de este día se carga DOS veces. La advertencia de duplicado sigue viva después del corte
+ * justamente por eso.
+ *
+ * Elegido por Bruno el 11-ago-2026. Vacío = el dry-run no propone nada (posición segura).
  */
-export const CORTE_STUNNED = ''
+export const CORTE_STUNNED = '2026-08-11'
 
 /** Días de gracia al cruzar una orden de TN contra una venta ya cargada a mano en GN. */
 export const TOLERANCIA_DIAS = 1
