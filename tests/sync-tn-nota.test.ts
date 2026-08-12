@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
 // Integraciones (que la muestra antes de que alguien apriete Importar).
 import { notaTnImport } from '@/lib/sync-tn/nota.core.js'
 
-const ORDEN_112 = { cliente: 'Lautaro Mora', fecha_tn: '2026-08-11', total_tn: 38241, pago: 'Transferencia' }
+// Los datos reales de la orden #112 de stunned.com.ar, la primera que va a pasar por acá.
+const ORDEN_112 = { cliente: 'Lautaro Mora', fecha_tn: '2026-08-11', total_tn: 38241, pago: 'wire_transfer' }
 
 describe('notaTnImport', () => {
   it('pone el número de orden y el nombre, que es para lo que existe', () => {
@@ -35,6 +36,17 @@ describe('notaTnImport', () => {
 
   it('sobrevive a una orden sin ningún dato: queda el número, que nunca falta', () => {
     expect(notaTnImport('114', {})).toBe('De Tienda Nube. #Orden: 114')
+  })
+
+  it('traduce la forma de pago: en GN la lee una persona, no un programa', () => {
+    expect(notaTnImport('112', { pago: 'wire_transfer' })).toContain('Pago: Transferencia')
+    expect(notaTnImport('112', { pago: 'credit_card' })).toContain('Pago: Tarjeta de crédito')
+    expect(notaTnImport('112', { pago: 'MercadoPago' })).toContain('Pago: Mercado Pago')
+  })
+
+  it('un medio de pago que no conocemos pasa TAL CUAL, no se convierte en "Otro"', () => {
+    // TN suma medios cuando quiere. Una nota que dice `mobbex` sirve; una que dice "Otro", no.
+    expect(notaTnImport('112', { pago: 'mobbex' })).toContain('Pago: mobbex')
   })
 
   it('no deja pasar un total 0 ni uno que no es número', () => {
