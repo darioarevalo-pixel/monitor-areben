@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   aplicaEn,
+  avisosDe,
   contarSinTildar,
   corre,
   cumplimiento,
+  entradasDelMes,
   esFechaIso,
   feriadoDe,
   hechoDe,
@@ -394,5 +396,68 @@ describe('feriadoDe(): se avisa, no se saltea', () => {
 
   it('una fecha que no existe no rompe la pantalla', () => {
     expect(feriadoDe('2026-02-31')).toBe(null)
+  })
+})
+
+describe('avisosDe(): lo que hay que saber, no lo que hay que hacer', () => {
+  const flete = item({ id: 'a1', clase: 'aviso', titulo: 'Viene el flete', regla: { tipo: 'unica', fecha: '2026-08-11' } })
+  const cierre = item({ id: 'a2', clase: 'aviso', titulo: 'Cerramos 19 h', regla: { tipo: 'diaria' } })
+  const vidriera = item({ id: 'i1' })
+
+  it('trae sólo los avisos del día, ordenados por título, y nunca un pendiente', () => {
+    const r = avisosDe([vidriera, flete, cierre], '2026-08-11')
+    expect(r.map((a) => a.id)).toEqual(['a2', 'a1'])
+  })
+
+  it('el aviso de otro día no aparece', () => {
+    expect(avisosDe([flete], '2026-08-12').map((a) => a.id)).toEqual([])
+  })
+
+  it('respeta el destino y la marca, igual que los pendientes', () => {
+    const ajeno = item({ id: 'a3', clase: 'aviso', regla: { tipo: 'diaria' }, paraMi: false })
+    const soloZattia = item({ id: 'a4', clase: 'aviso', regla: { tipo: 'diaria' }, marcas: ['zattia'] })
+    const r = avisosDe([cierre, ajeno, soloZattia], '2026-08-11', { marca: 'bdi' })
+    expect(r.map((a) => a.id)).toEqual(['a2'])
+  })
+
+  it('🔑 un aviso NO cuenta para el badge: ese número sólo baja tildando', () => {
+    // Si contara, quedaría prendido para siempre — y el badge que no se puede apagar se deja de
+    // mirar en una semana, arrastrando con él a los pendientes, que sí se apagan.
+    expect(contarSinTildar([cierre, flete], [], '2026-08-11')).toBe(0)
+  })
+})
+
+describe('entradasDelMes(): la grilla no puede discrepar con lo que se ve ese día', () => {
+  const promoMartes = promo({ id: 'p1', regla: { tipo: 'semanal', dias: [2] } })
+  const vidriera = item({ id: 'i1', regla: { tipo: 'semanal', dias: [2] } })
+  const flete = item({ id: 'a1', clase: 'aviso', regla: { tipo: 'unica', fecha: '2026-08-11' } })
+  const datos = { promos: [promoMartes], items: [vidriera, flete], hechos: [hecho({ fecha: '2026-08-04' })] }
+
+  it('los martes de agosto de 2026 son 4, 11, 18 y 25', () => {
+    const m = entradasDelMes(datos, 2026, 8)
+    expect([...m.keys()]).toEqual(['2026-08-04', '2026-08-11', '2026-08-18', '2026-08-25'])
+  })
+
+  it('un día trae la promo primero, después el aviso y al final el pendiente', () => {
+    // El mismo orden que la pestaña Hoy: la promo se contesta con el cliente delante.
+    expect(entradasDelMes(datos, 2026, 8).get('2026-08-11')?.map((e) => e.tipo))
+      .toEqual(['promo', 'aviso', 'pendiente'])
+  })
+
+  it('el tilde viaja con el pendiente, y el día sin tilde queda en null', () => {
+    const m = entradasDelMes(datos, 2026, 8)
+    const del4 = m.get('2026-08-04')?.find((e) => e.tipo === 'pendiente')
+    const del11 = m.get('2026-08-11')?.find((e) => e.tipo === 'pendiente')
+    expect(del4?.tipo === 'pendiente' && del4.hecho?.usuario).toBe('Local')
+    expect(del11?.tipo === 'pendiente' && del11.hecho).toBe(null)
+  })
+
+  it('la ventana de la promo corta el mes aunque la regla siga cayendo', () => {
+    // `hasta` el 31-ago: en septiembre los martes existen y la promo no.
+    expect([...entradasDelMes({ ...datos, items: [] }, 2026, 9).keys()]).toEqual([])
+  })
+
+  it('un mes sin nada devuelve un mapa vacío, no un día por celda', () => {
+    expect(entradasDelMes({ promos: [], items: [], hechos: [] }, 2026, 8).size).toBe(0)
   })
 })

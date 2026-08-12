@@ -87,7 +87,7 @@ export type Promo = {
  */
 export type ItemAgenda = {
   id: string
-  /** `pendiente` pide tilde; `aviso` sólo informa (llega en T3). */
+  /** `pendiente` pide tilde; `aviso` sólo informa —no se tilda, no cuenta para el badge. */
   clase: ClaseItem
   titulo: string
   /** El detalle, en markdown. Vacío es lo normal: el título suele alcanzar. */

@@ -10,7 +10,8 @@
  * # Por qué la primera pestaña es HOY y no el mes
  *
  * Porque la pregunta que se hace parada frente a la caja es "¿qué le aplico a este cliente?", y esa
- * se contesta con el día, no con la grilla. El mes es contexto y llega en otra tanda.
+ * se contesta con el día, no con la grilla. El mes está en la segunda pestaña y es **contexto**:
+ * contesta "¿cuándo cae la próxima?", que también es una pregunta real pero nunca la urgente.
  *
  * # La regla de oro de esta pantalla: que sea corta
  *
@@ -31,14 +32,16 @@ import {
   color, font, space, weight, useConfirmar, useToast, type TabItem,
 } from '@/components/ui'
 import {
-  contarSinTildar, corre, hoyIso, pendientesDe, promosDe, rotuloBeneficio, rotuloRegla, vaEl,
+  avisosDe, contarSinTildar, corre, hoyIso, pendientesDe, promosDe, rotuloBeneficio, rotuloRegla, vaEl,
   type ItemAgenda, type Promo,
 } from '@/lib/agenda'
 import { borrarItem, borrarPromo, guardarItem, guardarPromo } from '@/lib/agenda/cliente'
 import { tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
 import { useAgenda } from '@/store/useAgenda'
+import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
+import { GrillaMes } from './GrillaMes'
 import { ModalItem, itemVacio } from './ModalItem'
 import { ModalPromo, promoVacia } from './ModalPromo'
 import { PendientesHoy } from './PendientesHoy'
@@ -49,16 +52,20 @@ export function Agenda() {
   const { promos, items, hechos, puede, cargado, cargar } = useAgenda()
   const toast = useToast()
   const { confirmar } = useConfirmar()
-  const [tab, setTab] = useState<'hoy' | 'carga' | 'cumplimiento'>('hoy')
+  const [tab, setTab] = useState<'hoy' | 'mes' | 'carga' | 'cumplimiento'>('hoy')
   const [editando, setEditando] = useState<Promo | null>(null)
   const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
 
   const hoy = hoyIso()
   const deHoy = promosDe(promos, hoy, { marca })
   const pendientes = pendientesDe(items, hechos, hoy, { marca })
+  const avisos = avisosDe(items, hoy, { marca })
 
   const tabs: TabItem[] = [
     { key: 'hoy', label: 'Hoy' },
+    // El mes lo ve todo el equipo y no sólo quien carga: "¿cuándo cae la próxima del Nación?" es una
+    // pregunta del mostrador, no de administración.
+    { key: 'mes', label: 'Mes', hint: 'Cuándo cae cada cosa. Contexto: el tilde se pone en Hoy' },
     ...(puede.cargar
       ? [
           { key: 'carga', label: 'Cargar', hint: 'Alta y edición de las promociones y los pendientes' } as TabItem,
@@ -93,23 +100,27 @@ export function Agenda() {
   const onGuardarItem = async (i: ItemAgenda) => {
     await guardarItem(i)
     await cargar()
-    toast.ok('Pendiente guardado.')
+    toast.ok(i.clase === 'aviso' ? 'Aviso guardado.' : 'Pendiente guardado.')
   }
 
   const onBorrarItem = async (i: ItemAgenda) => {
+    const esAviso = i.clase === 'aviso'
     const ok = await confirmar({
-      titulo: 'Borrar el pendiente',
+      titulo: esAviso ? 'Borrar el aviso' : 'Borrar el pendiente',
       // Que los tildes se van con él va escrito acá y no en un tooltip: es lo que no se puede
-      // deshacer, y el interruptor de «apagado» existe justamente para no tener que borrar.
-      mensaje: `${i.titulo} — se borran también los tildes que ya tenga. Si sólo querés dejar de verlo, apagalo.`,
-      ok: 'Borrar el pendiente',
+      // deshacer, y el interruptor de «apagado» existe justamente para no tener que borrar. Un
+      // aviso no tiene tildes que perder, así que no se le advierte de algo que no le pasa.
+      mensaje: esAviso
+        ? `${i.titulo} — si sólo querés dejar de verlo, apagalo.`
+        : `${i.titulo} — se borran también los tildes que ya tenga. Si sólo querés dejar de verlo, apagalo.`,
+      ok: esAviso ? 'Borrar el aviso' : 'Borrar el pendiente',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarItem(i.id)
       await cargar()
-      toast.ok('Pendiente borrado.')
+      toast.ok(esAviso ? 'Aviso borrado.' : 'Pendiente borrado.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
     }
@@ -120,17 +131,31 @@ export function Agenda() {
       {puede.cargar && (
         <HeaderAcciones>
           <Button onClick={() => setEditando(promoVacia())}>Nueva promoción</Button>
-          <Button variant="outline" onClick={() => setEditandoItem(itemVacio())}>Nuevo pendiente</Button>
+          <Button variant="outline" onClick={() => setEditandoItem(itemVacio('pendiente'))}>Nuevo pendiente</Button>
+          {/*
+            El aviso tiene botón propio aunque el modal sea el mismo y adentro se pueda cambiar de
+            clase: quien nunca abrió el alta no tiene por qué saber que existe. Un tercer botón se
+            lee de una; un `<select>` escondido adentro de otro formulario, no.
+          */}
+          <Button variant="outline" onClick={() => setEditandoItem(itemVacio('aviso'))}>Nuevo aviso</Button>
         </HeaderAcciones>
       )}
 
-      {tabs.length > 1 && (
-        <div style={{ marginBottom: space[4] }}>
-          <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
-        </div>
-      )}
+      <div style={{ marginBottom: space[4] }}>
+        <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
+      </div>
 
-      {tab === 'hoy' && <Hoy promos={deHoy} hoy={hoy} sinTildar={contarSinTildar(items, hechos, hoy, { marca })} hayPendientes={pendientes.length > 0} cargado={cargado} />}
+      {tab === 'hoy' && (
+        <Hoy
+          promos={deHoy}
+          hoy={hoy}
+          sinTildar={contarSinTildar(items, hechos, hoy, { marca })}
+          hayPendientes={pendientes.length > 0}
+          hayAvisos={avisos.length > 0}
+          cargado={cargado}
+        />
+      )}
+      {tab === 'mes' && <GrillaMes />}
       {tab === 'carga' && (
         <Carga
           promos={promos}
@@ -156,19 +181,26 @@ export function Agenda() {
 
 /**
  * Lo del día, en el orden en que se necesita: **primero la promo** —es lo que se contesta con el
- * cliente delante— y después lo que hay que hacer.
+ * cliente delante—, después cómo viene el día, y al final lo que hay que hacer.
+ *
+ * El bloque de avisos no dibuja su título cuando no hay ninguno, a diferencia de los otros dos: la
+ * promo y los pendientes tienen un vacío que **afirma** ("hoy no hay promo" es exactamente lo que
+ * hay que poder contestarle al cliente), y un aviso no — "hoy no hay avisos" es una fila de ruido
+ * repetida todos los días, que es lo que enseña a saltear la zona.
  */
 function Hoy({
   promos,
   hoy,
   sinTildar,
   hayPendientes,
+  hayAvisos,
   cargado,
 }: {
   promos: Promo[]
   hoy: string
   sinTildar: number
   hayPendientes: boolean
+  hayAvisos: boolean
   cargado: boolean
 }) {
   if (!cargado) return <Esqueleto />
@@ -189,6 +221,13 @@ function Hoy({
           promos.map((p) => <TarjetaPromo key={p.id} promo={p} />)
         )}
       </section>
+
+      {hayAvisos && (
+        <section style={{ display: 'grid', gap: space[3] }}>
+          <Titulo>📣 Para tener en cuenta hoy</Titulo>
+          <AvisosHoy fecha={hoy} />
+        </section>
+      )}
 
       <section style={{ display: 'grid', gap: space[3] }}>
         <Titulo>
@@ -244,10 +283,10 @@ function Carga({
       </section>
 
       <section style={{ display: 'grid', gap: space[3] }}>
-        <Titulo>☑ Pendientes rutinarios</Titulo>
+        <Titulo>☑ Pendientes y avisos</Titulo>
         {items.length === 0 ? (
           <EmptyState
-            title="Todavía no hay ningún pendiente cargado."
+            title="Todavía no hay ningún pendiente ni aviso cargado."
             hint="Entra sólo lo que se olvida: la rutina obvia no se carga."
             dashed
           />
@@ -325,10 +364,16 @@ function FilaItem({
             <span style={{ fontSize: font.lg, fontWeight: weight.semibold, color: color.ink }}>
               {i.titulo}
             </span>
+            {/*
+              Que sea un aviso se dice acá y no sólo adentro del modal: en la lista, un renglón sin
+              tildes en Cumplimiento se explica casi siempre por esto, y buscar el porqué abriendo
+              cada uno es la fricción que hace que nadie revise.
+            */}
+            {i.clase === 'aviso' && <StatusPill tone="warning" label="sólo avisa" />}
             {!i.activo ? (
               <StatusPill tone="neutral" label="apagado" />
             ) : vaEl(i, hoy) ? (
-              <StatusPill tone="success" label="toca hoy" />
+              <StatusPill tone="success" label={i.clase === 'aviso' ? 'se avisa hoy' : 'toca hoy'} />
             ) : (
               <StatusPill tone="neutral" label="hoy no toca" />
             )}

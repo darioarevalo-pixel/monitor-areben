@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { BandaPromoHoy } from '@/components/agenda/BandaPromoHoy'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { useAtencion } from './useAtencion'
 import { useProductosTienda } from './useProductosTienda'
@@ -158,6 +159,11 @@ export function Atencion() {
       </HeaderAcciones>
 
       {at.error && <Notice tone="danger">{at.error}</Notice>}
+
+      {/* Las promos bancarias que corren HOY **en la web** — no las del mostrador: una del posnet no
+          vale para quien está comprando por Instagram, y contestarle que sí es peor que no contestar.
+          Se dibuja sola sólo si hoy hay alguna. */}
+      <BandaPromoHoy canal="web" />
       {at.desdeSemilla && (
         <Notice tone="warning">
           La tienda no contestó, así que estos son los modelos de la última vez que se pudo leer. Los

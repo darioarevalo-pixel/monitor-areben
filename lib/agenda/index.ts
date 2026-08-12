@@ -10,7 +10,7 @@
  * reglas, no las lee en voz alta.
  */
 
-import { FECHAS_COMERCIALES, hoyIso, resolverComercial, sumarDias } from '@/lib/calendario'
+import { diasDelMes, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
 import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Regla } from './tipos'
 import {
@@ -155,6 +155,29 @@ export function pendientesDe(
     .map((item) => ({ item, hecho: hechoDe(hechos, item.id, fecha) }))
 }
 
+/**
+ * Los avisos que corren un día — lo que hay que saber, no lo que hay que hacer.
+ *
+ * 🔑 **Un aviso no se tilda y por eso no cuenta para el badge.** "El jueves no hay envíos" o "el
+ * lunes viene el flete a las 10" no tienen un momento en que queden hechos: son el estado del día.
+ * Si encendieran el número del menú, ese número no se podría bajar, y **un contador que no se puede
+ * vaciar se deja de mirar en una semana** — que es exactamente lo que arruinaría también los
+ * pendientes, que sí se apagan.
+ *
+ * Filtra por `paraMi` y por marca igual que `pendientesDe`: el destino ya se evaluó en el servidor.
+ */
+export function avisosDe(
+  items: ItemAgenda[],
+  fecha: FechaIso,
+  opts: { marca?: Marca } = {},
+): ItemAgenda[] {
+  const { marca } = opts
+  return items
+    .filter((i) => i.clase === 'aviso' && i.paraMi && vaEl(i, fecha))
+    .filter((i) => !marca || i.marcas.length === 0 || i.marcas.includes(marca))
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'))
+}
+
 /** Cuántos pendientes de hoy siguen sin tildar. Es el número del badge, y sale de la misma lista. */
 export function contarSinTildar(
   items: ItemAgenda[],
@@ -163,6 +186,58 @@ export function contarSinTildar(
   opts: { marca?: Marca } = {},
 ): number {
   return pendientesDe(items, hechos, fecha, opts).filter((p) => !p.hecho).length
+}
+
+/**
+ * Una cosa de la agenda parada en un día del mes.
+ *
+ * Los tres tipos van separados y no aplanados en `{titulo, color}` porque la grilla los dibuja
+ * distinto y el detalle del día los ordena distinto: la promo se lee, el aviso se sabe y el
+ * pendiente se tilda. Aplanarlos obligaría a la pantalla a adivinar cuál de los tres tiene delante.
+ */
+export type EntradaMes =
+  | { key: string; tipo: 'promo'; promo: Promo }
+  | { key: string; tipo: 'aviso'; item: ItemAgenda }
+  | { key: string; tipo: 'pendiente'; item: ItemAgenda; hecho: Hecho | null }
+
+/**
+ * Qué cae cada día de un mes, para la grilla.
+ *
+ * 🔑 **Camina día por día llamando a las MISMAS funciones que contestan la pestaña Hoy** —
+ * `promosDe`, `avisosDe`, `pendientesDe`— y no a una consulta propia por tipo de regla. Un mes son
+ * treinta y una vueltas sobre unas pocas decenas de filas, así que lo barato no está en juego; lo
+ * que está en juego es que **el cuadradito del jueves y lo que el local va a ver el jueves no
+ * puedan discrepar**. Es el mismo criterio con el que se escribió `cumplimiento()`.
+ *
+ * El tilde sólo se llena para los días que ya pasaron por el GET (los últimos treinta): más atrás,
+ * `hecho` va en `null` y la grilla no dibuja acuse en vez de dibujar un "sin hacer" que sería falso.
+ *
+ * Los días vacíos no entran al mapa: la grilla pinta la celda igual, y una entrada por cada día del
+ * mes obligaría a distinguir "no hay nada" de "no se calculó".
+ */
+export function entradasDelMes(
+  datos: { promos: Promo[]; items: ItemAgenda[]; hechos: Hecho[] },
+  anio: number,
+  mes: number,
+  opts: { marca?: Marca } = {},
+): Map<FechaIso, EntradaMes[]> {
+  const out = new Map<FechaIso, EntradaMes[]>()
+  for (let d = 1; d <= diasDelMes(anio, mes); d++) {
+    const fecha = iso(anio, mes, d)
+    const delDia: EntradaMes[] = [
+      ...promosDe(datos.promos, fecha, opts).map(
+        (promo): EntradaMes => ({ key: `p-${promo.id}`, tipo: 'promo', promo }),
+      ),
+      ...avisosDe(datos.items, fecha, opts).map(
+        (item): EntradaMes => ({ key: `a-${item.id}`, tipo: 'aviso', item }),
+      ),
+      ...pendientesDe(datos.items, datos.hechos, fecha, opts).map(
+        ({ item, hecho }): EntradaMes => ({ key: `i-${item.id}`, tipo: 'pendiente', item, hecho }),
+      ),
+    ]
+    if (delDia.length > 0) out.set(fecha, delDia)
+  }
+  return out
 }
 
 /** Una ocurrencia mirada desde gerencia: qué día tocaba, de qué ítem, y si alguien lo tildó. */

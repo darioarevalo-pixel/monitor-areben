@@ -1,11 +1,19 @@
 'use client'
 
 /**
- * El alta de un pendiente rutinario.
+ * El alta de un pendiente rutinario **o de un aviso fechado**.
  *
  * 🔑 **La regla de carga es que la rutina obvia no se carga.** Abrir la caja no va acá: entra sólo lo
  * que se olvida. Si la lista de "Hoy" tuviera quince renglones todos los días, en dos semanas nadie
  * la mira y el pendiente que sí importaba se pierde con el resto.
+ *
+ * # Por qué las dos clases se cargan en la MISMA pantalla
+ *
+ * Porque las dos contestan "¿esto va hoy?" con la misma regla, el mismo destino y las mismas marcas;
+ * lo único que cambia es si al final hay un cuadradito para tildar. Dos altas separadas serían dos
+ * formularios que se copian entero y divergen en el primer arreglo — y encima obligarían a elegir
+ * antes de saber, cuando lo normal es cargar "el jueves viene el flete" y recién ahí darse cuenta de
+ * si alguien tiene que hacer algo o sólo enterarse.
  *
  * Los días se arman con `EditorRegla`, el mismo control que la promo bancaria: "los martes hay que
  * reponer la vidriera" y "los martes de Banco Nación" son la misma pregunta.
@@ -20,7 +28,7 @@
 
 import { useMemo, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { type Destino, type ItemAgenda } from '@/lib/agenda'
+import { CLASES, hoyIso, type ClaseItem, type Destino, type ItemAgenda } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
@@ -34,20 +42,23 @@ const MARCAS: { key: Marca; label: string }[] = [
 ]
 
 /**
- * Un pendiente nuevo arranca **semanal sin días tildados**, que es el caso que se carga siempre y el
- * único esqueleto que el validador rechaza hasta que la persona elija algo. Un default que ya pasa
- * la validación —"todos los días"— se guarda sin que nadie mire ese campo.
+ * Uno nuevo, con el esqueleto de regla que corresponde a cada clase.
  *
- * `clase` nace en `pendiente` y no se pregunta: el aviso fechado llega en T3, y ofrecer hoy una
- * opción que no se dibuja en ningún lado sería cargar cosas que no aparecen.
+ * Un **pendiente** arranca semanal sin días tildados: es el caso que se carga siempre y el único
+ * esqueleto que el validador rechaza hasta que la persona elija algo. Un default que ya pasa la
+ * validación —"todos los días"— se guarda sin que nadie mire ese campo.
+ *
+ * Un **aviso** arranca en un día puntual, porque eso es lo que un aviso es casi siempre: "el jueves
+ * viene el flete". La recurrencia existe igual —el editor de regla es el mismo— pero el default
+ * ahorra el caso normal en vez de pedir dos clics para llegar a él.
  */
-export function itemVacio(): ItemAgenda {
+export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
   return {
     id: nuevoIdItem(),
-    clase: 'pendiente',
+    clase,
     titulo: '',
     cuerpo: null,
-    regla: { tipo: 'semanal', dias: [] },
+    regla: clase === 'aviso' ? { tipo: 'unica', fecha: hoyIso() } : { tipo: 'semanal', dias: [] },
     destino: { tipo: 'todos' },
     marcas: [],
     manualId: null,
@@ -107,12 +118,17 @@ export function ModalItem({
   }
 
   const d: Destino = it.destino
+  const esAviso = it.clase === 'aviso'
 
   return (
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo={inicial.creado ? 'Editar el pendiente' : 'Nuevo pendiente rutinario'}
+      titulo={
+        inicial.creado
+          ? esAviso ? 'Editar el aviso' : 'Editar el pendiente'
+          : esAviso ? 'Nuevo aviso fechado' : 'Nuevo pendiente rutinario'
+      }
       ancho="ancho"
       cerrarConFondo={false}
       pie={
@@ -130,11 +146,42 @@ export function ModalItem({
           luces— no se carga acá: una lista larga todos los días es una lista que se deja de mirar.
         </Notice>
 
-        <Field label="Qué hay que hacer" required hint="Corto y en infinitivo: «Reponer la vidriera».">
+        {/*
+          La clase va PRIMERO porque cambia lo que significan los campos de abajo, y va como los dos
+          renglones enteros y no como un tilde suelto: "pide que lo tilden" y "sólo avisa" hay que
+          poder compararlos leyéndolos, no deducir el segundo de que el primero esté apagado.
+        */}
+        <Field
+          label="Qué es"
+          hint={
+            esAviso
+              ? 'Un aviso se lee y listo: no tiene cuadradito, no cuenta para el número del menú y no entra en Cumplimiento.'
+              : 'Un pendiente pide que alguien lo tilde ese día, y por eso enciende el número del menú hasta que se tilda.'
+          }
+        >
+          <Select
+            value={it.clase}
+            onChange={(e) => {
+              const clase = e.target.value as ClaseItem
+              // Pasar a aviso se lleva el manual puesto: si no, quedaría guardado sin dibujarse en
+              // ningún lado y volvería a aparecer solo si alguien lo devuelve a pendiente meses
+              // después. La regla, en cambio, no se toca: está a la vista acá abajo.
+              setIt((x) => ({ ...x, clase, manualId: clase === 'aviso' ? null : x.manualId }))
+            }}
+          >
+            {CLASES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </Select>
+        </Field>
+
+        <Field
+          label={esAviso ? 'Qué hay que saber' : 'Qué hay que hacer'}
+          required
+          hint={esAviso ? 'Corto y en presente: «Viene el flete a las 10».' : 'Corto y en infinitivo: «Reponer la vidriera».'}
+        >
           <Input
             value={it.titulo}
             onChange={(e) => set('titulo', e.target.value)}
-            placeholder="Reponer la vidriera"
+            placeholder={esAviso ? 'Viene el flete a las 10' : 'Reponer la vidriera'}
           />
         </Field>
 
@@ -151,7 +198,11 @@ export function ModalItem({
           />
         </Field>
 
-        <EditorRegla regla={it.regla} onChange={(r) => set('regla', r)} titulo="Qué días toca" />
+        <EditorRegla
+          regla={it.regla}
+          onChange={(r) => set('regla', r)}
+          titulo={esAviso ? 'Qué días se avisa' : 'Qué días toca'}
+        />
 
         <div>
           <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
@@ -219,9 +270,10 @@ export function ModalItem({
 
           {/*
             El manual es el enganche con el flujo que ya está escrito: en vez de repetir acá cómo se
-            hace, el renglón de Hoy abre el manual. Si no hay ninguno publicado, no se ofrece.
+            hace, el renglón de Hoy abre el manual. Si no hay ninguno publicado, no se ofrece — y
+            tampoco se ofrece en un aviso: "cómo se hace" no aplica a algo que no hay que hacer.
           */}
-          {publicados.length > 0 && (
+          {!esAviso && publicados.length > 0 && (
             <Field label="Cómo se hace" hint="El manual que se abre desde el renglón. Opcional." width={280}>
               <Select
                 value={it.manualId ?? ''}

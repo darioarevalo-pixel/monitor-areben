@@ -12,8 +12,9 @@ import { useAvisos } from '@/store/useAvisos'
 import { useSistema } from '@/store/useSistema'
 import { marcarVisto, vistoHasta } from '@/lib/notificaciones/visto'
 import { BandaPromoHoy } from '@/components/agenda/BandaPromoHoy'
+import { AvisosHoy } from '@/components/agenda/AvisosHoy'
 import { PendientesHoy } from '@/components/agenda/PendientesHoy'
-import { contarSinTildar, hoyIso } from '@/lib/agenda'
+import { avisosDe, contarSinTildar, hoyIso } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, EmptyState, Esqueleto, MarcaChip, color, font, space, toneTokens } from '@/components/ui'
@@ -68,6 +69,10 @@ export function Inicio() {
   const itemsAgenda = useAgenda((st) => st.items)
   const hechosAgenda = useAgenda((st) => st.hechos)
   const faltanHoy = contarSinTildar(itemsAgenda, hechosAgenda, hoy, { marca })
+  // ⚠️ `avisosDeHoy` es de la AGENDA (cargados a mano, con fecha) y no tiene nada que ver con
+  // `avisos`, que son los seis tipos que esta pantalla deriva de las solicitudes. Comparten palabra
+  // y nada más: por eso el bloque de abajo no dice "avisos" en el título.
+  const avisosDeHoy = avisosDe(itemsAgenda, hoy, { marca })
 
   /**
    * El reloj de "actualizado hace X min".
@@ -175,6 +180,18 @@ export function Inicio() {
           El número sale de `contarSinTildar`, la misma función que alimenta el badge del sidebar y
           la pestaña Hoy de la Agenda — contar distinto acá marcaría algo que ninguna pantalla
           muestra, que es el mismo agujero que esta pantalla vino a cerrar con los avisos. */}
+      {/* Lo que hay que saber del día, arriba de lo que hay que hacer: "hoy no hay envíos" cambia
+          cómo se hace todo lo demás, así que enterarse después de haber empezado no sirve. No tiene
+          tilde ni número —un aviso no se puede apagar—, y por eso tampoco enciende el badge. */}
+      {avisosDeHoy.length > 0 && (
+        <section style={{ marginBottom: space[6] }}>
+          <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, marginBottom: space[3] }}>
+            📣 Para tener en cuenta hoy
+          </h2>
+          <AvisosHoy fecha={hoy} />
+        </section>
+      )}
+
       {faltanHoy > 0 && (
         <section style={{ marginBottom: space[6] }}>
           <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, marginBottom: space[3] }}>
