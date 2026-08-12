@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 function loadEnv() {
   try {
@@ -33,6 +34,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function gnFetch(path, retries = 4) {
+  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
+  let cortes = 0;
   const url = `${GN_BASE}/${path}`;
   for (let attempt = 1; attempt <= retries; attempt++) {
     const res = await fetch(url, {
@@ -49,6 +52,14 @@ async function gnFetch(path, retries = 4) {
       throw new Error(`Respuesta no-JSON [${res.status}] en ${path}: ${text.substring(0, 200)}`);
     }
     if (!res.ok) {
+      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
+        cortes++;
+        const wait = esperaRateLimit(res, cortes);
+        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+        await sleep(wait);
+        attempt--; // el corte no gasta el presupuesto de reintentos
+        continue;
+      }
       if (res.status >= 500 && attempt < retries) {
         process.stdout.write(` [retry ${attempt}/${retries - 1} status ${res.status}]`);
         await sleep(3000 * attempt);

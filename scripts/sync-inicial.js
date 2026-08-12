@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 // Cargar .env manualmente (sin dependencia de dotenv)
 function loadEnv() {
@@ -34,18 +35,31 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Sin reintentos de ningún tipo hasta el 12-ago-2026: un solo corte de GN mataba el sync inicial
+// entero, que es el más largo de todos y el que peor cae volver a empezar.
 async function gnFetch(path) {
-  const url = `${GN_BASE}/${path}`;
-  const res = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-  });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch {
-    throw new Error(`Respuesta no-JSON de Gestión Nube [${res.status}] en ${path}: ${text.substring(0, 200)}`);
+  for (let cortes = 0; ; ) {
+    const url = `${GN_BASE}/${path}`;
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+      throw new Error(`Respuesta no-JSON de Gestión Nube [${res.status}] en ${path}: ${text.substring(0, 200)}`);
+    }
+    if (!res.ok) {
+      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
+        cortes++;
+        const wait = esperaRateLimit(res, cortes);
+        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+        await sleep(wait);
+        continue;
+      }
+      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
+    }
+    return data;
   }
-  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-  return data;
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

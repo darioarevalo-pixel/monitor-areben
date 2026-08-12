@@ -30,6 +30,7 @@ import { readFileSync, appendFileSync } from 'fs';
 import { resolve } from 'path';
 import { purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
+import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 function loadEnv() {
   try {
@@ -90,6 +91,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // ── Gestión Nube ──────────────────────────────────────────────────────────────
 
 async function gnFetch(path, retries = 5) {
+  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
+  let cortes = 0;
   for (let intento = 1; intento <= retries; intento++) {
     let res, text;
     try {
@@ -112,6 +115,14 @@ async function gnFetch(path, retries = 5) {
       throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 150)}`);
     }
     if (!res.ok) {
+      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
+        cortes++;
+        const wait = esperaRateLimit(res, cortes);
+        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+        await sleep(wait);
+        intento--; // el corte no gasta el presupuesto de reintentos
+        continue;
+      }
       if (res.status >= 500 && intento < retries) { await sleep(2000 * intento); continue; }
       throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
     }

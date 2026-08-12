@@ -46,6 +46,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 function loadEnv() {
   try {
@@ -93,15 +94,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * borrar por ausencia en el listado es borrar por sospecha.
  */
 async function gnVenta(id) {
-  const res = await fetch(`${GN_BASE}/ventas/${id}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/json' } });
-  if (res.status === 404) return null;
-  const text = await res.text();
-  if (!res.ok) throw new Error(`GN ${res.status} en ventas/${id}: ${text.substring(0, 120)}`);
-  const d = JSON.parse(text);
-  return d?.data || d;
+  // No va por `gnFetch` porque acá el status ES el dato: hay que distinguir el 404 de cualquier
+  // otro error. Por eso el corte por límite se aguanta a mano — confundirlo con un 404 sería
+  // leer "la venta no existe" donde GN sólo dijo "esperá".
+  for (let cortes = 0; ; ) {
+    const res = await fetch(`${GN_BASE}/ventas/${id}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/json' } });
+    if (res.status === 404) return null;
+    const text = await res.text();
+    if (esRateLimit(res, null) && cortes < MAX_RATE_LIMIT) {
+      cortes++;
+      const wait = esperaRateLimit(res, cortes);
+      console.warn(`  ⏳ GN cortó por límite de solicitudes en ventas/${id}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+      await sleep(wait);
+      continue;
+    }
+    if (!res.ok) throw new Error(`GN ${res.status} en ventas/${id}: ${text.substring(0, 120)}`);
+    const d = JSON.parse(text);
+    return d?.data || d;
+  }
 }
 
 async function gnFetch(path, retries = 5) {
+  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
+  let cortes = 0;
   for (let intento = 1; intento <= retries; intento++) {
     let res, text;
     try {
@@ -110,6 +125,16 @@ async function gnFetch(path, retries = 5) {
     } catch (e) {
       if (intento === retries) throw e;
       await sleep(2000 * intento); continue;
+    }
+    // Antes del try de abajo a propósito: ahí adentro un throw lo agarra su propio catch, y el
+    // corte por límite terminaría contado como "error de parseo" y gastando reintentos.
+    if (esRateLimit(res, null) && cortes < MAX_RATE_LIMIT) {
+      cortes++;
+      const wait = esperaRateLimit(res, cortes);
+      console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
+      await sleep(wait);
+      intento--;
+      continue;
     }
     try {
       const data = JSON.parse(text);
