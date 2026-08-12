@@ -10,9 +10,9 @@
  *    qué ESCRIBIRÍA el sync (TN = GN). Es de SOLO LECTURA: no escribe nada.
  *  - **Ventas (dry-run)**: las órdenes de la tienda de Stunned que HOY no llegan a Gestión Nube
  *    (alguien las carga a mano como si fueran del local), y qué venta crearía el sync por cada una.
- *    También de solo lectura mientras `ESCRITURA_HABILITADA` esté en false.
+ *    Con `ESCRITURA_HABILITADA` en true suma un botón "Importar" por fila, que crea la venta en GN.
  *
- * Nada acá toca ventas: mapeo (read+write sobre sku_map) y dos comparaciones (read-only).
+ * El dry-run es de solo lectura: lo único que escribe ventas es ese botón, de a una y con confirmación.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -34,12 +34,17 @@ const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acci
 const STORE = 'stunned' as const
 
 /**
- * 🔴 La importación de ventas a Gestión Nube nace APAGADA. GN no permite anular una venta por API:
- * una venta duplicada se limpia a mano en la web de GN. Se prende recién cuando estén acordados la
- * fecha de corte (`lib/sync-tn/config.ts`) y el cliente de GN, y después de probar una importación
- * real de a una. Prenderla es cambiar este `false`.
+ * La importación de ventas a Gestión Nube nació APAGADA y se prendió el 11-ago-2026, con la fecha de
+ * corte acordada (`lib/sync-tn/config.ts`) y el cliente de GN creado (`TN_IMPORT_CLIENT` en
+ * `api/crear-venta.js`). Apagarla de nuevo es cambiar este `true`.
+ *
+ * 🔴 Prenderla NO importa nada sola: hace aparecer el botón "Importar" fila por fila, y cada uno pide
+ * confirmación con el detalle de la venta. Es a propósito. La advertencia de duplicado AVISA, NO
+ * BLOQUEA, y GN no permite anular una venta por API — una duplicada se limpia a mano en la web de GN.
+ * Por eso no hay "importar todo" ni cron: el volumen es de 1-2 órdenes online por mes y conviene que
+ * un humano mire el cartel amarillo antes de crear la venta.
  */
-const ESCRITURA_HABILITADA = false
+const ESCRITURA_HABILITADA = true
 
 /** Tope del rango de fechas del dry-run de ventas: TN es lento y el endpoint corta a los 20 s. */
 const RANGO_MAX_DIAS = 31

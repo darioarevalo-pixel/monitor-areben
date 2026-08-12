@@ -47,11 +47,15 @@ const CAMBIO_PAYMENT = {
   bdi: { tarjeta: 2, transferencia: 5 },
 };
 // ── Importación de una orden de Tienda Nube (acción `tn_import`) ──
-// 🔴 FALTA EL DATO: el cliente de GN al que se le atribuyen las ventas online de Stunned. GN no
-// tiene API de alta de clientes, así que hay que crearlo a mano en GN y poner el id acá. Sin él el
-// handler CORTA con un error explícito (igual que CANJE_CLIENT) en vez de caer al cliente de fotos:
-// una venta atribuida al cliente equivocado no se corrige por API.
-const TN_IMPORT_CLIENT = { stunned: null };
+// El cliente de GN al que se le atribuyen las ventas online de Stunned. GN no tiene API de alta de
+// clientes: Bruno lo creó a mano en el GN de Zattia (11-ago-2026). Sin id el handler CORTA con un
+// error explícito (igual que CANJE_CLIENT) en vez de caer al cliente de fotos: una venta atribuida
+// al cliente equivocado no se corrige por API.
+// 🔑 Acá va el **id interno**, NO el `number` que se ve en la pantalla de GN. Se distinguen por el
+// orden de magnitud: el `id` es un contador GLOBAL de GN (dos clientes creados a la vez en cuentas
+// distintas salieron 621329 y 621331) y hoy anda por 64x.xxx; el `number` es por cuenta y en BDI
+// recién llega a ~13.900 con 13.970 clientes. Un 6 dígitos es id; un 4-5 dígitos es number.
+const TN_IMPORT_CLIENT = { stunned: 645285 };
 // Canal 16 = "Tienda Nube" en GN (verificado: es el que filtra `verificar_ventas` en bdi-catalogo
 // para cruzar contra las órdenes de TN). Es un canal NORMAL, no el 12 "Ninguno": si fuera el 12,
 // `esVentaTecnica` la descartaría y la venta online de Stunned no aparecería en ningún reporte —
