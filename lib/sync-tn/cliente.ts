@@ -58,6 +58,12 @@ export async function importarOrden(plan: PlanVenta): Promise<ResultadoImport> {
       origen: 'local',
       tn_order: plan.numero,
       descuento: plan.descuento,
+      // Para la NOTA de la venta en GN. Todas las ventas online caen en el mismo cliente genérico,
+      // así que la nota es el único lugar donde queda quién compró y por cuánto.
+      cliente: plan.cliente,
+      total_tn: plan.total_tn,
+      pago: plan.pago,
+      fecha_tn: plan.dia,
       items: plan.lineas.map((l) => ({ product_id: l.gn_product_id, size_id: l.gn_variant_id, quantity: l.quantity, unit_price: l.unit_price })),
     }),
   })

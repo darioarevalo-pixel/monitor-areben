@@ -4,6 +4,10 @@
 // Usa GN_TOKEN_VENTAS (Zattia) / GN_TOKEN_VENTAS_BDI (BDI): token con permiso de ventas.
 import { exigirUsuario } from './_auth.js';
 import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as reservarLedger } from './_sync-ledger.js';
+// La nota de las ventas importadas de TN. Vive en `lib/` y en JS plano porque el dry-run de la
+// pantalla muestra EXACTAMENTE esta nota antes de que alguien apriete Importar: si fueran dos
+// implementaciones, la pantalla prometería una cosa y GN guardaría otra.
+import { notaTnImport } from '../lib/sync-tn/nota.core.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -47,10 +51,16 @@ const CAMBIO_PAYMENT = {
   bdi: { tarjeta: 2, transferencia: 5 },
 };
 // ── Importación de una orden de Tienda Nube (acción `tn_import`) ──
-// El cliente de GN al que se le atribuyen las ventas online de Stunned. GN no tiene API de alta de
-// clientes: Bruno lo creó a mano en el GN de Zattia (11-ago-2026). Sin id el handler CORTA con un
-// error explícito (igual que CANJE_CLIENT) en vez de caer al cliente de fotos: una venta atribuida
-// al cliente equivocado no se corrige por API.
+// El cliente de GN al que se le atribuyen TODAS las ventas online de Stunned. Bruno lo creó a mano
+// en el GN de Zattia (11-ago-2026). Sin id el handler CORTA con un error explícito (igual que
+// CANJE_CLIENT) en vez de caer al cliente de fotos: una venta atribuida al cliente equivocado no se
+// corrige por API.
+// 📌 Ojo con lo que dábamos por sabido: `POST /clientes` **SÍ existe** en la API de GN (el `Allow`
+// de la ruta dice `GET, HEAD, POST`; nunca se ejerció). O sea que dar de alta un cliente por
+// comprador —como hace la integración NATIVA de TN, que creó el 645183 "Camila Galvan" con mail y
+// teléfono— es posible. Hoy NO se hace: es una decisión de Bruno, porque llenaría el padrón de
+// clientes de GN con cada comprador online. Mientras no se haga, quién compró vive en la NOTA
+// (`lib/sync-tn/nota.core.js`) y en ningún otro lado.
 // 🔑 Acá va el **id interno**, NO el `number` que se ve en la pantalla de GN. Se distinguen por el
 // orden de magnitud: el `id` es un contador GLOBAL de GN (dos clientes creados a la vez en cuentas
 // distintas salieron 621329 y 621331) y hoy anda por 64x.xxx; el `number` es por cuenta y en BDI
@@ -150,7 +160,12 @@ export default async function handler(req, res) {
     const payload = {
       client_id: clientId, channel_id: channel, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
       store_id, discount_inventory: true,
-      comments: `Orden TN #${tnOrder}`,
+      comments: notaTnImport(tnOrder, b),
+      // Campo propio de GN para el número de orden de TN. Lo llena la integración NATIVA, y el motor
+      // del sync ya lo lee para reconocer una orden como "ya está en GN" (lib/sync-tn/core.ts). Si GN
+      // lo acepta en el POST, nuestras ventas quedan reconocibles por ese camino además de por
+      // `integration_id`, y se cruzan igual que las nativas. Si lo ignora, no rompe nada.
+      tn_order: tnOrder,
       integration_source: 'monitor-sync-tn', integration_id: tnOrder,
       items: its.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: Number(it.unit_price) || 0, store_id })),
       discount_amount: Math.max(0, Math.round(Number(b.descuento) || 0)),

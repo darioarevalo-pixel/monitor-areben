@@ -26,6 +26,9 @@ import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
 import { importarOrden, leerOrdenes, leerProcesados } from '@/lib/sync-tn/cliente'
 import { TEXTO_MOTIVO, planificar } from '@/lib/sync-tn/core'
 import { CFG_STUNNED, CORTE_STUNNED } from '@/lib/sync-tn/config'
+// La MISMA función que usa `api/crear-venta.js` para escribir la nota en GN: lo que se ve acá es
+// literalmente lo que va a quedar guardado.
+import { notaTnImport } from '@/lib/sync-tn/nota.core.js'
 import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge as BadgeKit, Button, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space } from '@/components/ui'
@@ -364,6 +367,8 @@ export function Integraciones() {
       ...p.lineas.map((l) => `  ${l.sku} ×${l.quantity} — ${l.unit_price.toLocaleString('es-AR')}`),
       p.descuento ? `Descuento: ${p.descuento.toLocaleString('es-AR')}` : '',
       `Descuenta ${p.unidades} u. del Local.`,
+      '',
+      `Nota que queda en GN:\n${notaTnImport(p.numero, { cliente: p.cliente, fecha_tn: p.dia, total_tn: p.total_tn, pago: p.pago })}`,
       dup ? `\n⚠ OJO: puede que ya esté cargada a mano en GN (venta ${dup.gn_number ?? dup.gn_venta_id} del ${dup.date_sale}). Gestión Nube NO permite anular por API.` : '',
     ]
       .filter(Boolean)
@@ -649,6 +654,11 @@ export function Integraciones() {
                             <span style={{ color: color.ink2 }}>
                               Venta en GN · Local · canal Tienda Nube · descuenta {p.unidades} u.
                             </span>
+                            {/* La nota es el ÚNICO lugar donde queda quién compró: todas las ventas online caen
+                                en el mismo cliente genérico de GN. Se muestra textual para poder leerla antes. */}
+                            <div style={{ marginTop: space[1], fontSize: font.sm, color: color.mut }}>
+                              Nota: <span style={{ fontFamily: 'var(--fuente-mono, monospace)' }}>{notaTnImport(p.numero, { cliente: p.cliente, fecha_tn: p.dia, total_tn: p.total_tn, pago: p.pago })}</span>
+                            </div>
                             {ESCRITURA_HABILITADA && (
                               <span style={{ display: 'inline-flex', marginLeft: space[3] }}>
                                 <Button

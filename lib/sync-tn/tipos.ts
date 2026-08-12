@@ -118,6 +118,12 @@ export type PlanVenta = {
   cliente: string | null
   total_tn: number | null
   estado_pago: string | null
+  /**
+   * Cómo pagó, como lo nombra TN (`pago_metodo`, y si no `pago_gateway`). No se usa para armar la
+   * venta: va a la NOTA de la venta de GN, junto con el nombre y el número de orden. Es el único
+   * lugar donde esos datos sobreviven — todas las ventas online caen en un mismo cliente genérico.
+   */
+  pago: string | null
   lineas: LineaPlan[]
   unidades: number
   /**

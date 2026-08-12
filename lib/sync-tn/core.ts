@@ -256,6 +256,7 @@ export function planificar(e: {
       cliente: o.cliente ?? null,
       total_tn: o.total == null ? null : Number(o.total),
       estado_pago: o.estado_pago ?? null,
+      pago: o.pago_metodo || o.pago_gateway || null,
       lineas,
       unidades: lineas.reduce((s, x) => s + x.quantity, 0),
       descuento: descuentoDe(o, lineas),
