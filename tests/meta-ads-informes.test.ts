@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { COLS_LISTA, LIMITE_HTML, aVistaInforme } from '../lib/meta-ads/informes.core.js'
 // Lo que la app consume entra por el módulo TIPADO: si el `as` de `informes.ts` se despega de lo que
 // devuelve el `.core.js`, es acá donde tiene que doler.
-import { avisosDelHtml, nombreArchivo, validarInforme } from '../lib/meta-ads/informes'
+import { avisosDelHtml, nombreArchivo, riesgosDelHtml, validarInforme } from '../lib/meta-ads/informes'
 
 const LINEAS = ['bdi', 'zattia', 'stunned']
 const ok = (extra: Record<string, unknown> = {}) => ({
@@ -46,11 +46,34 @@ describe('validarInforme', () => {
   })
 })
 
-describe('avisosDelHtml', () => {
-  it('avisa del script, porque adentro del iframe no va a correr', () => {
-    const avisos = avisosDelHtml('<html><script>var a=1</script></html>')
-    expect(avisos.some((a) => a.includes('script'))).toBe(true)
+describe('el JavaScript se frena en la puerta, no en el navegador', () => {
+  /**
+   * 🔴 Esto NO es cosmético: es la única garantía que quedó. El `sandbox` del iframe dejaba el
+   * marco en blanco (medido en prod), así que se sacó, y el «no corre JavaScript» pasó a ser una
+   * condición sobre el texto que se verifica acá.
+   */
+  it('rechaza un informe con <script>, y lo dice', () => {
+    const r = validarInforme(ok({ html: '<html><script>var a=1</script></html>' }), { lineasValidas: LINEAS })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('script')
   })
+
+  it('rechaza un manejador en línea, que es la forma que no tiene etiqueta', () => {
+    expect(validarInforme(ok({ html: '<html><div onclick="robar()">x</div></html>' }), { lineasValidas: LINEAS }).ok).toBe(false)
+  })
+
+  it('rechaza una URL javascript: y un marco anidado', () => {
+    expect(validarInforme(ok({ html: '<html><a href="javascript:alert(1)">x</a></html>' }), { lineasValidas: LINEAS }).ok).toBe(false)
+    expect(validarInforme(ok({ html: '<html><iframe src="/x"></iframe></html>' }), { lineasValidas: LINEAS }).ok).toBe(false)
+  })
+
+  it('un informe de lectura pasa entero', () => {
+    // El caso real: los dos informes del analista son <title> + <style> + prosa.
+    expect(riesgosDelHtml('<title>x</title><style>b{color:#123}</style><h1>Hola</h1>')).toEqual([])
+  })
+})
+
+describe('avisosDelHtml', () => {
 
   it('avisa de los recursos externos: un informe tiene que leerse dentro de diez años', () => {
     const avisos = avisosDelHtml('<html><img src="https://cdn.ejemplo.com/f.png"></html>')

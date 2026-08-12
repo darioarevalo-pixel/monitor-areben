@@ -11,6 +11,7 @@ import type { LineaPauta } from './tipos'
 import {
   avisosDelHtml as avisosDelHtmlJs,
   nombreArchivo as nombreArchivoJs,
+  riesgosDelHtml as riesgosDelHtmlJs,
   validarInforme as validarInformeJs,
 } from './informes.core.js'
 
@@ -59,6 +60,11 @@ export type Validacion =
  */
 export function validarInforme(cuerpo: unknown, opts: { lineasValidas: string[] }): Validacion {
   return validarInformeJs(cuerpo, opts) as Validacion
+}
+
+/** Lo que hace que un informe NO se guarde: JavaScript en cualquiera de sus formas. Ver `RIESGOS`. */
+export function riesgosDelHtml(html: string): string[] {
+  return riesgosDelHtmlJs(html)
 }
 
 /** Lo que conviene saber antes de guardar y no invalida nada. Ver el `.core.js`. */

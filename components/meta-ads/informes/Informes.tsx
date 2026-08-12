@@ -20,25 +20,23 @@
  * escalar/mirar/cortar donde el color ES la decisión). Inyectado suelto, sus reglas y las del
  * monitor se pisan en los dos sentidos. El iframe le da su propio documento.
  *
- * Va con `sandbox` **sin `allow-scripts`**: los informes son estáticos, y el día que uno llegue con
- * un script no tiene por qué correr adentro del monitor. La contra, dicha en voz alta: **un iframe
- * sandboxeado no puede avisar su alto**, así que el informe scrollea adentro de su marco en vez de
- * estirar la página. Se eligió eso antes que abrirle la puerta a los scripts para ganar un scroll.
+ * 🔴 **Sin `sandbox`, y la garantía vive en la PUERTA.**
  *
- * 🔴 **El informe entra por `src` con un blob, NUNCA por `srcDoc`.**
+ * El plan era `sandbox` sin `allow-scripts` y que el navegador se ocupara. Medido en producción,
+ * con `sandbox` **el marco queda en blanco**: con el informe entero, con 3 KB, con y sin `<style>`,
+ * por `srcdoc` y por blob. Sin `sandbox` se ve siempre. Un aislamiento que no deja ver nada no es
+ * aislamiento, es la pantalla rota.
  *
- * Con `srcDoc` el marco salió a producción **en blanco**: la pantalla dibujaba, el atributo estaba
- * y medía sus 40 KB, y adentro no había nada. Se midió en prod probando las combinaciones una por
- * una: con este informe, **`srcdoc` + cualquier `sandbox` no pinta**; `srcdoc` sin sandbox pinta;
- * y un **blob como `src` pinta con el sandbox puesto**. Así que el aislamiento se queda y lo que
- * cambia es cómo entra el documento.
+ * Así que el «no corre JavaScript» se sostiene donde sí se puede sostener: `validarInforme()`
+ * **rechaza** un informe que traiga `<script>`, un manejador en línea, una URL `javascript:` o un
+ * marco anidado. Es una condición sobre el texto, se prueba, y no depende de que un atributo se
+ * comporte igual en cada navegador. Ver `RIESGOS` en `informes.core.js`.
  *
- * ⚠️ Y el blob declara `charset=utf-8`, que no es opcional: un marco sandboxeado tiene origen
- * opaco y **no hereda la codificación del padre**. Sin eso, el mismo informe que afuera muestra
- * «·» adentro muestra «Â·». Se vio en la prueba, no se dedujo.
+ * ⚠️ Volver a poner `sandbox` «por las dudas» rompe la pantalla sin un solo error: no hay nada en
+ * consola ni en el CI. Se ve mirando, y sólo si uno sabe que ahí tenía que haber algo.
  *
- * ⚠️ `srcDoc` no puede volver «para simplificar»: el defecto no da ningún error, ni en consola ni
- * en el CI. Se ve mirando la pantalla, y sólo si uno sabe que ahí tenía que haber algo.
+ * El documento entra por `src` con un blob y no por `srcDoc`, porque el blob **declara su
+ * codificación**: sin `charset=utf-8` el «·» del informe se lee «Â·».
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -56,7 +54,7 @@ import {
 /** Cuánto mide el marco del informe. Alto fijo porque el iframe no puede decir el suyo (ver arriba). */
 const ALTO_MARCO = 720
 
-/** El charset va SIEMPRE: un marco sandboxeado no hereda el del padre. Ver el encabezado. */
+/** El charset va SIEMPRE: el blob no hereda la codificación del padre. Ver el encabezado. */
 const TIPO_HTML = 'text/html;charset=utf-8'
 
 export function Informes() {
@@ -210,13 +208,13 @@ export function Informes() {
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => descargar(abierto)}>Descargar</Button>
                 </div>
-                {/* `sandbox` vacío: sin scripts, sin same-origin, sin formularios. El `key` fuerza un
+                {/* ⛔ Sin `sandbox`: con él el marco sale en blanco. El JavaScript lo frena la puerta
+                    al guardar, no el navegador al dibujar — ver el encabezado. El `key` fuerza un
                     marco nuevo por informe en vez de mutarle el `src` a uno que ya navegó. */}
                 <iframe
                   key={abierto.id}
                   title={abierto.titulo}
                   src={urlMarco ?? undefined}
-                  sandbox=""
                   style={{
                     width: '100%', height: ALTO_MARCO, border: `1px solid ${color.line}`,
                     borderRadius: radius.lg, background: '#fff',
