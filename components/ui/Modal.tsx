@@ -47,6 +47,16 @@ export function Modal({
 
   const cerrar = useCallback(() => onCerrar(), [onCerrar])
 
+  // 🔴 **Lo que el efecto de abajo necesita, va por ref, y el efecto depende SÓLO de `abierto`.**
+  // Casi todos los llamadores pasan `onCerrar={() => …}` inline, así que `cerrar` cambia de
+  // identidad en cada render del padre; con `cerrar` en las dependencias, el efecto —y con él el
+  // `focus()` de más abajo— corría **en cada tecla**. Se veía escribiendo el % de descuento en
+  // Liquidación: entraba un dígito y el foco se iba solo, así que no se podía tipear "30".
+  const vivo = useRef({ cerrar, cerrarConEscape })
+  useEffect(() => {
+    vivo.current = { cerrar, cerrarConEscape }
+  })
+
   useEffect(() => {
     if (!abierto) return
     foco.current = document.activeElement
@@ -54,15 +64,20 @@ export function Modal({
     document.body.style.overflow = 'hidden'
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && cerrarConEscape) {
+      if (e.key === 'Escape' && vivo.current.cerrarConEscape) {
         e.stopPropagation()
-        cerrar()
+        vivo.current.cerrar()
       }
     }
     document.addEventListener('keydown', onKey)
 
     // El foco entra al diálogo: si no, un Enter seguiría disparando el botón de atrás.
-    const primero = caja.current?.querySelector<HTMLElement>('[data-foco], button, input, select, textarea, a[href]')
+    // ⚠️ `data-foco` va en su **propio** `querySelector`: con la lista separada por comas se
+    // devuelve el primero en orden del DOM, no el primero de la lista, y cualquier botón que
+    // esté más arriba en el diálogo se lleva el foco que un campo pidió explícitamente.
+    const primero =
+      caja.current?.querySelector<HTMLElement>('[data-foco]') ??
+      caja.current?.querySelector<HTMLElement>('button, input, select, textarea, a[href]')
     primero?.focus()
 
     return () => {
@@ -70,7 +85,7 @@ export function Modal({
       document.body.style.overflow = overflow
       ;(foco.current as HTMLElement | null)?.focus?.()
     }
-  }, [abierto, cerrar, cerrarConEscape])
+  }, [abierto])
 
   if (!abierto) return null
 
