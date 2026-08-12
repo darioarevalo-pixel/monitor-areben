@@ -7,7 +7,7 @@
  */
 
 import { PERM_CAT, type Marca } from '@/lib/nav'
-import { FUNCIONES, funcionQueDa, marcaExcluir, type Funcion } from '@/lib/permisos'
+import { FUNCIONES, funcionQueDa, KEYS_PARA_TODOS, marcaExcluir, type Funcion } from '@/lib/permisos'
 import type { UsuarioConfig } from './tipos'
 
 /** Las dos marcas, en el orden en que se muestran siempre. */
@@ -44,10 +44,16 @@ export function toggleFuncion(u: UsuarioConfig, f: Funcion, val: boolean): Usuar
  * - `admin`     → es administrador, ve todo.
  * - `explicito` → se lo tildaron a él.
  * - `funcion`   → lo trae su función (Local, Marketing, …). No hace falta tildarlo.
+ * - `todos`     → es de las que ve todo el equipo (`KEYS_PARA_TODOS`). Tampoco hace falta tildarlo.
  * - `excluido`  → su función se lo daría, pero se lo quitaron a propósito.
  * - `no`        → no lo tiene.
+ *
+ * 🔴 **`todos` no es cosmético: sin él, Config MIENTE.** Esta función es la que dibuja el
+ * «no ve esta sección» de la tabla de acciones, y quedó contestando distinto que `puedeVer` el día
+ * que la puerta abierta pasó a estar en la decisión. Dos lugares que contestan la misma pregunta
+ * divergen, y acá el que se lee es éste — es la pantalla donde se decide quién ve qué.
  */
-export type OrigenPermiso = 'admin' | 'explicito' | 'funcion' | 'excluido' | 'no'
+export type OrigenPermiso = 'admin' | 'explicito' | 'funcion' | 'todos' | 'excluido' | 'no'
 
 export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): OrigenPermiso {
   if (u.admin) return 'admin'
@@ -55,7 +61,10 @@ export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): Orig
   const porFuncion = !!funcionQueDa(u, key)
   if (b[marcaExcluir(key)]) return 'excluido'
   if (b[key]) return 'explicito'
-  return porFuncion ? 'funcion' : 'no'
+  if (porFuncion) return 'funcion'
+  // Va último y no antes que `explicito`: si además se lo tildaron a mano, lo honesto es mostrar
+  // que hay un tilde puesto. `todos` es lo que contesta cuando no hay nada más que lo explique.
+  return KEYS_PARA_TODOS.has(key) ? 'todos' : 'no'
 }
 
 /**
@@ -67,18 +76,23 @@ export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): Orig
  *   deja la EXCEPCIÓN `-key`, que es lo único que puede ganarle a la función;
  * - volver a tildarlo saca la excepción, y solo agrega el permiso explícito si la
  *   función no se lo daba ya (así la config no se llena de tildes redundantes).
+ *
+ * ⚠️ Las secciones que ve todo el equipo (`KEYS_PARA_TODOS`) se comportan **igual que las que trae
+ * la función**, y tiene que ser así: destildar una borrando `b[key]` no borraría nada —no hay tilde
+ * puesto—, la persona la seguiría viendo y la casilla volvería sola a marcarse al redibujar. Lo
+ * único que le gana a un default es la excepción.
  */
 export function togglePerm(u: UsuarioConfig, brand: Marca, key: string, val: boolean): UsuarioConfig {
   const b: Record<string, boolean> = { ...(u.acceso?.[brand] || {}) }
   const excl = marcaExcluir(key)
-  const porFuncion = !key.includes('.') && !!funcionQueDa(u, key)
+  const vieneSolo = !key.includes('.') && (!!funcionQueDa(u, key) || KEYS_PARA_TODOS.has(key))
 
   if (val) {
     delete b[excl]
-    if (!porFuncion) b[key] = true
+    if (!vieneSolo) b[key] = true
   } else {
     delete b[key]
-    if (porFuncion) b[excl] = true
+    if (vieneSolo) b[excl] = true
   }
 
   const padre = key.split('.')[0]
@@ -124,10 +138,10 @@ export function validar(users: UsuarioConfig[]): string | null {
   return null
 }
 
-/** ¿La checkbox de `key` está marcada para `brand`? (admin y función también la marcan). */
+/** ¿La checkbox de `key` está marcada para `brand`? (admin, función y puerta abierta también). */
 export function tienePermiso(u: UsuarioConfig, brand: Marca, key: string): boolean {
   const o = origenPermiso(u, brand, key)
-  return o === 'admin' || o === 'explicito' || o === 'funcion'
+  return o === 'admin' || o === 'explicito' || o === 'funcion' || o === 'todos'
 }
 
 /**

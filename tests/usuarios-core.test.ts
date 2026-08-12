@@ -267,3 +267,48 @@ describe('usuarios/core — validar', () => {
     expect(validar([base({ name: 'Ana', admin: true }), base({ name: 'Beto' })])).toBeNull()
   })
 })
+
+/**
+ * 🔴 **Config y `puedeVer` tienen que contestar lo mismo, o la pantalla donde se decide quién ve
+ * qué es la que miente.** `origenPermiso` dibuja el «no ve esta sección» de la tabla de acciones;
+ * el día que la puerta abierta pasó a vivir en la decisión (`KEYS_PARA_TODOS`), esta función quedó
+ * diciendo que el puesto Local no veía la Agenda cuando ya la veía.
+ */
+describe('usuarios/core — las secciones que ve todo el equipo', () => {
+  it('salen como «todos», sin que nadie las haya tildado', () => {
+    const u = base({ funcion: ['local'] })
+    for (const k of ['agenda', 'novedades', 'manuales']) {
+      expect(origenPermiso(u, 'bdi', k), k).toBe('todos')
+      expect(tienePermiso(u, 'bdi', k), k).toBe(true)
+    }
+  })
+
+  it('⛔ el resumen NO es de todos: sigue saliendo «no»', () => {
+    expect(origenPermiso(base(), 'bdi', 'resumen')).toBe('no')
+    expect(tienePermiso(base(), 'bdi', 'resumen')).toBe(false)
+  })
+
+  it('un tilde puesto a mano se sigue viendo como explícito, y no se lo tapa', () => {
+    // Si dijera «todos» ahí, quien mira no podría saber que hay un tilde guardado en la config.
+    const u = base({ acceso: { bdi: { agenda: true }, zattia: {} } })
+    expect(origenPermiso(u, 'bdi', 'agenda')).toBe('explicito')
+  })
+
+  it('🔑 destildarla deja la EXCEPCIÓN, no un borrado que no borra nada', () => {
+    // Sin esto la casilla rebota: no hay tilde que sacar, así que la persona la seguiría viendo
+    // y la casilla se volvería a marcar sola al redibujar.
+    const u = togglePerm(base(), 'bdi', 'agenda', false)
+    expect(u.acceso.bdi?.[marcaExcluir('agenda')]).toBe(true)
+    expect(origenPermiso(u, 'bdi', 'agenda')).toBe('excluido')
+    expect(tienePermiso(u, 'bdi', 'agenda')).toBe(false)
+    // Y sólo en su marca.
+    expect(tienePermiso(u, 'zattia', 'agenda')).toBe(true)
+  })
+
+  it('volver a tildarla saca la excepción y NO deja un tilde redundante', () => {
+    const u = togglePerm(togglePerm(base(), 'bdi', 'agenda', false), 'bdi', 'agenda', true)
+    expect(u.acceso.bdi?.[marcaExcluir('agenda')]).toBeUndefined()
+    expect(u.acceso.bdi?.agenda).toBeUndefined()
+    expect(origenPermiso(u, 'bdi', 'agenda')).toBe('todos')
+  })
+})

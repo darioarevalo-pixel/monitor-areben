@@ -28,13 +28,15 @@ const CAJA: React.CSSProperties = { width: 17, height: 17, margin: '6px 4px', cu
 
 /** El fondo de la celda dice de dónde viene el permiso. Es lo que antes decía el tilde solo. */
 export function fondoDeOrigen(origen: OrigenPermiso): string | undefined {
-  if (origen === 'funcion') return color.bg2
+  // El gris ya significa «no lo tildó nadie, le llega solo». `todos` es exactamente eso, así que
+  // comparte el color en vez de estrenar uno: un color nuevo es una convención nueva que aprender.
+  if (origen === 'funcion' || origen === 'todos') return color.bg2
   if (origen === 'excluido') return color.dangerBg
   return undefined
 }
 
 export function estiloDeOrigen(origen: OrigenPermiso): React.CSSProperties {
-  if (origen === 'funcion') return { ...CAJA, accentColor: color.mut2 }
+  if (origen === 'funcion' || origen === 'todos') return { ...CAJA, accentColor: color.mut2 }
   if (origen === 'excluido') return { ...CAJA, outline: `1.5px solid ${color.dangerBorder}`, borderRadius: 3 }
   // Índigo de la marca, no el acento del sistema: que un color signifique algo no puede
   // depender de la configuración del Mac de quien mira.
@@ -46,6 +48,9 @@ function tituloDeOrigen(u: UsuarioConfig, brand: Marca, clave: string, origen: O
   if (origen === 'funcion') {
     const f = funcionQueDa(u, clave)
     return `Lo trae la función ${FUNCIONES.find((x) => x.key === f)?.label ?? f}. Destildalo para hacerle una excepción.`
+  }
+  if (origen === 'todos') {
+    return 'La ve todo el equipo: no hace falta tildarla. Destildala para hacerle una excepción a esta persona.'
   }
   if (origen === 'excluido') return `Su función se lo daría, pero se lo quitaron para ${brand === 'bdi' ? 'BDI' : 'Zattia'}.`
   if (origen === 'explicito') return 'Se lo tildaste vos para esta marca.'
@@ -110,7 +115,7 @@ function Muestra({ origen, marcada }: { origen: OrigenPermiso; marcada: boolean 
 }
 
 /**
- * Las cuatro formas que puede tener una casilla, dibujadas. Va arriba de la tabla, fija: es la
+ * Las cinco formas que puede tener una casilla, dibujadas. Va arriba de la tabla, fija: es la
  * respuesta a "¿por qué hay tildes negras y azules?" y no puede estar escondida en un popover,
  * que es donde estaba.
  */
@@ -118,6 +123,7 @@ export function Leyenda() {
   const items: { origen: OrigenPermiso; marcada: boolean; texto: string }[] = [
     { origen: 'explicito', marcada: true, texto: 'Se lo tildaste vos' },
     { origen: 'funcion', marcada: true, texto: 'Lo trae su función' },
+    { origen: 'todos', marcada: true, texto: 'La ve todo el equipo' },
     { origen: 'excluido', marcada: false, texto: 'Se lo quitaste (excepción)' },
     { origen: 'no', marcada: false, texto: 'No lo tiene' },
   ]
