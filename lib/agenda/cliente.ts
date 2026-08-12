@@ -7,7 +7,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { DatosAgenda, Promo } from './tipos'
+import type { DatosAgenda, FechaIso, ItemAgenda, Promo } from './tipos'
 
 const API = '/api/datos?recurso=agenda'
 
@@ -16,11 +16,21 @@ export function nuevoIdPromo(): string {
   return `pr${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** Lo mismo para un pendiente. El prefijo distinto es para reconocerlo de un vistazo en la base. */
+export function nuevoIdItem(): string {
+  return `it${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
 export async function leerAgenda(): Promise<DatosAgenda> {
   const r = await apiFetch(`${API}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la agenda.')
-  return { promos: d.promos || [], puede: d.puede || { cargar: false } }
+  return {
+    promos: d.promos || [],
+    items: d.items || [],
+    hechos: d.hechos || [],
+    puede: d.puede || { cargar: false },
+  }
 }
 
 /**
@@ -44,4 +54,28 @@ export function guardarPromo(promo: Promo): Promise<void> {
 
 export function borrarPromo(id: string): Promise<void> {
   return postear({ action: 'borrar-promo', id }, 'No se pudo borrar la promoción.')
+}
+
+export function guardarItem(item: ItemAgenda): Promise<void> {
+  return postear({ action: 'guardar-item', item }, 'No se pudo guardar el pendiente.')
+}
+
+export function borrarItem(id: string): Promise<void> {
+  return postear({ action: 'borrar-item', id }, 'No se pudo borrar el pendiente.')
+}
+
+/**
+ * Tildar un pendiente en un día.
+ *
+ * ⚠️ **La fecha va del cliente, y tiene que ir.** El servidor corre en UTC: a las 21:00 de Argentina
+ * ya es mañana, así que si el día lo pusiera el handler, el último tilde de la tarde quedaría
+ * anotado en el día siguiente y Cumplimiento mostraría el de hoy sin hacer. El servidor igual
+ * valida que la fecha exista, que la regla caiga ese día y que no sea del futuro.
+ */
+export function marcarHecho(itemId: string, fecha: FechaIso, nota?: string): Promise<void> {
+  return postear({ action: 'marcar', id: itemId, fecha, nota: nota ?? null }, 'No se pudo tildar.')
+}
+
+export function desmarcarHecho(itemId: string, fecha: FechaIso): Promise<void> {
+  return postear({ action: 'desmarcar', id: itemId, fecha }, 'No se pudo destildar.')
 }

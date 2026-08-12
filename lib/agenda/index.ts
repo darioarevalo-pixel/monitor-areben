@@ -10,9 +10,9 @@
  * reglas, no las lee en voz alta.
  */
 
-import { hoyIso } from '@/lib/calendario'
+import { FECHAS_COMERCIALES, hoyIso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
-import type { Canal, FechaIso, Promo, Regla } from './tipos'
+import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Regla } from './tipos'
 import {
   aplicaEn as aplicaEnJs,
   CLAVES_TIPO_REGLA as CLAVES_TIPO_REGLA_JS,
@@ -111,4 +111,114 @@ export function promosDe(
     .filter((p) => !canal || p.canales.includes(canal))
     .filter((p) => !marca || p.marcas.length === 0 || p.marcas.includes(marca))
     .sort((a, b) => a.banco.localeCompare(b.banco, 'es') || a.medio.localeCompare(b.medio))
+}
+
+/**
+ * ¿Este pendiente va este día?
+ *
+ * Más corto que `corre()` de la promo porque **una rutina no tiene ventana de vigencia**: no vence,
+ * se apaga. Lo que corre entre dos fechas se dice con `{tipo:'rango'}`, que es la regla.
+ */
+export function vaEl(item: ItemAgenda, fecha: FechaIso): boolean {
+  return item.activo && aplicaEn(item.regla, fecha)
+}
+
+/** El tilde de este ítem en este día, o `null` si nadie lo marcó. La ausencia ES "no está hecho". */
+export function hechoDe(hechos: Hecho[], itemId: string, fecha: FechaIso): Hecho | null {
+  return hechos.find((h) => h.itemId === itemId && h.fecha === fecha) ?? null
+}
+
+/** Un pendiente del día con su tilde al lado. `hecho` en `null` es lo que falta hacer. */
+export type PendienteHoy = { item: ItemAgenda; hecho: Hecho | null }
+
+/**
+ * Los pendientes de una persona en un día, con su acuse.
+ *
+ * 🔑 **Es LA función: la usan la pestaña Hoy, el bloque de Inicio y el número del menú.** Si el badge
+ * contara con un criterio propio, mostraría un 1 que no se corresponde con ninguna fila de ninguna
+ * pantalla, y el número que no se puede apagar se vuelve invisible en una semana.
+ *
+ * Sólo lo que es `paraMi`: el destino ya se filtró en el servidor, pero quien carga recibe todos los
+ * ítems para administrarlos y no le corresponde tildar los ajenos.
+ */
+export function pendientesDe(
+  items: ItemAgenda[],
+  hechos: Hecho[],
+  fecha: FechaIso,
+  opts: { marca?: Marca } = {},
+): PendienteHoy[] {
+  const { marca } = opts
+  return items
+    .filter((i) => i.clase === 'pendiente' && i.paraMi && vaEl(i, fecha))
+    .filter((i) => !marca || i.marcas.length === 0 || i.marcas.includes(marca))
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'))
+    .map((item) => ({ item, hecho: hechoDe(hechos, item.id, fecha) }))
+}
+
+/** Cuántos pendientes de hoy siguen sin tildar. Es el número del badge, y sale de la misma lista. */
+export function contarSinTildar(
+  items: ItemAgenda[],
+  hechos: Hecho[],
+  fecha: FechaIso,
+  opts: { marca?: Marca } = {},
+): number {
+  return pendientesDe(items, hechos, fecha, opts).filter((p) => !p.hecho).length
+}
+
+/** Una ocurrencia mirada desde gerencia: qué día tocaba, de qué ítem, y si alguien lo tildó. */
+export type FilaCumplimiento = { fecha: FechaIso; item: ItemAgenda; hecho: Hecho | null }
+
+/**
+ * Qué se tildó y qué no en los últimos días — lo que mira gerencia.
+ *
+ * Del día `hasta` hacia atrás, del más nuevo al más viejo. Se recorre día por día por el mismo
+ * motivo que `ocurrencias()`: es el mismo `aplicaEn` que contesta la pestaña Hoy, así que **el rojo
+ * de acá no puede discrepar con lo que el local vio ese día**.
+ *
+ * Dos exclusiones, y las dos evitan un rojo que no es de nadie:
+ *
+ * 1. **Nada anterior al día en que se cargó el ítem.** Una rutina que se carga hoy no incumplió los
+ *    treinta días anteriores. El `created_at` es UTC y el día es local, así que un ítem cargado
+ *    después de las 21:00 puede esconder su primera ocurrencia; es preferible a acusar de más.
+ * 2. **Un ítem apagado no sigue sumando ocurrencias**, pero sus tildes viejos se siguen viendo:
+ *    apagarlo dice "ya no va", no "nunca pasó".
+ */
+export function cumplimiento(
+  items: ItemAgenda[],
+  hechos: Hecho[],
+  hasta: FechaIso,
+  dias: number = DIAS_CUMPLIMIENTO,
+): FilaCumplimiento[] {
+  const out: FilaCumplimiento[] = []
+  for (let i = 0; i < dias; i++) {
+    const fecha = sumarDias(hasta, -i)
+    for (const item of items) {
+      if (item.clase !== 'pendiente') continue
+      if (!aplicaEn(item.regla, fecha)) continue
+      if (item.creado && fecha < item.creado.slice(0, 10)) continue
+      const hecho = hechoDe(hechos, item.id, fecha)
+      if (!item.activo && !hecho) continue
+      out.push({ fecha, item, hecho })
+    }
+  }
+  return out
+}
+
+/**
+ * El feriado que cae este día, si cae alguno.
+ *
+ * Sirve para un chip al lado de la rutina, no para saltearla: **saltearla sola sería deducir que el
+ * local está cerrado**, y hay feriados que se trabaja. Quien mira decide; la pantalla avisa.
+ *
+ * Sale del catálogo que ya existe (`FECHAS_COMERCIALES`), que además resuelve solo el traslado de
+ * los feriados trasladables — hardcodear "20 de noviembre" acierta un año y miente los otros.
+ */
+export function feriadoDe(fecha: FechaIso): string | null {
+  if (!esFechaIso(fecha)) return null
+  const anio = Number(fecha.slice(0, 4))
+  for (const f of FECHAS_COMERCIALES) {
+    if (f.tipo !== 'feriado') continue
+    if (resolverComercial(f.clave, anio)?.fecha === fecha) return f.titulo
+  }
+  return null
 }

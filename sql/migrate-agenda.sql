@@ -68,3 +68,71 @@ create table if not exists agenda_promos (
 create index if not exists idx_agenda_promos_vig on agenda_promos (activa, desde, hasta);
 
 alter table agenda_promos disable row level security;
+
+-- Un pendiente rutinario: "los martes hay que reponer la vidriera".
+--
+-- # Por qué comparte tabla y motor con la promo bancaria
+--
+-- "Todos los martes de Banco Nación" y "todos los martes hay que reponer la vidriera" son la misma
+-- pregunta, y por eso `regla` es exactamente la misma forma y la valida el mismo
+-- `lib/agenda/reglas.core.js`. Lo que las separa es que la promo se lee y el pendiente **se tilda**:
+-- por eso el acuse vive en su propia tabla y no en una columna de acá.
+--
+-- # `clase`: el que pide tilde y el que sólo informa
+--
+-- `pendiente` pide que alguien lo marque hecho; `aviso` sólo aparece el día que le toca. Hoy la
+-- pantalla de alta sólo carga pendientes — los avisos fechados llegan en T3 —, pero la columna nace
+-- con las dos porque son la misma fila con distinta pregunta, y partirlas después sería una
+-- migración para no ganar nada.
+--
+-- # `destino` es el MISMO de las novedades, a propósito
+--
+-- Lo normaliza y lo evalúa `lib/novedades/destino.core.js`, sin copiar una línea: "¿a quién le
+-- llega?" ya estaba contestada y contestarla dos veces es la forma de que un día se contesten
+-- distinto. Se filtra **en el servidor**: si filtrara sólo la pantalla, un pendiente ajeno igual
+-- encendería el badge del menú.
+create table if not exists agenda_items (
+  id         text primary key,                     -- `it<epoch>_<rand>`, generado en el cliente
+  clase      text not null,                        -- 'pendiente' (pide tilde) | 'aviso' (sólo informa)
+  titulo     text not null,
+  cuerpo     text,                                 -- markdown: el detalle, si hace falta
+  regla      jsonb not null,                       -- la misma forma que `agenda_promos.regla`
+  destino    jsonb not null default '{"tipo":"todos"}'::jsonb,
+  marcas     jsonb not null default '[]'::jsonb,   -- [] = las dos
+  manual_id  text,                                 -- el flujo de trabajo, si lo hay → tabla `manuales`
+  activo     boolean not null default true,
+  autor      text,                                 -- perfil.name de quien lo cargó
+  datos      jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_agenda_items_activo on agenda_items (activo, clase);
+
+-- El acuse: que ESTE pendiente se hizo ESTE día.
+--
+-- 🔑 **La ausencia de fila es "no está hecho".** No hay estado 'pendiente' guardado, igual que en el
+-- calendario "todavía no lo decidimos" no necesita fila: una rutina semanal no escribe nada hasta
+-- que alguien la tilda, y así no hay que generar filas por adelantado ni limpiarlas después.
+--
+-- La PK `(item_id, fecha)` es un tilde por ocurrencia: **lo pone el primero que llega** y los demás
+-- ven que ya está hecho. Sin eso, dos personas del mismo puesto tildando a la vez dejarían dos filas
+-- y "quién lo hizo" tendría dos respuestas.
+--
+-- ⚠️ `usuario` es `perfil.name`, NO el mail: los puestos compartidos (`Local`, `Depósito`) tienen
+-- email null. O sea que el tilde dice **"el puesto Local lo marcó"** y no "tal persona lo hizo" — y
+-- la pantalla lo tiene que decir así, o promete una trazabilidad que no existe.
+create table if not exists agenda_hechos (
+  item_id  text not null references agenda_items(id) on delete cascade,
+  fecha    date not null,
+  usuario  text not null,
+  nota     text,
+  hecho_at timestamptz not null default now(),
+  primary key (item_id, fecha)
+);
+
+-- Cumplimiento lee siempre "los últimos días", nunca un ítem suelto en toda su historia.
+create index if not exists idx_agenda_hechos_fecha on agenda_hechos (fecha desc);
+
+alter table agenda_items disable row level security;
+alter table agenda_hechos disable row level security;

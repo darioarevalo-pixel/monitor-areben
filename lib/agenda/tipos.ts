@@ -7,6 +7,9 @@
  */
 
 import type { Marca } from '@/lib/nav.datos'
+import type { Destino } from '@/lib/novedades/tipos'
+
+export type { Destino }
 
 /** `YYYY-MM-DD`. El formato en que se guarda y se compara todo día del almanaque. */
 export type FechaIso = string
@@ -72,11 +75,82 @@ export type Promo = {
   creado: string | null
 }
 
+/**
+ * Un pendiente rutinario o un aviso fechado.
+ *
+ * 🔑 **Es la misma pregunta que la promo bancaria** —"¿esto va hoy?"— y por eso `regla` es
+ * exactamente la misma forma y la contesta el mismo motor. Lo que cambia es que la promo se lee y el
+ * pendiente **se tilda**, y por eso el acuse es una fila aparte (`Hecho`) y no un campo de acá.
+ *
+ * ⚠️ A diferencia de la promo, **no tiene ventana de vigencia**: una rutina no vence, se apaga. Por
+ * eso `activo` y no `desde`/`hasta`. Lo que corre entre dos fechas se dice con `{tipo:'rango'}`.
+ */
+export type ItemAgenda = {
+  id: string
+  /** `pendiente` pide tilde; `aviso` sólo informa (llega en T3). */
+  clase: ClaseItem
+  titulo: string
+  /** El detalle, en markdown. Vacío es lo normal: el título suele alcanzar. */
+  cuerpo: string | null
+  regla: Regla
+  /** A quién le llega. El MISMO de las novedades, filtrado en el servidor. */
+  destino: Destino
+  marcas: Marca[]
+  /** El manual que explica cómo se hace, si lo hay. Es el `id` de la tabla `manuales`. */
+  manualId: string | null
+  activo: boolean
+  autor: string | null
+  creado: string | null
+  /**
+   * ¿Es para mí?
+   *
+   * ⚠️ **No es lo mismo que "la puedo ver"**: quien carga ve todos los ítems en la pestaña de carga,
+   * porque los administra. Esto contesta la otra pregunta —¿me sale en Hoy, me enciende el badge,
+   * lo tildo yo?— y para el que los administra la respuesta puede ser que no.
+   */
+  paraMi: boolean
+}
+
+export type ClaseItem = 'pendiente' | 'aviso'
+
+/**
+ * El tilde: este pendiente se hizo este día.
+ *
+ * ⚠️ `usuario` es `perfil.name`, no el mail. En los puestos compartidos (`Local`, `Depósito`) eso
+ * quiere decir **"el puesto lo marcó"**, no "esta persona lo hizo": la pantalla lo dice así.
+ */
+export type Hecho = {
+  itemId: string
+  fecha: FechaIso
+  usuario: string
+  nota: string | null
+  hechoAt: string | null
+}
+
 /** Lo que devuelve `GET /api/datos?recurso=agenda`. */
 export type DatosAgenda = {
   promos: Promo[]
+  items: ItemAgenda[]
+  /** Sólo los últimos días: es lo que mira Cumplimiento. Ver `DIAS_CUMPLIMIENTO`. */
+  hechos: Hecho[]
   puede: { cargar: boolean }
 }
+
+/**
+ * Cuántos días hacia atrás viaja el acuse en el GET.
+ *
+ * No es un límite de producto: es que la pregunta real de gerencia es "¿esta semana se hizo?", y
+ * traerse la historia entera para contestarla crecería sin techo. Un mes cubre la ventana en que
+ * todavía se puede hacer algo con la respuesta.
+ */
+export const DIAS_CUMPLIMIENTO = 30
+
+export const CLASES: { key: ClaseItem; label: string }[] = [
+  { key: 'pendiente', label: 'Pide que lo tilden' },
+  { key: 'aviso', label: 'Sólo avisa' },
+]
+
+export const CLAVES_CLASE = CLASES.map((c) => c.key)
 
 export const MEDIOS: { key: MedioPago; label: string }[] = [
   { key: 'credito', label: 'Tarjeta de crédito' },

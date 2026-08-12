@@ -30,27 +30,40 @@ import {
   Button, Card, EmptyState, Esqueleto, Notice, StatusPill, Tabs,
   color, font, space, weight, useConfirmar, useToast, type TabItem,
 } from '@/components/ui'
-import { corre, hoyIso, promosDe, rotuloBeneficio, rotuloRegla, type Promo } from '@/lib/agenda'
-import { borrarPromo, guardarPromo } from '@/lib/agenda/cliente'
+import {
+  contarSinTildar, corre, hoyIso, pendientesDe, promosDe, rotuloBeneficio, rotuloRegla, vaEl,
+  type ItemAgenda, type Promo,
+} from '@/lib/agenda'
+import { borrarItem, borrarPromo, guardarItem, guardarPromo } from '@/lib/agenda/cliente'
+import { tituloLimpio } from '@/lib/nav'
+import { FUNCIONES } from '@/lib/permisos'
 import { useAgenda } from '@/store/useAgenda'
+import { Cumplimiento } from './Cumplimiento'
+import { ModalItem, itemVacio } from './ModalItem'
 import { ModalPromo, promoVacia } from './ModalPromo'
+import { PendientesHoy } from './PendientesHoy'
 import { TarjetaPromo } from './TarjetaPromo'
 
 export function Agenda() {
   const { marca } = useSesion()
-  const { promos, puede, cargado, cargar } = useAgenda()
+  const { promos, items, hechos, puede, cargado, cargar } = useAgenda()
   const toast = useToast()
   const { confirmar } = useConfirmar()
-  const [tab, setTab] = useState<'hoy' | 'carga'>('hoy')
+  const [tab, setTab] = useState<'hoy' | 'carga' | 'cumplimiento'>('hoy')
   const [editando, setEditando] = useState<Promo | null>(null)
+  const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
 
   const hoy = hoyIso()
   const deHoy = promosDe(promos, hoy, { marca })
+  const pendientes = pendientesDe(items, hechos, hoy, { marca })
 
-  const items: TabItem[] = [
+  const tabs: TabItem[] = [
     { key: 'hoy', label: 'Hoy' },
     ...(puede.cargar
-      ? [{ key: 'carga', label: 'Cargar', hint: 'Alta y edición de las promociones' } as TabItem]
+      ? [
+          { key: 'carga', label: 'Cargar', hint: 'Alta y edición de las promociones y los pendientes' } as TabItem,
+          { key: 'cumplimiento', label: 'Cumplimiento', hint: 'Qué se tildó y qué no en los últimos días' } as TabItem,
+        ]
       : []),
   ]
 
@@ -77,109 +90,272 @@ export function Agenda() {
     }
   }
 
+  const onGuardarItem = async (i: ItemAgenda) => {
+    await guardarItem(i)
+    await cargar()
+    toast.ok('Pendiente guardado.')
+  }
+
+  const onBorrarItem = async (i: ItemAgenda) => {
+    const ok = await confirmar({
+      titulo: 'Borrar el pendiente',
+      // Que los tildes se van con él va escrito acá y no en un tooltip: es lo que no se puede
+      // deshacer, y el interruptor de «apagado» existe justamente para no tener que borrar.
+      mensaje: `${i.titulo} — se borran también los tildes que ya tenga. Si sólo querés dejar de verlo, apagalo.`,
+      ok: 'Borrar el pendiente',
+      tono: 'danger',
+    })
+    if (!ok) return
+    try {
+      await borrarItem(i.id)
+      await cargar()
+      toast.ok('Pendiente borrado.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+    }
+  }
+
   return (
     <>
       {puede.cargar && (
         <HeaderAcciones>
           <Button onClick={() => setEditando(promoVacia())}>Nueva promoción</Button>
+          <Button variant="outline" onClick={() => setEditandoItem(itemVacio())}>Nuevo pendiente</Button>
         </HeaderAcciones>
       )}
 
-      {items.length > 1 && (
+      {tabs.length > 1 && (
         <div style={{ marginBottom: space[4] }}>
-          <Tabs items={items} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
+          <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
         </div>
       )}
 
-      {tab === 'hoy' ? (
-        <Hoy promos={deHoy} cargado={cargado} />
-      ) : (
+      {tab === 'hoy' && <Hoy promos={deHoy} hoy={hoy} sinTildar={contarSinTildar(items, hechos, hoy, { marca })} hayPendientes={pendientes.length > 0} cargado={cargado} />}
+      {tab === 'carga' && (
         <Carga
           promos={promos}
+          items={items}
           hoy={hoy}
           onEditar={setEditando}
           onBorrar={onBorrar}
+          onEditarItem={setEditandoItem}
+          onBorrarItem={onBorrarItem}
         />
       )}
+      {tab === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
 
       {editando && (
         <ModalPromo inicial={editando} onCerrar={() => setEditando(null)} onGuardar={onGuardar} />
+      )}
+      {editandoItem && (
+        <ModalItem inicial={editandoItem} onCerrar={() => setEditandoItem(null)} onGuardar={onGuardarItem} />
       )}
     </>
   )
 }
 
-function Hoy({ promos, cargado }: { promos: Promo[]; cargado: boolean }) {
+/**
+ * Lo del día, en el orden en que se necesita: **primero la promo** —es lo que se contesta con el
+ * cliente delante— y después lo que hay que hacer.
+ */
+function Hoy({
+  promos,
+  hoy,
+  sinTildar,
+  hayPendientes,
+  cargado,
+}: {
+  promos: Promo[]
+  hoy: string
+  sinTildar: number
+  hayPendientes: boolean
+  cargado: boolean
+}) {
   if (!cargado) return <Esqueleto />
 
-  if (promos.length === 0) {
-    // El vacío es información, no una falla: "hoy no hay promo" es exactamente lo que hay que poder
-    // contestarle al cliente, y hay que poder leerlo sin dudar de si la pantalla cargó.
-    return (
-      <EmptyState
-        icon="🏦"
-        title="Hoy no corre ninguna promoción bancaria."
-        hint="Si el cliente pregunta, la respuesta es que hoy no hay."
-      />
-    )
-  }
-
   return (
-    <div style={{ display: 'grid', gap: space[3] }}>
-      {promos.map((p) => <TarjetaPromo key={p.id} promo={p} />)}
+    <div style={{ display: 'grid', gap: space[5] }}>
+      <section style={{ display: 'grid', gap: space[3] }}>
+        <Titulo>🏦 Promociones bancarias de hoy</Titulo>
+        {promos.length === 0 ? (
+          // El vacío es información, no una falla: "hoy no hay promo" es exactamente lo que hay que
+          // poder contestarle al cliente, y hay que leerlo sin dudar de si la pantalla cargó.
+          <EmptyState
+            icon="🏦"
+            title="Hoy no corre ninguna promoción bancaria."
+            hint="Si el cliente pregunta, la respuesta es que hoy no hay."
+          />
+        ) : (
+          promos.map((p) => <TarjetaPromo key={p.id} promo={p} />)
+        )}
+      </section>
+
+      <section style={{ display: 'grid', gap: space[3] }}>
+        <Titulo>
+          ☑ Lo que hay que hacer hoy
+          {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · faltan {sinTildar}</span>}
+        </Titulo>
+        {hayPendientes ? (
+          <PendientesHoy fecha={hoy} />
+        ) : (
+          <EmptyState icon="✅" title="Hoy no te toca ningún pendiente cargado." dashed />
+        )}
+      </section>
     </div>
+  )
+}
+
+function Titulo({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink, margin: 0 }}>{children}</h2>
   )
 }
 
 function Carga({
   promos,
+  items,
+  hoy,
+  onEditar,
+  onBorrar,
+  onEditarItem,
+  onBorrarItem,
+}: {
+  promos: Promo[]
+  items: ItemAgenda[]
+  hoy: string
+  onEditar: (p: Promo) => void
+  onBorrar: (p: Promo) => void
+  onEditarItem: (i: ItemAgenda) => void
+  onBorrarItem: (i: ItemAgenda) => void
+}) {
+  return (
+    <div style={{ display: 'grid', gap: space[5] }}>
+      <section style={{ display: 'grid', gap: space[3] }}>
+        <Titulo>🏦 Promociones bancarias</Titulo>
+        <Notice tone="neutral">
+          Acá están <b>todas</b>, incluidas las apagadas y las vencidas. En «Hoy» sólo se ve lo que
+          corre hoy — es lo que ve el mostrador.
+        </Notice>
+        {promos.length === 0 ? (
+          <EmptyState title="Todavía no hay ninguna promoción cargada." dashed />
+        ) : (
+          promos.map((p) => <FilaPromo key={p.id} p={p} hoy={hoy} onEditar={onEditar} onBorrar={onBorrar} />)
+        )}
+      </section>
+
+      <section style={{ display: 'grid', gap: space[3] }}>
+        <Titulo>☑ Pendientes rutinarios</Titulo>
+        {items.length === 0 ? (
+          <EmptyState
+            title="Todavía no hay ningún pendiente cargado."
+            hint="Entra sólo lo que se olvida: la rutina obvia no se carga."
+            dashed
+          />
+        ) : (
+          items.map((i) => (
+            <FilaItem key={i.id} i={i} hoy={hoy} onEditar={onEditarItem} onBorrar={onBorrarItem} />
+          ))
+        )}
+      </section>
+    </div>
+  )
+}
+
+function FilaPromo({
+  p,
   hoy,
   onEditar,
   onBorrar,
 }: {
-  promos: Promo[]
+  p: Promo
   hoy: string
   onEditar: (p: Promo) => void
   onBorrar: (p: Promo) => void
 }) {
-  if (promos.length === 0) {
-    return <EmptyState title="Todavía no hay ninguna promoción cargada." dashed />
-  }
-
   return (
-    <div style={{ display: 'grid', gap: space[3] }}>
-      <Notice tone="neutral">
-        Acá están <b>todas</b>, incluidas las apagadas y las vencidas. En «Hoy» sólo se ve lo que corre
-        hoy — es lo que ve el mostrador.
-      </Notice>
-
-      {promos.map((p) => (
-        <Card key={p.id}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-                <span style={{ fontSize: font.lg, fontWeight: weight.semibold, color: color.ink }}>
-                  {p.banco}
-                </span>
-                <span style={{ color: color.ink2 }}>{rotuloBeneficio(p.beneficio)}</span>
-                <EstadoPromo promo={p} hoy={hoy} />
-              </div>
-              <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
-                {rotuloRegla(p.regla)} · desde {p.desde}
-                {p.hasta ? ` hasta ${p.hasta}` : ' · sin fin anunciado'}
-                {p.marcas.length > 0 && ` · sólo ${p.marcas.join(' y ')}`}
-                {` · ${p.canales.join(' y ')}`}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-start' }}>
-              <Button variant="ghost" size="sm" onClick={() => onEditar(p)}>Editar</Button>
-              <Button variant="ghost" size="sm" onClick={() => onBorrar(p)}>Borrar</Button>
-            </div>
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+            <span style={{ fontSize: font.lg, fontWeight: weight.semibold, color: color.ink }}>
+              {p.banco}
+            </span>
+            <span style={{ color: color.ink2 }}>{rotuloBeneficio(p.beneficio)}</span>
+            <EstadoPromo promo={p} hoy={hoy} />
           </div>
-        </Card>
-      ))}
-    </div>
+          <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
+            {rotuloRegla(p.regla)} · desde {p.desde}
+            {p.hasta ? ` hasta ${p.hasta}` : ' · sin fin anunciado'}
+            {p.marcas.length > 0 && ` · sólo ${p.marcas.join(' y ')}`}
+            {` · ${p.canales.join(' y ')}`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-start' }}>
+          <Button variant="ghost" size="sm" onClick={() => onEditar(p)}>Editar</Button>
+          <Button variant="ghost" size="sm" onClick={() => onBorrar(p)}>Borrar</Button>
+        </div>
+      </div>
+    </Card>
   )
+}
+
+/**
+ * Un pendiente en la lista de administración.
+ *
+ * Dice **a quién le llega** además de qué días toca: el destino es lo que decide si aparece en la
+ * pantalla de alguien, y un pendiente que "no anda" casi siempre es un destino que no incluye a
+ * quien lo busca.
+ */
+function FilaItem({
+  i,
+  hoy,
+  onEditar,
+  onBorrar,
+}: {
+  i: ItemAgenda
+  hoy: string
+  onEditar: (i: ItemAgenda) => void
+  onBorrar: (i: ItemAgenda) => void
+}) {
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+            <span style={{ fontSize: font.lg, fontWeight: weight.semibold, color: color.ink }}>
+              {i.titulo}
+            </span>
+            {!i.activo ? (
+              <StatusPill tone="neutral" label="apagado" />
+            ) : vaEl(i, hoy) ? (
+              <StatusPill tone="success" label="toca hoy" />
+            ) : (
+              <StatusPill tone="neutral" label="hoy no toca" />
+            )}
+          </div>
+          <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
+            {rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
+            {i.marcas.length > 0 && ` · sólo ${i.marcas.join(' y ')}`}
+            {i.manualId && ' · con manual'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-start' }}>
+          <Button variant="ghost" size="sm" onClick={() => onEditar(i)}>Editar</Button>
+          <Button variant="ghost" size="sm" onClick={() => onBorrar(i)}>Borrar</Button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/** «a todo el equipo» · «a Local y Depósito» · «a quien usa Atención al cliente». */
+function rotuloDestino(d: ItemAgenda['destino']): string {
+  if (d.tipo === 'roles') {
+    const labels = d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r)
+    return `a ${labels.join(' y ')}`
+  }
+  if (d.tipo === 'seccion') return `a quien usa ${tituloLimpio(d.key)}`
+  return 'a todo el equipo'
 }
 
 /**

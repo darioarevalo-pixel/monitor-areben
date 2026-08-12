@@ -53,7 +53,11 @@ try {
   await client.query(sql)
   await client.query('COMMIT')
   const p = await client.query('select count(*)::int as n from agenda_promos')
-  console.log(`✓ BDI (${cfg.host}): agenda_promos ${p.rows[0].n} filas`)
+  const i = await client.query('select count(*)::int as n from agenda_items')
+  const h = await client.query('select count(*)::int as n from agenda_hechos')
+  console.log(
+    `✓ BDI (${cfg.host}): agenda_promos ${p.rows[0].n} · agenda_items ${i.rows[0].n} · agenda_hechos ${h.rows[0].n} filas`,
+  )
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})
   console.log(`✗ BDI: ${e.message}`)

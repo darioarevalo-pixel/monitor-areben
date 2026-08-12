@@ -1,17 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import {
   aplicaEn,
+  contarSinTildar,
   corre,
+  cumplimiento,
   esFechaIso,
+  feriadoDe,
+  hechoDe,
   motivoReglaInvalida,
   ocurrencias,
+  pendientesDe,
   promosDe,
   reglaValida,
   rotuloBeneficio,
   rotuloRegla,
+  vaEl,
   MAX_VENTANA_DIAS,
 } from '@/lib/agenda'
-import type { Promo, Regla } from '@/lib/agenda'
+import type { Hecho, ItemAgenda, Promo, Regla } from '@/lib/agenda'
 
 /**
  * La Agenda operativa.
@@ -42,6 +48,31 @@ const promo = (p: Partial<Promo> = {}): Promo => ({
   autor: null,
   creado: null,
   ...p,
+})
+
+const item = (i: Partial<ItemAgenda> = {}): ItemAgenda => ({
+  id: 'i1',
+  clase: 'pendiente',
+  titulo: 'Reponer la vidriera',
+  cuerpo: null,
+  regla: { tipo: 'semanal', dias: [2] },
+  destino: { tipo: 'todos' },
+  marcas: [],
+  manualId: null,
+  activo: true,
+  autor: null,
+  creado: '2026-07-01T10:00:00.000Z',
+  paraMi: true,
+  ...i,
+})
+
+const hecho = (h: Partial<Hecho> = {}): Hecho => ({
+  itemId: 'i1',
+  fecha: '2026-08-11',
+  usuario: 'Local',
+  nota: null,
+  hechoAt: '2026-08-11T13:00:00.000Z',
+  ...h,
 })
 
 describe('esFechaIso: el formato no alcanza', () => {
@@ -265,5 +296,103 @@ describe('los rótulos: una pantalla de administración que no se puede leer no 
     expect(rotuloBeneficio({ tipo: 'reintegro', pct: 20, tope: 15000 })).toBe('20% de reintegro')
     expect(rotuloBeneficio({ tipo: 'cuotas', n: 3, sinInteres: true })).toBe('3 cuotas sin interés')
     expect(rotuloBeneficio({ tipo: 'cuotas', n: 6, sinInteres: false })).toBe('6 cuotas con interés')
+  })
+})
+
+describe('vaEl(): un pendiente no vence, se apaga', () => {
+  it('corre el día que dice la regla', () => {
+    expect(vaEl(item(), '2026-08-11')).toBe(true) // martes
+    expect(vaEl(item(), '2026-08-12')).toBe(false) // miércoles
+  })
+
+  it('apagado no corre ningún día, aunque la regla diga que sí', () => {
+    expect(vaEl(item({ activo: false }), '2026-08-11')).toBe(false)
+  })
+})
+
+describe('pendientesDe(): la lista de Hoy, la de Inicio y el badge salen de acá', () => {
+  const vidriera = item({ id: 'i1', titulo: 'Reponer la vidriera' })
+  const caja = item({ id: 'i2', titulo: 'Cerrar la caja', regla: { tipo: 'diaria' } })
+  const ajeno = item({ id: 'i3', titulo: 'Lo de otro', regla: { tipo: 'diaria' }, paraMi: false })
+  const todos = [caja, vidriera, ajeno]
+
+  it('trae lo del día, ordenado por título y con su tilde al lado', () => {
+    const r = pendientesDe(todos, [hecho({ itemId: 'i2' })], '2026-08-11')
+    expect(r.map((p) => p.item.id)).toEqual(['i2', 'i1'])
+    expect(r[0].hecho?.usuario).toBe('Local')
+    // La ausencia de fila ES "no está hecho": no hay estado guardado que decir.
+    expect(r[1].hecho).toBe(null)
+  })
+
+  it('lo que no es para mí no entra, aunque lo esté viendo quien lo administra', () => {
+    expect(pendientesDe(todos, [], '2026-08-11').map((p) => p.item.id)).not.toContain('i3')
+  })
+
+  it('marcas vacío quiere decir LAS DOS, igual que en las promos', () => {
+    const soloZattia = item({ id: 'i4', regla: { tipo: 'diaria' }, marcas: ['zattia'] })
+    const lista = [caja, soloZattia]
+    expect(pendientesDe(lista, [], '2026-08-11', { marca: 'bdi' }).map((p) => p.item.id)).toEqual(['i2'])
+    expect(pendientesDe(lista, [], '2026-08-11', { marca: 'zattia' }).map((p) => p.item.id)).toEqual(['i2', 'i4'])
+  })
+
+  it('el badge cuenta lo mismo que muestra la lista, y se apaga tildando', () => {
+    expect(contarSinTildar(todos, [], '2026-08-11')).toBe(2)
+    expect(contarSinTildar(todos, [hecho({ itemId: 'i1' }), hecho({ itemId: 'i2' })], '2026-08-11')).toBe(0)
+  })
+
+  it('un aviso no pide tilde y por eso no entra en la lista de pendientes', () => {
+    const aviso = item({ id: 'i9', clase: 'aviso', regla: { tipo: 'diaria' } })
+    expect(pendientesDe([aviso], [], '2026-08-11')).toEqual([])
+  })
+})
+
+describe('hechoDe(): el tilde es de un ítem Y de un día', () => {
+  const hechos = [hecho({ itemId: 'i1', fecha: '2026-08-11' }), hecho({ itemId: 'i1', fecha: '2026-08-04' })]
+
+  it('no confunde el tilde de otro día', () => {
+    expect(hechoDe(hechos, 'i1', '2026-08-11')?.fecha).toBe('2026-08-11')
+    expect(hechoDe(hechos, 'i1', '2026-08-18')).toBe(null)
+    expect(hechoDe(hechos, 'i2', '2026-08-11')).toBe(null)
+  })
+})
+
+describe('cumplimiento(): lo que mira gerencia, sin acusar de más', () => {
+  it('una ocurrencia por día en que la regla cae, de la más nueva a la más vieja', () => {
+    // Del 11-ago (martes) para atrás, tres semanas: 11, 4 y 28-jul.
+    const filas = cumplimiento([item()], [hecho({ fecha: '2026-08-04' })], '2026-08-11', 21)
+    expect(filas.map((f) => f.fecha)).toEqual(['2026-08-11', '2026-08-04', '2026-07-28'])
+    expect(filas.map((f) => !!f.hecho)).toEqual([false, true, false])
+  })
+
+  it('🔴 una rutina cargada hoy NO incumplió los días anteriores a su carga', () => {
+    // El caso que hace inservible la pantalla: cargar una rutina y verla en rojo un mes para atrás.
+    const nuevo = item({ creado: '2026-08-11T12:00:00.000Z' })
+    expect(cumplimiento([nuevo], [], '2026-08-11', 30).map((f) => f.fecha)).toEqual(['2026-08-11'])
+  })
+
+  it('lo apagado deja de sumar ocurrencias, pero sus tildes viejos se siguen viendo', () => {
+    // Apagar dice "ya no va", no "nunca pasó".
+    const apagado = item({ activo: false })
+    const filas = cumplimiento([apagado], [hecho({ fecha: '2026-08-04' })], '2026-08-11', 21)
+    expect(filas.map((f) => f.fecha)).toEqual(['2026-08-04'])
+  })
+
+  it('un aviso no se tilda, así que no entra en cumplimiento', () => {
+    expect(cumplimiento([item({ clase: 'aviso', regla: { tipo: 'diaria' } })], [], '2026-08-11', 5)).toEqual([])
+  })
+})
+
+describe('feriadoDe(): se avisa, no se saltea', () => {
+  it('reconoce un feriado del catálogo', () => {
+    // 17-ago-2026 cae lunes: Paso a la Inmortalidad de San Martín, sin traslado.
+    expect(feriadoDe('2026-08-17')).toContain('San Martín')
+  })
+
+  it('un día común no es feriado', () => {
+    expect(feriadoDe('2026-08-11')).toBe(null)
+  })
+
+  it('una fecha que no existe no rompe la pantalla', () => {
+    expect(feriadoDe('2026-02-31')).toBe(null)
   })
 })

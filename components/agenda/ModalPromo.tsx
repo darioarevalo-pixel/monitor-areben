@@ -3,10 +3,9 @@
 /**
  * El alta de una promoción bancaria.
  *
- * 🔑 **La regla se arma con controles, nunca se tipea el JSON.** Lo que se guarda es
- * `{tipo:'semanal',dias:[2,5]}`, pero quien carga elige "ciertos días de la semana" y tilda martes y
- * viernes. Es la misma razón por la que la lista muestra `rotuloRegla()`: una regla que no se puede
- * leer no se puede revisar, y una que no se puede armar sin saber el formato no se carga.
+ * La regla se arma con controles y nunca se tipea el JSON: eso lo resuelve `EditorRegla`, que es el
+ * mismo que usa el alta del pendiente rutinario. Acá queda lo que es propio del banco —el beneficio,
+ * la ventana de vigencia, los canales, la letra chica y cómo se cobra.
  *
  * El servidor vuelve a validar todo (`motivoReglaInvalida`, el beneficio por rama, la ventana): esta
  * pantalla evita el viaje, no es la que decide.
@@ -14,21 +13,11 @@
 
 import { useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { hoyIso, TIPOS_REGLA, type Beneficio, type Canal, type MedioPago, type Promo, type Regla } from '@/lib/agenda'
+import { hoyIso, type Beneficio, type Canal, type MedioPago, type Promo } from '@/lib/agenda'
 import { CANALES, MEDIOS, TIPOS_BENEFICIO } from '@/lib/agenda/tipos'
 import { nuevoIdPromo } from '@/lib/agenda/cliente'
 import type { Marca } from '@/lib/nav.datos'
-
-/** 0 = domingo, como `getDay()` y como la regla. El orden de la fila arranca en lunes, que es como se lee. */
-const DIAS_TILDE: { valor: number; label: string }[] = [
-  { valor: 1, label: 'Lun' },
-  { valor: 2, label: 'Mar' },
-  { valor: 3, label: 'Mié' },
-  { valor: 4, label: 'Jue' },
-  { valor: 5, label: 'Vie' },
-  { valor: 6, label: 'Sáb' },
-  { valor: 0, label: 'Dom' },
-]
+import { EditorRegla, Tilde, toggleEnLista } from './EditorRegla'
 
 const MARCAS: { key: Marca; label: string }[] = [
   { key: 'bdi', label: 'BDI' },
@@ -54,28 +43,6 @@ export function promoVacia(): Promo {
   }
 }
 
-function Tilde({ puesto, label, onToggle }: { puesto: boolean; label: string; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      style={{
-        height: 'auto',
-        padding: `${space[1.5]}px ${space[3]}px`,
-        borderRadius: 999,
-        cursor: 'pointer',
-        fontSize: font.sm,
-        fontWeight: weight.semibold,
-        border: `1px solid ${puesto ? color.brand : color.line2}`,
-        background: puesto ? color.brandBg : 'transparent',
-        color: puesto ? color.brand : color.mut,
-      }}
-    >
-      {label}
-    </button>
-  )
-}
-
 export function ModalPromo({
   inicial,
   onCerrar,
@@ -92,19 +59,6 @@ export function ModalPromo({
 
   const set = <K extends keyof Promo>(k: K, v: Promo[K]) => setP((x) => ({ ...x, [k]: v }))
 
-  const cambiarTipoRegla = (tipo: Regla['tipo']) => {
-    // Cada tipo estrena su propio esqueleto: conservar los campos del anterior dejaría una
-    // `{tipo:'diaria', dias:[2]}` que el validador rechaza por un campo que la pantalla ya no muestra.
-    const nueva: Record<Regla['tipo'], Regla> = {
-      unica: { tipo: 'unica', fecha: hoyIso() },
-      rango: { tipo: 'rango', desde: hoyIso(), hasta: hoyIso() },
-      diaria: { tipo: 'diaria' },
-      semanal: { tipo: 'semanal', dias: [] },
-      mensual: { tipo: 'mensual', dia: 1 },
-    }
-    set('regla', nueva[tipo])
-  }
-
   const cambiarTipoBeneficio = (tipo: Beneficio['tipo']) => {
     const nuevo: Record<Beneficio['tipo'], Beneficio> = {
       descuento: { tipo: 'descuento', pct: 10 },
@@ -113,9 +67,6 @@ export function ModalPromo({
     }
     set('beneficio', nuevo[tipo])
   }
-
-  const toggleEnLista = <T,>(lista: T[], v: T): T[] =>
-    lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v]
 
   const guardar = async () => {
     setError(null)
@@ -135,7 +86,6 @@ export function ModalPromo({
     }
   }
 
-  const r = p.regla
   const b = p.beneficio
 
   return (
@@ -227,64 +177,7 @@ export function ModalPromo({
           </div>
         </div>
 
-        <div>
-          <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-            Qué días corre
-          </div>
-          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <Field width={240}>
-              <Select value={r.tipo} onChange={(e) => cambiarTipoRegla(e.target.value as Regla['tipo'])}>
-                {TIPOS_REGLA.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-              </Select>
-            </Field>
-
-            {r.tipo === 'unica' && (
-              <Field label="El día" width={170}>
-                <Input type="date" value={r.fecha} onChange={(e) => set('regla', { ...r, fecha: e.target.value })} />
-              </Field>
-            )}
-
-            {r.tipo === 'rango' && (
-              <>
-                <Field label="Del" width={170}>
-                  <Input type="date" value={r.desde} onChange={(e) => set('regla', { ...r, desde: e.target.value })} />
-                </Field>
-                <Field label="Al" width={170}>
-                  <Input type="date" value={r.hasta} onChange={(e) => set('regla', { ...r, hasta: e.target.value })} />
-                </Field>
-              </>
-            )}
-
-            {r.tipo === 'mensual' && (
-              <Field label="Día del mes" hint="Del 29 en adelante, usá «el último»" width={170}>
-                <Select
-                  value={String(r.dia)}
-                  onChange={(e) =>
-                    set('regla', { ...r, dia: e.target.value === 'ultimo' ? 'ultimo' : Number(e.target.value) })
-                  }
-                >
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={String(d)}>{d}</option>
-                  ))}
-                  <option value="ultimo">el último día del mes</option>
-                </Select>
-              </Field>
-            )}
-          </div>
-
-          {r.tipo === 'semanal' && (
-            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[3] }}>
-              {DIAS_TILDE.map((d) => (
-                <Tilde
-                  key={d.valor}
-                  puesto={r.dias.includes(d.valor)}
-                  label={d.label}
-                  onToggle={() => set('regla', { ...r, dias: toggleEnLista(r.dias, d.valor) })}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <EditorRegla regla={p.regla} onChange={(r) => set('regla', r)} />
 
         {/*
           La vigencia va aparte de la regla y no es redundante: "los martes" es la regla, "de agosto"
