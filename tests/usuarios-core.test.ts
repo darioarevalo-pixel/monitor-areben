@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { copiarPermisos, normalizar, nuevoUsuario, origenPermiso, tienePermiso, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
+import {
+  copiarDeUsuario,
+  copiarPermisos,
+  normalizar,
+  nuevoUsuario,
+  origenPermiso,
+  resumenUsuario,
+  SUBS_PLANOS,
+  tienePermiso,
+  toggleFuncion,
+  togglePerm,
+  validar,
+} from '@/lib/usuarios/core'
 import { marcaExcluir } from '@/lib/permisos'
+import { PERM_CAT } from '@/lib/nav'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 
 const base = (over: Partial<UsuarioConfig> = {}): UsuarioConfig => ({ name: 'Ana', pass: '1234', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, ...over })
@@ -114,6 +127,115 @@ describe('usuarios/core — copiarPermisos', () => {
     expect(u1.acceso.zattia).toEqual({ productos: true, etiquetas: true })
     expect(u1.acceso.bdi).toEqual({ productos: true, etiquetas: true })
     expect(u0.acceso.zattia).toEqual({ colores: true }) // inmutable
+  })
+})
+
+describe('usuarios/core — copiarDeUsuario', () => {
+  const molde = (over: Partial<UsuarioConfig> = {}) =>
+    base({
+      name: 'Candela',
+      email: 'candela@arebensrl.com',
+      pass: 'secreta',
+      tienePass: true,
+      nameOriginal: 'Candela',
+      admin: false,
+      cuenta: 'zattia',
+      funcion: ['local'],
+      acceso: { bdi: { cupones: true }, zattia: { etiquetas: true } },
+      ...over,
+    })
+
+  it('copia permisos, funciones, marca fija y admin', () => {
+    const u = copiarDeUsuario(nuevoUsuario(), molde())
+    expect(u.acceso).toEqual({ bdi: { cupones: true }, zattia: { etiquetas: true } })
+    expect(u.funcion).toEqual(['local'])
+    expect(u.cuenta).toBe('zattia')
+    expect(u.admin).toBe(false)
+  })
+
+  it('NO copia la identidad: nombre, mail ni contraseña', () => {
+    const u = copiarDeUsuario({ ...nuevoUsuario(), name: 'Sofía' }, molde())
+    expect(u.name).toBe('Sofía')
+    expect(u.email).toBe('')
+    expect(u.pass).toBe('')
+    expect(u.tienePass).toBeUndefined()
+    expect(u.nameOriginal).toBeUndefined()
+  })
+
+  it('es inmutable y los permisos no quedan compartidos con el molde', () => {
+    const m = molde()
+    const u = togglePerm(copiarDeUsuario(nuevoUsuario(), m), 'bdi', 'productos', true)
+    expect(u.acceso.bdi?.['productos']).toBe(true)
+    expect(m.acceso.bdi).toEqual({ cupones: true }) // el molde no se enteró
+  })
+
+  it('si el molde es admin, la copia también (y se ve en el resumen)', () => {
+    const u = copiarDeUsuario(nuevoUsuario(), molde({ admin: true }))
+    expect(u.admin).toBe(true)
+    expect(resumenUsuario(u).esAdmin).toBe(true)
+  })
+})
+
+describe('usuarios/core — SUBS_PLANOS', () => {
+  it('tiene exactamente los subs de PERM_CAT, sin inventar ni perder ninguno', () => {
+    const esperados = PERM_CAT.flatMap((c) => (c.subs ?? []).map((s) => `${c.key}.${s.key}`))
+    expect(SUBS_PLANOS.map((s) => s.clave)).toEqual(esperados)
+  })
+
+  it('un sub sin brands propios hereda los de su sección', () => {
+    const aprobar = SUBS_PLANOS.find((s) => s.clave === 'canjes.aprobar')!
+    expect(aprobar.brands).toEqual(PERM_CAT.find((c) => c.key === 'canjes')!.brands)
+  })
+
+  it('un sub con brands propios los respeta (Tienda Nube: categorías es sólo de BDI)', () => {
+    expect(SUBS_PLANOS.find((s) => s.clave === 'tncat.categorias')!.brands).toEqual(['bdi'])
+  })
+})
+
+describe('usuarios/core — resumenUsuario', () => {
+  it('cuenta las secciones igual que la matriz (misma fuente: tienePermiso)', () => {
+    const u = base({ funcion: ['local'] })
+    const r = resumenUsuario(u)
+    for (const m of ['bdi', 'zattia'] as const) {
+      const aMano = PERM_CAT.filter((c) => c.brands.includes(m) && tienePermiso(u, m, c.key)).length
+      expect(r.secciones[m].tiene).toBe(aMano)
+      expect(r.secciones[m].total).toBe(PERM_CAT.filter((c) => c.brands.includes(m)).length)
+    }
+    expect(r.secciones.bdi.tiene).toBeGreaterThan(0) // la función Local trae su área
+  })
+
+  it('la cuenta fija acota las marcas en las que trabaja', () => {
+    expect(resumenUsuario(base()).marcas).toEqual(['bdi', 'zattia'])
+    expect(resumenUsuario(base({ cuenta: 'zattia' })).marcas).toEqual(['zattia'])
+  })
+
+  it('lista los extras tildados y no los que no tiene', () => {
+    const u = togglePerm(base(), 'bdi', 'canjes.aprobar', true)
+    const r = resumenUsuario(u)
+    expect(r.extras).toContain('Canjes: Puede aprobar canjes')
+    expect(r.extras).not.toContain('Canjes: Puede cerrar un canje incompleto')
+  })
+
+  it('un extra de una marca que la persona no trabaja no cuenta', () => {
+    const u = togglePerm(base({ cuenta: 'zattia' }), 'bdi', 'canjes.aprobar', true)
+    expect(resumenUsuario(u).extras).toEqual([])
+  })
+
+  it('lista las excepciones (lo que la función le daría y se le quitó)', () => {
+    const u = togglePerm(base({ funcion: ['local'] }), 'bdi', 'cupones', false)
+    expect(resumenUsuario(u).excepciones).toContain('Cupones y canjes')
+  })
+
+  it('el admin ve todas las secciones de las dos marcas y no tiene excepciones', () => {
+    const r = resumenUsuario(base({ admin: true }))
+    expect(r.esAdmin).toBe(true)
+    expect(r.secciones.bdi.tiene).toBe(r.secciones.bdi.total)
+    expect(r.secciones.zattia.tiene).toBe(r.secciones.zattia.total)
+    expect(r.excepciones).toEqual([])
+  })
+
+  it('devuelve los rótulos de las funciones, no sus claves', () => {
+    expect(resumenUsuario(base({ funcion: ['local', 'marketing'] })).funciones).toEqual(['Marketing', 'Local'])
   })
 })
 

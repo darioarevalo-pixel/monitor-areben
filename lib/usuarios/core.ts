@@ -7,8 +7,11 @@
  */
 
 import { PERM_CAT, type Marca } from '@/lib/nav'
-import { funcionQueDa, marcaExcluir, type Funcion } from '@/lib/permisos'
+import { FUNCIONES, funcionQueDa, marcaExcluir, type Funcion } from '@/lib/permisos'
 import type { UsuarioConfig } from './tipos'
+
+/** Las dos marcas, en el orden en que se muestran siempre. */
+export const MARCAS: readonly Marca[] = ['bdi', 'zattia']
 
 /** Un usuario nuevo, vacío (sin permisos ni funciones). Port de usuAgregar. */
 export function nuevoUsuario(): UsuarioConfig {
@@ -125,4 +128,116 @@ export function validar(users: UsuarioConfig[]): string | null {
 export function tienePermiso(u: UsuarioConfig, brand: Marca, key: string): boolean {
   const o = origenPermiso(u, brand, key)
   return o === 'admin' || o === 'explicito' || o === 'funcion'
+}
+
+/**
+ * Copia a otra persona: permisos, funciones, marca fija y admin. **NO** copia la identidad
+ * (nombre, mail, contraseña).
+ *
+ * Es el atajo real del alta —"que quede igual que Candela"—, y es distinto de
+ * `copiarPermisos`, que copia de una marca a la otra DENTRO de la misma persona. Sin esto,
+ * dar de alta a la segunda persona de un puesto es volver a tildar la misma lista de cero, y
+ * ahí es donde aparecen las diferencias que después nadie sabe explicar.
+ *
+ * Copia `admin` a propósito: si el molde es un administrador, la copia también lo es, y eso
+ * tiene que verse en el resumen antes de guardar en vez de descubrirse después.
+ */
+export function copiarDeUsuario(destino: UsuarioConfig, origen: UsuarioConfig): UsuarioConfig {
+  return {
+    ...destino,
+    admin: origen.admin,
+    cuenta: origen.cuenta,
+    funcion: [...(origen.funcion ?? [])],
+    acceso: { bdi: { ...(origen.acceso?.bdi || {}) }, zattia: { ...(origen.acceso?.zattia || {}) } },
+  }
+}
+
+/** Un sub-permiso sacado de su sección, con todo lo que hace falta para mostrarlo suelto. */
+export type SubPlano = {
+  /** La clave tal como se guarda en `acceso`: `canjes.aprobar`. */
+  clave: string
+  seccion: string
+  seccionLabel: string
+  label: string
+  info?: string
+  brands: Marca[]
+  area: string
+}
+
+/**
+ * Los sub-permisos de todas las secciones, en una lista chata.
+ *
+ * Existen para mostrarlos **afuera** de la matriz. Adentro eran filas `↳` colgando de una
+ * sección que a su vez cuelga de un área plegada: tres niveles de profundidad para llegar a
+ * "puede aprobar canjes", que es exactamente el permiso que hay que decidir a conciencia.
+ * Un sub **nunca** lo trae la función (ver `puedeSub` en el core de permisos), así que si no
+ * se tilda a mano no lo tiene nadie — y no se tildaba porque no se veía.
+ *
+ * Sale de `PERM_CAT`, que es la fuente del menú: no hay una segunda lista que mantener.
+ */
+export const SUBS_PLANOS: SubPlano[] = PERM_CAT.flatMap((c) =>
+  (c.subs ?? []).map((s) => ({
+    clave: `${c.key}.${s.key}`,
+    seccion: c.key,
+    seccionLabel: c.label,
+    label: s.label,
+    info: s.info,
+    // El sub puede existir en menos marcas que su sección (Tienda Nube: "Categorías por
+    // modelo" es sólo de BDI). Si no dice nada, vale para las mismas que la sección.
+    brands: s.brands ?? c.brands,
+    area: c.area,
+  })),
+)
+
+export type ResumenUsuario = {
+  esAdmin: boolean
+  /** Rótulos de las funciones ("Local", "Marketing"), en el orden de `FUNCIONES`. */
+  funciones: string[]
+  /** En qué marcas trabaja. La cuenta fija la acota a una. */
+  marcas: Marca[]
+  /** Cuántas secciones ve sobre cuántas existen, por marca. */
+  secciones: Record<Marca, { tiene: number; total: number }>
+  /** Los sub-permisos que tiene, ya redactados ("Canjes: Puede aprobar canjes"). */
+  extras: string[]
+  /** Las secciones que su función le daría y se le quitaron. */
+  excepciones: string[]
+}
+
+/**
+ * Qué ve esta persona, en números y en castellano.
+ *
+ * Es lo que se muestra en el encabezado de su ficha y al final del alta guiada. La pregunta que
+ * contesta —"¿qué termina viendo?"— antes sólo se podía responder abriendo once áreas plegadas y
+ * contando tildes a ojo, así que en la práctica no se respondía.
+ *
+ * Cuenta con `tienePermiso`, el mismo que pinta cada casilla de la matriz: si el resumen y la
+ * matriz no coincidieran, el resumen no serviría para auditar.
+ */
+export function resumenUsuario(u: UsuarioConfig): ResumenUsuario {
+  const marcas = u.cuenta ? [u.cuenta] : [...MARCAS]
+  const secciones = Object.fromEntries(
+    MARCAS.map((m) => {
+      const deLaMarca = PERM_CAT.filter((c) => c.brands.includes(m))
+      return [m, { tiene: deLaMarca.filter((c) => tienePermiso(u, m, c.key)).length, total: deLaMarca.length }]
+    }),
+  ) as ResumenUsuario['secciones']
+
+  // Los extras y las excepciones se listan una sola vez aunque estén en las dos marcas: el
+  // resumen contesta "qué puede hacer", no "en cuál de las dos". El detalle está abajo.
+  const enAlgunaMarca = (clave: string, brands: Marca[]) =>
+    marcas.some((m) => brands.includes(m) && tienePermiso(u, m, clave))
+
+  return {
+    esAdmin: u.admin,
+    funciones: FUNCIONES.filter((f) => (u.funcion ?? []).includes(f.key)).map((f) => f.label),
+    marcas,
+    secciones,
+    // Sin caso especial para el admin: `tienePermiso` ya le da todo y `origenPermiso` le
+    // devuelve 'admin' antes que 'excluido', así que le salen los 32 extras y cero excepciones.
+    // Es lo correcto —ve todo— y la ficha igual lo resuelve con un cartel en vez de la lista.
+    extras: SUBS_PLANOS.filter((s) => enAlgunaMarca(s.clave, s.brands)).map((s) => `${s.seccionLabel}: ${s.label}`),
+    excepciones: PERM_CAT.filter((c) =>
+      marcas.some((m) => c.brands.includes(m) && origenPermiso(u, m, c.key) === 'excluido'),
+    ).map((c) => c.label),
+  }
 }
