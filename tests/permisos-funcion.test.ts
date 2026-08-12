@@ -55,6 +55,49 @@ describe('permisos — precedencia de puedeVer', () => {
   })
 
   /**
+   * 🔴 **El agujero que estuvo abierto de agosto a agosto: la afirmación estaba escrita, no
+   * ejecutada.** `KEYS_SIN_PERMISO` (en `lib/nav.ts`) dice en su nombre que lo de adentro lo ve todo
+   * el mundo, y cuatro comentarios del repo lo repetían — pero `puedeVer` nunca lo consultaba, así
+   * que **Novedades, Manuales y la Agenda no las veía nadie que no fuera admin**. El puesto Local
+   * recibía una novedad importante, la leía UNA vez en el cartel, apretaba «Entendido» y no tenía
+   * ninguna forma de volver a leerla.
+   *
+   * Estos tests van contra el EFECTO —quién entra— y no contra la estructura del set, que es
+   * exactamente lo que no lo cazaba.
+   */
+  it('🔴 el puesto Local ve Agenda, Novedades y Manuales sin tener nada tildado', () => {
+    const u = perfil({ name: 'Local', funcion: ['local'] })
+    for (const k of ['agenda', 'novedades', 'manuales']) {
+      expect(puedeVer(u, 'bdi', k), `${k} en bdi`).toBe(true)
+      expect(puedeVer(u, 'zattia', k), `${k} en zattia`).toBe(true)
+    }
+    // Y alguien sin ninguna función tampoco queda afuera: la puerta no cuelga del rol.
+    expect(puedeVer(perfil(), 'bdi', 'agenda')).toBe(true)
+  })
+
+  it('⛔ la puerta abierta NO se lleva puesto el resumen ni el padrón', () => {
+    // `resumen` son los KPIs del negocio y `usuarios` es de admin. Los dos están en
+    // KEYS_SIN_PERMISO, y que eso fuera inofensivo es lo que escondía que el set no hacía nada.
+    const u = perfil({ funcion: ['local'] })
+    expect(puedeVer(u, 'bdi', 'resumen')).toBe(false)
+    expect(puedeVer(u, 'bdi', 'usuarios')).toBe(false)
+  })
+
+  it('leer es de todos, pero escribir sigue pidiendo el sub', () => {
+    const u = perfil({ funcion: ['local'] })
+    expect(puedeVer(u, 'bdi', 'agenda')).toBe(true)
+    expect(puedeSub(u, 'bdi', 'agenda', 'cargar')).toBe(false)
+    expect(puedeSub(u, 'bdi', 'novedades', 'publicar')).toBe(false)
+  })
+
+  it('la excepción de Config puede recortarle la puerta abierta a alguien puntual', () => {
+    // El paso "para todos" va DESPUÉS de la excepción a propósito: es un default, no un candado.
+    const u = perfil({ acceso: { bdi: { [marcaExcluir('novedades')]: true }, zattia: {} } })
+    expect(puedeVer(u, 'bdi', 'novedades')).toBe(false)
+    expect(puedeVer(u, 'zattia', 'novedades')).toBe(true)
+  })
+
+  /**
    * 🔴 Meta salió de adentro de Marketing y pasó a ser área propia (`meta`) el 9-ago-2026.
    *
    * Mover el área es quitar el acceso: `seccionesDeFuncion()` expande por área, así que si la

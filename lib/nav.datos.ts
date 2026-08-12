@@ -690,7 +690,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "novedades",
     "area": "sistema",
     "label": "Novedades",
-    "info": "Qué cambió en los sistemas, en un solo lugar. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_SIN_PERMISO, así que tildar o destildar esta fila NO cambia nada — es la contracara de que exista, una novedad que no le llega a alguien no sirve. Lo único que se puede dar acá es el permiso de publicar.",
+    "info": "Qué cambió en los sistemas, en un solo lugar. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_PARA_TODOS (lib/permisos.core.js), así que tildar o destildar esta fila NO cambia nada — es la contracara de que exista, una novedad que no le llega a alguien no sirve. Lo único que se puede dar acá es el permiso de publicar.",
     "brands": [
       "bdi",
       "zattia"
@@ -724,7 +724,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "agenda",
     "area": "agenda",
     "label": "Agenda",
-    "info": "Lo que hay que hacer o saber HOY: qué promoción bancaria corre hoy y cómo se cobra, con sus condiciones y el paso a paso. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_SIN_PERMISO, así que tildar o destildar esta fila NO cambia nada — una promo que no le llega a quien cobra no sirve. Lo único que se da acá es el permiso de cargar. Es distinta del Calendario, que es de Marketing y habla de fechas comerciales.",
+    "info": "Lo que hay que hacer o saber HOY: qué promoción bancaria corre hoy y cómo se cobra, con sus condiciones y el paso a paso. LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_PARA_TODOS (lib/permisos.core.js), así que tildar o destildar esta fila NO cambia nada — una promo que no le llega a quien cobra no sirve. Lo único que se da acá es el permiso de cargar. Es distinta del Calendario, que es de Marketing y habla de fechas comerciales.",
     "brands": [
       "bdi",
       "zattia"

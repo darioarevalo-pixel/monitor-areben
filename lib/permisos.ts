@@ -15,6 +15,7 @@ import {
   ACCESO_POR_FUNCION as ACCESO_POR_FUNCION_JS,
   esAdmin as esAdminJs,
   estaExcluido as estaExcluidoJs,
+  KEYS_PARA_TODOS as KEYS_PARA_TODOS_JS,
   marcaExcluir as marcaExcluirJs,
   marcasConAcceso as marcasConAccesoJs,
   puedeAtenderRetiroLocal as puedeAtenderRetiroLocalJs,
@@ -50,6 +51,12 @@ export const ACCESO_POR_FUNCION: Record<Funcion, { areas: string[]; keys?: strin
 /** A qué área pertenece cada sección. Espejo de `PermCat.area`, amarrado por test. */
 export const SECCION_AREA: Record<string, string> = SECCION_AREA_JS
 
+/**
+ * Las secciones que ve todo el equipo sin permiso. **Es la puerta abierta de verdad** — no
+ * `KEYS_SIN_PERMISO` de `lib/nav.ts`, que sólo dice qué rutas existen. El porqué, en el core.
+ */
+export const KEYS_PARA_TODOS: Set<string> = KEYS_PARA_TODOS_JS
+
 /** Perfil tal como lo devuelve el KV (bdi-catalogo/api/usuarios). */
 export type Perfil = {
   name: string
@@ -73,6 +80,21 @@ export type Perfil = {
   apodo?: string | null
   /** Cumpleaños como `MM-DD`, sin año: para saludar, no para saber la edad. */
   cumple?: string | null
+}
+
+/**
+ * El cumpleaños de alguien del equipo, como llega con el login.
+ *
+ * 🔑 **Es a propósito lo más chico que se puede mandar**: apodo y día, nada más. Saber quién cumple
+ * exige el padrón, que es admin-only (`action:'config'`), así que la alternativa era abrirlo o
+ * inventar un endpoint — y en Hobby quedan tres funciones. `bdi-catalogo/api/usuarios.js` lo
+ * devuelve al lado del perfil (`cumplesDe`), sin mails, sin permisos y sin año de nacimiento: con
+ * esta lista en la mano no se puede deducir nada más que a quién saludar.
+ */
+export type Cumple = {
+  apodo: string
+  /** `MM-DD` */
+  cumple: string
 }
 
 /** Las secciones que trae puesta una función (expandiendo sus áreas). */

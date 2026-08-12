@@ -42,15 +42,18 @@ export function itemsDeCat(cat: NavCat): NavItem[] {
  */
 
 /**
- * Secciones que ve cualquiera que entre, sin permiso que valga.
+ * Keys que el nav y el router aceptan **sin que PERM_CAT tenga que listarlas**.
  *
- * 'usuarios' es caso especial: vive en NAV_CATS (adminOnly) pero no en PERM_CAT.
+ * 🔴 **Esto NO es "lo ve todo el mundo", aunque el nombre lo sugiera y aunque este comentario lo
+ * afirmó durante meses.** Lo consumen `esDeMarca`, `esKeyValida` y `todasLasKeys`, que contestan
+ * *"¿esta ruta existe y vale para esta marca?"*. Quién entra lo decide `puedeVer`, que **nunca miró
+ * este set**: por eso Novedades, Manuales y la Agenda estuvieron invisibles para todo el que no
+ * fuera admin, con el comentario diciendo lo contrario. La puerta abierta de verdad es
+ * **`KEYS_PARA_TODOS`, en `lib/permisos.core.js`**, que sí la lee la decisión.
  *
- * ⚠️ **Esto es una puerta abierta por definición**: lo que entra acá lo ve todo el mundo, incluidos
- * los puestos compartidos (`Local`, `Depósito`), y no hay permiso que lo tape. 'novedades', 'manuales' y 'agenda'
- * están acá a propósito y es la contracara de que existan: una novedad que no le llega a alguien no
- * sirve, y una promo bancaria que no le llega a quien cobra, tampoco. Los sub-permisos
- * (`novedades.publicar`, `agenda.cargar`) sí se tildan, porque escribir es otra cosa que leer.
+ * 'usuarios' es el único que necesita estar acá de verdad: vive en NAV_CATS (adminOnly) y no en
+ * PERM_CAT. Los otros cinco están también en PERM_CAT, así que su presencia acá casi no cambia nada
+ * — y eso es justamente lo que escondió que el set no gobernaba ningún acceso.
  *
  * `tests/nav-estructura.test.ts` exige que el set tenga exactamente estas keys: sumar una más
  * rompe, y eso es lo que obliga a pensarla.

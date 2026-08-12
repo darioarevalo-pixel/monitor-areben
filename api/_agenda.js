@@ -54,6 +54,21 @@ function puedeCargar(perfil) {
   return marcasConAcceso(perfil, 'agenda.cargar', ['bdi', 'zattia']).length > 0;
 }
 
+/**
+ * ¿Le sirve a esta persona algo marcado para `marcas`?
+ *
+ * 🔑 **`marcas` vacío es LAS DOS**, no ninguna — una promoción la define el banco y lo normal es que
+ * valga para todo lo que se cobre en ese mostrador. Leerlo al revés escondería la mayoría.
+ *
+ * ⚠️ Las marcas de la persona salen de `marcasConAcceso` y **no de `perfil.cuenta` a secas**: `cuenta`
+ * contesta otra pregunta —¿está clavado a una marca?— y da vacío para todo el que puede cambiar de
+ * marca en el header. Ese atajo es el que dejó Canjes roto una vez.
+ */
+function esDeMisMarcas(marcas, mias) {
+  const lista = marcas || [];
+  return lista.length === 0 || lista.some((m) => mias.includes(m));
+}
+
 const MEDIOS = ['credito', 'debito', 'app', 'qr', 'transferencia'];
 const CANALES = ['mostrador', 'web'];
 const MARCAS = ['bdi', 'zattia'];
@@ -164,10 +179,16 @@ export default async function handler(req, res) {
       if (ite.error) throw new Error(ite.error.message);
       if (hec.error) throw new Error(hec.error.message);
 
+      // Las marcas que esta persona puede mirar. Quien no está clavado a una son las dos; quien sí,
+      // la suya y nada más — y para ésa, lo de la otra marca no es que no se dibuje: **no viaja**.
+      // La pantalla igual filtra por la marca del header, que es la que está mirando en este momento;
+      // esto acota lo que sale del servidor, que es otra pregunta.
+      const mias = marcasConAcceso(perfil, 'agenda', MARCAS);
+
       // 🔑 El destino se resuelve ACÁ. Quien carga recibe todos los ítems porque los administra,
       // pero cada uno viaja con `paraMi`: la pestaña Hoy, el bloque de Inicio y el badge miran ese
       // campo, así que administrar un pendiente ajeno no lo mete en la lista de nadie.
-      const items = (ite.data || []).map((i) => ({
+      const itemsTodos = (ite.data || []).map((i) => ({
         id: i.id,
         clase: i.clase,
         titulo: i.titulo,
@@ -181,6 +202,10 @@ export default async function handler(req, res) {
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
       }));
+      // Quien carga los recibe todos aunque no sean suyos —los administra— pero la marca acota
+      // igual a los dos: administrar lo de BDI parado en una cuenta clavada a Zattia no se puede
+      // ni mirando, porque el header no cambia.
+      const items = itemsTodos.filter((i) => esDeMisMarcas(i.marcas, mias));
       const visibles = cargar ? items : items.filter((i) => i.paraMi);
       const idsVisibles = new Set(visibles.map((i) => i.id));
 
@@ -196,7 +221,7 @@ export default async function handler(req, res) {
             nota: h.nota,
             hechoAt: h.hecho_at,
           })),
-        promos: (data || []).map((p) => ({
+        promos: (data || []).filter((p) => esDeMisMarcas(p.marcas, mias)).map((p) => ({
           id: p.id,
           banco: p.banco,
           medio: p.medio,
