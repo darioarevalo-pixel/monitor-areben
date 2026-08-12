@@ -1,5 +1,5 @@
 import type { Marca } from './nav.datos'
-import type { Perfil } from './permisos'
+import type { Cumple, Perfil } from './permisos'
 import { salirDeGoogle, tokenActual } from './identidad'
 
 /**
@@ -160,9 +160,23 @@ export function camposAdmin(c: Credencial | null): { adminUser?: string; adminPa
   return 'token' in c ? { adminToken: c.token } : { adminUser: c.user, adminPass: c.pass }
 }
 
+/**
+ * La vuelta del login: quién sos y a quién hay que saludar.
+ *
+ * Los cumpleaños viajan **pegados al perfil y no en una llamada aparte** porque son la única forma
+ * de saber quién cumple sin abrir el padrón, que es admin-only. Ver `Cumple` en `lib/permisos.ts`.
+ * Un servidor viejo —o el de la otra marca— no manda el campo, así que el llamador lo recibe como
+ * lista vacía y la franja de Inicio simplemente no muestra cumpleaños: nunca `undefined`.
+ */
 export type RespuestaLogin =
-  | { ok: true; perfil: Perfil }
+  | { ok: true; perfil: Perfil; cumples: Cumple[] }
   | { ok: false; error: string }
+
+/** Los cumpleaños de la respuesta, saneados: nunca `undefined`, nunca algo que no sea una lista. */
+function cumplesDeLaRespuesta(d: unknown): Cumple[] {
+  const c = (d as { cumples?: unknown })?.cumples
+  return Array.isArray(c) ? (c as Cumple[]) : []
+}
 
 /**
  * Login con el token del proveedor: la identidad la puso Google, el acceso lo pone el KV.
@@ -183,7 +197,7 @@ export async function loginGoogle(token: string): Promise<RespuestaLogin> {
       body: JSON.stringify({ action: 'login-google', token }),
     })
     const d = await r.json()
-    if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil }
+    if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil, cumples: cumplesDeLaRespuesta(d) }
     if (d?.error === 'sin-acceso') {
       return {
         ok: false,
@@ -205,7 +219,7 @@ export async function login(user: string, pass: string): Promise<RespuestaLogin>
       body: JSON.stringify({ action: 'login', user, pass }),
     })
     const d = await r.json()
-    if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil }
+    if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil, cumples: cumplesDeLaRespuesta(d) }
     return { ok: false, error: 'Usuario o contraseña incorrectos.' }
   } catch {
     return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.' }
@@ -226,11 +240,11 @@ export async function login(user: string, pass: string): Promise<RespuestaLogin>
  * probar y hay que volver a entrar. Es raro —la pass persiste en localStorage junto a la
  * sesión— y es el modo de falla correcto.
  */
-export async function rehidratarPorPass(user: string): Promise<Perfil | null> {
+export async function rehidratarPorPass(user: string): Promise<{ perfil: Perfil; cumples: Cumple[] } | null> {
   const pass = leerAdminPass()
   if (!pass) return null
   const r = await login(user, pass)
-  return r.ok ? r.perfil : null
+  return r.ok ? { perfil: r.perfil, cumples: r.cumples } : null
 }
 
 /**

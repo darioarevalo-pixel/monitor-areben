@@ -42,7 +42,7 @@ export function LoginScreen() {
       // El legacy la necesita para autenticar guardados de admin (_getAdminPass).
       guardarAdminPass(pass)
       setError('')
-      entrar(r.perfil)
+      entrar(r.perfil, 'pass', r.cumples)
     } else {
       setError(r.error)
       setEnviando(false)

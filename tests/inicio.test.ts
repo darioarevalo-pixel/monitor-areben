@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { agruparAvisos, comoLeLlamamos, fechaLarga, filtrarPorOrigen, horaLabel, marcasVisibles, modoInicio, novedadesDeInicio, ordenar, origenesDe, pendientesDeMarca, pendientesDeTrabajo, tituloPendientes, unidadesDe } from '@/lib/inicio/core'
+import { agruparAvisos, comoLeLlamamos, cuandoLabel, cumplesDe, fechaLarga, filtrarPorOrigen, horaLabel, loQueViene, marcasVisibles, modoInicio, novedadesDeInicio, ordenar, origenesDe, pendientesDeMarca, pendientesDeTrabajo, tituloPendientes, unidadesDe } from '@/lib/inicio/core'
 import { contarNuevos } from '@/lib/notificaciones/derivar'
 import { resumenFoto, resumenInterna } from '@/lib/solicitudes/overview'
 import type { Aviso } from '@/lib/notificaciones/tipos'
@@ -294,5 +294,109 @@ describe('inicio/core — novedadesDeInicio', () => {
 
   it('sin novedades, lista vacía (la sección no se dibuja)', () => {
     expect(novedadesDeInicio([], [])).toEqual([])
+  })
+})
+
+describe('inicio/core — loQueViene', () => {
+  it('trae lo que cae en la ventana y nada de afuera', () => {
+    // Del 1 al 20 de junio de 2026: Güemes (trasladado al lunes 15) y Belgrano (sábado 20). El
+    // Día del Padre (3er domingo = 21) queda un día afuera y NO tiene que aparecer.
+    const r = loQueViene('2026-06-01', 19)
+    expect(r.map((f) => f.clave)).toEqual(['guemes', 'belgrano'])
+    expect(r[0].faltan).toBe(14)
+    expect(r[0].porQue).toContain('Día del Padre')
+  })
+
+  it('🔴 cruza el fin de año: parado el 26-dic, lo que viene es Año Nuevo y Reyes', () => {
+    // Mirar sólo el año en curso devolvería una franja vacía justo en la semana en que más importa
+    // saber qué días no se abre.
+    const r = loQueViene('2026-12-26', 15)
+    expect(r.map((f) => f.clave)).toEqual(['fin-de-ano', 'anio-nuevo', 'reyes'])
+    expect(r.find((f) => f.clave === 'anio-nuevo')?.fecha).toBe('2027-01-01')
+  })
+
+  it('hoy cuenta como que viene: un feriado no desaparece el día que es', () => {
+    const r = loQueViene('2026-07-09', 1)
+    expect(r[0].clave).toBe('independencia')
+    expect(r[0].faltan).toBe(0)
+  })
+
+  it('a Local y Depósito, sólo los feriados: es lo que les cambia el día', () => {
+    // Octubre de 2026 tiene Diversidad Cultural (12), el Día de la Madre (18) y Halloween (31).
+    const todas = loQueViene('2026-10-01', 31)
+    expect(todas.map((f) => f.clave)).toContain('dia-madre')
+    const sector = loQueViene('2026-10-01', 31, { soloFeriados: true })
+    expect(sector.map((f) => f.clave)).toEqual(['diversidad-cultural'])
+    expect(sector.every((f) => f.tipo === 'feriado')).toBe(true)
+  })
+
+  it('el mismo día, primero el feriado: es el que decide si se trabaja', () => {
+    // El 2-abr-2026 es Malvinas y Jueves Santo; los dos son feriado, así que desempata el título.
+    // Lo que se amarra acá es que ninguno se pierda por caer el mismo día.
+    const r = loQueViene('2026-04-02', 0)
+    expect(r.map((f) => f.clave).sort()).toEqual(['jueves-santo', 'malvinas'])
+  })
+
+  it('una estimada viaja marcada: mentir sobre la fecha es peor que no mostrarla', () => {
+    const r = loQueViene('2026-12-01', 10)
+    expect(r.find((f) => f.clave === 'puente-diciembre')?.estimada).toBe(true)
+    expect(r.find((f) => f.clave === 'inmaculada')?.estimada).toBe(false)
+  })
+})
+
+describe('inicio/core — cumplesDe', () => {
+  const gente = [
+    { apodo: 'Mari', cumple: '08-14' },
+    { apodo: 'Nico', cumple: '08-30' },
+    { apodo: 'Sol', cumple: '01-03' },
+  ]
+
+  it('sólo los de la ventana, ordenados por cercanía', () => {
+    const r = cumplesDe(gente, '2026-08-12', 15)
+    expect(r.map((c) => c.apodo)).toEqual(['Mari'])
+    expect(r[0]).toEqual({ apodo: 'Mari', fecha: '2026-08-14', faltan: 2 })
+    expect(cumplesDe(gente, '2026-08-12', 20).map((c) => c.apodo)).toEqual(['Mari', 'Nico'])
+  })
+
+  it('🔴 cruza el fin de año: un 3 de enero mirado desde el 27 de diciembre es del año que viene', () => {
+    const r = cumplesDe(gente, '2026-12-27', 15)
+    expect(r.map((c) => c.apodo)).toEqual(['Sol'])
+    expect(r[0].fecha).toBe('2027-01-03')
+    expect(r[0].faltan).toBe(7)
+  })
+
+  it('el cumpleaños de hoy sale con `faltan: 0`, que es lo que se dibuja como "hoy"', () => {
+    expect(cumplesDe(gente, '2026-08-14', 15)[0]).toEqual({ apodo: 'Mari', fecha: '2026-08-14', faltan: 0 })
+  })
+
+  it('quien nació el 29 de febrero se saluda el 28 en los años que no son bisiestos', () => {
+    const bisiesto = [{ apodo: 'Feli', cumple: '02-29' }]
+    expect(cumplesDe(bisiesto, '2027-02-20', 15)[0].fecha).toBe('2027-02-28')
+    expect(cumplesDe(bisiesto, '2028-02-20', 15)[0].fecha).toBe('2028-02-29')
+  })
+
+  it('lo que no es `MM-DD` se saltea sin romper la franja', () => {
+    // El padrón lo escribe una persona a mano en Config: un campo vacío, un año de más o un mes 13
+    // no pueden tirar abajo la pantalla de inicio de todo el equipo.
+    const roto = [
+      { apodo: 'A', cumple: '' },
+      { apodo: 'B', cumple: '1990-08-14' },
+      { apodo: 'C', cumple: '13-01' },
+      { apodo: '', cumple: '08-14' },
+      { apodo: 'D', cumple: '08-14' },
+    ]
+    expect(cumplesDe(roto, '2026-08-12', 15).map((c) => c.apodo)).toEqual(['D'])
+    expect(cumplesDe([], '2026-08-12', 15)).toEqual([])
+  })
+})
+
+describe('inicio/core — cuandoLabel', () => {
+  it('"mañana" se entiende sin restar; a partir de una semana vuelve a ganar el número', () => {
+    expect(cuandoLabel(0, '2026-08-12')).toBe('hoy')
+    expect(cuandoLabel(1, '2026-08-13')).toBe('mañana')
+    expect(cuandoLabel(3, '2026-08-15')).toBe('el sábado')
+    expect(cuandoLabel(6, '2026-08-18')).toBe('el martes')
+    // A doce días "el martes" es ambiguo: hay dos martes. Ahí el número dice más.
+    expect(cuandoLabel(12, '2026-08-24')).toBe('en 12 días')
   })
 })

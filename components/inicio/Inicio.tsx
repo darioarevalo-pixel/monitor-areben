@@ -14,6 +14,7 @@ import { marcarVisto, vistoHasta } from '@/lib/notificaciones/visto'
 import { BandaPromoHoy } from '@/components/agenda/BandaPromoHoy'
 import { AvisosHoy } from '@/components/agenda/AvisosHoy'
 import { PendientesHoy } from '@/components/agenda/PendientesHoy'
+import { LoQueViene } from '@/components/inicio/LoQueViene'
 import { avisosDe, contarSinTildar, hoyIso } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -44,7 +45,9 @@ import type { Aviso } from '@/lib/notificaciones/tipos'
  * 2. La promo bancaria de hoy, si atendés: es lo único con hora de vencimiento.
  * 3. Las acciones que se hacen con el cliente delante (falla, cambio).
  * 4. Lo que te está esperando, en bloques por tipo y con lo rojo arriba.
- * 5. Las últimas novedades: se leen cuando hay un rato, no cuando entrás corriendo.
+ * 5. Lo que viene: feriados, fechas y cumpleaños. Es contexto, no tarea — enterarse el martes de
+ *    que el lunes no se abre sirve igual, y arriba empujaría los pendientes abajo del pliegue.
+ * 6. Las últimas novedades: se leen cuando hay un rato, no cuando entrás corriendo.
  */
 export function Inicio() {
   const { perfil, marca, setMarca } = useSesion()
@@ -259,6 +262,10 @@ export function Inicio() {
           ))}
         </div>
       )}
+
+      {/* Lo que viene, entre lo que te espera y las novedades: es contexto, no tarea. Se dibuja
+          sola sólo si hay algo en la ventana. */}
+      <LoQueViene />
 
       {ultimas.length > 0 && (
         <section style={{ marginTop: space[6] }}>

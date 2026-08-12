@@ -41,6 +41,7 @@ import {
   nEsimoDiaDeSemana as nEsimoDiaDeSemanaJs,
   normalizarHora as normalizarHoraJs,
   partirIdComercial as partirIdComercialJs,
+  pascuaDe as pascuaDeJs,
   PRIORIDADES as PRIORIDADES_JS,
   prioridadDe as prioridadDeJs,
   prioridadSugerida as prioridadSugeridaJs,
@@ -72,6 +73,8 @@ export const apagaLaFila = apagaLaFilaJs as (key: string | null) => boolean
 export const prioridadSugerida = prioridadSugeridaJs as (tipo: TipoFecha | null) => Prioridad
 export const trasladarFeriado = trasladarFeriadoJs as (fecha: string) => string
 export const caeEnFinDeSemana = caeEnFinDeSemanaJs as (fecha: string) => boolean
+/** El Domingo de Resurrección de un año. De él cuelgan Carnaval y los dos días de Semana Santa. */
+export const pascuaDe = pascuaDeJs as (anio: number) => string
 export const idComercial = idComercialJs as (clave: string, anio: number) => string
 export const partirIdComercial = partirIdComercialJs as (id: string) => { clave: string; anio: number } | null
 
@@ -327,7 +330,17 @@ export function laQueAprieta(entradas: EntradaCalendario[]): EntradaCalendario |
  * Reemplaza al aviso de urgencia calculada, y no es el mismo cartel con otro texto: pide **una
  * decisión**, que es algo que una persona puede hacer en el momento, en vez de anunciar un atraso
  * de producción que nadie eligió tener. Los hitos no entran: lo propio ya está decidido.
+ *
+ * 🔑 **Sólo reclaman las comerciales: un feriado no pide decisión.** Se filtra por `tipo` y no por
+ * `clase` —los feriados también son entradas de catálogo, o sea `clase: 'comercial'`— porque al
+ * completar el calendario nacional el catálogo pasó de 5 feriados a 17, y con ellos adentro la banda
+ * pedía decidir dieciséis fechas, entre ellas Año Nuevo y el Día de la Memoria. Nadie *decide* el
+ * Día de la Memoria, y una banda de dieciséis renglones que no se puede vaciar enseña a saltear la
+ * zona donde aparece la fecha que sí había que decidir. Los feriados siguen en la lista, se ven, y
+ * se les puede poner prioridad a mano: lo único que se les sacó es el derecho a reclamar.
+ *
+ * Los hitos quedan afuera por el mismo test sin necesidad de nombrarlos: viajan con `tipo: null`.
  */
 export function sinDecidir(entradas: EntradaCalendario[]): EntradaCalendario[] {
-  return entradas.filter((e) => e.clase === 'comercial' && !e.prioridad)
+  return entradas.filter((e) => e.tipo === 'comercial' && !e.prioridad)
 }

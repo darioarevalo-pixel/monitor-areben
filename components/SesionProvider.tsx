@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
-import type { Perfil } from '@/lib/permisos'
+import type { Cumple, Perfil } from '@/lib/permisos'
 import { marcaInicial } from '@/lib/permisos'
 import {
   canjearCodigo,
@@ -20,10 +20,18 @@ type Ctx = {
   perfil: Perfil | null
   marca: Marca
   cargando: boolean
+  /**
+   * Los cumpleaños del equipo, tal como vinieron con el login. Vacío mientras no haya sesión.
+   *
+   * Vive acá y no en un store porque **llega con el perfil y muere con él**: es la única cosa del
+   * equipo que este navegador sabe sin volver a pedir nada, y al salir tiene que irse junto con la
+   * sesión. Un store la dejaría sobreviviendo al `salir()`.
+   */
+  cumples: Cumple[]
   /** Error de la vuelta de Google (cuenta sin alta en el KV, canje fallido). Lo muestra el login. */
   errorGoogle: string
   setMarca: (m: Marca) => void
-  entrar: (perfil: Perfil, via?: Via) => void
+  entrar: (perfil: Perfil, via?: Via, cumples?: Cumple[]) => void
   salir: () => void
 }
 
@@ -31,6 +39,7 @@ const SesionCtx = createContext<Ctx | null>(null)
 
 export function SesionProvider({ children }: { children: React.ReactNode }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null)
+  const [cumples, setCumples] = useState<Cumple[]>([])
   const [marca, setMarcaState] = useState<Marca>('bdi')
   const [cargando, setCargando] = useState(true)
   const [errorGoogle, setErrorGoogle] = useState('')
@@ -55,7 +64,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
         const r = canje.ok ? await loginGoogle(canje.token) : null
         if (!vivo) return
         if (r?.ok) {
-          const m = aplicar(r.perfil, null)
+          const m = aplicar(r.perfil, r.cumples, null)
           guardarSesion(r.perfil.name, m, 'google') // ingreso nuevo: acá sí nace la sesión
         } else {
           // `r` no nulo = Google autenticó bien y lo que falta es el alta en el KV: eso se
@@ -90,7 +99,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
         const token = await tokenActual()
         const r = token ? await loginGoogle(token) : null
         if (!vivo) return
-        if (r?.ok) aplicar(r.perfil, s.empresa)
+        if (r?.ok) aplicar(r.perfil, r.cumples, s.empresa)
         else borrarSesion()
         setCargando(false)
         return
@@ -99,7 +108,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       const p = await rehidratarPorPass(s.user)
       if (!vivo) return
       if (p) {
-        aplicar(p, s.empresa)
+        aplicar(p.perfil, p.cumples, s.empresa)
       } else {
         // El usuario ya no existe, le cambiaron la contraseña, o la pass no está
         // cacheada en este navegador: en los tres casos la sesión no se puede sostener.
@@ -113,9 +122,10 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
      * rehidratar, tocarla correría los 30 días de vencimiento en cada visita, que no es
      * lo que hacía el auto-login de antes. La sesión la escribe quien la crea.
      */
-    function aplicar(p: Perfil, empresa: Marca | null): Marca {
+    function aplicar(p: Perfil, c: Cumple[], empresa: Marca | null): Marca {
       const m = marcaInicial(p, empresa)
       setPerfil(p)
+      setCumples(c)
       setMarcaState(m)
       return m
     }
@@ -125,9 +135,10 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const entrar = useCallback((p: Perfil, via: Via = 'pass') => {
+  const entrar = useCallback((p: Perfil, via: Via = 'pass', c: Cumple[] = []) => {
     const m = marcaInicial(p, null)
     setPerfil(p)
+    setCumples(c)
     setMarcaState(m)
     guardarSesion(p.name, m, via)
   }, [])
@@ -135,6 +146,9 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   const salir = useCallback(() => {
     borrarSesion()
     setPerfil(null)
+    // Los cumpleaños se van con la sesión: son datos de otras personas y no tienen por qué quedar
+    // en memoria de un navegador donde ya nadie está adentro.
+    setCumples([])
   }, [])
 
   const setMarca = useCallback(
@@ -149,8 +163,8 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   )
 
   const valor = useMemo(
-    () => ({ perfil, marca, cargando, errorGoogle, setMarca, entrar, salir }),
-    [perfil, marca, cargando, errorGoogle, setMarca, entrar, salir],
+    () => ({ perfil, marca, cargando, cumples, errorGoogle, setMarca, entrar, salir }),
+    [perfil, marca, cargando, cumples, errorGoogle, setMarca, entrar, salir],
   )
 
   return <SesionCtx.Provider value={valor}>{children}</SesionCtx.Provider>

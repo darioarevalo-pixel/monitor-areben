@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   apagaLaFila,
   caeEnFinDeSemana,
+  diaDeSemanaDe,
   diasEntre,
+  pascuaDe,
   hoyIso,
   juegaLaFecha,
   laQueAprieta,
@@ -357,8 +359,24 @@ describe('sinDecidir()', () => {
   it('son las comerciales que nadie miró: es lo que la banda de arriba pide', () => {
     const r = proximas('2026-11-01', 60)
     const pend = sinDecidir(r)
-    expect(pend.length).toBe(r.filter((e) => e.clase === 'comercial').length)
-    expect(pend.every((e) => e.clase === 'comercial')).toBe(true)
+    expect(pend.length).toBe(r.filter((e) => e.tipo === 'comercial').length)
+    expect(pend.every((e) => e.tipo === 'comercial')).toBe(true)
+  })
+
+  it('🔑 un feriado NO pide decisión, aunque esté en la lista', () => {
+    // La ventana del 1-nov agarra Soberanía (23-nov, trasladado) y la Inmaculada, más el
+    // CyberMonday y Black Friday. Los dos feriados se VEN en el calendario y se les puede poner
+    // prioridad a mano; lo que no hacen es reclamar.
+    const r = proximas('2026-11-01', 45)
+    expect(r.some((e) => e.id === 'comercial:soberania:2026')).toBe(true)
+    expect(sinDecidir(r).some((e) => e.tipo === 'feriado')).toBe(false)
+
+    // Y el motivo por el que esto existe: con el calendario nacional completo, pedir decisión por
+    // `clase` en vez de por `tipo` llenaría la banda de feriados. En el primer semestre son
+    // mayoría — es el tramo del año donde no hay casi ninguna comercial.
+    const primerSemestre = proximas('2026-03-01', 120)
+    expect(primerSemestre.filter((e) => e.tipo === 'feriado').length).toBeGreaterThan(4)
+    expect(sinDecidir(primerSemestre).every((e) => e.tipo === 'comercial')).toBe(true)
   })
 
   it('dejar pasar una fecha TAMBIÉN es decidirla: sale de la lista de pendientes', () => {
@@ -426,6 +444,98 @@ describe('feriados: el traslado es una REGLA, no una fecha del almanaque', () =>
     expect(resolverComercial('puente-diciembre', 2026)?.estimada).toBe(true)
     // 8-dic-2027 cae miércoles: no hay puente que inventar.
     expect(resolverComercial('puente-diciembre', 2027)).toBe(null)
+  })
+})
+
+describe('Pascua: la única fecha que no se puede escribir a mano', () => {
+  it('el cómputo gregoriano, contra años conocidos', () => {
+    // Fijados contra el calendario real, no contra lo que devuelva la función. Se ve el rango
+    // entero que puede tomar: 2008 casi en el piso (22-mar) y 2038 en el techo (25-abr).
+    expect(pascuaDe(2020)).toBe('2020-04-12')
+    expect(pascuaDe(2021)).toBe('2021-04-04')
+    expect(pascuaDe(2022)).toBe('2022-04-17')
+    expect(pascuaDe(2023)).toBe('2023-04-09')
+    expect(pascuaDe(2024)).toBe('2024-03-31')
+    expect(pascuaDe(2025)).toBe('2025-04-20')
+    expect(pascuaDe(2026)).toBe('2026-04-05')
+    expect(pascuaDe(2027)).toBe('2027-03-28')
+    expect(pascuaDe(2028)).toBe('2028-04-16')
+    expect(pascuaDe(2029)).toBe('2029-04-01')
+    expect(pascuaDe(2030)).toBe('2030-04-21')
+    expect(pascuaDe(2038)).toBe('2038-04-25')  // el máximo posible
+    expect(pascuaDe(2008)).toBe('2008-03-23')  // casi el mínimo (el mínimo es 22-mar)
+  })
+
+  it('siempre cae domingo, y entre el 22-mar y el 25-abr', () => {
+    // Es la propiedad que define la fecha: si algún año diera un martes, el error se arrastraría a
+    // Carnaval y a Semana Santa sin que nada más fallara.
+    for (let a = 2000; a <= 2100; a++) {
+      const p = pascuaDe(a)
+      expect(diaDeSemanaDe(p)).toBe(0)
+      expect(p >= `${a}-03-22` && p <= `${a}-04-25`).toBe(true)
+    }
+  })
+
+  it('🔑 se mueve 35 días entre un año y el otro: por eso Carnaval no se hardcodea', () => {
+    // 2024 fue el 12 y 13 de FEBRERO; 2025, el 3 y 4 de MARZO. Escribir "Carnaval: febrero"
+    // acierta un año y miente el otro, que es el error que este catálogo existe para no cometer.
+    expect(resolverComercial('carnaval-lunes', 2024)?.fecha).toBe('2024-02-12')
+    expect(resolverComercial('carnaval-martes', 2024)?.fecha).toBe('2024-02-13')
+    expect(resolverComercial('carnaval-lunes', 2025)?.fecha).toBe('2025-03-03')
+    expect(resolverComercial('carnaval-martes', 2025)?.fecha).toBe('2025-03-04')
+  })
+
+  it('Semana Santa cuelga del mismo domingo: jueves y viernes anteriores', () => {
+    expect(resolverComercial('jueves-santo', 2026)?.fecha).toBe('2026-04-02')
+    expect(resolverComercial('viernes-santo', 2026)?.fecha).toBe('2026-04-03')
+    expect(resolverComercial('jueves-santo', 2025)?.fecha).toBe('2025-04-17')
+    expect(resolverComercial('viernes-santo', 2025)?.fecha).toBe('2025-04-18')
+    // Y son firmes, no estimadas: la regla es exacta aunque la fecha se mueva.
+    expect(resolverComercial('viernes-santo', 2026)?.estimada).toBe(false)
+  })
+})
+
+describe('el calendario nacional completo', () => {
+  it('los inamovibles caen donde dice la ley, todos los años', () => {
+    for (const a of [2026, 2027, 2028]) {
+      expect(resolverComercial('anio-nuevo', a)?.fecha).toBe(`${a}-01-01`)
+      expect(resolverComercial('memoria', a)?.fecha).toBe(`${a}-03-24`)
+      expect(resolverComercial('malvinas', a)?.fecha).toBe(`${a}-04-02`)
+      expect(resolverComercial('trabajador', a)?.fecha).toBe(`${a}-05-01`)
+      expect(resolverComercial('revolucion-mayo', a)?.fecha).toBe(`${a}-05-25`)
+      expect(resolverComercial('independencia', a)?.fecha).toBe(`${a}-07-09`)
+    }
+  })
+
+  it('🔴 Güemes se traslada y Belgrano NO, aunque caigan la misma semana', () => {
+    // Los dos son de junio y están a tres días: es exactamente el par que se escribe mal a mano.
+    // 2026: el 17 cae miércoles → Güemes al lunes 15. Belgrano queda el sábado 20.
+    expect(resolverComercial('guemes', 2026)?.fecha).toBe('2026-06-15')
+    expect(resolverComercial('belgrano', 2026)?.fecha).toBe('2026-06-20')
+    // 2027: el 17 cae jueves → Güemes al lunes 21, o sea DESPUÉS de Belgrano, que queda el 20.
+    expect(resolverComercial('guemes', 2027)?.fecha).toBe('2027-06-21')
+    expect(resolverComercial('belgrano', 2027)?.fecha).toBe('2027-06-20')
+  })
+
+  it('un trasladable que cae fin de semana sale ESTIMADO: lo mueve un decreto, no una regla', () => {
+    // 17-jun-2028 es sábado. El decreto 614/2025 dice que *podrá* moverse, y "podrá" no se computa.
+    expect(resolverComercial('guemes', 2028)?.estimada).toBe(true)
+    expect(resolverComercial('guemes', 2026)?.estimada).toBe(false)
+  })
+
+  it('🔑 dos feriados pueden caer el MISMO día, y los dos tienen que salir', () => {
+    // El 2-abr-2026 es Malvinas y Jueves Santo a la vez. Quedarse con uno escondería el otro, y
+    // son dos motivos distintos por los que ese día no se trabaja igual.
+    const dosDeAbril = FECHAS_COMERCIALES.filter((f) => resolverComercial(f.clave, 2026)?.fecha === '2026-04-02')
+    expect(dosDeAbril.map((f) => f.clave).sort()).toEqual(['jueves-santo', 'malvinas'])
+  })
+
+  it('el catálogo trae los 12 feriados nacionales + Jueves Santo, y ninguno se pisa por clave', () => {
+    const feriados = FECHAS_COMERCIALES.filter((f) => f.tipo === 'feriado')
+    // 12 nacionales inamovibles/trasladables + Jueves Santo (no laborable) + el puente estimado.
+    expect(feriados.length).toBe(17)
+    const claves = FECHAS_COMERCIALES.map((f) => f.clave)
+    expect(new Set(claves).size).toBe(claves.length)
   })
 })
 

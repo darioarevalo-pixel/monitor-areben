@@ -5,6 +5,7 @@
  */
 
 import { CUENTAS } from '@/lib/cuentas'
+import { diasDelMes, diasEntre, FECHAS_COMERCIALES, iso, resolverComercial, sumarDias, type TipoFecha } from '@/lib/calendario'
 import { esAdmin, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
 import { marcasQueVe, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { ordenarAvisos } from '@/lib/notificaciones/derivar'
@@ -179,6 +180,127 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
  */
 export function fechaLarga(hoy: Date = new Date()): string {
   return `${DIAS_SEMANA[hoy.getDay()]} ${hoy.getDate()} de ${MESES[hoy.getMonth()]}`
+}
+
+// ── Lo que viene ─────────────────────────────────────────────────────────────────
+
+/** Una fecha del almanaque como la muestra la franja de Inicio. */
+export type FechaQueViene = {
+  clave: string
+  /** `YYYY-MM-DD` */
+  fecha: string
+  titulo: string
+  tipo: TipoFecha
+  /** El catálogo hizo lo que pudo y todavía nadie confirmó el día. Se dibuja "(a confirmar)". */
+  estimada: boolean
+  /** El renglón en castellano que ya trae el catálogo: por qué esta fecha nos importa. */
+  porQue: string
+  /** Días desde hoy. `0` es hoy. */
+  faltan: number
+}
+
+/**
+ * Las fechas del almanaque que caen en los próximos `dias`, ordenadas por cercanía.
+ *
+ * 🔑 **No cuesta un fetch y por eso puede vivir en Inicio.** El calendario editorial pide al
+ * servidor las fechas fijadas a mano, los hitos propios y las decisiones de cada marca; esta franja
+ * **no las necesita**, porque no muestra ni prioridad ni producción — muestra qué días vienen. Todo
+ * eso se calcula del catálogo, que es código. Es la misma razón por la que `proximas()` sigue
+ * viviendo en `lib/calendario`: son dos preguntas distintas y comparten el catálogo, no la firma.
+ *
+ * ⚠️ **La ventana se recorre por años calendario, no por el año de hoy.** Parado un 20 de diciembre,
+ * lo que viene es Año Nuevo y Reyes del año siguiente; mirar sólo el año en curso devolvería una
+ * franja vacía justo en la semana en que más importa saber qué días no se abre. Es el mismo cuidado
+ * que documenta `proximas()`, y el test lo amarra parándose el 26-dic.
+ *
+ * `soloFeriados` es la vista de Local y Depósito: a ellos les cambia **el día** (el local no abre,
+ * el correo no despacha), no el trabajo. El Día de la Madre no les dice nada que puedan usar.
+ */
+export function loQueViene(hoy: string, dias: number, opts: { soloFeriados?: boolean } = {}): FechaQueViene[] {
+  const hasta = sumarDias(hoy, dias)
+  const out: FechaQueViene[] = []
+  for (let anio = Number(hoy.slice(0, 4)); anio <= Number(hasta.slice(0, 4)); anio++) {
+    for (const f of FECHAS_COMERCIALES) {
+      if (opts.soloFeriados && f.tipo !== 'feriado') continue
+      const r = resolverComercial(f.clave, anio)
+      if (!r || r.fecha < hoy || r.fecha > hasta) continue
+      out.push({
+        clave: f.clave,
+        fecha: r.fecha,
+        titulo: f.titulo,
+        tipo: f.tipo,
+        estimada: r.estimada,
+        porQue: f.porQue,
+        faltan: diasEntre(hoy, r.fecha),
+      })
+    }
+  }
+  // Por fecha; el mismo día, primero el feriado: es el que decide si se trabaja. En 2026 el 2 de
+  // abril es Malvinas y Jueves Santo a la vez, así que dos entradas el mismo día no es un caso raro.
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenTipo(a.tipo) - ordenTipo(b.tipo) || a.titulo.localeCompare(b.titulo))
+}
+
+const ordenTipo = (t: TipoFecha) => (t === 'feriado' ? 0 : t === 'efemeride' ? 1 : 2)
+
+// ── Los cumpleaños ───────────────────────────────────────────────────────────────
+
+/** Alguien del equipo cumpliendo años, ya resuelto al año que corresponde. */
+export type CumpleDeInicio = {
+  apodo: string
+  /** `YYYY-MM-DD` — el `MM-DD` del padrón, puesto en el año en que cae dentro de la ventana. */
+  fecha: string
+  faltan: number
+}
+
+/**
+ * Quién cumple años en los próximos `dias`.
+ *
+ * 🔴 **Viaja sin año a propósito**: el padrón guarda `MM-DD` y nada más, así que la pantalla no
+ * puede publicar la edad de nadie ni aunque alguien la quiera calcular. La lista llega con el login
+ * (`cumples` en la respuesta de `bdi-catalogo/api/usuarios.js`) y trae **sólo apodo y día** — ni
+ * mails, ni permisos, ni quién es admin. Que sea la única forma de saber quién cumple sin abrir el
+ * padrón entero, que es admin-only, no es una casualidad del diseño: es el diseño.
+ *
+ * El cruce de año se resuelve probando el año en curso y el siguiente: un 3 de enero mirado desde
+ * el 27 de diciembre cae en el año que viene, y sin eso la franja se apagaría sola justo en las
+ * fiestas. Un `MM-DD` que no existe ese año —el 29 de febrero de quien nació bisiesto— se saluda
+ * el 28: correrlo al 1 de marzo lo pasaría a otro mes, y el saludo llegaría tarde en vez de temprano.
+ */
+export function cumplesDe(cumples: { apodo: string; cumple: string }[], hoy: string, dias: number): CumpleDeInicio[] {
+  const hasta = sumarDias(hoy, dias)
+  const out: CumpleDeInicio[] = []
+  for (const c of cumples || []) {
+    const m = /^(\d{2})-(\d{2})$/.exec(String(c?.cumple || '').trim())
+    if (!m) continue
+    const mes = Number(m[1])
+    const dia = Number(m[2])
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) continue
+    const apodo = String(c.apodo || '').trim()
+    if (!apodo) continue
+    for (let anio = Number(hoy.slice(0, 4)); anio <= Number(hasta.slice(0, 4)); anio++) {
+      const fecha = iso(anio, mes, Math.min(dia, diasDelMes(anio, mes)))
+      if (fecha < hoy || fecha > hasta) continue
+      out.push({ apodo, fecha, faltan: diasEntre(hoy, fecha) })
+    }
+  }
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.apodo.localeCompare(b.apodo))
+}
+
+/**
+ * Cómo se lee la distancia: "hoy", "mañana", "en 3 días", "el lunes".
+ *
+ * 🔑 **"Falta 1 día" y "mañana" no son la misma frase**, aunque sean el mismo número: la segunda se
+ * entiende sin restar. Y a partir de una semana el número vuelve a ganar, porque "el martes" a
+ * doce días de distancia es ambiguo — hay dos martes.
+ */
+export function cuandoLabel(faltan: number, fecha: string): string {
+  if (faltan <= 0) return 'hoy'
+  if (faltan === 1) return 'mañana'
+  if (faltan <= 6) {
+    const [a, m, d] = fecha.split('-').map(Number)
+    return `el ${DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]}`
+  }
+  return `en ${faltan} días`
 }
 
 // ── Los avisos, agrupados para la pantalla ───────────────────────────────────────
