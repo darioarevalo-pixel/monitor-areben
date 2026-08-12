@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { agruparAvisos, comoLeLlamamos, cuandoLabel, cumplesDe, fechaLarga, filtrarPorOrigen, horaLabel, loQueViene, marcasVisibles, modoInicio, novedadesDeInicio, ordenar, origenesDe, pendientesDeMarca, pendientesDeTrabajo, tituloPendientes, unidadesDe } from '@/lib/inicio/core'
+import { agruparAvisos, comoLeLlamamos, cuandoLabel, cumplesDe, DIAS_LO_QUE_VIENE, fechaLarga, filtrarPorOrigen, horaLabel, loQueViene, marcasVisibles, modoInicio, novedadesDeInicio, ordenar, origenesDe, pendientesDeMarca, pendientesDeTrabajo, tituloPendientes, unidadesDe } from '@/lib/inicio/core'
 import { contarNuevos } from '@/lib/notificaciones/derivar'
 import { resumenFoto, resumenInterna } from '@/lib/solicitudes/overview'
 import type { Aviso } from '@/lib/notificaciones/tipos'
@@ -341,6 +341,17 @@ describe('inicio/core — loQueViene', () => {
     const r = loQueViene('2026-12-01', 10)
     expect(r.find((f) => f.clave === 'puente-diciembre')?.estimada).toBe(true)
     expect(r.find((f) => f.clave === 'inmaculada')?.estimada).toBe(false)
+  })
+
+  it('🔑 la ventana de la franja es de 15 días, no de mes y medio', () => {
+    // Éste es el único test que ejerce la ventana de VERDAD: `loQueViene` recibe los días por
+    // parámetro, así que todos los de arriba le pasan el número que les conviene y no notarían que
+    // la pantalla cambió. Parado el 1-jun-2026, con los 45 de antes aparecían Güemes (15), Belgrano
+    // (20) y el Día del Padre (21): tres renglones sobre los que ese día no se puede hacer nada.
+    // La anticipación no se perdió, vive en el calendario editorial de Marketing.
+    expect(DIAS_LO_QUE_VIENE).toBe(15)
+    expect(loQueViene('2026-06-01', DIAS_LO_QUE_VIENE).map((f) => f.clave)).toEqual(['guemes'])
+    expect(loQueViene('2026-06-01', 45).map((f) => f.clave)).toContain('belgrano')
   })
 })
 

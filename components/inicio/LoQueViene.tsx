@@ -1,7 +1,7 @@
 'use client'
 
 import { useSesion } from '@/components/SesionProvider'
-import { cuandoLabel, cumplesDe, loQueViene, modoInicio, type CumpleDeInicio, type FechaQueViene } from '@/lib/inicio/core'
+import { cuandoLabel, cumplesDe, DIAS_LO_QUE_VIENE, loQueViene, modoInicio, type CumpleDeInicio, type FechaQueViene } from '@/lib/inicio/core'
 import { hoyIso } from '@/lib/agenda'
 import { Card, color, font, space, toneTokens } from '@/components/ui'
 
@@ -39,8 +39,8 @@ export function LoQueViene() {
   const hoy = hoyIso()
   const soloFeriados = modoInicio(perfil) === 'sector'
 
-  const fechas = loQueViene(hoy, DIAS_FECHAS, { soloFeriados })
-  const cumpleanios = cumplesDe(cumples, hoy, DIAS_CUMPLES)
+  const fechas = loQueViene(hoy, DIAS_LO_QUE_VIENE, { soloFeriados })
+  const cumpleanios = cumplesDe(cumples, hoy, DIAS_LO_QUE_VIENE)
   if (!fechas.length && !cumpleanios.length) return null
 
   // Una sola línea de tiempo: el cumpleaños de alguien y un feriado compiten por el mismo lugar en
@@ -93,13 +93,3 @@ function Chip({ tono, children }: { tono: 'brand' | 'warning'; children: React.R
     </span>
   )
 }
-
-/**
- * Cuánto se mira para adelante.
- *
- * Son dos ventanas distintas porque contestan dos preguntas distintas. Un feriado a 45 días se
- * planifica —es la ventana con la que ya trabaja el calendario editorial—; un cumpleaños a 45 días
- * no se puede hacer nada con él, y ocuparía el mismo renglón que el de pasado mañana.
- */
-const DIAS_FECHAS = 45
-const DIAS_CUMPLES = 15

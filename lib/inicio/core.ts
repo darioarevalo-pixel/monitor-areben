@@ -184,6 +184,25 @@ export function fechaLarga(hoy: Date = new Date()): string {
 
 // ── Lo que viene ─────────────────────────────────────────────────────────────────
 
+/**
+ * Cuántos días para adelante mira la franja de Inicio. **Una sola ventana**, para las fechas del
+ * almanaque y para los cumpleaños.
+ *
+ * 🔑 **Quince días es lo que alcanza a cambiarle el día a alguien.** Las fechas miraban 45 y la
+ * franja se volvía una lista larga de cosas sobre las que hoy no se puede hacer nada: a la persona
+ * del local, un feriado a mes y medio no le dice nada, y una franja que no le habla es una franja
+ * que deja de leer —con el feriado de la semana que viene adentro—.
+ *
+ * ⛔ **La anticipación no se perdió, y no hay que reponerla acá.** Vive donde hace falta: el
+ * **calendario editorial** de Marketing (`lib/calendario`, `proximas()`) es el que planifica el Hot
+ * Sale y el Día de la Madre y conserva su ventana larga. Inicio contesta "¿qué viene?", no "¿qué
+ * hay que preparar?" — son dos preguntas, y por eso son dos pantallas.
+ *
+ * Vive acá y no en el componente para que un test pueda amarrarla: `loQueViene` recibe los días por
+ * parámetro, así que un test que le pasa el número no notaría que la pantalla cambió de ventana.
+ */
+export const DIAS_LO_QUE_VIENE = 15
+
 /** Una fecha del almanaque como la muestra la franja de Inicio. */
 export type FechaQueViene = {
   clave: string
