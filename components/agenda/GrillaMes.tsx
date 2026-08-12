@@ -38,6 +38,18 @@ export function GrillaMes() {
   const hoy = hoyIso()
   const { anio, mes } = mesCorrido(hoy, offset)
 
+  /**
+   * Cambiar de mes cierra el día abierto.
+   *
+   * Sin esto, el detalle del 12 de agosto se queda abajo mientras la grilla muestra septiembre: un
+   * encabezado que dice un mes y una tarjeta que dice otro, y la tarjeta gana porque es la que tiene
+   * texto. Es el mismo renglón que existe para desambiguar, mintiendo.
+   */
+  const irAlMes = (n: number) => {
+    setOffset(n)
+    setAbierto(null)
+  }
+
   const porDia = useMemo(
     () => entradasDelMes({ promos, items, hechos }, anio, mes, { marca }),
     [promos, items, hechos, anio, mes, marca],
@@ -49,12 +61,12 @@ export function GrillaMes() {
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
-        <Button size="sm" variant="ghost" onClick={() => setOffset((o) => o - 1)}>‹</Button>
+        <Button size="sm" variant="ghost" onClick={() => irAlMes(offset - 1)}>‹</Button>
         <div style={{ fontSize: font.md, fontWeight: weight.bold, minWidth: 170, textAlign: 'center' }}>
           {MESES[mes - 1]} {anio}
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setOffset((o) => o + 1)}>›</Button>
-        {offset !== 0 && <Button size="sm" variant="ghost" onClick={() => setOffset(0)}>Hoy</Button>}
+        <Button size="sm" variant="ghost" onClick={() => irAlMes(offset + 1)}>›</Button>
+        {offset !== 0 && <Button size="sm" variant="ghost" onClick={() => irAlMes(0)}>Hoy</Button>}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
