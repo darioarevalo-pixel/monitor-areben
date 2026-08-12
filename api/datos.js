@@ -19,6 +19,7 @@ import calendario from './_calendario.js';
 import liquidacion from './_liquidacion.js';
 import atencion from './_atencion.js';
 import sistema from './_sistema.js';
+import syncTn from './_sync-tn.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel` y `calendario` entran por acá y NO por api/meta-ads.js, aunque el tema sea el
@@ -36,6 +37,9 @@ const RECURSOS = {
   // `sistema` es el único que no tiene marca: novedades y manuales son del sistema, no de BDI ni de
   // Zattia, y por eso su handler no valida `store`.
   sistema,
+  // Ledger del sync de ventas TN→GN (Stunned). Entra por acá y no por un archivo propio en `api/`
+  // porque el repo está a 3 funciones del límite del plan Hobby.
+  'sync-tn': syncTn,
 };
 
 export default async function handler(req, res) {

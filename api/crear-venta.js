@@ -2,7 +2,8 @@
 // POST { store, origen:'deposito'|'local', items:[{product_id,size_id,quantity}], comments, solicitudId, user, pass }
 // Seguridad: valida que (user, pass) sea un usuario válido del Monitor (login server-side).
 // Usa GN_TOKEN_VENTAS (Zattia) / GN_TOKEN_VENTAS_BDI (BDI): token con permiso de ventas.
-import { usuarioValido } from './_auth.js';
+import { exigirUsuario } from './_auth.js';
+import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as reservarLedger } from './_sync-ledger.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -11,6 +12,10 @@ const GN_BASE = 'https://www.gestionnube.com/api/v1';
 const SF_CFG = {
   zattia: { client_id: 312923, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 18210, local: 11780 } },
   bdi:    { client_id: 338755, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 13307, local: 18393 } },
+  // STUNNED no tiene cuenta de GN propia: es la línea STU adentro del GN de Zattia, así que hereda
+  // sus ubicaciones y su token. Sólo se usa para la acción `tn_import` (las ventas online que hoy
+  // alguien carga a mano); no hay sesión de fotos ni fallas de Stunned.
+  stunned: { client_id: null, channel_id: 12, sale_type_id: 1, currency_id: 1, store: { deposito: 18210, local: 11780 } },
 };
 // Cliente propio para las ventas de FALLAS (payload con proposito:'falla'), distinto del de Sesión
 // de fotos: así en GN cada venta técnica queda atribuida a su cliente correcto. Sin proposito, se usa
@@ -41,7 +46,24 @@ const CAMBIO_PAYMENT = {
   zattia: { tarjeta: 2, transferencia: 5 },
   bdi: { tarjeta: 2, transferencia: 5 },
 };
-const TOKENS = { zattia: process.env.GN_TOKEN_VENTAS, bdi: process.env.GN_TOKEN_VENTAS_BDI };
+// ── Importación de una orden de Tienda Nube (acción `tn_import`) ──
+// 🔴 FALTA EL DATO: el cliente de GN al que se le atribuyen las ventas online de Stunned. GN no
+// tiene API de alta de clientes, así que hay que crearlo a mano en GN y poner el id acá. Sin él el
+// handler CORTA con un error explícito (igual que CANJE_CLIENT) en vez de caer al cliente de fotos:
+// una venta atribuida al cliente equivocado no se corrige por API.
+const TN_IMPORT_CLIENT = { stunned: null };
+// Canal 16 = "Tienda Nube" en GN (verificado: es el que filtra `verificar_ventas` en bdi-catalogo
+// para cruzar contra las órdenes de TN). Es un canal NORMAL, no el 12 "Ninguno": si fuera el 12,
+// `esVentaTecnica` la descartaría y la venta online de Stunned no aparecería en ningún reporte —
+// que es exactamente el agujero que este sync viene a tapar.
+const TN_IMPORT_CHANNEL = { stunned: 16 };
+
+const TOKENS = {
+  zattia: process.env.GN_TOKEN_VENTAS,
+  bdi: process.env.GN_TOKEN_VENTAS_BDI,
+  // Stunned vive en el GN de Zattia: mismo token.
+  stunned: process.env.GN_TOKEN_VENTAS,
+};
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function gnFetch(url, opts, tries = 3) {
@@ -87,7 +109,74 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!(await usuarioValido(b.user, b.pass, b.token))) return res.status(403).json({ error: 'No pudimos verificar tu identidad. Volvé a entrar al Monitor.' });
+  // `exigirUsuario` acepta el header `x-monitor-auth` Y el user/pass del body: es estrictamente más
+  // permisivo que el chequeo que había, así que los llamadores viejos siguen andando igual, y los
+  // nuevos pueden llamar con `apiFetch` como el resto del Monitor.
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
+
+  // ── Importar una orden de Tienda Nube como venta de GN (sync de Stunned) ──
+  // El orden de los pasos ES el diseño: se RESERVA en el ledger antes de postear. GN no anula
+  // ventas por API ⇒ una duplicada se limpia a mano en la web de GN, así que ante cualquier duda
+  // este handler prefiere no crear la venta.
+  if (b.accion === 'tn_import') {
+    const tnOrder = String(b.tn_order || '').trim();
+    if (!tnOrder) return res.status(400).json({ error: 'falta tn_order (el número de orden de Tienda Nube)' });
+    const clientId = TN_IMPORT_CLIENT[store];
+    const channel = TN_IMPORT_CHANNEL[store];
+    if (!clientId) return res.status(400).json({ error: `Falta el cliente de GN para las ventas importadas de ${store} (TN_IMPORT_CLIENT). Crealo en Gestión Nube y cargá el id.` });
+    if (!channel) return res.status(400).json({ error: `Falta el canal de GN para las ventas importadas de ${store} (TN_IMPORT_CHANNEL).` });
+    const its = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && Number.isInteger(+it.quantity) && +it.quantity > 0) : [];
+    if (!its.length) return res.status(400).json({ error: 'items vacíos o con cantidades que GN no acepta' });
+    if (its.length !== (b.items || []).length) return res.status(400).json({ error: 'hay renglones inválidos: la orden se importa entera o no se importa' });
+    const origen = ['deposito', 'local'].includes(b.origen) ? b.origen : 'local';
+    const store_id = cfg.store[origen];
+
+    // 1) Reservar. Si otra corrida (u otra pestaña) ya la tomó, no se postea NADA.
+    let reserva;
+    try {
+      reserva = await reservarLedger(store, tnOrder, { usuario: perfil.name || perfil.user || null, items: its.length });
+    } catch (e) {
+      return res.status(500).json({ error: `No se pudo reservar la orden en el registro: ${e.message}` });
+    }
+    if (reserva.ocupado) {
+      return res.status(409).json({ ya: true, error: `La orden #${tnOrder} ya está tomada por el registro del sync.`, detalle: reserva.fila && reserva.fila.detalle });
+    }
+
+    const payload = {
+      client_id: clientId, channel_id: channel, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
+      store_id, discount_inventory: true,
+      comments: `Orden TN #${tnOrder}`,
+      integration_source: 'monitor-sync-tn', integration_id: tnOrder,
+      items: its.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: Number(it.unit_price) || 0, store_id })),
+      discount_amount: Math.max(0, Math.round(Number(b.descuento) || 0)),
+    };
+
+    try {
+      // 2) Postear a GN.
+      const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
+      const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
+      if (!r.ok) {
+        // 4xx = rechazo determinístico: la venta NO se creó. Se suelta la reserva para poder
+        // corregir el mapeo y reintentar. Un 5xx cae al catch de abajo, que es otra historia.
+        if (r.status >= 400 && r.status < 500) {
+          await liberarLedger(store, tnOrder).catch(() => {});
+          return res.status(r.status).json({ error: 'Gestión Nube rechazó la venta', status: r.status, detalle: d });
+        }
+        await confirmarLedger(store, tnOrder, { estado: 'dudoso', error: `GN ${r.status}` }).catch(() => {});
+        return res.status(502).json({ dudoso: true, error: `No sabemos si la venta se creó (Gestión Nube contestó ${r.status}). Buscá la orden #${tnOrder} en GN antes de reintentar.` });
+      }
+      const v = (d && d.data) ? d.data : d;
+      await confirmarLedger(store, tnOrder, { estado: 'ok', gn_venta_id: v && v.id, gn_number: v && v.number, store_id }).catch(() => {});
+      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number } });
+    } catch (e) {
+      // Red caída o timeout: NO se sabe si GN llegó a crear la venta. La reserva QUEDA puesta a
+      // propósito, y sólo la suelta alguien que fue a mirar a GN (api/datos?recurso=sync-tn,
+      // action:'liberar'). Perder una venta cuesta 30 segundos de carga a mano; duplicarla, no.
+      await confirmarLedger(store, tnOrder, { estado: 'dudoso', error: e.message }).catch(() => {});
+      return res.status(502).json({ dudoso: true, error: `No sabemos si la venta se creó (${e.message}). Buscá la orden #${tnOrder} en GN antes de reintentar.` });
+    }
+  }
 
   // ── Venta REAL de un Cambio (Fase B.4) ── precio real + descuento + envío + forma de pago + canal normal
   // (CUENTA en la analítica). El cliente arma el descuento (Σdevueltos + % de la forma) y el shipping; acá

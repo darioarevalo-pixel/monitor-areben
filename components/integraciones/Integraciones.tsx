@@ -1,15 +1,18 @@
 'use client'
 
 /**
- * Integraciones → sync TN↔GN de Stunned. Dos pestañas:
+ * Integraciones → sync TN↔GN de Stunned. Tres pestañas:
  *  - **Mapeo**: la tabla `sku_map` (store='stunned', vive en la base de Zattia). "Proponer" cruza
  *    las variantes STU de GN (`inventario`) con las de TN (`?variantes=1`) por SKU exacto (+ barcode)
  *    y sube propuestas SIN validar. El sync solo usa las validadas. "Validar verdes" valida de una
  *    todo lo confiable (match por SKU/código de barras).
  *  - **Stock (dry-run)**: compara, por cada variante validada, el stock de GN vs el de TN y muestra
  *    qué ESCRIBIRÍA el sync (TN = GN). Es de SOLO LECTURA: no escribe nada.
+ *  - **Ventas (dry-run)**: las órdenes de la tienda de Stunned que HOY no llegan a Gestión Nube
+ *    (alguien las carga a mano como si fueran del local), y qué venta crearía el sync por cada una.
+ *    También de solo lectura mientras `ESCRITURA_HABILITADA` esté en false.
  *
- * Nada acá toca stock ni ventas: mapeo (read+write sobre sku_map) y comparación (read-only).
+ * Nada acá toca ventas: mapeo (read+write sobre sku_map) y dos comparaciones (read-only).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -19,12 +22,46 @@ import { sbFetch } from '@/lib/supabase/rest'
 import { guardarMapeo, leerMapeo, validarSkus } from '@/lib/sku-map/cliente'
 import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
 import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
+import { importarOrden, leerOrdenes, leerProcesados } from '@/lib/sync-tn/cliente'
+import { TEXTO_MOTIVO, planificar } from '@/lib/sync-tn/core'
+import { CFG_STUNNED, CORTE_STUNNED } from '@/lib/sync-tn/config'
+import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge as BadgeKit, Button, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space } from '@/components/ui'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acción 'stock'
 const STORE = 'stunned' as const
+
+/**
+ * 🔴 La importación de ventas a Gestión Nube nace APAGADA. GN no permite anular una venta por API:
+ * una venta duplicada se limpia a mano en la web de GN. Se prende recién cuando estén acordados la
+ * fecha de corte (`lib/sync-tn/config.ts`) y el cliente de GN, y después de probar una importación
+ * real de a una. Prenderla es cambiar este `false`.
+ */
+const ESCRITURA_HABILITADA = false
+
+/** Tope del rango de fechas del dry-run de ventas: TN es lento y el endpoint corta a los 20 s. */
+const RANGO_MAX_DIAS = 31
+
+const hoyIso = () => new Date().toISOString().slice(0, 10)
+function hace(dias: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - dias)
+  return d.toISOString().slice(0, 10)
+}
+const diasEntre = (a: string, b: string) => Math.abs(Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000
+
+const TONO_MOTIVO: Record<MotivoCola, 'success' | 'warning' | 'danger' | 'action' | 'neutral'> = {
+  anterior_al_corte: 'neutral',
+  ya_importada: 'success',
+  en_revision: 'danger',
+  ya_en_gn: 'success',
+  cancelada: 'warning',
+  no_paga: 'warning',
+  sku_sin_mapeo: 'danger',
+  cantidad_invalida: 'danger',
+}
 
 /** Fila del mirror `inventario` de GN (nivel VARIANTE: acá vive el SKU real por talle). */
 type FilaInventarioGN = {
@@ -65,7 +102,7 @@ function Badge({ m }: { m?: MatchMetodo | null }) {
 }
 
 export function Integraciones() {
-  const [tab, setTab] = useState<'mapeo' | 'stock'>('mapeo')
+  const [tab, setTab] = useState<'mapeo' | 'stock' | 'ventas'>('mapeo')
   const [rows, setRows] = useState<SkuMapRow[]>([])
   const [cargando, setCargando] = useState(true)
   const [proponiendo, setProponiendo] = useState(false)
@@ -78,6 +115,15 @@ export function Integraciones() {
   const [dryMsg, setDryMsg] = useState<string | null>(null)
   const [dryError, setDryError] = useState<string | null>(null)
   const [aplicando, setAplicando] = useState<string | null>(null) // sku que se está escribiendo
+
+  // Dry-run de ventas (TN → GN)
+  const [vDesde, setVDesde] = useState(CORTE_STUNNED || hace(7))
+  const [vHasta, setVHasta] = useState(hoyIso())
+  const [vPlan, setVPlan] = useState<PlanSync | null>(null)
+  const [vLoading, setVLoading] = useState(false)
+  const [vMsg, setVMsg] = useState<string | null>(null)
+  const [vError, setVError] = useState<string | null>(null)
+  const [vImportando, setVImportando] = useState<string | null>(null) // número de orden que se está escribiendo
 
   const recargar = useCallback(async () => {
     setCargando(true)
@@ -271,6 +317,65 @@ export function Integraciones() {
     }
   }, [])
 
+  // Dry-run de VENTAS: las órdenes de la tienda de Stunned contra lo que ya está en GN.
+  // Junta las tres fuentes y se las da al motor puro (lib/sync-tn/core.ts), que decide todo.
+  const correrDryRunVentas = useCallback(async () => {
+    if (diasEntre(vDesde, vHasta) > RANGO_MAX_DIAS) {
+      setVError(`El rango no puede pasar de ${RANGO_MAX_DIAS} días: Tienda Nube es lenta y el endpoint corta.`)
+      return
+    }
+    setVLoading(true)
+    setVError(null)
+    setVMsg(null)
+    try {
+      const [tn, mapa, procesados] = await Promise.all([leerOrdenes(vDesde, vHasta), leerMapeo(STORE, { validado: true }), leerProcesados(STORE)])
+      const plan = planificar({ ordenes: tn.ordenes, ventasGn: tn.ventasGn, mapa, procesados, cfg: CFG_STUNNED })
+      setVPlan(plan)
+      const avisos: string[] = [
+        `${plan.resumen.ordenes} órdenes en el rango · ${plan.resumen.a_crear} se importarían (${plan.resumen.unidades} u.) · ${plan.cola.length} en cola`,
+      ]
+      // Lo que se dejó afuera se DICE. Un tope silencioso se lee como "no había más".
+      if (tn.truncado) avisos.push(`⚠ Hay ${tn.total_en_rango} órdenes en el rango y se leyeron las primeras: achicá el rango.`)
+      if (tn.fallidas) avisos.push(`⚠ ${tn.fallidas} órdenes no se pudieron leer de Tienda Nube.`)
+      if (plan.resumen.con_advertencia) avisos.push(`⚠ ${plan.resumen.con_advertencia} ya podrían estar cargadas a mano en GN.`)
+      avisos.push('Simulación: NO se escribió nada.')
+      setVMsg(avisos.join(' · '))
+    } catch (e) {
+      setVError((e as Error).message)
+    } finally {
+      setVLoading(false)
+    }
+  }, [vDesde, vHasta])
+
+  // La ÚNICA escritura del sync de ventas: crea la venta en GN por UNA orden. De a una y con
+  // confirmación, porque GN no anula ventas por API.
+  const importarUna = useCallback(async (p: PlanVenta) => {
+    const dup = p.advertencias.find((a) => a.tipo === 'duplicado_manual')
+    const detalle = [
+      `Importar la orden #${p.numero} a Gestión Nube?`,
+      '',
+      `Fecha: ${p.dia}${p.cliente ? ` · ${p.cliente}` : ''}`,
+      ...p.lineas.map((l) => `  ${l.sku} ×${l.quantity} — ${l.unit_price.toLocaleString('es-AR')}`),
+      p.descuento ? `Descuento: ${p.descuento.toLocaleString('es-AR')}` : '',
+      `Descuenta ${p.unidades} u. del Local.`,
+      dup ? `\n⚠ OJO: puede que ya esté cargada a mano en GN (venta ${dup.gn_number ?? dup.gn_venta_id} del ${dup.date_sale}). Gestión Nube NO permite anular por API.` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+    if (typeof window !== 'undefined' && !window.confirm(detalle)) return
+    setVImportando(p.numero)
+    setVError(null)
+    try {
+      const r = await importarOrden(p)
+      setVPlan((pl) => (pl ? { ...pl, crear: pl.crear.filter((x) => x.numero !== p.numero) } : pl))
+      setVMsg(`✓ Orden #${p.numero} importada: venta ${r.venta?.number ?? r.venta?.id ?? ''} en Gestión Nube.`)
+    } catch (e) {
+      setVError((e as Error).message)
+    } finally {
+      setVImportando(null)
+    }
+  }, [])
+
   const resumen = useMemo(() => {
     const val = rows.filter((r) => r.validado).length
     return { total: rows.length, validados: val, pendientes: rows.length - val }
@@ -289,10 +394,24 @@ export function Integraciones() {
             </Button>
             <Button variant="solid" tone="brand" onClick={proponer} loading={proponiendo}>{proponiendo ? 'Proponiendo…' : 'Proponer / actualizar mapeo'}</Button>
           </>
-        ) : (
+        ) : tab === 'stock' ? (
           <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading}>
             {dryLoading ? 'Comparando…' : 'Correr dry-run'}
           </Button>
+        ) : (
+          <>
+            <label style={{ fontSize: font.sm, color: color.ink2, display: 'inline-flex', alignItems: 'center', gap: space[2] }}>
+              Desde
+              <input className="mo-input" type="date" value={vDesde} onChange={(e) => setVDesde(e.target.value)} style={{ width: 150 }} />
+            </label>
+            <label style={{ fontSize: font.sm, color: color.ink2, display: 'inline-flex', alignItems: 'center', gap: space[2] }}>
+              Hasta
+              <input className="mo-input" type="date" value={vHasta} onChange={(e) => setVHasta(e.target.value)} style={{ width: 150 }} />
+            </label>
+            <Button variant="solid" tone="brand" onClick={() => void correrDryRunVentas()} loading={vLoading}>
+              {vLoading ? 'Leyendo Tienda Nube…' : 'Correr dry-run'}
+            </Button>
+          </>
         )}
       </HeaderAcciones>
 
@@ -300,6 +419,7 @@ export function Integraciones() {
         items={[
           { key: 'mapeo', label: 'Mapeo' },
           { key: 'stock', label: 'Stock (dry-run)' },
+          { key: 'ventas', label: 'Ventas (dry-run)' },
         ]}
         value={tab}
         onChange={(k) => setTab(k as typeof tab)}
@@ -368,7 +488,7 @@ export function Integraciones() {
             </TableWrap>
           )}
         </>
-      ) : (
+      ) : tab === 'stock' ? (
         <>
           <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
             Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar en una fila. El stock de GN es la suma de todas las
@@ -435,6 +555,150 @@ export function Integraciones() {
                 })}
               </TBody>
             </TableWrap>
+          )}
+        </>
+      ) : (
+        <>
+          <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
+            Simulación de <b>solo lectura</b>: muestra qué ventas crearía en Gestión Nube por las órdenes de la tienda de Stunned. <b>No escribe nada.</b>
+            {CORTE_STUNNED ? (
+              <>
+                {' '}
+                La carga manual de las ventas online de Stunned se frena a partir del <b>{CORTE_STUNNED}</b>.
+              </>
+            ) : (
+              <>
+                {' '}
+                <b>Falta acordar la fecha de corte</b> (desde cuándo se hace cargo el sync y quien las carga a mano deja de hacerlo): hasta entonces no se propone
+                importar nada.
+              </>
+            )}
+          </Notice>
+
+          {vMsg && (
+            <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
+              {vMsg}
+            </Notice>
+          )}
+          {vError && (
+            <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
+              {vError}
+            </Notice>
+          )}
+
+          {vLoading ? (
+            <Esqueleto forma="tabla" filas={6} />
+          ) : !vPlan ? (
+            <EmptyState icon="🧾" title="Elegí el rango y tocá “Correr dry-run”" hint="Se leen las órdenes de stunned.com.ar y las ventas de Gestión Nube del mismo rango." dashed />
+          ) : (
+            <>
+              <p style={{ fontSize: font.base, color: color.ink2, margin: `0 0 ${space[2]} 0` }}>
+                <b>Se crearían ({vPlan.crear.length})</b>
+              </p>
+              {vPlan.crear.length === 0 ? (
+                <EmptyState icon="✅" title="No hay ninguna orden para importar en este rango" dashed />
+              ) : (
+                <TableWrap maxHeight={480}>
+                  <THead>
+                    <Tr>
+                      <Th>Orden</Th>
+                      <Th>Fecha</Th>
+                      <Th>Cliente</Th>
+                      <Th>Ítems</Th>
+                      <Th align="right">Total TN</Th>
+                      <Th align="right">Descuento</Th>
+                      <Th>Qué haría el sync</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {vPlan.crear.map((p) => {
+                      const dup = p.advertencias.find((a) => a.tipo === 'duplicado_manual')
+                      return (
+                        <Tr key={p.numero} style={dup ? { background: color.warningBg } : undefined}>
+                          <Td mono strong>
+                            #{p.numero}
+                          </Td>
+                          <Td style={{ color: color.mut }}>{p.dia}</Td>
+                          <Td wrap>{p.cliente ?? '—'}</Td>
+                          <Td mono style={{ fontSize: font.sm }}>
+                            {p.lineas.map((l) => `${l.sku} ×${l.quantity}`).join(' · ')}
+                          </Td>
+                          <Td align="right" strong>
+                            {p.total_tn == null ? '—' : p.total_tn.toLocaleString('es-AR')}
+                          </Td>
+                          <Td align="right" style={{ color: p.descuento ? color.warningInk : color.mut2 }}>
+                            {p.descuento ? p.descuento.toLocaleString('es-AR') : '—'}
+                          </Td>
+                          <Td tall wrap>
+                            <span style={{ color: color.ink2 }}>
+                              Venta en GN · Local · canal Tienda Nube · descuenta {p.unidades} u.
+                            </span>
+                            {ESCRITURA_HABILITADA && (
+                              <span style={{ display: 'inline-flex', marginLeft: space[3] }}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  tone={dup ? 'warning' : 'success'}
+                                  onClick={() => void importarUna(p)}
+                                  loading={vImportando === p.numero}
+                                  disabled={vImportando != null}
+                                >
+                                  {vImportando === p.numero ? 'Creando…' : 'Importar'}
+                                </Button>
+                              </span>
+                            )}
+                            {dup && (
+                              <div style={{ color: color.warningInk, fontWeight: 600, marginTop: space[1] }}>
+                                ⚠ Puede que ya esté cargada a mano: venta {dup.gn_number ? `N° ${dup.gn_number}` : `id ${dup.gn_venta_id}`}
+                                {dup.canal ? ` (${dup.canal})` : ''} del {dup.date_sale ?? '—'}. Mirala en GN antes de importar.
+                              </div>
+                            )}
+                          </Td>
+                        </Tr>
+                      )
+                    })}
+                  </TBody>
+                </TableWrap>
+              )}
+
+              <p style={{ fontSize: font.base, color: color.ink2, margin: `${space[4]} 0 ${space[2]} 0` }}>
+                <b>En cola ({vPlan.cola.length})</b> — qué queda afuera y por qué
+              </p>
+              {vPlan.cola.length === 0 ? (
+                <EmptyState icon="—" title="No quedó ninguna orden afuera" dashed />
+              ) : (
+                <TableWrap maxHeight={480}>
+                  <THead>
+                    <Tr>
+                      <Th>Orden</Th>
+                      <Th>Fecha</Th>
+                      <Th>Cliente</Th>
+                      <Th>Motivo</Th>
+                      <Th>Detalle</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {vPlan.cola.map((c) => (
+                      <Tr key={c.numero}>
+                        <Td mono strong>
+                          #{c.numero}
+                        </Td>
+                        <Td style={{ color: color.mut }}>{c.dia}</Td>
+                        <Td wrap>{c.cliente ?? '—'}</Td>
+                        <Td>
+                          <BadgeKit tone={TONO_MOTIVO[c.motivo]} subtle>
+                            {TEXTO_MOTIVO[c.motivo]}
+                          </BadgeKit>
+                        </Td>
+                        <Td wrap style={{ color: color.mut }}>
+                          {c.detalle ?? '—'}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </TableWrap>
+              )}
+            </>
           )}
         </>
       )}
