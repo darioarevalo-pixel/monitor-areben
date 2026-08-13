@@ -47,9 +47,6 @@ function conPatch(crmSeg: MapaSeguimiento, id: number | string, patch: Partial<S
   return { ...mapa, [k]: { ...mapa[k], ...patch } }
 }
 
-export const setCadencia = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
-  conPatch(crmSeg, id, { cadencia: value || '' })
-
 export const setMayorista = (crmSeg: MapaSeguimiento, id: number | string, value: boolean) =>
   conPatch(crmSeg, id, { es_mayorista: !!value })
 
@@ -72,10 +69,6 @@ export const setDifusion = (crmSeg: MapaSeguimiento, id: number | string, value:
  */
 export const setTemperatura = (crmSeg: MapaSeguimiento, id: number | string, value: Temperatura) =>
   conPatch(crmSeg, id, { temperatura: value })
-
-/** "Hablé hoy": registra contacto y deja que el próximo lo recalcule la cadencia. */
-export const hableHoy = (crmSeg: MapaSeguimiento, id: number | string, today?: Date) =>
-  conPatch(crmSeg, id, { ultimo_contacto: hoyISO(today), proximo_manual: null })
 
 /** "Le escribí hoy": fija el próximo a hoy + `dias`. */
 export const escribiHoy = (crmSeg: MapaSeguimiento, id: number | string, dias: number, today?: Date) => {

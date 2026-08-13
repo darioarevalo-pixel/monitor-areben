@@ -391,6 +391,28 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTa
 // ── Resumen de compras del modal ─────────────────────────────────────────────
 
 /**
+ * Los renglones de cada pedido, agrupados por venta, para poder abrir cualquiera del
+ * historial y no solo el último.
+ *
+ * No cuesta ninguna consulta: `traerDetalles` ya baja el detalle de TODAS las ventas del
+ * cliente (la ficha se lo pide con todos los ids), y hasta ahora `resumenCompras` se
+ * quedaba con la última y tiraba el resto. Esto es aprovechar lo que ya está en memoria.
+ *
+ * Los renglones sin `sale_id` se descartan: no hay pedido al que colgarlos.
+ */
+export function detallesPorVenta(det: FilaDetalle[]): Map<number, FilaDetalle[]> {
+  const out = new Map<number, FilaDetalle[]>()
+  for (const d of det || []) {
+    if (d.sale_id == null) continue
+    const k = Number(d.sale_id)
+    const actual = out.get(k)
+    if (actual) actual.push(d)
+    else out.set(k, [d])
+  }
+  return out
+}
+
+/**
  * renderResumenCompras (13826), sin el HTML.
  *
  * "Última compra" = la venta con `date_sale` más reciente **que tenga detalle**:

@@ -1,31 +1,31 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   agregarNota,
   borrarNota,
   escribiHoy,
-  hableHoy,
   hoyISO,
-  setCadencia,
   setDescartado,
   setDifusion,
   setMayorista,
   setPagina,
   setProximoManual,
 } from '@/lib/crm/seguimiento'
-import { esDescartado, resumenCompras } from '@/lib/crm/core'
+import { detallesPorVenta, esDescartado, resumenCompras } from '@/lib/crm/core'
 import { leadInstaHref } from '@/lib/crm/leads'
 import { traerDetalles } from '@/lib/crm/datos'
-import type { ClienteCRM, MapaSeguimiento, ResumenCompras } from '@/lib/crm/tipos'
+import type { ClienteCRM, FilaDetalle, MapaSeguimiento, ResumenCompras } from '@/lib/crm/tipos'
 import { Button, Card, KpiCard, color, toneSolidHover } from '@/components/ui'
 
-const CADENCIA_LABEL: Record<string, string> = {
-  '': 'Sin seguimiento',
-  semanal: 'Semana (7 días)',
-  quincenal: 'Quincena (15 días)',
-  mensual: 'Mes (30 días)',
-}
+/** Los cinco textos que Bruno escribe todo el tiempo. Se insertan en el cuadro, no se guardan. */
+const NOTAS_RAPIDAS = [
+  '🔥 En cierre / cotizando',
+  '📦 Pidió catálogo',
+  '⏳ Me dijo que me avisa',
+  '🔄 Preguntar por reposición',
+  '❄️ Sin respuesta',
+]
 
 /** Punto de estado del seguimiento (era 🔴/🟡/🟢: un emoji trae su propio color y no se tematiza). */
 function Punto({ col }: { col: string }) {
@@ -61,9 +61,12 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
   const seg = crmSeg[String(c.id)] || {}
   const [pagina, setPaginaLocal] = useState(seg.pagina || '')
   const [notaTexto, setNotaTexto] = useState('')
-  const [notaFecha, setNotaFecha] = useState(hoyISO())
   const [resumen, setResumen] = useState<ResumenCompras | null>(null)
   const [errResumen, setErrResumen] = useState(false)
+  /** Los renglones de cada pedido, para abrir cualquiera del historial. */
+  const [porPedido, setPorPedido] = useState<Map<number, FilaDetalle[]>>(new Map())
+  /** Qué pedido está desplegado. Uno por vez: la ficha no se estira. */
+  const [pedidoAbierto, setPedidoAbierto] = useState<number | null>(null)
 
   // El input de página es local y se persiste al perder foco (no por tecla). El
   // padre keyea el modal por id de cliente, así el estado local se re-inicializa
@@ -77,9 +80,14 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
     ;(async () => {
       setResumen(null)
       setErrResumen(false)
+      setPorPedido(new Map())
+      setPedidoAbierto(null)
       try {
         const det = await traerDetalles((c.ventas || []).map((v) => v.id).filter((v) => v != null))
-        if (vivo) setResumen(resumenCompras(c.ventas || [], det))
+        if (!vivo) return
+        setResumen(resumenCompras(c.ventas || [], det))
+        // Mismo lote de detalles, agrupado por pedido: no cuesta una consulta más.
+        setPorPedido(detallesPorVenta(det))
       } catch {
         if (vivo) setErrResumen(true)
       }
@@ -94,7 +102,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
   // Línea de estado del próximo contacto (segBloqueModalHTML).
   let proxLinea: React.ReactNode
   if (c.seg_estado === 'none') {
-    proxLinea = <span style={{ color: color.mut2 }}>Elegí cada cuánto recontactarlo para programarlo.</span>
+    proxLinea = <span style={{ color: color.mut2 }}>Sin recontacto programado — tocá un botón de acá arriba.</span>
   } else if (c.seg_estado === 'pendiente') {
     proxLinea = <span style={{ color: color.danger, fontWeight: 600 }}><Punto col={color.danger} /> A contactar (todavía sin primer contacto registrado)</span>
   } else {
@@ -133,17 +141,17 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--mo-mayorista-fg)' }}>
             <input type="checkbox" checked={!!seg.es_mayorista} onChange={(e) => mutar((s) => setMayorista(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--mo-mayorista-fg)' }} />
-            ⭐ Cliente mayorista <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(aparece en el CRM Mayorista aunque compre por otro canal)</span>
+            ⭐ Cliente mayorista
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.success }}>
             <input type="checkbox" checked={!!seg.en_difusion} onChange={(e) => mutar((s) => setDifusion(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: color.success }} />
-            En el canal de difusión <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(para que reciba los ingresos y novedades por WhatsApp)</span>
+            En el canal de difusión
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.mut }}>
             <input type="checkbox" checked={esDescartado(c.id, crmSeg)} onChange={(e) => mutar((s) => setDescartado(s, c.id, e.target.checked))} style={{ width: 16, height: 16 }} />
-            Ya no se dedica <span style={{ fontWeight: 400, color: color.mut2, fontSize: 11 }}>(lo saca del CRM, KPIs y recontacto; reversible)</span>
+            Ya no se dedica
           </label>
 
           <div style={{ marginBottom: 12 }}>
@@ -161,34 +169,24 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-            <div>
-              <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }}>Recontactar cada</label>
-              <select value={c.cadencia || ''} onChange={(e) => mutar((s) => setCadencia(s, c.id, e.target.value))} style={{ padding: '6px 8px' }}>
-                {['', 'semanal', 'quincenal', 'mensual'].map((v) => <option key={v} value={v}>{CADENCIA_LABEL[v]}</option>)}
-              </select>
-            </div>
-            <Button size="sm" variant="solid" tone="success" onClick={() => mutar((s) => hableHoy(s, c.id))}>Hablé hoy</Button>
-            <div>
-              <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }}>Último contacto</label>
-              <div style={{ fontSize: 13, padding: '6px 0' }}>{c.ultimo_contacto ? fmtFecha(c.ultimo_contacto) : '—'}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 3 }}>Próximo contacto</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="date" value={c.proximo_contacto || ''} onChange={(e) => mutar((s) => setProximoManual(s, c.id, e.target.value))} style={{ padding: '5px 8px' }} />
-                {manualActivo && <Button size="sm" variant="outline" onClick={() => mutar((s) => setProximoManual(s, c.id, ''))} title="Volver a calcularlo por cadencia">↺ Automático</Button>}
-              </div>
-              <div style={{ fontSize: 10, color: color.mut2, marginTop: 3 }}>Tocá la fecha para fijar otra a mano.</div>
-            </div>
-          </div>
-
+          {/* Una sola fila para todo el "próximo contacto".
+              Cada botón usa `escribiHoy`, que marca el contacto de hoy Y fija la próxima
+              fecha de un saque: es lo que antes hacían el botón "Hablé hoy" y los botones
+              de días por separado. La fecha del final reprograma SIN marcar contacto de
+              hoy, que es lo correcto cuando solo se corre la fecha. */}
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${color.line}` }}>
-            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>Le escribí hoy — recordarme de nuevo en:</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {[[1, 'Mañana'], [2, 'En 2 días'], [3, 'En 3 días'], [7, 'En 1 semana']].map(([d, t]) => (
-                <Button key={d} size="sm" variant="soft" tone="brand" onClick={() => mutar((s) => escribiHoy(s, c.id, d as number))}>{t}</Button>
+            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>Le escribí hoy — recordarme en:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              {([[1, 'Mañana'], [2, 'En 2 días'], [7, 'En 1 semana'], [30, 'En 30 días']] as [number, string][]).map(([d, t]) => (
+                <Button key={d} size="sm" variant="soft" tone="brand" onClick={() => mutar((s) => escribiHoy(s, c.id, d))}>{t}</Button>
               ))}
+              <input
+                type="date"
+                value={c.proximo_contacto || ''}
+                onChange={(e) => mutar((s) => setProximoManual(s, c.id, e.target.value))}
+                title="Elegir otra fecha en el calendario"
+                style={{ padding: '4px 8px', fontSize: 12, marginLeft: 4 }}
+              />
             </div>
           </div>
 
@@ -196,8 +194,21 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
           <div style={{ marginTop: 14 }}>
             <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 4 }}>Nota de seguimiento</label>
+            {/* Las notas rápidas ESCRIBEN en el cuadro, no guardan: casi siempre hay algo
+                que agregarle a mano al texto base antes de dejarlo asentado. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+              {NOTAS_RAPIDAS.map((t) => (
+                <Button
+                  key={t}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setNotaTexto((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <input type="date" value={notaFecha} onChange={(e) => setNotaFecha(e.target.value)} title="Fecha de la nota" style={{ padding: 8, fontSize: 13 }} />
               <textarea rows={2} value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} placeholder="Qué hablaron, qué quedó pendiente..." style={{ flex: 1, padding: 8, fontSize: 13, resize: 'vertical', border: `1px solid ${color.line2}`, borderRadius: 6, fontFamily: 'inherit' }} />
               <Button
                 size="sm"
@@ -205,7 +216,10 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                 onClick={() => {
                   const texto = notaTexto.trim()
                   if (!texto) return
-                  mutar((s) => agregarNota(s, c.id, texto, notaFecha.trim() || hoyISO()))
+                  // La fecha es siempre la de hoy. `hoyISO()` usa el día REAL, no el TODAY
+                  // congelado al abrir la pantalla: una nota cargada pasada la medianoche
+                  // con la ficha abierta queda con la fecha correcta.
+                  mutar((s) => agregarNota(s, c.id, texto, hoyISO()))
                   setNotaTexto('')
                 }}
                 style={{ alignSelf: 'flex-start' }}
@@ -248,19 +262,8 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
             <div style={{ fontSize: 12, color: color.mut2 }}>Sin detalle de productos disponible para este cliente.</div>
           ) : (
             <>
-              {resumen.ultima && (
-                <>
-                  <div style={{ fontSize: 11, color: color.mut2, marginBottom: 4 }}>Última compra · {fmtFecha(resumen.ultima.fecha)}</div>
-                  <table style={{ fontSize: 12, width: '100%', marginBottom: 14 }}>
-                    <thead><tr><th>Producto</th><th>Talle</th><th style={{ textAlign: 'right' }}>Cant</th><th style={{ textAlign: 'right' }}>P. unit.</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
-                    <tbody>
-                      {resumen.ultima.items.map((d, i) => (
-                        <tr key={i}><td>{d.product_name || '—'}</td><td style={{ color: color.mut }}>{d.size || ''}</td><td style={{ textAlign: 'right' }}>{d.quantity ?? ''}</td><td style={{ textAlign: 'right' }}>{fmtMonto(Number(d.unit_price) || 0)}</td><td style={{ textAlign: 'right' }}>{fmtMonto(Number(d.total) || (Number(d.unit_price) || 0) * (d.quantity || 0))}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
+              {/* La tabla de "Última compra" se fue: era el primer pedido del historial, que
+                  ahora se abre igual que todos los demás. */}
               <div style={{ fontSize: 11, color: color.mut2, marginBottom: 4 }}>Lo que más te compró (top {resumen.top.length})</div>
               <table style={{ fontSize: 12, width: '100%' }}>
                 <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Unid.</th><th style={{ textAlign: 'right' }}>Veces</th><th style={{ textAlign: 'right' }}>Últ. precio</th></tr></thead>
@@ -277,12 +280,52 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
         {/* Historial */}
         <div style={{ fontSize: 12, color: color.mut, marginBottom: 8, fontWeight: 600, letterSpacing: 0 }}>Historial de pedidos ({ventasOrden.length})</div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ fontSize: 12 }}>
-            <thead><tr><th>Fecha</th><th>N°</th><th style={{ textAlign: 'right' }}>Total</th><th>Estado</th></tr></thead>
+          <table style={{ fontSize: 12, width: '100%' }}>
+            <thead><tr><th>Fecha</th><th>N°</th><th style={{ textAlign: 'right' }}>Total</th><th>Estado</th><th /></tr></thead>
             <tbody>
-              {ventasOrden.map((v) => (
-                <tr key={v.id}><td>{fmtFecha(v.date_sale)}</td><td>#{v.id}</td><td style={{ textAlign: 'right' }}>{fmtMonto(Number(v.total_price) || 0)}</td><td style={{ fontSize: 11, color: color.mut }}>{v.sale_state || '—'}</td></tr>
-              ))}
+              {ventasOrden.map((v) => {
+                const items = porPedido.get(Number(v.id)) || []
+                const abierto = pedidoAbierto === v.id
+                return (
+                  <Fragment key={v.id}>
+                    <tr>
+                      <td>{fmtFecha(v.date_sale)}</td>
+                      <td>#{v.id}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMonto(Number(v.total_price) || 0)}</td>
+                      <td style={{ fontSize: 11, color: color.mut }}>{v.sale_state || '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {items.length ? (
+                          <Button size="sm" variant="ghost" onClick={() => setPedidoAbierto(abierto ? null : v.id)}>
+                            {abierto ? 'Ocultar ▲' : 'Ver pedido ▼'}
+                          </Button>
+                        ) : (
+                          <span style={{ fontSize: 11, color: color.mut2 }}>{resumen || errResumen ? 'sin detalle' : '…'}</span>
+                        )}
+                      </td>
+                    </tr>
+                    {abierto && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: 0 }}>
+                          <table style={{ fontSize: 12, width: '100%', background: color.bg, marginBottom: 6 }}>
+                            <thead><tr><th>Producto</th><th>Talle</th><th style={{ textAlign: 'right' }}>Cant</th><th style={{ textAlign: 'right' }}>P. unit.</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
+                            <tbody>
+                              {items.map((d, i) => (
+                                <tr key={i}>
+                                  <td>{d.product_name || '—'}</td>
+                                  <td style={{ color: color.mut }}>{d.size || ''}</td>
+                                  <td style={{ textAlign: 'right' }}>{d.quantity ?? ''}</td>
+                                  <td style={{ textAlign: 'right' }}>{fmtMonto(Number(d.unit_price) || 0)}</td>
+                                  <td style={{ textAlign: 'right' }}>{fmtMonto(Number(d.total) || (Number(d.unit_price) || 0) * (d.quantity || 0))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

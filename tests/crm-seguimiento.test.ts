@@ -3,10 +3,8 @@ import {
   agregarNota,
   borrarNota,
   escribiHoy,
-  hableHoy,
   hoyISO,
   parsearTelefonos,
-  setCadencia,
   setDescartado,
   setMayorista,
   setPagina,
@@ -40,11 +38,9 @@ describe('escrituras de seguimiento: tocan un solo cliente, sin mutar la entrada
   }
 
   const ops: [string, (m: MapaSeguimiento) => MapaSeguimiento][] = [
-    ['setCadencia', (m) => setCadencia(m, 1, 'semanal')],
     ['setMayorista', (m) => setMayorista(m, 2, true)],
     ['setPagina', (m) => setPagina(m, 1, '  @nueva  ')],
     ['setDescartado', (m) => setDescartado(m, 2, true)],
-    ['hableHoy', (m) => hableHoy(m, 1, HOY)],
     ['escribiHoy', (m) => escribiHoy(m, 1, 3, HOY)],
     ['setProximoManual', (m) => setProximoManual(m, 1, '2026-08-01')],
     ['agregarNota', (m) => agregarNota(m, 1, 'nueva nota', '2026-07-17')],
@@ -73,11 +69,6 @@ describe('escrituras de seguimiento: tocan un solo cliente, sin mutar la entrada
 })
 
 describe('fechas de contacto', () => {
-  it('hableHoy fija último a hoy y limpia el próximo manual', () => {
-    const out = hableHoy({ '1': { proximo_manual: '2026-09-01' } }, 1, HOY)
-    expect(out['1'].ultimo_contacto).toBe('2026-07-17')
-    expect(out['1'].proximo_manual).toBe(null)
-  })
   it('escribiHoy fija el próximo a hoy + días', () => {
     const out = escribiHoy({}, 1, 3, HOY)
     expect(out['1'].ultimo_contacto).toBe('2026-07-17')
