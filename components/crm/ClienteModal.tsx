@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   agregarNota,
   borrarNota,
@@ -67,6 +67,31 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
   const [porPedido, setPorPedido] = useState<Map<number, FilaDetalle[]>>(new Map())
   /** Qué pedido está desplegado. Uno por vez: la ficha no se estira. */
   const [pedidoAbierto, setPedidoAbierto] = useState<number | null>(null)
+  const notaRef = useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * Escape vuelve a la lista.
+   *
+   * ⚠️ El callback va por ref y el efecto NO depende de él. `onCerrar` llega inline
+   * desde CRM.tsx (`() => setModalId(null)`), así que cambia de identidad en cada
+   * render; con él en las dependencias, el listener se desuscribiría y re-suscribiría
+   * con cada tecla que se escribe en la nota. Es la misma trampa que está documentada
+   * en components/ui/Modal.tsx:50, donde costó que no se pudiera tipear un número.
+   */
+  const cerrarRef = useRef(onCerrar)
+  useEffect(() => {
+    cerrarRef.current = onCerrar
+  })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        cerrarRef.current()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // El input de página es local y se persiste al perder foco (no por tecla). El
   // padre keyea el modal por id de cliente, así el estado local se re-inicializa
@@ -94,6 +119,33 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
     })()
     return () => { vivo = false }
   }, [c.id, c.ventas])
+
+  const guardarNota = () => {
+    const texto = notaTexto.trim()
+    if (!texto) return
+    // La fecha es siempre la de hoy. `hoyISO()` usa el día REAL, no el TODAY congelado
+    // al abrir la pantalla: una nota cargada pasada la medianoche queda bien fechada.
+    mutar((s) => agregarNota(s, c.id, texto, hoyISO()))
+    setNotaTexto('')
+  }
+
+  /**
+   * Pega el texto de una nota rápida y deja el foco en el cuadro, para que el Enter
+   * guarde sin tener que hacer clic: nota rápida + Enter y listo.
+   *
+   * El caret se manda al final en el frame siguiente. Antes de que React repinte, el
+   * `value` del textarea todavía es el viejo y `setSelectionRange` mediría contra el
+   * largo equivocado.
+   */
+  const insertarNotaRapida = (t: string) => {
+    setNotaTexto((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))
+    requestAnimationFrame(() => {
+      const ta = notaRef.current
+      if (!ta) return
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+  }
 
   const manualActivo = !!seg.proximo_manual
   const pagHref = leadInstaHref(pagina)
@@ -202,28 +254,31 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                   key={t}
                   size="sm"
                   variant="outline"
-                  onClick={() => setNotaTexto((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
+                  onClick={() => insertarNotaRapida(t)}
                 >
                   {t}
                 </Button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <textarea rows={2} value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} placeholder="Qué hablaron, qué quedó pendiente..." style={{ flex: 1, padding: 8, fontSize: 13, resize: 'vertical', border: `1px solid ${color.line2}`, borderRadius: 6, fontFamily: 'inherit' }} />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const texto = notaTexto.trim()
-                  if (!texto) return
-                  // La fecha es siempre la de hoy. `hoyISO()` usa el día REAL, no el TODAY
-                  // congelado al abrir la pantalla: una nota cargada pasada la medianoche
-                  // con la ficha abierta queda con la fecha correcta.
-                  mutar((s) => agregarNota(s, c.id, texto, hoyISO()))
-                  setNotaTexto('')
+              <textarea
+                ref={notaRef}
+                rows={2}
+                value={notaTexto}
+                onChange={(e) => setNotaTexto(e.target.value)}
+                // Enter guarda; Shift+Enter hace renglón nuevo. Es la convención de
+                // WhatsApp: sin el Shift no habría forma de escribir una nota de dos
+                // renglones.
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    guardarNota()
+                  }
                 }}
-                style={{ alignSelf: 'flex-start' }}
-              >
+                placeholder="Qué hablaron, qué quedó pendiente… (Enter guarda)"
+                style={{ flex: 1, padding: 8, fontSize: 13, resize: 'vertical', border: `1px solid ${color.line2}`, borderRadius: 6, fontFamily: 'inherit' }}
+              />
+              <Button size="sm" variant="outline" onClick={guardarNota} style={{ alignSelf: 'flex-start' }}>
                 Agregar
               </Button>
             </div>
