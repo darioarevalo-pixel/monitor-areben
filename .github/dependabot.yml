@@ -1,0 +1,45 @@
+# Dependabot estaba apagado, y por eso la subida de `next` a 16.3.0 (13-ago-2026) salió de
+# correr `npm audit` a mano en una revisión de seguridad: la CVE de DoS en Server Components
+# llevaba semanas publicada y nadie se había enterado. Esto es para que el aviso llegue solo.
+#
+# Está agrupado a propósito. Sin `groups:`, Dependabot abre UN PR por paquete y en un repo con
+# ~550 dependencias eso son decenas de PRs por semana que nadie mira — y una alerta que nadie
+# mira es peor que no tenerla, porque tapa a la que sí importa. Con los grupos son 2 PRs por
+# semana como mucho: uno con todo lo menor/parche junto, y uno por cada major, que esos sí
+# piden leerse de a uno.
+#
+# 🔴 Ningún PR de estos entra sin el portón completo: `typecheck` + `lint` + **`next build` con
+# Turbopack** + `vitest`. El CI (`ci.yml`) los corre a los cuatro, así que alcanza con mirar que
+# esté verde — pero un major de `next` o de `react` además pide ejercer la app a mano.
+#
+# `xlsx` NO lo va a poder actualizar nunca: SheetJS abandonó npm en 0.18.5 (es la última de las
+# 108 publicadas) y desde entonces publica sólo en su propio CDN. Sus dos CVEs se quedan ahí y
+# la salida no es un bump: es elegir entre atar el `npm ci` de los crones a `cdn.sheetjs.com` o
+# cambiar de librería. Queda como el único `high` que `npm audit` va a seguir reportando.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      # Todo lo que no cambia de major, en un solo PR.
+      menores:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+
+  # Los 13 workflows fijan `actions/checkout@v4` y compañía. No es cosmético: ocho de ellos
+  # corren syncs de producción contra Gestión Nube por cron, así que una action que se queda
+  # vieja es un sync que un día deja de andar sin que nadie haya tocado nada.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: actions
