@@ -45,12 +45,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, contar, nuevoIdLiquidacion, pidsPorAplicar, resumenCampania, TOPE_APLICAR,
+  avisos, confirmarItem, contar, nuevoIdLiquidacion, pidsPorAplicar, reprecificar, resumenCampania,
+  TOPE_APLICAR, TOPE_MASIVO,
   type EstadoCampania, type EstadoItem, type Liquidacion as Campania, type LiquidacionItem,
 } from '@/lib/liquidacion'
 import {
-  aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, guardarItem,
-  leerCampanias, leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
+  aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, decidirMasivo, estadoItem,
+  guardarItem, leerCampanias, leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { DefinirPrecio } from './DefinirPrecio'
@@ -298,6 +299,8 @@ function DetalleCampania({
   onCambio: () => void
 }) {
   const { marca, perfil } = useSesion()
+  /** Quién está haciendo esto: va como autor del precio y del visto bueno. */
+  const yo = perfil?.name || null
   const { confirmar } = useConfirmar()
   const toast = useToast()
   const router = useRouter()
@@ -324,6 +327,8 @@ function DetalleCampania({
    */
   const [aplicando, setAplicando] = useState<{ modo: 'poner' | 'sacar'; hechos: number; total: number } | null>(null)
   const [fallidos, setFallidos] = useState<{ pid: string; error: string }[]>([])
+  /** Los masivos que sólo tocan nuestra base (confirmar todos, recalcular precios). */
+  const [ocupadoMasivo, setOcupadoMasivo] = useState(false)
 
   const cargar = useCallback(async () => {
     setError(null)
@@ -347,6 +352,11 @@ function DetalleCampania({
   // que dice «Escribir 260 precios» se entiende antes de apretarlo.
   const porAplicar = useMemo(() => pidsPorAplicar(items || [], 'poner').length, [items])
   const porSacar = useMemo(() => pidsPorAplicar(items || [], 'sacar').length, [items])
+  /** De los que tienen la oferta puesta, cuántos ya venían con una antes de la campaña. */
+  const conOfertaPrevia = useMemo(
+    () => (items || []).filter((i) => i.estado === 'aplicado' && (i.foto.promoPrevia || 0) > 0).length,
+    [items],
+  )
 
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -473,7 +483,85 @@ function DetalleCampania({
    * 🔑 **Un producto que falla no frena la tanda ni se pierde**: queda nombrado en `fallidos`. Un
    * contador de errores sin los nombres obliga a revisar los 260 a mano para encontrar los 3.
    */
-  async function aplicar(modo: 'poner' | 'sacar') {
+  /**
+   * Confirmar de una todos los que no pasaron por revisión.
+   *
+   * 🔑 **El cartel dice cuántos tienen un aviso ALTO**, que es lo único que la revisión de a uno
+   * hubiera cazado y esto se saltea. El 13-ago-2026 se confirmaron 260 con un script y quedaron
+   * adentro 7 con el precio de sale por debajo del costo: sin ese número, «confirmar todos» parece
+   * gratis.
+   */
+  async function confirmarTodos(sinRevisar: LiquidacionItem[]) {
+    const conAvisoAlto = sinRevisar.filter((i) => avisos(i).some((a) => a.nivel === 'alto'))
+    const ok = await confirmar({
+      titulo: `Confirmar ${sinRevisar.length} precios sin mirarlos de a uno`,
+      mensaje: conAvisoAlto.length
+        ? `De los ${sinRevisar.length}, hay ${conAvisoAlto.length} con un aviso importante sin resolver (precio abajo del costo, costo que no vino de Gestión Nube o sin precio de lista): ${conAvisoAlto.slice(0, 4).map((i) => i.foto.nombre).join(', ')}${conAvisoAlto.length > 4 ? '…' : ''}. Confirmándolos en masa, nadie los va a mirar.`
+        : `Quedan listos para escribirse en Gestión Nube sin que nadie los haya mirado de a uno.`,
+      ok: `Confirmar los ${sinRevisar.length}`,
+      tono: conAvisoAlto.length ? 'danger' : 'brand',
+    })
+    if (!ok) return
+    setOcupadoMasivo(true)
+    try {
+      for (let i = 0; i < sinRevisar.length; i += TOPE_MASIVO) {
+        await Promise.all(sinRevisar.slice(i, i + TOPE_MASIVO).map((it) => revisarItem(marca, campania.id, confirmarItem(it, yo))))
+      }
+      await cargar()
+      onCambio()
+      toast.ok(`${sinRevisar.length} confirmados.`)
+    } catch (e) {
+      await cargar()
+      toast.error(e instanceof Error ? e.message : 'No se pudieron confirmar.')
+    } finally {
+      setOcupadoMasivo(false)
+    }
+  }
+
+  /**
+   * Cambiarle el precio a toda la campaña de una, con un % sobre el precio de lista.
+   *
+   * 🔑 **Es para terminar un sale sin volver de golpe al precio de lista**: bajar de −40% a −20% de
+   * a uno son 260 modales. La cuenta la hace `reprecificar` con la regla de siempre, y los ítems
+   * vuelven a `definido` — un precio nuevo es un precio que nadie miró.
+   */
+  async function reprecificarTodos() {
+    const txt = window.prompt('¿Qué descuento sobre el precio de lista? (por ejemplo 20 para −20%)')
+    if (txt == null) return
+    const pct = Number(txt.replace(',', '.').replace('%', '').trim())
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
+      toast.error('Poné un número entre 1 y 99.')
+      return
+    }
+    const nuevos = reprecificar(items || [], pct, yo)
+    if (!nuevos.length) { toast.error('No hay productos con precio de lista para recalcular.'); return }
+    // La vista previa va con nombres y números concretos: un «se van a cambiar 260 precios» no deja
+    // ver que un producto de $52.490 termina en $41.990.
+    const muestra = nuevos.slice(0, 3).map((i) => `${i.foto.nombre}: $${Math.round(i.foto.precioNormal).toLocaleString('es-AR')} → $${Math.round(i.decision.precioSale || 0).toLocaleString('es-AR')}`).join(' · ')
+    const ok = await confirmar({
+      titulo: `Dejar todo a −${pct}% del precio de lista`,
+      mensaje: `Se les recalcula el precio a ${nuevos.length} productos: ${muestra}${nuevos.length > 3 ? ' · …' : ''}. Quedan para revisar y después hay que escribirlos en Gestión Nube: esto todavía no toca la tienda.`,
+      ok: `Recalcular ${nuevos.length}`,
+      tono: 'brand',
+    })
+    if (!ok) return
+    setOcupadoMasivo(true)
+    try {
+      for (let i = 0; i < nuevos.length; i += TOPE_MASIVO) {
+        await decidirMasivo(marca, campania.id, nuevos.slice(i, i + TOPE_MASIVO))
+      }
+      await cargar()
+      onCambio()
+      toast.ok(`${nuevos.length} precios recalculados a −${pct}%.`)
+    } catch (e) {
+      await cargar()
+      toast.error(e instanceof Error ? e.message : 'No se pudieron recalcular.')
+    } finally {
+      setOcupadoMasivo(false)
+    }
+  }
+
+  async function aplicar(modo: 'poner' | 'sacar', destino: 'lista' | 'previa' = 'lista') {
     const pids = pidsPorAplicar(items || [], modo)
     if (!pids.length) {
       toast.error(modo === 'poner' ? 'No hay precios confirmados para escribir.' : 'No hay ofertas puestas para sacar.')
@@ -481,12 +569,22 @@ function DetalleCampania({
     }
     const minutos = Math.max(1, Math.round((pids.length * 1.3) / 60))
     const cuanto = minutos === 1 ? 'menos de un minuto' : `unos ${minutos} minutos`
+    // Cuántos de los que se van a sacar tenían una oferta ANTES de la campaña. Es el número que
+    // decide entre las dos salidas, y por eso va en el cartel: sin él, «volver a precio de lista»
+    // parece inocuo y a esos les sube el precio más de lo que estaba antes del sale.
+    const conPrevia = modo === 'sacar'
+      ? (items || []).filter((i) => pids.includes(i.pid) && (i.foto.promoPrevia || 0) > 0).length
+      : 0
     const ok = await confirmar({
-      titulo: modo === 'poner' ? 'Escribir los precios en Gestión Nube' : 'Sacar las ofertas de Gestión Nube',
+      titulo: modo === 'poner'
+        ? 'Escribir los precios en Gestión Nube'
+        : destino === 'previa' ? 'Volver a la oferta que tenían' : 'Dejar todo a precio de lista',
       mensaje: modo === 'poner'
         ? `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda ${cuanto}: no cierres la pestaña. Si se corta, se puede retomar.`
-        : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista: se les saca la oferta en Gestión Nube y en la tienda. Tarda ${cuanto}.`,
-      ok: modo === 'poner' ? 'Escribir los precios' : 'Sacar las ofertas',
+        : destino === 'previa'
+          ? `A los ${conPrevia} que ya estaban en oferta cuando entraron a la campaña se les devuelve ESA oferta; los otros ${pids.length - conPrevia} quedan a precio de lista, que es como estaban. Tarda ${cuanto}.`
+          : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista.${conPrevia > 0 ? ` ⚠️ Ojo: ${conPrevia} de ellos YA estaban en oferta antes del sale, así que a esos les vas a subir el precio por encima de donde estaban. Para eso está «Volver a la oferta que tenían».` : ''} Tarda ${cuanto}.`,
+      ok: modo === 'poner' ? 'Escribir los precios' : destino === 'previa' ? 'Volver a la oferta previa' : 'Dejar a precio de lista',
       tono: modo === 'poner' ? 'brand' : 'danger',
     })
     if (!ok) return
@@ -497,7 +595,7 @@ function DetalleCampania({
     try {
       for (let i = 0; i < pids.length; i += TOPE_APLICAR) {
         const tanda = pids.slice(i, i + TOPE_APLICAR)
-        const res = await aplicarPrecios(marca, campania.id, tanda, modo)
+        const res = await aplicarPrecios(marca, campania.id, tanda, modo, destino)
         for (const r of res) if (!r.ok) malos.push({ pid: r.pid, error: r.error || 'no se pudo' })
         setFallidos([...malos])
         setAplicando({ modo, hechos: Math.min(i + TOPE_APLICAR, pids.length), total: pids.length })
@@ -612,17 +710,30 @@ function DetalleCampania({
                 : `Escribir ${porAplicar} ${porAplicar === 1 ? 'precio' : 'precios'} en Gestión Nube`}
             </Button>
           )}
+          {/*
+            🔑 **Terminar un sale tiene TRES salidas, no una.** «Precio de lista» era la única y para
+            los 44 de agosto que ya venían en oferta significaba subirles el precio por encima de
+            donde estaban antes. «La oferta que tenían» los devuelve a su estado real, y
+            «Otro precio» es para bajar de −40% a −20% sin volver a lista: eso no se escribe acá, se
+            decide (vuelve a `definido`) y después se aplica por el camino de siempre.
+          */}
           {(campania.estado === 'aplicada' || campania.estado === 'cerrada') && puede.aplicar && porSacar > 0 && (
-            <Button
-              variant="soft"
-              tone="danger"
-              size="sm"
-              disabled={!!aplicando}
-              onClick={() => void aplicar('sacar')}
-            >
-              {aplicando?.modo === 'sacar'
-                ? `Sacando ${aplicando.hechos} de ${aplicando.total}…`
-                : `Sacar ${porSacar} ${porSacar === 1 ? 'oferta' : 'ofertas'}`}
+            <>
+              <Button variant="soft" tone="danger" size="sm" disabled={!!aplicando} onClick={() => void aplicar('sacar', 'lista')}>
+                {aplicando?.modo === 'sacar'
+                  ? `Sacando ${aplicando.hechos} de ${aplicando.total}…`
+                  : `Sacar ${porSacar} ${porSacar === 1 ? 'oferta' : 'ofertas'}`}
+              </Button>
+              {conOfertaPrevia > 0 && (
+                <Button variant="ghost" size="sm" disabled={!!aplicando} onClick={() => void aplicar('sacar', 'previa')}>
+                  Volver a la oferta que tenían ({conOfertaPrevia})
+                </Button>
+              )}
+            </>
+          )}
+          {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && (
+            <Button variant="ghost" size="sm" disabled={ocupadoMasivo || !!aplicando} onClick={() => void reprecificarTodos()}>
+              Otro precio para todos
             </Button>
           )}
           {campania.estado === 'en_curso' && puede.aplicar && (
@@ -713,6 +824,7 @@ function DetalleCampania({
           puedeRevisar={puede.admin && campania.estado !== 'cerrada'}
           ingresoDe={ingresoDe}
           onRevisar={guardarRevision}
+          onConfirmarTodos={confirmarTodos}
         />
       )}
 

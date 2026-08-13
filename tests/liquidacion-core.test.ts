@@ -14,6 +14,7 @@ import {
   objetarItem,
   pidsPorAplicar,
   precioDeSale,
+  reprecificar,
   TOPE_APLICAR,
   resumenCampania,
   revisionDe,
@@ -332,6 +333,38 @@ describe('pidsPorAplicar', () => {
   it('el tope por viaje lo fija el límite de Gestión Nube, no el gusto', () => {
     // 2 consultas por segundo ⇒ 1200 ms entre producto y producto ⇒ cinco entran en ~7 s.
     expect(TOPE_APLICAR).toBe(5)
+  })
+})
+
+describe('reprecificar', () => {
+  it('🔑 calcula sobre el precio de LISTA, no sobre el sale vigente', () => {
+    // Encadenar descuentos sobre lo ya descontado da números que nadie puede reconstruir: «20% al
+    // cerrar» tiene que significar lo mismo mire quien mire.
+    const alCincuenta = decidirItem(armarItemDesdeProducto(prod({ id: 'a', retailer_price: 50000 })), { pctDesc: 50 })
+    expect(alCincuenta.decision.precioSale).toBe(precioDeSale(50000, { pctDesc: 50 }))
+
+    const [reprecificado] = reprecificar([alCincuenta], 20, 'Bruno')
+    expect(reprecificado.decision.precioSale).toBe(precioDeSale(50000, { pctDesc: 20 }))
+  })
+
+  it('respeta el redondeo de siempre en vez de una cuenta nueva', () => {
+    const item = armarItemDesdeProducto(prod({ id: 'b', retailer_price: 52490 }))
+    const [r] = reprecificar([item], 20, null)
+    // 52490 × 0,8 = 41.992 → termina en 90, como todo precio de la casa.
+    expect(r.decision.precioSale).toBe(41990)
+  })
+
+  it('🔑 deja los ítems en «definido»: un precio nuevo es un precio que nadie miró', () => {
+    const confirmado = confirmarItem(decidirItem(armarItemDesdeProducto(prod({ id: 'c' })), { pctDesc: 40 }), 'Darío')
+    const [r] = reprecificar([confirmado], 20, 'Bruno')
+    expect(r.estado).toBe('definido')
+    expect(revisionDe(r).porQuien).toBeNull()
+  })
+
+  it('no toca los descartados ni los que no tienen precio de lista', () => {
+    const descartado = { ...armarItemDesdeProducto(prod({ id: 'd' })), estado: 'descartado' as const }
+    const sinLista = armarItemDesdeProducto(prod({ id: 'e', retailer_price: 0 }))
+    expect(reprecificar([descartado, sinLista], 20, null)).toEqual([])
   })
 })
 

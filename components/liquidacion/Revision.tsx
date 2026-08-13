@@ -46,7 +46,7 @@ const fechaCorta = (iso: string) => {
 type Filtro = 'sin-revisar' | 'objetados' | 'confirmados' | 'todos'
 
 export function Revision({
-  items, puedeRevisar, ingresoDe, onRevisar,
+  items, puedeRevisar, ingresoDe, onRevisar, onConfirmarTodos,
 }: {
   /** Todos los ítems de la campaña. El filtro de acá adentro decide cuáles se ven. */
   items: LiquidacionItem[]
@@ -55,6 +55,8 @@ export function Revision({
   /** Fecha de alta del producto, del ETL. `null` si el ETL todavía no cargó. */
   ingresoDe: (pid: string) => string | null
   onRevisar: (item: LiquidacionItem) => Promise<void>
+  /** El atajo: confirmar de una todos los que no pasaron por revisión. Opcional. */
+  onConfirmarTodos?: (sinRevisar: LiquidacionItem[]) => Promise<void>
 }) {
   const { perfil } = useSesion()
   const yo = perfil?.name || null
@@ -68,11 +70,16 @@ export function Revision({
     () => items.filter((i) => i.estado === 'definido' || i.estado === 'confirmado'),
     [items],
   )
+  /** Los que nunca pasaron por revisión: ni confirmados ni devueltos con motivo. */
+  const sinRevisar = useMemo(
+    () => conPrecio.filter((i) => i.estado === 'definido' && !revisionDe(i).objecion),
+    [conPrecio],
+  )
   const cuentas = useMemo(() => ({
-    sinRevisar: conPrecio.filter((i) => i.estado === 'definido' && !revisionDe(i).objecion).length,
+    sinRevisar: sinRevisar.length,
     objetados: conPrecio.filter((i) => i.estado === 'definido' && !!revisionDe(i).objecion).length,
     confirmados: conPrecio.filter((i) => i.estado === 'confirmado').length,
-  }), [conPrecio])
+  }), [conPrecio, sinRevisar])
 
   const visibles = useMemo(() => conPrecio.filter((i) => {
     const obj = !!revisionDe(i).objecion
@@ -123,6 +130,25 @@ export function Revision({
           <span style={{ fontSize: font.xs, color: color.mut2, marginLeft: space[2] }}>
             Confirmar u objetar lo hace un admin. Vos podés mirar.
           </span>
+        )}
+        {/*
+          🔑 **El atajo existe porque igual se toma.** El 13-ago-2026 hubo que confirmar 260 precios
+          para poder aplicarlos y se hizo con un script contra la base — o sea, por afuera, sin que
+          quedara registro de que fue masivo y sin que nadie viera qué se estaba salteando. Puesto
+          acá, al menos dice en la cara cuántos avisos altos se están dejando pasar.
+
+          ⚠️ Va a la derecha y en `outline`, no al lado de los filtros: el camino de a uno tiene que
+          seguir siendo el que se ve primero.
+        */}
+        {puedeRevisar && cuentas.sinRevisar > 0 && onConfirmarTodos && (
+          <Button
+            size="sm"
+            variant="outline"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => void onConfirmarTodos(sinRevisar)}
+          >
+            Confirmar los {cuentas.sinRevisar} sin revisar
+          </Button>
         )}
       </div>
 

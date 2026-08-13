@@ -62,6 +62,10 @@ const GN_TOKENS = { bdi: process.env.GN_TOKEN, zattia: process.env.GN_TOKEN_ZATT
 // de `TOPE_APLICAR` en `lib/liquidacion/core.ts`.
 const TOPE_APLICAR = 5;
 
+// El masivo de precios no toca Gestión Nube —sólo escribe en nuestra base—, así que el tope no lo
+// fija el rate limit sino el tamaño del payload: 50 ítems con su foto congelada.
+const TOPE_MASIVO = 50;
+
 // 🔑 **Dos topes distintos, y el que muerde es el segundo.** GN limita 60 consultas por minuto *y*
 // 2 por segundo, contadas por segundo de reloj: con 600 ms de pausa el PATCH rebota `429`. Van 1200.
 const PAUSA_GN = 1200;
@@ -486,8 +490,39 @@ export default async function handler(req, res) {
     // 🔑 **Va de a cinco y el bucle vive en el cliente.** Una campaña de 260 productos son ~6
     // minutos contra el tope de GN: no entra en el tiempo de una función. De paso se gana la
     // reanudación —lo aplicado sale de la lista— y una barra de progreso en vez de una espera muda.
+    // ── Cambiarle el precio a muchos ítems de una. ─────────────────────────────────────────────
+    //
+    // 🔑 **Es `guardar-item` de a muchos, y por eso el precio SÍ viene del cliente** — al revés que
+    // en `aplicar`. La diferencia no es de confianza sino de destino: acá se guarda una decisión en
+    // nuestra base (lo mismo que hace cada "Definir"), allá se le escribe a la tienda. Además el
+    // redondeo a 90 vive en `lib/comisiones/core.ts`, que este handler no puede importar (es TS), y
+    // copiarlo acá sería tener dos reglas de plata que pueden discrepar.
+    //
+    // Los ítems entran por `itemDelBody`, la misma lista blanca de siempre: un campo que no esté ahí
+    // no viaja.
+    if (b.action === 'decidir-masivo') {
+      const crudos = Array.isArray(b.items) ? b.items : [];
+      if (!crudos.length) return res.status(400).json({ error: 'no vino ningún producto' });
+      if (crudos.length > TOPE_MASIVO) {
+        return res.status(400).json({ error: `Son ${crudos.length} y el tope por vez es ${TOPE_MASIVO}.` });
+      }
+      const items = crudos.map(itemDelBody).filter(Boolean);
+      if (!items.length) return res.status(400).json({ error: 'ningún producto válido' });
+      const ahora = new Date().toISOString();
+      const { error } = await supabase.from('liquidacion_items').upsert(
+        items.map((i) => ({ liq_id: id, store, pid: i.pid, estado: i.estado, datos: i, updated_at: ahora })),
+        { onConflict: 'store,liq_id,pid' },
+      );
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, guardados: items.length });
+    }
+
     if (b.action === 'aplicar') {
       const modo = b.modo === 'sacar' ? 'sacar' : 'poner';
+      // A dónde vuelve el precio al sacar. `lista` le saca la oferta; `previa` le devuelve la que
+      // tenía cuando entró a la campaña (44 de los 261 de agosto ya estaban en oferta, y dejarlos a
+      // precio de lista les subiría el precio MÁS de lo que estaba antes del sale).
+      const destino = b.destino === 'previa' ? 'previa' : 'lista';
       // Es una escritura sobre precios en producción: el mismo permiso que marcar la campaña como
       // cargada. La puerta va en el handler porque deshabilitar el botón no impide nada.
       if (!puede.aplicar) {
@@ -526,7 +561,12 @@ export default async function handler(req, res) {
           resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no aplicado` }); continue;
         }
 
-        const valor = modo === 'poner' ? precio : null;
+        // Al sacar con destino `previa`, el valor es la oferta congelada — y si el producto no
+        // tenía ninguna, queda a precio de lista, que ES su estado anterior.
+        const previa = item.foto.promoPrevia;
+        const valor = modo === 'poner'
+          ? precio
+          : (destino === 'previa' && previa > 0 ? previa : null);
         let r;
         try {
           r = await gnFetch(`${GN_BASE}/productos/${encodeURIComponent(pid)}`, {
@@ -551,9 +591,9 @@ export default async function handler(req, res) {
         // revirtió solo".
         let escrito;
         try { escrito = (JSON.parse(cuerpo).data || {}).tiendanube_promotional_price; } catch { escrito = undefined; }
-        const quedoBien = modo === 'poner'
-          ? Math.round(num(escrito)) === Math.round(precio)
-          : escrito == null;
+        const quedoBien = valor == null
+          ? escrito == null
+          : Math.round(num(escrito)) === Math.round(valor);
         if (!quedoBien) {
           resultados.push({ pid, ok: false, error: `Gestión Nube aceptó pero devolvió ${JSON.stringify(escrito)}` });
           await dormir(PAUSA_GN);

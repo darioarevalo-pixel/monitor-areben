@@ -134,6 +134,18 @@ export async function quitarItem(store: Marca, liqId: string, pid: string): Prom
   await postear({ store, action: 'quitar-item', id: liqId, pid }, 'No se pudo quitar el producto.')
 }
 
+/**
+ * Guarda muchos ítems de una. Es `guardarItem` en lote, para el cambio de precio masivo.
+ *
+ * 🔑 **Acá el precio SÍ sale del cliente**, al revés que en `aplicarPrecios`: esto guarda una
+ * decisión en nuestra base —lo mismo que hace cada "Definir"— y no le escribe nada a la tienda. La
+ * cuenta la hace `decidirItem`, que es donde vive la regla de redondeo.
+ */
+export async function decidirMasivo(store: Marca, liqId: string, items: LiquidacionItem[]): Promise<number> {
+  const d = await postear({ store, action: 'decidir-masivo', id: liqId, items }, 'No se pudieron guardar los precios.')
+  return d.guardados || 0
+}
+
 /** Cómo le fue a cada producto contra Gestión Nube. El que falla se nombra; no se cuenta. */
 export interface ResultadoAplicar {
   pid: string
@@ -157,9 +169,10 @@ export async function aplicarPrecios(
   liqId: string,
   pids: string[],
   modo: 'poner' | 'sacar',
+  destino: 'lista' | 'previa' = 'lista',
 ): Promise<ResultadoAplicar[]> {
   const d = await postear(
-    { store, action: 'aplicar', id: liqId, pids, modo },
+    { store, action: 'aplicar', id: liqId, pids, modo, destino },
     modo === 'poner' ? 'No se pudieron escribir los precios en Gestión Nube.' : 'No se pudieron sacar las ofertas en Gestión Nube.',
   )
   return (d.resultados || []) as ResultadoAplicar[]

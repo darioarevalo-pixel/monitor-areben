@@ -276,6 +276,31 @@ export function itemsAplicables(items: LiquidacionItem[]): LiquidacionItem[] {
  */
 export const TOPE_APLICAR = 5
 
+/** Cuántos ítems entran en un guardado masivo. Espejo del handler; no toca Gestión Nube. */
+export const TOPE_MASIVO = 50
+
+/**
+ * Rebajar (o subir) de una vez el precio de varios productos, con un % sobre el precio de lista.
+ *
+ * 🔑 **Sobre el precio de LISTA, no sobre el sale vigente.** Encadenar descuentos sobre lo ya
+ * descontado da números que nadie puede reconstruir: "20% al cerrar" tiene que significar lo mismo
+ * mire quien mire, y un producto que hoy está al 50% no debería terminar más barato que uno que
+ * está al 30% sólo porque se descontó dos veces.
+ *
+ * 🔑 **Usa `decidirItem`, no una cuenta nueva**: así el redondeo a 90, el markup y el margen salen
+ * de donde siempre. Los ítems vuelven a `definido` —los deja `decidirItem`— porque un precio nuevo
+ * es un precio que nadie miró todavía.
+ */
+export function reprecificar(
+  items: LiquidacionItem[],
+  pctDesc: number,
+  quien: string | null,
+): LiquidacionItem[] {
+  return items
+    .filter((i) => i.estado !== 'descartado' && i.foto.precioNormal > 0)
+    .map((i) => decidirItem(i, { pctDesc }, quien))
+}
+
 /**
  * Qué pids faltan escribir (o borrar) en Gestión Nube.
  *
