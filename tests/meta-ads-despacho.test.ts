@@ -53,3 +53,39 @@ describe('meta-ads — la puerta despacha todo lo que el cliente pide', () => {
     expect(rutas).toContain('Vercel Hobby admite 12 funciones')
   })
 })
+
+/**
+ * 🔴 **El MISMO defecto, un piso más arriba: el menú pide una vista que el router no despacha.**
+ *
+ * `MetaAds.tsx` resuelve la vista con `VISTAS[vista] ?? Panel`. Ese `?? Panel` es deliberado —una
+ * URL escrita a mano no tiene que romper nada— pero convierte un error de tipeo en el menú en una
+ * pantalla que **dibuja el Panel sin decir una palabra**: se entra desde el sidebar, se ve algo
+ * razonable, y nadie se entera de que la pantalla nueva es inalcanzable. Es exactamente cómo `poda`
+ * llegó a producción con todo en verde.
+ *
+ * Texto contra texto, como el espejo de arriba: `nav.datos.ts` es data y `MetaAds.tsx` es un
+ * componente de cliente que no se puede montar desde acá sin arrastrar medio Next.
+ */
+describe('meta-ads — el menú y el router nombran las mismas vistas', () => {
+  const router = readFileSync(join(raiz, 'components/meta-ads/MetaAds.tsx'), 'utf8')
+  const nav = readFileSync(join(raiz, 'lib/nav.datos.ts'), 'utf8')
+
+  /** Los 2º tramos de `/meta-ads/<x>` que el sidebar ofrece. `/meta-ads` pelado es el Panel. */
+  const delMenu = [...nav.matchAll(/"ruta":\s*"\/meta-ads\/([a-z-]+)"/g)].map((m) => m[1]).sort()
+
+  /** Las claves del mapa `VISTAS`, más los alias que siguen en bookmarks. */
+  const delRouter = [
+    ...[...router.matchAll(/^ {2}([a-z-]+):\s*[A-Z]\w*,$/gm)].map((m) => m[1]),
+    ...[...router.matchAll(/(\w+):\s*'[a-z-]+'/g)].map((m) => m[1]),
+  ].sort()
+
+  it('la extracción encuentra las dos listas (si alguna da cero, el test no puede fallar)', () => {
+    expect(delMenu.length).toBeGreaterThan(8)
+    expect(delRouter.length).toBeGreaterThan(8)
+  })
+
+  it('toda entrada del menú tiene su vista; si no, el sidebar lleva al Panel en silencio', () => {
+    const huerfanas = delMenu.filter((r) => !delRouter.includes(r))
+    expect(huerfanas, `En el menú pero sin despachar en MetaAds.tsx: ${huerfanas.join(', ')}`).toEqual([])
+  })
+})

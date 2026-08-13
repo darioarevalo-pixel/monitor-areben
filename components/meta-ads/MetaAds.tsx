@@ -8,7 +8,7 @@
  * descripción de `lib/nav.ts` decían «en seis pantallas» y quedaron mintiendo en silencio al entrar
  * Automatizaciones — mismo defecto que ya mordió en la tanda 2 con los «arriba» y «abajo». Al entrar
  * Biblioteca volvieron a estar los dos, más este comentario. Al entrar Piezas, los tres otra vez.
- * Al entrar Informes, los tres otra vez: son **DIEZ**.
+ * Al entrar Informes, los tres otra vez. Al entrar Rentabilidad, los tres otra vez: son **ONCE**.
  *
  * Las vistas se eligen por el 2º tramo de la URL (patrón de Tienda Nube):
  *
@@ -26,6 +26,9 @@
  *   `/meta-ads/registro`    → **Registro**: qué se accionó sobre la pauta, quién y cómo terminó.
  *   `/meta-ads/informes`    → **Informes**: el análisis en prosa de cada fecha. ⛔ La única que no
  *                            calcula nada: guarda el texto que explica lo que las otras miden.
+ *   `/meta-ads/rentabilidad` → **Rentabilidad**: hasta cuánto se puede pagar por una compra. Es la
+ *                            única que no mira la pauta: sale de la economía del producto y le da
+ *                            el umbral a todas las demás.
  *
  * ⚠️ **Los nombres viejos siguen andando** (`/meta-ads/etapas` y `/meta-ads/auditoria`): están en
  * bookmarks, en comentarios del repo y en las notas de trabajo. Son un alias de una línea, no un
@@ -49,6 +52,7 @@ import { Automatizaciones } from '@/components/meta-ads/reglas/Automatizaciones'
 import { Biblioteca } from '@/components/meta-ads/biblioteca/Biblioteca'
 import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 import { Informes } from '@/components/meta-ads/informes/Informes'
+import { Rentabilidad } from '@/components/meta-ads/rentabilidad/Rentabilidad'
 
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
 const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' }
@@ -63,6 +67,7 @@ const VISTAS: Record<string, () => React.ReactElement> = {
   rendimiento: Rendimiento,
   registro: Auditoria,
   informes: Informes,
+  rentabilidad: Rentabilidad,
 }
 
 /**
