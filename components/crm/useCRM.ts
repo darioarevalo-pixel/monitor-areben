@@ -41,6 +41,12 @@ export type EstadoCRM = {
   ventas: FilaVenta[]
   crmSeg: MapaSeguimiento
   crmTelOverride: MapaTelefonos
+  /**
+   * El día contra el que se calculó TODO el agregado, en `YYYY-MM-DD`. Sale de acá y no de
+   * un `new Date()` del componente: si los filtros por día usaran otro reloj, "Hoy" podría
+   * no coincidir con los que el agregado marcó como vencidos.
+   */
+  hoy: string
   /** ¿Se pudo leer el KV? Sin esto en true, ningún guardado puede salir. */
   cargado: boolean
   recargar: () => void
@@ -164,5 +170,10 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     [cargado, toast],
   )
 
-  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel }
+  const hoy =
+    today.getFullYear() +
+    '-' + String(today.getMonth() + 1).padStart(2, '0') +
+    '-' + String(today.getDate()).padStart(2, '0')
+
+  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, guardarTel }
 }

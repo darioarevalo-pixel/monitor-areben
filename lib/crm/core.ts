@@ -303,16 +303,34 @@ export function contarKpis(agregado: ClienteCRM[]): Kpis {
 
 // ── Filtro + orden de la tabla ───────────────────────────────────────────────
 
+/**
+ * Los filtros que responden **cuándo hay que llamarlo**, en contraste con los de segmento,
+ * que responden **qué clase de cliente es**. Son los que llevan orden por urgencia en vez
+ * del orden de columnas.
+ *
+ * Que existan por separado es lo que arregla el cruce con la temperatura: adentro de "Hoy"
+ * todos comparten fecha, así que la prioridad ordena **dentro del día** y un 🧊 Frío
+ * agendado para hoy queda al final de los de hoy, no al final de la semana entera.
+ */
+export const FILTROS_POR_DIA = new Set(['atrasados', 'hoy', 'manana', 'semana'])
+
 export type OpcionesTabla = {
   /** Texto del buscador, ya en minúsculas y trimmeado. */
   q: string
   /** El valor del select de segmento, o 'todos'. */
   seg: string
   sort: { col: string; dir: number }
+  /** Hoy en `YYYY-MM-DD`. Sale del mismo TODAY con el que se calculó el agregado. */
+  hoy?: string
+  /**
+   * El próximo día HÁBIL, en `YYYY-MM-DD`. Un viernes "mañana" no es sábado: es el lunes,
+   * o el martes si el lunes es feriado. Lo resuelve el llamador con `proximoHabil`.
+   */
+  manana?: string
 }
 
 /** renderCRMTabla (13695-13744), sin el DOM: la parte que decide QUÉ filas y en qué orden. */
-export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTabla): ClienteCRM[] {
+export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort, hoy, manana }: OpcionesTabla): ClienteCRM[] {
   let out = lista.slice()
 
   // Se calcula sobre la lista ENTERA que entra, antes de cualquier filtro. Si se calculara
@@ -334,17 +352,29 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTa
     // defecto es total_amount desc, o sea el frío que más compró primero. Es el que más
     // conviene recuperar, y desde ahí se puede reordenar por cualquier columna.
     out = out.filter((c) => c.temperatura === 'frio')
-  } else if (seg === 'contactar') {
-    // Vencidos + pendientes + los de esta semana. MISMO criterio que `paraContactar`.
-    out = out.filter(paraContactar)
+  } else if (FILTROS_POR_DIA.has(seg)) {
+    if (seg === 'atrasados') {
+      // La deuda: vencía ANTES de hoy y no se lo llamó. Los `pendiente` entran también —
+      // tienen cadencia y nunca se les registró un contacto, que es la misma deuda sin
+      // fecha. Es el número que avisa si el plan se está desarmando.
+      out = out.filter((c) => c.seg_estado === 'pendiente' || (!!c.proximo_contacto && !!hoy && c.proximo_contacto < hoy))
+    } else if (seg === 'hoy') {
+      out = out.filter((c) => !!hoy && c.proximo_contacto === hoy)
+    } else if (seg === 'manana') {
+      out = out.filter((c) => !!manana && c.proximo_contacto === manana)
+    } else {
+      // 'semana' — vencidos + pendientes + los próximos 7 días. MISMO criterio que
+      // `paraContactar`, que es lo que cuenta la tarjeta.
+      out = out.filter(paraContactar)
+    }
     // Primero la prioridad comercial (temperatura + tamaño), y recién adentro de cada
     // grupo la urgencia de la fecha. Ese es el cambio: antes mandaba solo la fecha, y los
     // clientes grandes fríos con cadencia semanal vivían arriba de todo.
-    const ord: Record<string, number> = { vencido: 0, pendiente: 1, semana: 2 }
+    const ord: Record<string, number> = { vencido: 0, pendiente: 1, semana: 2, aldia: 3, none: 4 }
     out.sort(
       (a, b) =>
         prioridadContacto(a, top.has(a.id)) - prioridadContacto(b, top.has(b.id)) ||
-        ord[a.seg_estado] - ord[b.seg_estado] ||
+        (ord[a.seg_estado] ?? 9) - (ord[b.seg_estado] ?? 9) ||
         (a.dias_proximo ?? 0) - (b.dias_proximo ?? 0),
     )
   } else if (seg !== 'todos') {
@@ -360,8 +390,8 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTa
     )
   }
 
-  // "Para contactar" trae su propio orden por urgencia; no se pisa.
-  if (seg !== 'contactar') {
+  // Los filtros por día traen su propio orden por prioridad y urgencia; no se pisa.
+  if (!FILTROS_POR_DIA.has(seg)) {
     const { col, dir } = sort
     out.sort((a, b) => {
       let av: string | number, bv: string | number

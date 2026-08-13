@@ -103,7 +103,7 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
   it('el frío atrasado 200 días queda DEBAJO del caliente que vence recién esta semana', () => {
     const frioViejo = enLista('frio', 'vencido', -200)
     const calienteFuturo = enLista('caliente', 'semana', 6)
-    const orden = filtrarOrdenar([frioViejo, calienteFuturo], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([frioViejo, calienteFuturo], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([calienteFuturo.id, frioViejo.id])
   })
 
@@ -116,7 +116,7 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     const templado = enLista('templado', 'vencido', -60, 20_000)
     const frio = enLista('frio', 'vencido', -300, 30_000)
 
-    const orden = filtrarOrdenar([...rellenoTop(), frio, templado, cuentaClave, cajaRapida], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([...rellenoTop(), frio, templado, cuentaClave, cajaRapida], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([cajaRapida.id, cuentaClave.id, templado.id, frio.id])
   })
 
@@ -124,14 +124,14 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     const vencido = enLista('caliente', 'vencido', -3)
     const pendiente = enLista('caliente', 'pendiente', 0)
     const semana = enLista('caliente', 'semana', 5)
-    const orden = filtrarOrdenar([semana, pendiente, vencido], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([semana, pendiente, vencido], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([vencido.id, pendiente.id, semana.id])
   })
 
   it('entre dos vencidos del mismo grupo, primero el más atrasado', () => {
     const pocoAtraso = enLista('caliente', 'vencido', -2)
     const muchoAtraso = enLista('caliente', 'vencido', -90)
-    const orden = filtrarOrdenar([pocoAtraso, muchoAtraso], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([pocoAtraso, muchoAtraso], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([muchoAtraso.id, pocoAtraso.id])
   })
 
@@ -139,7 +139,7 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     const alDia = enLista('caliente', 'aldia', 20)
     const sinSeguimiento = enLista('caliente', 'none', 0)
     const vencido = enLista('templado', 'vencido', -1)
-    const orden = filtrarOrdenar([alDia, sinSeguimiento, vencido], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([alDia, sinSeguimiento, vencido], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([vencido.id])
   })
 
@@ -149,7 +149,7 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     // top y el chico cambiaría de grupo por haber tipeado algo.
     const grande = cli({ name: 'Zapatería Norte', temperatura: 'caliente', seg_estado: 'vencido', dias_proximo: -1, total_amount: 5_000_000 })
     const chico = cli({ name: 'Zapatería Sur', temperatura: 'caliente', seg_estado: 'vencido', dias_proximo: -1, total_amount: 1_000 })
-    const conBusqueda = filtrarOrdenar([...rellenoTop(), grande, chico], { q: 'zapatería', seg: 'contactar', sort: SORT })
+    const conBusqueda = filtrarOrdenar([...rellenoTop(), grande, chico], { q: 'zapatería', seg: 'semana', sort: SORT })
     expect(conBusqueda.map((c) => c.id)).toEqual([chico.id, grande.id])
   })
 })
@@ -163,7 +163,7 @@ describe('el día 1: con todos en el default, la lista sale como salía antes', 
     const vencidoLeve = enLista(TEMPERATURA_DEFAULT, 'vencido', -1, 800_000)
     const vencidoGrave = enLista(TEMPERATURA_DEFAULT, 'vencido', -45, 2_000)
 
-    const orden = filtrarOrdenar([semana, pendiente, vencidoLeve, vencidoGrave], { q: '', seg: 'contactar', sort: SORT })
+    const orden = filtrarOrdenar([semana, pendiente, vencidoLeve, vencidoGrave], { q: '', seg: 'semana', sort: SORT })
     expect(orden.map((c) => c.id)).toEqual([vencidoGrave.id, vencidoLeve.id, pendiente.id, semana.id])
   })
 
@@ -213,7 +213,7 @@ describe('la tarjeta "Para contactar" y la tabla dan el mismo número', () => {
 
   it('coinciden', () => {
     const tarjeta = contarKpis(clientes).contactar
-    const tabla = filtrarOrdenar(clientes, { q: '', seg: 'contactar', sort: SORT }).length
+    const tabla = filtrarOrdenar(clientes, { q: '', seg: 'semana', sort: SORT }).length
     expect(tarjeta).toBe(tabla)
     expect(tarjeta).toBe(4)
   })
@@ -224,6 +224,74 @@ describe('la tarjeta "Para contactar" y la tabla dan el mismo número', () => {
     expect(paraContactar(cli({ seg_estado: 'pendiente' }))).toBe(true)
     expect(paraContactar(cli({ seg_estado: 'aldia' }))).toBe(false)
     expect(paraContactar(cli({ seg_estado: 'none' }))).toBe(false)
+  })
+})
+
+// ── Los filtros por día ───────────────────────────────────────────────────────
+
+describe('filtros por día (Atrasados · Hoy · Mañana · Esta semana)', () => {
+  const HOY = '2026-08-13'
+  const MANANA = '2026-08-14'
+  const OPTS = { q: '', sort: SORT, hoy: HOY, manana: MANANA }
+
+  const conFecha = (fecha: string | null, seg_estado: EstadoSeg, dias: number, temperatura: Temperatura = 'templado') =>
+    cli({ proximo_contacto: fecha, seg_estado, dias_proximo: dias, temperatura })
+
+  const atrasado = conFecha('2026-08-10', 'vencido', -3)
+  const deHoy = conFecha(HOY, 'vencido', 0)
+  const deManana = conFecha(MANANA, 'semana', 1)
+  const deLaSemana = conFecha('2026-08-18', 'semana', 5)
+  const lejano = conFecha('2026-09-14', 'aldia', 32)
+  const sinPrimerContacto = conFecha(null, 'pendiente', 0)
+  const TODOS = [atrasado, deHoy, deManana, deLaSemana, lejano, sinPrimerContacto]
+
+  const ids = (seg: string) => filtrarOrdenar(TODOS, { ...OPTS, seg }).map((c) => c.id)
+
+  it('"Hoy" trae exactamente los de hoy', () => {
+    expect(ids('hoy')).toEqual([deHoy.id])
+  })
+
+  it('"Mañana" trae los del próximo día hábil, que lo decide el llamador', () => {
+    expect(ids('manana')).toEqual([deManana.id])
+  })
+
+  it('"Atrasados" son los de fecha anterior a hoy — los de hoy NO son deuda todavía', () => {
+    expect(ids('atrasados')).toContain(atrasado.id)
+    expect(ids('atrasados')).not.toContain(deHoy.id)
+  })
+
+  it('"Atrasados" incluye al que tiene cadencia y nunca se contactó', () => {
+    expect(ids('atrasados')).toContain(sinPrimerContacto.id)
+  })
+
+  it('"Esta semana" es todo lo de los próximos 7 días más lo atrasado, y deja afuera lo lejano', () => {
+    const s = ids('semana')
+    expect(s).toContain(atrasado.id)
+    expect(s).toContain(deHoy.id)
+    expect(s).toContain(deLaSemana.id)
+    expect(s).not.toContain(lejano.id)
+  })
+
+  it('sin `hoy`/`manana` esos filtros no traen nada, en vez de traer cualquier cosa', () => {
+    expect(filtrarOrdenar(TODOS, { q: '', sort: SORT, seg: 'hoy' })).toEqual([])
+    expect(filtrarOrdenar(TODOS, { q: '', sort: SORT, seg: 'manana' })).toEqual([])
+  })
+
+  it('adentro de "Hoy" la temperatura ordena, que es lo que arregla el cruce', () => {
+    // El cruce que motivó el filtro: un 🧊 Frío agendado para hoy se iba al fondo de los
+    // 295 de la semana. Filtrando por día queda al final de LOS DE HOY, donde se lo ve.
+    const frio = conFecha(HOY, 'vencido', 0, 'frio')
+    const caliente = conFecha(HOY, 'vencido', 0, 'caliente')
+    const templado = conFecha(HOY, 'vencido', 0, 'templado')
+    const orden = filtrarOrdenar([frio, templado, caliente], { ...OPTS, seg: 'hoy' })
+    expect(orden.map((c) => c.temperatura)).toEqual(['caliente', 'templado', 'frio'])
+  })
+
+  it('el buscador se combina con el filtro del día', () => {
+    const a = cli({ name: 'Zapatería Norte', proximo_contacto: HOY, seg_estado: 'vencido', dias_proximo: 0 })
+    const b = cli({ name: 'Otra cosa', proximo_contacto: HOY, seg_estado: 'vencido', dias_proximo: 0 })
+    const r = filtrarOrdenar([a, b], { ...OPTS, seg: 'hoy', q: 'zapatería' })
+    expect(r.map((c) => c.id)).toEqual([a.id])
   })
 })
 

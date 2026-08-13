@@ -36,7 +36,7 @@ const BLOQUES: Bloque[] = [
     titulo: 'Clientes en cierre',
     donde: (
       <>
-        La tarjeta <b>Para contactar (caja rápida)</b>.
+        El filtro <b>Hoy</b>, arriba de la lista.
       </>
     ),
     quienes: 'Te pidieron precio, dijeron "te pido esta semana" o están eligiendo.',

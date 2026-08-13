@@ -7,6 +7,8 @@ import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
 import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
+import { feriadosDe, proximoHabil } from '@/lib/crm/agenda.core.js'
+import { sumarDias } from '@/lib/calendario/fechas.core.js'
 import {
   parsearTelefonos,
   setDescartado,
@@ -17,7 +19,7 @@ import {
 import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { BuscarInput, Button, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { BuscarInput, Button, Chips, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 /**
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
@@ -32,7 +34,10 @@ import { BuscarInput, Button, KpiCard, Notice, Select, StatusPill, TBody, THead,
 
 const SEGMENTOS = [
   { v: 'todos', t: 'Todos' },
-  { v: 'contactar', t: 'Para contactar (caja rápida)' },
+  { v: 'atrasados', t: '⚠️ Atrasados' },
+  { v: 'hoy', t: 'Hoy' },
+  { v: 'manana', t: 'Mañana' },
+  { v: 'semana', t: 'Esta semana' },
   { v: 'frios', t: '🧊 Fríos / En recuperación' },
   { v: 'top', t: '⭐ Top clientes' },
   { v: 'activos', t: 'Activos recurrentes' },
@@ -227,7 +232,7 @@ export function CRM() {
   const [guia, setGuia] = useState(false)
   const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
-  const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel } = useCRM(modo)
+  const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, guardarTel } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
   // Los que compraron pero todavía no están en el canal de difusión. Se cuenta
@@ -235,9 +240,29 @@ export function CRM() {
   const sinDifusion = useMemo(() => agregado.activos.filter((c) => !c.en_difusion).length, [agregado])
   // Ídem: los fríos se cuentan acá y no en contarKpis, por la misma razón.
   const frios = useMemo(() => agregado.activos.filter((c) => c.temperatura === 'frio').length, [agregado])
+
+  /**
+   * "Mañana" es el próximo día HÁBIL, no el día siguiente del almanaque: un viernes es el
+   * lunes, y si el lunes es feriado, el martes. Misma función que usa el reparto de la
+   * agenda, así que la pantalla y el script no pueden discrepar sobre qué día es mañana.
+   */
+  const manana = useMemo(() => {
+    const anio = Number(hoy.slice(0, 4))
+    return proximoHabil(sumarDias(hoy, 1), feriadosDe([anio, anio + 1])) as string
+  }, [hoy])
+
+  const porDia = useMemo(() => {
+    const a = agregado.activos
+    return {
+      atrasados: a.filter((c) => c.seg_estado === 'pendiente' || (!!c.proximo_contacto && c.proximo_contacto < hoy)).length,
+      hoy: a.filter((c) => c.proximo_contacto === hoy).length,
+      manana: a.filter((c) => c.proximo_contacto === manana).length,
+    }
+  }, [agregado, hoy, manana])
+
   const lista = useMemo(
-    () => filtrarOrdenar(verDescartados ? agregado.descartados : agregado.activos, { q: q.trim().toLowerCase(), seg: verDescartados ? 'todos' : seg, sort }),
-    [agregado, q, seg, sort, verDescartados],
+    () => filtrarOrdenar(verDescartados ? agregado.descartados : agregado.activos, { q: q.trim().toLowerCase(), seg: verDescartados ? 'todos' : seg, sort, hoy, manana }),
+    [agregado, q, seg, sort, verDescartados, hoy, manana],
   )
 
   const ordenarPor = (col: string) => setSort((s) => (s.col === col ? { col, dir: -s.dir } : { col, dir: -1 }))
@@ -252,7 +277,7 @@ export function CRM() {
     setGuia(false)
     setVista('clientes')
     setVerDescartados(false)
-    if (k === 'contactar') setSeg('contactar')
+    if (k === 'contactar') setSeg('hoy')
     else if (k === 'frios') setSeg('frios')
     else if (k === 'reposicion') {
       // No hay filtro de "compró hace 10 a 15 días". Lo más cerca que se llega hoy: los
@@ -298,7 +323,6 @@ export function CRM() {
   }
 
   const tarjetas = [
-    { key: 'contactar', label: 'Para contactar', n: kpis.contactar },
     { key: 'frios', label: '🧊 Fríos', n: frios },
     { key: 'top', label: '⭐ Top clientes', n: kpis.top },
     { key: 'activos', label: 'Activos', n: kpis.activos },
@@ -371,6 +395,30 @@ export function CRM() {
                 {error}
               </Notice>
             )}
+
+            {/* Los chips responden CUÁNDO hay que llamarlo; las tarjetas de abajo, QUÉ CLASE
+                de cliente es. Mezclarlas es lo que había convertido a "Para contactar" en un
+                cajón de 295 personas cuando la lista del día eran 73.
+
+                Y de paso arregla el cruce con la temperatura: adentro de "Hoy" todos comparten
+                fecha, así que un 🧊 Frío queda al final de LOS DE HOY y no al final de la
+                semana entera, que era donde se perdía. */}
+            <div style={{ marginBottom: space[3] }}>
+              <Chips
+                value={seg}
+                onChange={(k) => {
+                  setVerDescartados(false)
+                  setSeg(k)
+                }}
+                opciones={[
+                  { key: 'todos', label: 'Todos' },
+                  { key: 'atrasados', label: '⚠️ Atrasados', n: porDia.atrasados, title: 'Vencían antes de hoy y no se los llamó. Es la deuda: si crece, el plan se está desarmando.' },
+                  { key: 'hoy', label: 'Hoy', n: porDia.hoy, title: `Los agendados para hoy (${fmtFecha(hoy)})` },
+                  { key: 'manana', label: `Mañana · ${fmtFecha(manana).slice(0, 5)}`, n: porDia.manana, title: `El próximo día hábil (${fmtFecha(manana)}). Un viernes salta al lunes, y al martes si el lunes es feriado.` },
+                  { key: 'semana', label: 'Esta semana', n: kpis.contactar, title: 'Todo lo que vence dentro de los próximos 7 días, más lo atrasado.' },
+                ]}
+              />
+            </div>
 
             {/* Las tarjetas son FILTROS, no adornos: tocar una filtra la tabla de abajo.
                 Antes eran `.stat` idénticas a las de un tablero, así que no se notaba. */}
