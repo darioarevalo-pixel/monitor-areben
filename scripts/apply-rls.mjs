@@ -84,8 +84,9 @@ try {
   if (!aplicar) {
     console.log(`\n(simulación — no se tocó nada). Para aplicar de verdad:`)
     console.log(`    node scripts/apply-rls.mjs ${marca} --aplicar`)
-    console.log(`Antes, leé el PASO 0 de sql/migrate-rls.sql: si en Vercel falta una service key,`)
-    console.log(`esto deja al Monitor sin poder guardar.\n`)
+    console.log(`\nPASO 0 antes de aplicar: Monitor → Usuarios → "Credenciales del servidor".`)
+    console.log(`${MARCA} tiene que decir «escribe como servicio». Si dice «escribe como anónimo»,`)
+    console.log(`esto la deja sin poder guardar nada (los handlers hacen SERVICE_KEY || KEY).\n`)
     process.exit(0)
   }
 

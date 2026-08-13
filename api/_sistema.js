@@ -1,13 +1,14 @@
 // "Sistema" — Novedades (y más adelante los Manuales). Tabla `novedades` + `novedades_leidas`.
 //
 //   GET  ?recurso=sistema                              → { ok, novedades, leidas, puede }
+//   GET  ?recurso=sistema&vista=credenciales           → { ok, credenciales }   ⚠️ SOLO admin
 //   POST { recurso:'sistema', action:'leida', id, version }
 //   POST { recurso:'sistema', action:'novedad-guardar', novedad, subirVersion? }
 //   POST { recurso:'sistema', action:'novedad-estado', id, estado }
 //   POST { recurso:'sistema', action:'novedad-borrar', id }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=sistema`. El plan Hobby de
-// Vercel admite 12 funciones y hay 9 usadas. Si alguien crea `api/novedades.js` "por prolijidad",
+// Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/novedades.js` "por prolijidad",
 // **frena todos los deploys sin error visible**: Vercel sigue sirviendo la versión anterior y no
 // avisa. Ya pasó una vez.
 //
@@ -24,13 +25,17 @@
 //    única escritura abierta a todos, y sólo puede escribir SU propia fila.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { marcasConAcceso } from '../lib/permisos.core.js';
+import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
+import { diagnosticar } from '../lib/credenciales.core.js';
 import { esEstado } from '../lib/novedades/estados.core.js';
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
- * Además Zattia no tiene service key, y un registro de quién leyó qué no puede depender de la anon.
+ *
+ * Este bloque decía además "y Zattia no tiene service key". Eso era cierto del `.env` LOCAL, que no
+ * es lo que corre en producción — y se leía como un hecho sobre Vercel. Lo que hay en producción lo
+ * contesta la sonda de abajo (`?vista=credenciales`), no un comentario.
  */
 function cfgMaestra() {
   return {
@@ -53,6 +58,15 @@ const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicad
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
+
+  // Salud de las credenciales del servidor. Va ANTES que todo lo demás a propósito: no toca la
+  // base, así que tiene que poder contestar justo cuando la base es el problema. Ver
+  // `lib/credenciales.core.js` — no devuelve ninguna clave, ni un prefijo.
+  // Sólo admin: no es un dato secreto, pero es el mapa de con qué llaves entra el servidor.
+  if (req.method === 'GET' && String(req.query.vista || '') === 'credenciales') {
+    if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un administrador puede ver esto.' });
+    return res.status(200).json({ ok: true, credenciales: diagnosticar(process.env) });
+  }
 
   const yo = perfil.name || null;
   if (!yo) return res.status(400).json({ error: 'La sesión no tiene nombre; volvé a entrar.' });

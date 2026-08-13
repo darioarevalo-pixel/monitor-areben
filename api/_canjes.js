@@ -8,9 +8,11 @@
 // Zattia, y "¿hace cuánto no hacemos una acción con ella?" tiene que tener UNA respuesta, no dos.
 // De qué marca es cada canje lo dice la columna `store` de `canjes`.
 //
-// Ventaja lateral confirmada: en `.env` hay `SUPABASE_SERVICE_KEY` (BDI) pero NO existe
-// `ZATTIA_SUPABASE_SERVICE_KEY` — Zattia escribe hoy con la anon key. Escribiendo sólo contra la
-// maestra de BDI el tema se esquiva por completo.
+// Ventaja lateral: en el `.env` LOCAL hay `SUPABASE_SERVICE_KEY` (BDI) pero no
+// `ZATTIA_SUPABASE_SERVICE_KEY`. Escribiendo sólo contra la maestra de BDI el tema se esquiva.
+// ⚠️ Decía "confirmado" y no lo estaba: el `.env` local no es lo que corre en producción, y esa
+// frase se venía leyendo como un hecho sobre Vercel. Lo que hay en Vercel lo contesta la sonda de
+// `api/_sistema.js` (`?recurso=sistema&vista=credenciales`), no este comentario.
 //
 // Lo que se pierde, sin maquillar: la base de BDI guarda datos de Zattia, y si ese proyecto cae se
 // cae Canjes de las tres marcas. Con decenas de canjes por mes el impacto es "hoy no cargo un

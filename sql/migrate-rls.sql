@@ -56,18 +56,25 @@
 -- escribir nada. O sea que un entorno sin service key deja de guardar — canjes, fallas, conteos,
 -- liquidación — y el error va a decir "permiso denegado", no "falta una variable".
 --
--- Hay que confirmar que en Vercel (Production Y Preview) estén las CUATRO:
+-- Hay que confirmar que en Vercel estén las CUATRO, y que las dos `*_SERVICE_KEY` sean de verdad
+-- de servicio:
 --     SUPABASE_URL · SUPABASE_SERVICE_KEY · ZATTIA_SUPABASE_URL · ZATTIA_SUPABASE_SERVICE_KEY
 --
--- Y que las dos `*_SERVICE_KEY` sean de verdad de servicio. Se verifica sin mirar el valor:
--- una key de Supabase es un JWT y trae el rol adentro. `api/_tn-fotos-verificadas.js:28` ya tiene
--- esa comprobación hecha (`rolDe`), y es la razón por la que ese archivo grita cuando le toca la
--- pública. Desde la terminal:
+-- 🔑 **CÓMO SE VERIFICA: entrando al Monitor → Usuarios → "Credenciales del servidor".**
+-- Lo contesta el propio servidor que va a quedar del otro lado de RLS, que es el único que sabe
+-- qué tiene Vercel adentro. Cada marca dice `escribe como servicio` o `escribe como anónimo`, y
+-- eso último es exactamente lo que esta migración rompe. **Si una marca dice anónimo, NO correr
+-- esto sobre ella todavía**: primero se le carga la service key en Vercel.
 --
---     npx vercel env pull .env.check --environment=production
---     node -e "for(const l of require('fs').readFileSync('.env.check','utf8').split('\n')){const [k,v]=l.split('=');if(v&&v.includes('.')){try{console.log(k, JSON.parse(Buffer.from(v.replace(/\"/g,'').split('.')[1],'base64')).role)}catch{}}}"
+-- ⚠️ La receta anterior era `npx vercel env pull` + un `node -e` sobre el archivo. NO SIRVE, y el
+-- modo de falla es silencioso: el proyecto productivo vive en el Vercel de Darío, así que el CLI
+-- de Bruno resuelve OTRO proyecto (un cascarón sin deployments) y contesta "No Environment
+-- Variables found" — que se lee igual que "no están puestas". El `.env` local tampoco alcanza:
+-- ahí `ZATTIA_SUPABASE_SERVICE_KEY` no existe, y eso no dice nada sobre producción.
 --
--- Tiene que decir `service_role` en las dos. Si dice `anon`, NO correr esto todavía.
+-- La sonda es `api/_sistema.js` → `?recurso=sistema&vista=credenciales` (sólo admin), y no
+-- devuelve ninguna clave: sólo si la variable está, qué rol dice ser y contra qué proyecto apunta.
+-- La lógica pura y sus tests: `lib/credenciales.core.js`, `tests/credenciales*.test.ts`.
 --
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
 -- CÓMO VERIFICAR DESPUÉS
