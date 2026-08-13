@@ -12,6 +12,7 @@
 //   POST { recurso:'liquidacion', store, action:'guardar-item',id, item }
 //   POST { recurso:'liquidacion', store, action:'estado-item', id, pid, estado }
 //   POST { recurso:'liquidacion', store, action:'quitar-item', id, pid }
+//   POST { recurso:'liquidacion', store, action:'sincronizar-ventas', id }
 //   POST { recurso:'liquidacion', store, action:'borrar',      id }
 //
 // Archivo `_`: no es una ruta (entra por api/datos.js). El plan Hobby de Vercel admite 12 funciones
@@ -25,6 +26,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeSub, puedeVer } from '../lib/permisos.core.js';
+// El mapeo y el guardado del espejo de ventas, los MISMOS que usan los dos syncs diarios y la purga
+// histórica. Se importa en vez de copiarse por lo que ya costó una vez: ese código vivía duplicado
+// adentro de `sync-diario.js` y `sync-diario-zattia.js`, las copias se separaron, y de esa deriva
+// salió que Zattia no tenga CRM ni márgenes (ver el encabezado de `ventas-espejo.mjs`).
+import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -74,6 +80,55 @@ const PAUSA_GN = 1200;
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ── Traer las ventas de hoy al espejo ────────────────────────────────────────────────────────────
+//
+// Cuántas páginas de 50 ventas se bajan como mucho. Es un techo de seguridad, no un tope esperado:
+// dos días de la marca más movida no llegan a una página. **Si muerde, se avisa** (`truncado`) en
+// vez de devolver un número corto que parece completo.
+const TOPE_PAGINAS_VENTAS = 10;
+
+// Cuánto tiene que pasar entre dos sincronizadas de la misma campaña.
+const ESPERA_SYNC_VENTAS = 60_000;
+
+/** La fecha de Argentina (YYYY-MM-DD) de un instante dado. */
+function fechaAR(ms) {
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+}
+
+/**
+ * Qué rango se le pide a Gestión Nube: **ayer y hoy**, no sólo hoy.
+ *
+ * 🔑 **El día lo decide Argentina, no el reloj de la función.** Vercel corre en UTC, así que a las
+ * 21:30 de Buenos Aires `new Date().toISOString().slice(0,10)` ya devuelve el día siguiente: el
+ * botón pediría las ventas de mañana y traería cero **justo a la hora en que el local cierra**, que
+ * es cuando más se lo va a apretar. Es el mismo criterio que usa `scripts/sync-ventas-hoy.js`.
+ *
+ * Ayer entra igual de gratis (una venta cargada pasada la medianoche puede quedar fechada el día
+ * anterior) y el guardado es idempotente, así que retraerla no ensucia nada.
+ */
+export function ventanaVentasHoy(ahoraMs) {
+  return { desde: fechaAR(ahoraMs - 86400000), hasta: fechaAR(ahoraMs) };
+}
+
+/**
+ * Si el botón puede volver a correr. `ultimo` es el ISO de la sincronizada anterior.
+ *
+ * ⚠️ **El antirrebote es POR CAMPAÑA**, porque es donde vive el dato (`datos.ventasSync`): apretarlo
+ * desde otra campaña de la misma marca no lo frena. Alcanza para lo que tiene que frenar —diez
+ * toques seguidos al mismo botón— y decirlo acá es más honesto que insinuar un candado global que no
+ * existe. Lo que sí queda afuera de todo candado es el `concurrency: gestion-nube` que comparten los
+ * ocho workflows que hablan con GN: eso no lo puede ver una función de Vercel.
+ *
+ * Un `ultimo` ilegible deja pasar: el antirrebote es una comodidad, y trabar el botón por un dato
+ * roto sería peor que sincronizar de más.
+ */
+export function puedeSincronizarVentas(ultimo, ahoraMs, esperaMs = ESPERA_SYNC_VENTAS) {
+  if (!ultimo) return true;
+  const t = Date.parse(ultimo);
+  if (!Number.isFinite(t)) return true;
+  return ahoraMs - t >= esperaMs;
+}
+
 /**
  * `fetch` a GN que respeta el rate limit.
  *
@@ -113,6 +168,9 @@ function aCampania(row, conteo) {
     nota: d.nota || null,
     creadoPor: d.creadoPor || null,
     creado: d.creado || null,
+    // Cuándo se trajeron por última vez las ventas del día al espejo, desde el botón de Resultado.
+    // `null` es lo normal: la campaña se mide contra el sync diario y nadie apretó nada.
+    ventasSync: d.ventasSync || null,
     conteo: conteo || { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 },
   };
 }
@@ -587,6 +645,76 @@ export default async function handler(req, res) {
       );
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, guardados: items.length });
+    }
+
+    // ── Traer las ventas de hoy al espejo. Sólo admin. ─────────────────────────────────────────
+    //
+    // 🔑 **Resultado no le pregunta nada a Gestión Nube: lee el espejo de Supabase**, y el espejo lo
+    // llena el sync diario a las 6 UTC (3 de la mañana en Argentina). Una campaña que arrancó hoy se
+    // mira, entonces, contra un espejo de ayer, y la pantalla contesta «no vendió» de todo — que es
+    // lo contrario de lo que está pasando. Pasó de verdad el 13-ago-2026, el día que el WINTER SALE
+    // empezó a vender: cero ventas del 13 en el espejo de Zattia, con el local vendiendo.
+    //
+    // Es el mismo trabajo que hace `scripts/sync-ventas-hoy.js` —el workflow «Sync ventas
+    // recientes», que sólo se dispara a mano desde GitHub—, pero adentro de este handler porque
+    // **todo lo que necesita ya estaba acá**: los dos tokens de GN y los dos Supabase con service
+    // key. No hizo falta ni una función nueva de Vercel (quedan 5 de 12) ni un secret nuevo.
+    //
+    // 🔑 **Entra cómodo en el tiempo de una función: 1,2 segundos medidos** en el run del 13-ago
+    // (una página, 31 ventas, 82 renglones). Los ~40 s del workflow son casi todos `npm ci`.
+    if (b.action === 'sincronizar-ventas') {
+      // Liquidación hoy la ven sólo admins, así que la puerta se pone donde está la fuerza: esto
+      // escribe en las tablas `ventas`, `venta_detalles` y `clientes` del espejo de producción.
+      if (!puede.admin) {
+        return res.status(403).json({ error: 'Traer las ventas de hoy al espejo lo puede hacer un admin.' });
+      }
+      const token = GN_TOKENS[store];
+      if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
+
+      const { data: previo, error: e0 } = await supabase.from('liquidaciones')
+        .select('datos').eq('store', store).eq('id', id).maybeSingle();
+      if (e0) throw new Error(e0.message);
+      if (!previo) return res.status(404).json({ error: 'esa campaña no existe' });
+
+      const d = previo.datos || {};
+      const ahoraMs = Date.parse(ahora);
+      // Recién sincronizado: se contesta `ok` con `salteado`, no un error. Apretar dos veces no es
+      // una equivocación de nadie y no tiene por qué pintarse de rojo.
+      if (!puedeSincronizarVentas(d.ventasSync, ahoraMs)) {
+        return res.status(200).json({ ok: true, salteado: true, ventasSync: d.ventasSync, ventas: 0, detalles: 0 });
+      }
+
+      const { desde: dSync, hasta: hSync } = ventanaVentasHoy(ahoraMs);
+      const filas = [];
+      let truncado = false;
+      for (let pagina = 1; pagina <= TOPE_PAGINAS_VENTAS; pagina++) {
+        const r = await gnFetch(
+          `${GN_BASE}/ventas/obtener?from=${dSync}&to=${hSync}&include_details=1&per_page=50&page=${pagina}`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+        );
+        const j = await r.json().catch(() => null);
+        if (!r.ok) {
+          const detalle = j && (j.message || j.error) ? `: ${j.message || j.error}` : '';
+          return res.status(502).json({ error: `Gestión Nube contestó ${r.status}${detalle}` });
+        }
+        const pag = Array.isArray(j?.data) ? j.data : [];
+        filas.push(...pag);
+        if (!j?.meta?.has_more_pages || !pag.length) break;
+        if (pagina === TOPE_PAGINAS_VENTAS) { truncado = true; break; }
+        await dormir(PAUSA_GN);
+      }
+
+      // `completo:false` es Zattia, cuya tabla `ventas` todavía no tiene cliente ni costo. El
+      // criterio no se elige acá: es el mismo booleano que pasa su sync diario.
+      const conteo = filas.length
+        ? await guardarVentasBatch(supabase, filas, { completo: store !== 'zattia' })
+        : { ventas: 0, detalles: 0, clientes: 0 };
+
+      const { error } = await supabase.from('liquidaciones')
+        .update({ datos: { ...d, ventasSync: ahora }, updated_at: ahora }).eq('store', store).eq('id', id);
+      if (error) throw new Error(error.message);
+
+      return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ...conteo });
     }
 
     if (b.action === 'aplicar') {

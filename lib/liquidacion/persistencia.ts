@@ -178,6 +178,42 @@ export async function aplicarPrecios(
   return (d.resultados || []) as ResultadoAplicar[]
 }
 
+/** Lo que devolvió una sincronizada de ventas. */
+export interface SyncVentas {
+  /** ISO del momento en que se sincronizó. Si se salteó, es el de la sincronizada anterior. */
+  ventasSync: string
+  ventas: number
+  detalles: number
+  /** El pedido se salteó porque hace menos de un minuto que se había traído. No es un error. */
+  salteado?: boolean
+  /** Se llegó al tope de páginas: pueden faltar ventas. */
+  truncado?: boolean
+}
+
+/**
+ * Trae al espejo las ventas de ayer y hoy de la marca.
+ *
+ * 🔑 **Existe porque Resultado no lee Gestión Nube, lee el espejo**, y el espejo lo llena un sync
+ * que corre una vez por día a las 3 de la mañana. Sin esto, una campaña que arrancó hoy se mira
+ * contra los datos de ayer y contesta «no vendió» de todo.
+ *
+ * Pide admin, y **el día lo decide Argentina, no el reloj del servidor** (ver `ventanaVentasHoy` en
+ * `api/_liquidacion.js`).
+ */
+export async function sincronizarVentas(store: Marca, liqId: string): Promise<SyncVentas> {
+  const d = await postear(
+    { store, action: 'sincronizar-ventas', id: liqId },
+    'No se pudieron traer las ventas de hoy.',
+  )
+  return {
+    ventasSync: String(d.ventasSync || ''),
+    ventas: Number(d.ventas || 0),
+    detalles: Number(d.detalles || 0),
+    salteado: !!d.salteado,
+    truncado: !!d.truncado,
+  }
+}
+
 export async function borrarCampania(store: Marca, id: string): Promise<void> {
   await postear({ store, action: 'borrar', id }, 'No se pudo borrar la campaña.')
 }

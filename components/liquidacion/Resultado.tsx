@@ -37,9 +37,10 @@ import {
   type EstadoCarga, type Liquidacion as Campania, type LiquidacionItem, type ResultadoItem,
 } from '@/lib/liquidacion'
 import { leerVentasDeCampania } from '@/lib/liquidacion/ventas'
+import { sincronizarVentas } from '@/lib/liquidacion/persistencia'
 import {
-  BuscarInput, Card, EmptyState, Esqueleto, FilterBar, KpiCard, Notice, Select, StatusPill,
-  TBody, THead, TableWrap, Td, Th, Tr, formatMoney, color, font, space, weight, type Tone,
+  BuscarInput, Button, Card, EmptyState, Esqueleto, FilterBar, KpiCard, Notice, Select, StatusPill,
+  TBody, THead, TableWrap, Td, Th, Tr, formatMoney, color, font, space, useToast, weight, type Tone,
 } from '@/components/ui'
 
 const ROTULO_CARGA: Record<EstadoCarga, { label: string; tono: Tone; ayuda: string }> = {
@@ -84,12 +85,35 @@ function levanteTxt(n: number | null): string {
   return n == null ? '—' : `${n >= 10 ? Math.round(n) : n.toFixed(1)}×`
 }
 
-export function Resultado({ campania, items }: { campania: Campania; items: LiquidacionItem[] }) {
+/** `hace 3 min` · `hace 2 h`. Por debajo del minuto no se cuentan segundos: dice `recién`. */
+function haceTxt(iso: string): string {
+  const min = Math.floor((Date.now() - Date.parse(iso)) / 60000)
+  if (!Number.isFinite(min) || min < 1) return 'recién'
+  if (min < 60) return `hace ${min} min`
+  const h = Math.round(min / 60)
+  return h < 24 ? `hace ${h} h` : `hace ${Math.round(h / 24)} d`
+}
+
+export function Resultado({
+  campania,
+  items,
+  puedeSincronizar,
+}: {
+  campania: Campania
+  items: LiquidacionItem[]
+  /** Quién puede traer las ventas del día al espejo. Hoy, admin (ver la guarda del handler). */
+  puedeSincronizar: boolean
+}) {
   const { marca } = useSesion()
+  const toast = useToast()
   const [lineas, setLineas] = useState<Awaited<ReturnType<typeof leerVentasDeCampania>> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<string>('')
+  const [sincronizando, setSincronizando] = useState(false)
+  // Se siembra de la campaña y después la manda el servidor: recargar la lista entera de campañas
+  // para refrescar un rótulo sería pagar el payload de todas para mover cuatro palabras.
+  const [ventasSync, setVentasSync] = useState(campania.ventasSync)
 
   /**
    * El rango se congela al montar: `hoyLocal()` adentro del `useMemo` de abajo lo recalcularía en
@@ -117,6 +141,28 @@ export function Resultado({ campania, items }: { campania: Campania; items: Liqu
       await cargar()
     })()
   }, [cargar])
+
+  /**
+   * Traer las ventas del día y volver a leer.
+   *
+   * 🔑 **El orden importa: primero se sincroniza, después se recarga.** Al revés, el botón mostraría
+   * los mismos números de antes y parecería no haber hecho nada.
+   */
+  const sincronizar = useCallback(async () => {
+    setSincronizando(true)
+    try {
+      const r = await sincronizarVentas(marca, campania.id)
+      if (r.ventasSync) setVentasSync(r.ventasSync)
+      await cargar()
+      if (r.salteado) toast.info('Las ventas ya se habían traído hace menos de un minuto.')
+      else if (r.truncado) toast.error(`Se trajeron ${r.ventas} ventas y puede faltar alguna: se llegó al tope de páginas.`)
+      else toast.ok(`Listo: ${r.ventas} ${r.ventas === 1 ? 'venta' : 'ventas'} de ayer y hoy.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudieron traer las ventas de hoy.')
+    } finally {
+      setSincronizando(false)
+    }
+  }, [marca, campania.id, cargar, toast])
 
   const res = useMemo(
     () => (rango && lineas ? resultadoCampania(items, lineas, rango) : null),
@@ -153,9 +199,34 @@ export function Resultado({ campania, items }: { campania: Campania; items: Liqu
 
       {res && (
         <>
-          <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[3] }}>
-            {fechaCorta(res.desde)} → {fechaCorta(res.hasta)} · {res.dias} {res.dias === 1 ? 'día' : 'días'}
-            {res.enCurso && ' · la campaña sigue andando, así que va hasta hoy'}
+          {/*
+            🔑 **El botón vive al lado del rango, no en una barra de acciones.** Lo que hace es
+            corregir *hasta cuándo* llegan los datos que se están mirando, así que su lugar es
+            pegado a la frase que dice hasta cuándo llegan. Sólo sale con la campaña andando: en una
+            cerrada las ventas de hoy no son de la campaña.
+          */}
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap',
+              color: color.mut, fontSize: font.sm, marginBottom: space[3],
+            }}
+          >
+            <span>
+              {fechaCorta(res.desde)} → {fechaCorta(res.hasta)} · {res.dias} {res.dias === 1 ? 'día' : 'días'}
+              {res.enCurso && ' · la campaña sigue andando, así que va hasta hoy'}
+            </span>
+            {res.enCurso && puedeSincronizar && (
+              <>
+                <Button size="sm" onClick={() => void sincronizar()} loading={sincronizando}>
+                  Traer las ventas de hoy
+                </Button>
+                <span>
+                  {ventasSync
+                    ? `traídas ${haceTxt(ventasSync)}`
+                    : 'el espejo se actualiza solo a las 3 de la mañana'}
+                </span>
+              </>
+            )}
           </div>
 
           {/*

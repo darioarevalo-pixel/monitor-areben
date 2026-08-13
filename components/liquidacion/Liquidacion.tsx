@@ -843,7 +843,9 @@ function DetalleCampania({
         />
       )}
 
-      {items !== null && pestania === 'resultado' && <Resultado campania={campania} items={items} />}
+      {items !== null && pestania === 'resultado' && (
+        <Resultado campania={campania} items={items} puedeSincronizar={puede.admin} />
+      )}
 
       {items !== null && pestania === 'revision' && (
         <Revision

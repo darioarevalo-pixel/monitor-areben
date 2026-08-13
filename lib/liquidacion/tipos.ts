@@ -44,6 +44,11 @@ export interface Liquidacion {
   nota: string | null
   creadoPor: string | null
   creado: number
+  /**
+   * ISO de la última vez que se trajeron las ventas del día al espejo desde el botón de Resultado.
+   * `null` mientras nadie lo apriete: ahí el resultado se mide contra lo que dejó el sync diario.
+   */
+  ventasSync: string | null
   /** Cuántos productos tiene y cómo se reparten. Proyección del servidor, no se guarda. */
   conteo: ConteoCampania
 }
