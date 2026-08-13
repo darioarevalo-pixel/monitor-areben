@@ -122,7 +122,21 @@ async function syncProductos() {
   }
   console.log(`\n[productos] OK — ${STORE}`);
   // prodSku robusto: sumar TODO el sku que ya está en el espejo (evita el parpadeo del fetch de GN con productos nuevos)
-  try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
+  //
+  // El aviso importa igual que abajo. Esto era `try { ... } catch (e) {}`, y el `catch`
+  // no servía para nada: supabase-js NO lanza cuando la query falla, devuelve `{ error }`
+  // — que nadie miraba. Con la base cortando por statement timeout (ya pasó acá), `data`
+  // venía null, el enriquecido no ocurría, y el sync seguía mapeando los SKU con lo que
+  // trajo GN nomás. Sin una línea en el log.
+  try {
+    const { data, error } = await supabase.from('productos').select('id, sku');
+    if (error) {
+      console.warn(`  ⚠️ no pude leer los SKU del espejo (${error.message}); sigo con los de GN, que pueden faltar en productos nuevos.`);
+    }
+    (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; });
+  } catch (e) {
+    console.warn(`  ⚠️ no pude leer los SKU del espejo (${e.message}); sigo con los de GN, que pueden faltar en productos nuevos.`);
+  }
   await desactivarBorrados(gnIds);
   return { inactiveIds, prodSku, varBarcode };
 }

@@ -108,7 +108,7 @@ export default async function handler(req, res) {
           // si no podemos verificar, reintentar solo las que dieron error en el PATCH
           pend = pend.filter(f => errInv.includes(f.inventory_id));
         }
-      } catch (e) {
+      } catch {
         pend = pend.filter(f => errInv.includes(f.inventory_id));
       }
     }

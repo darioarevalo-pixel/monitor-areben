@@ -27,7 +27,7 @@ async function fetchEspejo(store, storeName) {
   while (true) {
     const q = `${url.replace(/\/$/, '')}/rest/v1/inventario?select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name&store_name=eq.${encodeURIComponent(storeName)}&order=product_id.asc,size_id.asc&limit=${PAGE}&offset=${offset}`;
     let d;
-    try { const r = await fetch(q, { headers: { apikey: key, Authorization: 'Bearer ' + key } }); if (!r.ok) break; d = await r.json(); } catch (e) { break; }
+    try { const r = await fetch(q, { headers: { apikey: key, Authorization: 'Bearer ' + key } }); if (!r.ok) break; d = await r.json(); } catch { break; }
     if (!Array.isArray(d) || !d.length) break;
     out.push(...d);
     if (d.length < PAGE) break;
@@ -79,7 +79,7 @@ async function fetchInventarioCompleto(storeId, token) {
         const items = (d.data || []).filter(r => Number(r.store_id) === storeId);
         for (const r of items) { const k = r.product_id + '_' + r.size_id; const ex = byKey.get(k); byKey.set(k, ex ? _pickReal(ex, r) : r); }
         more = !!(d.meta && d.meta.has_more_pages) && (d.data || []).length > 0;
-      } catch (e) { /* una página falló: la salteo y sigo (otra pasada la recupera) */ }
+      } catch { /* una página falló: la salteo y sigo (otra pasada la recupera) */ }
       page++; await sleep(40);
     }
     if (byKey.size === 0) throw new Error('No se pudo leer el inventario de GN. Reintentá en unos segundos.');
@@ -146,7 +146,7 @@ export default async function handler(req, res) {
     const byKey = new Map(dep.map(r => [r.product_id + '_' + r.size_id, r]));
     // El ESPEJO da la lista COMPLETA esperada → sirve para saber QUÉ variantes faltaron del vivo.
     let espRows = [];
-    try { espRows = await fetchEspejo(store, espejoName); } catch (e) { /* si el espejo falla, sigo con el vivo */ }
+    try { espRows = await fetchEspejo(store, espejoName); } catch { /* si el espejo falla, sigo con el vivo */ }
     const espByKey = new Map(espRows.map(m => [m.product_id + '_' + m.size_id, m]));
     const faltanPids = [...new Set([...espByKey.keys()].filter(k => !byKey.has(k)).map(k => espByKey.get(k).product_id))];
     // RELLENO EN VIVO: por cada producto con faltantes, consulta PUNTUAL a GN (confiable) para traer su stock
@@ -158,7 +158,7 @@ export default async function handler(req, res) {
       try {
         const vrows = await fetchProductoVivo(pid, storeId, token);
         vrows.forEach(r => { const k = r.product_id + '_' + r.size_id; if (!byKey.has(k)) { byKey.set(k, r); fromDirecto++; } });
-      } catch (e) { /* si un producto falla, sigue; queda para el espejo */ }
+      } catch { /* si un producto falla, sigue; queda para el espejo */ }
       await sleep(40);
     }
     // ÚLTIMO RECURSO: lo que ni el vivo ni la consulta puntual trajeron se completa con el espejo (sin inventory_id

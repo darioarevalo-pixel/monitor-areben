@@ -9,7 +9,8 @@
     "build": "next build",
     "dev": "next dev",
     "start": "next start",
-    "lint": "eslint",
+    "//NOTA-LINT": "--max-warnings 0: sin el flag, `eslint` sale 0 con warnings y el CI los deja pasar. Llegaron a ser 27, y 17 estaban en api/ y scripts/, la capa que el propio eslint.config.mjs marca como la más frágil. La barrera estaba puesta pero el picaporte flojo.",
+    "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "fixture-etl": "node scripts/fixture-etl.mjs"
@@ -30,6 +31,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "pg": "^8.22.0",

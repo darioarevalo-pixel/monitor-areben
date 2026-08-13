@@ -47,5 +47,27 @@ export default defineConfig({
      * cirugía sobre los tests de paridad del legacy y merece su propia sesión.
      */
     hookTimeout: 60_000,
+    /**
+     * Cobertura: **no corre sola**, se pide con `npx vitest run --coverage`.
+     *
+     * No estaba, y la falta se notaba: la pregunta "¿qué parte de esto está probado?" sólo se
+     * podía contestar cruzando imports a mano, archivo por archivo. Así se descubrió que de los
+     * 39 handlers, 27 no los toca ningún test — y que **ningún test invoca un `handler(req, res)`**:
+     * los 136 archivos de `tests/` prueban funciones puras exportadas al costado. O sea que el
+     * parseo del body, la validación, los códigos de estado y **la autorización** no los mira
+     * nadie.
+     *
+     * Va sin `thresholds` a propósito. Un umbral puesto hoy sobre una base sin tests de handler
+     * sólo tendría dos salidas: ponerlo tan bajo que no diga nada, o dejar el CI en rojo desde el
+     * primer día. Primero se escriben los tests que faltan, después se clava el piso.
+     *
+     * `api/` y `lib/` entran a propósito aunque sean `.js`: son la capa que menos red tiene.
+     */
+    coverage: {
+      provider: 'v8',
+      include: ['lib/**', 'api/**', 'store/**', 'components/**'],
+      exclude: ['**/*.d.ts', 'tests/**'],
+      reporter: ['text-summary', 'html'],
+    },
   },
 })

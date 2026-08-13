@@ -150,7 +150,21 @@ async function cargarProductos() {
   });
   console.log(`[productos] ${productos.length} descargados (${inactiveIds.size} inactivos).`);
   // prodSku robusto: sumar el sku que ya está en el espejo (evita el parpadeo del fetch con productos nuevos)
-  try { const { data } = await supabase.from('productos').select('id, sku'); (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; }); } catch (e) {}
+  //
+  // Va a `problemas[]` como todo paso que falla sin frenar el sync, así el job termina
+  // en rojo y el Monitor lo muestra. Era `try { ... } catch (e) {}`, y el `catch` no
+  // servía para nada: supabase-js NO lanza cuando la query falla, devuelve `{ error }`
+  // — que nadie miraba. Con la base cortando por statement timeout, `data` venía null,
+  // el enriquecido no ocurría, y el sync seguía mapeando los SKU con lo que trajo GN
+  // nomás. Es el mismo modo de falla que tuvo las vistas materializadas rotas una
+  // semana con el job en verde.
+  try {
+    const { data, error } = await supabase.from('productos').select('id, sku');
+    if (error) problemas.push(`SKU del espejo: ${error.message} (los productos nuevos pueden quedar sin sku)`);
+    (data || []).forEach(p => { if (p.sku && !prodSku[p.id]) prodSku[p.id] = p.sku; });
+  } catch (e) {
+    problemas.push(`SKU del espejo: ${e.message} (los productos nuevos pueden quedar sin sku)`);
+  }
   await desactivarBorrados(gnIds);
   return { inactiveIds, varBarcode, prodSku, productos };
 }

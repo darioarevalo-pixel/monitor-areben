@@ -428,7 +428,8 @@ function itemDeVitrinaDelBody(x) {
 }
 
 const VIAS_ENVIO = ['correo', 'andreani', 'cadete', 'presencial'];
-const PENDIENTES = ['pendiente', 'hecho', 'no_aplica'];
+// Acá había una TERCERA copia de `['pendiente','hecho','no_aplica']`, sin un solo uso.
+// Las que sí se usan son `api/_reclamos.js:66` y `lib/canjes/tipos.ts:286` (exportada).
 const TIPOS_CANJE = ['producto', 'producto_plata'];
 const TOPE_TIPOS = ['monto', 'unidades'];
 
@@ -679,7 +680,7 @@ export default async function handler(req, res) {
           vitrinaDe(t.canje.vitrina_id),
         ]);
         // El token NO viaja en el objeto del canje: se pide aparte con `vista=token`, de a uno.
-        const { token, ...sinToken } = t.canje; // eslint-disable-line no-unused-vars
+        const { token, ...sinToken } = t.canje;
         return res.status(200).json({
           ok: true,
           canje: { ...sinToken, numero: numeroCanje(id) },

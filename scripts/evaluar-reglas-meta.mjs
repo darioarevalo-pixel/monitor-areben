@@ -38,7 +38,7 @@ import { indexar, porQueCallado } from '../lib/meta-ads/decisiones.core.js'
 import { COLS_REGLA, leerDecisiones, leerSnapshot, leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
-  calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS, UMBRALES,
+  calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS,
 } from '../lib/meta-ads/reglas.core.js'
 
 const problemas = []
