@@ -9,7 +9,7 @@
 // funciones por deploy y cada archivo de ruta cuenta una.
 //
 // Los modelos se traen ACÁ y no en el navegador porque la tienda está en otro dominio y no manda
-// CORS. `api/proxy.js` no sirve: ese sólo habla con Gestión Nube.
+// CORS.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVer, puedeSub } from '../lib/permisos.core.js';

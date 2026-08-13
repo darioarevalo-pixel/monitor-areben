@@ -2,8 +2,8 @@
  * Baja un fixture real de Supabase para el test de paridad del ETL (Fase 4).
  *
  * Es SOLO LECTURA: replica los mismos queries que fetchFresh (index.html:2060),
- * nada más. No confundir con api/sync.js, que escribe en Supabase y pega a
- * Gestión Nube (límite 100/min).
+ * nada más. Quien escribe en Supabase pegándole a Gestión Nube es el sync de
+ * `scripts/sync-diario.js` (límite 100/min), que es otra cosa.
  *
  * El fixture queda en tests/fixtures/ y NO se commitea: son ventas reales.
  *

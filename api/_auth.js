@@ -121,7 +121,8 @@ export async function exigirUsuario(req, res) {
  * disparara estas llamadas desde su browser.
  *
  * Verificado antes de sacarlo: bdi-catalogo no consume la API del Monitor (tiene
- * su propio api/proxy.js con otro contrato) y ningún script ni workflow la llama.
+ * su propio `api/proxy.js`, con el contrato `?_path=` en vez de `?path=`) y ningún
+ * script ni workflow la llama.
  *
  * Devuelve true si ya contestó el preflight y el handler debe cortar.
  */

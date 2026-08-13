@@ -7,12 +7,17 @@ evita un error caro o una búsqueda repetida. Techo: 160 líneas.
 
 ## ⛔ Invariantes — romper una de estas cuesta caro
 
-**Vercel Hobby admite 12 funciones. Hay 9 usadas, quedan 3.**
+**Vercel Hobby admite 12 funciones. Hay 7 usadas, quedan 5.**
 Cada archivo de ruta en `api/` **sin** prefijo `_` cuenta como función. Pasarse **frena todos los
 deploys sin error visible**: Vercel sigue sirviendo la versión anterior y no avisa. Ya pasó una vez.
 Para sumar un recurso no se crea un archivo: entra por una puerta existente con `?recurso=`, como
 hace `api/datos.js`. Los `_*.js` no son rutas y no cuentan.
-Funciones actuales: `blob-upload crear-venta datos deposito meta-ads postventa proxy sku-map sync`.
+Funciones actuales: `blob-upload crear-venta datos deposito meta-ads postventa sku-map`.
+Eran 9: `sync.js` y `proxy.js` se borraron el 13-ago-2026 (abr-2026, sin un solo consumidor, con
+`Access-Control-Allow-Origin: *` y sin `exigirUsuario`; `sync.js` además hacía upserts masivos en
+`productos/inventario/ventas` de BDI para cualquiera que trajera un token de GN propio). Con ellos
+se fue `api/vercel.json`, que declaraba un rewrite para `proxy` y **nunca se aplicó**: Vercel sólo
+lee `vercel.json` en la raíz del proyecto.
 
 **Permisos: una sola implementación, `lib/permisos.core.js`. Nunca se copia.**
 Es `.js` plano porque los handlers de `api/*.js` corren en Node sin pasar por el compilador de Next
