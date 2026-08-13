@@ -136,3 +136,59 @@ export function soloMismoOrigen(req, res, metodos) {
   }
   return false;
 }
+
+/**
+ * Los únicos orígenes desde los que el Monitor se llama a sí mismo CRUZANDO de dominio.
+ *
+ * Los dos primeros son **el mismo deployment** (`monitor.arebensrl.com` es alias de
+ * `monitorareben.vercel.app`); son dos porque `crear-venta` se llama por URL ABSOLUTA a propósito
+ * —"las ventas van siempre al crear-venta de producción, esté donde esté corriendo el Monitor:
+ * los tokens de ventas de GN viven solo ahí" (`lib/reclamos/cliente.ts:25`)—, y la app se sirve en
+ * el otro. Eso es lo que lo vuelve cross-origin y lo que obliga a que haya CORS.
+ *
+ * `localhost` está para que se pueda probar contra producción desde la máquina, que es el otro
+ * caso que el comentario de arriba contempla.
+ *
+ * ⛔ **Los deploys de PREVIEW quedan afuera a propósito** (13-ago-2026, decidido con Bruno). Un
+ * preview no tiene por qué crear ventas reales en Gestión Nube ni bajar stock. Y no alcanzaría con
+ * permitir `*.vercel.app`: ese dominio lo puede tener cualquiera, así que la "lista" no filtraría
+ * nada. Si algún día hace falta, va el prefijo exacto del proyecto, no el comodín.
+ */
+export const ORIGENES_PROPIOS = [
+  'https://monitor.arebensrl.com',
+  'https://monitorareben.vercel.app',
+  'http://localhost:3000',
+];
+
+/**
+ * CORS para el puñado de endpoints que SÍ se llaman cruzando de dominio.
+ *
+ * 🔴 **Reemplaza un `Access-Control-Allow-Origin: *`**, que en `crear-venta` significaba que
+ * cualquier sitio de internet podía POSTear al endpoint que crea ventas reales en GN y descuenta
+ * stock. Con el guard puesto haría falta además una credencial válida, pero el `*` no habilitaba
+ * ningún uso legítimo que la lista no cubra.
+ *
+ * A un origen desconocido no se le contesta un error: simplemente **no se le manda el header**, y
+ * el navegador corta solo. Es lo que hace que un `curl` siga andando (CORS es una regla del
+ * navegador, no una autenticación) y por eso el guard de identidad sigue siendo el que protege.
+ *
+ * `Vary: Origin` no es decorativo: sin él un caché podría servirle a un origen la respuesta que se
+ * armó para otro.
+ *
+ * Devuelve true si ya contestó el preflight y el handler debe cortar.
+ */
+export function corsOrigenPropio(req, res, metodos) {
+  const origen = (req.headers && req.headers.origin) || '';
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Origin');
+  if (ORIGENES_PROPIOS.includes(origen)) {
+    res.setHeader('Access-Control-Allow-Origin', origen);
+    res.setHeader('Access-Control-Allow-Methods', metodos);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return true;
+  }
+  return false;
+}

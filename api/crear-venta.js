@@ -2,7 +2,7 @@
 // POST { store, origen:'deposito'|'local', items:[{product_id,size_id,quantity}], comments, solicitudId, user, pass }
 // Seguridad: valida que (user, pass) sea un usuario válido del Monitor (login server-side).
 // Usa GN_TOKEN_VENTAS (Zattia) / GN_TOKEN_VENTAS_BDI (BDI): token con permiso de ventas.
-import { exigirUsuario } from './_auth.js';
+import { corsOrigenPropio, exigirUsuario } from './_auth.js';
 import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as reservarLedger } from './_sync-ledger.js';
 // La nota de las ventas importadas de TN. Vive en `lib/` y en JS plano porque el dry-run de la
 // pantalla muestra EXACTAMENTE esta nota antes de que alguien apriete Importar: si fueran dos
@@ -93,11 +93,11 @@ async function gnFetch(url, opts, tries = 3) {
 // vez de un booleano: el `if (!(await ...))` de abajo funciona igual.
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  // El `*` que había acá dejaba que CUALQUIER sitio de internet le POSTeara al endpoint que crea
+  // ventas reales en GN y descuenta stock. No era un resto: este endpoint SÍ se llama cruzando de
+  // dominio (por URL absoluta, a propósito), así que sacarlo del todo habría roto Sesión de fotos,
+  // Reclamos y Fallas. Lo que cambia es el `*` por la lista de `ORIGENES_PROPIOS`.
+  if (corsOrigenPropio(req, res, 'POST, OPTIONS')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
   const b = req.body || {};
