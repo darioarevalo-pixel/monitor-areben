@@ -352,7 +352,13 @@ function ModoPanel({
   // La campaña acota *cuáles*; el precio lo sigue poniendo Tienda Nube.
   const listaBase = campania ? variantesDeCampania(enCampania, campania.pids) : enCampania
   const lista = filtrarVariantes(listaBase, q)
-  const shown = lista.slice(0, CAP)
+  // 🔑 **La lista de una liquidación NO se corta.** El tope de 500 protege al catálogo entero, que
+  // son miles de variantes; una campaña ya viene acotada (las de agosto son 260 productos / 675
+  // variantes). Cortarla es peor que en cualquier otra pestaña: acá la lista *es* la respuesta a
+  // "¿qué etiqueto?", y "refiná la búsqueda para ver el resto" le esconde 74 prendas a quien está
+  // recorriendo la tienda con el lector.
+  const tope = campania ? Infinity : CAP
+  const shown = lista.slice(0, tope)
   const total = totalEtiquetas(cant)
 
   const onScan = async () => {
@@ -529,7 +535,7 @@ function ModoPanel({
                   : 'No hay variantes con código de barras que coincidan.'}
             </div>
           )}
-          {lista.length > CAP && <div style={{ fontSize: 11, color: color.mut2, padding: 8 }}>Mostrando {CAP} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
+          {lista.length > tope && <div style={{ fontSize: 11, color: color.mut2, padding: 8 }}>Mostrando {tope} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
         </div>
       </Card>
 
