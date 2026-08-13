@@ -2,7 +2,7 @@
 
 /**
  * CopyButton — copia un texto al portapapeles con feedback, fallback y (opcional) Web Share en mobile.
- * Consolida el patrón repetido en components/crm/BancoMensajes.tsx y components/sesionfotos/SesionFotos.tsx.
+ * Consolida el patrón repetido en components/sesionfotos/SesionFotos.tsx.
  */
 import { useCallback, useRef, useState } from 'react'
 import { Button, type ButtonProps } from '@/components/ui/Button'

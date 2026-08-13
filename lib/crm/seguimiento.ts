@@ -10,8 +10,8 @@
  * el diff contra el dump sea exactamente el cliente tocado.
  */
 
-import { addDiasISO, segmentoCliente, TOP_LIMIT } from './core'
-import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from './tipos'
+import { addDiasISO } from './core'
+import type { MapaSeguimiento, Seguimiento, Temperatura } from './tipos'
 
 /** Fecha local YYYY-MM-DD. Port de hoyISO (13279): usa el día REAL, no el TODAY
  *  congelado, para que "Hablé hoy" y las notas no queden con fecha vieja. */
@@ -99,39 +99,6 @@ export function borrarNota(crmSeg: MapaSeguimiento, id: number | string, idx: nu
   const { mapa, k } = conEntrada(crmSeg, id)
   const notas = (mapa[k].notas || []).filter((_, i) => i !== idx)
   return { ...mapa, [k]: { ...mapa[k], notas } }
-}
-
-// ── Sugerir cadencias (escritura masiva) ──────────────────────────────────────
-
-export type Sugerencia = { id: number; cad: string }
-export type PlanCadencias = { plan: Sugerencia[]; omitidos: number; nSem: number; nMen: number }
-
-/**
- * Planifica las cadencias a asignar SIN tocar el mapa (así, si se cancela, no
- * cambia nada). Port de crmSugerirCadencias (13560): top por monto → semanal;
- * activos recurrentes → mensual; respeta lo que ya tiene cadencia.
- */
-export function planSugerirCadencias(agregado: ClienteCRM[], crmSeg: MapaSeguimiento): PlanCadencias {
-  const topIds = new Set(
-    [...agregado].sort((a, b) => b.total_amount - a.total_amount).slice(0, TOP_LIMIT).map((c) => String(c.id)),
-  )
-  const plan: Sugerencia[] = []
-  let omitidos = 0
-  for (const c of agregado) {
-    const actual = crmSeg[String(c.id)]
-    if (actual && actual.cadencia) {
-      omitidos++
-      continue
-    }
-    if (topIds.has(String(c.id))) plan.push({ id: c.id, cad: 'semanal' })
-    else if (segmentoCliente(c) === 'activos') plan.push({ id: c.id, cad: 'mensual' })
-  }
-  return { plan, omitidos, nSem: plan.filter((p) => p.cad === 'semanal').length, nMen: plan.filter((p) => p.cad === 'mensual').length }
-}
-
-/** Aplica el plan de cadencias al mapa (inmutable). */
-export function aplicarSugerencias(crmSeg: MapaSeguimiento, plan: Sugerencia[]): MapaSeguimiento {
-  return plan.reduce((m, p) => setCadencia(m, p.id, p.cad), crmSeg)
 }
 
 // ── Carga de teléfonos (crm:tel) ──────────────────────────────────────────────

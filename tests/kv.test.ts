@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { leerMapa, leerBanco, guardarMapa, guardarBanco, MOTIVO_NO_LEIDO } from '@/lib/kv/cliente'
+import { leerMapa, guardarMapa, MOTIVO_NO_LEIDO } from '@/lib/kv/cliente'
 
 /**
  * Lo que se prueba acá no es que fetch funcione: es que **la invariante que
@@ -57,19 +57,6 @@ describe('leerMapa · distingue "no pude leer" de "está vacío"', () => {
   })
 })
 
-describe('leerBanco · la clave que no existe es el caso normal', () => {
-  it('sin la clave devuelve ok:true y null (hoy mensajes:bdi no existe)', async () => {
-    vi.stubGlobal('fetch', () => Promise.resolve(resp(200, { ok: true, bank: null })))
-    const r = await leerBanco('bdi')
-    expect(r).toEqual({ ok: true, dato: null })
-  })
-
-  it.each(FALLAS)('%s → ok:false', async (_txt, f) => {
-    vi.stubGlobal('fetch', f)
-    expect((await leerBanco('bdi')).ok).toBe(false)
-  })
-})
-
 describe('guardarMapa · no se puede pisar lo que no se leyó', () => {
   it('con cargado:false NO llega a hacer el request', async () => {
     const fetchSpy = vi.fn()
@@ -96,17 +83,3 @@ describe('guardarMapa · no se puede pisar lo que no se leyó', () => {
   })
 })
 
-describe('guardarBanco · misma invariante ([] pasa la guarda del servidor)', () => {
-  it('con cargado:false NO postea', async () => {
-    const fetchSpy = vi.fn()
-    vi.stubGlobal('fetch', fetchSpy)
-    expect((await guardarBanco({ store: 'bdi', banco: [], cargado: false })).ok).toBe(false)
-    expect(fetchSpy).not.toHaveBeenCalled()
-  })
-
-  it('con cargado:true postea', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(resp(200, { ok: true, total: 2 })))
-    vi.stubGlobal('fetch', fetchSpy)
-    expect(await guardarBanco({ store: 'bdi', banco: [{ a: 1 }, { b: 2 }], cargado: true })).toEqual({ ok: true, total: 2 })
-  })
-})

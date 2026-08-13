@@ -2,16 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
-import { BancoMensajes } from './BancoMensajes'
 import { Leads } from './Leads'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
 import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
 import {
-  aplicarSugerencias,
   parsearTelefonos,
-  planSugerirCadencias,
   setDescartado,
   setDifusion,
   setPagina,
@@ -220,14 +217,13 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
 }
 
 export function CRM() {
-  const { confirmar, avisar } = useConfirmar()
+  const { avisar } = useConfirmar()
   const toast = useToast()
   const [modo, setModo] = useState<ModoCanal>('10')
   const [q, setQ] = useState('')
   const [seg, setSeg] = useState('todos')
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
-  const [banco, setBanco] = useState(false)
   const [guia, setGuia] = useState(false)
   const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
@@ -273,35 +269,6 @@ export function CRM() {
   const onPagina = (id: number, val: string) => mutar((s) => setPagina(s, id, val))
   const onTemperatura = (id: number, val: Temperatura) => mutar((s) => setTemperatura(s, id, val))
 
-  const sugerirCadencias = async () => {
-    const { plan, omitidos, nSem, nMen } = planSugerirCadencias(agregado.activos, crmSeg)
-    if (!plan.length) {
-      await avisar('No había clientes nuevos para sugerir: los que corresponden ya tienen un recontacto programado.')
-      return
-    }
-    const ok = await confirmar({
-      titulo: 'Programar recontactos',
-      ok: `Programar ${plan.length}`,
-      mensaje: (
-        <>
-          <p>Se asigna una cadencia automática por segmento:</p>
-          <ul style={{ margin: '8px 0 0 18px' }}>
-            <li>
-              <b>{nSem}</b> mejores por monto → cada semana
-            </li>
-            <li>
-              <b>{nMen}</b> activos recurrentes → cada mes
-            </li>
-          </ul>
-          <p style={{ marginTop: 8 }}>No se tocan los {omitidos} que ya tenían uno.</p>
-        </>
-      ),
-    })
-    if (!ok) return
-    if (await guardarSeg(aplicarSugerencias(crmSeg, plan))) {
-      toast.ok(`Recontacto programado para ${plan.length} clientes. Ajustá los que quieras desde la ficha de cada uno.`)
-    }
-  }
 
   const cargarTelefonos = async (file: File | undefined) => {
     if (!file) return
@@ -361,15 +328,6 @@ export function CRM() {
         <Button variant="ghost" onClick={recargar}>Recalcular</Button>
         {vista !== 'metricas' && (
           <>
-        <Button variant="outline" onClick={() => setBanco(true)}>
-          Banco de mensajes
-        </Button>
-        <Button
-          variant="outline"
-          onClick={sugerirCadencias}
-          disabled={!cargado}
-          title={cargado ? 'Asigna cadencia automática por segmento' : 'El KV no se pudo leer: guardado bloqueado'}
-        >Sugerir cadencias</Button>
         {/* Es un <label> porque abre un file picker; se le da la forma del botón primario. */}
         <label
           className="mo-btn mo-btn--md"
@@ -495,7 +453,6 @@ export function CRM() {
       </div>
 
       {clienteModal && <ClienteModal key={clienteModal.id} cliente={clienteModal} crmSeg={crmSeg} mutar={mutar} onCerrar={() => setModalId(null)} />}
-      {banco && <BancoMensajes onCerrar={() => setBanco(false)} />}
       {guia && <GuiaTrabajo onCerrar={() => setGuia(false)} onIr={irDesdeGuia} />}
     </>
   )

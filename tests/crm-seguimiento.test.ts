@@ -1,13 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   agregarNota,
-  aplicarSugerencias,
   borrarNota,
   escribiHoy,
   hableHoy,
   hoyISO,
   parsearTelefonos,
-  planSugerirCadencias,
   setCadencia,
   setDescartado,
   setMayorista,
@@ -15,8 +13,8 @@ import {
   setProximoManual,
   setTemperatura,
 } from '@/lib/crm/seguimiento'
-import { TEMPERATURA_DEFAULT, normalizeArgPhone } from '@/lib/crm/core'
-import type { ClienteCRM, MapaSeguimiento } from '@/lib/crm/tipos'
+import { normalizeArgPhone } from '@/lib/crm/core'
+import type { MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
  * Las escrituras del CRM son las que tocan el dato sin backup (305 clientes, 39
@@ -100,50 +98,6 @@ describe('notas', () => {
   it('borrarNota saca por índice', () => {
     const m: MapaSeguimiento = { '1': { notas: [{ fecha: '2026-07-15', texto: 'a' }, { fecha: '2026-07-14', texto: 'b' }] } }
     expect(borrarNota(m, 1, 0)['1'].notas).toEqual([{ fecha: '2026-07-14', texto: 'b' }])
-  })
-})
-
-// ── Sugerir cadencias ─────────────────────────────────────────────────────────
-
-function cli(over: Partial<ClienteCRM>): ClienteCRM {
-  return {
-    id: 0, name: '', email: '', phone: '', city: '', province: '',
-    first_sale: null, last_sale: null, dias_ultimo: 5, dias_primero: 200,
-    total_sales: 5, total_amount: 0, avg_ticket: 0, ventas: [],
-    cadencia: '', ultimo_contacto: null, proximo_contacto: null, seg_estado: 'none', dias_proximo: null, notas: [],
-    en_difusion: false, temperatura: TEMPERATURA_DEFAULT,
-    ...over,
-  }
-}
-
-describe('planSugerirCadencias', () => {
-  it('top por monto → semanal, activos recurrentes → mensual, respeta lo ya asignado', () => {
-    // 20 clientes de monto alto (llenan el top-20 → semanal), dormidos para que
-    // NO califiquen además como activos; + 1 activo de monto bajo (→ mensual);
-    // + 1 dormido de monto bajo (→ nada).
-    const top20 = Array.from({ length: 20 }, (_, i) =>
-      cli({ id: i + 1, total_amount: 1_000_000 - i * 1000, total_sales: 1, dias_ultimo: 200 }),
-    )
-    const activoBajo = cli({ id: 21, total_amount: 100, total_sales: 4, dias_ultimo: 10 })
-    const dormidoBajo = cli({ id: 22, total_amount: 50, total_sales: 1, dias_ultimo: 200 })
-    const agregado = [...top20, activoBajo, dormidoBajo]
-
-    const crmSeg: MapaSeguimiento = { '2': { cadencia: 'quincenal' } } // uno del top ya tiene → se omite
-    const { plan, omitidos, nSem, nMen } = planSugerirCadencias(agregado, crmSeg)
-
-    expect(omitidos).toBe(1)
-    expect(plan.find((p) => p.id === 1)).toEqual({ id: 1, cad: 'semanal' })
-    expect(plan.find((p) => p.id === 2)).toBeUndefined() // omitido (ya tenía cadencia)
-    expect(plan.find((p) => p.id === 21)).toEqual({ id: 21, cad: 'mensual' })
-    expect(plan.find((p) => p.id === 22)).toBeUndefined()
-    expect(nSem).toBe(19) // 20 del top menos el omitido
-    expect(nMen).toBe(1)
-  })
-
-  it('aplicarSugerencias escribe las cadencias del plan', () => {
-    const out = aplicarSugerencias({}, [{ id: 1, cad: 'semanal' }, { id: 3, cad: 'mensual' }])
-    expect(out['1'].cadencia).toBe('semanal')
-    expect(out['3'].cadencia).toBe('mensual')
   })
 })
 

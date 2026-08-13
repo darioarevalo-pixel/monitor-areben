@@ -41,8 +41,6 @@ const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 
 /** Las kinds que guardan un objeto `{map}`. */
 export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
-/** `mensajes` es la excepción: guarda un array bajo `{bank}`. */
-export type KindBanco = 'mensajes'
 /** `cupones` guarda su array bajo `{cupones}` (otra clave más del mismo endpoint). */
 export type KindCupones = 'cupones'
 /** `verifventas` guarda el checklist de anuladas bajo `{resueltas}` (un mapa). */
@@ -99,21 +97,9 @@ export async function leerMapa<T = unknown>(kind: KindMapa, store: Marca): Promi
 }
 
 /**
- * Lee el banco de mensajes. Devuelve `null` cuando la clave no existe — que es el
- * caso NORMAL hoy: `mensajes:bdi` nunca se escribió (verificado con el dump del
- * 17-jul-2026), así que el legacy siempre cae a su semilla. Caer a la semilla con
- * `ok:true` es correcto; hacerlo con `ok:false` sería el bug.
- */
-export async function leerBanco<T = unknown>(store: Marca): Promise<Lectura<T[] | null>> {
-  const r = await pedir(`${API}?kind=mensajes&store=${store}&nc=${Date.now()}`)
-  if (!r.ok) return r
-  return { ok: true, dato: Array.isArray(r.dato.bank) ? (r.dato.bank as T[]) : null }
-}
-
-/**
  * Lee el historial de Sesión de fotos (`kind=sesionfotos`, forma `{list:[...]}`).
  *
- * A diferencia del banco, la clave `sesionfotos:<marca>` SÍ existe y tiene datos
+ * La clave `sesionfotos:<marca>` existe y tiene datos
  * del equipo, así que distinguir "no se pudo leer" de "leí y está vacío" es
  * crítico: guardar tras una lectura fallida borraría el historial entero (es
  * exactamente el modo de falla que este archivo existe para prevenir). Una lista
@@ -130,7 +116,7 @@ export type OpcionesGuardarLista<T> = {
   store: Marca
   lista: T[]
   /**
-   * Igual que en guardarMapa/guardarBanco: obligatorio. El legacy (sfInit, 9821)
+   * Igual que en guardarMapa: obligatorio. El legacy (sfInit, 9821)
    * caía a `sfData=[]` cuando la lectura fallaba y después `sfGuardar` pisaba la
    * clave con esa lista vacía — el bug que casi cuesta 305 clientes, acá aplicado
    * al historial de fotos. Exigir `cargado` lo hace imposible de escribir.
@@ -282,22 +268,4 @@ export async function guardarMapa<T>({ kind, store, mapa, cargado }: OpcionesGua
   })
   if (!r.ok) return r
   return { ok: true, total: Number(r.dato.total ?? Object.keys(mapa).length) }
-}
-
-export type OpcionesGuardarBanco<T> = {
-  store: Marca
-  banco: T[]
-  /** Igual que en guardarMapa: obligatorio. `[]` pasa la guarda del servidor (`!Array.isArray`). */
-  cargado: boolean
-}
-
-export async function guardarBanco<T>({ store, banco, cargado }: OpcionesGuardarBanco<T>): Promise<Escritura> {
-  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
-  const r = await pedir(`${API}?kind=mensajes&store=${store}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bank: banco }),
-  })
-  if (!r.ok) return r
-  return { ok: true, total: Number(r.dato.total ?? banco.length) }
 }
