@@ -5,6 +5,7 @@ import {
   filtrarVariantes,
   resolverScan,
   secuenciaLabels,
+  variantesDeCampania,
   variantesEtiquetables,
   variantesSinCodigo,
   type ProductoPrecio,
@@ -36,6 +37,19 @@ describe('variantesEtiquetables · paridad con _etiVariantes', () => {
 describe('variantesSinCodigo', () => {
   it('activos con stock pero sin código', () => {
     expect(variantesSinCodigo(VARS).map((x) => x.id)).toEqual(['c']) // 'c' tiene stock 4 y sin barcode
+  })
+})
+
+describe('variantesDeCampania', () => {
+  it('deja las variantes cuyo producto está en la campaña, con todos sus talles', () => {
+    // El pid '1' tiene dos talles: entran los dos, porque la campaña es del producto.
+    expect(variantesDeCampania(VARS, new Set(['1'])).map((x) => x.id)).toEqual(['a', 'b'])
+  })
+  it('sin ningún pid no devuelve nada (campaña vacía ≠ toda la marca)', () => {
+    expect(variantesDeCampania(VARS, new Set())).toEqual([])
+  })
+  it('un pid de la campaña que no tiene variantes no inventa filas', () => {
+    expect(variantesDeCampania(VARS, new Set(['1', '99'])).map((x) => x.id)).toEqual(['a', 'b'])
   })
 })
 

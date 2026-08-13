@@ -27,6 +27,18 @@ export function variantesSinCodigo(variantes: VarianteEti[]): VarianteEti[] {
 }
 
 /**
+ * Las variantes cuyo producto entra en una campaña de liquidación.
+ *
+ * 🔑 **La campaña aporta *cuáles*, no *cuánto*.** El precio de la etiqueta sigue saliendo de Tienda
+ * Nube (`construirPrecios`), que es lo que el cliente paga; la lista de pid sólo acota qué prendas
+ * hay que etiquetar. Sin esto el local ve las 418 promos vivas de la marca en vez de las 260 del
+ * sale, que es exactamente el problema que la pestaña vino a resolver.
+ */
+export function variantesDeCampania(lista: VarianteEti[], pids: Set<string>): VarianteEti[] {
+  return (lista || []).filter((v) => pids.has(v.pid))
+}
+
+/**
  * Mapa de precios por producto: el de TN (promocional si está activo, si no el
  * normal), con respaldo al minorista de GN si el producto no está en TN. Además el
  * mapa de promo (solo descuentos reales: promo < normal). Port de _etiBuildPrecios,

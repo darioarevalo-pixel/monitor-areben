@@ -3,6 +3,8 @@
 //   GET  ?recurso=liquidacion&store=bdi|zattia            → las campañas, con sus conteos
 //   GET  ?recurso=liquidacion&store=…&liq=<id>            → los ítems de una campaña
 //   GET  ?recurso=liquidacion&store=…&liq=<id>&solo=pids  → qué pid ya está y en qué estado
+//   GET  ?recurso=liquidacion&store=…&etiquetas=1         → las campañas con los precios PUESTOS
+//   GET  ?recurso=liquidacion&store=…&etiquetas=1&liq=<id>→ los pid a etiquetar de esa campaña
 //   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,desde,hasta,nota} }
 //   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
@@ -115,6 +117,31 @@ function aCampania(row, conteo) {
   };
 }
 
+// ── La vista de Etiquetas ────────────────────────────────────────────────────────────────────────
+//
+// El local etiqueta el sale y no sabe qué prendas entran: la única lista de la campaña vive acá, en
+// una sección de Análisis cuya foto congelada trae **costo, margen y ventas**. Por eso esta vista es
+// de SOLO LECTURA y devuelve **nada más que el pid**: el precio de la etiqueta sale de Tienda Nube,
+// igual que antes, así que la campaña sólo tiene que contestar *cuáles*.
+
+// ⛔ **Sólo las campañas con los precios PUESTOS en la tienda.** Una en `borrador` tiene precios
+// decididos que todavía no rigen: etiquetar desde ahí cuelga en la percha un precio que no existe.
+// Una `cerrada` es un sale que terminó.
+export const ESTADOS_CAMPANIA_VIVA = ['en_curso', 'aplicada'];
+
+/**
+ * Qué ítems se etiquetan. `aplicado` significa «su precio está puesto en GN **ahora**», que es
+ * exactamente la pregunta que hace el local. Se le suman los `confirmado` cuando la campaña fue
+ * marcada `aplicada`: ese es el caso de los precios cargados a mano en GN, donde el ítem nunca pasa
+ * por el aplicador y quien los cargó es el único que puede decir que están puestos.
+ */
+export function pidsAEtiquetar(items, estadoCampania) {
+  const vale = estadoCampania === 'aplicada'
+    ? (e) => e === 'aplicado' || e === 'confirmado'
+    : (e) => e === 'aplicado';
+  return (items || []).filter((i) => vale(i.estado)).map((i) => i.pid);
+}
+
 /**
  * Normaliza un ítem que llega del cliente.
  *
@@ -183,8 +210,15 @@ export default async function handler(req, res) {
 
   // El chequeo vive acá arriba y no se copia adentro de ningún `if`: duplicarlo es lo que dejó al
   // equipo sin ver el padrón de Canjes. `liquidacion.aplicar` es aparte y lo mira la tanda 3.
-  if (!puedeVer(perfil, store, 'liquidacion')) {
-    return res.status(403).json({ error: 'No tenés acceso a Liquidación en esta marca.' });
+  //
+  // 🔑 **La vista de Etiquetas abre esta puerta con OTRA llave, y sigue siendo un solo `puedeVer`.**
+  // La sección que hay que poder ver se elige *antes* del chequeo, no con un segundo `if` que lo
+  // saltee. Y exige `GET`, así que ninguna `action` del POST se alcanza jamás con el permiso de
+  // Etiquetas: abajo, la rama corta con `return` antes de mirar el método.
+  const vistaEtiquetas = req.method === 'GET' && String(req.query.etiquetas || '') === '1';
+  const seccion = vistaEtiquetas ? 'etiquetas' : 'liquidacion';
+  if (!puedeVer(perfil, store, seccion)) {
+    return res.status(403).json({ error: `No tenés acceso a ${vistaEtiquetas ? 'Etiquetas' : 'Liquidación'} en esta marca.` });
   }
 
   const cfg = cfgFor(store);
@@ -196,6 +230,44 @@ export default async function handler(req, res) {
   const puede = { aplicar: puedeSub(perfil, store, 'liquidacion', 'aplicar'), admin: esAdmin(perfil) };
 
   try {
+    // Corta acá: lo único que contesta con el permiso de Etiquetas. Sin `puede`, sin fotos, sin
+    // precios — el pid y el nombre de la campaña, nada más.
+    if (vistaEtiquetas) {
+      const liq = String(req.query.liq || '');
+
+      if (!liq) {
+        const { data, error } = await supabase.from('liquidaciones').select('id, nombre, datos')
+          .eq('store', store).in('estado', ESTADOS_CAMPANIA_VIVA).order('created_at', { ascending: false });
+        if (error) throw new Error(error.message);
+        return res.status(200).json({
+          ok: true,
+          campanias: (data || []).map((r) => ({
+            id: r.id,
+            nombre: r.nombre,
+            desde: (r.datos || {}).desde || null,
+            hasta: (r.datos || {}).hasta || null,
+          })),
+        });
+      }
+
+      const [c, i] = await Promise.all([
+        supabase.from('liquidaciones').select('id, nombre, estado').eq('store', store).eq('id', liq).maybeSingle(),
+        supabase.from('liquidacion_items').select('pid, estado').eq('store', store).eq('liq_id', liq),
+      ]);
+      if (c.error) throw new Error(c.error.message);
+      if (i.error) throw new Error(i.error.message);
+      // El estado se revalida acá y no sólo en la lista: un id de una campaña en borrador, tipeado
+      // a mano en la URL, no puede devolver los productos de un sale que no está en la tienda.
+      if (!c.data || !ESTADOS_CAMPANIA_VIVA.includes(c.data.estado)) {
+        return res.status(404).json({ error: 'La campaña no existe o todavía no tiene los precios puestos.' });
+      }
+      return res.status(200).json({
+        ok: true,
+        campania: { id: c.data.id, nombre: c.data.nombre },
+        pids: pidsAEtiquetar(i.data, c.data.estado),
+      });
+    }
+
     if (req.method === 'GET') {
       const liq = String(req.query.liq || '');
 

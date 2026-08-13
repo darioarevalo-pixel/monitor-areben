@@ -6,6 +6,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
+import { useLiquidacionEtiquetas } from './useLiquidacionEtiquetas'
 import {
   agruparCantidades,
   construirPrecios,
@@ -13,6 +14,7 @@ import {
   resolverScan,
   secuenciaLabels,
   totalEtiquetas,
+  variantesDeCampania,
   variantesEtiquetables,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
@@ -20,9 +22,18 @@ import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from 
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Badge, Button, Card, Notice, Tabs, color, space, useConfirmar } from '@/components/ui'
+import { Badge, Button, Card, EmptyState, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
+
+/**
+ * La pestaña en la que se cargan cantidades. No es lo mismo que `ModoEtiqueta`: **Liquidaciones
+ * imprime la etiqueta de `promo`** —el dibujo es idéntico, antes tachado y ahora— pero guarda sus
+ * cantidades aparte, para no pisar las de Promo, que es otra lista.
+ */
+type Slot = ModoEtiqueta | 'liq'
+/** La etiqueta que dibuja cada pestaña. */
+const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', liq: 'promo' }
 const FP_DEFAULT: LineaEtiqueta[] = [
   { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
   { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
@@ -31,7 +42,7 @@ const FP_DEFAULT: LineaEtiqueta[] = [
 ]
 
 // ── localStorage (mismas claves que el legacy → el flip preserva lo guardado) ──
-const keyCant = (modo: string, marca: Marca) => `monitor_etiquetas_${modo}_${marca}`
+const keyCant = (slot: string, marca: Marca) => `monitor_etiquetas_${slot}_${marca}`
 const keyAutoClear = (marca: Marca) => `monitor_eti_autoclear_${marca}`
 const keyFP = (marca: Marca) => `monitor_eti_fp_v3_${marca}`
 function lsGet<T>(key: string, fallback: T): T {
@@ -74,10 +85,11 @@ export function Etiquetas() {
   const precioDe = useCallback((v: VarianteEti) => precios[v.pid] || 0, [precios])
   const promoDe = useCallback((v: VarianteEti) => promos[v.pid] || null, [promos])
 
-  const [sub, setSub] = useState<ModoEtiqueta | 'libre'>('dep')
+  const [sub, setSub] = useState<Slot | 'libre'>('dep')
+  const liq = useLiquidacionEtiquetas(marca)
 
   // Estado persistido (recargado al cambiar de marca).
-  const [cant, setCant] = useState<Record<ModoEtiqueta, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {} })
+  const [cant, setCant] = useState<Record<Slot, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {}, liq: {} })
   const [autoClear, setAutoClear] = useState(true)
   const [fpLines, setFpLines] = useState<LineaEtiqueta[]>(FP_DEFAULT)
   // Carga en un IIFE async (no setState sincrónico en el effect: dispararía cascada
@@ -86,11 +98,12 @@ export function Etiquetas() {
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      const c: Record<ModoEtiqueta, Cantidades> = {
+      const c: Record<Slot, Cantidades> = {
         dep: lsGet(keyCant('dep', marca), {}),
         loc: lsGet(keyCant('loc', marca), {}),
         promo: lsGet(keyCant('promo', marca), {}),
         sku: lsGet(keyCant('sku', marca), {}),
+        liq: lsGet(keyCant('liq', marca), {}),
       }
       // El autoclear es un string CRUDO ('1'/'0') en el legacy, no JSON.
       const ac = localStorage.getItem(keyAutoClear(marca)) !== '0'
@@ -105,18 +118,18 @@ export function Etiquetas() {
     }
   }, [marca])
 
-  const setCantModo = (modo: ModoEtiqueta, id: string, val: string) => {
+  const setCantModo = (slot: Slot, id: string, val: string) => {
     setCant((prev) => {
-      const next = { ...prev[modo] }
+      const next = { ...prev[slot] }
       const n = parseInt(val, 10)
       if (n > 0) next[id] = n
       else delete next[id]
-      lsSet(keyCant(modo, marca), next)
-      return { ...prev, [modo]: next }
+      lsSet(keyCant(slot, marca), next)
+      return { ...prev, [slot]: next }
     })
   }
-  const limpiar = async (modo: ModoEtiqueta) => {
-    if (!Object.keys(cant[modo]).length) return
+  const limpiar = async (slot: Slot) => {
+    if (!Object.keys(cant[slot]).length) return
     const ok = await confirmar({
       titulo: 'Borrar las cantidades',
       tono: 'danger',
@@ -125,8 +138,8 @@ export function Etiquetas() {
     })
     if (!ok) return
     setCant((prev) => {
-      lsSet(keyCant(modo, marca), {})
-      return { ...prev, [modo]: {} }
+      lsSet(keyCant(slot, marca), {})
+      return { ...prev, [slot]: {} }
     })
   }
   const onAutoClear = (on: boolean) => {
@@ -144,8 +157,9 @@ export function Etiquetas() {
 
   const ctx: CtxEtiqueta = { precioDe, promoDe, fpLines }
 
-  const imprimir = async (modo: ModoEtiqueta, opts: { sep: boolean; conFP: boolean }) => {
-    const grupos = agruparCantidades(cant[modo], varsById, modo)
+  const imprimir = async (slot: Slot, opts: { sep: boolean; conFP: boolean }) => {
+    const modo = MODO_DE[slot]
+    const grupos = agruparCantidades(cant[slot], varsById, modo)
     if (!grupos.length) {
       await avisar(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.')
       return
@@ -164,8 +178,8 @@ export function Etiquetas() {
           }))
         if (hacer) {
           setCant((prev) => {
-            lsSet(keyCant(modo, marca), {})
-            return { ...prev, [modo]: {} }
+            lsSet(keyCant(slot, marca), {})
+            return { ...prev, [slot]: {} }
           })
         }
       })()
@@ -200,18 +214,24 @@ export function Etiquetas() {
           { key: 'dep', label: '🏬 Depósito' },
           { key: 'loc', label: '🏪 Local' },
           { key: 'promo', label: '🔥 Promo' },
+          { key: 'liq', label: '🏷️ Liquidaciones' },
           { key: 'sku', label: '🔢 SKU' },
           { key: 'libre', label: '✏️ Libre' },
         ]}
         value={sub}
-        onChange={(k) => setSub(k as ModoEtiqueta | 'libre')}
+        onChange={(k) => setSub(k as Slot | 'libre')}
         style={{ marginBottom: space[4] }}
       />
 
-      {sub !== 'libre' ? (
+      {sub === 'liq' && <CabeceraLiquidacion liq={liq} />}
+
+      {sub === 'libre' ? (
+        <LibreEditor />
+      ) : sub === 'liq' && !liq.elegida ? null : (
         <ModoPanel
-          key={sub}
-          modo={sub}
+          key={sub === 'liq' ? `liq:${liq.elegida?.id}` : sub}
+          modo={MODO_DE[sub]}
+          campania={sub === 'liq' && liq.elegida ? { nombre: liq.elegida.nombre, pids: liq.pids } : undefined}
           vars={vars}
           sinCodigo={sinCodigo}
           cant={cant[sub]}
@@ -223,20 +243,67 @@ export function Etiquetas() {
           promoDe={promoDe}
           catalogoListo={!tn.cargando}
           onRefrescarPrecios={tn.refrescar}
-          onImprimir={imprimir}
+          onImprimir={(opts) => imprimir(sub, opts)}
           onImprimirUno={imprimirUno}
           fpLines={fpLines}
           guardarFP={guardarFP}
         />
-      ) : (
-        <LibreEditor />
       )}
     </div>
   )
 }
 
+/**
+ * El encabezado de la pestaña Liquidaciones: qué campaña se está etiquetando.
+ *
+ * 🔑 **El selector sólo se dibuja si hay dos o más.** Con una campaña viva —que es lo normal— elegir
+ * entre una sola cosa es ruido; el nombre va como rótulo y se entra derecho. Y las que están en
+ * borrador no llegan hasta acá: el servidor no las manda, porque sus precios todavía no rigen en la
+ * tienda y etiquetar desde ahí colgaría en la percha un precio que no existe.
+ */
+function CabeceraLiquidacion({ liq }: { liq: ReturnType<typeof useLiquidacionEtiquetas> }) {
+  if (liq.error) {
+    return (
+      <Notice tone="danger" icon="✗">
+        {liq.error}
+      </Notice>
+    )
+  }
+  if (!liq.campanias.length) {
+    return liq.cargando ? null : (
+      <EmptyState
+        icon="🏷️"
+        title="No hay ninguna liquidación con los precios puestos"
+        hint="Cuando arranque un sale y sus precios estén cargados en la tienda, los productos a etiquetar aparecen acá."
+        dashed
+      />
+    )
+  }
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {liq.campanias.length > 1 ? (
+          <Select value={liq.elegida?.id || ''} onChange={(e) => liq.elegir(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
+            {liq.campanias.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <div style={{ fontSize: 16, fontWeight: 700 }}>🏷️ {liq.elegida?.nombre}</div>
+        )}
+        <div style={{ fontSize: 12, color: color.mut }}>
+          {liq.cargando ? 'Cargando los productos…' : `${liq.pids.size} ${liq.pids.size === 1 ? 'producto' : 'productos'} con el precio puesto en la tienda`}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 function ModoPanel({
   modo,
+  campania,
   vars,
   sinCodigo,
   cant,
@@ -254,6 +321,8 @@ function ModoPanel({
   guardarFP,
 }: {
   modo: ModoEtiqueta
+  /** Puesta, la lista se acota a los productos de esa liquidación (pestaña Liquidaciones). */
+  campania?: { nombre: string; pids: Set<string> }
   vars: VarianteEti[]
   sinCodigo: VarianteEti[]
   cant: Cantidades
@@ -265,7 +334,7 @@ function ModoPanel({
   promoDe: (v: VarianteEti) => { normal: number; promo: number } | null
   catalogoListo: boolean
   onRefrescarPrecios: () => Promise<void>
-  onImprimir: (modo: ModoEtiqueta, opts: { sep: boolean; conFP: boolean }) => void
+  onImprimir: (opts: { sep: boolean; conFP: boolean }) => void
   onImprimirUno: (modo: ModoEtiqueta, v: VarianteEti, conFP: boolean) => void
   fpLines: LineaEtiqueta[]
   guardarFP: (l: LineaEtiqueta[]) => void
@@ -279,7 +348,9 @@ function ModoPanel({
 
   const conPrecio = modo === 'loc'
   const esPromo = modo === 'promo'
-  const listaBase = esPromo ? vars.filter((v) => promoDe(v)) : vars
+  const enCampania = esPromo ? vars.filter((v) => promoDe(v)) : vars
+  // La campaña acota *cuáles*; el precio lo sigue poniendo Tienda Nube.
+  const listaBase = campania ? variantesDeCampania(enCampania, campania.pids) : enCampania
   const lista = filtrarVariantes(listaBase, q)
   const shown = lista.slice(0, CAP)
   const total = totalEtiquetas(cant)
@@ -301,8 +372,20 @@ function ModoPanel({
       inp.focus()
       return
     }
+    // La campaña se pregunta ANTES que la promo: si la prenda no entra al sale, eso es lo que hay
+    // que decir, y no que "no está en promoción" —que suena a un problema de precios—.
+    if (campania && !campania.pids.has(v.pid)) {
+      setFeedback({ ok: false, html: `✗ ${v.name || ''} no está en «${campania.nombre}»: no lleva etiqueta de este sale.` })
+      inp.focus()
+      return
+    }
     if (modo === 'promo' && !promoDe(v)) {
-      setFeedback({ ok: false, html: `✗ ${v.name || ''} no está en promoción en TiendaNube.` })
+      setFeedback({
+        ok: false,
+        html: campania
+          ? `✗ ${v.name || ''} está en el sale, pero su precio todavía no figura en la tienda. No se imprime para no colgar un precio equivocado.`
+          : `✗ ${v.name || ''} no está en promoción en TiendaNube.`,
+      })
       inp.focus()
       return
     }
@@ -325,7 +408,9 @@ function ModoPanel({
       <Card style={cardScanStyle}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
         <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
-          Escaneá el código de barras de un producto: imprime su etiqueta de <b>{modo === 'loc' ? 'local (con precio)' : modo === 'promo' ? 'promo (antes/ahora)' : modo === 'sku' ? 'solo SKU' : 'depósito (sin precio)'}</b> al instante.
+          Escaneá el código de barras de un producto: imprime su etiqueta de{' '}
+          <b>{campania ? 'sale (antes/ahora)' : modo === 'loc' ? 'local (con precio)' : modo === 'promo' ? 'promo (antes/ahora)' : modo === 'sku' ? 'solo SKU' : 'depósito (sin precio)'}</b> al instante.
+          {campania && ' Si la prenda no entra en el sale, avisa y no imprime.'}
         </div>
         <input
           ref={scanRef}
@@ -345,14 +430,16 @@ function ModoPanel({
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{titulo(modo)}</div>
-            <div style={{ fontSize: 12, color: color.mut2, marginTop: 2 }}>{subtitulo(modo)}</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{campania ? 'Productos a etiquetar' : titulo(modo)}</div>
+            <div style={{ fontSize: 12, color: color.mut2, marginTop: 2 }}>
+              {campania ? 'Los del sale, con el precio anterior tachado y el nuevo. Escaneá para imprimir de a una.' : subtitulo(modo)}
+            </div>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" className="mo-input" style={{ width: 240, maxWidth: '100%' }} />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-          <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir(modo, { sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })}>
+          <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir({ sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })}>
             Imprimir {total} {total === 1 ? 'etiqueta' : 'etiquetas'}
           </Button>
           {(conPrecio || esPromo) && (
@@ -435,7 +522,11 @@ function ModoPanel({
             </table>
           ) : (
             <div style={{ color: color.mut2, padding: 24, textAlign: 'center' }}>
-              {esPromo ? 'No hay productos en promoción (con código de barras) que coincidan.' : 'No hay variantes con código de barras que coincidan.'}
+              {campania
+                ? 'No hay productos de esta liquidación (con código de barras y precio puesto en la tienda) que coincidan.'
+                : esPromo
+                  ? 'No hay productos en promoción (con código de barras) que coincidan.'
+                  : 'No hay variantes con código de barras que coincidan.'}
             </div>
           )}
           {lista.length > CAP && <div style={{ fontSize: 11, color: color.mut2, padding: 8 }}>Mostrando {CAP} de {lista.length}. Refiná la búsqueda para ver el resto.</div>}
