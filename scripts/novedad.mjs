@@ -142,8 +142,12 @@ if (!r.ok || !d?.ok) {
   console.error(`✗ ${(d && d.error) || r.status}`)
   process.exit(1)
 }
-const aQuien = destino
-  ? (destino.tipo === 'seccion' ? `los que ven "${destino.key}"` : `los de ${destino.roles.join(', ')}`)
+// ⚠️ `--marca` SIN `--destino` da `{tipo:'todos', marca}`, que no tiene `roles` ni `key`. Este
+// cartel asumía que un destino presente era `seccion` o `roles` y reventaba con la novedad YA
+// cargada — el peor momento para fallar: parece que no se hizo nada y en realidad está.
+const quienes = destino?.tipo === 'seccion' ? `los que ven "${destino.key}"`
+  : destino?.tipo === 'roles' ? `los de ${destino.roles.join(', ')}`
   : 'todos'
+const aQuien = destino?.marca ? `${quienes} de ${destino.marca.toUpperCase()}` : quienes
 console.log(`✓ Cargada como BORRADOR: ${novedad.id}  (le llega a ${aQuien})`)
 console.log(`  Se ve en /novedades, en "Sin publicar". Nadie más la ve hasta que le des Publicar.`)

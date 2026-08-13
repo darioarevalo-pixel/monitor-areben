@@ -480,11 +480,12 @@ function DetalleCampania({
       return
     }
     const minutos = Math.max(1, Math.round((pids.length * 1.3) / 60))
+    const cuanto = minutos === 1 ? 'menos de un minuto' : `unos ${minutos} minutos`
     const ok = await confirmar({
       titulo: modo === 'poner' ? 'Escribir los precios en Gestión Nube' : 'Sacar las ofertas de Gestión Nube',
       mensaje: modo === 'poner'
-        ? `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda unos ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}: no cierres la pestaña. Si se corta, se puede retomar.`
-        : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista: se les saca la oferta en Gestión Nube y en la tienda. Tarda unos ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}.`,
+        ? `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda ${cuanto}: no cierres la pestaña. Si se corta, se puede retomar.`
+        : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista: se les saca la oferta en Gestión Nube y en la tienda. Tarda ${cuanto}.`,
       ok: modo === 'poner' ? 'Escribir los precios' : 'Sacar las ofertas',
       tono: modo === 'poner' ? 'brand' : 'danger',
     })
@@ -502,10 +503,22 @@ function DetalleCampania({
         setAplicando({ modo, hechos: Math.min(i + TOPE_APLICAR, pids.length), total: pids.length })
       }
       await cargar()
-      // La campaña pasa sola a `aplicada` cuando entraron todos: marcarla a mano diría que los
-      // precios están puestos, y acá recién se sabe que lo están. Si algo falló, no se mueve.
-      if (modo === 'poner' && !malos.length && campania.estado === 'en_curso') {
-        try { await cambiarEstadoCampania(marca, campania.id, 'aplicada') } catch { /* el estado es secundario: los precios ya están */ }
+      /*
+       * El estado de la campaña sigue a lo que hay puesto en Gestión Nube, en los dos sentidos.
+       *
+       * 🔑 **Volver a `en_curso` al sacar la última oferta se cazó ejerciendo el botón**: la campaña
+       * quedaba «Aplicada» sin una sola oferta viva, o sea la pantalla afirmando que los precios
+       * están puestos cuando no queda ninguno. Es la misma regla que ya valía para el ítem — sólo
+       * que arriba no la había aplicado.
+       *
+       * Si algo falló no se mueve: el estado diría que entraron todos.
+       */
+      if (!malos.length) {
+        const destino = modo === 'poner' ? 'aplicada' : 'en_curso'
+        const mover = modo === 'poner' ? campania.estado === 'en_curso' : campania.estado === 'aplicada'
+        if (mover) {
+          try { await cambiarEstadoCampania(marca, campania.id, destino) } catch { /* secundario: los precios ya están escritos */ }
+        }
       }
       onCambio()
       if (malos.length) toast.error(`Quedaron ${malos.length} sin ${modo === 'poner' ? 'escribir' : 'sacar'}. Están listados abajo.`)
@@ -783,20 +796,19 @@ function DetalleCampania({
           )}
 
           {/*
-            El Monitor no puede escribir los precios: el token no tiene permiso sobre productos
-            (`PATCH /productos/{id}` → 403 «Invalid ability provided»), así que se cargan a mano.
-            Decirlo acá es más honesto que dejar una pantalla que se ve terminada y no hace lo que
-            promete el nombre — y la pestaña Resultado es la que después verifica que se hayan
-            cargado de verdad.
+            Este cartel decía que el Monitor NO podía escribir los precios (el token daba 403
+            «Invalid ability provided») y que se cargaban a mano. Desde el 13-ago-2026 los escribe:
+            el token se regeneró con la ability de productos. Se deja el camino manual descrito
+            porque sigue existiendo —«Ya cargué los precios»— pero ya no es el único.
           */}
           <Card style={{ marginTop: space[5], background: color.bg2 }}>
             <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.6 }}>
-              Los precios decididos acá <b>se cargan a mano en Gestión Nube</b>: el Monitor todavía no
-              tiene permiso para escribirlos por API. Cuando termines de cargarlos, marcá la campaña
-              con «Ya cargué los precios»
-              {puede.aplicar ? '' : ' (pide el permiso «Puede escribir los precios en Gestión Nube»)'}
-              {' '}y la pestaña <b>Resultado</b> te va a mostrar, contra lo que se cobró de verdad,
-              cuáles quedaron puestos y cuáles se olvidaron.
+              Los precios decididos acá <b>se escriben en Gestión Nube</b> con el botón «Escribir los
+              precios», y de ahí pasan a la tienda
+              {puede.aplicar ? '' : ' (pide el permiso «Puede escribir los precios en Gestión Nube»)'}.
+              Si los cargás a mano, marcá la campaña con «Ya cargué los precios». En los dos casos la
+              pestaña <b>Resultado</b> te va a mostrar, contra lo que se cobró de verdad, cuáles
+              quedaron puestos y cuáles se olvidaron.
             </div>
           </Card>
         </>
