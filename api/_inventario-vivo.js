@@ -4,6 +4,7 @@
 // Devuelve SOLO el depósito de esa marca (por store_id, no por nombre) para que sirva igual en ambas cuentas.
 // Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { puedeContar } from '../lib/permisos.core.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -111,9 +112,9 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'método no permitido' });
 
   // Es solo lectura, pero expone el stock completo de las dos marcas: hasta acá
-  // era público. El chequeo agrega ~200ms de ida al KV, dentro del presupuesto
-  // de 30s (los sub-presupuestos de 10s/9s de fetchInventarioCompleto no se tocan).
-  if (!(await exigirUsuario(req, res))) return;
+  // era público. El chequeo agrega ~200ms de ida al KV.
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String(req.query.store || '').toLowerCase();
   const loc = String(req.query.loc || 'deposito').toLowerCase(); // 'deposito' (default) | 'local'
@@ -121,6 +122,18 @@ export default async function handler(req, res) {
   const token = TOKENS[store];
   if (!storeId) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
   if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
+
+  // 🔴 Tener sesión no es tener permiso, y hasta el 13-ago-2026 acá terminaba el control: con
+  // cualquier cuenta válida se bajaba el inventario VIVO completo —producto, variante, código y
+  // stock— de la marca que se pidiera. Es el dato más sensible que sirve este handler y el que
+  // más barato era llevarse: una sola GET.
+  //
+  // La llave son las cuatro pantallas de conteo, que son las que lo usan (`lib/inventario-vivo/
+  // cliente.ts`). Va DESPUÉS de validar `store` a propósito: así una marca inventada sigue
+  // contestando 400 y no un 403 que haría pensar que existe.
+  if (!puedeContar(perfil, store)) {
+    return res.status(403).json({ error: 'Ver el stock vivo pide acceso a alguna pantalla de conteo de esta marca.' });
+  }
 
   try {
     // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.

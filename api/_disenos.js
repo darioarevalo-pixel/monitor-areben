@@ -8,6 +8,7 @@
 // funciones por deploy y cada archivo de ruta cuenta una.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
+import { puedeVerAlguna } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -23,10 +24,17 @@ function cfgFor(store) {
 }
 
 export default async function handler(req, res) {
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`: cualquier cuenta válida del
+  // Monitor —los puestos compartidos incluidos— entraba al tablero de diseños de las dos marcas, y podía borrar tarjetas ajenas.
+  if (!puedeVerAlguna(perfil, store, ['disenos'])) {
+    return res.status(403).json({ error: 'No tenés acceso a Diseños en esta marca.' });
+  }
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });

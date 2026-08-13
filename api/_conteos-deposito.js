@@ -5,6 +5,7 @@
 // Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { puedeContar } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -24,10 +25,26 @@ export default async function handler(req, res) {
 
   // El POST escribe con la service key de Supabase (se saltea RLS) y el GET lista
   // los conteos de la marca: los dos exigen usuario. Antes ninguno pedía nada.
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+
+  // 🔴 Exigir usuario NO es exigir permiso, y hasta el 13-ago-2026 acá terminaba el control.
+  // Cualquier cuenta válida —incluidos los puestos compartidos `Depósito`, `Local` y `bdilocal`,
+  // cuya contraseña conoce medio equipo— podía listar los conteos de la OTRA marca o insertar
+  // conteos falsos en ella. `puedeContar` mira las cuatro pantallas de conteo porque las cuatro
+  // comparten este endpoint: pedir una sola dejaría afuera a quien cuenta en las otras tres.
+  if (!puedeContar(perfil, store)) {
+    return res.status(403).json({ error: 'No tenés acceso a los conteos de esta marca.' });
+  }
+
+  // 🔑 La firma sale de `perfil.name`, NO del body. Hasta el 13-ago-2026 salía de `b.usuario`,
+  // o sea que el historial de una falla o de un conteo se podía firmar con el nombre de otro
+  // —basta con cambiar un campo del POST— y el rastro de auditoría no valía nada. Los handlers
+  // que ya lo hacían bien (`api/_canjes.js:498`, `api/_reclamos.js`) son el molde.
+  const yo = perfil.name || null;
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
@@ -51,7 +68,7 @@ export default async function handler(req, res) {
       const row = {
         store,
         ubicacion: b.ubicacion || null,
-        usuario: b.usuario || null,
+        usuario: yo,
         fecha_inicio: b.fecha_inicio || null,
         resumen: b.resumen && typeof b.resumen === 'object' ? b.resumen : {},
         detalle: Array.isArray(b.detalle) ? b.detalle : [],

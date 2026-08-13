@@ -15,6 +15,7 @@
 // RLS) y exige usuario logueado del Monitor.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { puedeVerAlguna, SECCIONES_POSTVENTA } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -66,10 +67,26 @@ async function apilarHistorial(supabase, store, id, evento) {
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`: cualquier cuenta válida leía
+  // y daba de alta fallas en las dos marcas. Son tres pantallas las que comparten este endpoint
+  // —la de Administración, la del Local y la del Depósito—, así que el permiso es «alguna»:
+  // exigir `postventa` a secas dejaría afuera a la gente de Depósito, que es la que más fallas
+  // carga.
+  if (!puedeVerAlguna(perfil, store, SECCIONES_POSTVENTA)) {
+    return res.status(403).json({ error: 'No tenés acceso a Post-venta en esta marca.' });
+  }
+
+  // 🔑 La firma sale de `perfil.name`, NO del body. Hasta el 13-ago-2026 salía de `b.usuario`,
+  // o sea que el historial de una falla o de un conteo se podía firmar con el nombre de otro
+  // —basta con cambiar un campo del POST— y el rastro de auditoría no valía nada. Los handlers
+  // que ya lo hacían bien (`api/_canjes.js:498`, `api/_reclamos.js`) son el molde.
+  const yo = perfil.name || null;
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
@@ -101,7 +118,7 @@ export default async function handler(req, res) {
 
       if (action === 'crear') {
         if (!b.producto || !String(b.producto).trim()) return res.status(400).json({ error: 'falta el producto' });
-        const usuario = b.usuario ? String(b.usuario) : null;
+        const usuario = yo;
         const row = {
           store,
           estado: 'cargada',
@@ -132,7 +149,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'falta id' });
 
       if (action === 'recibir') {
-        const hist = await apilarHistorial(supabase, store, id, { estado: 'recibida', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.nota ? String(b.nota) : 'recibida en depósito' });
+        const hist = await apilarHistorial(supabase, store, id, { estado: 'recibida', at: new Date().toISOString(), usuario: yo, nota: b.nota ? String(b.nota) : 'recibida en depósito' });
         const { error } = await supabase.from('fallas_deposito').update({ estado: 'recibida', ubicacion: 'deposito', historial: hist, updated_at: new Date().toISOString() }).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
@@ -144,7 +161,7 @@ export default async function handler(req, res) {
         const upd = { gn_integration_id: `falla-${id}`, updated_at: new Date().toISOString() };
         if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
         if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
-        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
+        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: yo, nota: `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
         const { error } = await supabase.from('fallas_deposito').update(upd).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
@@ -152,7 +169,7 @@ export default async function handler(req, res) {
 
       if (action === 'confirmar') {
         // Administración VALIDA los datos de la carga. NO toca GN (la venta ya se hizo al entregar).
-        const hist = await apilarHistorial(supabase, store, id, { estado: 'confirmada', at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: 'datos confirmados' });
+        const hist = await apilarHistorial(supabase, store, id, { estado: 'confirmada', at: new Date().toISOString(), usuario: yo, nota: 'datos confirmados' });
         const { error } = await supabase.from('fallas_deposito').update({ estado: 'confirmada', historial: hist, updated_at: new Date().toISOString() }).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
@@ -161,7 +178,7 @@ export default async function handler(req, res) {
       if (action === 'estado') {
         const estado = String(b.estado || '');
         if (!ESTADOS.includes(estado)) return res.status(400).json({ error: 'estado inválido' });
-        const hist = await apilarHistorial(supabase, store, id, { estado, at: new Date().toISOString(), usuario: b.usuario ? String(b.usuario) : null, nota: b.nota ? String(b.nota) : null });
+        const hist = await apilarHistorial(supabase, store, id, { estado, at: new Date().toISOString(), usuario: yo, nota: b.nota ? String(b.nota) : null });
         const { error } = await supabase.from('fallas_deposito').update({ estado, historial: hist, updated_at: new Date().toISOString() }).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });

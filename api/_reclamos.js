@@ -43,7 +43,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { esAdmin, tieneFuncion } from '../lib/permisos.core.js';
+import { esAdmin, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -113,6 +113,18 @@ export default async function handler(req, res) {
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`, y de este endpoint sale lo
+  // más sensible que tiene el Monitor sobre gente de afuera: nombre, contacto y relato de cada
+  // cliente que reclamó, en las dos marcas. Y sale también `vista=token`, o sea **la llave del
+  // portal público de cualquier reclamo** — con ella se entra a hacerse pasar por ese cliente.
+  //
+  // Las pantallas que lo usan son las de Reclamos y Cambios del local, más la de Administración,
+  // así que el permiso es «alguna» de las tres. Las acciones que mueven plata siguen pidiendo
+  // función de administración más abajo, que es un escalón aparte y no lo reemplaza esto.
+  if (!puedeVerAlguna(perfil, store, SECCIONES_RECLAMOS)) {
+    return res.status(403).json({ error: 'No tenés acceso a Reclamos en esta marca.' });
+  }
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });

@@ -16,8 +16,11 @@ import {
   esAdmin as esAdminJs,
   estaExcluido as estaExcluidoJs,
   KEYS_PARA_TODOS as KEYS_PARA_TODOS_JS,
+  marcaDePermisos as marcaDePermisosJs,
   marcaExcluir as marcaExcluirJs,
   marcasConAcceso as marcasConAccesoJs,
+  puedeContar as puedeContarJs,
+  SECCIONES_CONTEO as SECCIONES_CONTEO_JS,
   puedeAtenderRetiroLocal as puedeAtenderRetiroLocalJs,
   puedeSub as puedeSubJs,
   puedeVer as puedeVerJs,
@@ -142,6 +145,17 @@ export function marcasConAcceso(perfil: Perfil | null, key: string, marcas: read
  * ¿Atiende el mostrador de los canjes que se retiran en el local? Cuelga de `cupones` en BDI, no de
  * un sub propio: un sub habría que tildarlo usuario por usuario. Ver el docblock del core.
  */
+/** De qué marca del monitor cuelgan los permisos de una `store`. Stunned NO es una marca. */
+export const marcaDePermisos: (store: string) => Marca = marcaDePermisosJs
+
+/** Las cuatro pantallas de conteo físico, que comparten los endpoints de stock vivo. */
+export const SECCIONES_CONTEO: readonly string[] = SECCIONES_CONTEO_JS
+
+/** ¿Puede contar en esta `store`? La llave de `_inventario-vivo.js` y `_conteos-deposito.js`. */
+export function puedeContar(perfil: Perfil | null, store: string): boolean {
+  return puedeContarJs(perfil, store)
+}
+
 export function puedeAtenderRetiroLocal(perfil: Perfil | null): boolean {
   return puedeAtenderRetiroLocalJs(perfil)
 }

@@ -9,6 +9,7 @@
 // usuario logueado del Monitor. Stunned todavía no tiene base propia: se rutea a la de Zattia.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { puedeVerAlguna, SECCIONES_POSTVENTA } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   // Stunned es la línea SKU 'STU' dentro del GN de Zattia: comparte su base hasta provisionar la propia.
@@ -43,11 +44,25 @@ function limpiarFila(store, raw) {
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia', 'stunned'].includes(store)) {
     return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
+  }
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`: cualquier cuenta válida se
+  // bajaba el mapeo SKU completo de las tres marcas —hasta 5.000 filas por request— y podía
+  // pisarlo con un upsert. Este mapeo es lo que hace que una orden de Tienda Nube encuentre su
+  // producto en Gestión Nube: corromperlo no rompe nada visible, manda las ventas al producto
+  // equivocado.
+  //
+  // Son DOS pantallas las que lo usan y por eso el permiso es «alguna»: Integraciones
+  // (`components/integraciones/Integraciones.tsx`) y Post-venta, que lo consulta al cargar una
+  // falla (`lib/postventa/fallas/cliente.ts`).
+  if (!puedeVerAlguna(perfil, store, ['integraciones', ...SECCIONES_POSTVENTA])) {
+    return res.status(403).json({ error: 'El mapeo de SKU pide acceso a Integraciones o a Post-venta en esta marca.' });
   }
 
   const cfg = cfgFor(store);

@@ -16,6 +16,7 @@
 // logueado del Monitor.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { puedeVerAlguna } from '../lib/permisos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -55,10 +56,17 @@ function filaDe(store, kind, s) {
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`: cualquier cuenta válida del
+  // Monitor —los puestos compartidos incluidos— leía el historial de solicitudes de las dos marcas y podía borrarlas.
+  if (!puedeVerAlguna(perfil, store, ['solicitudes'])) {
+    return res.status(403).json({ error: 'No tenés acceso a Solicitudes en esta marca.' });
+  }
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });

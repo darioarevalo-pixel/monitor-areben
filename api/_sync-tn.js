@@ -10,16 +10,29 @@
 // `liberar` es el desbloqueo MANUAL del caso dudoso: cuando GN cortó con 5xx y no se sabe si la
 // venta se creó, la reserva queda puesta a propósito y sólo la suelta alguien que fue a mirar a GN.
 import { exigirUsuario } from './_auth.js';
+import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { liberar, listar } from './_sync-ledger.js';
 
 const STORES = ['bdi', 'zattia', 'stunned'];
 
 export default async function handler(req, res) {
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const b = req.body || {};
   const store = String((req.method === 'POST' ? b.store : req.query.store) || '').toLowerCase();
   if (!STORES.includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
+
+  // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`, y `liberar` no es una lectura:
+  // saca del ledger la reserva de una orden de Tienda Nube. Liberar una que YA se importó es lo que
+  // habilita crear la venta dos veces en Gestión Nube — y GN no anula ventas por API, así que la
+  // duplicada se limpia a mano.
+  //
+  // `marcaDePermisos` traduce `stunned` a `zattia`: Stunned es una línea de Zattia por prefijo de
+  // SKU, no una marca, y sin la traducción el permiso de Zattia no serviría para sus órdenes.
+  if (!puedeVerAlguna(perfil, store, ['integraciones'])) {
+    return res.status(403).json({ error: 'No tenés acceso a Integraciones en esta marca.' });
+  }
 
   try {
     if (req.method === 'GET') {
