@@ -83,6 +83,18 @@ export function borrarSesion(): void {
  * header x-monitor-auth no salía y todo daba 403, con un re-pedido de pass molesto
  * en cada vuelta. Persistirla acá lo elimina. Sigue siendo el modelo de pass en el
  * cliente; la Fase S (Supabase Auth / token firmado) lo reemplaza junto con RLS.
+ *
+ * ⚠️ **Revisado el 13-ago-2026 y se deja como está, a propósito.** Una contraseña en claro y
+ * persistente en el disco del navegador es fea, y la auditoría la marcó. Pero el daño concreto
+ * dependía de que algo pudiera LEERLA, y lo único que podía era el XSS de
+ * `components/gen-talles/tabla-dom.ts` —HTML de Tienda Nube inyectado sin sanitizar—, que se cerró
+ * en ese mismo commit. Sin esa cadena, lo que queda pide acceso físico a la máquina o una
+ * extensión del navegador, y quien tiene eso ya tiene la sesión igual.
+ *
+ * Volverla a `sessionStorage` sería recuperar exactamente la fricción que este cambio vino a
+ * sacar: la pass se pierde al cerrar el navegador, la sesión de 30 días sigue viva, y todo empieza
+ * a dar 403 pidiendo la contraseña de nuevo. Cambiar un riesgo chico por una molestia diaria para
+ * todo el equipo no es un buen negocio. El arreglo de verdad es la Fase S, no mover esto de lugar.
  */
 export function guardarAdminPass(pass: string): void {
   try {

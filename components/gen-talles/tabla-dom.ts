@@ -8,11 +8,69 @@
 
 import type { MedidaImportada } from '@/lib/gen-talles/core'
 
-/** El HTML de la primera `<table>` de la descripción, o null si no hay. Port de gtRenderTablaActual. */
+/**
+ * Las etiquetas que pueden sobrevivir dentro de la tabla que se muestra en pantalla.
+ *
+ * Todo lo demás se descarta y se conserva sólo su texto. La lista es de estructura de tabla más
+ * un puñado de marcas de formato: alcanza para que la tabla de Tienda Nube se vea igual.
+ */
+const TAGS_OK = new Set([
+  'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'CAPTION', 'COLGROUP', 'COL',
+  'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'P', 'BR', 'SMALL', 'SUP', 'SUB',
+])
+
+/** Lo único que puede quedar de los atributos. Ni `style`, ni `class`, ni nada que empiece con `on`. */
+const ATTRS_OK = new Set(['colspan', 'rowspan'])
+
+/**
+ * Deja la tabla en los huesos: sin atributos y sin etiquetas raras.
+ *
+ * 🔴 **Esto no existía y por eso había un XSS.** `tablaActualHtml` devolvía el `outerHTML` crudo de
+ * la primera `<table>` de la **descripción de un producto de Tienda Nube**, y `GenTalles.tsx:182`
+ * lo metía con `dangerouslySetInnerHTML`. `DOMParser` **no sanitiza nada**: parsea. Un
+ * `<td><img src=x onerror="..."></td>` en la descripción sobrevivía entero y se ejecutaba al abrir
+ * la sección. (El `<script>` no corre vía innerHTML, pero los handlers de evento sí, que es lo que
+ * importa.)
+ *
+ * Quién puede escribir esa descripción: cualquiera con acceso al panel de Tienda Nube, una
+ * integración, o una cuenta de TN comprometida. Y lo primero que ese JS podía leer era
+ * `localStorage['monitor_adminpass']`, que hasta hoy guardaba **la contraseña en claro** — de ahí
+ * que estos dos arreglos vayan juntos: el XSS solo es medio, la cadena completa no.
+ *
+ * Se limpia en vez de reconstruir con JSX a propósito: la tabla se muestra para que alguien copie
+ * los números a mano cuando la importación no engancha, así que conviene que se siga viendo como
+ * en la tienda. Lo que se pierde son los estilos, que no aportan a eso.
+ */
+function limpiarTabla(tabla: Element): Element {
+  const limpia = tabla.cloneNode(true) as Element
+  // `querySelectorAll('*')` devuelve una lista estática, así que borrar mientras se recorre es
+  // seguro. Se va de adentro hacia afuera para que al desarmar un nodo sus hijos ya estén limpios.
+  const nodos = [...limpia.querySelectorAll('*')].reverse()
+  for (const n of nodos) {
+    if (!TAGS_OK.has(n.tagName)) {
+      // No se borra el contenido: se reemplaza el nodo por su texto. Si alguien puso el talle
+      // adentro de un `<font>`, el número tiene que seguir estando.
+      n.replaceWith(n.ownerDocument!.createTextNode(n.textContent || ''))
+      continue
+    }
+    for (const attr of [...n.attributes]) {
+      if (!ATTRS_OK.has(attr.name.toLowerCase())) n.removeAttribute(attr.name)
+    }
+  }
+  for (const attr of [...limpia.attributes]) {
+    if (!ATTRS_OK.has(attr.name.toLowerCase())) limpia.removeAttribute(attr.name)
+  }
+  return limpia
+}
+
+/**
+ * El HTML de la primera `<table>` de la descripción, **ya sanitizado**, o null si no hay.
+ * Port de gtRenderTablaActual.
+ */
 export function tablaActualHtml(rawDesc: string | undefined): string | null {
   const doc = new DOMParser().parseFromString(rawDesc || '', 'text/html')
   const tabla = doc.querySelector('table')
-  return tabla ? tabla.outerHTML : null
+  return tabla ? limpiarTabla(tabla).outerHTML : null
 }
 
 export type TablaExtraida = { talles: string[]; medidas: MedidaImportada[] }
