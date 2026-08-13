@@ -3,6 +3,14 @@ name: Foto diaria de Meta Ads
 # 06:30 UTC = 03:30 en Argentina: media hora después del sync diario, y con el día de ayer ya
 # cerrado en la zona de las cuentas. Corre acá y no en Vercel porque son decenas de llamadas
 # paginadas a Graph por cuenta y Hobby corta a los 10 s.
+# 🔒 Candado propio: éste escribe en Meta sin que nadie lo apriete. Con el cron horario, una
+# corrida que se pasara de los 60 minutos arrancaría encima de sí misma y habría dos procesos
+# avanzando los mismos planes sobre cuentas publicitarias reales. Hoy tarda ~34 s, así que es un
+# seguro, no un problema actual. `cancel-in-progress: false`: un escalón a medias se espera.
+concurrency:
+  group: meta-ads-escritura
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: '30 6 * * *'
@@ -24,6 +32,7 @@ on:
 jobs:
   foto:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +40,11 @@ jobs:
         with:
           node-version: '20'
 
+      # `npm ci` y no `npm install`: instala EXACTAMENTE lo que dice package-lock.json. Con
+      # `install`, un sync de producción resolvía dependencias frescas cada noche y podía traerse
+      # una versión menor distinta a la fijada, sin que nadie lo pidiera ni se enterara.
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       - name: Sacar la foto
         env:

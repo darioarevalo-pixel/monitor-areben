@@ -17,6 +17,13 @@ name: CI — typecheck, lint, tests y build
 # ignorar, y ahí deja de servir para algo. El gate que bloquea tiene que depender
 # solo de este repo.
 
+# 🔒 Acá el candado SÍ cancela: si llegan dos pushes seguidos a la misma rama, el resultado del
+# primero ya no le sirve a nadie y son ~4 minutos de Actions por corrida (son dos jobs). Es lo
+# contrario del criterio de los syncs, donde cancelar dejaría datos a medias.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
   pull_request:
@@ -26,6 +33,7 @@ jobs:
   verificar:
     name: Verificar (typecheck, lint, tests sin red, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -43,11 +51,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # ⚠️ Estos son 42 tests y NO incluyen la paridad del ETL: sin el fixture,
-      # etl-paridad.test.ts hace it.skip (tests/etl-paridad.test.ts:41). O sea que
-      # el verde de ESTE job no dice nada sobre si el ETL portado calcula igual que
-      # el legacy. Eso lo dice el job `paridad`. Es una división deliberada, no un
-      # olvido: acá no se puede afirmar más de lo que se probó.
+      # ⚠️ NO incluyen la paridad del ETL: sin el fixture, etl-paridad.test.ts hace
+      # it.skip (tests/etl-paridad.test.ts:41). O sea que el verde de ESTE job no
+      # dice nada sobre si el ETL portado calcula igual que el legacy. Eso lo dice
+      # el job `paridad`. Es una división deliberada, no un olvido: acá no se puede
+      # afirmar más de lo que se probó.
+      #
+      # 📌 Acá decía "estos son 42 tests". Son 139 archivos y ~2.870 casos
+      # (`npx vitest list | wc -l`). El número quedó viejo el día que se escribió y
+      # nadie lo volvió a mirar, que es lo que pasa con los números sueltos en un
+      # comentario: por eso ahora está el comando en vez del número.
       - name: Tests que no necesitan datos reales
         run: npm test
 
@@ -58,6 +71,7 @@ jobs:
   paridad:
     name: Paridad del ETL contra el legacy (datos reales)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 

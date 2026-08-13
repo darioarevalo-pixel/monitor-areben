@@ -105,7 +105,10 @@ async function fetchProductoVivo(productId, storeId, token) {
 }
 
 // Varias pasadas de paginación pueden tardar → subimos el techo de tiempo de la función.
-export const config = { maxDuration: 30 };
+// 📌 Acá había un `export const config = { maxDuration: 30 }` que NO hacía nada: Vercel lee la
+// config del archivo de RUTA, y éste empieza con `_`. Se mudó a `api/deposito.js`, que es la ruta
+// por la que se entra. Si algún día este handler vuelve a ser un archivo propio, la config se
+// vuelve con él.
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, OPTIONS')) return;

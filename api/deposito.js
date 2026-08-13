@@ -33,6 +33,25 @@ import observaciones from './_observaciones.js';
 
 const RECURSOS = { conteos, inventario, observaciones };
 
+/**
+ * 🔴 **Esto vivía en `api/_inventario-vivo.js:107` y NO se estaba aplicando.**
+ *
+ * Vercel lee el `export const config` del **archivo de ruta**, y `_inventario-vivo.js` empieza con
+ * `_`: no es una ruta, es un módulo. La config se quedó huérfana en la mudanza a la puerta
+ * `?recurso=` —el handler se movió, su configuración no— y nadie lo notó porque el archivo seguía
+ * ahí, diciendo 30, mientras la función corría con el default.
+ *
+ * Importa porque `_inventario-vivo` se presupuestó para 30 s y los presupuestos son suyos, no del
+ * plan: 10 s para leer GN entero (`:70`) + 9 s para el relleno puntual (`:156`) + el espejo de
+ * Supabase + la ida al KV de la auth. Cuando se pasa, Vercel devuelve su página de error y el
+ * cliente (`lib/inventario-vivo/cliente.ts:19`) le hace `r.json()` encima: la persona de Depósito
+ * ve un `SyntaxError` y no un mensaje.
+ *
+ * Va acá arriba y no en el `_`, que es donde Vercel sí la mira. Es un techo, no una reserva: los
+ * otros dos recursos de esta puerta contestan en milisegundos y no pagan nada por esto.
+ */
+export const config = { maxDuration: 30 };
+
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún
   // llamador prefiere mandarlo ahí. El resto del request llega intacto al handler.

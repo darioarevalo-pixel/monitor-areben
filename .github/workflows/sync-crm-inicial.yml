@@ -2,6 +2,17 @@ name: Sync CRM (inicial / on-demand) — Gestión Nube
 
 # Solo corre manualmente. Sirve para llenar histórico de ventas + clientes
 # después de la migración CRM, o para re-sincronizar todo cuando haga falta.
+# 🔒 **Los ocho workflows que hablan con Gestión Nube comparten UN candado.** No es paranoia de
+# libro: `scripts/lib/gn-rate-limit.mjs:12` documenta que "el diario del 11-ago hizo 29 páginas
+# seguidas antes de chocar y el rápido del 12 chocó a la séptima, así que hay una ventana más larga
+# que no conocemos". Esa firma —cortes que no se explican por el volumen de UNA corrida— es
+# exactamente la de dos jobs compartiendo cupo. Y hasta hoy nada impedía que se pisaran: los dos
+# diarios están agendados en el MISMO minuto (`0 6 * * *`) y cualquiera podía disparar un sync a
+# mano encima. `cancel-in-progress: false` porque un sync a medias no se cancela, se espera.
+concurrency:
+  group: gestion-nube
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +24,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -20,8 +32,11 @@ jobs:
         with:
           node-version: '20'
 
+      # `npm ci` y no `npm install`: instala EXACTAMENTE lo que dice package-lock.json. Con
+      # `install`, un sync de producción resolvía dependencias frescas cada noche y podía traerse
+      # una versión menor distinta a la fijada, sin que nadie lo pidiera ni se enterara.
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       - name: Ejecutar sync CRM inicial
         env:

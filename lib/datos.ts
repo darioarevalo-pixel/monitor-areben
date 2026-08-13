@@ -64,6 +64,32 @@ export async function fetchUltimoSync(workflowFile: string | null): Promise<Sync
  * (index.html:2084). No es cosmético: cambia el rango de TODO lo que el ETL
  * computa, así que dos usuarios ven números legítimamente distintos.
  */
+/**
+ * Desde cuándo se bajan las ventas. Marketing: 35 días. Admin: **un piso FIJO que nunca avanza**.
+ *
+ * 🔑 **Eso significa que el payload crece con el calendario, no con el negocio.** Aunque no se
+ * venda una unidad más, cada mes que pasa agrega filas y ninguna sale nunca. Es la única parte del
+ * Monitor que engorda sola.
+ *
+ * Medido en BDI el 13-ago-2026, para que la próxima discusión no sea a ojo:
+ *
+ *     ventas 2025 (año entero)          12.887
+ *     ventas 2026 (hasta el 13-ago)      7.164   → ritmo ~9.500/año, MÁS LENTO que 2025
+ *     venta_detalles dentro de la ventana        102.692   (~9,6 MB del payload de 14,7)
+ *     venta_detalles en toda la base              122.804
+ *
+ * O sea ~50-60k detalles nuevos por año. Proyectado: ~155k a mediados de 2027, ~210k (el doble de
+ * hoy) a mediados de 2028. **No es urgente**, y conviene decirlo con el número al lado: el pico de
+ * memoria, que era el modo de falla agudo, ya lo sacó el techo de páginas en vuelo de
+ * `lib/supabase/rest.ts`.
+ *
+ * ⚠️ Mover este piso **no es una decisión técnica**: es qué historia ve la gerencia. Resumen y
+ * Ventas mensuales comparan contra el año anterior, así que una ventana móvil de 12 meses les
+ * corta la comparación. Si algún día hay que moverlo, la salida buena no es recortar sino que los
+ * agregados viejos los calcule el servidor —las vistas materializadas ya hacen eso para los
+ * totales por mes— y que el navegador baje sólo el detalle reciente. Eso es un proyecto, no un
+ * cambio de constante.
+ */
 function desdeVentas(rol: 'admin' | 'marketing', today: Date): string {
   return rol === 'marketing'
     ? new Date(today.getTime() - 35 * 86400000).toISOString().slice(0, 10)
