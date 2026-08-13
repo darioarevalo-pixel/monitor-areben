@@ -45,6 +45,10 @@ const config = [
       'node_modules/**',
       'public/legacy/**',
       'tests/fixtures/**',
+      // Reporte HTML de `vitest run --coverage`: JS generado por la herramienta. Está en
+      // `.gitignore`, pero ESLint mira el disco, no el índice de git: sin esta línea el
+      // `--max-warnings 0` se pone rojo apenas alguien pide cobertura una vez.
+      'coverage/**',
       'next-env.d.ts',
     ],
   },

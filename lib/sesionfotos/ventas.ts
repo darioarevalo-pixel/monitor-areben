@@ -17,6 +17,7 @@
  */
 
 import type { Credencial } from '../sesion'
+import { apiFetch } from '../api-fetch'
 import { faseCompleta, preparado } from './core'
 import type { ItemSolicitud, Origen, Solicitud, VentaGN } from './tipos'
 
@@ -125,10 +126,19 @@ export async function enviarPedidos(pedidos: PedidoVenta[], enviar: EnviarVenta 
 
 export type EstadoVentaGN = { ok?: boolean; existe?: boolean; active?: boolean; archived?: boolean } | null
 
-/** Consulta el estado de una venta en GN (accion:'estado', read-only, sin login). */
+/**
+ * Consulta el estado de una venta en GN (`accion:'estado'`, read-only).
+ *
+ * 🔑 **Va con `apiFetch` y no con `fetch` pelado, y eso cambió el 13-ago-2026.** Esta rama del
+ * handler contestaba arriba del `exigirUsuario`, o sea sin login y con el CORS abierto que tiene
+ * `crear-venta.js`: cualquiera podía preguntar por una venta arbitraria usando nuestro token de
+ * Gestión Nube, e ir enumerando `ventaId`. Que sea de sólo lectura no la hacía pública — lee de
+ * nuestra cuenta. Se corre a esta función porque siempre corrió adentro del Monitor, con sesión
+ * abierta: mandar el sobre no le cuesta nada.
+ */
 export async function consultarEstadoGN(store: string, ventaId: number | string): Promise<EstadoVentaGN> {
   try {
-    const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'estado', store, ventaId }) })
+    const r = await apiFetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'estado', store, ventaId }) })
     return (await r.json()) as EstadoVentaGN
   } catch {
     return null

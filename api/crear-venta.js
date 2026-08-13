@@ -107,7 +107,23 @@ export default async function handler(req, res) {
   const TOKEN = TOKENS[store];
   if (!TOKEN) return res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
 
-  // ── Estado de una venta (solo lectura, sin login) — para saber si ya se anuló en GN ──
+  // `exigirUsuario` acepta el header `x-monitor-auth` Y el user/pass del body: es estrictamente más
+  // permisivo que el chequeo que había, así que los llamadores viejos siguen andando igual, y los
+  // nuevos pueden llamar con `apiFetch` como el resto del Monitor.
+  //
+  // 🔴 **Va ANTES de la rama `estado`, y eso cambió el 13-ago-2026.** Esa rama contestaba arriba
+  // del guard, con el `Access-Control-Allow-Origin: *` de la línea 96 puesto: cualquiera en
+  // internet podía preguntar por una venta arbitraria de Gestión Nube usando NUESTRO token, y
+  // enumerar por `ventaId` hasta armarse el mapa de qué números existen y cuáles se anularon. Que
+  // sea de sólo lectura no lo hace público: lee de nuestra cuenta.
+  //
+  // El único llamador es `consultarEstadoGN` (`lib/sesionfotos/ventas.ts`), que corre adentro del
+  // Monitor con sesión abierta y pasó a mandar el sobre con `apiFetch`. No hay llamador anónimo
+  // legítimo.
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
+
+  // ── Estado de una venta (solo lectura en GN) — para saber si ya se anuló ──
   if (b.accion === 'estado') {
     const ventaId = parseInt(b.ventaId, 10);
     if (!ventaId) return res.status(400).json({ error: 'ventaId inválido' });
@@ -122,12 +138,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: e.message });
     }
   }
-
-  // `exigirUsuario` acepta el header `x-monitor-auth` Y el user/pass del body: es estrictamente más
-  // permisivo que el chequeo que había, así que los llamadores viejos siguen andando igual, y los
-  // nuevos pueden llamar con `apiFetch` como el resto del Monitor.
-  const perfil = await exigirUsuario(req, res);
-  if (!perfil) return;
 
   // ── Importar una orden de Tienda Nube como venta de GN (sync de Stunned) ──
   // El orden de los pasos ES el diseño: se RESERVA en el ledger antes de postear. GN no anula
