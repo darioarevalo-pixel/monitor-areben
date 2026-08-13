@@ -53,6 +53,7 @@ import {
   aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, decidirMasivo, estadoItem,
   guardarItem, leerCampanias, leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
+import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { DefinirPrecio } from './DefinirPrecio'
 import { Resultado } from './Resultado'
@@ -734,6 +735,32 @@ function DetalleCampania({
           {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && (
             <Button variant="ghost" size="sm" disabled={ocupadoMasivo || !!aplicando} onClick={() => void reprecificarTodos()}>
               Otro precio para todos
+            </Button>
+          )}
+          {/*
+            🔑 **La categoría de sale vive en Tienda Nube, no en Gestión Nube** (ningún producto con
+            promo viva en GN tiene una), y el camino para escribirla YA EXISTE: la card «Asignar
+            categoría» de tncat, con el puente que Comisiones estrenó. Acá no se construyó nada — se
+            usa lo que está.
+
+            🔑 **Manda los que se están VIENDO, no los 260.** Las subcategorías son por tipo de
+            prenda (TOPS, JEANS, SWEATERS…), así que se busca «SWEATER» arriba y se mandan esos 32;
+            sin filtro, van todos y sirve para la categoría general del sale. Un selector de tipo de
+            prenda propio sería una segunda forma de filtrar la misma tabla.
+          */}
+          {visibles.length > 0 && puedeVer(perfil, marca, 'tncat') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Lleva los productos que estás viendo a Asignar categoría de Tienda Nube, con los nombres ya cargados"
+              onClick={() => {
+                const nn = [...new Set(visibles.map((i) => i.foto.nombre.trim()).filter(Boolean))]
+                if (!nn.length) { toast.error('Estos productos no tienen nombre para cruzar contra Tienda Nube.'); return }
+                ponerPuenteAsignar(nn)
+                router.push('/tncat/categorias')
+              }}
+            >
+              🗂️ Categoría en TN ({visibles.length})
             </Button>
           )}
           {campania.estado === 'en_curso' && puede.aplicar && (
