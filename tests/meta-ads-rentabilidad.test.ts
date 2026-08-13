@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  calcularRentabilidad, DEFAULTS, escenariosDeFreno, proyeccionStock, type Supuestos,
+  calcularRentabilidad, DEFAULTS, escenariosDeFreno, normalizar, proyeccionStock, type Supuestos,
 } from '@/lib/meta-ads/rentabilidad'
 
 /**
@@ -157,5 +157,68 @@ describe('la proyección del stock', () => {
   it('sin costo de hoy no se inventa una fila', () => {
     const s = { ...DEFAULTS, costoHoy: 0 }
     expect(proyeccionStock(s, calcularRentabilidad(s))).toHaveLength(2)
+  })
+})
+
+/**
+ * 🔴 **La puerta por la que entra lo que se guarda.**
+ *
+ * Desde la tanda 2 los supuestos se persisten (`api/_meta-rentabilidad.js`), así que lo que llegue
+ * en un POST termina siendo el techo contra el que se juzga si una campaña rinde. Lo que este
+ * bloque amarra no es el formulario —el navegador ya clampea— sino **qué pasa con lo que NO viene
+ * del formulario**: un campo que falta, un `"catorce mil"`, un `reparto` de 10.000%.
+ *
+ * La regla es una sola y es la que hace la diferencia entre un número raro y un número mentiroso:
+ * **lo inválido cae al DEFAULT, lo válido-pero-fuera-de-rango se recorta contra el borde.** Un 0
+ * puesto por descarte calcula igual, se ve razonable, y está mal.
+ */
+describe('normalizar — lo que se guarda no puede ser cualquier cosa', () => {
+  it('lo que no vino queda en el default, y devuelve los campos completos', () => {
+    const n = normalizar({ precio: 20000 })
+    expect(n.precio).toBe(20000)
+    expect(n.costo).toBe(DEFAULTS.costo)
+    expect(Object.keys(n).sort()).toEqual(Object.keys(DEFAULTS).sort())
+  })
+
+  it('🔑 lo que vino MAL cae al default, no a 0', () => {
+    for (const basura of ['catorce mil', null, undefined, NaN, Infinity, {}, []]) {
+      expect(normalizar({ precio: basura }).precio).toBe(DEFAULTS.precio)
+    }
+  })
+
+  it('lo válido fuera de rango se recorta contra el borde', () => {
+    expect(normalizar({ reparto: 10000 }).reparto).toBe(100)
+    expect(normalizar({ iva: -5 }).iva).toBe(0)
+    expect(normalizar({ precio: -1 }).precio).toBe(0)
+    expect(normalizar({ unidades: 0.2 }).unidades).toBe(1) // media unidad por pedido no existe
+  })
+
+  it('acepta el número escrito como texto, que es como viaja en un JSON descuidado', () => {
+    expect(normalizar({ precio: '16990' }).precio).toBe(16990)
+  })
+
+  it('`acumulan` sólo cambia con un booleano de verdad', () => {
+    expect(normalizar({ acumulan: false }).acumulan).toBe(false)
+    expect(normalizar({ acumulan: 'false' }).acumulan).toBe(DEFAULTS.acumulan)
+    expect(normalizar({ acumulan: 0 }).acumulan).toBe(DEFAULTS.acumulan)
+  })
+
+  it('un cuerpo vacío, o que ni siquiera es un objeto, da los defaults enteros', () => {
+    for (const nada of [{}, null, undefined, 'hola', 42]) {
+      expect(normalizar(nada)).toEqual(DEFAULTS)
+    }
+  })
+
+  it('lo normalizado siempre calcula: ningún camino deja un NaN adentro del techo', () => {
+    for (const raro of [{}, { precio: 'x' }, { unidades: -3 }, { reparto: 1e9 }, { iva: 'NaN' }]) {
+      const r = calcularRentabilidad(normalizar(raro))
+      expect(Number.isFinite(r.costoMax)).toBe(true)
+      expect(Number.isFinite(r.ticket)).toBe(true)
+    }
+  })
+
+  it('normalizar dos veces da lo mismo que una: lo guardado se puede releer sin derivar', () => {
+    const una = normalizar({ precio: '16990', reparto: 200, acumulan: false })
+    expect(normalizar(una)).toEqual(una)
   })
 })

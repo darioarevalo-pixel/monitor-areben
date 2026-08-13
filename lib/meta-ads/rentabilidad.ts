@@ -1,31 +1,27 @@
 /**
- * El piso de rentabilidad de la pauta: **hasta cuánto se puede pagar por una compra**.
+ * El umbral de rentabilidad — la cara tipada, y el acceso a lo guardado.
  *
- * # Por qué esto existe y por qué el semáforo NO es el ROAS
+ * ⚠️ **La lógica no vive acá: vive en `lib/meta-ads/rentabilidad.core.js`**, en JS plano, porque
+ * `api/_meta-rentabilidad.js` necesita `normalizar()` y no puede importar TypeScript. El porqué del
+ * modelo entero —y por qué el semáforo es el costo por compra y no el ROAS— está en el docblock del
+ * core. Acá van los tipos, el re-export y las dos llamadas al endpoint.
  *
- * Sin un umbral, cada «rinde / no rinde» era una opinión. El umbral sale de la economía unitaria:
- * de lo que el cliente paga se van el IVA, el producto, Ingresos Brutos, el impuesto al cheque y
- * las comisiones; lo que queda —la **contribución**— es lo único con lo que se puede pagar pauta y
- * ganar plata. Repartirla decide el techo.
- *
- * 🔑 **El techo por compra casi no depende del mix de medios de pago (±0,7%), pero el ROAS sí
- * (±12%)**, porque el ROAS que reporta Meta usa lo que el cliente efectivamente pagó y la
- * transferencia paga menos. Como el mix es un dato que no tenemos, el semáforo es el **costo por
- * compra**: es el único de los dos que no depende de un dato que falta. Corolario que ya confundió
- * una vez: **si crece la transferencia el ROAS de Ads Manager baja ~10% sin que la pauta empeore.**
- *
- * 🔴 **El break-even y el objetivo no son lo mismo.** Entre los dos se gana plata, sólo que menos
- * de lo decidido. Confundirlos hace apagar campañas que están dando ganancia.
- *
- * # De dónde salen los números
- *
- * Portado de `~/Projects/analista-meta/herramientas/roas-minimo-bdi.html` (13-ago-2026), la
- * calculadora con la que se definió el umbral de BDI. **Las fórmulas se movieron tal cual.** Este
- * archivo sólo calcula: quien dibuja es `components/meta-ads/rentabilidad/`.
- *
- * ⚠️ `DEFAULTS` es la economía real de las fundas de BDI y **la pantalla lo lee de acá**: no se
- * repiten los valores en el JSX. Un default que la pantalla no lee es un default que miente.
+ * 🔑 **El eje es la LÍNEA de pauta, no la marca del monitor.** Es el mismo eje con el que se leen
+ * las campañas: el techo se compara contra el costo por compra de un conjunto, y los conjuntos
+ * cuelgan de una línea. Stunned tiene su propia cuenta y su propia economía, y no es una `Marca`
+ * —forzarlo adentro de Zattia le daría el techo de otro producto—. La marca sale de la línea con
+ * `baseDeLinea()`, que es la que manda para permisos y base de datos.
  */
+
+import { apiFetch } from '../api-fetch'
+import type { LineaPauta } from './tipos'
+import {
+  DEFAULTS as DEFAULTS_JS,
+  calcularRentabilidad as calcularJs,
+  escenariosDeFreno as escenariosJs,
+  normalizar as normalizarJs,
+  proyeccionStock as proyeccionJs,
+} from './rentabilidad.core.js'
 
 /** Los supuestos que se pueden mover. Los porcentajes van **en porcentaje** (12,5 = 12,5%). */
 export type Supuestos = {
@@ -66,36 +62,6 @@ export type Supuestos = {
   stock: number
   /** Lo que se está pagando hoy por compra. Es la referencia contra la que se mide el techo. */
   costoHoy: number
-}
-
-/**
- * La economía de las fundas de BDI al 13-ago-2026, medida con Bruno.
- *
- * ⚠️ **`pasTransf` es 1%, no 0.** La calculadora original quedó guardada con 0 en ese campo, pero
- * la economía anotada —y el techo de $9.100 que salió de ella— corresponden al 1%. Con 0 el techo
- * da $9.175. La diferencia es chica (0,8%) y no cambia ninguna decisión, pero el valor bueno es el
- * de la economía, no el que quedó tipeado.
- */
-export const DEFAULTS: Supuestos = {
-  precio: 14490, // promedio de $13.990 y $14.990
-  raspa: 12.5,
-  usaRaspa: 100,
-  transf: 10,
-  acumulan: true,
-  mix: 50,
-  costo: 1700,
-  iva: 21,
-  iibb: 4, // Santa Fe
-  cheque: 1.2,
-  tnTarjeta: 1,
-  pasTarjeta: 8,
-  tnTransf: 0, // bonificada
-  pasTransf: 1,
-  unidades: 2.6, // derivado del ticket real medido ($31.552)
-  reparto: 50,
-  ventasDia: 100,
-  stock: 11000,
-  costoHoy: 2472,
 }
 
 /** Lo que deja **una unidad** por un camino de cobro, con su desglose. */
@@ -153,93 +119,6 @@ export type Rentabilidad = {
   }
 }
 
-/** Un canal: precio bruto por unidad + sus comisiones → lo que queda. */
-function canal(s: Supuestos, bruto: number, tn: number, pas: number): Canal {
-  const neto = bruto / (1 + s.iva / 100)
-  const comision = bruto * ((tn + pas) / 100)
-  const iibb = bruto * (s.iibb / 100)
-  const cheque = bruto * (s.cheque / 100)
-  return {
-    bruto,
-    neto,
-    iva: bruto - neto,
-    producto: s.costo,
-    iibb,
-    cheque,
-    comision,
-    contrib: neto - s.costo - iibb - cheque - comision,
-  }
-}
-
-export function calcularRentabilidad(s: Supuestos): Rentabilidad {
-  // El raspa se pondera por cuánta gente lo usa: un 12,5% que usa la mitad pesa 6,25%.
-  const desc = (s.raspa / 100) * (s.usaRaspa / 100)
-  const conRaspa = s.precio * (1 - desc)
-  const tarjeta = canal(s, conRaspa, s.tnTarjeta, s.pasTarjeta)
-  const transferencia = canal(
-    s,
-    s.acumulan ? conRaspa * (1 - s.transf / 100) : s.precio * (1 - s.transf / 100),
-    s.tnTransf,
-    s.pasTransf,
-  )
-
-  const m = s.mix / 100
-  const w = (a: number, b: number) => a * (1 - m) + b * m
-  const unidad: Canal = {
-    bruto: w(tarjeta.bruto, transferencia.bruto),
-    neto: w(tarjeta.neto, transferencia.neto),
-    iva: w(tarjeta.iva, transferencia.iva),
-    producto: w(tarjeta.producto, transferencia.producto),
-    iibb: w(tarjeta.iibb, transferencia.iibb),
-    cheque: w(tarjeta.cheque, transferencia.cheque),
-    comision: w(tarjeta.comision, transferencia.comision),
-    contrib: w(tarjeta.contrib, transferencia.contrib),
-  }
-
-  // Del por-unidad al por-compra: Meta cobra por compra, no por unidad.
-  const ticket = unidad.bruto * s.unidades
-  const contribPedido = unidad.contrib * s.unidades
-  const roasBE = contribPedido > 0 ? ticket / contribPedido : Infinity
-  const costoMax = contribPedido * (s.reparto / 100)
-  const roasObj = costoMax > 0 ? ticket / costoMax : Infinity
-
-  const compras = s.unidades > 0 ? s.stock / s.unidades : 0
-  const dias = s.ventasDia > 0 ? compras / s.ventasDia : 0
-
-  // El techo en los dos extremos del mix. Si apenas se mueve, el mix deja de ser un dato que haga
-  // falta averiguar para poder decidir — que es justamente lo que pasa.
-  const extremo = (prop: number): Extremo => {
-    const bruto = tarjeta.bruto * (1 - prop) + transferencia.bruto * prop
-    const contrib = tarjeta.contrib * (1 - prop) + transferencia.contrib * prop
-    const cm = contrib * s.unidades * (s.reparto / 100)
-    return { costoMax: cm, roas: cm > 0 ? (bruto * s.unidades) / cm : Infinity }
-  }
-  const eT = extremo(0)
-  const eX = extremo(1)
-
-  return {
-    tarjeta,
-    transferencia,
-    unidad,
-    ticket,
-    contribPedido,
-    margenPct: ticket > 0 ? (contribPedido / ticket) * 100 : 0,
-    roasBE,
-    costoMax,
-    roasObj,
-    aire: s.costoHoy > 0 ? costoMax / s.costoHoy : Infinity,
-    diario: costoMax * s.ventasDia,
-    compras,
-    dias,
-    factu: compras * ticket,
-    extremos: {
-      tarjeta: eT,
-      transferencia: eX,
-      spreadPct: eT.costoMax > 0 ? (Math.abs(eX.costoMax - eT.costoMax) / eT.costoMax) * 100 : 0,
-    },
-  }
-}
-
 /** Un reparto posible de la contribución, con lo que implica. */
 export type Escenario = {
   /** Qué parte de la contribución se le da a la pauta, en %. */
@@ -254,37 +133,6 @@ export type Escenario = {
   elegido: boolean
 }
 
-/**
- * Los cuatro repartos que vale la pena comparar, incluyendo el elegido.
- *
- * El 100% es el break-even y se dibuja en rojo a propósito: **es el punto donde la pauta se lleva
- * toda la ganancia**, no un objetivo. Si el reparto elegido coincide con uno de los fijos, se
- * muestra una sola fila y no dos iguales.
- */
-export function escenariosDeFreno(s: Supuestos, r: Rentabilidad): Escenario[] {
-  const base: Array<[number, string, Escenario['tono']]> = [
-    [100, 'todo — punto de equilibrio', 'danger'],
-    [75, 'tres cuartos — al hueso', 'warning'],
-    [s.reparto, `${Math.round(s.reparto)}% — el elegido`, 'neutral'],
-    [33, 'un tercio — conservador', 'success'],
-  ]
-  return base
-    .filter(([q], i, a) => a.findIndex(([y]) => Math.abs(y - q) < 0.001) === i)
-    .sort((a, b) => b[0] - a[0])
-    .map(([q, etiqueta, tono]) => {
-      const costoMax = r.contribPedido * (q / 100)
-      return {
-        reparto: q,
-        etiqueta,
-        tono,
-        costoMax,
-        roas: costoMax > 0 ? r.ticket / costoMax : Infinity,
-        diario: costoMax * s.ventasDia,
-        elegido: Math.abs(q - s.reparto) < 0.001,
-      }
-    })
-}
-
 /** Qué deja vender todo el stock, pagando tanto por compra. */
 export type Proyeccion = {
   etiqueta: string
@@ -294,21 +142,67 @@ export type Proyeccion = {
   roas: number
 }
 
-/** El stock a tres precios de compra: el de hoy, la mitad del techo y el techo. */
-export function proyeccionStock(s: Supuestos, r: Rentabilidad): Proyeccion[] {
-  return [
-    { etiqueta: 'el de hoy', costoPorCompra: s.costoHoy },
-    { etiqueta: 'la mitad del techo', costoPorCompra: r.costoMax * 0.5 },
-    { etiqueta: 'el techo', costoPorCompra: r.costoMax },
-  ]
-    .filter((p) => p.costoPorCompra > 0)
-    .map((p) => {
-      const pauta = r.compras * p.costoPorCompra
-      return {
-        ...p,
-        pauta,
-        ganancia: r.compras * r.contribPedido - pauta,
-        roas: p.costoPorCompra > 0 ? r.ticket / p.costoPorCompra : Infinity,
-      }
-    })
+export const DEFAULTS = DEFAULTS_JS as Supuestos
+export const normalizar = normalizarJs as (crudo: unknown) => Supuestos
+export const calcularRentabilidad = calcularJs as (s: Supuestos) => Rentabilidad
+export const escenariosDeFreno = escenariosJs as (s: Supuestos, r: Rentabilidad) => Escenario[]
+export const proyeccionStock = proyeccionJs as (s: Supuestos, r: Rentabilidad) => Proyeccion[]
+
+/** Los supuestos de una línea, con la firma de quién los dejó así. */
+export type Guardado = {
+  linea: LineaPauta
+  supuestos: Supuestos
+  /**
+   * `false` cuando la línea todavía no tiene fila propia y lo que se ve son los `DEFAULTS`.
+   *
+   * 🔑 **La pantalla lo dice en voz alta.** Los defaults son la economía de las fundas de BDI: si
+   * Zattia los mostrara callada, su techo se leería como un dato medido de Zattia.
+   */
+  guardado: boolean
+  /** Quién lo guardó por última vez. `null` si todavía no se guardó. */
+  por: string | null
+  /** Cuándo, en ISO. `null` si todavía no se guardó. */
+  cuando: string | null
+}
+
+/** Qué puede hacer esta persona con el umbral de esta línea. Lo contesta el servidor. */
+export type PoderesRentabilidad = {
+  /** Guardar cambia lo que TODOS leen como «rinde»: hoy es sólo de un admin. */
+  editar: boolean
+}
+
+export type RespuestaRentabilidad = Guardado & { puede: PoderesRentabilidad }
+
+const API = '/api/datos?recurso=meta-rentabilidad'
+
+export async function leerRentabilidad(linea: LineaPauta): Promise<RespuestaRentabilidad> {
+  const r = await apiFetch(`${API}&linea=${linea}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer el umbral de rentabilidad.')
+  return {
+    linea: d.linea as LineaPauta,
+    supuestos: normalizar(d.supuestos),
+    guardado: Boolean(d.guardado),
+    por: d.por ?? null,
+    cuando: d.cuando ?? null,
+    puede: d.puede || { editar: false },
+  }
+}
+
+export async function guardarRentabilidad(linea: LineaPauta, supuestos: Supuestos): Promise<RespuestaRentabilidad> {
+  const r = await apiFetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ linea, supuestos }),
+  })
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo guardar el umbral de rentabilidad.')
+  return {
+    linea: d.linea as LineaPauta,
+    supuestos: normalizar(d.supuestos),
+    guardado: true,
+    por: d.por ?? null,
+    cuando: d.cuando ?? null,
+    puede: d.puede || { editar: false },
+  }
 }

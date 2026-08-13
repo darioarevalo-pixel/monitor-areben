@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|calendario|liquidacion|atencion|sistema|agenda&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -21,17 +21,20 @@ import atencion from './_atencion.js';
 import sistema from './_sistema.js';
 import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
+import metaRentabilidad from './_meta-rentabilidad.js';
 import { soloMismoOrigen } from './_auth.js';
 
-// `meta-funnel` y `calendario` entran por acá y NO por api/meta-ads.js, aunque el tema sea el
-// mismo: aquel endpoint corta con 500 si falta o vence META_ADS_TOKEN, y ni el tablero de ideas ni
-// el calendario necesitan hablar con Meta. Atarlos a ese token los mataría justo cuando marketing
-// tiene que estar craneando las piezas.
+// `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
+// el tema sea el mismo: aquel endpoint corta con 500 si falta o vence META_ADS_TOKEN, y ninguno de
+// los tres necesita hablar con Meta —el umbral de rentabilidad sale de la economía del producto—.
+// Atarlos a ese token los mataría justo cuando marketing tiene que estar craneando las piezas, o
+// cuando hay que decidir si algo rinde.
 const RECURSOS = {
   ignorados,
   disenos,
   'fotos-verificadas': fotosVerificadas,
   'meta-funnel': metaFunnel,
+  'meta-rentabilidad': metaRentabilidad,
   calendario,
   liquidacion,
   atencion,

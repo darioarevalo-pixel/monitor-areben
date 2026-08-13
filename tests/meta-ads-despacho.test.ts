@@ -55,6 +55,35 @@ describe('meta-ads — la puerta despacha todo lo que el cliente pide', () => {
 })
 
 /**
+ * 🔴 **La OTRA puerta: `api/datos.js`.**
+ *
+ * Meta Ads entra por dos endpoints y no por uno. Lo que necesita hablar con Meta va por
+ * `api/meta-ads.js`; lo que no —el tablero de ideas, el calendario, el umbral de rentabilidad— va
+ * por `api/datos.js`, porque aquel corta con 500 si falta o vence `META_ADS_TOKEN` y sería absurdo
+ * que la pantalla que dice si algo rinde dependa de un token de Meta.
+ *
+ * `datos.js` al menos contesta 400 «recurso inválido» y no se queda callado como `meta-ads.js`,
+ * pero el 400 aparece **en producción y del lado del que abrió la pantalla**. Que las dos listas
+ * coincidan se puede saber acá.
+ */
+describe('datos.js despacha todos los recursos que el cliente le pide', () => {
+  const puertaDatos = readFileSync(join(raiz, 'api/datos.js'), 'utf8')
+
+  /** Los `?recurso=X` que el código del navegador pide a `/api/datos`. */
+  const pedidos = [...readFileSync(join(raiz, 'lib/meta-ads/rentabilidad.ts'), 'utf8')
+    .matchAll(/\/api\/datos\?recurso=([a-z-]+)/g)].map((m) => m[1])
+
+  it('la extracción encuentra algo (si da cero, el test no puede fallar)', () => {
+    expect(pedidos.length).toBeGreaterThan(0)
+  })
+
+  it('cada recurso pedido está en el mapa RECURSOS', () => {
+    const faltan = pedidos.filter((r) => !puertaDatos.includes(`'${r}'`))
+    expect(faltan, `Sin despachar en api/datos.js: ${faltan.join(', ')}`).toEqual([])
+  })
+})
+
+/**
  * 🔴 **El MISMO defecto, un piso más arriba: el menú pide una vista que el router no despacha.**
  *
  * `MetaAds.tsx` resuelve la vista con `VISTAS[vista] ?? Panel`. Ese `?? Panel` es deliberado —una

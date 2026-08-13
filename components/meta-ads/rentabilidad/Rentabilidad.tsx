@@ -30,17 +30,21 @@
  * bien.**
  */
 
-import { useMemo, useState } from 'react'
-import { PanelesDeSupuestos, type Cambiar } from '@/components/meta-ads/rentabilidad/Supuestos'
+import { useMemo } from 'react'
+import { useMeta } from '@/components/meta-ads/ContextoMeta'
+import { PanelesDeSupuestos } from '@/components/meta-ads/rentabilidad/Supuestos'
+import { useRentabilidad, type EstadoRentabilidad } from '@/components/meta-ads/rentabilidad/useRentabilidad'
 import { plata, roas as equis, decimal } from '@/lib/meta-ads/formato'
+import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import {
-  calcularRentabilidad, DEFAULTS, escenariosDeFreno, proyeccionStock,
+  calcularRentabilidad, escenariosDeFreno, proyeccionStock,
   type Rentabilidad as Resultado, type Supuestos,
 } from '@/lib/meta-ads/rentabilidad'
+import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
-  Card, KpiCard, Notice, SectionCard, TBody, TableWrap, Td, Th, THead, Tr,
-  color, font, space, weight,
+  Button, Card, KpiCard, Notice, SectionCard, Tabs, TBody, TableWrap, Td, Th, THead, Tr,
+  color, font, space, weight, type TabItem,
 } from '@/components/ui'
 
 /** Millones, para las cifras del stock entero: `$132,5M`. Abajo de un millón se escribe entero. */
@@ -48,13 +52,55 @@ const millones = (v: number) =>
   Math.abs(v) >= 1e6 ? `$${(v / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M` : plata(v)
 
 export function Rentabilidad() {
-  const [s, setS] = useState<Supuestos>(DEFAULTS)
-  const cambiar: Cambiar = (k, v) => setS((prev) => ({ ...prev, [k]: v }))
+  const { linea, setLinea, visibles } = useMeta()
 
+  /**
+   * 🔑 **La línea se valida al RENDERIZAR, no con un efecto que la corrija.**
+   *
+   * El eje de la sección admite «Todas», que acá no significa nada —el umbral es de una economía, y
+   * tres economías no se promedian—. Así que se elige la primera visible y listo. Corregirlo con un
+   * efecto dejaría un cuadro intermedio calculando contra otra línea, que es el patrón que ya mordió
+   * tres veces en esta sección y que el lint del repo prohíbe (ver `ContextoMeta`).
+   *
+   * ⚠️ Tampoco se escribe el eje de vuelta: alguien que venía de Campañas mirando «Todas» y pasa
+   * por acá tiene que encontrar «Todas» al volver. Lo que se elige EN estas pestañas sí lo escribe,
+   * porque ahí la intención es explícita.
+   */
+  const laLinea: LineaPauta | null = linea !== 'todas' ? linea : (visibles[0] ?? null)
+
+  if (!laLinea) {
+    return <Notice tone="warning">No tenés ninguna línea de pauta habilitada para mirar.</Notice>
+  }
+  return <DeUnaLinea key={laLinea} laLinea={laLinea} visibles={visibles} setLinea={setLinea} />
+}
+
+/**
+ * La pantalla de UNA línea.
+ *
+ * Va aparte y con `key={laLinea}` a propósito: cambiar de pestaña **remonta todo**. Cada línea es
+ * su propia economía, y arrastrar lo que se estaba editando de BDI a la pestaña de Zattia sería
+ * mostrarle a Zattia los números de otro producto.
+ */
+function DeUnaLinea({ laLinea, visibles, setLinea }: {
+  laLinea: LineaPauta
+  visibles: LineaPauta[]
+  setLinea: (l: LineaPauta) => void
+}) {
+  const m = useRentabilidad(laLinea)
+  const s = m.supuestos
   const r = useMemo(() => calcularRentabilidad(s), [s])
+
+  const pestañas: TabItem[] = visibles.map((l) => ({ key: l, label: ETIQUETA_LINEA[l] }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      {/* Sin «Todas»: el umbral es de UNA economía. Sólo si hay más de una para elegir. */}
+      {visibles.length > 1 && (
+        <Tabs items={pestañas} value={laLinea} onChange={(k) => setLinea(k as LineaPauta)} />
+      )}
+
+      {m.error && <Notice tone="danger">{m.error}</Notice>}
+
       <Regla r={r} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: space[3] }}>
@@ -87,11 +133,9 @@ export function Rentabilidad() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: space[4], alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-          <Notice tone="warning">
-            <b>Son los supuestos de las fundas de BDI.</b> Lo que se mueve acá no se guarda: al salir
-            de la pantalla vuelven los de origen.
-          </Notice>
-          <PanelesDeSupuestos s={s} cambiar={cambiar} />
+          <DeDondeSalen m={m} linea={laLinea} />
+          <PanelesDeSupuestos s={s} cambiar={m.cambiar} soloLectura={!m.puedeEditar} />
+          <BarraDeGuardado m={m} />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -101,6 +145,98 @@ export function Rentabilidad() {
           <Stock s={s} r={r} />
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * De dónde salen los números que se están viendo. **Nunca calla.**
+ *
+ * Son tres estados y cada uno se lee distinto: los guardados de esta línea (con la firma de quién),
+ * los defaults prestados porque la línea todavía no cargó los suyos, y los defaults porque la
+ * lectura falló. El del medio es el que importa: los defaults son la economía de las fundas de BDI,
+ * y mostrárselos a Zattia sin decirlo haría pasar el techo de un producto por el de otro.
+ */
+function DeDondeSalen({ m, linea }: { m: EstadoRentabilidad; linea: LineaPauta }) {
+  if (m.cargando) return <Notice tone="neutral">Leyendo el umbral de {ETIQUETA_LINEA[linea]}…</Notice>
+
+  if (!m.origen.guardado) {
+    return (
+      <Notice tone="warning">
+        <b>{ETIQUETA_LINEA[linea]} todavía no tiene sus números.</b> Lo que se ve es la economía de
+        las <b>fundas de BDI</b>, que es de donde salió esta calculadora
+        {linea === 'bdi' ? '' : ' — otro producto, otro costo y otro margen'}.
+        {m.puedeEditar ? ' Cargá los suyos y guardá.' : ' Todavía no hay nada guardado para esta línea.'}
+      </Notice>
+    )
+  }
+
+  const cuando = m.origen.cuando
+    ? new Date(m.origen.cuando).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null
+
+  return (
+    <Notice tone="success">
+      Los números de <b>{ETIQUETA_LINEA[linea]}</b>
+      {m.origen.por ? <>, guardados por <b>{m.origen.por}</b></> : null}
+      {cuando ? ` el ${cuando}` : null}.
+      {!m.puedeEditar && ' Los podés mover para probar, pero el guardado es de un admin.'}
+    </Notice>
+  )
+}
+
+/**
+ * Guardar y descartar. **Guardar es un botón y no un efecto**, y por eso esto existe.
+ *
+ * El umbral es lo que todas las otras pantallas leen como «rinde»: con autoguardado, arrastrar el
+ * deslizador del reparto —que va de 10% a 100%— publicaría una decisión de negocio por cada pixel.
+ * Mientras haya cambios sin guardar, la barra queda a la vista y lo dice.
+ */
+function BarraDeGuardado({ m }: { m: EstadoRentabilidad }) {
+  if (!m.puedeEditar) {
+    return (
+      <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.5 }}>
+        Mové lo que quieras: es una prueba tuya y no le cambia el umbral a nadie. Guardarlo es de un
+        admin.
+      </div>
+    )
+  }
+
+  /**
+   * 🔑 **Una línea sin fila propia se puede guardar SIN tocar nada.**
+   *
+   * Parecía un caso de borde y no lo es: el cartel de arriba dice «cargá los suyos y guardá», y con
+   * el botón atado sólo a que haya cambios, la única forma de estrenar una línea era moverle algo y
+   * volverlo atrás. Confirmar los números prestados **es** el acto: los convierte de «esto es lo de
+   * BDI mientras no haya nada mejor» en «esto es lo de esta línea, y lo firmó alguien».
+   */
+  const estrenando = !m.origen.guardado
+  const hayQueGuardar = m.sucio || estrenando
+  const destacado = m.sucio
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: space[2],
+        padding: space[3],
+        border: `1px solid ${destacado ? color.warningBorder : color.line}`,
+        background: destacado ? color.warningBg : color.surface,
+        borderRadius: 10,
+      }}
+    >
+      <span style={{ fontSize: font.sm, color: destacado ? color.warningInk : color.mut2, flex: 1 }}>
+        {m.sucio ? 'Hay cambios sin guardar' : estrenando ? 'Todavía sin guardar' : 'Sin cambios'}
+      </span>
+      {m.sucio && (
+        <Button variant="ghost" size="sm" onClick={m.descartar} disabled={m.guardando}>
+          Descartar
+        </Button>
+      )}
+      <Button size="sm" onClick={() => void m.guardar()} disabled={!hayQueGuardar || m.guardando}>
+        {m.guardando ? 'Guardando…' : estrenando && !m.sucio ? 'Guardar estos números' : 'Guardar'}
+      </Button>
     </div>
   )
 }

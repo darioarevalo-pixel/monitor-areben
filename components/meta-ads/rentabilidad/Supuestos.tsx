@@ -54,7 +54,17 @@ function Campo({ label, pista, children }: { label: string; pista?: string; chil
 /** Las claves de `Supuestos` que llevan un número. Deja afuera a `acumulan`, que es el conmutador. */
 type ClaveNumerica = { [K in keyof Supuestos]: Supuestos[K] extends number ? K : never }[keyof Supuestos]
 
-export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Cambiar }) {
+export function PanelesDeSupuestos({ s, cambiar, soloLectura = false }: {
+  s: Supuestos
+  cambiar: Cambiar
+  /**
+   * ⚠️ **`soloLectura` deshabilita los controles, NO esconde los números.**
+   *
+   * Quien no puede guardar igual tiene que poder leer con qué está calculado el techo contra el que
+   * se le juzga la campaña. Esconderlo dejaría el umbral como un número caído del cielo.
+   */
+  soloLectura?: boolean
+}) {
   /**
    * 🔑 **Qué campos están momentáneamente en blanco, y por qué el blanco NO viaja al modelo.**
    *
@@ -94,6 +104,7 @@ export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Camb
         step={extra?.step ?? 0.1}
         prefix={extra?.prefix}
         width={extra?.width ?? 104}
+        disabled={soloLectura}
       />
     </span>
   )
@@ -105,22 +116,19 @@ export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Camb
         <Campo label="Precio de lista" pista="por unidad">{num('precio', { step: 10, prefix: '$', width: 116 })}</Campo>
         <Rango
           label="Descuento del raspa" valor={`${fmt(s.raspa)}%`} min={0} max={20} step={0.5}
-          value={s.raspa} izq="0%" der="20%" onChange={(n) => cambiar('raspa', n)}
+          value={s.raspa} izq="0%" der="20%" onChange={(n) => cambiar('raspa', n)} soloLectura={soloLectura}
         />
         <Rango
           label="Compradores que lo usan" valor={`${Math.round(s.usaRaspa)}%`} min={0} max={100} step={5}
-          value={s.usaRaspa} izq="nadie" der="todos" onChange={(n) => cambiar('usaRaspa', n)}
+          value={s.usaRaspa} izq="nadie" der="todos" onChange={(n) => cambiar('usaRaspa', n)} soloLectura={soloLectura}
         />
         <Campo label="Descuento por transferencia">{num('transf', { max: 100, step: 1, prefix: '%' })}</Campo>
         <Campo label="¿Se acumulan?" pista="raspa + transferencia">
-          <Conmutador
-            si={s.acumulan}
-            onChange={(v) => cambiar('acumulan', v)}
-          />
+          <Conmutador si={s.acumulan} onChange={(v) => cambiar('acumulan', v)} soloLectura={soloLectura} />
         </Campo>
         <Rango
           label="Ventas por transferencia" valor={`${Math.round(s.mix)}%`} min={0} max={100} step={5}
-          value={s.mix} izq="todo tarjeta" der="todo transferencia" onChange={(n) => cambiar('mix', n)}
+          value={s.mix} izq="todo tarjeta" der="todo transferencia" onChange={(n) => cambiar('mix', n)} soloLectura={soloLectura}
         />
       </div>
 
@@ -142,11 +150,11 @@ export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Camb
         <div style={titulo}>El pedido y el objetivo</div>
         <Rango
           label="Unidades por pedido" valor={fmt(s.unidades)} min={1} max={6} step={0.1}
-          value={s.unidades} izq="1" der="6" onChange={(n) => cambiar('unidades', n)}
+          value={s.unidades} izq="1" der="6" onChange={(n) => cambiar('unidades', n)} soloLectura={soloLectura}
         />
         <Rango
           label="De la ganancia, a la pauta" valor={`${Math.round(s.reparto)}%`} min={10} max={100} step={5}
-          value={s.reparto} izq="conservador" der="al hueso" onChange={(n) => cambiar('reparto', n)}
+          value={s.reparto} izq="conservador" der="al hueso" onChange={(n) => cambiar('reparto', n)} soloLectura={soloLectura}
         />
         <Campo label="Ventas por día" pista="el objetivo">{num('ventasDia', { step: 5, width: 116 })}</Campo>
         <Campo label="Stock" pista="unidades">{num('stock', { step: 100, width: 116 })}</Campo>
@@ -167,7 +175,7 @@ function fmt(n: number) {
  * Los extremos van con palabras y no con números («todo tarjeta» / «todo transferencia»): lo que
  * hay que entender de un slider es qué significa correrlo, no hasta dónde llega.
  */
-function Rango({ label, valor, min, max, step, value, izq, der, onChange }: {
+function Rango({ label, valor, min, max, step, value, izq, der, onChange, soloLectura }: {
   label: string
   valor: string
   min: number
@@ -177,6 +185,7 @@ function Rango({ label, valor, min, max, step, value, izq, der, onChange }: {
   izq: string
   der: string
   onChange: (n: number) => void
+  soloLectura?: boolean
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -191,6 +200,7 @@ function Rango({ label, valor, min, max, step, value, izq, der, onChange }: {
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        disabled={soloLectura}
         style={{ width: '100%', accentColor: color.brandSolid }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.xs, color: color.mut2 }}>
@@ -202,7 +212,7 @@ function Rango({ label, valor, min, max, step, value, izq, der, onChange }: {
 }
 
 /** Sí / No, en dos botones pegados. */
-function Conmutador({ si, onChange }: { si: boolean; onChange: (v: boolean) => void }) {
+function Conmutador({ si, onChange, soloLectura }: { si: boolean; onChange: (v: boolean) => void; soloLectura?: boolean }) {
   return (
     <span style={{ display: 'inline-flex', border: `1px solid ${color.line2}`, borderRadius: 8, overflow: 'hidden' }}>
       {([true, false] as const).map((v) => (
@@ -211,11 +221,12 @@ function Conmutador({ si, onChange }: { si: boolean; onChange: (v: boolean) => v
           type="button"
           aria-pressed={si === v}
           onClick={() => onChange(v)}
+          disabled={soloLectura}
           style={{
             border: 'none',
             padding: '4px 14px',
             fontSize: font.sm,
-            cursor: 'pointer',
+            cursor: soloLectura ? 'default' : 'pointer',
             background: si === v ? color.brandSolid : 'transparent',
             color: si === v ? '#fff' : color.mut,
             fontWeight: si === v ? weight.semibold : weight.normal,
