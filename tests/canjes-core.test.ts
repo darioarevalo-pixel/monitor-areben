@@ -61,19 +61,51 @@ describe('normalizarInstagram — el unique del padrón', () => {
   })
 
   /**
-   * ⚠️ El test que importa de verdad. `api/_canjes.js` tiene su propia copia porque los `api/*.js`
-   * no importan TS, y **esa** es la que decide el unique de la base. Si divergen, la UI dice "ya
-   * existe" y el servidor inserta una fila nueva, o al revés.
+   * ⚠️ **Este test cambió el 13-ago-2026 y el motivo es lo interesante.**
+   *
+   * Antes comparaba dos implementaciones: la de `lib/canjes/instagram.ts` y la copia a mano de
+   * `api/_canjes.js`, que es la que decide el `unique` de la base. Era el único freno contra que
+   * se despegaran y se crearan fichas duplicadas en silencio.
+   *
+   * Ahora la copia no existe: las dos salen de `lib/canjes/instagram.core.js`. Y si el test se
+   * hubiera dejado como estaba, seguiría en verde **comparando una función consigo misma** — o
+   * sea, sin probar nada, que es peor que no tenerlo.
+   *
+   * Lo que se prueba en su lugar es la identidad: tienen que ser **el mismo objeto función**. Eso
+   * falla el día que alguien vuelva a pegar una copia adentro del handler, que es exactamente el
+   * accidente que hay que atajar.
    */
-  it('el espejo JS del handler normaliza EXACTAMENTE igual que el TS', () => {
-    const casos = [
-      'Lucia.MKP', '@lucia.mkp', 'instagram.com/lucia.mkp', 'https://www.instagram.com/lucia.mkp/',
-      'https://instagram.com/lucia.mkp?igsh=abc123', 'instagram.com/lucia.mkp/reel/xyz',
-      'instagr.am/lucia.mkp', '@lucia.mkp.', '@lu_cia.mkp2', '  @Lucia.MKP  ',
-      '', '   ', '@@@', 'https://tiktok.com/@lucia', 'María.José', '@ñoño',
+  it('el handler y la app usan LA MISMA función, no dos iguales', () => {
+    expect(normalizarJS).toBe(normalizarInstagram)
+  })
+
+  it('y esa función aguanta los casos que el padrón vio de verdad', () => {
+    // Los casos siguen valiendo: hoy cubren la implementación única.
+    const casos: [string | null, string][] = [
+      ['Lucia.MKP', 'lucia.mkp'],
+      ['@lucia.mkp', 'lucia.mkp'],
+      ['instagram.com/lucia.mkp', 'lucia.mkp'],
+      ['https://www.instagram.com/lucia.mkp/', 'lucia.mkp'],
+      ['https://instagram.com/lucia.mkp?igsh=abc123', 'lucia.mkp'],
+      ['instagram.com/lucia.mkp/reel/xyz', 'lucia.mkp'],
+      ['instagr.am/lucia.mkp', 'lucia.mkp'],
+      ['@lucia.mkp.', 'lucia.mkp'],
+      ['@lu_cia.mkp2', 'lu_cia.mkp2'],
+      ['  @Lucia.MKP  ', 'lucia.mkp'],
+      ['María.José', 'mara.jos'],
+      ['@ñoño', 'oo'],
+      // 📌 Un link de TikTok pegado en el campo de Instagram queda como `tiktok.com`, no vacío:
+      // el dominio sólo se recorta cuando es instagram.com o instagr.am. Se documenta tal cual
+      // porque es lo que hace hoy y el `unique` de la base ya vive con eso — no es un caso que
+      // este commit venga a cambiar. Si algún día molesta, se arregla mirando este renglón.
+      ['https://tiktok.com/@lucia', 'tiktok.com'],
+      ['', ''],
+      ['   ', ''],
+      ['@@@', ''],
+      [null, ''],
     ]
-    for (const c of casos) {
-      expect(normalizarJS(c), `divergen en ${JSON.stringify(c)}`).toBe(normalizarInstagram(c))
+    for (const [entrada, esperado] of casos) {
+      expect(normalizarInstagram(entrada), `falla con ${JSON.stringify(entrada)}`).toBe(esperado)
     }
   })
 })

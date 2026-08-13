@@ -73,6 +73,7 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
 import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
 import { marcaDePermisos, marcasVisiblesCanjes } from '../lib/canjes/marcas.js';
+import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
 // El grafo de estados y el tope viven aparte porque **el portal público también los usa** desde la
 // tanda 2 (ella elige productos desde el link y hay que frenarla si se pasa del acuerdo), y ese
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
@@ -92,27 +93,20 @@ function cfgMaestra() {
 const STORES = ['bdi', 'zattia', 'stunned'];
 
 /**
- * Espejo de `normalizarInstagram` en `lib/canjes/instagram.ts`. Los `api/*.js` no importan TS, así
- * que la deuda de espejo es inevitable (la misma que ya tiene `numeroReclamo`).
+ * 📌 Acá había una COPIA de `normalizarInstagram`, con un comentario que decía que "la deuda de
+ * espejo es inevitable". No lo era: se importa de `lib/canjes/instagram.core.js` (arriba), que es
+ * el mismo archivo que usa el navegador. El repo ya había resuelto esto ocho veces con el patrón
+ * `.core.js` y Canjes era el que faltaba.
  *
- * ⚠️ ESTA es la versión que decide el `unique` de la base. Si diverge de la de TS se crean
- * duplicados en silencio: la UI cree que es la misma persona y el insert crea otra fila.
- * `tests/canjes-core.test.ts` compara las dos contra los mismos casos.
+ * Importaba más que en otros lados porque ESTA es la versión que decide el `unique` de la base: si
+ * las copias divergían se creaban fichas duplicadas **sin que fallara nada** — la UI creía que era
+ * la misma persona y el insert creaba otra fila.
+ *
+ * Las otras seis funciones espejadas contra `lib/canjes/tipos.ts` (`numeroCanje`, `puedeIr`,
+ * `queDatoPide`, `itemsVivos`, `retiroLocalDisponible`, `fechaISO`) siguen copiadas: bajarlas es un
+ * refactor sobre 2.218 líneas en uso, y el AGENTS.md pide coordinar los grandes con Darío antes de
+ * empezar.
  */
-function normalizarInstagram(v) {
-  let s = String(v ?? '').trim();
-  if (!s) return '';
-  s = s.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
-  if (/^(instagram\.com|instagr\.am)\//i.test(s)) {
-    s = s.replace(/^(instagram\.com|instagr\.am)\//i, '');
-  }
-  s = s.split('?')[0].split('#')[0];
-  s = s.split('/')[0];
-  s = s.replace(/^@+/, '').trim().toLowerCase();
-  s = s.replace(/[^a-z0-9._]/g, '');
-  s = s.replace(/\.+$/, '');
-  return s;
-}
 
 /** Espejo de `numeroCanje` en `lib/canjes/tipos.ts`. Mismo formato o los números no coinciden. */
 function numeroCanje(id) {

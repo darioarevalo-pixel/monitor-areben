@@ -5,41 +5,22 @@
  * cosmética: es lo que hace que `Lucia.MKP`, `@lucia.mkp` e `instagram.com/lucia.mkp` sean **una**
  * persona y no tres fichas con historiales partidos.
  *
- * ⚠️ Espejo en `api/_canjes.js` (`normalizarInstagram`), porque los `api/*.js` no importan TS. Si
- * cambia la normalización acá, cambia allá — el unique de la base es de la versión JS, y una
- * divergencia crea duplicados silenciosos. `tests/canjes-core.test.ts` compara las dos.
+ * ✅ Ya NO hay espejo: `normalizarInstagram` vive una sola vez, en `./instagram.core.js`, y la
+ * importan igual el navegador (por acá) y `api/_canjes.js`. Antes era una copia a mano vigilada
+ * por un test, que es pagar interés en vez de amortizar — y acá el interés es caro, porque el
+ * `unique` de la base es de la versión JS y una divergencia crea duplicados en silencio.
  */
+import { normalizarInstagram as normalizarInstagramJs } from './instagram.core.js'
 
 /**
  * La forma canónica: minúsculas, sin `@`, sin URL, sin barra final, sin query string.
  *
- * Devuelve `''` si no queda nada usable — el llamador decide si eso es un error (en el alta lo es:
- * el @ es obligatorio).
+ * 📌 **La implementación vive en `./instagram.core.js`** desde el 13-ago-2026; acá queda el
+ * re-export tipado, así que los que importan de este archivo no se enteran. El motivo está en el
+ * docblock del core: era una copia a mano contra `api/_canjes.js`, y su divergencia crea fichas
+ * duplicadas en el padrón sin que falle nada.
  */
-export function normalizarInstagram(v: string | null | undefined): string {
-  let s = String(v ?? '').trim()
-  if (!s) return ''
-
-  // Formato URL, con o sin protocolo, con o sin www. Se queda con el primer segmento del path:
-  // `instagram.com/lucia.mkp/reel/xyz` es igual de válido como entrada y la persona es `lucia.mkp`.
-  s = s.replace(/^https?:\/\//i, '').replace(/^www\./i, '')
-  if (/^(instagram\.com|instagr\.am)\//i.test(s)) {
-    s = s.replace(/^(instagram\.com|instagr\.am)\//i, '')
-  }
-
-  // Query y hash fuera: pegar un link desde el celular arrastra `?igsh=...`.
-  s = s.split('?')[0].split('#')[0]
-  // Sólo el primer segmento del path.
-  s = s.split('/')[0]
-  s = s.replace(/^@+/, '').trim().toLowerCase()
-
-  // Instagram permite letras, números, punto y guion bajo. Lo que no entra, no es parte del @.
-  s = s.replace(/[^a-z0-9._]/g, '')
-  // Un punto al final no es parte del nombre: casi siempre es el punto de la oración pegada.
-  s = s.replace(/\.+$/, '')
-
-  return s
-}
+export const normalizarInstagram: (v: string | null | undefined) => string = normalizarInstagramJs
 
 /**
  * El link al perfil. Port de `leadInstaHref` (`lib/crm/leads.ts:92`): si ya viene una URL entera se
