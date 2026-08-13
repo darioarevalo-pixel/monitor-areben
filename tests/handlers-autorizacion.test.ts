@@ -78,6 +78,13 @@ const PUERTAS = [
   { archivo: '_fallas', llave: 'postventa-deposito', que: 'las fallas' },
   { archivo: '_reclamos', llave: 'reclamos-local', que: 'los reclamos y sus tokens' },
   { archivo: 'sku-map', llave: 'integraciones', que: 'el mapeo de SKU' },
+  // Estos cuatro SÍ tenían gate, pero con `puedeVer` pelado (13-ago-2026). Entran a la tabla para
+  // que el 403 sin permiso quede fijado igual que en los otros: el gate estaba, y la mitad que
+  // faltaba —la cuenta fija— se prueba abajo.
+  { archivo: '_liquidacion', llave: 'liquidacion', que: 'los precios de sale' },
+  { archivo: '_calendario', llave: 'calendario', que: 'el calendario editorial' },
+  { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención al cliente' },
+  { archivo: '_meta-funnel', llave: 'meta-ads', que: 'el embudo de Meta Ads' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */
@@ -141,12 +148,59 @@ describe('el admin entra a todo', () => {
   })
 })
 
+/**
+ * 🔴 **La mitad que `puedeVer` no cubre.** El gate podía estar puesto y la puerta seguir abierta:
+ * `puedeVer(perfil, store, key)` mira la marca que le pasan, y del lado del servidor la `store` la
+ * elige el request. Alguien clavado a Zattia pedía `?store=bdi` a mano y entraba, aunque en su
+ * pantalla la marca ni siquiera se pueda cambiar (`puedeCambiarMarca()` es `!perfil.cuenta`).
+ *
+ * Por eso el permiso de abajo está tildado en LAS DOS marcas: lo que tiene que cortar no es la
+ * falta de permiso, es la cuenta fija. Con `puedeVer` pelado los cinco dan 200.
+ */
+const CLAVADA_A_ZATTIA = [
+  { archivo: '_conteos-deposito', llave: 'conteo', que: 'el stock del otro local' },
+  { archivo: '_liquidacion', llave: 'liquidacion', que: 'los precios de sale de la otra marca' },
+  { archivo: '_calendario', llave: 'calendario', que: 'el calendario de la otra marca' },
+  { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención de la otra marca' },
+  { archivo: '_meta-funnel', llave: 'meta-ads', que: 'la pauta de la otra marca' },
+] as const
+
 describe('la cuenta fija sigue mandando', () => {
-  it('quien está clavado a Zattia no ve los conteos de BDI, aunque tenga el permiso tildado', async () => {
-    // `marcasConAcceso` hace que la cuenta fija le gane incluso al permiso: es lo que ya hacía el
-    // cliente y lo que evita que alguien de un local vea el stock del otro.
-    sesionDe({ name: 'Local Zattia', admin: false, cuenta: 'zattia', acceso: { bdi: { conteo: true }, zattia: { conteo: true } }, funcion: [] })
-    const res = await llamar('_conteos-deposito', conSesion())
+  for (const { archivo, llave, que } of CLAVADA_A_ZATTIA) {
+    it(`${archivo}: clavada a Zattia y con «${llave}» en las dos, no ve ${que}`, async () => {
+      sesionDe({
+        name: 'Local Zattia',
+        admin: false,
+        cuenta: 'zattia',
+        acceso: { bdi: { [llave]: true }, zattia: { [llave]: true } },
+        funcion: [],
+      })
+      const res = await llamar(archivo, conSesion()) // conSesion() pide store=bdi
+      expect(res.code).toBe(403)
+    })
+  }
+
+  it('_liquidacion tampoco por la vuelta de Etiquetas, que abre la misma puerta con otra llave', async () => {
+    sesionDe({
+      name: 'Local Zattia',
+      admin: false,
+      cuenta: 'zattia',
+      acceso: { bdi: { etiquetas: true }, zattia: { etiquetas: true } },
+      funcion: [],
+    })
+    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi', etiquetas: '1' } }))
     expect(res.code).toBe(403)
+  })
+
+  it('sin cuenta fija, el mismo perfil entra: el que corta es el clavado, no el permiso', async () => {
+    // La mitad que evita el falso positivo de "prohibir todo": si esto también diera 403, el test
+    // de arriba estaría verde por la razón equivocada.
+    sesionDe({ name: 'Suelta', admin: false, cuenta: null, acceso: { bdi: { atencion: true } }, funcion: [] })
+    let code = 0
+    try { code = (await llamar('_atencion', conSesion())).code } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+      return
+    }
+    expect(code).not.toBe(403)
   })
 })

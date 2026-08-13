@@ -12,7 +12,7 @@
 // CORS.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { puedeVer, puedeSub } from '../lib/permisos.core.js';
+import { puedeVerAlguna, puedeSub } from '../lib/permisos.core.js';
 import { modelosDelMenu } from '../lib/atencion/modelos.core.js';
 import { TIENDA_BASE } from '../lib/tienda.core.js';
 
@@ -62,7 +62,13 @@ export default async function handler(req, res) {
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
 
-  if (!puedeVer(perfil, store, 'atencion')) {
+  // 🔑 `puedeVerAlguna` y no `puedeVer` pelado: `puedeVer` **no aplica la cuenta fija**, y acá la
+  // `store` la elige el request. Es el único de los cinco que se arreglaron el 13-ago que sí
+  // cambia algo medible: los puestos compartidos `local` (clavado a Zattia) y `bdilocal` (a BDI)
+  // tienen `atencion` por su función y podían pedir la bandeja de la OTRA marca —nombre, contacto
+  // y consulta de cada cliente— con un `?store=` a mano. En la pantalla no se nota, porque una
+  // cuenta clavada no puede cambiar de marca en el header y nunca pregunta por la otra.
+  if (!puedeVerAlguna(perfil, store, ['atencion'])) {
     return res.status(403).json({ error: 'No tenés acceso a Atención al cliente en esta marca.' });
   }
 

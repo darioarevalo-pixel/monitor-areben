@@ -22,7 +22,7 @@
 // funciones por deploy y cada archivo de ruta cuenta una.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { esAdmin, puedeVer } from '../lib/permisos.core.js';
+import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import {
   CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, normalizarHora, partirIdComercial,
 } from '../lib/calendario/fechas.core.js';
@@ -54,7 +54,13 @@ export default async function handler(req, res) {
   // marca por marca, a todo el equipo. Es información interna de bajo riesgo — una fecha de
   // lanzamiento —, así que la carga cualquiera que ya vea la sección. Lo único reservado es borrar
   // un hito ajeno.
-  if (!puedeVer(perfil, store, 'calendario')) {
+  //
+  // 🔑 Va por `puedeVerAlguna` y no por `puedeVer` pelado, que es lo que había: `puedeVer` **no
+  // aplica la cuenta fija**. Del lado del cliente da igual —quien está clavado a una marca no
+  // puede cambiarla en el header, así que nunca pregunta por la otra—, pero acá la `store` la
+  // elige el request, y con `puedeVer` alcanzaba con pedir `?store=bdi` desde una cuenta clavada
+  // a Zattia para leer el calendario de BDI.
+  if (!puedeVerAlguna(perfil, store, ['calendario'])) {
     return res.status(403).json({ error: 'No tenés acceso al calendario en esta marca.' });
   }
 

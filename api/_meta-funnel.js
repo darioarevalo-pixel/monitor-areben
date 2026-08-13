@@ -21,7 +21,7 @@
 // excluido: el handler y la pantalla tienen que leer las mismas líneas.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { esAdmin, puedeSub, puedeVer } from '../lib/permisos.core.js';
+import { esAdmin, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js';
 import { ETAPAS } from '../lib/meta-ads/etapas.core.js';
 import { baseDeLinea, esLinea } from '../lib/meta-ads/lineas.core.js';
 import { conPaso, puedeEditarIdea, puedeTransicionar, SUB_PAUTAR } from '../lib/meta-ads/ideas.core.js';
@@ -53,7 +53,9 @@ const clienteLineas = clienteBdi;
 /** Quién es esta persona, en una marca, para esta sección. Una sola lectura de permisos. */
 function poderes(perfil, store) {
   return {
-    ver: puedeVer(perfil, store, 'meta-ads'),
+    // `puedeVerAlguna` y no `puedeVer`: el segundo no aplica la cuenta fija y acá la `store` la
+    // elige el request. `pautar` cuelga de `ver`, así que con la puerta cerrada no se alcanza.
+    ver: puedeVerAlguna(perfil, store, ['meta-ads']),
     pautar: puedeSub(perfil, store, 'meta-ads', SUB_PAUTAR),
     admin: esAdmin(perfil),
   };

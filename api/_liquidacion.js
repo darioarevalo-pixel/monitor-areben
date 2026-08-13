@@ -25,7 +25,7 @@
 // sería pagar el payload entero para mostrar un número.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { esAdmin, puedeSub, puedeVer } from '../lib/permisos.core.js';
+import { esAdmin, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js';
 // El mapeo y el guardado del espejo de ventas, los MISMOS que usan los dos syncs diarios y la purga
 // histórica. Se importa en vez de copiarse por lo que ya costó una vez: ese código vivía duplicado
 // adentro de `sync-diario.js` y `sync-diario-zattia.js`, las copias se separaron, y de esa deriva
@@ -273,9 +273,17 @@ export default async function handler(req, res) {
   // La sección que hay que poder ver se elige *antes* del chequeo, no con un segundo `if` que lo
   // saltee. Y exige `GET`, así que ninguna `action` del POST se alcanza jamás con el permiso de
   // Etiquetas: abajo, la rama corta con `return` antes de mirar el método.
+  //
+  // 🔑 **`puedeVerAlguna` y no `puedeVer` pelado**, que es lo que había acá: `puedeVer` no aplica
+  // la cuenta fija. En el cliente no se nota —quien está clavado a una marca no la puede cambiar
+  // en el header, así que nunca pregunta por la otra—, pero acá la `store` viene en el request:
+  // con `puedeVer` alcanzaba con pedir `?store=bdi` desde una cuenta clavada a Zattia para leerse
+  // los precios de sale de BDI. Medido en el padrón el 13-ago-2026: **cero usuarios** cambian de
+  // alcance con esto (los 7 con cuenta fija no tienen `liquidacion` ni `etiquetas` en la otra
+  // marca), así que cierra la puerta sin sacarle la pantalla a nadie.
   const vistaEtiquetas = req.method === 'GET' && String(req.query.etiquetas || '') === '1';
   const seccion = vistaEtiquetas ? 'etiquetas' : 'liquidacion';
-  if (!puedeVer(perfil, store, seccion)) {
+  if (!puedeVerAlguna(perfil, store, [seccion])) {
     return res.status(403).json({ error: `No tenés acceso a ${vistaEtiquetas ? 'Etiquetas' : 'Liquidación'} en esta marca.` });
   }
 
