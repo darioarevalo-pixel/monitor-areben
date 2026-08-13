@@ -203,6 +203,25 @@ describe('aplicarAgenda', () => {
     expect(out['9'].proximo_manual).toBe(null)
   })
 
+  it('al descartado con fecha vencida también se la limpia, y sólo esa', () => {
+    // Se documenta porque es contraintuitivo: al descartado NO se le asigna día, pero su
+    // entrada sí pasa por la limpieza. Es a propósito — si se lo reactiva, conviene que
+    // vuelva sin fecha y no "vencido hace 40 días". Pasó con 4 de 27 el 13-ago-2026.
+    const antes = {
+      '5': {
+        descartado: true,
+        proximo_manual: '2026-07-06',
+        ultimo_contacto: '2026-06-30',
+        notas: [{ fecha: '2026-06-30', texto: 'cerró el local' }],
+      },
+    }
+    const out = aplicarAgenda(antes, [], HOY)
+    expect(out['5'].proximo_manual).toBe(null)
+    expect(out['5'].descartado).toBe(true)
+    expect(out['5'].ultimo_contacto).toBe('2026-06-30')
+    expect(out['5'].notas).toEqual([{ fecha: '2026-06-30', texto: 'cerró el local' }])
+  })
+
   it('a quien tiene fecha futura y no entró en el plan no lo toca', () => {
     const antes = { '9': { proximo_manual: '2026-12-01', notas: [] } }
     const out = aplicarAgenda(antes, [], HOY)

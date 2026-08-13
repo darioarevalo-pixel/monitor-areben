@@ -12,8 +12,12 @@
  *
  *     node scripts/crm-kv.mjs --dump
  *
- * Este script NO toca `ultimo_contacto` ni `notas`: solo escribe `proximo_manual`. Y a
- * los descartados ("ya no se dedica") ni los mira.
+ * Este script NO toca `ultimo_contacto` ni `notas`: solo escribe `proximo_manual`.
+ *
+ * A los descartados ("ya no se dedica") **no se les asigna día**, pero sí se les limpia la
+ * fecha si arrastraban una vencida — así, el día que se reactive a uno, vuelve sin fecha en
+ * vez de figurar "vencido hace 40 días". Es el único caso en que se los toca, y sólo en ese
+ * campo.
  *
  * USO
  *   node scripts/crm-agenda.mjs                    # simula (no toca nada)
