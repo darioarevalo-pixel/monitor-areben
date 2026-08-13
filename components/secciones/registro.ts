@@ -43,6 +43,7 @@ const Novedades = dynamic(() => import('@/components/novedades/Novedades').then(
 const Manuales = dynamic(() => import('@/components/manuales/Manuales').then((m) => m.Manuales), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
+const Envios = dynamic(() => import('@/components/envios/Envios').then((m) => m.Envios), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
@@ -274,6 +275,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // toca datos). PDF ported byte-fiel; JsBarcode como dep npm. Precios de TN (Zattia
   // mergea zattia+stunned). Rollback: mover esta línea de vuelta a SOMBRAS.
   etiquetas: Etiquetas,
+  // Envíos del día (13-ago-2026, sección NUEVA — no existe en el legacy): la hoja del cadete, que
+  // hasta hoy era una planilla de Google escrita a mano donde 3 de cada 10 filas no eran un envío.
+  // Es la única sección del Local **sin selector de marca**: el cadete sale con paquetes de las dos
+  // en la misma mochila. Cada envío sí guarda la suya, y para los de TN sale sola.
+  envios: Envios,
   // El flip de Comisiones (18-jul-2026): `/comisiones` lo sirve el shell. Margen neto
   // real por forma de pago × canal (comisiones/financiación/IIBB/DREI/Ganancias/IVA) +
   // simulador por producto + break-even + piso + lista de precios de sale (XLSX/PDF).

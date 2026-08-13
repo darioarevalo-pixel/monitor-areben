@@ -283,6 +283,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "envios",
+    "area": "local",
+    "label": "Envíos del día",
+    "info": "Los envíos que salen hoy, con la dirección, lo que hay que cobrar y la etiqueta para el cadete.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
@@ -795,6 +805,7 @@ export const NAV_CATS: NavCat[] = [
     "label": "Local",
     "keys": [
       "atencion",
+      "envios",
       "solicitudes",
       "cupones",
       "postventa-local",

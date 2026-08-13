@@ -22,6 +22,7 @@ import sistema from './_sistema.js';
 import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
+import envios from './_envios.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -46,6 +47,9 @@ const RECURSOS = {
   // Ledger del sync de ventas TN→GN (Stunned). Entra por acá y no por un archivo propio en `api/`
   // porque el repo está a 3 funciones del límite del plan Hobby.
   'sync-tn': syncTn,
+  // Envíos del día: la hoja del cadete. Tampoco tiene `store` en la puerta —el reparto mezcla las
+  // dos marcas en la misma mochila— pero cada envío sí lleva la suya.
+  envios,
 };
 
 export default async function handler(req, res) {
