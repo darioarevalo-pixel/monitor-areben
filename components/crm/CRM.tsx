@@ -6,6 +6,7 @@ import { BancoMensajes } from './BancoMensajes'
 import { Leads } from './Leads'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
+import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
 import { contarKpis, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
 import {
   aplicarSugerencias,
@@ -227,6 +228,7 @@ export function CRM() {
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
   const [banco, setBanco] = useState(false)
+  const [guia, setGuia] = useState(false)
   const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
   const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, recargar, guardarSeg, guardarTel } = useCRM(modo)
@@ -245,6 +247,24 @@ export function CRM() {
   const ordenarPor = (col: string) => setSort((s) => (s.col === col ? { col, dir: -s.dir } : { col, dir: -1 }))
   // 9 columnas fijas + la de Reactivar, que solo existe mirando descartados.
   const nCols = verDescartados ? 10 : 9
+
+  /**
+   * Cada bloque de la guía LLEVA a su lista en vez de describirla: es la diferencia entre
+   * una guía y un documento. Se resuelve acá porque el estado de los filtros vive acá.
+   */
+  const irDesdeGuia = (k: AccionGuia) => {
+    setGuia(false)
+    setVista('clientes')
+    setVerDescartados(false)
+    if (k === 'contactar') setSeg('contactar')
+    else if (k === 'frios') setSeg('frios')
+    else if (k === 'reposicion') {
+      // No hay filtro de "compró hace 10 a 15 días". Lo más cerca que se llega hoy: los
+      // activos recurrentes ordenados por último pedido, y él baja hasta esa franja.
+      setSeg('activos')
+      setSort({ col: 'last_sale', dir: -1 })
+    }
+  }
 
   // Cada edición: transformación pura → persiste el mapa entero (gateado por cargado).
   const mutar = (fn: (s: MapaSeguimiento) => MapaSeguimiento) => guardarSeg(fn(crmSeg))
@@ -335,6 +355,9 @@ export function CRM() {
             <option value="all">Todos los canales</option>
           </Select>
         )}
+        {/* Va siempre visible y primero: es lo que se abre al empezar el día, en cualquier
+            pestaña de la sección. */}
+        <Button variant="outline" onClick={() => setGuia(true)}>Guía de trabajo</Button>
         <Button variant="ghost" onClick={recargar}>Recalcular</Button>
         {vista !== 'metricas' && (
           <>
@@ -473,6 +496,7 @@ export function CRM() {
 
       {clienteModal && <ClienteModal key={clienteModal.id} cliente={clienteModal} crmSeg={crmSeg} mutar={mutar} onCerrar={() => setModalId(null)} />}
       {banco && <BancoMensajes onCerrar={() => setBanco(false)} />}
+      {guia && <GuiaTrabajo onCerrar={() => setGuia(false)} onIr={irDesdeGuia} />}
     </>
   )
 }
