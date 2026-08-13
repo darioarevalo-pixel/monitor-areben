@@ -56,10 +56,17 @@ type ClaveNumerica = { [K in keyof Supuestos]: Supuestos[K] extends number ? K :
 
 export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Cambiar }) {
   /**
-   * 🔑 **Qué campos están momentáneamente en blanco.** El modelo es de números y no admite vacío
-   * —un cálculo con `''` no existe—, pero borrar un campo para reescribirlo tiene que dejarlo
-   * vacío: si el `''` se guardara como 0, el campo mostraría un `0` que hay que borrar antes de
-   * poder tipear. Vale 0 para la cuenta y se dibuja vacío hasta que se escribe algo.
+   * 🔑 **Qué campos están momentáneamente en blanco, y por qué el blanco NO viaja al modelo.**
+   *
+   * Borrar un campo para reescribirlo tiene que dejarlo vacío —si el `''` se guardara como 0, el
+   * campo mostraría un `0` que hay que borrar antes de poder tipear—, pero el modelo es de números
+   * y **un 0 en el medio no es «todavía nada», es un precio de cero**: con el precio en blanco, el
+   * techo pasaba a `$ -2.210` y el ROAS a `∞×`, que se leen como una respuesta y no como un campo a
+   * medio llenar.
+   *
+   * Así que el campo se dibuja vacío y **la cuenta sigue con el último número bueno** hasta que
+   * entre uno nuevo. Al salir del campo se levanta la marca, y vuelve a mostrarse lo que se está
+   * usando: nunca queda un campo en blanco cuyo valor viejo sigue contando en silencio.
    */
   const [vacios, setVacios] = useState<ReadonlySet<string>>(new Set())
   const marcar = (k: string, vacio: boolean) =>
@@ -72,18 +79,23 @@ export function PanelesDeSupuestos({ s, cambiar }: { s: Supuestos; cambiar: Camb
     })
 
   const num = (k: ClaveNumerica, extra?: { min?: number; max?: number; step?: number; prefix?: string; width?: number }) => (
-    <NumberField
-      value={vacios.has(k) ? '' : s[k]}
-      onChange={(n) => {
-        marcar(k, n === '')
-        cambiar(k, n === '' ? 0 : n)
-      }}
-      min={extra?.min ?? 0}
-      max={extra?.max}
-      step={extra?.step ?? 0.1}
-      prefix={extra?.prefix}
-      width={extra?.width ?? 104}
-    />
+    // `onBlur` va en el envoltorio y no en el input: React lo implementa con `focusout`, que sí
+    // burbujea, y así no hay que tocar el `NumberField` del kit —que lo comparten otras secciones—
+    // para un comportamiento que necesita ésta.
+    <span onBlur={() => marcar(k, false)}>
+      <NumberField
+        value={vacios.has(k) ? '' : s[k]}
+        onChange={(n) => {
+          marcar(k, n === '')
+          if (n !== '') cambiar(k, n)
+        }}
+        min={extra?.min ?? 0}
+        max={extra?.max}
+        step={extra?.step ?? 0.1}
+        prefix={extra?.prefix}
+        width={extra?.width ?? 104}
+      />
+    </span>
   )
 
   return (

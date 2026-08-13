@@ -57,6 +57,15 @@ import { Rentabilidad } from '@/components/meta-ads/rentabilidad/Rentabilidad'
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
 const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' }
 
+/**
+ * 🔑 **Las vistas que NO se leen contra el eje no dibujan el selector.**
+ *
+ * Rentabilidad sale de la economía del producto: elegir otra cuenta o filtrar por línea no le
+ * cambia un número. Dejarle el selector arriba promete un filtro que no existe —y encima, con el
+ * token sin configurar, le pega su cartel rojo de error a una pantalla que no le pide nada a Meta.
+ */
+const SIN_EJE = new Set(['rentabilidad'])
+
 const VISTAS: Record<string, () => React.ReactElement> = {
   campanias: Campanias,
   biblioteca: Biblioteca,
@@ -86,7 +95,7 @@ export function MetaAds() {
   const Vista = VISTAS[vista] ?? Panel
   return (
     <ProveedorMeta>
-      <SelectorMeta />
+      {!SIN_EJE.has(vista) && <SelectorMeta />}
       <Vista />
     </ProveedorMeta>
   )
