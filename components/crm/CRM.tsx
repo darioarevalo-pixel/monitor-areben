@@ -6,7 +6,7 @@ import { BancoMensajes } from './BancoMensajes'
 import { Leads } from './Leads'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
-import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente, siguienteTemperatura } from '@/lib/crm/core'
+import { contarKpis, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
 import {
   aplicarSugerencias,
   parsearTelefonos,
@@ -74,9 +74,6 @@ const TEMP_UI: Record<Temperatura, { txt: string; ayuda: string; fg: string; bg:
   },
 }
 
-const SEG_LABEL: Record<string, string> = { activos: 'Activo', riesgo: 'Riesgo', dormidos: 'Dormido', nuevos: 'Nuevo', otros: '·' }
-const SEG_COLOR: Record<string, string> = { activos: color.success, riesgo: color.warning, dormidos: color.danger, nuevos: color.brandSolid, otros: color.mut2 }
-
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 function fmtFecha(d: string | null): string {
   if (!d) return '—'
@@ -118,11 +115,10 @@ type FilaProps = {
 }
 
 function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina, onTemperatura }: FilaProps) {
-  const segm = segmentoCliente(c)
   const esMayorista = !!seg.es_mayorista
   const enDifusion = !!seg.en_difusion
+  // Sigue haciendo falta aunque ya no haya botón de WhatsApp: es lo que marca "Sin teléfono".
   const waPhone = normalizeArgPhone(c.phone)
-  const ciudad = [c.city, c.province].filter(Boolean).join(', ')
   const ult = c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`
   const notas = Array.isArray(c.notas) ? c.notas : []
   const ultNota = notas.length ? notas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0] : null
@@ -153,10 +149,8 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
           />
         </span>
       </Td>
-      <Td wrap>{ciudad || <span style={{ color: color.mut2 }}>—</span>}</Td>
       <Td align="right">{c.total_sales}</Td>
       <Td align="right" strong>{fmtMonto(c.total_amount)}</Td>
-      <Td align="right">{fmtMonto(c.avg_ticket)}</Td>
       <Td align="right" tall>
         <div>{ult}</div>
         <div style={{ fontSize: font.xs, color: color.mut2 }}>{fmtFecha(c.last_sale)}</div>
@@ -208,29 +202,18 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
           )
         })()}
       </Td>
-      <Td>
-        <span style={{ fontSize: font.xs, fontWeight: 600, color: SEG_COLOR[segm] }}>{SEG_LABEL[segm]}</span>
-      </Td>
-      <Td>
-        <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          {waPhone && (
-            <a
-              href={`https://web.whatsapp.com/send?phone=${waPhone}`}
-              target="_blank"
-              rel="noopener"
-              title="Abrir WhatsApp"
-              style={{ fontSize: font.sm, fontWeight: 600, color: color.success }}
-            >
-              WhatsApp
-            </a>
-          )}
-          {verDescartados && (
+      {/* La columna de acciones existe SOLO mirando descartados: sacado el botón de
+          WhatsApp, lo único que queda acá es Reactivar. Si se dejara fija, en el uso
+          normal sería una columna vacía. */}
+      {verDescartados && (
+        <Td>
+          <span onClick={(e) => e.stopPropagation()}>
             <Button size="sm" variant="ghost" onClick={() => onDescartado(c.id, false)} title="Reactivar — vuelve al CRM">
               ↩ Reactivar
             </Button>
-          )}
-        </span>
-      </Td>
+          </span>
+        </Td>
+      )}
     </Tr>
   )
 }
@@ -260,6 +243,8 @@ export function CRM() {
   )
 
   const ordenarPor = (col: string) => setSort((s) => (s.col === col ? { col, dir: -s.dir } : { col, dir: -1 }))
+  // 9 columnas fijas + la de Reactivar, que solo existe mirando descartados.
+  const nCols = verDescartados ? 10 : 9
 
   // Cada edición: transformación pura → persiste el mapa entero (gateado por cargado).
   const mutar = (fn: (s: MapaSeguimiento) => MapaSeguimiento) => guardarSeg(fn(crmSeg))
@@ -448,29 +433,26 @@ export function CRM() {
                 <Tr>
                   <Th onClick={() => ordenarPor('name')}>Cliente</Th>
                   <Th onClick={() => ordenarPor('contact')}>Contacto</Th>
-                  <Th onClick={() => ordenarPor('city')}>Ciudad</Th>
                   <Th align="right" onClick={() => ordenarPor('total_sales')}>Pedidos</Th>
                   <Th align="right" onClick={() => ordenarPor('total_amount')}>Total comprado</Th>
-                  <Th align="right" onClick={() => ordenarPor('avg_ticket')}>Ticket prom.</Th>
                   <Th align="right" onClick={() => ordenarPor('last_sale')}>Último pedido</Th>
                   <Th onClick={() => ordenarPor('proximo')}>Próximo contacto</Th>
                   <Th>Última nota</Th>
                   <Th align="center">Difusión</Th>
                   <Th align="center">Cómo viene</Th>
-                  <Th>Segmento</Th>
-                  <Th />
+                  {verDescartados && <Th />}
                 </Tr>
               </THead>
               <TBody>
                 {cargando ? (
                   <Tr>
-                    <Td colSpan={13} align="center" style={{ padding: 24, color: color.mut2 }}>
+                    <Td colSpan={nCols} align="center" style={{ padding: 24, color: color.mut2 }}>
                       Cargando…
                     </Td>
                   </Tr>
                 ) : !lista.length ? (
                   <Tr>
-                    <Td colSpan={13} align="center" style={{ padding: 24, color: color.mut2 }}>
+                    <Td colSpan={nCols} align="center" style={{ padding: 24, color: color.mut2 }}>
                       Sin clientes para este filtro
                     </Td>
                   </Tr>
