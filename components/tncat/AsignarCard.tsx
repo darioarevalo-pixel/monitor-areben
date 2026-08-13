@@ -11,6 +11,29 @@ import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
 const CHUNK = 20
 
 /**
+ * «WINTER SALE › TOPS Y BODIES» en vez de «TOPS Y BODIES» a secas.
+ *
+ * 🔑 **Sin la ruta, dos categorías con el mismo nombre son indistinguibles y se elige a ciegas** —
+ * y pasa de verdad: en Zattia `JEANS` está duplicada, y las subcategorías de un sale se llaman igual
+ * que las globales. Mostrar la jerarquía es lo que permite que las del sale se llamen `TOPS Y
+ * BODIES` a secas, que es como tienen que verse en la tienda: ya cuelgan de «Winter Sale», así que
+ * un prefijo «SALE ·» le repite al cliente dónde está parado.
+ *
+ * Sube hasta la raíz, con tope por si un `parent` quedara apuntando en círculo.
+ */
+function rutaDe(c: Categoria, todas: Categoria[]): string {
+  const partes = [c.name]
+  let actual = c
+  for (let i = 0; i < 5 && actual.parent; i++) {
+    const madre = todas.find((x) => String(x.id) === String(actual.parent))
+    if (!madre) break
+    partes.unshift(madre.name)
+    actual = madre
+  }
+  return partes.join(' › ')
+}
+
+/**
  * Asignar categoría por Excel (card 4, Zattia). Subís un Excel con nombres de
  * producto (columna A), se previsualiza el cruce contra TN y, al confirmar, se le
  * AGREGA la categoría a los que matcheen (sin borrar las que ya tengan). El cruce y
@@ -231,7 +254,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
             <>
               <option value="">— Elegí una categoría —</option>
               {categorias.map((c) => (
-                <option key={c.id} value={String(c.id)}>{c.name}</option>
+                <option key={c.id} value={String(c.id)}>{rutaDe(c, categorias)}</option>
               ))}
             </>
           )}

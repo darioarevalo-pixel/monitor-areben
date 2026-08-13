@@ -20,7 +20,8 @@ export type CatRecalc = {
 export type CatAplicar = { aplicados: number; errores?: unknown[]; error?: string }
 
 // ── Asignar categoría por Excel (card 4, Zattia) ────────────────────────────────
-export type Categoria = { id: string | number; name: string }
+/** `parent` es el id de la categoría madre en Tienda Nube, o `null` si es de primer nivel. */
+export type Categoria = { id: string | number; name: string; parent?: string | number | null }
 export type AsigMatched = { id: string | number; nombre: string; nuevas?: unknown }
 export type AsigPreview = {
   ok: boolean
