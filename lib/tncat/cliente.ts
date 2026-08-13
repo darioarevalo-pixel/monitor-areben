@@ -54,12 +54,19 @@ export async function traerCategorias(store: Marca): Promise<Categoria[]> {
   if (!d.ok || !d.categorias) throw new Error(d.error || 'No se pudieron cargar las categorías')
   return d.categorias as Categoria[]
 }
-/** Previsualiza la asignación (aplicar:false): matched / yaTenían / noEncontrados. Port de tncatAsigPrevisualizar. */
-export async function previsualizarAsignar(store: Marca, categoriaId: string, nombres: string[]): Promise<AsigPreview> {
+/**
+ * Previsualiza la asignación (aplicar:false): matched / yaTenían / noEncontrados. Port de
+ * tncatAsigPrevisualizar.
+ *
+ * Con `sacar` hace lo contrario: le QUITA la categoría a los que la tengan. Es lo que hace falta al
+ * terminar un sale, donde las subcategorías (`SALE · …`) son temporales y hay que sacárselas a 260
+ * productos — borrar la categoría en Tienda Nube no es lo mismo.
+ */
+export async function previsualizarAsignar(store: Marca, categoriaId: string, nombres: string[], sacar = false): Promise<AsigPreview> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accion: 'asignar', categoriaId, nombres, aplicar: false }),
+    body: JSON.stringify({ accion: sacar ? 'desasignar' : 'asignar', categoriaId, nombres, aplicar: false }),
   })
   return r.json()
 }

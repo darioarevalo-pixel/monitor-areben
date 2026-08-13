@@ -32,6 +32,16 @@ export function AsignarCard({ marca }: { marca: Marca }) {
   const [prevMsg, setPrevMsg] = useState<React.ReactNode>(null)
   const [matched, setMatched] = useState<AsigMatched[]>([])
   const [catName, setCatName] = useState('')
+  /**
+   * Sacar en vez de agregar. Es el mismo flujo al revés y por eso vive acá y no en una card aparte:
+   * elegir categoría, cruzar por nombre y escribir en la tienda es idéntico; lo único que cambia es
+   * si la categoría entra o sale de la lista del producto.
+   *
+   * Hace falta para las subcategorías temporales de un sale (`SALE · TOPS Y BODIES`…): cuando la
+   * campaña termina hay que sacárselas a 260 productos, y borrar la categoría en Tienda Nube no es
+   * lo mismo ni se puede hacer de a uno.
+   */
+  const [sacar, setSacar] = useState(false)
   const [aplicando, setAplicando] = useState(false)
   const [resultado, setResultado] = useState<React.ReactNode>(null)
   const [progreso, setProgreso] = useState<number | null>(null)
@@ -68,7 +78,9 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     }
   }
 
-  const previsualizar = async (categoriaId: string, nn: string[]) => {
+  // `sacarAhora` viaja por parámetro y no se lee del estado: el switch llama a previsualizar en el
+  // mismo tick en que lo cambia, y ahí `sacar` todavía tiene el valor viejo.
+  const previsualizar = async (categoriaId: string, nn: string[], sacarAhora = sacar) => {
     setResultado(null)
     if (!nn.length) {
       setPreview(null)
@@ -82,7 +94,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     }
     setPrevMsg(<div style={{ color: paleta.mut2, fontSize: 13, padding: 8 }}>Cruzando con TiendaNube…</div>)
     try {
-      const d = await previsualizarAsignar(marca, categoriaId, nn)
+      const d = await previsualizarAsignar(marca, categoriaId, nn, sacarAhora)
       if (!d.ok) {
         setPreview(null)
         setPrevMsg(<div style={{ color: paleta.danger, fontSize: 13 }}>Error: {d.error || 'desconocido'}</div>)
@@ -116,11 +128,17 @@ export function AsignarCard({ marca }: { marca: Marca }) {
 
   const aplicar = async () => {
     if (!matched.length) return
+    const huerfanos = preview?.quedanSinCategoria || []
     const ok = await confirmar({
-      titulo: 'Asignar la categoría',
-      tono: 'warning',
-      ok: `Asignar a ${matched.length}`,
-      mensaje: `Se agrega "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.`,
+      titulo: sacar ? 'Sacar la categoría' : 'Asignar la categoría',
+      tono: sacar ? 'danger' : 'warning',
+      ok: sacar ? `Sacársela a ${matched.length}` : `Asignar a ${matched.length}`,
+      mensaje: sacar
+        // El aviso de los huérfanos va en el diálogo y no en un cartel al costado: es lo último que
+        // se lee antes de escribir en la tienda EN VIVO, y un producto sin categoría deja de estar
+        // en la navegación.
+        ? `Se le saca "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.${huerfanos.length ? ` ⚠️ ${huerfanos.length} ${huerfanos.length === 1 ? 'quedaría' : 'quedarían'} SIN NINGUNA categoría (${huerfanos.slice(0, 3).join(', ')}${huerfanos.length > 3 ? '…' : ''}): a la tienda dejan de aparecer en el menú, se llega sólo por buscador.` : ''}`
+        : `Se agrega "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.`,
     })
     if (!ok) return
     setAplicando(true)
@@ -185,10 +203,26 @@ export function AsignarCard({ marca }: { marca: Marca }) {
 
   return (
     <Card ref={caja}>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>Asignar categoría (Excel)</div>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>{sacar ? 'Sacar categoría' : 'Asignar categoría'} (Excel)</div>
       <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px', maxWidth: 680 }}>
-        Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.
+        Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, {sacar
+          ? <>se le <b>saca</b> esa categoría a los que la tengan — las demás no se tocan.</>
+          : <>se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.</>}
       </div>
+      {/*
+        El switch va arriba de todo y cambia el título de la card: es lo que decide si se agrega o
+        se quita, y descubrirlo recién en el diálogo de confirmación sería tarde. Cambiarlo vuelve a
+        cruzar, porque el «matchean / ya la tenían» se da vuelta entero.
+      */}
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={sacar}
+          onChange={(e) => { setSacar(e.target.checked); setResultado(null); void previsualizar(catId, nombres, e.target.checked) }}
+        />
+        Sacar la categoría en vez de agregarla
+        <span style={{ color: paleta.mut2 }}>— para cuando termina un sale y hay que quitar sus subcategorías</span>
+      </label>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <select value={catId} onChange={(e) => onCat(e.target.value)} style={{ padding: '7px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, minWidth: 220 }}>
           {categorias === null ? (
@@ -223,15 +257,22 @@ export function AsignarCard({ marca }: { marca: Marca }) {
         {preview && !resultado && progreso === null && (
           <div>
             <div style={{ fontSize: 13, margin: '6px 0' }}>
-              Categoría: <b>{preview.categoria}</b> · <b>{matched.length}</b> se van a asignar de {preview.total} nombre(s).
+              Categoría: <b>{preview.categoria}</b> · <b>{matched.length}</b> {sacar ? 'se la van a perder' : 'se van a asignar'} de {preview.total} nombre(s).
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
               <span style={{ background: paleta.successBg, color: paleta.successInk, borderRadius: 14, padding: '3px 10px' }}>✓ Matchean: {matched.length}</span>
-              <span style={{ background: paleta.bg2, color: paleta.mut, borderRadius: 14, padding: '3px 10px' }}>Ya la tenían: {preview.yaTenian.length}</span>
+              <span style={{ background: paleta.bg2, color: paleta.mut, borderRadius: 14, padding: '3px 10px' }}>{sacar ? 'No la tenían' : 'Ya la tenían'}: {preview.yaTenian.length}</span>
               <span style={{ background: paleta.dangerBg, color: paleta.dangerInk, borderRadius: 14, padding: '3px 10px' }}>No encontrados: {preview.noEncontrados.length}</span>
+              {/* Sólo al sacar, y sólo si hay: un producto sin categoría sale del menú de la tienda. */}
+              {!!preview.quedanSinCategoria?.length && (
+                <span style={{ background: paleta.warningBg, color: paleta.warningInk, borderRadius: 14, padding: '3px 10px' }}>
+                  ⚠️ Quedan sin ninguna categoría: {preview.quedanSinCategoria.length}
+                </span>
+              )}
             </div>
-            {lista('✓ Se van a asignar', paleta.successInk, matched.map((m) => m.nombre))}
-            {lista('Ya tenían la categoría', paleta.mut, preview.yaTenian)}
+            {lista(sacar ? '✓ Se les va a sacar' : '✓ Se van a asignar', paleta.successInk, matched.map((m) => m.nombre))}
+            {!!preview.quedanSinCategoria?.length && lista('⚠️ Quedan sin ninguna categoría (salen del menú de la tienda)', paleta.warningInk, preview.quedanSinCategoria)}
+            {lista(sacar ? 'No tenían la categoría' : 'Ya tenían la categoría', paleta.mut, preview.yaTenian)}
             {lista('No encontrados en TiendaNube (revisá el nombre)', paleta.dangerInk, preview.noEncontrados)}
           </div>
         )}
@@ -239,8 +280,8 @@ export function AsignarCard({ marca }: { marca: Marca }) {
 
       {matched.length > 0 && !resultado && progreso === null && (
         <div style={{ marginTop: 12 }}>
-          <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: paleta.success, color: '#fff' }}>
-            Aplicar en TiendaNube
+          <button className="btn-sm" onClick={aplicar} disabled={aplicando} style={{ background: sacar ? paleta.danger : paleta.success, color: '#fff' }}>
+            {sacar ? 'Sacar en TiendaNube' : 'Aplicar en TiendaNube'}
           </button>
         </div>
       )}

@@ -27,8 +27,15 @@ export type AsigPreview = {
   categoria: string
   total: number
   matched: AsigMatched[]
+  /** No hay nada que hacerles: al agregar, ya la tienen; al sacar, no la tienen. */
   yaTenian: string[]
   noEncontrados: string[]
+  /**
+   * Sólo al SACAR: los que se quedarían sin ninguna categoría. Un producto sin categoría no
+   * aparece en la navegación de la tienda —se llega por buscador o link directo—, así que el que
+   * aprieta tiene que verlos antes.
+   */
+  quedanSinCategoria?: string[]
   error?: string
 }
 export type AsigAplicar = { ok: boolean; aplicados?: number; errores?: { nombre?: string; msg?: string; status?: string }[]; error?: string }
