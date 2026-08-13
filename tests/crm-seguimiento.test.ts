@@ -13,8 +13,9 @@ import {
   setMayorista,
   setPagina,
   setProximoManual,
+  setTemperatura,
 } from '@/lib/crm/seguimiento'
-import { normalizeArgPhone } from '@/lib/crm/core'
+import { TEMPERATURA_DEFAULT, normalizeArgPhone } from '@/lib/crm/core'
 import type { ClienteCRM, MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -50,6 +51,7 @@ describe('escrituras de seguimiento: tocan un solo cliente, sin mutar la entrada
     ['setProximoManual', (m) => setProximoManual(m, 1, '2026-08-01')],
     ['agregarNota', (m) => agregarNota(m, 1, 'nueva nota', '2026-07-17')],
     ['borrarNota', (m) => borrarNota(m, 1, 0)],
+    ['setTemperatura', (m) => setTemperatura(m, 1, 'frio')],
   ]
 
   it.each(ops)('%s cambia un solo cliente y no muta la entrada', (_, op) => {
@@ -109,7 +111,7 @@ function cli(over: Partial<ClienteCRM>): ClienteCRM {
     first_sale: null, last_sale: null, dias_ultimo: 5, dias_primero: 200,
     total_sales: 5, total_amount: 0, avg_ticket: 0, ventas: [],
     cadencia: '', ultimo_contacto: null, proximo_contacto: null, seg_estado: 'none', dias_proximo: null, notas: [],
-    en_difusion: false,
+    en_difusion: false, temperatura: TEMPERATURA_DEFAULT,
     ...over,
   }
 }

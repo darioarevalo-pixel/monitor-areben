@@ -34,6 +34,7 @@ import type {
   ResumenCompras,
   Seg,
   Segmento,
+  Temperatura,
 } from './tipos'
 
 // ── Constantes de negocio (index.html:13105-13113) ───────────────────────────
@@ -44,6 +45,32 @@ export const DORMIDO_DAYS = 90 // > 90 → "dormido"
 export const NUEVO_DAYS = 30 // primer pedido <= 30 días → "nuevo"
 export const ACTIVO_MIN_PED = 3 // 3+ pedidos activos → "recurrente"
 export const TOP_LIMIT = 20 // tarjeta "Top clientes"
+
+// ── Temperatura (ago-2026, posterior al legacy) ──────────────────────────────
+
+/**
+ * Con qué temperatura entra un cliente que nunca se marcó.
+ *
+ * **`templado` es una decisión, no un descuido.** Los 305 clientes que ya viven en el KV
+ * no tienen el campo, así que el día 1 caen TODOS acá. Con `templado` todos quedan en la
+ * misma prioridad (3) y la lista sale ordenada por urgencia pura — es decir, idéntica a
+ * la de antes de este cambio — y se va acomodando a medida que Bruno marca. Con
+ * `caliente` habría pasado lo mismo pero repartiendo por tamaño sin que nadie lo pidiera.
+ * El criterio elegido: nada se mueve de lugar sin una decisión explícita.
+ */
+export const TEMPERATURA_DEFAULT: Temperatura = 'templado'
+
+/** El orden del ciclo del botón de la tabla: un termómetro que baja y da la vuelta. */
+const CICLO_TEMPERATURA: Temperatura[] = ['caliente', 'templado', 'frio']
+
+/**
+ * La que sigue al tocar el badge. Arrancando todos en `templado`, el primer clic marca
+ * `frio` — que es justo la tarea inicial: hundir a los que no contestan.
+ */
+export function siguienteTemperatura(t: Temperatura): Temperatura {
+  const i = CICLO_TEMPERATURA.indexOf(t)
+  return CICLO_TEMPERATURA[(i + 1) % CICLO_TEMPERATURA.length]
+}
 
 // ── Helpers de fecha ─────────────────────────────────────────────────────────
 
@@ -122,9 +149,59 @@ export function estadoSeguimiento(id: number | string, crmSeg: MapaSeguimiento, 
   return { cadencia: cad, ultimo: s.ultimo_contacto || null, proximo, estado, dias, notas }
 }
 
-/** paraContactar (13312). */
+/**
+ * ¿Este cliente entra en la lista del día?
+ *
+ * ⚠️ **Diverge del legacy A PROPÓSITO** (paraContactar, 13312, contaba solo `vencido` y
+ * `pendiente`). El legacy tenía un desfasaje: la tarjeta "Para contactar" contaba dos
+ * estados y la tabla de abajo mostraba tres — al tocarla aparecían más filas que el
+ * número de la tarjeta. Se empareja hacia arriba (sumando `semana`) y no hacia abajo,
+ * porque la lista de llamados es la que está bien: los que vencen dentro de la semana
+ * sirven y no había razón para esconderlos.
+ *
+ * El criterio de esta función y el filtro de `filtrarOrdenar` para `seg === 'contactar'`
+ * tienen que ser el MISMO. Si se toca uno, se toca el otro.
+ */
 export function paraContactar(c: ClienteCRM): boolean {
-  return c.seg_estado === 'vencido' || c.seg_estado === 'pendiente'
+  return c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana'
+}
+
+// ── Prioridad comercial de la lista del día ──────────────────────────────────
+
+/**
+ * Los ids de los N clientes que más compraron. Es la definición de "cuenta clave" que ya
+ * usaban la tarjeta ⭐ Top clientes y `planSugerirCadencias`, extraída para que las tres
+ * midan lo mismo.
+ *
+ * ⚠️ **No se usa `es_mayorista` para esto.** La estrellita la tienen 274 de los 305
+ * clientes: como marca de tamaño no separa nada. Lo suyo es otra cosa — decide qué ventas
+ * se traen de Supabase (`datos.ts:60`).
+ */
+export function idsTop(lista: ClienteCRM[], n: number = TOP_LIMIT): Set<number> {
+  return new Set(
+    [...lista]
+      .sort((a, b) => b.total_amount - a.total_amount)
+      .slice(0, n)
+      .map((c) => c.id),
+  )
+}
+
+/**
+ * En qué grupo cae el cliente dentro de la lista "Para contactar". Más chico = más arriba.
+ *
+ *   1. Caja rápida  — caliente que NO es cuenta clave: el mediano/chico que compra rápido.
+ *   2. Cuenta clave — caliente y top por monto: importa, pero tarda más en cerrar.
+ *   3. Templado     — el default de todos hasta que se los marque.
+ *   4. Frío         — al fondo SIEMPRE, lleve los días de atraso que lleve.
+ *
+ * El problema que esto resuelve: los clientes grandes que se enfriaron tienen cadencia
+ * semanal (se la da `planSugerirCadencias`), así que se vencen cada 7 días y quedaban
+ * clavados arriba de la lista, comiéndose la mañana en mensajes sin respuesta.
+ */
+export function prioridadContacto(c: ClienteCRM, esCuentaClave: boolean): 1 | 2 | 3 | 4 {
+  if (c.temperatura === 'frio') return 4
+  if (c.temperatura === 'templado') return 3
+  return esCuentaClave ? 2 : 1
 }
 
 // ── Agregado (RFM) ───────────────────────────────────────────────────────────
@@ -188,6 +265,7 @@ export function calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, tod
       dias_proximo: seg.dias,
       notas: seg.notas,
       en_difusion: !!(crmSeg[String(e.id)] && crmSeg[String(e.id)].en_difusion),
+      temperatura: (crmSeg[String(e.id)] && crmSeg[String(e.id)].temperatura) || TEMPERATURA_DEFAULT,
     })
   }
 
@@ -237,6 +315,11 @@ export type OpcionesTabla = {
 export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTabla): ClienteCRM[] {
   let out = lista.slice()
 
+  // Se calcula sobre la lista ENTERA que entra, antes de cualquier filtro. Si se calculara
+  // después del buscador, el "top 20" sería el top de lo que quedó tipeado y un cliente
+  // podría cambiar de prioridad por escribir en el buscador.
+  const top = idsTop(lista)
+
   if (seg === 'top') {
     out.sort((a, b) => b.total_amount - a.total_amount)
     out = out.slice(0, TOP_LIMIT)
@@ -245,11 +328,25 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort }: OpcionesTa
   } else if (seg === 'sin-difusion') {
     // Clientes que compraron pero todavía no están en el canal de difusión.
     out = out.filter((c) => !c.en_difusion)
+  } else if (seg === 'frios') {
+    // Lista de recuperación: SOLO los fríos, y todos — también los que están al día.
+    // No lleva orden propio a propósito: cae en el orden de columnas de abajo, que por
+    // defecto es total_amount desc, o sea el frío que más compró primero. Es el que más
+    // conviene recuperar, y desde ahí se puede reordenar por cualquier columna.
+    out = out.filter((c) => c.temperatura === 'frio')
   } else if (seg === 'contactar') {
-    // Vencidos + pendientes + los de esta semana. Más urgentes primero.
-    out = out.filter((c) => c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana')
+    // Vencidos + pendientes + los de esta semana. MISMO criterio que `paraContactar`.
+    out = out.filter(paraContactar)
+    // Primero la prioridad comercial (temperatura + tamaño), y recién adentro de cada
+    // grupo la urgencia de la fecha. Ese es el cambio: antes mandaba solo la fecha, y los
+    // clientes grandes fríos con cadencia semanal vivían arriba de todo.
     const ord: Record<string, number> = { vencido: 0, pendiente: 1, semana: 2 }
-    out.sort((a, b) => ord[a.seg_estado] - ord[b.seg_estado] || (a.dias_proximo ?? 0) - (b.dias_proximo ?? 0))
+    out.sort(
+      (a, b) =>
+        prioridadContacto(a, top.has(a.id)) - prioridadContacto(b, top.has(b.id)) ||
+        ord[a.seg_estado] - ord[b.seg_estado] ||
+        (a.dias_proximo ?? 0) - (b.dias_proximo ?? 0),
+    )
   } else if (seg !== 'todos') {
     out = out.filter((c) => segmentoCliente(c) === seg)
   }

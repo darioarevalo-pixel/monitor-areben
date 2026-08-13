@@ -6,7 +6,7 @@ import { BancoMensajes } from './BancoMensajes'
 import { Leads } from './Leads'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
-import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente } from '@/lib/crm/core'
+import { contarKpis, filtrarOrdenar, normalizeArgPhone, segmentoCliente, siguienteTemperatura } from '@/lib/crm/core'
 import {
   aplicarSugerencias,
   parsearTelefonos,
@@ -14,8 +14,9 @@ import {
   setDescartado,
   setDifusion,
   setPagina,
+  setTemperatura,
 } from '@/lib/crm/seguimiento'
-import type { ClienteCRM, MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
+import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { BuscarInput, Button, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
@@ -33,7 +34,8 @@ import { BuscarInput, Button, KpiCard, Notice, Select, StatusPill, TBody, THead,
 
 const SEGMENTOS = [
   { v: 'todos', t: 'Todos' },
-  { v: 'contactar', t: 'Para contactar' },
+  { v: 'contactar', t: 'Para contactar (caja rápida)' },
+  { v: 'frios', t: '🧊 Fríos / En recuperación' },
   { v: 'top', t: '⭐ Top clientes' },
   { v: 'activos', t: 'Activos recurrentes' },
   { v: 'riesgo', t: 'En riesgo' },
@@ -42,6 +44,35 @@ const SEGMENTOS = [
   { v: 'sin-difusion', t: 'Sin difusión' },
   { v: 'sin-tel', t: 'Sin teléfono (cargar)' },
 ]
+
+/**
+ * El badge de temperatura. Los textos son los que se ven en pantalla: sin tecnicismos y
+ * sin explicar el mecanismo — el usuario marca "cómo viene" la relación, no configura un
+ * criterio de ordenamiento.
+ */
+const TEMP_UI: Record<Temperatura, { txt: string; ayuda: string; fg: string; bg: string; bd: string }> = {
+  caliente: {
+    txt: '🔥 Caliente',
+    ayuda: 'Viene comprando o quedaron en hablar. Va primero en la lista del día.',
+    fg: color.dangerInk,
+    bg: color.dangerBg,
+    bd: color.dangerBorder,
+  },
+  templado: {
+    txt: '🟡 Templado',
+    ayuda: 'Ni frío ni caliente. Tocá para marcarlo frío.',
+    fg: color.warningInk,
+    bg: color.warningBg,
+    bd: color.warningBorder,
+  },
+  frio: {
+    txt: '🧊 Frío',
+    ayuda: 'No contesta o dejó de comprar. Se va al fondo de la lista del día.',
+    fg: color.mut,
+    bg: 'transparent',
+    bd: color.line2,
+  },
+}
 
 const SEG_LABEL: Record<string, string> = { activos: 'Activo', riesgo: 'Riesgo', dormidos: 'Dormido', nuevos: 'Nuevo', otros: '·' }
 const SEG_COLOR: Record<string, string> = { activos: color.success, riesgo: color.warning, dormidos: color.danger, nuevos: color.brandSolid, otros: color.mut2 }
@@ -83,9 +114,10 @@ type FilaProps = {
   onDifusion: (id: number, val: boolean) => void
   onDescartado: (id: number, val: boolean) => void
   onPagina: (id: number, val: string) => void
+  onTemperatura: (id: number, val: Temperatura) => void
 }
 
-function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina }: FilaProps) {
+function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina, onTemperatura }: FilaProps) {
   const segm = segmentoCliente(c)
   const esMayorista = !!seg.es_mayorista
   const enDifusion = !!seg.en_difusion
@@ -156,6 +188,26 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
           {enDifusion ? 'Sí' : '+ Sumar'}
         </button>
       </Td>
+      <Td align="center">
+        {(() => {
+          const t = TEMP_UI[c.temperatura]
+          return (
+            <button
+              // Mismo trato que el botón de Difusión: el stopPropagation va adentro del
+              // onClick (en captura mataría el propio click del botón). Lo único a evitar
+              // es que el clic abra además la ficha del cliente.
+              onClick={(e) => {
+                e.stopPropagation()
+                onTemperatura(c.id, siguienteTemperatura(c.temperatura))
+              }}
+              title={`${t.txt} — ${t.ayuda}`}
+              style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${t.bd}`, background: t.bg, color: t.fg }}
+            >
+              {t.txt}
+            </button>
+          )
+        })()}
+      </Td>
       <Td>
         <span style={{ fontSize: font.xs, fontWeight: 600, color: SEG_COLOR[segm] }}>{SEG_LABEL[segm]}</span>
       </Td>
@@ -200,6 +252,8 @@ export function CRM() {
   // Los que compraron pero todavía no están en el canal de difusión. Se cuenta
   // acá (no en contarKpis) para no tocar la paridad de KPIs contra el legacy.
   const sinDifusion = useMemo(() => agregado.activos.filter((c) => !c.en_difusion).length, [agregado])
+  // Ídem: los fríos se cuentan acá y no en contarKpis, por la misma razón.
+  const frios = useMemo(() => agregado.activos.filter((c) => c.temperatura === 'frio').length, [agregado])
   const lista = useMemo(
     () => filtrarOrdenar(verDescartados ? agregado.descartados : agregado.activos, { q: q.trim().toLowerCase(), seg: verDescartados ? 'todos' : seg, sort }),
     [agregado, q, seg, sort, verDescartados],
@@ -212,6 +266,7 @@ export function CRM() {
   const onDifusion = (id: number, val: boolean) => mutar((s) => setDifusion(s, id, val))
   const onDescartado = (id: number, val: boolean) => mutar((s) => setDescartado(s, id, val))
   const onPagina = (id: number, val: string) => mutar((s) => setPagina(s, id, val))
+  const onTemperatura = (id: number, val: Temperatura) => mutar((s) => setTemperatura(s, id, val))
 
   const sugerirCadencias = async () => {
     const { plan, omitidos, nSem, nMen } = planSugerirCadencias(agregado.activos, crmSeg)
@@ -272,6 +327,7 @@ export function CRM() {
 
   const tarjetas = [
     { key: 'contactar', label: 'Para contactar', n: kpis.contactar },
+    { key: 'frios', label: '🧊 Fríos', n: frios },
     { key: 'top', label: '⭐ Top clientes', n: kpis.top },
     { key: 'activos', label: 'Activos', n: kpis.activos },
     { key: 'riesgo', label: 'En riesgo', n: kpis.riesgo },
@@ -400,6 +456,7 @@ export function CRM() {
                   <Th onClick={() => ordenarPor('proximo')}>Próximo contacto</Th>
                   <Th>Última nota</Th>
                   <Th align="center">Difusión</Th>
+                  <Th align="center">Cómo viene</Th>
                   <Th>Segmento</Th>
                   <Th />
                 </Tr>
@@ -407,19 +464,19 @@ export function CRM() {
               <TBody>
                 {cargando ? (
                   <Tr>
-                    <Td colSpan={12} align="center" style={{ padding: 24, color: color.mut2 }}>
+                    <Td colSpan={13} align="center" style={{ padding: 24, color: color.mut2 }}>
                       Cargando…
                     </Td>
                   </Tr>
                 ) : !lista.length ? (
                   <Tr>
-                    <Td colSpan={12} align="center" style={{ padding: 24, color: color.mut2 }}>
+                    <Td colSpan={13} align="center" style={{ padding: 24, color: color.mut2 }}>
                       Sin clientes para este filtro
                     </Td>
                   </Tr>
                 ) : (
                   lista.map((c) => (
-                    <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} />
+                    <Fila key={c.id} c={c} seg={crmSeg[String(c.id)] || {}} verDescartados={verDescartados} onAbrir={setModalId} onDifusion={onDifusion} onDescartado={onDescartado} onPagina={onPagina} onTemperatura={onTemperatura} />
                   ))
                 )}
               </TBody>

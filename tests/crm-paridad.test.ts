@@ -100,7 +100,12 @@ if (!fx) {
         else if (s === 'dormidos') esperado.dormidos++
         else if (s === 'nuevos') esperado.nuevos++
         if (!legacy.normalizeArgPhone(c.phone)) esperado.sinTel++
-        if (c.seg_estado === 'vencido' || c.seg_estado === 'pendiente') esperado.contactar++
+        // ⚠️ DIVERGENCIA BUSCADA (ago-2026). El legacy contaba acá solo `vencido` y
+        // `pendiente`, pero su propia tabla mostraba además los de `semana`: la tarjeta
+        // decía un número y abajo aparecían más filas. Se emparejó sumando `semana` a
+        // `paraContactar`, así que el esperado del legacy se corrige a mano.
+        // El orden de esa lista ya tampoco es el del legacy: eso vive en crm-prioridad.test.ts.
+        if (c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana') esperado.contactar++
       }
       expect(contarKpis(port.activos)).toEqual(esperado)
     })
@@ -152,7 +157,11 @@ if (!fx) {
       return out
     }
 
-    const SEGMENTOS = ['todos', 'top', 'sin-tel', 'contactar', 'activos', 'riesgo', 'dormidos', 'nuevos', 'otros']
+    // ⚠️ `contactar` NO está en esta lista a propósito (ago-2026). Su orden dejó de ser el
+    // del legacy: ahora manda la prioridad comercial (temperatura + tamaño) y recién
+    // después la fecha. La rama `frios` tampoco, porque no existe en el legacy. Las dos
+    // se prueban en tests/crm-prioridad.test.ts, que además corre sin fixture.
+    const SEGMENTOS = ['todos', 'top', 'sin-tel', 'activos', 'riesgo', 'dormidos', 'nuevos', 'otros']
     it.each(SEGMENTOS)('el segmento %s da las mismas filas en el mismo orden', (seg) => {
       const sort = { col: 'total_amount', dir: -1 }
       const a = filtrarLegacy(activosLegacy, '', seg, sort).map((c) => c.id)

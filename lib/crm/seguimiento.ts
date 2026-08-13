@@ -11,7 +11,7 @@
  */
 
 import { addDiasISO, segmentoCliente, TOP_LIMIT } from './core'
-import type { ClienteCRM, MapaSeguimiento, Seguimiento } from './tipos'
+import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from './tipos'
 
 /** Fecha local YYYY-MM-DD. Port de hoyISO (13279): usa el día REAL, no el TODAY
  *  congelado, para que "Hablé hoy" y las notas no queden con fecha vieja. */
@@ -61,6 +61,17 @@ export const setDescartado = (crmSeg: MapaSeguimiento, id: number | string, valu
 
 export const setDifusion = (crmSeg: MapaSeguimiento, id: number | string, value: boolean) =>
   conPatch(crmSeg, id, { en_difusion: !!value })
+
+/**
+ * Marca qué tan viva está la relación. Es lo que ordena la lista del día (ver
+ * `prioridadContacto` en core.ts).
+ *
+ * No lleva ninguna protección propia contra el borrado en masa y no hace falta: como toda
+ * escritura del CRM, sale por `guardarSeg` → `guardarMapa`, que exige el flag `cargado`.
+ * Acá abajo es una transformación pura de un mapa y nada más.
+ */
+export const setTemperatura = (crmSeg: MapaSeguimiento, id: number | string, value: Temperatura) =>
+  conPatch(crmSeg, id, { temperatura: value })
 
 /** "Hablé hoy": registra contacto y deja que el próximo lo recalcule la cadencia. */
 export const hableHoy = (crmSeg: MapaSeguimiento, id: number | string, today?: Date) =>

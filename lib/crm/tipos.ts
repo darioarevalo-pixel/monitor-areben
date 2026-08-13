@@ -45,6 +45,17 @@ export type Nota = {
 }
 
 /**
+ * Qué tan viva está la relación con el cliente, marcada A MANO. No se deduce de las
+ * ventas: un cliente puede llevar 6 meses sin comprar y estar caliente porque quedaron
+ * en hablar la semana que viene, y otro puede haber comprado hace 20 días y estar frío
+ * porque cerró el local.
+ *
+ * Es lo que manda en el orden de la lista "Para contactar" (ver `prioridadContacto` en
+ * core.ts), por encima de la fecha de vencimiento.
+ */
+export type Temperatura = 'caliente' | 'templado' | 'frio'
+
+/**
  * Una entrada de `crm:seg:<marca>`. **`es_mayorista` no es cosmético**: arma los
  * ids de la consulta de ventas (index.html:13220-13233). Medido: 274 de 305.
  */
@@ -60,6 +71,12 @@ export type Seguimiento = {
   en_difusion?: boolean
   /** Instagram / página del cliente (crmSetPagina, index.html:13493). */
   pagina?: string
+  /**
+   * Temperatura de la relación. Campo agregado en ago-2026, POSTERIOR al legacy: las 305
+   * entradas que ya viven en el KV no lo tienen y caen a `TEMPERATURA_DEFAULT`. Es aditivo
+   * a propósito — no hay que migrar nada.
+   */
+  temperatura?: Temperatura
 }
 
 /** `crm:seg:<marca>`: id de cliente → seguimiento. */
@@ -107,6 +124,12 @@ export type ClienteCRM = {
   notas: Nota[]
   /** Del seguimiento: si está en el canal de difusión de WhatsApp. */
   en_difusion: boolean
+  /**
+   * Del seguimiento, ya resuelta: si el cliente no tiene marca, acá llega
+   * `TEMPERATURA_DEFAULT`. Se resuelve en el agregado (y no en cada lector) para que
+   * nadie tenga que acordarse del default — mismo trato que `en_difusion`.
+   */
+  temperatura: Temperatura
 }
 
 /**
