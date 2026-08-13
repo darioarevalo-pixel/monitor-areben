@@ -49,6 +49,52 @@ const TOPE_SUMAR = 200;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const txtOrNull = (v) => (v == null || v === '' ? null : String(v));
 
+// ── Escribirle el precio a Gestión Nube ───────────────────────────────────────────────────────────
+//
+// El precio de liquidación rige en el local Y online, y **la conexión es GN → TN**: se escribe en
+// Gestión Nube y GN lo propaga a Tienda Nube. Escribirlo derecho en TN es ir contra la corriente
+// —el sync de GN lo pisa— aunque el token de TN pueda hacerlo.
+const GN_BASE = 'https://www.gestionnube.com/api/v1';
+const GN_TOKENS = { bdi: process.env.GN_TOKEN, zattia: process.env.GN_TOKEN_ZATTIA };
+
+// Cuántos productos por viaje. Lo fija el tope de GN, no el gusto: son 2 consultas por segundo, y
+// con la pausa de 1200 ms cinco tardan ~7 s, que entra cómodo en el tiempo de una función. Espejo
+// de `TOPE_APLICAR` en `lib/liquidacion/core.ts`.
+const TOPE_APLICAR = 5;
+
+// 🔑 **Dos topes distintos, y el que muerde es el segundo.** GN limita 60 consultas por minuto *y*
+// 2 por segundo, contadas por segundo de reloj: con 600 ms de pausa el PATCH rebota `429`. Van 1200.
+const PAUSA_GN = 1200;
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * `fetch` a GN que respeta el rate limit.
+ *
+ * 🔑 **Se le hace caso al `retry-after` que manda GN**, que es correcto (medido: dice 15 y el
+ * `x-ratelimit-reset` cae 15 s después). Esperar de más es peor que esperar de menos: un backoff de
+ * 62 s se come tres ventanas enteras y encuentra la cuota igual de vacía, porque el tope está
+ * **compartido con los otros sistemas de la casa** y puede estar en `remaining: 0` sin que nosotros
+ * hayamos consultado nada.
+ */
+async function gnFetch(url, opts, tries = 3) {
+  let last;
+  for (let a = 1; a <= tries; a++) {
+    try {
+      const r = await fetch(url, opts);
+      if (r.ok || (r.status !== 429 && r.status < 500)) return r;
+      last = r;
+      if (a < tries) {
+        const esperar = Math.min(Math.max(Number(r.headers.get('retry-after')) || 15, 5), 30);
+        await dormir(esperar * 1000);
+        continue;
+      }
+      return r;
+    } catch (e) { last = e; if (a < tries) { await dormir(900 * a); continue; } throw e; }
+  }
+  return last;
+}
+
 /** La fila de la base → la campaña que espera el cliente. `conteo` lo pega el llamador. */
 function aCampania(row, conteo) {
   const d = row.datos || {};
@@ -116,6 +162,7 @@ function itemDelBody(raw) {
     },
     aplicacion: {
       aplicadoEn: a.aplicadoEn == null ? null : num(a.aplicadoEn),
+      precioEscrito: a.precioEscrito == null ? null : num(a.precioEscrito),
       variantesEscritas: a.variantesEscritas == null ? null : num(a.variantesEscritas),
       categoriaSaleAgregada: !!a.categoriaSaleAgregada,
     },
@@ -427,6 +474,111 @@ export default async function handler(req, res) {
         .delete().eq('store', store).eq('liq_id', id).eq('pid', pid);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    // ── Escribir (o borrar) el precio de sale en Gestión Nube. ─────────────────────────────────
+    //
+    // 🔑 **El cliente manda pids, no precios.** El precio se relee de la base acá adentro: uno que
+    // viaje desde el navegador es un precio que se puede alterar, y este handler escribe en la
+    // tienda de verdad. Por lo mismo sólo entran los `confirmado` — los que pasaron por la segunda
+    // mirada— y el estado se pone acá, no lo dice el cliente.
+    //
+    // 🔑 **Va de a cinco y el bucle vive en el cliente.** Una campaña de 260 productos son ~6
+    // minutos contra el tope de GN: no entra en el tiempo de una función. De paso se gana la
+    // reanudación —lo aplicado sale de la lista— y una barra de progreso en vez de una espera muda.
+    if (b.action === 'aplicar') {
+      const modo = b.modo === 'sacar' ? 'sacar' : 'poner';
+      // Es una escritura sobre precios en producción: el mismo permiso que marcar la campaña como
+      // cargada. La puerta va en el handler porque deshabilitar el botón no impide nada.
+      if (!puede.aplicar) {
+        return res.status(403).json({ error: 'Escribir los precios en Gestión Nube pide el permiso «Puede escribir los precios en Gestión Nube».' });
+      }
+      const token = GN_TOKENS[store];
+      if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
+
+      const pids = (Array.isArray(b.pids) ? b.pids : []).map(String).filter(Boolean);
+      if (!pids.length) return res.status(400).json({ error: 'no vino ningún producto' });
+      if (pids.length > TOPE_APLICAR) {
+        return res.status(400).json({ error: `Son ${pids.length} productos y el tope por vez es ${TOPE_APLICAR}.` });
+      }
+
+      const { data: filas, error: e0 } = await supabase.from('liquidacion_items')
+        .select('pid, estado, datos').eq('store', store).eq('liq_id', id).in('pid', pids);
+      if (e0) throw new Error(e0.message);
+
+      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+      const ahoraMs = Date.now();
+      const resultados = [];
+
+      for (const pid of pids) {
+        const fila = (filas || []).find((f) => String(f.pid) === pid);
+        if (!fila) { resultados.push({ pid, ok: false, error: 'no está en la campaña' }); continue; }
+        const item = itemDelBody({ ...(fila.datos || {}), pid, estado: fila.estado });
+        const precio = item.decision.precioSale;
+
+        // El estado que corresponde a cada modo. `aplicado` quiere decir "su precio está puesto en
+        // GN **ahora**": por eso sacar la oferta lo devuelve a `confirmado` en vez de dejarlo
+        // aplicado, que sería la pantalla afirmando que hay un precio puesto que ya no está.
+        if (modo === 'poner') {
+          if (fila.estado !== 'confirmado') { resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no confirmado` }); continue; }
+          if (!(precio > 0)) { resultados.push({ pid, ok: false, error: 'no tiene precio de sale' }); continue; }
+        } else if (fila.estado !== 'aplicado') {
+          resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no aplicado` }); continue;
+        }
+
+        const valor = modo === 'poner' ? precio : null;
+        let r;
+        try {
+          r = await gnFetch(`${GN_BASE}/productos/${encodeURIComponent(pid)}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ tiendanube_promotional_price: valor }),
+          });
+        } catch (err) {
+          resultados.push({ pid, ok: false, error: `no se pudo hablar con Gestión Nube: ${err.message}` });
+          await dormir(PAUSA_GN);
+          continue;
+        }
+        const cuerpo = await r.text();
+        if (!r.ok) {
+          resultados.push({ pid, ok: false, error: `Gestión Nube contestó ${r.status}: ${cuerpo.slice(0, 120)}` });
+          await dormir(PAUSA_GN);
+          continue;
+        }
+
+        // 🔑 **No alcanza con el 200: se mira el valor que devuelve el propio PATCH.** GN contesta
+        // con el producto actualizado, así que la confirmación es gratis y no cuesta una relectura
+        // por producto (que duplicaría las consultas contra un tope de 60 por minuto). Un 200 que
+        // no movió el precio es el modo de falla clásico de esta integración: "lo cargué y se
+        // revirtió solo".
+        let escrito;
+        try { escrito = (JSON.parse(cuerpo).data || {}).tiendanube_promotional_price; } catch { escrito = undefined; }
+        const quedoBien = modo === 'poner'
+          ? Math.round(num(escrito)) === Math.round(precio)
+          : escrito == null;
+        if (!quedoBien) {
+          resultados.push({ pid, ok: false, error: `Gestión Nube aceptó pero devolvió ${JSON.stringify(escrito)}` });
+          await dormir(PAUSA_GN);
+          continue;
+        }
+
+        const nuevo = {
+          ...item,
+          estado: modo === 'poner' ? 'aplicado' : 'confirmado',
+          aplicacion: modo === 'poner'
+            ? { ...item.aplicacion, aplicadoEn: ahoraMs, precioEscrito: precio }
+            : { ...item.aplicacion, aplicadoEn: null, precioEscrito: null },
+        };
+        const { error: eU } = await supabase.from('liquidacion_items')
+          .update({ estado: nuevo.estado, datos: nuevo, updated_at: new Date().toISOString() })
+          .eq('store', store).eq('liq_id', id).eq('pid', pid);
+        // El precio YA está escrito en Gestión Nube: si falla el guardado nuestro, lo que quedó mal
+        // es el registro, no la tienda. Se dice cuál de los dos falló en vez de un "no se pudo".
+        if (eU) { resultados.push({ pid, ok: false, error: `se escribió en Gestión Nube pero no se pudo anotar acá: ${eU.message}` }); }
+        else { resultados.push({ pid, ok: true, precio: valor }); }
+
+        await dormir(PAUSA_GN);
+      }
+
+      return res.status(200).json({ ok: true, modo, resultados });
     }
 
     // ── Borrar la campaña entera. ──────────────────────────────────────────────────────────────

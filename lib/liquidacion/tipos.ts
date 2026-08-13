@@ -125,9 +125,23 @@ export interface RevisionItem {
   precioAnterior: number | null
 }
 
-/** Lo que pasó al escribir el precio en Gestión Nube. Se llena en la tanda 3. */
+/**
+ * Lo que pasó al escribir el precio en Gestión Nube.
+ *
+ * 🔑 **`precioEscrito` es el número que se le mandó a GN**, y no se deriva de `decision.precioSale`:
+ * el precio decidido se puede volver a tocar después de aplicado, y ahí los dos números dejan de ser
+ * el mismo. Sin guardarlo, la pregunta "¿qué está puesto hoy en la tienda?" sólo se contesta yendo a
+ * mirar a GN.
+ *
+ * ⚠️ `variantesEscritas` y `categoriaSaleAgregada` quedaron de la forma que se imaginó en la tanda 1
+ * y **no se usan**: el promocional es un campo del producto, no de cada variante, y la categoría de
+ * sale vive en Tienda Nube, no en Gestión Nube (los productos con promo viva en GN no tienen ninguna
+ * categoría de sale).
+ */
 export interface AplicacionItem {
   aplicadoEn: number | null
+  /** Opcional: los ítems guardados antes de la tanda 3 no lo traen. */
+  precioEscrito?: number | null
   variantesEscritas: number | null
   categoriaSaleAgregada: boolean
 }

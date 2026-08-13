@@ -266,6 +266,32 @@ export function itemsAplicables(items: LiquidacionItem[]): LiquidacionItem[] {
 }
 
 /**
+ * Cuántos productos escribe Gestión Nube por request, espejo del que hace cumplir el handler.
+ *
+ * 🔑 **El número lo fija el tope de GN, no el gusto.** Son 2 consultas por segundo y 60 por minuto
+ * (compartidas con los otros sistemas de la casa), así que el handler espera 1200 ms entre producto
+ * y producto: cinco son ~7 segundos, que es lo que entra cómodo en el tiempo de una función. Una
+ * campaña de 260 son ~52 viajes y unos 6 minutos — por eso el bucle vive en el cliente, con
+ * progreso, y no en el handler.
+ */
+export const TOPE_APLICAR = 5
+
+/**
+ * Qué pids faltan escribir (o borrar) en Gestión Nube.
+ *
+ * 🔑 **`aplicado` significa "su precio está puesto en GN ahora"**, no "alguna vez se aplicó". Por eso
+ * poner y sacar son la misma lista leída al revés, y por eso sacar la oferta devuelve el ítem a
+ * `confirmado`: si quedara en `aplicado`, la pantalla diría que hay un precio puesto que ya no está.
+ *
+ * 🔑 **Es lo que hace la reanudación gratis.** Cortar a la mitad y volver a apretar no reescribe lo
+ * hecho: los que ya se aplicaron salieron de la lista solos.
+ */
+export function pidsPorAplicar(items: LiquidacionItem[], modo: 'poner' | 'sacar'): string[] {
+  const listos = modo === 'poner' ? itemsAplicables(items) : items.filter((i) => i.estado === 'aplicado')
+  return listos.map((i) => i.pid)
+}
+
+/**
  * El tope de un "Mandar a liquidación", espejo del que hace cumplir `api/_liquidacion.js`.
  *
  * Vive acá además de allá para poder avisar **antes** de mandar: sin esto, marcar de una tanda

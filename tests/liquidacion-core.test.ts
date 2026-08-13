@@ -12,7 +12,9 @@ import {
   itemsAplicables,
   objetados,
   objetarItem,
+  pidsPorAplicar,
   precioDeSale,
+  TOPE_APLICAR,
   resumenCampania,
   revisionDe,
 } from '@/lib/liquidacion'
@@ -291,6 +293,45 @@ describe('itemsAplicables', () => {
     const aplicado = { ...definido, pid: 'd', estado: 'aplicado' as const }
 
     expect(itemsAplicables([definido, confirmado, pendiente, descartado, aplicado]).map((i) => i.pid)).toEqual(['e'])
+  })
+})
+
+describe('pidsPorAplicar', () => {
+  const definido = decidirItem(armarItemDesdeProducto(prod({ id: 'a' })), { pctDesc: 30 })
+  const confirmado = confirmarItem({ ...definido, pid: 'b' }, 'Darío')
+  const aplicado = { ...confirmado, pid: 'c', estado: 'aplicado' as const }
+  const descartado = { ...definido, pid: 'd', estado: 'descartado' as const }
+  const todos = [definido, confirmado, aplicado, descartado]
+
+  it('poner: los confirmados, sin los que ya están puestos', () => {
+    expect(pidsPorAplicar(todos, 'poner')).toEqual(['b'])
+  })
+
+  it('sacar: sólo los que hoy tienen precio puesto en Gestión Nube', () => {
+    expect(pidsPorAplicar(todos, 'sacar')).toEqual(['c'])
+  })
+
+  it('🔑 poner y sacar no se pisan: ningún pid está en las dos listas', () => {
+    // `aplicado` significa "su precio está puesto AHORA". Si un pid cayera en las dos, aplicar y
+    // sacar se estarían peleando por el mismo producto y el último en correr ganaría.
+    const poner = new Set(pidsPorAplicar(todos, 'poner'))
+    expect(pidsPorAplicar(todos, 'sacar').some((pid) => poner.has(pid))).toBe(false)
+  })
+
+  it('🔑 lo aplicado sale de la lista: volver a apretar no reescribe lo hecho', () => {
+    // Es lo que hace que cortar a la mitad y retomar sea gratis, sin llevar la cuenta en ningún lado.
+    const yaEsta = [{ ...confirmado, estado: 'aplicado' as const }]
+    expect(pidsPorAplicar(yaEsta, 'poner')).toEqual([])
+  })
+
+  it('un confirmado sin precio no se escribe', () => {
+    const sinPrecio = confirmarItem({ ...armarItemDesdeProducto(prod({ id: 'e' })), pid: 'e' }, 'Darío')
+    expect(pidsPorAplicar([sinPrecio], 'poner')).toEqual([])
+  })
+
+  it('el tope por viaje lo fija el límite de Gestión Nube, no el gusto', () => {
+    // 2 consultas por segundo ⇒ 1200 ms entre producto y producto ⇒ cinco entran en ~7 s.
+    expect(TOPE_APLICAR).toBe(5)
   })
 })
 

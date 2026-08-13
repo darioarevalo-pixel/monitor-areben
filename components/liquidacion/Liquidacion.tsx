@@ -45,12 +45,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, contar, nuevoIdLiquidacion, resumenCampania,
+  avisos, contar, nuevoIdLiquidacion, pidsPorAplicar, resumenCampania, TOPE_APLICAR,
   type EstadoCampania, type EstadoItem, type Liquidacion as Campania, type LiquidacionItem,
 } from '@/lib/liquidacion'
 import {
-  borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, guardarItem, leerCampanias,
-  leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
+  aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, estadoItem, guardarItem,
+  leerCampanias, leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { DefinirPrecio } from './DefinirPrecio'
@@ -315,6 +315,15 @@ function DetalleCampania({
    */
   const [definiendo, setDefiniendo] = useState<{ orden: string[]; i: number } | null>(null)
   const [pestania, setPestania] = useFiltroUrl<string>('t', 'productos')
+  /**
+   * La escritura contra Gestión Nube, mientras corre.
+   *
+   * 🔑 **Hace falta un estado porque tarda minutos, no segundos**: son ~6 para una campaña de 260
+   * contra el tope de GN. Un spinner mudo durante seis minutos se lee como "se colgó", y quien mira
+   * recarga la página en el medio.
+   */
+  const [aplicando, setAplicando] = useState<{ modo: 'poner' | 'sacar'; hechos: number; total: number } | null>(null)
+  const [fallidos, setFallidos] = useState<{ pid: string; error: string }[]>([])
 
   const cargar = useCallback(async () => {
     setError(null)
@@ -334,6 +343,10 @@ function DetalleCampania({
   }, [cargar])
 
   const resumen = useMemo(() => resumenCampania(items || []), [items])
+  // Cuántos faltan escribir y cuántos tienen la oferta puesta. Los botones muestran el número: uno
+  // que dice «Escribir 260 precios» se entiende antes de apretarlo.
+  const porAplicar = useMemo(() => pidsPorAplicar(items || [], 'poner').length, [items])
+  const porSacar = useMemo(() => pidsPorAplicar(items || [], 'sacar').length, [items])
 
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -449,6 +462,64 @@ function DetalleCampania({
     }
   }
 
+  /**
+   * Escribe (o saca) los precios de la campaña en Gestión Nube, de a `TOPE_APLICAR` por viaje.
+   *
+   * 🔑 **El bucle está acá y no en el servidor** porque una campaña grande no entra en el tiempo de
+   * una función: contra el tope de GN son ~1,2 s por producto. Partirlo en viajes chicos da además
+   * el progreso y la reanudación — los que ya se aplicaron salen solos de `pidsPorAplicar`, así que
+   * cortar en la mitad y volver a apretar sigue donde quedó en vez de reescribir todo.
+   *
+   * 🔑 **Un producto que falla no frena la tanda ni se pierde**: queda nombrado en `fallidos`. Un
+   * contador de errores sin los nombres obliga a revisar los 260 a mano para encontrar los 3.
+   */
+  async function aplicar(modo: 'poner' | 'sacar') {
+    const pids = pidsPorAplicar(items || [], modo)
+    if (!pids.length) {
+      toast.error(modo === 'poner' ? 'No hay precios confirmados para escribir.' : 'No hay ofertas puestas para sacar.')
+      return
+    }
+    const minutos = Math.max(1, Math.round((pids.length * 1.3) / 60))
+    const ok = await confirmar({
+      titulo: modo === 'poner' ? 'Escribir los precios en Gestión Nube' : 'Sacar las ofertas de Gestión Nube',
+      mensaje: modo === 'poner'
+        ? `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda unos ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}: no cierres la pestaña. Si se corta, se puede retomar.`
+        : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista: se les saca la oferta en Gestión Nube y en la tienda. Tarda unos ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}.`,
+      ok: modo === 'poner' ? 'Escribir los precios' : 'Sacar las ofertas',
+      tono: modo === 'poner' ? 'brand' : 'danger',
+    })
+    if (!ok) return
+
+    setFallidos([])
+    setAplicando({ modo, hechos: 0, total: pids.length })
+    const malos: { pid: string; error: string }[] = []
+    try {
+      for (let i = 0; i < pids.length; i += TOPE_APLICAR) {
+        const tanda = pids.slice(i, i + TOPE_APLICAR)
+        const res = await aplicarPrecios(marca, campania.id, tanda, modo)
+        for (const r of res) if (!r.ok) malos.push({ pid: r.pid, error: r.error || 'no se pudo' })
+        setFallidos([...malos])
+        setAplicando({ modo, hechos: Math.min(i + TOPE_APLICAR, pids.length), total: pids.length })
+      }
+      await cargar()
+      // La campaña pasa sola a `aplicada` cuando entraron todos: marcarla a mano diría que los
+      // precios están puestos, y acá recién se sabe que lo están. Si algo falló, no se mueve.
+      if (modo === 'poner' && !malos.length && campania.estado === 'en_curso') {
+        try { await cambiarEstadoCampania(marca, campania.id, 'aplicada') } catch { /* el estado es secundario: los precios ya están */ }
+      }
+      onCambio()
+      if (malos.length) toast.error(`Quedaron ${malos.length} sin ${modo === 'poner' ? 'escribir' : 'sacar'}. Están listados abajo.`)
+      else toast.ok(modo === 'poner' ? `Listo: ${pids.length} ${pids.length === 1 ? 'precio escrito' : 'precios escritos'} en Gestión Nube.` : 'Listo: las ofertas quedaron sacadas.')
+    } catch (e) {
+      // Se corta la tanda, pero lo ya escrito quedó escrito y anotado: por eso se recarga igual.
+      await cargar()
+      onCambio()
+      toast.error(e instanceof Error ? e.message : 'Se cortó la escritura en Gestión Nube.')
+    } finally {
+      setAplicando(null)
+    }
+  }
+
   async function cambiarEstado(estado: EstadoCampania) {
     try {
       await cambiarEstadoCampania(marca, campania.id, estado)
@@ -510,12 +581,43 @@ function DetalleCampania({
             recargando en otro estado. El cartel dice cuántos faltan y adónde ir: un botón apagado
             sin motivo es lo que hace pensar que la pantalla está rota.
           */}
+          {/*
+            El aplicador de verdad (tanda 3). Convive con «Ya cargué los precios», que se queda para
+            cuando alguien los carga a mano en Gestión Nube: los dos caminos terminan en `aplicada`.
+          */}
+          {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && porAplicar > 0 && (
+            <Button
+              variant="solid"
+              tone="brand"
+              size="sm"
+              disabled={!!aplicando || resumen.definidos > 0}
+              title={resumen.definidos > 0 ? `Faltan revisar ${resumen.definidos} en la pestaña Revisión.` : undefined}
+              onClick={() => void aplicar('poner')}
+            >
+              {aplicando?.modo === 'poner'
+                ? `Escribiendo ${aplicando.hechos} de ${aplicando.total}…`
+                : `Escribir ${porAplicar} ${porAplicar === 1 ? 'precio' : 'precios'} en Gestión Nube`}
+            </Button>
+          )}
+          {(campania.estado === 'aplicada' || campania.estado === 'cerrada') && puede.aplicar && porSacar > 0 && (
+            <Button
+              variant="soft"
+              tone="danger"
+              size="sm"
+              disabled={!!aplicando}
+              onClick={() => void aplicar('sacar')}
+            >
+              {aplicando?.modo === 'sacar'
+                ? `Sacando ${aplicando.hechos} de ${aplicando.total}…`
+                : `Sacar ${porSacar} ${porSacar === 1 ? 'oferta' : 'ofertas'}`}
+            </Button>
+          )}
           {campania.estado === 'en_curso' && puede.aplicar && (
             <Button
               variant="soft"
               tone="brand"
               size="sm"
-              disabled={resumen.definidos > 0}
+              disabled={resumen.definidos > 0 || !!aplicando}
               title={
                 resumen.definidos > 0
                   ? `Faltan revisar ${resumen.definidos} ${resumen.definidos === 1 ? 'precio' : 'precios'} en la pestaña Revisión.`
@@ -536,6 +638,26 @@ function DetalleCampania({
       </div>
 
       {error && <Notice tone="danger" style={{ marginBottom: space[4] }}>{error}</Notice>}
+
+      {/*
+        🔑 **Los que fallaron se nombran, no se cuentan.** "3 productos no se pudieron escribir" en
+        una campaña de 260 obliga a revisarlos todos a mano para encontrar cuáles. Con el nombre y el
+        motivo, se arreglan esos tres. Quedan a la vista hasta la próxima corrida.
+      */}
+      {fallidos.length > 0 && (
+        <Notice tone="warning" style={{ marginBottom: space[4] }}>
+          <strong>{fallidos.length === 1 ? 'Un producto quedó sin escribir' : `${fallidos.length} productos quedaron sin escribir`}</strong>
+          <ul style={{ margin: `${space[2]} 0 0`, paddingLeft: space[5] }}>
+            {fallidos.map((f) => {
+              const it = (items || []).find((i) => i.pid === f.pid)
+              return <li key={f.pid} style={{ fontSize: font.sm }}>{it?.foto.nombre || f.pid}: {f.error}</li>
+            })}
+          </ul>
+          <div style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
+            Volvé a apretar el botón: los que ya entraron no se reescriben.
+          </div>
+        </Notice>
+      )}
 
       {items === null ? (
         <Esqueleto forma="tabla" />

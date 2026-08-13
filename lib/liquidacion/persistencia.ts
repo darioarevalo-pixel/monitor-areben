@@ -134,6 +134,37 @@ export async function quitarItem(store: Marca, liqId: string, pid: string): Prom
   await postear({ store, action: 'quitar-item', id: liqId, pid }, 'No se pudo quitar el producto.')
 }
 
+/** Cómo le fue a cada producto contra Gestión Nube. El que falla se nombra; no se cuenta. */
+export interface ResultadoAplicar {
+  pid: string
+  ok: boolean
+  error?: string
+  precio?: number | null
+}
+
+/**
+ * Escribe (o borra) el precio de sale de una tanda de productos en Gestión Nube.
+ *
+ * 🔑 **Van los pid, no los precios.** El handler los relee de la base: un precio que viaje desde el
+ * navegador es un precio que se puede alterar, y del otro lado hay una tienda de verdad.
+ *
+ * 🔑 **De a `TOPE_APLICAR`, con el bucle afuera.** Contra el tope de Gestión Nube una campaña de 260
+ * son unos 6 minutos, que no entran en el tiempo de una función. El que llama itera y muestra el
+ * progreso; lo aplicado sale solo de la lista, así que cortar y retomar no reescribe nada.
+ */
+export async function aplicarPrecios(
+  store: Marca,
+  liqId: string,
+  pids: string[],
+  modo: 'poner' | 'sacar',
+): Promise<ResultadoAplicar[]> {
+  const d = await postear(
+    { store, action: 'aplicar', id: liqId, pids, modo },
+    modo === 'poner' ? 'No se pudieron escribir los precios en Gestión Nube.' : 'No se pudieron sacar las ofertas en Gestión Nube.',
+  )
+  return (d.resultados || []) as ResultadoAplicar[]
+}
+
 export async function borrarCampania(store: Marca, id: string): Promise<void> {
   await postear({ store, action: 'borrar', id }, 'No se pudo borrar la campaña.')
 }
