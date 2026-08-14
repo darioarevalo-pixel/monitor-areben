@@ -135,6 +135,19 @@ try {
     console.log(`    Corré:  node scripts/apply-clientes-servidor.mjs ${marca} --aplicar`)
   }
 
+  // Y el escalón 3: `venta_detalles` vuelve a entregar lo cobrado en cada renglón. Es por columna,
+  // como el escalón 1, pero se cierra con otro script — de ahí el chequeo aparte.
+  const vd = await client.query(
+    `select has_column_privilege('anon', 'public.venta_detalles'::regclass, 'unit_price', 'SELECT') as lee
+      where exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'venta_detalles'
+                       and column_name = 'unit_price')`,
+  )
+  if (vd.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer \`venta_detalles.unit_price\`: este grant deshizo el escalón 3.`)
+    console.log(`    Corré:  node scripts/apply-venta-detalles-servidor.mjs ${marca} --aplicar`)
+  }
+
   const ok = despuesRls.length === 0 && despuesEsc.length === 0
   console.log(ok ? `\n✓ ${MARCA} cerrada.` : `\n✗ ${MARCA}: quedó algo abierto, mirá el detalle de arriba.`)
   console.log(`\nFalta lo que no se puede verificar desde acá: entrar al Monitor de ${MARCA} y`)

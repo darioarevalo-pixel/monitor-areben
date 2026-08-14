@@ -17,9 +17,9 @@ import type { FilaCliente, FilaDetalle, FilaVenta, MapaSeguimiento } from './tip
 
 /** Los select textuales del legacy (13200, 13814). Un campo de menos y el agregado computa otra cosa. */
 const SEL_VENTAS = 'select=id,date_sale,total_price,client_id,channel_id,sale_state'
-const SEL_DETALLES = 'select=sale_id,product_name,size,quantity,unit_price,total'
-// 📌 El de `clientes` (13250) ya no vive acá: se mudó a `api/_crm.js` (COLUMNAS) cuando la tabla
-// salió del navegador. Es el mismo, palabra por palabra.
+// 📌 Los de `clientes` (13250) y `venta_detalles` (13813) ya no viven acá: se mudaron a
+// `api/_crm.js` (COLUMNAS y COLUMNAS_DETALLE) cuando esas tablas salieron del navegador. Son los
+// mismos, palabra por palabra.
 
 /**
  * El CRM es **bdi-only por esquema, no por permisos**: `ventas.channel_id` no
@@ -114,15 +114,26 @@ export async function traerClientes(ventas: FilaVenta[]): Promise<Record<number,
 
 /**
  * Los detalles de las ventas de un cliente, para el resumen de compras del modal.
- * Lotes de 150 sale_ids (13813). Medido: ~170 líneas por lote, 6x de margen contra
- * el corte de 1000 — pero igual pagina, porque el margen de hoy no es un contrato.
+ *
+ * 🔑 **Ya no sale de Supabase: lo sirve el servidor** (escalón 3 de la Fase S). `venta_detalles`
+ * trae `unit_price` y `total`, y con la anon key —que viaja en el bundle— eso eran **122.952
+ * líneas de facturación** de BDI a disposición de cualquiera. Los ids viajan en el body de un POST
+ * y las tandas las arma el servidor, igual que el padrón de acá arriba.
+ *
+ * Los lotes de 150 sale_ids del legacy (13813) también se fueron con la mudanza: el servidor va de
+ * a 500 y pagina, que es lo que el corte de 1.000 filas de PostgREST pide de verdad.
  */
 export async function traerDetalles(ventaIds: number[]): Promise<FilaDetalle[]> {
-  const cuenta = CUENTAS[MARCA]
-  let out: FilaDetalle[] = []
-  for (let i = 0; i < ventaIds.length; i += 150) {
-    const lote = ventaIds.slice(i, i + 150)
-    out = out.concat(await fetchAll<FilaDetalle>(cuenta, 'venta_detalles', `${SEL_DETALLES}&sale_id=in.(${lote.join(',')})`))
-  }
-  return out
+  const ids = [...new Set(ventaIds.filter((v) => v != null))]
+  if (!ids.length) return []
+
+  const r = await apiFetch('/api/datos?recurso=crm', {
+    method: 'POST',
+    // ⚠️ Sin este header Vercel no parsea el body y el handler ve `ids` vacío, sin error.
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'detalles', ids }),
+  })
+  const d = (await r.json().catch(() => ({}))) as { ok?: boolean; detalles?: FilaDetalle[]; error?: string }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} pidiendo el detalle de las compras.`)
+  return d.detalles || []
 }

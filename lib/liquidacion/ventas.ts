@@ -19,11 +19,19 @@
  * del rango dan los ids, y los detalles se piden por `sale_id` entre el mínimo y el máximo y se
  * cruzan contra el conjunto de ids. `venta_detalles` no tiene fecha propia — el sale_id es el único
  * puente.
+ *
+ * 🔑 **Las dos consultas ya no las hace el navegador: las hace el servidor** (escalón 3 de la Fase
+ * S). El motivo es justamente lo que dice el párrafo de arriba: esas dos columnas son plata, y con
+ * la anon key —que viaja en el bundle— la tabla entera se bajaba desde afuera (122.952 líneas en
+ * BDI, 35.426 en Zattia). Del otro lado hay sesión y el permiso de la sección, que es lo que la
+ * anon key no puede tener.
+ *
+ * **El cruce y el reparto de la plata se quedaron acá**, tal cual estaban. Lo único que cambió es
+ * de dónde vienen las filas.
  */
 
-import { CUENTAS } from '../cuentas'
 import type { Marca } from '../nav.datos'
-import { fetchAll } from '../supabase/rest'
+import { apiFetch } from '../api-fetch'
 
 /** Una línea de venta de un producto de la campaña, ya cruzada con su fecha y su canal. */
 export interface LineaVenta {
@@ -65,27 +73,28 @@ export async function leerVentasDeCampania(
   const quiero = new Set(pids.map(String))
   if (!quiero.size || !desde || !hasta || hasta < desde) return []
 
-  const cuenta = CUENTAS[marca]
-  const ventas = await fetchAll<FilaVentaLiq>(
-    cuenta,
-    'ventas',
-    `select=id,date_sale,channel&date_sale=gte.${desde}&date_sale=lte.${hasta}&order=id`,
-  )
+  const r = await apiFetch('/api/datos?recurso=liquidacion', {
+    method: 'POST',
+    // ⚠️ Sin este header Vercel no parsea el body y el handler ve la campaña vacía, sin error.
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store: marca, action: 'ventas-campania', pids: [...quiero], desde, hasta }),
+  })
+  const d = (await r.json().catch(() => ({}))) as {
+    ok?: boolean
+    ventas?: FilaVentaLiq[]
+    detalles?: FilaDetalleLiq[]
+    error?: string
+  }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} leyendo las ventas del período.`)
+
+  const ventas = d.ventas || []
   if (!ventas.length) return []
 
   // El sale_id es el único puente con `venta_detalles`, que no tiene fecha. El rango de ids incluye
   // ventas de otras fechas que caen en el medio, así que el cruce final va contra este mapa y no
   // contra el rango.
   const deVenta = new Map(ventas.map((v) => [String(v.id), v]))
-  const min = ventas[0].id
-  const max = ventas[ventas.length - 1].id
-
-  const detalles = await fetchAll<FilaDetalleLiq>(
-    cuenta,
-    'venta_detalles',
-    `select=sale_id,product_id,quantity,unit_price,total` +
-      `&product_id=in.(${[...quiero].join(',')})&sale_id=gte.${min}&sale_id=lte.${max}&order=sale_id`,
-  )
+  const detalles = d.detalles || []
 
   const out: LineaVenta[] = []
   for (const d of detalles) {

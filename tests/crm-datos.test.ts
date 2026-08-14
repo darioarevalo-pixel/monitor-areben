@@ -106,9 +106,10 @@ describe('traerVentas · modo Todos los canales', () => {
 })
 
 /**
- * `traerClientes` es el único que NO habla con Supabase: desde el escalón 2 de la Fase S pide por
- * `api/datos?recurso=crm`, que lee con la clave de servicio detrás de sesión y permiso. Lo que hay
- * que sostener acá cambió de forma: ya no es "qué URL de PostgREST arma" sino "qué ids manda".
+ * `traerClientes` y `traerDetalles` son los que NO hablan con Supabase: piden por
+ * `api/datos?recurso=crm`, que lee con la clave de servicio detrás de sesión y permiso —el padrón
+ * desde el escalón 2 de la Fase S, los detalles desde el 3—. Lo que hay que sostener acá cambió de
+ * forma: ya no es "qué URL de PostgREST arma" sino "qué ids manda".
  */
 describe('traerClientes', () => {
   /** Espía `apiFetch`: devuelve las llamadas y contesta la forma del handler. */
@@ -164,11 +165,49 @@ describe('traerClientes', () => {
 })
 
 describe('traerDetalles', () => {
-  it('pide en lotes de 150 sale_ids', async () => {
-    const { urls } = espiarFetch()
+  /** Mismo espía que el de `traerClientes`, con la forma que contesta la acción `detalles`. */
+  function espiarApi(detalles: unknown[] = []) {
+    const llamadas: { url: string; body: { action?: string; ids: number[] } }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, opts: RequestInit) => {
+        llamadas.push({ url: String(url), body: JSON.parse(String(opts.body)) })
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, detalles }) })
+      }),
+    )
+    return { llamadas }
+  }
+
+  it('manda los sale_ids en UN viaje, y no a Supabase', async () => {
+    // Antes eran lotes de 150 contra PostgREST con `unit_price` y `total` en el select. Esas dos
+    // columnas son la facturación entera de la marca y por eso la consulta se mudó al servidor
+    // (escalón 3): los lotes ahora los arma él.
+    const { llamadas } = espiarApi()
     await traerDetalles(Array.from({ length: 160 }, (_, i) => i + 1))
-    expect(urls).toHaveLength(2)
-    expect(consulta(urls[0])).toContain('venta_detalles?select=sale_id,product_name,size,quantity,unit_price,total&sale_id=in.(1,')
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].url).toContain('/api/datos?recurso=crm')
+    expect(llamadas[0].body.action).toBe('detalles')
+    expect(llamadas[0].body.ids).toHaveLength(160)
+  })
+
+  it('no repite ids y sin ids no sale ninguna llamada', async () => {
+    const { llamadas } = espiarApi()
+    await traerDetalles([5, 5, 7])
+    expect(llamadas[0].body.ids).toEqual([5, 7])
+
+    const vacio = espiarApi()
+    expect(await traerDetalles([])).toEqual([])
+    expect(vacio.llamadas).toHaveLength(0)
+  })
+
+  it('un 403 del handler sube como error, no como "no compró nada"', async () => {
+    // 🔴 Mismo modo de falla que el padrón: tragarse el 403 devolviendo `[]` pintaría un cliente
+    // sin compras, que es una afirmación falsa sobre un dato que sí existe.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: false, status: 403, json: async () => ({ error: 'No tenés acceso a Clientes.' }) })),
+    )
+    await expect(traerDetalles([1])).rejects.toThrow('No tenés acceso a Clientes.')
   })
 })
 

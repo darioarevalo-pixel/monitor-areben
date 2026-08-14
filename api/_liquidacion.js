@@ -13,6 +13,7 @@
 //   POST { recurso:'liquidacion', store, action:'estado-item', id, pid, estado }
 //   POST { recurso:'liquidacion', store, action:'quitar-item', id, pid }
 //   POST { recurso:'liquidacion', store, action:'sincronizar-ventas', id }
+//   POST { recurso:'liquidacion', store, action:'ventas-campania', pids:[…], desde, hasta }
 //   POST { recurso:'liquidacion', store, action:'borrar',      id }
 //
 // Archivo `_`: no es una ruta (entra por api/datos.js). El plan Hobby de Vercel admite 12 funciones
@@ -258,6 +259,25 @@ function itemDelBody(raw) {
   };
 }
 
+/**
+ * Una consulta que puede devolver más de mil filas, entera.
+ *
+ * 🔴 **PostgREST corta en 1.000 filas y `supabase-js` no lo esquiva** — medido: un `.limit(20000)`
+ * devuelve 1.000, sin error y sin aviso. Es el equivalente servidor de `fetchAll` (`lib/supabase/
+ * rest.ts`), que existe por lo mismo. En una campaña de agosto son ~170 renglones y no se nota;
+ * el día que alguien liquide medio catálogo, sin esto el Resultado diría que se vendió menos.
+ */
+async function leerTodo(supabase, tabla, armar) {
+  const PAGINA = 1000;
+  const out = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await armar(supabase.from(tabla)).range(desde, desde + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    out.push(...(data || []));
+    if ((data || []).length < PAGINA) return out;
+  }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
@@ -416,6 +436,59 @@ export default async function handler(req, res) {
         .insert([{ id, store, nombre, estado: 'borrador', datos, updated_at: ahora }]);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, campania: aCampania({ id, nombre, estado: 'borrador', datos }) });
+    }
+
+    // ── Qué se vendió de los productos de la campaña, y a qué precio salió cada unidad. ────────
+    //
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // POR QUÉ ESTO ESTÁ ACÁ Y NO EN EL NAVEGADOR (escalón 3 de la Fase S)
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //
+    // La pregunta que contesta Resultado —*¿el precio de sale llegó a estar puesto?*— sólo se puede
+    // responder con `venta_detalles.unit_price` y `total`. Hasta acá eso lo leía el navegador con
+    // la anon key, y esa key **entrega la tabla entera**: medido el 14-ago-2026 desde afuera,
+    // 122.952 líneas en BDI y 35.426 en Zattia, con lo cobrado en cada renglón. Mudar esta
+    // consulta —y la del modal del CRM, que es la otra— es lo que permite revocarle la tabla a
+    // `anon` (`sql/migrate-venta-detalles-servidor.sql`).
+    //
+    // El gate ya está puesto arriba y es el de la sección: quien no puede ver Liquidación en esta
+    // marca no llega hasta acá. Es exactamente lo que la anon key no sabía hacer.
+    //
+    // 🔑 **Las dos consultas van juntas del lado del servidor.** `venta_detalles` no tiene fecha
+    // propia: el `sale_id` es el único puente con `ventas`, así que el rango de ids sale de la
+    // primera. Hacerlo en dos viajes desde el navegador era el camino viejo; acá es uno.
+    //
+    // El cruce final y el reparto de la plata siguen en `lib/liquidacion/ventas.ts`, que es donde
+    // estaban: esto devuelve las filas crudas y no decide nada.
+    //
+    // 🔴 **Va ARRIBA del `const id` de abajo y no es un capricho de orden.** Esta acción no toca
+    // `liquidaciones` ni `liquidacion_items`: pregunta por unos productos entre dos fechas. Puesta
+    // debajo del guard, contestaba `400 falta el id de la campaña` a un request perfectamente
+    // válido — y el mensaje mandaba a buscar el problema al lado equivocado.
+    if (b.action === 'ventas-campania') {
+      const desde = String(b.desde || '');
+      const hasta = String(b.hasta || '');
+      // Sólo dígitos y guiones, y en formato de fecha: van concatenados en el filtro de PostgREST.
+      const fechaOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+      if (!fechaOk(desde) || !fechaOk(hasta) || hasta < desde) {
+        return res.status(400).json({ error: 'rango inválido (desde/hasta en YYYY-MM-DD)' });
+      }
+      // Los pid de Gestión Nube son enteros. Filtrar por tipo no es prolijidad: estos valores
+      // terminan adentro de un `in.(…)`, y ahí lo que no es número es una inyección.
+      const pids = [...new Set((Array.isArray(b.pids) ? b.pids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+      if (!pids.length) return res.status(200).json({ ok: true, ventas: [], detalles: [] });
+
+      const ventas = await leerTodo(supabase, 'ventas', (q) =>
+        q.select('id, date_sale, channel').gte('date_sale', desde).lte('date_sale', hasta).order('id'));
+      if (!ventas.length) return res.status(200).json({ ok: true, ventas: [], detalles: [] });
+
+      const min = ventas[0].id;
+      const max = ventas[ventas.length - 1].id;
+      const detalles = await leerTodo(supabase, 'venta_detalles', (q) =>
+        q.select('sale_id, product_id, quantity, unit_price, total')
+          .in('product_id', pids).gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+
+      return res.status(200).json({ ok: true, ventas, detalles });
     }
 
     // A partir de acá todo pide id de campaña. Se valida una sola vez.

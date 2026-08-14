@@ -1,6 +1,11 @@
-// El padrón del CRM — tabla `clientes` de BDI, servida con la clave de servicio.
+// El padrón del CRM — tabla `clientes` de BDI, servida con la clave de servicio. Y, desde el
+// escalón 3, las líneas de venta con plata que el modal de un cliente muestra.
 //
-//   POST { recurso:'crm', ids:[…] } → { ok, clientes:[{id,name,email,phone,city,province}] }
+//   POST { recurso:'crm', ids:[…] }                    → { ok, clientes:[{id,name,email,…}] }
+//   POST { recurso:'crm', action:'detalles', ids:[…] }  → { ok, detalles:[{sale_id,…,unit_price,total}] }
+//
+// Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
+// padrón, que es como nació: el navegador viejo no manda el campo.
 //
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // POR QUÉ ESTO EXISTE (escalón 2 de la Fase S)
@@ -46,12 +51,32 @@ import { puedeVerAlguna } from '../lib/permisos.core.js';
 // y el agregado computa otra cosa sin un solo error en consola.
 const COLUMNAS = 'id, name, email, phone, city, province';
 
+// El select de los detalles, palabra por palabra el de `lib/crm/datos.ts` (SEL_DETALLES).
+//
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// POR QUÉ TAMBIÉN ESTO (escalón 3 de la Fase S)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// `venta_detalles` tiene `unit_price` y `total`, y medido el 14-ago-2026 con la anon key desde
+// afuera entregaba **122.952 líneas en BDI y 35.426 en Zattia**: la facturación entera, renglón
+// por renglón, para cualquiera que abriera el bundle. Es la tabla más grande de las dos bases.
+//
+// 🔑 **El ETL nunca pidió esas dos columnas** (su select es `sale_id, product_id, size_id, size,
+// quantity`). Los únicos que las leían en el navegador son dos pantallas chicas y ya filtradas:
+// este resumen de compras y el Resultado de una campaña de Liquidación. Por eso cerrar las
+// 122.952 filas no cuesta tocar el ETL: alcanza con mudar estas dos.
+const COLUMNAS_DETALLE = 'sale_id, product_name, size, quantity, unit_price, total';
+
 // El CRM es **bdi-only por esquema**: `clientes` no existe en la base de Zattia (por eso
 // `migrate-columnas-pii.sql` se la saltea ahí). No hay `store` en la puerta a propósito.
 const MARCA = 'bdi';
 
 const LOTE = 500;
 const EN_VUELO = 6;
+
+// El corte de PostgREST. No es configurable desde acá y `supabase-js` no lo esquiva: se pagina o
+// se pierden filas sin enterarse.
+const PAGINA = 1000;
 
 // Techo de una respuesta de función en Vercel. Hoy el padrón entero pesa 1,76 MB, o sea 2,5x de
 // aire, pero el que se pasa no recibe un error legible: recibe una respuesta cortada, que del otro
@@ -70,13 +95,18 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'No tenés acceso a Clientes.' });
   }
 
-  const crudos = Array.isArray((req.body || {}).ids) ? req.body.ids : null;
-  if (!crudos) return res.status(400).json({ error: 'falta ids (una lista de client_id)' });
+  const body = req.body || {};
+  const detalles = String(body.action || '') === 'detalles';
+
+  const crudos = Array.isArray(body.ids) ? body.ids : null;
+  if (!crudos) {
+    return res.status(400).json({ error: `falta ids (una lista de ${detalles ? 'sale_id' : 'client_id'})` });
+  }
 
   // Sólo enteros. No es paranoia de tipos: estos ids se concatenan en el `in.(…)` de PostgREST, y
   // ahí cualquier cosa que no sea un número es una inyección en la query string.
   const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-  if (!ids.length) return res.status(200).json({ ok: true, clientes: [] });
+  if (!ids.length) return res.status(200).json(detalles ? { ok: true, detalles: [] } : { ok: true, clientes: [] });
 
   const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
   const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
@@ -86,6 +116,32 @@ export default async function handler(req, res) {
   try {
     const lotes = [];
     for (let i = 0; i < ids.length; i += LOTE) lotes.push(ids.slice(i, i + LOTE));
+
+    // ── Las líneas con plata de esas ventas. ─────────────────────────────────────────────────
+    //
+    // 🔴 **Acá sí hace falta paginar, y en el padrón no.** Un lote de 500 `client_id` devuelve
+    // como mucho 500 clientes, así que el corte de 1.000 filas de PostgREST nunca llega a
+    // morder. Una venta, en cambio, tiene tantas líneas como artículos: 500 sale_ids son ~570
+    // renglones de promedio pero no hay ningún tope. Y el corte **también aplica con
+    // `supabase-js`** —medido: un `.limit(20000)` devuelve 1.000—, así que sin el `range` la
+    // pérdida sería silenciosa: un pedido grande aparecería con menos artículos de los que tuvo.
+    if (detalles) {
+      const filas = [];
+      for (const lote of lotes) {
+        for (let desde = 0; ; desde += PAGINA) {
+          const { data, error } = await supabase
+            .from('venta_detalles')
+            .select(COLUMNAS_DETALLE)
+            .in('sale_id', lote)
+            .order('sale_id')
+            .range(desde, desde + PAGINA - 1);
+          if (error) throw new Error(error.message);
+          filas.push(...(data || []));
+          if ((data || []).length < PAGINA) break;
+        }
+      }
+      return res.status(200).json({ ok: true, detalles: filas });
+    }
 
     // Por id, no un array a secas: un id repetido entre lotes no puede pasar (ya vienen únicos),
     // pero el mapa además deja la respuesta estable para el `Record` que arma el cliente.
