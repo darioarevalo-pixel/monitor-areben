@@ -6,10 +6,11 @@ import {
   linkWhatsapp,
   ordenarParaPreparar,
   totalesDelTurno,
+  vaAlReparto,
   validarEnvio,
 } from '@/lib/envios/core'
 import { textoDePlata } from '@/lib/envios/etiqueta'
-import type { Envio } from '@/lib/envios/tipos'
+import type { Envio, OrdenTN } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
@@ -205,5 +206,69 @@ describe('lo que no se puede guardar', () => {
 
   it('rechaza montos negativos', () => {
     expect(validarEnvio(con({ monto_envio: -100 }))).toMatch(/monto|número/i)
+  })
+})
+
+/**
+ * Qué paquetes son del cadete.
+ *
+ * 🔴 **El defecto que estos tests existen para cazar es que entre a la hoja un paquete que despacha
+ * el correo.** No es hipotético: se midió en prod sobre 127 órdenes de BDI que **23 de las 39 que
+ * pasaban el filtro (el 59%) eran de Correo Argentino y Andreani**. Un test que sólo verifique que
+ * la de cadetería entra da verde con ese defecto puesto, así que cada caso de acá está escrito al
+ * revés: qué tiene que quedar AFUERA, y por cuál de las dos señales.
+ */
+describe('vaAlReparto — qué sale en la mochila', () => {
+  const orden = (p: Partial<OrdenTN>): OrdenTN => ({
+    number: 20915,
+    cliente: 'Ana',
+    envio: 'Envío Cadeteria Rosario y alrededores',
+    fecha: '2026-08-14',
+    envio_costo_cliente: 0,
+    envio_tipo: 'ship',
+    envio_tracking: null,
+    estado_pago: 'paid',
+    estado_orden: 'open',
+    envio_direccion: null,
+    ...p,
+  })
+
+  it('el cadete lleva la cadetería, con el nombre de hoy y con el de julio', () => {
+    expect(vaAlReparto(orden({}))).toBe(true)
+    // El mismo servicio, escrito como estaba hasta julio. Si el filtro fuera positivo por nombre,
+    // el día que lo renombran otra vez el paquete no sale y nadie se entera.
+    expect(
+      vaAlReparto(
+        orden({ envio: 'Envio con Cadete en Rosario (entre $3000 y $4300), Fisherton ($4300/$5500), Funes ( $8000)' }),
+      ),
+    ).toBe(true)
+  })
+
+  it('🔴 el correo NO va a la mochila, ni siquiera antes de tener tracking', () => {
+    // Con tracking es fácil. El caso que importa es el de arriba: a la mañana, cuando se arma la
+    // hoja, la orden de correo todavía no fue despachada y no tiene número de seguimiento. Un
+    // filtro que sólo mire el tracking la deja pasar.
+    expect(vaAlReparto(orden({ envio: 'Envío Nube - Correo Argentino Clásico a domicilio', envio_tracking: null }))).toBe(false)
+    expect(vaAlReparto(orden({ envio: 'Envío Nube - Correo Argentino Clásico a domicilio', envio_tracking: 'AR123' }))).toBe(false)
+    expect(vaAlReparto(orden({ envio: 'Envío Nube - Andreani a domicilio', envio_tracking: '360001234' }))).toBe(false)
+  })
+
+  it('un correo nuevo, con otro nombre, se caza por el tracking', () => {
+    expect(vaAlReparto(orden({ envio: 'OCA Puerta a Puerta', envio_tracking: 'OCA99' }))).toBe(false)
+  })
+
+  it('una opción desconocida y sin tracking entra: falla del lado seguro', () => {
+    // Aparece una fila de más, que se ve y se borra. Al revés —esconderla— el paquete no sale.
+    expect(vaAlReparto(orden({ envio: 'Moto Rosario centro' }))).toBe(true)
+  })
+
+  it('el retiro no sale a la calle, aunque el nombre no diga nada', () => {
+    expect(vaAlReparto(orden({ envio: 'BDI Store', envio_tipo: 'pickup' }))).toBe(false)
+    expect(vaAlReparto(orden({ envio: 'Punto de retiro', envio_tipo: 'pickup' }))).toBe(false)
+  })
+
+  it('una orden cancelada no se prepara', () => {
+    expect(vaAlReparto(orden({ cancelada: true }))).toBe(false)
+    expect(vaAlReparto(orden({ estado_orden: 'cancelled' }))).toBe(false)
   })
 })

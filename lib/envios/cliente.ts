@@ -8,7 +8,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
-import type { CierreTurno, Envio, Turno } from './tipos'
+import type { CierreTurno, Envio, OrdenTN, Turno } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -60,29 +60,6 @@ export async function cerrarTurno(fecha: string, turno: Turno, pagado_al_cadete:
 }
 
 // ── Lo que viene de Tienda Nube ──────────────────────────────────────────────────────────────
-
-/** Una orden de TN, con el bloque de envío que `mapOrdenTN` empezó a mandar el 13-ago-2026. */
-type OrdenTN = {
-  number: number | string
-  cliente: string | null
-  envio: string | null
-  fecha: string | null
-  envio_costo_cliente: number | null
-  envio_tipo: string | null
-  estado_pago: string | null
-  estado_orden: string | null
-  cancelada?: boolean
-  envio_direccion: {
-    nombre: string | null
-    telefono: string | null
-    calle: string | null
-    numero: string | null
-    piso: string | null
-    localidad: string | null
-    provincia: string | null
-    cp: string | null
-  } | null
-}
 
 /** Lo que devuelve el endpoint, más el resumen de cobertura que sirve para saber qué se puede medir. */
 export type OrdenesDelDia = {
@@ -138,11 +115,4 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca, fecha: string, turno: Turn
     // la de hoy. Lo que se guardó es lo que el cadete tiene en la mano.
     datos: { tn: o as unknown as Record<string, unknown> },
   }
-}
-
-/** Las que no van a la calle: canceladas, o retiro en sucursal. */
-export function vaAlReparto(o: OrdenTN): boolean {
-  if (o.cancelada || o.estado_orden === 'cancelled') return false
-  if (o.envio_tipo === 'pickup') return false
-  return true
 }

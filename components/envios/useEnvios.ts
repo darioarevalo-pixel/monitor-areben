@@ -10,7 +10,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { hoyIso } from '@/lib/calendario'
-import { leerDia, leerOrdenesTN, ordenAEnvio, vaAlReparto } from '@/lib/envios/cliente'
+import { leerDia, leerOrdenesTN, ordenAEnvio } from '@/lib/envios/cliente'
+import { vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
 import type { CierreTurno, Envio, Turno } from '@/lib/envios/tipos'
 import type { Marca } from '@/lib/nav'
@@ -27,7 +28,7 @@ export type EstadoEnvios = {
   cargando: boolean
   error: string | null
   recargar: () => Promise<void>
-  traerDeTiendaNube: () => Promise<{ agregados: number; ya_estaban: number; sinDireccion: number }>
+  traerDeTiendaNube: () => Promise<{ agregados: number; ya_estaban: number; sinDireccion: number; porCorreo: number }>
 }
 
 export function useEnvios(): EstadoEnvios {
@@ -86,12 +87,16 @@ export function useEnvios(): EstadoEnvios {
   const traerDeTiendaNube = useCallback(async () => {
     const candidatas: ReturnType<typeof ordenAEnvio>[] = []
     let sinDireccion = 0
+    // Las que se dejan afuera porque las despacha el correo. Se cuentan y se dicen: sin el número,
+    // "el día tenía 39 órdenes y en la hoja hay 16" parece que la pantalla perdió paquetes.
+    let porCorreo = 0
     const fallos: string[] = []
 
     for (const marca of MARCAS) {
       try {
         const { ordenes } = await leerOrdenesTN(marca, fecha)
         for (const o of ordenes) {
+          if (vaPorCorreo(o) && o.envio_tipo !== 'pickup' && !o.cancelada && o.estado_orden !== 'cancelled') porCorreo++
           if (!vaAlReparto(o)) continue
           const fila = ordenAEnvio(o, marca, fecha, turno)
           // Una orden sin dirección igual entra: es un envío real que alguien tiene que completar a
@@ -106,7 +111,7 @@ export function useEnvios(): EstadoEnvios {
 
     if (!candidatas.length) {
       if (fallos.length) throw new Error(fallos.join(' · '))
-      return { agregados: 0, ya_estaban: 0, sinDireccion: 0 }
+      return { agregados: 0, ya_estaban: 0, sinDireccion: 0, porCorreo }
     }
 
     const r = await apiFetch('/api/datos?recurso=envios', {
@@ -119,7 +124,7 @@ export function useEnvios(): EstadoEnvios {
 
     await recargar()
     if (fallos.length) throw new Error(`Se trajeron las que se pudieron. ${fallos.join(' · ')}`)
-    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion }
+    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo }
   }, [fecha, turno, recargar])
 
   return { fecha, setFecha, turno, setTurno, envios, cierres, cargando, error, recargar, traerDeTiendaNube }

@@ -64,6 +64,8 @@ export function Envios() {
       // Las dos cuentas, no un "listo": "traje 2 y 3 ya estaban" es una respuesta.
       const partes = [`${r.agregados} nuevo${r.agregados === 1 ? '' : 's'}`]
       if (r.ya_estaban) partes.push(`${r.ya_estaban} ya estaban`)
+      // El correo se deja afuera, pero se dice: si no, la cuenta del día no cierra contra Tienda Nube.
+      if (r.porCorreo) partes.push(`${r.porCorreo} van por correo`)
       if (r.sinDireccion) partes.push(`⚠️ ${r.sinDireccion} sin dirección: completala a mano`)
       toast.ok(partes.join(' · '))
     } catch (e) {

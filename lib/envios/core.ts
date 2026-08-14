@@ -9,7 +9,45 @@
 
 import { normalizeArgPhone } from '../crm/core'
 import { ESTADOS_CERRADOS, ESTADOS_EN_CASA } from './reglas.core.js'
-import type { Envio, TotalesTurno } from './tipos'
+import type { Envio, OrdenTN, TotalesTurno } from './tipos'
+
+// ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
+
+/**
+ * Las que despacha un correo, no el cadete.
+ *
+ * 🔑 **Se pregunta por dos señales y alcanza con una.** Ninguna sola sirve:
+ *   · El **nombre** (`Envío Nube - Correo Argentino…`, `Envío Nube - Andreani…`) es lo único que
+ *     está desde el minuto cero, que es cuando se arma la hoja.
+ *   · El **tracking** llega recién al despachar —12 de 14 en la medición— así que a la mañana
+ *     todavía no está; pero es el que sigue funcionando si mañana entra otro correo con otro
+ *     nombre.
+ *
+ * Es una regla negativa a propósito. La positiva (“que diga cadete”) parece más limpia, pero
+ * `shipping_option` es **texto libre y la tienda lo edita**: hasta julio la opción del cadete se
+ * llamaba `Envio con Cadete en Rosario (entre $3000 y $4300), Fisherton…` y en agosto pasó a
+ * `Envío Cadeteria Rosario y alrededores`. Con un filtro positivo, el día que le cambien el nombre
+ * otra vez el paquete **no sale y nadie se entera**. Así, lo que falla es al revés: aparece una
+ * fila de más en la hoja, que se ve y se borra.
+ */
+export function vaPorCorreo(o: OrdenTN): boolean {
+  if (o.envio_tracking) return true
+  return /env[íi]o\s*nube/i.test(o.envio || '')
+}
+
+/**
+ * ¿Este paquete va a la mochila del cadete?
+ *
+ * 🔴 **Medido en prod el 14-ago-2026 sobre 127 órdenes de BDI**: de las 39 que pasaban el filtro
+ * viejo (no cancelada + no `pickup`), **23 eran de Correo Argentino y Andreani** — el 59% de la
+ * hoja del cadete eran paquetes que despacha el correo. El `pickup` saca el retiro en el local y
+ * el punto de retiro; lo que faltaba era sacar el correo.
+ */
+export function vaAlReparto(o: OrdenTN): boolean {
+  if (o.cancelada || o.estado_orden === 'cancelled') return false
+  if (o.envio_tipo === 'pickup') return false
+  return !vaPorCorreo(o)
+}
 
 /** PostgREST devuelve `numeric` como string. Mismo criterio que `lib/crm/core.ts`. */
 function num(v: number | string | null | undefined): number {

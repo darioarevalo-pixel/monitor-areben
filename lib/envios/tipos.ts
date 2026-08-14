@@ -71,3 +71,35 @@ export type CierreTurno = {
   cerrado_por: string | null
   cerrado_en: string | null
 }
+
+/**
+ * Una orden de Tienda Nube, con el bloque de envío que `mapOrdenTN` empezó a mandar el 13-ago-2026.
+ *
+ * Vive acá y no en `cliente.ts` porque quien decide si el paquete va a la mochila del cadete es
+ * `vaAlReparto` (en `core.ts`, puro y testeable): dejarla al lado del `fetch` obligaba al test a
+ * importar `apiFetch`, y con eso a arrastrar la sesión y el cliente de identidad.
+ */
+export type OrdenTN = {
+  number: number | string
+  cliente: string | null
+  /** `shipping_option`. ⚠️ **Texto libre que la tienda edita**: ver `vaAlReparto`. */
+  envio: string | null
+  fecha: string | null
+  envio_costo_cliente: number | null
+  envio_tipo: string | null
+  /** `shipping_tracking_number`. Sólo lo tienen las que despacha un correo, y recién al despacharlas. */
+  envio_tracking?: string | null
+  estado_pago: string | null
+  estado_orden: string | null
+  cancelada?: boolean
+  envio_direccion: {
+    nombre: string | null
+    telefono: string | null
+    calle: string | null
+    numero: string | null
+    piso: string | null
+    localidad: string | null
+    provincia: string | null
+    cp: string | null
+  } | null
+}
