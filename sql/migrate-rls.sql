@@ -166,7 +166,13 @@ revoke insert, update, delete, truncate on all tables in schema public from anon
 grant select on all tables in schema public to anon, authenticated;
 
 -- Lo mismo para lo que se cree de acá en adelante, así una tabla nueva nace cerrada.
-alter default privileges in schema public revoke insert, update, delete on tables from anon, authenticated;
+--
+-- 🔴 **`truncate` estaba en la línea de arriba y faltaba en ésta**, y la diferencia no se ve hasta
+-- que nace una tabla: las tres que se crearon después del 13-ago-2026 (`envios_reparto`,
+-- `envios_turno`, `meta_ads_rentabilidad`) aparecieron con TRUNCATE otorgado a `anon` y a
+-- `authenticated`. No era explotable —PostgREST no expone TRUNCATE—, pero rompía en silencio lo
+-- único que esta línea promete. Las dos listas tienen que decir lo mismo, siempre.
+alter default privileges in schema public revoke insert, update, delete, truncate on tables from anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
 -- CHEQUEO — corré esto después del commit. Las dos consultas tienen que dar vacío.
@@ -177,10 +183,10 @@ alter default privileges in schema public revoke insert, update, delete on table
 --     select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
 --     where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
 --
--- b) Permisos de escritura que le hayan quedado a `anon` (tienen que ser cero):
+-- b) Permisos de escritura que le hayan quedado a `anon` **o a `authenticated`** (cero los dos):
 --
---     select table_name, privilege_type from information_schema.role_table_grants
---     where grantee = 'anon' and table_schema = 'public'
+--     select grantee, table_name, privilege_type from information_schema.role_table_grants
+--     where grantee in ('anon', 'authenticated') and table_schema = 'public'
 --       and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE');
 --
 -- ═══════════════════════════════════════════════════════════════════════════════════════════

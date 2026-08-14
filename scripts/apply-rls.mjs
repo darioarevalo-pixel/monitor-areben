@@ -58,9 +58,12 @@ function parse(raw) {
 
 const SIN_RLS = `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
                  where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity order by 1`
-const ESCRIBE = `select table_name, privilege_type from information_schema.role_table_grants
-                 where grantee = 'anon' and table_schema = 'public'
-                   and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE') order by 1, 2`
+// 🔴 `authenticated` va en la lista, no sólo `anon`. Mirando sólo `anon`, este chequeo dio verde el
+// 13-ago-2026 con `meta_ads_rentabilidad:TRUNCATE` puesto para `authenticated` — la migración
+// revoca los dos roles, así que verificar uno solo es verificar la mitad.
+const ESCRIBE = `select grantee, table_name, privilege_type from information_schema.role_table_grants
+                 where grantee in ('anon', 'authenticated') and table_schema = 'public'
+                   and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE') order by 1, 2, 3`
 
 const cfg = parse(url)
 const client = new pg.Client({ ...cfg, ssl: { rejectUnauthorized: false } })
@@ -75,7 +78,7 @@ try {
 
   console.log(`\n=== ${MARCA} (${cfg.host}) — ANTES ===`)
   console.log(`  tablas SIN row level security : ${antesRls.length}`)
-  console.log(`  tablas donde \`anon\` ESCRIBE   : ${tablasQueEscriben.size}`)
+  console.log(`  tablas donde anon/auth ESCRIBEN: ${tablasQueEscriben.size}`)
   if (tablasQueEscriben.size) {
     const m = [...tablasQueEscriben].slice(0, 8).join(', ')
     console.log(`    p.ej.: ${m}${tablasQueEscriben.size > 8 ? ', …' : ''}`)
@@ -99,7 +102,7 @@ try {
 
   console.log(`\n=== ${MARCA} — DESPUÉS ===`)
   console.log(`  tablas SIN row level security : ${despuesRls.length}${despuesRls.length ? ' → ' + despuesRls.join(', ') : ' ✓'}`)
-  console.log(`  permisos de escritura de anon : ${despuesEsc.length}${despuesEsc.length ? ' → ' + despuesEsc.map((r) => r.table_name + ':' + r.privilege_type).join(', ') : ' ✓'}`)
+  console.log(`  escritura de anon/authenticated: ${despuesEsc.length}${despuesEsc.length ? ' → ' + despuesEsc.map((r) => `${r.grantee}:${r.table_name}:${r.privilege_type}`).join(', ') : ' ✓'}`)
 
   // Que la lectura del navegador siga entrando. Si esto da 0 filas en `productos`, el Monitor de
   // esta marca ya no muestra nada y hay que hacer el rollback del final del .sql.
