@@ -62,8 +62,16 @@ function parse(raw) {
 // una verificación de verdad: sin ella, un revoke que se hubiera llevado media base también daría
 // "cerrado". `productos` y `ventas` siguen abiertos para `anon` en las columnas que el ETL usa —
 // eso lo dejaron los escalones 1 y 3, y romperlo acá sería no abrir el Monitor.
+//
+// 🔴 **A `productos` y `ventas` hay que preguntarles por COLUMNA, no por tabla.** Los escalones 1 y
+// 3 les sacaron el permiso de tabla y lo devolvieron enumerando columnas, así que
+// `has_table_privilege('anon', 'productos', 'SELECT')` es **false** y el ETL las lee igual. Medido
+// acá mismo: la primera versión de este script preguntaba por tabla y daba rojo con todo sano. Es
+// la misma trampa del escalón 2 al revés — allá un verde falso, acá un rojo falso.
 const SE_CIERRAN = ['inventario', 'ventas_por_mes', 'ventas_por_categoria_mes', 'fundas_por_modelo_mes']
 const NO_SE_TOCAN = ['productos', 'ventas']
+/** Una columna que el ETL sí pide de cada una, para preguntar por el permiso EFECTIVO. */
+const COLUMNA_TESTIGO = { productos: 'id', ventas: 'id' }
 
 const cfg = parse(url)
 const client = new pg.Client({ ...cfg, ssl: { rejectUnauthorized: false } })
@@ -85,8 +93,16 @@ async function foto(cierran, quedan) {
   const out = {}
   for (const rol of ROLES) {
     const lee = []
-    for (const o of [...cierran, ...quedan]) {
+    for (const o of cierran) {
       const { rows } = await client.query(`select has_table_privilege($1, 'public.' || $2, 'SELECT') as si`, [rol, o])
+      if (rows[0].si) lee.push(o)
+    }
+    for (const o of quedan) {
+      // Por COLUMNA: ver el comentario de `COLUMNA_TESTIGO`. Preguntar por tabla acá da rojo falso.
+      const { rows } = await client.query(
+        `select has_column_privilege($1, ('public.' || $2)::regclass, $3, 'SELECT') as si`,
+        [rol, o, COLUMNA_TESTIGO[o]],
+      )
       if (rows[0].si) lee.push(o)
     }
     out[rol] = { cierran: lee.filter((o) => cierran.includes(o)), quedan: lee.filter((o) => quedan.includes(o)) }
