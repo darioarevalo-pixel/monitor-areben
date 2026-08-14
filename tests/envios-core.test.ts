@@ -8,7 +8,9 @@ import {
   esTurnoDeGrilla,
   ordenAEnvio,
   ordenarParaPreparar,
+  ordenesQueNoLlegaron,
   proximoDiaDeReparto,
+  resumenDeTraida,
   rotuloDeDia,
   cuentaDelCadete,
   netoDelEnvio,
@@ -19,7 +21,7 @@ import {
   validarEnvio,
 } from '@/lib/envios/core'
 import { textoDePlata } from '@/lib/envios/etiqueta'
-import type { CierreDia, Envio, OrdenTN } from '@/lib/envios/tipos'
+import type { CierreDia, Envio, OrdenTN, Traida } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
@@ -662,5 +664,80 @@ describe('diaDeRepartoVecino — saltea los días sin moto', () => {
   it('el próximo día de reparto desde un sábado es el lunes, y desde un día hábil es él mismo', () => {
     expect(proximoDiaDeReparto('2026-08-15')).toBe('2026-08-17')
     expect(proximoDiaDeReparto('2026-08-14')).toBe('2026-08-14')
+  })
+})
+
+/**
+ * Lo que Tienda Nube no contestó.
+ *
+ * 🔴 **El defecto que cazan es el peor de todos los de esta pantalla: media hoja en verde.** Cuando
+ * el detalle se come el rate limit, el endpoint contesta `ok: true` con menos órdenes adentro —se
+ * midió: 15 de 77, con 62 fallidas— así que no hay excepción que atrape nadie. Un test que sólo
+ * verifique que traer devuelve un texto da verde con el defecto puesto: lo que hay que afirmar es
+ * que el número aparece **y que el cartel deja de ser verde**.
+ */
+describe('🔴 lo que Tienda Nube no contestó', () => {
+  it('cuenta las que faltan restando, no leyendo `fallidas`', () => {
+    // El tramo real de nueve días: 77 en el rango, 15 llegaron.
+    expect(ordenesQueNoLlegaron({ total_en_rango: 77, fallidas: 62 }, 15)).toBe(62)
+  })
+
+  it('🔴 también cuenta las que ni se intentaron: `truncado` no es `fallidas`', () => {
+    // Ninguna falló: el rango se pasó del límite y esas 100 nunca se pidieron. Faltan lo mismo.
+    expect(ordenesQueNoLlegaron({ total_en_rango: 300, fallidas: 0 }, 200)).toBe(100)
+  })
+
+  it('cuando llegaron todas, no falta ninguna', () => {
+    expect(ordenesQueNoLlegaron({ total_en_rango: 32, fallidas: 0 }, 32)).toBe(0)
+  })
+
+  it('si el total no viaja, cae en `fallidas`; y sin nada, no inventa un faltante', () => {
+    expect(ordenesQueNoLlegaron({ fallidas: 5 }, 10)).toBe(5)
+    expect(ordenesQueNoLlegaron({}, 10)).toBe(0)
+    expect(ordenesQueNoLlegaron(null, 10)).toBe(0)
+  })
+
+  it('nunca da negativo, ni si el endpoint cuenta mal el rango', () => {
+    expect(ordenesQueNoLlegaron({ total_en_rango: 5 }, 10)).toBe(0)
+  })
+})
+
+describe('🔴 el cartel de traer no puede ser verde con media hoja', () => {
+  const traida = (p: Partial<Traida> = {}): Traida => ({
+    agregados: 7,
+    ya_estaban: 1,
+    sinDireccion: 0,
+    porCorreo: 7,
+    noLeidas: 0,
+    ...p,
+  })
+
+  it('la pasada buena sigue diciendo lo mismo, en verde', () => {
+    const r = resumenDeTraida(traida())
+    expect(r.tono).toBe('ok')
+    expect(r.texto).toBe('7 nuevos · 1 ya estaban · 7 van por correo')
+  })
+
+  it('🔴 si faltaron órdenes, el tono NO es `ok`', () => {
+    expect(resumenDeTraida(traida({ noLeidas: 62 })).tono).toBe('aviso')
+  })
+
+  it('🔴 y el número aparece en el texto, con qué hacer', () => {
+    const r = resumenDeTraida(traida({ agregados: 0, ya_estaban: 0, porCorreo: 0, noLeidas: 62 }))
+    expect(r.texto).toContain('62')
+    expect(r.texto).toContain('Tienda Nube no contestó')
+    expect(r.texto).toContain('volvé a apretar Traer')
+  })
+
+  it('«0 nuevos» con órdenes perdidas no se lee como un día tranquilo', () => {
+    const r = resumenDeTraida(traida({ agregados: 0, ya_estaban: 0, porCorreo: 0, noLeidas: 1 }))
+    expect(r.tono).toBe('aviso')
+    expect(r.texto).toBe('0 nuevos · ⚠️ 1 orden que Tienda Nube no contestó: volvé a apretar Traer')
+  })
+
+  it('sigue avisando de las que entraron sin dirección', () => {
+    const r = resumenDeTraida(traida({ sinDireccion: 2 }))
+    expect(r.texto).toContain('2 sin dirección')
+    expect(r.tono).toBe('ok')
   })
 })

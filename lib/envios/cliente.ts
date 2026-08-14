@@ -8,6 +8,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
+import { ordenesQueNoLlegaron } from './core'
 import type { CierreDia, Envio, OrdenTN, Turno } from './tipos'
 
 const API = '/api/datos?recurso=envios'
@@ -130,6 +131,11 @@ export type OrdenesDelDia = {
   ordenes: OrdenTN[]
   /** Cuántas órdenes del rango traen cada campo de envío lleno. Ver `coberturaEnvio` en el endpoint. */
   cobertura: Record<string, unknown> | null
+  /**
+   * 🔴 Las que había en el rango y **no vinieron**. Sin este número, un rate limit de Tienda Nube
+   * y un día tranquilo se ven exactamente igual. Ver `ordenesQueNoLlegaron`.
+   */
+  noLeidas: number
 }
 
 /**
@@ -140,11 +146,16 @@ export type OrdenesDelDia = {
  * días seguidos Tienda Nube corta por rate limit —se midió: 15 órdenes de 77, con 62 fallidas y un
  * `ok: true` igual—. El modo `lista`, que existía para barrer un mes, **hoy devuelve cero órdenes**
  * (lo canta `?probe=1`), así que no es una salida.
+ *
+ * 🔑 **Por eso lo que falta se cuenta y se devuelve.** El corte no es un error —la respuesta viene
+ * `ok`, con menos órdenes adentro— así que no hay `throw` que lo cace: si este lado no resta, no
+ * queda ningún lugar donde el faltante pueda aparecer.
  */
 export async function leerOrdenesTN(marca: Marca, desde: string, hasta: string): Promise<OrdenesDelDia> {
   const qs = new URLSearchParams({ ordenes: '1', store: marca, from: desde, to: hasta, limite: '200', nc: String(Date.now()) })
   const r = await apiFetch(`${AUDIT}?${qs.toString()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || `No se pudieron leer las órdenes de ${marca}.`)
-  return { ordenes: (d.ordenes || []) as OrdenTN[], cobertura: d.envio_cobertura || null }
+  const ordenes = (d.ordenes || []) as OrdenTN[]
+  return { ordenes, cobertura: d.envio_cobertura || null, noLeidas: ordenesQueNoLlegaron(d, ordenes.length) }
 }

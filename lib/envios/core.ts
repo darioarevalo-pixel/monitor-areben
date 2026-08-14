@@ -12,7 +12,7 @@ import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
 import { ESTADOS_CERRADOS, ESTADOS_EN_CASA, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia } from './tipos'
+import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -50,6 +50,54 @@ export function vaAlReparto(o: OrdenTN): boolean {
   if (o.cancelada || o.estado_orden === 'cancelled') return false
   if (o.envio_tipo === 'pickup') return false
   return !vaPorCorreo(o)
+}
+
+// ── Lo que Tienda Nube NO contestó ───────────────────────────────────────────────────────────
+
+/**
+ * Cuántas órdenes del rango **no llegaron**: las que había del otro lado menos las que entraron.
+ *
+ * 🔴 **Tienda Nube corta por rate limit y el endpoint contesta `ok: true` igual.** El detalle pide
+ * una orden por vez y un tramo de nueve días devolvió **15 de 77, con 62 fallidas**. El endpoint
+ * siempre informó ese número; el que lo tiraba era este lado, así que la pantalla pintaba media hoja
+ * en verde — y una orden que no se trajo el día que entró no la trae nadie después.
+ *
+ * 🔑 **Se resta, no se lee `fallidas` a secas.** `fallidas` sólo cuenta los GET que fallaron; si el
+ * rango además se pasó del `limite` (`truncado`), esas órdenes no fallaron: ni se intentaron, y
+ * faltan lo mismo. La resta las cuenta a las dos, y de yapa no depende de que el endpoint sepa
+ * contar. `fallidas` queda como respaldo por si un día no viaja el total.
+ */
+export function ordenesQueNoLlegaron(
+  d: { total_en_rango?: unknown; fallidas?: unknown } | null | undefined,
+  leidas: number,
+): number {
+  const total = Number(d?.total_en_rango)
+  if (Number.isFinite(total)) return Math.max(0, total - leidas)
+  return Math.max(0, Number(d?.fallidas) || 0)
+}
+
+/**
+ * El cartel de una pasada del botón «Traer»: qué decir y **de qué color**.
+ *
+ * Va acá, separado del `toast`, por lo mismo que `textoDePlata` está separada del dibujo del PDF: un
+ * ensayo que sólo verifique que el botón no explota da verde con el defecto puesto. Lo que hay que
+ * poder mutar es esto — que el tono sea `aviso` cuando faltan órdenes, y que el número aparezca.
+ *
+ * 🔑 **La instrucción es apretar de nuevo, y es segura**: la dedup por `(marca, nº de orden)` no deja
+ * repetir, así que una segunda pasada sólo puede sumar las que la primera perdió.
+ */
+export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: string } {
+  // Las dos cuentas, no un "listo": "traje 2 y 3 ya estaban" es una respuesta.
+  const partes = [`${t.agregados} nuevo${t.agregados === 1 ? '' : 's'}`]
+  if (t.ya_estaban) partes.push(`${t.ya_estaban} ya estaban`)
+  // El correo se deja afuera, pero se dice: si no, la cuenta del día no cierra contra Tienda Nube.
+  if (t.porCorreo) partes.push(`${t.porCorreo} ${t.porCorreo === 1 ? 'va' : 'van'} por correo`)
+  if (t.sinDireccion) partes.push(`⚠️ ${t.sinDireccion} sin dirección: completala a mano`)
+  if (t.noLeidas) {
+    const q = t.noLeidas === 1 ? 'orden que Tienda Nube no contestó' : 'órdenes que Tienda Nube no contestó'
+    partes.push(`⚠️ ${t.noLeidas} ${q}: volvé a apretar Traer`)
+  }
+  return { tono: t.noLeidas ? 'aviso' : 'ok', texto: partes.join(' · ') }
 }
 
 /** PostgREST devuelve `numeric` como string. Mismo criterio que `lib/crm/core.ts`. */

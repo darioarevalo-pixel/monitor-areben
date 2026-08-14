@@ -129,6 +129,27 @@ export type CuentaCadete = {
 }
 
 /**
+ * Lo que dejó una pasada del botón «Traer de Tienda Nube».
+ *
+ * 🔴 **Tiene que poder decir lo que NO se trajo.** Es el único cartel que ve quien aprieta, y quien
+ * aprieta no tiene forma de saber cuántas órdenes había del otro lado: si sólo se cuenta lo que
+ * entró, media hoja perdida y un día flojo se escriben exactamente igual.
+ */
+export type Traida = {
+  agregados: number
+  ya_estaban: number
+  /** Entraron igual, pero hay que completarles la dirección a mano. */
+  sinDireccion: number
+  /** Las que despacha el correo: quedaron afuera a propósito. Ver `vaPorCorreo`. */
+  porCorreo: number
+  /**
+   * Las órdenes del rango que **no llegaron**. Ver `ordenesQueNoLlegaron`: casi siempre es Tienda
+   * Nube cortando por rate limit, que contesta `ok: true` con la mitad de la lista.
+   */
+  noLeidas: number
+}
+
+/**
  * Una orden de Tienda Nube, con el bloque de envío que `mapOrdenTN` empezó a mandar el 13-ago-2026.
  *
  * Vive acá y no en `cliente.ts` porque quien decide si el paquete va a la mochila del cadete es

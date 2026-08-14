@@ -14,7 +14,7 @@ import { hoyIso, sumarDias } from '@/lib/calendario'
 import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
 import { cuentaDelCadete, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CierreDia, CuentaCadete, Envio } from '@/lib/envios/tipos'
+import type { CierreDia, CuentaCadete, Envio, Traida } from '@/lib/envios/tipos'
 import type { Marca } from '@/lib/nav'
 
 const MARCAS: Marca[] = ['bdi', 'zattia']
@@ -47,7 +47,7 @@ export type EstadoEnvios = {
   cargando: boolean
   error: string | null
   recargar: () => Promise<void>
-  traerDeTiendaNube: () => Promise<{ agregados: number; ya_estaban: number; sinDireccion: number; porCorreo: number }>
+  traerDeTiendaNube: () => Promise<Traida>
 }
 
 export function useEnvios(): EstadoEnvios {
@@ -117,6 +117,9 @@ export function useEnvios(): EstadoEnvios {
     // Las que se dejan afuera porque las despacha el correo. Se cuentan y se dicen: sin el número,
     // "el día tenía 39 órdenes y en la hoja hay 16" parece que la pantalla perdió paquetes.
     let porCorreo = 0
+    // 🔴 Las que había en Tienda Nube y no vinieron. Se suman las dos tiendas: la hoja es una sola,
+    // así que "faltan 12" es la pregunta, no de cuál de las dos faltan.
+    let noLeidas = 0
     const fallos: string[] = []
 
     const hasta = hoyIso()
@@ -124,7 +127,8 @@ export function useEnvios(): EstadoEnvios {
 
     for (const marca of MARCAS) {
       try {
-        const { ordenes } = await leerOrdenesTN(marca, desde, hasta)
+        const { ordenes, noLeidas: faltantes } = await leerOrdenesTN(marca, desde, hasta)
+        noLeidas += faltantes
         for (const o of ordenes) {
           if (vaPorCorreo(o) && o.envio_tipo !== 'pickup' && !o.cancelada && o.estado_orden !== 'cancelled') porCorreo++
           if (!vaAlReparto(o)) continue
@@ -139,9 +143,11 @@ export function useEnvios(): EstadoEnvios {
       }
     }
 
+    // Ninguna candidata NO quiere decir que no había nada: si Tienda Nube cortó, acá es donde el
+    // corte se vería como un día tranquilo. Por eso `noLeidas` viaja también por este camino.
     if (!candidatas.length) {
       if (fallos.length) throw new Error(fallos.join(' · '))
-      return { agregados: 0, ya_estaban: 0, sinDireccion: 0, porCorreo }
+      return { agregados: 0, ya_estaban: 0, sinDireccion: 0, porCorreo, noLeidas }
     }
 
     const r = await apiFetch('/api/datos?recurso=envios', {
@@ -153,8 +159,11 @@ export function useEnvios(): EstadoEnvios {
     if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron traer las órdenes.')
 
     await recargar()
-    if (fallos.length) throw new Error(`Se trajeron las que se pudieron. ${fallos.join(' · ')}`)
-    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo }
+    if (fallos.length) {
+      const faltan = noLeidas ? ` · ${noLeidas} más que Tienda Nube no contestó` : ''
+      throw new Error(`Se trajeron las que se pudieron. ${fallos.join(' · ')}${faltan}`)
+    }
+    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo, noLeidas }
   }, [recargar])
 
   // El filtro por marca se hace acá y no en el servidor: la bandeja es chica y así cambiar de marca

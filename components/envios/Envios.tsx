@@ -37,6 +37,7 @@ import {
   proximoDiaDeReparto,
   rotuloDeDia,
   ordenarParaPreparar,
+  resumenDeTraida,
   totalesDelDia,
   turnosDe,
 } from '@/lib/envios/core'
@@ -89,13 +90,12 @@ export function Envios() {
     setTrayendo(true)
     try {
       const r = await traerDeTiendaNube()
-      // Las dos cuentas, no un "listo": "traje 2 y 3 ya estaban" es una respuesta.
-      const partes = [`${r.agregados} nuevo${r.agregados === 1 ? '' : 's'}`]
-      if (r.ya_estaban) partes.push(`${r.ya_estaban} ya estaban`)
-      // El correo se deja afuera, pero se dice: si no, la cuenta del día no cierra contra Tienda Nube.
-      if (r.porCorreo) partes.push(`${r.porCorreo} ${r.porCorreo === 1 ? 'va' : 'van'} por correo`)
-      if (r.sinDireccion) partes.push(`⚠️ ${r.sinDireccion} sin dirección: completala a mano`)
-      toast.ok(partes.join(' · '))
+      // El texto y el color salen de `resumenDeTraida`, en `core.ts`: es lo que hay que poder mutar
+      // en un test. 🔴 Si faltaron órdenes el cartel NO es verde — un tilde verde con media hoja es
+      // el defecto que se está arreglando, no un detalle de estilo.
+      const { tono, texto } = resumenDeTraida(r)
+      if (tono === 'aviso') toast.aviso(texto)
+      else toast.ok(texto)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudieron traer las órdenes.')
     } finally {
