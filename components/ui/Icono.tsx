@@ -316,6 +316,15 @@ const TRAZOS = {
       <path d="M12 8.6 3.4 15.4a1.2 1.2 0 0 0 .8 2.2h15.6a1.2 1.2 0 0 0 .8-2.2z" />
     </>
   ),
+  /** Envíos del día — camión de reparto. */
+  envios: (
+    <>
+      <rect x="3" y="5.6" width="10.6" height="9.4" rx="1.2" />
+      <path d="M13.6 9.4h3.4l2.6 2.9V15h-6z" />
+      <circle cx="7.2" cy="16.8" r="1.8" />
+      <circle cx="16.6" cy="16.8" r="1.8" />
+    </>
+  ),
   /** Canjes — dos flechas que se cruzan: le mandamos producto, nos manda contenido. */
   canjes: (
     <>
