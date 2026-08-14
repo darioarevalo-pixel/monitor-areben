@@ -9,13 +9,16 @@
  *    marca deja de ser mutar una variable que medio archivo lee de refilón.
  *  - `fetchAll` no llama a setStatus (que tocaba el DOM). Reporta por callback.
  *
- * **Va contra Supabase desde el cliente, con la anon key, a propósito.** Moverlo a
- * un route handler hoy no agrega seguridad — la anon key ya es pública (ver
- * lib/cuentas.ts) — y rompería el caché compartido con el iframe. Tiene sentido
- * recién después de RLS (Fase S).
+ * **Va contra Supabase desde el cliente, con la anon key**, salvo las cuatro cosas
+ * de `POR_EL_SERVIDOR`. Ese era el plan desde el principio: el comentario viejo acá
+ * decía que moverlo a un route handler no agregaba seguridad "hasta que exista RLS
+ * (Fase S)". RLS existe desde el 13-ago-2026 y los escalones 1 a 3 ya sacaron del
+ * navegador el padrón, la facturación y los costos.
  */
 
 import type { Cuenta } from '../cuentas'
+import { CUENTAS } from '../cuentas'
+import { apiFetch } from '../api-fetch'
 
 function headers(cuenta: Cuenta, conCount = false): HeadersInit {
   const h: Record<string, string> = {
@@ -41,9 +44,40 @@ function headers(cuenta: Cuenta, conCount = false): HeadersInit {
  */
 const TIMEOUT_MS = 45_000
 
+/**
+ * Lo que ya no se le pide a Supabase con la anon key: va por `api/datos?recurso=espejo`, con la
+ * clave de servicio y sesión. Escalón 4 de la Fase S.
+ *
+ * 🔑 **El desvío vive acá y no en los once lectores.** `inventario` lo leen once lugares —el ETL,
+ * Exhibición, Ubicaciones, Reposición, Caducados, Canjes, Integraciones (dos), Reclamos y el picker
+ * `BuscarArticuloGN`— cada uno con su select y su filtro. Poniéndolo en el embudo, ninguno cambia
+ * una línea y no hay forma de que mañana alguien escriba el lector número doce por el camino viejo:
+ * el camino viejo devuelve 401.
+ *
+ * 🔑 **Es un pase, no una consulta nueva.** `limit`, `offset` y `Content-Range` viajan tal cual, así
+ * que `fetchAll` sigue paginando de a 1.000 exactamente igual y el servidor nunca junta más de una
+ * página. Lo único que cambia es quién firma la consulta.
+ */
+const POR_EL_SERVIDOR = new Set(['inventario', 'ventas_por_mes', 'ventas_por_categoria_mes', 'fundas_por_modelo_mes'])
+
+/** `bdi` | `zattia` a partir de la cuenta. Las secciones pasan `CUENTAS[marca]`, y dos de ellas una fija. */
+function storeDe(cuenta: Cuenta): string {
+  return cuenta.url === CUENTAS.zattia.url ? 'zattia' : 'bdi'
+}
+
 async function pedir(cuenta: Cuenta, table: string, params: string, conCount = false): Promise<Response> {
   const corte = AbortSignal.timeout(TIMEOUT_MS)
   try {
+    if (POR_EL_SERVIDOR.has(table)) {
+      // El `Prefer: count=exact` no viaja: la puerta lo pide siempre y devuelve el `Content-Range`,
+      // que es lo único que `sbFetchWithCount` mira.
+      return await apiFetch('/api/datos?recurso=espejo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store: storeDe(cuenta), tabla: table, params }),
+        signal: corte,
+      })
+    }
     return await fetch(`${cuenta.url}/rest/v1/${table}?${params}`, { headers: headers(cuenta, conCount), signal: corte })
   } catch (e) {
     // El error de un abort dice "The operation was aborted", que no le sirve a nadie. Se traduce

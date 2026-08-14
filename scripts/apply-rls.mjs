@@ -148,6 +148,32 @@ try {
     console.log(`    Corré:  node scripts/apply-venta-detalles-servidor.mjs ${marca} --aplicar`)
   }
 
+  // El escalón 3 son DOS piezas y hasta hoy sólo se avisaba de la A. `productos.unit_cost` —lo que
+  // nos cuesta cada cosa que vendemos— se reabre con este mismo grant y no lo decía nadie: el
+  // chequeo de arriba mira `ventas`, no `productos`.
+  const pr = await client.query(
+    `select has_column_privilege('anon', 'public.productos'::regclass, 'unit_cost', 'SELECT') as lee
+      where exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'productos'
+                       and column_name = 'unit_cost')`,
+  )
+  if (pr.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer \`productos.unit_cost\`: este grant deshizo el escalón 3 (pieza B).`)
+    console.log(`    Corré:  node scripts/apply-productos-servidor.mjs ${marca} --aplicar`)
+  }
+
+  // Y el escalón 4: el espejo de GN. Son cuatro objetos y alcanza con que UNO haya vuelto a abrirse
+  // para tener que correr el script, así que se pregunta por todos y se avisa una sola vez.
+  const esp = await client.query(
+    `select coalesce(bool_or(has_table_privilege('anon', 'public.' || o, 'SELECT')), false) as lee
+       from unnest(array['inventario','ventas_por_mes','ventas_por_categoria_mes','fundas_por_modelo_mes']) as o
+      where to_regclass('public.' || o) is not null`,
+  )
+  if (esp.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer el espejo de GN (inventario o las vistas): este grant deshizo el escalón 4.`)
+    console.log(`    Corré:  node scripts/apply-espejo-servidor.mjs ${marca} --aplicar`)
+  }
+
   const ok = despuesRls.length === 0 && despuesEsc.length === 0
   console.log(ok ? `\n✓ ${MARCA} cerrada.` : `\n✗ ${MARCA}: quedó algo abierto, mirá el detalle de arriba.`)
   console.log(`\nFalta lo que no se puede verificar desde acá: entrar al Monitor de ${MARCA} y`)

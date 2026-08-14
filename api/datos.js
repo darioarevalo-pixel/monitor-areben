@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -25,6 +25,7 @@ import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
 import crm from './_crm.js';
 import costos from './_costos.js';
+import espejo from './_espejo.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -59,6 +60,11 @@ const RECURSOS = {
   // un enriquecimiento opcional: sin permiso contesta 200 con la lista vacía en vez de 403, porque
   // el ETL de las 11 personas que no ven costos tiene que terminar igual.
   costos,
+  // El espejo de GN (`inventario` y las 3 vistas materializadas), escalón 4 de la Fase S. A
+  // diferencia de los otros dos es un PASE —reenvía la consulta de PostgREST tal cual— porque
+  // tiene once lectores en el navegador y once consultas con nombre se desincronizan. Los
+  // candados que lo hacen seguro están explicados en `_espejo.js`.
+  espejo,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

@@ -24,8 +24,20 @@ let pedidas: string[] = []
 function mockFetch(opciones: { totalPorTabla?: Record<string, number>; filas?: (t: string, url: string) => unknown[]; falla?: (url: string) => boolean } = {}) {
   const { totalPorTabla = {}, filas = () => [], falla = () => false } = opciones
 
-  return vi.fn(async (url: string) => {
+  return vi.fn(async (url: string, opts?: RequestInit) => {
     pedidas.push(url)
+
+    // El espejo de GN —`inventario` y las tres vistas— ya no se le pide a Supabase con la anon key:
+    // va por `api/datos?recurso=espejo`, con la clave de servicio y sesión (escalón 4 de la Fase S).
+    // La consulta viaja igual, sólo que en el body, así que se reconstruye la URL equivalente y
+    // **todas las aserciones de select de este archivo siguen midiendo lo mismo**. Lo que cambió es
+    // el transporte, no lo que se pide, y eso es exactamente lo que este archivo tiene que seguir
+    // vigilando: un select de más o de menos no rompe nada visible.
+    if (url.includes('recurso=espejo')) {
+      const b = JSON.parse(String(opts?.body || '{}')) as { store?: string; tabla?: string; params?: string }
+      url = `${b.store === 'zattia' ? CUENTAS.zattia.url : CUENTAS.bdi.url}/rest/v1/${b.tabla}?${b.params}`
+      pedidas.push(url)
+    }
 
     if (url.includes('api.github.com')) {
       return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
@@ -89,6 +101,21 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     expect(selectDe('fundas_por_modelo_mes')).toBe('mes,modelo,product_id,product_name,product_created_at,total_items')
     expect(selectDe('ventas')).toBe('id,date_sale,channel,channel_id')
     expect(selectDe('venta_detalles')).toBe('sale_id,product_id,size_id,size,quantity')
+  })
+
+  it('el espejo de GN NO se le pide a Supabase con la anon key: va por la puerta', async () => {
+    // 🔴 El escalón 4 de la Fase S. Con la anon key desde afuera, `inventario` entregaba 7.195
+    // filas y las tres vistas la curva mensual del negocio, a cualquiera que abriera la página.
+    // Que el select siga siendo el mismo lo miran los tests de arriba; lo que mira éste es **por
+    // dónde sale**, que es lo único que el revoke de la base va a permitir.
+    vi.stubGlobal('fetch', mockFetch())
+    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+
+    for (const t of ['inventario', 'ventas_por_mes', 'ventas_por_categoria_mes', 'fundas_por_modelo_mes']) {
+      expect(pedidas.some((u) => u.startsWith(CUENTAS.bdi.url) && u.includes(`/rest/v1/${t}?`))).toBe(true)
+      // La URL de arriba es la reconstruida por el mock: lo que salió de verdad fue la puerta.
+      expect(pedidas.filter((u) => u.includes('recurso=espejo')).length).toBeGreaterThan(0)
+    }
   })
 
   it('BDI no pide variante_color_manual: la tabla es de Zattia', async () => {
