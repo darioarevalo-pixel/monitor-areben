@@ -7,9 +7,10 @@
  * algo que la pantalla da por pagado, con el cadete ya en la calle.
  */
 
+import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
-import { ESTADOS_CERRADOS, ESTADOS_EN_CASA } from './reglas.core.js'
+import { ESTADOS_CERRADOS, ESTADOS_EN_CASA, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { Envio, OrdenTN, TotalesTurno } from './tipos'
 
@@ -168,12 +169,25 @@ function saldoDelProducto(o: OrdenTN): number {
 }
 
 /**
- * Una orden de TN convertida en una fila de la hoja del cadete.
+ * ¿El envío ya lo cobró la tienda?
  *
- * 🔑 **`envio_pagado` sale del estado de pago de la orden, no de un default.** En Tienda Nube el
- * envío se cobra dentro del total: si la orden está `paid`, el envío ya entró y en la puerta no se
- * cobra nada. Poner `false` "por las dudas" haría que cada etiqueta salga pidiendo plata que el
- * cliente ya pagó — y se midió que ése es el caso mayoritario, no el raro.
+ * 🔴 **Que la ORDEN esté paga no quiere decir que el ENVÍO esté pago**, y confundirlos es plata que
+ * el cadete no cobra. La cadetería llega de Tienda Nube en $0 —18 de 18 medidas: el precio vive en
+ * el mapa de zonas y lo pone una persona después—, así que lo que la clienta pagó fue el producto y
+ * nada de envío. Con `estado_pago === 'paid'` a secas, la fila salía marcada PAGADO **con el precio
+ * todavía sin cargar**; se cotizaba en $3.000 y la etiqueta seguía diciendo PAGADO. Pasó en la hoja
+ * del 14-ago-2026: «Envíos ya pagos $3.000 · A rendir $0», con el cadete yendo a cobrar nada.
+ *
+ * Se pide que TN haya cobrado el envío **de verdad**: precio mayor a cero y orden paga. El resto
+ * nace a cobrar, y cuando la clienta confirma que transfiere se tilda «Marcar envío como pagado».
+ */
+function envioYaPago(o: OrdenTN): boolean {
+  const cobrado = parseFloat(String(o.envio_costo_cliente ?? '')) || 0
+  return cobrado > 0 && o.estado_pago === 'paid'
+}
+
+/**
+ * Una orden de TN convertida en una fila de la hoja del cadete.
  *
  * 🔑 **Nace sin día.** Entra a la bandeja de pendientes y no a la hoja de un día, porque el día del
  * reparto lo confirma el cliente y no tiene nada que ver con la fecha de la orden. Y nace con el
@@ -197,7 +211,7 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
     localidad: d?.localidad || null,
     anotacion: null,
     monto_envio: o.envio_costo_cliente ?? 0,
-    envio_pagado: o.estado_pago === 'paid',
+    envio_pagado: envioYaPago(o),
     monto_pedido_a_cobrar: saldoDelProducto(o),
     estado: 'pendiente',
     // La foto congelada: si el cliente cambia su dirección en TN mañana, la etiqueta ya salió con
@@ -223,6 +237,42 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
 export function rotuloDeDia(fecha: string | null | undefined): string {
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return ''
   return rotuloFecha(fecha)
+}
+
+/**
+ * El día de reparto anterior (`paso: -1`) o el siguiente (`paso: 1`).
+ *
+ * 🔑 **Saltea los días sin moto.** El sábado, el domingo y cualquier día sin turnos son pantallas
+ * siempre vacías: pasar por ellos de a un click es exactamente lo que hacía que se terminara
+ * abriendo el calendario para todo. El campo de fecha sigue ahí para ir a un día lejano.
+ *
+ * El tope de 14 vueltas es un cinturón por si alguien deja `TURNOS_POR_DIA` sin ningún día: sin él,
+ * la flecha colgaría el navegador en vez de no hacer nada.
+ */
+export function diaDeRepartoVecino(desde: string, paso: 1 | -1): string {
+  let f = desde
+  for (let i = 0; i < 14; i++) {
+    f = sumarDias(f, paso)
+    if (turnosDe(f).length) return f
+  }
+  return desde
+}
+
+/**
+ * El primer día con reparto de acá en adelante. Es el default del selector: el caso normal es
+ * «mandalo al próximo que salga», y arrancar en un sábado obligaría a corregirlo siempre.
+ *
+ * Camina día por día y no salta: la grilla es de siete casilleros y un salto "inteligente" es una
+ * segunda forma de contestar lo mismo que se puede equivocar sola. El tope de 14 es un cinturón —con
+ * la grilla actual nunca pasa de 3—, no una regla.
+ */
+export function proximoDiaDeReparto(desde: string): string {
+  let f = desde
+  for (let i = 0; i < 14; i++) {
+    if (turnosDe(f).length) return f
+    f = sumarDias(f, 1)
+  }
+  return desde
 }
 
 export {

@@ -10,6 +10,7 @@ import {
   Field,
   Input,
   KpiCard,
+  MarcaChip,
   Modal,
   Notice,
   Select,
@@ -31,14 +32,16 @@ import {
   direccionCompleta,
   estaTodoPago,
   linkWhatsapp,
+  diaDeRepartoVecino,
   nuevoIdEnvio,
+  proximoDiaDeReparto,
   rotuloDeDia,
   ordenarParaPreparar,
   totalesDelTurno,
   turnosDe,
 } from '@/lib/envios/core'
-import { hoyIso, sumarDias } from '@/lib/calendario'
-import { agendar, borrarEnvio, cambiarEstado, cerrarTurno, guardarEnvio, marcarPagado } from '@/lib/envios/cliente'
+import { hoyIso } from '@/lib/calendario'
+import { agendar, borrarEnvio, cambiarEstado, cerrarTurno, desagendar, guardarCosto, guardarEnvio, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirEtiquetasCadete } from '@/lib/envios/etiqueta'
 import type { Envio, EstadoEnvio, Turno } from '@/lib/envios/tipos'
 import { useEnvios } from './useEnvios'
@@ -58,18 +61,29 @@ import { useEnvios } from './useEnvios'
  * cambie. Para los que vienen de Tienda Nube la marca sale sola.
  */
 export function Envios() {
-  const { fecha, setFecha, turno, setTurno, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
+  const { fecha, setFecha, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   const [trayendo, setTrayendo] = useState(false)
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
-  const [cerrando, setCerrando] = useState(false)
+  // Qué turno se está cerrando, o `null`. Antes era un booleano porque la pantalla era de un turno.
+  const [cerrando, setCerrando] = useState<Turno | null>(null)
   const [pestania, setPestania] = useState<'dia' | 'pendientes'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
 
-  const delTurno = useMemo(() => ordenarParaPreparar(envios.filter((e) => e.turno === turno)), [envios, turno])
-  const totales = useMemo(() => totalesDelTurno(delTurno), [delTurno])
-  const cierre = useMemo(() => cierres.find((c) => c.turno === turno) || null, [cierres, turno])
+  // 🔑 **La hoja es del DÍA, no del turno.** Un día con reparto de mañana y de tarde es un día:
+  // el cadete es el mismo, la rendición es una, y tener que acordarse de mirar los dos turnos por
+  // separado es la forma de que a las 11 nadie vea los paquetes de la tarde. Los turnos siguen
+  // existiendo —cada envío guarda el suyo— pero como secciones adentro del día.
+  const delDia = useMemo(() => ordenarParaPreparar(envios), [envios])
+  const totales = useMemo(() => totalesDelTurno(delDia), [delDia])
+  // Los turnos que hay que pintar: los de la grilla de ese día, más cualquiera que tenga un envío
+  // metido fuera de grilla — si no, un paquete agendado un sábado no aparecería en ningún lado.
+  const turnosDelDia = useMemo(() => {
+    const dela = new Set<string>(turnosDe(fecha))
+    for (const e of delDia) if (e.turno) dela.add(e.turno)
+    return (['mañana', 'tarde'] as Turno[]).filter((t) => dela.has(t))
+  }, [fecha, delDia])
 
   async function traer() {
     setTrayendo(true)
@@ -101,8 +115,8 @@ export function Envios() {
   async function imprimir() {
     // Se imprime lo que todavía va a salir: reimprimir un entregado sería mandar al cadete a una
     // puerta donde ya estuvo.
-    const paraImprimir = delTurno.filter((e) => e.estado !== 'entregado' && e.estado !== 'no_entregado')
-    if (!paraImprimir.length) return toast.error('No hay envíos para imprimir en este turno.')
+    const paraImprimir = delDia.filter((e) => e.estado !== 'entregado' && e.estado !== 'no_entregado')
+    if (!paraImprimir.length) return toast.error('No hay envíos para imprimir en este día.')
     await imprimirEtiquetasCadete(paraImprimir)
   }
 
@@ -113,6 +127,16 @@ export function Envios() {
       await recargar()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo marcar como pagado.')
+    }
+  }
+
+  /** Devolver un envío a la bandeja: la clienta pospuso y todavía no hay día nuevo. */
+  async function sacarDelDia(e: Envio) {
+    try {
+      await desagendar(e.id)
+      await recargar()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo sacar del día.')
     }
   }
 
@@ -161,138 +185,169 @@ export function Envios() {
           onAgendar={setAgendando}
           onEditar={setEditando}
           onBorrar={borrar}
+          onRecargar={recargar}
         />
       ) : (
       <>
       <Card>
         <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          {/* 🔑 Las flechas saltan al día de reparto anterior y al siguiente, no al día calendario:
+              el sábado, el domingo y el resto de los días sin moto son pantallas siempre vacías, y
+              tener que pasar por ellas de a un click es la razón por la que se terminaba abriendo el
+              calendario para todo. El campo de fecha queda para ir a un día lejano. */}
           <Field label="Día">
-            <Input type="date" value={fecha} onChange={(ev) => setFecha(ev.target.value)} />
-          </Field>
-          <Field label="Turno">
-            <Select value={turno} onChange={(ev) => setTurno(ev.target.value as Turno)}>
-              <option value="mañana">Mañana</option>
-              <option value="tarde">Tarde</option>
-            </Select>
+            <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+              <Button variant="outline" onClick={() => setFecha(diaDeRepartoVecino(fecha, -1))} title="El día de reparto anterior">
+                ←
+              </Button>
+              <Input type="date" value={fecha} onChange={(ev) => setFecha(ev.target.value)} />
+              <Button variant="outline" onClick={() => setFecha(diaDeRepartoVecino(fecha, 1))} title="El próximo día de reparto">
+                →
+              </Button>
+            </div>
           </Field>
           <Button
             variant="outline"
-            onClick={() => setEditando({ id: nuevoIdEnvio(), store: 'bdi', fecha, turno, origen: 'manual', estado: 'pendiente', envio_pagado: false })}
+            onClick={() =>
+              setEditando({
+                id: nuevoIdEnvio(),
+                store: 'bdi',
+                fecha,
+                turno: (turnosDe(fecha)[0] as Turno) || 'tarde',
+                origen: 'manual',
+                estado: 'pendiente',
+                envio_pagado: false,
+              })
+            }
           >
             Cargar uno a mano
           </Button>
+        </div>
+        <div style={{ marginTop: space[2], opacity: 0.7, fontSize: 13 }}>
+          {rotuloDeDia(fecha)
+            ? turnosDe(fecha).length === 0
+              ? `${rotuloDeDia(fecha)} · no hay reparto`
+              : `${rotuloDeDia(fecha)} · sale ${turnosDe(fecha).length === 2 ? 'mañana y tarde' : `sólo por la ${turnosDe(fecha)[0]}`}`
+            : ''}
         </div>
       </Card>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {/* El reparto tiene días: lun-vie por la tarde, mar y jue también por la mañana. El turno que
-          no existe no se esconde —puede haber un envío especial metido ahí y esconderlo sería
-          perderlo—, se avisa. */}
-      {rotuloDeDia(fecha) && !turnosDe(fecha).includes(turno) ? (
-        <Notice tone="warning">
-          {turnosDe(fecha).length === 0
-            ? `El ${rotuloDeDia(fecha)} no hay reparto.`
-            : `El ${rotuloDeDia(fecha)} el cadete sale sólo por la ${turnosDe(fecha).join(' y la ')}.`}
-        </Notice>
-      ) : null}
-
-      {/* Los dos totales con los que se cierra el turno son los mismos dos que la planilla calculaba
-          al pie de cada sección: son la razón por la que la planilla existía. */}
+      {/* Los totales son del DÍA entero, que es como se rinde. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[4] }}>
-        <KpiCard label="Envíos del turno" value={String(totales.envios)} />
+        <KpiCard label="Envíos del día" value={String(totales.envios)} />
         <KpiCard label="Sin salir todavía" value={String(totales.pendienteDeSalir)} />
         <KpiCard label="Envíos ya pagos" value={formatMoney(totales.enviosPagos)} />
         <KpiCard label="A rendir" value={formatMoney(totales.aRendir)} sub={totales.aRendirSiTodoLlega !== totales.aRendir ? `${formatMoney(totales.aRendirSiTodoLlega - totales.aRendir)} todavía en la calle` : undefined} />
       </div>
 
-      {cargando ? null : delTurno.length === 0 ? (
+      {cargando ? null : delDia.length === 0 ? (
         <EmptyState
-          title="No hay envíos cargados en este turno"
-          hint="Traé los de Tienda Nube o cargá uno a mano."
+          title="No hay envíos cargados en este día"
+          hint="Traelos de «Sin fecha», o cargá uno a mano."
         />
       ) : (
-        <TableWrap>
-          <THead>
-            <Tr>
-              <Th>Cliente</Th>
-              <Th>Dónde va</Th>
-              <Th>Marca</Th>
-              <Th>Cobra</Th>
-              <Th>Estado</Th>
-              <Th />
-            </Tr>
-          </THead>
-          <TBody>
-            {delTurno.map((e) => (
-              <Tr key={e.id}>
-                <Td>
-                  <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
-                  {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
-                  {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
-                </Td>
-                <Td>
-                  <div>{direccionCompleta(e)}</div>
-                  {e.anotacion ? <div style={{ opacity: 0.7, fontSize: 12 }}>{e.anotacion}</div> : null}
-                  {linkWhatsapp(e) ? (
-                    <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
-                      WhatsApp
-                    </a>
-                  ) : null}
-                </Td>
-                <Td>{e.store === 'bdi' ? 'BDI' : 'Zattia'}</Td>
-                <Td>
-                  {/* Igual que en la etiqueta: pagado NO es "$0". Un cero se lee como un precio. */}
-                  {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
-                  {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace con
-                      el cliente al teléfono avisando que ya transfirió, y el cadete todavía sin salir. */}
-                  <div>
-                    <Button size="sm" variant="ghost" onClick={() => void tildarPagado(e)}>
-                      {e.envio_pagado ? 'Marcar como impago' : 'Marcar como pagado'}
-                    </Button>
-                  </div>
-                </Td>
-                <Td>
-                  <Select value={e.estado} onChange={(ev) => void tildar(e, ev.target.value as EstadoEnvio)}>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="preparado">Preparado</option>
-                    <option value="despachado">Salió</option>
-                    <option value="entregado">Entregado</option>
-                    <option value="no_entregado">No entregado</option>
-                    <option value="reintento">Vuelve a salir</option>
-                  </Select>
-                </Td>
-                <Td>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <Button size="sm" variant="ghost" onClick={() => setEditando(e)}>
-                      Editar
-                    </Button>
-                    <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(e)}>
-                      Sacar
-                    </Button>
-                  </div>
-                </Td>
-              </Tr>
-            ))}
-          </TBody>
-        </TableWrap>
+        turnosDelDia.map((t) => {
+          const delTurno = delDia.filter((e) => e.turno === t)
+          if (!delTurno.length) return null
+          const cierre = cierres.find((c) => c.turno === t) || null
+          return (
+            <div key={t} style={{ display: 'grid', gap: space[3] }}>
+              {/* El encabezado va SIEMPRE, aunque el día tenga un solo turno: el cadete de la mañana
+                  y el de la tarde salen con hojas distintas, y una tabla sin decir cuál es se lee
+                  como "todo esto sale ahora". */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
+                <strong style={{ textTransform: 'capitalize' }}>
+                  {t} · {delTurno.length} {delTurno.length === 1 ? 'envío' : 'envíos'}
+                  {turnosDe(fecha).includes(t) ? '' : ' (fuera de grilla)'}
+                </strong>
+                <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+                  <span style={{ opacity: 0.7, fontSize: 13 }}>
+                    {cierre?.cerrado_en
+                      ? `Cerrado por ${cierre.cerrado_por} · se le pagaron ${cierre.pagado_al_cadete == null ? '—' : formatMoney(Number(cierre.pagado_al_cadete))}`
+                      : 'Sin cerrar'}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={() => setCerrando(t)}>
+                    {cierre?.cerrado_en ? 'Corregir el cierre' : 'Cerrar el turno'}
+                  </Button>
+                </div>
+              </div>
+              <TableWrap>
+                <THead>
+                  <Tr>
+                    <Th>Cliente</Th>
+                    <Th>Dónde va</Th>
+                    <Th>Marca</Th>
+                    <Th>Cobra</Th>
+                    <Th>Estado</Th>
+                    <Th />
+                  </Tr>
+                </THead>
+                <TBody>
+                  {delTurno.map((e) => (
+                    <Tr key={e.id}>
+                      <Td>
+                        <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
+                        {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
+                        {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+                      </Td>
+                      <Td>
+                        <div>{direccionCompleta(e)}</div>
+                        {e.anotacion ? <div style={{ opacity: 0.7, fontSize: 12 }}>{e.anotacion}</div> : null}
+                        {linkWhatsapp(e) ? (
+                          <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
+                            WhatsApp
+                          </a>
+                        ) : null}
+                      </Td>
+                      {/* 🔑 El chip de color, y no el nombre en texto: la hoja mezcla las dos marcas a
+                          propósito, así que de un golpe de vista tiene que verse de cuál es cada
+                          paquete mientras se arma la mochila. */}
+                      <Td><MarcaChip marca={e.store} /></Td>
+                      <Td>
+                        {/* Igual que en la etiqueta: pagado NO es "$0". Un cero se lee como un precio. */}
+                        {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
+                        {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
+                            con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
+                        <div>
+                          <Button size="sm" variant="ghost" onClick={() => void tildarPagado(e)}>
+                            {e.envio_pagado ? 'Marcar envío impago' : 'Marcar envío pagado'}
+                          </Button>
+                        </div>
+                      </Td>
+                      <Td>
+                        <Select value={e.estado} onChange={(ev) => void tildar(e, ev.target.value as EstadoEnvio)}>
+                          <option value="pendiente">Pendiente</option>
+                          <option value="preparado">Preparado</option>
+                          <option value="despachado">Salió</option>
+                          <option value="entregado">Entregado</option>
+                          <option value="no_entregado">No entregado</option>
+                          <option value="reintento">Vuelve a salir</option>
+                        </Select>
+                      </Td>
+                      <Td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <Button size="sm" variant="ghost" onClick={() => setEditando(e)}>
+                            Editar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => void sacarDelDia(e)}>
+                            Sin fecha
+                          </Button>
+                          <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(e)}>
+                            Sacar
+                          </Button>
+                        </div>
+                      </Td>
+                    </Tr>
+                  ))}
+                </TBody>
+              </TableWrap>
+            </div>
+          )
+        })
       )}
 
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[4], flexWrap: 'wrap' }}>
-          <div>
-            <strong>Cierre del turno</strong>
-            <div style={{ opacity: 0.7, fontSize: 13 }}>
-              {cierre?.cerrado_en
-                ? `Cerrado por ${cierre.cerrado_por}. Se le pagaron ${cierre.pagado_al_cadete == null ? '—' : formatMoney(Number(cierre.pagado_al_cadete))} al cadete.`
-                : 'Sin cerrar. Acá se anota lo que trajo el cadete y lo que se le pagó.'}
-            </div>
-          </div>
-          <Button variant="outline" onClick={() => setCerrando(true)}>
-            {cierre?.cerrado_en ? 'Corregir el cierre' : 'Cerrar el turno'}
-          </Button>
-        </div>
-      </Card>
       </>
       )}
 
@@ -321,12 +376,12 @@ export function Envios() {
       {cerrando ? (
         <CierreDelTurno
           fecha={fecha}
-          turno={turno}
-          aRendir={totales.aRendir}
-          cierre={cierre}
-          onCerrar={() => setCerrando(false)}
+          turno={cerrando}
+          aRendir={totalesDelTurno(delDia.filter((e) => e.turno === cerrando)).aRendir}
+          cierre={cierres.find((c) => c.turno === cerrando) || null}
+          onCerrar={() => setCerrando(null)}
           onGuardado={async () => {
-            setCerrando(false)
+            setCerrando(null)
             await recargar()
           }}
         />
@@ -352,19 +407,21 @@ function Pendientes({
   onAgendar,
   onEditar,
   onBorrar,
+  onRecargar,
 }: {
   envios: Envio[]
   cargando: boolean
   onAgendar: (e: Envio) => void
   onEditar: (e: Partial<Envio>) => void
   onBorrar: (e: Envio) => Promise<void>
+  onRecargar: () => Promise<void>
 }) {
   if (cargando) return null
   if (!envios.length) {
     return (
       <EmptyState
-        title="No hay pedidos esperando fecha"
-        hint="Traé los de Tienda Nube: las órdenes que van en moto entran acá hasta que el cliente confirme el día."
+        title="No hay pedidos de esta marca esperando fecha"
+        hint="Traé los de Tienda Nube: las órdenes que van en moto entran acá hasta que la clienta confirme el día."
       />
     )
   }
@@ -375,56 +432,115 @@ function Pendientes({
         <Tr>
           <Th>Cliente</Th>
           <Th>Dónde va</Th>
-          <Th>Marca</Th>
-          <Th>Envío</Th>
+          <Th>Precio del envío</Th>
+          <Th>Cómo se cobra</Th>
           <Th />
         </Tr>
       </THead>
       <TBody>
-        {envios.map((e) => {
-          const sinPrecio = !(Number(e.monto_envio) > 0)
-          return (
-            <Tr key={e.id}>
-              <Td>
-                <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
-                {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
-                {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
-              </Td>
-              <Td>
-                <div>{direccionCompleta(e)}</div>
-                {linkWhatsapp(e) ? (
-                  <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
-                    WhatsApp
-                  </a>
-                ) : null}
-              </Td>
-              <Td>{e.store === 'bdi' ? 'BDI' : 'Zattia'}</Td>
-              <Td>
-                {sinPrecio ? (
-                  <Badge tone="warning">sin cotizar</Badge>
-                ) : (
-                  <strong>{formatMoney(Number(e.monto_envio))}</strong>
-                )}
-                {e.envio_pagado ? <div><StatusPill tone="success" label="PAGADO" /></div> : null}
-              </Td>
-              <Td>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <Button size="sm" variant="solid" tone="brand" onClick={() => onAgendar(e)}>
-                    Mandar a un día
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => onEditar(e)}>
-                    Editar
-                  </Button>
-                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void onBorrar(e)}>
-                    Sacar
-                  </Button>
-                </div>
-              </Td>
-            </Tr>
-          )
-        })}
+        {envios.map((e) => (
+          <Tr key={e.id}>
+            <Td>
+              <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
+              {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
+              {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+            </Td>
+            <Td>
+              <div>{direccionCompleta(e)}</div>
+              {linkWhatsapp(e) ? (
+                <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
+                  WhatsApp
+                </a>
+              ) : null}
+            </Td>
+            <Td>
+              <Cotizar envio={e} onGuardado={onRecargar} />
+            </Td>
+            <Td>
+              {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
+                  arriba de «PAGADO»— se leían como si una fuera del envío y la otra del pedido, y
+                  además se contradecían: un envío sin precio no puede estar pagado. */}
+              {e.envio_pagado ? (
+                <StatusPill tone="success" label="PAGADO" />
+              ) : (
+                <span style={{ opacity: 0.75 }}>lo cobra el cadete</span>
+              )}
+              <div>
+                <Button size="sm" variant="ghost" onClick={() => void marcarPagado(e.id, !e.envio_pagado).then(onRecargar)}>
+                  {e.envio_pagado ? 'Marcar envío impago' : 'Marcar envío pagado'}
+                </Button>
+              </div>
+            </Td>
+            <Td>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Button size="sm" variant="solid" tone="brand" onClick={() => onAgendar(e)}>
+                  Mandar a un día
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onEditar(e)}>
+                  Editar
+                </Button>
+                <Button size="sm" variant="ghost" tone="danger" onClick={() => void onBorrar(e)}>
+                  Sacar
+                </Button>
+              </div>
+            </Td>
+          </Tr>
+        ))}
       </TBody>
     </TableWrap>
+  )
+}
+
+/**
+ * El precio del envío, cargado desde la fila.
+ *
+ * 🔑 **Se cotiza de a diez seguidos, mirando el mapa.** Abrir la ficha entera para escribir un
+ * número es tres clicks por fila y encima reenvía la fila completa —con lo que estaba en pantalla
+ * al abrirla—, así que pisa lo que otra persona corrigió mientras tanto. Acá viaja un solo campo.
+ *
+ * Guarda al salir del campo o con Enter, y sólo si el número cambió: el `blur` se dispara también
+ * cuando alguien pasa de largo con el tabulador, y guardar ahí sería escribir sin que nadie lo pida.
+ */
+function Cotizar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
+  const toast = useToast()
+  const original = Number(envio.monto_envio) || 0
+  const [valor, setValor] = useState(original ? String(original) : '')
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar() {
+    const n = Number(valor)
+    if (valor === '' || !Number.isFinite(n) || n < 0 || n === original) {
+      setValor(original ? String(original) : '')
+      return
+    }
+    setGuardando(true)
+    try {
+      await guardarCosto(envio.id, n)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el precio.')
+      setValor(original ? String(original) : '')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <Input
+        type="number"
+        value={valor}
+        placeholder="sin cotizar"
+        disabled={guardando}
+        style={{ width: 110 }}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={() => void guardar()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        }}
+      />
+      {!original ? <Badge tone="warning">falta</Badge> : null}
+    </div>
   )
 }
 
@@ -508,23 +624,6 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
       </div>
     </Modal>
   )
-}
-
-/**
- * El primer día con reparto de acá en adelante. Es el default del selector: el caso normal es
- * «mandalo al próximo que salga», y arrancar en un sábado obligaría a corregirlo siempre.
- *
- * Camina día por día y no salta: la grilla es de siete casilleros y un salto "inteligente" es una
- * segunda forma de contestar lo mismo que se puede equivocar sola. El tope de 14 es un cinturón —con
- * la grilla actual nunca pasa de 3—, no una regla.
- */
-function proximoDiaDeReparto(desde: string): string {
-  let f = desde
-  for (let i = 0; i < 14; i++) {
-    if (turnosDe(f).length) return f
-    f = sumarDias(f, 1)
-  }
-  return desde
 }
 
 /** Alta y edición a mano: el 10% de los envíos que no pasa por la tienda. */

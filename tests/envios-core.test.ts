@@ -4,9 +4,11 @@ import {
   direccionCompleta,
   estaTodoPago,
   linkWhatsapp,
+  diaDeRepartoVecino,
   esTurnoDeGrilla,
   ordenAEnvio,
   ordenarParaPreparar,
+  proximoDiaDeReparto,
   rotuloDeDia,
   totalesDelTurno,
   turnosDe,
@@ -428,5 +430,74 @@ describe('rotuloDeDia — el borde por donde entra lo que se tipea', () => {
 
   it('una fecha entera sale con el día de la semana', () => {
     expect(rotuloDeDia('2026-08-14')).toBe('vie 14-ago')
+  })
+})
+
+/**
+ * Que la ORDEN esté paga no quiere decir que el ENVÍO esté pago.
+ *
+ * 🔴 **El defecto que este bloque caza es plata que el cadete no cobra.** La cadetería llega de
+ * Tienda Nube en $0 —el precio vive en el mapa de zonas y lo pone una persona después—, así que con
+ * `estado_pago === 'paid'` a secas la fila salía marcada PAGADO con el precio sin cargar. Se
+ * cotizaba en $3.000 y la etiqueta seguía diciendo PAGADO. Pasó en la hoja del 14-ago-2026:
+ * «Envíos ya pagos $3.000 · A rendir $0».
+ */
+describe('envio_pagado — sólo si Tienda Nube cobró el envío', () => {
+  const orden = (p: Record<string, unknown>) => ({
+    number: 20913,
+    cliente: 'Ana',
+    envio: 'Envío Cadeteria Rosario y alrededores',
+    fecha: '2026-08-14',
+    total: '18174.70',
+    envio_costo_cliente: 0,
+    envio_tipo: 'ship',
+    estado_pago: 'paid',
+    estado_orden: 'open',
+    envio_direccion: null,
+    ...p,
+  })
+
+  it('🔴 la orden paga con el envío en $0 NO nace pagada', () => {
+    expect(ordenAEnvio(orden({}), 'bdi').envio_pagado).toBe(false)
+  })
+
+  it('el envío que la tienda sí cobró nace pagado', () => {
+    expect(ordenAEnvio(orden({ envio_costo_cliente: 9326 }), 'bdi').envio_pagado).toBe(true)
+  })
+
+  it('un envío con precio pero con la orden impaga se cobra en la puerta', () => {
+    expect(ordenAEnvio(orden({ envio_costo_cliente: 9326, estado_pago: 'pending' }), 'bdi').envio_pagado).toBe(false)
+  })
+})
+
+/**
+ * Las flechas del día.
+ *
+ * 🔴 **El defecto que cazan es dejar al usuario parado en un día sin reparto**, que es una pantalla
+ * siempre vacía. Un test que sólo avance de martes a miércoles da verde con el salto del fin de
+ * semana roto, así que los casos son justo los bordes: el viernes y el lunes.
+ */
+describe('diaDeRepartoVecino — saltea los días sin moto', () => {
+  it('🔴 del viernes, la flecha adelante cae en lunes, no en sábado', () => {
+    expect(diaDeRepartoVecino('2026-08-14', 1)).toBe('2026-08-17')
+  })
+
+  it('🔴 del lunes, la flecha atrás cae en viernes, no en domingo', () => {
+    expect(diaDeRepartoVecino('2026-08-17', -1)).toBe('2026-08-14')
+  })
+
+  it('entre semana avanza y retrocede de a un día', () => {
+    expect(diaDeRepartoVecino('2026-08-11', 1)).toBe('2026-08-12')
+    expect(diaDeRepartoVecino('2026-08-12', -1)).toBe('2026-08-11')
+  })
+
+  it('desde un sábado —al que se llega por el calendario— sale para los dos lados', () => {
+    expect(diaDeRepartoVecino('2026-08-15', 1)).toBe('2026-08-17')
+    expect(diaDeRepartoVecino('2026-08-15', -1)).toBe('2026-08-14')
+  })
+
+  it('el próximo día de reparto desde un sábado es el lunes, y desde un día hábil es él mismo', () => {
+    expect(proximoDiaDeReparto('2026-08-15')).toBe('2026-08-17')
+    expect(proximoDiaDeReparto('2026-08-14')).toBe('2026-08-14')
   })
 })

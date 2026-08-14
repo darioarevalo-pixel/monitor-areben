@@ -285,6 +285,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Cotizar: el precio del envío, desde la fila ───────────────────────────
+    //
+    // Un campo solo, por la misma razón que `pagado`: cotizar es lo que se hace de a diez seguidos
+    // mirando el mapa, y abrir la ficha entera para escribir un número la reenvía completa —con lo
+    // que estaba en pantalla cuando se abrió— y pisa lo que otra persona corrigió mientras tanto.
+    if (b.action === 'costo') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const m = monto(b.monto_envio);
+      if (m === undefined) return res.status(400).json({ error: 'El precio del envío tiene que ser un número de cero para arriba.' });
+      const { data, error } = await supabase
+        .from('envios_reparto')
+        .update({ monto_envio: m == null ? 0 : m, autor: yo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id');
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      return res.status(200).json({ ok: true });
+    }
+
     if (b.action === 'borrar') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });

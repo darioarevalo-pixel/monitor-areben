@@ -71,6 +71,11 @@ export async function marcarPagado(id: string, pagado: boolean): Promise<void> {
   await postear({ action: 'pagado', id, envio_pagado: pagado }, 'No se pudo marcar el envío como pagado.')
 }
 
+/** Cotizar: el precio del envío, sin abrir la ficha. Sale del mapa de zonas. */
+export async function guardarCosto(id: string, monto: number): Promise<void> {
+  await postear({ action: 'costo', id, monto_envio: monto }, 'No se pudo guardar el precio del envío.')
+}
+
 export async function cambiarEstado(id: string, estado: string, cadete?: string | null): Promise<void> {
   await postear({ action: 'estado', id, estado, ...(cadete !== undefined ? { cadete } : {}) }, 'No se pudo cambiar el estado.')
 }

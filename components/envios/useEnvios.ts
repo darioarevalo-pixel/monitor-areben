@@ -3,17 +3,18 @@
 /**
  * El estado de la hoja del cadete: qué día se está mirando y qué hay cargado ese día.
  *
- * La lectura es de la fecha entera (los dos turnos), y el turno se elige en la pantalla: son ~2
- * envíos por día, así que traer el día completo es más barato que dos viajes, y cambiar de turno
- * no tiene que esperar a la red.
+ * Se pide **el día entero, con sus dos turnos**, y no un turno por vez: un día de reparto es un
+ * día —el cadete es el mismo y la rendición es una—, así que partirlo obligaría a acordarse de
+ * mirar dos pantallas para saber qué sale hoy.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
 import { leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
 import { ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CierreTurno, Envio, Turno } from '@/lib/envios/tipos'
+import type { CierreTurno, Envio } from '@/lib/envios/tipos'
 import type { Marca } from '@/lib/nav'
 
 const MARCAS: Marca[] = ['bdi', 'zattia']
@@ -32,10 +33,14 @@ const DIAS_PARA_ATRAS = 3
 export type EstadoEnvios = {
   fecha: string
   setFecha: (f: string) => void
-  turno: Turno
-  setTurno: (t: Turno) => void
   envios: Envio[]
-  /** Los cotizados que todavía no tienen día. Es la otra pestaña. */
+  /**
+   * Los cotizados que todavía no tienen día, **sólo de la marca del header**.
+   *
+   * 🔑 Es la única lista de la pantalla que se filtra por marca, y va al revés que la hoja del día
+   * a propósito: cotizar y acordar el día con la clienta lo hace el equipo de una marca, mirando su
+   * tienda. El reparto, en cambio, es uno solo — el cadete sale con las dos en la misma mochila.
+   */
   pendientes: Envio[]
   cierres: CierreTurno[]
   cargando: boolean
@@ -47,10 +52,10 @@ export type EstadoEnvios = {
 export function useEnvios(): EstadoEnvios {
   // 🔴 El día sale del NAVEGADOR, no del servidor. El servidor corre en UTC y a las 21:00 de
   // Argentina ya devuelve mañana: la hoja se vaciaría sola en el medio del turno tarde.
+  const { marca } = useSesion()
   const [fecha, setFecha] = useState<string>(() => hoyIso())
-  const [turno, setTurno] = useState<Turno>('mañana')
   const [envios, setEnvios] = useState<Envio[]>([])
-  const [pendientes, setPendientes] = useState<Envio[]>([])
+  const [todosLosPendientes, setTodosLosPendientes] = useState<Envio[]>([])
   const [cierres, setCierres] = useState<CierreTurno[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +85,7 @@ export function useEnvios(): EstadoEnvios {
         if (!vivo) return
         setEnvios(d.envios)
         setCierres(d.cierres)
-        setPendientes(p)
+        setTodosLosPendientes(p)
       } catch (e) {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudo leer el día.')
@@ -151,5 +156,12 @@ export function useEnvios(): EstadoEnvios {
     return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo }
   }, [recargar])
 
-  return { fecha, setFecha, turno, setTurno, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube }
+  // El filtro por marca se hace acá y no en el servidor: la bandeja es chica y así cambiar de marca
+  // en el header no cuesta un viaje. Sin marca (nunca pasa con sesión) se muestran las dos.
+  const pendientes = useMemo(
+    () => (marca ? todosLosPendientes.filter((e) => e.store === marca) : todosLosPendientes),
+    [todosLosPendientes, marca],
+  )
+
+  return { fecha, setFecha, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube }
 }
