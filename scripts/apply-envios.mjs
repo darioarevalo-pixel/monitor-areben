@@ -30,9 +30,10 @@ const env = Object.fromEntries(
     }),
 )
 
-// Los dos archivos y en este orden: el segundo afloja columnas que crea el primero. Van en la misma
-// transacción, así que o entran los dos o no entra ninguno.
-const sql = ['sql/migrate-envios.sql', 'sql/migrate-envios-pendientes.sql']
+// Los tres archivos y en este orden: el segundo afloja columnas que crea el primero, y el tercero
+// agrega la cuenta corriente del cadete y se lleva puesta `envios_turno` (sólo si está vacía). Van
+// en la misma transacción, así que o entran los tres o no entra ninguno.
+const sql = ['sql/migrate-envios.sql', 'sql/migrate-envios-pendientes.sql', 'sql/migrate-envios-cuenta.sql']
   .map((f) => readFileSync(f, 'utf8'))
   .join('\n;\n')
 
@@ -67,14 +68,20 @@ try {
   await client.query(sql)
   await client.query('COMMIT')
   const r = await client.query('select count(*)::int as n from envios_reparto')
-  const t = await client.query('select count(*)::int as n from envios_turno')
+  const t = await client.query('select count(*)::int as n from envios_dia')
   // El RLS es la mitad del punto de esta migración: si quedara apagado, sería la única tabla
   // abierta de la base justo después de que `migrate-rls.sql` la dejara en cero. Se verifica, no
-  // se supone.
+  // se supone. Y con él, que `anon` no pueda ESCRIBIR: son dos candados distintos —RLS filtra filas,
+  // el privilegio niega el verbo— y ya pasó una vez que uno tapara la ausencia del otro.
   const rls = await client.query(
-    `select relname, relrowsecurity from pg_class
-     where relname in ('envios_reparto', 'envios_turno') order by relname`,
+    `select relname, relrowsecurity,
+            has_table_privilege('anon', 'public.' || relname, 'INSERT') as anon_escribe
+       from pg_class
+      where relname in ('envios_reparto', 'envios_dia') order by relname`,
   )
+  // La tabla vieja del cierre por turno. Tenía que irse, pero sólo si estaba vacía: con filas, esos
+  // serían los únicos datos de caja que existen.
+  const vieja = await client.query(`select to_regclass('public.envios_turno') is not null as sigue`)
   // Igual que el RLS: el candado nuevo se **ejerce**, no se supone. Una fila con fecha y sin turno
   // es el estado que la planilla vieja tenía en el 53,8% de sus filas, y un `check` que no llegó a
   // aplicarse no se nota hasta que alguien la escribe. Se prueba en una transacción que se deshace.
@@ -89,11 +96,14 @@ try {
   }
   await client.query('ROLLBACK')
 
-  const estado = rls.rows.map((x) => `${x.relname}=${x.relrowsecurity ? 'RLS ✓' : 'RLS ✗ ABIERTA'}`).join(' · ')
-  console.log(`✓ BDI (${cfg.host}): envios_reparto ${r.rows[0].n} · envios_turno ${t.rows[0].n} filas`)
+  const estado = rls.rows
+    .map((x) => `${x.relname}=${x.relrowsecurity ? 'RLS ✓' : 'RLS ✗ ABIERTA'}${x.anon_escribe ? ' ✗ anon ESCRIBE' : ''}`)
+    .join(' · ')
+  console.log(`✓ BDI (${cfg.host}): envios_reparto ${r.rows[0].n} · envios_dia ${t.rows[0].n} filas`)
   console.log(`  ${estado}`)
   console.log(`  fecha sin turno: ${checkOk ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`)
-  if (rls.rows.some((x) => !x.relrowsecurity) || !checkOk) process.exitCode = 1
+  console.log(`  envios_turno: ${vieja.rows[0].sigue ? '⚠️ SIGUE (tenía filas: son datos de caja, mirarlos)' : 'se fue ✓'}`)
+  if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk) process.exitCode = 1
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})
   console.log(`✗ BDI: ${e.message}`)

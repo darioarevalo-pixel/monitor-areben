@@ -12,7 +12,7 @@ import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
 import { ESTADOS_CERRADOS, ESTADOS_EN_CASA, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { Envio, OrdenTN, TotalesTurno } from './tipos'
+import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -79,39 +79,156 @@ export function estaTodoPago(e: Envio): boolean {
   return aCobrar(e) === 0
 }
 
+// ── La cuenta corriente del cadete ───────────────────────────────────────────────────────────
+
 /**
- * Los dos totales con los que se cierra un turno. Son los mismos dos que la planilla calculaba a
- * mano al pie de cada sección, y son la razón por la que la planilla existía:
+ * **Lo que le debemos al cadete por llevar este paquete.**
  *
- *   · `enviosPagos` — lo que ya entró antes de que el cadete saliera. No se rinde: se controla.
- *   · `aRendir`     — la plata que el cadete tiene que traer de vuelta.
+ * Es lo que se le cobró al cliente, salvo que se haya escrito otra cosa: el precio del mapa de zonas
+ * se le cobra a la clienta y él se lo queda entero. `pago_cadete` en `null` NO es cero, es "lo mismo
+ * que el envío" — guardar una copia haría que cotizar de nuevo dejara los dos números peleados.
  *
- * `aRendir` cuenta **sólo lo que se entregó de verdad**. Un envío que volvió sin entregar no trae
- * plata, y sumarlo haría que la caja no cierre todas las veces que alguien no estaba en la casa —
- * que es justo el caso que la planilla nunca supo registrar, porque no tenía estado.
+ * 🔑 **Existe porque el envío bonificado los separa.** Cuando el envío va sin cargo, `monto_envio`
+ * es 0 y el cadete **cobra igual**: leer la tarifa de `monto_envio` a secas diría que ese reparto
+ * salió gratis, y la diferencia se la comería él sin que nadie lo vea.
  */
-export function totalesDelTurno(envios: Envio[]): TotalesTurno {
+export function tarifaCadete(e: Envio): number {
+  return e.pago_cadete == null || e.pago_cadete === '' ? num(e.monto_envio) : num(e.pago_cadete)
+}
+
+/**
+ * **Lo que el cadete tiene que traer por este envío**, y el corazón de toda la cuenta.
+ *
+ * Cobró `aCobrar(e)` en la puerta y le debemos `tarifaCadete(e)` por haberlo llevado. La resta es lo
+ * que sobra, y **puede dar negativo**: ahí le debemos nosotros.
+ *
+ * Los tres casos reales, para que se vea que no hay ninguno raro:
+ *   · envío cobrado en la puerta, producto ya pagado → cobra el envío y se lo queda: **0**.
+ *   · el cliente ya había pagado el envío por adelantado → lo llevó y no cobró nada: **le debemos**.
+ *   · cobró el producto en efectivo → **trae esa plata**, menos su envío.
+ *
+ * Que el caso normal dé cero es la razón por la que la planilla nunca necesitó una cuenta: mientras
+ * todo se cobre en la puerta, nadie se debe nada. Los otros dos son los que se arrastraban de
+ * memoria.
+ */
+export function netoDelEnvio(e: Envio): number {
+  return aCobrar(e) - tarifaCadete(e)
+}
+
+/**
+ * La cuenta corriente, día por día, con el saldo arrastrado.
+ *
+ * Se le pasan **todos** los envíos con fecha y todos los cierres, sin filtrar por rango: el
+ * acumulado de un día es la suma de todos los anteriores, así que recortar la ventana daría un saldo
+ * distinto según por dónde se empiece a mirar. Arranca en cero — al 14-ago-2026 el cadete y el local
+ * están a mano — y por eso no hay saldo de apertura que pasarle.
+ *
+ * 🔑 **Sólo cuentan los entregados.** Un paquete que volvió sin entregar no cobró nada y tampoco se
+ * le paga: sumarlo haría que la caja no cierre justo los días que algo salió mal, que es cuando el
+ * número tiene que ser confiable.
+ *
+ * El signo, una sola vez y para todo el módulo: **positivo = el cadete tiene plata nuestra**;
+ * negativo = se la debemos.
+ */
+export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCadete {
+  const porDia = new Map<string, Envio[]>()
+  for (const e of envios) {
+    if (!e.fecha) continue
+    const lista = porDia.get(e.fecha)
+    if (lista) lista.push(e)
+    else porDia.set(e.fecha, [e])
+  }
+  // Un día cerrado sin un solo envío entregado igual es una fila de la cuenta: es el día en que se
+  // le pagó lo que se le debía y no salió a repartir.
+  for (const c of cierres) if (!porDia.has(c.fecha)) porDia.set(c.fecha, [])
+
+  const fechas = [...porDia.keys()].sort()
+  let acumulado = 0
+  const dias: DiaDeCuenta[] = []
+
+  for (const fecha of fechas) {
+    const delDia = porDia.get(fecha) || []
+    const entregados = delDia.filter((e) => e.estado === 'entregado')
+    const cierre = cierres.find((c) => c.fecha === fecha) || null
+
+    const cobrado = entregados.reduce((s, e) => s + aCobrar(e), 0)
+    const tarifas = entregados.reduce((s, e) => s + tarifaCadete(e), 0)
+    const trajo = cierre?.trajo == null ? null : num(cierre.trajo)
+    const pagadoAparte = num(cierre?.pagado_aparte)
+
+    // Lo que el día movió en la cuenta: lo que quedó en su bolsillo, menos lo que entregó.
+    //
+    // 🔑 **La plata que se le dio por fuera SUMA, no resta.** El saldo es "cuánto tiene él de lo
+    // nuestro", así que transferirle lo que se le debía sube el número hacia cero — restarlo
+    // duplicaría la deuda en vez de saldarla, que es justo el error que este signo esconde: los dos
+    // caminos dan un número plausible y sólo uno cierra contra la calle.
+    const debeTraer = cobrado - tarifas
+    const saldoDelDia = debeTraer - (trajo ?? 0) + pagadoAparte
+    acumulado += saldoDelDia
+
+    dias.push({
+      fecha,
+      envios: delDia.length,
+      entregados: entregados.length,
+      cobrado,
+      tarifas,
+      debeTraer,
+      trajo,
+      pagadoAparte,
+      saldoDelDia,
+      acumulado,
+      cerrado: !!cierre?.cerrado_en,
+      cerradoPor: cierre?.cerrado_por || null,
+      nota: cierre?.nota || null,
+    })
+  }
+
+  return { dias, saldo: acumulado }
+}
+
+/**
+ * Los totales con los que se cierra el día. Son los que la planilla calculaba a mano al pie de cada
+ * sección, y son la razón por la que la planilla existía:
+ *
+ *   · `cobrado`   — lo que el cadete juntó en las puertas.
+ *   · `tarifas`   — lo que le debemos por haber llevado esos paquetes.
+ *   · `debeTraer` — la resta: la plata que tiene que entregar. **Puede dar negativo**, y ahí le
+ *                   debemos nosotros. Ver `netoDelEnvio`.
+ *
+ * Cuentan **sólo lo que se entregó de verdad**. Un envío que volvió sin entregar no cobró nada y
+ * tampoco se paga; sumarlo haría que la caja no cierre justo las veces que alguien no estaba en la
+ * casa —el caso que la planilla nunca supo registrar, porque no tenía estado—.
+ */
+export function totalesDelDia(envios: Envio[]): TotalesDia {
   let enviosPagos = 0
-  let aRendir = 0
+  let cobrado = 0
+  let tarifas = 0
   let pendienteDeSalir = 0
   let noEntregados = 0
 
   for (const e of envios) {
     if (e.envio_pagado) enviosPagos += num(e.monto_envio)
-    if (e.estado === 'entregado') aRendir += aCobrar(e)
+    if (e.estado === 'entregado') {
+      cobrado += aCobrar(e)
+      tarifas += tarifaCadete(e)
+    }
     if ((ESTADOS_EN_CASA as string[]).includes(e.estado)) pendienteDeSalir++
     if (e.estado === 'no_entregado') noEntregados++
   }
 
+  const debeTraer = cobrado - tarifas
   return {
     envios: envios.length,
     enviosPagos,
-    aRendir,
+    cobrado,
+    tarifas,
+    debeTraer,
     pendienteDeSalir,
     noEntregados,
-    // Lo que el turno tendría que rendir si todo lo que salió llegara. La diferencia contra
-    // `aRendir` es exactamente la plata que quedó en la calle.
-    aRendirSiTodoLlega: envios.filter((e) => !(ESTADOS_CERRADOS as string[]).includes(e.estado)).reduce((s, e) => s + aCobrar(e), 0) + aRendir,
+    // Lo que el día cerraría si todo lo que sigue en la calle llegara. La diferencia contra
+    // `debeTraer` es exactamente la plata que todavía está afuera.
+    debeTraerSiTodoLlega:
+      envios.filter((e) => !(ESTADOS_CERRADOS as string[]).includes(e.estado)).reduce((s, e) => s + netoDelEnvio(e), 0) + debeTraer,
   }
 }
 

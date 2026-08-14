@@ -1,14 +1,16 @@
-// "Envíos del día": la hoja del cadete. Tablas `envios_reparto` y `envios_turno`.
+// "Envíos del día": la hoja del cadete. Tablas `envios_reparto` y `envios_dia`.
 //
 //   GET  ?recurso=envios&fecha=YYYY-MM-DD                    → { ok, envios, cierre, puede }
 //   GET  ?recurso=envios&pendientes=1                        → { ok, envios } (los que no tienen día)
+//   GET  ?recurso=envios&cuenta=1                            → { ok, envios, dias } (la del cadete)
 //   POST { recurso:'envios', action:'traer-tn', envios:[…] }
 //   POST { recurso:'envios', action:'guardar', envio }
 //   POST { recurso:'envios', action:'agendar', id, fecha, turno }   ·  action:'desagendar', id
 //   POST { recurso:'envios', action:'pagado', id, envio_pagado }
+//   POST { recurso:'envios', action:'costo', id, monto_envio }      ·  action:'pago-cadete', id, pago_cadete
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
-//   POST { recurso:'envios', action:'cerrar-turno', fecha, turno, pagado_al_cadete, rendido }
+//   POST { recurso:'envios', action:'cerrar-dia', fecha, trajo, pagado_aparte, nota }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=envios`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/envios.js` "por prolijidad",
@@ -63,10 +65,21 @@ function puedeEnvios(perfil) {
 
 const CAMPOS =
   'id, store, fecha, turno, origen, orden_numero, cliente, telefono, direccion, piso_depto, ' +
-  'localidad, anotacion, monto_envio, envio_pagado, monto_pedido_a_cobrar, estado, vendedor, ' +
-  'cadete, datos, autor, created_at, updated_at';
+  'localidad, anotacion, monto_envio, envio_pagado, monto_pedido_a_cobrar, pago_cadete, estado, ' +
+  'vendedor, cadete, datos, autor, created_at, updated_at';
 
-const CAMPOS_CIERRE = 'fecha, turno, pagado_al_cadete, rendido, cerrado_por, cerrado_en';
+const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_en';
+
+/**
+ * Lo que la cuenta del cadete necesita de cada envío, y nada más.
+ *
+ * ⚠️ **Sin `datos`, que es la orden de Tienda Nube congelada entera.** La cuenta pide todos los días
+ * desde el principio —el acumulado de hoy es la suma de todo lo anterior—, así que traer el jsonb
+ * sería mandar el histórico completo de las órdenes al navegador para calcular cuatro sumas.
+ */
+const CAMPOS_CUENTA =
+  'id, store, fecha, turno, cliente, orden_numero, estado, monto_envio, envio_pagado, ' +
+  'monto_pedido_a_cobrar, pago_cadete';
 
 const esFechaIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
@@ -91,6 +104,7 @@ function nuevoId() {
 function filaDe(e, yo) {
   const mEnvio = monto(e.monto_envio);
   const mSaldo = monto(e.monto_pedido_a_cobrar);
+  const mCadete = monto(e.pago_cadete);
   return {
     id: e.id || nuevoId(),
     store: e.store,
@@ -109,6 +123,10 @@ function filaDe(e, yo) {
     monto_envio: mEnvio == null ? 0 : mEnvio,
     envio_pagado: !!e.envio_pagado,
     monto_pedido_a_cobrar: mSaldo == null ? 0 : mSaldo,
+    // 🔑 Este NO se cae a cero cuando viene vacío: `null` significa "lo mismo que el envío", que es
+    // el caso normal. Un cero acá diría que el cadete lleva ese paquete gratis. Y si vino basura se
+    // pasa cruda a propósito, para que `validarEnvio` la rechace en castellano en vez de comérsela.
+    pago_cadete: mCadete === undefined ? e.pago_cadete : mCadete,
     estado: e.estado || 'pendiente',
     vendedor: e.vendedor || null,
     cadete: e.cadete || null,
@@ -152,17 +170,35 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, envios: data || [] });
       }
 
+      // ── La cuenta corriente del cadete ─────────────────────────────────────
+      //
+      // 🔑 **Se piden todos los días, no una ventana.** El saldo de hoy es la suma de todos los
+      // anteriores, así que recortar el rango daría un número distinto según por dónde se empiece a
+      // mirar — y el saldo es justo lo que se arrastra. Lo que la hace barata es `CAMPOS_CUENTA`,
+      // que deja afuera el jsonb de la orden congelada: con ~10 envíos por día de reparto son unos
+      // 2.500 registros flacos al año, y el día que eso moleste se corta por fecha de cierre, no
+      // por ventana ciega.
+      if (req.query.cuenta === '1') {
+        const [env, dia] = await Promise.all([
+          supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
+          supabase.from('envios_dia').select(CAMPOS_CIERRE).order('fecha'),
+        ]);
+        if (env.error) throw new Error(env.error.message);
+        if (dia.error) throw new Error(dia.error.message);
+        return res.status(200).json({ ok: true, envios: env.data || [], dias: dia.data || [] });
+      }
+
       const fecha = req.query.fecha;
       if (!esFechaIso(fecha)) return res.status(400).json({ error: 'Falta la fecha del día (YYYY-MM-DD).' });
 
       const [env, cie] = await Promise.all([
         supabase.from('envios_reparto').select(CAMPOS).eq('fecha', fecha).order('created_at'),
-        supabase.from('envios_turno').select(CAMPOS_CIERRE).eq('fecha', fecha),
+        supabase.from('envios_dia').select(CAMPOS_CIERRE).eq('fecha', fecha).maybeSingle(),
       ]);
       if (env.error) throw new Error(env.error.message);
       if (cie.error) throw new Error(cie.error.message);
 
-      return res.status(200).json({ ok: true, fecha, envios: env.data || [], cierres: cie.data || [] });
+      return res.status(200).json({ ok: true, fecha, envios: env.data || [], cierre: cie.data || null });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
@@ -305,6 +341,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Lo que cobra el cadete, cuando no es lo que se le cobró al cliente ────
+    //
+    // Un campo solo, igual que `costo`. `null` es "lo mismo que el envío" y es lo que hay que poder
+    // volver a escribir: se tipea por error un número en una fila que no iba, se borra el campo y la
+    // fila vuelve a seguir el precio del envío sola. Un `0` diría que ese paquete se lleva gratis.
+    if (b.action === 'pago-cadete') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const m = monto(b.pago_cadete);
+      if (m === undefined) return res.status(400).json({ error: 'Lo que cobra el cadete tiene que ser un número de cero para arriba.' });
+      const { data, error } = await supabase
+        .from('envios_reparto')
+        .update({ pago_cadete: m, autor: yo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id');
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      return res.status(200).json({ ok: true });
+    }
+
     if (b.action === 'borrar') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
@@ -313,32 +369,38 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── El cierre de caja del turno ───────────────────────────────────────────
+    // ── El cierre de caja del DÍA ─────────────────────────────────────────────
     //
-    // 🔑 `pagado_al_cadete` es el único dato que hoy no existe en ningún lado: la planilla decía
-    // cuánto se cobra de envío pero nunca cuánto cuesta el reparto, así que nunca se supo si el
-    // envío se subsidia. `null` es "no se cargó" y NO es cero — guardarlo como cero diría que el
-    // reparto sale gratis.
-    if (b.action === 'cerrar-turno') {
-      if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta la fecha del turno.' });
-      if (!TURNOS.includes(b.turno)) return res.status(400).json({ error: `El turno tiene que ser ${TURNOS.join(' o ')}.` });
+    // 🔑 **Del día y no del turno**, por lo mismo que la hoja: el cadete es uno solo y sale a la
+    // mañana y a la tarde con la misma plata en el bolsillo. Partir la caja en dos obligaría a
+    // repartir a mano un saldo que en la calle nunca estuvo partido.
+    //
+    // Se guarda **un solo hecho**: cuánto trajo. Lo que tenía que traer, lo que se le debe y el
+    // saldo arrastrado se derivan de los envíos (`cuentaDelCadete`). Un total guardado y otro
+    // calculado que se contradicen es la forma de que la cuenta diga una cosa y la caja otra, y acá
+    // pesa más que en ningún lado porque el saldo de hoy es la suma de todos los días anteriores.
+    //
+    // `trajo` en `null` es "no se cerró"; en `0` es "no trajo nada", que es lo NORMAL —en la mediana
+    // el 100% de lo que cobra es el envío, y el envío se lo queda él—.
+    if (b.action === 'cerrar-dia') {
+      if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta la fecha del día.' });
 
-      const pagado = monto(b.pagado_al_cadete);
-      const rendido = monto(b.rendido);
-      if (pagado === undefined || rendido === undefined) {
+      const trajo = monto(b.trajo);
+      const aparte = monto(b.pagado_aparte);
+      if (trajo === undefined || aparte === undefined) {
         return res.status(400).json({ error: 'Los montos del cierre tienen que ser números de cero para arriba.' });
       }
 
-      const { error } = await supabase.from('envios_turno').upsert(
+      const { error } = await supabase.from('envios_dia').upsert(
         {
           fecha: b.fecha,
-          turno: b.turno,
-          pagado_al_cadete: pagado,
-          rendido,
+          trajo,
+          pagado_aparte: aparte == null ? 0 : aparte,
+          nota: b.nota ? String(b.nota) : null,
           cerrado_por: yo,
           cerrado_en: new Date().toISOString(),
         },
-        { onConflict: 'fecha,turno' },
+        { onConflict: 'fecha' },
       );
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });

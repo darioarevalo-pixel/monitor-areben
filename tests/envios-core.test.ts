@@ -10,13 +10,16 @@ import {
   ordenarParaPreparar,
   proximoDiaDeReparto,
   rotuloDeDia,
-  totalesDelTurno,
+  cuentaDelCadete,
+  netoDelEnvio,
+  tarifaCadete,
+  totalesDelDia,
   turnosDe,
   vaAlReparto,
   validarEnvio,
 } from '@/lib/envios/core'
 import { textoDePlata } from '@/lib/envios/etiqueta'
-import type { Envio, OrdenTN } from '@/lib/envios/tipos'
+import type { CierreDia, Envio, OrdenTN } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
@@ -85,41 +88,201 @@ describe('lo que se cobra en la puerta', () => {
   })
 })
 
-describe('los dos totales con los que se cierra el turno', () => {
-  const turno: Envio[] = [
+describe('los totales con los que se cierra el día', () => {
+  const dia: Envio[] = [
     con({ id: 'a', monto_envio: 3000, envio_pagado: true, estado: 'entregado' }),
     con({ id: 'b', monto_envio: 3000, envio_pagado: false, estado: 'entregado' }),
     con({ id: 'c', monto_envio: 4300, envio_pagado: false, monto_pedido_a_cobrar: 10000, estado: 'entregado' }),
     con({ id: 'd', monto_envio: 3000, envio_pagado: false, estado: 'no_entregado' }),
-    con({ id: 'e', monto_envio: 3000, envio_pagado: false, estado: 'pendiente' }),
+    con({ id: 'e', monto_envio: 3000, envio_pagado: false, monto_pedido_a_cobrar: 5000, estado: 'pendiente' }),
   ]
 
   it('ENVÍOS PAGOS junta sólo lo que ya había entrado', () => {
-    expect(totalesDelTurno(turno).enviosPagos).toBe(3000)
+    expect(totalesDelDia(dia).enviosPagos).toBe(3000)
   })
 
-  // 🔴 El que se equivoca solo: si `aRendir` sumara todo el turno en vez de sólo lo entregado,
-  // daría 26300 y la caja nunca cerraría los días que alguien no estaba en la casa.
-  it('A RENDIR cuenta sólo lo que se entregó de verdad', () => {
-    const t = totalesDelTurno(turno)
-    expect(t.aRendir).toBe(3000 + 4300 + 10000) // b + c. `a` ya estaba pago, `d` volvió, `e` no salió.
-    expect(t.aRendir).not.toBe(26300)
+  // 🔴 El que se equivoca solo: si `cobrado` sumara el día entero en vez de sólo lo entregado,
+  // daría de más y la caja nunca cerraría los días que alguien no estaba en la casa.
+  it('COBRÓ cuenta sólo lo que se entregó de verdad', () => {
+    const t = totalesDelDia(dia)
+    expect(t.cobrado).toBe(0 + 3000 + 14300) // `a` ya estaba pago, `d` volvió, `e` no salió
+    expect(t.cobrado).not.toBe(31300)
+  })
+
+  // 🔴 **La cuenta entera en un caso.** Lo que tiene que traer no es lo que cobró: de eso se queda
+  // con sus envíos. Si alguien borra la resta, esto da 17300 y el cadete entrega diez mil de más.
+  it('TIENE QUE TRAER es lo que cobró menos lo que se queda por llevarlos', () => {
+    const t = totalesDelDia(dia)
+    expect(t.tarifas).toBe(3000 + 3000 + 4300)
+    expect(t.debeTraer).toBe(17300 - 10300)
+    // Y es exactamente «el producto que cobró en efectivo, menos los envíos que el cliente ya había
+    // pagado»: 10.000 del pedido de `c` menos los 3.000 de `a`, que llevó sin cobrar nada.
+    expect(t.debeTraer).toBe(10000 - 3000)
   })
 
   it('cuenta lo que todavía no salió de la casa y lo que volvió sin entregar', () => {
-    const t = totalesDelTurno(turno)
+    const t = totalesDelDia(dia)
     expect(t.pendienteDeSalir).toBe(1)
     expect(t.noEntregados).toBe(1)
     expect(t.envios).toBe(5)
   })
 
   it('la diferencia contra "si todo llega" es la plata que quedó en la calle', () => {
-    const t = totalesDelTurno(turno)
-    expect(t.aRendirSiTodoLlega - t.aRendir).toBe(3000) // el `e`, que sigue sin salir
+    const t = totalesDelDia(dia)
+    // El `e`: el envío que cobre se lo queda, así que lo que falta traer es el pedido en efectivo.
+    expect(t.debeTraerSiTodoLlega - t.debeTraer).toBe(5000)
   })
 
-  it('un turno vacío no rompe ni inventa plata', () => {
-    expect(totalesDelTurno([])).toMatchObject({ envios: 0, enviosPagos: 0, aRendir: 0 })
+  it('un día vacío no rompe ni inventa plata', () => {
+    expect(totalesDelDia([])).toMatchObject({ envios: 0, enviosPagos: 0, cobrado: 0, tarifas: 0, debeTraer: 0 })
+  })
+})
+
+/**
+ * 🔑 **Lo que el cadete cobra por llevarlo es una pregunta distinta de lo que se le cobró al
+ * cliente**, y sólo se separan en el envío bonificado. Es el caso que un test de "la suma da bien"
+ * nunca toca: con el bonificado, leer la tarifa de `monto_envio` da 0 y el reparto figura gratis.
+ */
+describe('lo que cobra el cadete por llevarlo', () => {
+  it('sin nada escrito, cobra lo mismo que se le cobró al cliente', () => {
+    expect(tarifaCadete(con({ monto_envio: 4300 }))).toBe(4300)
+    expect(tarifaCadete(con({ monto_envio: 4300, pago_cadete: null }))).toBe(4300)
+  })
+
+  // 🔴 El mutante: si `null` se leyera como 0, este caso daría 0 y el bonificado saldría gratis.
+  it('🔴 el envío BONIFICADO se le paga igual, aunque el cliente pague $0', () => {
+    const bonificado = con({ monto_envio: 0, pago_cadete: 3000, estado: 'entregado' })
+    expect(tarifaCadete(bonificado)).toBe(3000)
+    expect(aCobrar(bonificado)).toBe(0) // en la puerta no cobra nada
+    expect(netoDelEnvio(bonificado)).toBe(-3000) // y le quedamos debiendo lo que puso él
+  })
+
+  it('escrito en cero SÍ es cero: ese paquete lo lleva sin cobrar', () => {
+    expect(tarifaCadete(con({ monto_envio: 4300, pago_cadete: 0 }))).toBe(0)
+  })
+
+  it('aguanta el string de la base', () => {
+    expect(tarifaCadete(con({ monto_envio: '4300', pago_cadete: '5500' }))).toBe(5500)
+  })
+
+  // Los tres casos de la calle, que son los que hacen que la cuenta exista.
+  it('el envío cobrado en la puerta se salda solo: no trae nada', () => {
+    expect(netoDelEnvio(con({ monto_envio: 3000, envio_pagado: false, estado: 'entregado' }))).toBe(0)
+  })
+
+  it('el envío ya pagado por el cliente lo llevó sin cobrar: le debemos', () => {
+    expect(netoDelEnvio(con({ monto_envio: 3000, envio_pagado: true, estado: 'entregado' }))).toBe(-3000)
+  })
+
+  it('el producto en efectivo es lo único que de verdad trae', () => {
+    expect(netoDelEnvio(con({ monto_envio: 3000, monto_pedido_a_cobrar: 17500, estado: 'entregado' }))).toBe(17500)
+  })
+})
+
+/**
+ * La cuenta corriente: un solo cadete, y un saldo que **se arrastra**.
+ *
+ * 🔴 El defecto que estos casos existen para cazar es que el saldo se reinicie cada día. Un test que
+ * mire un día solo da verde con el arrastre roto, y el error recién se ve cuando el cadete dice que
+ * le deben algo que la pantalla no muestra.
+ */
+describe('la cuenta corriente del cadete', () => {
+  const dia = (fecha: string, envios: Partial<Envio>[]): Envio[] =>
+    envios.map((e, i) => con({ id: `${fecha}-${i}`, fecha, estado: 'entregado', ...e }))
+
+  const cierre = (fecha: string, trajo: number | null, pagado_aparte = 0): CierreDia => ({
+    fecha,
+    trajo,
+    pagado_aparte,
+    nota: null,
+    cerrado_por: 'Bruno',
+    cerrado_en: `${fecha}T20:00:00Z`,
+  })
+
+  it('el día normal —todo cobrado en la puerta— no mueve la cuenta', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300 }]), [cierre('2026-08-17', 0)])
+    expect(c.dias[0].debeTraer).toBe(0)
+    expect(c.saldo).toBe(0)
+  })
+
+  it('el envío que el cliente ya había pagado lo deja a favor del cadete', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17', 0)])
+    expect(c.saldo).toBe(-3000) // negativo = le debemos
+  })
+
+  // 🔴 EL test de la tanda. Con `acumulado = saldoDelDia` esto da -3000 y el lunes se le paga de
+  // menos: el martes trajo de más justamente porque el lunes se le había quedado debiendo.
+  it('🔴 el saldo se ARRASTRA de un día al siguiente', () => {
+    const envios = [
+      ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), // le quedamos debiendo 3000
+      ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), // trae 10000
+    ]
+    const c = cuentaDelCadete(envios, [cierre('2026-08-17', 0), cierre('2026-08-18', 10000)])
+    expect(c.dias.map((d) => d.acumulado)).toEqual([-3000, -3000])
+    // El martes trajo los 10.000 enteros, así que los 3.000 del lunes le siguen debiendo.
+    expect(c.saldo).toBe(-3000)
+  })
+
+  it('si se descuenta lo que se le debía, la cuenta vuelve a cero', () => {
+    const envios = [
+      ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
+      ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
+    ]
+    // Trae 7.000 y se queda con los 3.000 que se le debían: es como se salda en la calle.
+    const c = cuentaDelCadete(envios, [cierre('2026-08-17', 0), cierre('2026-08-18', 7000)])
+    expect(c.saldo).toBe(0)
+  })
+
+  // 🔴 **El signo del pago por fuera.** Los dos caminos dan un número plausible y sólo uno cierra
+  // contra la calle: si restara, transferirle lo que se le debía DUPLICARÍA la deuda (-6.000) en vez
+  // de saldarla. Se le debían 3.000, se le transfirieron 3.000, quedan a mano.
+  it('🔴 la plata que se le da por fuera SALDA lo que se le debía, no lo agranda', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17', 0, 3000)])
+    expect(c.saldo).toBe(0)
+    expect(c.saldo).not.toBe(-6000)
+  })
+
+  // 🔴 Un envío que volvió sin entregar no cobró nada Y no se le paga. Contarlo haría que la cuenta
+  // se rompa justo los días que algo salió mal.
+  it('🔴 lo que no se entregó no entra en la cuenta', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado' }]),
+      [cierre('2026-08-17', 0)],
+    )
+    expect(c.dias[0].cobrado).toBe(0)
+    expect(c.dias[0].tarifas).toBe(0)
+    expect(c.saldo).toBe(0)
+  })
+
+  it('un día sin cerrar cuenta igual: la plata está en su bolsillo aunque nadie la haya anotado', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), [])
+    expect(c.dias[0].trajo).toBe(null)
+    expect(c.dias[0].cerrado).toBe(false)
+    expect(c.saldo).toBe(10000)
+  })
+
+  // 🔴 El acumulado depende del orden. Si los días llegaran de la base al revés y no se ordenaran,
+  // cada fila mostraría el saldo de otro día.
+  it('🔴 ordena los días aunque lleguen mezclados', () => {
+    const envios = [
+      ...dia('2026-08-19', [{ monto_envio: 3000, monto_pedido_a_cobrar: 5000 }]),
+      ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
+    ]
+    const c = cuentaDelCadete(envios, [])
+    expect(c.dias.map((d) => d.fecha)).toEqual(['2026-08-17', '2026-08-19'])
+    expect(c.dias.map((d) => d.acumulado)).toEqual([-3000, 2000])
+  })
+
+  it('los que están en la bandeja, sin día, no tienen nada que ver con la cuenta', () => {
+    const c = cuentaDelCadete([con({ fecha: null, turno: null, estado: 'entregado', monto_pedido_a_cobrar: 9999 })], [])
+    expect(c.dias).toEqual([])
+    expect(c.saldo).toBe(0)
+  })
+
+  it('un día cerrado sin envíos igual es una fila: es el día en que se le pagó lo que se le debía', () => {
+    const c = cuentaDelCadete([], [cierre('2026-08-17', 0, 5000)])
+    expect(c.dias).toHaveLength(1)
+    expect(c.saldo).toBe(5000) // no repartió y se le dieron 5.000: ahora los tiene él
   })
 })
 

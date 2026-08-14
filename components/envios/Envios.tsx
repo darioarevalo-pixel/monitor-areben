@@ -37,14 +37,14 @@ import {
   proximoDiaDeReparto,
   rotuloDeDia,
   ordenarParaPreparar,
-  totalesDelTurno,
+  totalesDelDia,
   turnosDe,
 } from '@/lib/envios/core'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, borrarEnvio, cambiarEstado, cerrarTurno, desagendar, guardarCosto, guardarEnvio, marcarPagado } from '@/lib/envios/cliente'
+import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, guardarPagoCadete, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirEtiquetasCadete } from '@/lib/envios/etiqueta'
-import type { Envio, EstadoEnvio, Turno } from '@/lib/envios/tipos'
-import { useEnvios } from './useEnvios'
+import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
+import { useCuentaCadete, useEnvios } from './useEnvios'
 
 /**
  * "🛵 Envíos del día" (key `envios`).
@@ -61,14 +61,14 @@ import { useEnvios } from './useEnvios'
  * cambie. Para los que vienen de Tienda Nube la marca sale sola.
  */
 export function Envios() {
-  const { fecha, setFecha, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
+  const { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   const [trayendo, setTrayendo] = useState(false)
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
-  // Qué turno se está cerrando, o `null`. Antes era un booleano porque la pantalla era de un turno.
-  const [cerrando, setCerrando] = useState<Turno | null>(null)
-  const [pestania, setPestania] = useState<'dia' | 'pendientes'>('dia')
+  // La caja es del día, así que esto vuelve a ser un booleano: hay una sola por cerrar.
+  const [cerrando, setCerrando] = useState(false)
+  const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
 
   // 🔑 **La hoja es del DÍA, no del turno.** Un día con reparto de mañana y de tarde es un día:
@@ -76,7 +76,7 @@ export function Envios() {
   // separado es la forma de que a las 11 nadie vea los paquetes de la tarde. Los turnos siguen
   // existiendo —cada envío guarda el suyo— pero como secciones adentro del día.
   const delDia = useMemo(() => ordenarParaPreparar(envios), [envios])
-  const totales = useMemo(() => totalesDelTurno(delDia), [delDia])
+  const totales = useMemo(() => totalesDelDia(delDia), [delDia])
   // Los turnos que hay que pintar: los de la grilla de ese día, más cualquiera que tenga un envío
   // metido fuera de grilla — si no, un paquete agendado un sábado no aparecería en ningún lado.
   const turnosDelDia = useMemo(() => {
@@ -167,18 +167,22 @@ export function Envios() {
         </Button>
       </HeaderAcciones>
 
-      {/* Dos listas y no dos pantallas: el pendiente y el del día son el mismo envío en dos momentos
-          de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el trabajo. */}
+      {/* Las dos primeras no son dos pantallas: el pendiente y el del día son el mismo envío en dos
+          momentos de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el
+          trabajo. La tercera es la otra mitad de la operación: la plata que queda dando vueltas. */}
       <Tabs
         value={pestania}
-        onChange={(k) => setPestania(k as 'dia' | 'pendientes')}
+        onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta')}
         items={[
           { key: 'dia', label: 'El día' },
           { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.' },
+          { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.' },
         ]}
       />
 
-      {pestania === 'pendientes' ? (
+      {pestania === 'cuenta' ? (
+        <CuentaDelCadete activa={pestania === 'cuenta'} />
+      ) : pestania === 'pendientes' ? (
         <Pendientes
           envios={pendientes}
           cargando={cargando}
@@ -234,12 +238,22 @@ export function Envios() {
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {/* Los totales son del DÍA entero, que es como se rinde. */}
+      {/* Los totales son del DÍA entero, que es como se rinde. Los tres de plata son la cuenta del
+          cadete en chiquito: cobró en las puertas, se queda con sus envíos, trae la diferencia. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[4] }}>
         <KpiCard label="Envíos del día" value={String(totales.envios)} />
         <KpiCard label="Sin salir todavía" value={String(totales.pendienteDeSalir)} />
-        <KpiCard label="Envíos ya pagos" value={formatMoney(totales.enviosPagos)} />
-        <KpiCard label="A rendir" value={formatMoney(totales.aRendir)} sub={totales.aRendirSiTodoLlega !== totales.aRendir ? `${formatMoney(totales.aRendirSiTodoLlega - totales.aRendir)} todavía en la calle` : undefined} />
+        <KpiCard label="Cobró en las puertas" value={formatMoney(totales.cobrado)} />
+        <KpiCard label="Se queda (sus envíos)" value={formatMoney(totales.tarifas)} />
+        <KpiCard
+          label={totales.debeTraer < 0 ? 'Le debemos' : 'Tiene que traer'}
+          value={formatMoney(Math.abs(totales.debeTraer))}
+          sub={
+            totales.debeTraerSiTodoLlega !== totales.debeTraer
+              ? `${formatMoney(totales.debeTraerSiTodoLlega - totales.debeTraer)} todavía en la calle`
+              : undefined
+          }
+        />
       </div>
 
       {cargando ? null : delDia.length === 0 ? (
@@ -251,28 +265,17 @@ export function Envios() {
         turnosDelDia.map((t) => {
           const delTurno = delDia.filter((e) => e.turno === t)
           if (!delTurno.length) return null
-          const cierre = cierres.find((c) => c.turno === t) || null
           return (
             <div key={t} style={{ display: 'grid', gap: space[3] }}>
               {/* El encabezado va SIEMPRE, aunque el día tenga un solo turno: el cadete de la mañana
                   y el de la tarde salen con hojas distintas, y una tabla sin decir cuál es se lee
-                  como "todo esto sale ahora". */}
+                  como "todo esto sale ahora". La caja, en cambio, es del día: se cierra abajo. */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
                 <strong>
                   <span style={{ textTransform: 'capitalize' }}>{t}</span> · {delTurno.length}{' '}
                   {delTurno.length === 1 ? 'envío' : 'envíos'}
                   {turnosDe(fecha).includes(t) ? '' : ' (fuera de grilla)'}
                 </strong>
-                <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-                  <span style={{ opacity: 0.7, fontSize: 13 }}>
-                    {cierre?.cerrado_en
-                      ? `Cerrado por ${cierre.cerrado_por} · se le pagaron ${cierre.pagado_al_cadete == null ? '—' : formatMoney(Number(cierre.pagado_al_cadete))}`
-                      : 'Sin cerrar'}
-                  </span>
-                  <Button size="sm" variant="outline" onClick={() => setCerrando(t)}>
-                    {cierre?.cerrado_en ? 'Corregir el cierre' : 'Cerrar el turno'}
-                  </Button>
-                </div>
               </div>
               <TableWrap>
                 <THead>
@@ -349,6 +352,31 @@ export function Envios() {
         })
       )}
 
+      {/* 🔑 **La caja se cierra una vez por día, no una por turno.** El cadete es uno solo y sale a
+          la mañana y a la tarde con la misma plata en el bolsillo: partirla en dos obligaría a
+          repartir a mano un saldo que en la calle nunca estuvo partido. Y lo que quede a favor de
+          uno o del otro no se salda hoy —se arrastra a los envíos que siguen—, por eso el cierre
+          muestra el saldo y no un "faltan $4.300" que nadie va a volver a mirar. */}
+      {cargando || !delDia.length ? null : (
+        <Card>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+            <div>
+              <strong>La caja del día</strong>
+              <div style={{ opacity: 0.7, fontSize: 13 }}>
+                {cierre?.cerrado_en
+                  ? `Cerrado por ${cierre.cerrado_por} · trajo ${cierre.trajo == null ? '—' : formatMoney(Number(cierre.trajo))}`
+                  : totales.pendienteDeSalir
+                    ? `Todavía hay ${totales.pendienteDeSalir} sin salir`
+                    : 'Sin cerrar'}
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setCerrando(true)}>
+              {cierre?.cerrado_en ? 'Corregir el cierre' : 'Cerrar el día'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       </>
       )}
 
@@ -375,14 +403,13 @@ export function Envios() {
       ) : null}
 
       {cerrando ? (
-        <CierreDelTurno
+        <CierreDelDia
           fecha={fecha}
-          turno={cerrando}
-          aRendir={totalesDelTurno(delDia.filter((e) => e.turno === cerrando)).aRendir}
-          cierre={cierres.find((c) => c.turno === cerrando) || null}
-          onCerrar={() => setCerrando(null)}
+          totales={totales}
+          cierre={cierre}
+          onCerrar={() => setCerrando(false)}
           onGuardado={async () => {
-            setCerrando(null)
+            setCerrando(false)
             await recargar()
           }}
         />
@@ -503,45 +530,131 @@ function Pendientes({
  * cuando alguien pasa de largo con el tabulador, y guardar ahí sería escribir sin que nadie lo pida.
  */
 function Cotizar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
-  const toast = useToast()
   const original = Number(envio.monto_envio) || 0
-  const [valor, setValor] = useState(original ? String(original) : '')
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <MontoEnFila
+          original={original || null}
+          placeholder="sin cotizar"
+          alFallar="No se pudo guardar el precio."
+          onGuardar={(n) => guardarCosto(envio.id, n ?? 0)}
+          onGuardado={onGuardado}
+        />
+        {!original ? <Badge tone="warning">falta</Badge> : null}
+      </div>
+      <PagoAlCadete envio={envio} onGuardado={onGuardado} />
+    </div>
+  )
+}
+
+/**
+ * Lo que cobra el cadete por ese paquete, cuando **no** es lo que se le cobró al cliente.
+ *
+ * 🔑 **Arranca escondido detrás de un link, y es lo importante.** Lo normal es que coincidan —el
+ * precio del mapa de zonas se le cobra a la clienta y él se lo queda entero—, así que un segundo
+ * input en cada fila sería una pregunta que nadie tiene que contestar veinte veces por día. Aparece
+ * cuando hace falta: cuando el envío va bonificado, que es el caso donde `monto_envio` en 0 diría
+ * que el reparto salió gratis.
+ *
+ * Vaciarlo lo devuelve a "lo mismo que el envío". Ese camino de vuelta tiene que existir: un número
+ * tipeado en la fila equivocada, si quedara pegado, dejaría ese reparto figurando gratis para
+ * siempre.
+ */
+function PagoAlCadete({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
+  const propio = envio.pago_cadete == null || envio.pago_cadete === '' ? null : Number(envio.pago_cadete)
+  const [abierto, setAbierto] = useState(propio != null)
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, opacity: 0.6, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline' }}
+      >
+        el cadete cobra otra cosa
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+      <span style={{ opacity: 0.7 }}>cobra</span>
+      <MontoEnFila
+        original={propio}
+        placeholder="igual al envío"
+        alFallar="No se pudo guardar lo que cobra el cadete."
+        permiteVacio
+        onGuardar={(n) => guardarPagoCadete(envio.id, n)}
+        onGuardado={onGuardado}
+      />
+    </div>
+  )
+}
+
+/**
+ * Un monto que se escribe en la fila y viaja solo.
+ *
+ * Guarda al salir del campo o con Enter, y **sólo si el número cambió**: el `blur` se dispara también
+ * cuando alguien pasa de largo con el tabulador, y guardar ahí sería escribir sin que nadie lo pida.
+ *
+ * `permiteVacio` distingue los dos sentidos que tiene borrar el campo. En el precio del envío, vacío
+ * es "no lo toqué" y se descarta; en lo que cobra el cadete, vacío es una respuesta —"lo mismo que el
+ * envío"— y se guarda como `null`.
+ */
+function MontoEnFila({
+  original,
+  placeholder,
+  alFallar,
+  permiteVacio,
+  onGuardar,
+  onGuardado,
+}: {
+  original: number | null
+  placeholder: string
+  alFallar: string
+  permiteVacio?: boolean
+  onGuardar: (monto: number | null) => Promise<void>
+  onGuardado: () => Promise<void>
+}) {
+  const texto = original == null ? '' : String(original)
+  const toast = useToast()
+  const [valor, setValor] = useState(texto)
   const [guardando, setGuardando] = useState(false)
 
   async function guardar() {
+    if (valor === texto) return
+    const vacio = valor.trim() === ''
     const n = Number(valor)
-    if (valor === '' || !Number.isFinite(n) || n < 0 || n === original) {
-      setValor(original ? String(original) : '')
+    if ((vacio && !permiteVacio) || (!vacio && (!Number.isFinite(n) || n < 0))) {
+      setValor(texto)
       return
     }
     setGuardando(true)
     try {
-      await guardarCosto(envio.id, n)
+      await onGuardar(vacio ? null : n)
       await onGuardado()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el precio.')
-      setValor(original ? String(original) : '')
+      toast.error(e instanceof Error ? e.message : alFallar)
+      setValor(texto)
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <Input
-        type="number"
-        value={valor}
-        placeholder="sin cotizar"
-        disabled={guardando}
-        style={{ width: 110 }}
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={() => void guardar()}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-        }}
-      />
-      {!original ? <Badge tone="warning">falta</Badge> : null}
-    </div>
+    <Input
+      type="number"
+      value={valor}
+      placeholder={placeholder}
+      disabled={guardando}
+      style={{ width: 110 }}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={() => void guardar()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      }}
+    />
   )
 }
 
@@ -676,6 +789,20 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
         <Field label="Precio del envío">
           <Input type="number" value={String(f.monto_envio ?? '')} onChange={(e) => set('monto_envio', e.target.value)} />
         </Field>
+        {/* 🔑 Vacío NO es cero: es «lo mismo que el envío», que es el caso normal. Se escribe cuando
+            el envío va bonificado —la clienta paga $0 y el cadete cobra igual—; con un cero acá, la
+            cuenta diría que ese reparto salió gratis y la diferencia se la comería él. */}
+        <Field
+          label="Lo que cobra el cadete"
+          hint="Dejalo vacío si es lo mismo que el precio del envío. Se completa cuando el envío va bonificado."
+        >
+          <Input
+            type="number"
+            placeholder={`igual al envío (${formatMoney(Number(f.monto_envio) || 0)})`}
+            value={f.pago_cadete == null ? '' : String(f.pago_cadete)}
+            onChange={(e) => set('pago_cadete', e.target.value === '' ? null : e.target.value)}
+          />
+        </Field>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={!!f.envio_pagado} onChange={(e) => set('envio_pagado', e.target.checked)} />
           {/* Es el tilde que decide si la etiqueta dice PAGADO o manda a cobrar. */}
@@ -698,74 +825,180 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
 }
 
 /**
- * El cierre de caja del turno.
+ * El cierre de caja del día: la rendición.
  *
- * 🔑 `pagado_al_cadete` es el único dato que hoy no existe en ningún lado: la planilla decía cuánto
- * se cobra de envío pero nunca cuánto cuesta el reparto, así que nunca se supo si el envío se
- * subsidia. Se deja vacío si no se sabe: vacío es "no se cargó" y cero diría que el reparto sale
- * gratis, que es una respuesta distinta.
+ * 🔑 **Se guarda un solo número: cuánto trajo.** Lo que tenía que traer sale de los envíos —lo que
+ * cobró en las puertas menos lo que se queda por llevarlos— y no se congela en ninguna columna: si
+ * mañana se corrige el precio de un envío de hoy, un total guardado quedaría mintiendo sin que nada
+ * falle, y encima el saldo se arrastra a todos los días siguientes.
+ *
+ * 🔑 **Que traiga $0 es lo NORMAL, no un error.** En la mediana el 100% de lo que cobra es el envío,
+ * y el envío se lo queda él: sólo trae plata cuando cobró producto en efectivo. Por eso el campo
+ * arranca en lo que la cuenta espera y no en blanco.
  */
-function CierreDelTurno({
+function CierreDelDia({
   fecha,
-  turno,
-  aRendir,
+  totales,
   cierre,
   onCerrar,
   onGuardado,
 }: {
   fecha: string
-  turno: Turno
-  aRendir: number
-  cierre: { pagado_al_cadete: number | string | null; rendido: number | string | null } | null
+  totales: TotalesDia
+  cierre: CierreDia | null
   onCerrar: () => void
   onGuardado: () => Promise<void>
 }) {
   const toast = useToast()
-  const [pagado, setPagado] = useState(cierre?.pagado_al_cadete == null ? '' : String(cierre.pagado_al_cadete))
-  const [rendido, setRendido] = useState(cierre?.rendido == null ? String(aRendir) : String(cierre.rendido))
+  const esperado = totales.debeTraer
+  const [trajo, setTrajo] = useState(cierre?.trajo == null ? String(Math.max(0, esperado)) : String(cierre.trajo))
+  const [aparte, setAparte] = useState(cierre?.pagado_aparte == null ? '' : String(cierre.pagado_aparte))
+  const [nota, setNota] = useState(cierre?.nota || '')
   const [guardando, setGuardando] = useState(false)
 
-  const diferencia = (Number(rendido) || 0) - aRendir
+  // Lo que queda dando vueltas después de cerrar: positivo = se lo llevó él, negativo = le debemos.
+  // Lo que se le dio por fuera SUMA: salda lo que se le debía, no lo agranda. Ver `cuentaDelCadete`.
+  const queda = esperado - (Number(trajo) || 0) + (Number(aparte) || 0)
 
   async function guardar() {
     setGuardando(true)
     try {
-      await cerrarTurno(fecha, turno, pagado === '' ? null : Number(pagado), rendido === '' ? null : Number(rendido))
+      await cerrarDia(fecha, trajo === '' ? null : Number(trajo), aparte === '' ? 0 : Number(aparte), nota.trim() || null)
       await onGuardado()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo cerrar el turno.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo cerrar el día.')
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <Modal abierto onCerrar={onCerrar} titulo={`Cerrar el turno ${turno}`}>
+    <Modal abierto onCerrar={onCerrar} titulo={`Cerrar la caja del ${rotuloDeDia(fecha) || 'día'}`}>
       <div style={{ display: 'grid', gap: space[4] }}>
-        <Notice tone="brand">Según lo entregado, tendría que rendir {formatMoney(aRendir)}.</Notice>
-        <Field label="Lo que trajo el cadete">
-          <Input type="number" value={rendido} onChange={(e) => setRendido(e.target.value)} />
+        <Notice tone="brand">
+          Cobró {formatMoney(totales.cobrado)} en las puertas y se queda {formatMoney(totales.tarifas)} de sus envíos ⇒{' '}
+          {esperado < 0 ? (
+            <>
+              <strong>le debemos {formatMoney(-esperado)}</strong> y no trae nada.
+            </>
+          ) : (
+            <>
+              tendría que traer <strong>{formatMoney(esperado)}</strong>.
+            </>
+          )}
+        </Notice>
+        <Field label="Lo que trajo" hint="Cero es una respuesta: lo normal es que cobre sólo sus envíos y se los quede.">
+          <Input type="number" value={trajo} onChange={(e) => setTrajo(e.target.value)} />
         </Field>
-        {rendido !== '' && diferencia !== 0 ? (
-          <Notice tone={diferencia < 0 ? 'danger' : 'warning'}>
-            {diferencia < 0 ? `Faltan ${formatMoney(-diferencia)}.` : `Sobran ${formatMoney(diferencia)}.`}
+        <Field
+          label="Plata que se le dio por fuera"
+          hint="Una transferencia para saldar lo que se le debía. Vacío si no hubo."
+        >
+          <Input type="number" value={aparte} onChange={(e) => setAparte(e.target.value)} />
+        </Field>
+        {queda !== 0 ? (
+          <Notice tone={queda > 0 ? 'warning' : 'brand'}>
+            {queda > 0
+              ? `Quedan ${formatMoney(queda)} suyos sin entregar: se suman a la cuenta y se descuentan de los próximos envíos.`
+              : `Le quedamos debiendo ${formatMoney(-queda)}: se los descuenta de los próximos envíos que no estén pagos.`}
           </Notice>
         ) : null}
-        <Field
-          label="Lo que se le pagó al cadete"
-          hint="Dejalo vacío si no se sabe. Es el único número que falta para saber si el envío se subsidia o deja plata."
-        >
-          <Input type="number" value={pagado} onChange={(e) => setPagado(e.target.value)} />
+        <Field label="Nota" hint="Por qué, si el número no es el esperado. Un ajuste sin motivo es un número que nadie se anima a tocar.">
+          <Input value={nota} onChange={(e) => setNota(e.target.value)} />
         </Field>
         <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
           <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Cerrar el turno'}
+            {guardando ? 'Guardando…' : 'Cerrar el día'}
           </Button>
         </div>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * La cuenta corriente del cadete.
+ *
+ * 🔑 **Existe porque el saldo no se salda: se arrastra.** Hay un solo cadete; por cada envío
+ * entregado él cobró en la puerta y nosotros le debemos lo que vale ese reparto, y lo que sobra o
+ * falta se lo descuenta de los envíos que siguen. Sin esta pantalla, esa diferencia se llevaba de
+ * memoria entre dos personas — que es exactamente lo que hacía la planilla con la mitad de la caja.
+ *
+ * El signo, una sola vez: **positivo = tiene plata nuestra**; negativo = se la debemos.
+ */
+function CuentaDelCadete({ activa }: { activa: boolean }) {
+  const { cuenta, cargando, error } = useCuentaCadete(activa)
+
+  if (error) return <Notice tone="danger">{error}</Notice>
+  if (cargando) return null
+  if (!cuenta.dias.length) {
+    return (
+      <EmptyState
+        title="Todavía no hay días con envíos"
+        hint="La cuenta se arma sola con lo que se entrega cada día. Arranca en cero."
+      />
+    )
+  }
+
+  const saldo = cuenta.saldo
+  return (
+    <div style={{ display: 'grid', gap: space[4] }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
+        <KpiCard
+          label={saldo === 0 ? 'Están a mano' : saldo > 0 ? 'El cadete tiene plata nuestra' : 'Le debemos al cadete'}
+          value={formatMoney(Math.abs(saldo))}
+          sub={saldo === 0 ? undefined : saldo > 0 ? 'lo trae en la próxima rendición' : 'se lo descuenta de los próximos envíos'}
+        />
+        <KpiCard label="Días sin cerrar" value={String(cuenta.dias.filter((d) => !d.cerrado && d.entregados > 0).length)} />
+      </div>
+
+      {/* Del día más nuevo al más viejo: lo que se mira es lo último, y el acumulado ya viene
+          calculado desde el principio — dar vuelta la lista no cambia ninguna suma. */}
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Día</Th>
+            <Th>Entregados</Th>
+            <Th>Cobró</Th>
+            <Th>Se queda</Th>
+            <Th>Tenía que traer</Th>
+            <Th>Trajo</Th>
+            <Th>Saldo</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {[...cuenta.dias].reverse().map((d) => (
+            <Tr key={d.fecha}>
+              <Td>
+                <div style={{ fontWeight: 600 }}>{rotuloDeDia(d.fecha) || d.fecha}</div>
+                {d.cerrado ? (
+                  <div style={{ opacity: 0.6, fontSize: 12 }}>cerró {d.cerradoPor}</div>
+                ) : (
+                  <Badge tone="warning">sin cerrar</Badge>
+                )}
+                {d.nota ? <div style={{ opacity: 0.7, fontSize: 12 }}>{d.nota}</div> : null}
+              </Td>
+              <Td>
+                {d.entregados} de {d.envios}
+              </Td>
+              <Td>{formatMoney(d.cobrado)}</Td>
+              <Td>{formatMoney(d.tarifas)}</Td>
+              <Td>{formatMoney(d.debeTraer)}</Td>
+              <Td>
+                {d.trajo == null ? <span style={{ opacity: 0.5 }}>—</span> : formatMoney(d.trajo)}
+                {d.pagadoAparte ? <div style={{ opacity: 0.7, fontSize: 12 }}>+ {formatMoney(d.pagadoAparte)} por fuera</div> : null}
+              </Td>
+              {/* El acumulado y no el saldo del día: es el número con el que se habla con el cadete. */}
+              <Td>
+                <strong>{formatMoney(d.acumulado)}</strong>
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+    </div>
   )
 }

@@ -118,6 +118,11 @@ create unique index if not exists idx_envios_orden_tn
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 -- El cierre del turno: la rendición.
 --
+-- ⛔ **MUERTA desde el 14-ago-2026.** `sql/migrate-envios-cuenta.sql` la reemplaza por `envios_dia`
+-- y la borra en la misma transacción (estaba vacía: el cierre por turno nunca se usó). El bloque
+-- sigue acá porque estos archivos se aplican en orden y en una base nueva la tabla tiene que existir
+-- para que el `drop` de la tercera migración sea el mismo camino que en producción. Nadie la lee.
+--
 -- 🔑 **`pagado_al_cadete` es el único dato que hoy no existe en ningún lado.** La planilla dice
 -- cuánto se cobra de envío pero nunca cuánto cuesta el reparto, así que jamás se supo si el envío
 -- se subsidia o deja plata: el diagnóstico lo listó como "no se pudo medir" y no había forma de

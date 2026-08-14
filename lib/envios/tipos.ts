@@ -39,6 +39,13 @@ export type Envio = {
   envio_pagado: boolean
   /** El saldo del producto a cobrar en la puerta. Casi siempre 0: el pedido ya se pagó antes. */
   monto_pedido_a_cobrar: number | string
+  /**
+   * Lo que cobra el cadete por llevarlo, cuando NO es lo que se le cobró al cliente.
+   *
+   * `null` no es cero: es "lo mismo que el envío", que es el caso normal. Se escribe sólo cuando el
+   * envío va **bonificado** —el cliente paga $0 y el cadete cobra igual—. Ver `tarifaCadete`.
+   */
+  pago_cadete?: number | string | null
 
   estado: EstadoEnvio
   vendedor: string | null
@@ -50,31 +57,75 @@ export type Envio = {
   updated_at?: string
 }
 
-/** Lo que hay que saber para cerrar un turno. Ver `totalesDelTurno`. */
-export type TotalesTurno = {
+/** Lo que hay que saber para cerrar el día. Ver `totalesDelDia`. */
+export type TotalesDia = {
   envios: number
   /** Lo que ya entró antes de salir. No se rinde: se controla. */
   enviosPagos: number
-  /** La plata que el cadete tiene que traer. Sólo lo entregado de verdad. */
-  aRendir: number
+  /** Lo que el cadete juntó en las puertas. Sólo lo entregado de verdad. */
+  cobrado: number
+  /** Lo que le debemos por haber llevado esos paquetes. */
+  tarifas: number
+  /** `cobrado − tarifas`: la plata que tiene que entregar. Negativo = le debemos nosotros. */
+  debeTraer: number
   /** Cuántos paquetes todavía no salieron de la casa. */
   pendienteDeSalir: number
   noEntregados: number
-  /** Lo que rendiría si todo lo que sigue en la calle llegara. La diferencia contra `aRendir`
+  /** Lo que cerraría si todo lo que sigue en la calle llegara. La diferencia contra `debeTraer`
    *  es la plata que todavía está afuera. */
-  aRendirSiTodoLlega: number
+  debeTraerSiTodoLlega: number
 }
 
-/** El cierre de caja de un turno. La ausencia de fila es "todavía no se cerró". */
-export type CierreTurno = {
+/**
+ * El cierre de caja del DÍA. La ausencia de fila es "todavía no se cerró".
+ *
+ * 🔑 Es del día y no del turno porque el cadete es uno solo: sale a la mañana y a la tarde con la
+ * misma plata en el bolsillo, y partir la caja en dos obligaría a repartir a mano un saldo que en la
+ * calle nunca estuvo partido.
+ */
+export type CierreDia = {
   fecha: string
-  turno: Turno
-  /** Lo que se le pagó al cadete. `null` NO es cero: es "no se cargó". */
-  pagado_al_cadete: number | string | null
-  /** Lo que el cadete trajo de verdad, para contrastar contra `aRendir`. */
-  rendido: number | string | null
+  /** La plata que entregó. `null` es "no se cerró"; 0 es "no trajo nada", que es lo normal. */
+  trajo: number | string | null
+  /** Plata que se le dio por fuera del reparto, para saldar lo que se le debía. */
+  pagado_aparte: number | string | null
+  nota: string | null
   cerrado_por: string | null
   cerrado_en: string | null
+}
+
+/**
+ * Un día en la cuenta corriente del cadete. Todo derivado: lo único que se guarda es el cierre.
+ *
+ * El signo, una sola vez para todo el módulo: **positivo = el cadete tiene plata nuestra**; negativo
+ * = se la debemos.
+ */
+export type DiaDeCuenta = {
+  fecha: string
+  envios: number
+  entregados: number
+  /** Lo que cobró en las puertas. */
+  cobrado: number
+  /** Lo que le debemos por llevarlos. */
+  tarifas: number
+  /** `cobrado − tarifas`. Negativo = ese día le quedamos debiendo. */
+  debeTraer: number
+  /** Lo que entregó. `null` = el día no se cerró. */
+  trajo: number | null
+  pagadoAparte: number
+  saldoDelDia: number
+  /** El saldo después de ese día, arrastrando todos los anteriores. */
+  acumulado: number
+  cerrado: boolean
+  cerradoPor: string | null
+  nota: string | null
+}
+
+/** La cuenta entera: los días y el saldo de hoy. */
+export type CuentaCadete = {
+  dias: DiaDeCuenta[]
+  /** El acumulado del último día. Positivo = tiene plata nuestra; negativo = le debemos. */
+  saldo: number
 }
 
 /**

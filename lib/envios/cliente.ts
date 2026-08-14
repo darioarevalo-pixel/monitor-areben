@@ -8,18 +8,18 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
-import type { CierreTurno, Envio, OrdenTN, Turno } from './tipos'
+import type { CierreDia, Envio, OrdenTN, Turno } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 
-export type DatosDia = { fecha: string; envios: Envio[]; cierres: CierreTurno[] }
+export type DatosDia = { fecha: string; envios: Envio[]; cierre: CierreDia | null }
 
 export async function leerDia(fecha: string): Promise<DatosDia> {
   const r = await apiFetch(`${API}&fecha=${fecha}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los envíos del día.')
-  return { fecha, envios: d.envios || [], cierres: d.cierres || [] }
+  return { fecha, envios: d.envios || [], cierre: d.cierre || null }
 }
 
 /**
@@ -76,6 +76,16 @@ export async function guardarCosto(id: string, monto: number): Promise<void> {
   await postear({ action: 'costo', id, monto_envio: monto }, 'No se pudo guardar el precio del envío.')
 }
 
+/**
+ * Lo que cobra el cadete por ese paquete, cuando no es lo que se le cobró al cliente.
+ *
+ * `null` lo devuelve al default —"lo mismo que el envío"—, que es lo que hay que poder volver a
+ * escribir: si un número tipeado por error quedara pegado como cero, ese reparto figuraría gratis.
+ */
+export async function guardarPagoCadete(id: string, monto: number | null): Promise<void> {
+  await postear({ action: 'pago-cadete', id, pago_cadete: monto }, 'No se pudo guardar lo que cobra el cadete.')
+}
+
 export async function cambiarEstado(id: string, estado: string, cadete?: string | null): Promise<void> {
   await postear({ action: 'estado', id, estado, ...(cadete !== undefined ? { cadete } : {}) }, 'No se pudo cambiar el estado.')
 }
@@ -84,8 +94,33 @@ export async function borrarEnvio(id: string): Promise<void> {
   await postear({ action: 'borrar', id }, 'No se pudo borrar el envío.')
 }
 
-export async function cerrarTurno(fecha: string, turno: Turno, pagado_al_cadete: number | null, rendido: number | null): Promise<void> {
-  await postear({ action: 'cerrar-turno', fecha, turno, pagado_al_cadete, rendido }, 'No se pudo cerrar el turno.')
+/**
+ * Cerrar la caja del día: cuánto trajo el cadete, y cuánto se le dio por fuera del reparto.
+ *
+ * Es lo único que se guarda de la cuenta. Todo lo demás —lo que tenía que traer, lo que se le debe,
+ * el saldo arrastrado— sale de los envíos, en `cuentaDelCadete`.
+ */
+export async function cerrarDia(
+  fecha: string,
+  trajo: number | null,
+  pagado_aparte: number,
+  nota: string | null,
+): Promise<void> {
+  await postear({ action: 'cerrar-dia', fecha, trajo, pagado_aparte, nota }, 'No se pudo cerrar el día.')
+}
+
+/**
+ * La cuenta entera del cadete: todos los días, no una ventana.
+ *
+ * El saldo de hoy es la suma de todos los días anteriores, así que pedir un rango daría un número
+ * distinto según por dónde se empiece a mirar. Viene sin la orden congelada de cada envío: la cuenta
+ * sólo necesita los campos de plata.
+ */
+export async function leerCuenta(): Promise<{ envios: Envio[]; dias: CierreDia[] }> {
+  const r = await apiFetch(`${API}&cuenta=1&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la cuenta del cadete.')
+  return { envios: (d.envios || []) as Envio[], dias: (d.dias || []) as CierreDia[] }
 }
 
 // ── Lo que viene de Tienda Nube ──────────────────────────────────────────────────────────────

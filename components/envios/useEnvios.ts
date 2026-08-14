@@ -11,10 +11,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
-import { leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
-import { ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
+import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
+import { cuentaDelCadete, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CierreTurno, Envio } from '@/lib/envios/tipos'
+import type { CierreDia, CuentaCadete, Envio } from '@/lib/envios/tipos'
 import type { Marca } from '@/lib/nav'
 
 const MARCAS: Marca[] = ['bdi', 'zattia']
@@ -42,7 +42,8 @@ export type EstadoEnvios = {
    * tienda. El reparto, en cambio, es uno solo — el cadete sale con las dos en la misma mochila.
    */
   pendientes: Envio[]
-  cierres: CierreTurno[]
+  /** El cierre de caja de ese día, o `null` si todavía no se cerró. Es uno: la caja es del día. */
+  cierre: CierreDia | null
   cargando: boolean
   error: string | null
   recargar: () => Promise<void>
@@ -56,7 +57,7 @@ export function useEnvios(): EstadoEnvios {
   const [fecha, setFecha] = useState<string>(() => hoyIso())
   const [envios, setEnvios] = useState<Envio[]>([])
   const [todosLosPendientes, setTodosLosPendientes] = useState<Envio[]>([])
-  const [cierres, setCierres] = useState<CierreTurno[]>([])
+  const [cierre, setCierre] = useState<CierreDia | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -84,7 +85,7 @@ export function useEnvios(): EstadoEnvios {
         const [d, p] = await Promise.all([leerDia(fecha), leerPendientes()])
         if (!vivo) return
         setEnvios(d.envios)
-        setCierres(d.cierres)
+        setCierre(d.cierre)
         setTodosLosPendientes(p)
       } catch (e) {
         if (!vivo) return
@@ -163,5 +164,47 @@ export function useEnvios(): EstadoEnvios {
     [todosLosPendientes, marca],
   )
 
-  return { fecha, setFecha, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube }
+  return { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube }
+}
+
+/**
+ * La cuenta corriente del cadete, y **sólo cuando se abre su pestaña**.
+ *
+ * Va aparte de `useEnvios` a propósito: la cuenta pide todos los días desde el principio —el saldo
+ * de hoy es la suma de todo lo anterior— y eso no puede pagarse en cada carga de la hoja, que es la
+ * pantalla que se abre veinte veces por día para ver qué sale.
+ */
+export function useCuentaCadete(activa: boolean) {
+  const [cuenta, setCuenta] = useState<CuentaCadete>({ dias: [], saldo: 0 })
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  const recargar = useCallback(async () => {
+    setTick((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!activa) return
+    let vivo = true
+    void (async () => {
+      setCargando(true)
+      setError(null)
+      try {
+        const { envios, dias } = await leerCuenta()
+        if (!vivo) return
+        setCuenta(cuentaDelCadete(envios, dias))
+      } catch (e) {
+        if (!vivo) return
+        setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta del cadete.')
+      } finally {
+        if (vivo) setCargando(false)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [activa, tick])
+
+  return { cuenta, cargando, error, recargar }
 }
