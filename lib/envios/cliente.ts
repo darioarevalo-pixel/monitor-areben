@@ -141,18 +141,27 @@ export type OrdenesDelDia = {
 /**
  * Las órdenes de Tienda Nube de un rango, para una marca.
  *
- * Va en modo `detalle` (el default del endpoint) a propósito: es el único camino correcto por
- * construcción. 🔴 **El rango tiene que ser corto**: el detalle pide una orden por vez y con nueve
- * días seguidos Tienda Nube corta por rate limit —se midió: 15 órdenes de 77, con 62 fallidas y un
- * `ok: true` igual—. El modo `lista`, que existía para barrer un mes, **hoy devuelve cero órdenes**
- * (lo canta `?probe=1`), así que no es una salida.
+ * Va en modo `lista` desde el 14-ago-2026. 🔑 **El que se quedaba sin órdenes era el `detalle`**,
+ * que es el default del endpoint: pide una orden por vez y Tienda Nube lo corta por rate limit. Se
+ * midió el mismo rango de 14 días contra las dos: `lista` trajo **100 de 100 en 6,9 s**, `detalle`
+ * **48 de 100 en 10,6 s** (52 fallidas, y con `ok: true` igual). El modo `lista` devolvía cero
+ * —por eso este lado usaba el otro— hasta que se encontró por qué: pedía `customer` en los
+ * `fields`, que el listado de TN rechaza con un 404 que el paginador leía como «no hay más
+ * páginas».
  *
- * 🔑 **Por eso lo que falta se cuenta y se devuelve.** El corte no es un error —la respuesta viene
+ * ⚠️ **Lo que la lista sí trae peor son `paid_at` y `shipped_at`**: la MISMA orden viene con fecha
+ * en una página de 10 filas y en null en una de 74 (medido; no es el `fields`, es el tamaño). No
+ * los mira nadie —`pagado_en` y `envio_despachado_en` no tienen un solo consumidor— y todo lo que
+ * esta pantalla sí usa (plata, `estado_pago`, el bloque de envío, la dirección, los ítems) salió
+ * idéntico en las dos, orden por orden, sobre ~120 órdenes de las tres tiendas (`?probe=1`).
+ *
+ * 🔑 **Lo que falta se sigue contando y devolviendo.** El corte no es un error —la respuesta viene
  * `ok`, con menos órdenes adentro— así que no hay `throw` que lo cace: si este lado no resta, no
- * queda ningún lugar donde el faltante pueda aparecer.
+ * queda ningún lugar donde el faltante pueda aparecer. Con `lista` da cero, pero el día que TN
+ * corte de otra forma tiene que seguir habiendo quién lo diga.
  */
 export async function leerOrdenesTN(marca: Marca, desde: string, hasta: string): Promise<OrdenesDelDia> {
-  const qs = new URLSearchParams({ ordenes: '1', store: marca, from: desde, to: hasta, limite: '200', nc: String(Date.now()) })
+  const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store: marca, from: desde, to: hasta, limite: '200', nc: String(Date.now()) })
   const r = await apiFetch(`${AUDIT}?${qs.toString()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || `No se pudieron leer las órdenes de ${marca}.`)
