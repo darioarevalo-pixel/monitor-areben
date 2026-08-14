@@ -9,7 +9,28 @@
  *
  * ⚠️ **El padrón de personas es único y transversal a las tres marcas**; los canjes sí son por
  * marca. Esa asimetría es el corazón del módulo: `CanjePersona` no tiene `store`, `CanjeRow` sí.
+ *
+ * 🔑 **Las reglas duras NO viven acá: vienen de `reglas.core.js`.** El grafo de estados, el tope,
+ * el retiro en el local y los motivos son las mismas que corren en `api/_canjes.js` y en el portal
+ * público, y hasta el 13-ago-2026 estaban escritas dos veces —una en TS para la pantalla, otra en
+ * JS para el servidor— con un bloque de tests comparándolas. Este archivo les pone los tipos
+ * encima y las re-exporta, así que quien importa de `tipos` sigue viendo lo mismo de siempre.
  */
+import {
+  controlDelTope as controlDelTopeJS,
+  esTerminal as esTerminalJS,
+  ESTADOS as ESTADOS_JS,
+  fechaISO as fechaISOJS,
+  itemsVivos as itemsVivosJS,
+  listoParaEntregar as listoParaEntregarJS,
+  MOTIVO_NO_ACEPTO_OTRO as MOTIVO_NO_ACEPTO_OTRO_JS,
+  MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS,
+  numeroCanje as numeroCanjeJS,
+  puedeIr as puedeIrJS,
+  retiroLocalDisponible as retiroLocalDisponibleJS,
+  TERMINALES as TERMINALES_JS,
+  TRANSICIONES as TRANSICIONES_JS,
+} from './reglas.core.js'
 
 // ── La marca ────────────────────────────────────────────────────────────────────
 
@@ -74,10 +95,8 @@ export type EstadoCanje =
   | 'cerrado'
   | 'cancelado'
 
-export const ESTADOS_CANJE: EstadoCanje[] = [
-  'propuesta', 'enviada', 'rechazado', 'no_acepto',
-  'acuerdo', 'preparando', 'en_curso', 'cerrado', 'cancelado',
-]
+/** Los nueve, en el orden del grafo. Sale de `reglas.core.js`, no de una lista a mano. */
+export const ESTADOS_CANJE = ESTADOS_JS as EstadoCanje[]
 
 export const ESTADO_CANJE_LABEL: Record<EstadoCanje, string> = {
   propuesta: 'Esperando la firma interna',
@@ -98,32 +117,17 @@ export const ESTADO_CANJE_LABEL: Record<EstadoCanje, string> = {
  * nuestro y lo firma quien tiene el sub; el segundo es de ella y lo registra quien lleva la
  * conversación. Uno dice algo de nosotros, el otro dice algo de la persona.
  */
-export const ESTADOS_TERMINALES: EstadoCanje[] = ['rechazado', 'no_acepto', 'cerrado', 'cancelado']
+export const ESTADOS_TERMINALES = TERMINALES_JS as EstadoCanje[]
 
-export function esTerminal(estado: EstadoCanje): boolean {
-  return ESTADOS_TERMINALES.includes(estado)
-}
+export const esTerminal: (estado: EstadoCanje) => boolean = esTerminalJS
 
 /**
  * El grafo. `cancelado` no figura acá porque se puede llegar desde **cualquier** estado no
  * terminal — lo resuelve `puedeIr`, no la tabla.
  */
-export const TRANSICIONES: Record<EstadoCanje, EstadoCanje[]> = {
-  propuesta: ['enviada', 'rechazado'],
-  enviada: ['acuerdo', 'no_acepto'],
-  rechazado: [],
-  no_acepto: [],
-  acuerdo: ['preparando'],
-  preparando: ['en_curso'],
-  en_curso: ['cerrado'],
-  cerrado: [],
-  cancelado: [],
-}
+export const TRANSICIONES = TRANSICIONES_JS as Record<EstadoCanje, EstadoCanje[]>
 
-export function puedeIr(desde: EstadoCanje, hasta: EstadoCanje): boolean {
-  if (hasta === 'cancelado') return !esTerminal(desde)
-  return (TRANSICIONES[desde] ?? []).includes(hasta)
-}
+export const puedeIr: (desde: EstadoCanje, hasta: EstadoCanje) => boolean = puedeIrJS
 
 /**
  * En qué está parado el canje **de verdad**, que no es lo mismo que su estado.
@@ -229,12 +233,8 @@ export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): 
  *
  * Es una función y no una constante suelta para que la pantalla y el servidor pregunten lo mismo:
  * si un día Zattia abre local, se agrega acá y no en dos lados.
- *
- * ⚠️ Espejo en `api/_canjes-reglas.js`.
  */
-export function retiroLocalDisponible(store: string | null | undefined): boolean {
-  return store === 'bdi'
-}
+export const retiroLocalDisponible: (store: string | null | undefined) => boolean = retiroLocalDisponibleJS
 
 /**
  * Si el local ya puede entregarlo. **De acá salen el botón habilitado y la validación del handler**,
@@ -245,38 +245,18 @@ export function retiroLocalDisponible(store: string | null | undefined): boolean
  *
  * ⛔ **No exige llegar al tope.** Si se autorizaron 3 fundas y se lleva 2, se cierra con 2 — el tope
  * es un techo, no una cuota.
- *
- * ⚠️ Espejo en `api/_canjes-reglas.js`.
  */
-export function listoParaEntregar(
+export const listoParaEntregar: (
   c: Pick<CanjeRow, 'store' | 'estado' | 'retiro_local' | 'entregado_at' | 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
   items: CanjeItem[],
-): { ok: boolean; motivo: string | null } {
-  if (!c.retiro_local) return { ok: false, motivo: 'Este canje no es de retiro en el local.' }
-  if (!retiroLocalDisponible(c.store)) return { ok: false, motivo: 'Esta marca no tiene local.' }
-  if (c.entregado_at) return { ok: false, motivo: 'Este canje ya figura entregado.' }
-  if (c.estado !== 'acuerdo' && c.estado !== 'preparando') {
-    return { ok: false, motivo: 'Todavía no está acordado.' }
-  }
-  const vivos = itemsVivos(items)
-  if (!vivos.length) return { ok: false, motivo: 'Cargá lo que se lleva antes de entregarlo.' }
-  if (vivos.some((i) => !i.product_id || !i.size_id)) {
-    return { ok: false, motivo: 'Hay un producto sin artículo de Gestión Nube: sin eso no se puede descontar el stock.' }
-  }
-  const tope = controlDelTope(c, items)
-  if (!tope.ok) return { ok: false, motivo: tope.mensaje }
-  return { ok: true, motivo: null }
-}
+) => { ok: boolean; motivo: string | null } = listoParaEntregarJS
 
 /**
- * El número que ve la gente. Derivado del id, **no es una columna**: mismo criterio (y misma deuda
- * de espejo TS/JS) que `numeroReclamo` en `lib/reclamos/tipos.ts:799`.
- *
- * ⚠️ Espejo en `api/_canjes.js` (`numeroCanje`). Si cambia el formato, cambian los dos.
+ * El número que ve la gente. Derivado del id, **no es una columna**: mismo criterio que
+ * `numeroReclamo` en `lib/reclamos/tipos.ts:799` — que sigue con la deuda de espejo que ésta ya no
+ * tiene.
  */
-export function numeroCanje(id: number): string {
-  return 'C-' + String(id).padStart(4, '0')
-}
+export const numeroCanje: (id: number) => string = numeroCanjeJS
 
 // ── Los pendientes (no son estados) ─────────────────────────────────────────────
 
@@ -368,18 +348,10 @@ export const MOTIVOS_RECHAZO = [
  * `'Ahora no, más adelante'` está para que el registro no se ensucie: no es un no, y sin esa opción
  * termina anotado como "No le interesó", que es lo que después mira quien la vuelva a proponer.
  */
-export const MOTIVOS_NO_ACEPTO = [
-  'No respondió',
-  'No le interesó',
-  'Pidió más de lo que ofrecimos',
-  'Pidió plata',
-  'Trabaja con una marca competidora',
-  'Ahora no, más adelante',
-  'Otro',
-]
+export const MOTIVOS_NO_ACEPTO: string[] = MOTIVOS_NO_ACEPTO_JS
 
 /** El único que exige nota: sin eso, "Otro" no dice nada dentro de seis meses. */
-export const MOTIVO_NO_ACEPTO_OTRO = 'Otro'
+export const MOTIVO_NO_ACEPTO_OTRO: string = MOTIVO_NO_ACEPTO_OTRO_JS
 
 export const MOTIVOS_QUITAR_ITEM = ['Sin stock', 'Se cambió por otro', 'Se pasaba del tope', 'Otro']
 
@@ -841,9 +813,7 @@ export function puedeElegir(
 export type NivelAprobacion = 'aprobar' | 'aprobar-plata'
 
 /** Los items que cuentan: un quitado o un sin stock no está en el pedido. */
-export function itemsVivos(items: CanjeItem[]): CanjeItem[] {
-  return items.filter((i) => i.estado === 'propuesto' || i.estado === 'confirmado')
-}
+export const itemsVivos: (items: CanjeItem[]) => CanjeItem[] = itemsVivosJS
 
 /**
  * Lo que **cuesta** el canje, para que gerencia apruebe mirando un número.
@@ -953,44 +923,13 @@ export type ControlTope = {
  * una validación que se equivoca la mitad de las veces se termina apagando. El operador ve la
  * lista acordada al lado de lo que carga y valida a ojo.
  */
-export function controlDelTope(
+// El `as` es por `unidad`, que del lado JS se infiere `string` y acá es `'$' | 'u'`. Es el único
+// lugar del re-export que necesita uno: los dos literales están tres líneas más arriba, en
+// `reglas.core.js`, y `ControlTope` es quien manda sobre ellos.
+export const controlDelTope = controlDelTopeJS as (
   c: Pick<CanjeRow, 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
   items: CanjeItem[],
-): ControlTope {
-  const vivos = itemsVivos(items)
-
-  if (c.tope_tipo === 'unidades') {
-    const tope = (c.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0)
-    const usado = vivos.reduce((a, i) => a + (Number(i.cantidad) || 0), 0)
-    const ok = tope === 0 || usado <= tope
-    return {
-      ok,
-      usado,
-      tope: tope || null,
-      unidad: 'u',
-      mensaje: !tope
-        ? 'El acuerdo no tiene unidades cargadas.'
-        : ok
-          ? `${usado} de ${tope} ${tope === 1 ? 'unidad' : 'unidades'}`
-          : `Se pasa del acuerdo: ${usado} ${usado === 1 ? 'unidad' : 'unidades'} contra las ${tope} acordadas.`,
-    }
-  }
-
-  const tope = c.tope_pvp == null ? null : Number(c.tope_pvp)
-  const usado = vivos.reduce((a, i) => a + (Number(i.pvp_unit) || 0) * (Number(i.cantidad) || 0), 0)
-  const ok = tope == null || usado <= tope
-  return {
-    ok,
-    usado,
-    tope,
-    unidad: '$',
-    mensaje: tope == null
-      ? 'El acuerdo no tiene tope cargado.'
-      : ok
-        ? `$${usado.toLocaleString('es-AR')} de $${tope.toLocaleString('es-AR')}`
-        : `Se pasa del tope: $${usado.toLocaleString('es-AR')} contra los $${tope.toLocaleString('es-AR')} acordados.`,
-  }
-}
+) => ControlTope
 
 // ── El cumplimiento ─────────────────────────────────────────────────────────────
 
@@ -1065,9 +1004,7 @@ export function cumplimiento(
 }
 
 /** `YYYY-MM-DD` en hora **local**. En UTC, un canje de la tarde vencería un día antes. */
-export function fechaISO(d: Date): string {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
-}
+export const fechaISO: (d: Date) => string = fechaISOJS
 
 /**
  * Los entregables obligatorios que pasaron su fecha sin evidencia verificada. Alimenta el aviso

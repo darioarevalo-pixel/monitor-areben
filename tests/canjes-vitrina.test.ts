@@ -9,7 +9,7 @@ import { direccionDelSwipe, moverIndice } from '@/lib/canjes/gestos'
 // Handlers JS de api/: sólo las funciones puras, sin tocar Supabase.
 import { eleccionesEnItems, paraLaPersona } from '@/api/_canje-portal.js'
 import { itemDeVitrinaDelBody } from '@/api/_canjes.js'
-import { seVaDelTope } from '@/api/_canjes-reglas.js'
+import { seVaDelTope } from '@/lib/canjes/reglas.core.js'
 
 /**
  * La vitrina: el espejo curado de Tienda Nube del que la creadora elige.

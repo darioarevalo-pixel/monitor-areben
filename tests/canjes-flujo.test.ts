@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  CONFIG_DEFAULT, ESTADOS_TERMINALES, MOTIVOS_NO_ACEPTO,
+  CONFIG_DEFAULT,
   calcularBalance, controlDelTope, costoEstimado, cumplimiento,
   entregablesVencidos, faltantesParaCerrarCanje, fechaISO, itemsVivos, naceEn, pideSeguimiento,
   puedeProponerCanje, quienApruebaCanje, vencimientoDe,
@@ -21,12 +21,11 @@ import {
   listaEntregables, loQueLeMandamos, mensajeAcuerdo, mensajeDespacho, mensajeIntentoEntrega,
   mensajeLinkDatos, mensajePropuesta, mensajeRecordatorio, mensajeSondeo,
 } from '@/lib/canjes/mensajes'
-// Los espejos del handler. Si divergen, el botón dice una cosa y el servidor hace otra.
-import {
-  entregablesDelBody, MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS, puedeIr as puedeIrJS,
-  seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES as TRANS_JS,
-} from '../api/_canjes.js'
-import { TRANSICIONES, puedeIr } from '@/lib/canjes/tipos'
+// Lo que decide el handler y no está en el dominio: cómo lee el body y quién firma.
+import { entregablesDelBody, subQueApruebe } from '../api/_canjes.js'
+// La cara del tope que usa el servidor. Ya no es un espejo: es la MISMA función que `controlDelTope`
+// vista desde el lado del que valida (`lib/canjes/reglas.core.js`).
+import { seVaDelTope } from '@/lib/canjes/reglas.core.js'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────────
 
@@ -226,30 +225,21 @@ describe('controlDelTope — modo unidades', () => {
 
 // ── El grafo de estados ──────────────────────────────────────────────────────────
 
-describe('el espejo del grafo de estados', () => {
-  it('las TRANSICIONES son idénticas en los dos lados', () => {
-    expect(TRANS_JS).toEqual(TRANSICIONES)
-  })
-
-  it('`puedeIr` decide igual para TODO par de estados', () => {
-    const estados = Object.keys(TRANSICIONES) as (keyof typeof TRANSICIONES)[]
-    for (const a of estados) {
-      for (const b of estados) {
-        expect(puedeIrJS(a, b), `${a}→${b}`).toBe(puedeIr(a, b))
-      }
-    }
-  })
-
-  it('los terminales son los mismos en los dos lados', () => {
-    expect([...TERMINALES].sort()).toEqual([...ESTADOS_TERMINALES].sort())
-  })
-
-  it('los motivos de "no aceptó" son los mismos', () => {
-    // Lista cerrada de los dos lados: si el servidor no reconoce el motivo que manda la UI,
-    // registrar la respuesta devuelve 400 y el canje queda colgado en "esperando respuesta".
-    expect(MOTIVOS_NO_ACEPTO_JS).toEqual(MOTIVOS_NO_ACEPTO)
-  })
-})
+/**
+ * 🗑️ **Acá vivía «el espejo del grafo de estados»** — cuatro tests que comparaban `TRANSICIONES`,
+ * `puedeIr`, `TERMINALES` y `MOTIVOS_NO_ACEPTO` del handler contra los de `tipos.ts`, par por par.
+ *
+ * Se borraron el 13-ago-2026 porque **ya no hay dos lados que comparar**: las reglas viven una sola
+ * vez en `lib/canjes/reglas.core.js` y `tipos.ts` las re-exporta con sus tipos. Un test de espejo
+ * es interés que se paga todos los meses; que se pueda borrar es la señal de que la deuda se
+ * amortizó.
+ *
+ * 🔑 Y lo que el espejo **no** cubría era lo caro: `controlDelTope` —lo único que impide que un
+ * canje de $80.000 salga $200.000— y `listoParaEntregar` estaban escritos dos veces, con la misma
+ * plata en juego y sin un solo test comparándolos. Coincidían carácter por carácter porque alguien
+ * los copió bien, no porque algo lo garantizara. Ahora son una función sola, y los tests de esta
+ * misma suite (`controlDelTope`, arriba) la ejercen a través de las dos caras.
+ */
 
 // ── La firma que se saltea sola ──────────────────────────────────────────────────
 

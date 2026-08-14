@@ -79,7 +79,9 @@ import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
 // El grafo de estados y el tope viven aparte porque **el portal público también los usa** desde la
 // tanda 2 (ella elige productos desde el link y hay que frenarla si se pasa del acuerdo), y ese
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
-import { ESTADOS, noSePuedeEntregar, puedeIr, retiroLocalDisponible, seVaDelTope, TERMINALES, TRANSICIONES } from './_canjes-reglas.js';
+// Las reglas duras, LA implementación. El grafo lo consulta `puedeIr` y por eso `TRANSICIONES` no
+// se importa: se importaba sólo para re-exportarlo al test de espejo, que ya no existe.
+import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -109,11 +111,6 @@ const STORES = ['bdi', 'zattia', 'stunned'];
  * refactor sobre 2.218 líneas en uso, y el AGENTS.md pide coordinar los grandes con Darío antes de
  * empezar.
  */
-
-/** Espejo de `numeroCanje` en `lib/canjes/tipos.ts`. Mismo formato o los números no coinciden. */
-function numeroCanje(id) {
-  return 'C-' + String(id).padStart(4, '0');
-}
 
 const PERSONA_COLS = `id, instagram, instagram_raw, nombre, apellido, telefono, email, tiktok, ciudad,
   dni, calle, numero, piso, depto, cp, provincia, localidad, direccion_nota,
@@ -190,20 +187,11 @@ function esAdministracion(perfil) {
 //
 // `tests/canjes-flujo.test.ts` compara los dos lados contra los mismos casos.
 
-// ⚠️ El grafo de estados (`TRANSICIONES`, `ESTADOS`, `TERMINALES`, `puedeIr`) y el tope
-// (`seVaDelTope`) **ya no están acá**: viven en `./_canjes-reglas.js` porque el portal público los
-// necesita y no puede importar este archivo. Se re-exportan al final para los tests de espejo.
-
-/** Espejo de `MOTIVOS_NO_ACEPTO`. Lista cerrada: es información sobre la persona, no sobre nosotros. */
-const MOTIVOS_NO_ACEPTO = [
-  'No respondió',
-  'No le interesó',
-  'Pidió más de lo que ofrecimos',
-  'Pidió plata',
-  'Trabaja con una marca competidora',
-  'Ahora no, más adelante',
-  'Otro',
-];
+// ⚠️ **Nada de las reglas duras vive acá.** El grafo de estados, el tope, el retiro en el local,
+// los motivos de "no aceptó", el número de canje y la fecha local salen todos de
+// `lib/canjes/reglas.core.js`, que es LA implementación y la importan igual el portal público y la
+// pantalla (vía `lib/canjes/tipos.ts`). Antes eran copias a mano y había un bloque de tests
+// comparándolas.
 
 /**
  * ¿Tiene el sub-permiso para esta `store`?
@@ -248,11 +236,6 @@ function subQueApruebe(canje, items, cfg) {
 function puedeFirmar(perfil, store, nivel) {
   if (puedeSubCanjes(perfil, store, 'aprobar-plata')) return true;
   return puedeSubCanjes(perfil, store, nivel);
-}
-
-/** `YYYY-MM-DD` local. Espejo de `fechaISO`: en UTC un canje de la tarde vencería un día antes. */
-function fechaISO(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 const num = (v) => (v == null || v === '' ? null : Number(v));
@@ -2203,13 +2186,12 @@ export default async function handler(req, res) {
 
 // `apilar` queda listo para la Fase 1 (los canjes en sí, que sí llevan historial de estados). En la
 // Fase 0 las fichas se editan sin apilar: una nota ya es el registro de lo que pasó.
-// Los espejos se exportan para que `tests/canjes-flujo.test.ts` los compare contra los de
-// `lib/canjes/tipos.ts`. Es lo único que mantiene honesta la duplicación.
+// Lo que se exporta es lo que ESTE archivo decide: cómo lee el body y quién firma.
 //
-// Los cuatro del grafo y `seVaDelTope` se re-exportan desde `_canjes-reglas.js`: se mudaron ahí para
-// que el portal público los use, y siguen saliendo por acá para no partir los tests en dos archivos
-// según dónde vive hoy cada función.
+// 🔑 `normalizarInstagram` y `numeroCanje` salen igual, y no para compararles el resultado: los
+// tests los assertean con `toBe` contra los de `lib/canjes/`, o sea **contra la misma función**.
+// Ese test no puede pasar si alguien vuelve a escribir una copia acá adentro, que es exactamente
+// lo que un test de espejo —comparar dos implementaciones caso por caso— nunca pudo garantizar.
 export {
-  apilar, entregablesDelBody, itemDeVitrinaDelBody, MOTIVOS_NO_ACEPTO, normalizarInstagram,
-  numeroCanje, puedeIr, seVaDelTope, subQueApruebe, TERMINALES, TRANSICIONES,
+  apilar, entregablesDelBody, itemDeVitrinaDelBody, normalizarInstagram, numeroCanje, subQueApruebe,
 };

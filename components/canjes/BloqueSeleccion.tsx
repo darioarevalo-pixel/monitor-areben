@@ -9,7 +9,7 @@
  * haya stock— y el equipo los confirma o los marca sin stock, que es el mismo flujo de siempre.
  *
  * El control del tope se muestra acá pero **lo hace el servidor** con la lista real, y ahora
- * también del lado de ella: la misma función corre en los dos handlers (`api/_canjes-reglas.js`).
+ * también del lado de ella: la misma función corre en los dos handlers (`lib/canjes/reglas.core.js`).
  * El de esta pantalla es para que nadie llegue hasta el error.
  */
 

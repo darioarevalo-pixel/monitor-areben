@@ -18,7 +18,8 @@ import { normalizarInstagram } from '@/lib/canjes/instagram'
 import {
   TOPE_CANJES_LOTE, cuantasPersonas, separarSeleccion, textoDelResultado,
 } from '@/lib/canjes/propuesta-masiva'
-// El handler es JS y no importa TS: se importa su espejo para compararlo contra el de acá.
+// No es un espejo: es LA misma función que usa la pantalla, re-exportada por el handler para poder
+// assertear con `toBe` que no vuelva a haber una copia.
 import { normalizarInstagram as normalizarJS } from '../api/_canjes.js'
 
 const fila = (p: Partial<FilaAlta> = {}): FilaAlta =>
@@ -131,10 +132,19 @@ describe('filasDePegado — copiar y pegar sin salir de la grilla', () => {
 
 // ── El espejo, con lo que trae un pegado de verdad ───────────────────────────────
 
-describe('normalizarInstagram — el espejo TS↔JS con lo que se pega de verdad', () => {
-  it('las dos copias contestan lo mismo', () => {
-    // En el alta de a una una divergencia es invisible (el server contesta `existia` y la UI abre esa
-    // ficha). En un lote significa prometer 38 y crear 35, sin saber cuáles.
+describe('normalizarInstagram — con lo que se pega de verdad', () => {
+  it('el handler usa LA función, y normalizar dos veces no mueve el @', () => {
+    // 📌 Esto era «el espejo TS↔JS»: comparaba la copia del handler contra la de la app, caso por
+    // caso. Ya no hay dos copias —las dos importan `lib/canjes/instagram.core.js`—, así que la
+    // comparación se volvió una identidad, que es más fuerte: ningún caso de prueba puede detectar
+    // una copia nueva que se escriba mañana, y `toBe` sí.
+    //
+    // Los 13 casos de abajo pasan a ejercer la propiedad que el `unique` del padrón necesita de
+    // verdad: **normalizar es idempotente**. Si `f(f(x)) !== f(x)`, el @ guardado no vuelve a dar
+    // el mismo valor al releerlo y el alta crea una ficha duplicada sin ningún error visible —que
+    // es el modo de falla caro del módulo, no que las dos copias difieran.
+    expect(normalizarJS).toBe(normalizarInstagram)
+
     const casos = [
       '@lucia.mkp',
       'Lucia.MKP',
@@ -151,7 +161,10 @@ describe('normalizarInstagram — el espejo TS↔JS con lo que se pega de verdad
       '¿?¿?',
       'https://instagram.com/',
     ]
-    for (const c of casos) expect(normalizarJS(c), JSON.stringify(c)).toBe(normalizarInstagram(c))
+    for (const c of casos) {
+      const una = normalizarInstagram(c)
+      expect(normalizarInstagram(una), JSON.stringify(c)).toBe(una)
+    }
   })
 
   it('las tres formas de pegar el mismo perfil dan el mismo @', () => {

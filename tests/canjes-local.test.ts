@@ -19,7 +19,7 @@ import {
 // El espejo del handler. Si diverge, el botón dice una cosa y el servidor hace otra.
 import {
   noSePuedeEntregar, retiroLocalDisponible as retiroLocalDisponibleJS,
-} from '../api/_canjes-reglas.js'
+} from '@/lib/canjes/reglas.core.js'
 import { puedeAtenderRetiroLocal } from '@/lib/permisos.core.js'
 import {
   deDondeElige, fundasPorModelo, modeloEnLaVitrina, modelosDeLaVitrina, stockDelModelo,

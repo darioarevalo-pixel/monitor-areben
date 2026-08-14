@@ -31,13 +31,13 @@
 //     nada a Tienda Nube: no tiene credenciales y el link tiene que abrir aunque el catálogo esté
 //     caído. Ver la sección 8 de `sql/migrate-canjes.sql`.
 //   - **El tope lo hace cumplir el servidor**, con la lista real y con `seVaDelTope` —la misma
-//     función que usa el panel, importada de `_canjes-reglas.js`, no una copia—. Un control que
+//     función que usa el panel, importada de `lib/canjes/reglas.core.js`, no una copia—. Un control que
 //     sólo vive en su pantalla no es un control.
 //   - **Escribe en su propia columna del renglón**: los items que carga ella van con
 //     `origen:'persona'`, y los del equipo no se tocan nunca desde acá. Siguen siendo dos
 //     escritores sin coordinarse, igual que arriba.
 import { createClient } from '@supabase/supabase-js';
-import { seVaDelTope } from './_canjes-reglas.js';
+import { seVaDelTope } from '../lib/canjes/reglas.core.js';
 
 /** La misma base maestra de `_canjes.js`. Si algún día se separa por marca, cambian los dos. */
 function cfgMaestra() {

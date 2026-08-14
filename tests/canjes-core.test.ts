@@ -20,7 +20,8 @@ import {
   numeroCanje, puedeIr, queDatoPide, textoDeBusquedaDelItem, tieneDatosDeMarca, tieneDireccion,
   type CanjePersona, type CanjeRow, type EstadoCanje,
 } from '@/lib/canjes/tipos'
-// El handler es JS y no importa TS: se importan sus espejos para compararlos contra los de acá.
+// Lo que el handler re-exporta. `normalizarJS`/`numeroJS` no son espejos: son LA misma función que
+// importa la pantalla, y abajo se assertea con `toBe` que lo sigan siendo.
 import { normalizarInstagram as normalizarJS, numeroCanje as numeroJS, resumenCiego } from '../api/_canjes.js'
 
 // ── El @ ─────────────────────────────────────────────────────────────────────────
@@ -150,11 +151,14 @@ describe('numeroCanje', () => {
     expect(numeroCanje(12345)).toBe('C-12345')
   })
 
-  /** El otro espejo TS↔JS: si difieren, el número del panel no es el del aviso. */
-  it('el espejo JS da el mismo número', () => {
-    for (const id of [1, 7, 31, 999, 1234, 12345]) {
-      expect(numeroJS(id)).toBe(numeroCanje(id))
-    }
+  /**
+   * Ya no hay dos implementaciones que comparar: el handler importa la misma función que la
+   * pantalla, de `lib/canjes/reglas.core.js`. Se assertea la **identidad** y no el resultado,
+   * porque comparar resultados caso por caso nunca pudo garantizar lo que sí garantiza esto: que
+   * nadie haya vuelto a escribir una copia del otro lado.
+   */
+  it('el handler usa LA función, no una copia', () => {
+    expect(numeroJS).toBe(numeroCanje)
   })
 })
 
