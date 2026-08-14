@@ -127,9 +127,10 @@ function FilaCanje({
         nombre: a.product_name,
         variante: a.size_name,
         cantidad: 1,
-        // Congelados al cargarlos, igual que del lado de Marketing: el balance necesita el costo y
-        // el precio de HOY, no el de dentro de un año.
-        costo_unit: a.unit_cost,
+        // El precio se congela al cargarlo: el balance necesita el de HOY, no el de dentro de un
+        // año. **El costo ya no viaja desde acá** — lo congela el servidor leyéndolo de la base
+        // (pieza B del escalón 3 de la Fase S). Mandarlo era lo que dejaba que la valuación de un
+        // canje la dictara el navegador.
         pvp_unit: a.retailer_price,
       })
       await onCambio()

@@ -71,6 +71,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+// El costo de un producto, con la clave de servicio. Una sola implementación para los tres que lo
+// leen del lado del servidor (ver `api/_costos.js`).
+import { leerCostos } from './_costos.js';
 // Los permisos se IMPORTAN, no se copian: es la única implementación, la misma que usa la app.
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
 import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
@@ -1671,6 +1674,34 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: 'Este canje ya está cerrado.' });
       }
       const cantidad = Math.max(1, parseInt(b.cantidad, 10) || 1);
+
+      // ── El costo lo resuelve el SERVIDOR, y lo que mande el navegador se ignora ─────────────
+      //
+      // 🔴 Hasta la pieza B del escalón 3 de la Fase S, `costo_unit` venía en el body: el buscador
+      // leía `productos.unit_cost` con la anon key y lo mandaba. Eso hacía dos cosas malas a la
+      // vez — ponía los 450 / 2.676 costos en el bundle de cualquiera, y dejaba que **la valuación
+      // de un canje la dictara el navegador**, con el servidor creyéndole. `controlDelTope`, que
+      // es lo único que impide que un canje de $80.000 salga $200.000, se calcula con este número.
+      //
+      // Sigue siendo un valor CONGELADO: se lee hoy y se guarda, porque el balance necesita el
+      // costo del día en que se cargó, no el de dentro de un año. Lo que cambió es de dónde sale.
+      //
+      // 📌 Stunned no tiene base propia: sus costos son los de Zattia. Es la misma traducción que
+      // hace `baseDeCostos` en el navegador, escrita acá porque este handler no importa TypeScript.
+      let costoUnit = null;
+      const pidCosto = parseInt(texto(b.product_id), 10);
+      if (Number.isInteger(pidCosto) && pidCosto > 0) {
+        try {
+          const mapa = await leerCostos(canje.store === 'bdi' ? 'bdi' : 'zattia', [pidCosto]);
+          costoUnit = mapa[String(pidCosto)] ?? null;
+        } catch {
+          // Que no se pueda leer el costo no puede impedir cargar el producto: el balance lo estima
+          // con el factor de la config hasta que alguien lo complete, que es lo que ya hacía
+          // `item-confirmar` para lo que elige la creadora.
+          costoUnit = null;
+        }
+      }
+
       const nuevo = {
         canje_id: canjeId,
         sku: texto(b.sku),
@@ -1679,8 +1710,7 @@ export default async function handler(req, res) {
         nombre: texto(b.nombre),
         variante: texto(b.variante),
         cantidad,
-        // Congelados: el balance necesita el costo DE ESE DÍA, no el de hoy.
-        costo_unit: num(b.costo_unit),
+        costo_unit: costoUnit,
         pvp_unit: num(b.pvp_unit),
         origen: b.origen === 'persona' ? 'persona' : 'equipo',
         estado: 'confirmado',

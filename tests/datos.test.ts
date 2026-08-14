@@ -79,7 +79,9 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     vi.stubGlobal('fetch', mockFetch())
     await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
 
-    expect(selectDe('productos')).toBe('id,name,category,sku,retailer_price,unit_cost,created_at,active')
+    // 🔑 **Sin `unit_cost`**: el costo salió del navegador con la pieza B del escalón 3 de la Fase
+    // S. Lo sirve `api/_costos.js` gateado por permiso y se mergea sobre estas mismas filas.
+    expect(selectDe('productos')).toBe('id,name,category,sku,retailer_price,created_at,active')
     expect(queryDe('productos')).toContain('active=eq.1')
     expect(selectDe('inventario')).toBe('product_id,product_name,size_id,size_name,available_quantity,store_name,sku,barcode')
     expect(selectDe('ventas_por_mes')).toBe('mes,channel,cantidad_ventas,total_items,promedio_items_por_venta')
@@ -101,7 +103,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     vi.stubGlobal('fetch', mockFetch())
     const datos = await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
 
-    expect(selectDe('productos')).toBe('id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active')
+    expect(selectDe('productos')).toBe('id,name,category,sku,proveedor,retailer_price,created_at,active')
     expect(selectDe('ventas')).toBe('id,date_sale,channel')
     expect(selectDe('variante_color_manual')).toBe('product_name,color')
     // Zattia no vende fundas: el legacy ni pide la tabla (index.html:2081).
@@ -112,7 +114,48 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
   it('pega a la URL de la cuenta que corresponde', async () => {
     vi.stubGlobal('fetch', mockFetch())
     await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
-    expect(pedidas.every((u) => u.startsWith(CUENTAS.zattia.url) || u.includes('api.github.com'))).toBe(true)
+    // `/api/datos?recurso=costos` es del propio monitor, no de Supabase: es la puerta por la que
+    // entra `unit_cost` desde que salió del navegador.
+    expect(
+      pedidas.every((u) => u.startsWith(CUENTAS.zattia.url) || u.includes('api.github.com') || u.includes('/api/datos')),
+    ).toBe(true)
+  })
+
+  it('el costo NO se le pide a Supabase: entra por la puerta del monitor', async () => {
+    // 🔴 El test que se rompe si alguien vuelve a poner `unit_cost` en el select del ETL. Ese select
+    // corre con la **anon key**, que viaja en el bundle: es exactamente lo que la pieza B cerró.
+    vi.stubGlobal('fetch', mockFetch())
+    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    expect(pedidas.some((u) => u.includes('unit_cost'))).toBe(false)
+    expect(pedidas.some((u) => u.includes('/api/datos?recurso=costos'))).toBe(true)
+  })
+
+  it('el costo que devuelve la puerta se pega a la fila del producto', async () => {
+    // El camino feliz del merge. Sin esto, "no se le pide a Supabase" pasaría igual con el costo
+    // perdiéndose del todo, que es la otra mitad del bug posible.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      pedidas.push(url)
+      if (url.includes('api.github.com')) return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
+      if (url.includes('recurso=costos')) {
+        return new Response(JSON.stringify({ ok: true, costos: { '7': 4500 } }), { status: 200 })
+      }
+      const tabla = url.split('/rest/v1/')[1]?.split('?')[0] ?? ''
+      const filas = tabla === 'productos' ? [{ id: 7 }, { id: 9 }] : []
+      return new Response(JSON.stringify(filas), { status: 200, headers: { 'Content-Range': '0-0/0' } })
+    }))
+    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    expect(datos.productos.find((p) => String(p.id) === '7')?.unit_cost).toBe(4500)
+    // El que la puerta no devolvió queda en `null`, que es lo que `computarDatos` lee como
+    // `sinCosto` — el mismo estado que cuando GN no manda el costo.
+    expect(datos.productos.find((p) => String(p.id) === '9')?.unit_cost).toBeNull()
+  })
+
+  it('si la puerta de costos se cae, la carga termina igual y todo queda sin costo', async () => {
+    // El costo es un enriquecimiento opcional: quien no lo puede ver —o el día que la puerta falle—
+    // igual necesita que el Monitor abra. `traerCostos` no lanza nunca.
+    vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('recurso=costos') }))
+    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    expect(datos.productos.every((p) => p.unit_cost == null)).toBe(true)
   })
 })
 

@@ -10,6 +10,7 @@
 import { CUENTAS, GH_REPO, type Cuenta } from './cuentas'
 import { fetchAll, sbFetch } from './supabase/rest'
 import { esVentaTecnica } from './etl/helpers'
+import { traerCostos } from './costos'
 import type { Marca } from './nav.datos'
 import type {
   FilaColorManual,
@@ -126,10 +127,18 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
 
   const syncMetaPromise = fetchUltimoSync(cuenta.syncWorkflow)
 
+  // 🔑 **Sin `unit_cost`**: el costo ya no sale de Supabase con la anon key (pieza B del escalón 3
+  // de la Fase S). Lo sirve `api/_costos.js`, gateado por permiso, y se mergea más abajo sobre
+  // estas mismas filas — así `computarDatos` no se entera de nada.
   const selectProductos =
     (esZattia
-      ? 'select=id,name,category,sku,proveedor,retailer_price,unit_cost,created_at,active&active=eq.1'
-      : 'select=id,name,category,sku,retailer_price,unit_cost,created_at,active&active=eq.1') + '&order=id'
+      ? 'select=id,name,category,sku,proveedor,retailer_price,created_at,active&active=eq.1'
+      : 'select=id,name,category,sku,retailer_price,created_at,active&active=eq.1') + '&order=id'
+
+  // Va en paralelo con las tablas: es un viaje chico (450 filas en BDI, 2.676 en Zattia) y no tiene
+  // por qué sumarle su tiempo a la bajada. `traerCostos` **no lanza** — sin permiso, o si la puerta
+  // se cae, vuelve `{}` y cada producto queda `sinCosto`, que es lo que hay que mostrar.
+  const costosPromise = traerCostos(marca)
 
   const desde = desdeVentas(rol, today)
   const t0 = performance.now()
@@ -224,6 +233,15 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
   ])
 
   const msTablas = performance.now() - t0
+
+  // El costo vuelve a su lugar en la fila cruda, que es lo que hace que nada más abajo cambie:
+  // `computarDatos` sigue leyendo `p.unit_cost` y su `sinCosto` sigue siendo `== null`, así que
+  // quien no tiene permiso ve exactamente lo mismo que cuando GN no manda el costo.
+  const costos = await costosPromise
+  for (const p of productos) {
+    const c = costos[String(p.id)]
+    p.unit_cost = c === undefined ? null : c
+  }
 
   let detalles = await detallesPromise
   if (errDetalles) throw errDetalles

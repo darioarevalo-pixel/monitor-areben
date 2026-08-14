@@ -353,7 +353,12 @@ export function DecidirReclamo({
           <BuscarArticuloGN marca={marca} mostrarCosto={false} onSelect={(a) => setRecibidos((prev) => [...prev, {
             producto: a.product_name || 'Sin nombre', sku: a.sku, variante: a.size_name,
             cantidad: 1, product_id: a.product_id, size_id: a.size_id,
-            precio: a.retailer_price ?? null, costo: a.unit_cost ?? null,
+            // `costo` viene en null desde la pieza B del escalón 3 de la Fase S: el buscador ya no
+            // lee `unit_cost` con la anon key. No se resuelve del lado del servidor porque **nadie
+            // lo lee**: de `items_correctos` se usan product_id, size_id y cantidad —que es lo que
+            // dice qué stock corregir— y en pantalla sólo se muestran producto, SKU y variante.
+            // Si algún día se necesita, sale de `api/_costos.js` como en canjes y fallas.
+            precio: a.retailer_price ?? null, costo: null,
           }])} />
           {!!recibidos.length && (
             <div style={{ marginTop: space[2] }}>

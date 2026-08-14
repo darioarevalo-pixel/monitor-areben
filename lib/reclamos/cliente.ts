@@ -92,7 +92,6 @@ export function ordenTraeDatosDePlata(orden: OrdenTN | null | undefined): boolea
 }
 
 type FilaInv = { product_id: number | string; size_id: number | string | null; sku: string | null }
-type FilaProd = { id: number | string; unit_cost: number | string | null; retailer_price: number | string | null }
 
 /**
  * Le pega a los ítems de la orden de TN sus datos de Gestión Nube: los ids de la variante (sin
@@ -114,12 +113,13 @@ export async function enriquecerConGN(marca: Marca, items: ItemReclamo[]): Promi
     const porSku = new Map<string, FilaInv>()
     for (const r of inv) if (r.sku && !porSku.has(r.sku)) porSku.set(r.sku, r)
 
-    const pids = [...new Set(inv.map((r) => String(r.product_id)))]
-    const prods = pids.length
-      ? await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,unit_cost,retailer_price&id=in.(${pids.join(',')})`)
-      : []
-    const costo = new Map(prods.map((p) => [String(p.id), p.unit_cost == null ? null : Number(p.unit_cost)]))
-
+    // 🔑 **El costo ya no se pide acá** (pieza B del escalón 3 de la Fase S): `unit_cost` salió del
+    // navegador. Lo resuelve el servidor cuando hace falta guardarlo —al crear la falla— con la
+    // clave de servicio. Esta función sigue haciendo lo único que la pantalla necesita de verdad:
+    // pegarle a cada ítem los ids de la variante, sin los cuales no se puede tocar stock.
+    //
+    // `costo` se respeta si el ítem ya venía con uno (lo tipea una persona); lo que se fue es la
+    // consulta que lo adivinaba desde `productos`.
     return items.map((it) => {
       const g = it.sku ? porSku.get(it.sku.trim()) : undefined
       if (!g) return it
@@ -127,7 +127,7 @@ export async function enriquecerConGN(marca: Marca, items: ItemReclamo[]): Promi
         ...it,
         product_id: String(g.product_id),
         size_id: g.size_id == null ? null : String(g.size_id),
-        costo: it.costo ?? costo.get(String(g.product_id)) ?? null,
+        costo: it.costo ?? null,
       }
     })
   } catch {

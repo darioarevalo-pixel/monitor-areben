@@ -16,6 +16,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeVerAlguna, SECCIONES_POSTVENTA } from '../lib/permisos.core.js';
+// El costo de un producto, con la clave de servicio. Una sola implementación (ver `api/_costos.js`).
+import { leerCostos } from './_costos.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -127,6 +129,27 @@ export default async function handler(req, res) {
           ...camposDe(b),
         };
         if (!row.ubicacion) row.ubicacion = 'local';
+
+        // ── La valuación la completa el SERVIDOR cuando no vino tipeada ────────────────────────
+        //
+        // 🔴 Hasta la pieza B del escalón 3 de la Fase S, el costo lo prellenaba el navegador: el
+        // buscador leía `productos.unit_cost` con la anon key **para las 14 personas**, aunque el
+        // campo «Costo unit.» sólo lo ve el admin. O sea que 10 personas mandaban un costo que no
+        // veían, y ese número es el que después suma la valuación del depósito de fallas.
+        //
+        // Ahora sale de la base con la clave de servicio. Se completa **sólo si el campo quedó
+        // vacío**: un admin que tipea 0 quiere decir cero, y eso no es lo mismo que `null`.
+        if (row.valuacion_costo == null && row.product_id) {
+          try {
+            const mapa = await leerCostos(store, [row.product_id]);
+            const c = mapa[String(row.product_id)];
+            if (c != null) row.valuacion_costo = c;
+          } catch {
+            // Una falla sin valuación se puede cargar igual y completar después; que no se pueda
+            // leer el costo no puede dejar al local sin poder registrar la falla.
+          }
+        }
+
         let { data, error } = await supabase.from('fallas_deposito').insert(row).select('id').single();
         // `variante` es una columna nueva (migrate-fallas-4). Si la base todavía no la tiene,
         // se reintenta sin ese campo en vez de dejar al local sin poder cargar: la migración

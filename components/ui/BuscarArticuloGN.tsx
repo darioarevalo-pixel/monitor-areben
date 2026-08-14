@@ -3,14 +3,19 @@
 /**
  * Picker reusable de artículo de Gestión Nube (para Post-venta: fallas, y luego cambios/devoluciones).
  * Busca por SKU o nombre sobre el mirror Supabase de la marca, joineando `inventario` (sku/barcode/
- * variante) con `productos` (unit_cost) por product_id. Devuelve la variante elegida con su costo.
- * Lectura pura (sbFetch); no escribe nada. Dedupea las filas por variante (inventario trae una fila
- * por ubicación — Depósito/Local — y acá interesa la variante, con el stock total sumado).
+ * variante) con `productos` (precio de lista) por product_id. Lectura pura; no escribe nada.
+ * Dedupea las filas por variante (inventario trae una fila por ubicación — Depósito/Local — y acá
+ * interesa la variante, con el stock total sumado).
+ *
+ * 🔴 **`unit_cost` sólo viene cuando `mostrarCosto` es `true`, y sólo si el servidor lo autoriza.**
+ * Quien lo necesite para GUARDARLO no lo va a encontrar acá: el costo de un canje o de una falla lo
+ * resuelve el handler con la clave de servicio. Ver `api/_costos.js`.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
+import { traerCostos } from '@/lib/costos'
 import type { Marca } from '@/lib/nav.datos'
 import { color } from '@/components/ui'
 
@@ -35,7 +40,7 @@ type FilaInv = {
   barcode: string | null
   available_quantity: number | null
 }
-type FilaProd = { id: number | string; unit_cost: number | string | null; retailer_price: number | string | null }
+type FilaProd = { id: number | string; retailer_price: number | string | null }
 
 export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { marca: Marca; onSelect: (a: ArticuloGN) => void; mostrarCosto?: boolean }) {
   const [q, setQ] = useState('')
@@ -81,17 +86,26 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
         }
       }
       const arts = [...porVariante.values()]
-      // Traigo el costo por producto (unit_cost vive en `productos`, no en `inventario`).
+      // El precio de lista por producto (vive en `productos`, no en `inventario`).
+      //
+      // 🔑 **Sin `unit_cost`**: el costo ya no sale de Supabase con la anon key (pieza B del
+      // escalón 3 de la Fase S). `retailer_price` sí sigue por acá — no se cierra, no es plata
+      // nuestra sino el precio que ve cualquiera que entre a la tienda.
       const pids = [...new Set(arts.map((a) => a.product_id))]
       if (pids.length) {
-        const prods = await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,unit_cost,retailer_price&id=in.(${pids.join(',')})`)
-        const costo = new Map<string, number | null>()
+        const prods = await sbFetch<FilaProd>(CUENTAS[marca], 'productos', `select=id,retailer_price&id=in.(${pids.join(',')})`)
         const precio = new Map<string, number | null>()
-        for (const p of prods) {
-          costo.set(String(p.id), p.unit_cost == null ? null : Number(p.unit_cost))
-          precio.set(String(p.id), p.retailer_price == null ? null : Number(p.retailer_price))
+        for (const p of prods) precio.set(String(p.id), p.retailer_price == null ? null : Number(p.retailer_price))
+        for (const a of arts) a.retailer_price = precio.get(a.product_id) ?? null
+
+        // El costo sólo se pide cuando se va a MOSTRAR, y el servidor decide si lo da: hoy el único
+        // que lo pinta es Post-venta en modo admin. Las otras cuatro pantallas que usan este picker
+        // lo pasan en `false` porque nunca lo mostraron — lo leían para estamparlo, y eso ahora lo
+        // resuelve el servidor solo (`api/_canjes.js`, `api/_fallas.js`).
+        if (mostrarCosto) {
+          const costos = await traerCostos(marca, pids)
+          for (const a of arts) a.unit_cost = costos[a.product_id] ?? null
         }
-        for (const a of arts) { a.unit_cost = costo.get(a.product_id) ?? null; a.retailer_price = precio.get(a.product_id) ?? null }
       }
       arts.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''))
       setRows(arts.slice(0, 40))
@@ -100,7 +114,7 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
     } finally {
       setCargando(false)
     }
-  }, [marca])
+  }, [marca, mostrarCosto])
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value

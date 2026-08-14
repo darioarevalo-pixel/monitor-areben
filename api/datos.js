@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -24,6 +24,7 @@ import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
 import crm from './_crm.js';
+import costos from './_costos.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -54,6 +55,10 @@ const RECURSOS = {
   // El padrón del CRM. Entra por acá porque es el escalón 2 de la Fase S: la tabla `clientes` sale
   // del navegador para que se le pueda revocar el `select` a la anon key.
   crm,
+  // El costo de los productos, por lo mismo (pieza B del escalón 3). A diferencia de los otros, es
+  // un enriquecimiento opcional: sin permiso contesta 200 con la lista vacía en vez de 403, porque
+  // el ETL de las 11 personas que no ven costos tiene que terminar igual.
+  costos,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a
