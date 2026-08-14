@@ -109,6 +109,20 @@ try {
   const p = await client.query('select count(*)::int as n from productos')
   console.log(`  productos legibles            : ${p.rows[0].n}`)
 
+  // 🔴 El `grant select on all tables` de arriba es a nivel tabla y **pisa los permisos por columna**
+  // de `migrate-columnas-pii.sql`: correr esto de nuevo vuelve a entregar los mails y los costos.
+  // Sin este aviso, la re-apertura no la nota nadie — el resto de la salida queda igual de verde.
+  const pii = await client.query(
+    `select has_column_privilege('anon', 'public.ventas'::regclass, 'client_email', 'SELECT') as lee
+       from pg_class where oid = 'public.ventas'::regclass
+        and exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'ventas' and column_name = 'client_email')`,
+  )
+  if (pii.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer \`ventas.client_email\`: este grant pisó los permisos por columna.`)
+    console.log(`    Corré:  node scripts/apply-columnas-pii.mjs ${marca} --aplicar`)
+  }
+
   const ok = despuesRls.length === 0 && despuesEsc.length === 0
   console.log(ok ? `\n✓ ${MARCA} cerrada.` : `\n✗ ${MARCA}: quedó algo abierto, mirá el detalle de arriba.`)
   console.log(`\nFalta lo que no se puede verificar desde acá: entrar al Monitor de ${MARCA} y`)

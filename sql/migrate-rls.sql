@@ -163,6 +163,10 @@ end $$;
 -- que exista sesión por usuario, se le dan permisos a propósito.
 -- ───────────────────────────────────────────────────────────────────────────────────────────
 revoke insert, update, delete, truncate on all tables in schema public from anon, authenticated;
+-- 🔴 Este grant es a nivel TABLA, así que **pisa los permisos por columna de
+-- `migrate-columnas-pii.sql`**: en Postgres el permiso de la tabla entera le gana a la lista de
+-- columnas. O sea que volver a correr esta migración vuelve a entregar los mails y los costos, en
+-- silencio. El chequeo del final de `apply-rls.mjs` lo avisa; si lo ves, corré aquella después.
 grant select on all tables in schema public to anon, authenticated;
 
 -- Lo mismo para lo que se cree de acá en adelante, así una tabla nueva nace cerrada.
