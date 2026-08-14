@@ -258,8 +258,9 @@ export function Envios() {
                   y el de la tarde salen con hojas distintas, y una tabla sin decir cuál es se lee
                   como "todo esto sale ahora". */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
-                <strong style={{ textTransform: 'capitalize' }}>
-                  {t} · {delTurno.length} {delTurno.length === 1 ? 'envío' : 'envíos'}
+                <strong>
+                  <span style={{ textTransform: 'capitalize' }}>{t}</span> · {delTurno.length}{' '}
+                  {delTurno.length === 1 ? 'envío' : 'envíos'}
                   {turnosDe(fecha).includes(t) ? '' : ' (fuera de grilla)'}
                 </strong>
                 <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
