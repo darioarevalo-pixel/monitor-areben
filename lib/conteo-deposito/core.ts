@@ -177,6 +177,13 @@ export function calcularAjuste(
 /** El header EXACTO de GN. No tocar: es lo que espera "Importar y Ajustar". */
 export const HEADER_AJUSTE = ['id_inventario', 'codigo_producto', 'producto', 'variante', 'ubicacion', 'codigo_barras', 'stock_actual', 'nuevo_stock'] as const
 
+/**
+ * Ancho de cada columna del Excel de ajuste, en caracteres. Vive al lado del header porque
+ * es el mismo archivo para los tres conteos (Depósito, Estándar y Fundas): estaba copiado
+ * en las tres pantallas y cambiar una columna pedía acordarse de las otras dos.
+ */
+export const ANCHOS_AJUSTE = [12, 14, 30, 26, 18, 16, 11, 11]
+
 /** El array-of-arrays del Excel de ajuste (header + una fila por diferencia). BYTE-FIEL a conteoDepConfirmar @11960-11962. */
 export function aoaAjuste(rows: FilaAjuste[]): (string | number)[][] {
   const aoa: (string | number)[][] = [[...HEADER_AJUSTE]]

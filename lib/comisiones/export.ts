@@ -1,25 +1,21 @@
 /**
- * Export de la lista de precios de sale a Excel y PDF. Cliente-only (xlsx y jsPDF por
- * import dinámico). Port de saleExportXLSX/saleExportPDF (index.html:6351/6362).
+ * Export de la lista de precios de sale a Excel y PDF. Cliente-only (el Excel y jsPDF
+ * entran por import dinámico). Port de saleExportXLSX/saleExportPDF (index.html:6351/6362).
  */
 
 import { compartirODescargarPDF } from '../pdf'
+import { descargarXlsx, type Filas } from '../excel'
 import type { ItemSale } from './tipos'
 
 const hoy = () => new Date().toISOString().slice(0, 10)
 
 /** Exporta la lista a un .xlsx. Port de saleExportXLSX. */
 export async function exportarSaleXLSX(saleList: ItemSale[], cuenta: string): Promise<void> {
-  const XLSX = await import('xlsx')
-  const rows: (string | number)[][] = [['Producto', 'SKU', 'Precio actual', 'Precio sale', '% desc', 'Markup %', 'Margen %']]
+  const rows: Filas = [['Producto', 'SKU', 'Precio actual', 'Precio sale', '% desc', 'Markup %', 'Margen %']]
   saleList.forEach((x) =>
     rows.push([x.name, x.sku || '', Math.round(x.actual), Math.round(x.sale), x.desc, x.markup != null ? Math.round(x.markup) : '', x.margin != null ? Math.round(x.margin) : '']),
   )
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!cols'] = [{ wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 10 }]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sale')
-  XLSX.writeFile(wb, `sale-${cuenta}-${hoy()}.xlsx`)
+  await descargarXlsx(rows, { archivo: `sale-${cuenta}-${hoy()}.xlsx`, hoja: 'Sale', anchos: [34, 14, 12, 12, 8, 10, 10] })
 }
 
 /** Exporta la lista a un PDF A4. Port de saleExportPDF. */

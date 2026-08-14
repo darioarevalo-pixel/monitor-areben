@@ -18,6 +18,7 @@ import {
 } from '@/lib/crm/seguimiento'
 import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
+import { leerXlsx } from '@/lib/excel'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { BuscarInput, Button, Chips, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
@@ -302,10 +303,7 @@ export function CRM() {
       return
     }
     try {
-      const XLSX = await import('xlsx')
-      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as unknown[][]
+      const aoa = await leerXlsx(file)
       const idsCRM = new Set(agregado.activos.map((c) => String(c.id)))
       const res = parsearTelefonos(aoa, idsCRM, normalizeArgPhone)
       if (!res.ok) {
@@ -366,7 +364,7 @@ export function CRM() {
           title={cargado ? 'Importar teléfonos del export de clientes de GN' : 'El KV no se pudo leer: guardado bloqueado'}
         >
           Cargar teléfonos
-          <input type="file" accept=".xlsx,.xls,.csv" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
+          <input type="file" accept=".xlsx" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
         </label>
           </>
         )}

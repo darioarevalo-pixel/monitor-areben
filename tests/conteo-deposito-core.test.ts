@@ -8,6 +8,7 @@ import {
   aoaAjuste,
   calcularAjuste,
   detalleHistorial,
+  ANCHOS_AJUSTE,
   HEADER_AJUSTE,
   setCount,
   stockSistema,
@@ -32,6 +33,13 @@ describe('HEADER_AJUSTE · idéntico al header del Excel del legacy', () => {
     expect(m).toBeTruthy()
     const legacy = m![1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''))
     expect([...HEADER_AJUSTE]).toEqual(legacy)
+  })
+
+  it('hay un ancho de columna por cada columna del header', () => {
+    // Los tres conteos escriben el MISMO archivo con los mismos anchos. Si algún día se le
+    // suma una columna al header de GN, la columna nueva sale sin ancho y nadie se entera
+    // mirando el código: se ve en el Excel, después de contar el depósito entero.
+    expect(ANCHOS_AJUSTE).toHaveLength(HEADER_AJUSTE.length)
   })
 })
 

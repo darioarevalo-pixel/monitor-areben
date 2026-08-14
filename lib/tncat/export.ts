@@ -1,6 +1,6 @@
 /**
- * El reporte de qué hay que fotografiar, a Excel. Cliente-only (`xlsx` por import dinámico, igual
- * que `lib/comisiones/export.ts`, para que no entre al bundle).
+ * El reporte de qué hay que fotografiar, a Excel. Cliente-only: el Excel entra por
+ * `lib/excel.ts`, que lo carga con import dinámico para que no viaje en el bundle.
  *
  * **Una fila por color, no por producto**, porque la unidad de trabajo de una sesión de fotos es
  * "el violeta de tal funda" y no el producto entero: un producto puede tener tres colores listos y
@@ -12,6 +12,7 @@
  */
 
 import { fichaDe, type EstadoFotos } from './auditoria'
+import { descargarXlsx, type Filas } from '@/lib/excel'
 import type { IndiceStock } from './stock-variante'
 import type { Marca } from '@/lib/nav'
 import { linkProducto } from '@/lib/tienda'
@@ -29,9 +30,7 @@ function estadoDeColor(e: EstadoFotos, tieneFoto: boolean): string {
 }
 
 export async function exportarPendientesXLSX(filas: FilaExport[], marca: Marca, idx?: IndiceStock): Promise<void> {
-  const XLSX = await import('xlsx')
-
-  const rows: (string | number)[][] = [
+  const rows: Filas = [
     ['Producto', 'Color', 'Variantes sin foto', 'Total variantes', 'Unidades sin foto', 'Estado', 'Categoría', 'id TN', 'Link'],
   ]
 
@@ -61,9 +60,9 @@ export async function exportarPendientesXLSX(filas: FilaExport[], marca: Marca, 
     }
   }
 
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!cols'] = [{ wch: 38 }, { wch: 20 }, { wch: 17 }, { wch: 15 }, { wch: 17 }, { wch: 24 }, { wch: 26 }, { wch: 12 }, { wch: 46 }]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Fotos pendientes')
-  XLSX.writeFile(wb, `fotos-pendientes_${marca}_${hoy()}.xlsx`)
+  await descargarXlsx(rows, {
+    archivo: `fotos-pendientes_${marca}_${hoy()}.xlsx`,
+    hoja: 'Fotos pendientes',
+    anchos: [38, 20, 17, 15, 17, 24, 26, 12, 46],
+  })
 }

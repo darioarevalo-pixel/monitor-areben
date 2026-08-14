@@ -6,7 +6,8 @@ import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
-import { aoaAjuste } from '@/lib/conteo-deposito/core'
+import { ANCHOS_AJUSTE, aoaAjuste } from '@/lib/conteo-deposito/core'
+import { descargarXlsx } from '@/lib/excel'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
 import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
@@ -276,13 +277,12 @@ export function ConteoEstandar() {
     })
     if (!ok) return
     try {
-      const XLSX = await import('xlsx')
-      const ws = XLSX.utils.aoa_to_sheet(aoaAjuste(preview.rows))
-      ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 18 }, { wch: 16 }, { wch: 11 }, { wch: 11 }]
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Worksheet')
       const fecha = new Date().toISOString().slice(0, 10)
-      XLSX.writeFile(wb, `ajuste_local_${preview.store || marca}_${linea}_${fecha}.xlsx`)
+      await descargarXlsx(aoaAjuste(preview.rows), {
+        archivo: `ajuste_local_${preview.store || marca}_${linea}_${fecha}.xlsx`,
+        hoja: 'Worksheet',
+        anchos: ANCHOS_AJUSTE,
+      })
       try {
         await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
         await ce.refrescarUltimos()

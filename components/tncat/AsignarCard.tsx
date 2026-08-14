@@ -6,6 +6,7 @@ import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib
 import { nombresDeFilas } from '@/lib/tncat/excel'
 import { tomarPuenteAsignar } from '@/lib/tncat/puente'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
+import { leerXlsx } from '@/lib/excel'
 import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
 
 const CHUNK = 20
@@ -87,11 +88,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
   const onArchivo = async (file: File | undefined) => {
     if (!file) return
     try {
-      const XLSX = await import('xlsx')
-      const buf = await file.arrayBuffer()
-      const wb = XLSX.read(buf, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false }) as unknown[][]
+      const rows = await leerXlsx(file)
       const nn = nombresDeFilas(rows)
       setNombres(nn)
       setInfo(`${nn.length} nombre(s) cargado(s) de "${file.name}"`)
@@ -261,7 +258,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
         </select>
         <label className="btn-sm" style={{ background: paleta.brandSolid, color: '#fff', cursor: 'pointer' }}>
           📁 Subir Excel
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { onArchivo(e.target.files?.[0]); e.currentTarget.value = '' }} style={{ display: 'none' }} />
+          <input type="file" accept=".xlsx" onChange={(e) => { onArchivo(e.target.files?.[0]); e.currentTarget.value = '' }} style={{ display: 'none' }} />
         </label>
         <span style={{ fontSize: 12, color: paleta.mut2 }}>{info}</span>
       </div>
