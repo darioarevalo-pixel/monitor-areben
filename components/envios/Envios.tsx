@@ -245,13 +245,19 @@ export function Envios() {
         <KpiCard label="Sin salir todavía" value={String(totales.pendienteDeSalir)} />
         <KpiCard label="Cobró en las puertas" value={formatMoney(totales.cobrado)} />
         <KpiCard label="Se queda (sus envíos)" value={formatMoney(totales.tarifas)} />
+        {/* El pie cambia de frase con el signo: lo que falta llegar puede ser plata que el cadete
+            todavía tiene que cobrar, o —cuando lo que queda son envíos ya pagos o bonificados—
+            plata que le vamos a deber. «-$3.000 todavía en la calle» decía lo contrario de lo que
+            pasa. */}
         <KpiCard
           label={totales.debeTraer < 0 ? 'Le debemos' : 'Tiene que traer'}
           value={formatMoney(Math.abs(totales.debeTraer))}
           sub={
-            totales.debeTraerSiTodoLlega !== totales.debeTraer
-              ? `${formatMoney(totales.debeTraerSiTodoLlega - totales.debeTraer)} todavía en la calle`
-              : undefined
+            totales.debeTraerSiTodoLlega === totales.debeTraer
+              ? undefined
+              : totales.debeTraerSiTodoLlega > totales.debeTraer
+                ? `${formatMoney(totales.debeTraerSiTodoLlega - totales.debeTraer)} todavía en la calle`
+                : `si todo llega le vamos a deber ${formatMoney(totales.debeTraer - totales.debeTraerSiTodoLlega)} más`
           }
         />
       </div>
