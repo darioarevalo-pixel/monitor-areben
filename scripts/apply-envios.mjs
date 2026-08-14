@@ -30,7 +30,11 @@ const env = Object.fromEntries(
     }),
 )
 
-const sql = readFileSync('sql/migrate-envios.sql', 'utf8')
+// Los dos archivos y en este orden: el segundo afloja columnas que crea el primero. Van en la misma
+// transacción, así que o entran los dos o no entra ninguno.
+const sql = ['sql/migrate-envios.sql', 'sql/migrate-envios-pendientes.sql']
+  .map((f) => readFileSync(f, 'utf8'))
+  .join('\n;\n')
 
 function parse(raw) {
   const afterProto = raw.slice(raw.indexOf('://') + 3)
@@ -71,10 +75,25 @@ try {
     `select relname, relrowsecurity from pg_class
      where relname in ('envios_reparto', 'envios_turno') order by relname`,
   )
+  // Igual que el RLS: el candado nuevo se **ejerce**, no se supone. Una fila con fecha y sin turno
+  // es el estado que la planilla vieja tenía en el 53,8% de sus filas, y un `check` que no llegó a
+  // aplicarse no se nota hasta que alguien la escribe. Se prueba en una transacción que se deshace.
+  let checkOk = false
+  await client.query('BEGIN')
+  try {
+    await client.query(
+      `insert into envios_reparto (id, store, fecha, turno, direccion) values ('__sonda__', 'bdi', '2026-01-01', null, 'sonda')`,
+    )
+  } catch {
+    checkOk = true
+  }
+  await client.query('ROLLBACK')
+
   const estado = rls.rows.map((x) => `${x.relname}=${x.relrowsecurity ? 'RLS ✓' : 'RLS ✗ ABIERTA'}`).join(' · ')
   console.log(`✓ BDI (${cfg.host}): envios_reparto ${r.rows[0].n} · envios_turno ${t.rows[0].n} filas`)
   console.log(`  ${estado}`)
-  if (rls.rows.some((x) => !x.relrowsecurity)) process.exitCode = 1
+  console.log(`  fecha sin turno: ${checkOk ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`)
+  if (rls.rows.some((x) => !x.relrowsecurity) || !checkOk) process.exitCode = 1
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})
   console.log(`✗ BDI: ${e.message}`)

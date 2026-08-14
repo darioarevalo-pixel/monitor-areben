@@ -4,8 +4,11 @@ import {
   direccionCompleta,
   estaTodoPago,
   linkWhatsapp,
+  esTurnoDeGrilla,
+  ordenAEnvio,
   ordenarParaPreparar,
   totalesDelTurno,
+  turnosDe,
   vaAlReparto,
   validarEnvio,
 } from '@/lib/envios/core'
@@ -270,5 +273,138 @@ describe('vaAlReparto — qué sale en la mochila', () => {
   it('una orden cancelada no se prepara', () => {
     expect(vaAlReparto(orden({ cancelada: true }))).toBe(false)
     expect(vaAlReparto(orden({ estado_orden: 'cancelled' }))).toBe(false)
+  })
+})
+
+/**
+ * Los días en que el cadete sale.
+ *
+ * 🔴 **El defecto que estos tests cazan es un paquete agendado en un turno que no existe**: queda
+ * esperando en la pantalla, nadie lo lleva, y no falla nada. Por eso cada caso pregunta por el día
+ * que NO tiene ese turno —un test que sólo pruebe el martes da verde con la tabla del lunes vacía—.
+ */
+describe('turnosDe — lun-vie tarde, mar y jue también mañana', () => {
+  // Agosto de 2026: el 10 cae lunes.
+  const LUNES = '2026-08-10'
+  const MARTES = '2026-08-11'
+  const MIERCOLES = '2026-08-12'
+  const JUEVES = '2026-08-13'
+  const VIERNES = '2026-08-14'
+  const SABADO = '2026-08-15'
+  const DOMINGO = '2026-08-16'
+
+  it('el lunes, el miércoles y el viernes son sólo de tarde', () => {
+    for (const f of [LUNES, MIERCOLES, VIERNES]) expect(turnosDe(f)).toEqual(['tarde'])
+    expect(esTurnoDeGrilla(LUNES, 'mañana')).toBe(false)
+  })
+
+  it('el martes y el jueves tienen los dos turnos', () => {
+    for (const f of [MARTES, JUEVES]) expect(turnosDe(f)).toEqual(['mañana', 'tarde'])
+  })
+
+  it('el fin de semana no hay reparto', () => {
+    expect(turnosDe(SABADO)).toEqual([])
+    expect(turnosDe(DOMINGO)).toEqual([])
+    expect(esTurnoDeGrilla(SABADO, 'tarde')).toBe(false)
+  })
+
+  it('🔴 el día se lee sin corrimiento de zona horaria', () => {
+    // `new Date('2026-08-10')` es medianoche UTC: en Argentina eso todavía es el domingo 9, y toda
+    // la grilla se correría un día sin que fallara nada. `diaDeSemanaDe` parsea a mano por eso.
+    expect(turnosDe(LUNES)).toEqual(['tarde'])
+    expect(turnosDe(DOMINGO)).toEqual([])
+  })
+
+  it('una fecha rota no rompe la pantalla: no hay reparto', () => {
+    expect(turnosDe('')).toEqual([])
+    expect(turnosDe('15/08/2026')).toEqual([])
+  })
+})
+
+/**
+ * La bandeja: el envío cotizado que todavía no tiene día.
+ *
+ * 🔴 **Lo que no puede volver es la fila con fecha y sin turno**: era el 53,8% de la planilla vieja,
+ * y es la única combinación que se rechaza. «Sin ninguno de los dos» es un estado legítimo.
+ */
+describe('validarEnvio — fecha y turno, los dos o ninguno', () => {
+  const base = {
+    store: 'bdi',
+    origen: 'manual',
+    direccion: 'Callao 1033',
+    monto_envio: 3000,
+    monto_pedido_a_cobrar: 0,
+  }
+
+  it('sin fecha ni turno se acepta: es un pendiente', () => {
+    expect(validarEnvio({ ...base, fecha: null, turno: null })).toBeNull()
+    expect(validarEnvio({ ...base, fecha: '', turno: '' })).toBeNull()
+  })
+
+  it('🔴 con fecha y sin turno se rechaza', () => {
+    expect(validarEnvio({ ...base, fecha: '2026-08-11', turno: null })).toMatch(/turno/i)
+  })
+
+  it('con turno y sin fecha se rechaza', () => {
+    expect(validarEnvio({ ...base, fecha: null, turno: 'tarde' })).toMatch(/fecha|día/i)
+  })
+
+  it('con los dos, bien formados, se acepta', () => {
+    expect(validarEnvio({ ...base, fecha: '2026-08-11', turno: 'tarde' })).toBeNull()
+  })
+
+  it('un turno fuera de grilla se guarda igual: la grilla la avisa la pantalla', () => {
+    // Lunes a la mañana no existe en el reparto, pero un envío especial tiene que poder salir sin
+    // tocar el código. Si esto empieza a devolver un error, el local se queda sin salida.
+    expect(validarEnvio({ ...base, fecha: '2026-08-10', turno: 'mañana' })).toBeNull()
+  })
+})
+
+/**
+ * Lo que llega de Tienda Nube.
+ *
+ * 🔴 **Dos defectos distintos, y los dos se cobran mal en la puerta**: que un pedido a pagar en
+ * efectivo salga con saldo 0 (el cadete no cobra el producto y la plata no vuelve), y que un pago
+ * anulado salga con saldo (el cadete le pide plata a alguien que no compró).
+ */
+describe('ordenAEnvio — de la orden a la fila', () => {
+  const orden = (p: Record<string, unknown>) => ({
+    number: 20915,
+    cliente: 'Ana',
+    envio: 'Envío Cadeteria Rosario y alrededores',
+    fecha: '2026-08-14',
+    total: '18174.70',
+    envio_costo_cliente: 0,
+    envio_tipo: 'ship',
+    envio_tracking: null,
+    estado_pago: 'paid',
+    estado_orden: 'open',
+    envio_direccion: null,
+    ...p,
+  })
+
+  it('nace sin día: va a la bandeja, no al día de la orden', () => {
+    const f = ordenAEnvio(orden({}), 'bdi')
+    expect(f.fecha).toBeNull()
+    expect(f.turno).toBeNull()
+  })
+
+  it('🔴 el pedido a pagar en efectivo sale con el saldo del producto cargado', () => {
+    // `offline` + `custom` + `pending` es el efectivo de TN. El envío se cuenta aparte, así que el
+    // saldo es el total MENOS el envío: sumarlo entero cobraría el envío dos veces en la puerta.
+    const f = ordenAEnvio(orden({ estado_pago: 'pending', total: '20000', envio_costo_cliente: 3000 }), 'bdi')
+    expect(f.monto_pedido_a_cobrar).toBe(17000)
+    expect(f.envio_pagado).toBe(false)
+  })
+
+  it('🔴 un pago anulado NO se cobra en la puerta', () => {
+    for (const estado of ['voided', 'refunded']) {
+      const f = ordenAEnvio(orden({ estado_pago: estado, total: '20000' }), 'bdi')
+      expect(f.monto_pedido_a_cobrar).toBe(0)
+    }
+  })
+
+  it('una orden pagada no cobra nada de producto', () => {
+    expect(ordenAEnvio(orden({ estado_pago: 'paid' }), 'bdi').monto_pedido_a_cobrar).toBe(0)
   })
 })

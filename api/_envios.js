@@ -1,8 +1,11 @@
 // "Envíos del día": la hoja del cadete. Tablas `envios_reparto` y `envios_turno`.
 //
 //   GET  ?recurso=envios&fecha=YYYY-MM-DD                    → { ok, envios, cierre, puede }
-//   POST { recurso:'envios', action:'traer-tn', fecha, turno, envios:[…] }
+//   GET  ?recurso=envios&pendientes=1                        → { ok, envios } (los que no tienen día)
+//   POST { recurso:'envios', action:'traer-tn', envios:[…] }
 //   POST { recurso:'envios', action:'guardar', envio }
+//   POST { recurso:'envios', action:'agendar', id, fecha, turno }   ·  action:'desagendar', id
+//   POST { recurso:'envios', action:'pagado', id, envio_pagado }
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
 //   POST { recurso:'envios', action:'cerrar-turno', fecha, turno, pagado_al_cadete, rendido }
@@ -91,8 +94,10 @@ function filaDe(e, yo) {
   return {
     id: e.id || nuevoId(),
     store: e.store,
-    fecha: e.fecha,
-    turno: e.turno,
+    // `''` y `null` son lo mismo acá: "todavía no tiene día". Un string vacío en una columna `date`
+    // es un 500 de Postgres, y sale por la puerta como "error interno" en vez de decir qué pasó.
+    fecha: e.fecha == null || e.fecha === '' ? null : e.fecha,
+    turno: e.turno == null || e.turno === '' ? null : e.turno,
     origen: e.origen || 'manual',
     orden_numero: e.orden_numero == null || e.orden_numero === '' ? null : String(e.orden_numero),
     cliente: e.cliente || null,
@@ -132,6 +137,21 @@ export default async function handler(req, res) {
   try {
     // ── El día ────────────────────────────────────────────────────────────────
     if (req.method === 'GET') {
+      // ── La bandeja: los cotizados que todavía no tienen día ────────────────
+      //
+      // Va por su propia consulta y no colgada del día: `fecha is null` no matchea ningún día, así
+      // que la hoja del cadete no los ve nunca. Es lo que hace que "sin fecha" sea un estado y no
+      // una fila rota mezclada con las del turno, que es lo que rompía la planilla vieja.
+      if (req.query.pendientes === '1') {
+        const { data, error } = await supabase
+          .from('envios_reparto')
+          .select(CAMPOS)
+          .is('fecha', null)
+          .order('created_at');
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, envios: data || [] });
+      }
+
       const fecha = req.query.fecha;
       if (!esFechaIso(fecha)) return res.status(400).json({ error: 'Falta la fecha del día (YYYY-MM-DD).' });
 
@@ -210,6 +230,57 @@ export default async function handler(req, res) {
       const { data, error } = await supabase.from('envios_reparto').update(parche).eq('id', id).select('id');
       if (error) throw new Error(error.message);
       // Sin esto, tildar un envío borrado por otra pantalla contestaría "ok" y no habría pasado nada.
+      if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Mandar un pendiente a un día, o devolverlo a la bandeja ───────────────
+    //
+    // Los dos campos viajan juntos y se escriben juntos. Un `update` que dejara la fecha y borrara
+    // el turno —o al revés— produce la fila que la planilla tenía en el 53,8% de los casos: la base
+    // lo rechaza con `envios_fecha_turno_juntos`, pero acá el error se dice en castellano.
+    //
+    // ⚠️ **No se valida contra la grilla de días a propósito.** El reparto normal es lun-vie tarde y
+    // mar/jue mañana, y la pantalla ofrece sólo esos turnos; pero un envío especial un sábado tiene
+    // que poder salir sin tocar el código. La pantalla avisa, el handler guarda.
+    if (b.action === 'agendar' || b.action === 'desagendar') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+
+      let parche;
+      if (b.action === 'desagendar') {
+        parche = { fecha: null, turno: null };
+      } else {
+        if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta el día del reparto (YYYY-MM-DD).' });
+        if (!TURNOS.includes(b.turno)) return res.status(400).json({ error: `El turno tiene que ser ${TURNOS.join(' o ')}.` });
+        parche = { fecha: b.fecha, turno: b.turno };
+      }
+
+      const { data, error } = await supabase
+        .from('envios_reparto')
+        .update({ ...parche, autor: yo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id');
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── El tilde de «ya lo pagó» ──────────────────────────────────────────────
+    //
+    // Existe aparte del `guardar` porque es la decisión que cambia lo que el cadete cobra en la
+    // puerta, y tiene que poder tomarse desde la fila sin abrir la ficha ni reenviar el resto de los
+    // campos: mandar la fila entera para tocar un booleano es la forma de pisar sin querer un monto
+    // que otra persona acaba de corregir.
+    if (b.action === 'pagado') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const { data, error } = await supabase
+        .from('envios_reparto')
+        .update({ envio_pagado: !!b.envio_pagado, autor: yo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id');
+      if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
       return res.status(200).json({ ok: true });
     }

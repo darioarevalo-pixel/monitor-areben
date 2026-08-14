@@ -16,6 +16,7 @@ import {
   StatusPill,
   TBody,
   TableWrap,
+  Tabs,
   Td,
   THead,
   Th,
@@ -25,8 +26,19 @@ import {
   useConfirmar,
   useToast,
 } from '@/components/ui'
-import { aCobrar, direccionCompleta, estaTodoPago, linkWhatsapp, ordenarParaPreparar, totalesDelTurno } from '@/lib/envios/core'
-import { borrarEnvio, cambiarEstado, cerrarTurno, guardarEnvio, nuevoIdEnvio } from '@/lib/envios/cliente'
+import {
+  aCobrar,
+  direccionCompleta,
+  estaTodoPago,
+  linkWhatsapp,
+  nuevoIdEnvio,
+  ordenarParaPreparar,
+  totalesDelTurno,
+  turnosDe,
+} from '@/lib/envios/core'
+import { hoyIso, sumarDias } from '@/lib/calendario'
+import { rotuloFecha } from '@/lib/fechas/semana'
+import { agendar, borrarEnvio, cambiarEstado, cerrarTurno, guardarEnvio, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirEtiquetasCadete } from '@/lib/envios/etiqueta'
 import type { Envio, EstadoEnvio, Turno } from '@/lib/envios/tipos'
 import { useEnvios } from './useEnvios'
@@ -46,12 +58,14 @@ import { useEnvios } from './useEnvios'
  * cambie. Para los que vienen de Tienda Nube la marca sale sola.
  */
 export function Envios() {
-  const { fecha, setFecha, turno, setTurno, envios, cierres, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
+  const { fecha, setFecha, turno, setTurno, envios, pendientes, cierres, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   const [trayendo, setTrayendo] = useState(false)
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
   const [cerrando, setCerrando] = useState(false)
+  const [pestania, setPestania] = useState<'dia' | 'pendientes'>('dia')
+  const [agendando, setAgendando] = useState<Envio | null>(null)
 
   const delTurno = useMemo(() => ordenarParaPreparar(envios.filter((e) => e.turno === turno)), [envios, turno])
   const totales = useMemo(() => totalesDelTurno(delTurno), [delTurno])
@@ -92,6 +106,16 @@ export function Envios() {
     await imprimirEtiquetasCadete(paraImprimir)
   }
 
+  /** El tilde de «ya lo pagó»: el cadete deja de cobrarlo en la puerta. */
+  async function tildarPagado(e: Envio) {
+    try {
+      await marcarPagado(e.id, !e.envio_pagado)
+      await recargar()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo marcar como pagado.')
+    }
+  }
+
   async function borrar(e: Envio) {
     const ok = await confirmar({
       titulo: '¿Sacar este envío de la hoja?',
@@ -119,6 +143,27 @@ export function Envios() {
         </Button>
       </HeaderAcciones>
 
+      {/* Dos listas y no dos pantallas: el pendiente y el del día son el mismo envío en dos momentos
+          de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el trabajo. */}
+      <Tabs
+        value={pestania}
+        onChange={(k) => setPestania(k as 'dia' | 'pendientes')}
+        items={[
+          { key: 'dia', label: 'El día' },
+          { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.' },
+        ]}
+      />
+
+      {pestania === 'pendientes' ? (
+        <Pendientes
+          envios={pendientes}
+          cargando={cargando}
+          onAgendar={setAgendando}
+          onEditar={setEditando}
+          onBorrar={borrar}
+        />
+      ) : (
+      <>
       <Card>
         <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <Field label="Día">
@@ -140,6 +185,17 @@ export function Envios() {
       </Card>
 
       {error && <Notice tone="danger">{error}</Notice>}
+
+      {/* El reparto tiene días: lun-vie por la tarde, mar y jue también por la mañana. El turno que
+          no existe no se esconde —puede haber un envío especial metido ahí y esconderlo sería
+          perderlo—, se avisa. */}
+      {!turnosDe(fecha).includes(turno) ? (
+        <Notice tone="warning">
+          {turnosDe(fecha).length === 0
+            ? `El ${rotuloFecha(fecha)} no hay reparto.`
+            : `El ${rotuloFecha(fecha)} el cadete sale sólo por la ${turnosDe(fecha).join(' y la ')}.`}
+        </Notice>
+      ) : null}
 
       {/* Los dos totales con los que se cierra el turno son los mismos dos que la planilla calculaba
           al pie de cada sección: son la razón por la que la planilla existía. */}
@@ -188,6 +244,13 @@ export function Envios() {
                 <Td>
                   {/* Igual que en la etiqueta: pagado NO es "$0". Un cero se lee como un precio. */}
                   {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
+                  {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace con
+                      el cliente al teléfono avisando que ya transfirió, y el cadete todavía sin salir. */}
+                  <div>
+                    <Button size="sm" variant="ghost" onClick={() => void tildarPagado(e)}>
+                      {e.envio_pagado ? 'Marcar como impago' : 'Marcar como pagado'}
+                    </Button>
+                  </div>
                 </Td>
                 <Td>
                   <Select value={e.estado} onChange={(ev) => void tildar(e, ev.target.value as EstadoEnvio)}>
@@ -230,6 +293,19 @@ export function Envios() {
           </Button>
         </div>
       </Card>
+      </>
+      )}
+
+      {agendando ? (
+        <MandarAUnDia
+          envio={agendando}
+          onCerrar={() => setAgendando(null)}
+          onGuardado={async () => {
+            setAgendando(null)
+            await recargar()
+          }}
+        />
+      ) : null}
 
       {editando ? (
         <FichaEnvio
@@ -257,6 +333,198 @@ export function Envios() {
       ) : null}
     </div>
   )
+}
+
+/**
+ * La bandeja: los pedidos cotizados que todavía no tienen día.
+ *
+ * 🔑 **Existe porque el día lo confirma el cliente, no la orden.** Antes, la única forma de anotar
+ * un pedido que hay que enviar era meterlo en un día inventado —que es el ruido que la tabla vino a
+ * sacar— o no anotarlo, que es lo que pasaba.
+ *
+ * Las dos columnas que no son decorativas son **el precio del envío** y **el botón de mandarlo a un
+ * día**, y en ese orden: Tienda Nube manda la cadetería siempre en $0 (18 de 18 medidas) porque el
+ * precio vive en el mapa de zonas, así que sin ese número la fila no está lista para salir.
+ */
+function Pendientes({
+  envios,
+  cargando,
+  onAgendar,
+  onEditar,
+  onBorrar,
+}: {
+  envios: Envio[]
+  cargando: boolean
+  onAgendar: (e: Envio) => void
+  onEditar: (e: Partial<Envio>) => void
+  onBorrar: (e: Envio) => Promise<void>
+}) {
+  if (cargando) return null
+  if (!envios.length) {
+    return (
+      <EmptyState
+        title="No hay pedidos esperando fecha"
+        hint="Traé los de Tienda Nube: las órdenes que van en moto entran acá hasta que el cliente confirme el día."
+      />
+    )
+  }
+
+  return (
+    <TableWrap>
+      <THead>
+        <Tr>
+          <Th>Cliente</Th>
+          <Th>Dónde va</Th>
+          <Th>Marca</Th>
+          <Th>Envío</Th>
+          <Th />
+        </Tr>
+      </THead>
+      <TBody>
+        {envios.map((e) => {
+          const sinPrecio = !(Number(e.monto_envio) > 0)
+          return (
+            <Tr key={e.id}>
+              <Td>
+                <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
+                {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
+                {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+              </Td>
+              <Td>
+                <div>{direccionCompleta(e)}</div>
+                {linkWhatsapp(e) ? (
+                  <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
+                    WhatsApp
+                  </a>
+                ) : null}
+              </Td>
+              <Td>{e.store === 'bdi' ? 'BDI' : 'Zattia'}</Td>
+              <Td>
+                {sinPrecio ? (
+                  <Badge tone="warning">sin cotizar</Badge>
+                ) : (
+                  <strong>{formatMoney(Number(e.monto_envio))}</strong>
+                )}
+                {e.envio_pagado ? <div><StatusPill tone="success" label="PAGADO" /></div> : null}
+              </Td>
+              <Td>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <Button size="sm" variant="solid" tone="brand" onClick={() => onAgendar(e)}>
+                    Mandar a un día
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onEditar(e)}>
+                    Editar
+                  </Button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void onBorrar(e)}>
+                    Sacar
+                  </Button>
+                </div>
+              </Td>
+            </Tr>
+          )
+        })}
+      </TBody>
+    </TableWrap>
+  )
+}
+
+/**
+ * Mandar un pendiente a un día y turno: el momento en que el paquete entra a la calle.
+ *
+ * 🔑 **El selector ofrece sólo los turnos que ese día existen** —lun-vie tarde, mar y jue también
+ * mañana— y por eso pide la fecha primero. Elegir «lunes a la mañana» no es un error de tipeo que se
+ * vea después: es un paquete esperando en un turno que nunca sale.
+ *
+ * Pero **no bloquea**: si hace falta meter uno fuera de grilla se puede, con el aviso puesto. Un
+ * sábado con un envío especial no puede depender de que alguien toque el código.
+ */
+function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar: () => void; onGuardado: () => Promise<void> }) {
+  const toast = useToast()
+  const [fecha, setFecha] = useState<string>(() => proximoDiaDeReparto(hoyIso()))
+  const [turno, setTurno] = useState<Turno>(() => (turnosDe(proximoDiaDeReparto(hoyIso()))[0] as Turno) || 'tarde')
+  const [guardando, setGuardando] = useState(false)
+
+  const dispo = turnosDe(fecha) as Turno[]
+  const fueraDeGrilla = !dispo.includes(turno)
+  const sinPrecio = !(Number(envio.monto_envio) > 0)
+
+  async function guardar() {
+    setGuardando(true)
+    try {
+      await agendar(envio.id, fecha, turno)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo mandar a ese día.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo={`Mandar a un día · ${envio.cliente || 'Sin nombre'}`}>
+      <div style={{ display: 'grid', gap: space[4] }}>
+        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
+          <Field label="Día" hint={`${rotuloFecha(fecha)}${dispo.length ? '' : ' · no hay reparto'}`}>
+            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </Field>
+          <Field label="Turno">
+            <Select value={turno} onChange={(e) => setTurno(e.target.value as Turno)}>
+              {(dispo.length ? dispo : (['mañana', 'tarde'] as Turno[])).map((t) => (
+                <option key={t} value={t}>
+                  {t === 'mañana' ? 'Mañana' : 'Tarde'}
+                </option>
+              ))}
+              {/* El turno que no es de ese día sigue estando, al final y dicho: se puede forzar. */}
+              {dispo.length === 1 ? (
+                <option value={dispo[0] === 'mañana' ? 'tarde' : 'mañana'}>
+                  {dispo[0] === 'mañana' ? 'Tarde' : 'Mañana'} (fuera de grilla)
+                </option>
+              ) : null}
+            </Select>
+          </Field>
+        </div>
+
+        {fueraDeGrilla ? (
+          <Notice tone="warning">
+            Ese día el cadete {dispo.length ? `sale sólo por la ${dispo.join(' y la ')}` : 'no sale'}. Se puede mandar igual, pero
+            revisá que alguien lo esté esperando.
+          </Notice>
+        ) : null}
+
+        {sinPrecio ? (
+          <Notice tone="warning">
+            Este envío todavía no tiene precio. Si sale así, la etiqueta no le va a pedir nada al cliente.
+          </Notice>
+        ) : null}
+
+        <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando}>
+            {guardando ? 'Mandando…' : 'Mandar a ese día'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * El primer día con reparto de acá en adelante. Es el default del selector: el caso normal es
+ * «mandalo al próximo que salga», y arrancar en un sábado obligaría a corregirlo siempre.
+ *
+ * Camina día por día y no salta: la grilla es de siete casilleros y un salto "inteligente" es una
+ * segunda forma de contestar lo mismo que se puede equivocar sola. El tope de 14 es un cinturón —con
+ * la grilla actual nunca pasa de 3—, no una regla.
+ */
+function proximoDiaDeReparto(desde: string): string {
+  let f = desde
+  for (let i = 0; i < 14; i++) {
+    if (turnosDe(f).length) return f
+    f = sumarDias(f, 1)
+  }
+  return desde
 }
 
 /** Alta y edición a mano: el 10% de los envíos que no pasa por la tienda. */

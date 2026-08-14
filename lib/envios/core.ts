@@ -9,6 +9,7 @@
 
 import { normalizeArgPhone } from '../crm/core'
 import { ESTADOS_CERRADOS, ESTADOS_EN_CASA } from './reglas.core.js'
+import type { Marca } from '../nav'
 import type { Envio, OrdenTN, TotalesTurno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
@@ -140,4 +141,84 @@ export function ordenarParaPreparar(envios: Envio[]): Envio[] {
   return [...envios].sort((a, b) => peso(a) - peso(b) || (a.localidad || '').localeCompare(b.localidad || '') || (a.cliente || '').localeCompare(b.cliente || ''))
 }
 
-export { ESTADOS, ESTADOS_CERRADOS, ESTADOS_EN_CASA, MARCAS, ORIGENES, TURNOS, validarEnvio } from './reglas.core.js'
+// ── De una orden de Tienda Nube a una fila de la hoja ────────────────────────────────────────
+
+/** Id nuevo, generado en el cliente para pintar la fila sin esperar al servidor. */
+export function nuevoIdEnvio(): string {
+  return `en${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * **Lo que el cadete tiene que cobrar del producto**, cuando la orden llegó sin pagar.
+ *
+ * Es el pedido "a pagar en efectivo" de Tienda Nube: `gateway: 'offline'`, `method: 'custom'`,
+ * `payment_status: 'pending'`. El envío se cuenta aparte (`monto_envio` + `envio_pagado`), así que
+ * acá va el total **menos** el envío: sumarlo entero haría que la puerta cobre el envío dos veces.
+ *
+ * 🔴 **Sólo `pending` cobra.** `voided` y `refunded` también son "no pagada" y son lo contrario: un
+ * pago anulado o devuelto. Cobrarlos sería pedirle plata en la puerta a alguien a quien se le anuló
+ * la compra. Medido en prod: los dos estados existen en el mismo día.
+ */
+function saldoDelProducto(o: OrdenTN): number {
+  if (o.estado_pago !== 'pending') return 0
+  const total = parseFloat(String(o.total ?? '')) || 0
+  const envio = parseFloat(String(o.envio_costo_cliente ?? '')) || 0
+  return Math.max(0, total - envio)
+}
+
+/**
+ * Una orden de TN convertida en una fila de la hoja del cadete.
+ *
+ * 🔑 **`envio_pagado` sale del estado de pago de la orden, no de un default.** En Tienda Nube el
+ * envío se cobra dentro del total: si la orden está `paid`, el envío ya entró y en la puerta no se
+ * cobra nada. Poner `false` "por las dudas" haría que cada etiqueta salga pidiendo plata que el
+ * cliente ya pagó — y se midió que ése es el caso mayoritario, no el raro.
+ *
+ * 🔑 **Nace sin día.** Entra a la bandeja de pendientes y no a la hoja de un día, porque el día del
+ * reparto lo confirma el cliente y no tiene nada que ver con la fecha de la orden. Y nace con el
+ * envío en $0 salvo que TN traiga un precio: la cadetería viene siempre en cero (18 de 18 medidas),
+ * el precio está en el mapa de zonas y lo pone una persona antes de mandarlo a un día.
+ */
+export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
+  const d = o.envio_direccion || null
+  const calle = [d?.calle, d?.numero].filter(Boolean).join(' ').trim()
+  return {
+    id: nuevoIdEnvio(),
+    store: marca,
+    fecha: null,
+    turno: null,
+    origen: 'tn',
+    orden_numero: String(o.number),
+    cliente: o.cliente || d?.nombre || null,
+    telefono: d?.telefono || null,
+    direccion: calle || '(sin dirección en la orden)',
+    piso_depto: d?.piso || null,
+    localidad: d?.localidad || null,
+    anotacion: null,
+    monto_envio: o.envio_costo_cliente ?? 0,
+    envio_pagado: o.estado_pago === 'paid',
+    monto_pedido_a_cobrar: saldoDelProducto(o),
+    estado: 'pendiente',
+    // La foto congelada: si el cliente cambia su dirección en TN mañana, la etiqueta ya salió con
+    // la de hoy. Lo que se guardó es lo que el cadete tiene en la mano.
+    datos: { tn: o as unknown as Record<string, unknown> },
+  }
+}
+
+/** ¿Está esperando que el cliente confirme el día? Es la bandeja, no un día vacío. */
+export function esperaFecha(e: Pick<Envio, 'fecha'>): boolean {
+  return e.fecha == null || e.fecha === ''
+}
+
+export {
+  ESTADOS,
+  ESTADOS_CERRADOS,
+  ESTADOS_EN_CASA,
+  esTurnoDeGrilla,
+  MARCAS,
+  ORIGENES,
+  TURNOS,
+  TURNOS_POR_DIA,
+  turnosDe,
+  validarEnvio,
+} from './reglas.core.js'

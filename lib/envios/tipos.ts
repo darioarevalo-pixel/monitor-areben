@@ -14,8 +14,13 @@ export type Envio = {
   id: string
   /** La marca del ENVÍO, no la de la pantalla: el cadete lleva las dos en la misma mochila. */
   store: Marca
-  fecha: string // YYYY-MM-DD
-  turno: Turno
+  /**
+   * El día del reparto, o `null` si todavía no tiene: es la bandeja de pendientes, el pedido que ya
+   * se cotizó y espera que el cliente confirme la fecha. **Van siempre de a dos con `turno`**: los
+   * dos o ninguno, nunca uno solo. Ver `validarEnvio` y el check `envios_fecha_turno_juntos`.
+   */
+  fecha: string | null // YYYY-MM-DD
+  turno: Turno | null
   origen: OrigenEnvio
   /** Número de orden de Tienda Nube. `null` en los manuales. */
   orden_numero: string | null
@@ -82,6 +87,8 @@ export type CierreTurno = {
 export type OrdenTN = {
   number: number | string
   cliente: string | null
+  /** El total de la orden, envío incluido. PostgREST y TN lo mandan como string. */
+  total?: number | string | null
   /** `shipping_option`. ⚠️ **Texto libre que la tienda edita**: ver `vaAlReparto`. */
   envio: string | null
   fecha: string | null
