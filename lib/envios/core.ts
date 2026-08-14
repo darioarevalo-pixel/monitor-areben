@@ -8,6 +8,7 @@
  */
 
 import { normalizeArgPhone } from '../crm/core'
+import { rotuloFecha } from '../fechas/semana'
 import { ESTADOS_CERRADOS, ESTADOS_EN_CASA } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { Envio, OrdenTN, TotalesTurno } from './tipos'
@@ -205,9 +206,23 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
   }
 }
 
-/** ¿Está esperando que el cliente confirme el día? Es la bandeja, no un día vacío. */
-export function esperaFecha(e: Pick<Envio, 'fecha'>): boolean {
-  return e.fecha == null || e.fecha === ''
+/**
+ * El rótulo del día para la pantalla (`vie 14-ago`), o `''` si todavía no hay una fecha entera.
+ *
+ * 🔴 **Existe porque un `<input type="date">` pasa por vacío mientras se tipea.** Chrome emite el
+ * cambio con el valor en `''` en cuanto se toca el primer dígito, y `rotuloFecha('')` —que es
+ * estricto, y está bien que lo sea: sus otros dos usos reciben fechas que arma el código— tira un
+ * TypeError. Tirar en el render no deja un cartel de error: React reintenta, se come la memoria y
+ * **Chrome mata la pestaña entera** ("This page couldn't load") con el modal abierto y el envío sin
+ * agendar. Pasó en producción las dos veces que se probó a mano.
+ *
+ * El guard va acá, en el borde por donde entra lo que tipea una persona, y no adentro de
+ * `rotuloFecha`: si aquél empezara a devolver `''` en vez de fallar, un error en las grillas del
+ * calendario pasaría en silencio.
+ */
+export function rotuloDeDia(fecha: string | null | undefined): string {
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return ''
+  return rotuloFecha(fecha)
 }
 
 export {

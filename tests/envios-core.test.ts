@@ -7,6 +7,7 @@ import {
   esTurnoDeGrilla,
   ordenAEnvio,
   ordenarParaPreparar,
+  rotuloDeDia,
   totalesDelTurno,
   turnosDe,
   vaAlReparto,
@@ -406,5 +407,26 @@ describe('ordenAEnvio — de la orden a la fila', () => {
 
   it('una orden pagada no cobra nada de producto', () => {
     expect(ordenAEnvio(orden({ estado_pago: 'paid' }), 'bdi').monto_pedido_a_cobrar).toBe(0)
+  })
+})
+
+/**
+ * El rótulo del día.
+ *
+ * 🔴 **El defecto que este test caza mató la pestaña dos veces en producción.** Un
+ * `<input type="date">` pasa por vacío mientras se tipea, `rotuloFecha('')` tira un TypeError, y un
+ * throw en el render de React no muestra un cartel: reintenta hasta que Chrome mata la pestaña
+ * ("This page couldn't load"), con el modal abierto y el envío sin agendar.
+ */
+describe('rotuloDeDia — el borde por donde entra lo que se tipea', () => {
+  it('🔴 una fecha a medio escribir no rompe: devuelve vacío', () => {
+    for (const rota of ['', '2', '2026', '2026-08', '2026-08-1', '15/08/2026', null, undefined]) {
+      expect(() => rotuloDeDia(rota as string)).not.toThrow()
+      expect(rotuloDeDia(rota as string)).toBe('')
+    }
+  })
+
+  it('una fecha entera sale con el día de la semana', () => {
+    expect(rotuloDeDia('2026-08-14')).toBe('vie 14-ago')
   })
 })

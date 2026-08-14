@@ -32,12 +32,12 @@ import {
   estaTodoPago,
   linkWhatsapp,
   nuevoIdEnvio,
+  rotuloDeDia,
   ordenarParaPreparar,
   totalesDelTurno,
   turnosDe,
 } from '@/lib/envios/core'
 import { hoyIso, sumarDias } from '@/lib/calendario'
-import { rotuloFecha } from '@/lib/fechas/semana'
 import { agendar, borrarEnvio, cambiarEstado, cerrarTurno, guardarEnvio, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirEtiquetasCadete } from '@/lib/envios/etiqueta'
 import type { Envio, EstadoEnvio, Turno } from '@/lib/envios/tipos'
@@ -189,11 +189,11 @@ export function Envios() {
       {/* El reparto tiene días: lun-vie por la tarde, mar y jue también por la mañana. El turno que
           no existe no se esconde —puede haber un envío especial metido ahí y esconderlo sería
           perderlo—, se avisa. */}
-      {!turnosDe(fecha).includes(turno) ? (
+      {rotuloDeDia(fecha) && !turnosDe(fecha).includes(turno) ? (
         <Notice tone="warning">
           {turnosDe(fecha).length === 0
-            ? `El ${rotuloFecha(fecha)} no hay reparto.`
-            : `El ${rotuloFecha(fecha)} el cadete sale sólo por la ${turnosDe(fecha).join(' y la ')}.`}
+            ? `El ${rotuloDeDia(fecha)} no hay reparto.`
+            : `El ${rotuloDeDia(fecha)} el cadete sale sólo por la ${turnosDe(fecha).join(' y la ')}.`}
         </Notice>
       ) : null}
 
@@ -464,7 +464,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
     <Modal abierto onCerrar={onCerrar} titulo={`Mandar a un día · ${envio.cliente || 'Sin nombre'}`}>
       <div style={{ display: 'grid', gap: space[4] }}>
         <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
-          <Field label="Día" hint={`${rotuloFecha(fecha)}${dispo.length ? '' : ' · no hay reparto'}`}>
+          <Field label="Día" hint={rotuloDeDia(fecha) ? `${rotuloDeDia(fecha)}${dispo.length ? '' : ' · no hay reparto'}` : 'Elegí un día'}>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </Field>
           <Field label="Turno">
@@ -501,7 +501,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando}>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !rotuloDeDia(fecha)}>
             {guardando ? 'Mandando…' : 'Mandar a ese día'}
           </Button>
         </div>
