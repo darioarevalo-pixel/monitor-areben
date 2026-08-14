@@ -43,7 +43,7 @@ import {
 } from '@/lib/envios/core'
 import { hoyIso } from '@/lib/calendario'
 import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, guardarPagoCadete, marcarPagado } from '@/lib/envios/cliente'
-import { imprimirEtiquetasCadete } from '@/lib/envios/etiqueta'
+import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 
@@ -117,7 +117,7 @@ export function Envios() {
     // puerta donde ya estuvo.
     const paraImprimir = delDia.filter((e) => e.estado !== 'entregado' && e.estado !== 'no_entregado')
     if (!paraImprimir.length) return toast.error('No hay envíos para imprimir en este día.')
-    await imprimirEtiquetasCadete(paraImprimir)
+    await imprimirTicketsCadete(paraImprimir)
   }
 
   /** El tilde de «ya lo pagó»: el cadete deja de cobrarlo en la puerta. */
@@ -163,7 +163,7 @@ export function Envios() {
           {trayendo ? 'Trayendo…' : 'Traer los de Tienda Nube'}
         </Button>
         <Button variant="solid" tone="brand" onClick={imprimir}>
-          Imprimir etiquetas
+          Imprimir tickets
         </Button>
       </HeaderAcciones>
 
@@ -316,7 +316,7 @@ export function Envios() {
                           paquete mientras se arma la mochila. */}
                       <Td><MarcaChip marca={e.store} /></Td>
                       <Td>
-                        {/* Igual que en la etiqueta: pagado NO es "$0". Un cero se lee como un precio. */}
+                        {/* Igual que en el ticket: pagado NO es "$0". Un cero se lee como un precio. */}
                         {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
@@ -729,7 +729,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
 
         {sinPrecio ? (
           <Notice tone="warning">
-            Este envío todavía no tiene precio. Si sale así, la etiqueta no le va a pedir nada al cliente.
+            Este envío todavía no tiene precio. Si sale así, el ticket no le va a pedir nada al cliente.
           </Notice>
         ) : null}
 
@@ -811,7 +811,7 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
         </Field>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={!!f.envio_pagado} onChange={(e) => set('envio_pagado', e.target.checked)} />
-          {/* Es el tilde que decide si la etiqueta dice PAGADO o manda a cobrar. */}
+          {/* Es el tilde que decide si el ticket dice PAGADO o manda a cobrar. */}
           El envío ya está pagado
         </label>
         <Field label="Saldo del pedido a cobrar" hint="Casi siempre 0: el producto ya se pagó antes de despachar.">

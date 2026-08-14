@@ -35,7 +35,7 @@ export type Envio = {
 
   /** Cuánto vale el envío. Existe siempre, se haya cobrado o no. */
   monto_envio: number | string
-  /** Si ya se pagó por adelantado. Es lo que decide si la etiqueta dice PAGADO o un monto. */
+  /** Si ya se pagó por adelantado. Es lo que decide si el ticket dice PAGADO o un monto. */
   envio_pagado: boolean
   /** El saldo del producto a cobrar en la puerta. Casi siempre 0: el pedido ya se pagó antes. */
   monto_pedido_a_cobrar: number | string

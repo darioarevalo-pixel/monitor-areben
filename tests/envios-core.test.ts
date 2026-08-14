@@ -20,13 +20,13 @@ import {
   vaAlReparto,
   validarEnvio,
 } from '@/lib/envios/core'
-import { textoDePlata } from '@/lib/envios/etiqueta'
+import { armarTicket, textoDePlata } from '@/lib/envios/ticket'
 import type { CierreDia, Envio, OrdenTN, Traida } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
  *
- * 🔴 **El defecto que estos tests existen para cazar es uno solo: que la etiqueta mande a cobrar
+ * 🔴 **El defecto que estos tests existen para cazar es uno solo: que el ticket mande a cobrar
  * algo que ya está pagado.** No es hipotético — se midió sobre dos años de la planilla de reparto
  * que en la mediana el 100% de lo que el cadete cobra es el envío, o sea que el pedido ya venía
  * pagado. Un test que sólo verifique que la cuenta suma daría verde con esa suma mal hecha, así que
@@ -64,7 +64,7 @@ describe('lo que se cobra en la puerta', () => {
   })
 
   // Éste es EL test. Si alguien saca el `envio_pagado ? 0 :` de `aCobrar`, este caso da 3000 y la
-  // etiqueta sale a la calle pidiendo plata que el cliente ya transfirió.
+  // ticket sale a la calle pidiendo plata que el cliente ya transfirió.
   it('🔴 NO cobra el envío cuando ya estaba pagado', () => {
     expect(aCobrar(con({ monto_envio: 3000, envio_pagado: true }))).toBe(0)
     expect(estaTodoPago(con({ monto_envio: 3000, envio_pagado: true }))).toBe(true)
@@ -79,7 +79,7 @@ describe('lo que se cobra en la puerta', () => {
   })
 
   // PostgREST devuelve `numeric` como string: sin el parseFloat, "3000" + 0 daría "30000" y la
-  // etiqueta pediría diez veces el envío.
+  // el ticket pediría diez veces el envío.
   it('aguanta los montos como string, que es como los devuelve la base', () => {
     expect(aCobrar(con({ monto_envio: '3000', monto_pedido_a_cobrar: '500' }))).toBe(3500)
   })
@@ -305,12 +305,12 @@ describe('lo que va impreso', () => {
   })
 })
 
-describe('🔴 lo que dice la etiqueta en la mano del cadete', () => {
+describe('🔴 lo que dice el ticket en la mano del cadete', () => {
   it('un envío ya pagado dice PAGADO, no "$0"', () => {
     const dice = textoDePlata(con({ monto_envio: 3000, envio_pagado: true }))
     expect(dice.modo).toBe('pagado')
     expect(dice.titulo).toBe('PAGADO')
-    // "$0" se lee como un precio, no como "no cobres". Es la diferencia entre una etiqueta que
+    // "$0" se lee como un precio, no como "no cobres". Es la diferencia entre un ticket que
     // funciona en la puerta y una que hace discutir al cadete con el cliente.
     expect(dice.titulo).not.toContain('$')
   })
@@ -325,6 +325,76 @@ describe('🔴 lo que dice la etiqueta en la mano del cadete', () => {
     const dice = textoDePlata(con({ monto_envio: 3000, envio_pagado: true, monto_pedido_a_cobrar: 17500 }))
     expect(dice.modo).toBe('cobrar')
     expect(dice.titulo).toBe('$17.500')
+    // El envío ya está pago: meterlo en el desglose sería mandar a cobrarlo por la puerta de atrás.
+    expect(dice.detalle).toBeNull()
+  })
+
+  it('cuando la puerta cobra dos cosas, el desglose las nombra y suman el total', () => {
+    const dice = textoDePlata(con({ monto_envio: 3000, envio_pagado: false, monto_pedido_a_cobrar: 17500 }))
+    expect(dice.titulo).toBe('$20.500')
+    expect(dice.detalle).toBe('Envío $3.000 + pedido $17.500')
+  })
+
+  it('con una sola cosa que cobrar no hay desglose', () => {
+    // Repetir el mismo número en chico abajo del grande invita a leer el chico.
+    expect(textoDePlata(con({ monto_envio: 3000, monto_pedido_a_cobrar: 0 })).detalle).toBeNull()
+  })
+})
+
+/**
+ * 🔴 **El alto del rollo lo decide el contenido**, así que el defecto propio de este formato es el
+ * ticket cortado: una dirección de cuatro renglones que empuja el bloque de plata fuera del papel.
+ * Un test que sólo verifique que el PDF se generó da verde con eso puesto — de ahí que el layout sea
+ * una función pura que devuelve dónde queda cada cosa y cuánto mide la página.
+ *
+ * El medidor de mentira corta cada 24 caracteres: no imita a jsPDF, sólo hace que un texto más largo
+ * ocupe más renglones, que es lo único de lo que depende el alto.
+ */
+const medir = (txt: string) => txt.match(/.{1,24}/g) || ['']
+
+describe('🔴 el ticket de 80 mm no se corta', () => {
+  it('el papel crece con la dirección: nada queda abajo del corte', () => {
+    const corto = armarTicket(con({ direccion: 'San Juan 100' }), medir)
+    const largo = armarTicket(
+      con({ direccion: 'Avenida Presidente Perón 4567 bis, entre Mendoza y Córdoba', piso_depto: 'Piso 12 Depto B', anotacion: 'Tocar timbre 2, si no atiende llamar antes de irse' }),
+      medir,
+    )
+    expect(largo.alto).toBeGreaterThan(corto.alto)
+    // Lo que importa no es que la página sea más alta, sino que la plata siga adentro.
+    for (const t of [corto, largo]) {
+      const plata = t.ops.find((o) => o.k === 'plata')!
+      expect(plata).toBeDefined()
+      // El bloque ENTERO, no sólo su primer milímetro: un ticket que arranca el recuadro adentro y
+      // lo termina afuera sale con el monto cortado por la cuchilla, que es el defecto de este
+      // formato.
+      expect(plata.y + plata.alto).toBeLessThanOrEqual(t.alto)
+    }
+  })
+
+  it('el recuadro crece cuando además va el desglose: el número grande y el chico no se tocan', () => {
+    const simple = armarTicket(con({ monto_envio: 3000, monto_pedido_a_cobrar: 0 }), medir)
+    const doble = armarTicket(con({ monto_envio: 3000, monto_pedido_a_cobrar: 17500 }), medir)
+    const alto = (t: { ops: { k: string; alto?: number }[] }) => t.ops.find((o) => o.k === 'plata')!.alto!
+    expect(alto(doble)).toBeGreaterThan(alto(simple))
+  })
+
+  it('el bloque de plata va último: nada se escribe abajo del número que hay que cobrar', () => {
+    const { ops } = armarTicket(con({ anotacion: 'Dejar en portería' }), medir)
+    expect(ops[ops.length - 1].k).toBe('plata')
+  })
+
+  it('lo que el cadete necesita en la puerta está impreso', () => {
+    const { ops } = armarTicket(con({ cliente: 'Ana', telefono: '3415551234', anotacion: 'Timbre 2' }), medir)
+    const escrito = ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt).join(' ')
+    expect(escrito).toContain('Ana')
+    expect(escrito).toContain('3415551234')
+    expect(escrito).toContain('Timbre 2')
+    expect(escrito).toContain('#1234')
+  })
+
+  it('un envío sin teléfono ni anotación no deja renglones vacíos', () => {
+    const { ops } = armarTicket(con({ telefono: null, anotacion: null }), medir)
+    expect(ops.filter((o) => o.k === 'txt').every((o) => (o as { txt: string }).txt.trim() !== '')).toBe(true)
   })
 })
 
@@ -604,7 +674,7 @@ describe('rotuloDeDia — el borde por donde entra lo que se tipea', () => {
  * 🔴 **El defecto que este bloque caza es plata que el cadete no cobra.** La cadetería llega de
  * Tienda Nube en $0 —el precio vive en el mapa de zonas y lo pone una persona después—, así que con
  * `estado_pago === 'paid'` a secas la fila salía marcada PAGADO con el precio sin cargar. Se
- * cotizaba en $3.000 y la etiqueta seguía diciendo PAGADO. Pasó en la hoja del 14-ago-2026:
+ * cotizaba en $3.000 y el ticket seguía diciendo PAGADO. Pasó en la hoja del 14-ago-2026:
  * «Envíos ya pagos $3.000 · A rendir $0».
  */
 describe('envio_pagado — sólo si Tienda Nube cobró el envío', () => {

@@ -2,8 +2,8 @@
  * La hoja del cadete, en números: qué se cobra en cada puerta y cuánto tiene que volver del turno.
  *
  * Puro y sin DOM, como el resto de los `lib/<seccion>/core.ts`. Lo que decide acá se muestra en dos
- * lados —la pantalla y la etiqueta impresa— y por eso **se calcula una sola vez**: un total guardado
- * y un total derivado que se pueden contradecir es la forma de que un día la etiqueta diga cobrar
+ * lados —la pantalla y el ticket impreso— y por eso **se calcula una sola vez**: un total guardado
+ * y un total derivado que se pueden contradecir es la forma de que un día el ticket diga cobrar
  * algo que la pantalla da por pagado, con el cadete ya en la calle.
  */
 
@@ -114,7 +114,7 @@ function num(v: number | string | null | undefined): number {
  *
  * 🔴 El caso "no hay que cobrar nada" es lo normal, no el borde: se midió sobre dos años de la
  * planilla que **en la mediana el 100% de lo que el cadete cobra es el envío** —el producto ya se
- * pagó por transferencia antes de despachar—. Una etiqueta que cobre de más un pedido ya pagado es
+ * pagó por transferencia antes de despachar—. Un ticket que cobre de más un pedido ya pagado es
  * un problema con el cliente en la puerta, no un error de redondeo.
  */
 export function aCobrar(e: Envio): number {
@@ -122,7 +122,7 @@ export function aCobrar(e: Envio): number {
   return envio + num(e.monto_pedido_a_cobrar)
 }
 
-/** ¿Esta puerta no se cobra? Lo que decide si la etiqueta dice PAGADO en vez de un monto. */
+/** ¿Esta puerta no se cobra? Lo que decide si el ticket dice PAGADO en vez de un monto. */
 export function estaTodoPago(e: Envio): boolean {
   return aCobrar(e) === 0
 }
@@ -293,10 +293,10 @@ export function linkWhatsapp(e: Envio): string | null {
 }
 
 /**
- * La dirección en una línea, como va impresa en la etiqueta.
+ * La dirección en una línea, como va impresa en el ticket.
  *
  * Junta lo que TN devuelve por separado y descarta lo vacío, para que no salgan comas huérfanas ni
- * un "piso null" en una etiqueta que va a manejar alguien en una moto.
+ * un "piso null" en un ticket que va a leer alguien arriba de una moto.
  */
 export function direccionCompleta(e: Envio): string {
   return [e.direccion, e.piso_depto, e.localidad].map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' · ')
@@ -340,7 +340,7 @@ function saldoDelProducto(o: OrdenTN): number {
  * el cadete no cobra. La cadetería llega de Tienda Nube en $0 —18 de 18 medidas: el precio vive en
  * el mapa de zonas y lo pone una persona después—, así que lo que la clienta pagó fue el producto y
  * nada de envío. Con `estado_pago === 'paid'` a secas, la fila salía marcada PAGADO **con el precio
- * todavía sin cargar**; se cotizaba en $3.000 y la etiqueta seguía diciendo PAGADO. Pasó en la hoja
+ * todavía sin cargar**; se cotizaba en $3.000 y el ticket seguía diciendo PAGADO. Pasó en la hoja
  * del 14-ago-2026: «Envíos ya pagos $3.000 · A rendir $0», con el cadete yendo a cobrar nada.
  *
  * Se pide que TN haya cobrado el envío **de verdad**: precio mayor a cero y orden paga. El resto
@@ -379,7 +379,7 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
     envio_pagado: envioYaPago(o),
     monto_pedido_a_cobrar: saldoDelProducto(o),
     estado: 'pendiente',
-    // La foto congelada: si el cliente cambia su dirección en TN mañana, la etiqueta ya salió con
+    // La foto congelada: si el cliente cambia su dirección en TN mañana, el ticket ya salió con
     // la de hoy. Lo que se guardó es lo que el cadete tiene en la mano.
     datos: { tn: o as unknown as Record<string, unknown> },
   }
