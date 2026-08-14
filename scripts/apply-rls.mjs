@@ -123,6 +123,18 @@ try {
     console.log(`    Corré:  node scripts/apply-columnas-pii.mjs ${marca} --aplicar`)
   }
 
+  // Lo mismo con el escalón 2, que es la TABLA entera: `clientes` salió del navegador y este grant
+  // se la devuelve. Va aparte del chequeo de arriba porque se cierra con otro script, y porque en
+  // Zattia la tabla no existe (ahí `has_table_privilege` tiraría error, de ahí el `to_regclass`).
+  const cli = await client.query(
+    `select has_table_privilege('anon', 'public.clientes', 'SELECT') as lee
+      where to_regclass('public.clientes') is not null`,
+  )
+  if (cli.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer la tabla \`clientes\` entera: este grant deshizo el escalón 2.`)
+    console.log(`    Corré:  node scripts/apply-clientes-servidor.mjs ${marca} --aplicar`)
+  }
+
   const ok = despuesRls.length === 0 && despuesEsc.length === 0
   console.log(ok ? `\n✓ ${MARCA} cerrada.` : `\n✗ ${MARCA}: quedó algo abierto, mirá el detalle de arriba.`)
   console.log(`\nFalta lo que no se puede verificar desde acá: entrar al Monitor de ${MARCA} y`)

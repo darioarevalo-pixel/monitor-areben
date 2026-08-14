@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -23,6 +23,7 @@ import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
+import crm from './_crm.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -50,7 +51,17 @@ const RECURSOS = {
   // Envíos del día: la hoja del cadete. Tampoco tiene `store` en la puerta —el reparto mezcla las
   // dos marcas en la misma mochila— pero cada envío sí lleva la suya.
   envios,
+  // El padrón del CRM. Entra por acá porque es el escalón 2 de la Fase S: la tabla `clientes` sale
+  // del navegador para que se le pueda revocar el `select` a la anon key.
+  crm,
 };
+
+// El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a
+// PostgREST, medidas en 3,9 s. El default de una función de Vercel son 10 s, que hoy alcanzan pero
+// sin aire para un día lento de la base. Va en el archivo de RUTA porque es el único lugar donde
+// Vercel lee la config — los `_*.js` no son rutas (lo aprendió `_inventario-vivo.js`, que la tenía
+// puesta y no hacía nada). El techo es un techo: no cambia lo que tarda el resto.
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;

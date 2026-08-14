@@ -11,13 +11,15 @@
 
 import { CUENTAS } from '../cuentas'
 import { fetchAll } from '../supabase/rest'
+import { apiFetch } from '../api-fetch'
 import { esVentaTecnica } from '../etl/helpers'
 import type { FilaCliente, FilaDetalle, FilaVenta, MapaSeguimiento } from './tipos'
 
-/** Los select textuales del legacy (13200, 13250, 13814). Un campo de menos y el agregado computa otra cosa. */
+/** Los select textuales del legacy (13200, 13814). Un campo de menos y el agregado computa otra cosa. */
 const SEL_VENTAS = 'select=id,date_sale,total_price,client_id,channel_id,sale_state'
-const SEL_CLIENTES = 'select=id,name,email,phone,city,province'
 const SEL_DETALLES = 'select=sale_id,product_name,size,quantity,unit_price,total'
+// 📌 El de `clientes` (13250) ya no vive acá: se mudó a `api/_crm.js` (COLUMNAS) cuando la tabla
+// salió del navegador. Es el mismo, palabra por palabra.
 
 /**
  * El CRM es **bdi-only por esquema, no por permisos**: `ventas.channel_id` no
@@ -79,17 +81,34 @@ export async function traerVentas(modo: ModoCanal, crmSeg: MapaSeguimiento): Pro
   return [...porId.values()].filter((v) => !esVentaTecnica(v))
 }
 
-/** Los clientes de esas ventas, en lotes de 200 para no romper la URL (13249). */
+/**
+ * Los clientes de esas ventas.
+ *
+ * 🔑 **Único consumidor de la tabla `clientes`, y por eso el único que había que mover.** Esto ya
+ * no habla con Supabase: va contra `api/datos?recurso=crm`, que lee con la clave de servicio
+ * detrás de `exigirUsuario` + el permiso de la sección. Es el escalón 2 de la Fase S — hasta el
+ * 14-ago-2026 el navegador se bajaba nombre, mail, teléfono y ciudad de 12.523 personas con la
+ * anon key, que cualquiera saca del bundle. Con esto puesto, a `anon` se le revoca el `select`
+ * sobre la tabla (`sql/migrate-clientes-servidor.sql`).
+ *
+ * Los lotes de 200 del legacy (13249) se fueron con la mudanza: existían para no romper la URL de
+ * PostgREST, y ahora los ids viajan en el body de un POST. Los arma el servidor, que además los
+ * pide de a 6 en paralelo. Un viaje en vez de 63.
+ */
 export async function traerClientes(ventas: FilaVenta[]): Promise<Record<number, FilaCliente>> {
-  const cuenta = CUENTAS[MARCA]
   const ids = [...new Set(ventas.map((v) => v.client_id).filter(Boolean))] as number[]
   const out: Record<number, FilaCliente> = {}
-  for (let i = 0; i < ids.length; i += 200) {
-    const lote = ids.slice(i, i + 200)
-    for (const c of await fetchAll<FilaCliente>(cuenta, 'clientes', `${SEL_CLIENTES}&id=in.(${lote.join(',')})`)) {
-      out[c.id] = c
-    }
-  }
+  if (!ids.length) return out
+
+  const r = await apiFetch('/api/datos?recurso=crm', {
+    method: 'POST',
+    // ⚠️ Sin este header Vercel no parsea el body y el handler ve `ids` vacío, sin error.
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  const d = (await r.json().catch(() => ({}))) as { ok?: boolean; clientes?: FilaCliente[]; error?: string }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} pidiendo el padrón de clientes.`)
+  for (const c of d.clientes || []) out[c.id] = c
   return out
 }
 

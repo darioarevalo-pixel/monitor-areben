@@ -105,20 +105,61 @@ describe('traerVentas · modo Todos los canales', () => {
   })
 })
 
+/**
+ * `traerClientes` es el único que NO habla con Supabase: desde el escalón 2 de la Fase S pide por
+ * `api/datos?recurso=crm`, que lee con la clave de servicio detrás de sesión y permiso. Lo que hay
+ * que sostener acá cambió de forma: ya no es "qué URL de PostgREST arma" sino "qué ids manda".
+ */
 describe('traerClientes', () => {
-  it('pide los ids únicos de las ventas, en lotes de 200', async () => {
+  /** Espía `apiFetch`: devuelve las llamadas y contesta la forma del handler. */
+  function espiarApi(clientes: unknown[] = []) {
+    const llamadas: { url: string; body: { ids: number[] } }[] = []
+    const spy = vi.fn((url: string, opts: RequestInit) => {
+      llamadas.push({ url: String(url), body: JSON.parse(String(opts.body)) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, clientes }) })
+    })
+    vi.stubGlobal('fetch', spy)
+    return { llamadas }
+  }
+
+  it('manda los ids únicos de las ventas en UN solo viaje', async () => {
     const ventas = Array.from({ length: 250 }, (_, i) => ({ id: i, client_id: i + 1, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }))
-    const { urls } = espiarFetch()
+    const { llamadas } = espiarApi()
     await traerClientes(ventas)
-    expect(urls).toHaveLength(2)
-    expect(consulta(urls[0])).toContain('clientes?select=id,name,email,phone,city,province&id=in.(1,2,')
+    // Antes eran dos lotes de 200 contra PostgREST; los lotes ahora los arma el servidor.
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].url).toContain('/api/datos?recurso=crm')
+    expect(llamadas[0].body.ids).toHaveLength(250)
   })
 
   it('ignora las ventas sin client_id y no repite ids', async () => {
     const v = (client_id: number | null) => ({ id: 1, client_id, date_sale: null, total_price: 0, channel_id: 10, sale_state: null })
-    const { urls } = espiarFetch()
+    const { llamadas } = espiarApi()
     await traerClientes([v(5), v(5), v(null), v(7)])
-    expect(consulta(urls[0])).toContain('id=in.(5,7)')
+    expect(llamadas[0].body.ids).toEqual([5, 7])
+  })
+
+  it('devuelve el mapa por id', async () => {
+    espiarApi([{ id: 7, name: 'Ana', email: null, phone: null, city: null, province: null }])
+    const out = await traerClientes([{ id: 1, client_id: 7, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }])
+    expect(out[7].name).toBe('Ana')
+  })
+
+  it('sin ids no sale ninguna llamada', async () => {
+    const { llamadas } = espiarApi()
+    const out = await traerClientes([{ id: 1, client_id: null, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }])
+    expect(llamadas).toHaveLength(0)
+    expect(out).toEqual({})
+  })
+
+  it('un 403 del handler sube como error, no como padrón vacío', async () => {
+    // 🔴 El modo de falla que este endpoint agrega: quien no tenga el permiso de Clientes recibe
+    // 403. Si eso se tragara devolviendo `{}`, la pantalla diría "no hay clientes" en vez de "no
+    // tenés acceso" — y el CRM sin clientes se ve exactamente igual que el CRM vacío.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 403, json: async () => ({ error: 'No tenés acceso a Clientes.' }) })))
+    await expect(
+      traerClientes([{ id: 1, client_id: 7, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }]),
+    ).rejects.toThrow('No tenés acceso a Clientes.')
   })
 })
 
