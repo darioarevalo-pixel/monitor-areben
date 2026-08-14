@@ -12,10 +12,12 @@
 # Turbopack** + `vitest`. El CI (`ci.yml`) los corre a los cuatro, así que alcanza con mirar que
 # esté verde — pero un major de `next` o de `react` además pide ejercer la app a mano.
 #
-# `xlsx` NO lo va a poder actualizar nunca: SheetJS abandonó npm en 0.18.5 (es la última de las
-# 108 publicadas) y desde entonces publica sólo en su propio CDN. Sus dos CVEs se quedan ahí y
-# la salida no es un bump: es elegir entre atar el `npm ci` de los crones a `cdn.sheetjs.com` o
-# cambiar de librería. Queda como el único `high` que `npm audit` va a seguir reportando.
+# 🔑 Dependabot no puede con una librería que dejó de publicarse, y eso hay que verlo a mano.
+# `xlsx` (SheetJS) abandonó npm en la 0.18.5 —la última de 108— y desde entonces publica sólo en
+# su propio CDN: sus dos CVEs `high` no tenían bump posible. La salida no fue actualizar sino
+# **cambiar de librería** (`write-excel-file` + `read-excel-file`, ago-2026, `lib/excel.ts`).
+# Con eso `npm audit` quedó en CERO. Si algún día vuelve a aparecer un `high` sin fix, el reflejo
+# no es esperar el PR: es mirar si el paquete sigue vivo.
 version: 2
 updates:
   - package-ecosystem: npm
