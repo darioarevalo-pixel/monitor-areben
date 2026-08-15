@@ -5,24 +5,34 @@
  *
  * 🔑 **No es la pantalla de Envíos, y no puede serlo.** La interna muestra la cuenta corriente, deja
  * borrar filas y trae la orden de Tienda Nube completa. Acá hay tres cosas: a dónde ir, cuánto
- * cobrar, y dos botones para decir qué pasó.
+ * cobrar, y qué pasó en la puerta.
  *
- * Estilos propios y no el kit del Monitor, igual que `ReclamoPublico` y `CanjePortal`: esto se abre
- * arriba de una moto, con una mano, con sol en la pantalla. Los botones son grandes, el nombre y la
- * dirección grandes, y el monto a cobrar es lo único en negrita.
+ * 🔑 **Tiene la estética del Monitor aunque el link sea de afuera.** No importa componentes del kit
+ * —esto se baja con datos del teléfono, arriba de una moto— pero sí sus **tokens**, que ya viajan en
+ * el CSS global (`app/tokens.css`): los mismos índigo, grises, verdes y rojos, la misma tipografía y
+ * los mismos radios. Se ve parte del sistema sin pagar el bundle de la app.
  *
- * 🔑 **La sesión es el `localStorage` del teléfono.** Guarda token y PIN y los manda en cada pedido;
- * el servidor valida los dos siempre. No hay estado de sesión del otro lado, así que revocar es
+ * 🔑 **Los íconos son los trazos del kit, no emojis.** Un emoji trae su color puesto: adentro de un
+ * botón verde el 📞 sigue siendo gris y no se puede teñir. `Icono` dibuja con `currentColor`, así
+ * que hereda el color del botón que lo contiene.
+ *
+ * 🔑 **La sesión es el `localStorage` del teléfono.** Guarda el PIN y lo manda en cada pedido; el
+ * servidor valida token y PIN siempre. No hay estado de sesión del otro lado, así que revocar es
  * rotar el token — que es lo que se hace el 1º de cada mes.
  *
- * 🔑 **Se ven los días que vienen, pero no se tocan.** Sirve para organizarse —cuántos son y para
- * qué zona— y por eso esas tarjetas salen **sin dirección ni teléfono**: el servidor no las manda
- * (`paraElCadeteFuturo`). Los dos tipos de acá son el espejo de esas dos formas, y están separados a
- * propósito: con campos opcionales, dibujar la tarjeta completa con datos flacos imprimiría
- * `undefined` en el renglón de la dirección.
+ * 🔑 **Se ven los días que vienen, pero no se tocan.** Sirve para organizarse, y por eso esas
+ * tarjetas salen **sin dirección ni teléfono** (el servidor no los manda: `paraElCadeteFuturo`). Los
+ * dos tipos de acá son el espejo de esas dos formas, y están separados a propósito: con campos
+ * opcionales, dibujar la tarjeta completa con datos flacos imprimiría `undefined` en la dirección.
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { Icono } from '@/components/ui/Icono'
+import { diasNavegables, diaVecino } from '@/lib/envios/portal.core.js'
+// Una sola función, y de un archivo sin dependencias. 🔴 El teléfono argentino necesita el `9` que
+// no viene en el dato: sin eso, `wa.me` abre un chat con un número que no existe. Reimplementarlo
+// acá sería la tercera copia de una regla que ya nos mordió una vez.
+import { normalizeArgPhone } from '@/lib/crm/core'
 
 /** Un envío de un día que todavía no llegó: para saber qué viene, no para ir a la puerta. */
 type EnvioQueViene = {
@@ -47,7 +57,6 @@ type EnvioDelCadete = EnvioQueViene & {
   cobrado: boolean | null
 }
 
-/** Un día con envíos, para los chips de arriba. */
 type DiaConEnvios = { fecha: string; cuantos: number; rotulo: string }
 
 /**
@@ -61,27 +70,70 @@ type Hoja =
 const LLAVE = 'cadete.pin'
 const API = '/api/postventa?recurso=cadete'
 
+// ── El kit, en la versión que entra en un teléfono ───────────────────────────────────────────
+//
+// Los valores salen de `app/tokens.css` y de `components/ui/tokens.ts` (radius, space, font), que
+// es lo que hace que esto se vea del mismo sistema que el Monitor.
+
 const caja: React.CSSProperties = {
   maxWidth: 520,
   margin: '0 auto',
   padding: 16,
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  color: '#1c1c1e',
+  paddingBottom: 40,
+  fontFamily: 'var(--mo-font)',
+  color: 'var(--mo-ink)',
+  background: 'var(--mo-canvas)',
+  minHeight: '100vh',
+  boxSizing: 'border-box',
 }
+
 // 16px de fuente en los campos: menos que eso y iOS hace zoom solo al enfocar, y la pantalla queda
 // corrida justo cuando hay que tipear con una mano.
-const campo: React.CSSProperties = { width: '100%', padding: 14, fontSize: 16, borderRadius: 10, border: '1px solid #d1d1d6', boxSizing: 'border-box' }
-const boton = (fondo: string): React.CSSProperties => ({
+const campo: React.CSSProperties = {
   width: '100%',
   padding: 14,
   fontSize: 16,
-  fontWeight: 600,
-  color: '#fff',
-  background: fondo,
-  border: 0,
+  fontFamily: 'inherit',
   borderRadius: 10,
-  cursor: 'pointer',
-})
+  border: '1px solid var(--mo-line)',
+  background: 'var(--mo-surface)',
+  color: 'inherit',
+  boxSizing: 'border-box',
+}
+
+/**
+ * Los botones, en tres pesos.
+ *
+ * 🔑 **La jerarquía es el diseño acá.** Lo que se hace en casi todas las puertas —entregué, cobré—
+ * son dos botones grandes y llenos; lo que pasa a veces —no entregué, no me pagó— tiene que estar a
+ * mano pero no puede competir por el pulgar con lo otro. Con los cuatro iguales, el error de un
+ * toque cuesta lo mismo que el acierto.
+ */
+const boton = (tono: 'brand' | 'success' | 'danger' | 'neutral', peso: 'lleno' | 'suave' | 'ghost'): React.CSSProperties => {
+  const solido =
+    tono === 'success' ? 'var(--mo-success)' : tono === 'danger' ? 'var(--mo-danger)' : tono === 'brand' ? 'var(--mo-brand-solid)' : 'var(--mo-ink2)'
+  const tinta = tono === 'success' ? 'var(--mo-success-ink)' : tono === 'danger' ? 'var(--mo-danger-ink)' : tono === 'brand' ? 'var(--mo-brand)' : 'var(--mo-ink2)'
+  const fondo = tono === 'success' ? 'var(--mo-success-bg)' : tono === 'danger' ? 'var(--mo-danger-bg)' : tono === 'brand' ? 'var(--mo-brand-bg)' : 'var(--mo-bg2)'
+  const borde = tono === 'success' ? 'var(--mo-success-border)' : tono === 'danger' ? 'var(--mo-danger-border)' : tono === 'brand' ? 'var(--mo-brand-border)' : 'var(--mo-line)'
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    width: '100%',
+    padding: peso === 'lleno' ? '14px 12px' : '9px 10px',
+    fontSize: peso === 'lleno' ? 16 : 13,
+    fontWeight: peso === 'lleno' ? 600 : 500,
+    fontFamily: 'inherit',
+    lineHeight: 1.1,
+    color: peso === 'lleno' ? '#fff' : tinta,
+    background: peso === 'lleno' ? solido : peso === 'suave' ? fondo : 'transparent',
+    border: peso === 'ghost' ? '1px solid var(--mo-line)' : peso === 'suave' ? `1px solid ${borde}` : 0,
+    borderRadius: 10,
+    cursor: 'pointer',
+    boxSizing: 'border-box',
+  }
+}
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -170,8 +222,11 @@ export function PortalCadete({ token }: { token: string | null }) {
   if (estado === 'muerto') {
     return (
       <div style={caja}>
-        <h1 style={{ fontSize: 20 }}>Este link ya no sirve</h1>
-        <p style={{ color: '#636366' }}>Pedí el link nuevo en el local. Se cambia a principio de cada mes.</p>
+        <Encabezado />
+        <Tarjetón>
+          <h2 style={{ fontSize: 17, margin: 0 }}>Este link ya no sirve</h2>
+          <p style={{ color: 'var(--mo-mut)', marginBottom: 0 }}>Pedí el link nuevo en el local. Se cambia a principio de cada mes.</p>
+        </Tarjetón>
       </div>
     )
   }
@@ -179,81 +234,82 @@ export function PortalCadete({ token }: { token: string | null }) {
   if (estado === 'pidiendo-pin' || !hoja) {
     return (
       <div style={caja}>
-        <h1 style={{ fontSize: 20, marginBottom: 4 }}>Envíos del día</h1>
-        <p style={{ color: '#636366', marginTop: 0 }}>Poné el PIN que te pasaron.</p>
-        <form
-          onSubmit={(ev) => {
-            ev.preventDefault()
-            void traer(pin)
-          }}
-        >
-          {/* `inputMode` numérico: en el celular abre el teclado de números directo. */}
-          <input
-            style={campo}
-            value={pin}
-            onChange={(ev) => setPin(ev.target.value)}
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="PIN"
-            aria-label="PIN"
-          />
-          {error ? <p style={{ color: '#d92d20' }}>{error}</p> : null}
-          <button type="submit" style={{ ...boton('#4f46e5'), marginTop: 12 }}>
-            Entrar
-          </button>
-        </form>
+        <Encabezado />
+        <Tarjetón>
+          <p style={{ color: 'var(--mo-mut)', marginTop: 0 }}>Poné el PIN que te pasaron.</p>
+          <form
+            onSubmit={(ev) => {
+              ev.preventDefault()
+              void traer(pin)
+            }}
+          >
+            {/* `inputMode` numérico: en el celular abre el teclado de números directo. */}
+            <input
+              style={campo}
+              value={pin}
+              onChange={(ev) => setPin(ev.target.value)}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="PIN"
+              aria-label="PIN"
+            />
+            {error ? <p style={{ color: 'var(--mo-danger-ink)' }}>{error}</p> : null}
+            <div style={{ marginTop: 12 }}>
+              <button type="submit" style={boton('brand', 'lleno')}>
+                Entrar
+              </button>
+            </div>
+          </form>
+        </Tarjetón>
       </div>
     )
   }
 
+  const dias = diasNavegables(proximos, hoy || hoja.fecha) as DiaConEnvios[]
+  const anterior = diaVecino(dias, hoja.fecha, -1)
+  const siguiente = diaVecino(dias, hoja.fecha, 1)
   const porEntregar = hoja.envios.filter(abierto).length
 
   return (
     <div style={caja}>
-      <h1 style={{ fontSize: 20, marginBottom: 2 }}>Envíos del día</h1>
-      <p style={{ color: '#636366', marginTop: 0, fontSize: 14 }}>
-        {hoja.rotulo || hoja.fecha} · {porEntregar} por entregar
-      </p>
-      {error ? <p style={{ color: '#d92d20' }}>{error}</p> : null}
+      <Encabezado />
 
-      {/* Los días que vienen. Sólo los que tienen algo, y sólo si hay más de uno: el 95% de los días
-          esta fila no se dibuja, y cuando aparece dice todo lo que hay que saber de un vistazo. */}
-      {proximos.length > 1 ? (
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 4 }}>
-          {proximos.map((d) => {
-            const puesto = d.fecha === hoja.fecha
-            return (
-              <button
-                key={d.fecha}
-                onClick={() => void traer(pin, d.fecha)}
-                style={{
-                  flex: '0 0 auto',
-                  padding: '8px 12px',
-                  fontSize: 14,
-                  fontWeight: puesto ? 700 : 500,
-                  borderRadius: 999,
-                  cursor: 'pointer',
-                  border: `1px solid ${puesto ? '#4f46e5' : '#d1d1d6'}`,
-                  background: puesto ? '#4f46e5' : d.fecha === hoy ? '#fff' : '#f2f2f7',
-                  color: puesto ? '#fff' : d.fecha === hoy ? '#1c1c1e' : '#636366',
-                }}
-              >
-                {d.rotulo} · {d.cuantos}
-              </button>
-            )
-          })}
+      {/* 🔑 El día, con flechas: es el mismo gesto que la hoja interna. Las flechas saltan al día
+          **con envíos** anterior y siguiente, no al día calendario — los días sin reparto son
+          pantallas siempre vacías y pasar por ellas de a un toque es lo que hace que nadie navegue.
+          Hoy está siempre en el camino aunque esté vacío, para poder volver. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <Flecha hacia="anterior" a={anterior} onIr={(f) => void traer(pin, f)} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{hoja.rotulo || hoja.fecha}</div>
+          <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>
+            {!hoja.envios.length ? 'sin envíos' : hoja.editable ? `${porEntregar} por entregar` : `${hoja.envios.length} ${hoja.envios.length === 1 ? 'envío' : 'envíos'}`}
+          </div>
+        </div>
+        <Flecha hacia="siguiente" a={siguiente} onIr={(f) => void traer(pin, f)} />
+      </div>
+
+      {error ? (
+        <div style={{ background: 'var(--mo-danger-bg)', border: '1px solid var(--mo-danger-border)', color: 'var(--mo-danger-ink)', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 14 }}>
+          {error}
         </div>
       ) : null}
 
-      {!hoja.envios.length ? <p style={{ color: '#636366' }}>Ese día no hay envíos cargados.</p> : null}
+      {!hoja.envios.length ? (
+        <Tarjetón>
+          <p style={{ color: 'var(--mo-mut)', margin: 0 }}>Ese día no hay envíos cargados.</p>
+        </Tarjetón>
+      ) : null}
 
       {/* 🔑 Un día que no se puede tocar se dibuja con la tarjeta flaca, que es la única forma que
           existe para los datos que mandó el servidor: no hay dirección ni teléfono que pintar. */}
       {!hoja.editable ? (
         <>
-          <p style={{ color: '#636366', fontSize: 14, marginTop: 12 }}>
-            Esto es para que sepas qué viene. La dirección y el teléfono aparecen el día del reparto.
-          </p>
+          {hoja.envios.length ? (
+            <p style={{ color: 'var(--mo-mut)', fontSize: 13, marginTop: 0 }}>
+              Esto es para que sepas qué viene. La dirección y el teléfono aparecen el día del reparto.
+            </p>
+          ) : null}
           {hoja.envios.map((e, i) => (
             <TarjetaQueViene key={`${hoja.fecha}-${i}`} envio={e} />
           ))}
@@ -268,7 +324,7 @@ export function PortalCadete({ token }: { token: string | null }) {
               no tienen que competir por la atención con los que todavía hay que llevar. */}
           {hoja.envios.some((e) => !abierto(e)) ? (
             <>
-              <h2 style={{ fontSize: 15, color: '#636366', marginTop: 28 }}>Ya cerrados</h2>
+              <h2 style={{ fontSize: 14, color: 'var(--mo-mut)', marginTop: 28, marginBottom: 0, textTransform: 'uppercase', letterSpacing: 0.4 }}>Ya cerrados</h2>
               {hoja.envios
                 .filter((e) => !abierto(e))
                 .map((e) => (
@@ -282,12 +338,90 @@ export function PortalCadete({ token }: { token: string | null }) {
   )
 }
 
-/** El marco de una tarjeta, igual en las dos formas. */
-function Marco({ apagado, children }: { apagado?: boolean; children: React.ReactNode }) {
+/** La marca del Monitor arriba de todo: esto es del local, aunque se abra desde un link suelto. */
+function Encabezado() {
   return (
-    <div style={{ border: '1px solid #d1d1d6', borderRadius: 12, padding: 14, marginTop: 12, opacity: apagado ? 0.6 : 1, background: '#fff' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 14px' }}>
+      <span style={{ display: 'inline-flex', color: 'var(--mo-brand)' }}>
+        <Icono nombre="envios" size={22} />
+      </span>
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>Envíos del día</div>
+        <div style={{ fontSize: 12, color: 'var(--mo-mut)', letterSpacing: 0.6, textTransform: 'uppercase' }}>Areben</div>
+      </div>
+    </div>
+  )
+}
+
+/** Una flecha del selector de día. Apagada en la punta: no da la vuelta ni lleva a un día vacío. */
+function Flecha({ hacia, a, onIr }: { hacia: 'anterior' | 'siguiente'; a: string | null; onIr: (f: string) => void }) {
+  const puede = !!a
+  return (
+    <button
+      type="button"
+      disabled={!puede}
+      onClick={() => a && onIr(a)}
+      aria-label={hacia === 'anterior' ? 'El día anterior' : 'El día siguiente'}
+      style={{
+        width: 42,
+        height: 42,
+        flex: '0 0 auto',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+        border: '1px solid var(--mo-line)',
+        background: 'var(--mo-surface)',
+        color: puede ? 'var(--mo-ink2)' : 'var(--mo-mut2)',
+        opacity: puede ? 1 : 0.45,
+        cursor: puede ? 'pointer' : 'default',
+        fontSize: 18,
+        lineHeight: 1,
+      }}
+    >
+      {hacia === 'anterior' ? '←' : '→'}
+    </button>
+  )
+}
+
+/** El marco de una tarjeta, igual en las dos formas. */
+function Tarjetón({ apagado, children }: { apagado?: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        border: '1px solid var(--mo-line)',
+        borderRadius: 12,
+        padding: 14,
+        marginTop: 12,
+        opacity: apagado ? 0.6 : 1,
+        background: 'var(--mo-surface)',
+        boxShadow: 'var(--mo-sh-sm)',
+      }}
+    >
       {children}
     </div>
+  )
+}
+
+/** El chip de la marca, con los colores que ya tiene cada una en el Monitor. */
+function Marca({ marca }: { marca: string }) {
+  const m = marca === 'zattia' ? 'zattia' : 'bdi'
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 0.3,
+        textTransform: 'uppercase',
+        color: `var(--mo-marca-${m}-fg)`,
+        background: `var(--mo-marca-${m}-bg)`,
+      }}
+    >
+      {m === 'bdi' ? 'BDI' : 'Zattia'}
+    </span>
   )
 }
 
@@ -298,18 +432,21 @@ function Marco({ apagado, children }: { apagado?: boolean; children: React.React
  * un rectángulo negro, y acá con el fondo verde.
  */
 function Plata({ aCobrar, chico }: { aCobrar: number; chico?: boolean }) {
+  const pago = aCobrar === 0
   return (
     <div
       style={{
         marginTop: 10,
         padding: '10px 12px',
-        borderRadius: 8,
-        background: aCobrar === 0 ? '#e8f5ee' : '#fff7e6',
-        fontSize: aCobrar === 0 ? 16 : chico ? 18 : 22,
+        borderRadius: 10,
+        background: pago ? 'var(--mo-success-bg)' : 'var(--mo-warning-bg)',
+        border: `1px solid ${pago ? 'var(--mo-success-border)' : 'var(--mo-warning-border)'}`,
+        color: pago ? 'var(--mo-success-ink)' : 'var(--mo-warning-ink)',
+        fontSize: pago ? 15 : chico ? 18 : 22,
         fontWeight: 700,
       }}
     >
-      {aCobrar === 0 ? 'PAGADO · no cobrar nada' : `COBRAR ${plata(aCobrar)}`}
+      {pago ? 'PAGADO · no cobrar nada' : `COBRAR ${plata(aCobrar)}`}
     </div>
   )
 }
@@ -323,19 +460,23 @@ function Plata({ aCobrar, chico }: { aCobrar: number; chico?: boolean }) {
  */
 function TarjetaQueViene({ envio }: { envio: EnvioQueViene }) {
   return (
-    <Marco>
-      <div style={{ fontSize: 12, color: '#8e8e93', textTransform: 'uppercase' }}>
-        {envio.marca} {envio.turno ? `· ${envio.turno}` : ''}
+    <Tarjetón>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Marca marca={envio.marca} />
+        {envio.turno ? <span style={{ fontSize: 12, color: 'var(--mo-mut)' }}>{envio.turno}</span> : null}
       </div>
-      <div style={{ fontSize: 17, fontWeight: 600, marginTop: 2 }}>{envio.cliente || 'Sin nombre'}</div>
-      <div style={{ fontSize: 15, marginTop: 2, color: '#636366' }}>{envio.localidad || 'Sin localidad'}</div>
+      <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>{envio.cliente || 'Sin nombre'}</div>
+      <div style={{ fontSize: 15, marginTop: 2, color: 'var(--mo-mut)' }}>{envio.localidad || 'Sin localidad'}</div>
       <Plata aCobrar={envio.aCobrar} chico />
-    </Marco>
+    </Tarjetón>
   )
 }
 
 /**
- * Un envío del día: a dónde ir, cuánto cobrar, y qué pasó.
+ * Un envío del día: a dónde ir, cómo avisar, cuánto cobrar, y qué pasó.
+ *
+ * 🔑 **WhatsApp primero**: es como el cadete avisa que está llegando. Llamar queda al lado porque a
+ * veces no contestan el mensaje, y el mapa tercero porque se toca una vez por puerta.
  */
 function Tarjeta({
   envio,
@@ -349,70 +490,105 @@ function Tarjeta({
   apagado?: boolean
 }) {
   const cerrado = !abierto(envio)
+  const wa = normalizeArgPhone(envio.telefono)
   const tel = String(envio.telefono || '').replace(/[^\d+]/g, '')
   const donde = [envio.direccion, envio.piso, envio.localidad].filter(Boolean).join(' · ')
   const mapa = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([envio.direccion, envio.localidad, 'Rosario'].filter(Boolean).join(', '))}`
+  const trabajando = (accion: string) => ocupado === envio.id + accion
 
   return (
-    <Marco apagado={apagado}>
-      <div style={{ fontSize: 12, color: '#8e8e93', textTransform: 'uppercase' }}>
-        {envio.marca} {envio.orden ? `· #${envio.orden}` : ''} {envio.turno ? `· ${envio.turno}` : ''}
+    <Tarjetón apagado={apagado}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Marca marca={envio.marca} />
+        {envio.orden ? <span style={{ fontSize: 12, color: 'var(--mo-mut)' }}>#{envio.orden}</span> : null}
+        {envio.turno ? <span style={{ fontSize: 12, color: 'var(--mo-mut)' }}>· {envio.turno}</span> : null}
       </div>
-      <div style={{ fontSize: 19, fontWeight: 700, marginTop: 2 }}>{envio.cliente || 'Sin nombre'}</div>
+
+      <div style={{ fontSize: 19, fontWeight: 700, marginTop: 6 }}>{envio.cliente || 'Sin nombre'}</div>
       <div style={{ fontSize: 16, marginTop: 2 }}>{donde}</div>
-      {envio.anotacion ? <div style={{ fontSize: 14, color: '#636366', marginTop: 4 }}>{envio.anotacion}</div> : null}
+      {envio.anotacion ? <div style={{ fontSize: 14, color: 'var(--mo-mut)', marginTop: 4 }}>{envio.anotacion}</div> : null}
 
       <Plata aCobrar={envio.aCobrar} />
 
+      {/* Contacto y mapa: llevan a otra app, así que van en el peso del medio — nunca compiten con
+          los dos botones que escriben. */}
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <a href={mapa} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
-          <span style={{ ...boton('#636366'), display: 'block', textAlign: 'center', boxSizing: 'border-box' }}>Mapa</span>
-        </a>
-        {tel ? (
-          <a href={`tel:${tel}`} style={{ flex: 1, textDecoration: 'none' }}>
-            <span style={{ ...boton('#636366'), display: 'block', textAlign: 'center', boxSizing: 'border-box' }}>Llamar</span>
+        {wa ? (
+          <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
+            <span style={boton('success', 'suave')}>
+              <Icono nombre="whatsapp" size={16} /> WhatsApp
+            </span>
           </a>
         ) : null}
+        {tel ? (
+          <a href={`tel:${tel}`} style={{ flex: 1, textDecoration: 'none' }}>
+            <span style={boton('neutral', 'suave')}>
+              <Icono nombre="telefono" size={16} /> Llamar
+            </span>
+          </a>
+        ) : null}
+        <a href={mapa} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
+          <span style={boton('neutral', 'suave')}>Mapa</span>
+        </a>
       </div>
 
-      {!cerrado ? (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button style={boton('#079455')} disabled={!!ocupado} onClick={() => void onMarcar(envio, 'entregado')}>
-              {ocupado === envio.id + 'entregado' ? '…' : 'Entregado'}
-            </button>
-            <button style={boton('#d92d20')} disabled={!!ocupado} onClick={() => void onMarcar(envio, 'no_entregado')}>
-              {ocupado === envio.id + 'no_entregado' ? '…' : 'No entregado'}
-            </button>
+      {/* ── Lo que se escribe ─────────────────────────────────────────────────────────────────
+          🔑 Dos pesos, y ésa es toda la idea: **entregado** y **cobrado** son lo que pasa en casi
+          todas las puertas y van llenos y grandes; **no entregado** y **no cobré** son lo que pasa a
+          veces, tienen que estar a mano, y no pueden competir por el pulgar con los otros dos. */}
+      <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+        {!cerrado ? (
+          <button style={boton('success', 'lleno')} disabled={!!ocupado} onClick={() => void onMarcar(envio, 'entregado')}>
+            <Icono nombre="check" size={18} /> {trabajando('entregado') ? 'Guardando…' : 'Marcar entregado'}
+          </button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--mo-mut)' }}>
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: 999,
+                fontWeight: 600,
+                fontSize: 12,
+                color: envio.estado === 'entregado' ? 'var(--mo-success-ink)' : 'var(--mo-danger-ink)',
+                background: envio.estado === 'entregado' ? 'var(--mo-success-bg)' : 'var(--mo-danger-bg)',
+              }}
+            >
+              {envio.estadoTexto}
+            </span>
           </div>
-          {/* 🔑 Cobrar y entregar son DOS hechos. Se puede entregar sin cobrar —la clienta no tenía
-              el efectivo— y esa diferencia es la que después no cierra en la rendición si no se
-              anota. Sólo aparece cuando hay algo que cobrar. */}
-          {envio.aCobrar > 0 ? (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-              <button
-                style={{ ...boton(envio.cobrado === true ? '#079455' : '#e5e5ea'), color: envio.cobrado === true ? '#fff' : '#1c1c1e' }}
-                disabled={!!ocupado}
-                onClick={() => void onMarcar(envio, 'cobrado')}
-              >
-                Cobré
-              </button>
-              <button
-                style={{ ...boton(envio.cobrado === false ? '#d92d20' : '#e5e5ea'), color: envio.cobrado === false ? '#fff' : '#1c1c1e' }}
-                disabled={!!ocupado}
-                onClick={() => void onMarcar(envio, 'no_cobrado')}
-              >
-                No cobré
-              </button>
-            </div>
+        )}
+
+        {/* 🔑 El cobro sigue disponible aunque el paquete ya esté cerrado: se entrega y recién
+            después se cuenta la plata, y sin esto «entregado» tapaba la única forma de decir que en
+            esa puerta no se cobró. */}
+        {envio.aCobrar > 0 ? (
+          <button
+            style={envio.cobrado === true ? boton('success', 'suave') : boton('brand', 'lleno')}
+            disabled={!!ocupado}
+            onClick={() => void onMarcar(envio, 'cobrado')}
+          >
+            <Icono nombre="check" size={18} />
+            {trabajando('cobrado') ? 'Guardando…' : envio.cobrado === true ? 'Cobrado ✓' : 'Marcar cobrado'}
+          </button>
+        ) : null}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!cerrado || envio.estado === 'entregado' ? (
+            <button style={boton('danger', 'ghost')} disabled={!!ocupado} onClick={() => void onMarcar(envio, 'no_entregado')}>
+              {trabajando('no_entregado') ? '…' : 'No entregado'}
+            </button>
           ) : null}
-        </>
-      ) : (
-        <div style={{ marginTop: 10, fontSize: 14, color: '#636366' }}>
-          {envio.estadoTexto}
-          {envio.cobrado === true ? ' · cobrado' : envio.cobrado === false ? ' · sin cobrar' : ''}
+          {envio.aCobrar > 0 ? (
+            <button
+              style={{ ...boton('danger', 'ghost'), ...(envio.cobrado === false ? { color: 'var(--mo-danger-ink)', borderColor: 'var(--mo-danger-border)', background: 'var(--mo-danger-bg)' } : null) }}
+              disabled={!!ocupado}
+              onClick={() => void onMarcar(envio, 'no_cobrado')}
+            >
+              {trabajando('no_cobrado') ? '…' : envio.cobrado === false ? 'No cobré ✓' : 'No cobré'}
+            </button>
+          ) : null}
         </div>
-      )}
-    </Marco>
+      </div>
+    </Tarjetón>
   )
 }

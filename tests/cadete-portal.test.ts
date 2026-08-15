@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   diaArgentino,
   diasConEnvios,
+  diasNavegables,
+  diaVecino,
   enviosDelDia,
   fechaQueSePuedeEscribir,
   fechaQueSePuedeLeer,
@@ -272,6 +274,48 @@ describe('los chips de los días que vienen', () => {
     expect(diasConEnvios([null, '', 'mañana', '2026-08-17'] as unknown as string[], '2026-08-17')).toEqual([
       { fecha: '2026-08-17', cuantos: 1, rotulo: 'Hoy' },
     ])
+  })
+
+  it('🔴 a HOY siempre se puede volver, tenga envíos o no', () => {
+    // El mutante: armar la lista de navegación sólo con los días que tienen envíos. Un sábado sin
+    // reparto, el cadete toca la flecha para mirar el martes y **se queda sin camino de vuelta** al
+    // único día que puede tocar.
+    const dias = diasNavegables([{ fecha: '2026-08-18', cuantos: 2, rotulo: 'mar 18-ago' }], '2026-08-15')
+    expect((dias as { fecha: string }[]).map((d) => d.fecha)).toEqual(['2026-08-15', '2026-08-18'])
+    expect(dias[0]).toMatchObject({ cuantos: 0, rotulo: 'Hoy' })
+    expect(diaVecino(dias, '2026-08-18', -1)).toBe('2026-08-15')
+  })
+
+  it('🔴 hoy no se duplica cuando SÍ tiene envíos', () => {
+    // Mutante: empujar hoy sin preguntar. La flecha «siguiente» iría de hoy a hoy y no pasaría nada.
+    const dias = diasNavegables(
+      [
+        { fecha: '2026-08-15', cuantos: 2, rotulo: 'Hoy' },
+        { fecha: '2026-08-18', cuantos: 1, rotulo: 'mar 18-ago' },
+      ],
+      '2026-08-15',
+    )
+    expect(dias).toHaveLength(2)
+    expect(diaVecino(dias, '2026-08-15', 1)).toBe('2026-08-18')
+  })
+
+  it('🔴 en la punta la flecha no lleva a ningún lado', () => {
+    // Mutante: dar la vuelta al llegar al final. El cadete cree que avanza y vuelve al principio.
+    const dias = diasNavegables([{ fecha: '2026-08-18', cuantos: 1, rotulo: 'mar 18-ago' }], '2026-08-15')
+    expect(diaVecino(dias, '2026-08-18', 1)).toBeNull()
+    expect(diaVecino(dias, '2026-08-15', -1)).toBeNull()
+    expect(diaVecino(dias, '2026-09-30', 1)).toBeNull()
+  })
+
+  it('los días llegan ordenados aunque la base los devuelva mezclados', () => {
+    const dias = diasNavegables(
+      [
+        { fecha: '2026-08-20', cuantos: 1, rotulo: 'jue 20-ago' },
+        { fecha: '2026-08-16', cuantos: 1, rotulo: 'dom 16-ago' },
+      ],
+      '2026-08-15',
+    )
+    expect((dias as { fecha: string }[]).map((d) => d.fecha)).toEqual(['2026-08-15', '2026-08-16', '2026-08-20'])
   })
 
   it('🔴 el rótulo no corre un día', () => {
