@@ -402,10 +402,14 @@ export function Envios() {
                             {...dice('Imprimir el ticket de este envío')}
                           />
                           <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => setEditando(e)} {...dice('Editar el envío')} />
+                          {/* ⚠️ **NO el calendario**, aunque la acción sea de días: en la bandeja el
+                              calendario significa «mandalo a un día», y acá significaría lo
+                              contrario. El mismo dibujo para las dos direcciones es peor que no
+                              tener ícono. Éste es la flecha de retorno: vuelve a la bandeja. */}
                           <Button
                             size="sm"
                             variant="ghost"
-                            iconLeft={<Icono nombre="calendario" />}
+                            iconLeft={<Icono nombre="postventa" />}
                             onClick={() => void sacarDelDia(e)}
                             {...dice('Sacarlo del día y devolverlo a «Sin fecha» para recoordinar')}
                           />
