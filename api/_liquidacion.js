@@ -5,6 +5,7 @@
 //   GET  ?recurso=liquidacion&store=…&liq=<id>&solo=pids  → qué pid ya está y en qué estado
 //   GET  ?recurso=liquidacion&store=…&etiquetas=1         → las campañas con los precios PUESTOS
 //   GET  ?recurso=liquidacion&store=…&etiquetas=1&liq=<id>→ los pid a etiquetar de esa campaña
+//   GET  ?recurso=liquidacion&store=…&liq=<id>&bitacora=1 → la ida y vuelta de precios de la campaña
 //   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,desde,hasta,nota} }
 //   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
@@ -32,6 +33,11 @@ import { esAdmin, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js';
 // adentro de `sync-diario.js` y `sync-diario-zattia.js`, las copias se separaron, y de esa deriva
 // salió que Zattia no tenga CRM ni márgenes (ver el encabezado de `ventas-espejo.mjs`).
 import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
+// La bitácora: qué precio se escribió en Gestión Nube y cuál se sacó. En `.core.js` porque este
+// handler es el que la escribe y no puede importar TypeScript, y porque el backfill histórico
+// (`scripts/backfill-liquidacion-bitacora.mjs`) arma la fila con el MISMO código que el registro
+// vivo — si divergieran, la campaña de agosto quedaría anotada distinto que la de septiembre.
+import { aEvento, filaBitacora, precioAnterior } from '../lib/liquidacion/bitacora.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -356,6 +362,18 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const liq = String(req.query.liq || '');
+
+      // ── La bitácora de la campaña: qué precio se puso y cuál se sacó, del más nuevo al más viejo.
+      //
+      // ⚠️ **Se filtra por `liq_id`, no por los ítems que la campaña tiene HOY.** Un producto que se
+      // quitó de la lista igual tuvo su precio escrito en la tienda, y esa es justamente la clase de
+      // movimiento que la bitácora existe para no perder. Por eso tampoco se joinea con
+      // `liquidacion_items`: el evento se lee solo, con el nombre del producto copiado adentro.
+      if (liq && String(req.query.bitacora || '') === '1') {
+        const filas = await leerTodo(supabase, 'liquidacion_bitacora', (q) =>
+          q.select('*').eq('store', store).eq('liq_id', liq).order('cuando', { ascending: false }));
+        return res.status(200).json({ ok: true, eventos: filas.map(aEvento), puede });
+      }
 
       // Análisis pregunta "de estos productos, ¿cuáles ya mandé a esta campaña?". La respuesta son
       // dos columnas por ítem, no la foto congelada entera: la tabla de productos sólo necesita
@@ -822,6 +840,24 @@ export default async function handler(req, res) {
         .select('pid, estado, datos').eq('store', store).eq('liq_id', id).in('pid', pids);
       if (e0) throw new Error(e0.message);
 
+      // El nombre de la campaña se copia en cada evento: la bitácora tiene que poder leerse cuando
+      // la campaña ya no existe (`borrar` no la toca a propósito).
+      const { data: cab, error: eC } = await supabase.from('liquidaciones')
+        .select('nombre').eq('store', store).eq('id', id).maybeSingle();
+      if (eC) throw new Error(eC.message);
+      const liqNombre = (cab && cab.nombre) || '';
+
+      // El último movimiento de cada uno de estos productos, para saber qué había puesto antes.
+      // 🔑 **Se busca por `store` + `pid`, sin acotar a esta campaña**: lo que la tienda tenía antes
+      // de esta escritura es lo que dejó la escritura anterior, la haya hecho esta campaña o la de
+      // julio. Acotarlo a `liq_id` haría que el primer renglón de cada campaña se invente un "antes".
+      const { data: previos, error: eB } = await supabase.from('liquidacion_bitacora')
+        .select('pid, precio_a, cuando').eq('store', store).in('pid', pids)
+        .order('cuando', { ascending: false });
+      if (eB) throw new Error(eB.message);
+      const ultimoDe = new Map();
+      for (const f of previos || []) if (!ultimoDe.has(f.pid)) ultimoDe.set(f.pid, { precioA: f.precio_a });
+
       const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
       const ahoraMs = Date.now();
       const resultados = [];
@@ -881,6 +917,26 @@ export default async function handler(req, res) {
           continue;
         }
 
+        // ── La bitácora, acá y no antes. ──────────────────────────────────────────────────────
+        //
+        // 🔑 **Este es el único punto del módulo donde consta que el precio se movió de verdad**:
+        // arriba ya se comparó lo que devolvió el PATCH contra lo que se quiso escribir. Anotar el
+        // evento antes sería registrar la intención, y una bitácora que diga que el cliente vio un
+        // precio que nunca estuvo puesto es peor que no tenerla.
+        //
+        // 🔴 **Y va antes de tocar el ítem, porque el ítem PIERDE el dato.** El renglón de abajo
+        // deja `aplicadoEn` y `precioEscrito` en `null` cuando se saca la oferta — que es correcto
+        // (`aplicado` quiere decir "está puesto AHORA") pero borra la única huella de que ese precio
+        // existió. La bitácora es lo que lo conserva.
+        const cuandoISO = new Date().toISOString();
+        const deAntes = precioAnterior(ultimoDe.get(pid), item.foto.promoPrevia);
+        const { error: eL } = await supabase.from('liquidacion_bitacora').insert([
+          filaBitacora({ store, liqId: id, liqNombre, item, modo, precioDe: deAntes, precioA: valor, porQuien: yo, cuando: cuandoISO }),
+        ]);
+        // Que el evento quede en memoria aunque la inserción falle mantiene coherente al resto de la
+        // tanda: sin esto, el próximo movimiento de este mismo producto leería un "antes" viejo.
+        ultimoDe.set(pid, { precioA: valor });
+
         const nuevo = {
           ...item,
           estado: modo === 'poner' ? 'aplicado' : 'confirmado',
@@ -894,6 +950,9 @@ export default async function handler(req, res) {
         // El precio YA está escrito en Gestión Nube: si falla el guardado nuestro, lo que quedó mal
         // es el registro, no la tienda. Se dice cuál de los dos falló en vez de un "no se pudo".
         if (eU) { resultados.push({ pid, ok: false, error: `se escribió en Gestión Nube pero no se pudo anotar acá: ${eU.message}` }); }
+        // Una bitácora que no entró NO invalida la operación —el precio está puesto y el ítem quedó
+        // bien— pero tampoco se calla: es el registro que después se lee para saber qué pasó.
+        else if (eL) { resultados.push({ pid, ok: true, precio: valor, avisoBitacora: `no se pudo anotar en la bitácora: ${eL.message}` }); }
         else { resultados.push({ pid, ok: true, precio: valor }); }
 
         await dormir(PAUSA_GN);
@@ -908,6 +967,10 @@ export default async function handler(req, res) {
     // dos bases distintas por marca y la convención del repo es `store` + PK compuesta, sin
     // relaciones declaradas. Van primero, para que una falla en el medio deje la campaña visible y
     // no cuarenta filas huérfanas que nadie ve ni puede borrar.
+    //
+    // ⛔ **`liquidacion_bitacora` NO se borra acá, y no es un olvido.** Que alguien borre la campaña
+    // no deshace los precios que estuvieron puestos en la tienda de verdad. Por eso el evento lleva
+    // copiados el nombre de la campaña y el del producto: se lee solo, sin nadie a quien apuntar.
     if (b.action === 'borrar') {
       const { data: previo, error: e0 } = await supabase.from('liquidaciones')
         .select('estado, datos').eq('store', store).eq('id', id).maybeSingle();

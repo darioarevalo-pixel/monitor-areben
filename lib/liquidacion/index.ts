@@ -3,6 +3,7 @@
  * derecho de `./persistencia` para que un test del dominio no arrastre `apiFetch`.
  */
 
+export * from './bitacora'
 export * from './core'
 export * from './resultado'
 export * from './tipos'

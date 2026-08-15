@@ -56,6 +56,7 @@ import {
 import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { DefinirPrecio } from './DefinirPrecio'
+import { Bitacora } from './Bitacora'
 import { Resultado } from './Resultado'
 import { Revision } from './Revision'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -64,6 +65,16 @@ import {
   Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, formatMoney, useConfirmar,
   useFiltroUrl, useToast, color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
+
+/**
+ * Las pestañas que tienen componente propio. `productos` es el default y **no figura acá**: cualquier
+ * `?t=` desconocido cae ahí.
+ *
+ * Está en una lista sola porque el `?t=` se pregunta en dos lugares —cuál marcar como activa y qué
+ * dibujar abajo— y con la condición escrita a mano en los dos, sumar una pestaña es acordarse de
+ * las dos. Al sumar la tercera ya se notaba.
+ */
+const PESTANIAS_PROPIAS = ['revision', 'resultado', 'bitacora']
 
 const ROTULO_CAMPANIA: Record<EstadoCampania, { label: string; tono: Tone }> = {
   borrador: { label: 'Borrador', tono: 'neutral' },
@@ -816,7 +827,7 @@ function DetalleCampania({
         <Tabs
           variant="underline"
           style={{ marginBottom: space[4] }}
-          value={pestania === 'resultado' || pestania === 'revision' ? pestania : 'productos'}
+          value={PESTANIAS_PROPIAS.includes(pestania) ? pestania : 'productos'}
           onChange={setPestania}
           items={[
             { key: 'productos', label: 'Productos', badge: resumen.total || undefined },
@@ -839,12 +850,23 @@ function DetalleCampania({
                 ? 'Qué se vendió de lo liquidado, y si el precio llegó a estar puesto'
                 : 'Necesita una fecha de inicio',
             },
+            {
+              key: 'bitacora',
+              label: 'Bitácora',
+              // ⛔ **Sin badge, a propósito.** Los otros dos cuentan pendientes —algo que hacer—; acá
+              // el número sólo crecería, y un contador que nunca baja se deja de mirar a la semana.
+              hint: 'Qué precio se escribió en Gestión Nube y cuál se sacó, con quién y cuándo',
+            },
           ]}
         />
       )}
 
       {items !== null && pestania === 'resultado' && (
         <Resultado campania={campania} items={items} puedeSincronizar={puede.admin} />
+      )}
+
+      {items !== null && pestania === 'bitacora' && (
+        <Bitacora liqId={campania.id} marca={marca} items={items} />
       )}
 
       {items !== null && pestania === 'revision' && (
@@ -857,7 +879,7 @@ function DetalleCampania({
         />
       )}
 
-      {items !== null && pestania !== 'resultado' && pestania !== 'revision' && (
+      {items !== null && !PESTANIAS_PROPIAS.includes(pestania) && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[3], marginBottom: space[4] }}>
             <KpiCard label="Productos" value={String(resumen.total)} sub={resumen.pendientes ? `${resumen.pendientes} sin definir` : 'todos definidos'} />

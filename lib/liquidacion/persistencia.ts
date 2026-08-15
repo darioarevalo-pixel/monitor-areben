@@ -10,6 +10,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
+import type { EventoBitacora } from './bitacora'
 import type { EstadoCampania, EstadoItem, Liquidacion, LiquidacionItem } from './tipos'
 
 const API = '/api/datos?recurso=liquidacion'
@@ -68,6 +69,20 @@ export async function leerPidsCampania(store: Marca, liqId: string): Promise<Pid
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer qué productos ya están en la campaña.')
   return { campania: d.campania, pids: (d.pids || {}) as Record<string, EstadoItem> }
+}
+
+/**
+ * La bitácora de la campaña: cada precio que se escribió en Gestión Nube y cada uno que se sacó.
+ *
+ * Se pide aparte de los ítems y sólo cuando se abre la pestaña. Es una tabla que crece con cada
+ * escritura —los 260 de agosto son 260 renglones de ida y van a ser otros 260 de vuelta—, así que
+ * bajarla junto con las fotos congeladas pagaría el doble por una pantalla que casi no se mira.
+ */
+export async function leerBitacora(store: Marca, liqId: string): Promise<EventoBitacora[]> {
+  const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&bitacora=1&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la bitácora de la campaña.')
+  return (d.eventos || []) as EventoBitacora[]
 }
 
 export async function crearCampania(
@@ -152,6 +167,12 @@ export interface ResultadoAplicar {
   ok: boolean
   error?: string
   precio?: number | null
+  /**
+   * El precio se escribió y el ítem quedó bien, pero el evento no entró a la bitácora. No invalida
+   * la operación; se avisa porque el registro es lo que después contesta "¿qué pasó con este
+   * producto?", y un hueco silencioso ahí no se detecta nunca.
+   */
+  avisoBitacora?: string
 }
 
 /**
