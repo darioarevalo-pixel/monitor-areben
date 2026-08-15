@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ACCESO_POR_FUNCION, estaExcluido, funcionQueDa, marcaExcluir, puedeSub, puedeVer, seccionesDeFuncion, type Perfil } from '@/lib/permisos'
-import { PERM_CAT } from '@/lib/nav'
+import { categoriasDe, keysDeCat, NAV_CATS, PERM_CAT, sectorVisible } from '@/lib/nav'
 
 const perfil = (over: Partial<Perfil> = {}): Perfil => ({
   name: 'Ana',
@@ -150,5 +150,52 @@ describe('permisos — qué da cada función', () => {
     expect(puedeVer(u, 'bdi', 'conteo')).toBe(true)
     expect(puedeSub(u, 'bdi', 'conteo', 'aplicar')).toBe(false) // aplicar el ajuste de stock, no
     expect(puedeSub(u, 'bdi', 'cupones', 'crear')).toBe(false)
+  })
+})
+
+/**
+ * Solicitudes cuelga de cuatro sectores y el permiso es UNO: el sidebar preguntaba lo mismo cuatro
+ * veces y se las mostraba todas. `sectorVisible` recorta el MENÚ (no el permiso: el guard de ruta y
+ * el servidor siguen intactos, la URL a mano entra igual) a quien tiene función de sector.
+ *
+ * No hay ningún test que renderice el Sidebar, y por eso la lógica salió a `lib/nav.ts` como
+ * función pura: acá es donde se sostiene.
+ */
+describe('nav — la puerta del sector propio (Solicitudes)', () => {
+  const PUERTAS = ['local', 'deposito', 'marketing', 'administracion']
+  const ve = (u: Perfil | null) => PUERTAS.filter((c) => sectorVisible(u, 'solicitudes', c))
+
+  it('con función de sector queda UNA sola puerta: la suya', () => {
+    expect(ve(perfil({ funcion: ['marketing'] }))).toEqual(['marketing']) // el caso de Stefania
+  })
+
+  it('con dos funciones, las dos', () => {
+    expect(ve(perfil({ funcion: ['local', 'deposito'] }))).toEqual(['local', 'deposito'])
+  })
+
+  it('Dirección ve las cuatro: no es ninguno de esos sectores y navega por intención', () => {
+    expect(ve(perfil({ funcion: ['direccion'] }))).toEqual(PUERTAS)
+  })
+
+  it('el admin ve las cuatro AUNQUE tenga una función de sector tildada', () => {
+    // `tieneFuncion` no es implícita para los admins: sin el `esAdmin` de adelante, éste quedaría
+    // recortado a Local.
+    expect(ve(perfil({ admin: true, funcion: ['local'] }))).toEqual(PUERTAS)
+  })
+
+  it('sin ninguna función, las cuatro (compatibilidad: nadie pierde acceso)', () => {
+    expect(ve(perfil())).toEqual(PUERTAS)
+    expect(ve(null)).toEqual(PUERTAS)
+  })
+
+  it('una sección que vive en un solo grupo no se recorta nunca', () => {
+    const u = perfil({ funcion: ['marketing'] })
+    expect(sectorVisible(u, 'cupones', 'local')).toBe(true)
+    expect(sectorVisible(u, 'postventa', 'administracion')).toBe(true)
+  })
+
+  it('solicitudes es la ÚNICA key que cruza categorías: si aparece otra, este cambio la alcanza', () => {
+    const cruzan = [...new Set(NAV_CATS.flatMap((c) => keysDeCat(c)))].filter((k) => categoriasDe(k).length > 1)
+    expect(cruzan).toEqual(['solicitudes'])
   })
 })

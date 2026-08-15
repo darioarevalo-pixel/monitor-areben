@@ -8,7 +8,7 @@ import { useAgenda } from '@/store/useAgenda'
 import { contarSinLeer, useSistema } from '@/store/useSistema'
 import { contarSinTildar, hoyIso } from '@/lib/agenda'
 import { comoLeLlamamos } from '@/lib/inicio/core'
-import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, sectorVisible, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
@@ -96,10 +96,18 @@ export function Sidebar({
 
   const cats = NAV_CATS.map((cat) => {
     if (cat.adminOnly && !esAdmin(perfil)) return null
-    const keys = cat.keys.filter(visible)
-    const items = (cat.items ?? []).filter(itemVisible)
+    // 🔴 La arrow explícita no es cosmética: `Array.filter` le pasa el ÍNDICE como 2º argumento,
+    // así que extender `visible(k, catId?)` en vez de envolverlo le metería un número donde va el
+    // id del grupo y el bug sería mudo. `sectorVisible` es no-op en 44 de las 45 secciones.
+    const deEsteSector = (k: string) => visible(k) && sectorVisible(perfil, k, cat.id)
+    const keys = cat.keys.filter(deEsteSector)
+    const items = (cat.items ?? []).filter((it) => itemVisible(it) && sectorVisible(perfil, it.key, cat.id))
     const grupos = (cat.grupos ?? [])
-      .map((g) => ({ ...g, keys: g.keys.filter(visible), items: (g.items ?? []).filter(itemVisible) }))
+      .map((g) => ({
+        ...g,
+        keys: g.keys.filter(deEsteSector),
+        items: (g.items ?? []).filter((it) => itemVisible(it) && sectorVisible(perfil, it.key, cat.id)),
+      }))
       .filter((g) => g.keys.length > 0 || g.items.length > 0)
     // 🔴 `items` va en la condición: una categoría que es un módulo (Meta) no tiene keys sueltas ni
     // subgrupos, así que sin esto desaparecería entera del menú para todo el mundo.

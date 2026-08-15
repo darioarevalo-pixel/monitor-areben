@@ -1,4 +1,5 @@
 import { NAV_CATS, PERM_CAT, type Marca, type NavCat, type NavGrupo, type NavItem, type PermCat } from './nav.datos'
+import { esAdmin, tieneFuncion, type Funcion, type Perfil } from './permisos'
 
 export { NAV_CATS, PERM_CAT }
 export type { Marca, NavCat, NavGrupo, NavItem, PermCat }
@@ -243,9 +244,46 @@ export function categoriaDe(key: string): string | null {
  */
 const CAT_POR_ID = new Map(NAV_CATS.map((c) => [c.id, c]))
 
+/** Los ids de los grupos del menú donde vive una key. Vacío si no está en ninguno. */
+export function categoriasDe(key: string): string[] {
+  return NAV_CATS.filter((c) => keysDeCat(c).includes(key)).map((c) => c.id)
+}
+
 /** ¿Esta key cuelga de más de un grupo? (define si hace falta el `?g=` en el link). */
 export function estaEnVariosGrupos(key: string): boolean {
-  return NAV_CATS.filter((c) => keysDeCat(c).includes(key)).length > 1
+  return categoriasDe(key).length > 1
+}
+
+/**
+ * ── Quién ve CUÁL de las puertas repetidas ──
+ *
+ * `solicitudes` es la única de las 45 que cuelga de cuatro sectores, y el sidebar filtraba las
+ * cuatro con la misma pregunta (`puedeVer(perfil, marca, 'solicitudes')`): no hay cuatro permisos,
+ * hay **uno listado cuatro veces**, así que a alguien de Marketing le aparecían también Local,
+ * Depósito y Administración. Las cuatro entradas no son copias: son cuatro **intenciones** (pedir /
+ * preparar / ver todo), por eso no se colapsan a una sola para todos — se recorta sólo a quien
+ * tiene una función de ese sector.
+ *
+ * Esto es **puro menú**: el permiso, el guard de ruta y el servidor no se tocan. Escribir
+ * `/solicitudes?g=deposito` a mano sigue entrando igual, y nadie pierde acceso.
+ *
+ * Dos cosas que la hacen andar y no son obvias:
+ * - **El mapa categoría → función es la identidad**: los `cat.id` de las cuatro (`local`,
+ *   `deposito`, `marketing`, `administracion`) son textualmente los ids del tipo `Funcion`.
+ * - **`mias` se filtra contra las categorías donde vive ESA key**, no contra todas las funciones
+ *   del perfil: Dirección no tiene ninguna de las cuatro, así que cae en la rama de compatibilidad
+ *   y ve las cuatro. Filtrando contra las funciones sueltas se quedaría sin ninguna.
+ *
+ * El `esAdmin` va antes y no es redundante: `tieneFuncion` no es implícita para los admins (es un
+ * rol de flujo, ortogonal), así que un admin con la función `local` tildada quedaría recortado.
+ */
+export function sectorVisible(perfil: Perfil | null, key: string, catId: string): boolean {
+  const donde = categoriasDe(key)
+  if (donde.length < 2) return true // 44 de 45: no-op
+  if (esAdmin(perfil)) return true // admin y Dirección navegan por intención
+  const mias = donde.filter((c) => tieneFuncion(perfil, c as Funcion))
+  if (!mias.length) return true // ninguna función aplica acá → ve todas (compatibilidad)
+  return mias.includes(catId)
 }
 
 /**
