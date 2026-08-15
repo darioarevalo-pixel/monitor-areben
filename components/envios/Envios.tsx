@@ -30,22 +30,27 @@ import {
 } from '@/components/ui'
 import {
   aCobrar,
+  cpFueraDeZona,
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
   ESTADO_LABEL,
   ESTADOS_CERRADOS,
+  itemsDelPedido,
   linkWhatsapp,
   diaDeRepartoVecino,
   nuevoIdEnvio,
   proximoDiaDeReparto,
+  puedeIrAUnDia,
   rotuloDeDia,
   ordenarParaPreparar,
   resumenDeTraida,
+  resumenDelPedido,
   siguienteEstado,
   totalesDelDia,
   turnosDe,
 } from '@/lib/envios/core'
+import { Icono } from '@/components/ui/Icono'
 import { hoyIso } from '@/lib/calendario'
 import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, marcarBonificado, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
@@ -95,6 +100,7 @@ export function Envios() {
   const [cerrando, setCerrando] = useState(false)
   const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
+  const [viendoPedido, setViendoPedido] = useState<Envio | null>(null)
 
   // 🔑 **La hoja es del DÍA, no del turno.** Un día con reparto de mañana y de tarde es un día:
   // el cadete es el mismo, la rendición es una, y tener que acordarse de mirar los dos turnos por
@@ -214,6 +220,7 @@ export function Envios() {
           onEditar={setEditando}
           onBorrar={borrar}
           onRecargar={recargar}
+          onVerPedido={setViendoPedido}
         />
       ) : (
       <>
@@ -413,6 +420,8 @@ export function Envios() {
       </>
       )}
 
+      {viendoPedido ? <ModalPedido envio={viendoPedido} onCerrar={() => setViendoPedido(null)} /> : null}
+
       {agendando ? (
         <MandarAUnDia
           envio={agendando}
@@ -515,6 +524,7 @@ function Pendientes({
   onEditar,
   onBorrar,
   onRecargar,
+  onVerPedido,
 }: {
   envios: Envio[]
   cargando: boolean
@@ -522,6 +532,7 @@ function Pendientes({
   onEditar: (e: Partial<Envio>) => void
   onBorrar: (e: Envio) => Promise<void>
   onRecargar: () => Promise<void>
+  onVerPedido: (e: Envio) => void
 }) {
   if (cargando) return null
   if (!envios.length) {
@@ -538,10 +549,13 @@ function Pendientes({
       <THead>
         <Tr>
           <Th>Cliente</Th>
-          <Th>Dónde va</Th>
+          {/* Se llamaba «Dónde va», que describía la pregunta en vez de nombrar el dato. */}
+          <Th>Dirección</Th>
+          <Th>Pedido</Th>
           <Th>Precio del envío</Th>
-          <Th>Cómo se cobra</Th>
           <Th />
+          {/* El tilde de cobrado va al final: es lo último que se decide, después de cotizar. */}
+          <Th>Cómo se cobra</Th>
         </Tr>
       </THead>
       <TBody>
@@ -562,15 +576,16 @@ function Pendientes({
               ) : null}
             </Td>
             <Td>
-              <div>{direccionCompleta(e)}</div>
-              {linkWhatsapp(e) ? (
-                <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
-                  WhatsApp
-                </a>
-              ) : null}
+              <Direccion envio={e} />
+            </Td>
+            <Td>
+              <ResumenPedido envio={e} onVer={() => onVerPedido(e)} />
             </Td>
             <Td>
               <Cotizar envio={e} onGuardado={onRecargar} />
+            </Td>
+            <Td>
+              <AccionesDeFila envio={e} onAgendar={onAgendar} onEditar={onEditar} onBorrar={onBorrar} />
             </Td>
             <Td>
               {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
@@ -586,21 +601,10 @@ function Pendientes({
                 <span style={{ opacity: 0.75 }}>lo cobra el cadete</span>
               )}
               <div>
+                {/* Corto a propósito: la fila ya dice en qué estado está, así que el botón sólo
+                    tiene que decir hacia dónde lo mueve. «Marcar envío pagado» repetía la columna. */}
                 <Button size="sm" variant="ghost" onClick={() => void marcarPagado(e.id, !e.envio_pagado).then(onRecargar)}>
-                  {e.envio_pagado ? 'Marcar envío impago' : 'Marcar envío pagado'}
-                </Button>
-              </div>
-            </Td>
-            <Td>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Button size="sm" variant="solid" tone="brand" onClick={() => onAgendar(e)}>
-                  Mandar a un día
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => onEditar(e)}>
-                  Editar
-                </Button>
-                <Button size="sm" variant="ghost" tone="danger" onClick={() => void onBorrar(e)}>
-                  Sacar
+                  {e.envio_pagado ? 'Impago' : 'Ya lo pagó'}
                 </Button>
               </div>
             </Td>
@@ -608,6 +612,184 @@ function Pendientes({
         ))}
       </TBody>
     </TableWrap>
+  )
+}
+
+/** Un botón que es sólo un ícono. `title` y `aria-label` con el mismo texto: el que pasa el mouse
+ *  necesita saber qué hace, y el que no ve el ícono también. Sin eso son cuatro cuadraditos. */
+function dice(texto: string) {
+  return { title: texto, 'aria-label': texto }
+}
+
+/**
+ * La dirección, con el CP y el aviso de zona.
+ *
+ * 🔑 **El CP va al lado de la localidad, no en su lugar.** La localidad viene sucia de Tienda Nube
+ * («Rosario - Rosario», «CENTRO», «Talleres») y el CP lo tipea el cliente: medido en prod, una orden
+ * con CP 2000 y localidad «San Martin de las Escobas», a 100 km. Ninguno de los dos alcanza solo,
+ * así que se muestran los dos y decide la persona.
+ */
+function Direccion({ envio }: { envio: Envio }) {
+  const wa = linkWhatsapp(envio)
+  const tel = String(envio.telefono || '').replace(/[^\d+]/g, '')
+  const fuera = cpFueraDeZona(envio.cp)
+  return (
+    <div style={{ display: 'grid', gap: 2 }}>
+      <div>{direccionCompleta(envio)}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+        {envio.cp ? <span style={{ opacity: 0.6 }}>CP {envio.cp}</span> : null}
+        {fuera ? (
+          <Badge tone="warning" {...dice('El código postal no es de la zona de reparto. ¿Este pedido es de acá?')}>
+            fuera de zona
+          </Badge>
+        ) : null}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {wa ? (
+          <a href={wa} target="_blank" rel="noopener noreferrer" {...dice(`Escribirle por WhatsApp a ${envio.telefono}`)}>
+            <Button size="sm" variant="ghost" tone="success" iconLeft={<Icono nombre="whatsapp" />} />
+          </a>
+        ) : null}
+        {tel ? (
+          <a href={`tel:${tel}`} {...dice(`Llamar a ${envio.telefono}`)}>
+            <Button size="sm" variant="ghost" iconLeft={<Icono nombre="telefono" />} />
+          </a>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * El pedido, en una línea, con la puerta para verlo entero.
+ *
+ * 🔑 **Contesta la pregunta que se hace al cotizar: ¿queda algo por cobrar además del envío?** Los
+ * ítems salen de la orden congelada en `datos`, no de Tienda Nube: es lo que el cadete va a tener en
+ * la mano, y pedirle algo a la tienda por cada fila de la bandeja no se sostiene.
+ */
+function ResumenPedido({ envio, onVer }: { envio: Envio; onVer: () => void }) {
+  const r = resumenDelPedido(envio)
+  return (
+    <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+      {r.pago ? (
+        <StatusPill tone="success" label="Pagado" />
+      ) : (
+        <StatusPill tone="warning" label={`Cobrar ${formatMoney(r.aCobrar)}`} />
+      )}
+      {r.items ? (
+        <Button size="sm" variant="ghost" onClick={onVer} {...dice('Ver el pedido')}>
+          {r.items} {r.items === 1 ? 'artículo' : 'artículos'}
+        </Button>
+      ) : (
+        <span style={{ fontSize: 12, opacity: 0.5 }}>sin detalle</span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Las tres acciones de la fila, como íconos.
+ *
+ * 🔴 **El de mandar a un día se apaga cuando falta el precio, y ése es todo el motivo de que sean
+ * íconos del kit y no emojis.** Un emoji trae su color puesto: un 📅 a todo color al lado de un
+ * botón deshabilitado se ve exactamente igual que uno activo, y el aviso deja de existir. Con trazo,
+ * el botón apagado se ve apagado.
+ */
+function AccionesDeFila({
+  envio,
+  onAgendar,
+  onEditar,
+  onBorrar,
+}: {
+  envio: Envio
+  onAgendar: (e: Envio) => void
+  onEditar: (e: Partial<Envio>) => void
+  onBorrar: (e: Envio) => Promise<void>
+}) {
+  const { ok, motivo } = puedeIrAUnDia(envio)
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      <Button
+        size="sm"
+        variant="solid"
+        tone="brand"
+        disabled={!ok}
+        iconLeft={<Icono nombre="calendario" />}
+        onClick={() => onAgendar(envio)}
+        {...dice(ok ? 'Mandar a un día de reparto' : motivo || 'No puede salir todavía')}
+      />
+      <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => onEditar(envio)} {...dice('Editar el envío')} />
+      <Button
+        size="sm"
+        variant="ghost"
+        tone="danger"
+        iconLeft={<Icono nombre="papelera" />}
+        onClick={() => void onBorrar(envio)}
+        {...dice('Sacar el envío de la hoja')}
+      />
+    </div>
+  )
+}
+
+/**
+ * El pedido entero, de sólo lectura.
+ *
+ * Sale de la orden congelada: no le pide nada a Tienda Nube. Si la clienta cambia algo mañana, lo
+ * que se ve acá sigue siendo lo que el cadete llevó — que es lo que hace falta cuando alguien
+ * reclama en la puerta.
+ */
+function ModalPedido({ envio, onCerrar }: { envio: Envio; onCerrar: () => void }) {
+  const items = itemsDelPedido(envio)
+  const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0)
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo={envio.orden_numero ? `Pedido #${envio.orden_numero}` : 'Pedido'}>
+      <div style={{ display: 'grid', gap: space[3] }}>
+        <div style={{ opacity: 0.7, fontSize: 13 }}>
+          {envio.cliente || 'Sin nombre'} · {direccionCompleta(envio)}
+        </div>
+        {items.length ? (
+          <TableWrap>
+            <THead>
+              <Tr>
+                <Th>Artículo</Th>
+                <Th>Cant.</Th>
+                <Th>Precio</Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {items.map((i, n) => (
+                <Tr key={n}>
+                  <Td>
+                    <div>{i.nombre}</div>
+                    {i.sku ? <div style={{ opacity: 0.55, fontSize: 12 }}>{i.sku}</div> : null}
+                  </Td>
+                  <Td>{i.cantidad}</Td>
+                  <Td>{formatMoney(i.precio * i.cantidad)}</Td>
+                </Tr>
+              ))}
+            </TBody>
+          </TableWrap>
+        ) : (
+          <Notice tone="neutral">Este envío no tiene el detalle del pedido guardado. Se cargó a mano, o es anterior al cambio.</Notice>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+          <span>Total del pedido</span>
+          <span>{formatMoney(total)}</span>
+        </div>
+        {/* Lo que de verdad importa en la puerta, y por eso va aparte del total: casi siempre el
+            pedido ya está pagado y lo único que se cobra es el envío. */}
+        <Notice tone={resumenDelPedido(envio).pago ? 'success' : 'warning'}>
+          {resumenDelPedido(envio).pago
+            ? 'El pedido ya está pagado: en la puerta no se cobra el producto.'
+            : `Quedan ${formatMoney(resumenDelPedido(envio).aCobrar)} del pedido por cobrar en la puerta.`}
+        </Notice>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cerrar
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -772,7 +954,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
 
   const dispo = turnosDe(fecha) as Turno[]
   const fueraDeGrilla = !dispo.includes(turno)
-  const sinPrecio = !(Number(envio.monto_envio) > 0)
+  const precio = puedeIrAUnDia(envio)
 
   async function guardar() {
     setGuardando(true)
@@ -817,17 +999,17 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
           </Notice>
         ) : null}
 
-        {sinPrecio ? (
-          <Notice tone="warning">
-            Este envío todavía no tiene precio. Si sale así, el ticket no le va a pedir nada al cliente.
-          </Notice>
-        ) : null}
+        {/* 🔴 **Esto BLOQUEA, no avisa.** Era un cartel amarillo que se podía pasar de largo, y el
+            resultado era un paquete en la calle con un ticket que no le pide nada al cliente: un
+            envío que nadie cobra y un cadete al que igual hay que pagarle. El precio es las dos
+            cosas a la vez, así que sin él el paquete no puede salir. */}
+        {!precio.ok ? <Notice tone="danger">{precio.motivo}</Notice> : null}
 
         <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !rotuloDeDia(fecha)}>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !rotuloDeDia(fecha) || !precio.ok}>
             {guardando ? 'Mandando…' : 'Mandar a ese día'}
           </Button>
         </div>

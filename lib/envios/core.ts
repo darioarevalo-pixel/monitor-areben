@@ -247,6 +247,109 @@ export function direccionCompleta(e: Envio): string {
   return [e.direccion, e.piso_depto, e.localidad].map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' · ')
 }
 
+/**
+ * De qué tiendas se traen las órdenes: la del header, y nada más.
+ *
+ * Sin marca en la sesión —que con sesión no pasa— se traen las dos, que es lo que hacía siempre: un
+ * array vacío sería un botón que no hace nada y no dice por qué.
+ */
+export function marcasATraer(marca: Marca | null | undefined): Marca[] {
+  return marca ? [marca] : (['bdi', 'zattia'] as Marca[])
+}
+
+// ── La zona de reparto ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Los códigos postales a los que llega la moto.
+ *
+ * 🔑 **Es una lista a mano y está bien que lo sea.** Sale del mismo mapa con el que se cotiza
+ * —Rosario $3.000-4.300, Fisherton $4.300/5.500, Funes $8.000, Roldán $11.000, VGG $6.500— y se
+ * corrige editando esta línea, no con una migración. Una tabla de zonas para seis números sería
+ * darle mantenimiento a algo que cambia una vez por año.
+ *
+ * ⚠️ **Es un aviso, no un bloqueo.** Un pedido de afuera de la zona puede salir igual —lo decide
+ * quien cotiza—; lo que no puede es pasar desapercibido hasta que el cadete está en la calle.
+ */
+export const CP_DE_REPARTO = [
+  '2000', // Rosario (incluye Fisherton)
+  '2121', // Pérez
+  '2124', // Villa Gobernador Gálvez
+  '2132', // Funes
+  '2134', // Roldán
+  '2152', // Granadero Baigorria
+]
+
+/**
+ * ¿Este pedido eligió cadetería sin ser de la zona?
+ *
+ * 🔴 **Con el CP vacío devuelve `false`, y es lo importante.** Una alarma que suena en todas las
+ * filas viejas —las que se trajeron antes de que se guardara el CP— deja de significar algo en dos
+ * días, y a partir de ahí nadie mira la única que sí importaba.
+ *
+ * ⚠️ Y no alcanza solo: se midió en prod el 15-ago-2026 una orden con **CP 2000 y localidad «San
+ * Martin de las Escobas»**, que está a 100 km. El CP lo tipea el cliente, así que puede mentir. Esto
+ * levanta la mano, no cierra la puerta.
+ */
+export function cpFueraDeZona(cp: string | null | undefined): boolean {
+  const limpio = String(cp ?? '').replace(/\D/g, '')
+  if (!limpio) return false
+  return !CP_DE_REPARTO.includes(limpio.slice(0, 4))
+}
+
+// ── El pedido que va adentro del paquete ─────────────────────────────────────────────────────
+
+/** Una línea de la orden, como quedó congelada al traerla. */
+export type ItemDelPedido = { nombre: string; sku: string | null; cantidad: number; precio: number }
+
+/**
+ * Los ítems de la orden congelada.
+ *
+ * 🔴 **Cada nivel tiene su guarda, y no es paranoia.** `datos` es jsonb libre: hay filas cargadas a
+ * mano que lo tienen vacío, y las viejas pueden no traer `products`. Un `e.datos.tn.products.map`
+ * tira un TypeError **en el render**, y eso no deja un cartel de error: React reintenta, se come la
+ * memoria y Chrome mata la pestaña. Ya pasó tres veces en esta misma sección.
+ *
+ * Sale de lo guardado y no de Tienda Nube: lo que se muestra es lo que el cadete tiene en la mano.
+ */
+export function itemsDelPedido(e: Envio): ItemDelPedido[] {
+  const datos = (e?.datos ?? {}) as Record<string, unknown>
+  const tn = (datos.tn ?? {}) as Record<string, unknown>
+  const crudos = Array.isArray(tn.products) ? tn.products : []
+  return crudos.map((p) => {
+    const it = (p ?? {}) as Record<string, unknown>
+    return {
+      nombre: String(it.name ?? 'Sin nombre'),
+      sku: it.sku == null ? null : String(it.sku),
+      cantidad: num(it.quantity as string),
+      precio: num(it.price as string),
+    }
+  })
+}
+
+/** Lo que hay que decir del pedido en una línea: cuántas cosas son y si queda algo por cobrar. */
+export function resumenDelPedido(e: Envio): { items: number; aCobrar: number; pago: boolean } {
+  const items = itemsDelPedido(e).reduce((s, i) => s + i.cantidad, 0)
+  const saldo = num(e.monto_pedido_a_cobrar)
+  return { items, aCobrar: saldo, pago: saldo === 0 }
+}
+
+/**
+ * ¿Este envío puede salir a un día?
+ *
+ * 🔴 **Sin precio no sale, y esto BLOQUEA.** Antes era un aviso amarillo que se podía pasar de
+ * largo, y el resultado era un paquete en la calle con un ticket que no le pide nada al cliente —o
+ * sea, un envío que nadie cobra y un cadete al que igual hay que pagarle—. El precio del envío es
+ * las dos cosas a la vez: lo que se cobra en la puerta y lo que se le paga a él.
+ *
+ * El bonificado pasa igual: tiene precio cargado, sólo que no lo paga la clienta.
+ */
+export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } {
+  if (!(num(e.monto_envio) > 0)) {
+    return { ok: false, motivo: 'Falta el precio del envío. Es lo que cobra el cadete: sin eso el paquete no puede salir.' }
+  }
+  return { ok: true, motivo: null }
+}
+
 /** Los envíos de un turno, ordenados como se preparan: primero lo que todavía no salió. */
 export function ordenarParaPreparar(envios: Envio[]): Envio[] {
   const peso = (e: Envio) => ((ESTADOS_EN_CASA as string[]).includes(e.estado) ? 0 : (ESTADOS_CERRADOS as string[]).includes(e.estado) ? 2 : 1)
@@ -319,6 +422,9 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
     direccion: calle || '(sin dirección en la orden)',
     piso_depto: d?.piso || null,
     localidad: d?.localidad || null,
+    // El CP se guarda en su columna además de quedar en `datos`: es lo que decide el aviso de zona,
+    // y cavar en el jsonb para una consulta que la pantalla hace en cada fila no se sostiene.
+    cp: d?.cp || null,
     anotacion: null,
     monto_envio: o.envio_costo_cliente ?? 0,
     envio_pagado: envioYaPago(o),

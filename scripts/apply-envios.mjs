@@ -52,6 +52,7 @@ const archivos = [
   'sql/migrate-envios-cuenta.sql',
   'sql/migrate-envios-plata.sql',
   'sql/migrate-envios-estados.sql',
+  'sql/migrate-envios-bandeja.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 

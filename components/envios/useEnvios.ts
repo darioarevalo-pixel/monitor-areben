@@ -12,12 +12,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
 import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
-import { cuentaDelCadete, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
+import { cuentaDelCadete, marcasATraer, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
 import type { CierreDia, CuentaCadete, Envio, Traida } from '@/lib/envios/tipos'
-import type { Marca } from '@/lib/nav'
-
-const MARCAS: Marca[] = ['bdi', 'zattia']
 
 /**
  * Cuántos días para atrás se piden al traer de Tienda Nube.
@@ -53,7 +50,7 @@ export type EstadoEnvios = {
 export function useEnvios(): EstadoEnvios {
   // 🔴 El día sale del NAVEGADOR, no del servidor. El servidor corre en UTC y a las 21:00 de
   // Argentina ya devuelve mañana: la hoja se vaciaría sola en el medio del turno tarde.
-  const { marca } = useSesion()
+  const { marca: marcaActiva } = useSesion()
   const [fecha, setFecha] = useState<string>(() => hoyIso())
   const [envios, setEnvios] = useState<Envio[]>([])
   const [todosLosPendientes, setTodosLosPendientes] = useState<Envio[]>([])
@@ -101,11 +98,16 @@ export function useEnvios(): EstadoEnvios {
   }, [fecha, tick])
 
   /**
-   * Trae las órdenes de las DOS tiendas a la **bandeja de pendientes**, no a un día.
+   * Trae las órdenes de **la marca del header** a la bandeja de pendientes, no a un día.
    *
-   * Las dos juntas y no la de la marca del header: la hoja del cadete no tiene marca. Si una tienda
-   * falla, la otra entra igual y el error se cuenta — media hoja es mejor que ninguna, siempre que
-   * se sepa que está a medias.
+   * 🔑 **Traía las dos y era desconcertante.** La hoja del día no tiene marca —el cadete lleva las
+   * dos en la misma mochila—, pero la bandeja sí: cotizar y acordar el día lo hace el equipo de una
+   * marca mirando su tienda. Con la traída cross-marca, apretar el botón parado en BDI contestaba
+   * «5 nuevos» y no aparecía ninguno, porque los cinco eran de Zattia. El número decía la verdad y
+   * la pantalla también; lo que no cerraba era que fueran dos preguntas distintas.
+   *
+   * La consecuencia, dicha: si nadie se para en Zattia, las de Zattia no entran. Es visible —la
+   * bandeja de Zattia queda vacía— y era el precio de que el cartel signifique algo.
    *
    * 🔑 **Ninguna orden cae en un día.** El día del reparto lo confirma el cliente y no tiene por qué
    * ser el de la orden: mandarla directo a la fecha en que se compró es inventar una entrega que
@@ -125,7 +127,9 @@ export function useEnvios(): EstadoEnvios {
     const hasta = hoyIso()
     const desde = sumarDias(hasta, -DIAS_PARA_ATRAS)
 
-    for (const marca of MARCAS) {
+    // Sin marca en la sesión no se adivina: se traen las dos, que es lo que hacía siempre. Con
+    // sesión nunca pasa, pero un `[]` acá sería un botón que no hace nada y no dice por qué.
+    for (const marca of marcasATraer(marcaActiva)) {
       try {
         const { ordenes, noLeidas: faltantes } = await leerOrdenesTN(marca, desde, hasta)
         noLeidas += faltantes
@@ -164,13 +168,13 @@ export function useEnvios(): EstadoEnvios {
       throw new Error(`Se trajeron las que se pudieron. ${fallos.join(' · ')}${faltan}`)
     }
     return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo, noLeidas }
-  }, [recargar])
+  }, [recargar, marcaActiva])
 
   // El filtro por marca se hace acá y no en el servidor: la bandeja es chica y así cambiar de marca
   // en el header no cuesta un viaje. Sin marca (nunca pasa con sesión) se muestran las dos.
   const pendientes = useMemo(
-    () => (marca ? todosLosPendientes.filter((e) => e.store === marca) : todosLosPendientes),
-    [todosLosPendientes, marca],
+    () => (marcaActiva ? todosLosPendientes.filter((e) => e.store === marcaActiva) : todosLosPendientes),
+    [todosLosPendientes, marcaActiva],
   )
 
   return { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube }

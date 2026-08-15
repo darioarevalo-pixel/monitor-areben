@@ -476,6 +476,39 @@ const TRAZOS = {
       <path d="M6 6l12 12M18 6L6 18" />
     </>
   ),
+  /** Llamar — auricular. */
+  telefono: (
+    <>
+      <path d="M6.4 3.8h3l1.5 3.7-1.9 1.4a11 11 0 0 0 5.1 5.1l1.4-1.9 3.7 1.5v3a1.7 1.7 0 0 1-1.9 1.7A15.6 15.6 0 0 1 4.7 5.7a1.7 1.7 0 0 1 1.7-1.9z" />
+    </>
+  ),
+  /**
+   * Escribir por WhatsApp — burbuja con auricular.
+   *
+   * Es una burbuja genérica y no el logo: el logotipo de WhatsApp es marca registrada, y además un
+   * ícono de trazo se pinta con `currentColor`, que es lo que permite apagarlo cuando el botón está
+   * deshabilitado. Un logo a todo color se ve igual habilitado que no.
+   */
+  whatsapp: (
+    <>
+      <path d="M20.2 11.6a8.1 8.1 0 0 1-11.9 7.2L4 20.1l1.4-4.2a8.1 8.1 0 1 1 14.8-4.3z" />
+      <path d="M9.3 9.1c.4 2.4 2.4 4.4 4.8 4.8l.9-1.3 1.7.8v1.3c0 .6-.5 1-1.1 1a7 7 0 0 1-6.4-6.4c0-.6.4-1.1 1-1.1h1.3l.8 1.7z" />
+    </>
+  ),
+  /** Imprimir — impresora con la hoja saliendo. */
+  impresora: (
+    <>
+      <path d="M7.2 9.2V3.9h9.6v5.3" />
+      <path d="M7.2 17.6H5.4a1.6 1.6 0 0 1-1.6-1.6v-4.2a2.6 2.6 0 0 1 2.6-2.6h11.2a2.6 2.6 0 0 1 2.6 2.6V16a1.6 1.6 0 0 1-1.6 1.6h-1.8" />
+      <path d="M7.2 14.4h9.6v5.7H7.2z" />
+    </>
+  ),
+  /** Listo — tilde. */
+  check: (
+    <>
+      <path d="M4.8 12.6l4.6 4.6L19.2 7.4" />
+    </>
+  ),
 } as const
 
 export function Icono({ nombre, size = 16, style }: { nombre: NombreIcono; size?: number; style?: React.CSSProperties }) {

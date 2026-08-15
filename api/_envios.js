@@ -67,7 +67,7 @@ function puedeEnvios(perfil) {
 
 const CAMPOS =
   'id, store, fecha, turno, origen, orden_numero, cliente, telefono, direccion, piso_depto, ' +
-  'localidad, anotacion, monto_envio, envio_pagado, envio_bonificado, monto_pedido_a_cobrar, estado, ' +
+  'localidad, cp, anotacion, monto_envio, envio_pagado, envio_bonificado, monto_pedido_a_cobrar, estado, ' +
   'vendedor, cadete, datos, autor, created_at, updated_at';
 
 const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_en';
@@ -120,6 +120,7 @@ function filaDe(e, yo) {
     direccion: String(e.direccion || '').trim(),
     piso_depto: e.piso_depto || null,
     localidad: e.localidad || null,
+    cp: e.cp == null || e.cp === '' ? null : String(e.cp).trim(),
     anotacion: e.anotacion || null,
     monto_envio: mEnvio == null ? 0 : mEnvio,
     // Los dos tildes de quién paga el envío. El costo (`monto_envio`) no los mira: existe igual.

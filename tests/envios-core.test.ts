@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   aCobrar,
   conIntentoFallido,
+  cpFueraDeZona,
+  itemsDelPedido,
+  marcasATraer,
+  puedeIrAUnDia,
+  resumenDelPedido,
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
@@ -52,6 +57,7 @@ const base: Envio = {
   direccion: '3 de Febrero 1234',
   piso_depto: null,
   localidad: 'Rosario',
+  cp: '2000',
   anotacion: null,
   monto_envio: 3000,
   envio_pagado: false,
@@ -546,6 +552,100 @@ describe('🔴 el intento fallido se apila, no pisa', () => {
   it('una fila sin datos no rompe', () => {
     const p = conIntentoFallido(con({ fecha: '2026-08-14', turno: 'tarde', datos: {} }), { por: null, at: 'x' })
     expect(p.datos.intentos).toHaveLength(1)
+  })
+})
+
+/**
+ * El aviso de zona, el pedido congelado, y el candado del precio.
+ */
+describe('🔴 el aviso de zona no puede sonar siempre', () => {
+  // 🔴 EL test. El mutante —devolver `true` con el CP vacío— pinta de amarillo todas las filas
+  // viejas, las que se trajeron antes de que se guardara el CP. Una alarma que suena en todo deja
+  // de significar algo en dos días, y a partir de ahí nadie mira la única que sí importaba.
+  it('🔴 sin CP no avisa nada', () => {
+    expect(cpFueraDeZona(null)).toBe(false)
+    expect(cpFueraDeZona('')).toBe(false)
+    expect(cpFueraDeZona(undefined)).toBe(false)
+  })
+
+  it('los de la zona no avisan', () => {
+    expect(cpFueraDeZona('2000')).toBe(false) // Rosario
+    expect(cpFueraDeZona('2132')).toBe(false) // Funes
+  })
+
+  it('los de afuera sí', () => {
+    expect(cpFueraDeZona('1425')).toBe(true) // CABA
+    expect(cpFueraDeZona('5000')).toBe(true) // Córdoba
+  })
+
+  // TN los devuelve en las dos formas según cómo los cargó el cliente.
+  it('aguanta el CPA con letras', () => {
+    expect(cpFueraDeZona('S2000ABC')).toBe(false)
+    expect(cpFueraDeZona('C1425DKE')).toBe(true)
+  })
+})
+
+describe('el pedido que va adentro del paquete', () => {
+  const conItems = con({
+    datos: { tn: { products: [{ name: 'POP CASE BLUE', sku: 'F-0225-15', quantity: '2', price: '14990.00' }] } },
+  })
+
+  it('lee los ítems de la orden congelada', () => {
+    expect(itemsDelPedido(conItems)).toEqual([{ nombre: 'POP CASE BLUE', sku: 'F-0225-15', cantidad: 2, precio: 14990 }])
+  })
+
+  // 🔴 EL test. `datos` es jsonb libre: hay filas cargadas a mano que lo tienen vacío. Un
+  // `e.datos.tn.products.map` tira un TypeError EN EL RENDER, y eso no deja un cartel: React
+  // reintenta, se come la memoria y Chrome mata la pestaña. Ya pasó tres veces en esta sección.
+  it('🔴 una fila sin datos devuelve lista vacía, no una excepción', () => {
+    expect(itemsDelPedido(con({ datos: {} }))).toEqual([])
+    expect(itemsDelPedido(con({ datos: { tn: {} } }))).toEqual([])
+    expect(itemsDelPedido(con({ datos: { tn: { products: null } } as never }))).toEqual([])
+  })
+
+  it('el resumen cuenta unidades, no líneas', () => {
+    expect(resumenDelPedido(conItems).items).toBe(2)
+  })
+
+  it('«pagado» es que no queda saldo del pedido, que es el caso normal', () => {
+    expect(resumenDelPedido(con({ monto_pedido_a_cobrar: 0 })).pago).toBe(true)
+    expect(resumenDelPedido(con({ monto_pedido_a_cobrar: 17500 }))).toMatchObject({ pago: false, aCobrar: 17500 })
+  })
+})
+
+describe('🔴 sin precio el paquete no sale', () => {
+  // 🔴 El mutante es el cartel amarillo de antes, que avisaba y dejaba pasar: el paquete salía con
+  // un ticket que no le pide nada al cliente. El test afirma `ok === false`, no que haya un texto.
+  it('🔴 un envío sin cotizar no puede ir a un día', () => {
+    expect(puedeIrAUnDia(con({ monto_envio: 0 })).ok).toBe(false)
+    expect(puedeIrAUnDia(con({ monto_envio: 0 })).motivo).toBeTruthy()
+  })
+
+  it('cotizado sale', () => {
+    expect(puedeIrAUnDia(con({ monto_envio: 3000 })).ok).toBe(true)
+  })
+
+  // El bonificado tiene precio cargado: no lo paga la clienta, pero el cadete cobra. Si esto
+  // bloqueara, la bandeja se trabaría justo con las filas que más apuro tienen.
+  it('el BONIFICADO sale igual: tiene precio, sólo que no lo paga ella', () => {
+    expect(puedeIrAUnDia(con({ monto_envio: 3000, envio_bonificado: true })).ok).toBe(true)
+  })
+})
+
+describe('🔴 traer trae la marca del header', () => {
+  it('una sola, la que está parada', () => {
+    expect(marcasATraer('bdi')).toEqual(['bdi'])
+    expect(marcasATraer('zattia')).toEqual(['zattia'])
+  })
+
+  // El mutante es volver a recorrer las dos: el cartel dice «5 nuevos» parado en BDI y no aparece
+  // ninguno, porque los cinco eran de Zattia y la bandeja filtra por marca.
+  it('🔴 nunca las dos cuando hay una parada', () => {
+    expect(marcasATraer('bdi')).not.toContain('zattia')
+  })
+
+  it('sin marca trae las dos, que es mejor que un botón que no hace nada', () => {
+    expect(marcasATraer(null)).toEqual(['bdi', 'zattia'])
   })
 })
 

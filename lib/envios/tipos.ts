@@ -45,6 +45,14 @@ export type Envio = {
   direccion: string
   piso_depto: string | null
   localidad: string | null
+  /**
+   * El código postal, como lo tipeó el cliente en Tienda Nube.
+   *
+   * Existe para avisar cuando alguien eligió cadetería sin ser de la zona. ⚠️ No es confiable solo:
+   * se midió una orden con CP 2000 (Rosario) y localidad «San Martin de las Escobas», a 100 km. Ver
+   * `cpFueraDeZona`.
+   */
+  cp: string | null
   anotacion: string | null
 
   /**
