@@ -10,9 +10,9 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
-import { aCobrar, cobroPendiente, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, cobroPendiente, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
+import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -114,10 +114,22 @@ export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: strin
  * le paga: sumarlo haría que la caja no cierre justo los días que algo salió mal, que es cuando el
  * número tiene que ser confiable.
  *
+ * 🔑 **La plata que va y viene son los `movimientos`, y ya vienen con signo.** El día aporta al
+ * saldo `(cobrado − tarifas) + Σ movimientos vivos`, y esa suma no tiene ningún `if` que decida si
+ * una fila suma o resta — porque no hay dónde invertirlo. Ver `montoDelMovimiento`.
+ *
+ * **Cero totales guardados**, igual que antes y por lo mismo: si el saldo de ayer quedara congelado
+ * en una columna y alguien corrigiera el precio de un envío de ayer, el acumulado de hoy mentiría
+ * sin que nada falle.
+ *
  * El signo, una sola vez y para todo el módulo: **positivo = el cadete tiene plata nuestra**;
  * negativo = se la debemos.
  */
-export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCadete {
+export function cuentaDelCadete(
+  envios: Envio[],
+  cierres: CierreDia[],
+  movimientos: MovimientoCuenta[] = [],
+): CuentaCadete {
   const porDia = new Map<string, Envio[]>()
   for (const e of envios) {
     if (!e.fecha) continue
@@ -128,6 +140,11 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
   // Un día cerrado sin un solo envío entregado igual es una fila de la cuenta: es el día en que se
   // le pagó lo que se le debía y no salió a repartir.
   for (const c of cierres) if (!porDia.has(c.fecha)) porDia.set(c.fecha, [])
+  // 🔑 **Y los días salen de TRES fuentes, no de dos.** Un movimiento puede caer en un día sin
+  // reparto —el jueves que rinde lo del lunes al miércoles, el sábado que se le transfiere lo que se
+  // le debía— y ése es justamente el caso que la tabla vieja no sabía anotar: su PK era el día de
+  // reparto. Sin esta línea, esa plata existe en la base y no aparece en ninguna fila.
+  for (const m of movimientos) if (m.fecha && !porDia.has(m.fecha)) porDia.set(m.fecha, [])
 
   const fechas = [...porDia.keys()].sort()
   let acumulado = 0
@@ -148,17 +165,20 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
     const sinCobrar = entregados.filter(cobroPendiente).reduce((s, e) => s + aCobrar(e), 0)
     const tarifas = entregados.reduce((s, e) => s + tarifaCadete(e), 0)
     sinCobrarTotal += sinCobrar
-    const trajo = cierre?.trajo == null ? null : num(cierre.trajo)
-    const pagadoAparte = num(cierre?.pagado_aparte)
 
-    // Lo que el día movió en la cuenta: lo que quedó en su bolsillo, menos lo que entregó.
+    // 🔑 **Los movimientos se SUMAN, tal como vienen.** El signo ya viene adentro del dato
+    // (`montoDelMovimiento`), así que acá no hay ningún `if` que decida si esta fila suma o resta —
+    // y por lo tanto no hay ninguno que se pueda invertir. Ése era el defecto que escondía el
+    // modelo anterior: restar `pagado_aparte` en vez de sumarlo DUPLICABA la deuda en vez de
+    // saldarla, y los dos caminos daban un número plausible.
     //
-    // 🔑 **La plata que se le dio por fuera SUMA, no resta.** El saldo es "cuánto tiene él de lo
-    // nuestro", así que transferirle lo que se le debía sube el número hacia cero — restarlo
-    // duplicaría la deuda en vez de saldarla, que es justo el error que este signo esconde: los dos
-    // caminos dan un número plausible y sólo uno cierra contra la calle.
+    // Los anulados quedan en la lista para que la pantalla los muestre tachados, pero no suman: la
+    // fila no se borra porque puede haber un recibo impreso en la mano del cadete.
+    const delDiaMov = movimientos.filter((m) => m.fecha === fecha)
+    const movido = delDiaMov.filter(movimientoVivo).reduce((s, m) => s + num(m.monto), 0)
+
     const debeTraer = cobrado - tarifas
-    const saldoDelDia = debeTraer - (trajo ?? 0) + pagadoAparte
+    const saldoDelDia = debeTraer + movido
     acumulado += saldoDelDia
 
     dias.push({
@@ -169,8 +189,8 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
       sinCobrar,
       tarifas,
       debeTraer,
-      trajo,
-      pagadoAparte,
+      movimientos: delDiaMov,
+      movido,
       saldoDelDia,
       acumulado,
       cerrado: !!cierre?.cerrado_en,
@@ -588,6 +608,9 @@ export {
   aCobrar,
   CAMPOS,
   CAMPOS_CUENTA,
+  CAMPOS_MOVIMIENTO,
+  claseDelMovimiento,
+  CLASES_MOVIMIENTO,
   cobroPendiente,
   conIntentoFallido,
   envioSaldado,
@@ -600,6 +623,9 @@ export {
   esTurnoDeGrilla,
   FILTRO_BANDEJA,
   MARCAS,
+  montoDelMovimiento,
+  MOVIMIENTO_LABEL,
+  movimientoVivo,
   netoDelEnvio,
   num,
   ORIGENES,
@@ -609,4 +635,5 @@ export {
   TURNOS_POR_DIA,
   turnosDe,
   validarEnvio,
+  validarMovimiento,
 } from './reglas.core.js'

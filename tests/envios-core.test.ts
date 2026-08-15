@@ -29,8 +29,13 @@ import {
   cuentaDelCadete,
   CAMPOS,
   CAMPOS_CUENTA,
+  CAMPOS_MOVIMIENTO,
+  claseDelMovimiento,
   cobroPendiente,
   envioNuevoAMano,
+  montoDelMovimiento,
+  MOVIMIENTO_LABEL,
+  movimientoVivo,
   netoDelEnvio,
   pagoDelEnvio,
   tarifaCadete,
@@ -38,9 +43,10 @@ import {
   turnosDe,
   vaAlReparto,
   validarEnvio,
+  validarMovimiento,
 } from '@/lib/envios/core'
 import { armarTicket, textoDePlata } from '@/lib/envios/ticket'
-import type { CierreDia, Envio, OrdenTN, Traida } from '@/lib/envios/tipos'
+import type { CierreDia, Envio, MovimientoCuenta, OrdenTN, Traida } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
@@ -268,36 +274,56 @@ describe('la cuenta corriente del cadete', () => {
   const dia = (fecha: string, envios: Partial<Envio>[]): Envio[] =>
     envios.map((e, i) => con({ id: `${fecha}-${i}`, fecha, estado: 'entregado', ...e }))
 
-  const cierre = (fecha: string, trajo: number | null, pagado_aparte = 0): CierreDia => ({
+  const cierre = (fecha: string): CierreDia => ({
     fecha,
-    trajo,
-    pagado_aparte,
     nota: null,
     cerrado_por: 'Bruno',
     cerrado_en: `${fecha}T20:00:00Z`,
   })
 
+  /**
+   * Un movimiento **ya guardado**: el monto viene con su signo, como sale de la base. Lo que la
+   * pantalla manda son la clase y un positivo — eso lo prueba el bloque de `montoDelMovimiento`.
+   */
+  const mov = (fecha: string, monto: number, extra: Partial<MovimientoCuenta> = {}): MovimientoCuenta => ({
+    id: `mv-${fecha}-${monto}`,
+    fecha,
+    monto,
+    nota: null,
+    autor: 'Bruno',
+    anulado_en: null,
+    anulado_por: null,
+    ...extra,
+  })
+
+  /** Rindió: nos entregó plata ⇒ tiene menos plata nuestra. */
+  const rindio = (fecha: string, cuanto: number, extra?: Partial<MovimientoCuenta>) =>
+    mov(fecha, montoDelMovimiento('rindio', cuanto), extra)
+  /** Le pagamos: ahora la tiene él. */
+  const lePagamos = (fecha: string, cuanto: number, extra?: Partial<MovimientoCuenta>) =>
+    mov(fecha, montoDelMovimiento('le_pagamos', cuanto), extra)
+
   it('el día normal —todo cobrado en la puerta— no mueve la cuenta', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300 }]), [cierre('2026-08-17', 0)])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300 }]), [cierre('2026-08-17')])
     expect(c.dias[0].debeTraer).toBe(0)
     expect(c.saldo).toBe(0)
   })
 
   it('el envío que el cliente ya había pagado lo deja a favor del cadete', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17', 0)])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17')])
     expect(c.saldo).toBe(-3000) // negativo = le debemos
   })
 
-  // 🔴 EL test de la tanda. Con `acumulado = saldoDelDia` esto da -3000 y el lunes se le paga de
+  // 🔴 EL test de la tanda 4. Con `acumulado = saldoDelDia` esto da -3000 y el lunes se le paga de
   // menos: el martes trajo de más justamente porque el lunes se le había quedado debiendo.
   it('🔴 el saldo se ARRASTRA de un día al siguiente', () => {
     const envios = [
       ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), // le quedamos debiendo 3000
       ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), // trae 10000
     ]
-    const c = cuentaDelCadete(envios, [cierre('2026-08-17', 0), cierre('2026-08-18', 10000)])
+    const c = cuentaDelCadete(envios, [cierre('2026-08-17'), cierre('2026-08-18')], [rindio('2026-08-18', 10000)])
     expect(c.dias.map((d) => d.acumulado)).toEqual([-3000, -3000])
-    // El martes trajo los 10.000 enteros, así que los 3.000 del lunes le siguen debiendo.
+    // El martes rindió los 10.000 enteros, así que los 3.000 del lunes le siguen debiendo.
     expect(c.saldo).toBe(-3000)
   })
 
@@ -306,18 +332,34 @@ describe('la cuenta corriente del cadete', () => {
       ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
       ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
     ]
-    // Trae 7.000 y se queda con los 3.000 que se le debían: es como se salda en la calle.
-    const c = cuentaDelCadete(envios, [cierre('2026-08-17', 0), cierre('2026-08-18', 7000)])
+    // Rinde 7.000 y se queda con los 3.000 que se le debían: es como se salda en la calle.
+    const c = cuentaDelCadete(envios, [cierre('2026-08-17'), cierre('2026-08-18')], [rindio('2026-08-18', 7000)])
     expect(c.saldo).toBe(0)
   })
 
-  // 🔴 **El signo del pago por fuera.** Los dos caminos dan un número plausible y sólo uno cierra
-  // contra la calle: si restara, transferirle lo que se le debía DUPLICARÍA la deuda (-6.000) en vez
-  // de saldarla. Se le debían 3.000, se le transfirieron 3.000, quedan a mano.
-  it('🔴 la plata que se le da por fuera SALDA lo que se le debía, no lo agranda', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17', 0, 3000)])
+  // 🔴 **El signo, que es el riesgo grande de la tanda G.** Los dos caminos dan un número plausible
+  // —nadie sabe de memoria si son $3.000 a favor o en contra— y sólo uno cierra contra la calle: si
+  // pagarle restara, transferirle lo que se le debía DUPLICARÍA la deuda (-6.000) en vez de
+  // saldarla. Se le debían 3.000, se le transfirieron 3.000, quedan a mano.
+  it('🔴 pagarle SALDA lo que se le debía, no lo agranda', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
+      [cierre('2026-08-17')],
+      [lePagamos('2026-08-17', 3000)],
+    )
     expect(c.saldo).toBe(0)
     expect(c.saldo).not.toBe(-6000)
+  })
+
+  // 🔴 La otra mitad del mismo par: rendir tiene que BAJAR el saldo. Con el signo dado vuelta en los
+  // dos lados, cada test suelto sigue dando verde y la cuenta entera queda espejada.
+  it('🔴 rendir BAJA el saldo y que le paguemos lo SUBE', () => {
+    const envios = dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }])
+    const soloRinde = cuentaDelCadete(envios, [], [rindio('2026-08-17', 4000)])
+    const soloPaga = cuentaDelCadete(envios, [], [lePagamos('2026-08-17', 4000)])
+    expect(soloRinde.saldo).toBe(6000) // tenía 10.000 nuestros, entregó 4.000
+    expect(soloPaga.saldo).toBe(14000) // tenía 10.000 nuestros y le dimos 4.000 más
+    expect(soloRinde.saldo).toBeLessThan(soloPaga.saldo)
   })
 
   // 🔴 Un envío que volvió sin entregar no cobró nada Y no se le paga. Contarlo haría que la cuenta
@@ -325,7 +367,7 @@ describe('la cuenta corriente del cadete', () => {
   it('🔴 lo que no se entregó no entra en la cuenta', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado' }]),
-      [cierre('2026-08-17', 0)],
+      [cierre('2026-08-17')],
     )
     expect(c.dias[0].cobrado).toBe(0)
     expect(c.dias[0].tarifas).toBe(0)
@@ -334,7 +376,8 @@ describe('la cuenta corriente del cadete', () => {
 
   it('un día sin cerrar cuenta igual: la plata está en su bolsillo aunque nadie la haya anotado', () => {
     const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), [])
-    expect(c.dias[0].trajo).toBe(null)
+    expect(c.dias[0].movimientos).toEqual([])
+    expect(c.dias[0].movido).toBe(0)
     expect(c.dias[0].cerrado).toBe(false)
     expect(c.saldo).toBe(10000)
   })
@@ -357,10 +400,51 @@ describe('la cuenta corriente del cadete', () => {
     expect(c.saldo).toBe(0)
   })
 
-  it('un día cerrado sin envíos igual es una fila: es el día en que se le pagó lo que se le debía', () => {
-    const c = cuentaDelCadete([], [cierre('2026-08-17', 0, 5000)])
+  it('un día cerrado sin envíos igual es una fila', () => {
+    const c = cuentaDelCadete([], [cierre('2026-08-17')])
     expect(c.dias).toHaveLength(1)
-    expect(c.saldo).toBe(5000) // no repartió y se le dieron 5.000: ahora los tiene él
+    expect(c.saldo).toBe(0)
+  })
+
+  // 🔴 **EL caso que la tabla vieja no sabía anotar**, y el motivo de toda la tanda: su PK era el día
+  // de REPARTO, así que «el jueves pasó a rendir lo del lunes, martes y miércoles» había que
+  // repartirlo a mano entre tres días, o inventarle un cierre a un día sin moto. El mutante —armar
+  // los días sólo con envíos y cierres— hace que esa plata exista en la base y **no aparezca en
+  // ninguna fila**: la cuenta cierra mal y no falla nada.
+  it('🔴 un movimiento en un día sin reparto igual es una fila de la cuenta', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
+      [],
+      [rindio('2026-08-22', 10000)], // el sábado, sin moto, pasó a rendir lo del lunes
+    )
+    expect(c.dias.map((d) => d.fecha)).toEqual(['2026-08-17', '2026-08-22'])
+    expect(c.dias[1].envios).toBe(0)
+    expect(c.dias[1].movido).toBe(-10000)
+    expect(c.saldo).toBe(0)
+  })
+
+  // 🔴 Un movimiento anulado **sigue en la lista** —puede haber un recibo impreso en la mano del
+  // cadete— pero no suma. Los dos mutantes muerden: filtrarlo de la lista deja el papel sin
+  // respaldo; sumarlo igual deja al cadete debiendo plata que ya se decidió que no debe.
+  it('🔴 un movimiento anulado sigue a la vista pero NO cuenta en el saldo', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
+      [],
+      [rindio('2026-08-17', 10000, { anulado_en: '2026-08-17T21:00:00Z', anulado_por: 'Bruno' })],
+    )
+    expect(c.dias[0].movimientos).toHaveLength(1)
+    expect(c.dias[0].movido).toBe(0)
+    expect(c.saldo).toBe(10000)
+  })
+
+  it('dos movimientos el mismo día se suman: rinde a la mañana y vuelve a la tarde', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
+      [],
+      [rindio('2026-08-17', 6000), rindio('2026-08-17', 4000)],
+    )
+    expect(c.dias[0].movimientos).toHaveLength(2)
+    expect(c.saldo).toBe(0)
   })
 
   // ── Lo que entregó sin cobrar ──────────────────────────────────────────────
@@ -374,7 +458,7 @@ describe('la cuenta corriente del cadete', () => {
     // cadete queda debiendo diez mil pesos que nunca tuvo en la mano.
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, cobrado: false }]),
-      [cierre('2026-08-17', 0)],
+      [cierre('2026-08-17')],
     )
     expect(c.dias[0].cobrado).toBe(0)
     expect(c.dias[0].sinCobrar).toBe(13000)
@@ -387,14 +471,14 @@ describe('la cuenta corriente del cadete', () => {
   // tildan desde la pantalla interna. El mutante —tratarlo como `false`— da vuelta la cuenta
   // histórica entera de un día para el otro y hace aparecer una deuda de clientas que no existe.
   it('🔴 el que nadie tildó sigue contando como cobrado', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]), [cierre('2026-08-17', 0)])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]), [cierre('2026-08-17')])
     expect(c.dias[0].cobrado).toBe(3000)
     expect(c.dias[0].sinCobrar).toBe(0)
     expect(c.saldo).toBe(0)
   })
 
   it('lo que se cobró de verdad no aparece como pendiente', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: true }]), [cierre('2026-08-17', 0)])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: true }]), [cierre('2026-08-17')])
     expect(c.dias[0].sinCobrar).toBe(0)
   })
 
@@ -423,6 +507,65 @@ describe('la cuenta corriente del cadete', () => {
 })
 
 /**
+ * 🔴 **El signo, que es el único riesgo grande de la tanda G.**
+ *
+ * `monto` es el efecto sobre el saldo, y el saldo es «cuánta plata nuestra tiene él». No hay columna
+ * `tipo` justamente para que no exista un `if` que decida si una fila suma o resta — ese `if` se
+ * puede invertir en cualquiera de los lugares que lo leen (la pantalla, el papel, la cuenta) y en
+ * los dos sentidos da un número plausible: nadie sabe de memoria si son $47.000 a favor o en contra.
+ *
+ * Así, el signo entra por **un solo lugar** y estos casos lo clavan ahí.
+ */
+describe('🔴 el signo de un movimiento entra por un solo lugar', () => {
+  it('rendir baja el saldo; que le paguemos lo sube', () => {
+    expect(montoDelMovimiento('rindio', 10000)).toBe(-10000)
+    expect(montoDelMovimiento('le_pagamos', 3000)).toBe(3000)
+  })
+
+  // 🔴 La pantalla tiene un input de plata donde nadie tipea un menos, pero un `-` de más pegado en
+  // el campo no puede significar lo contrario de lo que dice el botón que se apretó.
+  it('🔴 un negativo pegado en el campo no da vuelta el movimiento', () => {
+    expect(montoDelMovimiento('rindio', -10000)).toBe(-10000)
+    expect(montoDelMovimiento('le_pagamos', -3000)).toBe(3000)
+  })
+
+  // La vuelta: la clase se DERIVA del signo. Guardar las dos cosas permitiría una fila que diga «Le
+  // pagamos» con el monto en negativo, y no habría forma de saber cuál de las dos tiene razón.
+  it('la clase sale del signo, no de una columna', () => {
+    expect(claseDelMovimiento(-10000)).toBe('rindio')
+    expect(claseDelMovimiento(3000)).toBe('le_pagamos')
+    // PostgREST devuelve `numeric` como string, y así es como llega de la base a la pantalla.
+    // ⚠️ Sacarle el `num()` a la implementación NO rompe este caso —JS convierte solo en un `<`— así
+    // que el `num()` está por consistencia con el resto del módulo, no porque este test lo defienda.
+    expect(claseDelMovimiento('-10000')).toBe('rindio')
+  })
+
+  it('ida y vuelta: lo que se escribe es lo que después se lee', () => {
+    for (const clase of ['rindio', 'le_pagamos'] as const) {
+      expect(claseDelMovimiento(montoDelMovimiento(clase, 5000))).toBe(clase)
+      expect(MOVIMIENTO_LABEL[clase]).toBeTruthy()
+    }
+  })
+
+  // 🔴 Cero no dice nada —«no trajo nada» es lo normal en la calle y ya lo dice la ausencia de
+  // movimiento— pero ocupa una fila, sale en la pantalla y se le puede imprimir un recibo de $0.
+  it('🔴 un movimiento de $0 no se guarda', () => {
+    expect(validarMovimiento({ fecha: '2026-08-17', monto: 0 })).toBeTruthy()
+    expect(validarMovimiento({ fecha: '2026-08-17', monto: -10000 })).toBe(null)
+  })
+
+  it('sin día no se guarda: la fecha es lo único que lo ubica en la cuenta', () => {
+    expect(validarMovimiento({ fecha: '', monto: 5000 })).toBeTruthy()
+    expect(validarMovimiento({ fecha: '17/08/2026', monto: 5000 })).toBeTruthy()
+  })
+
+  it('anulado es lo contrario de vivo', () => {
+    expect(movimientoVivo({ anulado_en: null })).toBe(true)
+    expect(movimientoVivo({ anulado_en: '2026-08-17T21:00:00Z' })).toBe(false)
+  })
+})
+
+/**
  * 🔴 **Una columna que no se pide llega `undefined` y no falla nada.**
  *
  * Es el modo de falla que dejó esta pantalla ciega: `cobrado` existía en la base, lo escribía el
@@ -437,6 +580,15 @@ describe('🔴 las columnas que el handler pide', () => {
 
   it('la hoja del día también', () => {
     expect(CAMPOS.split(',').map((c) => c.trim())).toContain('cobrado')
+  })
+
+  // 🔴 El mismo modo de falla, en la tabla nueva: sin `anulado_en` la pantalla suma movimientos que
+  // ya se anularon —`movimientoVivo` los ve todos vivos— y el saldo miente sin que nada se rompa.
+  it('🔴 los movimientos piden `anulado_en`: sin eso el saldo suma lo anulado', () => {
+    const campos = CAMPOS_MOVIMIENTO.split(',').map((c) => c.trim())
+    expect(campos).toContain('anulado_en')
+    expect(campos).toContain('monto')
+    expect(campos).toContain('fecha')
   })
 
   // La cuenta pide TODOS los días desde el principio. El jsonb de la orden congelada ahí adentro es

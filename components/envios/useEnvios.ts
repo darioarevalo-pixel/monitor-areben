@@ -204,9 +204,9 @@ export function useCuentaCadete(activa: boolean) {
       setCargando(true)
       setError(null)
       try {
-        const { envios, dias } = await leerCuenta()
+        const { envios, dias, movimientos } = await leerCuenta()
         if (!vivo) return
-        setCuenta(cuentaDelCadete(envios, dias))
+        setCuenta(cuentaDelCadete(envios, dias, movimientos))
       } catch (e) {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta del cadete.')

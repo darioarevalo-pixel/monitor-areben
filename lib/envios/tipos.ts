@@ -122,21 +122,50 @@ export type TotalesDia = {
 }
 
 /**
- * El cierre de caja del DÍA. La ausencia de fila es "todavía no se cerró".
+ * El cierre del DÍA. La ausencia de fila es "todavía no se revisó".
  *
  * 🔑 Es del día y no del turno porque el cadete es uno solo: sale a la mañana y a la tarde con la
  * misma plata en el bolsillo, y partir la caja en dos obligaría a repartir a mano un saldo que en la
  * calle nunca estuvo partido.
+ *
+ * 🔑 **Desde la tanda G no guarda plata.** `trajo` y `pagado_aparte` eran un solo casillero por día
+ * de reparto, y el cadete no rinde así: rinde cuando pasa, a veces tres días juntos, a veces dos
+ * veces el mismo día. Eso vive ahora en `MovimientoCuenta`, y cerrar el día quedó siendo lo que
+ * siempre fue en la práctica: **alguien lo revisó**.
  */
 export type CierreDia = {
   fecha: string
-  /** La plata que entregó. `null` es "no se cerró"; 0 es "no trajo nada", que es lo normal. */
-  trajo: number | string | null
-  /** Plata que se le dio por fuera del reparto, para saldar lo que se le debía. */
-  pagado_aparte: number | string | null
   nota: string | null
   cerrado_por: string | null
   cerrado_en: string | null
+}
+
+/**
+ * **Un movimiento de plata entre el cadete y el local.**
+ *
+ * 🔑 `monto` es el efecto sobre el saldo, con signo: rindió ⇒ negativo, le pagamos ⇒ positivo. No
+ * hay columna `tipo` — la clase se deriva del signo (`claseDelMovimiento`), porque dos datos que
+ * dicen lo mismo se pueden contradecir y no habría forma de saber cuál manda.
+ *
+ * La fecha es la del movimiento, que **no** tiene por qué ser un día de reparto: el jueves que rinde
+ * lo del lunes al miércoles es un movimiento del jueves.
+ */
+/**
+ * Las dos cosas que le pueden pasar a la plata. **No se guarda**: se deriva del signo del monto
+ * (`claseDelMovimiento`). Es lo que dicen los dos botones de la pantalla.
+ */
+export type ClaseMovimiento = 'rindio' | 'le_pagamos'
+
+export type MovimientoCuenta = {
+  id: string
+  fecha: string
+  monto: number | string
+  nota: string | null
+  autor: string | null
+  created_at?: string
+  /** Anulado, no borrado: puede haber un recibo impreso en la mano del cadete. No suma al saldo. */
+  anulado_en: string | null
+  anulado_por: string | null
 }
 
 /**
@@ -157,9 +186,10 @@ export type DiaDeCuenta = {
   tarifas: number
   /** `cobrado − tarifas`. Negativo = ese día le quedamos debiendo. */
   debeTraer: number
-  /** Lo que entregó. `null` = el día no se cerró. */
-  trajo: number | null
-  pagadoAparte: number
+  /** Los movimientos de plata de ese día, anulados incluidos: la pantalla los muestra tachados. */
+  movimientos: MovimientoCuenta[]
+  /** La suma de los movimientos **vivos**, con su signo. Es lo que el día movió por fuera del reparto. */
+  movido: number
   saldoDelDia: number
   /** El saldo después de ese día, arrastrando todos los anteriores. */
   acumulado: number

@@ -2,7 +2,7 @@
 //
 //   GET  ?recurso=envios&fecha=YYYY-MM-DD                    → { ok, envios, cierre, puede }
 //   GET  ?recurso=envios&pendientes=1                        → { ok, envios } (los que no tienen día)
-//   GET  ?recurso=envios&cuenta=1                            → { ok, envios, dias } (la del cadete)
+//   GET  ?recurso=envios&cuenta=1                            → { ok, envios, dias, movimientos }
 //   POST { recurso:'envios', action:'traer-tn', envios:[…] }
 //   POST { recurso:'envios', action:'guardar', envio }
 //   POST { recurso:'envios', action:'agendar', id, fecha, turno }   ·  action:'desagendar', id
@@ -10,7 +10,9 @@
 //   POST { recurso:'envios', action:'costo', id, monto_envio }
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
-//   POST { recurso:'envios', action:'cerrar-dia', fecha, trajo, pagado_aparte, nota }
+//   POST { recurso:'envios', action:'cerrar-dia', fecha, nota }
+//   POST { recurso:'envios', action:'movimiento', fecha, clase, monto, nota }
+//   POST { recurso:'envios', action:'anular-movimiento', id }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=envios`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/envios.js` "por prolijidad",
@@ -42,7 +44,18 @@ import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
-import { CAMPOS, CAMPOS_CUENTA, conIntentoFallido, ESTADOS, FILTRO_BANDEJA, TURNOS, validarEnvio } from '../lib/envios/reglas.core.js';
+import {
+  CAMPOS,
+  CAMPOS_CUENTA,
+  CAMPOS_MOVIMIENTO,
+  conIntentoFallido,
+  ESTADOS,
+  FILTRO_BANDEJA,
+  montoDelMovimiento,
+  TURNOS,
+  validarEnvio,
+  validarMovimiento,
+} from '../lib/envios/reglas.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: el reparto no es
@@ -67,7 +80,11 @@ function puedeEnvios(perfil) {
   return marcasConAcceso(perfil, 'envios', ['bdi', 'zattia']).length > 0;
 }
 
-const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_en';
+// ⚠️ **Sin `trajo` ni `pagado_aparte` desde la tanda G.** Las dos columnas siguen existiendo en la
+// base hasta que corra `--cerrar-tanda-g`, y no se piden a propósito: pedirlas obligaría a dropear
+// antes de deployar, que es el orden que ya rompió prod una vez (`envios_turno`, tanda 4). La plata
+// del día vive ahora en `envios_movimientos`.
+const CAMPOS_CIERRE = 'fecha, nota, cerrado_por, cerrado_en';
 
 const esFechaIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
@@ -184,13 +201,19 @@ export default async function handler(req, res) {
       }
 
       if (req.query.cuenta === '1') {
-        const [env, dia] = await Promise.all([
+        const [env, dia, mov] = await Promise.all([
           supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
           supabase.from('envios_dia').select(CAMPOS_CIERRE).order('fecha'),
+          // Todos, anulados incluidos: la pantalla los muestra tachados, y un movimiento anulado que
+          // desaparece de la lista es un recibo impreso del que no queda rastro.
+          supabase.from('envios_movimientos').select(CAMPOS_MOVIMIENTO).order('fecha'),
         ]);
         if (env.error) throw new Error(env.error.message);
         if (dia.error) throw new Error(dia.error.message);
-        return res.status(200).json({ ok: true, envios: env.data || [], dias: dia.data || [] });
+        if (mov.error) throw new Error(mov.error.message);
+        return res
+          .status(200)
+          .json({ ok: true, envios: env.data || [], dias: dia.data || [], movimientos: mov.data || [] });
       }
 
       const fecha = req.query.fecha;
@@ -422,39 +445,67 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── El cierre de caja del DÍA ─────────────────────────────────────────────
+    // ── El cierre del DÍA ─────────────────────────────────────────────────────
     //
     // 🔑 **Del día y no del turno**, por lo mismo que la hoja: el cadete es uno solo y sale a la
-    // mañana y a la tarde con la misma plata en el bolsillo. Partir la caja en dos obligaría a
-    // repartir a mano un saldo que en la calle nunca estuvo partido.
+    // mañana y a la tarde con la misma plata en el bolsillo.
     //
-    // Se guarda **un solo hecho**: cuánto trajo. Lo que tenía que traer, lo que se le debe y el
-    // saldo arrastrado se derivan de los envíos (`cuentaDelCadete`). Un total guardado y otro
-    // calculado que se contradicen es la forma de que la cuenta diga una cosa y la caja otra, y acá
-    // pesa más que en ningún lado porque el saldo de hoy es la suma de todos los días anteriores.
-    //
-    // `trajo` en `null` es "no se cerró"; en `0` es "no trajo nada", que es lo NORMAL —en la mediana
-    // el 100% de lo que cobra es el envío, y el envío se lo queda él—.
+    // 🔑 **Y desde la tanda G no pide plata.** Pedía cuánto trajo, con un solo casillero por día de
+    // reparto — pero el cadete rinde cuando pasa, a veces tres días juntos y a veces dos veces el
+    // mismo día, así que ese número había que repartirlo a mano entre días que en la calle nunca
+    // estuvieron partidos. La plata son ahora movimientos (`action: 'movimiento'`), y cerrar el día
+    // quedó siendo lo que siempre fue en la práctica: **alguien lo revisó**.
     if (b.action === 'cerrar-dia') {
       if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta la fecha del día.' });
-
-      const trajo = monto(b.trajo);
-      const aparte = monto(b.pagado_aparte);
-      if (trajo === undefined || aparte === undefined) {
-        return res.status(400).json({ error: 'Los montos del cierre tienen que ser números de cero para arriba.' });
-      }
 
       const { error } = await supabase.from('envios_dia').upsert(
         {
           fecha: b.fecha,
-          trajo,
-          pagado_aparte: aparte == null ? 0 : aparte,
           nota: b.nota ? String(b.nota) : null,
           cerrado_por: yo,
           cerrado_en: new Date().toISOString(),
         },
         { onConflict: 'fecha' },
       );
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Un movimiento de plata entre el cadete y el local ─────────────────────
+    //
+    // 🔑 **El cliente manda la clase y un monto positivo; el signo lo pone `montoDelMovimiento`.**
+    // Es el único lugar donde el signo se decide, acá y en la pantalla, la misma función. Si el
+    // monto viajara ya firmado, un `-` de más en el input daría vuelta el sentido del movimiento sin
+    // que nada se queje: rendir $10.000 y que nos deban $10.000 son números igual de plausibles.
+    //
+    // La fecha es la del movimiento y **no** tiene que ser un día de reparto: el jueves que rinde lo
+    // del lunes al miércoles es un movimiento del jueves. Por eso no se valida contra la grilla.
+    if (b.action === 'movimiento') {
+      const fila = {
+        id: b.id || `mv${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        fecha: b.fecha,
+        monto: montoDelMovimiento(b.clase, b.monto),
+        nota: b.nota ? String(b.nota) : null,
+        autor: yo,
+      };
+      const mal = validarMovimiento(fila);
+      if (mal) return res.status(400).json({ error: mal });
+
+      const { error } = await supabase.from('envios_movimientos').insert(fila);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, id: fila.id });
+    }
+
+    // 🔑 **Anular, no borrar.** Puede haber un recibo impreso en la mano del cadete: si la fila
+    // desaparece, ese papel habla de algo que en el sistema no existe y la conversación vuelve a ser
+    // la memoria de dos personas contra un papel. Queda quién lo anuló y cuándo.
+    if (b.action === 'anular-movimiento') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el movimiento.' });
+      const { error } = await supabase
+        .from('envios_movimientos')
+        .update({ anulado_en: new Date().toISOString(), anulado_por: yo })
+        .eq('id', id);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
     }

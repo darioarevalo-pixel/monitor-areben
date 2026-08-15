@@ -43,9 +43,17 @@ const env = Object.fromEntries(
 // prod sin que nadie hubiera pedido nada raro. Que haya que escribirlo aparte ES el recordatorio.
 const cerrarTandaA = process.argv.includes('--cerrar-tanda-a')
 
+// Lo mismo para la tanda G, y por el mismo motivo: `migrate-envios-movimientos-cierre.sql` se lleva
+// `trajo` y `pagado_aparte` de `envios_dia`, que `CAMPOS_CIERRE` pedía por nombre hasta esta tanda.
+//
+//     node scripts/apply-envios.mjs                    ← antes de deployar (todo aditivo)
+//     node scripts/apply-envios.mjs --cerrar-tanda-g   ← después, con el código nuevo sirviendo
+const cerrarTandaG = process.argv.includes('--cerrar-tanda-g')
+
 // El orden importa: el segundo afloja columnas que crea el primero, el tercero agrega la cuenta
-// corriente y se lleva `envios_turno` (sólo si está vacía), y el cuarto suma el tilde de bonificado.
-// Van en la misma transacción, así que o entran todos o no entra ninguno.
+// corriente y se lleva `envios_turno` (sólo si está vacía), el cuarto suma el tilde de bonificado y
+// el último pasa la cuenta a movimientos con signo. Van en la misma transacción, así que o entran
+// todos o no entra ninguno.
 const archivos = [
   'sql/migrate-envios.sql',
   'sql/migrate-envios-pendientes.sql',
@@ -54,8 +62,10 @@ const archivos = [
   'sql/migrate-envios-estados.sql',
   'sql/migrate-envios-bandeja.sql',
   'sql/migrate-envios-portal.sql',
+  'sql/migrate-envios-movimientos.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
+if (cerrarTandaG) archivos.push('sql/migrate-envios-movimientos-cierre.sql')
 
 const sql = archivos.map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
@@ -99,7 +109,7 @@ try {
     `select relname, relrowsecurity,
             has_table_privilege('anon', 'public.' || relname, 'INSERT') as anon_escribe
        from pg_class
-      where relname in ('envios_reparto', 'envios_dia', 'envios_portal') order by relname`,
+      where relname in ('envios_reparto', 'envios_dia', 'envios_movimientos', 'envios_portal') order by relname`,
   )
   // La tabla vieja del cierre por turno. Tenía que irse, pero sólo si estaba vacía: con filas, esos
   // serían los únicos datos de caja que existen.
@@ -133,6 +143,58 @@ try {
   }
   await client.query('ROLLBACK')
 
+  // Un movimiento de $0 no dice nada y sin embargo ocupa una fila, sale en la pantalla y se le puede
+  // imprimir un recibo. La base lo rechaza — y como el resto de los candados, se **ejerce**: un
+  // `check` que se declaró y no llegó a aplicarse se ve exactamente igual que uno que sí.
+  let ceroOk = false
+  await client.query('BEGIN')
+  try {
+    await client.query(`insert into envios_movimientos (id, fecha, monto) values ('__sonda3__', '2026-01-01', 0)`)
+  } catch {
+    ceroOk = true
+  }
+  await client.query('ROLLBACK')
+
+  // 🔴 **El cotejo del signo, que es el único control del riesgo grande de esta tanda.**
+  //
+  // Vitest prueba `montoDelMovimiento` y `cuentaDelCadete`, pero el signo con el que la siembra
+  // escribió cada fila lo decidió un `insert` de SQL, y eso no lo prueba ningún test. Si estuviera
+  // dado vuelta, el saldo del cadete cambiaría en `2 × Σ trajo` y **el número seguiría siendo
+  // plausible**: nadie sabe de memoria si son $47.000 a favor o en contra.
+  //
+  // La identidad tiene que dar exacta: Σ movimientos sembrados = −Σ trajo + Σ pagado_aparte.
+  // Se imprime SIEMPRE, no sólo cuando falla: un control que hay que pedir aparte es un control que
+  // no se mira. Después del `--cerrar-tanda-g` las columnas ya no existen y deja de tener sentido.
+  const hayColumnasViejas = (
+    await client.query(
+      `select count(*)::int as n from information_schema.columns
+        where table_name = 'envios_dia' and column_name in ('trajo', 'pagado_aparte')`,
+    )
+  ).rows[0].n
+  const cotejo = hayColumnasViejas
+    ? (
+        await client.query(
+          `select coalesce((select sum(monto) from envios_movimientos where id like 'mvdia\\_%'), 0)::float as sembrado,
+                  coalesce((select sum(coalesce(pagado_aparte, 0) - coalesce(trajo, 0)) from envios_dia), 0)::float as esperado,
+                  (select count(*)::int from envios_dia
+                    where (coalesce(trajo, 0) <> 0 and not exists (
+                            select 1 from envios_movimientos m
+                             where m.id = 'mvdia_' || to_char(envios_dia.fecha, 'YYYY-MM-DD') || '_t' and m.monto = -envios_dia.trajo))
+                       or (coalesce(pagado_aparte, 0) <> 0 and not exists (
+                            select 1 from envios_movimientos m
+                             where m.id = 'mvdia_' || to_char(envios_dia.fecha, 'YYYY-MM-DD') || '_a' and m.monto = envios_dia.pagado_aparte))
+                  ) as huerfanos`,
+        )
+      ).rows[0]
+    : null
+
+  const movs = await client.query(
+    `select count(*)::int as n,
+            count(*) filter (where anulado_en is not null)::int as anulados,
+            coalesce(sum(monto) filter (where anulado_en is null), 0)::float as saldo
+       from envios_movimientos`,
+  )
+
   // `pago_cadete`: mientras exista, cuántas filas la usan. Con filas NO se dropea — cada una es el
   // único registro de lo que ese reparto le costó a la empresa. Ver `migrate-envios-plata-drop.sql`.
   const viejaCol = await client.query(
@@ -161,6 +223,23 @@ try {
   console.log(`  ${estado}`)
   console.log(`  fecha sin turno: ${checkOk ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`)
   console.log(`  pagado + bonificado: ${plataOk ? 'rechazado ✓' : '✗ SE GUARDÓ — el check no está'}`)
+  console.log(`  movimiento de $0: ${ceroOk ? 'rechazado ✓' : '✗ SE GUARDÓ — el check no está'}`)
+  console.log(
+    `  movimientos: ${movs.rows[0].n} filas (${movs.rows[0].anulados} anuladas) · saldo ${movs.rows[0].saldo}`,
+  )
+  if (cotejo) {
+    // Se comparan redondeados a centavos: `numeric` viene por `float` y 0.1 + 0.2 no es 0.3.
+    const igual = Math.round(cotejo.sembrado * 100) === Math.round(cotejo.esperado * 100)
+    console.log(
+      `  cotejo del signo: sembrado ${cotejo.sembrado} vs esperado ${cotejo.esperado} ${
+        igual ? '✓' : '✗ NO CIERRA — mirá el signo de la siembra ANTES de cerrar la tanda'
+      }${cotejo.huerfanos ? ` · ⚠️ ${cotejo.huerfanos} día(s) huérfano(s): el drop no va a correr` : ''}`,
+    )
+    console.log(`  envios_dia: todavía tiene trajo/pagado_aparte — cerrá con --cerrar-tanda-g DESPUÉS de deployar`)
+    if (!igual) process.exitCode = 1
+  } else {
+    console.log('  cotejo del signo: las columnas viejas ya se fueron ✓ (tanda G cerrada)')
+  }
   console.log(`  envios_turno: ${vieja.rows[0].sigue ? '⚠️ SIGUE (tenía filas: son datos de caja, mirarlos)' : 'se fue ✓'}`)
   console.log(
     `  pago_cadete: ${
@@ -178,7 +257,7 @@ try {
         (reintentoConFecha ? `; ${reintentoConFecha} reintento CON fecha: MIRALOS DE A UNO antes` : ''),
     )
   }
-  if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk || !plataOk) process.exitCode = 1
+  if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk || !plataOk || !ceroOk) process.exitCode = 1
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})
   console.log(`✗ BDI: ${e.message}`)

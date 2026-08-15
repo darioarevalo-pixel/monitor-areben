@@ -9,7 +9,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { CierreDia, Envio, OrdenTN, Turno } from './tipos'
+import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, Turno } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -96,18 +96,35 @@ export async function borrarEnvio(id: string): Promise<void> {
 }
 
 /**
- * Cerrar la caja del día: cuánto trajo el cadete, y cuánto se le dio por fuera del reparto.
+ * Cerrar el día: dejar anotado que alguien lo revisó, con una nota si hace falta.
  *
- * Es lo único que se guarda de la cuenta. Todo lo demás —lo que tenía que traer, lo que se le debe,
- * el saldo arrastrado— sale de los envíos, en `cuentaDelCadete`.
+ * 🔑 **No lleva plata.** La llevaba —cuánto trajo el cadete—, con un solo casillero por día de
+ * reparto; pero él rinde cuando pasa, a veces tres días juntos, así que ese número había que
+ * repartirlo a mano. La plata son `anotarMovimiento`.
  */
-export async function cerrarDia(
+export async function cerrarDia(fecha: string, nota: string | null): Promise<void> {
+  await postear({ action: 'cerrar-dia', fecha, nota }, 'No se pudo cerrar el día.')
+}
+
+/**
+ * Anotar plata que se movió entre el cadete y el local.
+ *
+ * 🔑 **`monto` va siempre positivo y el signo lo pone la clase.** Nadie tipea un negativo: el signo
+ * lo decide `montoDelMovimiento`, una sola función, en el cliente y en el handler. Ver
+ * `sql/migrate-envios-movimientos.sql`.
+ */
+export async function anotarMovimiento(
   fecha: string,
-  trajo: number | null,
-  pagado_aparte: number,
+  clase: ClaseMovimiento,
+  monto: number,
   nota: string | null,
 ): Promise<void> {
-  await postear({ action: 'cerrar-dia', fecha, trajo, pagado_aparte, nota }, 'No se pudo cerrar el día.')
+  await postear({ action: 'movimiento', fecha, clase, monto, nota }, 'No se pudo anotar el movimiento.')
+}
+
+/** Anular, no borrar: puede haber un recibo impreso del otro lado. */
+export async function anularMovimiento(id: string): Promise<void> {
+  await postear({ action: 'anular-movimiento', id }, 'No se pudo anular el movimiento.')
 }
 
 /**
@@ -117,11 +134,19 @@ export async function cerrarDia(
  * distinto según por dónde se empiece a mirar. Viene sin la orden congelada de cada envío: la cuenta
  * sólo necesita los campos de plata.
  */
-export async function leerCuenta(): Promise<{ envios: Envio[]; dias: CierreDia[] }> {
+export async function leerCuenta(): Promise<{
+  envios: Envio[]
+  dias: CierreDia[]
+  movimientos: MovimientoCuenta[]
+}> {
   const r = await apiFetch(`${API}&cuenta=1&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la cuenta del cadete.')
-  return { envios: (d.envios || []) as Envio[], dias: (d.dias || []) as CierreDia[] }
+  return {
+    envios: (d.envios || []) as Envio[],
+    dias: (d.dias || []) as CierreDia[],
+    movimientos: (d.movimientos || []) as MovimientoCuenta[],
+  }
 }
 
 // ── El link del cadete ───────────────────────────────────────────────────────────────────────

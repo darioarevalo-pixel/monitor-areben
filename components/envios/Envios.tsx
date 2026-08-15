@@ -31,6 +31,7 @@ import {
 } from '@/components/ui'
 import {
   aCobrar,
+  claseDelMovimiento,
   cobroPendiente,
   cpFueraDeZona,
   direccionCompleta,
@@ -47,6 +48,9 @@ import {
   puedeIrAUnDia,
   rotuloDeDia,
   marcasPresentes,
+  MOVIMIENTO_LABEL,
+  movimientoVivo,
+  num,
   ordenarParaPreparar,
   paraImprimir,
   resumenDeTraida,
@@ -59,11 +63,11 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
+import type { CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 
 /**
@@ -447,28 +451,27 @@ export function Envios() {
         })
       )}
 
-      {/* 🔑 **La caja se cierra una vez por día, no una por turno.** El cadete es uno solo y sale a
-          la mañana y a la tarde con la misma plata en el bolsillo: partirla en dos obligaría a
-          repartir a mano un saldo que en la calle nunca estuvo partido. Y lo que quede a favor de
-          uno o del otro no se salda hoy —se arrastra a los envíos que siguen—, por eso el cierre
-          muestra el saldo y no un "faltan $4.300" que nadie va a volver a mirar. */}
+      {/* 🔑 **El día se revisa una vez, no una por turno.** El cadete es uno solo y sale a la mañana
+          y a la tarde con la misma plata en el bolsillo. Y desde la tanda G esto ya no pide plata:
+          la rendición no cae por día de reparto —él rinde cuando pasa, a veces tres días juntos— y
+          vive en los movimientos de la cuenta. Acá queda el hecho de que alguien miró el día. */}
       <LinkDelCadete />
 
       {cargando || !delDia.length ? null : (
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
             <div>
-              <strong>La caja del día</strong>
+              <strong>El día</strong>
               <div style={{ opacity: 0.7, fontSize: 13 }}>
                 {cierre?.cerrado_en
-                  ? `Cerrado por ${cierre.cerrado_por} · trajo ${cierre.trajo == null ? '—' : formatMoney(Number(cierre.trajo))}`
+                  ? `Revisado por ${cierre.cerrado_por}${cierre.nota ? ` · ${cierre.nota}` : ''}`
                   : totales.pendienteDeSalir
                     ? `Todavía hay ${totales.pendienteDeSalir} sin salir`
-                    : 'Sin cerrar'}
+                    : 'Sin revisar'}
               </div>
             </div>
             <Button variant="outline" onClick={() => setCerrando(true)}>
-              {cierre?.cerrado_en ? 'Corregir el cierre' : 'Cerrar el día'}
+              {cierre?.cerrado_en ? 'Corregir la nota' : 'Marcar el día como revisado'}
             </Button>
           </div>
         </Card>
@@ -1361,16 +1364,17 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
 }
 
 /**
- * El cierre de caja del día: la rendición.
+ * El cierre del día: dejar anotado que alguien lo revisó.
  *
- * 🔑 **Se guarda un solo número: cuánto trajo.** Lo que tenía que traer sale de los envíos —lo que
- * cobró en las puertas menos lo que se queda por llevarlos— y no se congela en ninguna columna: si
- * mañana se corrige el precio de un envío de hoy, un total guardado quedaría mintiendo sin que nada
- * falle, y encima el saldo se arrastra a todos los días siguientes.
+ * 🔴 **Pedía plata y ya no.** Preguntaba cuánto había traído el cadete, con un solo casillero por
+ * día de reparto — pero él rinde cuando pasa: el jueves trae lo del lunes, martes y miércoles, y a
+ * veces vuelve el mismo día. Ese número había que repartirlo a mano entre tres días que en la calle
+ * nunca estuvieron partidos, o inventar un cierre en un día sin moto. La plata son **movimientos**
+ * (ver la pestaña de la cuenta), con su propia fecha y sin límite de uno por día.
  *
- * 🔑 **Que traiga $0 es lo NORMAL, no un error.** En la mediana el 100% de lo que cobra es el envío,
- * y el envío se lo queda él: sólo trae plata cuando cobró producto en efectivo. Por eso el campo
- * arranca en lo que la cuenta espera y no en blanco.
+ * Lo que queda acá es lo que el cierre siempre fue en la práctica: alguien miró el día y lo dio por
+ * bueno. Sigue siendo útil —es lo que distingue «no pasó nada» de «nadie lo revisó»— y por eso el
+ * modal sigue mostrando cómo cerró el día, aunque ya no se tipee ningún número.
  */
 function CierreDelDia({
   fecha,
@@ -1387,19 +1391,13 @@ function CierreDelDia({
 }) {
   const toast = useToast()
   const esperado = totales.debeTraer
-  const [trajo, setTrajo] = useState(cierre?.trajo == null ? String(Math.max(0, esperado)) : String(cierre.trajo))
-  const [aparte, setAparte] = useState(cierre?.pagado_aparte == null ? '' : String(cierre.pagado_aparte))
   const [nota, setNota] = useState(cierre?.nota || '')
   const [guardando, setGuardando] = useState(false)
-
-  // Lo que queda dando vueltas después de cerrar: positivo = se lo llevó él, negativo = le debemos.
-  // Lo que se le dio por fuera SUMA: salda lo que se le debía, no lo agranda. Ver `cuentaDelCadete`.
-  const queda = esperado - (Number(trajo) || 0) + (Number(aparte) || 0)
 
   async function guardar() {
     setGuardando(true)
     try {
-      await cerrarDia(fecha, trajo === '' ? null : Number(trajo), aparte === '' ? 0 : Number(aparte), nota.trim() || null)
+      await cerrarDia(fecha, nota.trim() || null)
       await onGuardado()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cerrar el día.')
@@ -1409,37 +1407,33 @@ function CierreDelDia({
   }
 
   return (
-    <Modal abierto onCerrar={onCerrar} titulo={`Cerrar la caja del ${rotuloDeDia(fecha) || 'día'}`}>
+    <Modal abierto onCerrar={onCerrar} titulo={`Revisar el ${rotuloDeDia(fecha) || 'día'}`}>
       <div style={{ display: 'grid', gap: space[4] }}>
         <Notice tone="brand">
           Cobró {formatMoney(totales.cobrado)} en las puertas y se queda {formatMoney(totales.tarifas)} de sus envíos ⇒{' '}
           {esperado < 0 ? (
             <>
-              <strong>le debemos {formatMoney(-esperado)}</strong> y no trae nada.
+              <strong>le debemos {formatMoney(-esperado)}</strong> por este día.
+            </>
+          ) : esperado === 0 ? (
+            <>
+              <strong>no queda nada dando vueltas</strong>, que es lo normal.
             </>
           ) : (
             <>
-              tendría que traer <strong>{formatMoney(esperado)}</strong>.
+              le quedan <strong>{formatMoney(esperado)}</strong> nuestros.
             </>
           )}
         </Notice>
-        <Field label="Lo que trajo" hint="Cero es una respuesta: lo normal es que cobre sólo sus envíos y se los quede.">
-          <Input type="number" value={trajo} onChange={(e) => setTrajo(e.target.value)} />
-        </Field>
-        <Field
-          label="Plata que se le dio por fuera"
-          hint="Una transferencia para saldar lo que se le debía. Vacío si no hubo."
-        >
-          <Input type="number" value={aparte} onChange={(e) => setAparte(e.target.value)} />
-        </Field>
-        {queda !== 0 ? (
-          <Notice tone={queda > 0 ? 'warning' : 'brand'}>
-            {queda > 0
-              ? `Quedan ${formatMoney(queda)} suyos sin entregar: se suman a la cuenta y se descuentan de los próximos envíos.`
-              : `Le quedamos debiendo ${formatMoney(-queda)}: se los descuenta de los próximos envíos que no estén pagos.`}
-          </Notice>
-        ) : null}
-        <Field label="Nota" hint="Por qué, si el número no es el esperado. Un ajuste sin motivo es un número que nadie se anima a tocar.">
+        {/* 🔑 **No hay un botón de rendir acá.** La rendición casi nunca es de este día: es del
+            jueves que pasó a traer lo de tres días. Mandarla a la cuenta —donde está el saldo
+            acumulado, que es contra lo que se rinde— evita el reflejo de anotarla en el día que se
+            está mirando, que es exactamente el error que el modelo viejo obligaba a cometer. */}
+        <Notice tone="neutral">
+          La plata que traiga o que se le pague se anota en <strong>la cuenta del cadete</strong>, con la fecha del
+          día en que se mueve.
+        </Notice>
+        <Field label="Nota" hint="Qué pasó ese día, si pasó algo. Vacío es lo normal.">
           <Input value={nota} onChange={(e) => setNota(e.target.value)} />
         </Field>
         <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
@@ -1447,7 +1441,7 @@ function CierreDelDia({
             Cancelar
           </Button>
           <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Cerrar el día'}
+            {guardando ? 'Guardando…' : 'Marcar como revisado'}
           </Button>
         </div>
       </div>
@@ -1466,20 +1460,45 @@ function CierreDelDia({
  * El signo, una sola vez: **positivo = tiene plata nuestra**; negativo = se la debemos.
  */
 function CuentaDelCadete({ activa }: { activa: boolean }) {
-  const { cuenta, cargando, error } = useCuentaCadete(activa)
+  const { cuenta, cargando, error, recargar } = useCuentaCadete(activa)
+  const [anotando, setAnotando] = useState(false)
 
   if (error) return <Notice tone="danger">{error}</Notice>
   if (cargando) return null
+
+  const saldo = cuenta.saldo
+  const anotar = anotando ? (
+    <AnotarMovimiento
+      saldo={saldo}
+      onCerrar={() => setAnotando(false)}
+      onGuardado={async () => {
+        setAnotando(false)
+        await recargar()
+      }}
+    />
+  ) : null
+
+  // 🔴 **El botón va afuera del `EmptyState`, no adentro.** Es el mismo motivo que en la bandeja: sin
+  // días la pantalla se reemplaza entera por el cartel, y el primer movimiento —el saldo de apertura,
+  // o la plata que se le adelantó antes del primer reparto— es justo el que hay que poder anotar
+  // cuando todavía no hay nada.
   if (!cuenta.dias.length) {
     return (
-      <EmptyState
-        title="Todavía no hay días con envíos"
-        hint="La cuenta se arma sola con lo que se entrega cada día. Arranca en cero."
-      />
+      <div style={{ display: 'grid', gap: space[4] }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="outline" onClick={() => setAnotando(true)}>
+            Anotar un movimiento
+          </Button>
+        </div>
+        <EmptyState
+          title="Todavía no hay días con envíos"
+          hint="La cuenta se arma sola con lo que se entrega cada día. Arranca en cero."
+        />
+        {anotar}
+      </div>
     )
   }
 
-  const saldo = cuenta.saldo
   return (
     <div style={{ display: 'grid', gap: space[4] }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
@@ -1501,6 +1520,12 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
         ) : null}
       </div>
 
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button variant="outline" onClick={() => setAnotando(true)}>
+          Anotar un movimiento
+        </Button>
+      </div>
+
       {/* Del día más nuevo al más viejo: lo que se mira es lo último, y el acumulado ya viene
           calculado desde el principio — dar vuelta la lista no cambia ninguna suma. */}
       <TableWrap>
@@ -1510,8 +1535,8 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
             <Th>Entregados</Th>
             <Th>Cobró</Th>
             <Th>Se queda</Th>
-            <Th>Tenía que traer</Th>
-            <Th>Trajo</Th>
+            <Th>Le quedó del día</Th>
+            <Th>Movimientos</Th>
             <Th>Saldo</Th>
           </Tr>
         </THead>
@@ -1541,8 +1566,15 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
               <Td>{formatMoney(d.tarifas)}</Td>
               <Td>{formatMoney(d.debeTraer)}</Td>
               <Td>
-                {d.trajo == null ? <span style={{ opacity: 0.5 }}>—</span> : formatMoney(d.trajo)}
-                {d.pagadoAparte ? <div style={{ opacity: 0.7, fontSize: 12 }}>+ {formatMoney(d.pagadoAparte)} por fuera</div> : null}
+                {d.movimientos.length ? (
+                  <div style={{ display: 'grid', gap: space[1] }}>
+                    {d.movimientos.map((m) => (
+                      <Movimiento key={m.id} mov={m} onGuardado={recargar} />
+                    ))}
+                  </div>
+                ) : (
+                  <span style={{ opacity: 0.5 }}>—</span>
+                )}
               </Td>
               {/* El acumulado y no el saldo del día: es el número con el que se habla con el cadete. */}
               <Td>
@@ -1552,6 +1584,166 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
           ))}
         </TBody>
       </TableWrap>
+      {anotar}
     </div>
+  )
+}
+
+/**
+ * Un movimiento en la fila de su día.
+ *
+ * 🔑 **Lo que se muestra es el verbo y el monto en positivo**, no el número con signo: «Rindió
+ * $10.000» se lee de un vistazo y `-$10.000` obliga a acordarse de qué significa el menos. El signo
+ * vive adentro del dato y sólo lo usa la suma; para la pantalla lo traduce `claseDelMovimiento`, la
+ * misma función que va a usar el recibo.
+ *
+ * 🔑 **Anular no borra.** Puede haber un recibo impreso en la mano del cadete: la fila queda tachada
+ * y fuera del saldo, pero queda. Sin `catch`, un anulado que falla no se ve —la lista se recarga
+ * igual y la fila sigue ahí— y se lee como que el botón no anduvo.
+ */
+function Movimiento({ mov, onGuardado }: { mov: MovimientoCuenta; onGuardado: () => Promise<void> }) {
+  const toast = useToast()
+  const [anulando, setAnulando] = useState(false)
+  const vivo = movimientoVivo(mov)
+  const clase = claseDelMovimiento(mov.monto)
+
+  async function anular() {
+    setAnulando(true)
+    try {
+      await anularMovimiento(mov.id)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anular el movimiento.')
+    } finally {
+      setAnulando(false)
+    }
+  }
+
+  return (
+    <div style={{ opacity: vivo ? 1 : 0.5 }}>
+      <span style={{ textDecoration: vivo ? undefined : 'line-through' }}>
+        {MOVIMIENTO_LABEL[clase]} {formatMoney(Math.abs(num(mov.monto)))}
+      </span>
+      {mov.nota ? <div style={{ opacity: 0.7, fontSize: 12 }}>{mov.nota}</div> : null}
+      {vivo ? (
+        <button
+          type="button"
+          onClick={anular}
+          disabled={anulando}
+          style={{ background: 'none', border: 0, padding: 0, fontSize: 12, color: color.danger, cursor: 'pointer' }}
+        >
+          {anulando ? 'Anulando…' : 'Anular'}
+        </button>
+      ) : (
+        <div style={{ fontSize: 12 }}>anulado por {mov.anulado_por || '—'}</div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Anotar plata que se movió entre el cadete y el local.
+ *
+ * 🔑 **Dos botones y un monto siempre positivo.** El signo lo pone `montoDelMovimiento` en el
+ * handler, que es el único lugar donde se decide: si el número viajara ya firmado, un `-` de más
+ * daría vuelta el sentido del movimiento sin que nada se queje —rendir $10.000 y que nos deban
+ * $10.000 son igual de plausibles— y el error recién se vería en la próxima discusión de plata.
+ *
+ * 🔑 **La fecha arranca en hoy y se puede mover.** Es todo el punto de la tanda: el jueves que rinde
+ * lo del lunes al miércoles es un movimiento del jueves, y un sábado sin moto también puede tener
+ * uno.
+ */
+function AnotarMovimiento({
+  saldo,
+  onCerrar,
+  onGuardado,
+}: {
+  saldo: number
+  onCerrar: () => void
+  onGuardado: () => Promise<void>
+}) {
+  const toast = useToast()
+  const [fecha, setFecha] = useState(hoyIso())
+  // Arranca en la que salda: con saldo a favor nuestro lo normal es que venga a rendir, y al revés
+  // cuando le debemos. Es un default, no una regla: los dos botones están siempre.
+  const [clase, setClase] = useState<ClaseMovimiento>(saldo < 0 ? 'le_pagamos' : 'rindio')
+  const [monto, setMonto] = useState(saldo === 0 ? '' : String(Math.abs(saldo)))
+  const [nota, setNota] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const n = Number(monto)
+  const puede = Number.isFinite(n) && n > 0 && !!fecha
+  // Adónde queda el saldo si se guarda esto. Es la única forma de ver el signo ANTES de escribirlo.
+  const queda = saldo + (clase === 'rindio' ? -Math.abs(n || 0) : Math.abs(n || 0))
+
+  async function guardar() {
+    setGuardando(true)
+    try {
+      await anotarMovimiento(fecha, clase, Math.abs(n), nota.trim() || null)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anotar el movimiento.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Anotar un movimiento">
+      <div style={{ display: 'grid', gap: space[4] }}>
+        <Field label="Día" hint="El día en que se movió la plata, que no tiene por qué ser un día de reparto.">
+          <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        </Field>
+        <Field label="Qué pasó">
+          <div style={{ display: 'flex', gap: space[2] }}>
+            <Button
+              variant={clase === 'rindio' ? 'solid' : 'outline'}
+              tone="brand"
+              onClick={() => setClase('rindio')}
+            >
+              {MOVIMIENTO_LABEL.rindio}
+            </Button>
+            <Button
+              variant={clase === 'le_pagamos' ? 'solid' : 'outline'}
+              tone="brand"
+              onClick={() => setClase('le_pagamos')}
+            >
+              {MOVIMIENTO_LABEL.le_pagamos}
+            </Button>
+          </div>
+        </Field>
+        <Field label="Cuánto" hint="Siempre en positivo: lo que suma o resta lo decide el botón de arriba.">
+          <Input type="number" value={monto} onChange={(e) => setMonto(e.target.value)} />
+        </Field>
+        {puede ? (
+          <Notice tone={queda === 0 ? 'success' : 'neutral'}>
+            {queda === 0 ? (
+              <>
+                Con esto quedan <strong>a mano</strong>.
+              </>
+            ) : queda > 0 ? (
+              <>
+                Le quedan <strong>{formatMoney(queda)}</strong> nuestros.
+              </>
+            ) : (
+              <>
+                Le quedamos debiendo <strong>{formatMoney(-queda)}</strong>.
+              </>
+            )}
+          </Notice>
+        ) : null}
+        <Field label="Nota" hint="Por qué. Un movimiento sin motivo es un número que nadie se anima a tocar.">
+          <Input value={nota} onChange={(e) => setNota(e.target.value)} />
+        </Field>
+        <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !puede}>
+            {guardando ? 'Guardando…' : 'Anotar'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
