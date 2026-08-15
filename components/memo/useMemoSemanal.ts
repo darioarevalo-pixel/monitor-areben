@@ -22,11 +22,34 @@ export function useMemoSemanal(id: string) {
   const [calculando, setCalculando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /**
+   * 🔴 **El número de pedido, y por qué el módulo no funciona sin él.**
+   *
+   * Las flechas cambian de semana en un clic y la foto viva es la consulta cara del monitor (dos
+   * semanas de `venta_detalles` en las dos bases, segundos). Sin este contador, la respuesta de la
+   * semana que el usuario ya dejó atrás llega tarde y se dibuja abajo del encabezado de la semana
+   * nueva: la venta de agosto con cara de septiembre. **No hay error, no hay aviso y el número se
+   * ve perfectamente razonable** — que es el modo de fallar que este módulo entero viene a evitar.
+   * Y no es un caso raro: si la semana nueva contesta más rápido que la vieja (pasa, son consultas
+   * de distinto tamaño), la vieja pisa a la nueva y ahí se queda.
+   *
+   * Vale para las dos respuestas, no sólo la foto: con el acta llegando tarde, los textos de una
+   * semana se ven bajo otra y `guardar` los escribiría en la que está en pantalla — copiando el
+   * acta de una semana a la otra.
+   *
+   * Cada carga toma un número; cuando vuelve, sólo escribe si sigue siendo la última.
+   */
+  const pedido = useRef(0)
+
   const cargar = useCallback(async () => {
+    const mio = ++pedido.current
+    const vigente = () => pedido.current === mio
+
     setCargando(true)
     setError(null)
     try {
       const d = await leerMemo(id)
+      if (!vigente()) return
       setMemo(d.memo)
       setCampos(d.campos)
       setPuedeEscribir(d.puede.escribir)
@@ -39,14 +62,14 @@ export function useMemoSemanal(id: string) {
         setFoto(null)
         setCalculando(true)
         leerFotoViva(id)
-          .then(setFoto)
-          .catch((e) => setError(e.message))
-          .finally(() => setCalculando(false))
+          .then((f) => { if (vigente()) setFoto(f) })
+          .catch((e) => { if (vigente()) setError(e.message) })
+          .finally(() => { if (vigente()) setCalculando(false) })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo leer el memo.')
+      if (vigente()) setError(e instanceof Error ? e.message : 'No se pudo leer el memo.')
     } finally {
-      setCargando(false)
+      if (vigente()) setCargando(false)
     }
   }, [id])
 
