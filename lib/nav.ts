@@ -145,6 +145,9 @@ const ICONO_POR_KEY: Record<string, string> = {
   novedades: 'novedades',
   manuales: 'manuales',
   gerencial: 'gerencial',
+  // El memo lleva `historial` y no un ícono propio a propósito: lo que lo distingue de Gerencial
+  // es justamente que tiene pasado. Gerencial es hoy; el memo es la serie de semanas.
+  memo: 'historial',
   // Análisis
   productos: 'productos',
   variantes: 'variantes',
@@ -358,6 +361,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   calendario: 'Las fechas comerciales y los hitos propios, con cuánto falta y qué etapas ya tienen ideas anotadas.',
   liquidacion: 'Campañas de sale: mandás los productos desde Por producto, les definís el precio uno por uno y queda guardado para todo el equipo.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
+  memo: 'Qué pasó esta semana: los números de lunes a domingo, el avance de cada sistema y el acta.',
   integraciones: 'Mapeo de SKU entre Gestión Nube y Tienda Nube: la base del sync de stock y ventas.',
   postventa: 'Post-venta (motor): recibe y confirma fallas, descuenta stock en GN, etiqueta. Valorizado.',
   'postventa-local': 'Cargá las prendas con falla que recibís del cliente. El motor está en Administración.',

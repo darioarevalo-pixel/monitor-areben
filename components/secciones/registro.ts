@@ -55,6 +55,9 @@ const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exh
 const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m) => m.Usuarios), { loading: Cargando })
 const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) => m.MetaAds), { loading: Cargando })
 const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then((m) => m.Gerencial), { loading: Cargando })
+// `MemoSemanal` y no `Memo`: `Memo` a secas se confunde con `React.memo` de un vistazo, y este
+// archivo es una lista de nombres leídos en diagonal.
+const MemoSemanal = dynamic(() => import('@/components/memo/Memo').then((m) => m.Memo), { loading: Cargando })
 const Integraciones = dynamic(() => import('@/components/integraciones/Integraciones').then((m) => m.Integraciones), { loading: Cargando })
 const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
 const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
@@ -318,6 +321,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // stock, GN, Meta ni KV; el ETL por marca sale del MISMO caché del store (o la red si no hay).
   // Gateada por permiso `gerencial` (ambas marcas). Rollback: comentar esta línea.
   gerencial: Gerencial,
+  // Memo semanal (15-ago-2026, sección NUEVA — no existe en el legacy): `/memo` lo sirve el shell.
+  // La otra mitad de Gerencial: aquél dice qué decidir ahora, éste dice qué pasó esta semana. Lee
+  // la venta por rango de las DOS bases (`venta_detalles`, que es la única con plata) y la pauta de
+  // `meta_ads_snapshot_dia`; escribe SOLO sus dos tablas propias (`memo_semana`, `memo_campo`) en la
+  // base de BDI. No toca stock, GN ni Meta. Gateada por permiso `memo` (ambas marcas) para leer y
+  // por admin para escribir. Rollback: comentar esta línea.
+  memo: MemoSemanal,
   // Integraciones (22-jul-2026, sección NUEVA — no existe en el legacy): `/integraciones` lo sirve
   // el shell. Fase 0 del sync de Stunned: mapeo de SKU GN↔TN (tabla sku_map en la base de Zattia).
   // Escribe SOLO sku_map (correspondencias), NO stock ni ventas. Gateada por permiso `integraciones`

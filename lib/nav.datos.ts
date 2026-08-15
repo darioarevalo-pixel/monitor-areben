@@ -638,6 +638,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "memo",
+    "area": "direccion",
+    "label": "Memo semanal",
+    "info": "El memo de la semana (lunes a domingo), que es la otra mitad del panel Gerencial: aquél dice qué decidir ahora, éste dice qué pasó. Arriba, la foto que arma el monitor: venta de la semana contra la anterior por línea (BDI, Zattia y Stunned), gasto y costo por compra contra el techo de rentabilidad, capital parado y lo que quedó abierto. Abajo, lo que se escribe: el avance de cada uno de los ocho sistemas, y el acta con siete temas —qué se logró, qué aprendimos, qué viene, insights, bloqueos, decisiones y cambios de estrategia—, cada uno con la casilla de cada persona, así dos pueden escribir el mismo tema el mismo día sin pisarse. Venta y pauta se congelan cuando la semana termina; capital parado y pendientes se congelan cuando se toman y van con la fecha puesta. Queda el histórico de todas las semanas. Escribir es de administradores.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "integraciones",
     "area": "integraciones",
     "label": "Integraciones",
@@ -780,7 +790,8 @@ export const NAV_CATS: NavCat[] = [
       "icono": "direccion",
     "label": "Dirección",
     "keys": [
-      "gerencial"
+      "gerencial",
+      "memo"
     ]
   },
   {

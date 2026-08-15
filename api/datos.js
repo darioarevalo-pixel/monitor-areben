@@ -26,6 +26,7 @@ import envios from './_envios.js';
 import crm from './_crm.js';
 import costos from './_costos.js';
 import espejo from './_espejo.js';
+import memo from './_memo.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -65,6 +66,9 @@ const RECURSOS = {
   // tiene once lectores en el navegador y once consultas con nombre se desincronizan. Los
   // candados que lo hacen seguro están explicados en `_espejo.js`.
   espejo,
+  // El Friday memo de Dirección. Tampoco tiene `store` —el memo es de la empresa y adentro tiene
+  // las tres líneas—, y por eso su handler no valida marca. Mismo caso que `sistema`.
+  memo,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

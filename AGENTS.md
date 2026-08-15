@@ -91,7 +91,7 @@ secciones joinean contra el producto. Los cachés de IndexedDB anteriores al cam
 
 ## Mapa de secciones
 
-45 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+46 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -115,7 +115,7 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Administración** — `caducados` · `postventa` · `reposicion`
 
-**Dirección** — `gerencial` · **Integraciones** — `integraciones`
+**Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) · **Integraciones** — `integraciones`
 
 **Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en
 la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
