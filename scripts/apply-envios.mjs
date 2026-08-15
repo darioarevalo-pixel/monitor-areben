@@ -53,6 +53,7 @@ const archivos = [
   'sql/migrate-envios-plata.sql',
   'sql/migrate-envios-estados.sql',
   'sql/migrate-envios-bandeja.sql',
+  'sql/migrate-envios-portal.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 
@@ -98,7 +99,7 @@ try {
     `select relname, relrowsecurity,
             has_table_privilege('anon', 'public.' || relname, 'INSERT') as anon_escribe
        from pg_class
-      where relname in ('envios_reparto', 'envios_dia') order by relname`,
+      where relname in ('envios_reparto', 'envios_dia', 'envios_portal') order by relname`,
   )
   // La tabla vieja del cierre por turno. Tenía que irse, pero sólo si estaba vacía: con filas, esos
   // serían los únicos datos de caja que existen.

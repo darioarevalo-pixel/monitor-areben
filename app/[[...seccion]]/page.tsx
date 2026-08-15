@@ -7,6 +7,7 @@ import { LoginScreen } from '@/components/LoginScreen'
 import { ReclamoPublico } from '@/components/reclamos/ReclamoPublico'
 import { CanjePortal } from '@/components/canjes/CanjePortal'
 import { LegalPublico } from '@/components/legal/LegalPublico'
+import { PortalCadete } from '@/components/envios/PortalCadete'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { CartelNovedad } from '@/components/novedades/CartelNovedad'
@@ -64,7 +65,13 @@ export default function Seccion() {
    * legales las tiene que poder abrir un revisor de Meta **sin cuenta**, y una política de
    * privacidad detrás de un login no es una política de privacidad.
    */
-  const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal'
+  /**
+   * `/cadete/<token>` es el tercero, y el único que abre alguien que trabaja con nosotros: la hoja
+   * del día en el celular, para marcar entregado y cobrado desde la puerta. No es la pantalla
+   * interna de Envíos —ésa tiene la cuenta corriente y deja borrar— y por eso no puede ser la misma
+   * ruta. Se defiende con token + PIN. Ver `api/_cadete.js`.
+   */
+  const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal' || key === 'cadete'
 
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
@@ -95,6 +102,7 @@ export default function Seccion() {
   if (esPortalCliente) {
     const token = Array.isArray(partes) ? partes[1] ?? null : null
     if (key === 'legal') return <LegalPublico pagina={token} />
+    if (key === 'cadete') return <PortalCadete token={token} />
     return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} />
   }
 

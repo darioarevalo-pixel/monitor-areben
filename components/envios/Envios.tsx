@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   Badge,
@@ -54,8 +54,9 @@ import {
   turnosDe,
 } from '@/lib/envios/core'
 import { Icono } from '@/components/ui/Icono'
+import { CopyButton } from '@/components/ui/CopyButton'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, marcarBonificado, marcarPagado } from '@/lib/envios/cliente'
+import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
@@ -448,6 +449,8 @@ export function Envios() {
           repartir a mano un saldo que en la calle nunca estuvo partido. Y lo que quede a favor de
           uno o del otro no se salda hoy —se arrastra a los envíos que siguen—, por eso el cierre
           muestra el saldo y no un "faltan $4.300" que nadie va a volver a mirar. */}
+      <LinkDelCadete />
+
       {cargando || !delDia.length ? null : (
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
@@ -663,6 +666,112 @@ function Pendientes({
         ))}
       </TBody>
     </TableWrap>
+  )
+}
+
+/**
+ * El link que se le manda al cadete, con su PIN y su vencimiento.
+ *
+ * 🔑 **Se lee desde acá y se manda por WhatsApp.** El PIN se muestra en claro a propósito: no es la
+ * credencial de una persona, es un segundo factor sobre 64 hex inadivinables, y quien lo manda tiene
+ * que poder leerlo. Esconderlo obligaría a mostrarlo una sola vez al rotar, que es la forma
+ * garantizada de que se pierda y de que nadie rote nunca más.
+ *
+ * 🔴 **Generar uno nuevo mata el anterior en el acto.** No hay estado de sesión del otro lado —el
+ * teléfono guarda token y PIN y los manda en cada pedido— así que rotar es también el camino de
+ * revocación: se usa el 1º de cada mes, y el día que un teléfono se pierde.
+ */
+function LinkDelCadete() {
+  const toast = useToast()
+  const { confirmar } = useConfirmar()
+  const [portal, setPortal] = useState<PortalDelCadete | null>(null)
+  // 🔑 «Venció» se resuelve al leer y no en el render: `Date.now()` en el cuerpo del componente es
+  // una función impura, y el lint del repo la rechaza — con razón, porque hace que el mismo estado
+  // pinte distinto según cuándo se renderice.
+  const [vencido, setVencido] = useState(false)
+  const [cargando, setCargando] = useState(true)
+  const [rotando, setRotando] = useState(false)
+  const [tick, setTick] = useState(0)
+
+  const recargar = useCallback(() => setTick((n) => n + 1), [])
+
+  // Mismo molde que `useEnvios`: la carga vive adentro de una IIFE con bandera `vivo`, porque
+  // llamar a `setState` derecho en el cuerpo de un efecto encadena renders y el lint lo rechaza.
+  useEffect(() => {
+    let vivo = true
+    void (async () => {
+      try {
+        const p = await leerPortal()
+        if (!vivo) return
+        setPortal(p)
+        setVencido(!!p && Date.parse(p.token_vence) < Date.now())
+      } catch {
+        // Que no se pueda leer el link no puede tapar la hoja del día, que es para lo que se entra.
+        if (vivo) setPortal(null)
+      } finally {
+        if (vivo) setCargando(false)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [tick])
+
+  async function rotar() {
+    const ok = await confirmar({
+      titulo: portal ? '¿Generar un link nuevo?' : 'Generar el link del cadete',
+      mensaje: portal
+        ? 'El link y el PIN que tiene ahora dejan de funcionar en el acto. Vas a tener que mandarle los nuevos.'
+        : 'Se genera el link con su PIN para mandárselo por WhatsApp.',
+      ok: portal ? 'Generar uno nuevo' : 'Generar',
+      tono: portal ? 'danger' : 'brand',
+    })
+    if (!ok) return
+    setRotando(true)
+    try {
+      await rotarPortal()
+      recargar()
+      toast.ok('Link nuevo generado. El anterior dejó de funcionar.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo generar el link.')
+    } finally {
+      setRotando(false)
+    }
+  }
+
+  if (cargando) return null
+
+  const link = portal ? linkDelCadete(portal.token) : ''
+  const mensaje = portal
+    ? `Hola! Este es el link de los envíos de hoy: ${link}\nPIN: ${portal.pin}\n(Sirve hasta el ${rotuloDeDia(portal.token_vence.slice(0, 10)) || portal.token_vence.slice(0, 10)}.)`
+    : ''
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+        <div>
+          <strong>El link del cadete</strong>
+          <div style={{ opacity: 0.7, fontSize: 13 }}>
+            {!portal
+              ? 'Todavía no hay ninguno. Se genera acá y se le manda por WhatsApp.'
+              : vencido
+                ? 'El link venció. Generá uno nuevo y mandáselo.'
+                : `PIN ${portal.pin} · vence el ${rotuloDeDia(portal.token_vence.slice(0, 10)) || portal.token_vence.slice(0, 10)}`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+          {/* Se manda el mensaje entero, no el link pelado: si sólo se copia el link, alguien tiene
+              que escribir el PIN al lado y ahí es donde se manda uno viejo. Mismo criterio que el
+              mensaje de apertura de Reclamos. */}
+          {portal && !vencido ? (
+            <CopyButton getText={() => mensaje} onError={(e) => toast.error(e.message)} label="Copiar el mensaje" />
+          ) : null}
+          <Button variant="outline" onClick={() => void rotar()} disabled={rotando}>
+            {rotando ? 'Generando…' : portal ? 'Generar uno nuevo' : 'Generar el link'}
+          </Button>
+        </div>
+      </div>
+    </Card>
   )
 }
 

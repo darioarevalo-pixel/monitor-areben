@@ -124,6 +124,39 @@ export async function leerCuenta(): Promise<{ envios: Envio[]; dias: CierreDia[]
   return { envios: (d.envios || []) as Envio[], dias: (d.dias || []) as CierreDia[] }
 }
 
+// ── El link del cadete ───────────────────────────────────────────────────────────────────────
+
+export type PortalDelCadete = {
+  token: string
+  token_vence: string
+  pin: string
+  rotado_por: string | null
+  rotado_en: string
+}
+
+/** El link vigente, o `null` si nunca se generó uno. */
+export async function leerPortal(): Promise<PortalDelCadete | null> {
+  const r = await apiFetch(`${API}&portal=1&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer el link del cadete.')
+  return (d.portal || null) as PortalDelCadete | null
+}
+
+/**
+ * Genera un link nuevo. **Mata el anterior en el acto**: el teléfono guarda token y PIN y los manda
+ * en cada pedido, así que cambiar la fila es cerrarle la sesión a cualquiera que tuviera el viejo.
+ * Es el camino de revocación, además del de renovación.
+ */
+export async function rotarPortal(): Promise<{ token: string; pin: string; vence: string }> {
+  return postear<{ token: string; pin: string; vence: string }>({ action: 'rotar-token' }, 'No se pudo generar el link.')
+}
+
+/** La URL que se le manda por WhatsApp. Mismo patrón que `/reclamo/<token>` y `/canje/<token>`. */
+export function linkDelCadete(token: string): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : 'https://monitor.arebensrl.com'
+  return `${base}/cadete/${token}`
+}
+
 // ── Lo que viene de Tienda Nube ──────────────────────────────────────────────────────────────
 
 /** Lo que devuelve el endpoint, más el resumen de cobertura que sirve para saber qué se puede medir. */

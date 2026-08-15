@@ -36,6 +36,7 @@ import reclamos from './_reclamos.js';
 import reclamo from './_reclamo.js';
 import canjes from './_canjes.js';
 import canje from './_canje-portal.js';
+import cadete from './_cadete.js';
 
 // `cambios` ya no está: un cambio es un reclamo cuya salida es otro producto, así que se atiende
 // por `reclamos` (acciones `cambio` / `procesar`). La tabla `cambios` estaba vacía en las dos
@@ -47,7 +48,10 @@ import canje from './_canje-portal.js';
 //
 // `canje` (en singular) es al canje lo que `reclamo` al reclamo: el link público, sin sesión. Ver
 // abajo.
-const RECURSOS = { fallas, solicitudes, reclamos, reclamo, canjes, canje };
+// `cadete` es el tercer portal sin sesión: la hoja del día que el cadete abre en la calle para
+// marcar entregado y cobrado. A diferencia de los otros dos, el token NO es de una fila: es uno
+// solo, con PIN, y se rota el 1º de cada mes. Ver `api/_cadete.js`.
+const RECURSOS = { fallas, solicitudes, reclamos, reclamo, canjes, canje, cadete };
 
 export default async function handler(req, res) {
   // Acepta el recurso por query (sirve para GET y POST) o en el body, por si algún

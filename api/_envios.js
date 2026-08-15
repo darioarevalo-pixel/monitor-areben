@@ -35,8 +35,10 @@
 // Traer los envíos de Tienda Nube dos veces no puede duplicar un paquete: se leen los números de
 // orden que ya están y se insertan sólo los que faltan. El índice único parcial de la migración es
 // el segundo candado, no el primero — pero si salta, salta como error y no en silencio.
+import { randomInt, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
+import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
@@ -182,6 +184,21 @@ export default async function handler(req, res) {
       // que deja afuera el jsonb de la orden congelada: con ~10 envíos por día de reparto son unos
       // 2.500 registros flacos al año, y el día que eso moleste se corta por fecha de cierre, no
       // por ventana ciega.
+      // ── El link vigente del cadete, para copiarlo y mandárselo ─────────────
+      //
+      // Devuelve el token y el PIN en claro: las chicas tienen que poder leerlos para pasarlos por
+      // WhatsApp. Pasa por `exigirUsuario` y por el permiso de Envíos como todo lo demás de este
+      // archivo — es una pantalla interna, la que da a internet es `_cadete.js`.
+      if (req.query.portal === '1') {
+        const { data, error } = await supabase
+          .from('envios_portal')
+          .select('token, token_vence, pin, rotado_por, rotado_en')
+          .eq('id', 'cadete')
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, portal: data || null });
+      }
+
       if (req.query.cuenta === '1') {
         const [env, dia] = await Promise.all([
           supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
@@ -380,6 +397,37 @@ export default async function handler(req, res) {
       if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
       return res.status(200).json({ ok: true });
+    }
+
+    // ── El link del cadete ────────────────────────────────────────────────────
+    //
+    // 🔴 **Rotar mata el link viejo en el acto**, y eso es lo que se pide del botón: es el camino de
+    // revocación. No hay estado de sesión del otro lado —el teléfono guarda token y PIN y los manda
+    // en cada pedido— así que cambiar la fila ES cerrar la sesión de todos.
+    //
+    // El primer token también nace por acá, nunca sembrado en el SQL: un token escrito en un archivo
+    // del repo es un token comprometido, y además así el camino que renueva queda ejercido el día
+    // uno en vez de descubrirse roto en noviembre.
+    if (b.action === 'rotar-token') {
+      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+      // Cuatro dígitos, con el cero adelante si toca: es para tipear con una mano arriba de la moto.
+      const pin = String(randomInt(0, 10000)).padStart(4, '0');
+      const vence = venceElProximoPrimero(new Date().toISOString().slice(0, 10));
+      const { error } = await supabase.from('envios_portal').upsert(
+        {
+          id: 'cadete',
+          token,
+          token_vence: `${vence}T03:00:00.000Z`, // medianoche de Argentina, no de UTC
+          pin,
+          pin_fallos: 0,
+          pin_bloqueado_hasta: null,
+          rotado_por: yo,
+          rotado_en: new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      );
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, token, pin, vence });
     }
 
     if (b.action === 'borrar') {
