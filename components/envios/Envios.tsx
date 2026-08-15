@@ -22,6 +22,7 @@ import {
   THead,
   Th,
   Tr,
+  color,
   formatMoney,
   space,
   useConfirmar,
@@ -30,6 +31,7 @@ import {
 import {
   aCobrar,
   direccionCompleta,
+  envioSaldado,
   estaTodoPago,
   linkWhatsapp,
   diaDeRepartoVecino,
@@ -42,7 +44,7 @@ import {
   turnosDe,
 } from '@/lib/envios/core'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, guardarPagoCadete, marcarPagado } from '@/lib/envios/cliente'
+import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, marcarBonificado, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
@@ -221,6 +223,7 @@ export function Envios() {
                 origen: 'manual',
                 estado: 'pendiente',
                 envio_pagado: false,
+                envio_bonificado: false,
               })
             }
           >
@@ -318,6 +321,15 @@ export function Envios() {
                       <Td>
                         {/* Igual que en el ticket: pagado NO es "$0". Un cero se lee como un precio. */}
                         {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
+                        {/* 🔑 **El costo del envío no se borra cuando no se cobra: se pinta.** Es lo
+                            que se le paga al cadete, así que tiene que estar a la vista mientras se
+                            arma la mochila; esconderlo es lo que hacía falta una segunda columna
+                            para no perderlo de vista. Verde = esta puerta no lo cobra. */}
+                        {envioSaldado(e) && Number(e.monto_envio) > 0 ? (
+                          <div style={{ fontSize: 12, color: color.success }}>
+                            envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'ya pago'}
+                          </div>
+                        ) : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
                         <div>
@@ -493,9 +505,13 @@ function Pendientes({
             <Td>
               {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
                   arriba de «PAGADO»— se leían como si una fuera del envío y la otra del pedido, y
-                  además se contradecían: un envío sin precio no puede estar pagado. */}
+                  además se contradecían: un envío sin precio no puede estar pagado.
+                  Son tres respuestas y no dos: bonificado NO es lo mismo que pagado —uno es plata
+                  que entró y el otro plata que no entró nunca— aunque en la puerta se cobre igual. */}
               {e.envio_pagado ? (
                 <StatusPill tone="success" label="PAGADO" />
+              ) : e.envio_bonificado ? (
+                <StatusPill tone="brand" label="BONIFICADO" />
               ) : (
                 <span style={{ opacity: 0.75 }}>lo cobra el cadete</span>
               )}
@@ -549,52 +565,59 @@ function Cotizar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promis
         />
         {!original ? <Badge tone="warning">falta</Badge> : null}
       </div>
-      <PagoAlCadete envio={envio} onGuardado={onGuardado} />
+      <Bonificar envio={envio} onGuardado={onGuardado} />
     </div>
   )
 }
 
 /**
- * Lo que cobra el cadete por ese paquete, cuando **no** es lo que se le cobró al cliente.
+ * El tilde de «se lo regalamos».
  *
- * 🔑 **Arranca escondido detrás de un link, y es lo importante.** Lo normal es que coincidan —el
- * precio del mapa de zonas se le cobra a la clienta y él se lo queda entero—, así que un segundo
- * input en cada fila sería una pregunta que nadie tiene que contestar veinte veces por día. Aparece
- * cuando hace falta: cuando el envío va bonificado, que es el caso donde `monto_envio` en 0 diría
- * que el reparto salió gratis.
+ * 🔑 **El precio sigue escrito arriba, y eso es todo el punto.** La versión anterior resolvía el
+ * bonificado poniendo el envío en cero y anotando aparte lo que igual cobraba el cadete: dos
+ * columnas para el mismo número, que es exactamente el defecto que este módulo persigue. Ahora el
+ * costo se cotiza igual que cualquier otro —es lo que se le paga a él— y esto sólo dice que en la
+ * puerta no se cobra.
  *
- * Vaciarlo lo devuelve a "lo mismo que el envío". Ese camino de vuelta tiene que existir: un número
- * tipeado en la fila equivocada, si quedara pegado, dejaría ese reparto figurando gratis para
- * siempre.
+ * Vive detrás de un link porque es el caso raro: nadie tiene que contestar esta pregunta veinte
+ * veces por día.
  */
-function PagoAlCadete({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
-  const propio = envio.pago_cadete == null || envio.pago_cadete === '' ? null : Number(envio.pago_cadete)
-  const [abierto, setAbierto] = useState(propio != null)
+function Bonificar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
+  const toast = useToast()
+  const [guardando, setGuardando] = useState(false)
 
-  if (!abierto) {
+  async function alternar() {
+    setGuardando(true)
+    try {
+      await marcarBonificado(envio.id, !envio.envio_bonificado)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo marcar el envío como bonificado.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (envio.envio_bonificado) {
     return (
-      <button
-        type="button"
-        onClick={() => setAbierto(true)}
-        style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, opacity: 0.6, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline' }}
-      >
-        el cadete cobra otra cosa
-      </button>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <Badge tone="brand">bonificado</Badge>
+        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void alternar()}>
+          Sacar
+        </Button>
+      </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-      <span style={{ opacity: 0.7 }}>cobra</span>
-      <MontoEnFila
-        original={propio}
-        placeholder="igual al envío"
-        alFallar="No se pudo guardar lo que cobra el cadete."
-        permiteVacio
-        onGuardar={(n) => guardarPagoCadete(envio.id, n)}
-        onGuardado={onGuardado}
-      />
-    </div>
+    <button
+      type="button"
+      disabled={guardando}
+      onClick={() => void alternar()}
+      style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, opacity: 0.6, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline' }}
+    >
+      bonificar el envío
+    </button>
   )
 }
 
@@ -604,22 +627,19 @@ function PagoAlCadete({ envio, onGuardado }: { envio: Envio; onGuardado: () => P
  * Guarda al salir del campo o con Enter, y **sólo si el número cambió**: el `blur` se dispara también
  * cuando alguien pasa de largo con el tabulador, y guardar ahí sería escribir sin que nadie lo pida.
  *
- * `permiteVacio` distingue los dos sentidos que tiene borrar el campo. En el precio del envío, vacío
- * es "no lo toqué" y se descarta; en lo que cobra el cadete, vacío es una respuesta —"lo mismo que el
- * envío"— y se guarda como `null`.
+ * Vacío es "no lo toqué" y se descarta: el precio del envío no tiene forma de "sin precio" que
+ * alguien quiera guardar a propósito — para eso está el placeholder «sin cotizar».
  */
 function MontoEnFila({
   original,
   placeholder,
   alFallar,
-  permiteVacio,
   onGuardar,
   onGuardado,
 }: {
   original: number | null
   placeholder: string
   alFallar: string
-  permiteVacio?: boolean
   onGuardar: (monto: number | null) => Promise<void>
   onGuardado: () => Promise<void>
 }) {
@@ -632,13 +652,13 @@ function MontoEnFila({
     if (valor === texto) return
     const vacio = valor.trim() === ''
     const n = Number(valor)
-    if ((vacio && !permiteVacio) || (!vacio && (!Number.isFinite(n) || n < 0))) {
+    if (vacio || !Number.isFinite(n) || n < 0) {
       setValor(texto)
       return
     }
     setGuardando(true)
     try {
-      await onGuardar(vacio ? null : n)
+      await onGuardar(n)
       await onGuardado()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : alFallar)
@@ -792,27 +812,30 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
         <Field label="Anotación" hint="«Tocar timbre 2», «dejar en portería».">
           <Input value={f.anotacion || ''} onChange={(e) => set('anotacion', e.target.value)} />
         </Field>
-        <Field label="Precio del envío">
+        {/* 🔑 **Es el costo del reparto, no "lo que se cobra".** Se carga siempre, aunque en la
+            puerta no se cobre: es lo que se le paga al cadete. Ponerlo en cero para decir que va sin
+            cargo es lo que había antes, y obligaba a una segunda columna para no dejarlo trabajando
+            gratis. Quién lo paga lo dicen los dos tildes de abajo. */}
+        <Field label="Precio del envío" hint="El costo del reparto. Se carga igual aunque el envío vaya bonificado: es lo que cobra el cadete.">
           <Input type="number" value={String(f.monto_envio ?? '')} onChange={(e) => set('monto_envio', e.target.value)} />
         </Field>
-        {/* 🔑 Vacío NO es cero: es «lo mismo que el envío», que es el caso normal. Se escribe cuando
-            el envío va bonificado —la clienta paga $0 y el cadete cobra igual—; con un cero acá, la
-            cuenta diría que ese reparto salió gratis y la diferencia se la comería él. */}
-        <Field
-          label="Lo que cobra el cadete"
-          hint="Dejalo vacío si es lo mismo que el precio del envío. Se completa cuando el envío va bonificado."
-        >
-          <Input
-            type="number"
-            placeholder={`igual al envío (${formatMoney(Number(f.monto_envio) || 0)})`}
-            value={f.pago_cadete == null ? '' : String(f.pago_cadete)}
-            onChange={(e) => set('pago_cadete', e.target.value === '' ? null : e.target.value)}
-          />
-        </Field>
+        {/* Los dos tildes deciden si el ticket dice PAGADO o manda a cobrar, y son excluyentes:
+            `validarEnvio` rechaza los dos juntos, así que prender uno apaga el otro acá también. */}
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="checkbox" checked={!!f.envio_pagado} onChange={(e) => set('envio_pagado', e.target.checked)} />
-          {/* Es el tilde que decide si el ticket dice PAGADO o manda a cobrar. */}
+          <input
+            type="checkbox"
+            checked={!!f.envio_pagado}
+            onChange={(e) => setF((x) => ({ ...x, envio_pagado: e.target.checked, envio_bonificado: e.target.checked ? false : x.envio_bonificado }))}
+          />
           El envío ya está pagado
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={!!f.envio_bonificado}
+            onChange={(e) => setF((x) => ({ ...x, envio_bonificado: e.target.checked, envio_pagado: e.target.checked ? false : x.envio_pagado }))}
+          />
+          Va bonificado (no lo paga nadie)
         </label>
         <Field label="Saldo del pedido a cobrar" hint="Casi siempre 0: el producto ya se pagó antes de despachar.">
           <Input type="number" value={String(f.monto_pedido_a_cobrar ?? '')} onChange={(e) => set('monto_pedido_a_cobrar', e.target.value)} />

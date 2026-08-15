@@ -6,8 +6,8 @@
 //   POST { recurso:'envios', action:'traer-tn', envios:[…] }
 //   POST { recurso:'envios', action:'guardar', envio }
 //   POST { recurso:'envios', action:'agendar', id, fecha, turno }   ·  action:'desagendar', id
-//   POST { recurso:'envios', action:'pagado', id, envio_pagado }
-//   POST { recurso:'envios', action:'costo', id, monto_envio }      ·  action:'pago-cadete', id, pago_cadete
+//   POST { recurso:'envios', action:'pagado', id, envio_pagado }    ·  action:'bonificado', id, envio_bonificado
+//   POST { recurso:'envios', action:'costo', id, monto_envio }
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
 //   POST { recurso:'envios', action:'cerrar-dia', fecha, trajo, pagado_aparte, nota }
@@ -65,7 +65,7 @@ function puedeEnvios(perfil) {
 
 const CAMPOS =
   'id, store, fecha, turno, origen, orden_numero, cliente, telefono, direccion, piso_depto, ' +
-  'localidad, anotacion, monto_envio, envio_pagado, monto_pedido_a_cobrar, pago_cadete, estado, ' +
+  'localidad, anotacion, monto_envio, envio_pagado, envio_bonificado, monto_pedido_a_cobrar, estado, ' +
   'vendedor, cadete, datos, autor, created_at, updated_at';
 
 const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_en';
@@ -79,7 +79,7 @@ const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_e
  */
 const CAMPOS_CUENTA =
   'id, store, fecha, turno, cliente, orden_numero, estado, monto_envio, envio_pagado, ' +
-  'monto_pedido_a_cobrar, pago_cadete';
+  'envio_bonificado, monto_pedido_a_cobrar';
 
 const esFechaIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
@@ -104,7 +104,6 @@ function nuevoId() {
 function filaDe(e, yo) {
   const mEnvio = monto(e.monto_envio);
   const mSaldo = monto(e.monto_pedido_a_cobrar);
-  const mCadete = monto(e.pago_cadete);
   return {
     id: e.id || nuevoId(),
     store: e.store,
@@ -121,12 +120,10 @@ function filaDe(e, yo) {
     localidad: e.localidad || null,
     anotacion: e.anotacion || null,
     monto_envio: mEnvio == null ? 0 : mEnvio,
+    // Los dos tildes de quién paga el envío. El costo (`monto_envio`) no los mira: existe igual.
     envio_pagado: !!e.envio_pagado,
+    envio_bonificado: !!e.envio_bonificado,
     monto_pedido_a_cobrar: mSaldo == null ? 0 : mSaldo,
-    // 🔑 Este NO se cae a cero cuando viene vacío: `null` significa "lo mismo que el envío", que es
-    // el caso normal. Un cero acá diría que el cadete lleva ese paquete gratis. Y si vino basura se
-    // pasa cruda a propósito, para que `validarEnvio` la rechace en castellano en vez de comérsela.
-    pago_cadete: mCadete === undefined ? e.pago_cadete : mCadete,
     estado: e.estado || 'pendiente',
     vendedor: e.vendedor || null,
     cadete: e.cadete || null,
@@ -311,9 +308,13 @@ export default async function handler(req, res) {
     if (b.action === 'pagado') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const pagado = !!b.envio_pagado;
+      const parche = { envio_pagado: pagado, autor: yo, updated_at: new Date().toISOString() };
+      // Simétrico al de bonificado: marcar que la clienta lo pagó apaga el «se lo regalamos».
+      if (pagado) parche.envio_bonificado = false;
       const { data, error } = await supabase
         .from('envios_reparto')
-        .update({ envio_pagado: !!b.envio_pagado, autor: yo, updated_at: new Date().toISOString() })
+        .update(parche)
         .eq('id', id)
         .select('id');
       if (error) throw new Error(error.message);
@@ -341,21 +342,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── Lo que cobra el cadete, cuando no es lo que se le cobró al cliente ────
+    // ── El tilde de «va bonificado» ───────────────────────────────────────────
     //
-    // Un campo solo, igual que `costo`. `null` es "lo mismo que el envío" y es lo que hay que poder
-    // volver a escribir: se tipea por error un número en una fila que no iba, se borra el campo y la
-    // fila vuelve a seguir el precio del envío sola. Un `0` diría que ese paquete se lleva gratis.
-    if (b.action === 'pago-cadete') {
+    // Un campo solo, calcado de `pagado` y por el mismo motivo. Y **apaga el otro tilde**: los dos
+    // juntos son dos verdades sobre la misma plata y `validarEnvio` los rechaza, así que bonificar
+    // algo marcado como pagado tiene que resolverse acá y no dejar la fila en un estado que el
+    // guardado siguiente va a rebotar sin que nadie entienda por qué.
+    if (b.action === 'bonificado') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
-      const m = monto(b.pago_cadete);
-      if (m === undefined) return res.status(400).json({ error: 'Lo que cobra el cadete tiene que ser un número de cero para arriba.' });
-      const { data, error } = await supabase
-        .from('envios_reparto')
-        .update({ pago_cadete: m, autor: yo, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select('id');
+      const bonificado = !!b.envio_bonificado;
+      const parche = { envio_bonificado: bonificado, autor: yo, updated_at: new Date().toISOString() };
+      if (bonificado) parche.envio_pagado = false;
+      const { data, error } = await supabase.from('envios_reparto').update(parche).eq('id', id).select('id');
       if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
       return res.status(200).json({ ok: true });

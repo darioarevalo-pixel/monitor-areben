@@ -10,7 +10,7 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
-import { ESTADOS_CERRADOS, ESTADOS_EN_CASA, turnosDe } from './reglas.core.js'
+import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida } from './tipos'
 
@@ -100,68 +100,7 @@ export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: strin
   return { tono: t.noLeidas ? 'aviso' : 'ok', texto: partes.join(' · ') }
 }
 
-/** PostgREST devuelve `numeric` como string. Mismo criterio que `lib/crm/core.ts`. */
-function num(v: number | string | null | undefined): number {
-  return parseFloat(String(v)) || 0
-}
-
-/**
- * **Lo que el cadete tiene que cobrar en esta puerta.**
- *
- * Es la única cuenta que importa de todo el módulo, y son dos sumandos:
- *   · el envío, sólo si NO se pagó por adelantado;
- *   · el saldo del pedido, si quedó algo por cobrar.
- *
- * 🔴 El caso "no hay que cobrar nada" es lo normal, no el borde: se midió sobre dos años de la
- * planilla que **en la mediana el 100% de lo que el cadete cobra es el envío** —el producto ya se
- * pagó por transferencia antes de despachar—. Un ticket que cobre de más un pedido ya pagado es
- * un problema con el cliente en la puerta, no un error de redondeo.
- */
-export function aCobrar(e: Envio): number {
-  const envio = e.envio_pagado ? 0 : num(e.monto_envio)
-  return envio + num(e.monto_pedido_a_cobrar)
-}
-
-/** ¿Esta puerta no se cobra? Lo que decide si el ticket dice PAGADO en vez de un monto. */
-export function estaTodoPago(e: Envio): boolean {
-  return aCobrar(e) === 0
-}
-
 // ── La cuenta corriente del cadete ───────────────────────────────────────────────────────────
-
-/**
- * **Lo que le debemos al cadete por llevar este paquete.**
- *
- * Es lo que se le cobró al cliente, salvo que se haya escrito otra cosa: el precio del mapa de zonas
- * se le cobra a la clienta y él se lo queda entero. `pago_cadete` en `null` NO es cero, es "lo mismo
- * que el envío" — guardar una copia haría que cotizar de nuevo dejara los dos números peleados.
- *
- * 🔑 **Existe porque el envío bonificado los separa.** Cuando el envío va sin cargo, `monto_envio`
- * es 0 y el cadete **cobra igual**: leer la tarifa de `monto_envio` a secas diría que ese reparto
- * salió gratis, y la diferencia se la comería él sin que nadie lo vea.
- */
-export function tarifaCadete(e: Envio): number {
-  return e.pago_cadete == null || e.pago_cadete === '' ? num(e.monto_envio) : num(e.pago_cadete)
-}
-
-/**
- * **Lo que el cadete tiene que traer por este envío**, y el corazón de toda la cuenta.
- *
- * Cobró `aCobrar(e)` en la puerta y le debemos `tarifaCadete(e)` por haberlo llevado. La resta es lo
- * que sobra, y **puede dar negativo**: ahí le debemos nosotros.
- *
- * Los tres casos reales, para que se vea que no hay ninguno raro:
- *   · envío cobrado en la puerta, producto ya pagado → cobra el envío y se lo queda: **0**.
- *   · el cliente ya había pagado el envío por adelantado → lo llevó y no cobró nada: **le debemos**.
- *   · cobró el producto en efectivo → **trae esa plata**, menos su envío.
- *
- * Que el caso normal dé cero es la razón por la que la planilla nunca necesitó una cuenta: mientras
- * todo se cobre en la puerta, nadie se debe nada. Los otros dos son los que se arrastraban de
- * memoria.
- */
-export function netoDelEnvio(e: Envio): number {
-  return aCobrar(e) - tarifaCadete(e)
-}
 
 /**
  * La cuenta corriente, día por día, con el saldo arrastrado.
@@ -249,13 +188,18 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
  */
 export function totalesDelDia(envios: Envio[]): TotalesDia {
   let enviosPagos = 0
+  let enviosBonificados = 0
   let cobrado = 0
   let tarifas = 0
   let pendienteDeSalir = 0
   let noEntregados = 0
 
   for (const e of envios) {
+    // 🔑 Los bonificados NO entran en `enviosPagos`, aunque en la puerta se comporten igual. Ese
+    // número es plata que ya entró y que hay que controlar; el bonificado no entró nunca. Sumarlo
+    // ahí sería inflar la caja con plata que nadie pagó.
     if (e.envio_pagado) enviosPagos += num(e.monto_envio)
+    if (e.envio_bonificado) enviosBonificados += num(e.monto_envio)
     if (e.estado === 'entregado') {
       cobrado += aCobrar(e)
       tarifas += tarifaCadete(e)
@@ -268,6 +212,7 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
   return {
     envios: envios.length,
     enviosPagos,
+    enviosBonificados,
     cobrado,
     tarifas,
     debeTraer,
@@ -377,6 +322,8 @@ export function ordenAEnvio(o: OrdenTN, marca: Marca): Partial<Envio> {
     anotacion: null,
     monto_envio: o.envio_costo_cliente ?? 0,
     envio_pagado: envioYaPago(o),
+    // Bonificar es una decisión que toma una persona acá adentro, nunca algo que venga de la tienda.
+    envio_bonificado: false,
     monto_pedido_a_cobrar: saldoDelProducto(o),
     estado: 'pendiente',
     // La foto congelada: si el cliente cambia su dirección en TN mañana, el ticket ya salió con
@@ -440,13 +387,26 @@ export function proximoDiaDeReparto(desde: string): string {
   return desde
 }
 
+/**
+ * La plata vive en `reglas.core.js` y se re-exporta acá tipada.
+ *
+ * 🔑 No es prolijidad: la lee gente que no puede importar TypeScript —`api/_envios.js` y el portal
+ * que el cadete abre en la calle—. Lo que el papel manda a cobrar, lo que la pantalla muestra y lo
+ * que el portal deja marcar salen de la misma función, o un día dicen cosas distintas.
+ */
 export {
+  aCobrar,
+  envioSaldado,
+  estaTodoPago,
   ESTADOS,
   ESTADOS_CERRADOS,
   ESTADOS_EN_CASA,
   esTurnoDeGrilla,
   MARCAS,
+  netoDelEnvio,
+  num,
   ORIGENES,
+  tarifaCadete,
   TURNOS,
   TURNOS_POR_DIA,
   turnosDe,

@@ -30,12 +30,31 @@ const env = Object.fromEntries(
     }),
 )
 
-// Los tres archivos y en este orden: el segundo afloja columnas que crea el primero, y el tercero
-// agrega la cuenta corriente del cadete y se lleva puesta `envios_turno` (sólo si está vacía). Van
-// en la misma transacción, así que o entran los tres o no entra ninguno.
-const sql = ['sql/migrate-envios.sql', 'sql/migrate-envios-pendientes.sql', 'sql/migrate-envios-cuenta.sql']
-  .map((f) => readFileSync(f, 'utf8'))
-  .join('\n;\n')
+// ⛔ **El `drop` de `pago_cadete` va detrás de una bandera, y no es prolijidad.**
+//
+// Prod y los previews comparten UNA base, y `api/_envios.js` pide sus columnas por nombre: mientras
+// haya una versión vieja andando, dropear la columna le contesta 500 a cada lectura de la hoja. El
+// orden correcto es deployar primero y cerrar después:
+//
+//     node scripts/apply-envios.mjs                    ← antes de deployar (todo aditivo)
+//     node scripts/apply-envios.mjs --cerrar-tanda-a   ← después, con el código nuevo sirviendo
+//
+// Si el drop viviera en el array de siempre, "correr las migraciones" antes de deployar rompería
+// prod sin que nadie hubiera pedido nada raro. Que haya que escribirlo aparte ES el recordatorio.
+const cerrarTandaA = process.argv.includes('--cerrar-tanda-a')
+
+// El orden importa: el segundo afloja columnas que crea el primero, el tercero agrega la cuenta
+// corriente y se lleva `envios_turno` (sólo si está vacía), y el cuarto suma el tilde de bonificado.
+// Van en la misma transacción, así que o entran todos o no entra ninguno.
+const archivos = [
+  'sql/migrate-envios.sql',
+  'sql/migrate-envios-pendientes.sql',
+  'sql/migrate-envios-cuenta.sql',
+  'sql/migrate-envios-plata.sql',
+]
+if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql')
+
+const sql = archivos.map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
 function parse(raw) {
   const afterProto = raw.slice(raw.indexOf('://') + 3)
@@ -96,14 +115,50 @@ try {
   }
   await client.query('ROLLBACK')
 
+  // Lo mismo para el candado nuevo: pagado y bonificado son dos verdades sobre la misma plata y la
+  // base los tiene que rechazar juntos. Se ejerce escribiendo la fila prohibida, igual que arriba —
+  // un `check` declarado `not valid` que no llegó a aplicarse se ve exactamente igual que uno que sí.
+  let plataOk = false
+  await client.query('BEGIN')
+  try {
+    await client.query(
+      `insert into envios_reparto (id, store, direccion, envio_pagado, envio_bonificado)
+       values ('__sonda2__', 'bdi', 'sonda', true, true)`,
+    )
+  } catch {
+    plataOk = true
+  }
+  await client.query('ROLLBACK')
+
+  // `pago_cadete`: mientras exista, cuántas filas la usan. Con filas NO se dropea — cada una es el
+  // único registro de lo que ese reparto le costó a la empresa. Ver `migrate-envios-plata-drop.sql`.
+  const viejaCol = await client.query(
+    `select count(*)::int as n
+       from information_schema.columns
+      where table_name = 'envios_reparto' and column_name = 'pago_cadete'`,
+  )
+  const conTarifaPropia = viejaCol.rows[0].n
+    ? (await client.query('select count(*)::int as n from envios_reparto where pago_cadete is not null')).rows[0].n
+    : 0
+
   const estado = rls.rows
     .map((x) => `${x.relname}=${x.relrowsecurity ? 'RLS ✓' : 'RLS ✗ ABIERTA'}${x.anon_escribe ? ' ✗ anon ESCRIBE' : ''}`)
     .join(' · ')
   console.log(`✓ BDI (${cfg.host}): envios_reparto ${r.rows[0].n} · envios_dia ${t.rows[0].n} filas`)
   console.log(`  ${estado}`)
   console.log(`  fecha sin turno: ${checkOk ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`)
+  console.log(`  pagado + bonificado: ${plataOk ? 'rechazado ✓' : '✗ SE GUARDÓ — el check no está'}`)
   console.log(`  envios_turno: ${vieja.rows[0].sigue ? '⚠️ SIGUE (tenía filas: son datos de caja, mirarlos)' : 'se fue ✓'}`)
-  if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk) process.exitCode = 1
+  console.log(
+    `  pago_cadete: ${
+      !viejaCol.rows[0].n
+        ? 'se fue ✓'
+        : conTarifaPropia === 0
+          ? `sigue (0 filas la usan — cerrá con --cerrar-tanda-a después de deployar)`
+          : `⚠️ SIGUE y ${conTarifaPropia} filas la usan: son bonificados del modelo viejo, pasarlos a monto_envio + envio_bonificado ANTES de dropear`
+    }`,
+  )
+  if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk || !plataOk) process.exitCode = 1
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})
   console.log(`✗ BDI: ${e.message}`)

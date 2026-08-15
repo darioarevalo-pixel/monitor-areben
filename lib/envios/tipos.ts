@@ -33,19 +33,25 @@ export type Envio = {
   localidad: string | null
   anotacion: string | null
 
-  /** Cuánto vale el envío. Existe siempre, se haya cobrado o no. */
+  /**
+   * **El costo del reparto. Existe siempre, se cobre o no en la puerta.**
+   *
+   * Es lo que se le paga al cadete (`tarifaCadete`) y, salvo que esté saldado, lo que él cobra.
+   * Nunca se pone en cero para decir que no se cobra: para eso están los dos tildes de abajo.
+   */
   monto_envio: number | string
-  /** Si ya se pagó por adelantado. Es lo que decide si el ticket dice PAGADO o un monto. */
+  /** La clienta ya lo pagó por adelantado. El cadete no lo cobra, pero a él se le paga igual. */
   envio_pagado: boolean
+  /**
+   * Se lo regalamos: no lo paga nadie, y al cadete se le paga igual.
+   *
+   * 🔑 Va separado de `envio_pagado` aunque en la puerta valgan lo mismo. Son motivos opuestos —una
+   * es plata que entró por adelantado, la otra plata que no entró nunca— y colapsarlos en un
+   * booleano hace imposible contestar cuánto regalamos en envíos. `validarEnvio` los rechaza juntos.
+   */
+  envio_bonificado: boolean
   /** El saldo del producto a cobrar en la puerta. Casi siempre 0: el pedido ya se pagó antes. */
   monto_pedido_a_cobrar: number | string
-  /**
-   * Lo que cobra el cadete por llevarlo, cuando NO es lo que se le cobró al cliente.
-   *
-   * `null` no es cero: es "lo mismo que el envío", que es el caso normal. Se escribe sólo cuando el
-   * envío va **bonificado** —el cliente paga $0 y el cadete cobra igual—. Ver `tarifaCadete`.
-   */
-  pago_cadete?: number | string | null
 
   estado: EstadoEnvio
   vendedor: string | null
@@ -62,6 +68,8 @@ export type TotalesDia = {
   envios: number
   /** Lo que ya entró antes de salir. No se rinde: se controla. */
   enviosPagos: number
+  /** Lo que regalamos en envíos ese día. Nunca entró: va aparte de `enviosPagos` a propósito. */
+  enviosBonificados: number
   /** Lo que el cadete juntó en las puertas. Sólo lo entregado de verdad. */
   cobrado: number
   /** Lo que le debemos por haber llevado esos paquetes. */

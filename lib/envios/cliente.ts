@@ -78,13 +78,13 @@ export async function guardarCosto(id: string, monto: number): Promise<void> {
 }
 
 /**
- * Lo que cobra el cadete por ese paquete, cuando no es lo que se le cobró al cliente.
+ * El tilde de «se lo regalamos»: nadie paga el envío, y al cadete se le paga igual.
  *
- * `null` lo devuelve al default —"lo mismo que el envío"—, que es lo que hay que poder volver a
- * escribir: si un número tipeado por error quedara pegado como cero, ese reparto figuraría gratis.
+ * Apaga `envio_pagado` del otro lado —lo hace el handler—, porque son motivos opuestos y juntos no
+ * se pueden guardar. El costo del envío no se toca: sigue existiendo, y es lo que cobra el cadete.
  */
-export async function guardarPagoCadete(id: string, monto: number | null): Promise<void> {
-  await postear({ action: 'pago-cadete', id, pago_cadete: monto }, 'No se pudo guardar lo que cobra el cadete.')
+export async function marcarBonificado(id: string, bonificado: boolean): Promise<void> {
+  await postear({ action: 'bonificado', id, envio_bonificado: bonificado }, 'No se pudo marcar el envío como bonificado.')
 }
 
 export async function cambiarEstado(id: string, estado: string, cadete?: string | null): Promise<void> {

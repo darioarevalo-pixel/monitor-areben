@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   aCobrar,
   direccionCompleta,
+  envioSaldado,
   estaTodoPago,
   linkWhatsapp,
   diaDeRepartoVecino,
@@ -48,6 +49,7 @@ const base: Envio = {
   anotacion: null,
   monto_envio: 3000,
   envio_pagado: false,
+  envio_bonificado: false,
   monto_pedido_a_cobrar: 0,
   estado: 'pendiente',
   vendedor: 'Karen',
@@ -88,6 +90,22 @@ describe('lo que se cobra en la puerta', () => {
     expect(aCobrar(con({ monto_envio: 0, envio_pagado: false }))).toBe(0)
     expect(estaTodoPago(con({ monto_envio: 0 }))).toBe(true)
   })
+
+  // 🔴 El segundo tilde. El mutante es `aCobrar` mirando sólo `envio_pagado`: el bonificado sale a
+  // la calle con el ticket pidiendo los $3.000 que la clienta ya sabe que no paga.
+  it('🔴 NO cobra el envío cuando va bonificado', () => {
+    expect(aCobrar(con({ monto_envio: 3000, envio_bonificado: true }))).toBe(0)
+    expect(estaTodoPago(con({ monto_envio: 3000, envio_bonificado: true }))).toBe(true)
+    expect(envioSaldado(con({ monto_envio: 3000, envio_bonificado: true }))).toBe(true)
+  })
+
+  it('el bonificado igual cobra el saldo del pedido, que es otra plata', () => {
+    expect(aCobrar(con({ monto_envio: 3000, envio_bonificado: true, monto_pedido_a_cobrar: 17500 }))).toBe(17500)
+  })
+
+  it('sin ningún tilde el envío no está saldado', () => {
+    expect(envioSaldado(con({ monto_envio: 3000 }))).toBe(false)
+  })
 })
 
 describe('los totales con los que se cierra el día', () => {
@@ -101,6 +119,18 @@ describe('los totales con los que se cierra el día', () => {
 
   it('ENVÍOS PAGOS junta sólo lo que ya había entrado', () => {
     expect(totalesDelDia(dia).enviosPagos).toBe(3000)
+  })
+
+  // 🔴 En la puerta el bonificado y el pagado se comportan igual, y por eso es fácil sumarlos en el
+  // mismo KPI. El mutante —`if (pagado || bonificado)`— infla la caja con plata que nadie pagó
+  // nunca: el número que se controla contra las transferencias del día dejaría de cerrar.
+  it('🔴 lo BONIFICADO no es plata que entró: va en su propio total', () => {
+    const conBonificado = [...dia, con({ id: 'f', monto_envio: 5500, envio_bonificado: true, estado: 'entregado' })]
+    const t = totalesDelDia(conBonificado)
+    expect(t.enviosPagos).toBe(3000)
+    expect(t.enviosBonificados).toBe(5500)
+    // Y al cadete se le paga igual: la tarifa del bonificado entra en lo que se queda.
+    expect(t.tarifas).toBe(3000 + 3000 + 4300 + 5500)
   })
 
   // 🔴 El que se equivoca solo: si `cobrado` sumara el día entero en vez de sólo lo entregado,
@@ -141,30 +171,37 @@ describe('los totales con los que se cierra el día', () => {
 })
 
 /**
- * 🔑 **Lo que el cadete cobra por llevarlo es una pregunta distinta de lo que se le cobró al
- * cliente**, y sólo se separan en el envío bonificado. Es el caso que un test de "la suma da bien"
- * nunca toca: con el bonificado, leer la tarifa de `monto_envio` da 0 y el reparto figura gratis.
+ * 🔑 **Al cadete se le paga el costo del reparto, lo cobre o no en la puerta.**
+ *
+ * Es la cuenta que un test de "la suma da bien" nunca toca. Hubo una versión que resolvía el
+ * bonificado poniendo `monto_envio` en cero y anotando aparte lo que él cobraba igual: dos columnas
+ * para el mismo número. El precio ahora se carga siempre —es lo que se le paga— y los dos tildes
+ * dicen quién lo paga.
  */
 describe('lo que cobra el cadete por llevarlo', () => {
-  it('sin nada escrito, cobra lo mismo que se le cobró al cliente', () => {
+  it('es el costo del envío, y nada más', () => {
     expect(tarifaCadete(con({ monto_envio: 4300 }))).toBe(4300)
-    expect(tarifaCadete(con({ monto_envio: 4300, pago_cadete: null }))).toBe(4300)
   })
 
-  // 🔴 El mutante: si `null` se leyera como 0, este caso daría 0 y el bonificado saldría gratis.
-  it('🔴 el envío BONIFICADO se le paga igual, aunque el cliente pague $0', () => {
-    const bonificado = con({ monto_envio: 0, pago_cadete: 3000, estado: 'entregado' })
+  // 🔴 **EL test de la tanda.** El mutante que caza es `tarifaCadete` mirando si el envío está
+  // saldado y devolviendo 0: la fila diría que ese reparto salió gratis y la diferencia se la
+  // comería la única persona que no está mirando la pantalla. Los dos tildes tienen que dar lo mismo
+  // acá, porque los dos significan "no lo cobró en la puerta", no "lo llevó gratis".
+  it('🔴 el envío BONIFICADO se le paga igual: la clienta paga $0, él cobra el costo', () => {
+    const bonificado = con({ monto_envio: 3000, envio_bonificado: true, estado: 'entregado' })
     expect(tarifaCadete(bonificado)).toBe(3000)
     expect(aCobrar(bonificado)).toBe(0) // en la puerta no cobra nada
     expect(netoDelEnvio(bonificado)).toBe(-3000) // y le quedamos debiendo lo que puso él
   })
 
-  it('escrito en cero SÍ es cero: ese paquete lo lleva sin cobrar', () => {
-    expect(tarifaCadete(con({ monto_envio: 4300, pago_cadete: 0 }))).toBe(0)
+  it('🔴 el envío ya PAGO se le paga igual, por el mismo motivo', () => {
+    const pago = con({ monto_envio: 3000, envio_pagado: true, estado: 'entregado' })
+    expect(tarifaCadete(pago)).toBe(3000)
+    expect(tarifaCadete(pago)).toBe(tarifaCadete(con({ monto_envio: 3000, envio_bonificado: true })))
   })
 
   it('aguanta el string de la base', () => {
-    expect(tarifaCadete(con({ monto_envio: '4300', pago_cadete: '5500' }))).toBe(5500)
+    expect(tarifaCadete(con({ monto_envio: '4300' }))).toBe(4300)
   })
 
   // Los tres casos de la calle, que son los que hacen que la cuenta exista.
@@ -312,6 +349,15 @@ describe('🔴 lo que dice el ticket en la mano del cadete', () => {
     expect(dice.titulo).toBe('PAGADO')
     // "$0" se lee como un precio, no como "no cobres". Es la diferencia entre un ticket que
     // funciona en la puerta y una que hace discutir al cadete con el cliente.
+    expect(dice.titulo).not.toContain('$')
+  })
+
+  // 🔴 El bonificado en el papel. El mutante es `textoDePlata` mirando sólo `envio_pagado`: el
+  // ticket saldría con "$3.000" arriba de un envío que se regaló, y el cadete lo cobra.
+  it('🔴 un envío bonificado también dice PAGADO, no el precio', () => {
+    const dice = textoDePlata(con({ monto_envio: 3000, envio_bonificado: true }))
+    expect(dice.modo).toBe('pagado')
+    expect(dice.titulo).toBe('PAGADO')
     expect(dice.titulo).not.toContain('$')
   })
 
@@ -595,6 +641,19 @@ describe('validarEnvio — fecha y turno, los dos o ninguno', () => {
     // Lunes a la mañana no existe en el reparto, pero un envío especial tiene que poder salir sin
     // tocar el código. Si esto empieza a devolver un error, el local se queda sin salida.
     expect(validarEnvio({ ...base, fecha: '2026-08-10', turno: 'mañana' })).toBeNull()
+  })
+
+  // 🔴 Los dos tildes juntos son dos verdades sobre la misma plata, y el mutante es no chequearlo:
+  // en la puerta no se nota —`aCobrar` da lo mismo—, así que si no se rechaza acá no se rechaza en
+  // ningún lado, y el día que haya que contestar «cuánto regalamos en envíos» esas filas no se
+  // pueden ni contar ni dejar afuera.
+  it('🔴 pagado y bonificado a la vez se rechaza', () => {
+    expect(validarEnvio({ ...base, envio_pagado: true, envio_bonificado: true })).toMatch(/pagado y bonificado/i)
+  })
+
+  it('cada uno por su lado se acepta', () => {
+    expect(validarEnvio({ ...base, envio_pagado: true, envio_bonificado: false })).toBeNull()
+    expect(validarEnvio({ ...base, envio_pagado: false, envio_bonificado: true })).toBeNull()
   })
 })
 
