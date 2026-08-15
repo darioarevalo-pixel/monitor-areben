@@ -72,5 +72,24 @@ create table if not exists memo_campo (
 
 create index if not exists idx_memo_campo_memo on memo_campo (memo_id);
 
-alter table memo_semana disable row level security;
-alter table memo_campo disable row level security;
+-- ── 🔴 RLS PRENDIDA, Y SIN NINGUNA POLÍTICA ──────────────────────────────────────────────────────
+--
+-- Estas dos líneas decían `disable` y eso abría el memo entero a internet. Medido el 15-ago-2026:
+-- con la anon key —que se descarga sin login desde un chunk público de `monitor.arebensrl.com`—
+-- `memo_campo` devolvía las ocho filas y `memo_semana` la semana. De las 48 tablas del esquema eran
+-- **las dos únicas** que entregaban datos: todas las demás las tapa `migrate-rls.sql`, que prende
+-- RLS en bucle sobre lo que existía el 13-ago. El memo nació después y llegó con el `disable`
+-- puesto, así que se saltaba ese candado.
+--
+-- 🔑 **`alter default privileges` (migrate-rls.sql:179) sólo revoca ESCRITURA sobre las tablas
+-- futuras, nunca la lectura.** Por eso una tabla nueva nace legible por `anon` y hay que prenderle
+-- RLS a mano: el `grant select ... to anon` de la línea 170 es a nivel esquema y la alcanza sola.
+-- Escribir ya estaba cerrado (INSERT/UPDATE/DELETE con la anon key dan 42501); lo que estaba
+-- abierto era leer, que en el memo es justo lo que importa: el acta, los avances, y al cerrar la
+-- semana la foto de venta por línea y el capital parado.
+--
+-- Sin política de SELECT, `anon` lee CERO filas. Los handlers entran con la service key, que se
+-- saltea RLS — y que está en Vercel, probado por el hecho de que guardar el memo funciona en prod
+-- (con la anon key de fallback la escritura habría dado permiso denegado).
+alter table memo_semana enable row level security;
+alter table memo_campo enable row level security;
