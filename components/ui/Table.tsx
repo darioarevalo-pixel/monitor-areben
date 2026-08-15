@@ -32,6 +32,18 @@ export function TBody({ children }: { children: React.ReactNode }) {
   return <tbody>{children}</tbody>
 }
 
+/**
+ * El pie de la tabla: la fila de totales.
+ *
+ * 🔑 **Va acá y no como un div abajo de la tabla porque tiene que alinear con las columnas.** Un
+ * total que no cae debajo de su columna obliga a leer el encabezado de nuevo para saber de qué es,
+ * que es justamente lo que una fila de totales viene a evitar. La regla de estilo vive en
+ * `kit.css` (`.mo-table tfoot`).
+ */
+export function TFoot({ children }: { children: React.ReactNode }) {
+  return <tfoot>{children}</tfoot>
+}
+
 export function Tr({ children, onClick, style }: { children: React.ReactNode; onClick?: () => void; style?: React.CSSProperties }) {
   return (
     <tr onClick={onClick} className={onClick ? 'mo-tr--click' : undefined} style={style}>

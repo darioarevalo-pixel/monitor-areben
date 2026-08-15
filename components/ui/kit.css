@@ -222,6 +222,17 @@
 .mo-table tr.mo-tr--click {
   cursor: pointer;
 }
+/* La fila de totales. El borde de arriba es más grueso que el de las filas: es lo que hace que se
+   lea como un cierre y no como un renglón más de datos. */
+.mo-table tfoot td {
+  padding: 0 var(--mo-cell-x);
+  height: var(--mo-row-h);
+  color: var(--mo-ink);
+  font-weight: 600;
+  background: var(--mo-bg2);
+  border-top: 2px solid var(--mo-line);
+  vertical-align: middle;
+}
 .mo-td--num {
   text-align: right;
   font-variant-numeric: tabular-nums;

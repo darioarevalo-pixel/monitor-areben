@@ -5,6 +5,8 @@ import {
   cpFueraDeZona,
   itemsDelPedido,
   marcasATraer,
+  marcasPresentes,
+  paraImprimir,
   puedeIrAUnDia,
   resumenDelPedido,
   direccionCompleta,
@@ -646,6 +648,32 @@ describe('🔴 traer trae la marca del header', () => {
 
   it('sin marca trae las dos, que es mejor que un botón que no hace nada', () => {
     expect(marcasATraer(null)).toEqual(['bdi', 'zattia'])
+  })
+})
+
+describe('🔴 qué tickets se imprimen', () => {
+  const dia = [
+    con({ id: 'a', store: 'bdi', estado: 'pendiente' }),
+    con({ id: 'b', store: 'zattia', estado: 'preparado' }),
+    con({ id: 'c', store: 'bdi', estado: 'entregado' }),
+    con({ id: 'd', store: 'bdi', estado: 'no_entregado' }),
+  ]
+
+  // 🔴 Mutante uno: reimprimir lo cerrado manda al cadete a una puerta donde ya estuvo.
+  it('🔴 no reimprime lo que ya cerró', () => {
+    expect(paraImprimir(dia).map((e) => e.id)).toEqual(['a', 'b'])
+  })
+
+  // 🔴 Mutante dos: ignorar la marca ⇒ el cadete se lleva tickets de la otra en la misma pila.
+  it('🔴 por marca trae sólo los de esa marca', () => {
+    expect(paraImprimir(dia, 'bdi').map((e) => e.id)).toEqual(['a'])
+    expect(paraImprimir(dia, 'zattia').map((e) => e.id)).toEqual(['b'])
+  })
+
+  it('los botones que se pintan son las marcas que de verdad hay', () => {
+    expect(marcasPresentes(dia)).toEqual(['bdi', 'zattia'])
+    expect(marcasPresentes([con({ store: 'bdi' })])).toEqual(['bdi'])
+    expect(marcasPresentes([])).toEqual([])
   })
 })
 

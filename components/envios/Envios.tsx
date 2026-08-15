@@ -16,6 +16,7 @@ import {
   Select,
   StatusPill,
   TBody,
+  TFoot,
   TableWrap,
   Tabs,
   Td,
@@ -43,7 +44,9 @@ import {
   proximoDiaDeReparto,
   puedeIrAUnDia,
   rotuloDeDia,
+  marcasPresentes,
   ordenarParaPreparar,
+  paraImprimir,
   resumenDeTraida,
   resumenDelPedido,
   siguienteEstado,
@@ -55,23 +58,10 @@ import { hoyIso } from '@/lib/calendario'
 import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, marcarBonificado, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
+import type { Marca } from '@/lib/nav'
 import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 
-/**
- * "🛵 Envíos del día" (key `envios`).
- *
- * La hoja del cadete, que hasta hoy era una planilla de Google escrita a mano. Se diagnosticó
- * entera el 13-ago-2026 y lo que salió no fue "faltan datos": **3 de cada 10 filas no eran un
- * envío** —eran el encabezado del turno siguiente filtrado adentro del anterior—, el 53,8% de los
- * turnos no decía si era mañana o tarde, y no había marca, ni estado, ni localidad. Nada de eso se
- * arregla con una regla de carga: se arregla dejando de escribir fechas como encabezados.
- *
- * **No tiene selector de marca, y eso es lo importante de la pantalla.** El cadete sale con
- * paquetes de BDI y de Zattia en la misma mochila: el turno es uno y la rendición es una. Pero cada
- * envío guarda su marca, así que el análisis por marca deja de estar ciego sin que la operación
- * cambie. Para los que vienen de Tienda Nube la marca sale sola.
- */
 /**
  * El color de cada estado. Mismo criterio que Postventa (`ESTADO_TONE`), y por eso mismo tono:
  * ámbar es advertencia y nada más, verde es cerrado bien, rojo es cerrado mal.
@@ -90,6 +80,21 @@ const ESTADO_TONE: Record<string, Tone> = {
   reintento: 'neutral',
 }
 
+/**
+ * "🛵 Envíos del día" (key `envios`).
+ *
+ * La hoja del cadete, que hasta hoy era una planilla de Google escrita a mano. Se diagnosticó
+ * entera el 13-ago-2026 y lo que salió no fue "faltan datos": **3 de cada 10 filas no eran un
+ * envío** —eran el encabezado del turno siguiente filtrado adentro del anterior—, el 53,8% de los
+ * turnos no decía si era mañana o tarde, y no había marca, ni estado, ni localidad. Nada de eso se
+ * arregla con una regla de carga: se arregla dejando de escribir fechas como encabezados.
+ *
+ * **La hoja del día no tiene selector de marca, y eso es lo importante de la pantalla.** El cadete
+ * sale con paquetes de BDI y de Zattia en la misma mochila: el turno es uno y la rendición es una.
+ * La bandeja «Sin fecha» va al revés —ahí sí filtra por marca— porque cotizar y acordar el día lo
+ * hace el equipo de una marca mirando su tienda. Cada envío guarda la suya igual, así que el
+ * análisis por marca deja de estar ciego sin que la operación cambie.
+ */
 export function Envios() {
   const { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
@@ -108,6 +113,7 @@ export function Envios() {
   // existiendo —cada envío guarda el suyo— pero como secciones adentro del día.
   const delDia = useMemo(() => ordenarParaPreparar(envios), [envios])
   const totales = useMemo(() => totalesDelDia(delDia), [delDia])
+  const marcasDelDia = useMemo(() => marcasPresentes(delDia), [delDia])
   // Los turnos que hay que pintar: los de la grilla de ese día, más cualquiera que tenga un envío
   // metido fuera de grilla — si no, un paquete agendado un sábado no aparecería en ningún lado.
   const turnosDelDia = useMemo(() => {
@@ -142,12 +148,17 @@ export function Envios() {
     }
   }
 
-  async function imprimir() {
-    // Se imprime lo que todavía va a salir: reimprimir un entregado sería mandar al cadete a una
-    // puerta donde ya estuvo.
-    const paraImprimir = delDia.filter((e) => e.estado !== 'entregado' && e.estado !== 'no_entregado')
-    if (!paraImprimir.length) return toast.error('No hay envíos para imprimir en este día.')
-    await imprimirTicketsCadete(paraImprimir)
+  /**
+   * Imprimir los tickets del día, enteros o de una marca.
+   *
+   * 🔑 **La mochila se arma por marca aunque el reparto sea uno.** Se juntan los paquetes de BDI, se
+   * imprimen los suyos y se pegan; después los de Zattia. Con un solo botón había que imprimir todo
+   * junto y separar la pila a mano, que es donde se traspapela un ticket.
+   */
+  async function imprimir(marca?: Marca) {
+    const lista = paraImprimir(delDia, marca)
+    if (!lista.length) return toast.error(marca ? `No hay envíos de ${marca.toUpperCase()} para imprimir en este día.` : 'No hay envíos para imprimir en este día.')
+    await imprimirTicketsCadete(lista)
   }
 
   /** El tilde de «ya lo pagó»: el cadete deja de cobrarlo en la puerta. */
@@ -192,8 +203,23 @@ export function Envios() {
         <Button variant="outline" onClick={traer} disabled={trayendo}>
           {trayendo ? 'Trayendo…' : 'Traer los de Tienda Nube'}
         </Button>
-        <Button variant="solid" tone="brand" onClick={imprimir}>
-          Imprimir tickets
+        {/* Un botón por marca presente, más el de todas. Sólo aparecen si el día tiene las dos:
+            con una sola marca en la mochila, «Todos» y «BDI» imprimen exactamente lo mismo. */}
+        {marcasDelDia.length > 1
+          ? marcasDelDia.map((m) => (
+              <Button
+                key={m}
+                variant="outline"
+                iconLeft={<Icono nombre="impresora" />}
+                onClick={() => void imprimir(m)}
+                {...dice(`Imprimir sólo los tickets de ${m.toUpperCase()}`)}
+              >
+                {m === 'bdi' ? 'BDI' : 'Zattia'}
+              </Button>
+            ))
+          : null}
+        <Button variant="solid" tone="brand" iconLeft={<Icono nombre="impresora" />} onClick={() => void imprimir()}>
+          {marcasDelDia.length > 1 ? 'Imprimir todos' : 'Imprimir tickets'}
         </Button>
       </HeaderAcciones>
 
@@ -231,15 +257,7 @@ export function Envios() {
               tener que pasar por ellas de a un click es la razón por la que se terminaba abriendo el
               calendario para todo. El campo de fecha queda para ir a un día lejano. */}
           <Field label="Día">
-            <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-              <Button variant="outline" onClick={() => setFecha(diaDeRepartoVecino(fecha, -1))} title="El día de reparto anterior">
-                ←
-              </Button>
-              <Input type="date" value={fecha} onChange={(ev) => setFecha(ev.target.value)} />
-              <Button variant="outline" onClick={() => setFecha(diaDeRepartoVecino(fecha, 1))} title="El próximo día de reparto">
-                →
-              </Button>
-            </div>
+            <SelectorDeDia fecha={fecha} onCambiar={setFecha} />
           </Field>
           <Button
             variant="outline"
@@ -319,8 +337,9 @@ export function Envios() {
                 <THead>
                   <Tr>
                     <Th>Cliente</Th>
-                    <Th>Dónde va</Th>
+                    <Th>Dirección</Th>
                     <Th>Marca</Th>
+                    <Th>Pedido</Th>
                     <Th>Cobra</Th>
                     <Th>Estado</Th>
                     <Th />
@@ -335,18 +354,16 @@ export function Envios() {
                         {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
                       </Td>
                       <Td>
-                        <div>{direccionCompleta(e)}</div>
+                        <Direccion envio={e} />
                         {e.anotacion ? <div style={{ opacity: 0.7, fontSize: 12 }}>{e.anotacion}</div> : null}
-                        {linkWhatsapp(e) ? (
-                          <a href={linkWhatsapp(e)!} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
-                            WhatsApp
-                          </a>
-                        ) : null}
                       </Td>
                       {/* 🔑 El chip de color, y no el nombre en texto: la hoja mezcla las dos marcas a
                           propósito, así que de un golpe de vista tiene que verse de cuál es cada
                           paquete mientras se arma la mochila. */}
                       <Td><MarcaChip marca={e.store} /></Td>
+                      <Td>
+                        <ResumenPedido envio={e} onVer={() => setViendoPedido(e)} />
+                      </Td>
                       <Td>
                         {/* Igual que en el ticket: pagado NO es "$0". Un cero se lee como un precio. */}
                         {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
@@ -363,7 +380,7 @@ export function Envios() {
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
                         <div>
                           <Button size="sm" variant="ghost" onClick={() => void tildarPagado(e)}>
-                            {e.envio_pagado ? 'Marcar envío impago' : 'Marcar envío pagado'}
+                            {e.envio_pagado ? 'Impago' : 'Ya lo pagó'}
                           </Button>
                         </div>
                       </Td>
@@ -371,21 +388,55 @@ export function Envios() {
                         <EstadoDelEnvio envio={e} onCambiar={tildar} />
                       </Td>
                       <Td>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <Button size="sm" variant="ghost" onClick={() => setEditando(e)}>
-                            Editar
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => void sacarDelDia(e)}>
-                            Sin fecha
-                          </Button>
-                          <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(e)}>
-                            Sacar
-                          </Button>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {/* Reimprimir una sola fila. No filtra por estado a propósito, al revés
+                              que el botón de arriba: acá alguien pidió ESE ticket, y volver a
+                              imprimir el de un entregado es una decisión de una persona —se manchó,
+                              se despegó— y no un descuido de la pantalla. */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            iconLeft={<Icono nombre="impresora" />}
+                            onClick={() => void imprimirTicketsCadete([e])}
+                            {...dice('Imprimir el ticket de este envío')}
+                          />
+                          <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => setEditando(e)} {...dice('Editar el envío')} />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            iconLeft={<Icono nombre="calendario" />}
+                            onClick={() => void sacarDelDia(e)}
+                            {...dice('Sacarlo del día y devolverlo a «Sin fecha» para recoordinar')}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            tone="danger"
+                            iconLeft={<Icono nombre="papelera" />}
+                            onClick={() => void borrar(e)}
+                            {...dice('Sacar el envío de la hoja')}
+                          />
                         </div>
                       </Td>
                     </Tr>
                   ))}
                 </TBody>
+                {/* 🔑 **El pie es del TURNO, no del día.** La hoja pinta una tabla por turno, así
+                    que poner el total del día entero abajo de las dos las haría mentir a las dos.
+                    El del día ya está arriba, en los KPI. */}
+                <TFoot>
+                  <Tr>
+                    <Td>Total del turno</Td>
+                    <Td />
+                    <Td />
+                    <Td />
+                    <Td>
+                      <TotalDelTurno envios={delTurno} />
+                    </Td>
+                    <Td />
+                    <Td />
+                  </Tr>
+                </TFoot>
               </TableWrap>
             </div>
           )
@@ -612,6 +663,53 @@ function Pendientes({
         ))}
       </TBody>
     </TableWrap>
+  )
+}
+
+/**
+ * Elegir un día de reparto: flechas que saltan de día con moto a día con moto, más el calendario.
+ *
+ * 🔑 **Las flechas saltean los días sin reparto.** El sábado, el domingo y cualquier día sin turnos
+ * son pantallas siempre vacías: pasar por ellos de a un click es lo que hacía que se terminara
+ * abriendo el calendario para todo. El campo de fecha queda para ir a un día lejano.
+ *
+ * Vive acá, en un solo lugar, y lo usan la hoja del día y el modal de mandar a un día: elegir un
+ * día es la misma operación en los dos, y tenerla escrita dos veces es tener dos formas de que se
+ * comporte distinto.
+ */
+function SelectorDeDia({ fecha, onCambiar }: { fecha: string; onCambiar: (f: string) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+      <Button variant="outline" onClick={() => onCambiar(diaDeRepartoVecino(fecha, -1))} {...dice('El día de reparto anterior')}>
+        ←
+      </Button>
+      <Input type="date" value={fecha} onChange={(ev) => onCambiar(ev.target.value)} />
+      <Button variant="outline" onClick={() => onCambiar(diaDeRepartoVecino(fecha, 1))} {...dice('El próximo día de reparto')}>
+        →
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * Lo que se cobra en ese turno, al pie de su tabla.
+ *
+ * 🔑 **Suma lo que hay que cobrar, no lo que ya se cobró.** Es el número con el que se controla la
+ * hoja antes de que el cadete salga: cuánta plata tiene que volver de esas puertas. El KPI de arriba
+ * («Cobró en las puertas») cuenta sólo lo entregado, que es otra pregunta y de otro momento del día.
+ */
+function TotalDelTurno({ envios }: { envios: Envio[] }) {
+  const total = envios.reduce((s, e) => s + aCobrar(e), 0)
+  const saldados = envios.filter((e) => envioSaldado(e)).length
+  return (
+    <div style={{ display: 'grid', gap: 2 }}>
+      <span>{formatMoney(total)}</span>
+      {saldados ? (
+        <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>
+          {saldados} {saldados === 1 ? 'envío ya saldado' : 'envíos ya saldados'}
+        </span>
+      ) : null}
+    </div>
   )
 }
 
@@ -971,26 +1069,43 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
   return (
     <Modal abierto onCerrar={onCerrar} titulo={`Mandar a un día · ${envio.cliente || 'Sin nombre'}`}>
       <div style={{ display: 'grid', gap: space[4] }}>
-        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
-          <Field label="Día" hint={rotuloDeDia(fecha) ? `${rotuloDeDia(fecha)}${dispo.length ? '' : ' · no hay reparto'}` : 'Elegí un día'}>
-            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-          </Field>
-          <Field label="Turno">
-            <Select value={turno} onChange={(e) => setTurno(e.target.value as Turno)}>
-              {(dispo.length ? dispo : (['mañana', 'tarde'] as Turno[])).map((t) => (
-                <option key={t} value={t}>
+        {/* 🔑 **La misma grilla que la hoja del día, y no un calendario pelado.** Acá se contesta
+            «¿cuándo sale?», que casi siempre es «el próximo que salga» o «el de después»: con las
+            flechas eso son uno o dos clicks, y el campo de fecha queda para el envío lejano. */}
+        <Field label="Día" hint={rotuloDeDia(fecha) ? `${rotuloDeDia(fecha)}${dispo.length ? '' : ' · no hay reparto'}` : 'Elegí un día'}>
+          <SelectorDeDia
+            fecha={fecha}
+            onCambiar={(f) => {
+              setFecha(f)
+              // El turno sigue al día: si el día nuevo no tiene el que estaba elegido, se corrige
+              // solo al primero que sí existe. Dejarlo pegado es la forma de agendar sin querer en
+              // un turno que ese día no sale.
+              const suyos = turnosDe(f) as Turno[]
+              if (suyos.length && !suyos.includes(turno)) setTurno(suyos[0])
+            }}
+          />
+        </Field>
+        {/* Los turnos como botones y no como desplegable: son dos, y el que no corresponde a ese
+            día tiene que poder elegirse igual —un sábado especial existe— pero diciéndolo. */}
+        <Field label="Turno">
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            {(['mañana', 'tarde'] as Turno[]).map((t) => {
+              const deEseDia = dispo.includes(t)
+              return (
+                <Button
+                  key={t}
+                  variant={turno === t ? 'solid' : 'outline'}
+                  tone={turno === t ? 'brand' : undefined}
+                  onClick={() => setTurno(t)}
+                  {...dice(deEseDia ? `Mandarlo al turno ${t}` : `Ese día el cadete no sale a la ${t}, pero se puede forzar`)}
+                >
                   {t === 'mañana' ? 'Mañana' : 'Tarde'}
-                </option>
-              ))}
-              {/* El turno que no es de ese día sigue estando, al final y dicho: se puede forzar. */}
-              {dispo.length === 1 ? (
-                <option value={dispo[0] === 'mañana' ? 'tarde' : 'mañana'}>
-                  {dispo[0] === 'mañana' ? 'Tarde' : 'Mañana'} (fuera de grilla)
-                </option>
-              ) : null}
-            </Select>
-          </Field>
-        </div>
+                  {deEseDia ? '' : ' ·  fuera de grilla'}
+                </Button>
+              )
+            })}
+          </div>
+        </Field>
 
         {fueraDeGrilla ? (
           <Notice tone="warning">

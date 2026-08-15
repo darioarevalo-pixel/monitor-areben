@@ -350,6 +350,25 @@ export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } 
   return { ok: true, motivo: null }
 }
 
+/**
+ * Qué tickets se imprimen: los que **todavía van a salir**, opcionalmente de una sola marca.
+ *
+ * 🔑 **No reimprime lo cerrado.** Un ticket de un entregado en la pila manda al cadete a una puerta
+ * donde ya estuvo. (Reimprimir uno suelto sí se puede, desde su fila: ahí lo pidió una persona.)
+ *
+ * El filtro por marca existe porque la mochila se arma por marca aunque el reparto sea uno: se
+ * juntan los paquetes de BDI, se imprimen los suyos, y después los de Zattia. Sin esto había que
+ * imprimir todo junto y separarlo a mano de la pila.
+ */
+export function paraImprimir(envios: Envio[], marca?: Marca | null): Envio[] {
+  return envios.filter((e) => !(ESTADOS_CERRADOS as string[]).includes(e.estado) && (!marca || e.store === marca))
+}
+
+/** Las marcas que de verdad hay en esta lista, en orden. Es lo que decide cuántos botones se pintan. */
+export function marcasPresentes(envios: Envio[]): Marca[] {
+  return (['bdi', 'zattia'] as Marca[]).filter((m) => envios.some((e) => e.store === m))
+}
+
 /** Los envíos de un turno, ordenados como se preparan: primero lo que todavía no salió. */
 export function ordenarParaPreparar(envios: Envio[]): Envio[] {
   const peso = (e: Envio) => ((ESTADOS_EN_CASA as string[]).includes(e.estado) ? 0 : (ESTADOS_CERRADOS as string[]).includes(e.estado) ? 2 : 1)
