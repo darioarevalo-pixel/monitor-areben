@@ -1,7 +1,7 @@
 /**
  * Registro de los sistemas internos de Areben (sección "Nuestras apps").
  *
- * Se repite igual en los tres repos a propósito: son proyectos separados, sin paquete
+ * Se repite igual en los cuatro repos a propósito: son proyectos separados, sin paquete
  * compartido, y este archivo es chico y estable. Duplicarlo cuesta menos que montar y
  * mantener un paquete común.
  *
@@ -12,7 +12,7 @@
  * que las apps vivan todas bajo el mismo dominio. Ver `lib/identidad.ts`.
  *
  * Ojo con la forma del link: el monitor es un catch-all sin ruta de login, así que su
- * salto va a la raíz (`/?sso=1`). Producción y el dashboard tienen `/login?sso=1`.
+ * salto va a la raíz (`/?sso=1`). Producción, el dashboard y Maketa tienen `/login?sso=1`.
  */
 
 export type AppInterna = {
@@ -34,6 +34,13 @@ export const APPS: AppInterna[] = [
     nombre: 'Monitor',
     descripcion: 'Ventas, stock, fotos y solicitudes del día',
     href: 'https://monitor.arebensrl.com/?sso=1',
+    sso: true,
+  },
+  {
+    id: 'maketa',
+    nombre: 'Maketa',
+    descripcion: 'Piezas, calendario y redes de las tres marcas',
+    href: 'https://maketa.arebensrl.com/login?sso=1',
     sso: true,
   },
   {
