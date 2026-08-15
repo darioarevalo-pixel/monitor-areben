@@ -23,8 +23,8 @@ export function limpiarCats(tnCats: string[] | undefined | null): string[] {
 
 /** Fila de inventario del Local (Supabase). */
 export type FilaInvExhib = { product_id: number | string; product_name?: string | null; size_name?: string | null; sku?: string | null; barcode?: number | string | null; available_quantity?: number | null }
-/** Datos TN por productId GN: imagen, categorías crudas y tnId. */
-export type ProdMap = Record<string, { img: string | null; tnCats: string[]; tnId: string | number | null }>
+/** Datos TN por productId GN: imagen, categorías crudas, tnId y los dos precios. */
+export type ProdMap = Record<string, { img: string | null; tnCats: string[]; tnId: string | number | null; precio?: number | null; promo?: number | null }>
 
 /**
  * Arma los ítems del recorrido cruzando inventario ↔ TN, aplicando los errores de
@@ -52,8 +52,42 @@ export function construirItems(inv: FilaInvExhib[], prodMap: ProdMap, errores: E
       cat,
       cleanCats,
       tnId: pm.tnId,
+      precio: pm.precio ?? null,
+      promo: pm.promo ?? null,
     }
   })
+}
+
+/**
+ * Qué precio tendría que tener la etiqueta de esta prenda hoy.
+ *
+ * Es la pregunta entera del recorrido: quien camina el local tiene la prenda en la mano y el
+ * cartelito colgando, y necesita un número contra el cual compararlo. Por eso `aCobrar` es **uno
+ * solo** —el que el cliente paga— y `lista` viaja al lado nada más que para explicar la diferencia
+ * cuando hay oferta.
+ *
+ * 🔑 **Una promo que no es menor que el precio de lista NO es una oferta.** Pasa cuando el precio
+ * de lista sube y la promo vieja queda arriba: mostrarla como oferta pondría un descuento negativo
+ * en la pantalla y mandaría a reimprimir una etiqueta que está bien. Ahí se cobra el de lista, que
+ * es lo que hace la tienda.
+ *
+ * `aCobrar` en `null` significa **no se sabe** (el producto no cruzó con TN), y la pantalla lo dice
+ * así: un cero se leería como "regalado" y un precio de lista inventado haría reimprimir de más.
+ */
+export function precioDeGondola(it: Pick<ExhibItem, 'precio' | 'promo'>): {
+  aCobrar: number | null
+  lista: number | null
+  enOferta: boolean
+  pct: number | null
+} {
+  const lista = it.precio != null && it.precio > 0 ? it.precio : null
+  const promo = it.promo != null && it.promo > 0 ? it.promo : null
+  const enOferta = promo != null && lista != null && promo < lista
+  if (enOferta) {
+    return { aCobrar: promo, lista, enOferta: true, pct: Math.round((1 - promo! / lista!) * 100) }
+  }
+  // Sin precio de lista, una promo suelta es el único número que hay: mejor eso que "no se sabe".
+  return { aCobrar: lista ?? promo, lista, enOferta: false, pct: null }
 }
 
 /** Categorías presentes, alfabético con "(Sin categoría)" siempre al final. Port de catsOrden @7624. */

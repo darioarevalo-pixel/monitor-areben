@@ -32,10 +32,21 @@ export async function cargarDatosExhib(marca: Marca, productos: Producto[], erro
   }
   const idx = indexarTn(tnProducts)
 
+  // 🔑 **Los precios ya venían en este mismo payload y se tiraban.** El recorrido necesita saber a
+  // cuánto tiene que estar la etiqueta, y la respuesta estaba a mano: `tiendanube-audit` devuelve
+  // `price` y `promo_price` por producto, que es lo que Márgenes ya usa (`lib/margenes.ts`). No hizo
+  // falta ni una consulta nueva, ni una columna en el espejo, ni tocar el sync — y meter la columna
+  // habría chocado con el `grant select` por lista de columnas que la Fase S dejó en `productos`.
   const prodMap: ProdMap = {}
   productos.forEach((p) => {
     const tn = matchTn(p, idx)
-    prodMap[String(p.id)] = { img: (tn && tn.images && tn.images[0]) || null, tnCats: (tn && tn.categories) || [], tnId: (tn && tn.id) || null }
+    prodMap[String(p.id)] = {
+      img: (tn && tn.images && tn.images[0]) || null,
+      tnCats: (tn && tn.categories) || [],
+      tnId: (tn && tn.id) || null,
+      precio: (tn && tn.price) ?? null,
+      promo: (tn && tn.promo_price) ?? null,
+    }
   })
 
   const items = construirItems(inv, prodMap, errores)

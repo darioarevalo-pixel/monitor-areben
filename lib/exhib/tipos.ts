@@ -21,6 +21,21 @@ export type ExhibItem = {
   /** Todas las categorías TN limpias del producto (para detectar cruces de categoría). */
   cleanCats: string[]
   tnId: string | number | null
+  /**
+   * Precio de lista y oferta vigente, los dos de Tienda Nube. `null` = no se sabe (el producto no
+   * cruzó con TN); `promo` en `null` = no está en oferta, que es distinto.
+   *
+   * 🔑 **Salen de TN y no de nuestras campañas de Liquidación**, y no es una comodidad: medido el
+   * 15-ago-2026, Gestión Nube tenía **404 promos vivas** en Zattia y la bitácora del Monitor conocía
+   * **262** — las otras 142 se cargaron a mano. Leyendo lo nuestro, más de un tercio de las etiquetas
+   * a controlar aparecería como "sin oferta" teniéndola, y el recorrido pasaría de largo en silencio.
+   *
+   * 🔑 **Y TN es espejo fiel de GN**: de los 262 que el Monitor escribió, TN devolvió **262 con el
+   * mismo precio**, cero distintos, cero sin cruzar. La cadena es GN → TN, con hasta un día de
+   * retraso: un precio cambiado hace una hora puede no estar todavía.
+   */
+  precio: number | null
+  promo: number | null
 }
 
 /** Un error de categoría marcado durante el recorrido (se corrige a mano en TN). */

@@ -5,13 +5,41 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { dispararSyncStock } from '@/lib/sync-gn'
 import { generarReporteExhib } from '@/lib/exhib/pdf'
-import { contarSinMarcar, exhibId, faltantes, filtrarPorCat, tnAdminUrl, agruparPDF } from '@/lib/exhib/core'
+import { contarSinMarcar, exhibId, faltantes, filtrarPorCat, precioDeGondola, tnAdminUrl, agruparPDF } from '@/lib/exhib/core'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, Card, Field, Input, Notice, Select, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { Button, Card, Field, Input, Notice, Select, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 
 type Fase = 'config' | 'scan' | 'triage'
+
+/**
+ * El precio que la etiqueta de esta prenda tendría que decir hoy.
+ *
+ * 🔑 **Va GRANDE y es un solo número.** Quien lo lee está parado en el local con la prenda en una
+ * mano y el teléfono en la otra, comparando contra un cartelito de papel: lo único que necesita es
+ * "cuánto tiene que decir". El precio de lista aparece tachado al lado **sólo cuando hay oferta**,
+ * porque ahí es la explicación de por qué el número cambió — sin oferta sería ruido.
+ *
+ * Sin dato se dice "sin precio en Tienda Nube" y no un cero: un cero se lee como regalado, y
+ * mostrar el de lista cuando no sabemos si hay oferta manda a reimprimir una etiqueta que está bien.
+ */
+function PrecioEtiqueta({ it }: { it: ExhibItem }) {
+  const { aCobrar, lista, enOferta, pct } = precioDeGondola(it)
+  if (aCobrar == null) {
+    return <span style={{ fontSize: font.sm, color: color.mut }}>sin precio en Tienda Nube</span>
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: font['2xl'], fontWeight: weight.bold, color: color.ink }}>{formatMoney(aCobrar)}</span>
+      {enOferta && (
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          <s>{formatMoney(lista!)}</s> · en oferta −{pct}%
+        </span>
+      )}
+    </span>
+  )
+}
 
 /**
  * "👕 Chequeo de exhibición" (key `exhib`).
@@ -254,12 +282,21 @@ export function Exhib() {
             )}
             {fb?.tipo === 'ok' && (
               <Notice tone="success" icon="✓">
-                {fb.it.name} · {fb.it.size}
+                <div>{fb.it.name} · {fb.it.size}</div>
+                <div style={{ marginTop: 2 }}>
+                  <PrecioEtiqueta it={fb.it} />
+                </div>
               </Notice>
             )}
             {fb?.tipo === 'cruce' && (
               <Notice tone="warning" icon="⚠">
                 <div style={{ fontWeight: 700 }}>&quot;{fb.it.name}&quot; no es de «{fb.catSel}»</div>
+                {/* El precio va también acá: la prenda está en la mano igual, y el cruce de categoría
+                    no tiene nada que ver con la etiqueta. Sin esto, controlar el cartelito dependería
+                    de que el producto esté bien colgado en TN. */}
+                <div style={{ margin: '2px 0' }}>
+                  <PrecioEtiqueta it={fb.it} />
+                </div>
                 <div style={{ margin: '2px 0 8px' }}>En TN figura en «{fb.it.cat}». ¿Qué hacés?</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <Button size="sm" variant="solid" tone="brand" onClick={() => vaAca(fb.it.productId)}>

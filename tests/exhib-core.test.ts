@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
-const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, ...over })
+const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
 
 describe('exhibId', () => {
   it('usa barcode si hay, si no productId|talle', () => {
@@ -37,6 +37,15 @@ describe('construirItems', () => {
     const [it] = construirItems(inv, {}, {})
     expect(it.cat).toBe(SIN_CATEGORIA)
     expect(it.img).toBeNull()
+    // Sin cruce con TN no se sabe el precio, y eso NO es cero: la pantalla lo dice como "no se sabe".
+    expect(it.precio).toBeNull()
+    expect(it.promo).toBeNull()
+  })
+
+  it('trae los dos precios de TN', () => {
+    const [it] = construirItems(inv, { '5': { img: null, tnCats: [], tnId: 99, precio: 20490, promo: 12290 } }, {})
+    expect(it.precio).toBe(20490)
+    expect(it.promo).toBe(12290)
   })
 })
 
@@ -106,5 +115,43 @@ describe('tnAdminUrl', () => {
     expect(tnAdminUrl(99, 'zattia')).toBe('https://zattiaco.mitiendanube.com/admin/products/99')
     expect(tnAdminUrl(99, 'bdi')).toBe('https://bdiaccesorios4.mitiendanube.com/admin/products/99')
     expect(tnAdminUrl(null, 'bdi')).toBeNull()
+  })
+})
+
+describe('precioDeGondola — qué tiene que decir la etiqueta', () => {
+  it('en oferta, se cobra la promo y el de lista queda como explicación', () => {
+    expect(precioDeGondola(it0({ precio: 20490, promo: 12290 }))).toEqual({
+      aCobrar: 12290, lista: 20490, enOferta: true, pct: 40,
+    })
+  })
+
+  it('sin oferta, se cobra el de lista y no hay porcentaje que mostrar', () => {
+    expect(precioDeGondola(it0({ precio: 20490, promo: null }))).toEqual({
+      aCobrar: 20490, lista: 20490, enOferta: false, pct: null,
+    })
+  })
+
+  // 🔑 El caso que manda a reimprimir de más: sube el precio de lista y la promo vieja queda
+  // arriba. Tratarla como oferta pondría un descuento negativo en pantalla y haría cambiar una
+  // etiqueta que está bien. La tienda cobra el de lista, y eso es lo que se muestra.
+  it('una promo que NO es menor que el precio de lista no es una oferta', () => {
+    expect(precioDeGondola(it0({ precio: 20490, promo: 24990 }))).toMatchObject({ aCobrar: 20490, enOferta: false, pct: null })
+    expect(precioDeGondola(it0({ precio: 20490, promo: 20490 }))).toMatchObject({ aCobrar: 20490, enOferta: false })
+  })
+
+  // Un 0 en TN es "no hay promo cargada", no "vale cero".
+  it('una promo en 0 se ignora', () => {
+    expect(precioDeGondola(it0({ precio: 20490, promo: 0 }))).toMatchObject({ aCobrar: 20490, enOferta: false })
+  })
+
+  it('sin ningún precio contesta "no se sabe", no cero', () => {
+    expect(precioDeGondola(it0({ precio: null, promo: null }))).toEqual({ aCobrar: null, lista: null, enOferta: false, pct: null })
+    expect(precioDeGondola(it0({ precio: 0, promo: null }))).toMatchObject({ aCobrar: null })
+  })
+
+  // Raro pero posible si TN no devolvió el precio normal: una promo suelta sigue siendo el mejor
+  // número disponible, y decir "no se sabe" teniendo uno sería peor.
+  it('con promo pero sin precio de lista, muestra la promo sin llamarla oferta', () => {
+    expect(precioDeGondola(it0({ precio: null, promo: 12290 }))).toMatchObject({ aCobrar: 12290, enOferta: false, pct: null })
   })
 })
