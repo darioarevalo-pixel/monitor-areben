@@ -2,8 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { useSesion } from '@/components/SesionProvider'
+import { CeldaEnSale } from '@/components/liquidacion/CeldaEnSale'
+import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
+import { useTnPromo } from '@/components/productos/useTnImages'
 import { formatLifespan, lifespanDays } from '@/lib/etl/helpers'
 import type { Variante } from '@/lib/etl/tipos'
+import { ofertaHoy, type EnSale } from '@/lib/liquidacion/vendido'
 import { colorStock } from '@/lib/productos'
 import { paginar, sortList, totalPaginas } from '@/lib/tabla'
 import { filtrarVariantes } from '@/lib/variantes'
@@ -40,20 +45,40 @@ import {
  * derecha con cifras tabulares para poder compararlas de un vistazo.
  */
 
-type ColOrden = 'name' | 'size' | 'lastSale' | 'sales7' | 'sales30' | 'lifespan' | 'stock'
+type ColOrden = 'name' | 'size' | 'lastSale' | 'sales7' | 'sales30' | 'enSale30' | 'lifespan' | 'stock'
+
+/** Mismo filtro que en Por producto; la explicación de cada opción está allá. */
+type FiltroSale = '' | 'con' | 'sin' | 'hoy'
 
 export function VariantesTable() {
   const { datos, error, progreso, origen } = useDatosMonitor()
+  const { marca } = useSesion()
+  const vendido = useVendidoSale(marca)
+  const promoIdx = useTnPromo(marca)
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
+  const [filtroSale, setFiltroSale] = useState<FiltroSale>('')
   const [col, setCol] = useState<ColOrden>('sales30')
   const [dir, setDir] = useState(-1)
   const [page, setPage] = useState(1)
 
   const variantes = useMemo(() => datos?.allVariantes ?? [], [datos])
 
-  const firmaFiltros = `${busqueda}|${estado}`
+  /**
+   * Los pid con oferta puesta hoy en Tienda Nube.
+   *
+   * 🔑 **Se cruza por PRODUCTO y no por variante**: la oferta de TN es del producto, y el `sku` de
+   * una variante es el del talle — matchearlo contra el catálogo daría vacío o, peor, el producto
+   * equivocado.
+   */
+  const pidsEnOferta = useMemo(() => {
+    const s = new Set<string>()
+    if (promoIdx) (datos?.allProductos ?? []).forEach((p) => ofertaHoy(p, promoIdx) && s.add(String(p.id)))
+    return s
+  }, [datos, promoIdx])
+
+  const firmaFiltros = `${busqueda}|${estado}|${filtroSale}`
   const primeraRef = useRef(true)
   useEffect(() => {
     if (primeraRef.current) {
@@ -63,8 +88,20 @@ export function VariantesTable() {
     setPage(1)
   }, [firmaFiltros])
 
-  const filtrada = useMemo(() => filtrarVariantes(variantes, { busqueda, estado }), [variantes, busqueda, estado])
-  const ordenada = useMemo(() => sortList(filtrada, col, dir), [filtrada, col, dir])
+  const filtrada = useMemo(() => {
+    const base = filtrarVariantes(variantes, { busqueda, estado })
+    if (!filtroSale) return base
+    if (filtroSale === 'hoy') return base.filter((v) => pidsEnOferta.has(String(v.pid)))
+    const vendio = (v: Variante) => (vendido?.porVar.get(v.id)?.s30 ?? 0) > 0
+    return base.filter((v) => (filtroSale === 'con' ? vendio(v) : !vendio(v)))
+  }, [variantes, busqueda, estado, filtroSale, vendido, pidsEnOferta])
+
+  // `enSale30` se pisa sobre una copia de la fila para poder ordenar por la columna, igual que
+  // `lifespan` en Por producto: `sortList` ordena por una clave del objeto.
+  const ordenada = useMemo(() => {
+    const conSale = filtrada.map((v) => ({ ...v, enSale30: vendido?.porVar.get(v.id)?.s30 ?? 0 }))
+    return sortList(conSale, col, dir)
+  }, [filtrada, col, dir, vendido])
 
   const paginas = totalPaginas(ordenada.length)
   const pageClamp = Math.min(page, Math.max(1, paginas))
@@ -100,6 +137,18 @@ export function VariantesTable() {
               <option value="dormido">Dormido</option>
               <option value="obsoleto">Obsoleto</option>
             </Select>
+            <Select
+              value={filtroSale}
+              onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
+              disabled={!vendido}
+              style={{ width: 210 }}
+              aria-label="Ventas de sale"
+            >
+              <option value="">Con y sin sale</option>
+              <option value="sin">Sin ventas de sale</option>
+              <option value="con">Sólo lo vendido en sale</option>
+              <option value="hoy">En oferta hoy en la tienda</option>
+            </Select>
           </FilterBar>
 
           {ordenada.length === 0 ? (
@@ -114,6 +163,7 @@ export function VariantesTable() {
                     {th('lastSale', 'Última venta')}
                     {th('sales7', 'Ventas 7d', 'right')}
                     {th('sales30', 'Ventas 30d', 'right')}
+                    {th('enSale30', 'En sale 30d', 'right')}
                     {th('lifespan', 'Vida útil est.')}
                     {th('stock', 'Stock', 'right')}
                     <Th>Estado</Th>
@@ -121,7 +171,12 @@ export function VariantesTable() {
                 </THead>
                 <TBody>
                   {slice.map((v) => (
-                    <FilaVariante key={v.id} v={v} />
+                    <FilaVariante
+                      key={v.id}
+                      v={v}
+                      enSale={vendido?.porVar.get(v.id) ?? null}
+                      ofertaHoy={pidsEnOferta.has(String(v.pid))}
+                    />
                   ))}
                 </TBody>
               </TableWrap>
@@ -135,7 +190,7 @@ export function VariantesTable() {
   )
 }
 
-function FilaVariante({ v }: { v: Variante }) {
+function FilaVariante({ v, enSale, ofertaHoy }: { v: Variante; enSale: EnSale | null; ofertaHoy: boolean }) {
   const lsStr = formatLifespan(lifespanDays(v.stock, v.sales30), v.stock)
   return (
     <Tr>
@@ -152,6 +207,9 @@ function FilaVariante({ v }: { v: Variante }) {
       </Td>
       <Td align="right" strong>
         {v.sales30}
+      </Td>
+      <Td align="right">
+        <CeldaEnSale enSale={enSale} total30={v.sales30} ofertaHoy={ofertaHoy} />
       </Td>
       <Td style={{ color: color.mut, fontSize: font.sm }}>{lsStr}</Td>
       <Td align="right" tall>

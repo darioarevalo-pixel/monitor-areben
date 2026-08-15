@@ -5,12 +5,15 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { DetalleVariante } from '@/components/productos/DetalleVariante'
 import { Lightbox } from '@/components/productos/Lightbox'
-import { asegurarTnPromo, useTnImages } from '@/components/productos/useTnImages'
+import { asegurarTnPromo, useTnImages, useTnPromo } from '@/components/productos/useTnImages'
 import { generarReporteSale } from '@/components/productos/reporteSale'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
+import { CeldaEnSale } from '@/components/liquidacion/CeldaEnSale'
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
+import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
+import { ofertaHoy, type EnSale } from '@/lib/liquidacion/vendido'
 import { formatLifespan } from '@/lib/etl/helpers'
 import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
@@ -70,7 +73,16 @@ import {
  * estaban en pantalla sin darse cuenta.
  */
 
-type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'lifespan' | 'stock'
+type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'enSale30' | 'lifespan' | 'stock'
+
+/**
+ * El filtro de ventas de sale.
+ *
+ * `sin` es el que pidió Bruno para mirar reposición: esconde los productos que se movieron con la
+ * oferta puesta, que son los que no hay que leer como demanda. `hoy` no mira ventas sino el estado
+ * de Tienda Nube — sirve para la pregunta de al lado, "¿qué tengo en oferta ahora mismo?".
+ */
+type FiltroSale = '' | 'con' | 'sin' | 'hoy'
 
 /** Cómo se ve un producto que ya está en la campaña activa. `aplicado` no llega desde acá. */
 const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
@@ -85,6 +97,10 @@ export function ProductosTable() {
   const { datos, error, progreso, origen } = useDatosMonitor()
   const { marca } = useSesion()
   const tnIdx = useTnImages(marca)
+  // El índice completo de TN (el mismo payload que las fotos, ya bajado) para saber qué producto
+  // tiene una oferta puesta HOY, incluidas las que se cargaron a mano y la bitácora no conoce.
+  const promoIdx = useTnPromo(marca)
+  const vendido = useVendidoSale(marca)
   const toast = useToast()
 
   /**
@@ -98,6 +114,7 @@ export function ProductosTable() {
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
   const [enCampania, setEnCampania] = useState<'' | 'faltan' | 'estan'>('')
+  const [filtroSale, setFiltroSale] = useState<FiltroSale>('')
   const [proveedor, setProveedor] = useState('')
   const [ingresos, setIngresos] = useState<Set<string>>(new Set())
   /**
@@ -124,7 +141,7 @@ export function ProductosTable() {
 
   // Volver a la página 1 cuando cambia el conjunto filtrado (el legacy resetea pageState
   // en cada handler de filtro). Un effect sobre la firma de los filtros.
-  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}|${camp.liq}|${enCampania}`
+  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}|${camp.liq}|${enCampania}|${filtroSale}`
   const primeraRef = useRef(true)
   useEffect(() => {
     if (primeraRef.current) {
@@ -146,18 +163,43 @@ export function ProductosTable() {
     [camp.liq, filtradaBase, camp.yaEstan],
   )
 
+  /**
+   * Los que tienen una oferta puesta **hoy** en Tienda Nube.
+   *
+   * Se calcula una vez por catálogo y no producto por producto en el render: `matchTn` recorre las
+   * palabras del nombre cuando no hay SKU, y esta tabla dibuja 50 filas por página sobre 700
+   * productos filtrados en cada tecla del buscador.
+   */
+  const enOfertaHoy = useMemo(() => {
+    const s = new Set<string>()
+    if (promoIdx) productos.forEach((p) => ofertaHoy(p, promoIdx) && s.add(p.id))
+    return s
+  }, [productos, promoIdx])
+
   const filtrada = useMemo(() => {
-    if (!camp.liq || !enCampania) return filtradaBase
-    return enCampania === 'faltan' ? porFaltar : filtradaBase.filter((p) => camp.yaEstan[p.id])
-  }, [camp.liq, camp.yaEstan, enCampania, filtradaBase, porFaltar])
+    const base = !camp.liq || !enCampania
+      ? filtradaBase
+      : enCampania === 'faltan'
+        ? porFaltar
+        : filtradaBase.filter((p) => camp.yaEstan[p.id])
+    if (!filtroSale) return base
+    if (filtroSale === 'hoy') return base.filter((p) => enOfertaHoy.has(p.id))
+    const vendio = (p: Producto) => (vendido?.porPid.get(p.id)?.s30 ?? 0) > 0
+    return base.filter((p) => (filtroSale === 'con' ? vendio(p) : !vendio(p)))
+  }, [camp.liq, camp.yaEstan, enCampania, filtradaBase, porFaltar, filtroSale, vendido, enOfertaHoy])
 
   // El legacy pisa `lifespan` con el valor del modo (sentinel si no hay dato) ANTES de
   // ordenar, así la columna "Vida útil" ordena por el modo elegido. Se replica sobre una
-  // copia con el campo pisado.
+  // copia con el campo pisado. `enSale30` entra por el mismo camino: `sortList` ordena por una
+  // clave del objeto, así que la columna nueva tiene que existir en la fila para poder ordenarla.
   const ordenada = useMemo(() => {
-    const conLifespan = filtrada.map((p) => ({ ...p, lifespan: lifespanDaysByMode(p, modoVU) ?? LIFESPAN_SIN_DATO }))
+    const conLifespan = filtrada.map((p) => ({
+      ...p,
+      lifespan: lifespanDaysByMode(p, modoVU) ?? LIFESPAN_SIN_DATO,
+      enSale30: vendido?.porPid.get(p.id)?.s30 ?? 0,
+    }))
     return sortList(conLifespan, col, dir)
-  }, [filtrada, modoVU, col, dir])
+  }, [filtrada, modoVU, col, dir, vendido])
 
   const paginas = totalPaginas(ordenada.length)
   const pageClamp = Math.min(page, Math.max(1, paginas))
@@ -284,6 +326,25 @@ export function ProductosTable() {
             </label>
 
             {/*
+              El filtro de sale. «Sin ventas de sale» es el que se usa para decidir reposición: deja
+              a la vista sólo lo que se movió a precio de lista. No se esconde cuando la marca
+              todavía no cargó —el selector estaría a veces sí y a veces no— pero elegir algo con
+              `vendido` en null dejaría la tabla vacía sin explicación, así que espera al dato.
+            */}
+            <Select
+              value={filtroSale}
+              onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
+              disabled={!vendido}
+              style={{ width: 210 }}
+              aria-label="Ventas de sale"
+            >
+              <option value="">Con y sin sale</option>
+              <option value="sin">Sin ventas de sale</option>
+              <option value="con">Sólo lo vendido en sale</option>
+              <option value="hoy">En oferta hoy en la tienda</option>
+            </Select>
+
+            {/*
               La lista de campañas se pide al tocar el selector, no al montar la tabla: casi ninguna
               visita a "Por producto" va a liquidar algo, y sería un request por visita. Con `?liq=`
               en la URL la campaña activa ya vino con su nombre, así que se puede dibujar sin lista.
@@ -406,6 +467,7 @@ export function ProductosTable() {
                     {th('sales7', 'Ventas 7d', 'right')}
                     {th('sales30', 'Ventas 30d', 'right')}
                     {th('sales90', 'Ventas 90d', 'right')}
+                    {th('enSale30', 'En sale 30d', 'right')}
                     {th('lifespan', 'Vida útil est.')}
                     {th('stock', 'Stock', 'right')}
                     <Th>Estado</Th>
@@ -418,6 +480,8 @@ export function ProductosTable() {
                       p={p}
                       modoVU={modoVU}
                       tnIdx={tnIdx}
+                      enSale={vendido?.porPid.get(p.id) ?? null}
+                      ofertaHoy={enOfertaHoy.has(p.id)}
                       datos={d}
                       marcado={outletSel.has(p.id)}
                       yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
@@ -445,6 +509,8 @@ function FilaProducto({
   p,
   modoVU,
   tnIdx,
+  enSale,
+  ofertaHoy,
   datos,
   marcado,
   yaEsta,
@@ -456,6 +522,10 @@ function FilaProducto({
   p: Producto
   modoVU: ModoVidaUtil
   tnIdx: IndiceTn | null
+  /** Lo que este producto vendió con la oferta puesta, o `null` si nunca estuvo en una campaña. */
+  enSale: EnSale | null
+  /** Tiene una oferta puesta hoy en Tienda Nube, la haya escrito el Monitor o no. */
+  ofertaHoy: boolean
   datos: DatosETL
   marcado: boolean
   /** En qué estado está este producto dentro de la campaña activa, si está. */
@@ -556,6 +626,9 @@ function FilaProducto({
           {p.sales30}
         </Td>
         <Td align="right">{p.sales90}</Td>
+        <Td align="right">
+          <CeldaEnSale enSale={enSale} total30={p.sales30} ofertaHoy={ofertaHoy} />
+        </Td>
         {/*
           Sin subtexto: la antigüedad que explica sobre cuántos días está hecha esta cuenta ya está
           debajo del nombre, y para TODOS los productos, no sólo los nuevos. Repetirla acá era el
@@ -572,7 +645,7 @@ function FilaProducto({
       </Tr>
       {expandido && (
         <Tr>
-          <Td colSpan={10} style={{ padding: 0, background: color.bg, height: 'auto' }}>
+          <Td colSpan={11} style={{ padding: 0, background: color.bg, height: 'auto' }}>
             <DetalleVariante allVvar={datos.allVvar} allVariantes={datos.allVariantes} pid={p.id} />
           </Td>
         </Tr>

@@ -157,3 +157,25 @@ export function extractColor(size: string | null | undefined): string | null {
 export function num(v: number | string | null | undefined): number {
   return parseFloat(String(v)) || 0
 }
+
+/**
+ * Los cortes de las ventanas de venta (7 / 15 / 30 / 60 / 90 días), tal como los arma el ETL.
+ *
+ * Existe para que haya **una sola definición de "los últimos 30 días"** en la app. La marca de
+ * «vendido en sale» (`lib/liquidacion/vendido.ts`) tiene que caer exactamente en la misma ventana
+ * que la columna que va al lado: si una contara con el corte a medianoche UTC y la otra con la hora
+ * local, un producto podría mostrar «9 en sale» sobre una columna que dice 8, y a partir de ahí no
+ * se puede confiar en ninguna de las dos.
+ *
+ * La construcción es la del legacy y no se toca: `setDate(getDate() - N)` sobre `today` **conserva
+ * la hora**, y las fechas de venta se comparan como `new Date('YYYY-MM-DD')`, que es medianoche
+ * UTC. Esa asimetría es la que decide el día del borde, y es la misma para todos los que usen esto.
+ */
+export function cortesDeVentas(today: Date): { c7: Date; c15: Date; c30: Date; c60: Date; c90: Date } {
+  const menos = (n: number) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - n)
+    return d
+  }
+  return { c7: menos(7), c15: menos(15), c30: menos(30), c60: menos(60), c90: menos(90) }
+}

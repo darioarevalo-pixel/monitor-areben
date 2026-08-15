@@ -24,6 +24,8 @@ import {
   puedeAtenderRetiroLocal as puedeAtenderRetiroLocalJs,
   puedeSub as puedeSubJs,
   puedeVer as puedeVerJs,
+  puedeVerAlguna as puedeVerAlgunaJs,
+  SECCIONES_ANALISIS_VENTAS as SECCIONES_ANALISIS_VENTAS_JS,
   seccionesDeFuncion as seccionesDeFuncionJs,
   SECCION_AREA as SECCION_AREA_JS,
   tieneFuncion as tieneFuncionJs,
@@ -150,6 +152,18 @@ export const marcaDePermisos: (store: string) => Marca = marcaDePermisosJs
 
 /** Las cuatro pantallas de conteo físico, que comparten los endpoints de stock vivo. */
 export const SECCIONES_CONTEO: readonly string[] = SECCIONES_CONTEO_JS
+
+/**
+ * Las tres pantallas de Análisis que muestran ventas: la llave de la marca de «vendido en sale»
+ * (`?vendido=1` de `api/_liquidacion.js`).
+ */
+export const SECCIONES_ANALISIS_VENTAS: readonly string[] = SECCIONES_ANALISIS_VENTAS_JS
+
+/** ¿Puede ver **alguna** de esas secciones en la marca? La forma en que los handlers abren una
+    puerta compartida por varias pantallas, sin copiar el chequeo adentro de cada rama. */
+export function puedeVerAlguna(perfil: Perfil | null, store: string, keys: readonly string[]): boolean {
+  return puedeVerAlgunaJs(perfil, store, [...keys])
+}
 
 /** ¿Puede contar en esta `store`? La llave de `_inventario-vivo.js` y `_conteos-deposito.js`. */
 export function puedeContar(perfil: Perfil | null, store: string): boolean {

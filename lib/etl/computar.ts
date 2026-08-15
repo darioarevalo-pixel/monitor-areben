@@ -31,6 +31,7 @@
 import { matchModelo } from './modelos'
 import {
   COLOR_UNICA,
+  cortesDeVentas,
   daysSince,
   extractColor,
   getPhase,
@@ -114,11 +115,9 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
   // ── Ventas por producto y por variante, desde venta_detalles planos ──────────
   const vprod: Record<string, VentasProducto> = {}
   const vvar: Record<string, VentasVariante> = {}
-  const cutoff7 = new Date(today); cutoff7.setDate(cutoff7.getDate() - 7)
-  const cutoff15 = new Date(today); cutoff15.setDate(cutoff15.getDate() - 15)
-  const cutoff30 = new Date(today); cutoff30.setDate(cutoff30.getDate() - 30)
-  const cutoff60 = new Date(today); cutoff60.setDate(cutoff60.getDate() - 60)
-  const cutoff90 = new Date(today); cutoff90.setDate(cutoff90.getDate() - 90)
+  // Los cortes salen de `cortesDeVentas` para que la marca de «vendido en sale» caiga en la MISMA
+  // ventana que estas columnas. La construcción no cambió: es la del legacy, movida a un solo lugar.
+  const { c7: cutoff7, c15: cutoff15, c30: cutoff30, c60: cutoff60, c90: cutoff90 } = cortesDeVentas(today)
 
   // Últimos 16 meses para análisis mensual de producto
   const months: string[] = []

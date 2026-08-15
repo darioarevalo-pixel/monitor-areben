@@ -3,6 +3,9 @@
 import { useMemo } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { useSesion } from '@/components/SesionProvider'
+import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
+import { enSaleDelMes } from '@/lib/liquidacion/vendido'
 import {
   canalesOrdenados,
   categoriasOrdenadas,
@@ -68,6 +71,8 @@ export function VentasMensuales() {
 }
 
 function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: Periodo }) {
+  const { marca } = useSesion()
+  const vendido = useVendidoSale(marca)
   const filtered = useMemo(() => filtrarPeriodo(stats, periodo), [stats, periodo])
   const cats = useMemo(() => categoriasOrdenadas(filtered), [filtered])
   const channels = useMemo(() => canalesOrdenados(filtered), [filtered])
@@ -102,6 +107,11 @@ function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: P
             <Tr>
               <Th style={COL_MES_TH}>Mes</Th>
               <Th align="right">Total items</Th>
+              {/*
+                Va pegado al total y antes que las categorías: es la advertencia sobre el número de
+                al lado —cuánto de ese mes salió con una oferta puesta— y no una categoría más.
+              */}
+              <Th align="right">En sale</Th>
               <Th align="right">Prom./venta</Th>
               {cats.map((c) => (
                 <Th key={c} align="right">
@@ -111,13 +121,24 @@ function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: P
             </Tr>
           </THead>
           <TBody>
-            {filasCat.map((f) => (
+            {filasCat.map((f) => {
+              const sale = enSaleDelMes(vendido?.meses ?? {}, f.mes, f.items)
+              return (
               <Tr key={f.mes}>
                 <Td strong style={COL_MES_TD}>
                   {f.label}
                 </Td>
                 <Td align="right" strong>
                   {f.items.toLocaleString('es-AR')}
+                </Td>
+                <Td align="right" style={sale.u ? { color: color.warning } : { color: color.mut2 }}>
+                  {sale.u ? (
+                    <>
+                      {sale.u.toLocaleString('es-AR')} <span style={{ fontSize: font.xs }}>({sale.pct}%)</span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </Td>
                 <Td align="right">{f.prom}</Td>
                 {f.cats.map((v, i) => (
@@ -126,7 +147,8 @@ function Contenido({ stats, periodo }: { stats: EstadisticaMensual[]; periodo: P
                   </Td>
                 ))}
               </Tr>
-            ))}
+              )
+            })}
           </TBody>
         </TableWrap>
       </Tabla>

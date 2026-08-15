@@ -6,6 +6,7 @@
 //   GET  ?recurso=liquidacion&store=…&etiquetas=1         → las campañas con los precios PUESTOS
 //   GET  ?recurso=liquidacion&store=…&etiquetas=1&liq=<id>→ los pid a etiquetar de esa campaña
 //   GET  ?recurso=liquidacion&store=…&liq=<id>&bitacora=1 → la ida y vuelta de precios de la campaña
+//   GET  ?recurso=liquidacion&store=…&vendido=1           → lo vendido CON la oferta puesta (Análisis)
 //   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,desde,hasta,nota} }
 //   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
@@ -27,7 +28,7 @@
 // sería pagar el payload entero para mostrar un número.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { esAdmin, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js';
+import { esAdmin, puedeSub, puedeVerAlguna, SECCIONES_ANALISIS_VENTAS } from '../lib/permisos.core.js';
 // El mapeo y el guardado del espejo de ventas, los MISMOS que usan los dos syncs diarios y la purga
 // histórica. Se importa en vez de copiarse por lo que ya costó una vez: ese código vivía duplicado
 // adentro de `sync-diario.js` y `sync-diario-zattia.js`, las copias se separaron, y de esa deriva
@@ -38,6 +39,10 @@ import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
 // (`scripts/backfill-liquidacion-bitacora.mjs`) arma la fila con el MISMO código que el registro
 // vivo — si divergieran, la campaña de agosto quedaría anotada distinto que la de septiembre.
 import { aEvento, filaBitacora, precioAnterior } from '../lib/liquidacion/bitacora.core.js';
+// El cruce de la bitácora contra las ventas, para la marca de «vendido en sale» de Análisis. Mismo
+// motivo de `.core.js` que arriba, y la MISMA implementación que usa la pantalla para no contar
+// distinto de un lado y del otro.
+import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/vendido.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -307,10 +312,19 @@ export default async function handler(req, res) {
   // los precios de sale de BDI. Medido en el padrón el 13-ago-2026: **cero usuarios** cambian de
   // alcance con esto (los 7 con cuenta fija no tienen `liquidacion` ni `etiquetas` en la otra
   // marca), así que cierra la puerta sin sacarle la pantalla a nadie.
+  //
+  // 🔑 **La tercera llave es la de Análisis, y por eso NO devuelve un solo precio.** La marca de
+  // «vendido en sale» la mira quien está en Por producto, Variantes o Ventas mensuales, que no
+  // tienen por qué tener Liquidación (Bruno la pidió justamente para el que analiza, no para el que
+  // arma el sale). Pedirle el permiso de Liquidación sería o dejar la marca sin ver, o abrirle a
+  // esa gente los precios de sale contra el costo. Lo que contesta esa rama son **unidades y
+  // fechas**: ni el precio que se puso, ni el de lista, ni el descuento.
   const vistaEtiquetas = req.method === 'GET' && String(req.query.etiquetas || '') === '1';
-  const seccion = vistaEtiquetas ? 'etiquetas' : 'liquidacion';
-  if (!puedeVerAlguna(perfil, store, [seccion])) {
-    return res.status(403).json({ error: `No tenés acceso a ${vistaEtiquetas ? 'Etiquetas' : 'Liquidación'} en esta marca.` });
+  const vistaVendido = req.method === 'GET' && String(req.query.vendido || '') === '1';
+  const secciones = vistaEtiquetas ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
+  if (!puedeVerAlguna(perfil, store, secciones)) {
+    const que = vistaEtiquetas ? 'Etiquetas' : vistaVendido ? 'Análisis' : 'Liquidación';
+    return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });
   }
 
   const cfg = cfgFor(store);
@@ -358,6 +372,62 @@ export default async function handler(req, res) {
         campania: { id: c.data.id, nombre: c.data.nombre },
         pids: pidsAEtiquetar(i.data, c.data.estado),
       });
+    }
+
+    // ── Lo vendido CON la oferta puesta, para la marca de Análisis. ────────────────────────────
+    //
+    // Corta acá igual que Etiquetas: es GET y devuelve antes de mirar ninguna `action`.
+    //
+    // 🔑 **Se devuelven las líneas con su fecha, no los totales de 7/30/90 días.** El corte de esas
+    // ventanas lo hizo el ETL en el navegador con la fecha del navegador; rehacerlo acá con el
+    // reloj del servidor (UTC, otra hora) dejaría marcas de «9 de 8» — ver `cortesDeVentas`.
+    //
+    // El costo está acotado por la bitácora, no por el catálogo: sólo se piden las ventas desde el
+    // día del primer `poner` y sólo de los productos que alguna vez tuvieron una oferta escrita.
+    // Sin eso esto sería bajar `venta_detalles`, que es la tabla más grande de la base.
+    if (vistaVendido) {
+      const eventos = await leerTodo(supabase, 'liquidacion_bitacora', (q) =>
+        q.select('pid, modo, cuando').eq('store', store).order('cuando'));
+      const ventanas = ventanasDe(eventos);
+      const primerDia = primerDiaEnSale(ventanas);
+      // Los pid van adentro de un `in.(…)`: enteros o nada, aunque vengan de nuestra propia tabla.
+      const pids = [...ventanas.keys()].map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      if (!pids.length || !primerDia) return res.status(200).json({ ok: true, lineas: [], pids: [] });
+
+      // Nunca más atrás de los 16 meses que dibuja Ventas mensuales: más historia que esa no la
+      // muestra ninguna de las tres pantallas, y sería payload que nadie mira.
+      const tope = new Date();
+      tope.setMonth(tope.getMonth() - 16);
+      const desde = primerDia > tope.toISOString().slice(0, 10) ? primerDia : tope.toISOString().slice(0, 10);
+
+      const ventas = await leerTodo(supabase, 'ventas', (q) =>
+        q.select('id, date_sale').gte('date_sale', desde).order('id'));
+      if (!ventas.length) return res.status(200).json({ ok: true, lineas: [], pids: pids.map(String) });
+
+      // El sale_id es el único puente con `venta_detalles`, que no tiene fecha propia (mismo cruce
+      // que `ventas-campania`). El rango incluye ventas de otras fechas, así que la fecha sale del
+      // mapa y no del rango.
+      const min = ventas[0].id;
+      const max = ventas[ventas.length - 1].id;
+      const detalles = [];
+      for (let i = 0; i < pids.length; i += 200) {
+        const grupo = pids.slice(i, i + 200);
+        detalles.push(...await leerTodo(supabase, 'venta_detalles', (q) =>
+          q.select('sale_id, product_id, size_id, quantity')
+            .in('product_id', grupo).gte('sale_id', min).lte('sale_id', max).order('sale_id')));
+      }
+
+      const fechaDe = new Map(ventas.map((v) => [String(v.id), String(v.date_sale || '').slice(0, 10)]));
+      const lineas = lineasEnSale(
+        detalles.map((d) => ({
+          pid: d.product_id,
+          sid: d.size_id,
+          fecha: fechaDe.get(String(d.sale_id)) || '',
+          q: d.quantity,
+        })),
+        ventanas,
+      );
+      return res.status(200).json({ ok: true, lineas, pids: pids.map(String) });
     }
 
     if (req.method === 'GET') {
