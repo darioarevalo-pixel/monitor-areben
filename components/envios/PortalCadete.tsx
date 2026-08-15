@@ -14,27 +14,49 @@
  * 🔑 **La sesión es el `localStorage` del teléfono.** Guarda token y PIN y los manda en cada pedido;
  * el servidor valida los dos siempre. No hay estado de sesión del otro lado, así que revocar es
  * rotar el token — que es lo que se hace el 1º de cada mes.
+ *
+ * 🔑 **Se ven los días que vienen, pero no se tocan.** Sirve para organizarse —cuántos son y para
+ * qué zona— y por eso esas tarjetas salen **sin dirección ni teléfono**: el servidor no las manda
+ * (`paraElCadeteFuturo`). Los dos tipos de acá son el espejo de esas dos formas, y están separados a
+ * propósito: con campos opcionales, dibujar la tarjeta completa con datos flacos imprimiría
+ * `undefined` en el renglón de la dirección.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 
-type EnvioDelCadete = {
-  id: string
+/** Un envío de un día que todavía no llegó: para saber qué viene, no para ir a la puerta. */
+type EnvioQueViene = {
   marca: string
-  orden: string | null
   cliente: string | null
-  direccion: string
-  piso: string | null
   localidad: string | null
-  anotacion: string | null
-  telefono: string | null
   turno: string | null
   estado: string
   estadoTexto: string
   aCobrar: number
   envioSaldado: boolean
+}
+
+/** Un envío del día que se está repartiendo. Lo mismo, más con qué llegar y con qué escribir. */
+type EnvioDelCadete = EnvioQueViene & {
+  id: string
+  orden: string | null
+  direccion: string
+  piso: string | null
+  anotacion: string | null
+  telefono: string | null
   cobrado: boolean | null
 }
+
+/** Un día con envíos, para los chips de arriba. */
+type DiaConEnvios = { fecha: string; cuantos: number; rotulo: string }
+
+/**
+ * La hoja que se está mirando. Es una unión y no un objeto con `envios` y un booleano al lado: así
+ * el compilador no deja pintar los botones sobre un día que el servidor mandó recortado.
+ */
+type Hoja =
+  | { editable: true; fecha: string; rotulo: string; envios: EnvioDelCadete[] }
+  | { editable: false; fecha: string; rotulo: string; envios: EnvioQueViene[] }
 
 const LLAVE = 'cadete.pin'
 const API = '/api/postventa?recurso=cadete'
@@ -63,20 +85,26 @@ const boton = (fondo: string): React.CSSProperties => ({
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
+const abierto = (e: { estado: string }) => e.estado !== 'entregado' && e.estado !== 'no_entregado'
+
 export function PortalCadete({ token }: { token: string | null }) {
   const [pin, setPin] = useState('')
-  const [envios, setEnvios] = useState<EnvioDelCadete[]>([])
-  const [fecha, setFecha] = useState<string | null>(null)
+  const [hoja, setHoja] = useState<Hoja | null>(null)
+  const [hoy, setHoy] = useState<string | null>(null)
+  const [proximos, setProximos] = useState<DiaConEnvios[]>([])
   const [estado, setEstado] = useState<'pidiendo-pin' | 'cargando' | 'listo' | 'muerto'>('cargando')
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null)
 
   const traer = useCallback(
-    async (elPin: string) => {
+    async (elPin: string, dia?: string) => {
       if (!token) return setEstado('muerto')
       setError(null)
       try {
-        const r = await fetch(`${API}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(elPin)}&nc=${Date.now()}`)
+        // Sin `dia`, el pedido va pelado y contesta el día de hoy —el de Argentina, calculado en el
+        // servidor—. Es lo que hace que el link a secas sirva sin que el teléfono sepa qué día es.
+        const conDia = dia ? `&fecha=${encodeURIComponent(dia)}` : ''
+        const r = await fetch(`${API}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(elPin)}${conDia}&nc=${Date.now()}`)
         const d = await r.json().catch(() => null)
         // 🔑 El 404 es el link: no existe, o venció. No se distingue a propósito, así que acá
         // tampoco se inventa un motivo — se dice lo único que la persona puede hacer.
@@ -94,8 +122,10 @@ export function PortalCadete({ token }: { token: string | null }) {
         if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo cargar la hoja.')
         window.localStorage.setItem(LLAVE, elPin)
         setPin(elPin)
-        setEnvios(d.envios || [])
-        setFecha(d.fecha || null)
+        const comun = { fecha: String(d.fecha || ''), rotulo: String(d.rotulo || '') }
+        setHoja(d.editable ? { editable: true, ...comun, envios: d.envios || [] } : { editable: false, ...comun, envios: d.envios || [] })
+        setHoy(d.hoy || null)
+        setProximos(d.proximos || [])
         setEstado('listo')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'No se pudo cargar la hoja.')
@@ -121,11 +151,13 @@ export function PortalCadete({ token }: { token: string | null }) {
       const r = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recurso: 'cadete', token, pin, id: e.id, accion }),
+        // 🔑 La fecha viaja: sin ella, a las 00:30 —mirando todavía la hoja de ayer— el servidor
+        // buscaría el envío en el día de hoy y contestaría que no es de ahí.
+        body: JSON.stringify({ recurso: 'cadete', token, pin, id: e.id, accion, fecha: hoja?.fecha }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo guardar.')
-      await traer(pin)
+      await traer(pin, hoja?.fecha)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar.')
     } finally {
@@ -144,7 +176,7 @@ export function PortalCadete({ token }: { token: string | null }) {
     )
   }
 
-  if (estado === 'pidiendo-pin') {
+  if (estado === 'pidiendo-pin' || !hoja) {
     return (
       <div style={caja}>
         <h1 style={{ fontSize: 20, marginBottom: 4 }}>Envíos del día</h1>
@@ -174,42 +206,136 @@ export function PortalCadete({ token }: { token: string | null }) {
     )
   }
 
-  const pendientes = envios.filter((e) => e.estado !== 'entregado' && e.estado !== 'no_entregado')
-  const cerrados = envios.filter((e) => e.estado === 'entregado' || e.estado === 'no_entregado')
+  const porEntregar = hoja.envios.filter(abierto).length
 
   return (
     <div style={caja}>
       <h1 style={{ fontSize: 20, marginBottom: 2 }}>Envíos del día</h1>
       <p style={{ color: '#636366', marginTop: 0, fontSize: 14 }}>
-        {fecha} · {pendientes.length} por entregar
+        {hoja.rotulo || hoja.fecha} · {porEntregar} por entregar
       </p>
       {error ? <p style={{ color: '#d92d20' }}>{error}</p> : null}
 
-      {!envios.length ? <p style={{ color: '#636366' }}>Hoy no hay envíos cargados.</p> : null}
+      {/* Los días que vienen. Sólo los que tienen algo, y sólo si hay más de uno: el 95% de los días
+          esta fila no se dibuja, y cuando aparece dice todo lo que hay que saber de un vistazo. */}
+      {proximos.length > 1 ? (
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 4 }}>
+          {proximos.map((d) => {
+            const puesto = d.fecha === hoja.fecha
+            return (
+              <button
+                key={d.fecha}
+                onClick={() => void traer(pin, d.fecha)}
+                style={{
+                  flex: '0 0 auto',
+                  padding: '8px 12px',
+                  fontSize: 14,
+                  fontWeight: puesto ? 700 : 500,
+                  borderRadius: 999,
+                  cursor: 'pointer',
+                  border: `1px solid ${puesto ? '#4f46e5' : '#d1d1d6'}`,
+                  background: puesto ? '#4f46e5' : d.fecha === hoy ? '#fff' : '#f2f2f7',
+                  color: puesto ? '#fff' : d.fecha === hoy ? '#1c1c1e' : '#636366',
+                }}
+              >
+                {d.rotulo} · {d.cuantos}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
-      {pendientes.map((e) => (
-        <Tarjeta key={e.id} envio={e} ocupado={ocupado} onMarcar={marcar} />
-      ))}
+      {!hoja.envios.length ? <p style={{ color: '#636366' }}>Ese día no hay envíos cargados.</p> : null}
 
-      {/* Los cerrados quedan abajo y apagados: sirven para confirmar que no falta ninguno, pero no
-          tienen que competir por la atención con los que todavía hay que llevar. */}
-      {cerrados.length ? (
+      {/* 🔑 Un día que no se puede tocar se dibuja con la tarjeta flaca, que es la única forma que
+          existe para los datos que mandó el servidor: no hay dirección ni teléfono que pintar. */}
+      {!hoja.editable ? (
         <>
-          <h2 style={{ fontSize: 15, color: '#636366', marginTop: 28 }}>Ya cerrados</h2>
-          {cerrados.map((e) => (
-            <Tarjeta key={e.id} envio={e} ocupado={ocupado} onMarcar={marcar} apagado />
+          <p style={{ color: '#636366', fontSize: 14, marginTop: 12 }}>
+            Esto es para que sepas qué viene. La dirección y el teléfono aparecen el día del reparto.
+          </p>
+          {hoja.envios.map((e, i) => (
+            <TarjetaQueViene key={`${hoja.fecha}-${i}`} envio={e} />
           ))}
         </>
-      ) : null}
+      ) : (
+        <>
+          {hoja.envios.filter(abierto).map((e) => (
+            <Tarjeta key={e.id} envio={e} ocupado={ocupado} onMarcar={marcar} />
+          ))}
+
+          {/* Los cerrados quedan abajo y apagados: sirven para confirmar que no falta ninguno, pero
+              no tienen que competir por la atención con los que todavía hay que llevar. */}
+          {hoja.envios.some((e) => !abierto(e)) ? (
+            <>
+              <h2 style={{ fontSize: 15, color: '#636366', marginTop: 28 }}>Ya cerrados</h2>
+              {hoja.envios
+                .filter((e) => !abierto(e))
+                .map((e) => (
+                  <Tarjeta key={e.id} envio={e} ocupado={ocupado} onMarcar={marcar} apagado />
+                ))}
+            </>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** El marco de una tarjeta, igual en las dos formas. */
+function Marco({ apagado, children }: { apagado?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ border: '1px solid #d1d1d6', borderRadius: 12, padding: 14, marginTop: 12, opacity: apagado ? 0.6 : 1, background: '#fff' }}>
+      {children}
     </div>
   )
 }
 
 /**
- * Un envío: a dónde ir, cuánto cobrar, y qué pasó.
+ * La plata, con el mismo criterio que el papel: o un monto, o la palabra.
  *
- * 🔑 **El monto es lo único en negrita grande, y «PAGADO» no es «$0».** Un cero se lee como un
- * precio; el ticket impreso resuelve lo mismo con un rectángulo negro, y acá con el fondo verde.
+ * 🔑 **«PAGADO» no es «$0».** Un cero se lee como un precio; el ticket impreso resuelve lo mismo con
+ * un rectángulo negro, y acá con el fondo verde.
+ */
+function Plata({ aCobrar, chico }: { aCobrar: number; chico?: boolean }) {
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '10px 12px',
+        borderRadius: 8,
+        background: aCobrar === 0 ? '#e8f5ee' : '#fff7e6',
+        fontSize: aCobrar === 0 ? 16 : chico ? 18 : 22,
+        fontWeight: 700,
+      }}
+    >
+      {aCobrar === 0 ? 'PAGADO · no cobrar nada' : `COBRAR ${plata(aCobrar)}`}
+    </div>
+  )
+}
+
+/**
+ * Un envío que todavía no salió: cuántos son, de qué marca y para qué zona.
+ *
+ * 🔴 **No tiene con qué llegar a la puerta, y no es un descuido**: el servidor no manda dirección ni
+ * teléfono de los días que no llegaron, así que un link filtrado se lleva una lista de nombres y
+ * barrios de la semana, no una semana de direcciones.
+ */
+function TarjetaQueViene({ envio }: { envio: EnvioQueViene }) {
+  return (
+    <Marco>
+      <div style={{ fontSize: 12, color: '#8e8e93', textTransform: 'uppercase' }}>
+        {envio.marca} {envio.turno ? `· ${envio.turno}` : ''}
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 600, marginTop: 2 }}>{envio.cliente || 'Sin nombre'}</div>
+      <div style={{ fontSize: 15, marginTop: 2, color: '#636366' }}>{envio.localidad || 'Sin localidad'}</div>
+      <Plata aCobrar={envio.aCobrar} chico />
+    </Marco>
+  )
+}
+
+/**
+ * Un envío del día: a dónde ir, cuánto cobrar, y qué pasó.
  */
 function Tarjeta({
   envio,
@@ -222,22 +348,13 @@ function Tarjeta({
   onMarcar: (e: EnvioDelCadete, accion: string) => Promise<void>
   apagado?: boolean
 }) {
-  const cerrado = envio.estado === 'entregado' || envio.estado === 'no_entregado'
+  const cerrado = !abierto(envio)
   const tel = String(envio.telefono || '').replace(/[^\d+]/g, '')
   const donde = [envio.direccion, envio.piso, envio.localidad].filter(Boolean).join(' · ')
   const mapa = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([envio.direccion, envio.localidad, 'Rosario'].filter(Boolean).join(', '))}`
 
   return (
-    <div
-      style={{
-        border: '1px solid #d1d1d6',
-        borderRadius: 12,
-        padding: 14,
-        marginTop: 12,
-        opacity: apagado ? 0.6 : 1,
-        background: '#fff',
-      }}
-    >
+    <Marco apagado={apagado}>
       <div style={{ fontSize: 12, color: '#8e8e93', textTransform: 'uppercase' }}>
         {envio.marca} {envio.orden ? `· #${envio.orden}` : ''} {envio.turno ? `· ${envio.turno}` : ''}
       </div>
@@ -245,19 +362,7 @@ function Tarjeta({
       <div style={{ fontSize: 16, marginTop: 2 }}>{donde}</div>
       {envio.anotacion ? <div style={{ fontSize: 14, color: '#636366', marginTop: 4 }}>{envio.anotacion}</div> : null}
 
-      {/* La plata, con el mismo criterio que el papel: o un monto, o la palabra. */}
-      <div
-        style={{
-          marginTop: 10,
-          padding: '10px 12px',
-          borderRadius: 8,
-          background: envio.aCobrar === 0 ? '#e8f5ee' : '#fff7e6',
-          fontSize: envio.aCobrar === 0 ? 16 : 22,
-          fontWeight: 700,
-        }}
-      >
-        {envio.aCobrar === 0 ? 'PAGADO · no cobrar nada' : `COBRAR ${plata(envio.aCobrar)}`}
-      </div>
+      <Plata aCobrar={envio.aCobrar} />
 
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <a href={mapa} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
@@ -308,6 +413,6 @@ function Tarjeta({
           {envio.cobrado === true ? ' · cobrado' : envio.cobrado === false ? ' · sin cobrar' : ''}
         </div>
       )}
-    </div>
+    </Marco>
   )
 }

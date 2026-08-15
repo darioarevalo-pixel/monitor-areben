@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-  fechaDelPortal,
+  diaArgentino,
+  diasConEnvios,
+  enviosDelDia,
+  fechaQueSePuedeEscribir,
+  fechaQueSePuedeLeer,
   paraElCadete,
+  paraElCadeteFuturo,
   parcheDeAccion,
   pinTrabado,
+  rangoDeLectura,
+  rotuloCorto,
   venceElProximoPrimero,
 } from '@/lib/envios/portal.core.js'
 
@@ -108,34 +115,172 @@ describe('🔴 lo que el portal deja salir a internet', () => {
 })
 
 /**
- * 🔴 La barrera más importante: el link sirve para HOY, no para la agenda entera.
+ * 🔴 El día del portal es el de ACÁ, no el de UTC.
+ *
+ * El defecto que estos tests existen para cazar le vaciaba la hoja al cadete en el medio del turno
+ * tarde: el servidor corre en UTC, así que a las 21:00 de Argentina ya contestaba el día siguiente.
+ */
+describe('🔴 el día del portal es el de Argentina', () => {
+  it('🔴 a las 23:30 de acá TODAVÍA es hoy', () => {
+    // El mutante es el código que había: `new Date().toISOString().slice(0,10)`. Con él, a las 21:00
+    // el portal salta a mañana —una hoja vacía— y los toques de «Entregado» caen sobre los envíos
+    // del día siguiente. Las 23:30 del 17 en Argentina son las 02:30 del 18 en UTC.
+    expect(diaArgentino(Date.parse('2026-08-18T02:30:00Z'))).toBe('2026-08-17')
+    expect(diaArgentino(Date.parse('2026-08-18T00:15:00Z'))).toBe('2026-08-17')
+  })
+
+  it('🔴 a las 00:30 de acá ya es el día nuevo', () => {
+    // El mutante que el borde de arriba solo no caza: restar el offset dos veces, o sumarlo en vez
+    // de restarlo. Con cualquiera de los dos, el cadete arranca el día viendo la hoja de ayer.
+    expect(diaArgentino(Date.parse('2026-08-18T03:30:00Z'))).toBe('2026-08-18')
+    expect(diaArgentino(Date.parse('2026-08-18T03:00:00Z'))).toBe('2026-08-18')
+  })
+
+  it('el mediodía no se mueve', () => {
+    // Canario de un offset gigante o con el signo cambiado: si esto falla, no hay borde que discutir.
+    expect(diaArgentino(Date.parse('2026-08-17T15:00:00Z'))).toBe('2026-08-17')
+  })
+})
+
+/**
+ * 🔴 La barrera más importante: el link sirve para esta semana, no para la agenda entera.
  */
 describe('🔴 qué día puede pedir el link', () => {
   const HOY = '2026-08-17'
 
-  it('sin fecha, el día del servidor', () => {
-    expect(fechaDelPortal(undefined, HOY)).toBe(HOY)
-    expect(fechaDelPortal('', HOY)).toBe(HOY)
+  it('sin fecha, el día de hoy', () => {
+    expect(fechaQueSePuedeLeer(undefined, HOY)).toBe(HOY)
+    expect(fechaQueSePuedeLeer('', HOY)).toBe(HOY)
+    expect(fechaQueSePuedeEscribir(undefined, HOY)).toBe(HOY)
   })
 
   // 🔴 EL test. El mutante —aceptar cualquier fecha— convierte el link en un volcado de la agenda:
   // nombre, dirección y teléfono de cada clienta que pasó por la moto.
   it('🔴 un día lejano se rechaza', () => {
-    expect(fechaDelPortal('2026-01-05', HOY)).toBeNull()
-    expect(fechaDelPortal('2026-07-17', HOY)).toBeNull()
-    expect(fechaDelPortal('2026-08-14', HOY)).toBeNull()
+    expect(fechaQueSePuedeLeer('2026-01-05', HOY)).toBeNull()
+    expect(fechaQueSePuedeLeer('2026-07-17', HOY)).toBeNull()
+    expect(fechaQueSePuedeLeer('2026-08-25', HOY)).toBeNull()
   })
 
-  // 🔑 El ±1 no es holgura: el servidor corre en UTC y a las 21:00 de Argentina ya devuelve mañana.
-  // Sin esto, el portal se vaciaría solo en el medio del turno tarde.
-  it('el día de al lado sí, que es el huso', () => {
-    expect(fechaDelPortal('2026-08-16', HOY)).toBe('2026-08-16')
-    expect(fechaDelPortal('2026-08-18', HOY)).toBe('2026-08-18')
+  // 🔴 La ventana es ASIMÉTRICA a propósito. El mutante es hacerla ±7: el historial es justo lo que
+  // un link filtrado nunca puede dar, y para adelante lo que hay son envíos que todavía no salieron.
+  it('🔴 para adelante una semana, para atrás sólo el día del huso', () => {
+    expect(fechaQueSePuedeLeer('2026-08-24', HOY)).toBe('2026-08-24')
+    expect(fechaQueSePuedeLeer('2026-08-25', HOY)).toBeNull()
+    expect(fechaQueSePuedeLeer('2026-08-16', HOY)).toBe('2026-08-16')
+    expect(fechaQueSePuedeLeer('2026-08-15', HOY)).toBeNull()
   })
 
-  it('una fecha con cualquier forma se rechaza', () => {
-    expect(fechaDelPortal('17/08/2026', HOY)).toBeNull()
-    expect(fechaDelPortal('2026-08-17 or 1=1', HOY)).toBeNull()
+  // 🔴 EL otro test del archivo. El mutante es usar la ventana de lectura también para el POST: con
+  // eso, un link filtrado marca entregada —y cobrada— la semana entera de una sentada.
+  it('🔴 un día de la semana que viene se LEE pero no se ESCRIBE', () => {
+    expect(fechaQueSePuedeLeer('2026-08-20', HOY)).toBe('2026-08-20')
+    expect(fechaQueSePuedeEscribir('2026-08-20', HOY)).toBeNull()
+  })
+
+  // 🔑 El ±1 de escritura no es holgura: a las 00:30 el cadete todavía está cerrando lo de ayer.
+  it('el día de al lado sí se puede tocar, que es el borde del huso', () => {
+    expect(fechaQueSePuedeEscribir('2026-08-16', HOY)).toBe('2026-08-16')
+    expect(fechaQueSePuedeEscribir('2026-08-18', HOY)).toBe('2026-08-18')
+    expect(fechaQueSePuedeEscribir('2026-08-19', HOY)).toBeNull()
+  })
+
+  it('una fecha con cualquier forma se rechaza en las dos', () => {
+    expect(fechaQueSePuedeLeer('17/08/2026', HOY)).toBeNull()
+    expect(fechaQueSePuedeLeer('2026-08-17 or 1=1', HOY)).toBeNull()
+    expect(fechaQueSePuedeEscribir('17/08/2026', HOY)).toBeNull()
+    expect(fechaQueSePuedeEscribir('2026-08-17 or 1=1', HOY)).toBeNull()
+  })
+
+  it('el rango que se le pide a la base es el mismo que la ventana de lectura', () => {
+    // El mutante: un rango más ancho que la ventana. Los chips contarían días que después el
+    // servidor rechaza, y al tocarlos daría 400.
+    const { desde, hasta } = rangoDeLectura(HOY)
+    expect(desde).toBe('2026-08-16')
+    expect(hasta).toBe('2026-08-24')
+    expect(fechaQueSePuedeLeer(desde, HOY)).toBe(desde)
+    expect(fechaQueSePuedeLeer(hasta, HOY)).toBe(hasta)
+  })
+})
+
+/**
+ * 🔴 Los días que todavía no llegaron salen sin con qué llegar a la puerta.
+ */
+describe('🔴 lo que se ve de la semana que viene', () => {
+  it('🔴 un día futuro NO lleva dirección ni teléfono', () => {
+    // EL test de la ventana de 7 días. El mutante es reusar `paraElCadete` para los futuros: ahí
+    // mirar la semana pasa a entregar siete días de direcciones y teléfonos en vez de uno.
+    const salida = paraElCadeteFuturo(fila) as Record<string, unknown>
+    expect(salida.direccion).toBeUndefined()
+    expect(salida.telefono).toBeUndefined()
+    expect(salida.piso).toBeUndefined()
+    expect(salida.anotacion).toBeUndefined()
+    // Sin `id` no hay con qué escribir, ni siquiera armando el pedido a mano.
+    expect(salida.id).toBeUndefined()
+    // Y dicho de la otra forma, por si mañana alguien renombra un campo.
+    const json = JSON.stringify(salida)
+    expect(json).not.toContain('3 de Febrero')
+    expect(json).not.toContain('3415551234')
+    expect(json).not.toContain('Tocar timbre')
+  })
+
+  it('pero sí lo que hace falta para saber qué viene', () => {
+    expect(paraElCadeteFuturo(fila)).toMatchObject({
+      marca: 'bdi',
+      cliente: 'Ana',
+      localidad: 'Rosario',
+      turno: 'tarde',
+      aCobrar: 3000,
+    })
+  })
+
+  it('🔴 la forma la decide poder ESCRIBIR el día, no que sea hoy', () => {
+    // EL test del recorte, y va sobre `enviosDelDia` porque es ahí donde se elige: probar sólo las
+    // dos formas por separado deja el mutante que importa —usar la completa para todos los días—
+    // adentro del handler, donde no lo mira nadie.
+    const futuro = enviosDelDia([fila], false) as Record<string, unknown>[]
+    expect(futuro[0].direccion).toBeUndefined()
+    expect(futuro[0].telefono).toBeUndefined()
+    expect(JSON.stringify(futuro)).not.toContain('3415551234')
+
+    // Y ayer sigue siendo escribible por el borde del huso: ahí la dirección tiene que estar, porque
+    // a las 00:30 el paquete todavía está en la moto.
+    const hoyOAyer = enviosDelDia([fila], true) as Record<string, unknown>[]
+    expect(hoyOAyer[0].direccion).toBe('3 de Febrero 1234')
+    expect(hoyOAyer[0].telefono).toBe('3415551234')
+  })
+
+  it('🔴 la forma completa se construye ENCIMA de la flaca', () => {
+    // El mutante es mantener dos listas de campos en paralelo: alguien agrega un dato a una y se
+    // olvida de la otra. Acá, todo lo de la flaca tiene que estar sí o sí en la completa.
+    const flaca = paraElCadeteFuturo(fila) as Record<string, unknown>
+    const completa = paraElCadete(fila) as Record<string, unknown>
+    for (const k of Object.keys(flaca)) expect(completa[k]).toEqual(flaca[k])
+  })
+})
+
+describe('los chips de los días que vienen', () => {
+  it('agrupa, cuenta y ordena, sin días vacíos', () => {
+    const d = diasConEnvios(['2026-08-19', '2026-08-17', '2026-08-19', '2026-08-17', '2026-08-19'], '2026-08-17')
+    expect(d).toEqual([
+      { fecha: '2026-08-17', cuantos: 2, rotulo: 'Hoy' },
+      { fecha: '2026-08-19', cuantos: 3, rotulo: 'mié 19-ago' },
+    ])
+  })
+
+  it('una fecha rota no se cuenta como un día', () => {
+    expect(diasConEnvios([null, '', 'mañana', '2026-08-17'] as unknown as string[], '2026-08-17')).toEqual([
+      { fecha: '2026-08-17', cuantos: 1, rotulo: 'Hoy' },
+    ])
+  })
+
+  it('🔴 el rótulo no corre un día', () => {
+    // El mutante: reordenar el arreglo de días «para que arranque en lunes». `getDay()` indexa con
+    // 0 = domingo, y el corrimiento no rompe nada visible: sale a la calle con el día cambiado.
+    expect(rotuloCorto('2026-08-17')).toBe('lun 17-ago') // lunes
+    expect(rotuloCorto('2026-08-23')).toBe('dom 23-ago') // domingo
+    expect(rotuloCorto('2026-01-01')).toBe('jue 1-ene')
+    expect(rotuloCorto('mañana')).toBe('')
   })
 })
 

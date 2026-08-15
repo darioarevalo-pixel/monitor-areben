@@ -13,8 +13,11 @@
 //     Es una desviación deliberada del 404-para-todo, y es correcta: lo que no puede ser sondeable
 //     es el token; el PIN el cadete lo tiene que poder corregir arriba de la moto.
 //   - 10 fallos de PIN → trabado 15 minutos. Cuatro dígitos son 10.000 combinaciones.
-//   - 🔴 **El día se acota a ±1 del día del servidor.** Sin eso, un link filtrado devuelve la agenda
-//     entera de direcciones y teléfonos. Es la barrera más importante del archivo.
+//   - 🔴 **El día se acota, y con DOS ventanas distintas**: se lee de ayer a la semana que viene (el
+//     cadete quiere saber qué le espera), pero se escribe sólo hoy ±1. Sin esto, un link filtrado
+//     devuelve la agenda entera de direcciones y teléfonos. Es la barrera más importante del archivo.
+//   - 🔴 **Los días que todavía no llegaron salen sin dirección ni teléfono** (`paraElCadeteFuturo`):
+//     es lo que hace que mirar la semana no multiplique por siete lo que entrega un link filtrado.
 //   - La respuesta se arma campo por campo en `paraElCadete`: nunca `select *` ni `{...fila}`.
 //   - La escritura es una lista cerrada de cuatro parches fijos: el body no se copia nunca.
 //
@@ -22,7 +25,19 @@
 // puerta donde ya viven los otros dos portales sin sesión. Crear `api/cadete.js` "por prolijidad"
 // frena todos los deploys sin error visible.
 import { createClient } from '@supabase/supabase-js';
-import { fechaDelPortal, MAX_FALLOS_PIN, MINUTOS_TRABADO, paraElCadete, parcheDeAccion, pinTrabado } from '../lib/envios/portal.core.js';
+import {
+  diaArgentino,
+  diasConEnvios,
+  enviosDelDia,
+  fechaQueSePuedeEscribir,
+  fechaQueSePuedeLeer,
+  MAX_FALLOS_PIN,
+  MINUTOS_TRABADO,
+  parcheDeAccion,
+  pinTrabado,
+  rangoDeLectura,
+  rotuloCorto,
+} from '../lib/envios/portal.core.js';
 
 /**
  * Siempre la base de BDI, como todo Envíos: el reparto no es de una marca y el cadete sale con las
@@ -47,10 +62,6 @@ const VISIBLE_AL_CADETE =
   'id, store, turno, orden_numero, cliente, telefono, direccion, piso_depto, localidad, anotacion, ' +
   'monto_envio, envio_pagado, envio_bonificado, monto_pedido_a_cobrar, estado, cobrado';
 
-/** El día de hoy según el servidor, en ISO. Corre en UTC: por eso `fechaDelPortal` da ±1 de gracia. */
-function hoyDelServidor() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default async function handler(req, res) {
   // Este endpoint NO usa `soloMismoOrigen`: lo abre el cadete desde su celular, con el link.
@@ -104,21 +115,44 @@ export default async function handler(req, res) {
   if (portal.pin_fallos) await supabase.from('envios_portal').update({ pin_fallos: 0 }).eq('id', 'cadete');
 
   try {
+    // 🔴 El día es el ARGENTINO, calculado acá. Con el de UTC, a las 21:00 el portal saltaba a
+    // mañana —vacío— en el medio del turno tarde, y los toques iban a los envíos del día siguiente.
+    const hoyAR = diaArgentino(Date.now());
     const pedida = req.method === 'POST' ? body.fecha : req.query.fecha;
-    const fecha = fechaDelPortal(pedida, hoyDelServidor());
-    if (!fecha) return res.status(400).json({ error: 'Ese día no se puede pedir desde acá.' });
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('envios_reparto')
-        .select(VISIBLE_AL_CADETE)
-        .eq('fecha', fecha)
-        .order('turno');
-      if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, fecha, envios: (data || []).map(paraElCadete) });
+      const fecha = fechaQueSePuedeLeer(pedida, hoyAR);
+      if (!fecha) return res.status(400).json({ error: 'Ese día no se puede pedir desde acá.' });
+      // Un día que no se puede escribir es un día que todavía no llegó: sale sin dirección.
+      const editable = fechaQueSePuedeEscribir(fecha, hoyAR) !== null;
+      const { desde, hasta } = rangoDeLectura(hoyAR);
+
+      const [delDia, dias] = await Promise.all([
+        supabase.from('envios_reparto').select(VISIBLE_AL_CADETE).eq('fecha', fecha).order('turno'),
+        // 🔑 Sólo la columna `fecha`. Es para contar los chips de arriba, y pidiendo un solo dato no
+        // hay nada que se pueda escapar por acá aunque mañana alguien toque el mapeo.
+        supabase.from('envios_reparto').select('fecha').gte('fecha', desde).lte('fecha', hasta),
+      ]);
+      if (delDia.error) throw new Error(delDia.error.message);
+      if (dias.error) throw new Error(dias.error.message);
+
+      return res.status(200).json({
+        ok: true,
+        fecha,
+        hoy: hoyAR,
+        editable,
+        rotulo: fecha === hoyAR ? 'Hoy' : rotuloCorto(fecha),
+        envios: enviosDelDia(delDia.data, editable),
+        proximos: diasConEnvios((dias.data || []).map((d) => d.fecha), hoyAR),
+      });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
+
+    // 🔴 Escribir tiene su propia ventana, más chica que la de leer. Con la de lectura acá, un link
+    // filtrado marcaría entregada —y cobrada— la semana entera de una.
+    const fecha = fechaQueSePuedeEscribir(pedida, hoyAR);
+    if (!fecha) return res.status(400).json({ error: 'Ese día no se puede tocar desde acá.' });
 
     const id = String(body.id || '');
     if (!id) return res.status(400).json({ error: 'Falta el envío.' });
@@ -142,7 +176,7 @@ export default async function handler(req, res) {
       .eq('fecha', fecha)
       .select('id');
     if (error) throw new Error(error.message);
-    if (!data || !data.length) return res.status(404).json({ error: 'Ese envío no es de hoy.' });
+    if (!data || !data.length) return res.status(404).json({ error: 'Ese envío no es del día que estás mirando.' });
 
     return res.status(200).json({ ok: true });
   } catch (e) {
