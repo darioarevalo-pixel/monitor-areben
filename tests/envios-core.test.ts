@@ -454,6 +454,21 @@ describe('🔴 el ticket de 80 mm no se corta', () => {
     expect(escrito).toContain('#1234')
   })
 
+  it('🔴 la DIRECCIÓN es lo más grande del papel, no el nombre', () => {
+    // Lo pidió el cadete: para llegar no le sirve el nombre —lo usa recién en la puerta— y lo que
+    // mira de reojo arriba de la moto es a dónde va.
+    //
+    // El mutante es volver a la jerarquía anterior (nombre 18, dirección 15). No rompe nada, no se
+    // ve en ningún assert de alto, y el papel sale igual de "correcto": por eso el tamaño se afirma
+    // acá y no se deja librado a mirar un PDF.
+    const { ops } = armarTicket(con({ cliente: 'Ana', direccion: 'San Juan 100', piso_depto: null, localidad: 'Rosario' }), medir)
+    const txt = ops.filter((o) => o.k === 'txt') as { txt: string; tam: number; y: number }[]
+    const dir = txt.find((o) => o.txt.includes('San Juan 100'))!
+    const nom = txt.find((o) => o.txt.includes('Ana'))!
+    expect(dir.tam).toBeGreaterThan(nom.tam)
+    expect(dir.y).toBeLessThan(nom.y)
+  })
+
   it('un envío sin teléfono ni anotación no deja renglones vacíos', () => {
     const { ops } = armarTicket(con({ telefono: null, anotacion: null }), medir)
     expect(ops.filter((o) => o.k === 'txt').every((o) => (o as { txt: string }).txt.trim() !== '')).toBe(true)

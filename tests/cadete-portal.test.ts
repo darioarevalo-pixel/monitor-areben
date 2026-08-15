@@ -7,6 +7,8 @@ import {
   enviosDelDia,
   fechaQueSePuedeEscribir,
   fechaQueSePuedeLeer,
+  linkDeWhatsapp,
+  mensajeParaLaPuerta,
   paraElCadete,
   paraElCadeteFuturo,
   parcheDeAccion,
@@ -391,5 +393,55 @@ describe('hasta cuándo vale un link', () => {
   it('una fecha rota no devuelve un vencimiento inventado', () => {
     expect(venceElProximoPrimero('')).toBeNull()
     expect(venceElProximoPrimero('mañana')).toBeNull()
+  })
+})
+
+describe('🔴 el mensaje que el cadete manda antes de salir', () => {
+  const delPortal = paraElCadete(fila) as { cliente: string; direccion: string; localidad: string; marca: string }
+
+  it('🔴 no pregunta lo que el sistema YA sabe', () => {
+    // El mensaje que escribían a mano arrancaba pidiendo el nombre y la dirección, porque lo tipeaban
+    // en la calle sin tener la hoja delante. El mutante es dejarlo así: se le pregunta a la clienta
+    // un dato que está en la pantalla, y encima queda mal.
+    const m = mensajeParaLaPuerta(delPortal)
+    expect(m).toContain('Ana')
+    expect(m).toContain('3 de Febrero 1234')
+    expect(m).toContain('Rosario')
+    expect(m).not.toMatch(/tu nombre/i)
+  })
+
+  it('sí pide lo único que falta: la ubicación y el piso', () => {
+    const m = mensajeParaLaPuerta(delPortal)
+    expect(m).toMatch(/ubicaci[óo]n/i)
+    expect(m).toMatch(/piso/i)
+  })
+
+  it('🔴 dice la marca del pedido, no las dos siempre', () => {
+    // El mutante es dejar «BDI y Zattia» fijo: la clienta compró en una sola, y el mensaje se lee
+    // como si vinieran de otro lado.
+    expect(mensajeParaLaPuerta({ ...delPortal, marca: 'zattia' })).toContain('Zattia')
+    expect(mensajeParaLaPuerta({ ...delPortal, marca: 'zattia' })).not.toContain('BDI')
+    expect(mensajeParaLaPuerta({ ...delPortal, marca: 'bdi' })).toContain('BDI')
+  })
+
+  it('sin nombre ni dirección sigue siendo una frase, no un hueco', () => {
+    const m = mensajeParaLaPuerta({ marca: 'bdi', cliente: null, direccion: null, localidad: null })
+    expect(m).toContain('Hola!')
+    expect(m).not.toContain('null')
+    expect(m).not.toContain('undefined')
+  })
+
+  it('🔴 el link lleva el mensaje escapado', () => {
+    // El mutante es concatenar el texto crudo: el mensaje se corta en el primer `&` o `#`, y una
+    // dirección como «San Juan 100 # 3» lo deja por la mitad sin que nadie lo note.
+    const link = linkDeWhatsapp('5493415551234', 'timbre 2 & 3 #B')!
+    expect(link.startsWith('https://wa.me/5493415551234?text=')).toBe(true)
+    expect(link).not.toContain(' ')
+    expect(decodeURIComponent(link.split('?text=')[1])).toBe('timbre 2 & 3 #B')
+  })
+
+  it('sin teléfono no hay link', () => {
+    expect(linkDeWhatsapp('', 'hola')).toBeNull()
+    expect(linkDeWhatsapp(null as unknown as string, 'hola')).toBeNull()
   })
 })

@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Icono } from '@/components/ui/Icono'
-import { diasNavegables, diaVecino } from '@/lib/envios/portal.core.js'
+import { diasNavegables, diaVecino, linkDeWhatsapp, mensajeParaLaPuerta } from '@/lib/envios/portal.core.js'
 // Una sola función, y de un archivo sin dependencias. 🔴 El teléfono argentino necesita el `9` que
 // no viene en el dato: sin eso, `wa.me` abre un chat con un número que no existe. Reimplementarlo
 // acá sería la tercera copia de una regla que ya nos mordió una vez.
@@ -465,8 +465,9 @@ function TarjetaQueViene({ envio }: { envio: EnvioQueViene }) {
         <Marca marca={envio.marca} />
         {envio.turno ? <span style={{ fontSize: 12, color: 'var(--mo-mut)' }}>{envio.turno}</span> : null}
       </div>
-      <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>{envio.cliente || 'Sin nombre'}</div>
-      <div style={{ fontSize: 15, marginTop: 2, color: 'var(--mo-mut)' }}>{envio.localidad || 'Sin localidad'}</div>
+      {/* La zona manda también acá: es lo que decide si el día que viene entra en el recorrido. */}
+      <div style={{ fontSize: 17, fontWeight: 700, marginTop: 6 }}>{envio.localidad || 'Sin localidad'}</div>
+      <div style={{ fontSize: 14, marginTop: 2, color: 'var(--mo-mut)' }}>{envio.cliente || 'Sin nombre'}</div>
       <Plata aCobrar={envio.aCobrar} chico />
     </Tarjetón>
   )
@@ -504,9 +505,12 @@ function Tarjeta({
         {envio.turno ? <span style={{ fontSize: 12, color: 'var(--mo-mut)' }}>· {envio.turno}</span> : null}
       </div>
 
-      <div style={{ fontSize: 19, fontWeight: 700, marginTop: 6 }}>{envio.cliente || 'Sin nombre'}</div>
-      <div style={{ fontSize: 16, marginTop: 2 }}>{donde}</div>
-      {envio.anotacion ? <div style={{ fontSize: 14, color: 'var(--mo-mut)', marginTop: 4 }}>{envio.anotacion}</div> : null}
+      {/* 🔑 **La dirección primero y grande; el nombre abajo y en gris.** Lo dijo el cadete: para
+          llegar no le sirve el nombre —lo usa recién en la puerta, para preguntar por alguien—, y lo
+          que mira de reojo arriba de la moto es a dónde va. Va igual que en el ticket impreso. */}
+      <div style={{ fontSize: 19, fontWeight: 700, marginTop: 6, lineHeight: 1.25 }}>{donde}</div>
+      <div style={{ fontSize: 14, color: 'var(--mo-mut)', marginTop: 2 }}>{envio.cliente || 'Sin nombre'}</div>
+      {envio.anotacion ? <div style={{ fontSize: 14, color: 'var(--mo-ink2)', marginTop: 4 }}>{envio.anotacion}</div> : null}
 
       <Plata aCobrar={envio.aCobrar} />
 
@@ -514,7 +518,8 @@ function Tarjeta({
           los dos botones que escriben. */}
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         {wa ? (
-          <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
+          // El mensaje va escrito: abre el chat con el texto puesto, y enviarlo lo decide él.
+          <a href={linkDeWhatsapp(wa, mensajeParaLaPuerta(envio)) || undefined} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
             <span style={boton('success', 'suave')}>
               <Icono nombre="whatsapp" size={16} /> WhatsApp
             </span>

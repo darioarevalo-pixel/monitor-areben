@@ -122,9 +122,12 @@ export function armarTicket(e: Envio, partir: Medidor): { ops: Op[]; alto: numbe
   y += 4.5
   regla()
 
-  escribir(e.cliente || 'Sin nombre', 18, true)
+  // 🔑 **La dirección va primera y grande; el nombre, abajo y más chico.** Lo dijo el cadete: a él
+  // el nombre no le sirve para llegar —lo usa recién en la puerta, para preguntar por alguien—, y
+  // el dato que lee de reojo en la moto, con el papel en la mano, es a dónde va.
+  escribir(direccionCompleta(e), 17, true)
   y += 1.5
-  escribir(direccionCompleta(e), 15, false)
+  escribir(e.cliente || 'Sin nombre', 13, false, 60)
 
   // El teléfono es lo que se usa cuando nadie abre, y se marca a mano con una sola mano: va grande.
   if (e.telefono) {
