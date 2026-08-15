@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   aCobrar,
+  conIntentoFallido,
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
+  ESTADO_LABEL,
+  ESTADOS,
+  ESTADOS_LEGADO,
+  FILTRO_BANDEJA,
+  siguienteEstado,
   linkWhatsapp,
   diaDeRepartoVecino,
   esTurnoDeGrilla,
@@ -441,6 +447,105 @@ describe('🔴 el ticket de 80 mm no se corta', () => {
   it('un envío sin teléfono ni anotación no deja renglones vacíos', () => {
     const { ops } = armarTicket(con({ telefono: null, anotacion: null }), medir)
     expect(ops.filter((o) => o.k === 'txt').every((o) => (o as { txt: string }).txt.trim() !== '')).toBe(true)
+  })
+})
+
+/**
+ * Los estados: cinco y un camino, no una lista de seis.
+ *
+ * 🔴 El defecto que estos casos cazan es el de la ventana: prod y los previews comparten base, así
+ * que entre el deploy y la migración hay filas con los nombres viejos. Una pantalla que no sepa
+ * leerlas les da un botón muerto **sobre un paquete real**, y nadie entiende por qué justo ésas no
+ * avanzan.
+ */
+describe('el camino del paquete', () => {
+  it('son cinco, y no están los que se fueron', () => {
+    expect(ESTADOS).toEqual(['pendiente', 'preparado', 'en_transito', 'entregado', 'no_entregado'])
+    // El mutante es dejar el array viejo: el desplegable desaparece de la pantalla, pero un POST
+    // a mano sigue escribiendo `reintento` y la fila queda en un estado que ya nadie pinta.
+    expect(ESTADOS).not.toContain('reintento')
+    expect(ESTADOS).not.toContain('despachado')
+  })
+
+  it('avanza de a uno, en orden', () => {
+    expect(siguienteEstado('pendiente')).toBe('preparado')
+    expect(siguienteEstado('preparado')).toBe('en_transito')
+    expect(siguienteEstado('en_transito')).toBe('entregado')
+  })
+
+  // 🔴 Un ciclo que vuelva al principio convierte un click de más en un paquete que sale de la
+  // cuenta del día sin que nada avise.
+  it('🔴 lo cerrado no vuelve a empezar', () => {
+    expect(siguienteEstado('entregado')).toBeNull()
+    expect(siguienteEstado('no_entregado')).toBeNull()
+  })
+
+  // 🔴 EL test de la ventana. Si esto diera `undefined`, las filas que prod escribió con el código
+  // viejo quedarían con un botón que no hace nada hasta que corra la migración.
+  it('🔴 un estado legado igual sabe hacia dónde sigue', () => {
+    expect(siguienteEstado('despachado')).toBe('entregado')
+    expect(siguienteEstado('reintento')).toBe('preparado')
+  })
+
+  it('un estado inventado no rompe: simplemente no avanza', () => {
+    expect(siguienteEstado('cualquier_cosa')).toBeNull()
+  })
+
+  it('los legados tienen nombre para mostrar, no salen crudos', () => {
+    const label = ESTADO_LABEL as Record<string, string>
+    for (const e of [...ESTADOS, ...ESTADOS_LEGADO]) expect(label[e]).toBeTruthy()
+  })
+})
+
+/**
+ * La bandeja «Sin fecha» es la lista de trabajo, no una bandeja de entrada.
+ *
+ * 🔴 Se afirma el string del filtro y no el resultado de una consulta: un `.or()` mal escrito **no
+ * falla**, vacía la bandeja, y una bandeja vacía se lee como «no hay nada que hacer». Mismo criterio
+ * que el test de `modo=lista` en `envios-cliente.test.ts`: se fija la decisión.
+ */
+describe('🔴 la bandeja trae también lo que volvió', () => {
+  it('el filtro pregunta por las dos cosas', () => {
+    expect(FILTRO_BANDEJA).toBe('fecha.is.null,estado.eq.no_entregado')
+  })
+})
+
+/**
+ * Reprogramar: el paquete que volvió sale de nuevo, y queda escrito que ya se intentó.
+ */
+describe('🔴 el intento fallido se apila, no pisa', () => {
+  const volvio = con({ fecha: '2026-08-14', turno: 'tarde', estado: 'no_entregado', datos: { tn: { number: 1234 } } })
+
+  it('vuelve a pendiente: sale al día nuevo como cualquier otro', () => {
+    const p = conIntentoFallido(volvio, { por: 'Karen', at: '2026-08-15T12:00:00Z' })
+    // El mutante deja `no_entregado`: el paquete sale al día nuevo ya pintado de rojo, y el día
+    // nuevo arranca diciendo que una entrega falló antes de que el cadete se suba a la moto.
+    expect(p.estado).toBe('pendiente')
+  })
+
+  it('anota de qué día volvió, y quién lo reprogramó', () => {
+    const p = conIntentoFallido(volvio, { por: 'Karen', at: '2026-08-15T12:00:00Z' })
+    expect(p.datos.intentos).toEqual([{ fecha: '2026-08-14', turno: 'tarde', at: '2026-08-15T12:00:00Z', por: 'Karen' }])
+  })
+
+  // 🔴 EL test. `datos` es donde vive la orden de Tienda Nube congelada: la dirección que salió
+  // impresa, los ítems, el teléfono. Escribir `{ intentos }` a secas se la lleva puesta y el envío
+  // se queda sin ticket — y el mutante da verde en cualquier test que sólo mire `intentos`.
+  it('🔴 NO se lleva puesta la orden congelada', () => {
+    const p = conIntentoFallido(volvio, { por: 'Karen', at: '2026-08-15T12:00:00Z' })
+    expect(p.datos.tn).toEqual({ number: 1234 })
+  })
+
+  it('un segundo intento se suma al primero', () => {
+    const uno = conIntentoFallido(volvio, { por: 'Karen', at: '2026-08-15T12:00:00Z' })
+    const dos = conIntentoFallido({ ...volvio, ...uno, fecha: '2026-08-18', turno: 'mañana' }, { por: 'Sol', at: '2026-08-19T12:00:00Z' })
+    expect(dos.datos.intentos).toHaveLength(2)
+    expect(dos.datos.tn).toEqual({ number: 1234 })
+  })
+
+  it('una fila sin datos no rompe', () => {
+    const p = conIntentoFallido(con({ fecha: '2026-08-14', turno: 'tarde', datos: {} }), { por: null, at: 'x' })
+    expect(p.datos.intentos).toHaveLength(1)
   })
 })
 

@@ -33,6 +33,8 @@ import {
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
+  ESTADO_LABEL,
+  ESTADOS_CERRADOS,
   linkWhatsapp,
   diaDeRepartoVecino,
   nuevoIdEnvio,
@@ -40,12 +42,14 @@ import {
   rotuloDeDia,
   ordenarParaPreparar,
   resumenDeTraida,
+  siguienteEstado,
   totalesDelDia,
   turnosDe,
 } from '@/lib/envios/core'
 import { hoyIso } from '@/lib/calendario'
 import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, marcarBonificado, marcarPagado } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
+import type { Tone } from '@/components/ui'
 import type { CierreDia, Envio, EstadoEnvio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 
@@ -63,6 +67,24 @@ import { useCuentaCadete, useEnvios } from './useEnvios'
  * envío guarda su marca, así que el análisis por marca deja de estar ciego sin que la operación
  * cambie. Para los que vienen de Tienda Nube la marca sale sola.
  */
+/**
+ * El color de cada estado. Mismo criterio que Postventa (`ESTADO_TONE`), y por eso mismo tono:
+ * ámbar es advertencia y nada más, verde es cerrado bien, rojo es cerrado mal.
+ *
+ * ⚠️ Están los dos legados (`despachado`, `reintento`) porque prod y los previews comparten base y
+ * entre el deploy y la migración hay filas con esos valores. Un `Record` incompleto pinta la
+ * pastilla sin color, que se lee como «acá no pasó nada» sobre un paquete que salió.
+ */
+const ESTADO_TONE: Record<string, Tone> = {
+  pendiente: 'neutral',
+  preparado: 'warning',
+  en_transito: 'action',
+  entregado: 'success',
+  no_entregado: 'danger',
+  despachado: 'action',
+  reintento: 'neutral',
+}
+
 export function Envios() {
   const { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
@@ -339,14 +361,7 @@ export function Envios() {
                         </div>
                       </Td>
                       <Td>
-                        <Select value={e.estado} onChange={(ev) => void tildar(e, ev.target.value as EstadoEnvio)}>
-                          <option value="pendiente">Pendiente</option>
-                          <option value="preparado">Preparado</option>
-                          <option value="despachado">Salió</option>
-                          <option value="entregado">Entregado</option>
-                          <option value="no_entregado">No entregado</option>
-                          <option value="reintento">Vuelve a salir</option>
-                        </Select>
+                        <EstadoDelEnvio envio={e} onCambiar={tildar} />
                       </Td>
                       <Td>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -437,6 +452,52 @@ export function Envios() {
 }
 
 /**
+ * El estado del paquete: una pastilla con color y **un botón que avanza**.
+ *
+ * 🔑 **Era un desplegable de seis opciones y eso es fricción veinte veces por día.** Elegir de una
+ * lista obliga a leerla entera cada vez, y deja elegir hacia atrás sin querer —un click de más en
+ * «Pendiente» sobre un entregado lo saca de la cuenta del día sin que nada avise—. El camino es uno
+ * solo (`pendiente → preparado → en tránsito → entregado`), así que el botón dice a dónde va.
+ *
+ * La salida lateral —«No entregado»— aparece **sólo cuando el paquete ya salió**: antes de que el
+ * cadete lo lleve no hay nada que no se haya podido entregar.
+ *
+ * Y los cerrados tienen «Corregir», chiquito. El estado va hacia adelante, pero un dedo en la
+ * pantalla equivocada tiene que poder deshacerse sin abrir la base.
+ */
+function EstadoDelEnvio({ envio, onCambiar }: { envio: Envio; onCambiar: (e: Envio, estado: EstadoEnvio) => Promise<void> }) {
+  const sigue = siguienteEstado(envio.estado) as EstadoEnvio | null
+  const cerrado = (ESTADOS_CERRADOS as string[]).includes(envio.estado)
+  const enLaCalle = envio.estado === 'en_transito' || envio.estado === 'despachado'
+
+  return (
+    <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
+      <StatusPill tone={ESTADO_TONE[envio.estado] || 'neutral'} label={ESTADO_LABEL[envio.estado] || envio.estado} />
+      {sigue ? (
+        <Button size="sm" variant="outline" tone={ESTADO_TONE[sigue]} onClick={() => void onCambiar(envio, sigue)}>
+          {ESTADO_LABEL[sigue]}
+        </Button>
+      ) : null}
+      {enLaCalle ? (
+        <Button size="sm" variant="ghost" tone="danger" onClick={() => void onCambiar(envio, 'no_entregado')}>
+          No entregado
+        </Button>
+      ) : null}
+      {cerrado ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          title="Volver a «en tránsito»: se marcó por error."
+          onClick={() => void onCambiar(envio, 'en_transito')}
+        >
+          Corregir
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * La bandeja: los pedidos cotizados que todavía no tienen día.
  *
  * 🔑 **Existe porque el día lo confirma el cliente, no la orden.** Antes, la única forma de anotar
@@ -490,6 +551,15 @@ function Pendientes({
               <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
               {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
               {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+              {/* 🔑 **De dónde viene esta fila.** La bandeja mezcla dos cosas que se trabajan igual
+                  —hablar con la clienta y acordar un día— pero que llegaron por caminos distintos:
+                  el pedido nuevo, y el paquete que salió y volvió. Sin decirlo, el segundo se lee
+                  como un pedido más y nadie sabe que alguien ya esperó en una puerta. */}
+              {e.estado === 'no_entregado' ? (
+                <div style={{ marginTop: 2 }}>
+                  <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
+                </div>
+              ) : null}
             </Td>
             <Td>
               <div>{direccionCompleta(e)}</div>

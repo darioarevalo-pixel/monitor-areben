@@ -7,7 +7,21 @@ import type { Marca } from '../nav'
 
 export type Turno = 'mañana' | 'tarde'
 export type OrigenEnvio = 'tn' | 'manual'
-export type EstadoEnvio = 'pendiente' | 'preparado' | 'despachado' | 'entregado' | 'no_entregado' | 'reintento'
+/**
+ * El camino de un paquete: `pendiente → preparado → en_transito → entregado`, con `no_entregado`
+ * como única salida lateral. Ver `siguienteEstado` en `reglas.core.js`.
+ */
+export type EstadoEnvio = 'pendiente' | 'preparado' | 'en_transito' | 'entregado' | 'no_entregado'
+
+/**
+ * Los dos que se fueron el 15-ago-2026, y que **siguen tipados**: prod y los previews comparten una
+ * base, así que entre el deploy y la migración que renombra hay filas escritas con estos valores.
+ * Una pantalla que no los contemple les da un botón muerto sobre un paquete real.
+ */
+export type EstadoLegado = 'despachado' | 'reintento'
+
+/** Lo que puede venir de la base hoy: el camino nuevo más lo que todavía no se renombró. */
+export type EstadoEnBase = EstadoEnvio | EstadoLegado
 
 /** Un paquete que sale a la calle un día, en un turno. */
 export type Envio = {
@@ -53,7 +67,8 @@ export type Envio = {
   /** El saldo del producto a cobrar en la puerta. Casi siempre 0: el pedido ya se pagó antes. */
   monto_pedido_a_cobrar: number | string
 
-  estado: EstadoEnvio
+  /** Lo que hay en la base: puede ser un estado legado hasta que corra la migración de cierre. */
+  estado: EstadoEnBase
   vendedor: string | null
   cadete: string | null
   /** La orden de TN congelada al armar el reparto. Ver el encabezado de la migración. */

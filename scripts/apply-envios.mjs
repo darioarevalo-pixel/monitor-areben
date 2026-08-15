@@ -51,8 +51,9 @@ const archivos = [
   'sql/migrate-envios-pendientes.sql',
   'sql/migrate-envios-cuenta.sql',
   'sql/migrate-envios-plata.sql',
+  'sql/migrate-envios-estados.sql',
 ]
-if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql')
+if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 
 const sql = archivos.map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
@@ -141,6 +142,16 @@ try {
     ? (await client.query('select count(*)::int as n from envios_reparto where pago_cadete is not null')).rows[0].n
     : 0
 
+  // Los estados que hay de verdad. Se imprimen SIEMPRE y no sólo cuando hay legados: es el número
+  // que hay que mirar antes de estrechar el check, y pedirlo aparte es la forma de no mirarlo.
+  const est = await client.query('select estado, count(*)::int as n from envios_reparto group by 1 order by 2 desc')
+  const legados = est.rows.filter((r) => r.estado === 'despachado' || r.estado === 'reintento')
+  // 🔴 El caso ambiguo del renombrado: un `reintento` CON fecha puede ser un paquete ya reagendado
+  // (⇒ `pendiente`) o uno que volvió y nadie sacó del día (⇒ `no_entregado`). Se miran de a uno.
+  const reintentoConFecha = (
+    await client.query(`select count(*)::int as n from envios_reparto where estado = 'reintento' and fecha is not null`)
+  ).rows[0].n
+
   const estado = rls.rows
     .map((x) => `${x.relname}=${x.relrowsecurity ? 'RLS ✓' : 'RLS ✗ ABIERTA'}${x.anon_escribe ? ' ✗ anon ESCRIBE' : ''}`)
     .join(' · ')
@@ -158,6 +169,13 @@ try {
           : `⚠️ SIGUE y ${conTarifaPropia} filas la usan: son bonificados del modelo viejo, pasarlos a monto_envio + envio_bonificado ANTES de dropear`
     }`,
   )
+  console.log(`  estados: ${est.rows.map((r) => `${r.estado} ${r.n}`).join(' · ') || '(sin filas)'}`)
+  if (legados.length) {
+    console.log(
+      `  ⚠️ quedan ${legados.map((r) => `${r.estado} ${r.n}`).join(' · ')} — se renombran con --cerrar-tanda-a` +
+        (reintentoConFecha ? `; ${reintentoConFecha} reintento CON fecha: MIRALOS DE A UNO antes` : ''),
+    )
+  }
   if (rls.rows.some((x) => !x.relrowsecurity || x.anon_escribe) || !checkOk || !plataOk) process.exitCode = 1
 } catch (e) {
   await client.query('ROLLBACK').catch(() => {})

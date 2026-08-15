@@ -38,7 +38,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
-import { ESTADOS, TURNOS, validarEnvio } from '../lib/envios/reglas.core.js';
+// `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
+// un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
+import { conIntentoFallido, ESTADOS, FILTRO_BANDEJA, TURNOS, validarEnvio } from '../lib/envios/reglas.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: el reparto no es
@@ -152,16 +154,20 @@ export default async function handler(req, res) {
   try {
     // ── El día ────────────────────────────────────────────────────────────────
     if (req.method === 'GET') {
-      // ── La bandeja: los cotizados que todavía no tienen día ────────────────
+      // ── La bandeja: todo lo que falta coordinar ────────────────────────────
       //
-      // Va por su propia consulta y no colgada del día: `fecha is null` no matchea ningún día, así
-      // que la hoja del cadete no los ve nunca. Es lo que hace que "sin fecha" sea un estado y no
-      // una fila rota mezclada con las del turno, que es lo que rompía la planilla vieja.
+      // 🔑 **No es una bandeja de entrada, es la lista de trabajo.** Son los que todavía no tienen
+      // día **más los que volvieron sin entregar**: para las chicas es el mismo trabajo —hablar con
+      // la clienta y acordar cuándo— y separarlos dejaba al que volvió únicamente en la hoja de un
+      // día que ya pasó, o sea en una pantalla que nadie vuelve a abrir.
+      //
+      // El que volvió sigue teniendo fecha, así que aparece **en los dos lados**: en su día, para
+      // que ese día siga diciendo la verdad de lo que salió, y acá, para que alguien lo agarre.
       if (req.query.pendientes === '1') {
         const { data, error } = await supabase
           .from('envios_reparto')
           .select(CAMPOS)
-          .is('fecha', null)
+          .or(FILTRO_BANDEJA)
           .order('created_at');
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true, envios: data || [] });
@@ -287,6 +293,21 @@ export default async function handler(req, res) {
         if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta el día del reparto (YYYY-MM-DD).' });
         if (!TURNOS.includes(b.turno)) return res.status(400).json({ error: `El turno tiene que ser ${TURNOS.join(' o ')}.` });
         parche = { fecha: b.fecha, turno: b.turno };
+
+        // 🔑 **Reprogramar un envío que volvió deja rastro del intento.** Se lee la fila antes de
+        // escribir porque el paquete **se muda** al día nuevo: el día que falló deja de mostrarlo,
+        // y sin esta anotación «cuántas entregas fallan» vuelve a ser la pregunta que la planilla no
+        // pudo contestar en dos años. Y vuelve a `pendiente`: sale al día nuevo como cualquier otro,
+        // no ya pintado de rojo.
+        const { data: actual, error: eLeer } = await supabase
+          .from('envios_reparto')
+          .select('fecha, turno, estado, datos')
+          .eq('id', id)
+          .maybeSingle();
+        if (eLeer) throw new Error(eLeer.message);
+        if (actual && actual.estado === 'no_entregado') {
+          Object.assign(parche, conIntentoFallido(actual, { por: yo, at: new Date().toISOString() }));
+        }
       }
 
       const { data, error } = await supabase
