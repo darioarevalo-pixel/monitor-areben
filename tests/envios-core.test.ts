@@ -27,6 +27,9 @@ import {
   resumenDeTraida,
   rotuloDeDia,
   cuentaDelCadete,
+  CAMPOS,
+  CAMPOS_CUENTA,
+  cobroPendiente,
   envioNuevoAMano,
   netoDelEnvio,
   pagoDelEnvio,
@@ -68,6 +71,8 @@ const base: Envio = {
   envio_bonificado: false,
   monto_pedido_a_cobrar: 0,
   estado: 'pendiente',
+  // El default de la base y el de casi toda la tabla: "el cadete no dijo nada". No es `false`.
+  cobrado: null,
   vendedor: 'Karen',
   cadete: null,
   datos: {},
@@ -155,6 +160,24 @@ describe('los totales con los que se cierra el día', () => {
     const t = totalesDelDia(dia)
     expect(t.cobrado).toBe(0 + 3000 + 14300) // `a` ya estaba pago, `d` volvió, `e` no salió
     expect(t.cobrado).not.toBe(31300)
+  })
+
+  // 🔴 **El mismo corte que en la cuenta, y por el mismo motivo**: la hoja del día le dice al cadete
+  // cuánta plata tiene que traer, así que un envío que entregó sin cobrar no puede entrar ahí. El
+  // mutante —contarlo en `cobrado`— le pide $14.300 que no tiene en el bolsillo, y encima delante
+  // de él, que es cuando se discute.
+  it('🔴 lo entregado SIN COBRAR sale del total, pero su tarifa se paga igual', () => {
+    const conImpago = dia.map((e) => (e.id === 'c' ? { ...e, cobrado: false } : e))
+    const t = totalesDelDia(conImpago)
+    expect(t.cobrado).toBe(3000) // se fueron los 14.300 de `c`
+    expect(t.sinCobrar).toBe(14300)
+    expect(t.tarifas).toBe(3000 + 3000 + 4300) // ← `c` lo llevó igual
+    expect(t.debeTraer).toBe(3000 - 10300)
+    expect(t.cobrado).not.toBe(17300)
+  })
+
+  it('el que nadie tildó sigue contando como cobrado', () => {
+    expect(totalesDelDia(dia).sinCobrar).toBe(0)
   })
 
   // 🔴 **La cuenta entera en un caso.** Lo que tiene que traer no es lo que cobró: de eso se queda
@@ -338,6 +361,108 @@ describe('la cuenta corriente del cadete', () => {
     const c = cuentaDelCadete([], [cierre('2026-08-17', 0, 5000)])
     expect(c.dias).toHaveLength(1)
     expect(c.saldo).toBe(5000) // no repartió y se le dieron 5.000: ahora los tiene él
+  })
+
+  // ── Lo que entregó sin cobrar ──────────────────────────────────────────────
+  //
+  // 🔴 El defecto que cierra esta tanda: el cadete marcaba «No cobré» desde la puerta y la cuenta se
+  // la cobraba igual. La plata la debe la clienta, no él.
+
+  it('🔴 lo que entregó sin cobrar NO le suma deuda, pero la tarifa se le paga igual', () => {
+    // Entregó un pedido de $10.000 + envío de $3.000 y no le pagaron nada. Llevó el paquete, así que
+    // los $3.000 del reparto se los debemos igual. El mutante —contarlo en `cobrado`— da +10.000: el
+    // cadete queda debiendo diez mil pesos que nunca tuvo en la mano.
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, cobrado: false }]),
+      [cierre('2026-08-17', 0)],
+    )
+    expect(c.dias[0].cobrado).toBe(0)
+    expect(c.dias[0].sinCobrar).toBe(13000)
+    expect(c.dias[0].tarifas).toBe(3000) // ← llevó el paquete
+    expect(c.saldo).toBe(-3000) // le debemos su reparto
+    expect(c.saldo).not.toBe(10000)
+  })
+
+  // 🔴 `null` es "no dijo nada", que es el 100% de las filas anteriores al portal y todas las que se
+  // tildan desde la pantalla interna. El mutante —tratarlo como `false`— da vuelta la cuenta
+  // histórica entera de un día para el otro y hace aparecer una deuda de clientas que no existe.
+  it('🔴 el que nadie tildó sigue contando como cobrado', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]), [cierre('2026-08-17', 0)])
+    expect(c.dias[0].cobrado).toBe(3000)
+    expect(c.dias[0].sinCobrar).toBe(0)
+    expect(c.saldo).toBe(0)
+  })
+
+  it('lo que se cobró de verdad no aparece como pendiente', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: true }]), [cierre('2026-08-17', 0)])
+    expect(c.dias[0].sinCobrar).toBe(0)
+  })
+
+  // El total va aparte del saldo a propósito: son dos deudores distintos. Sumarlos daría un número
+  // que no le sirve a nadie —ni para hablar con el cadete ni para llamar a las clientas—.
+  it('el total sin cobrar suma todos los días y no toca el saldo', () => {
+    const envios = [
+      ...dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 5000, cobrado: false }]),
+      ...dia('2026-08-18', [{ monto_envio: 4300, cobrado: false }]),
+    ]
+    const c = cuentaDelCadete(envios, [])
+    expect(c.sinCobrar).toBe(12300)
+    expect(c.saldo).toBe(-7300) // sólo las dos tarifas, que se le deben igual
+  })
+
+  // 🔴 Un `no_entregado` con `cobrado: false` no es plata que falte cobrar: no hubo puerta. Si
+  // `cobroPendiente` no mirara el estado, cada entrega fallida inflaría el KPI de las clientas.
+  it('🔴 el que volvió sin entregar no es un cobro pendiente', () => {
+    const c = cuentaDelCadete(
+      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado', cobrado: false }]),
+      [],
+    )
+    expect(c.dias[0].sinCobrar).toBe(0)
+    expect(c.sinCobrar).toBe(0)
+  })
+})
+
+/**
+ * 🔴 **Una columna que no se pide llega `undefined` y no falla nada.**
+ *
+ * Es el modo de falla que dejó esta pantalla ciega: `cobrado` existía en la base, lo escribía el
+ * portal desde la calle, y no estaba en la lista de `select`. La pantalla lo leía como `undefined`
+ * —o sea, "no dijo nada"— y el «No cobré» del cadete no llegaba a ningún lado. Ningún test que mire
+ * sólo la lógica lo caza, porque la lógica está bien: lo que falta es el dato.
+ */
+describe('🔴 las columnas que el handler pide', () => {
+  it('la cuenta pide `cobrado`: sin eso no puede distinguir lo que no se cobró', () => {
+    expect(CAMPOS_CUENTA.split(',').map((c) => c.trim())).toContain('cobrado')
+  })
+
+  it('la hoja del día también', () => {
+    expect(CAMPOS.split(',').map((c) => c.trim())).toContain('cobrado')
+  })
+
+  // La cuenta pide TODOS los días desde el principio. El jsonb de la orden congelada ahí adentro es
+  // el histórico completo de Tienda Nube viajando al navegador para calcular cuatro sumas.
+  it('la cuenta NO pide `datos`, que es la orden entera', () => {
+    expect(CAMPOS_CUENTA.split(',').map((c) => c.trim())).not.toContain('datos')
+  })
+})
+
+describe('🔴 cobroPendiente — entregado y sin cobrar', () => {
+  it('entregado con `cobrado: false` es un cobro pendiente', () => {
+    expect(cobroPendiente(con({ estado: 'entregado', cobrado: false }))).toBe(true)
+  })
+
+  // Los tres que NO lo son, y cada uno por un motivo distinto.
+  it('`null` no es `false`: nadie dijo nada', () => {
+    expect(cobroPendiente(con({ estado: 'entregado', cobrado: null }))).toBe(false)
+  })
+
+  it('el que sí cobró, obviamente no', () => {
+    expect(cobroPendiente(con({ estado: 'entregado', cobrado: true }))).toBe(false)
+  })
+
+  it('el que todavía no salió tampoco: no hubo puerta', () => {
+    expect(cobroPendiente(con({ estado: 'pendiente', cobrado: false }))).toBe(false)
+    expect(cobroPendiente(con({ estado: 'no_entregado', cobrado: false }))).toBe(false)
   })
 })
 

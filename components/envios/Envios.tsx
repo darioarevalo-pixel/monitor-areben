@@ -31,6 +31,7 @@ import {
 } from '@/components/ui'
 import {
   aCobrar,
+  cobroPendiente,
   cpFueraDeZona,
   direccionCompleta,
   envioSaldado,
@@ -370,6 +371,14 @@ export function Envios() {
                           <div style={{ fontSize: 12, color: color.success }}>
                             envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'ya pago'}
                           </div>
+                        ) : null}
+                        {/* 🔴 **Lo que el cadete marcó desde la puerta, en la única columna donde
+                            significa algo.** Va en rojo y no como un dato más: es plata que no
+                            entró, y la acción que sigue —llamar a la clienta— la decide quien mira
+                            esta hoja. Antes esta pantalla era ciega a esto: el portal escribía
+                            `cobrado` y del otro lado no lo pedía nadie. */}
+                        {cobroPendiente(e) ? (
+                          <div style={{ fontSize: 12, color: color.danger, fontWeight: 600 }}>no cobró</div>
                         ) : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
@@ -1480,6 +1489,16 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
           sub={saldo === 0 ? undefined : saldo > 0 ? 'lo trae en la próxima rendición' : 'se lo descuenta de los próximos envíos'}
         />
         <KpiCard label="Días sin cerrar" value={String(cuenta.dias.filter((d) => !d.cerrado && d.entregados > 0).length)} />
+        {/* 🔑 **Aparece sólo cuando hay algo que reclamar**, y va aparte del saldo a propósito: es
+            plata que deben las clientas, no el cadete. Un KPI en cero al lado del saldo invitaría a
+            sumarlos, que es justo la confusión que este número vino a deshacer. */}
+        {cuenta.sinCobrar > 0 ? (
+          <KpiCard
+            label="Falta cobrarle a clientas"
+            value={formatMoney(cuenta.sinCobrar)}
+            sub="entregado sin cobrar: no lo debe el cadete"
+          />
+        ) : null}
       </div>
 
       {/* Del día más nuevo al más viejo: lo que se mira es lo último, y el acumulado ya viene
@@ -1511,7 +1530,14 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
               <Td>
                 {d.entregados} de {d.envios}
               </Td>
-              <Td>{formatMoney(d.cobrado)}</Td>
+              <Td>
+                {formatMoney(d.cobrado)}
+                {/* Debajo del cobrado y no en su propia columna: es la explicación de por qué ese
+                    número es más chico que los envíos del día. */}
+                {d.sinCobrar ? (
+                  <div style={{ fontSize: 12, color: color.danger }}>{formatMoney(d.sinCobrar)} sin cobrar</div>
+                ) : null}
+              </Td>
               <Td>{formatMoney(d.tarifas)}</Td>
               <Td>{formatMoney(d.debeTraer)}</Td>
               <Td>

@@ -42,7 +42,7 @@ import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
-import { conIntentoFallido, ESTADOS, FILTRO_BANDEJA, TURNOS, validarEnvio } from '../lib/envios/reglas.core.js';
+import { CAMPOS, CAMPOS_CUENTA, conIntentoFallido, ESTADOS, FILTRO_BANDEJA, TURNOS, validarEnvio } from '../lib/envios/reglas.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: el reparto no es
@@ -67,23 +67,7 @@ function puedeEnvios(perfil) {
   return marcasConAcceso(perfil, 'envios', ['bdi', 'zattia']).length > 0;
 }
 
-const CAMPOS =
-  'id, store, fecha, turno, origen, orden_numero, cliente, telefono, direccion, piso_depto, ' +
-  'localidad, cp, anotacion, monto_envio, envio_pagado, envio_bonificado, monto_pedido_a_cobrar, estado, ' +
-  'vendedor, cadete, datos, autor, created_at, updated_at';
-
 const CAMPOS_CIERRE = 'fecha, trajo, pagado_aparte, nota, cerrado_por, cerrado_en';
-
-/**
- * Lo que la cuenta del cadete necesita de cada envío, y nada más.
- *
- * ⚠️ **Sin `datos`, que es la orden de Tienda Nube congelada entera.** La cuenta pide todos los días
- * desde el principio —el acumulado de hoy es la suma de todo lo anterior—, así que traer el jsonb
- * sería mandar el histórico completo de las órdenes al navegador para calcular cuatro sumas.
- */
-const CAMPOS_CUENTA =
-  'id, store, fecha, turno, cliente, orden_numero, estado, monto_envio, envio_pagado, ' +
-  'envio_bonificado, monto_pedido_a_cobrar';
 
 const esFechaIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 

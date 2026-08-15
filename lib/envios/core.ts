@@ -10,7 +10,7 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
-import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, cobroPendiente, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
@@ -131,6 +131,7 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
 
   const fechas = [...porDia.keys()].sort()
   let acumulado = 0
+  let sinCobrarTotal = 0
   const dias: DiaDeCuenta[] = []
 
   for (const fecha of fechas) {
@@ -138,8 +139,15 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
     const entregados = delDia.filter((e) => e.estado === 'entregado')
     const cierre = cierres.find((c) => c.fecha === fecha) || null
 
-    const cobrado = entregados.reduce((s, e) => s + aCobrar(e), 0)
+    // 🔴 **Lo que entregó sin cobrar no se le reclama a él.** Antes toda entrega sumaba `aCobrar` a
+    // lo que tenía que traer, tildara lo que tildara en la puerta: el cadete quedaba debiendo plata
+    // que nunca tuvo en la mano, y como la pantalla interna ni siquiera pedía la columna, la
+    // diferencia se discutía de memoria. La tarifa sí se le paga igual —llevó el paquete—, así que
+    // sale de `cobrado` y **no** de `tarifas`.
+    const cobrado = entregados.filter((e) => !cobroPendiente(e)).reduce((s, e) => s + aCobrar(e), 0)
+    const sinCobrar = entregados.filter(cobroPendiente).reduce((s, e) => s + aCobrar(e), 0)
     const tarifas = entregados.reduce((s, e) => s + tarifaCadete(e), 0)
+    sinCobrarTotal += sinCobrar
     const trajo = cierre?.trajo == null ? null : num(cierre.trajo)
     const pagadoAparte = num(cierre?.pagado_aparte)
 
@@ -158,6 +166,7 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
       envios: delDia.length,
       entregados: entregados.length,
       cobrado,
+      sinCobrar,
       tarifas,
       debeTraer,
       trajo,
@@ -170,7 +179,7 @@ export function cuentaDelCadete(envios: Envio[], cierres: CierreDia[]): CuentaCa
     })
   }
 
-  return { dias, saldo: acumulado }
+  return { dias, saldo: acumulado, sinCobrar: sinCobrarTotal }
 }
 
 /**
@@ -190,6 +199,7 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
   let enviosPagos = 0
   let enviosBonificados = 0
   let cobrado = 0
+  let sinCobrar = 0
   let tarifas = 0
   let pendienteDeSalir = 0
   let noEntregados = 0
@@ -201,7 +211,10 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     if (e.envio_pagado) enviosPagos += num(e.monto_envio)
     if (e.envio_bonificado) enviosBonificados += num(e.monto_envio)
     if (e.estado === 'entregado') {
-      cobrado += aCobrar(e)
+      // La misma partición que en `cuentaDelCadete`, y por el mismo motivo: lo que entregó sin
+      // cobrar no es plata que él tenga que traer. La tarifa se le paga igual, llevó el paquete.
+      if (cobroPendiente(e)) sinCobrar += aCobrar(e)
+      else cobrado += aCobrar(e)
       tarifas += tarifaCadete(e)
     }
     if ((ESTADOS_EN_CASA as string[]).includes(e.estado)) pendienteDeSalir++
@@ -214,6 +227,7 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     enviosPagos,
     enviosBonificados,
     cobrado,
+    sinCobrar,
     tarifas,
     debeTraer,
     pendienteDeSalir,
@@ -572,6 +586,9 @@ export function proximoDiaDeReparto(desde: string): string {
  */
 export {
   aCobrar,
+  CAMPOS,
+  CAMPOS_CUENTA,
+  cobroPendiente,
   conIntentoFallido,
   envioSaldado,
   estaTodoPago,

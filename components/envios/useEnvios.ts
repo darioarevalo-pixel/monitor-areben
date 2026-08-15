@@ -188,7 +188,7 @@ export function useEnvios(): EstadoEnvios {
  * pantalla que se abre veinte veces por día para ver qué sale.
  */
 export function useCuentaCadete(activa: boolean) {
-  const [cuenta, setCuenta] = useState<CuentaCadete>({ dias: [], saldo: 0 })
+  const [cuenta, setCuenta] = useState<CuentaCadete>({ dias: [], saldo: 0, sinCobrar: 0 })
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
