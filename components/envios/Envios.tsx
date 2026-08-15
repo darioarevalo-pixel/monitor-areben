@@ -40,7 +40,8 @@ import {
   itemsDelPedido,
   linkWhatsapp,
   diaDeRepartoVecino,
-  nuevoIdEnvio,
+  envioNuevoAMano,
+  pagoDelEnvio,
   proximoDiaDeReparto,
   puedeIrAUnDia,
   rotuloDeDia,
@@ -55,6 +56,7 @@ import {
 } from '@/lib/envios/core'
 import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
+import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
 import { agendar, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
@@ -100,6 +102,9 @@ export function Envios() {
   const { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
+  // La marca del header. Es la que siembra el alta a mano: la bandeja filtra por marca, así que una
+  // fila creada con otra desaparece de la pantalla en cuanto se recarga.
+  const { marca: marcaActiva } = useSesion()
   const [trayendo, setTrayendo] = useState(false)
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
   // La caja es del día, así que esto vuelve a ser un booleano: hay una sola por cerrar.
@@ -160,16 +165,6 @@ export function Envios() {
     const lista = paraImprimir(delDia, marca)
     if (!lista.length) return toast.error(marca ? `No hay envíos de ${marca.toUpperCase()} para imprimir en este día.` : 'No hay envíos para imprimir en este día.')
     await imprimirTicketsCadete(lista)
-  }
-
-  /** El tilde de «ya lo pagó»: el cadete deja de cobrarlo en la puerta. */
-  async function tildarPagado(e: Envio) {
-    try {
-      await marcarPagado(e.id, !e.envio_pagado)
-      await recargar()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo marcar como pagado.')
-    }
   }
 
   /** Devolver un envío a la bandeja: la clienta pospuso y todavía no hay día nuevo. */
@@ -240,15 +235,28 @@ export function Envios() {
       {pestania === 'cuenta' ? (
         <CuentaDelCadete activa={pestania === 'cuenta'} />
       ) : pestania === 'pendientes' ? (
-        <Pendientes
-          envios={pendientes}
-          cargando={cargando}
-          onAgendar={setAgendando}
-          onEditar={setEditando}
-          onBorrar={borrar}
-          onRecargar={recargar}
-          onVerPedido={setViendoPedido}
-        />
+        <>
+          {/* 🔑 El botón va ACÁ y no adentro de `Pendientes`: ese componente se reemplaza entero por
+              el `EmptyState` cuando no hay nada, y la bandeja vacía es justo el caso que este botón
+              resuelve —la clienta que escribió antes de que exista un pedido en Tienda Nube—. */}
+          <Card>
+            <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva }))}>
+              Cargar uno a mano
+            </Button>
+            <span style={{ marginLeft: space[3], opacity: 0.7, fontSize: 13 }}>
+              Entra sin día: el día se le pone después, cuando la clienta lo confirma.
+            </span>
+          </Card>
+          <Pendientes
+            envios={pendientes}
+            cargando={cargando}
+            onAgendar={setAgendando}
+            onEditar={setEditando}
+            onBorrar={borrar}
+            onRecargar={recargar}
+            onVerPedido={setViendoPedido}
+          />
+        </>
       ) : (
       <>
       <Card>
@@ -260,21 +268,7 @@ export function Envios() {
           <Field label="Día">
             <SelectorDeDia fecha={fecha} onCambiar={setFecha} />
           </Field>
-          <Button
-            variant="outline"
-            onClick={() =>
-              setEditando({
-                id: nuevoIdEnvio(),
-                store: 'bdi',
-                fecha,
-                turno: (turnosDe(fecha)[0] as Turno) || 'tarde',
-                origen: 'manual',
-                estado: 'pendiente',
-                envio_pagado: false,
-                envio_bonificado: false,
-              })
-            }
-          >
+          <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva, fecha }))}>
             Cargar uno a mano
           </Button>
         </div>
@@ -379,11 +373,7 @@ export function Envios() {
                         ) : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
-                        <div>
-                          <Button size="sm" variant="ghost" onClick={() => void tildarPagado(e)}>
-                            {e.envio_pagado ? 'Impago' : 'Ya lo pagó'}
-                          </Button>
-                        </div>
+                        <PagoDelEnvio envio={e} onGuardado={recargar} conEstado={false} />
                       </Td>
                       <Td>
                         <EstadoDelEnvio envio={e} onCambiar={tildar} />
@@ -613,7 +603,7 @@ function Pendientes({
           <Th>Precio del envío</Th>
           <Th />
           {/* El tilde de cobrado va al final: es lo último que se decide, después de cotizar. */}
-          <Th>Cómo se cobra</Th>
+          <Th>Pago del envío</Th>
         </Tr>
       </THead>
       <TBody>
@@ -648,23 +638,8 @@ function Pendientes({
             <Td>
               {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
                   arriba de «PAGADO»— se leían como si una fuera del envío y la otra del pedido, y
-                  además se contradecían: un envío sin precio no puede estar pagado.
-                  Son tres respuestas y no dos: bonificado NO es lo mismo que pagado —uno es plata
-                  que entró y el otro plata que no entró nunca— aunque en la puerta se cobre igual. */}
-              {e.envio_pagado ? (
-                <StatusPill tone="success" label="PAGADO" />
-              ) : e.envio_bonificado ? (
-                <StatusPill tone="brand" label="BONIFICADO" />
-              ) : (
-                <span style={{ opacity: 0.75 }}>lo cobra el cadete</span>
-              )}
-              <div>
-                {/* Corto a propósito: la fila ya dice en qué estado está, así que el botón sólo
-                    tiene que decir hacia dónde lo mueve. «Marcar envío pagado» repetía la columna. */}
-                <Button size="sm" variant="ghost" onClick={() => void marcarPagado(e.id, !e.envio_pagado).then(onRecargar)}>
-                  {e.envio_pagado ? 'Impago' : 'Ya lo pagó'}
-                </Button>
-              </div>
+                  además se contradecían: un envío sin precio no puede estar pagado. */}
+              <PagoDelEnvio envio={e} onGuardado={onRecargar} />
             </Td>
           </Tr>
         ))}
@@ -1001,6 +976,49 @@ function ModalPedido({ envio, onCerrar }: { envio: Envio; onCerrar: () => void }
         </div>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * El pago del envío: en qué estado está y el botón que lo mueve.
+ *
+ * 🔑 **Un solo componente para la bandeja y para la hoja del día.** Antes eran dos copias del mismo
+ * par pastilla + botón, y se notaba: la de la bandeja llamaba a `marcarPagado(...).then(recargar)`
+ * **sin `catch`**, así que cuando el POST fallaba —la fila ya no existía, se cayó la red— no pasaba
+ * nada visible y el envío se seguía leyendo como impago.
+ *
+ * El estado y el texto del botón salen los dos de `pagoDelEnvio`. Ver ahí por qué.
+ *
+ * `conEstado` apaga la pastilla en la hoja del día: ahí la columna «Cobra» ya dice cuánto se pide en
+ * la puerta y la línea verde de abajo ya aclara si el envío está pago o bonificado. Repetirlo en una
+ * pastilla sería decir tres veces lo mismo en la misma celda; lo que falta ahí es sólo el botón.
+ */
+function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; onGuardado: () => Promise<void>; conEstado?: boolean }) {
+  const toast = useToast()
+  const [guardando, setGuardando] = useState(false)
+  const { tone, label, accion, siguiente } = pagoDelEnvio(envio)
+
+  async function alternar() {
+    setGuardando(true)
+    try {
+      await marcarPagado(envio.id, siguiente)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo cambiar el pago del envío.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <>
+      {conEstado ? <StatusPill tone={tone} label={label} /> : null}
+      <div>
+        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void alternar()}>
+          {accion}
+        </Button>
+      </div>
+    </>
   )
 }
 

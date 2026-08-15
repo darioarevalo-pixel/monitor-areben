@@ -12,7 +12,7 @@ import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
 import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida } from './tipos'
+import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -351,6 +351,27 @@ export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } 
 }
 
 /**
+ * El pago del envío, en **tres** estados: Pendiente · Pago · Bonificado.
+ *
+ * 🔑 **El label y el verbo salen de la misma función a propósito.** Son las dos mitades de una
+ * decisión —dónde está la fila y hacia dónde la mueve el botón— y separarlas es la forma de que un
+ * día el botón diga una cosa y haga otra. Por eso devuelve también `siguiente`, que es literalmente
+ * lo que se le pasa a `marcarPagado`.
+ *
+ * 🔴 **Bonificado no es Pago.** Se cobra igual en la puerta —nada—, pero uno es plata que entró y el
+ * otro plata que no entró nunca: colapsarlos en un booleano hace que la columna diga que cobramos un
+ * envío que regalamos. Se guardan en dos tildes excluyentes y acá se leen como dos estados.
+ *
+ * El pendiente es `warning` y no un texto gris: «lo cobra el cadete» describía lo normal en vez de
+ * nombrar el estado, así que nada distinguía la fila que falta cobrar de la que ya está resuelta.
+ */
+export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; accion: string; siguiente: boolean } {
+  if (e.envio_pagado) return { tone: 'success', label: 'Pago', accion: 'Marcar como pendiente', siguiente: false }
+  if (e.envio_bonificado) return { tone: 'brand', label: 'Bonificado', accion: 'Marcar como pago', siguiente: true }
+  return { tone: 'warning', label: 'Pendiente', accion: 'Marcar como pago', siguiente: true }
+}
+
+/**
  * Qué tickets se imprimen: los que **todavía van a salir**, opcionalmente de una sola marca.
  *
  * 🔑 **No reimprime lo cerrado.** Un ticket de un entregado en la pila manda al cadete a una puerta
@@ -380,6 +401,36 @@ export function ordenarParaPreparar(envios: Envio[]): Envio[] {
 /** Id nuevo, generado en el cliente para pintar la fila sin esperar al servidor. */
 export function nuevoIdEnvio(): string {
   return `en${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * La semilla de un envío cargado a mano, con o sin día.
+ *
+ * 🔑 **Sin día es un estado legítimo, no un formulario a medio llenar.** El caso es la clienta que
+ * escribe por WhatsApp antes de que haya fecha: la bandeja «Sin fecha» existe justamente para eso
+ * con lo que llega de Tienda Nube, pero el alta a mano seguía sembrando el día abierto y obligaba a
+ * inventar una fecha —lo mismo que la bandeja vino a evitar—.
+ *
+ * 🔑 **El turno lo pone esta función, no el llamador.** `fecha` y `turno` van los dos o ninguno (el
+ * check `envios_fecha_turno_juntos` lo hace cumplir en la base, y era el 53,8% de las filas rotas de
+ * la planilla vieja). Que el invariante viva en un solo lugar es lo que evita que un llamador nuevo
+ * mande fecha sola y se entere recién con la clienta al teléfono.
+ *
+ * La marca es la del header y no una fija: la bandeja filtra por marca, así que una fila creada con
+ * `bdi` puesto parado en Zattia **desaparece de la pantalla al recargar**.
+ */
+export function envioNuevoAMano(opts: { marca?: Marca | null; fecha?: string | null } = {}): Partial<Envio> {
+  const fecha = opts.fecha || null
+  return {
+    id: nuevoIdEnvio(),
+    store: opts.marca || 'bdi',
+    fecha,
+    turno: fecha ? ((turnosDe(fecha)[0] as Turno) || 'tarde') : null,
+    origen: 'manual',
+    estado: 'pendiente',
+    envio_pagado: false,
+    envio_bonificado: false,
+  }
 }
 
 /**

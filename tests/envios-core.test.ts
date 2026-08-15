@@ -27,7 +27,9 @@ import {
   resumenDeTraida,
   rotuloDeDia,
   cuentaDelCadete,
+  envioNuevoAMano,
   netoDelEnvio,
+  pagoDelEnvio,
   tarifaCadete,
   totalesDelDia,
   turnosDe,
@@ -1101,5 +1103,80 @@ describe('🔴 el cartel de traer no puede ser verde con media hoja', () => {
     const r = resumenDeTraida(traida({ sinDireccion: 2 }))
     expect(r.texto).toContain('2 sin dirección')
     expect(r.tono).toBe('ok')
+  })
+})
+
+describe('🔴 el pago del envío: son tres estados, no dos', () => {
+  it('🔴 bonificado NO es pago', () => {
+    // El mutante: colapsar los dos tildes en un booleano («¿se cobra en la puerta?»). En la puerta
+    // se cobra igual —nada—, pero uno es plata que entró y el otro plata que no entró nunca: con
+    // el booleano la columna dice que cobramos un envío que regalamos, y «cuánto regalamos en
+    // envíos» deja de tener respuesta.
+    const p = pagoDelEnvio(con({ envio_bonificado: true }))
+    expect(p.label).toBe('Bonificado')
+    expect(p.tone).toBe('brand')
+  })
+
+  it('sin ningún tilde está Pendiente, y se ve como un pendiente', () => {
+    // El naranja es del kit (`warning`), no un color inventado. Antes era un texto gris que
+    // describía lo normal —«lo cobra el cadete»— en vez de nombrar el estado, así que nada
+    // distinguía la fila que falta cobrar de la que ya está resuelta.
+    const p = pagoDelEnvio(con({ envio_pagado: false, envio_bonificado: false }))
+    expect(p.label).toBe('Pendiente')
+    expect(p.tone).toBe('warning')
+  })
+
+  it('🔴 el botón dice a dónde LO MUEVE, no dónde está', () => {
+    // El mutante: el toggle invertido (`siguiente: true` estando pago). El botón queda muerto
+    // sobre una fila ya paga —se aprieta y no pasa nada— y nadie entiende por qué.
+    const pago = pagoDelEnvio(con({ envio_pagado: true }))
+    expect(pago.label).toBe('Pago')
+    expect(pago.accion).toBe('Marcar como pendiente')
+    expect(pago.siguiente).toBe(false)
+
+    const pendiente = pagoDelEnvio(con({ envio_pagado: false }))
+    expect(pendiente.accion).toBe('Marcar como pago')
+    expect(pendiente.siguiente).toBe(true)
+  })
+
+  it('desde bonificado el botón ofrece cobrarlo, no bonificarlo de nuevo', () => {
+    const p = pagoDelEnvio(con({ envio_bonificado: true }))
+    expect(p.accion).toBe('Marcar como pago')
+    expect(p.siguiente).toBe(true)
+  })
+})
+
+describe('🔴 el alta a mano entra con día o sin día', () => {
+  it('🔴 desde la bandeja nace SIN día y SIN turno', () => {
+    // El mutante: sembrar el día abierto igual que antes. Ése es el día inventado que la bandeja
+    // «Sin fecha» existe para evitar, y el envío aparecería en la hoja de un día que nadie acordó
+    // con la clienta.
+    const e = envioNuevoAMano({ marca: 'zattia' })
+    expect(e.fecha).toBeNull()
+    expect(e.turno).toBeNull()
+    expect(e.store).toBe('zattia')
+    expect(e.origen).toBe('manual')
+  })
+
+  it('🔴 y el servidor lo acepta tal como nace', () => {
+    // Ata la semilla a la validación real. El mutante es agregarle a la semilla un campo que
+    // `validarEnvio` rebota: sin este test, el error aparecería recién al apretar Guardar, con la
+    // clienta al teléfono.
+    expect(validarEnvio({ ...envioNuevoAMano({ marca: 'bdi' }), direccion: 'San Juan 100' })).toBeNull()
+  })
+
+  it('🔴 con día, el turno lo pone la función, nunca queda vacío', () => {
+    // El mutante: dejar el turno en null cuando hay fecha. Lo rechazan `validarEnvio` y el check
+    // `envios_fecha_turno_juntos` de la base — era el 53,8% de las filas rotas de la planilla.
+    const mar = envioNuevoAMano({ marca: 'bdi', fecha: '2026-08-18' }) // martes: mañana y tarde
+    expect(mar.fecha).toBe('2026-08-18')
+    expect(mar.turno).toBe('mañana')
+    expect(validarEnvio({ ...mar, direccion: 'San Juan 100' })).toBeNull()
+  })
+
+  it('un día sin reparto igual sale con turno: el envío especial tiene que poder salir', () => {
+    const sab = envioNuevoAMano({ marca: 'bdi', fecha: '2026-08-22' }) // sábado: no hay grilla
+    expect(sab.turno).toBe('tarde')
+    expect(validarEnvio({ ...sab, direccion: 'San Juan 100' })).toBeNull()
   })
 })
