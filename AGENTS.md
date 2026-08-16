@@ -109,6 +109,10 @@ Tienen ficha:
 - Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
   `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
   mostrador, que vive en Cupones y entrega canjes creando una venta en GN).
+- Tienda Nube → **leer `docs/secciones/tncat.md`** antes de tocar `components/tncat/`,
+  `lib/tncat/`, `lib/tn-audit.ts`, `api/_tn-ignorados.js` o `api/_tn-fotos-verificadas.js`.
+  ⛔ **Lo que escribe la tienda vive en OTRO repo** (`bdi-catalogo`), ningún test lo cubre, y un
+  POST con una acción que ese deploy no conoce **recategoriza la tienda entera**.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está

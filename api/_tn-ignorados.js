@@ -5,7 +5,7 @@
 //   POST { recurso:'ignorados', store, tn_id, nombre?, motivo?, usuario? } → ignora (upsert)
 //   POST { recurso:'ignorados', store, tn_id, action:'quitar' }            → lo vuelve a mostrar
 //
-// Es un archivo `_`: NO es una ruta. Entra por api/tienda.js (ver el comentario de ahí: el
+// Es un archivo `_`: NO es una ruta. Entra por api/datos.js (ver el comentario de ahí: el
 // plan Hobby de Vercel admite 12 funciones por deploy y cada archivo de ruta cuenta una).
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';

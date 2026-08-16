@@ -1,5 +1,5 @@
 /**
- * Productos de la tienda marcados como "no revisar" (`/api/tienda?recurso=ignorados`).
+ * Productos de la tienda marcados como "no revisar" (`/api/datos?recurso=ignorados`).
  *
  * Son los que no van a tener foto nunca porque no son de la tienda —mayoristas, pruebas—.
  * Sin poder sacarlos, la revisión de fotos nunca llega a cero y deja de servir como

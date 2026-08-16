@@ -1,8 +1,9 @@
 /**
  * Extracción de nombres del Excel para "Asignar categoría" (card 4). Port de la
  * parte pura de tncatAsigArchivo (index.html:7991-7993): saltea el encabezado
- * (fila 1), toma la columna A, limpia y deduplica. El parseo del XLSX en sí (lib
- * `xlsx`, ya dependencia) vive en el componente.
+ * (fila 1), toma la columna A, limpia y deduplica. El parseo del XLSX en sí lo hace
+ * `leerXlsx` de `lib/excel.ts` —la única puerta al `.xlsx` del monitor— y se llama
+ * desde el componente.
  */
 
 /** rows = array de filas (cada fila un array). Devuelve los nombres únicos de la columna A, sin el encabezado. */

@@ -134,9 +134,21 @@ describe('cada ficha tiene su puntero, y cada puntero su ficha', () => {
     expect(rotos, `punteros a archivos que no existen: ${rotos.join(' · ')}`).toEqual([])
   })
 
-  // El índice es una orden, no un dato: si deja de estar redactado como orden, deja de servir.
-  it('el índice sigue mandando leerlas', () => {
-    expect(indice).toMatch(/leer/i)
+  /**
+   * El índice es una orden, no un dato: si deja de estar redactado como orden, deja de servir.
+   *
+   * 🔴 **Se exige por puntero, no una vez para todo el bloque.** Mutado el 16-ago-2026: con un
+   * `/leer/i` sobre el índice entero, escribir el puntero nuevo como «ver `docs/secciones/x.md`»
+   * pasaba en VERDE — la palabra seguía apareciendo en los otros cuatro y en el encabezado. El
+   * bug que este test existe para cazar es exactamente ese, y entra de a una ficha por vez.
+   */
+  it('cada puntero está redactado como orden', () => {
+    // Una línea de puntero es la que nombra una ficha; el bullet puede seguir en la línea de abajo.
+    const flojos = indice
+      .split(/\n(?=- )/)
+      .filter((b) => /docs\/secciones\/[\w.-]+\.md/.test(b) && !/leer/i.test(b))
+      .map((b) => b.match(/docs\/secciones\/([\w.-]+\.md)/)?.[1] ?? b.slice(0, 40))
+    expect(flojos, `punteros que no mandan leer: ${flojos.join(' · ')}`).toEqual([])
   })
 })
 
