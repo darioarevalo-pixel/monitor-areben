@@ -49,7 +49,14 @@ la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan c
 
 **Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`)
 
-**Sin permiso (todos las ven)** — `inicio` · `usuarios` · `novedades` · `manuales` · `agenda`
+**Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda`
+
+Son las de `KEYS_PARA_TODOS` (`lib/permisos.core.js`), que es lo que consulta `puedeVer`.
+⚠️ **`usuarios` NO entra**, aunque esté en `KEYS_SIN_PERMISO` de `lib/nav.ts`: es de **admin**. Esta
+línea lo listaba hasta el 16-ago-2026, arrastrado de `AGENTS.md`; medido corriendo `puedeVer` sobre
+las 49 secciones, un perfil sin permisos ni función ve exactamente esas cuatro. **No tener área y
+verse sin permiso son dos cosas distintas**: `usuarios` no tiene área (por eso ninguna función se lo
+da) y además es admin-only.
 
 El menú y los permisos se definen a mano en `lib/nav.datos.ts`: `PERM_CAT` (qué secciones existen,
 con su área y sus sub-permisos) y `NAV_CATS` (cómo se agrupan en el sidebar).

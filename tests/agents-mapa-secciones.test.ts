@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { SECCION_AREA } from '@/lib/permisos'
+import { SECCION_AREA, puedeVer, type Perfil } from '@/lib/permisos'
 
 /**
  * El mapa de secciones de `AGENTS.md`, amarrado al código.
@@ -95,6 +95,38 @@ describe('el mapa de secciones de AGENTS.md dice la verdad', () => {
     const m = mapa.match(/^(\d+) secciones\./m)
     expect(m, 'el mapa dejó de declarar cuántas secciones son').not.toBeNull()
     expect(Number(m![1])).toBe(DEL_CODIGO.length)
+  })
+})
+
+/**
+ * La línea de "sin permiso" del mapa, atada a la decisión.
+ *
+ * 🔴 **Decía `usuarios` y era falso**, arrastrado de `AGENTS.md` hasta el 16-ago-2026. Confunde dos
+ * cosas que se parecen y no son la misma: `usuarios` no tiene **área** (por eso ninguna función se
+ * lo da, y por eso figura en `KEYS_SIN_PERMISO` de `lib/nav.ts`, que sólo dice qué rutas existen),
+ * pero es de **admin**. El comentario de `KEYS_PARA_TODOS` avisa explícito que no entra; la línea
+ * del mapa decía lo contrario, y el mapa es lo que se lee para ubicarse.
+ *
+ * 🔑 **Se ejerce `puedeVer` sobre las 49 secciones, no se lee `KEYS_PARA_TODOS`.** El antecedente
+ * está en el comentario de esa misma constante: `KEYS_SIN_PERMISO` estaba escrita, prolija, y
+ * **`puedeVer` no la consultaba nunca** — la afirmación estaba escrita, no ejecutada. Comparar el
+ * doc contra la constante repetiría el error; comparar contra lo que la decisión **contesta** caza
+ * además el día que cambie la precedencia y la constante quede igual.
+ */
+describe('el mapa dice la verdad sobre lo que se ve sin permiso', () => {
+  /** Alguien del equipo sin nada: ni admin, ni permisos tildados, ni función. */
+  const PELADO: Perfil = { name: 'test', admin: false, cuenta: null, acceso: {}, funcion: [] }
+
+  const linea = mapa.split('\n').find((l) => l.startsWith('**Sin permiso'))
+
+  it('el mapa sigue teniendo la línea', () => {
+    expect(linea, 'se fue del mapa la línea de "Sin permiso"').toBeTruthy()
+  })
+
+  it('nombra exactamente las que ve un perfil sin permisos', () => {
+    const nombradas = [...(linea ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1]).sort()
+    const queVe = DEL_CODIGO.filter((k) => puedeVer(PELADO, 'bdi', k)).sort()
+    expect(nombradas, `el mapa dice ${nombradas.join(' · ')} y se ven ${queVe.join(' · ')}`).toEqual(queVe)
   })
 })
 
