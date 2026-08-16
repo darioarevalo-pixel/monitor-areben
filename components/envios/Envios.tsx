@@ -705,11 +705,12 @@ function SugerirPrecios({
       const lista = await sugerirPrecios(sinPrecio.slice(0, 100).map((e) => e.id))
       onSugerir(new Map(lista.map((s) => [s.id, s])))
       const conPrecio = lista.filter((s) => s.estado === 'sugerido').length
+      const aMano = lista.length - conPrecio
       // Se dicen las dos cuentas: "propuse 7" sin el resto deja creer que las otras cinco no existen.
       toast.ok(
         conPrecio
-          ? `${conPrecio} con precio propuesto${lista.length > conPrecio ? ` · ${lista.length - conPrecio} se tipean a mano` : ''}.`
-          : 'Ninguna se pudo ubicar: se tipean a mano, y al lado de cada una dice por qué.',
+          ? `${conPrecio} con precio propuesto${aMano ? ` · ${aMano} se tipea${aMano > 1 ? 'n' : ''} a mano` : ''}.`
+          : `Ninguna se pudo ubicar: se tipea${lista.length > 1 ? 'n' : ''} a mano, y al lado de cada una dice por qué.`,
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudieron sugerir los precios.')
