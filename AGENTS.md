@@ -91,18 +91,27 @@ secciones joinean contra el producto. Los cachés de IndexedDB anteriores al cam
 
 ## Mapa de secciones
 
-46 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+49 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
+**⛔ Antes de tocar una sección que tenga ficha, leerla — no es opcional y no se carga sola.** Un
+`CLAUDE.md` adentro de `components/<seccion>/` **se midió el 15-ago-2026 y NO se inyecta** al leer
+archivos de esa carpeta: si nadie abre la ficha, no entra. Tienen ficha:
+
+- `envios` → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`, `lib/envios/`,
+  `api/_envios.js` o `api/_cadete.js`.
+
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
-`colores` (cada una en `components/<key>/`) · `comisiones` · `verif-ventas` (con `lib/` propio)
+`colores` (cada una en `components/<key>/`) · `comisiones` · `verif-ventas` · `liquidacion`
+(con `lib/` propio)
 
 **Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
 `disenos`
 
 **Clientes** — `clientes → components/crm + lib/crm`
 
-**Local** — `atencion → components/atencion + lib/atencion` ·
+**Local** — `envios → components/envios + lib/envios` (+ portal `/cadete/<token>`) ·
+`atencion → components/atencion + lib/atencion` ·
 `conteo → components/conteo-local-bdi` · `conteo-estandar-zattia` y
 `conteo-estandar-stunned → components/conteo-estandar` · `cupones` · `etiquetas` · `exhib` ·
 `ubicaciones` · `solicitudes` · `solicitudes-internas` · `postventa-local → components/postventa` ·
@@ -121,7 +130,9 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
 `scripts/novedad.mjs` y se publican a mano; el manual de una sección lo muestra `SeccionHeader`.
 
-**Sin permiso (todos las ven)** — `inicio` · `usuarios` · `novedades` · `manuales`
+**Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`)
+
+**Sin permiso (todos las ven)** — `inicio` · `usuarios` · `novedades` · `manuales` · `agenda`
 
 El menú y los permisos se definen a mano en `lib/nav.datos.ts`: `PERM_CAT` (qué secciones existen,
 con su área y sus sub-permisos) y `NAV_CATS` (cómo se agrupan en el sidebar).
