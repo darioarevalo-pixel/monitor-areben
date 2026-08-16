@@ -109,6 +109,10 @@ Tienen ficha:
 - Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
   `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
   mostrador, que vive en Cupones y entrega canjes creando una venta en GN).
+- Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
+  `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
+  Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
+  medido y qué nunca se ejerció están ahí, no en el código.
 
 ## Mapa de secciones
 
@@ -133,8 +137,11 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa`
 
-**Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos` · `meta-ads` ·
-`canjes` · `gen-talles` · `calendario`
+**Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos` · `canjes` ·
+`gen-talles` · `calendario`
+
+**Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, once vistas por el 2º
+tramo de la URL; el perfil de Marketing la ve porque tiene las dos áreas
 
 **Administración** — `caducados` · `postventa` · `reposicion`
 

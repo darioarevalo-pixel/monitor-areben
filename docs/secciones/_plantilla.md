@@ -14,10 +14,20 @@ Lo que va: lo que dijo la persona que usa la pantalla · lo que se midió en pro
 está hecho al revés de lo que parece · lo que ya se rompió · lo que falta.
 Lo que NO va: qué hace cada función (eso es el código) · el paso a paso de la UI.
 
-TECHO: ~80 líneas. No son ~30 — se midió: la sección más chica que probamos dio 72. Y está bien,
-porque la ficha se paga UNA vez al entrar a la sección, no en cada mensaje como `AGENTS.md`
-(~3.300 tokens × cada turno). Si una ficha se pasa de 80, es porque la sección es grande de
-verdad (Envíos son 122): que se pase, pero que sea a propósito.
+TECHO: no es un número, y eso está MEDIDO. Se probó ~30 y se corrigió a ~80, y con cuatro fichas
+escritas NINGUNA lo cumple. Lo que hay es una escala, y **no es lineal**: la ficha crece mucho más
+despacio que el código —de 1 línea cada 20 en la sección más chica a 1 cada 123 en la más grande—,
+con piso en ~70 y, por ahora, techo en ~270.
+
+  conteo-deposito   1.453 líneas de código →  72     canjes    17.849 → 164
+  envíos            6.736                  → 122     meta-ads  32.786 → 266
+
+Y está bien: la ficha se paga UNA vez al entrar a la sección, no en cada mensaje como `AGENTS.md`
+(~3.300 tokens × cada turno). Apretar la de conteo-deposito a 30 ahorraba 600 tokens una vez a
+cambio de tirar reglas que ajustan stock.
+
+⇒ El límite real es la REGLA DE ORO de arriba, no el largo: si una ficha se está yendo, casi siempre
+es porque repite algo que el código ya comenta. Buscá eso antes de recortar contenido.
 
 Borrá este comentario y los bloques que no apliquen.
 -->
