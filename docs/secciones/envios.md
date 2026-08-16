@@ -107,9 +107,34 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 
 - ▶️ **El precio por zona, tanda 3: geocodificar la dirección y proponer.** El motor y las zonas ya
   están (16 cargadas en prod, ejercidas a mano). Falta el punto: la orden de TN **no trae lat/lng**,
-  sólo `direccion`, `localidad` y `cp`. 🔴 **Arranca MIDIENDO**, no codeando: ~20 envíos ya cotizados
-  a mano contra lo que propone el motor. Si no coinciden no es un bug del código — es que el geocoder
-  no entiende las direcciones sucias de TN, y eso decide si esto sirve o queda como ayuda opcional.
+  sólo `direccion`, `localidad` y `cp`. ✅ **Medido el 16-ago-2026** sobre 200 direcciones reales de
+  `clientes` (script en `~/.claude/plans/envios-zonas-tanda3/`), y lo que salió cambia el diseño:
+  - **El geocoder es Georef** (`apis.datos.gob.ar`, del Estado, gratis y sin clave). 🔴 **Nominatim
+    quedó descartado en la primera prueba**: para `Rodriguez 1062, Rosario` devolvió una casa en
+    **Álvarez, a 60 km**, con cara de resultado bueno.
+  - 🔴 **HACE FALTA UN CANDADO ANTES DEL MOTOR: sin ALTURA (o esquina), no hay precio.** Georef
+    contesta igual sin número de puerta, con un punto cualquiera de la calle entera — y
+    `precioSugerido` no puede distinguirlo, porque un punto es un punto. Medido: de las **100
+    direcciones sin número, 66 salen con precio** si no se las frena, y **`"(2000)"` —una dirección
+    vacía, sólo el CP— sale $4.800** porque Georef la matchea a `PJE 2007`. Con el candado, 0.
+  - 🔑 **Y afinar el geocoder EMPEORA eso**: al agregar reintentos, los puntos precisos subieron de
+    92 a 95 y los precios inventados de 30 a 68. La escalera recupera sobre todo calles peladas.
+  - ✅ **Cuando la dirección trae calle + número —que es lo que manda TN— resuelve el 95%** (95 de
+    100; 93 con zona y precio, 2 `sin_zona` correctos, 3 que **se niegan** en vez de inventar). El
+    candado además atajó dos donde Georef devolvió **otra calle** (`Calle 1331 2983` → `CALLE 1335`).
+  - 🔑 **El string sucio hay que limpiarlo antes**: mandado tal cual resuelve 47,5%, cortado en
+    `calle + altura` sube a 82,5%. ⚠️ El corte **no puede ser «el primer número»**: en Rosario hay
+    calles que empiezan con número (9 de Julio, 27 de Febrero) y quedarían como calle «9».
+  - 🔑 **Georef es caprichoso y hay que probarle variantes**: `Av Pellegrini` resuelve y
+    `Av San Martin` no; `Moreno 1192` sí y `Mariano Moreno 1192` no; `Alem 1517` sí y
+    `Leandro N. Alem 1517` no ⇒ los nombres de pila se sacan **de a uno**, no sólo el primero.
+  - 🔴 **La `localidad` de TN rompe la consulta aunque la calle esté bien**: `Garay Bis 47` resuelve
+    sola y falla con `localidad = "Entre esmeralda y chacabuco"` (que es lo que vino en la orden).
+  - ▶️ **Lo que sigue faltando es el CONTRASTE**: que el punto sea preciso no prueba que la zona sea
+    la correcta, y **en prod hay 5 filas con precio a mano, dos de ellas de prueba** ⇒ los «~20
+    envíos ya cotizados» de la premisa **no existen**. Sale de la planilla vieja de OneDrive
+    («ENVIOS BDI», 877 filas con dirección + costo tipeado, precios viejos ⇒ compara barato/caro) o
+    de que Bruno cotice 20 a mano. **Sin eso no se puede decidir si esto propone bien.**
 - ▶️ **Lo que falta en el mapa externo** (lo dibuja Bruno, entra por «Importar»): estirar Zona 8
   (Belgrano al norte, Godoy y Moderno al sur, medidos con reverse-geocoding), dibujar como
   **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy
