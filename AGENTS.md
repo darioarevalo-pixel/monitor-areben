@@ -106,6 +106,9 @@ Tienen ficha:
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.
+- Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
+  `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
+  mostrador, que vive en Cupones y entrega canjes creando una venta en GN).
 
 ## Mapa de secciones
 
@@ -180,7 +183,7 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
   `/compact`, no `/clear`.
 - **Los archivos caros se leen por rango, no enteros.** Los peores:
   `components/sesionfotos/SesionFotos.tsx` (1.803 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
-  `api/_canjes.js` (1.700) · `tests/reclamos.test.ts` (1.192) · `lib/canjes/tipos.ts` (1.091) ·
+  `api/_canjes.js` (2.227) · `lib/canjes/tipos.ts` (1.261) · `tests/reclamos.test.ts` (1.192) ·
   `components/reclamos/ArmarCambio.tsx` y `components/conteo-estandar/ConteoEstandar.tsx` (870) ·
   `lib/nav.datos.ts` (750 — es data, casi nunca hace falta entero).
 
@@ -188,14 +191,6 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
 
 - **⛔ Reclamos y Cambios: frenado.** El flujo no convence; no construir ahí hasta que Bruno
   devuelva el mapa marcado.
-- **▶️ Canjes: entraron las tandas 1 (la propuesta), 2 (la vitrina) y 3 (la carga a TN)**, 2-ago-2026. La
-  vitrina es un **espejo curado de Tienda Nube**: se trae por categoría o buscando, se congela con
-  foto y precio (el portal no tiene sesión y no puede pedirle nada a TN), y la creadora elige desde
-  el link. Lo suyo entra como `origen:'persona'` + `estado:'propuesto'` y el equipo lo confirma. El
-  tope lo hacen cumplir los dos handlers con `api/_canjes-reglas.js`. **De TN sólo se lee: el
-  monitor no escribe en la tienda** — la orden se tipea a mano con el cupón de 100% de la config y
-  los botones de copiar campo por campo. Ya no está vacío: 20 personas y 3 canjes.
-  **Nada de esto se probó a mano todavía.**
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo
