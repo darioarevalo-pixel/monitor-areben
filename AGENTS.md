@@ -89,17 +89,19 @@ verde. Si el job queda en rojo, el Monitor lo muestra solo (`fetchUltimoSync` le
 producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
 secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.
 
+## Fichas de sección
+
+**⛔ Antes de tocar una sección que tenga ficha, leerla — no es opcional y no se carga sola.** Un
+`CLAUDE.md` adentro de la carpeta de la sección **se midió el 15-ago-2026 y NO se inyecta** al leer
+archivos de esa carpeta: si nadie abre la ficha, no entra. Tienen ficha:
+
+- Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
+  `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
+
 ## Mapa de secciones
 
 49 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
-
-**⛔ Antes de tocar una sección que tenga ficha, leerla — no es opcional y no se carga sola.** Un
-`CLAUDE.md` adentro de `components/<seccion>/` **se midió el 15-ago-2026 y NO se inyecta** al leer
-archivos de esa carpeta: si nadie abre la ficha, no entra. Tienen ficha:
-
-- `envios` → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`, `lib/envios/`,
-  `api/_envios.js` o `api/_cadete.js`.
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
 `colores` (cada una en `components/<key>/`) · `comisiones` · `verif-ventas` · `liquidacion`
