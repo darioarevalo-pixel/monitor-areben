@@ -89,9 +89,53 @@ describe('revisarParams — lo que NO puede pasar', () => {
     expect(revisarParams('inventario', 'select=sku,productos%28unit_cost%29')).toMatch(/paréntesis/)
   })
 
-  it('las cuatro tablas que costaron los escalones 1 a 3 no están en el catálogo', () => {
-    for (const t of ['ventas', 'clientes', 'productos', 'venta_detalles']) {
+  it('`clientes` no está en el catálogo, y ninguna tabla inventada tampoco', () => {
+    // El padrón salió del navegador entero en el escalón 2 y no vuelve ni por acá: su único lector
+    // es `api/_crm.js`, que además pide el permiso de la sección.
+    for (const t of ['clientes', 'usuarios', 'canjes', 'pg_catalog.pg_user']) {
       expect(revisarParams(t, 'select=id')).toMatch(/fuera del catálogo/)
+    }
+  })
+
+  /**
+   * 🔴 **El test del escalón 5.** `ventas`, `venta_detalles` y `productos` SÍ entran al catálogo
+   * ahora, pero sólo con las columnas que un lector del navegador pide hoy. Lo que costaron los
+   * escalones 1 y 3 —PII, costos, margen y precio unitario— tiene que seguir rebotando, y acá el
+   * rebote importa el doble: del otro lado de la puerta está la clave de SERVICIO, así que una
+   * columna de más no se lleva lo que la anon key podía ver, se lleva todo.
+   */
+  it('🔴 la PII, los costos y el margen rebotan aunque su tabla esté en el catálogo', () => {
+    const PROHIBIDAS: [string, string[]][] = [
+      // Escalón 1: la PII de `ventas`. Y `total_cost`/`profit`, que es el margen por venta.
+      ['ventas', ['client_email', 'client_phone', 'client_name', 'client_city', 'client_province', 'total_cost', 'profit']],
+      // Escalón 3, pieza A: la facturación renglón por renglón.
+      ['venta_detalles', ['unit_price', 'total']],
+      // Escalón 3, pieza B: el costo y el precio mayorista.
+      ['productos', ['unit_cost', 'wholesaler_price']],
+    ]
+    for (const [tabla, columnas] of PROHIBIDAS) {
+      for (const col of columnas) {
+        expect(revisarParams(tabla, `select=${col}`), `${tabla}.${col} en el select`).toMatch(/columna fuera de/)
+        // Y tampoco de oráculo: filtrar u ordenar por una columna cerrada la deja adivinar.
+        expect(revisarParams(tabla, `select=id&${col}=eq.1`), `${tabla}.${col} como filtro`).toMatch(/fuera de/)
+        expect(revisarParams(tabla, `select=id&order=${col}.desc`), `${tabla}.${col} en el order`).toMatch(/fuera de/)
+      }
+    }
+  })
+
+  it('🔴 la plata del CRM no entra por el pase: va por api/_crm.js, con permiso', () => {
+    // `total_price`, `client_id` y `sale_state` los lee sólo `lib/crm/datos.ts`. Si estuvieran en
+    // el CATALOGO, cualquier usuario con sesión se bajaría la facturación sin tener Clientes —
+    // justo el agujero que el escalón 2 cerró con el padrón.
+    for (const col of ['total_price', 'client_id', 'sale_state']) {
+      expect(revisarParams('ventas', `select=id,${col}`)).toMatch(/columna fuera de ventas/)
+    }
+  })
+
+  it('un `select=*` no existe para el pase: hay que nombrar las columnas', () => {
+    // PostgREST lo entiende y devolvería la fila entera con la clave de servicio.
+    for (const t of ['ventas', 'venta_detalles', 'productos', 'inventario']) {
+      expect(revisarParams(t, 'select=*')).toMatch(/columna rara|fuera de/)
     }
   })
 
@@ -117,7 +161,7 @@ describe('revisarParams — lo que NO puede pasar', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════
-describe('revisarParams — las once consultas reales del repo pasan', () => {
+describe('revisarParams — las consultas reales del repo pasan', () => {
   /**
    * 🔑 **Este es el test que evita romper una pantalla.** Cada línea es, palabra por palabra, lo
    * que hoy le pide al espejo un lector del navegador. Están acá copiadas de su archivo porque
@@ -143,6 +187,21 @@ describe('revisarParams — las once consultas reales del repo pasan', () => {
     ['lib/datos.ts (vmMes)', 'ventas_por_mes', 'select=mes,channel,cantidad_ventas,total_items,promedio_items_por_venta&order=mes'],
     ['lib/datos.ts (vmCat)', 'ventas_por_categoria_mes', 'select=mes,categoria,total_items&order=mes'],
     ['lib/datos.ts (vmFundas)', 'fundas_por_modelo_mes', 'select=mes,modelo,product_id,product_name,product_created_at,total_items&order=mes'],
+    // ── Escalón 5 ────────────────────────────────────────────────────────────────────────────
+    ['lib/datos.ts (ETL, ventas BDI)', 'ventas', 'select=id,date_sale,channel,channel_id&date_sale=gte.2025-01-01&order=id&limit=1000&offset=0'],
+    ['lib/datos.ts (ETL, ventas Zattia)', 'ventas', 'select=id,date_sale,channel&date_sale=gte.2025-01-01&order=id'],
+    ['lib/datos.ts (ETL, la sonda del mínimo id)', 'ventas', 'select=id&date_sale=gte.2025-01-01&order=id&limit=1'],
+    ['lib/datos.ts (ETL, detalles)', 'venta_detalles', 'select=sale_id,product_id,size_id,size,quantity&sale_id=gte.1000&order=sale_id'],
+    ['lib/datos.ts (ETL, productos BDI)', 'productos', 'select=id,name,category,sku,retailer_price,created_at,active&active=eq.1&order=id'],
+    ['lib/datos.ts (ETL, productos Zattia)', 'productos', 'select=id,name,category,sku,proveedor,retailer_price,created_at,active&active=eq.1&order=id'],
+    ['lib/datos.ts (colores manuales, sólo Zattia)', 'variante_color_manual', 'select=product_name,color'],
+    ['lib/reposicion/cliente.ts (BDI, un canal)', 'ventas', 'select=id&channel=ilike.*local*&date_sale=gte.2026-08-09&order=id'],
+    ['lib/reposicion/cliente.ts (Zattia, dos canales)', 'ventas', `select=id&or=(channel.ilike.*local*,channel.ilike.*tienda*)&date_sale=gte.2026-08-09&order=id`],
+    ['lib/reposicion/cliente.ts (detalles)', 'venta_detalles', 'select=sale_id,product_id,size_id,quantity&sale_id=gte.1000&order=sale_id'],
+    ['lib/ubicaciones/cliente.ts', 'productos', 'select=id&active=eq.1&order=id'],
+    ['components/ui/BuscarArticuloGN.tsx', 'productos', 'select=id,retailer_price&id=in.(101,102,103)'],
+    ['components/caducados/datosCaducados.ts (ventas)', 'ventas', 'select=id,date_sale,channel,channel_id&date_sale=gte.2024-08-16&order=id'],
+    ['components/caducados/datosCaducados.ts (detalles)', 'venta_detalles', 'select=sale_id,product_id&sale_id=gte.1000&order=sale_id'],
   ]
 
   for (const [quien, tabla, params] of REALES) {

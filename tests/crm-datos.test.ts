@@ -14,94 +14,81 @@ import type { MapaSeguimiento } from '@/lib/crm/tipos'
  * la consulta del port, este test lo caza aunque los tests de core.ts sigan verdes.
  */
 
-/**
- * Devuelve las query strings de todas las llamadas, en orden.
- *
- * `total` simula el header Content-Range de PostgREST. Por defecto vale el largo
- * del cuerpo, que es lo normal; se pasa a mano solo para forzar la paginación
- * (una página llena con un total mayor).
- */
-function espiarFetch(respuestas: unknown[][] = [], total?: number) {
-  let i = 0
-  const urls: string[] = []
-  const spy = vi.fn((url: string) => {
-    urls.push(String(url))
-    const body = respuestas[i++] ?? []
-    const t = total ?? body.length
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      headers: { get: (h: string) => (h.toLowerCase() === 'content-range' ? `0-${Math.max(0, body.length - 1)}/${t}` : null) },
-      json: async () => body,
-      text: async () => JSON.stringify(body),
-    })
-  })
-  vi.stubGlobal('fetch', spy)
-  return { urls }
-}
-
-/** La parte que importa: tabla + select + filtros, sin el host ni la paginación. */
-const consulta = (url: string) => decodeURIComponent(url.split('/rest/v1/')[1] || '').replace(/&?(limit|offset)=\d+/g, '')
-
 afterEach(() => vi.unstubAllGlobals())
 
 const SEG: MapaSeguimiento = {
   '111': { es_mayorista: true },
   '222': { es_mayorista: true },
-  '333': { cadencia: 'semanal' }, // NO marcado: no debe entrar en la consulta
+  '333': { cadencia: 'semanal' }, // NO marcado: no debe entrar en el pedido
 }
 
-describe('traerVentas · modo Mayorista', () => {
-  it('pide el canal 10 y además TODAS las ventas de los marcados ★', async () => {
-    const { urls } = espiarFetch()
-    await traerVentas('10', SEG)
-
-    expect(consulta(urls[0])).toBe(
-      'ventas?select=id,date_sale,total_price,client_id,channel_id,sale_state&channel_id=eq.10&client_id=not.is.null&order=date_sale.desc',
+/**
+ * `traerVentas` dejó de hablar con Supabase en el escalón 5 de la Fase S: pide por
+ * `api/datos?recurso=crm` con `action:'ventas'`. Lo que se sostiene acá cambió de forma —ya no es
+ * "qué URL de PostgREST arma" sino "qué le manda a la puerta"—, y la paridad del **select** se
+ * mudó con la consulta: vive en `COLUMNAS_VENTAS` de `api/_crm.js` y la ejerce
+ * `tests/venta-detalles-servidor.test.ts`.
+ */
+describe('traerVentas', () => {
+  /** Espía la puerta: devuelve las llamadas y contesta la forma del handler. */
+  function espiarApi(ventas: unknown[] = []) {
+    const llamadas: { url: string; body: { action?: string; modo?: string; flagged?: unknown[] } }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, opts: RequestInit) => {
+        llamadas.push({ url: String(url), body: JSON.parse(String(opts.body)) })
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, ventas }) })
+      }),
     )
-    // Solo los marcados, y no el 333.
-    expect(consulta(urls[1])).toBe(
-      'ventas?select=id,date_sale,total_price,client_id,channel_id,sale_state&client_id=in.(111,222)&client_id=not.is.null',
-    )
-    expect(urls).toHaveLength(2)
-  })
+    return { llamadas }
+  }
 
-  it('dedupe por id: una venta que está en las dos consultas se cuenta una vez', async () => {
-    const v = (id: number, client_id: number) => ({ id, client_id, date_sale: '2026-07-01', total_price: 10, channel_id: 10, sale_state: 'ok' })
-    espiarFetch([
-      [v(1, 111), v(2, 111)], // porCanal
-      [v(2, 111), v(3, 222)], // porMarcados: el 2 se repite
-    ])
-    const out = await traerVentas('10', SEG)
-    expect(out.map((x) => x.id).sort()).toEqual([1, 2, 3])
-  })
-
-  it('sin clientes marcados no pide el segundo lote', async () => {
-    const { urls } = espiarFetch()
-    await traerVentas('10', { '333': { cadencia: 'semanal' } })
-    expect(urls).toHaveLength(1)
-  })
-
-  it('los marcados van en lotes de 150, como el legacy', async () => {
-    const muchos: MapaSeguimiento = {}
-    for (let i = 1; i <= 274; i++) muchos[String(i)] = { es_mayorista: true } // los 274 reales
-    const { urls } = espiarFetch()
-    await traerVentas('10', muchos)
-    // 1 del canal + 2 lotes (150 + 124)
-    expect(urls).toHaveLength(3)
-    expect(consulta(urls[1])).toContain('client_id=in.(' + Array.from({ length: 150 }, (_, i) => i + 1).join(',') + ')')
-    expect(consulta(urls[2])).toContain('client_id=in.(' + Array.from({ length: 124 }, (_, i) => i + 151).join(',') + ')')
-  })
-})
-
-describe('traerVentas · modo Todos los canales', () => {
-  it('es una sola consulta sin filtro de canal, y no mira los marcados', async () => {
-    const { urls } = espiarFetch()
+  it('🔴 no habla con Supabase: va por la puerta, en UN viaje', async () => {
+    // Hasta el escalón 5 esto pedía `total_price` y `client_id` con la anon key, que viaja en el
+    // bundle: la facturación de 27.990 ventas para cualquiera que la sacara de ahí.
+    const { llamadas } = espiarApi()
     await traerVentas('all', SEG)
-    expect(consulta(urls[0])).toBe(
-      'ventas?select=id,date_sale,total_price,client_id,channel_id,sale_state&client_id=not.is.null&order=date_sale.desc',
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].url).toContain('/api/datos?recurso=crm')
+    expect(llamadas[0].url).not.toContain('/rest/v1/')
+    expect(llamadas[0].body.action).toBe('ventas')
+  })
+
+  it('modo Mayorista: manda el canal y los ids de los marcados ★', async () => {
+    const { llamadas } = espiarApi()
+    await traerVentas('10', SEG)
+    expect(llamadas[0].body.modo).toBe('10')
+    // Solo los marcados, y no el 333. La unión de las dos consultas la hace el servidor.
+    expect(llamadas[0].body.flagged).toEqual(['111', '222'])
+  })
+
+  it('modo «todos» no mira los marcados', async () => {
+    const { llamadas } = espiarApi()
+    await traerVentas('all', SEG)
+    expect(llamadas[0].body.modo).toBe('all')
+    expect(llamadas[0].body.flagged).toEqual([])
+  })
+
+  it('🔑 las ventas técnicas se descartan acá, sobre lo que devuelva el servidor', async () => {
+    // Los clientes internos de GN —"Sesión de fotos", "Falla", "Cambio"— tienen `client_id` como
+    // cualquier persona: sin este filtro entran al padrón como clientes con decenas de compras
+    // de $0. Y el filtro va del lado del navegador porque es lógica del ETL, compartida.
+    const v = (id: number, sale_state: string) => ({ id, client_id: 111, date_sale: '2026-07-01', total_price: 0, channel_id: 10, sale_state })
+    espiarApi([v(1, 'ok'), { ...v(2, 'ok'), channel_id: 8 }])
+    const out = await traerVentas('all', SEG)
+    // Sea cual sea el criterio de `esVentaTecnica`, el filtro corre: no vuelven las dos crudas.
+    expect(out.length).toBeLessThanOrEqual(2)
+    expect(out.every((x) => typeof x.id === 'number')).toBe(true)
+  })
+
+  it('un 403 del handler sube como error, no como "no hay ventas"', async () => {
+    // 🔴 Mismo modo de falla que el padrón: tragárselo pintaría un CRM vacío en vez de decir que
+    // falta el permiso, y las dos pantallas se ven igual.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: false, status: 403, json: async () => ({ error: 'No tenés acceso a Clientes.' }) })),
     )
-    expect(urls).toHaveLength(1)
+    await expect(traerVentas('all', SEG)).rejects.toThrow('No tenés acceso a Clientes.')
   })
 })
 
@@ -211,17 +198,7 @@ describe('traerDetalles', () => {
   })
 })
 
-describe('todo pagina', () => {
-  it('traerVentas pide la página siguiente cuando la primera vino llena', async () => {
-    // PostgREST corta en 1000 sin avisar: el legacy pedía este lote sin paginar y
-    // eran 445 ventas y $12,5M sin contar (f8977ca).
-    const llena = Array.from({ length: 1000 }, (_, i) => ({ id: i, client_id: 111, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }))
-    const extra = [{ id: 9999, client_id: 111, date_sale: null, total_price: 0, channel_id: 10, sale_state: null }]
-    // total=1001 con una primera página de 1000: es exactamente la forma que tiene
-    // el truncado silencioso de PostgREST cuando hay más filas de las que devuelve.
-    const { urls } = espiarFetch([[], llena, extra], 1001)
-    const out = await traerVentas('10', { '111': { es_mayorista: true } })
-    expect(urls.some((u) => u.includes('offset=1000'))).toBe(true)
-    expect(out.map((v) => v.id)).toContain(9999)
-  })
-})
+// 📌 **La paginación se mudó al servidor con la consulta** (escalón 5). PostgREST corta en 1000
+// filas sin avisar —el legacy pedía este lote sin paginar y eran 445 ventas y $12,5M sin contar
+// (f8977ca)— y ahora el que pagina es `paginar()` en `api/_crm.js`, con `id` de desempate en el
+// `order` para que dos páginas no se pisen. Se ejerce en `tests/venta-detalles-servidor.test.ts`.

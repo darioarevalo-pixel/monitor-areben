@@ -24,7 +24,7 @@ vi.mock('@supabase/supabase-js', () => ({
       const registro = { tabla, pasos: [] as string[] }
       consultas.push(registro)
       const q: Record<string, unknown> = {}
-      for (const m of ['select', 'in', 'gte', 'lte', 'order', 'eq', 'maybeSingle']) {
+      for (const m of ['select', 'in', 'gte', 'lte', 'order', 'eq', 'not', 'maybeSingle']) {
         q[m] = (...args: unknown[]) => {
           registro.pasos.push(`${m}(${args.map(String).join('|')})`)
           return q
@@ -120,6 +120,92 @@ describe('api/_crm.js — action:detalles', () => {
     expect(res.code).toBe(200)
     expect(res.body?.clientes).toHaveLength(1)
     expect(res.body?.detalles).toBeUndefined()
+  })
+})
+
+/**
+ * La puerta del escalón 5: las ventas del CRM salieron del navegador.
+ *
+ * 🔑 **Es la única de las tres columnas con plata que quedaba afuera.** `ventas` sí entró al pase
+ * de `api/_espejo.js` —que no pide permiso— pero sólo con `id, date_sale, channel, channel_id`.
+ * `total_price`, `client_id` y `sale_state` los lee sólo el CRM, así que van por acá, detrás del
+ * mismo gate que el padrón. Si estuvieran en el pase, cualquier usuario con sesión se bajaría la
+ * facturación entera sin tener Clientes tildado.
+ */
+describe('api/_crm.js — action:ventas', () => {
+  const CRM = '@/api/_crm.js'
+
+  it('🔴 sin el permiso de Clientes corta con 403, y no toca la base', async () => {
+    sesionDe(con('marketing'))
+    const res = await llamar(CRM, pedido({ action: 'ventas', modo: 'all' }))
+    expect(res.code).toBe(403)
+    expect(consultas).toHaveLength(0)
+  })
+
+  it('modo «todos»: una consulta, sin filtro de canal', async () => {
+    sesionDe(con('clientes'))
+    filasPorTabla.ventas = [{ id: 1, date_sale: '2026-07-01', total_price: 10, client_id: 111, channel_id: 10, sale_state: 'ok' }]
+    const res = await llamar(CRM, pedido({ action: 'ventas', modo: 'all' }))
+    expect(res.code).toBe(200)
+    expect(res.body?.ventas).toHaveLength(1)
+    expect(consultas).toHaveLength(1)
+    const pasos = consultas[0].pasos.join(' ')
+    expect(pasos).toContain('not(client_id|is|null)')
+    expect(pasos).not.toContain('eq(channel_id')
+    // El select trae la plata: es lo que esta puerta existe para servir con permiso.
+    expect(pasos).toContain('total_price')
+  })
+
+  it('modo Mayorista: el canal MÁS las ventas de los marcados ★, en lotes', async () => {
+    sesionDe(con('clientes'))
+    filasPorTabla.ventas = [{ id: 1, date_sale: '2026-07-01', total_price: 10, client_id: 111, channel_id: 10, sale_state: 'ok' }]
+    const res = await llamar(CRM, pedido({ action: 'ventas', modo: '10', flagged: [111, 222] }))
+    expect(res.code).toBe(200)
+    expect(consultas).toHaveLength(2)
+    expect(consultas[0].pasos.join(' ')).toContain('eq(channel_id|10)')
+    expect(consultas[1].pasos.join(' ')).toContain('in(client_id|111,222)')
+  })
+
+  it('sin marcados ★ no sale la segunda consulta', async () => {
+    sesionDe(con('clientes'))
+    await llamar(CRM, pedido({ action: 'ventas', modo: '10', flagged: [] }))
+    expect(consultas).toHaveLength(1)
+  })
+
+  it('dedupe por id: una venta que está en las dos consultas se cuenta una vez', async () => {
+    sesionDe(con('clientes'))
+    filasPorTabla.ventas = [{ id: 2, date_sale: '2026-07-01', total_price: 10, client_id: 111, channel_id: 10, sale_state: 'ok' }]
+    const res = await llamar(CRM, pedido({ action: 'ventas', modo: '10', flagged: [111] }))
+    // Las dos consultas devuelven la misma fila: tiene que salir una sola vez.
+    expect(res.body?.ventas).toHaveLength(1)
+  })
+
+  it('🔴 el `order` lleva `id` de desempate, o la paginación pierde filas', async () => {
+    // `date_sale` es una FECHA y hay decenas de ventas por día: paginar con `range` sobre un orden
+    // que empata no está definido — la misma fila puede volver dos veces y otra ninguna. Es la
+    // clase de pérdida que no da error, sólo un total más chico.
+    sesionDe(con('clientes'))
+    await llamar(CRM, pedido({ action: 'ventas', modo: 'all' }))
+    const pasos = consultas[0].pasos.join(' ')
+    expect(pasos).toContain('order(date_sale|[object Object])')
+    expect(pasos).toContain('order(id|[object Object])')
+  })
+
+  it('un modo que no es "all" ni un número se rechaza antes de la base', async () => {
+    // Se concatena en el filtro de PostgREST: cualquier otra cosa es una inyección en la query.
+    sesionDe(con('clientes'))
+    for (const modo of ['10; drop', 'all-1', '../ventas', '10.5']) {
+      consultas.length = 0
+      const res = await llamar(CRM, pedido({ action: 'ventas', modo }))
+      expect(res.code, `modo ${modo}`).toBe(400)
+      expect(consultas).toHaveLength(0)
+    }
+  })
+
+  it('los ★ que no son enteros positivos no llegan a la consulta', async () => {
+    sesionDe(con('clientes'))
+    await llamar(CRM, pedido({ action: 'ventas', modo: '10', flagged: [111, 'abc', -3, 0, 111] }))
+    expect(consultas[1].pasos.join(' ')).toContain('in(client_id|111)')
   })
 })
 

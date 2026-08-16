@@ -9,24 +9,17 @@
  *    oculto y no lo ve nadie.
  */
 
-import { CUENTAS } from '../cuentas'
-import { fetchAll } from '../supabase/rest'
 import { apiFetch } from '../api-fetch'
 import { esVentaTecnica } from '../etl/helpers'
 import type { FilaCliente, FilaDetalle, FilaVenta, MapaSeguimiento } from './tipos'
 
-/** Los select textuales del legacy (13200, 13814). Un campo de menos y el agregado computa otra cosa. */
-const SEL_VENTAS = 'select=id,date_sale,total_price,client_id,channel_id,sale_state'
-// 📌 Los de `clientes` (13250) y `venta_detalles` (13813) ya no viven acá: se mudaron a
-// `api/_crm.js` (COLUMNAS y COLUMNAS_DETALLE) cuando esas tablas salieron del navegador. Son los
-// mismos, palabra por palabra.
+// 📌 Los tres select textuales del legacy —`ventas` (13200), `clientes` (13250) y `venta_detalles`
+// (13813)— ya no viven acá: se mudaron a `api/_crm.js` (COLUMNAS_VENTAS, COLUMNAS y
+// COLUMNAS_DETALLE) cuando esas tablas salieron del navegador. Son los mismos, palabra por palabra.
 
-/**
- * El CRM es **bdi-only por esquema, no por permisos**: `ventas.channel_id` no
- * existe en la base de Zattia (por eso el ETL bifurca su select). Habilitar la key
- * para zattia da 400 de PostgREST, no una pantalla vacía.
- */
-const MARCA = 'bdi' as const
+// 📌 El CRM es **bdi-only por esquema, no por permisos**: `ventas.channel_id` no existe en la base
+// de Zattia (por eso el ETL bifurca su select), y `clientes` tampoco. La marca ya no se elige acá:
+// la fija el servidor (`MARCA` en `api/_crm.js`) y esta capa no tiene forma de pedir otra.
 
 /** El canal "Mayorista", hardcodeado en el <option> (1714) y en el chequeo de 13416. */
 export const CANAL_MAYORISTA = '10'
@@ -36,49 +29,41 @@ export type ModoCanal = typeof CANAL_MAYORISTA | 'all'
 /**
  * Trae las ventas del CRM según el modo del select.
  *
- * En modo Mayorista son DOS consultas unidas y deduplicadas por id: las del canal
- * 10, más **todas** las de los clientes marcados ★ (compren por donde compren).
+ * 🔑 **Ya no sale de Supabase: lo sirve el servidor** (escalón 5 de la Fase S). `ventas` es lo
+ * último que la anon key seguía leyendo, y de sus columnas las tres que importan —`total_price`,
+ * `client_id` y `sale_state`— las lee **sólo este archivo**. Por eso no van por el pase de
+ * `api/_espejo.js`, que no pide permiso: van por esta puerta, detrás del permiso de Clientes, como
+ * ya habían ido el padrón (escalón 2) y las líneas con plata (escalón 3).
+ *
+ * En modo Mayorista siguen siendo DOS consultas unidas y deduplicadas por id —las del canal 10,
+ * más **todas** las de los clientes marcados ★—, sólo que ahora las une el servidor.
  *
  * ⚠️ El orden importa y no es negociable: la marca `es_mayorista` sale de `crmSeg`,
  * o sea que el KV se lee ANTES que las ventas. Un `Promise.all` "de sentido común"
  * hace desaparecer a los clientes ★ en silencio.
  *
- * ⚠️ Todo con `fetchAll`, que pagina. PostgREST corta en 1000 filas sin avisar, y
- * el legacy pedía este lote con `sbFetch` (sin paginar): eran 445 ventas y $12,5M
- * sin contar. Arreglado en el legacy en f8977ca; acá nace bien de entrada.
+ * ⚠️ La paginación se fue con la mudanza: la hace el servidor, de a 1.000 y con `id` de desempate
+ * en el `order`. PostgREST corta en 1000 filas sin avisar, y el legacy pedía este lote con
+ * `sbFetch` (sin paginar): eran 445 ventas y $12,5M sin contar (f8977ca).
  *
- * ⚠️ Las ventas técnicas se descartan siempre. Los clientes internos de Gestión Nube —"Sesión de
- * fotos", "Falla", "Cambio"— tienen `client_id` como cualquier persona, así que sin este filtro
- * entraban al padrón como clientes con decenas de compras de $0.
+ * ⚠️ Las ventas técnicas se descartan **acá y no en el servidor**. Los clientes internos de Gestión
+ * Nube —"Sesión de fotos", "Falla", "Cambio"— tienen `client_id` como cualquier persona, así que
+ * sin este filtro entraban al padrón como clientes con decenas de compras de $0. Y va sobre la
+ * unión: `porMarcados` trae al cliente ★ sin filtro de canal, así que arrastra técnicas.
  */
 export async function traerVentas(modo: ModoCanal, crmSeg: MapaSeguimiento): Promise<FilaVenta[]> {
-  const cuenta = CUENTAS[MARCA]
+  const flagged =
+    modo === 'all' ? [] : Object.keys(crmSeg).filter((id) => crmSeg[id] && crmSeg[id].es_mayorista)
 
-  if (modo === 'all') {
-    const todas = await fetchAll<FilaVenta>(cuenta, 'ventas', `${SEL_VENTAS}&client_id=not.is.null&order=date_sale.desc`)
-    return todas.filter((v) => !esVentaTecnica(v))
-  }
-
-  const flagged = Object.keys(crmSeg).filter((id) => crmSeg[id] && crmSeg[id].es_mayorista)
-  const porCanal = await fetchAll<FilaVenta>(
-    cuenta,
-    'ventas',
-    `${SEL_VENTAS}&channel_id=eq.${modo}&client_id=not.is.null&order=date_sale.desc`,
-  )
-
-  let porMarcados: FilaVenta[] = []
-  for (let i = 0; i < flagged.length; i += 150) {
-    const lote = flagged.slice(i, i + 150)
-    porMarcados = porMarcados.concat(
-      await fetchAll<FilaVenta>(cuenta, 'ventas', `${SEL_VENTAS}&client_id=in.(${lote.join(',')})&client_id=not.is.null`),
-    )
-  }
-
-  const porId = new Map<number, FilaVenta>()
-  for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v)
-  // `porMarcados` trae TODAS las ventas del cliente ★, sin filtro de canal, así que puede arrastrar
-  // técnicas igual que el modo "todos". `porCanal` ya viene limpio por el eq.10.
-  return [...porId.values()].filter((v) => !esVentaTecnica(v))
+  const r = await apiFetch('/api/datos?recurso=crm', {
+    method: 'POST',
+    // ⚠️ Sin este header Vercel no parsea el body y el handler ve el modo vacío, sin error.
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'ventas', modo, flagged }),
+  })
+  const d = (await r.json().catch(() => ({}))) as { ok?: boolean; ventas?: FilaVenta[]; error?: string }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} pidiendo las ventas del CRM.`)
+  return (d.ventas || []).filter((v) => !esVentaTecnica(v))
 }
 
 /**

@@ -9,17 +9,24 @@ import type { Cuenta } from '@/lib/cuentas'
  * Se le cambió el motor el 13-ago-2026 —de "todas las páginas de una" a tandas de 6— y lo que hay
  * que fijar es que el cambio no se note en el resultado: **mismas filas, en el mismo orden**. Una
  * regresión de orden acá no rompe ninguna pantalla, corre los números.
+ *
+ * 📌 Desde el escalón 5 de la Fase S (16-ago-2026) esto ya no sale a Supabase: `pedir()` manda
+ * todo a `api/datos?recurso=espejo` con la consulta en el **body**. Lo que el doble imita cambió de
+ * forma —los `limit`/`offset` se leen del body y no de la URL— pero no de contenido: la puerta
+ * reenvía `params` tal cual, así que la paginación sigue siendo la misma.
  */
 
-/** Una base falsa de `n` filas que responde `limit`/`offset` como lo hace PostgREST. */
+/** La puerta falsa: `n` filas paginadas por `limit`/`offset`, como las reenvía `api/_espejo.js`. */
 function supabaseCon(n: number) {
   const llamadas: number[] = []
   let enVueloAhora = 0
   let picoEnVuelo = 0
 
-  const fetchFalso = vi.fn(async (url: string) => {
-    const limit = Number(new URL(url).searchParams.get('limit'))
-    const offset = Number(new URL(url).searchParams.get('offset'))
+  const fetchFalso = vi.fn(async (url: string, init?: { body?: string }) => {
+    const { params } = JSON.parse(String(init?.body || '{}')) as { params?: string }
+    const q = new URLSearchParams(params || '')
+    const limit = Number(q.get('limit'))
+    const offset = Number(q.get('offset'))
     llamadas.push(offset)
     enVueloAhora++
     picoEnVuelo = Math.max(picoEnVuelo, enVueloAhora)
@@ -104,9 +111,34 @@ describe('fetchAll: los params del llamador viajan intactos', () => {
   it('el filtro y el order se repiten en cada página', async () => {
     const { fetchFalso } = supabaseCon(2500)
     await fetchAll(CUENTA, 'ventas', 'select=id&date_sale=gte.2025-01-01&order=id')
-    for (const [url] of fetchFalso.mock.calls) {
-      expect(String(url)).toContain('date_sale=gte.2025-01-01')
-      expect(String(url)).toContain('order=id')
+    for (const [, init] of fetchFalso.mock.calls) {
+      const body = String((init as { body?: string } | undefined)?.body || '')
+      expect(body).toContain('date_sale=gte.2025-01-01')
+      expect(body).toContain('order=id')
     }
+  })
+})
+
+describe('el navegador ya no habla con Supabase (escalón 5)', () => {
+  it('🔴 todas las páginas salen por la puerta, ninguna por rest/v1', async () => {
+    // El objetivo entero del escalón: la anon key no se usa más. Si alguien devuelve el `fetch`
+    // directo, esto lo caza — y es lo único que lo caza, porque con la key todavía en el bundle
+    // el camino viejo "funciona" hasta que se corre el revoke.
+    const { fetchFalso } = supabaseCon(2500)
+    await fetchAll(CUENTA, 'ventas', 'select=id&order=id')
+    const urls = fetchFalso.mock.calls.map(([u]) => String(u))
+    expect(urls).toHaveLength(3)
+    expect(urls.every((u) => u.startsWith('/api/datos?recurso=espejo'))).toBe(true)
+    expect(urls.some((u) => u.includes('/rest/v1/'))).toBe(false)
+    expect(urls.some((u) => u.includes('x.supabase.co'))).toBe(false)
+  })
+
+  it('🔴 una tabla que no esté en POR_EL_SERVIDOR falla FUERTE, no vuelve vacía', async () => {
+    // Sin este guard, la tabla nueva se pediría con la anon key —que desde el revoke no tiene
+    // permiso sobre nada— y PostgREST contesta `[]` con 200: una pantalla vacía sin un error.
+    supabaseCon(10)
+    await expect(fetchAll(CUENTA, 'tabla_que_no_existe_todavia', 'select=id')).rejects.toThrow(
+      /POR_EL_SERVIDOR/,
+    )
   })
 })

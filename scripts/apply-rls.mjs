@@ -174,6 +174,20 @@ try {
     console.log(`    Corré:  node scripts/apply-espejo-servidor.mjs ${marca} --aplicar`)
   }
 
+  // Y el escalón 5, el último: `ventas`, `venta_detalles`, `productos` y `variante_color_manual`
+  // salieron enteras del navegador, así que acá la pregunta no es por una columna sino por
+  // CUALQUIERA — después del escalón 5 la respuesta correcta es "ninguna", en las cuatro.
+  const fac = await client.query(
+    `select coalesce(bool_or(has_column_privilege('anon', ('public.' || c.table_name)::regclass, c.column_name, 'SELECT')), false) as lee
+       from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = any (array['ventas','venta_detalles','productos','variante_color_manual'])`,
+  )
+  if (fac.rows[0]?.lee) {
+    console.log(`\n⚠️  anon volvió a leer ventas/venta_detalles/productos: este grant deshizo el escalón 5.`)
+    console.log(`    Corré:  node scripts/apply-facturacion-servidor.mjs ${marca} --aplicar`)
+  }
+
   const ok = despuesRls.length === 0 && despuesEsc.length === 0
   console.log(ok ? `\n✓ ${MARCA} cerrada.` : `\n✗ ${MARCA}: quedó algo abierto, mirá el detalle de arriba.`)
   console.log(`\nFalta lo que no se puede verificar desde acá: entrar al Monitor de ${MARCA} y`)

@@ -1,5 +1,7 @@
-// El espejo de Gestión Nube servido con la clave de servicio: `inventario` y las tres vistas
-// materializadas. Escalón 4 de la Fase S — lo último que quedaba abierto a la anon key.
+// El espejo de Gestión Nube servido con la clave de servicio. Nació en el escalón 4 de la Fase S
+// con `inventario` y las tres vistas materializadas; el escalón 5 (16-ago-2026) le sumó `ventas`,
+// `venta_detalles`, `productos` y `variante_color_manual`, que era todo lo que le quedaba por leer
+// a la anon key. ⇒ **hoy el navegador no le pide una sola fila a Supabase con esa key.**
 //
 //   POST { recurso:'espejo', store, tabla, params } → el cuerpo de PostgREST, tal cual
 //
@@ -29,8 +31,9 @@
 // 13-ago-2026 por abierto (ver AGENTS.md). Tres candados lo separan de aquello:
 //
 // 1. **La tabla la elige el servidor, no el request.** `CATALOGO` es la lista blanca completa, y lo
-//    que no está no se consulta. `ventas`, `clientes`, `productos` y `venta_detalles` —lo que
-//    costó los escalones 1, 2 y 3— no entran por acá.
+//    que no está no se consulta. `clientes` no entra por acá, y de `ventas`, `venta_detalles` y
+//    `productos` entran sólo las columnas sin plata ni PII: lo que costaron los escalones 1, 2 y 3
+//    —el padrón, la facturación por renglón y los costos— sigue saliendo por puertas con permiso.
 // 2. **`select` no puede tener paréntesis.** 🔴 Es el candado que importa: PostgREST trae tablas
 //    vecinas con `select=sku,productos(unit_cost)`, y esa sintaxis **necesita** paréntesis. Sin
 //    ellos, un select sólo puede nombrar columnas de la tabla pedida. La lista blanca de columnas
@@ -41,20 +44,44 @@
 // 📌 **Sin gate por permiso, a propósito.** `allMonths` (`lib/etl/computar.ts:311`) se arma con los
 // meses que traen las vistas, y lo leen Talles, Colores y Proveedores. Contestar vacío a quien no
 // tiene el permiso de Ventas mensuales les borraría en silencio todo lo anterior a 16 meses. Y no
-// hay nada acá que justifique el riesgo: es catálogo, stock por local y unidades por mes — sin
-// plata y sin datos de personas. El que entró al Monitor lo puede leer.
+// hay nada acá que justifique el riesgo: es catálogo, stock por local, unidades por mes y la
+// cabecera de cada venta —fecha y canal, sin monto— sin costos, sin margen y sin datos de personas.
+// El único precio que viaja es el de vidriera. El que entró al Monitor lo puede leer.
+//
+// 🔑 **Ese párrafo es el contrato del `CATALOGO`, no un comentario.** El día que una columna nueva
+// lo vuelva falso, la salida no es agregarla igual: es que esa columna vaya por una puerta con
+// nombre y con permiso, como hizo el CRM con `total_price` en el escalón 5.
 import { exigirUsuario } from './_auth.js';
 
-// Las cuatro cosas que se pueden pedir, con sus columnas. Sacadas del esquema real de las dos bases
-// el 14-ago-2026 (`select=*` con la anon key), no de memoria.
+// Lo que se puede pedir, con sus columnas. Sacadas del esquema real de las dos bases (`select=*`
+// con la anon key el 14-ago-2026; las del escalón 5, con `information_schema` el 16), no de memoria.
 //
-// 📌 `fundas_por_modelo_mes` existe en las dos bases pero en Zattia está vacía: no vende fundas. El
-// ETL ni la pide (`lib/datos.ts`), y si la pidiera devolvería 0 filas, no un error.
+// ⛔ **Esta lista es un TECHO, no una descripción.** Una columna entra sólo si un lector del
+// navegador la pide hoy. Del otro lado hay clave de SERVICIO: agregar una "por las dudas" es
+// abrirla para cualquiera con sesión, sin permiso de por medio. Medido el 16-ago-2026, lo que se
+// cierra gratis por no estar en ningún select: `ventas.number/store/payment_method/items_sold/
+// sale_type_id` y `venta_detalles.product_name`.
+//
+// 🔴 **Y por eso la plata del CRM no está acá**: `ventas.total_price`, `client_id` y `sale_state`
+// los lee sólo `lib/crm/datos.ts` y van por `api/_crm.js`, que sí pide el permiso de Clientes. Si
+// entraran acá, cualquier usuario con sesión se bajaría la facturación entera.
+//
+// 📌 `retailer_price` sí entra: es el precio de vidriera, el mismo que ve cualquiera que abra la
+// tienda. Cerrarlo no protege nada y rompe el picker, Liquidación y media analítica.
+// 📌 Asimetrías entre marcas, a propósito: `fundas_por_modelo_mes` está vacía en Zattia (no vende
+// fundas), `productos.proveedor` sólo existe en Zattia, `ventas.channel_id` sólo en BDI, y
+// `variante_color_manual` no existe en BDI —su único lector ya la pide con `.catch(() => [])`—.
+// Pedir una columna que no existe da 400 de PostgREST, que es lo que ya pasaba antes del desvío.
 const CATALOGO = {
   inventario: ['product_id', 'product_name', 'size_id', 'size_name', 'store_name', 'available_quantity', 'sku', 'barcode', 'observation'],
   ventas_por_mes: ['mes', 'channel', 'cantidad_ventas', 'total_items', 'promedio_items_por_venta'],
   ventas_por_categoria_mes: ['mes', 'categoria', 'total_items'],
   fundas_por_modelo_mes: ['mes', 'modelo', 'product_id', 'product_name', 'product_created_at', 'total_items'],
+  // ── Escalón 5: lo último que leía la anon key. ────────────────────────────────────────────────
+  ventas: ['id', 'date_sale', 'channel', 'channel_id'],
+  venta_detalles: ['sale_id', 'product_id', 'size_id', 'size', 'quantity'],
+  productos: ['id', 'name', 'category', 'sku', 'proveedor', 'retailer_price', 'created_at', 'active'],
+  variante_color_manual: ['product_name', 'color'],
 };
 
 // `select`, `order`, `limit`, `offset`, `or`, `and` y `not` tienen su propia revisión más abajo.

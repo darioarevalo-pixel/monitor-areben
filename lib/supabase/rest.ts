@@ -9,25 +9,18 @@
  *    marca deja de ser mutar una variable que medio archivo lee de refilón.
  *  - `fetchAll` no llama a setStatus (que tocaba el DOM). Reporta por callback.
  *
- * **Va contra Supabase desde el cliente, con la anon key**, salvo las cuatro cosas
- * de `POR_EL_SERVIDOR`. Ese era el plan desde el principio: el comentario viejo acá
- * decía que moverlo a un route handler no agregaba seguridad "hasta que exista RLS
- * (Fase S)". RLS existe desde el 13-ago-2026 y los escalones 1 a 3 ya sacaron del
- * navegador el padrón, la facturación y los costos.
+ * **Ya no va contra Supabase desde el cliente.** Iba, con la anon key, y ése era el
+ * plan desde el principio: el comentario viejo acá decía que moverlo a un route
+ * handler no agregaba seguridad "hasta que exista RLS (Fase S)". RLS existe desde el
+ * 13-ago-2026, los escalones 1 a 4 sacaron del navegador el padrón, la facturación
+ * por renglón, los costos y el espejo de stock, y el **escalón 5** (16-ago-2026) se
+ * llevó lo último que quedaba: `ventas`, `venta_detalles`, `productos` y
+ * `variante_color_manual`. Todo pasa por `api/datos?recurso=espejo`.
  */
 
 import type { Cuenta } from '../cuentas'
 import { CUENTAS } from '../cuentas'
 import { apiFetch } from '../api-fetch'
-
-function headers(cuenta: Cuenta, conCount = false): HeadersInit {
-  const h: Record<string, string> = {
-    apikey: cuenta.key,
-    Authorization: 'Bearer ' + cuenta.key,
-  }
-  if (conCount) h['Prefer'] = 'count=exact'
-  return h
-}
 
 /**
  * Techo por página. Ninguna de estas consultas tenía uno.
@@ -46,39 +39,59 @@ const TIMEOUT_MS = 45_000
 
 /**
  * Lo que ya no se le pide a Supabase con la anon key: va por `api/datos?recurso=espejo`, con la
- * clave de servicio y sesión. Escalón 4 de la Fase S.
+ * clave de servicio y sesión. Escalones 4 y 5 de la Fase S.
  *
- * 🔑 **El desvío vive acá y no en los once lectores.** `inventario` lo leen once lugares —el ETL,
+ * 🔑 **El desvío vive acá y no en los lectores.** `inventario` solo lo leen once lugares —el ETL,
  * Exhibición, Ubicaciones, Reposición, Caducados, Canjes, Integraciones (dos), Reclamos y el picker
  * `BuscarArticuloGN`— cada uno con su select y su filtro. Poniéndolo en el embudo, ninguno cambia
- * una línea y no hay forma de que mañana alguien escriba el lector número doce por el camino viejo:
- * el camino viejo devuelve 401.
+ * una línea y no hay forma de que mañana alguien escriba el lector siguiente por el camino viejo:
+ * el camino viejo ya no existe.
  *
  * 🔑 **Es un pase, no una consulta nueva.** `limit`, `offset` y `Content-Range` viajan tal cual, así
  * que `fetchAll` sigue paginando de a 1.000 exactamente igual y el servidor nunca junta más de una
  * página. Lo único que cambia es quién firma la consulta.
+ *
+ * 🔑 **Con el escalón 5 la lista pasó a ser TODA la capa de datos del navegador**, medido tabla por
+ * tabla el 16-ago-2026. Por eso abajo el `else` es un throw y no un `fetch`: una tabla que no esté
+ * acá no puede caer a la anon key en silencio y devolver `[]` en producción — falla de una, en la
+ * primera corrida, diciendo qué falta. La lista blanca de verdad vive en `api/_espejo.js`
+ * (`CATALOGO`); ésta es la que decide por dónde sale el request.
  */
-const POR_EL_SERVIDOR = new Set(['inventario', 'ventas_por_mes', 'ventas_por_categoria_mes', 'fundas_por_modelo_mes'])
+const POR_EL_SERVIDOR = new Set([
+  'inventario',
+  'ventas_por_mes',
+  'ventas_por_categoria_mes',
+  'fundas_por_modelo_mes',
+  'ventas',
+  'venta_detalles',
+  'productos',
+  'variante_color_manual',
+])
 
 /** `bdi` | `zattia` a partir de la cuenta. Las secciones pasan `CUENTAS[marca]`, y dos de ellas una fija. */
 function storeDe(cuenta: Cuenta): string {
   return cuenta.url === CUENTAS.zattia.url ? 'zattia' : 'bdi'
 }
 
-async function pedir(cuenta: Cuenta, table: string, params: string, conCount = false): Promise<Response> {
+async function pedir(cuenta: Cuenta, table: string, params: string): Promise<Response> {
   const corte = AbortSignal.timeout(TIMEOUT_MS)
   try {
-    if (POR_EL_SERVIDOR.has(table)) {
-      // El `Prefer: count=exact` no viaja: la puerta lo pide siempre y devuelve el `Content-Range`,
-      // que es lo único que `sbFetchWithCount` mira.
-      return await apiFetch('/api/datos?recurso=espejo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store: storeDe(cuenta), tabla: table, params }),
-        signal: corte,
-      })
+    if (!POR_EL_SERVIDOR.has(table)) {
+      // No es un caso posible con el código de hoy: es el guard que hace que deje de serlo mañana.
+      // Sin él, la tabla nueva se pediría con la anon key, que desde el escalón 5 no tiene permiso
+      // sobre nada — y eso llega como un `[]` con 200, o sea una pantalla vacía sin un error.
+      throw new Error(
+        `"${table}" no está en POR_EL_SERVIDOR (lib/supabase/rest.ts). Agregala ahí y al CATALOGO de api/_espejo.js: el navegador ya no lee Supabase directo.`,
+      )
     }
-    return await fetch(`${cuenta.url}/rest/v1/${table}?${params}`, { headers: headers(cuenta, conCount), signal: corte })
+    // No hace falta pedir el conteo: la puerta manda `count=exact` siempre y devuelve el
+    // `Content-Range`, que es lo único que `sbFetchWithCount` mira.
+    return await apiFetch('/api/datos?recurso=espejo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store: storeDe(cuenta), tabla: table, params }),
+      signal: corte,
+    })
   } catch (e) {
     // El error de un abort dice "The operation was aborted", que no le sirve a nadie. Se traduce
     // acá y no en la pantalla para que las ~30 secciones que muestran este mensaje digan lo mismo.
@@ -103,7 +116,7 @@ export async function sbFetchWithCount<T = unknown>(
   table: string,
   params: string,
 ): Promise<{ data: T[]; total: number }> {
-  const res = await pedir(cuenta, table, params, true)
+  const res = await pedir(cuenta, table, params)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Error ${res.status} en ${table}: ${text.substring(0, 150)}`)

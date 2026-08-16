@@ -51,13 +51,13 @@ carga con `next/dynamic`, así que su JS es un chunk aparte.
 Datos de Supabase por `lib/supabase/rest.ts`; el ETL que arma el payload está en `lib/etl/` y se
 cachea en IndexedDB. Estado en Zustand (`store/`). Dos marcas: `bdi` y `zattia`.
 
-**Cerrada la Fase S: la anon key no entrega ni un dato PERSONAL ni un COSTO.** Sí entrega la
-facturación (`ventas.total_price`, `venta_detalles.quantity`), que es la entrada del ETL. `clientes`,
-el precio de `venta_detalles`, `productos.unit_cost` y la PII de `ventas` van por handlers con nombre
-(`api/_crm.js`, `api/_costos.js`); `inventario` y las 3 vistas materializadas, por `api/_espejo.js`,
-un **pase** con lista blanca porque tiene once lectores. El desvío vive en `pedir()`
-(`lib/supabase/rest.ts`): una consulta nueva a esas cuatro ya sale por la puerta. 🔴 **Volver a
-correr `apply-rls.mjs` deshace los cuatro escalones** — avisa de cada uno con el script que cierra.
+**Cerrada la Fase S: el navegador NO le pide una sola fila a Supabase.** Todo entra por `api/`:
+`clientes` y la plata del CRM por `api/_crm.js`, los costos por `api/_costos.js`, el resto por
+`api/_espejo.js` — un **pase** con lista blanca de tabla y de columna, sin gate de permiso porque
+**no lleva plata ni PII**: ése es el contrato de su `CATALOGO`, y la columna que lo vuelva falso va
+por una puerta con nombre. El desvío vive en `pedir()` (`lib/supabase/rest.ts`), que **tira error**
+si la tabla no está en `POR_EL_SERVIDOR` — si no, cae a la anon key y vuelve `[]` con 200, o sea
+pantalla vacía sin error. 🔴 **`apply-rls.mjs` deshace los cinco escalones**, y avisa de cada uno.
 
 Portales públicos, sin sesión y fuera del nav: `/reclamo/<token>` (cliente) y `/canje/<token>`
 (creadora). Se resuelven antes del guard de permisos.

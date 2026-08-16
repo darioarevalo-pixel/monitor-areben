@@ -21,23 +21,34 @@ const AHORA = new Date('2026-07-16T12:00:00.000Z')
 /** URLs pedidas, en orden. */
 let pedidas: string[] = []
 
+/**
+ * Traduce un pedido a la puerta en la URL de PostgREST equivalente, y lo anota en `pedidas`.
+ *
+ * **Nada del ETL se le pide ya a Supabase con la anon key**: `inventario` y las tres vistas se
+ * fueron en el escalón 4 de la Fase S, y `ventas`, `venta_detalles`, `productos` y
+ * `variante_color_manual` en el 5. Todo va por `api/datos?recurso=espejo`, con la clave de servicio
+ * y sesión. La consulta viaja igual, sólo que en el body, así que acá se reconstruye la URL
+ * equivalente y **todas las aserciones de select de este archivo siguen midiendo lo mismo**. Lo que
+ * cambió es el transporte, no lo que se pide, y eso es lo que este archivo tiene que seguir
+ * vigilando: un select de más o de menos no rompe nada visible.
+ *
+ * 🔑 **Está afuera de `mockFetch` porque tres tests arman su propio doble.** Cuando vivía adentro,
+ * los otros dos leían `/rest/v1/` de una URL que ya no lo tenía y medían sobre la tabla vacía.
+ */
+function comoPostgrest(url: string, opts?: RequestInit): string {
+  pedidas.push(url)
+  if (!url.includes('recurso=espejo')) return url
+  const b = JSON.parse(String(opts?.body || '{}')) as { store?: string; tabla?: string; params?: string }
+  const equivalente = `${b.store === 'zattia' ? CUENTAS.zattia.url : CUENTAS.bdi.url}/rest/v1/${b.tabla}?${b.params}`
+  pedidas.push(equivalente)
+  return equivalente
+}
+
 function mockFetch(opciones: { totalPorTabla?: Record<string, number>; filas?: (t: string, url: string) => unknown[]; falla?: (url: string) => boolean } = {}) {
   const { totalPorTabla = {}, filas = () => [], falla = () => false } = opciones
 
   return vi.fn(async (url: string, opts?: RequestInit) => {
-    pedidas.push(url)
-
-    // El espejo de GN —`inventario` y las tres vistas— ya no se le pide a Supabase con la anon key:
-    // va por `api/datos?recurso=espejo`, con la clave de servicio y sesión (escalón 4 de la Fase S).
-    // La consulta viaja igual, sólo que en el body, así que se reconstruye la URL equivalente y
-    // **todas las aserciones de select de este archivo siguen midiendo lo mismo**. Lo que cambió es
-    // el transporte, no lo que se pide, y eso es exactamente lo que este archivo tiene que seguir
-    // vigilando: un select de más o de menos no rompe nada visible.
-    if (url.includes('recurso=espejo')) {
-      const b = JSON.parse(String(opts?.body || '{}')) as { store?: string; tabla?: string; params?: string }
-      url = `${b.store === 'zattia' ? CUENTAS.zattia.url : CUENTAS.bdi.url}/rest/v1/${b.tabla}?${b.params}`
-      pedidas.push(url)
-    }
+    url = comoPostgrest(url, opts)
 
     if (url.includes('api.github.com')) {
       return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
@@ -160,12 +171,13 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
   it('el costo que devuelve la puerta se pega a la fila del producto', async () => {
     // El camino feliz del merge. Sin esto, "no se le pide a Supabase" pasaría igual con el costo
     // perdiéndose del todo, que es la otra mitad del bug posible.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      pedidas.push(url)
-      if (url.includes('api.github.com')) return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
       if (url.includes('recurso=costos')) {
+        pedidas.push(url)
         return new Response(JSON.stringify({ ok: true, costos: { '7': 4500 } }), { status: 200 })
       }
+      url = comoPostgrest(url, opts)
+      if (url.includes('api.github.com')) return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
       const tabla = url.split('/rest/v1/')[1]?.split('?')[0] ?? ''
       const filas = tabla === 'productos' ? [{ id: 7 }, { id: 9 }] : []
       return new Response(JSON.stringify(filas), { status: 200, headers: { 'Content-Range': '0-0/0' } })
@@ -237,8 +249,8 @@ describe('detalles y paginación', () => {
     let soltarVentas = () => {}
     const ventasColgada = new Promise<void>((r) => { soltarVentas = r })
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      pedidas.push(url)
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
+      url = comoPostgrest(url, opts)
       if (url.includes('api.github.com')) return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 })
       if (url.includes('/rest/v1/ventas?') && !esSonda(url)) await ventasColgada
       const filas = esSonda(url) ? [{ id: 55 }] : []

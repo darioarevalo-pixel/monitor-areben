@@ -1,8 +1,10 @@
 // El padrón del CRM — tabla `clientes` de BDI, servida con la clave de servicio. Y, desde el
-// escalón 3, las líneas de venta con plata que el modal de un cliente muestra.
+// escalón 3, las líneas de venta con plata que el modal de un cliente muestra; desde el 5, las
+// ventas mismas.
 //
-//   POST { recurso:'crm', ids:[…] }                    → { ok, clientes:[{id,name,email,…}] }
-//   POST { recurso:'crm', action:'detalles', ids:[…] }  → { ok, detalles:[{sale_id,…,unit_price,total}] }
+//   POST { recurso:'crm', ids:[…] }                        → { ok, clientes:[{id,name,email,…}] }
+//   POST { recurso:'crm', action:'detalles', ids:[…] }     → { ok, detalles:[{sale_id,…,unit_price,total}] }
+//   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
 // padrón, que es como nació: el navegador viejo no manda el campo.
@@ -67,6 +69,24 @@ const COLUMNAS = 'id, name, email, phone, city, province';
 // 122.952 filas no cuesta tocar el ETL: alcanza con mudar estas dos.
 const COLUMNAS_DETALLE = 'sale_id, product_name, size, quantity, unit_price, total';
 
+// El select de las ventas del CRM, palabra por palabra el de `lib/crm/datos.ts` (SEL_VENTAS).
+//
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// POR QUÉ TAMBIÉN ESTO (escalón 5 de la Fase S)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// El escalón 5 saca del navegador lo último que la anon key seguía leyendo: `ventas`,
+// `venta_detalles` y `productos`. Las tres se van por el pase de `api/_espejo.js`, que no tiene
+// gate por permiso **porque no lleva plata ni datos de personas** — y esa frase es lo que decide
+// qué columnas puede tener el pase.
+//
+// 🔑 **Por eso `total_price`, `client_id` y `sale_state` NO entran al pase: entran acá.** Medido
+// el 16-ago-2026, el CRM es su único lector en todo el navegador; el ETL, Caducados y Reposición
+// piden de `ventas` sólo `id, date_sale, channel[, channel_id]`. Si la facturación viajara por el
+// pase, cualquier usuario con sesión podría pedirla aunque no tenga Clientes — que es exactamente
+// el agujero que el escalón 2 cerró con el padrón.
+const COLUMNAS_VENTAS = 'id, date_sale, total_price, client_id, channel_id, sale_state';
+
 // El CRM es **bdi-only por esquema**: `clientes` no existe en la base de Zattia (por eso
 // `migrate-columnas-pii.sql` se la saltea ahí). No hay `store` en la puerta a propósito.
 const MARCA = 'bdi';
@@ -83,6 +103,83 @@ const PAGINA = 1000;
 // lado se ve como un JSON.parse roto. Mejor decirlo.
 const TOPE_RESPUESTA = 4 * 1024 * 1024;
 
+/**
+ * Trae una página de `ventas` detrás de otra hasta que se acaben, con el filtro que le pasen.
+ *
+ * 🔴 **El `order` lleva `id` de desempate y no es adorno.** Paginar con `range` sobre un orden que
+ * empata —`date_sale` es una FECHA: hay decenas de ventas por día— no está definido: la misma fila
+ * puede volver en dos páginas y otra no volver en ninguna. El legacy paginaba así desde el
+ * navegador y la pérdida era silenciosa. `id` es único, así que el orden queda total y el visible
+ * no cambia: sigue siendo por fecha descendente.
+ */
+async function paginar(supabase, aplicarFiltro) {
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const q = aplicarFiltro(supabase.from('ventas').select(COLUMNAS_VENTAS))
+      .order('date_sale', { ascending: false })
+      .order('id', { ascending: false })
+      .range(desde, desde + PAGINA - 1);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    filas.push(...(data || []));
+    if ((data || []).length < PAGINA) break;
+  }
+  return filas;
+}
+
+/**
+ * Las ventas del CRM, en los dos modos del select de la pantalla.
+ *
+ * En modo Mayorista son DOS consultas unidas y deduplicadas por id, igual que antes: las del canal
+ * pedido, más **todas** las de los clientes marcados ★ (compren por donde compren). Los ★ los
+ * manda el navegador porque salen del KV, que es suyo.
+ *
+ * 🔑 **Las ventas técnicas las sigue descartando el navegador**, con `esVentaTecnica`. No se mueve
+ * acá: es lógica del ETL, la comparten otras pantallas y el filtro tiene que correr sobre la unión
+ * —`porMarcados` trae al cliente ★ sin filtro de canal, así que arrastra técnicas.
+ */
+async function ventasDelCrm(supabase, body, res) {
+  const modo = String(body.modo || 'all');
+  // El modo se concatena en el filtro de PostgREST: o es `all` o es un número, no hay tercera.
+  if (modo !== 'all' && !/^\d+$/.test(modo)) {
+    return res.status(400).json({ ok: false, error: 'modo tiene que ser "all" o un id de canal numérico' });
+  }
+
+  let filas;
+  if (modo === 'all') {
+    filas = await paginar(supabase, (q) => q.not('client_id', 'is', null));
+  } else {
+    const crudos = Array.isArray(body.flagged) ? body.flagged : [];
+    const flagged = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+
+    const porCanal = await paginar(supabase, (q) => q.eq('channel_id', modo).not('client_id', 'is', null));
+
+    const porMarcados = [];
+    for (let i = 0; i < flagged.length; i += LOTE) {
+      const lote = flagged.slice(i, i + LOTE);
+      porMarcados.push(...(await paginar(supabase, (q) => q.in('client_id', lote).not('client_id', 'is', null))));
+    }
+
+    const porId = new Map();
+    for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v);
+    filas = [...porId.values()];
+  }
+
+  const cuerpo = JSON.stringify({ ok: true, ventas: filas });
+  // 🔴 **De las tres respuestas de esta puerta, ésta es la que menos aire tiene.** Medido el
+  // 16-ago-2026 contra BDI: el modo «todos» son 27.990 ventas y **3,34 MB**, contra un techo de
+  // 4,5 — o sea 1,3x, y crece con cada venta. El padrón, para comparar, va 1,76 MB. Cuando esto
+  // salte hay que paginarlo hacia el navegador; el error lo dice en vez de mandar un JSON cortado.
+  if (cuerpo.length > TOPE_RESPUESTA) {
+    return res.status(500).json({
+      ok: false,
+      error: `Las ventas del CRM ya no entran en una respuesta (${(cuerpo.length / 1024 / 1024).toFixed(1)} MB contra un techo de 4,5). Hay que paginar la acción "ventas" de api/_crm.js.`,
+    });
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.status(200).send(cuerpo);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -96,7 +193,22 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
-  const detalles = String(body.action || '') === 'detalles';
+  const accion = String(body.action || '');
+  const detalles = accion === 'detalles';
+
+  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  if (!key) return res.status(500).json({ error: 'Falta la clave de Supabase de BDI en el entorno.' });
+  const supabase = createClient(url, key);
+
+  // ── Las ventas del CRM (escalón 5). No lleva `ids`: el filtro es el modo del select. ──────────
+  if (accion === 'ventas') {
+    try {
+      return await ventasDelCrm(supabase, body, res);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
 
   const crudos = Array.isArray(body.ids) ? body.ids : null;
   if (!crudos) {
@@ -107,11 +219,6 @@ export default async function handler(req, res) {
   // ahí cualquier cosa que no sea un número es una inyección en la query string.
   const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   if (!ids.length) return res.status(200).json(detalles ? { ok: true, detalles: [] } : { ok: true, clientes: [] });
-
-  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
-  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-  if (!key) return res.status(500).json({ error: 'Falta la clave de Supabase de BDI en el entorno.' });
-  const supabase = createClient(url, key);
 
   try {
     const lotes = [];
