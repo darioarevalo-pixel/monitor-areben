@@ -113,6 +113,12 @@ Tienen ficha:
   `lib/tncat/`, `lib/tn-audit.ts`, `api/_tn-ignorados.js` o `api/_tn-fotos-verificadas.js`.
   ⛔ **Lo que escribe la tienda vive en OTRO repo** (`bdi-catalogo`), ningún test lo cubre, y un
   POST con una acción que ese deploy no conoce **recategoriza la tienda entera**.
+- Sesión de fotos → **leer `docs/secciones/sesionfotos.md`** antes de tocar `lib/sesionfotos/`,
+  `components/sesionfotos/`, `components/solicitudes/` o `components/solicitudes-internas/`.
+  ⛔ **`lib/sesionfotos/` NO es solo de esta sección**: es el motor de las solicitudes, y
+  Solicitudes internas monta el MISMO componente y el MISMO hook con otro preset.
+  ⛔ **Crear la venta pega por URL absoluta a PROD**: desde localhost o un preview, crea una venta
+  real en Gestión Nube.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
@@ -141,7 +147,7 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa`
 
-**Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos` · `canjes` ·
+**Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
 `gen-talles` · `calendario`
 
 **Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, once vistas por el 2º
@@ -193,7 +199,7 @@ turno posterior, así que un output largo temprano cuesta varias veces su tamañ
   difícil: ese contexto es casi todo intento fallido. Dentro de una tarea sin terminar va
   `/compact`, no `/clear`.
 - **Los archivos caros se leen por rango, no enteros.** Los peores:
-  `components/sesionfotos/SesionFotos.tsx` (1.803 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
+  `components/sesionfotos/SesionFotos.tsx` (1.820 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
   `api/_canjes.js` (2.227) · `lib/canjes/tipos.ts` (1.261) · `tests/reclamos.test.ts` (1.192) ·
   `components/reclamos/ArmarCambio.tsx` y `components/conteo-estandar/ConteoEstandar.tsx` (870) ·
   `lib/nav.datos.ts` (750 — es data, casi nunca hace falta entero).
