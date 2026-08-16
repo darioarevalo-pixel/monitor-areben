@@ -94,15 +94,26 @@ jobs:
           restore-keys: |
             fixture-etl-${{ hashFiles('scripts/fixture-etl.mjs') }}-
 
-      # Se baja con las anon keys, que son públicas: no necesita ningún secret.
-      # Con reintentos porque Supabase corta la query de `ventas` por statement
-      # timeout de forma intermitente (57014) — pasó en el primer run de este CI.
+      # 🔴 Va con las claves de SERVICIO, no con las anon. Desde la Fase S (14-ago-2026) la anon
+      # tiene revocados `productos.unit_cost`, `inventario` y las tres vistas materializadas, que
+      # son justo lo que pide el fixture: PostgREST contestaba 401 y este job quedó rojo desde
+      # entonces: la última corrida verde es del 14-ago 20:05 UTC y atrás vinieron 36 seguidas en
+      # rojo, en las que su rojo tapó cualquier rojo real. Los dos secrets ya existían
+      # (los usan los ocho workflows de sync), así que no hubo que crear ninguno.
+      #
+      # Con reintentos porque Supabase corta la query de `ventas` por statement timeout de forma
+      # intermitente (57014) — pasó en el primer run de este CI. ⚠️ Ese mensaje fue el que tapó
+      # esto durante dos semanas: decía "timeout" cuando el error era de permiso. Ahora el script
+      # corta antes de la red si la clave falta, es anon o está cruzada de marca, y lo dice.
       - name: Bajar el fixture de datos reales
         if: steps.cache-fixture.outputs.cache-hit != 'true'
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
         run: |
           for intento in 1 2 3; do
             if npm run fixture-etl; then exit 0; fi
-            echo "::warning::Intento $intento falló (Supabase suele cortar ventas por statement timeout). Reintentando en $((intento * 20))s…"
+            echo "::warning::Intento $intento falló. Si el mensaje habla de la clave, es permiso y reintentar no lo arregla; si no, Supabase suele cortar ventas por statement timeout. Reintentando en $((intento * 20))s…"
             sleep $((intento * 20))
           done
           echo "::error::No se pudo bajar el fixture después de 3 intentos."
