@@ -151,3 +151,54 @@ describe('escanearCombi · cae en la primera con lugar', () => {
     expect(resultado.tipo).toBe('no-encontrado')
   })
 })
+
+/**
+ * La vista combinada, en DEVOLUCIÓN. Es el agujero que dejó `8d8265e`: la regla «al devolver, el
+ * tope es lo que SALIÓ» se llevó a `esperadoEn` y se aplicó en cuatro de los cinco lugares —
+ * `escanearCombi` quedó afuera y siguió topeando contra `it.qty`, lo pedido.
+ *
+ * 🔑 **Los tres casos de arriba son todos de fase `retiro`, y ahí `esperadoEn` ES `i.qty`** — por eso
+ * pasaban en verde con el defecto puesto durante tres semanas. El bug sólo existe en la otra mitad
+ * del ciclo, así que la única forma de cazarlo era ejercer la fase que nadie estaba ejerciendo.
+ *
+ * Son el espejo exacto de los de `escanearSol`: mismas tres situaciones, misma expectativa. Que la
+ * combinada y el detalle contesten distinto sobre la misma solicitud es el defecto, no un matiz.
+ */
+describe('escanearCombi · en devolución el tope es lo que SALIÓ', () => {
+  const mapa = construirMapaBc([{ id: 'a', barcode: '111' }])
+  /** Salida real: se pidieron `qty`, se prepararon `verif`, ya volvieron `devuelto`. */
+  const mkDev = (id: string, qty: number, verif: number, devuelto: number) =>
+    sol({ id, estado: 'cargada', items: [item({ vid: 'a', qty })], verif: { a: verif }, devuelto: { a: devuelto } })
+
+  // El caso medido: 10 pedidos, 7 salidos, 7 ya devueltos. El detalle rebota el 8º escaneo y la
+  // combinada lo aceptaba, registrando una devolución de mercadería que nunca se retiró.
+  it('no deja devolver más de lo que salió', () => {
+    const sols = [mkDev('s1', 10, 7, 7)]
+    const { sols: ns, resultado } = escanearCombi(sols, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado.tipo).toBe('ya-completo')
+    expect(ns[0].devuelto).toEqual({ a: 7 }) // no 8
+  })
+
+  // El segundo mutante: `agregarCombinada` ni lo muestra en la lista, pero se podía escanear igual.
+  it('un ítem que nunca salió no se puede devolver', () => {
+    const sols = [mkDev('s1', 2, 0, 0)]
+    const { resultado } = escanearCombi(sols, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado.tipo).toBe('no-encontrado')
+  })
+
+  // El `qty` del feedback es el tope de ESTA fase, no lo pedido: con 10/7 la pantalla tiene que
+  // decir "1 de 7". Decir "1 de 10" manda a buscar tres unidades que no salieron nunca.
+  it('el feedback informa el tope de la fase, no lo pedido', () => {
+    const sols = [mkDev('s1', 10, 7, 0)]
+    const { resultado } = escanearCombi(sols, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ok', done: 1, qty: 7 })
+  })
+
+  // El tope es por solicitud: la primera está llena según SU salida, la segunda todavía tiene lugar.
+  it('cae en la siguiente solicitud según el esperado de cada una', () => {
+    const sols = [mkDev('s1', 5, 2, 2), mkDev('s2', 5, 3, 0)]
+    const { sols: ns, resultado } = escanearCombi(sols, 'deposito', 'devolucion', '111', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ok', targetId: 's2', done: 1, qty: 3 })
+    expect(ns.find((s) => s.id === 's1')!.devuelto).toEqual({ a: 2 }) // intacta
+  })
+})

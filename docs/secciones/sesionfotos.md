@@ -29,9 +29,12 @@ esta pantalla se llega por el botón «Ver» de ahí, o por el puente de Marketi
 toca **seis** lugares, y ninguno tiene su propia copia de la cuenta:
 
 - **Solicitudes internas** (`components/solicitudes-internas/`, `lib/solicitudes-internas/`) monta
-  **el mismo componente** (`SolicitudesInner`) y **el mismo hook** con otro `preset`. Eran dos
-  gemelos byte por byte hasta la convergencia; hoy difieren solo en `kind`, el `comments` de GN y
-  el estado post-venta.
+  **el mismo componente** (`SolicitudesInner`, que vive en `components/sesionfotos/SesionFotos.tsx`)
+  y **el mismo hook** con otro `preset`. Eran dos gemelos byte por byte hasta la convergencia; hoy
+  difieren solo en `kind`, el `comments` de GN y el estado post-venta.
+  🔑 **Medido el 16-ago: `components/solicitudes-internas/` son 60 líneas y las dos son wiring** —
+  no hay una sola copia de la cuenta. ⇒ **«¿este arreglo toca también a internas?» no es una
+  decisión: es el mismo código.** La única forma de arreglar uno sin el otro sería duplicar.
 - **Solicitudes** (`components/solicitudes/`) — la vista unificada, y el alta que rutea por motivo.
 - **Inicio** y **Marketing** empujan por los tres puentes de `lib/sesionfotos/puente.ts`.
 - **Gerencial** y **Notificaciones** (`lib/notificaciones/derivar.ts`) leen `salio`/`faltantes`.
@@ -95,17 +98,20 @@ variante de internas pasada por parámetro.
 - 🔴 **Hasta el 13-ago cualquier cuenta válida del Monitor leía y borraba las solicitudes de las dos
   marcas**, puestos compartidos incluidos: el control terminaba en `exigirUsuario`. →
   `api/_solicitudes.js:65`.
-
+- 🔴 **`escanearCombi` quedó afuera de la unificación de `8d8265e` y la vista combinada aceptaba
+  devolver más de lo que salió** (arreglado el 16-ago). La regla se había llevado a `esperadoEn` y
+  aplicado en cuatro de los cinco lugares; acá seguía topeando contra `it.qty`, lo PEDIDO. Con 10
+  pedidos, 7 salidos y 7 devueltos, el detalle rebotaba el 8º escaneo y la combinada lo aceptaba; y
+  un ítem que nunca salió se devolvía por la combinada aunque `agregarCombinada` ni lo mostrara.
+  🔑 **Sobrevivió tres semanas porque los tres tests que cubrían `escanearCombi` eran todos de fase
+  `retiro`, y ahí `esperadoEn` ES `i.qty`**: el defecto sólo existe en la otra mitad del ciclo. La
+  lección no es «faltaba un test» sino **«faltaba ejercer la fase»**.
+  🔑 **El tope es por SOLICITUD, no por ítem**: dos solicitudes con el mismo ítem pueden haber
+  sacado cantidades distintas, así que se recalcula en cada vuelta del loop.
+  🔑 **Medido contra las dos bases: no ensució ningún dato.** 335 ítems, 301 con devolución, **0**
+  con `devuelto` mayor a lo que salió. El agujero era real y nunca se materializó.
 ## Pendiente
 
-- 🔴 **`escanearCombi` quedó afuera de la unificación de `8d8265e`** — la regla se aplicó en cuatro
-  de los cinco lugares. **Medido el 16-ago con dos mutantes**: con 10 pedidos, 7 salidos y 7 ya
-  devueltos, el detalle rebota el 8º escaneo (`ya-completo`) y **la vista combinada lo acepta**
-  (`done: 8, qty: 10`); y un ítem que nunca salió da `no-encontrado` en el detalle pero **se
-  devuelve** por la combinada, aunque `agregarCombinada` ni lo muestre en la lista. Consecuencia:
-  una devolución hecha desde la vista combinada puede registrar más unidades de las que salieron.
-  Sin arreglar — el arreglo es cambiar `it.qty` por `esperadoEn(s, it, fase)` en `escaneo.ts:141` y
-  filtrar como hace `escanearSol`, pero primero hay que decidir si toca también a internas.
 - ▶️ **El select de prioridad de retiro está DESHABILITADO para siempre**
   (`SesionFotos.tsx:350`), con el cartel «Disponible al completar la migración» — que terminó el
   **31-jul**. Hoy la prioridad solo se cambia en Reposición, en `bdi-catalogo`.
@@ -147,4 +153,7 @@ npx vitest run tests/sesionfotos-core.test.ts --reporter=dot   # y draft / escan
   la hoja de compartir del reporte de faltantes, que solo existe en el teléfono.
 - El mutante que hay que ver caer al tocar la cuenta de la devolución: poner `i.qty` en lugar de
   `esperadoEn(...)` en `escaneo.ts` o `combinada.ts` tiene que romper `sesionfotos-core` y
-  `sesionfotos-escaneo`. En `escanearCombi` **no rompe nada** — ver Pendiente.
+  `sesionfotos-escaneo`. **Los cinco lugares están cubiertos desde el 16-ago**, `escanearCombi`
+  incluido (4 mutantes, uno por caso).
+- 🔑 **Un test de escaneo que no dice la fase está probando `retiro`, y `retiro` no distingue nada**
+  (`esperadoEn` devuelve `i.qty`). Todo caso nuevo sobre topes va **en devolución** o no mide.

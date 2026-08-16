@@ -121,6 +121,16 @@ export type ResultadoCombi =
  * Un escaneo sobre VARIAS solicitudes combinadas: cae en la primera solicitud que
  * tenga lugar para ese ítem. Devuelve las solicitudes (con la target mutada) y el
  * resultado. Port de sfScanCombi (sin el fallback por barcode, igual que el legacy).
+ *
+ * 🔑 **"Tener lugar" se mide con `esperadoEn`, igual que en `escanearSol`** — y el esperado es
+ * **por solicitud**: dos solicitudes con el mismo ítem pueden haber sacado cantidades distintas,
+ * así que el tope se recalcula en cada vuelta del loop en vez de salir del ítem.
+ *
+ * Esta función quedó afuera de la unificación de `8d8265e`, que llevó la regla "al devolver, el
+ * tope es lo que SALIÓ" a `esperadoEn` y la aplicó en cuatro de los cinco lugares. Acá seguía
+ * topeando contra `i.qty` (lo PEDIDO), así que la vista combinada aceptaba devolver mercadería que
+ * nunca se había retirado mientras el detalle la rebotaba. Nadie lo vio porque los tres casos que
+ * la cubrían eran de fase `retiro`, donde `esperadoEn` **es** `i.qty` y no hay diferencia.
  */
 export function escanearCombi(
   sols: Solicitud[],
@@ -133,12 +143,15 @@ export function escanearCombi(
   let target: Solicitud | null = null
   let item: ItemSolicitud | null = null
   for (const s of sols) {
-    const arr = (s.items || []).filter((i) => i.origen === origen)
+    // El mismo filtro que escanearSol: lo que no se espera en esta fase no existe para el escáner.
+    // Es lo que hace que un ítem que nunca salió dé 'no-encontrado' en vez de dejarse devolver,
+    // igual que `agregarCombinada`, que tampoco lo muestra en la lista.
+    const arr = (s.items || []).filter((i) => i.origen === origen && esperadoEn(s, i, fase) > 0)
     const it = resolverItem(arr, code, mapa, false)
     if (!it) continue
     if (!item) item = it // existe en alguna (aunque esté completa)
     const done = (s[mapKey] || {})[it.vid] || 0
-    if (done < it.qty) {
+    if (done < esperadoEn(s, it, fase)) {
       target = s
       item = it
       break
@@ -146,12 +159,13 @@ export function escanearCombi(
   }
   if (!item) return { sols, resultado: { tipo: 'no-encontrado', code } }
   if (!target) return { sols, resultado: { tipo: 'ya-completo', nombre: item.nombre, variante: item.variante } }
+  const tope = esperadoEn(target, item, fase)
   const done = (target[mapKey] || {})[item.vid] || 0
   const conteo = { ...(target[mapKey] || {}), [item.vid]: done + 1 }
   const ns = transicionEstado({ ...target, [mapKey]: conteo }, fase)
   const nsols = sols.map((s) => (s.id === ns.id ? ns : s))
   return {
     sols: nsols,
-    resultado: { tipo: 'ok', nombre: item.nombre, variante: item.variante, done: done + 1, qty: item.qty, targetId: ns.id },
+    resultado: { tipo: 'ok', nombre: item.nombre, variante: item.variante, done: done + 1, qty: tope, targetId: ns.id },
   }
 }
