@@ -73,9 +73,9 @@ refresco es una llamada por vista, y el paso que estuvo roto una semana con el j
 
 ## Fichas de sección
 
-**⛔ Antes de tocar una sección que tenga ficha, leerla — no es opcional y no se carga sola.** Un
-`CLAUDE.md` adentro de la carpeta de la sección **se midió el 15-ago-2026 y NO se inyecta** al leer
-archivos de esa carpeta: si nadie abre la ficha, no entra.
+**⛔ Antes de tocar una sección que tenga ficha, leerla — no es opcional y no se carga sola.**
+**Medido el 16-ago-2026 borrando este bloque**: la sesión nueva no la abre ni una vez —ni con
+`docs/secciones/` a la vista—, tarda el doble e inventa un dato. Un `CLAUDE.md` ahí tampoco entra.
 
 **Y el que toca una sección que NO tiene ficha, la escribe al terminar** — con
 `docs/secciones/_plantilla.md`, que dice qué va adentro y qué no. Es el único momento en que el
