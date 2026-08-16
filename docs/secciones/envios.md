@@ -11,6 +11,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` · `ticket.ts` (rollo de 80 mm) |
+| **El mapa de zonas** (todavía sin consumidor) | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
 | Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_dia` · `envios_movimientos` · `envios_portal` |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
@@ -42,8 +43,11 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **`cobrado: null` («no dijo nada») NO es `false` («no me pagó»)** — se saldan al revés, y todas
   las filas anteriores al portal son `null`. La tarifa se le paga igual: llevó el paquete.
 - 🔴 **El envío del cadete llega de TN SIEMPRE en $0** (18 de 18 medidos). El precio no viaja en la
-  orden: está escrito en el nombre de la opción, por zona. **Se tipea** (sin tabla de zonas):
-  Rosario $3.000-4.300 · Fisherton $4.300/5.500 · Funes $8.000 · Roldán $11.000 · VGG $6.500.
+  orden: está escrito en el nombre de la opción, por zona. **Hoy se tipea**: Rosario $3.000-4.300 ·
+  Fisherton $4.300/5.500 · Funes $8.000 · Roldán $11.000 · VGG $6.500. El motor que lo propondría a
+  partir de la dirección ya está (`zonas.core.js`), pero **faltan las zonas y el geocoder**, y lo que
+  proponga **se confirma a mano** (decidido con Bruno): un precio de la zona de al lado no lo caza
+  nadie, mientras que la falta de precio ya bloquea agendar.
 - 🔴 **El filtro del correo es NEGATIVO a propósito** y mira dos señales (nombre `Envío Nube - …` y
   tracking). La positiva («que diga cadete») falla en silencio: `shipping_option` es **texto libre
   que la tienda edita**. El 59% de lo que pasaba el filtro viejo era Correo Argentino y Andreani.
