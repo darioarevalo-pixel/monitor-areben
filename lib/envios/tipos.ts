@@ -289,6 +289,37 @@ export type ZonaDeReparto = {
   updated_at?: string | null
 }
 
+/**
+ * **El precio que el mapa propone para una fila de la bandeja.** No es un dato guardado: se calcula
+ * cuando alguien aprieta «Sugerir precios» y vive hasta que se recarga la pantalla.
+ *
+ * 🔑 **`sugerido` es el único estado con precio.** Los otros siete dicen por qué no lo hay, y esa
+ * fila se tipea a mano exactamente como hasta ahora — que es la mitad barata del error. Los motivos
+ * están escritos en `MOTIVO_SUGERENCIA` (`direccion.core.js`), una sola vez para el handler y la
+ * pantalla.
+ */
+export type SugerenciaDePrecio = {
+  id: string
+  estado:
+    | 'sugerido'
+    | 'ambigua'
+    | 'sin_zona'
+    | 'no_vamos'
+    | 'sin_direccion'
+    | 'sin_localidad'
+    | 'sin_altura'
+    | 'no_ubicada'
+    | 'punto_impreciso'
+  precio: number | null
+  zona: { id: string; nombre: string; coordinar: boolean } | null
+  /** Los nombres de todas las zonas que contienen el punto: con `ambigua`, cuáles son las dos. */
+  zonas?: string[]
+  motivo: string | null
+  /** Cómo se lo escribió Georef y qué contestó. Es lo que deja entender una propuesta rara. */
+  consulta?: string | null
+  encontrado?: string | null
+}
+
 /** Lo que va a pasar si se importa el archivo del mapa, antes de escribir nada. */
 export type PlanDeImportacion = {
   nuevas: { nombre: string; tipo: string; precio: number | null }[]

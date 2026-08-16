@@ -12,6 +12,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` · `ticket.ts` (rollo de 80 mm) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
+| **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
 | Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_dia` · `envios_movimientos` · `envios_portal` |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
@@ -53,6 +54,24 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   abril y el de junio hay $1.000 en todas). Una zona que está en la base y no viene en el archivo
   **no se borra**: se informa. Vive en `planDeImportacion`, y la previsualización sale del **mismo
   llamado** que la escritura (`confirmar: false`/`true`) para que no puedan divergir.
+- 🔴 **El candado va ANTES del motor: sin altura no se pregunta, y sin altura en la respuesta no se
+  propone.** Georef contesta igual sin número de puerta —con un punto cualquiera de la calle entera—
+  y `precioSugerido` no puede distinguirlo, porque **un punto es un punto**. Medido: 66 de 100
+  direcciones sin número salían con precio, y `"(2000)"` —vacía, sólo el CP— salía $4.800. Por eso la
+  validación no puede vivir adentro del motor y está partida en dos mitades (`consultaDe` antes de
+  gastar la consulta, `sugerenciaDePunto` después). 🔑 **Y el candado es lo que hace segura la
+  escalera de variantes**: sola empeoraba todo (precisos 92→95, inventados 30→68), porque lo que más
+  recupera son las calles peladas.
+- 🔴 **Sin localidad no se pregunta, y la localidad rara NO se reintenta sin ella.** `"Entre esmeralda
+  y chacabuco"` vino así en una orden real y hace fallar la consulta con la calle bien. Reintentar sin
+  localidad recupera esa dirección y **rompe las de Funes**: la calle homónima de Rosario devuelve un
+  punto **preciso** en la zona equivocada, $4.300 donde van $9.000. La fila queda sin propuesta.
+- 🔑 **La escalera para en la primera forma que conteste, aunque el punto salga impreciso.** Seguir
+  despojando hasta conseguir uno con altura es conseguirlo **de otra calle**: "Av San Martin 1200" sin
+  altura se tipea a mano, "Martin 1200" es un punto exacto y ajeno.
+- 🔑 **Georef contesta NADA cuando conoce la calle pero no tiene el número** (`Minetti 2682` → nada,
+  `Minetti` → `PJE MINETTI`): «no se pudo ubicar» **no** quiere decir que la calle no exista, y por eso
+  volver a preguntar sin la altura es exactamente la trampa.
 - 🔑 **«Coordinar» NO es un precio a convenir**: el paquete se lleva y se cobra lo de la zona; lo que
   se coordina es **cuándo se va**. Por eso es una marca al lado del precio, no un tipo de zona.
 - 🔑 **Lo que proponga el motor se confirma a mano** (decidido con Bruno): un precio de la zona de al
@@ -105,10 +124,23 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 
 ## Pendiente
 
-- ▶️ **El precio por zona, tanda 3: geocodificar la dirección y proponer.** El motor y las zonas ya
-  están (16 cargadas en prod, ejercidas a mano). Falta el punto: la orden de TN **no trae lat/lng**,
-  sólo `direccion`, `localidad` y `cp`. ✅ **Medido el 16-ago-2026** sobre 200 direcciones reales de
-  `clientes` (script en `~/.claude/plans/envios-zonas-tanda3/`), y lo que salió cambia el diseño:
+- ✅ **El precio por zona, tanda 4: EN LA PANTALLA** (16-ago-2026). En la bandeja «Sin fecha» hay un
+  botón **«Sugerir precios (N)»** que manda **sólo las filas sin cotizar**, en un llamado, y deja al
+  lado de cada una «Zona 7 · $4.500 — usar» o el motivo por el que no hay precio. **No escribe nada**:
+  «usar» guarda con `action: 'costo'`, de a una, como siempre. Las propuestas viven en el estado de
+  `Pendientes` y mueren al recargar — no son un dato de la fila, son la respuesta a una pregunta sobre
+  la dirección de ese momento, y la dirección se corrige seguido.
+  ✅ **Ejercido contra prod y contra Georef vivo** (no sólo con tests): las 16 zonas de la base y las 7
+  filas de la bandeja → **5 con precio, 2 que se niegan** (`Garay Bis 47`, por la localidad rara, y
+  `Minetti 2682`, que Georef no tiene numerada) en 307 ms. Y sobre 60 direcciones reales de clientas:
+  **25 con precio, 27 frenadas por el candado sin gastar una sola consulta**, 8 sin ubicar, **0
+  inventadas**. 🔑 Los 11 mutantes del candado caen (`tests/envios-direccion.test.ts`).
+- ▶️ **Lo que sigue faltando es el CONTRASTE**: que el punto sea preciso no prueba que la zona sea la
+  correcta. Sale de la planilla vieja de OneDrive («ENVIOS BDI», 877 filas con dirección + costo
+  tipeado, precios viejos ⇒ compara barato/caro) o de que Bruno cotice 20 a mano. **Sin eso no se
+  puede decidir si esto propone bien** — por eso la propuesta se confirma a mano y no se escribe sola.
+- 📎 **La medición que fundó todo esto** (tanda 3, 16-ago-2026, 200 direcciones reales de `clientes`,
+  scripts en `~/.claude/plans/envios-zonas-tanda3/`):
   - **El geocoder es Georef** (`apis.datos.gob.ar`, del Estado, gratis y sin clave). 🔴 **Nominatim
     quedó descartado en la primera prueba**: para `Rodriguez 1062, Rosario` devolvió una casa en
     **Álvarez, a 60 km**, con cara de resultado bueno.
@@ -130,11 +162,8 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
     `Leandro N. Alem 1517` no ⇒ los nombres de pila se sacan **de a uno**, no sólo el primero.
   - 🔴 **La `localidad` de TN rompe la consulta aunque la calle esté bien**: `Garay Bis 47` resuelve
     sola y falla con `localidad = "Entre esmeralda y chacabuco"` (que es lo que vino en la orden).
-  - ▶️ **Lo que sigue faltando es el CONTRASTE**: que el punto sea preciso no prueba que la zona sea
-    la correcta, y **en prod hay 5 filas con precio a mano, dos de ellas de prueba** ⇒ los «~20
-    envíos ya cotizados» de la premisa **no existen**. Sale de la planilla vieja de OneDrive
-    («ENVIOS BDI», 877 filas con dirección + costo tipeado, precios viejos ⇒ compara barato/caro) o
-    de que Bruno cotice 20 a mano. **Sin eso no se puede decidir si esto propone bien.**
+  - 🔴 **Los «~20 envíos ya cotizados» de la premisa no existen**: en prod hay 5 filas con precio a
+    mano y **dos de esas cinco son de prueba** ($1.000). De ahí sale que el contraste esté abierto.
 - ▶️ **Lo que falta en el mapa externo** (lo dibuja Bruno, entra por «Importar»): estirar Zona 8
   (Belgrano al norte, Godoy y Moderno al sur, medidos con reverse-geocoding), dibujar como
   **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy

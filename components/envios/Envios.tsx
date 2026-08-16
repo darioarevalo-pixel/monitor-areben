@@ -63,11 +63,11 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, TotalesDia, Turno } from '@/lib/envios/tipos'
+import type { CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
 
@@ -601,6 +601,11 @@ function Pendientes({
   onRecargar: () => Promise<void>
   onVerPedido: (e: Envio) => void
 }) {
+  // Las propuestas del mapa viven acá y sólo hasta que se recarga la pantalla: no son un dato de la
+  // fila, son la respuesta a una pregunta que alguien hizo hace un minuto sobre la dirección de ese
+  // momento. Guardarlas obligaría a decidir cuándo dejan de valer, y la dirección se corrige seguido.
+  const [sugerencias, setSugerencias] = useState<Map<string, SugerenciaDePrecio>>(new Map())
+
   if (cargando) return null
   if (!envios.length) {
     return (
@@ -612,6 +617,8 @@ function Pendientes({
   }
 
   return (
+    <>
+    <SugerirPrecios envios={envios} sugerencias={sugerencias} onSugerir={setSugerencias} />
     <TableWrap>
       <THead>
         <Tr>
@@ -649,7 +656,7 @@ function Pendientes({
               <ResumenPedido envio={e} onVer={() => onVerPedido(e)} />
             </Td>
             <Td>
-              <Cotizar envio={e} onGuardado={onRecargar} />
+              <Cotizar envio={e} onGuardado={onRecargar} sugerencia={sugerencias.get(e.id)} />
             </Td>
             <Td>
               <AccionesDeFila envio={e} onAgendar={onAgendar} onEditar={onEditar} onBorrar={onBorrar} />
@@ -664,6 +671,129 @@ function Pendientes({
         ))}
       </TBody>
     </TableWrap>
+    </>
+  )
+}
+
+/**
+ * **El botón que le pregunta al mapa cuánto sale cada envío sin cotizar.**
+ *
+ * 🔑 **Es un botón y no algo que pase solo al abrir la pestaña.** La bandeja se mira muchas veces por
+ * día —para ver quién falta, para agendar, para buscar un pedido— y cotizar es una de esas veces:
+ * consultar un servicio ajeno en cada una de las otras es gasto que nadie pidió, y encima llenaría la
+ * pantalla de propuestas cuando la pregunta era otra.
+ *
+ * 🔑 **Sólo van las filas sin precio.** Una fila cotizada ya tiene su número decidido por una
+ * persona, y ofrecerle una alternativa al lado es invitar a cambiarlo sin motivo.
+ */
+function SugerirPrecios({
+  envios,
+  sugerencias,
+  onSugerir,
+}: {
+  envios: Envio[]
+  sugerencias: Map<string, SugerenciaDePrecio>
+  onSugerir: (m: Map<string, SugerenciaDePrecio>) => void
+}) {
+  const toast = useToast()
+  const [pidiendo, setPidiendo] = useState(false)
+  const sinPrecio = envios.filter((e) => !(Number(e.monto_envio) > 0))
+
+  async function pedir() {
+    setPidiendo(true)
+    try {
+      const lista = await sugerirPrecios(sinPrecio.slice(0, 100).map((e) => e.id))
+      onSugerir(new Map(lista.map((s) => [s.id, s])))
+      const conPrecio = lista.filter((s) => s.estado === 'sugerido').length
+      // Se dicen las dos cuentas: "propuse 7" sin el resto deja creer que las otras cinco no existen.
+      toast.ok(
+        conPrecio
+          ? `${conPrecio} con precio propuesto${lista.length > conPrecio ? ` · ${lista.length - conPrecio} se tipean a mano` : ''}.`
+          : 'Ninguna se pudo ubicar: se tipean a mano, y al lado de cada una dice por qué.',
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudieron sugerir los precios.')
+    } finally {
+      setPidiendo(false)
+    }
+  }
+
+  if (!sinPrecio.length) return null
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button variant="outline" disabled={pidiendo} onClick={() => void pedir()}>
+          {pidiendo ? 'Preguntándole al mapa…' : `Sugerir precios (${sinPrecio.length})`}
+        </Button>
+        <span style={{ opacity: 0.7, fontSize: 13 }}>
+          Busca la dirección en el mapa y propone el precio de la zona. <strong>No lo guarda</strong>: cada uno se
+          confirma con «usar», y el que no se pueda ubicar se tipea a mano como siempre.
+        </span>
+        {sugerencias.size ? (
+          <Button variant="ghost" onClick={() => onSugerir(new Map())}>
+            Ocultar propuestas
+          </Button>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * **Lo que el mapa propone para una fila**, al lado del campo del precio.
+ *
+ * 🔑 **El nombre de la zona va adelante del número.** «Zona 7 · $4.500» se revisa de un vistazo
+ * —quien cotiza conoce el mapa—; «$4.500» solo hay que creerlo. Es la misma razón por la que el
+ * motor devuelve la zona junto con el precio.
+ *
+ * 🔴 **Cuando no hay precio, lo que se muestra es el motivo y nada más.** No hay botón, no hay número
+ * a medias y no hay "aproximado": la fila queda igual que antes de apretar el botón, que es como se
+ * cotizó siempre. El único error caro de todo esto sería un precio de la zona de al lado, así que
+ * cada estado que no es `sugerido` es una fila que el sistema se **niega** a contestar.
+ */
+function PropuestaDelMapa({
+  sugerencia,
+  onUsar,
+}: {
+  sugerencia: SugerenciaDePrecio
+  onUsar: (precio: number) => Promise<void>
+}) {
+  const [usando, setUsando] = useState(false)
+
+  if (sugerencia.estado !== 'sugerido' || sugerencia.precio == null) {
+    return (
+      <div style={{ fontSize: 12, opacity: 0.65 }} title={sugerencia.encontrado || sugerencia.consulta || undefined}>
+        el mapa no propone: {sugerencia.motivo || 'no se pudo ubicar'}
+        {sugerencia.estado === 'ambigua' && sugerencia.zonas?.length ? ` (${sugerencia.zonas.join(' y ')})` : ''}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Badge tone="brand">
+        {sugerencia.zona?.nombre} · {formatMoney(sugerencia.precio)}
+      </Badge>
+      {/* La zona de Funes sale sólo martes y jueves: quien agenda tiene que verlo acá, no descubrirlo
+          cuando el paquete no salió. */}
+      {sugerencia.zona?.coordinar ? <Badge tone="warning">coordinar</Badge> : null}
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={usando}
+        onClick={async () => {
+          setUsando(true)
+          try {
+            await onUsar(sugerencia.precio as number)
+          } finally {
+            setUsando(false)
+          }
+        }}
+      >
+        {usando ? 'Guardando…' : 'usar'}
+      </Button>
+    </div>
   )
 }
 
@@ -1051,7 +1181,15 @@ function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; o
  * Guarda al salir del campo o con Enter, y sólo si el número cambió: el `blur` se dispara también
  * cuando alguien pasa de largo con el tabulador, y guardar ahí sería escribir sin que nadie lo pida.
  */
-function Cotizar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
+function Cotizar({
+  envio,
+  onGuardado,
+  sugerencia,
+}: {
+  envio: Envio
+  onGuardado: () => Promise<void>
+  sugerencia?: SugerenciaDePrecio
+}) {
   const original = Number(envio.monto_envio) || 0
   return (
     <div style={{ display: 'grid', gap: 4 }}>
@@ -1065,6 +1203,17 @@ function Cotizar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promis
         />
         {!original ? <Badge tone="warning">falta</Badge> : null}
       </div>
+      {/* La propuesta se muestra sólo mientras la fila no tenga precio: apenas se guarda, el número
+          decidido es el que manda y una alternativa al lado sería una invitación a cambiarlo. */}
+      {!original && sugerencia ? (
+        <PropuestaDelMapa
+          sugerencia={sugerencia}
+          onUsar={async (precio) => {
+            await guardarCosto(envio.id, precio)
+            await onGuardado()
+          }}
+        />
+      ) : null}
       <Bonificar envio={envio} onGuardado={onGuardado} />
     </div>
   )

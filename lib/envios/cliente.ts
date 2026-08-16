@@ -9,7 +9,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, Turno, ZonaDeReparto } from './tipos'
+import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -252,6 +252,22 @@ export async function borrarZona(id: string): Promise<void> {
  * igual» y que el servidor escriba otra cosa — y lo que se pisa acá son los precios de todas las
  * zonas a la vez, que es de lo que nadie se entera hasta que el cadete cobra de menos una semana.
  */
+/**
+ * **Pedir el precio que propone el mapa para un puñado de filas.** No escribe nada: el campo del
+ * precio sigue vacío hasta que alguien aprieta «usar», y eso guarda con `guardarCosto`, de a una.
+ *
+ * Van los `id` y no las direcciones: el servidor las lee de la base. La pantalla ya las tiene, pero
+ * mandarlas desde acá dejaría pedir el precio de una dirección que no es la del envío, y el número
+ * que vuelve tiene cara de oficial.
+ */
+export async function sugerirPrecios(ids: string[]): Promise<SugerenciaDePrecio[]> {
+  const d = await postear<{ sugerencias: SugerenciaDePrecio[] }>(
+    { action: 'zonas-sugerir', ids },
+    'No se pudieron sugerir los precios.',
+  )
+  return d.sugerencias || []
+}
+
 export async function importarZonas(
   archivo: unknown,
   opciones: { ajuste?: number; confirmar?: boolean } = {},

@@ -16,6 +16,7 @@
 //   GET  ?recurso=envios&zonas=1                             → { ok, zonas } (el mapa de reparto)
 //   POST { recurso:'envios', action:'zona-guardar', zona }   ·  action:'zona-borrar', id
 //   POST { recurso:'envios', action:'zonas-importar', archivo, ajuste, confirmar }
+//   POST { recurso:'envios', action:'zonas-sugerir', ids:[…] }  → { ok, sugerencias } (no escribe)
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=envios`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/envios.js` "por prolijidad",
@@ -45,6 +46,8 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { CAMPOS_ZONA, planDeImportacion, validarZona } from '../lib/envios/zonas.core.js';
+import { consultaDe, MOTIVO_SUGERENCIA, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
+import { geocodificarEnEscalera } from './_georef.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
@@ -604,6 +607,55 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message);
       }
       return res.status(200).json({ ok: true, plan: resumen, escrito: true });
+    }
+
+    // ── Proponer el precio de un puñado de filas, por zona ────────────────────
+    //
+    // 🔑 **No escribe nada.** Devuelve una sugerencia por fila y el campo del precio sigue vacío
+    // hasta que alguien aprieta "usar": lo decidió Bruno y es lo que hace que un precio de la zona de
+    // al lado no llegue a la calle. Escribir el precio es `action: 'costo'`, de a uno, como siempre.
+    //
+    // 🔑 **La dirección se lee de la base, no del body.** La pantalla ya la tiene, pero mandarla
+    // desde el cliente abriría un camino para pedir el precio de una dirección que no es la del
+    // envío — y el número que vuelve tiene cara de oficial.
+    if (b.action === 'zonas-sugerir') {
+      const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map((x) => String(x || '')).filter(Boolean))];
+      if (!ids.length) return res.status(400).json({ error: 'No vino ningún envío para cotizar.' });
+      // El tope es el del lote de Georef. Sin él, una bandeja grande se convierte en una tanda de
+      // consultas encadenadas contra un servicio ajeno y gratis, y el pedido muere por timeout.
+      if (ids.length > 100) return res.status(400).json({ error: 'De a 100 envíos como máximo.' });
+
+      const [env, zon] = await Promise.all([
+        supabase.from('envios_reparto').select('id, direccion, localidad').in('id', ids),
+        supabase.from('envios_zonas').select(CAMPOS_ZONA),
+      ]);
+      if (env.error) throw new Error(env.error.message);
+      if (zon.error) throw new Error(zon.error.message);
+
+      const zonas = zon.data || [];
+      if (!zonas.length) {
+        return res.status(400).json({ error: 'Todavía no hay zonas cargadas: importá el mapa desde «Zonas y precios».' });
+      }
+
+      // Primera mitad del candado: las que ni se preguntan quedan resueltas acá y no gastan consulta.
+      const sugerencias = [];
+      const aPreguntar = [];
+      for (const e of env.data || []) {
+        const c = consultaDe(e);
+        if (c.estado) {
+          sugerencias.push({ id: e.id, estado: c.estado, precio: null, zona: null, motivo: MOTIVO_SUGERENCIA[c.estado] });
+          continue;
+        }
+        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad });
+      }
+
+      const puntos = aPreguntar.length ? await geocodificarEnEscalera(aPreguntar) : new Map();
+      for (const p of aPreguntar) {
+        const s = sugerenciaDePunto((puntos.get(p.clave) || {}).resultado, zonas);
+        sugerencias.push({ id: p.clave, ...s, motivo: MOTIVO_SUGERENCIA[s.estado] || null, consulta: (puntos.get(p.clave) || {}).usada });
+      }
+
+      return res.status(200).json({ ok: true, sugerencias });
     }
 
     return res.status(400).json({ error: 'Acción desconocida.' });
