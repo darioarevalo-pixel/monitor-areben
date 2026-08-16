@@ -81,8 +81,7 @@ export function borrarSesion(): void {
  * lea dentro de la sesión (_getAdminPass, index.html:9365). Antes vivía solo en
  * sessionStorage y se perdía al cerrar el navegador: la sesión seguía viva pero el
  * header x-monitor-auth no salía y todo daba 403, con un re-pedido de pass molesto
- * en cada vuelta. Persistirla acá lo elimina. Sigue siendo el modelo de pass en el
- * cliente; la Fase S (Supabase Auth / token firmado) lo reemplaza junto con RLS.
+ * en cada vuelta. Persistirla acá lo elimina. Sigue siendo el modelo de pass en el cliente.
  *
  * ⚠️ **Revisado el 13-ago-2026 y se deja como está, a propósito.** Una contraseña en claro y
  * persistente en el disco del navegador es fea, y la auditoría la marcó. Pero el daño concreto
@@ -94,7 +93,20 @@ export function borrarSesion(): void {
  * Volverla a `sessionStorage` sería recuperar exactamente la fricción que este cambio vino a
  * sacar: la pass se pierde al cerrar el navegador, la sesión de 30 días sigue viva, y todo empieza
  * a dar 403 pidiendo la contraseña de nuevo. Cambiar un riesgo chico por una molestia diaria para
- * todo el equipo no es un buen negocio. El arreglo de verdad es la Fase S, no mover esto de lugar.
+ * todo el equipo no es un buen negocio.
+ *
+ * 🔴 **Corregido el 16-ago-2026: esta decisión se apoyaba en un futuro que NO va a llegar.** Hasta
+ * hoy acá decía que el arreglo de verdad era la Fase S, con Supabase Auth o un token firmado. La
+ * Fase S se terminó (5 escalones, la anon key ya no lee una fila) y se hizo **a propósito SIN
+ * Supabase Auth**: el monitor ya tiene sesión y motor de permisos del lado del servidor
+ * (`api/_auth.js` + `lib/permisos.core.js`), y un login de Supabase duplicaba el padrón para que la
+ * política siguiera diciendo `true`. Ver `docs/sync-ventas.md` y el AGENTS.md.
+ *
+ * ⇒ **Nadie va a venir a reemplazar esto de arriba.** La decisión sigue siendo la misma —se deja
+ * como está— pero por su propio motivo, que es el párrafo de la cadena rota con el XSS, no por una
+ * fase pendiente. Si algún día se quiere sacar de verdad, el camino es un token de sesión firmado
+ * por `api/_auth.js` que reemplace al header `x-monitor-auth`, y eso es trabajo propio: hay que
+ * abrirlo como tal, no esperarlo.
  */
 export function guardarAdminPass(pass: string): void {
   try {
