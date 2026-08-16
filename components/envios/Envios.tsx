@@ -69,6 +69,7 @@ import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
 import type { CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
+import { ZonasDeReparto } from './ZonasDeReparto'
 
 /**
  * El color de cada estado. Mismo criterio que Postventa (`ESTADO_TONE`), y por eso mismo tono:
@@ -114,7 +115,7 @@ export function Envios() {
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
   // La caja es del día, así que esto vuelve a ser un booleano: hay una sola por cerrar.
   const [cerrando, setCerrando] = useState(false)
-  const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta'>('dia')
+  const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta' | 'zonas'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
   const [viendoPedido, setViendoPedido] = useState<Envio | null>(null)
 
@@ -229,15 +230,21 @@ export function Envios() {
           trabajo. La tercera es la otra mitad de la operación: la plata que queda dando vueltas. */}
       <Tabs
         value={pestania}
-        onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta')}
+        onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta' | 'zonas')}
         items={[
           { key: 'dia', label: 'El día' },
           { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.' },
           { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.' },
+          // Va última y es de otra frecuencia: las otras tres se abren todos los días, ésta cuando
+          // cambian los precios. Pero es de Envíos —quien cotiza es quien mira el mapa— y una
+          // sección propia en el menú costaría los dos espejos de permisos por una pantalla mensual.
+          { key: 'zonas', label: 'Zonas y precios', hint: 'El mapa de reparto: en qué zona cae cada dirección y cuánto sale.' },
         ]}
       />
 
-      {pestania === 'cuenta' ? (
+      {pestania === 'zonas' ? (
+        <ZonasDeReparto activa={pestania === 'zonas'} />
+      ) : pestania === 'cuenta' ? (
         <CuentaDelCadete activa={pestania === 'cuenta'} />
       ) : pestania === 'pendientes' ? (
         <>

@@ -9,7 +9,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, Turno } from './tipos'
+import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, Turno, ZonaDeReparto } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -225,4 +225,39 @@ export async function leerOrdenesTN(marca: Marca, desde: string, hasta: string):
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || `No se pudieron leer las órdenes de ${marca}.`)
   const ordenes = (d.ordenes || []) as OrdenTN[]
   return { ordenes, cobertura: d.envio_cobertura || null, noLeidas: ordenesQueNoLlegaron(d, ordenes.length) }
+}
+
+// ── El mapa de zonas de reparto ──────────────────────────────────────────────
+
+export async function leerZonas(): Promise<ZonaDeReparto[]> {
+  const r = await apiFetch(`${API}&zonas=1&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las zonas de reparto.')
+  return (d.zonas || []) as ZonaDeReparto[]
+}
+
+export async function guardarZona(zona: Partial<ZonaDeReparto>): Promise<void> {
+  await postear({ action: 'zona-guardar', zona }, 'No se pudo guardar la zona.')
+}
+
+export async function borrarZona(id: string): Promise<void> {
+  await postear({ action: 'zona-borrar', id }, 'No se pudo borrar la zona.')
+}
+
+/**
+ * Importar el JSON que exporta el mapa.
+ *
+ * 🔑 **La previsualización y la escritura son el MISMO llamado**, con `confirmar` en `false` o en
+ * `true`. Si la pantalla calculara por su cuenta lo que va a pasar, podría mostrar «14 quedan
+ * igual» y que el servidor escriba otra cosa — y lo que se pisa acá son los precios de todas las
+ * zonas a la vez, que es de lo que nadie se entera hasta que el cadete cobra de menos una semana.
+ */
+export async function importarZonas(
+  archivo: unknown,
+  opciones: { ajuste?: number; confirmar?: boolean } = {},
+): Promise<{ plan: PlanDeImportacion; escrito: boolean }> {
+  return postear<{ plan: PlanDeImportacion; escrito: boolean }>(
+    { action: 'zonas-importar', archivo, ajuste: opciones.ajuste || 0, confirmar: opciones.confirmar === true },
+    'No se pudo importar el mapa de zonas.',
+  )
 }

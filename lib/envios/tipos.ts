@@ -264,3 +264,36 @@ export type OrdenTN = {
     cp: string | null
   } | null
 }
+
+/**
+ * Una zona del mapa de reparto.
+ *
+ * `poligono` viaja entero desde la base: es lo que se evalúa para saber en qué zona cae una
+ * dirección. Se declara `unknown` a propósito — es GeoJSON crudo y quien lo entiende es
+ * `zonas.core.js`, que valida la forma; tiparlo acá sería una segunda verdad sobre el mismo dato.
+ */
+export type ZonaDeReparto = {
+  id: string
+  nombre: string
+  tipo: 'servicio' | 'exclusion'
+  /** `null` sólo en las de exclusión. En una de servicio la base no deja que falte ni que sea cero. */
+  precio: number | null
+  prioridad: number
+  /** Se reparte, con el precio de la zona; lo que se coordina es **cuándo se va**. */
+  coordinar: boolean
+  /** `getDay()`: 0 es domingo. `null` es sin restricción, que es el caso de quince de las dieciséis. */
+  dias: number[] | null
+  turnos: Turno[] | null
+  poligono: unknown
+  autor?: string | null
+  updated_at?: string | null
+}
+
+/** Lo que va a pasar si se importa el archivo del mapa, antes de escribir nada. */
+export type PlanDeImportacion = {
+  nuevas: { nombre: string; tipo: string; precio: number | null }[]
+  actualizadas: { nombre: string; cambios: string[]; precio: number | null }[]
+  iguales: string[]
+  ausentes: string[]
+  problemas: { zona: string; motivo: string }[]
+}

@@ -11,10 +11,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
-import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes } from '@/lib/envios/cliente'
+import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes, leerZonas } from '@/lib/envios/cliente'
 import { cuentaDelCadete, marcasATraer, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CierreDia, CuentaCadete, Envio, Traida } from '@/lib/envios/tipos'
+import type { CierreDia, CuentaCadete, Envio, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
 
 /**
  * Cuántos días para atrás se piden al traer de Tienda Nube.
@@ -220,4 +220,43 @@ export function useCuentaCadete(activa: boolean) {
   }, [activa, tick])
 
   return { cuenta, cargando, error, recargar }
+}
+
+/**
+ * El mapa de zonas de reparto. Mismo molde que `useCuentaCadete`, incluida la carga perezosa: son
+ * dieciséis filas con un polígono adentro cada una y la pestaña se abre una vez por mes.
+ */
+export function useZonas(activa: boolean) {
+  const [zonas, setZonas] = useState<ZonaDeReparto[]>([])
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  const recargar = useCallback(async () => {
+    setTick((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!activa) return
+    let vivo = true
+    void (async () => {
+      setCargando(true)
+      setError(null)
+      try {
+        const lista = await leerZonas()
+        if (!vivo) return
+        setZonas(lista)
+      } catch (e) {
+        if (!vivo) return
+        setError(e instanceof Error ? e.message : 'No se pudieron leer las zonas de reparto.')
+      } finally {
+        if (vivo) setCargando(false)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [activa, tick])
+
+  return { zonas, cargando, error, recargar }
 }
