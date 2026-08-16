@@ -25,8 +25,14 @@ import { SECCION_AREA } from '@/lib/permisos'
 const raiz = fileURLToPath(new URL('..', import.meta.url))
 const agents = readFileSync(`${raiz}/AGENTS.md`, 'utf8')
 
-/** El bloque del mapa, no el archivo entero: afuera se nombran secciones al pasar y no son el mapa. */
-const mapa = agents.slice(agents.indexOf('## Mapa de secciones'), agents.indexOf('## Comandos'))
+/**
+ * El mapa se mudó a su propio archivo el 16-ago-2026 (Fase 4): eran 43 de las 226 líneas de
+ * `AGENTS.md`, que se pagan en **cada** mensaje, y es una tabla que se consulta cuando hay que
+ * ubicar algo. En `AGENTS.md` quedó la orden de leerlo — atada abajo, porque un puntero que nadie
+ * obedece es lo mismo que no tenerlo.
+ */
+const RUTA_MAPA = 'docs/mapa-secciones.md'
+const mapa = readFileSync(`${raiz}/${RUTA_MAPA}`, 'utf8')
 
 /**
  * La fuente de verdad del mapa es el **registro de componentes**, no `SECCION_AREA`.
@@ -114,9 +120,10 @@ describe('el mapa de secciones de AGENTS.md dice la verdad', () => {
  * ⛔ **Esto sigue sin exigir ficha por sección.** Sólo amarra las que ya existen: se pueden tener
  * dos fichas y 47 secciones sin, que es exactamente el plan.
  */
+const indice = agents.slice(agents.indexOf('## Fichas de sección'), agents.indexOf('## Mapa de secciones'))
+
 describe('cada ficha tiene su puntero, y cada puntero su ficha', () => {
   const dirFichas = `${raiz}/docs/secciones`
-  const indice = agents.slice(agents.indexOf('## Fichas de sección'), agents.indexOf('## Mapa de secciones'))
 
   /** `_plantilla.md` no es una ficha: es el molde, y no se lee al entrar a ninguna sección. */
   const fichas = existsSync(dirFichas)
@@ -149,6 +156,40 @@ describe('cada ficha tiene su puntero, y cada puntero su ficha', () => {
       .filter((b) => /docs\/secciones\/[\w.-]+\.md/.test(b) && !/leer/i.test(b))
       .map((b) => b.match(/docs\/secciones\/([\w.-]+\.md)/)?.[1] ?? b.slice(0, 40))
     expect(flojos, `punteros que no mandan leer: ${flojos.join(' · ')}`).toEqual([])
+  })
+})
+
+/**
+ * Los documentos que `AGENTS.md` sacó afuera de sí mismo (Fase 4): el mapa y el sync.
+ *
+ * 🔑 **Sacar 43 líneas de `AGENTS.md` sólo sirve si alguien abre el archivo adonde fueron.** Se
+ * midió el 15-ago-2026 que nada se auto-inyecta: si el puntero no manda **leer**, el contenido
+ * desapareció del contexto en vez de mudarse — que es peor que dejarlo adentro, porque parece que
+ * está documentado. Es el mismo test que el de las fichas, aplicado a los docs que no son fichas.
+ *
+ * 🔑 **Se exige por PÁRRAFO, no sobre el archivo entero** — misma corrección que mordió en el test
+ * de las fichas el 16-ago: con un `/leer/i` global, un puntero flojo pasa en verde porque la palabra
+ * aparece en cualquier otro lado del archivo. Y se mira **fuera** del índice de fichas, que tiene su
+ * propio test por bullet y donde `_plantilla.md` se nombra a propósito sin mandar leerla (es el
+ * molde de escritura, no lectura previa).
+ */
+describe('los documentos que AGENTS.md sacó afuera siguen mandados a leer', () => {
+  const fueraDelIndice = agents.replace(indice, '')
+  const parrafos = fueraDelIndice.split(/\n\s*\n/)
+  const nombrados = [...new Set([...fueraDelIndice.matchAll(/docs\/[\w.-]+\.md/g)].map((m) => m[0]))]
+
+  it('AGENTS.md nombra el mapa y el sync', () => {
+    expect(nombrados.sort()).toEqual([RUTA_MAPA, 'docs/sync-ventas.md'])
+  })
+
+  it('apuntan a archivos que existen', () => {
+    const rotos = nombrados.filter((d) => !existsSync(`${raiz}/${d}`))
+    expect(rotos, `punteros a archivos que no existen: ${rotos.join(' · ')}`).toEqual([])
+  })
+
+  it('cada uno está en un párrafo que manda leerlo', () => {
+    const flojos = nombrados.filter((d) => !parrafos.some((p) => p.includes(d) && /leer/i.test(p)))
+    expect(flojos, `nombrados sin la orden de leerlos: ${flojos.join(' · ')}`).toEqual([])
   })
 })
 

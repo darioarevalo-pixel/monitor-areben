@@ -2,8 +2,8 @@
 
 Monitor interno de BDI y Zattia. Next 15 (App Router) + Supabase + Vercel.
 
-Este archivo se carga en **cada** sesión de IA: cada línea se paga siempre. Entra solo lo que
-evita un error caro o una búsqueda repetida. Techo: 160 líneas.
+Este archivo se carga en **cada** sesión de IA: cada línea se paga siempre. Entra solo lo que evita
+un error caro o una búsqueda repetida. **Techo: 160 líneas propias** (el bloque de `next dev`, no).
 
 ## ⛔ Invariantes — romper una de estas cuesta caro
 
@@ -67,27 +67,9 @@ de Supabase (`productos` + `inventario`), y la tabla `inventario` ya trae sku, b
 variante. El único camino en vivo es `api/_inventario-vivo.js` (10-30 s por marca). Ante "no
 aparece un producto nuevo", el problema es el cruce o la frescura del espejo, no el endpoint.
 
-**El sync de ventas relee los últimos 90 días y borra lo que GN ya no tiene.** Nació solo-upsert
-con ventana incremental, así que una venta quedaba congelada en la foto de su primer día y una
-anulada seguía sumando plata (GN no devuelve las anuladas con un estado: dejan de venir). El mapeo
-y el guardado son de `scripts/lib/ventas-espejo.mjs` —una sola implementación para las dos marcas,
-`completo: false` es Zattia, cuya tabla todavía no tiene cliente ni costo— y el borrado, de
-`scripts/lib/purga-ventas.mjs`. **La purga va DESPUÉS del upsert**: si una venta cambió de fecha,
-mirarla antes la mostraría con la fecha vieja y se borraría por "desaparecida". Para el histórico
-anterior a la ventana existe `scripts/purga-historica.js`, que arranca en simulación.
-
-**El `statement_timeout` de la API de Supabase es de 8 segundos**, y las tres vistas materializadas
-juntas ya no entran. Por eso el refresco va **una llamada por vista**
-(`scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql`, que les sube el tiempo a
-120s). Mientras ese SQL no esté aplicado en una base, el módulo cae solo a `refresh_all_views()`.
-
-**Un paso que falla sin frenar el sync se junta en `problemas[]` y el script sale con código 1.**
-Antes eran `console.warn` con salida 0: el refresco de vistas estuvo roto una semana con el job en
-verde. Si el job queda en rojo, el Monitor lo muestra solo (`fetchUltimoSync` lee el `conclusion`).
-
-**`allVariantesHuerfanas` (ETL) se lee SIEMPRE con `?? []`.** Son las variantes con stock cuyo
-producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
-secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.
+**⛔ Antes de tocar `scripts/`, `sql/` o `lib/etl/`, leer `docs/sync-ventas.md`** — sync de ventas,
+refresco de vistas materializadas y ETL: por qué la purga va **después** del upsert, por qué el
+refresco es una llamada por vista, y el paso que estuvo roto una semana con el job en verde.
 
 ## Fichas de sección
 
@@ -97,9 +79,8 @@ archivos de esa carpeta: si nadie abre la ficha, no entra.
 
 **Y el que toca una sección que NO tiene ficha, la escribe al terminar** — con
 `docs/secciones/_plantilla.md`, que dice qué va adentro y qué no. Es el único momento en que el
-conocimiento está fresco y escribirlo cuesta cinco minutos. No se escriben las 49 de una.
-
-Tienen ficha:
+conocimiento está fresco y escribirlo cuesta cinco minutos. No se escriben las 49 de una. Las que
+ya tienen ficha:
 
 - Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
   `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
@@ -126,47 +107,9 @@ Tienen ficha:
 
 ## Mapa de secciones
 
-49 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
-suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
-
-**Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
-`colores` (cada una en `components/<key>/`) · `comisiones` · `verif-ventas` · `liquidacion`
-(con `lib/` propio)
-
-**Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
-`disenos`
-
-**Clientes** — `clientes → components/crm + lib/crm`
-
-**Local** — `envios → components/envios + lib/envios` (+ portal `/cadete/<token>`) ·
-`atencion → components/atencion + lib/atencion` ·
-`conteo → components/conteo-local-bdi` · `conteo-estandar-zattia` y
-`conteo-estandar-stunned → components/conteo-estandar` · `cupones` · `etiquetas` · `exhib` ·
-`ubicaciones` · `solicitudes` · `solicitudes-internas` · `postventa-local → components/postventa` ·
-`reclamos-local` y `cambios-local → components/reclamos + lib/reclamos`
-
-**Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa`
-
-**Marketing** — `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
-`gen-talles` · `calendario`
-
-**Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, once vistas por el 2º
-tramo de la URL; el perfil de Marketing la ve porque tiene las dos áreas
-
-**Administración** — `caducados` · `postventa` · `reposicion`
-
-**Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) · **Integraciones** — `integraciones`
-
-**Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en
-la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
-`scripts/novedad.mjs` y se publican a mano; el manual de una sección lo muestra `SeccionHeader`.
-
-**Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`)
-
-**Sin permiso (todos las ven)** — `inicio` · `usuarios` · `novedades` · `manuales` · `agenda`
-
-El menú y los permisos se definen a mano en `lib/nav.datos.ts`: `PERM_CAT` (qué secciones existen,
-con su área y sus sub-permisos) y `NAV_CATS` (cómo se agrupan en el sidebar).
+**⛔ Para ubicar cualquier sección, leer `docs/mapa-secciones.md`** — `key → components/… + lib/…`,
+el área de cada una, y lo que no se adivina (el portal del cadete, las once vistas de Meta, las tres
+secciones sin `store`). El menú y los permisos se definen a mano en `lib/nav.datos.ts`.
 
 ## Comandos
 
