@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SECCION_AREA } from '@/lib/permisos'
 
@@ -103,6 +103,43 @@ describe('el mapa de secciones de AGENTS.md dice la verdad', () => {
  * ⚠️ Que una sección esté acá **no dice cómo se autoriza** — `inicio` está en `KEYS_PARA_TODOS` y
  * `usuarios` no. Eso vive en `puedeVer`, no en esta lista.
  */
+/**
+ * Las fichas y sus punteros, atados.
+ *
+ * 🔑 **Una ficha que nadie manda leer es una ficha muerta.** Se midió el 15-ago-2026 que un
+ * `CLAUDE.md` adentro de la carpeta de la sección **no se inyecta solo**: si el índice de
+ * `AGENTS.md` no la nombra, la ficha existe y no la abre nadie. Y al revés, un puntero que quedó
+ * apuntando a un archivo borrado manda a buscar humo en cada sesión.
+ *
+ * ⛔ **Esto sigue sin exigir ficha por sección.** Sólo amarra las que ya existen: se pueden tener
+ * dos fichas y 47 secciones sin, que es exactamente el plan.
+ */
+describe('cada ficha tiene su puntero, y cada puntero su ficha', () => {
+  const dirFichas = `${raiz}/docs/secciones`
+  const indice = agents.slice(agents.indexOf('## Fichas de sección'), agents.indexOf('## Mapa de secciones'))
+
+  /** `_plantilla.md` no es una ficha: es el molde, y no se lee al entrar a ninguna sección. */
+  const fichas = existsSync(dirFichas)
+    ? readdirSync(dirFichas).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort()
+    : []
+
+  it('el índice de AGENTS.md nombra a todas las fichas', () => {
+    const sinPuntero = fichas.filter((f) => !indice.includes(`docs/secciones/${f}`))
+    expect(sinPuntero, `fichas que nadie manda leer: ${sinPuntero.join(' · ')}`).toEqual([])
+  })
+
+  it('todo puntero del índice apunta a una ficha que existe', () => {
+    const apuntadas = [...indice.matchAll(/docs\/secciones\/([\w.-]+\.md)/g)].map((m) => m[1])
+    const rotos = [...new Set(apuntadas)].filter((f) => !existsSync(`${dirFichas}/${f}`))
+    expect(rotos, `punteros a archivos que no existen: ${rotos.join(' · ')}`).toEqual([])
+  })
+
+  // El índice es una orden, no un dato: si deja de estar redactado como orden, deja de servir.
+  it('el índice sigue mandando leerlas', () => {
+    expect(indice).toMatch(/leer/i)
+  })
+})
+
 describe('el registro y el catálogo de permisos', () => {
   const SIN_AREA = ['inicio', 'usuarios']
 
