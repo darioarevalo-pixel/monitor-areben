@@ -5,7 +5,7 @@ import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
 const problemas = [];
@@ -33,71 +33,20 @@ loadEnv();
 const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
 const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN_ZATTIA;
-const GN_BASE      = 'https://www.gestionnube.com/api/v1';
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY, GN_TOKEN_ZATTIA');
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function gnFetch(path, retries = 4) {
-  const url = `${GN_BASE}/${path}`;
-  // Presupuesto aparte para el corte por límite de solicitudes (ver gn-rate-limit.mjs).
-  let cortes = 0;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-    });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
-      if (attempt < retries) {
-        process.stdout.write(` [retry ${attempt}/${retries - 1}]`);
-        await sleep(3000 * attempt);
-        continue;
-      }
-      throw new Error(`Respuesta no-JSON [${res.status}] en ${path}: ${text.substring(0, 200)}`);
-    }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`\n  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        attempt--; // el corte no gasta el presupuesto de reintentos de arriba
-        continue;
-      }
-      if (res.status >= 500 && attempt < retries) {
-        process.stdout.write(` [retry ${attempt}/${retries - 1} status ${res.status}]`);
-        await sleep(3000 * attempt);
-        continue;
-      }
-      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-    }
-    return data;
-  }
-}
-
-async function fetchAllPages(basePath) {
-  const results = [];
-  let page = 1;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    process.stdout.write(`  página ${page}...`);
-    const data = await gnFetch(`${basePath}${sep}page=${page}`);
-    const items = data.data || [];
-    results.push(...items);
-    process.stdout.write(` ${items.length} registros\n`);
-    if (!data.meta?.has_more_pages || items.length === 0) break;
-    page++;
-    await sleep(400);
-  }
-  return results;
-}
+// El cliente de GN es UNO solo (scripts/lib/gn-fetch.mjs). Hasta el 16-ago-2026 acá vivía una
+// copia propia que **no reintentaba los errores de red**: su `fetch` estaba pelado, sin try/catch,
+// así que un `fetch failed` mataba el sync diario de Zattia entero mientras el de BDI —con el
+// mismo código, arreglado sólo de aquel lado— sobrevivía.
+const { fetchAllPages } = crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 

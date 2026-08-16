@@ -30,7 +30,7 @@ import { readFileSync, appendFileSync } from 'fs';
 import { resolve } from 'path';
 import { purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 function loadEnv() {
   try {
@@ -85,50 +85,12 @@ if (!cfg.url || !cfg.key || !cfg.token) {
 }
 
 const supabase = createClient(cfg.url, cfg.key);
-const GN_BASE = 'https://www.gestionnube.com/api/v1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Gestión Nube ──────────────────────────────────────────────────────────────
 
-async function gnFetch(path, retries = 5) {
-  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
-  let cortes = 0;
-  for (let intento = 1; intento <= retries; intento++) {
-    let res, text;
-    try {
-      res = await fetch(`${GN_BASE}/${path}`, {
-        headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/json' },
-      });
-      text = await res.text();
-    } catch (e) {
-      if (intento === retries) throw e;
-      await sleep(2000 * intento);
-      continue;
-    }
-    let data;
-    try { data = JSON.parse(text); }
-    catch {
-      // GN contesta el HTML del login cuando el token venció: decirlo con todas las letras
-      // en vez de dejar un "Unexpected token <" que no ayuda a nadie.
-      if (/<!DOCTYPE|<html/i.test(text)) throw new Error(`Gestión Nube devolvió HTML: el token de ${MARCA} está vencido o es inválido.`);
-      if (res.status >= 500 && intento < retries) { await sleep(2000 * intento); continue; }
-      throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 150)}`);
-    }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        intento--; // el corte no gasta el presupuesto de reintentos
-        continue;
-      }
-      if (res.status >= 500 && intento < retries) { await sleep(2000 * intento); continue; }
-      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-    }
-    return data;
-  }
-}
+// Cliente de GN compartido: ver scripts/lib/gn-fetch.mjs.
+const { gnFetch } = crearClienteGN({ token: cfg.token });
 
 async function bajarMes(desde, hasta) {
   const filas = [];

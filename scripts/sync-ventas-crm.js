@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 function loadEnv() {
   try {
@@ -27,7 +27,6 @@ loadEnv();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN;
-const GN_BASE      = 'https://www.gestionnube.com/api/v1';
 const FROM_DATE    = process.env.SYNC_FROM_DATE || '2025-01-01';
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
@@ -36,88 +35,13 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function gnFetch(path, retries = 5) {
-  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
-  let cortes = 0;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    let res, text;
-    try {
-      res = await fetch(`${GN_BASE}/${path}`, {
-        headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-      });
-      text = await res.text();
-    } catch (e) {
-      // Error de red (ECONNRESET, fetch failed, timeout, etc)
-      if (attempt < retries) {
-        const wait = 2000 * attempt;
-        console.warn(`  ⚠️  red ${e.message} en ${path}, reintentando en ${wait}ms (${attempt}/${retries})...`);
-        await sleep(wait);
-        continue;
-      }
-      throw e;
-    }
-    let data;
-    try { data = JSON.parse(text); }
-    catch {
-      if (res.status >= 500 && attempt < retries) {
-        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
-        await sleep(2000 * attempt);
-        continue;
-      }
-      throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 200)}`);
-    }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        attempt--; // el corte no gasta el presupuesto de reintentos
-        continue;
-      }
-      if (res.status >= 500 && attempt < retries) {
-        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
-        await sleep(2000 * attempt);
-        continue;
-      }
-      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-    }
-    return data;
-  }
-}
+// Cliente de GN compartido: ver scripts/lib/gn-fetch.mjs.
+const { fetchAllPagesStreaming } = crearClienteGN({ token: GN_TOKEN });
 
 // Itera páginas e invoca onBatch(rows, page) cada FLUSH_EVERY páginas
 // (o al final si hay un resto). Permite guardado incremental.
 const FLUSH_EVERY = 50;
-
-async function fetchAllPagesStreaming(basePath, onBatch) {
-  let buffer = [];
-  let page = 1;
-  let totalAcumulado = 0;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    process.stdout.write(`  página ${page}...`);
-    const data = await gnFetch(`${basePath}${sep}page=${page}`);
-    const items = data.data || [];
-    buffer.push(...items);
-    process.stdout.write(` ${items.length} registros\n`);
-    const noMore = !data.meta?.has_more_pages || items.length === 0;
-
-    if (buffer.length && (page % FLUSH_EVERY === 0 || noMore)) {
-      console.log(`  → flush parcial (página ${page}, ${buffer.length} ventas)...`);
-      await onBatch(buffer, page);
-      totalAcumulado += buffer.length;
-      buffer = [];
-    }
-
-    if (noMore) break;
-    page++;
-    await sleep(1100);
-  }
-  return { totalPaginas: page, totalAcumulado };
-}
 
 function mapVentaRow(v) {
   return {

@@ -9,6 +9,7 @@ en cada mensaje de cada sesión.
 
 | qué | archivo |
 |---|---|
+| **el cliente HTTP de Gestión Nube** | `scripts/lib/gn-fetch.mjs` |
 | mapeo y guardado de ventas | `scripts/lib/ventas-espejo.mjs` |
 | borrado de las que GN ya no tiene | `scripts/lib/purga-ventas.mjs` |
 | histórico anterior a la ventana | `scripts/purga-historica.js` (arranca en simulación) |
@@ -16,6 +17,13 @@ en cada mensaje de cada sesión.
 | payload de la app | `lib/etl/`, cacheado en IndexedDB (`lib/cache.ts`) |
 
 ## Reglas que el código no dice
+
+🔴 **Nadie escribe su propio `gnFetch`.** Había diez copias y habían divergido: medido el
+16-ago-2026, **cinco no reintentaban los errores de red** —el `fetch` sin `try/catch`, así que un
+`fetch failed` mataba el job entero—, y cuatro de esas cinco eran de Zattia más
+`sync-inventario-solo`, que es el que más corre. Ahora es `crearClienteGN({ token, pausaPagina })`
+de `scripts/lib/gn-fetch.mjs`. La `pausaPagina` sí es de cada script (400 incremental, 1100 los que
+barren catálogos enteros): es cuánto se le apoya a GN y no debe uniformarse sin querer.
 
 **El sync relee los últimos 90 días y borra lo que GN ya no tiene.** Nació solo-upsert con ventana
 incremental, así que una venta quedaba congelada en la foto de su primer día y una anulada seguía

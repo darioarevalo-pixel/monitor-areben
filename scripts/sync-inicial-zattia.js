@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 function loadEnv() {
   try {
@@ -25,7 +25,6 @@ loadEnv();
 const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
 const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN_ZATTIA;
-const GN_BASE      = 'https://www.gestionnube.com/api/v1';
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY, GN_TOKEN_ZATTIA');
@@ -34,62 +33,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function gnFetch(path, retries = 4) {
-  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
-  let cortes = 0;
-  const url = `${GN_BASE}/${path}`;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-    });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
-      if (attempt < retries) {
-        process.stdout.write(` [retry ${attempt}/${retries-1}]`);
-        await sleep(3000 * attempt);
-        continue;
-      }
-      throw new Error(`Respuesta no-JSON de Gestión Nube [${res.status}] en ${path}: ${text.substring(0, 200)}`);
-    }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        attempt--; // el corte no gasta el presupuesto de reintentos
-        continue;
-      }
-      if (res.status >= 500 && attempt < retries) {
-        process.stdout.write(` [retry ${attempt}/${retries-1} status ${res.status}]`);
-        await sleep(3000 * attempt);
-        continue;
-      }
-      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-    }
-    return data;
-  }
-}
+// Cliente de GN compartido. Esta copia NO reintentaba errores de red: ahora sí.
+const { fetchAllPages } = crearClienteGN({ token: GN_TOKEN, pausaPagina: 1100 });
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function fetchAllPages(basePath) {
-  const results = [];
-  let page = 1;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    process.stdout.write(`  página ${page}...`);
-    const data = await gnFetch(`${basePath}${sep}page=${page}`);
-    const items = data.data || [];
-    results.push(...items);
-    process.stdout.write(` ${items.length} registros\n`);
-    if (!data.meta?.has_more_pages || items.length === 0) break;
-    page++;
-    await sleep(1100);
-  }
-  return results;
-}
 
 async function syncProductos() {
   console.log('\n[productos] Descargando...');

@@ -1,10 +1,9 @@
 // Sync RÁPIDO: inventario (stock + sku + barcode) + productos (precio, costo, categoría, etc.),
 // para BDI o Zattia. Se elige con INPUT_STORE=bdi|zattia. NO toca ventas → es veloz.
 import { createClient } from '@supabase/supabase-js';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 const STORE = (process.env.INPUT_STORE || process.argv[2] || 'bdi').toLowerCase();
-const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
 const CFG = STORE === 'zattia'
   ? {
@@ -24,47 +23,10 @@ if (!CFG.url || !CFG.key || !CFG.token) {
 }
 
 const supabase = createClient(CFG.url, CFG.key);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function gnFetch(path, retries = 4) {
-  // Presupuesto aparte para el corte por límite de solicitudes (ver lib/gn-rate-limit.mjs):
-  // es el que dejaba el inventario sin bajar y los productos nuevos fuera de Etiquetas.
-  let cortes = 0;
-  for (let a = 1; a <= retries; a++) {
-    const res = await fetch(`${GN_BASE}/${path}`, { headers: { Authorization: `Bearer ${CFG.token}`, Accept: 'application/json' } });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { if (a < retries) { await sleep(3000 * a); continue; } throw new Error('Respuesta no-JSON ' + res.status + ': ' + text.slice(0, 160)); }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`  ⏳ GN cortó por límite de solicitudes. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        a--; // el corte no gasta el presupuesto de reintentos de arriba
-        continue;
-      }
-      if (res.status >= 500 && a < retries) { await sleep(3000 * a); continue; }
-      throw new Error(data.message || data.error || ('Error ' + res.status));
-    }
-    return data;
-  }
-}
-
-async function fetchAllPages(base) {
-  const out = []; let page = 1;
-  while (true) {
-    const sep = base.includes('?') ? '&' : '?';
-    const d = await gnFetch(`${base}${sep}page=${page}`);
-    const items = d.data || [];
-    out.push(...items);
-    process.stdout.write(`  pág ${page}: ${items.length}\n`);
-    if (!d.meta?.has_more_pages || items.length === 0) break;
-    page++; await sleep(400);
-  }
-  return out;
-}
-
+// Cliente de GN compartido. Esta copia NO reintentaba errores de red, y es el sync que MÁS corre
+// (91 corridas en 30 días): era el menos protegido de todos.
+const { fetchAllPages } = crearClienteGN({ token: CFG.token, pausaPagina: 400 });
 
 // Desactiva en el espejo los productos que GN ya no devuelve (borrados/inactivos), salvo los muy nuevos.
 async function desactivarBorrados(gnIds) {

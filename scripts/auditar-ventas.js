@@ -46,6 +46,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
+// `gnVenta` los usa a mano: necesita el status crudo para distinguir el 404 (ver su comentario).
 import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
 
 function loadEnv() {
@@ -114,39 +116,8 @@ async function gnVenta(id) {
   }
 }
 
-async function gnFetch(path, retries = 5) {
-  // El corte por límite lleva presupuesto aparte: esperar no es "un intento fallido más".
-  let cortes = 0;
-  for (let intento = 1; intento <= retries; intento++) {
-    let res, text;
-    try {
-      res = await fetch(`${GN_BASE}/${path}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/json' } });
-      text = await res.text();
-    } catch (e) {
-      if (intento === retries) throw e;
-      await sleep(2000 * intento); continue;
-    }
-    // Antes del try de abajo a propósito: ahí adentro un throw lo agarra su propio catch, y el
-    // corte por límite terminaría contado como "error de parseo" y gastando reintentos.
-    if (esRateLimit(res, null) && cortes < MAX_RATE_LIMIT) {
-      cortes++;
-      const wait = esperaRateLimit(res, cortes);
-      console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-      await sleep(wait);
-      intento--;
-      continue;
-    }
-    try {
-      const data = JSON.parse(text);
-      if (res.ok) return data;
-      if (res.status < 500 || intento === retries) throw new Error(data.message || `Error ${res.status}`);
-    } catch (e) {
-      if (/<!DOCTYPE|<html/i.test(text)) throw new Error(`Gestión Nube devolvió HTML: el token de ${MARCA} está vencido.`);
-      if (intento === retries) throw e;
-    }
-    await sleep(2000 * intento);
-  }
-}
+// Cliente de GN compartido: ver scripts/lib/gn-fetch.mjs.
+const { gnFetch } = crearClienteGN({ token: cfg.token });
 
 async function bajarGN(desde, hasta) {
   const filas = [];

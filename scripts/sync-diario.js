@@ -5,7 +5,7 @@ import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
-import { esRateLimit, esperaRateLimit, MAX_RATE_LIMIT } from './lib/gn-rate-limit.mjs';
+import { crearClienteGN } from './lib/gn-fetch.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -43,7 +43,6 @@ loadEnv();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const GN_TOKEN    = process.env.GN_TOKEN;
-const GN_BASE     = 'https://www.gestionnube.com/api/v1';
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_KEY, GN_TOKEN');
   process.exit(1);
@@ -53,101 +52,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Reintentos: errores de red (fetch failed, ECONNRESET, timeouts) y HTTP 5xx
-async function gnFetch(path, retries = 5) {
-  // El corte por límite de solicitudes lleva su propio presupuesto: esperar un minuto no
-  // es "un intento fallido más", y gastarlo del de arriba dejaba el sync sin reintentos
-  // reales para los 5xx. Ver scripts/lib/gn-rate-limit.mjs.
-  let cortes = 0;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    let res, text;
-    try {
-      res = await fetch(`${GN_BASE}/${path}`, {
-        headers: { 'Authorization': `Bearer ${GN_TOKEN}`, 'Accept': 'application/json' }
-      });
-      text = await res.text();
-    } catch (e) {
-      if (attempt < retries) {
-        const wait = 2000 * attempt;
-        console.warn(`  ⚠️  red ${e.message} en ${path}, reintentando en ${wait}ms (${attempt}/${retries})...`);
-        await sleep(wait);
-        continue;
-      }
-      throw e;
-    }
-    let data;
-    try { data = JSON.parse(text); }
-    catch {
-      if ((res.status >= 500 || esRateLimit(res, null)) && attempt < retries) {
-        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
-        await sleep(2000 * attempt);
-        continue;
-      }
-      throw new Error(`Respuesta no-JSON de GN [${res.status}] en ${path}: ${text.substring(0, 200)}`);
-    }
-    if (!res.ok) {
-      if (esRateLimit(res, data) && cortes < MAX_RATE_LIMIT) {
-        cortes++;
-        const wait = esperaRateLimit(res, cortes);
-        console.warn(`  ⏳ GN cortó por límite de solicitudes en ${path}. Esperando ${Math.round(wait / 1000)}s (${cortes}/${MAX_RATE_LIMIT})...`);
-        await sleep(wait);
-        attempt--; // el corte no gasta el presupuesto de reintentos de arriba
-        continue;
-      }
-      if (res.status >= 500 && attempt < retries) {
-        console.warn(`  ⚠️  ${res.status} en ${path}, reintentando (${attempt}/${retries})...`);
-        await sleep(2000 * attempt);
-        continue;
-      }
-      throw new Error(data.message || data.error || `Error ${res.status} en ${path}`);
-    }
-    return data;
-  }
-}
-
-async function fetchAllPages(basePath) {
-  const results = [];
-  let page = 1;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    process.stdout.write(`  página ${page}...`);
-    const data = await gnFetch(`${basePath}${sep}page=${page}`);
-    const items = data.data || [];
-    results.push(...items);
-    process.stdout.write(` ${items.length} registros\n`);
-    if (!data.meta?.has_more_pages || items.length === 0) break;
-    page++;
-    await sleep(400);
-  }
-  return results;
-}
-
-// Igual que fetchAllPages, pero invoca onBatch(rows, page) cada FLUSH_EVERY páginas.
-// Si el job se cae a mitad, lo que ya bajó queda persistido (re-correr es idempotente).
-const FLUSH_EVERY = 50;
-async function fetchAllPagesStreaming(basePath, onBatch) {
-  let buffer = [];
-  let page = 1;
-  while (true) {
-    const sep = basePath.includes('?') ? '&' : '?';
-    process.stdout.write(`  página ${page}...`);
-    const data = await gnFetch(`${basePath}${sep}page=${page}`);
-    const items = data.data || [];
-    buffer.push(...items);
-    process.stdout.write(` ${items.length} registros\n`);
-    const noMore = !data.meta?.has_more_pages || items.length === 0;
-    if (buffer.length && (page % FLUSH_EVERY === 0 || noMore)) {
-      console.log(`  → flush parcial (página ${page}, ${buffer.length} registros)...`);
-      await onBatch(buffer, page);
-      buffer = [];
-    }
-    if (noMore) break;
-    page++;
-    await sleep(1100);
-  }
-}
+// Cliente de GN compartido (scripts/lib/gn-fetch.mjs): esta era la copia BUENA —la única con
+// reintento de errores de red— y es la que quedó como implementación única para las diez.
+const { fetchAllPages, fetchAllPagesStreaming } = crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
