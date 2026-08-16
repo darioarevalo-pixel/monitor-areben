@@ -11,7 +11,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` · `ticket.ts` (rollo de 80 mm) |
-| **El mapa de zonas** (todavía sin consumidor) | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos |
+| **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
 | Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_dia` · `envios_movimientos` · `envios_portal` |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
@@ -43,11 +43,25 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **`cobrado: null` («no dijo nada») NO es `false` («no me pagó»)** — se saldan al revés, y todas
   las filas anteriores al portal son `null`. La tarifa se le paga igual: llevó el paquete.
 - 🔴 **El envío del cadete llega de TN SIEMPRE en $0** (18 de 18 medidos). El precio no viaja en la
-  orden: está escrito en el nombre de la opción, por zona. **Hoy se tipea**: Rosario $3.000-4.300 ·
-  Fisherton $4.300/5.500 · Funes $8.000 · Roldán $11.000 · VGG $6.500. El motor que lo propondría a
-  partir de la dirección ya está (`zonas.core.js`), pero **faltan las zonas y el geocoder**, y lo que
-  proponga **se confirma a mano** (decidido con Bruno): un precio de la zona de al lado no lo caza
-  nadie, mientras que la falta de precio ya bloquea agendar.
+  orden: está escrito en el nombre de la opción, por zona. **Hoy se tipea**, pero el mapa de zonas ya
+  está cargado (16 zonas en `envios_zonas`); falta **geocodificar la dirección** para poder proponer.
+- 🔑 **El mapa de zonas tiene DOS fuentes y cada una manda sobre una cosa: el DIBUJO viene del mapa
+  externo** (un HTML con Leaflet que vive fuera del repo, se exporta a JSON y se importa desde la
+  pantalla) **y el PRECIO se edita en la app**. Re-importar actualiza el dibujo y **no pisa los
+  precios** — sin esa asimetría, corregir un polígono revierte las dieciséis zonas al valor que el
+  JSON tenía el día que se exportó, en silencio, y los precios se mueven seguido (entre el mapa de
+  abril y el de junio hay $1.000 en todas). Una zona que está en la base y no viene en el archivo
+  **no se borra**: se informa. Vive en `planDeImportacion`, y la previsualización sale del **mismo
+  llamado** que la escritura (`confirmar: false`/`true`) para que no puedan divergir.
+- 🔑 **«Coordinar» NO es un precio a convenir**: el paquete se lleva y se cobra lo de la zona; lo que
+  se coordina es **cuándo se va**. Por eso es una marca al lado del precio, no un tipo de zona.
+- 🔑 **Lo que proponga el motor se confirma a mano** (decidido con Bruno): un precio de la zona de al
+  lado no lo caza nadie, mientras que la falta de precio ya bloquea agendar. Por eso `precioSugerido`
+  devuelve `ambigua` **sin precio** cuando el punto cae en dos zonas empatadas que cobran distinto, y
+  por eso el **nombre** de la zona viaja al lado del precio: «Zona 7 — $4.500» no se puede revisar.
+- 🔑 **`dias`/`turnos` de una zona existen por Funes**, que sale sólo martes y jueves a la mañana. Se
+  guardan y se preguntan los dos aunque hoy digan lo mismo (martes y jueves son los únicos días con
+  turno mañana): deducir uno del otro convierte un cambio de grilla en un paquete que no sale.
 - 🔴 **El filtro del correo es NEGATIVO a propósito** y mira dos señales (nombre `Envío Nube - …` y
   tracking). La positiva («que diga cadete») falla en silencio: `shipping_option` es **texto libre
   que la tienda edita**. El 59% de lo que pasaba el filtro viejo era Correo Argentino y Andreani.
@@ -91,6 +105,16 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 
 ## Pendiente
 
+- ▶️ **El precio por zona, tanda 3: geocodificar la dirección y proponer.** El motor y las zonas ya
+  están (16 cargadas en prod, ejercidas a mano). Falta el punto: la orden de TN **no trae lat/lng**,
+  sólo `direccion`, `localidad` y `cp`. 🔴 **Arranca MIDIENDO**, no codeando: ~20 envíos ya cotizados
+  a mano contra lo que propone el motor. Si no coinciden no es un bug del código — es que el geocoder
+  no entiende las direcciones sucias de TN, y eso decide si esto sirve o queda como ayuda opcional.
+- ▶️ **Lo que falta en el mapa externo** (lo dibuja Bruno, entra por «Importar»): estirar Zona 8
+  (Belgrano al norte, Godoy y Moderno al sur, medidos con reverse-geocoding), dibujar como
+  **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy
+  no existen como dato y por lo tanto reciben precio— y marcar los **coordinar**. Menor: renombrar
+  las diez «Zona N» con su barrio.
 - ▶️ **`node scripts/apply-envios.mjs --cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte` detrás de
   un guard de huérfanos) y **`--cerrar-tanda-a`** (`pago_cadete`, 0 filas). Van **después** del deploy.
 - ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
