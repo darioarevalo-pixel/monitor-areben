@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  planDeImportacion,
   precioSugerido,
   puntoEnPoligono,
+  validarZona,
+  zonaSaleEse,
   zonasDelPunto,
   zonasDesdeExport,
 } from '@/lib/envios/zonas.core.js'
@@ -241,6 +244,32 @@ describe('zonasDesdeExport', () => {
     expect(problemas).toHaveLength(1)
   })
 
+  it('el ajuste suma a todos los precios de servicio, y la exclusión sigue sin precio', () => {
+    const { zonas } = zonasDesdeExport(
+      [
+        zonaCruda({ name: 'Zona Centro', type: 'service', price: 3000 }),
+        zonaCruda({ name: 'Roldán', type: 'service', price: 11000 }),
+        zonaCruda({ name: 'Alvear', type: 'exclude' }),
+      ],
+      { ajuste: 1000 },
+    )
+    expect(zonas.map((z: { precio: number | null }) => z.precio)).toEqual([4000, 12000, null])
+  })
+
+  it('🔴 el ajuste NO crea el precio que falta: se valida el del archivo primero', () => {
+    // Con el aumento aplicado antes de validar, esta zona entraría valiendo $1.000 — un número
+    // plausible, inventado, y para un barrio entero.
+    const { zonas, problemas } = zonasDesdeExport([zonaCruda({ name: 'Rota', type: 'service', price: 0 })], { ajuste: 1000 })
+    expect(zonas).toEqual([])
+    expect(problemas).toHaveLength(1)
+  })
+
+  it('un ajuste negativo que deja el precio en cero o menos tampoco entra', () => {
+    const { zonas, problemas } = zonasDesdeExport([zonaCruda({ name: 'Centro', type: 'service', price: 3000 })], { ajuste: -3000 })
+    expect(zonas).toEqual([])
+    expect(problemas[0].motivo).toMatch(/ajuste/i)
+  })
+
   it('de punta a punta: del JSON del mapa a un precio', () => {
     const { zonas } = zonasDesdeExport([
       zonaCruda({ name: 'Rosario centro', type: 'service', price: 3000, priority: 1 }),
@@ -248,5 +277,127 @@ describe('zonasDesdeExport', () => {
     ])
     expect(precioSugerido(CENTRO.lat, CENTRO.lng, zonas).precio).toBe(3000)
     expect(precioSugerido(-32.95, -60.71, zonas).precio).toBe(5500)
+  })
+})
+
+/**
+ * Importar es la única operación de la pantalla que puede pisar trabajo ajeno, y la regla que la
+ * hace segura es una asimetría que no se ve mirando el resultado: **el dibujo manda desde el mapa,
+ * el precio manda desde la app**. Sin ella, corregir un polígono y re-importar revierte los precios
+ * de las dieciséis zonas al valor que el archivo tenía el día que se exportó, en silencio.
+ */
+describe('planDeImportacion', () => {
+  const zonaCruda = (meta: Record<string, unknown>, geometry: unknown = CAJA) => ({
+    meta,
+    feature: { type: 'Feature', properties: {}, geometry },
+  })
+  const enLaBase = [
+    { id: 'z1', nombre: 'Zona Centro', tipo: 'servicio', precio: 4000, prioridad: 1, coordinar: false, dias: null, turnos: null, poligono: CAJA },
+  ]
+
+  it('🔴 re-importar el archivo NO pisa el precio que se editó en la app', () => {
+    // El archivo sigue diciendo $3.000 (es el export viejo); en la app ya está el aumento.
+    const plan = planDeImportacion(
+      [zonaCruda({ name: 'Zona Centro', type: 'service', price: 3000 }, FISHERTON.poligono)],
+      enLaBase,
+    )
+    expect(plan.nuevas).toEqual([])
+    expect(plan.actualizadas).toHaveLength(1)
+    expect(plan.actualizadas[0].precio).toBe(4000) // el de la app, no el del archivo
+    expect(plan.actualizadas[0].poligono).toEqual(FISHERTON.poligono) // el dibujo sí se actualiza
+    expect(plan.actualizadas[0].cambios).toContain('el dibujo')
+  })
+
+  it('una zona nueva sí toma el precio del archivo', () => {
+    const plan = planDeImportacion([zonaCruda({ name: 'Fisherton 1', type: 'service', price: 5600 })], enLaBase)
+    expect(plan.nuevas).toHaveLength(1)
+    expect(plan.nuevas[0].precio).toBe(5600)
+    expect(plan.ausentes.map((z: { nombre: string }) => z.nombre)).toEqual(['Zona Centro'])
+  })
+
+  it('sin cambios en el dibujo no propone tocar nada', () => {
+    const plan = planDeImportacion([zonaCruda({ name: 'Zona Centro', type: 'service', price: 3000 })], enLaBase)
+    expect(plan.actualizadas).toEqual([])
+    expect(plan.iguales).toHaveLength(1)
+  })
+
+  it('🔴 una zona que está en la base y no viene en el archivo NO se borra', () => {
+    const plan = planDeImportacion([], enLaBase)
+    expect(plan.ausentes.map((z: { nombre: string }) => z.nombre)).toEqual(['Zona Centro'])
+    expect(plan.actualizadas).toEqual([])
+  })
+
+  it('si el mapa la convierte en exclusión, el precio se va', () => {
+    const plan = planDeImportacion([zonaCruda({ name: 'Zona Centro', type: 'exclude' }, FISHERTON.poligono)], enLaBase)
+    expect(plan.actualizadas[0].tipo).toBe('exclusion')
+    expect(plan.actualizadas[0].precio).toBe(null)
+    expect(plan.actualizadas[0].cambios.join(' ')).toMatch(/NO VAMOS/)
+  })
+
+  it('reconoce la zona aunque el nombre venga con otra caja o con espacios', () => {
+    const plan = planDeImportacion([zonaCruda({ name: '  zona centro ', type: 'service', price: 3000 })], enLaBase)
+    expect(plan.nuevas).toEqual([])
+    expect(plan.iguales).toHaveLength(1)
+  })
+
+  it('las marcas que el mapa no conoce (coordinar, días, turnos) se respetan', () => {
+    const conMarcas = [{ ...enLaBase[0], coordinar: true, dias: [2, 4], turnos: ['mañana'] }]
+    const plan = planDeImportacion([zonaCruda({ name: 'Zona Centro', type: 'service', price: 3000 }, FISHERTON.poligono)], conMarcas)
+    expect(plan.actualizadas[0]).toMatchObject({ coordinar: true, dias: [2, 4], turnos: ['mañana'] })
+  })
+
+  it('el ajuste sólo llega a las zonas nuevas, que son las que toman precio del archivo', () => {
+    const plan = planDeImportacion(
+      [
+        zonaCruda({ name: 'Zona Centro', type: 'service', price: 3000 }, FISHERTON.poligono),
+        zonaCruda({ name: 'Roldán', type: 'service', price: 11000 }),
+      ],
+      enLaBase,
+      { ajuste: 1000 },
+    )
+    expect(plan.nuevas[0].precio).toBe(12000)
+    expect(plan.actualizadas[0].precio).toBe(4000)
+  })
+})
+
+describe('zonaSaleEse — la regla de Funes', () => {
+  const FUNES = { nombre: 'Funes', dias: [2, 4], turnos: ['mañana'] }
+
+  it('sin restricción sale siempre', () => {
+    expect(zonaSaleEse({ nombre: 'Centro', dias: null, turnos: null }, 1, 'tarde')).toBe(true)
+    expect(zonaSaleEse({ nombre: 'Centro', dias: [], turnos: [] }, 0, 'mañana')).toBe(true)
+    expect(zonaSaleEse(null, 1, 'tarde')).toBe(true)
+  })
+
+  it('Funes sale martes y jueves a la mañana, y nada más', () => {
+    expect(zonaSaleEse(FUNES, 2, 'mañana')).toBe(true)
+    expect(zonaSaleEse(FUNES, 4, 'mañana')).toBe(true)
+    expect(zonaSaleEse(FUNES, 2, 'tarde')).toBe(false) // el día está bien, el turno no
+    expect(zonaSaleEse(FUNES, 1, 'mañana')).toBe(false) // el turno está bien, el día no
+    expect(zonaSaleEse(FUNES, 6, 'tarde')).toBe(false)
+  })
+})
+
+describe('validarZona', () => {
+  const buena = { nombre: 'Funes', tipo: 'servicio', precio: 9000, prioridad: 10, poligono: CAJA }
+
+  it('una zona bien formada no tiene problemas', () => {
+    expect(validarZona(buena)).toEqual([])
+    expect(validarZona({ ...buena, tipo: 'exclusion', precio: null })).toEqual([])
+    expect(validarZona({ ...buena, dias: [2, 4], turnos: ['mañana'] })).toEqual([])
+  })
+
+  it('🔴 rechaza el servicio sin precio y la exclusión con precio', () => {
+    expect(validarZona({ ...buena, precio: 0 }).join(' ')).toMatch(/precio/)
+    expect(validarZona({ ...buena, precio: null }).join(' ')).toMatch(/precio/)
+    expect(validarZona({ ...buena, tipo: 'exclusion', precio: 9000 }).join(' ')).toMatch(/no cobra/)
+  })
+
+  it('rechaza lo que la base rechazaría con un 500 críptico', () => {
+    expect(validarZona({ ...buena, nombre: '  ' }).join(' ')).toMatch(/nombre/)
+    expect(validarZona({ ...buena, tipo: 'otra' }).join(' ')).toMatch(/tipo/)
+    expect(validarZona({ ...buena, poligono: null }).join(' ')).toMatch(/poligono/)
+    expect(validarZona({ ...buena, dias: [7] }).join(' ')).toMatch(/dias/)
+    expect(validarZona({ ...buena, turnos: ['siesta'] }).join(' ')).toMatch(/turnos/)
   })
 })

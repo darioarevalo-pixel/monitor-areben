@@ -13,6 +13,9 @@
 //   POST { recurso:'envios', action:'cerrar-dia', fecha, nota }
 //   POST { recurso:'envios', action:'movimiento', fecha, clase, monto, nota }
 //   POST { recurso:'envios', action:'anular-movimiento', id }
+//   GET  ?recurso=envios&zonas=1                             → { ok, zonas } (el mapa de reparto)
+//   POST { recurso:'envios', action:'zona-guardar', zona }   ·  action:'zona-borrar', id
+//   POST { recurso:'envios', action:'zonas-importar', archivo, ajuste, confirmar }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=envios`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/envios.js` "por prolijidad",
@@ -41,6 +44,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
+import { CAMPOS_ZONA, planDeImportacion, validarZona } from '../lib/envios/zonas.core.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
@@ -52,6 +56,7 @@ import {
   ESTADOS,
   FILTRO_BANDEJA,
   montoDelMovimiento,
+  num,
   TURNOS,
   validarEnvio,
   validarMovimiento,
@@ -190,6 +195,16 @@ export default async function handler(req, res) {
       // Devuelve el token y el PIN en claro: las chicas tienen que poder leerlos para pasarlos por
       // WhatsApp. Pasa por `exigirUsuario` y por el permiso de Envíos como todo lo demás de este
       // archivo — es una pantalla interna, la que da a internet es `_cadete.js`.
+      // ── El mapa de zonas de reparto ────────────────────────────────────────
+      //
+      // Se piden enteras, con el polígono adentro: es lo que se evalúa para saber en qué zona cae
+      // una dirección. Son dieciséis filas.
+      if (req.query.zonas === '1') {
+        const { data, error } = await supabase.from('envios_zonas').select(CAMPOS_ZONA).order('nombre');
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, zonas: data || [] });
+      }
+
       if (req.query.portal === '1') {
         const { data, error } = await supabase
           .from('envios_portal')
@@ -508,6 +523,87 @@ export default async function handler(req, res) {
         .eq('id', id);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    // ── El mapa de zonas ──────────────────────────────────────────────────────
+    //
+    // Guardar una zona a mano: el precio, el nombre, la marca de coordinar y los días. El dibujo no
+    // se toca desde acá —para eso está importar— pero viaja igual, porque el `check` de la base
+    // exige `poligono not null` y una zona sin él no se puede escribir.
+    if (b.action === 'zona-guardar') {
+      const z = b.zona || {};
+      const zona = {
+        id: String(z.id || '') || randomUUID(),
+        nombre: String(z.nombre || '').trim(),
+        tipo: z.tipo === 'exclusion' ? 'exclusion' : 'servicio',
+        // 🔴 El precio entra por `num`, no por `Number(...) || null`: con ese `||`, un precio
+        // tipeado en cero se guardaría como `null` y el mensaje de error hablaría de un campo vacío
+        // que en la pantalla tiene un número escrito.
+        precio: z.tipo === 'exclusion' ? null : num(z.precio),
+        prioridad: Number.isInteger(Number(z.prioridad)) ? Number(z.prioridad) : 1,
+        coordinar: z.coordinar === true,
+        dias: Array.isArray(z.dias) && z.dias.length ? z.dias.map(Number) : null,
+        turnos: Array.isArray(z.turnos) && z.turnos.length ? z.turnos.map(String) : null,
+        poligono: z.poligono,
+        autor: yo,
+        updated_at: new Date().toISOString(),
+      };
+      const mal = validarZona(zona);
+      if (mal.length) return res.status(400).json({ error: mal.join(' · ') });
+
+      const { error } = await supabase.from('envios_zonas').upsert(zona, { onConflict: 'id' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, id: zona.id });
+    }
+
+    if (b.action === 'zona-borrar') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta la zona.' });
+      const { error } = await supabase.from('envios_zonas').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Importar el JSON que exporta el mapa ──────────────────────────────────
+    //
+    // 🔑 **El plan lo calcula el servidor y la previsualización sale del MISMO llamado**, con
+    // `confirmar: false`. Si la pantalla calculara lo que va a pasar y el servidor decidiera aparte,
+    // se puede mostrar «14 quedan igual» y escribir otra cosa — y lo que se pisa son los precios de
+    // todas las zonas a la vez, que es de lo que nadie se da cuenta hasta que el cadete cobra de
+    // menos durante una semana.
+    if (b.action === 'zonas-importar') {
+      const { data: actuales, error: eLeer } = await supabase.from('envios_zonas').select(CAMPOS_ZONA);
+      if (eLeer) throw new Error(eLeer.message);
+
+      const plan = planDeImportacion(b.archivo, actuales || [], { ajuste: num(b.ajuste) || 0 });
+      const resumen = {
+        nuevas: plan.nuevas.map((z) => ({ nombre: z.nombre, tipo: z.tipo, precio: z.precio })),
+        actualizadas: plan.actualizadas.map((z) => ({ nombre: z.nombre, cambios: z.cambios, precio: z.precio })),
+        iguales: plan.iguales.map((z) => z.nombre),
+        ausentes: plan.ausentes.map((z) => z.nombre),
+        problemas: plan.problemas,
+      };
+      if (b.confirmar !== true) return res.status(200).json({ ok: true, plan: resumen, escrito: false });
+
+      // 🔴 Con problemas no se escribe NADA. Media importación deja el mapa en un estado que nadie
+      // pidió y que no se puede deshacer mirando el archivo: unas zonas nuevas, otras viejas, y la
+      // pantalla proponiendo precios de las dos épocas.
+      if (plan.problemas.length) {
+        return res.status(400).json({ error: `El archivo tiene ${plan.problemas.length} zona(s) con problemas.`, plan: resumen });
+      }
+
+      const ahora = new Date().toISOString();
+      const filas = [
+        ...plan.nuevas.map((z) => ({ ...z, id: randomUUID(), coordinar: false, dias: null, turnos: null })),
+        // `cambios` es para que la pantalla pueda listar qué se toca; no es una columna.
+        ...plan.actualizadas.map(({ cambios, ...z }) => z),
+      ].map((z) => ({ ...z, autor: yo, updated_at: ahora }));
+
+      if (filas.length) {
+        const { error } = await supabase.from('envios_zonas').upsert(filas, { onConflict: 'id' });
+        if (error) throw new Error(error.message);
+      }
+      return res.status(200).json({ ok: true, plan: resumen, escrito: true });
     }
 
     return res.status(400).json({ error: 'Acción desconocida.' });

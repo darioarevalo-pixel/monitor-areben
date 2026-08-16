@@ -63,6 +63,7 @@ const archivos = [
   'sql/migrate-envios-bandeja.sql',
   'sql/migrate-envios-portal.sql',
   'sql/migrate-envios-movimientos.sql',
+  'sql/migrate-envios-zonas.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 if (cerrarTandaG) archivos.push('sql/migrate-envios-movimientos-cierre.sql')
@@ -109,7 +110,7 @@ try {
     `select relname, relrowsecurity,
             has_table_privilege('anon', 'public.' || relname, 'INSERT') as anon_escribe
        from pg_class
-      where relname in ('envios_reparto', 'envios_dia', 'envios_movimientos', 'envios_portal') order by relname`,
+      where relname in ('envios_reparto', 'envios_dia', 'envios_movimientos', 'envios_portal', 'envios_zonas') order by relname`,
   )
   // La tabla vieja del cierre por turno. Tenía que irse, pero sólo si estaba vacía: con filas, esos
   // serían los únicos datos de caja que existen.
@@ -155,6 +156,24 @@ try {
   }
   await client.query('ROLLBACK')
 
+  // El candado del mapa de zonas, ejercido con las dos filas que no tienen que entrar: una zona de
+  // servicio en $0 —que haría que la pantalla propusiera «$0» para un barrio entero, y en esta
+  // sección el cero significa que el reparto salió gratis, no que no se cobra— y una exclusión con
+  // precio, que es decir «no vamos» y «cobramos tanto» en la misma fila.
+  let zonasOk = { cero: false, exclusionConPrecio: false }
+  for (const [clave, fila] of [
+    ['cero', `('__z1__', 'sonda', 'servicio', 0, '{"type":"Polygon","coordinates":[]}')`],
+    ['exclusionConPrecio', `('__z2__', 'sonda', 'exclusion', 4300, '{"type":"Polygon","coordinates":[]}')`],
+  ]) {
+    await client.query('BEGIN')
+    try {
+      await client.query(`insert into envios_zonas (id, nombre, tipo, precio, poligono) values ${fila}`)
+    } catch {
+      zonasOk[clave] = true
+    }
+    await client.query('ROLLBACK')
+  }
+
   // 🔴 **El cotejo del signo, que es el único control del riesgo grande de esta tanda.**
   //
   // Vitest prueba `montoDelMovimiento` y `cuentaDelCadete`, pero el signo con el que la siembra
@@ -195,6 +214,12 @@ try {
        from envios_movimientos`,
   )
 
+  // Cuántas zonas hay cargadas. Nace vacía: las zonas entran importando el JSON del mapa desde la
+  // pantalla, no desde una migración — si no, corregir un polígono sería un deploy.
+  const zonas = await client.query(
+    `select count(*)::int as n, count(*) filter (where tipo = 'exclusion')::int as exclusiones from envios_zonas`,
+  )
+
   // `pago_cadete`: mientras exista, cuántas filas la usan. Con filas NO se dropea — cada una es el
   // único registro de lo que ese reparto le costó a la empresa. Ver `migrate-envios-plata-drop.sql`.
   const viejaCol = await client.query(
@@ -224,6 +249,11 @@ try {
   console.log(`  fecha sin turno: ${checkOk ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`)
   console.log(`  pagado + bonificado: ${plataOk ? 'rechazado ✓' : '✗ SE GUARDÓ — el check no está'}`)
   console.log(`  movimiento de $0: ${ceroOk ? 'rechazado ✓' : '✗ SE GUARDÓ — el check no está'}`)
+  console.log(
+    `  zona de servicio en $0: ${zonasOk.cero ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'} · ` +
+      `exclusión con precio: ${zonasOk.exclusionConPrecio ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`,
+  )
+  console.log(`  envios_zonas: ${zonas.rows[0].n} zonas (${zonas.rows[0].exclusiones} de exclusión)`)
   console.log(
     `  movimientos: ${movs.rows[0].n} filas (${movs.rows[0].anulados} anuladas) · saldo ${movs.rows[0].saldo}`,
   )
