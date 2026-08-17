@@ -1513,6 +1513,17 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
         <Field label="Localidad" hint="Rosario, Roldán, Funes… Es lo que permite tarifar por distancia en vez de negociarlo caso por caso.">
           <Input value={f.localidad || ''} onChange={(e) => set('localidad', e.target.value)} />
         </Field>
+        {/* 🔑 **Va al lado de la localidad porque es la SEGUNDA señal, nunca su reemplazo** (la misma
+            regla que dibuja `Direccion`). Sirve para las dos mitades: levanta el aviso de «fuera de
+            zona» y, sobre todo, es lo único que caza a la clienta de Funes que escribió «Rosario» —
+            se geocodifica sobre la calle homónima, el punto cae en una calle real y sale $4.300
+            donde van $9.000. Sin este campo, todo lo que se carga a mano nacía con `cp` nulo y las
+            dos cosas quedaban apagadas justo en las filas que tipea una persona. Es `text` y no
+            `number` a propósito: el CPA es alfanumérico (`S2000ABC`), y quien lo lee se queda con
+            los dígitos. */}
+        <Field label="Código postal" hint="La segunda señal para el precio: si dice otra localidad que la de arriba, no se propone nada y el motivo nombra a las dos.">
+          <Input value={f.cp || ''} onChange={(e) => set('cp', e.target.value)} />
+        </Field>
         <Field label="Teléfono">
           <Input value={f.telefono || ''} onChange={(e) => set('telefono', e.target.value)} />
         </Field>

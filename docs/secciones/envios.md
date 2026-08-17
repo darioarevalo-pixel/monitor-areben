@@ -358,12 +358,29 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   base y Georef de verdad. `Minetti 2682` sigue negándose, que es correcto: Georef no tiene ese
   número. **No se apretó «usar»** y la tabla quedó igual (11 filas, 3 con precio, sin un `updated_at`
   nuevo).
-- 🔴 ▶️ **La mitad que PROTEGE no se puede ejercer a mano hoy, y hay que decir por qué**: las 11 filas
-  de prod tienen CP 2000 y localidad «Rosario», así que **ninguna dispara `localidad_dudosa`**, y
-  provocarla con una fila de prueba tampoco se puede porque **el formulario de «Cargar uno a mano» no
-  tiene campo de CP** ⇒ nace con `cp` nulo. Queda cubierta por los tests, por la corrida del camino
-  real contra Georef vivo (que devolvió el motivo con los dos nombres para las nueve) y porque la
-  pantalla imprime `sugerencia.motivo` tal cual — se vio con «no se pudo ubicar» en la misma tanda.
+- ✅ **El alta a mano ya tiene campo de CP** (17-ago-2026). No era sólo para poder ejercer la mitad
+  que protege: **todo lo que cargaba una persona nacía con `cp` nulo**, así que ni el aviso de «fuera
+  de zona» ni la corroboración del precio se prendían nunca — y son justo las filas donde la localidad
+  la escribe alguien de memoria. Sirve también para **corregir** el CP de una fila que vino de TN, que
+  hoy decide si se propone un precio y hasta ahora no se podía tocar. Va **debajo** de Localidad,
+  que es la misma regla de la sección puesta en el orden del formulario, y es `text` y no `number`
+  porque el CPA es alfanumérico (`S2000ABC`).
+  🔴 🔑 **La protección quedaba partida entre la pantalla y el handler, y las dos mitades fallan
+  calladas**: sin el campo no hay dónde tipearlo, y sin `cp` en `filaDe` —que es una **lista blanca**,
+  así que perder la línea es un descarte, no un error— la persona lo tipea, el POST contesta **200** y
+  la columna queda en `null`. Es el mismo modo de falla de `cobrado`. Lo afirma
+  `tests/envios-cp-alta-a-mano.test.ts`, texto contra texto sobre las dos puntas: **5 mutantes, los 5
+  muertos por un `expect`** (campo borrado · CP arriba de la localidad · `type="number"` · `cp` fuera
+  de `filaDe` · `e.cp || null`, que pierde el `''`), cada uno verificado que **entró** al archivo.
+  ⚠️ La lógica no hacía falta escribirla: `consultaDe` con `localidad: 'rosario'` + `cp: '2124'` ya
+  daba `localidad_dudosa` con los dos nombres en `tests/envios-direccion.test.ts`. Lo que faltaba era
+  que una fila pudiera **tener** CP.
+- 🔴 ▶️ **Y con eso la mitad que PROTEGE se puede por fin ejercer a mano**, que hasta acá era lo único
+  del código postal sin probar en prod: las 11 filas reales tienen CP 2000 y localidad «Rosario», así
+  que **ninguna dispara `localidad_dudosa`** y había que poder sembrar una. Queda cubierta mientras
+  tanto por los tests, por la corrida del camino real contra Georef vivo (que devolvió el motivo con
+  los dos nombres para las nueve) y porque la pantalla imprime `sugerencia.motivo` tal cual — se vio
+  con «no se pudo ubicar» en la misma tanda.
 - 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un
   solo status de Vercel** —los de la noche anterior sí tienen el suyo, o sea que el oráculo sirve— y
   producción estuvo **once horas** sirviendo `6e57911` con el CI en verde. Lo destrabó un **commit
