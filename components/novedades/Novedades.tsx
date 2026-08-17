@@ -73,7 +73,10 @@ function cuando(iso?: string | null): string {
  */
 function cuandoConHora(iso?: string | null): string {
   if (!iso) return ''
-  return `${cuando(iso)}, ${new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+  // `hour12: false` explícito: sin eso salía «12:36 p. m.», que es más largo y no es como se lee la
+  // hora acá. El default de `es-AR` no es de fiar — lo decide el navegador, y el de Bruno da 12 h.
+  const hora = new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${cuando(iso)}, ${hora}`
 }
 
 /**
