@@ -9,10 +9,16 @@
 // Crea una tabla NUEVA, no toca ninguna existente ni migra datos. ⚠️ Prod y las previews comparten
 // base, así que esto se corre sabiendo que lo ve producción en el momento — es aditivo por eso.
 //
-// ⚠️ NO hay backfill, y es a propósito: no existe ningún registro de qué se etiquetó antes de hoy.
-// Inventarlo (por ejemplo, dar por etiquetado todo lo que ya tiene precio puesto) haría arrancar la
-// cola vacía justo cuando hay 260 prendas del WINTER SALE para rehacer. Arranca en cero y la primera
-// lectura muestra todo lo que cambió de precio: eso es lo correcto, no un defecto.
+// ⚠️ NO hay backfill: no existe ningún registro de qué se etiquetó antes de hoy, y no se puede
+// inventar. Pero la tabla vacía tiene una consecuencia que hay que mirar ANTES de abrir la pestaña:
+// la cola muestra como pendiente **todo lo que alguna vez cambió de precio**. Medido el 16-ago-2026:
+// 248 prendas en Zattia, que en realidad se etiquetaron a mano el 13 y el 14.
+//
+// 🔑 **Sellar todo como hecho hoy NO esconde el trabajo del miércoles**, que era el miedo razonable:
+// levantar el sale escribe eventos NUEVOS en la bitácora, con fecha posterior al sello, así que esas
+// ~260 vuelven a la cola igual. Lo único que se pierde es el rezagado que estuviera mal etiquetado
+// desde antes, y eso no lo sabe nadie hoy. La decisión es de Bruno; el sello se hace con
+// `action:'etiquetado'` y `modo:'ya_estaba'`, que es justamente «se dio por hecha, no se imprimió».
 import { readFileSync } from 'fs'
 import pg from 'pg'
 
