@@ -12,12 +12,9 @@ Cada archivo de ruta en `api/` **sin** prefijo `_` cuenta como función. Pasarse
 deploys sin error visible**: Vercel sigue sirviendo la versión anterior y no avisa. Ya pasó una vez.
 Para sumar un recurso no se crea un archivo: entra por una puerta existente con `?recurso=`, como
 hace `api/datos.js`. Los `_*.js` no son rutas y no cuentan.
-Funciones actuales: `blob-upload crear-venta datos deposito meta-ads postventa sku-map`.
-Eran 9: `sync.js` y `proxy.js` se borraron el 13-ago-2026 (abr-2026, sin un solo consumidor, con
-`Access-Control-Allow-Origin: *` y sin `exigirUsuario`; `sync.js` además hacía upserts masivos en
-`productos/inventario/ventas` de BDI para cualquiera que trajera un token de GN propio). Con ellos
-se fue `api/vercel.json`, que declaraba un rewrite para `proxy` y **nunca se aplicó**: Vercel sólo
-lee `vercel.json` en la raíz del proyecto.
+Funciones actuales: `blob-upload crear-venta datos deposito meta-ads postventa sku-map`. Eran 9:
+`sync.js` y `proxy.js` se borraron el 13-ago-2026 por abandonados y abiertos (`git show 42c43b8`).
+⚠️ **Vercel sólo lee el `vercel.json` de la RAÍZ**: el que vivía en `api/` nunca se aplicó.
 
 **Permisos: una sola implementación, `lib/permisos.core.js`. Nunca se copia.**
 Es `.js` plano porque los handlers de `api/*.js` corren en Node sin pasar por el compilador de Next
@@ -36,11 +33,11 @@ perdone. Por eso `{ loading: Cargando }` se repite en cada línea en vez de sali
 
 **`.shell-content button` fija altura.** Un botón de dos renglones se desborda.
 
-**`index.html` no es código vivo.** El iframe legacy murió en julio de 2026. Sobrevive solo como
-fuente de los tests de paridad (`tests/legacy-*.ts`). No se edita para cambiar la app.
+**`index.html` no es código vivo.** El iframe legacy murió en julio de 2026 y sobrevive sólo como
+fuente de los tests de paridad (`tests/legacy-*.ts`): no se edita para cambiar la app.
 
-**El caché del ETL vive en IndexedDB (`lib/cache.ts`), no en localStorage**, y no tiene tope de
-tamaño: el payload de BDI pesa ~14,7 MB y en localStorage no se guardaba nunca, en silencio.
+**El caché del ETL vive en IndexedDB (`lib/cache.ts`), no en localStorage**: el payload de BDI pesa
+~14,7 MB y en localStorage no se guardaba nunca, en silencio.
 
 ## Arquitectura
 
@@ -90,18 +87,20 @@ ya tienen ficha:
 - Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
   `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
   mostrador, que vive en Cupones y entrega canjes creando una venta en GN).
-- Tienda Nube → **leer `docs/secciones/tncat.md`** antes de tocar `components/tncat/`,
-  `lib/tncat/`, `lib/tn-audit.ts`, `api/_tn-ignorados.js` o `api/_tn-fotos-verificadas.js`.
-  ⛔ **Lo que escribe la tienda vive en OTRO repo** (`bdi-catalogo`), ningún test lo cubre, y un
-  POST con una acción que ese deploy no conoce **recategoriza la tienda entera**.
+- Tienda Nube → **leer `docs/secciones/tncat.md`** antes de tocar `components/tncat/`, `lib/tncat/`,
+  `lib/tn-audit.ts`, `api/_tn-ignorados.js` o `api/_tn-fotos-verificadas.js`. ⛔ **Lo que escribe la
+  tienda vive en OTRO repo** (`bdi-catalogo`) y un POST con una acción que ese deploy no conoce
+  **recategoriza la tienda entera**.
 - Sesión de fotos → **leer `docs/secciones/sesionfotos.md`** antes de tocar `lib/sesionfotos/`,
   `components/sesionfotos/`, `components/solicitudes/` o `components/solicitudes-internas/`.
-  ⛔ **`lib/sesionfotos/` NO es solo de esta sección**: es el motor de las solicitudes, y
-  Solicitudes internas monta el MISMO componente y el MISMO hook con otro preset.
-  ⛔ **Crear la venta pega por URL absoluta a PROD**: desde localhost o un preview, crea una venta
-  real en Gestión Nube.
+  ⛔ **`lib/sesionfotos/` NO es solo de esta sección**: es el motor de las solicitudes, que montan el
+  MISMO componente con otro preset. ⛔ **Crear la venta pega por URL absoluta a PROD**, también
+  desde localhost.
 - Liquidación → **leer `docs/secciones/liquidacion.md`** antes de tocar `components/liquidacion/`,
   `lib/liquidacion/` o `api/_liquidacion.js` — ⛔ ese handler lo abren también Etiquetas y Análisis.
+- Etiquetas → **leer `docs/secciones/etiquetas.md`** antes de tocar `components/etiquetas/` o
+  `lib/etiquetas/`. ⛔ **La geometría del PDF sale en una Zebra real**: el dibujo se toca sólo con
+  el test de paridad delante.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
@@ -132,22 +131,21 @@ Leyendo la salida de tests: `Test timed out` es ruido conocido de la máquina (`
 
 ## Higiene de contexto
 
-Estas reglas bajan el gasto de tokens por sesión. Todo lo que entra al contexto se re-paga en cada
-turno posterior, así que un output largo temprano cuesta varias veces su tamaño.
+Todo lo que entra al contexto se re-paga en cada turno posterior: un output largo temprano cuesta
+varias veces su tamaño.
 
 - **Tests: uno por vez.** `npx vitest run tests/<archivo>.test.ts --reporter=dot`. La suite completa
   son 89 archivos y su salida entera queda en contexto — correrla solo si se pide.
 - **Comandos largos van cortados**: `git log`, builds y deploys con `| tail -30`.
-- **Avisar el `/clear` al cerrar cada unidad de trabajo** — Bruno no lo tiene que pedir. El marcador
+- **Avisar el `/clear` al cerrar cada unidad de trabajo** — Bruno no lo tiene que pedir; el marcador
   natural es después de deployar y verificar. El criterio no es "cambió el tema" sino **"¿vamos a
-  volver a abrir los mismos archivos?"**. Donde más rinde es justo después de resolver un bug
-  difícil: ese contexto es casi todo intento fallido. Dentro de una tarea sin terminar va
-  `/compact`, no `/clear`.
-- **Los archivos caros se leen por rango, no enteros.** Los peores:
-  `components/sesionfotos/SesionFotos.tsx` (1.820 líneas) · `lib/reclamos/tipos.ts` (1.372) ·
-  `api/_canjes.js` (2.227) · `lib/canjes/tipos.ts` (1.261) · `tests/reclamos.test.ts` (1.192) ·
-  `components/reclamos/ArmarCambio.tsx` y `components/conteo-estandar/ConteoEstandar.tsx` (870) ·
-  `lib/nav.datos.ts` (750 — es data, casi nunca hace falta entero).
+  volver a abrir los mismos archivos?"**, y donde más rinde es justo después de un bug difícil: ese
+  contexto es casi todo intento fallido. Dentro de una tarea sin terminar va `/compact`.
+- **Los archivos caros se leen por rango, no enteros.** Arriba de 850 líneas: `api/_canjes.js`
+  (2.227) · `components/sesionfotos/SesionFotos.tsx` (1.820) · `lib/reclamos/tipos.ts` (1.372) ·
+  `lib/canjes/tipos.ts` (1.261) · `tests/reclamos.test.ts` (1.192) · `components/reclamos/
+  ArmarCambio.tsx` y `components/conteo-estandar/ConteoEstandar.tsx` · `lib/nav.datos.ts` (750, es
+  data).
 
 ## Estado del trabajo
 

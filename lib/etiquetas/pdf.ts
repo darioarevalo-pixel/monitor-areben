@@ -58,6 +58,84 @@ function drawFP(pdf: Pdf, W: number, Hh: number, M: number, CX: number, fpLines:
   })
 }
 
+
+/**
+ * El cuerpo común de las etiquetas con código de barras: **nombre → variante → barras → SKU**,
+ * centrado vertical, con un encabezado opcional arriba (el precio, o el precio tachado + el nuevo).
+ *
+ * ⚠️ **La geometría no se toca.** Los números salen del port byte-fiel del legacy y se imprimen en
+ * una Zebra real; lo único que cambió al unificar es dónde están escritos. `tests/etiquetas-pdf.
+ * test.ts` compara la cinta de órdenes de dibujo contra la de antes del refactor.
+ *
+ * ⚠️ **El `setFont` va ANTES del `splitTextToSize`**, y no es cosmético: en jsPDF el corte de línea
+ * depende de la fuente activa, así que medir en normal y escribir en negrita parte el nombre en
+ * otro lado.
+ */
+function dibujarCuerpo(pdf: Pdf, v: VarianteEti, barras: (y: number, h: number) => void, cfg: CuerpoEtiqueta) {
+  const W = 50, Hh = 25, M = 2, CX = W / 2, margin = 1.3
+  const enc = cfg.encabezado
+  pdf.setFont('helvetica', cfg.nameBold ? 'bold' : 'normal')
+  pdf.setFontSize(cfg.nameFS)
+  const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2)
+  const nameH = nom.length * cfg.nameLineH
+  const skuBlock = v.sku ? cfg.gBarSku + cfg.skuLineH : 0
+  const encBlock = enc ? enc.alto + enc.gap : 0
+  const nonBar = encBlock + nameH + cfg.gNameVar + cfg.varLineH + cfg.gVarBar + skuBlock
+  let barH = cfg.barH
+  if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar)
+  let y = Math.max(margin, (Hh - (nonBar + barH)) / 2)
+
+  if (enc) {
+    enc.dibujar(y)
+    y += enc.alto + enc.gap
+    // El encabezado deja puesta su propia tipografía: el nombre la vuelve a fijar.
+    pdf.setFont('helvetica', cfg.nameBold ? 'bold' : 'normal')
+    pdf.setFontSize(cfg.nameFS)
+  }
+  pdf.text(nom, CX, y, { align: 'center', baseline: 'top' })
+  y += nameH + cfg.gNameVar
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(cfg.varFS)
+  pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' })
+  y += cfg.varLineH + cfg.gVarBar
+  barras(y, barH)
+  y += barH
+  if (v.sku) {
+    y += cfg.gBarSku
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(cfg.skuFS)
+    pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' })
+  }
+}
+
+type CuerpoEtiqueta = {
+  nameFS: number; varFS: number; skuFS: number
+  nameLineH: number; varLineH: number; skuLineH: number
+  gNameVar: number; gVarBar: number; gBarSku: number
+  /** Alto que se le da a las barras si entra; se achica hasta 4,5 mm antes de desbordar. */
+  barH: number
+  nameBold?: boolean
+  encabezado?: { alto: number; gap: number; dibujar: (y: number) => void } | null
+}
+
+/** Con encabezado de precio: la tipografía se achica para dejarle lugar. */
+const CUERPO_CHICO: CuerpoEtiqueta = {
+  nameFS: 8, varFS: 7.5, skuFS: 7.5,
+  nameLineH: 2.9, varLineH: 2.7, skuLineH: 2.8,
+  gNameVar: 0.4, gVarBar: 1.2, gBarSku: 1.0,
+  barH: 5.5,
+}
+
+/** Sin precio: sobra alto, así que el nombre va en negrita y todo entra más grande. */
+const CUERPO_GRANDE: CuerpoEtiqueta = {
+  nameFS: 9.5, varFS: 8.5, skuFS: 9,
+  nameLineH: 3.6, varLineH: 3.2, skuLineH: 3.4,
+  gNameVar: 0.7, gVarBar: 1.8, gBarSku: 1.2,
+  barH: 7,
+  nameBold: true,
+  encabezado: null,
+}
+
 /** Construye el PDF de etiquetas (5×2,5 cm) según el modo. Port de _etiBuildPdf. */
 export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqueta, ctx: CtxEtiqueta): Promise<Pdf> {
   const { jsPDF } = await import('jspdf')
@@ -80,7 +158,6 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
     }
     // El modo del lote, salvo que el llamador decida prenda por prenda (ver `modoDe`).
     const modo = ctx.modoDe ? ctx.modoDe(v) : modoLote
-    const margin = 1.3
     const barras = (y: number, h: number) => {
       try {
         const canvas = document.createElement('canvas')
@@ -105,117 +182,63 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
       return
     }
 
-    if (modo === 'promo') {
-      const pr = ctx.promoDe(v) || { normal: ctx.precioDe(v), promo: ctx.precioDe(v) }
-      const nameFS = 8, varFS = 7.5, skuFS = 7.5
-      const nameLineH = 2.9, varLineH = 2.7, skuLineH = 2.8
-      const priceRowH = 5.0, gPriceName = 2.0, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(nameFS)
-      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2)
-      const nameH = nom.length * nameLineH
-      const skuBlock = v.sku ? gBarSku + skuLineH : 0
-      const nonBar = priceRowH + gPriceName + nameH + gNameVar + varLineH + gVarBar + skuBlock
-      let barH = 5.5
-      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar)
-      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2)
-      const oldX = W * 0.3, newX = W * 0.7, midY = y + priceRowH / 2
-      const oldTxt = fmt(pr.normal)
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8)
-      pdf.setTextColor(120)
-      pdf.text(oldTxt, oldX, midY, { align: 'center', baseline: 'middle' })
-      const ow = pdf.getTextWidth(oldTxt)
-      pdf.setDrawColor(120)
-      pdf.setLineWidth(0.35)
-      pdf.line(oldX - ow / 2 - 0.4, midY, oldX + ow / 2 + 0.4, midY)
-      pdf.setTextColor(0)
-      pdf.setDrawColor(0)
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(13.5)
-      pdf.text(fmt(pr.promo), newX, midY, { align: 'center', baseline: 'middle' })
-      y += priceRowH + gPriceName
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(nameFS)
-      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' })
-      y += nameH + gNameVar
-      pdf.setFontSize(varFS)
-      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' })
-      y += varLineH + gVarBar
-      barras(y, barH)
-      y += barH
-      if (v.sku) {
-        y += gBarSku
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(skuFS)
-        pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' })
-      }
-      return
-    }
-
+    // Las tres etiquetas con código de barras son **el mismo cuerpo** —nombre, variante, barras y
+    // SKU, centrado vertical— con otra tipografía y otro encabezado. Estaban escritas tres veces,
+    // con constantes distintas cada una; acá se elige qué encabezado va y con qué cuerpo.
     const conPrecio = modo === 'loc'
     const precio = conPrecio ? ctx.precioDe(v) : 0
     const hasPrecio = conPrecio && precio > 0
-    if (hasPrecio) {
-      const priceFS = 14, nameFS = 8, varFS = 7.5, skuFS = 7.5
-      const priceLineH = 4.6, nameLineH = 2.9, varLineH = 2.7, skuLineH = 2.8
-      const gPriceName = 2.0, gNameVar = 0.4, gVarBar = 1.2, gBarSku = 1.0
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(nameFS)
-      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2)
-      const nameH = nom.length * nameLineH
-      const skuBlock = v.sku ? gBarSku + skuLineH : 0
-      const nonBar = priceLineH + gPriceName + nameH + gNameVar + varLineH + gVarBar + skuBlock
-      let barH = 5.5
-      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar)
-      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2)
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(priceFS)
-      pdf.text('$ ' + Math.round(precio).toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' })
-      y += priceLineH + gPriceName
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(nameFS)
-      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' })
-      y += nameH + gNameVar
-      pdf.setFontSize(varFS)
-      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' })
-      y += varLineH + gVarBar
-      barras(y, barH)
-      y += barH
-      if (v.sku) {
-        y += gBarSku
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(skuFS)
-        pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' })
-      }
-    } else {
-      const nameFS = 9.5, varFS = 8.5, skuFS = 9
-      const nameLineH = 3.6, varLineH = 3.2, skuLineH = 3.4
-      const gNameVar = 0.7, gVarBar = 1.8, gBarSku = 1.2
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(nameFS)
-      const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2)
-      const nameH = nom.length * nameLineH
-      const skuBlock = v.sku ? gBarSku + skuLineH : 0
-      const nonBar = nameH + gNameVar + varLineH + gVarBar + skuBlock
-      let barH = 7
-      if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar)
-      let y = Math.max(margin, (Hh - (nonBar + barH)) / 2)
-      pdf.text(nom, CX, y, { align: 'center', baseline: 'top' })
-      y += nameH + gNameVar
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(varFS)
-      pdf.text(pdf.splitTextToSize(v.size || '—', W - M * 2).slice(0, 1), CX, y, { align: 'center', baseline: 'top' })
-      y += varLineH + gVarBar
-      barras(y, barH)
-      y += barH
-      if (v.sku) {
-        y += gBarSku
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(skuFS)
-        pdf.text(v.sku, CX, y, { align: 'center', baseline: 'top' })
-      }
+
+    if (modo === 'promo') {
+      const pr = ctx.promoDe(v) || { normal: ctx.precioDe(v), promo: ctx.precioDe(v) }
+      dibujarCuerpo(pdf, v, barras, {
+        ...CUERPO_CHICO,
+        encabezado: {
+          alto: 5.0,
+          gap: 2.0,
+          // El precio viejo tachado a la izquierda y el nuevo, grande, a la derecha.
+          dibujar: (y) => {
+            const oldX = W * 0.3, newX = W * 0.7, midY = y + 5.0 / 2
+            const oldTxt = fmt(pr.normal)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(8)
+            pdf.setTextColor(120)
+            pdf.text(oldTxt, oldX, midY, { align: 'center', baseline: 'middle' })
+            const ow = pdf.getTextWidth(oldTxt)
+            pdf.setDrawColor(120)
+            pdf.setLineWidth(0.35)
+            pdf.line(oldX - ow / 2 - 0.4, midY, oldX + ow / 2 + 0.4, midY)
+            pdf.setTextColor(0)
+            pdf.setDrawColor(0)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(13.5)
+            pdf.text(fmt(pr.promo), newX, midY, { align: 'center', baseline: 'middle' })
+          },
+        },
+      })
+      return
     }
+
+    if (hasPrecio) {
+      dibujarCuerpo(pdf, v, barras, {
+        ...CUERPO_CHICO,
+        encabezado: {
+          alto: 4.6,
+          gap: 2.0,
+          dibujar: (y) => {
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(14)
+            pdf.text('$ ' + Math.round(precio).toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' })
+          },
+        },
+      })
+      return
+    }
+
+    // Sin precio queda la etiqueta de información, que usa el alto de sobra para agrandar todo.
+    // 🔴 Acá cae también la de precio con precio 0, en silencio; quien la frena antes de llegar es
+    // `partirPorPrecio` en `core.ts`, que la parte y la nombra.
+    dibujarCuerpo(pdf, v, barras, CUERPO_GRANDE)
   })
   return pdf
 }
