@@ -143,10 +143,21 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   `Minetti 2682`, que Georef no tiene numerada) en 307 ms. Y sobre 60 direcciones reales de clientas:
   **25 con precio, 27 frenadas por el candado sin gastar una sola consulta**, 8 sin ubicar, **0
   inventadas**. 🔑 Los 11 mutantes del candado caen (`tests/envios-direccion.test.ts`).
-- ▶️ **Lo que sigue faltando es el CONTRASTE**: que el punto sea preciso no prueba que la zona sea la
-  correcta. Sale de la planilla vieja de OneDrive («ENVIOS BDI», 877 filas con dirección + costo
-  tipeado, precios viejos ⇒ compara barato/caro) o de que Bruno cotice 20 a mano. **Sin eso no se
-  puede decidir si esto propone bien** — por eso la propuesta se confirma a mano y no se escribe sola.
+- ✅ **EL CONTRASTE, HECHO: 82 direcciones confirmadas y CERO equivocadas** (16-ago-2026, lo confirmó
+  Bruno a ojo sobre el mapa). 🔑 **La idea de cómo hacerlo es de él y cambió el costo del problema**:
+  en vez de cotizar 20 a mano —o de esperar la planilla vieja de OneDrive, que era el plan—, **ver los
+  puntos dibujados sobre las zonas y confirmar mirando**. La herramienta es
+  `~/Downloads/ConfirmarZonasAreben.html`, un visor **aparte y de sólo lectura** (las 16 zonas salen de
+  la base, no del `localStorage` del mapa editable, y no tiene con qué dibujar ni exportar), con 120
+  direcciones reales **repartidas por zona** y voto con B/M/N que salta solo al siguiente.
+  Confirmadas 12/16 zonas, incluidas Roldán ($12.000) y Fisherton 1 ($5.600).
+  🔴 **Lo que quedó sin confirmar y hay que decirlo: Funes ($9.000) y Villa Gobernador Gálvez
+  ($7.500), las dos más caras después de Roldán**, porque sus votos se borraron al corregir el cartel
+  del departamento. Y **20 de las 23 «afuera del mapa»**, que son las que dirían si falta dibujar una
+  zona (Alvear y La Carolina son las candidatas).
+  🔴 **Lo que este contraste NO puede ver**: la clienta de Funes que escribió «Rosario» en la orden.
+  Se geocodifica sobre la calle homónima de Rosario, el punto cae sobre una calle **real**, se ve
+  perfecto en el mapa y sale $4.300 en vez de $9.000. Aparece cuando el cadete llega, no antes.
 - 📎 **La medición que fundó todo esto** (tanda 3, 16-ago-2026, 200 direcciones reales de `clientes`,
   scripts en `~/.claude/plans/envios-zonas-tanda3/`):
   - **El geocoder es Georef** (`apis.datos.gob.ar`, del Estado, gratis y sin clave). 🔴 **Nominatim
