@@ -249,9 +249,30 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   ⚠️ **Lo que NO se vio en pantalla es el KPI**: el envío de prueba quedó en $0 —el clasificador
   bloquea tipear montos en prod— y la tarjeta sólo aparece con `sinCobrar > 0`. Su texto se verificó
   **en el bundle servido**, no dibujado.
-- ▶️ **Medir antes de decidir el filtro de la traída** (`envio_estado='fulfilled'` / `estado_orden=
-  'closed'`): TN no tiene «entregado», y si en el local marcan «despachado» al empaquetar, agregarlo
-  haría que el paquete no salga y nadie se entere.
+- ⛔ **El filtro de la traída se MIDIÓ y quedó decidido que NO va** (17-ago-2026). Era la pregunta
+  abierta desde la tanda 5: TN no tiene «entregado», así que la tentación es sacar de la hoja lo que
+  TN da por terminado. Las dos formas fallan, y no por poco:
+  · **`estado_orden === 'closed'` está refutado**. Sobre 30 días y las dos tiendas (184 órdenes de
+  BDI + 110 de Zattia, nada truncado) marca **20 de las 23 órdenes de cadetería, el 87%** — y el
+  número que cierra la discusión no es ése: de los **10 envíos que en ese momento estaban en
+  `envios_reparto` sin entregar, 7 estaban `closed`, incluidos los 2 que salían ESE DÍA**. Con el
+  filtro puesto, la hoja del 17-ago salía **vacía**. En el local cierran la orden cuando la
+  empaquetan, no cuando llega: era exactamente el modo de falla que Bruno pidió medir antes de tocar.
+  · **`shipping_status === 'fulfilled'` no excluye nada**: 0 de 23 en cadetería y **0 de las 78
+  órdenes vivas** de los 30 días — ni siquiera las 13 del correo que sí tienen `shipped_at`. Es un
+  filtro que hoy no hace **nada**, y que el día que alguien empiece a tildar «despachado» al
+  empaquetar vacía la hoja en silencio. Por eso `envio_estado` no entra en `OrdenTN`: existe en el
+  mapper de `tiendanube-audit` y se deja afuera a propósito.
+  ⇒ **Lo que saca un envío de la hoja es que alguien lo entregue, no lo que TN opine de la orden.**
+  Queda escrito en `vaAlReparto` y lo defiende un test que se pone rojo si alguien agrega el filtro
+  (`tests/envios-core.test.ts`, «una orden CERRADA en Tienda Nube igual sale»; ejercido con el
+  mutante puesto: `AssertionError`, no error del compilador).
+  🔑 **Cómo se midió, que sirve para cualquier endpoint del Monitor**: la mitad barata sale sin
+  navegador —`?orden=N&store=…` de `tiendanube-audit` **no exige usuario** y contesta `envio_estado`
+  y `estado_orden`, así que los 10 envíos reales se cotejaron con `curl` contra los `orden_numero`
+  que devuelve `psql`—. La otra mitad (`?ordenes=1`, 30 días) **sí** exige sesión, y el token de TN
+  vive sólo en Vercel: se resuelve **desde la pantalla logueada**, reusando el objeto `init` que la
+  propia app arma —no se lee la credencial, se la deja pasar— y devolviendo sólo los agregados.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
   reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
 - 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un

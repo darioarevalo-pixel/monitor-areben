@@ -45,6 +45,20 @@ export function vaPorCorreo(o: OrdenTN): boolean {
  * viejo (no cancelada + no `pickup`), **23 eran de Correo Argentino y Andreani** — el 59% de la
  * hoja del cadete eran paquetes que despacha el correo. El `pickup` saca el retiro en el local y
  * el punto de retiro; lo que faltaba era sacar el correo.
+ *
+ * ⛔ **Y NO se filtra por «ya despachada» ni por «cerrada». Medido el 17-ago-2026 y quedó
+ * decidido que no.** Era la pregunta abierta de la tanda 5 — Tienda Nube no tiene «entregado», así
+ * que la tentación es sacar de la hoja lo que TN da por terminado. Las dos formas fallan:
+ *   · `estado_orden === 'closed'` marca **20 de las 23 órdenes de cadetería de 30 días (87%)** y
+ *     —el número que cierra la discusión— **7 de los 10 envíos que en ese momento estaban sin
+ *     entregar en `envios_reparto`, incluidos los 2 que salían ESE DÍA**. Con este filtro la hoja
+ *     del 17-ago salía vacía: en el local cierran la orden cuando la empaquetan, no cuando llega.
+ *   · `shipping_status === 'fulfilled'` no excluye **nada**: 0 de 23 en cadetería y 0 de 78
+ *     órdenes vivas de las dos tiendas en 30 días (ni siquiera las 13 del correo que sí tienen
+ *     `shipped_at`). Es un filtro que hoy no hace nada y que el día que alguien empiece a tildar
+ *     «despachado» al empaquetar vacía la hoja **en silencio**. Por eso `envio_estado` ni siquiera
+ *     entra en `OrdenTN`: el campo existe en el mapper de `tiendanube-audit` y se deja afuera.
+ * Lo que saca un envío de la hoja es que alguien lo entregue, no lo que TN opine de la orden.
  */
 export function vaAlReparto(o: OrdenTN): boolean {
   if (o.cancelada || o.estado_orden === 'cancelled') return false

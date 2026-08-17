@@ -1161,6 +1161,14 @@ describe('vaAlReparto — qué sale en la mochila', () => {
     expect(vaAlReparto(orden({ cancelada: true }))).toBe(false)
     expect(vaAlReparto(orden({ estado_orden: 'cancelled' }))).toBe(false)
   })
+
+  it('🔴 una orden CERRADA en Tienda Nube igual sale: cerrarla es empaquetarla, no entregarla', () => {
+    // Medido el 17-ago-2026: `closed` marcaba 20 de las 23 órdenes de cadetería de 30 días y 7 de
+    // los 10 envíos que estaban sin entregar en la base — los 2 de la hoja de ese día incluidos.
+    // Un filtro por `closed` acá vacía la hoja del cadete y nadie se entera hasta que no sale la
+    // moto. Este caso existe para ponerse rojo el día que alguien lo agregue.
+    expect(vaAlReparto(orden({ estado_orden: 'closed' }))).toBe(true)
+  })
 })
 
 /**
