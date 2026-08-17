@@ -108,6 +108,20 @@ describe('leerVentasDeCampania', () => {
     expect(l.unidades).toBe(1)
   })
 
+  it('🔴 una devolución (`quantity` negativo) LLEGA: la decide el consumidor, no el transporte', async () => {
+    // Descartarla acá le sacaba la unidad a la conciliación de stock de `agotadosQueNoCierran`, que
+    // necesita el neto: la prenda devuelta volvió al stock. El que la ignora es `resultadoCampania`.
+    espiar({ ventas: [venta(10, '2026-08-13')], detalles: [linea(10, 1, { quantity: -1, unit_price: 12890, total: -12890 })] })
+    const out = await leerVentasDeCampania('bdi', ['1'], '2026-08-12', '2026-08-27')
+    expect(out).toHaveLength(1)
+    expect(out[0].unidades).toBe(-1)
+  })
+
+  it('una línea de cero unidades no dice nada y no entra', async () => {
+    espiar({ ventas: [venta(10, '2026-08-13')], detalles: [linea(10, 1, { quantity: 0 })] })
+    expect(await leerVentasDeCampania('bdi', ['1'], '2026-08-12', '2026-08-27')).toEqual([])
+  })
+
   it('un 403 del handler sube como error, no como "no vendió nada"', async () => {
     // 🔴 El modo de falla que agrega el endpoint. Tragárselo devolviendo `[]` haría que Resultado
     // dijera que el sale no vendió — y sobre eso se decide bajar más los precios.

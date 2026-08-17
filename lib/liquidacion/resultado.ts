@@ -280,6 +280,10 @@ export function resultadoCampania(
       // aparecería como prenda perdida—. El resultado de la campaña, en cambio, es del rango: sin
       // este corte, una campaña cerrada seguiría sumando ventas de la semana siguiente.
       if (l.fecha < rango.desde || l.fecha > rango.hasta) continue
+      // Una devolución (`quantity` negativo) no se vendió al precio de sale: acá se descarta, y en
+      // `agotadosQueNoCierran` se cuenta, porque ahí la pregunta es dónde está la prenda. Estaba en
+      // `leerVentasDeCampania` y se movió acá: la decisión es de cada consumidor, no del transporte.
+      if (l.unidades <= 0) continue
       const canal = canalDe(l.canal)
       porCanal[canal].unidades += l.unidades
       porCanal[canal].plata += l.plata
@@ -355,6 +359,11 @@ export function resultadoCampania(
  * o una falla descuentan la prenda igual, y el mayorista también: mirar sólo los canales minoristas
  * —que es lo que hace `resultadoCampania`, y ahí está bien— acusaría al local de perder prendas que
  * salieron bien. Por eso `lineas` entra cruda y sin filtrar por canal.
+ *
+ * 🔴 **Y las devoluciones se restan.** Una línea con unidades negativas es una prenda que volvió al
+ * stock: sumarla como salida —o peor, descartarla— deja la cuenta corta. Medido en prod el
+ * 17-ago-2026: BODY SOUTH tenía una venta y su devolución, neto cero, y la primera versión de esta
+ * pantalla pedía buscar **una** prenda cuando faltan **dos**.
  *
  * 🔑 **`lineas` tiene que llegar hasta HOY**, no hasta el fin de la campaña. La foto se congeló el
  * día que el producto entró y el stock de `stockHoy` es el de este momento: cualquier venta que

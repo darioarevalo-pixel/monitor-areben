@@ -105,8 +105,16 @@ export async function leerVentasDeCampania(
 
     // `quantity` en null es una unidad, igual que en Reposición: la fila existe porque algo se
     // vendió. Descartarla perdería la venta entera.
+    //
+    // 🔴 **Las líneas NEGATIVAS no se descartan acá, y antes sí.** Una devolución entra como
+    // `quantity: -1` y devuelve la prenda al stock: para la conciliación de
+    // `agotadosQueNoCierran` esa unidad **no salió**, y tragársela hacía que la pantalla pidiera
+    // buscar una prenda menos de las que faltan. Medido en prod el 17-ago-2026: BODY SOUTH tenía
+    // una venta y su devolución (neto 0) y la lista decía «faltan 1» sobre 2 que faltan.
+    // El que sí las tiene que ignorar es `resultadoCampania`, y lo hace él: una unidad devuelta no
+    // se vendió al precio de sale. Filtrar en el transporte le sacaba la decisión al que la toma.
     const unidades = Number(d.quantity ?? 1) || 0
-    if (unidades <= 0) continue
+    if (!unidades) continue
 
     // `total` es la fuente de la plata; `unit_price` sólo se usa si el total no vino. Al revés
     // perdería los descuentos por línea que la caja aplica sobre el precio unitario.

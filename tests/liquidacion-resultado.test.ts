@@ -325,6 +325,20 @@ describe('agotadosQueNoCierran', () => {
     expect(agotadosQueNoCierran(items, lineas, agotado)).toHaveLength(0)
   })
 
+  it('🔴 la devolución se RESTA: la prenda volvió al stock, no salió', () => {
+    // El caso que lo cazó en prod: BODY SOUTH tenía una venta y su devolución (neto cero) y la
+    // pantalla pedía buscar una prenda cuando faltan dos. Descartar la línea negativa —que es lo
+    // que hacía `leerVentasDeCampania`— deja la cuenta corta justo en el número que se camina.
+    const items = [item({ pid: 'p1', foto: { nombre: 'BODY SOUTH', stock: 2 } as never })]
+    const lineas = [
+      linea({ pid: 'p1', unidades: 1, canal: 'Tienda Nube' }),
+      linea({ pid: 'p1', unidades: -1, plata: -12890, canal: 'Mi Local' }),
+    ]
+    const [a] = agotadosQueNoCierran(items, lineas, agotado)
+    expect(a.salieron).toBe(0)
+    expect(a.diferencia).toBe(2)
+  })
+
   it('el que todavía tiene stock no es una caminata, por mal que cierre la cuenta', () => {
     const items = [item({ pid: 'p1', foto: { stock: 9 } as never })]
     expect(agotadosQueNoCierran(items, [], { p1: 4 })).toHaveLength(0)
@@ -372,6 +386,17 @@ describe('resultadoCampania · el corte del rango', () => {
       RANGO,
     )
     expect(r.liquidados.unidades).toBe(0)
+  })
+
+  it('🔑 la devolución NO cuenta como venta al precio de sale: acá sí se descarta', () => {
+    // La otra mitad de la misma decisión. El filtro vive en cada consumidor y no en el transporte:
+    // la conciliación de stock la resta, el resultado de la campaña la ignora.
+    const r = resultadoCampania(
+      [item({ pid: 'p1' })],
+      [linea({ pid: 'p1', unidades: 2 }), linea({ pid: 'p1', unidades: -1, plata: -34900 })],
+      RANGO,
+    )
+    expect(r.liquidados.unidades).toBe(2)
   })
 
   it('la del rango sí', () => {
