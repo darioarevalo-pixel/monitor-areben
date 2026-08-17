@@ -43,6 +43,9 @@ import { aEvento, filaBitacora, precioAnterior } from '../lib/liquidacion/bitaco
 // motivo de `.core.js` que arriba, y la MISMA implementación que usa la pantalla para no contar
 // distinto de un lado y del otro.
 import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/vendido.core.js';
+// La cola de reetiquetado: la regla vive afuera para poder testearla y mutarla sin levantar el
+// handler. Ver `lib/etiquetas/cola.core.js`.
+import { armarCola } from '../lib/etiquetas/cola.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -319,11 +322,21 @@ export default async function handler(req, res) {
   // arma el sale). Pedirle el permiso de Liquidación sería o dejar la marca sin ver, o abrirle a
   // esa gente los precios de sale contra el costo. Lo que contesta esa rama son **unidades y
   // fechas**: ni el precio que se puso, ni el de lista, ni el descuento.
+  //
+  // 🔴 **La cuarta llave es la ÚNICA escritura que abre el permiso de Etiquetas, y por eso pide DOS
+  // condiciones a la vez**: `?etiquetas=1` en la query **y** `action:'etiquetado'` en el body. Marcar
+  // una prenda como etiquetada es un POST y no hay forma de que no lo sea —deja una fila—, así que
+  // acá se cae la garantía cómoda de «Etiquetas es sólo GET». Lo que la reemplaza es que la rama
+  // corta con `return` antes de que se mire ninguna otra `action`: con la llave de Etiquetas se
+  // llega a `etiquetado` y a nada más. Un POST con `?etiquetas=1` y `action:'aplicar'` no entra por
+  // acá —`escribeEtiquetado` es false— y cae en la rama de siempre, que pide Liquidación.
   const vistaEtiquetas = req.method === 'GET' && String(req.query.etiquetas || '') === '1';
+  const escribeEtiquetado = req.method === 'POST' && String(req.query.etiquetas || '') === '1' && b.action === 'etiquetado';
   const vistaVendido = req.method === 'GET' && String(req.query.vendido || '') === '1';
-  const secciones = vistaEtiquetas ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
+  const conLlaveEtiquetas = vistaEtiquetas || escribeEtiquetado;
+  const secciones = conLlaveEtiquetas ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
   if (!puedeVerAlguna(perfil, store, secciones)) {
-    const que = vistaEtiquetas ? 'Etiquetas' : vistaVendido ? 'Análisis' : 'Liquidación';
+    const que = conLlaveEtiquetas ? 'Etiquetas' : vistaVendido ? 'Análisis' : 'Liquidación';
     return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });
   }
 
@@ -338,6 +351,56 @@ export default async function handler(req, res) {
   try {
     // Corta acá: lo único que contesta con el permiso de Etiquetas. Sin `puede`, sin fotos, sin
     // precios — el pid y el nombre de la campaña, nada más.
+    // ── La cola de reetiquetado. ───────────────────────────────────────────────────────────────
+    //
+    // 🔑 **No lee campañas: lee la bitácora.** La pregunta es «¿a qué prenda le cambió el precio
+    // después de la última vez que la dimos por etiquetada?», que no nombra la liquidación y por eso
+    // cubre los cuatro casos: se puso el sale, **se levantó**, una promo puntual y un ajuste suelto.
+    //
+    // El stock sale de `inventario` sumando los dos depósitos: una prenda que está sólo en Depósito
+    // igual hay que etiquetarla cuando salga al salón, y quién la tiene es otra pregunta.
+    if (vistaEtiquetas && String(req.query.cola || '') === '1') {
+      const [ev, im, inv] = await Promise.all([
+        supabase.from('liquidacion_bitacora')
+          .select('pid, producto, sku, cuando, precio_a, precio_lista, liq_nombre, modo')
+          .eq('store', store).order('cuando', { ascending: false }),
+        supabase.from('etiquetas_impresas').select('pid, cuando, modo').eq('store', store),
+        supabase.from('inventario').select('product_id, available_quantity'),
+      ]);
+      if (ev.error) throw new Error(ev.error.message);
+      if (im.error) throw new Error(im.error.message);
+      if (inv.error) throw new Error(inv.error.message);
+
+      // Uno por producto: el más nuevo. 🔑 **Se cuenta por el ÚLTIMO movimiento y no por evento**
+      // —la etiqueta es de la prenda, no del cambio de precio—: tres cambios en una tarde son UNA
+      // etiqueta, y guardarlo por evento haría que imprimir una vez dejara dos sin tildar.
+      const ultimo = new Map();
+      for (const r of ev.data || []) if (!ultimo.has(r.pid)) ultimo.set(r.pid, r);
+
+      const impresas = {};
+      for (const r of im.data || []) impresas[r.pid] = r.cuando;
+      const stock = {};
+      for (const r of inv.data || []) {
+        const k = String(r.product_id);
+        stock[k] = (stock[k] || 0) + Number(r.available_quantity || 0);
+      }
+
+      const eventos = [...ultimo.values()].map((r) => ({
+        pid: String(r.pid),
+        producto: r.producto,
+        sku: r.sku,
+        cuando: r.cuando,
+        precioA: r.precio_a == null ? null : Number(r.precio_a),
+        precioLista: r.precio_lista == null ? null : Number(r.precio_lista),
+        liqNombre: r.liq_nombre || null,
+        modo: r.modo,
+      }));
+      const cola = armarCola(eventos, impresas, stock);
+      // 🔑 **`leidoEn` va SIEMPRE**: sin él, una cola vacía porque está todo hecho se ve igual que
+      // una cola vacía porque la consulta se rompió.
+      return res.status(200).json({ ok: true, ...cola, leidoEn: ahora });
+    }
+
     if (vistaEtiquetas) {
       const liq = String(req.query.liq || '');
 
@@ -372,6 +435,25 @@ export default async function handler(req, res) {
         campania: { id: c.data.id, nombre: c.data.nombre },
         pids: pidsAEtiquetar(i.data, c.data.estado),
       });
+    }
+
+    // ── Dar por hecha la etiqueta de N productos. La ÚNICA escritura del permiso de Etiquetas. ──
+    //
+    // 🔑 **Se pisa, no se acumula.** Un renglón por producto: lo que importa es *hasta cuándo* está
+    // al día su etiqueta, no cuántas veces se imprimió. Por eso reimprimir es gratis y no avisa nada
+    // —lo pidió Bruno para el caso «se trabó la impresora»—: vuelve a sellar la misma fila.
+    //
+    // `modo` separa el que se imprimió del que se sacó a mano con «ya está» (la prenda está en el
+    // depósito, o se decidió no etiquetarla). Decir «impresa» sobre algo que nadie imprimió es una
+    // mentira que después no se puede deshacer.
+    if (escribeEtiquetado) {
+      const pids = (Array.isArray(b.pids) ? b.pids : []).map(String).filter(Boolean);
+      if (!pids.length) return res.status(400).json({ error: 'no vino ningún producto' });
+      const modo = b.modo === 'ya_estaba' ? 'ya_estaba' : 'impresa';
+      const filas = pids.map((pid) => ({ store, pid, cuando: ahora, modo, por_quien: yo }));
+      const { error } = await supabase.from('etiquetas_impresas').upsert(filas, { onConflict: 'store,pid' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, marcados: filas.length, cuando: ahora });
     }
 
     // ── Lo vendido CON la oferta puesta, para la marca de Análisis. ────────────────────────────

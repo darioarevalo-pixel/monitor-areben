@@ -204,3 +204,57 @@ describe('la cuenta fija sigue mandando', () => {
     expect(code).not.toBe(403)
   })
 })
+
+/**
+ * La cola de reetiquetado agregó la **única escritura** que abre el permiso de Etiquetas, y con eso
+ * se cayó la garantía cómoda que sostenía este endpoint: «Etiquetas es sólo GET, así que ninguna
+ * `action` del POST se alcanza jamás con esa llave».
+ *
+ * Lo que la reemplaza es que `escribeEtiquetado` pide DOS condiciones a la vez —`?etiquetas=1` en la
+ * query **y** `action:'etiquetado'` en el body— y corta con `return` antes de que se mire ninguna
+ * otra `action`. Este bloque fija justamente eso: que con la llave de Etiquetas se llegue a
+ * `etiquetado` y **a nada más**.
+ */
+describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
+  const SOLO_ETIQUETAS = { name: 'Local', admin: false, cuenta: null, acceso: { bdi: { etiquetas: true } }, funcion: [] }
+  const postDe = (body: Record<string, unknown>) =>
+    conSesion({ method: 'POST', query: { store: 'bdi', etiquetas: '1' }, body: { store: 'bdi', ...body } })
+
+  it('🔴 `aplicar` con ?etiquetas=1 NO entra: escribir precios en la tienda pide Liquidación', async () => {
+    // El que importa. Si esto deja de dar 403, cualquiera con Etiquetas escribe precios en GN.
+    sesionDe(SOLO_ETIQUETAS)
+    const res = await llamar('_liquidacion', postDe({ action: 'aplicar', liq: 'l1', pids: ['1'], modo: 'poner' }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 ninguna otra action se cuela por la misma puerta', async () => {
+    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item']) {
+      sesionDe(SOLO_ETIQUETAS)
+      const res = await llamar('_liquidacion', postDe({ action, liq: 'l1' }))
+      expect(res.code, `action «${action}» no puede entrar con la llave de Etiquetas`).toBe(403)
+    }
+  })
+
+  it('`etiquetado` SÍ entra — si no, el bloque de arriba estaría verde por prohibir todo', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    try {
+      const res = await llamar('_liquidacion', postDe({ action: 'etiquetado', pids: ['1'] }))
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      // Pasó el gate y se fue a la base, que es exactamente lo que se quiere probar acá.
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+
+  it('`etiquetado` SIN ?etiquetas=1 vuelve a pedir Liquidación: hacen falta las dos condiciones', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action: 'etiquetado', pids: ['1'] } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('y sin el permiso de Etiquetas tampoco, aunque mande las dos condiciones', async () => {
+    sesionDe(SIN_NADA)
+    const res = await llamar('_liquidacion', postDe({ action: 'etiquetado', pids: ['1'] }))
+    expect(res.code).toBe(403)
+  })
+})

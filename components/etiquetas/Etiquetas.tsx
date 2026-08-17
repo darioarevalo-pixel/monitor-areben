@@ -6,7 +6,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
-import { useLiquidacionEtiquetas } from './useLiquidacionEtiquetas'
+import { pidsDe, useColaReetiquetado, type EstadoCola } from './useColaReetiquetado'
 import {
   agruparCantidades,
   construirPrecios,
@@ -25,18 +25,28 @@ import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib
 import type { Marca } from '@/lib/nav.datos'
 import { fmtHace } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Badge, Button, Card, EmptyState, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
+import { Badge, Button, Card, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
 
 /**
- * La pestaña en la que se cargan cantidades. No es lo mismo que `ModoEtiqueta`: **Liquidaciones
- * imprime la etiqueta de `promo`** —el dibujo es idéntico, antes tachado y ahora— pero guarda sus
- * cantidades aparte, para no pisar las de Promo, que es otra lista.
+ * La pestaña en la que se cargan cantidades. **No es lo mismo que `ModoEtiqueta`**, y ésa es la
+ * distinción que ordena esta pantalla: `ModoEtiqueta` es **qué dice la etiqueta** (el dibujo) y el
+ * slot es **sobre qué prendas** (todo el catálogo, las que tienen oferta viva, las que hay que
+ * rehacer). Son dos ejes, y estaban colapsados en uno.
+ *
+ * `cola` es el caso que lo deja claro: no tiene un dibujo propio —usa los que ya están— y lo que
+ * aporta es la lista. Guarda sus cantidades aparte para no pisar las de Promo, que es otra lista.
  */
-type Slot = ModoEtiqueta | 'liq'
-/** La etiqueta que dibuja cada pestaña. */
-const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', liq: 'promo' }
+type Slot = ModoEtiqueta | 'cola'
+/**
+ * La etiqueta que dibuja cada pestaña.
+ *
+ * ⚠️ `cola` dice `promo` sólo como valor de arranque: ahí el dibujo se decide **prenda por prenda**
+ * con `modoDe` (ver `lib/etiquetas/pdf.ts`), porque la cola mezcla las que entran a una oferta con
+ * las que vuelven a precio de lista.
+ */
+const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', cola: 'promo' }
 const FP_DEFAULT: LineaEtiqueta[] = [
   { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
   { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
@@ -90,10 +100,22 @@ export function Etiquetas() {
   const sinPrecioDeTn = useCallback((v: VarianteEti) => fueraDeTn.has(v.pid), [fueraDeTn])
 
   const [sub, setSub] = useState<Slot | 'libre'>('dep')
-  const liq = useLiquidacionEtiquetas(marca)
+  const cola = useColaReetiquetado(marca)
+  const [filtroCampania, setFiltroCampania] = useState('')
+
+  // La campaña dejó de ser la que decide qué etiquetar y quedó como filtro. Viaja en cada fila, así
+  // que filtrar no cuesta una consulta más.
+  const pendientesFiltradas = useMemo(
+    () => (filtroCampania ? cola.pendientes.filter((p) => p.liqNombre === filtroCampania) : cola.pendientes),
+    [cola.pendientes, filtroCampania],
+  )
+  const pidsCola = useMemo(() => pidsDe(pendientesFiltradas), [pendientesFiltradas])
+  // 🔑 Qué etiqueta le toca a cada una: la cola mezcla las que entran a una oferta con las que
+  // vuelven a precio de lista, y una etiqueta con un «antes» que no existe es un cartel mentiroso.
+  const modoDeCola = useCallback((v: VarianteEti) => (promoDe(v) ? 'promo' : 'loc') as ModoEtiqueta, [promoDe])
 
   // Estado persistido (recargado al cambiar de marca).
-  const [cant, setCant] = useState<Record<Slot, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {}, liq: {} })
+  const [cant, setCant] = useState<Record<Slot, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {}, cola: {} })
   const [autoClear, setAutoClear] = useState(true)
   const [fpLines, setFpLines] = useState<LineaEtiqueta[]>(FP_DEFAULT)
   // Carga en un IIFE async (no setState sincrónico en el effect: dispararía cascada
@@ -107,7 +129,7 @@ export function Etiquetas() {
         loc: lsGet(keyCant('loc', marca), {}),
         promo: lsGet(keyCant('promo', marca), {}),
         sku: lsGet(keyCant('sku', marca), {}),
-        liq: lsGet(keyCant('liq', marca), {}),
+        cola: lsGet(keyCant('cola', marca), {}),
       }
       // El autoclear es un string CRUDO ('1'/'0') en el legacy, no JSON.
       const ac = localStorage.getItem(keyAutoClear(marca)) !== '0'
@@ -160,6 +182,19 @@ export function Etiquetas() {
   }
 
   const ctx: CtxEtiqueta = { precioDe, promoDe, fpLines }
+  // En la cola el dibujo se elige prenda por prenda; en las otras pestañas manda el de la pestaña.
+  const ctxDe = (slot: Slot): CtxEtiqueta => (slot === 'cola' ? { ...ctx, modoDe: modoDeCola } : ctx)
+
+  /**
+   * Da por hecha la etiqueta de estos productos.
+   *
+   * 🔑 **Nunca frena la impresión.** Si esto falla, la etiqueta ya salió de la impresora: cortar
+   * acá dejaría a alguien con la prenda etiquetada en la mano y un cartel de error. Lo peor que
+   * pasa es que el producto siga en la cola y se imprima dos veces, que es gratis a propósito.
+   */
+  const anotarEtiquetado = (grupos: { v: VarianteEti }[], modo: 'impresa' | 'ya_estaba' = 'impresa') => {
+    void cola.marcar(grupos.map((g) => g.v.pid), modo).catch(() => {})
+  }
 
   const imprimir = async (slot: Slot, opts: { sep: boolean; conFP: boolean }) => {
     const modo = MODO_DE[slot]
@@ -168,8 +203,11 @@ export function Etiquetas() {
       await avisar(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.')
       return
     }
+    // En la cola el freno por precio se evalúa contra la etiqueta que le toca a cada prenda, no
+    // contra la de la pestaña: las que vuelven a lista llevan la de precio y ahí el cero sí frena.
+    const modoParaFreno = slot === 'cola' ? 'loc' : modo
     // Sin precio no sale la etiqueta de precio: salía la de información, bien impresa y sin avisar.
-    const { imprimibles, sinPrecio } = partirPorPrecio(grupos, modo, precioDe)
+    const { imprimibles, sinPrecio } = partirPorPrecio(grupos, modoParaFreno, precioDe)
     if (sinPrecio.length) {
       await avisar(
         `${sinPrecio.length === 1 ? 'Esta prenda no tiene' : `Estas ${sinPrecio.length} prendas no tienen`} precio y ${sinPrecio.length === 1 ? 'no se va' : 'no se van'} a imprimir: ${nombrarSinPrecio(sinPrecio)}. ` +
@@ -178,7 +216,8 @@ export function Etiquetas() {
     }
     if (!imprimibles.length) return
     const labels = secuenciaLabels(imprimibles, opts)
-    imprimirPdf(await buildEtiquetasPdf(labels, modo, ctx))
+    imprimirPdf(await buildEtiquetasPdf(labels, modo, ctxDe(slot)))
+    if (slot === 'cola') anotarEtiquetado(imprimibles)
     setTimeout(() => {
       void (async () => {
         const hacer =
@@ -199,8 +238,11 @@ export function Etiquetas() {
     }, 600)
   }
 
-  const imprimirUno = async (modo: ModoEtiqueta, v: VarianteEti, conFP: boolean) => {
-    imprimirPdf(await buildEtiquetasPdf(conFP ? [v, { __fp: true }] : [v], modo, ctx))
+  const imprimirUno = async (slot: Slot, v: VarianteEti, conFP: boolean) => {
+    imprimirPdf(await buildEtiquetasPdf(conFP ? [v, { __fp: true }] : [v], MODO_DE[slot], ctxDe(slot)))
+    // Escanear y que salga la etiqueta ES haberla hecho. Y desde cualquier pestaña: si alguien la
+    // reimprime desde Local o Promo, la prenda quedó al día igual — la cola no es dueña de eso.
+    anotarEtiquetado([{ v }])
   }
 
   return (
@@ -227,7 +269,7 @@ export function Etiquetas() {
           { key: 'dep', label: '🏬 Depósito' },
           { key: 'loc', label: '🏪 Local' },
           { key: 'promo', label: '🔥 Promo' },
-          { key: 'liq', label: '🏷️ Liquidaciones' },
+          { key: 'cola', label: `🔁 Para reetiquetar${cola.pendientes.length ? ` (${cola.pendientes.length})` : ''}` },
           { key: 'sku', label: '🔢 SKU' },
           { key: 'libre', label: '✏️ Libre' },
         ]}
@@ -236,15 +278,15 @@ export function Etiquetas() {
         style={{ marginBottom: space[4] }}
       />
 
-      {sub === 'liq' && <CabeceraLiquidacion liq={liq} />}
+      {sub === 'cola' && <CabeceraCola cola={cola} filtro={filtroCampania} setFiltro={setFiltroCampania} />}
 
       {sub === 'libre' ? (
         <LibreEditor />
-      ) : sub === 'liq' && !liq.elegida ? null : (
+      ) : (
         <ModoPanel
-          key={sub === 'liq' ? `liq:${liq.elegida?.id}` : sub}
+          key={sub === 'cola' ? `cola:${filtroCampania}` : sub}
           modo={MODO_DE[sub]}
-          campania={sub === 'liq' && liq.elegida ? { nombre: liq.elegida.nombre, pids: liq.pids } : undefined}
+          campania={sub === 'cola' ? { nombre: 'Para reetiquetar', pids: pidsCola } : undefined}
           vars={vars}
           sinCodigo={sinCodigo}
           cant={cant[sub]}
@@ -259,7 +301,7 @@ export function Etiquetas() {
           catalogoListo={!tn.cargando}
           onRefrescarPrecios={tn.refrescar}
           onImprimir={(opts) => imprimir(sub, opts)}
-          onImprimirUno={imprimirUno}
+          onImprimirUno={(v, conFP) => imprimirUno(sub, v, conFP)}
           fpLines={fpLines}
           guardarFP={guardarFP}
         />
@@ -269,48 +311,51 @@ export function Etiquetas() {
 }
 
 /**
- * El encabezado de la pestaña Liquidaciones: qué campaña se está etiquetando.
+ * El encabezado de «Para reetiquetar»: cuántas hay, de cuándo es la lectura y el filtro de campaña.
  *
- * 🔑 **El selector sólo se dibuja si hay dos o más.** Con una campaña viva —que es lo normal— elegir
- * entre una sola cosa es ruido; el nombre va como rótulo y se entra derecho. Y las que están en
- * borrador no llegan hasta acá: el servidor no las manda, porque sus precios todavía no rigen en la
- * tienda y etiquetar desde ahí colgaría en la percha un precio que no existe.
+ * 🔑 **La fecha de lectura va SIEMPRE.** Una cola vacía porque está todo hecho se ve exactamente
+ * igual que una cola vacía porque la consulta se rompió, y de las dos la pantalla diría «no hay
+ * nada que etiquetar».
+ *
+ * 🔑 **El filtro de campaña sólo se dibuja si hay dos o más.** Con una sola, elegir entre una cosa
+ * es ruido. Y es un **filtro**, no la fuente: la lista sale de los cambios de precio, no de que
+ * exista una campaña.
  */
-function CabeceraLiquidacion({ liq }: { liq: ReturnType<typeof useLiquidacionEtiquetas> }) {
-  if (liq.error) {
+function CabeceraCola({ cola, filtro, setFiltro }: { cola: EstadoCola; filtro: string; setFiltro: (v: string) => void }) {
+  if (cola.error) {
     return (
       <Notice tone="danger" icon="✗">
-        {liq.error}
+        {cola.error}
       </Notice>
     )
   }
-  if (!liq.campanias.length) {
-    return liq.cargando ? null : (
-      <EmptyState
-        icon="🏷️"
-        title="No hay ninguna liquidación con los precios puestos"
-        hint="Cuando arranque un sale y sus precios estén cargados en la tienda, los productos a etiquetar aparecen acá."
-        dashed
-      />
-    )
-  }
+  const n = cola.pendientes.length
+  const leido = cola.leidoEn ? new Date(cola.leidoEn).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        {liq.campanias.length > 1 ? (
-          <Select value={liq.elegida?.id || ''} onChange={(e) => liq.elegir(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
-            {liq.campanias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
+        <div style={{ fontSize: 16, fontWeight: 700 }}>
+          🔁 {cola.cargando ? 'Buscando qué cambió de precio…' : n ? `${n} ${n === 1 ? 'prenda' : 'prendas'} para reetiquetar` : 'No hay nada para reetiquetar'}
+        </div>
+        {cola.campanias.length > 1 && (
+          <Select value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ width: 260, maxWidth: '100%' }}>
+            <option value="">Todas las campañas</option>
+            {cola.campanias.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </Select>
-        ) : (
-          <div style={{ fontSize: 16, fontWeight: 700 }}>🏷️ {liq.elegida?.nombre}</div>
         )}
-        <div style={{ fontSize: 12, color: color.mut }}>
-          {liq.cargando ? 'Cargando los productos…' : `${liq.pids.size} ${liq.pids.size === 1 ? 'producto' : 'productos'} con el precio puesto en la tienda`}
-        </div>
+        <button className="btn-sm" onClick={() => void cola.recargar()} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+          🔄 Revisar de nuevo
+        </button>
+        {leido && <span style={{ fontSize: 12, color: color.mut }}>Leído el {leido}</span>}
+      </div>
+      <div style={{ fontSize: 12, color: color.mut, marginTop: 8 }}>
+        Entra sola cualquier prenda a la que le haya cambiado el precio desde el Monitor —se puso una
+        oferta, se sacó, se ajustó— y sale al imprimirla. Reimprimir es libre y no avisa nada.
+        {cola.sinStock.length > 0 && ` ${cola.sinStock.length} quedaron afuera por no tener stock.`}
       </div>
     </Card>
   )
@@ -356,7 +401,7 @@ function ModoPanel({
   catalogoListo: boolean
   onRefrescarPrecios: () => Promise<void>
   onImprimir: (opts: { sep: boolean; conFP: boolean }) => void
-  onImprimirUno: (modo: ModoEtiqueta, v: VarianteEti, conFP: boolean) => void
+  onImprimirUno: (v: VarianteEti, conFP: boolean) => void
   fpLines: LineaEtiqueta[]
   guardarFP: (l: LineaEtiqueta[]) => void
 }) {
@@ -432,7 +477,7 @@ function ModoPanel({
       inp.focus()
       return
     }
-    onImprimirUno(modo, v, modo === 'loc' && conFP)
+    onImprimirUno(v, modo === 'loc' && conFP)
     const p = precioDe(v)
     const pr = modo === 'promo' ? promoDe(v) : null
     const extra =

@@ -16,6 +16,18 @@ export type CtxEtiqueta = {
   precioDe: (v: VarianteEti) => number
   promoDe: (v: VarianteEti) => Promo | null
   fpLines: LineaEtiqueta[]
+  /**
+   * Qué etiqueta le toca a ESTA prenda, cuando no es la misma para todo el lote.
+   *
+   * 🔑 **Lo pide la cola de reetiquetado, que mezcla dos casos por naturaleza.** El día que se
+   * levanta un sale, los productos vuelven a precio de lista y su etiqueta es la de precio, sin
+   * tachado; los que entran a una promo nueva llevan la de precio rebajado. Imprimir todo el lote
+   * con un modo solo pondría un «antes» que no existe, o se comería el que sí.
+   *
+   * Sin esto puesto manda `modo`, que es el caso de las cuatro pestañas de siempre. No toca la
+   * geometría: elige entre los dibujos que ya están.
+   */
+  modoDe?: (v: VarianteEti) => ModoEtiqueta
 }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -47,7 +59,7 @@ function drawFP(pdf: Pdf, W: number, Hh: number, M: number, CX: number, fpLines:
 }
 
 /** Construye el PDF de etiquetas (5×2,5 cm) según el modo. Port de _etiBuildPdf. */
-export async function buildEtiquetasPdf(labels: LabelItem[], modo: ModoEtiqueta, ctx: CtxEtiqueta): Promise<Pdf> {
+export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqueta, ctx: CtxEtiqueta): Promise<Pdf> {
   const { jsPDF } = await import('jspdf')
   const JsBarcode = (await import('jsbarcode')).default
   const W = 50, Hh = 25, M = 2, CX = W / 2
@@ -66,6 +78,8 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modo: ModoEtiqueta,
       drawFP(pdf, W, Hh, M, CX, ctx.fpLines)
       return
     }
+    // El modo del lote, salvo que el llamador decida prenda por prenda (ver `modoDe`).
+    const modo = ctx.modoDe ? ctx.modoDe(v) : modoLote
     const margin = 1.3
     const barras = (y: number, h: number) => {
       try {
