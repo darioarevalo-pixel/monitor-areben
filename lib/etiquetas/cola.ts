@@ -6,7 +6,13 @@
  * `lib/permisos.ts` sobre `lib/permisos.core.js`.
  */
 
-import { armarCola as armarColaJs, precioQueQuedo as precioQueQuedoJs, sinEtiquetar as sinEtiquetarJs, STOCK_MINIMO as STOCK_MINIMO_JS } from './cola.core.js'
+import {
+  armarCola as armarColaJs,
+  etiquetasDesactualizadas as etiquetasDesactualizadasJs,
+  precioQueQuedo as precioQueQuedoJs,
+  sinEtiquetar as sinEtiquetarJs,
+  STOCK_MINIMO as STOCK_MINIMO_JS,
+} from './cola.core.js'
 
 /** Un cambio de precio, tal como sale de la bitácora. Sólo el último de cada producto. */
 export interface EventoDePrecio {
@@ -56,3 +62,31 @@ export const sinEtiquetar = sinEtiquetarJs as (
 ) => FilaCola[]
 
 export const precioQueQuedo = precioQueQuedoJs as (ev: Pick<EventoDePrecio, 'precioA'> | null) => number | null
+
+/** Lo que decía la etiqueta de un producto la última vez que se dio por hecha. */
+export interface SelloEtiqueta {
+  cuando: string
+  modo: 'impresa' | 'ya_estaba'
+  /** El número que se imprimió. `null` en los sellos viejos: ahí manda la fecha. */
+  precio: number | null
+  /** El tachado, si lo llevaba. */
+  precioLista: number | null
+}
+
+/** Una etiqueta que dice otro número del que se paga hoy. */
+export interface EtiquetaVieja {
+  pid: string
+  decia: number
+  ahora: number
+  cuando: string
+}
+
+/**
+ * Las prendas cuya etiqueta dice otro número del que se cobra hoy — **incluye los cambios de precio
+ * de LISTA**, que no pasan por el Monitor y por eso la regla de fechas no los ve.
+ */
+export const etiquetasDesactualizadas = etiquetasDesactualizadasJs as (
+  impresas: Record<string, SelloEtiqueta>,
+  precioHoy: Record<string, { aCobrar: number | null; lista: number | null }>,
+  stockPorPid: Record<string, number>,
+) => EtiquetaVieja[]

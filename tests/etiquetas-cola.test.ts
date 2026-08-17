@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { armarCola, precioQueQuedo, sinEtiquetar, type EventoDePrecio } from '@/lib/etiquetas/cola'
+import { armarCola, etiquetasDesactualizadas, precioQueQuedo, sinEtiquetar, type EventoDePrecio } from '@/lib/etiquetas/cola'
 
 const T = (iso: string) => iso
 function ev(over: Partial<EventoDePrecio> = {}): EventoDePrecio {
@@ -100,5 +100,55 @@ describe('sinEtiquetar · lo que queda con stock puede ser una prenda no exhibid
     const { pendientes } = armarCola([ev({ cuando: T('2026-08-14T12:00:00.000Z') })], {}, { '1': 4 })
     expect(sinEtiquetar(pendientes, ahora, 3)).toHaveLength(0)
     expect(sinEtiquetar(pendientes, ahora, 1)).toHaveLength(1)
+  })
+})
+
+describe('etiquetasDesactualizadas · la etiqueta dice otro número del que se paga hoy', () => {
+  // 🔴 Cierra el agujero de la regla por fechas: el precio de LISTA se carga a mano en Gestión Nube
+  // y no deja rastro en la bitácora, así que comparar fechas no lo ve nunca.
+  const sello = (over: Partial<{ cuando: string; modo: 'impresa' | 'ya_estaba'; precio: number | null; precioLista: number | null }> = {}) => ({
+    cuando: '2026-08-13T12:00:00.000Z',
+    modo: 'impresa' as const,
+    precio: 12290,
+    precioLista: 20490,
+    ...over,
+  })
+
+  it('el precio de LISTA cambió a mano: la etiqueta queda vieja y se caza igual', () => {
+    const r = etiquetasDesactualizadas(
+      { '1': sello({ precio: 20490, precioLista: 20490 }) },
+      { '1': { aCobrar: 24990, lista: 24990 } },
+      { '1': 5 },
+    )
+    expect(r).toEqual([{ pid: '1', decia: 20490, ahora: 24990, cuando: '2026-08-13T12:00:00.000Z' }])
+  })
+
+  it('el mismo número no entra', () => {
+    expect(etiquetasDesactualizadas({ '1': sello() }, { '1': { aCobrar: 12290, lista: 20490 } }, { '1': 5 })).toEqual([])
+  })
+
+  it('cambió sólo el tachado: la etiqueta igual está mal', () => {
+    const r = etiquetasDesactualizadas({ '1': sello() }, { '1': { aCobrar: 12290, lista: 29990 } }, { '1': 5 })
+    expect(r).toHaveLength(1)
+  })
+
+  it('🔑 un sello SIN número no acusa a nadie', () => {
+    // Las 262 del sellado inicial no tienen precio: no se puede inventar qué decía una etiqueta que
+    // se imprimió a mano la semana pasada. Tratarlas como distintas las mandaba a la cola el primer
+    // día, que es justo lo que el sellado vino a evitar.
+    expect(etiquetasDesactualizadas({ '1': sello({ precio: null, precioLista: null }) }, { '1': { aCobrar: 24990, lista: 24990 } }, { '1': 5 })).toEqual([])
+  })
+
+  it('sin precio hoy tampoco acusa: puede ser el catálogo que no cruzó', () => {
+    expect(etiquetasDesactualizadas({ '1': sello() }, { '1': { aCobrar: null, lista: null } }, { '1': 5 })).toEqual([])
+    expect(etiquetasDesactualizadas({ '1': sello() }, {}, { '1': 5 })).toEqual([])
+  })
+
+  it('sin stock no entra, igual que en la cola por fechas', () => {
+    expect(etiquetasDesactualizadas({ '1': sello() }, { '1': { aCobrar: 24990, lista: 24990 } }, { '1': 0 })).toEqual([])
+  })
+
+  it('los centavos no cuentan: la etiqueta imprime pesos redondos', () => {
+    expect(etiquetasDesactualizadas({ '1': sello({ precio: 12290 }) }, { '1': { aCobrar: 12290.4, lista: 20490 } }, { '1': 5 })).toEqual([])
   })
 })

@@ -6,7 +6,8 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
-import { pidsDe, useColaReetiquetado, type EstadoCola } from './useColaReetiquetado'
+import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
+import { etiquetasDesactualizadas } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
   construirPrecios,
@@ -103,13 +104,45 @@ export function Etiquetas() {
   const cola = useColaReetiquetado(marca)
   const [filtroCampania, setFiltroCampania] = useState('')
 
+  /**
+   * Las etiquetas que **dicen otro número del que se paga hoy**.
+   *
+   * 🔑 Se calcula acá y no en el servidor porque el precio de hoy vive acá: es el mismo que la
+   * pantalla imprime, sacado de Tienda Nube. El servidor no lo tiene y traerlo sería una consulta
+   * externa por request.
+   *
+   * 🔴 Es lo que caza un precio de LISTA cambiado a mano en Gestión Nube, que no pasa por el Monitor
+   * y por eso la comparación por fechas contra la bitácora no lo ve.
+   */
+  const precioHoyPorPid = useMemo(() => {
+    const m: Record<string, { aCobrar: number | null; lista: number | null }> = {}
+    for (const pid of Object.keys(cola.sellos)) {
+      const pr = promos[pid]
+      const p = precios[pid] || 0
+      m[pid] = { aCobrar: p > 0 ? p : null, lista: pr ? pr.normal : p > 0 ? p : null }
+    }
+    return m
+  }, [cola.sellos, precios, promos])
+
+  const viejasPorNumero = useMemo(
+    () => etiquetasDesactualizadas(cola.sellos, precioHoyPorPid, cola.stock),
+    [cola.sellos, precioHoyPorPid, cola.stock],
+  )
+
   // La campaña dejó de ser la que decide qué etiquetar y quedó como filtro. Viaja en cada fila, así
   // que filtrar no cuesta una consulta más.
   const pendientesFiltradas = useMemo(
     () => (filtroCampania ? cola.pendientes.filter((p) => p.liqNombre === filtroCampania) : cola.pendientes),
     [cola.pendientes, filtroCampania],
   )
-  const pidsCola = useMemo(() => pidsDe(pendientesFiltradas), [pendientesFiltradas])
+  // Las dos puertas de la cola, sin repetir: la de fechas (cambió después de etiquetarla) y la del
+  // número (la etiqueta dice otra cosa). Un producto puede entrar por las dos.
+  const pidsCola = useMemo(() => {
+    const s = pidsDe(pendientesFiltradas)
+    // El filtro de campaña no aplica a las viejas por número: ésas no vienen de ninguna campaña.
+    if (!filtroCampania) for (const v of viejasPorNumero) s.add(v.pid)
+    return s
+  }, [pendientesFiltradas, viejasPorNumero, filtroCampania])
   // 🔑 Qué etiqueta le toca a cada una: la cola mezcla las que entran a una oferta con las que
   // vuelven a precio de lista, y una etiqueta con un «antes» que no existe es un cartel mentiroso.
   const modoDeCola = useCallback((v: VarianteEti) => (promoDe(v) ? 'promo' : 'loc') as ModoEtiqueta, [promoDe])
@@ -193,7 +226,14 @@ export function Etiquetas() {
    * pasa es que el producto siga en la cola y se imprima dos veces, que es gratis a propósito.
    */
   const anotarEtiquetado = (grupos: { v: VarianteEti }[], modo: 'impresa' | 'ya_estaba' = 'impresa') => {
-    void cola.marcar(grupos.map((g) => g.v.pid), modo).catch(() => {})
+    // Qué NÚMERO decía cada etiqueta. Es lo que después caza un precio de lista cambiado a mano en
+    // Gestión Nube, que no pasa por el Monitor y no deja rastro en la bitácora.
+    const precios: Record<string, PrecioImpreso> = {}
+    for (const g of grupos) {
+      const pr = promoDe(g.v)
+      precios[g.v.pid] = { precio: precioDe(g.v) || null, precioLista: pr ? pr.normal : null }
+    }
+    void cola.marcar(grupos.map((g) => g.v.pid), modo, precios).catch(() => {})
   }
 
   const imprimir = async (slot: Slot, opts: { sep: boolean; conFP: boolean }) => {
@@ -278,7 +318,7 @@ export function Etiquetas() {
         style={{ marginBottom: space[4] }}
       />
 
-      {sub === 'cola' && <CabeceraCola cola={cola} filtro={filtroCampania} setFiltro={setFiltroCampania} />}
+      {sub === 'cola' && <CabeceraCola cola={cola} filtro={filtroCampania} setFiltro={setFiltroCampania} porNumero={viejasPorNumero.length} />}
 
       {sub === 'libre' ? (
         <LibreEditor />
@@ -321,7 +361,7 @@ export function Etiquetas() {
  * es ruido. Y es un **filtro**, no la fuente: la lista sale de los cambios de precio, no de que
  * exista una campaña.
  */
-function CabeceraCola({ cola, filtro, setFiltro }: { cola: EstadoCola; filtro: string; setFiltro: (v: string) => void }) {
+function CabeceraCola({ cola, filtro, setFiltro, porNumero }: { cola: EstadoCola; filtro: string; setFiltro: (v: string) => void; porNumero: number }) {
   if (cola.error) {
     return (
       <Notice tone="danger" icon="✗">
@@ -329,7 +369,7 @@ function CabeceraCola({ cola, filtro, setFiltro }: { cola: EstadoCola; filtro: s
       </Notice>
     )
   }
-  const n = cola.pendientes.length
+  const n = cola.pendientes.length + porNumero
   const leido = cola.leidoEn ? new Date(cola.leidoEn).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
   return (
     <Card>
@@ -355,6 +395,7 @@ function CabeceraCola({ cola, filtro, setFiltro }: { cola: EstadoCola; filtro: s
       <div style={{ fontSize: 12, color: color.mut, marginTop: 8 }}>
         Entra sola cualquier prenda a la que le haya cambiado el precio desde el Monitor —se puso una
         oferta, se sacó, se ajustó— y sale al imprimirla. Reimprimir es libre y no avisa nada.
+        {porNumero > 0 && ` ${porNumero} ${porNumero === 1 ? 'entró' : 'entraron'} porque la etiqueta dice otro número del que se cobra hoy — eso incluye los precios de lista cambiados a mano en Gestión Nube.`}
         {cola.sinStock.length > 0 && ` ${cola.sinStock.length} quedaron afuera por no tener stock.`}
       </div>
     </Card>

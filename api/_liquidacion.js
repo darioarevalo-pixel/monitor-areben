@@ -364,7 +364,7 @@ export default async function handler(req, res) {
         supabase.from('liquidacion_bitacora')
           .select('pid, producto, sku, cuando, precio_a, precio_lista, liq_nombre, modo')
           .eq('store', store).order('cuando', { ascending: false }),
-        supabase.from('etiquetas_impresas').select('pid, cuando, modo').eq('store', store),
+        supabase.from('etiquetas_impresas').select('pid, cuando, modo, precio, precio_lista').eq('store', store),
         supabase.from('inventario').select('product_id, available_quantity'),
       ]);
       if (ev.error) throw new Error(ev.error.message);
@@ -396,9 +396,21 @@ export default async function handler(req, res) {
         modo: r.modo,
       }));
       const cola = armarCola(eventos, impresas, stock);
+      // Los sellos con su número van enteros: la comparación «¿la etiqueta dice lo que se paga
+      // hoy?» se hace en el navegador, que es donde están los precios de Tienda Nube. El servidor
+      // no los tiene y traerlos acá sería una consulta externa por request.
+      const sellos = {};
+      for (const r of im.data || []) {
+        sellos[r.pid] = {
+          cuando: r.cuando,
+          modo: r.modo,
+          precio: r.precio == null ? null : Number(r.precio),
+          precioLista: r.precio_lista == null ? null : Number(r.precio_lista),
+        };
+      }
       // 🔑 **`leidoEn` va SIEMPRE**: sin él, una cola vacía porque está todo hecho se ve igual que
       // una cola vacía porque la consulta se rompió.
-      return res.status(200).json({ ok: true, ...cola, leidoEn: ahora });
+      return res.status(200).json({ ok: true, ...cola, sellos, stock, leidoEn: ahora });
     }
 
     if (vistaEtiquetas) {
@@ -450,7 +462,25 @@ export default async function handler(req, res) {
       const pids = (Array.isArray(b.pids) ? b.pids : []).map(String).filter(Boolean);
       if (!pids.length) return res.status(400).json({ error: 'no vino ningún producto' });
       const modo = b.modo === 'ya_estaba' ? 'ya_estaba' : 'impresa';
-      const filas = pids.map((pid) => ({ store, pid, cuando: ahora, modo, por_quien: yo }));
+      // 🔑 **Qué NÚMERO decía la etiqueta.** Sin esto la cola sólo sabe comparar fechas contra la
+      // bitácora, y la bitácora sólo tiene lo que escribe el Monitor ⇒ un precio de LISTA corregido
+      // a mano en Gestión Nube dejaba la etiqueta mal y ninguna pantalla lo decía.
+      //
+      // Viene del cliente, y está bien que venga: no es una decisión ni plata que se le cobre a
+      // nadie, es **el testimonio de qué se imprimió**, y el único que lo sabe es el que imprimió.
+      // Lo peor que puede hacer un número falso acá es dejar una prenda de más o de menos en una
+      // lista de tareas.
+      const precios = (b.precios && typeof b.precios === 'object') ? b.precios : {};
+      const num = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
+      const filas = pids.map((pid) => ({
+        store,
+        pid,
+        cuando: ahora,
+        modo,
+        por_quien: yo,
+        precio: num((precios[pid] || {}).precio),
+        precio_lista: num((precios[pid] || {}).precioLista),
+      }));
       const { error } = await supabase.from('etiquetas_impresas').upsert(filas, { onConflict: 'store,pid' });
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, marcados: filas.length, cuando: ahora });

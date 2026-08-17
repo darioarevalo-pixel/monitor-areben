@@ -134,6 +134,18 @@ describe('GET ?etiquetas=1&cola=1 — la cola sale de la bitácora, no de una ca
     expect(p[0]).toMatchObject({ cuando: ayer, modo: 'sacar' })
   })
 
+  it('devuelve los sellos con su número, para poder comparar contra el precio de hoy', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    filasPorTabla['etiquetas_impresas'] = [
+      { pid: '7', cuando: ayer, modo: 'impresa', precio: '12290.00', precio_lista: '20490.00' },
+      { pid: '8', cuando: ayer, modo: 'ya_estaba', precio: null, precio_lista: null },
+    ]
+    const res = await llamar(pedir())
+    const sellos = res.body?.sellos as Record<string, { precio: number | null; precioLista: number | null }>
+    expect(sellos['7']).toEqual({ cuando: ayer, modo: 'impresa', precio: 12290, precioLista: 20490 })
+    expect(sellos['8'].precio).toBeNull()
+  })
+
   it('la respuesta dice CUÁNDO se leyó: una cola vacía sana se ve igual que una rota', async () => {
     sesionDe(SOLO_ETIQUETAS)
     const res = await llamar(pedir())
@@ -175,6 +187,24 @@ describe('POST action:etiquetado — la única escritura de la llave de Etiqueta
     const escritura = consultas.find((c) => c.tabla === 'etiquetas_impresas')
     expect(escritura!.pasos.join(' ')).toContain('"modo":"impresa"')
     expect(escritura!.pasos.join(' ')).not.toContain('lo-que-sea')
+  })
+
+  it('🔴 guarda QUÉ NÚMERO decía la etiqueta, que es lo que caza un precio de lista cambiado a mano', async () => {
+    // Sin esto la cola sólo sabe comparar fechas contra la bitácora, y la bitácora sólo tiene lo que
+    // escribe el Monitor: un precio de LISTA corregido en Gestión Nube no deja rastro.
+    sesionDe(SOLO_ETIQUETAS)
+    await llamar(postDe({ action: 'etiquetado', pids: ['1'], precios: { '1': { precio: 12290, precioLista: 20490 } } }))
+    const escritura = consultas.find((c) => c.tabla === 'etiquetas_impresas')!.pasos.join(' ')
+    expect(escritura).toContain('"precio":12290')
+    expect(escritura).toContain('"precio_lista":20490')
+  })
+
+  it('un precio que no es número no viaja a la base: entra como null', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    await llamar(postDe({ action: 'etiquetado', pids: ['1'], precios: { '1': { precio: 'gratis', precioLista: null } } }))
+    const escritura = consultas.find((c) => c.tabla === 'etiquetas_impresas')!.pasos.join(' ')
+    expect(escritura).toContain('"precio":null')
+    expect(escritura).not.toContain('gratis')
   })
 
   it('sin productos contesta 400 y no escribe nada', async () => {

@@ -41,6 +41,25 @@ create table if not exists etiquetas_impresas (
   primary key (store, pid)
 );
 
+-- ─────────────────────────────────────────────────────────────────────────────────────────────
+-- 🔑 QUÉ NÚMERO DECÍA LA ETIQUETA. Agregado el 16-ago-2026, y cierra el agujero que dejaba la
+-- primera versión.
+--
+-- La cola arrancó comparando FECHAS: «¿le cambió el precio después de la última vez que la
+-- etiquetamos?». Eso funciona para lo que escribe el Monitor —el precio promocional— y **deja
+-- afuera el precio de lista**, que se sigue cargando a mano en Gestión Nube y no deja rastro en
+-- `liquidacion_bitacora`. O sea: se corregía un precio de lista, la etiqueta quedaba mal, y ninguna
+-- pantalla lo decía. Lo preguntó Bruno antes de que nos diéramos cuenta.
+--
+-- Guardando lo que la etiqueta DICE, la pregunta deja de depender de quién movió el precio y pasa a
+-- ser la única que importa: **¿lo que dice el cartelito es lo que el cliente paga hoy?**. Eso caza
+-- el promocional, el de lista, y cualquier cosa que venga después.
+--
+-- `null` en las dos = sellado viejo, sin número (las 262 del sellado inicial). Ahí manda la fecha,
+-- como antes: no se puede inventar qué decía una etiqueta que se imprimió a mano la semana pasada.
+alter table etiquetas_impresas add column if not exists precio       numeric(12,2);
+alter table etiquetas_impresas add column if not exists precio_lista numeric(12,2);
+
 -- La consulta de la cola: «todo lo impreso de esta marca», para cruzar contra la bitácora.
 create index if not exists idx_eti_impresas_store on etiquetas_impresas (store, cuando desc);
 

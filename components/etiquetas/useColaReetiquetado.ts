@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
-import type { Cola, FilaCola } from '@/lib/etiquetas/cola'
+import type { Cola, FilaCola, SelloEtiqueta } from '@/lib/etiquetas/cola'
 import type { Marca } from '@/lib/nav.datos'
 
 /**
@@ -24,6 +24,9 @@ import type { Marca } from '@/lib/nav.datos'
 const API = '/api/datos?recurso=liquidacion'
 const VACIA: Cola = { pendientes: [], hechas: [], sinStock: [] }
 
+/** Lo que decía la etiqueta de un producto, para poder guardarlo al marcarla como hecha. */
+export type PrecioImpreso = { precio: number | null; precioLista: number | null }
+
 export interface EstadoCola extends Cola {
   /** ISO de cuándo se leyó. Va a la pantalla: una cola vacía sana se ve igual que una rota. */
   leidoEn: string | null
@@ -31,13 +34,23 @@ export interface EstadoCola extends Cola {
   error: string | null
   /** Las campañas que aparecen en la cola, para filtrar. Sin consulta extra. */
   campanias: string[]
+  /** Lo que dice la etiqueta de cada producto, para comparar contra el precio de hoy. */
+  sellos: Record<string, SelloEtiqueta>
+  /** El stock de hoy por producto, tal como lo vio el servidor. */
+  stock: Record<string, number>
   recargar: () => Promise<void>
-  /** Da por hecha la etiqueta de estos productos. `ya_estaba` = se sacó a mano, no se imprimió. */
-  marcar: (pids: string[], modo?: 'impresa' | 'ya_estaba') => Promise<void>
+  /**
+   * Da por hecha la etiqueta de estos productos. `ya_estaba` = se sacó a mano, no se imprimió.
+   * `precios` guarda **qué número decía cada etiqueta**, que es lo que después caza un precio de
+   * lista cambiado a mano en Gestión Nube.
+   */
+  marcar: (pids: string[], modo?: 'impresa' | 'ya_estaba', precios?: Record<string, PrecioImpreso>) => Promise<void>
 }
 
 export function useColaReetiquetado(marca: Marca): EstadoCola {
   const [cola, setCola] = useState<Cola>(VACIA)
+  const [sellos, setSellos] = useState<Record<string, SelloEtiqueta>>({})
+  const [stock, setStock] = useState<Record<string, number>>({})
   const [leidoEn, setLeidoEn] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,11 +63,15 @@ export function useColaReetiquetado(marca: Marca): EstadoCola {
       const d = await r.json().catch(() => null)
       if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer qué hay para reetiquetar.')
       setCola({ pendientes: d.pendientes || [], hechas: d.hechas || [], sinStock: d.sinStock || [] })
+      setSellos(d.sellos || {})
+      setStock(d.stock || {})
       setLeidoEn(d.leidoEn || null)
     } catch (e) {
       // 🔑 La cola se vacía al fallar, y el error queda a la vista. Dejar la lista vieja con un
       // cartel chico es peor: se sigue etiquetando contra datos que ya no se están leyendo.
       setCola(VACIA)
+      setSellos({})
+      setStock({})
       setLeidoEn(null)
       setError(e instanceof Error ? e.message : 'No se pudo leer qué hay para reetiquetar.')
     } finally {
@@ -75,13 +92,13 @@ export function useColaReetiquetado(marca: Marca): EstadoCola {
   }, [traer])
 
   const marcar = useCallback(
-    async (pids: string[], modo: 'impresa' | 'ya_estaba' = 'impresa') => {
+    async (pids: string[], modo: 'impresa' | 'ya_estaba' = 'impresa', precios: Record<string, PrecioImpreso> = {}) => {
       const limpios = [...new Set(pids.filter(Boolean))]
       if (!limpios.length) return
       const r = await apiFetch(`${API}&store=${marca}&etiquetas=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store: marca, action: 'etiquetado', pids: limpios, modo }),
+        body: JSON.stringify({ store: marca, action: 'etiquetado', pids: limpios, modo, precios }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo anotar la etiqueta como hecha.')
@@ -96,7 +113,7 @@ export function useColaReetiquetado(marca: Marca): EstadoCola {
     return [...vistas].sort((a, b) => a.localeCompare(b, 'es'))
   }, [cola.pendientes])
 
-  return { ...cola, leidoEn, cargando, error, campanias, recargar: traer, marcar }
+  return { ...cola, sellos, stock, leidoEn, cargando, error, campanias, recargar: traer, marcar }
 }
 
 /** Los pid de una lista de filas, que es lo que la tabla usa para acotar las variantes. */
