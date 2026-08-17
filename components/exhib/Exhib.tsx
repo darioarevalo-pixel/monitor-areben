@@ -5,7 +5,10 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { dispararSyncStock } from '@/lib/sync-gn'
 import { generarReporteExhib } from '@/lib/exhib/pdf'
-import { contarSinMarcar, exhibId, faltantes, filtrarPorCat, precioDeGondola, tnAdminUrl, agruparPDF } from '@/lib/exhib/core'
+import { contarSinMarcar, exhibId, faltantes, filtrarPorCat, precioDeGondola, sospechososNoExhibidos, tnAdminUrl, agruparPDF } from '@/lib/exhib/core'
+import { useColaReetiquetado } from '@/components/etiquetas/useColaReetiquetado'
+import { sinEtiquetar } from '@/lib/etiquetas/cola'
+import { puedeVer } from '@/lib/permisos'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -64,6 +67,22 @@ export function Exhib() {
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
   const ex = useExhib(marca, productos)
 
+  /**
+   * Lo que la cola de reetiquetado deriva acá: prendas **con stock** a las que nadie les hizo la
+   * etiqueta días después de cambiarles el precio. Ver `sospechososNoExhibidos`.
+   *
+   * Sólo se pide con el permiso de Etiquetas, que es de donde sale el dato: sin él la vista
+   * contesta 403 y esta pantalla mostraría un error que no es suyo.
+   */
+  const cola = useColaReetiquetado(marca, puedeVer(perfil, marca, 'etiquetas'))
+  // 🔑 El corte se mide contra **cuándo leyó el servidor**, no contra el reloj del navegador: es el
+  // mismo dato que la cola muestra en Etiquetas, y sin lectura no hay lista (en vez de un cero que
+  // se lee como «no hay ninguna»).
+  const pidsSinEtiquetar = useMemo(
+    () => (cola.leidoEn ? sinEtiquetar(cola.pendientes, Date.parse(cola.leidoEn)).map((p) => p.pid) : []),
+    [cola.pendientes, cola.leidoEn],
+  )
+
   const [fase, setFase] = useState<Fase>('config')
   const [persona, setPersona] = useState('')
   const [catSel, setCatSel] = useState('')
@@ -80,6 +99,7 @@ export function Exhib() {
   const pendientes = useMemo(() => faltantes(lista, ex.estados), [lista, ex.estados])
   const faltas = pendientes // en triage son lo mismo (los no 'exhibido')
   const sinMarcar = useMemo(() => contarSinMarcar(faltas, ex.estados), [faltas, ex.estados])
+  const sospechosos = useMemo(() => sospechososNoExhibidos(faltas, pidsSinEtiquetar), [faltas, pidsSinEtiquetar])
   const enCurso = Object.keys(ex.estados).length
 
   function foco() {
@@ -325,6 +345,25 @@ export function Exhib() {
       {fase === 'triage' && (
         <Card>
           <Subtitulo>Faltantes: marcá qué pasó con cada uno</Subtitulo>
+
+          {/*
+            La derivación de la cola de reetiquetado. Va ARRIBA de la lista y no como una columna:
+            son pocos y son los que más probablemente no estén colgados, así que la caminata empieza
+            por ellos. No los marca como resueltos ni les cambia el estado — la decisión sigue
+            siendo de quien recorre.
+          */}
+          {sospechosos.length > 0 && (
+            <Notice tone="warning" icon="🏷️" style={{ margin: `${space[3]}px 0` }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                {sospechosos.length === 1 ? 'Una de estas prendas lleva' : `${sospechosos.length} de estas prendas llevan`} días con el precio cambiado y sin etiquetar
+              </div>
+              <div style={{ fontSize: font.sm }}>
+                Tienen stock y nadie les hizo la etiqueta nueva: suele querer decir que no están colgadas en el salón.{' '}
+                {sospechosos.slice(0, 10).map((it) => `${it.name}${it.size ? ` · ${it.size}` : ''}`).join(', ')}
+                {sospechosos.length > 10 ? ` y ${sospechosos.length - 10} más` : ''}.
+              </div>
+            </Notice>
+          )}
 
           {Object.keys(ex.errores).length > 0 && (
             <Notice tone="warning" icon="⚠" style={{ margin: `${space[3]}px 0` }}>

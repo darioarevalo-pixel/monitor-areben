@@ -47,7 +47,13 @@ export interface EstadoCola extends Cola {
   marcar: (pids: string[], modo?: 'impresa' | 'ya_estaba', precios?: Record<string, PrecioImpreso>) => Promise<void>
 }
 
-export function useColaReetiquetado(marca: Marca): EstadoCola {
+/**
+ * @param activo Si es `false` no se pide nada y la cola queda vacía. Lo usa el chequeo de
+ *   exhibición, que consume la derivación de «no exhibido» pero **puede abrirlo alguien sin el
+ *   permiso de Etiquetas**: sin esto, esa persona se comería un 403 y un cartel de error rojo en
+ *   una pantalla que no tiene nada que ver.
+ */
+export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
   const [cola, setCola] = useState<Cola>(VACIA)
   const [sellos, setSellos] = useState<Record<string, SelloEtiqueta>>({})
   const [stock, setStock] = useState<Record<string, number>>({})
@@ -56,6 +62,10 @@ export function useColaReetiquetado(marca: Marca): EstadoCola {
   const [error, setError] = useState<string | null>(null)
 
   const traer = useCallback(async () => {
+    if (!activo) {
+      setCargando(false)
+      return
+    }
     setCargando(true)
     setError(null)
     try {
@@ -77,7 +87,7 @@ export function useColaReetiquetado(marca: Marca): EstadoCola {
     } finally {
       setCargando(false)
     }
-  }, [marca])
+  }, [marca, activo])
 
   // setState en un IIFE async: el CI marca el setState sincrónico adentro de un efecto.
   useEffect(() => {

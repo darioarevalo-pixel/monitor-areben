@@ -141,3 +141,25 @@ export function tnAdminUrl(tnId: string | number | null, marca: 'zattia' | 'bdi'
   const base = marca === 'zattia' ? 'https://zattiaco.mitiendanube.com/admin/products' : 'https://bdiaccesorios4.mitiendanube.com/admin/products'
   return base + '/' + tnId
 }
+
+/**
+ * Las prendas que la cola de reetiquetado sospecha **no exhibidas**.
+ *
+ * 🔑 **Lo dio vuelta Bruno el 16-ago-2026**: *«si está en depósito y no se etiqueta, puede levantar
+ * un problema de no exhibido»*. Una prenda con stock a la que nadie le hizo la etiqueta días
+ * después de cambiarle el precio no es un olvido administrativo — es una prenda que probablemente
+ * no está colgada en el salón. Por eso la cola **no descarta ese resto: lo deriva acá**, que es la
+ * pantalla que ya sabe preguntar «¿está en el local?».
+ *
+ * 🔑 **La sospecha se cruza con lo que el recorrido ya sabe.** Un producto sin etiquetar que el
+ * recorrido encontró colgado no acusa nada: la etiqueta vieja es un problema de Etiquetas, no de
+ * exhibición. El que suma información es el que **además** no apareció.
+ *
+ * ⚠️ Va por `productId`: la cola es por producto y el recorrido por variante, así que un producto
+ * sospechoso marca todas sus variantes faltantes. Es lo correcto — la prenda que no está en el
+ * salón no está en ningún talle.
+ */
+export function sospechososNoExhibidos(faltantesDeLaCat: ExhibItem[], pidsSinEtiquetar: Iterable<string>): ExhibItem[] {
+  const pids = new Set(Array.from(pidsSinEtiquetar, (p) => String(p)))
+  return pids.size ? faltantesDeLaCat.filter((it) => pids.has(String(it.productId))) : []
+}

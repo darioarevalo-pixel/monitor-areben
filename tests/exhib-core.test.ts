@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
@@ -153,5 +153,35 @@ describe('precioDeGondola — qué tiene que decir la etiqueta', () => {
   // número disponible, y decir "no se sabe" teniendo uno sería peor.
   it('con promo pero sin precio de lista, muestra la promo sin llamarla oferta', () => {
     expect(precioDeGondola(it0({ precio: null, promo: 12290 }))).toMatchObject({ aCobrar: 12290, enOferta: false, pct: null })
+  })
+})
+
+/**
+ * El enganche con la cola de reetiquetado (`sinEtiquetar` en `lib/etiquetas/cola.core.js`).
+ *
+ * Lo que se fija acá es que la sospecha **se cruce** con el recorrido en vez de listarse suelta: la
+ * cola no descarta lo que quedó con stock y sin etiquetar, lo deriva, y lo que informa de verdad es
+ * el producto que además no apareció en el salón.
+ */
+describe('sospechososNoExhibidos', () => {
+  const faltante = it0({ productId: '10', barcode: '779010', name: 'JEAN' })
+  const otroTalle = it0({ productId: '10', barcode: '779011', name: 'JEAN', size: '38' })
+  const ajeno = it0({ productId: '20', barcode: '779020', name: 'TOP' })
+
+  it('marca los faltantes cuyo producto lleva días sin etiquetar', () => {
+    expect(sospechososNoExhibidos([faltante, ajeno], ['10']).map((i) => i.barcode)).toEqual(['779010'])
+  })
+
+  it('🔴 un producto sospechoso marca TODAS sus variantes faltantes: la prenda que no está no está en ningún talle', () => {
+    expect(sospechososNoExhibidos([faltante, otroTalle], ['10'])).toHaveLength(2)
+  })
+
+  it('sin sospechas no devuelve nada, y un pid que no falta tampoco entra', () => {
+    expect(sospechososNoExhibidos([faltante, ajeno], [])).toEqual([])
+    expect(sospechososNoExhibidos([ajeno], ['10'])).toEqual([])
+  })
+
+  it('cruza aunque los pid vengan como número de un lado y texto del otro', () => {
+    expect(sospechososNoExhibidos([faltante], [10 as unknown as string])).toHaveLength(1)
   })
 })
