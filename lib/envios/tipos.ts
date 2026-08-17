@@ -97,6 +97,20 @@ export type Envio = {
   updated_at?: string
 }
 
+/**
+ * Un botón de la columna «Pago del envío»: qué dice y qué escribe.
+ *
+ * 🔑 **El texto y el destino viajan juntos.** `campo` elige a cuál de los dos tildes excluyentes le
+ * escribe (`marcarPagado` o `marcarBonificado`) y `siguiente` es el booleano que se manda, así que la
+ * pantalla no puede dibujar «Bonificar» y terminar marcando el envío como pago. Sale de
+ * `pagoDelEnvio`, que es el único lugar donde se decide.
+ */
+export type AccionDePago = {
+  texto: string
+  campo: 'pagado' | 'bonificado'
+  siguiente: boolean
+}
+
 /** Lo que hay que saber para cerrar el día. Ver `totalesDelDia`. */
 export type TotalesDia = {
   envios: number

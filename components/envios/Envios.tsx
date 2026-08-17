@@ -69,7 +69,7 @@ import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, TotalesDia, Turno } from '@/lib/envios/tipos'
+import type { AccionDePago, CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, TotalesDia, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
 
@@ -1136,21 +1136,26 @@ function ModalPedido({ envio, onCerrar }: { envio: Envio; onCerrar: () => void }
  * **sin `catch`**, así que cuando el POST fallaba —la fila ya no existía, se cayó la red— no pasaba
  * nada visible y el envío se seguía leyendo como impago.
  *
- * El estado y el texto del botón salen los dos de `pagoDelEnvio`. Ver ahí por qué.
+ * El estado y el texto de los botones salen todos de `pagoDelEnvio`. Ver ahí por qué, y por qué
+ * **bonificar es uno de ellos**: lo que dice no es cuánto sale el reparto sino quién lo paga, que es
+ * la pregunta de esta columna. Antes colgaba del precio, dos columnas más a la izquierda.
  *
  * `conEstado` apaga la pastilla en la hoja del día: ahí la columna «Cobra» ya dice cuánto se pide en
  * la puerta y la línea verde de abajo ya aclara si el envío está pago o bonificado. Repetirlo en una
- * pastilla sería decir tres veces lo mismo en la misma celda; lo que falta ahí es sólo el botón.
+ * pastilla sería decir tres veces lo mismo en la misma celda; lo que falta ahí son sólo los botones.
  */
 function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; onGuardado: () => Promise<void>; conEstado?: boolean }) {
   const toast = useToast()
   const [guardando, setGuardando] = useState(false)
-  const { tone, label, accion, siguiente } = pagoDelEnvio(envio)
+  const { tone, label, acciones } = pagoDelEnvio(envio)
 
-  async function alternar() {
+  // 🔑 A quién le escribe lo dice `campo`, no el orden ni el texto del botón: acá no hay ninguna
+  // decisión que pueda quedar desfasada de lo que la pastilla muestra.
+  async function correr(accion: AccionDePago) {
     setGuardando(true)
     try {
-      await marcarPagado(envio.id, siguiente)
+      if (accion.campo === 'pagado') await marcarPagado(envio.id, accion.siguiente)
+      else await marcarBonificado(envio.id, accion.siguiente)
       await onGuardado()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cambiar el pago del envío.')
@@ -1162,10 +1167,12 @@ function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; o
   return (
     <>
       {conEstado ? <StatusPill tone={tone} label={label} /> : null}
-      <div>
-        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void alternar()}>
-          {accion}
-        </Button>
+      <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+        {acciones.map((a) => (
+          <Button key={a.campo} size="sm" variant="ghost" disabled={guardando} onClick={() => void correr(a)}>
+            {a.texto}
+          </Button>
+        ))}
       </div>
     </>
   )
@@ -1255,59 +1262,7 @@ function Cotizar({
           }}
         />
       ) : null}
-      <Bonificar envio={envio} onGuardado={onGuardado} />
     </div>
-  )
-}
-
-/**
- * El tilde de «se lo regalamos».
- *
- * 🔑 **El precio sigue escrito arriba, y eso es todo el punto.** La versión anterior resolvía el
- * bonificado poniendo el envío en cero y anotando aparte lo que igual cobraba el cadete: dos
- * columnas para el mismo número, que es exactamente el defecto que este módulo persigue. Ahora el
- * costo se cotiza igual que cualquier otro —es lo que se le paga a él— y esto sólo dice que en la
- * puerta no se cobra.
- *
- * Vive detrás de un link porque es el caso raro: nadie tiene que contestar esta pregunta veinte
- * veces por día.
- */
-function Bonificar({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
-  const toast = useToast()
-  const [guardando, setGuardando] = useState(false)
-
-  async function alternar() {
-    setGuardando(true)
-    try {
-      await marcarBonificado(envio.id, !envio.envio_bonificado)
-      await onGuardado()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo marcar el envío como bonificado.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  if (envio.envio_bonificado) {
-    return (
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <Badge tone="brand">bonificado</Badge>
-        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void alternar()}>
-          Sacar
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      disabled={guardando}
-      onClick={() => void alternar()}
-      style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, opacity: 0.6, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline' }}
-    >
-      bonificar el envío
-    </button>
   )
 }
 

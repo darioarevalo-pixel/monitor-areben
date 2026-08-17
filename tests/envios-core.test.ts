@@ -1507,18 +1507,47 @@ describe('🔴 el pago del envío: son tres estados, no dos', () => {
     // sobre una fila ya paga —se aprieta y no pasa nada— y nadie entiende por qué.
     const pago = pagoDelEnvio(con({ envio_pagado: true }))
     expect(pago.label).toBe('Pago')
-    expect(pago.accion).toBe('Marcar como pendiente')
-    expect(pago.siguiente).toBe(false)
+    expect(pago.acciones).toEqual([{ texto: 'Marcar como pendiente', campo: 'pagado', siguiente: false }])
 
     const pendiente = pagoDelEnvio(con({ envio_pagado: false }))
-    expect(pendiente.accion).toBe('Marcar como pago')
-    expect(pendiente.siguiente).toBe(true)
+    expect(pendiente.acciones[0]).toEqual({ texto: 'Marcar como pago', campo: 'pagado', siguiente: true })
   })
 
-  it('desde bonificado el botón ofrece cobrarlo, no bonificarlo de nuevo', () => {
+  it('desde bonificado se puede cobrarlo o sacarle la bonificación, no bonificarlo de nuevo', () => {
     const p = pagoDelEnvio(con({ envio_bonificado: true }))
-    expect(p.accion).toBe('Marcar como pago')
-    expect(p.siguiente).toBe(true)
+    expect(p.acciones).toEqual([
+      { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
+      // 🔴 El mutante: `siguiente: true` acá. El botón dice «Sacar la bonificación» y la vuelve a
+      // poner: se aprieta, contesta 200, y la fila queda exactamente igual.
+      { texto: 'Sacar la bonificación', campo: 'bonificado', siguiente: false },
+    ])
+  })
+
+  it('🔴 desde PENDIENTE se ofrece bonificar, y el botón que lo dice le escribe al tilde que corresponde', () => {
+    // 🔴 El mutante que importa: `campo: 'pagado'` en la acción que dice «Bonificar». La pantalla
+    // despacha por `campo`, así que el botón queda diciendo que se lo regalamos y marcando que la
+    // clienta lo pagó — dos verdades opuestas sobre la misma plata, sin que nada falle.
+    const p = pagoDelEnvio(con({ envio_pagado: false, envio_bonificado: false }))
+    expect(p.acciones).toEqual([
+      { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
+      { texto: 'Bonificar', campo: 'bonificado', siguiente: true },
+    ])
+  })
+
+  it('🔴 desde PAGO no se ofrece bonificar (lo decidió Bruno)', () => {
+    // Bonificar una fila ya cobrada es contradictorio —habría que devolver la plata—, así que se
+    // pasa por Pendiente. El mutante es agregar la acción acá: un click convierte plata que entró
+    // en plata que nunca entró, y la caja del día cambia sin que nadie lo pida.
+    const p = pagoDelEnvio(con({ envio_pagado: true }))
+    expect(p.acciones.some((a) => a.campo === 'bonificado')).toBe(false)
+  })
+
+  it('🔴 ningún estado se queda sin salida', () => {
+    // El mutante: la lista vacía en alguno de los tres. Se ve como una fila que no se puede
+    // corregir, y el estado equivocado queda escrito para siempre.
+    for (const e of [con({}), con({ envio_pagado: true }), con({ envio_bonificado: true })]) {
+      expect(pagoDelEnvio(e).acciones.length).toBeGreaterThan(0)
+    }
   })
 })
 

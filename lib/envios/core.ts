@@ -13,7 +13,7 @@ import { rotuloFecha } from '../fechas/semana'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
+import type { AccionDePago, CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -402,21 +402,6 @@ export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } 
 }
 
 /**
- * El pago del envío, en **tres** estados: Pendiente · Pago · Bonificado.
- *
- * 🔑 **El label y el verbo salen de la misma función a propósito.** Son las dos mitades de una
- * decisión —dónde está la fila y hacia dónde la mueve el botón— y separarlas es la forma de que un
- * día el botón diga una cosa y haga otra. Por eso devuelve también `siguiente`, que es literalmente
- * lo que se le pasa a `marcarPagado`.
- *
- * 🔴 **Bonificado no es Pago.** Se cobra igual en la puerta —nada—, pero uno es plata que entró y el
- * otro plata que no entró nunca: colapsarlos en un booleano hace que la columna diga que cobramos un
- * envío que regalamos. Se guardan en dos tildes excluyentes y acá se leen como dos estados.
- *
- * El pendiente es `warning` y no un texto gris: «lo cobra el cadete» describía lo normal en vez de
- * nombrar el estado, así que nada distinguía la fila que falta cobrar de la que ya está resuelta.
- */
-/**
  * **Por dónde entró la plata de esa puerta**: el rótulo, y el verbo que lo corrige.
  *
  * Calcado de `pagoDelEnvio` y por el mismo motivo: el label y la acción salen de **una** función, así
@@ -438,10 +423,53 @@ export function quienCobro(e: Envio): { tone: 'success' | 'brand' | 'warning'; l
   return { tone: 'warning', label: 'Sin dato: cuenta como cobrada por él', accion: 'Se pagó al local', siguiente: false }
 }
 
-export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; accion: string; siguiente: boolean } {
-  if (e.envio_pagado) return { tone: 'success', label: 'Pago', accion: 'Marcar como pendiente', siguiente: false }
-  if (e.envio_bonificado) return { tone: 'brand', label: 'Bonificado', accion: 'Marcar como pago', siguiente: true }
-  return { tone: 'warning', label: 'Pendiente', accion: 'Marcar como pago', siguiente: true }
+/**
+ * El pago del envío, en **tres** estados: Pendiente · Pago · Bonificado.
+ *
+ * 🔑 **El rótulo y los verbos salen de la misma función a propósito.** Son las dos mitades de una
+ * decisión —dónde está la fila y hacia dónde la mueve cada botón— y separarlas es la forma de que un
+ * día el botón diga una cosa y haga otra. Por eso cada acción viaja con `campo` y `siguiente`, que es
+ * literalmente lo que se le pasa a `marcarPagado` o a `marcarBonificado`: la pantalla no elige a
+ * quién le escribe, sólo dibuja lo que hay acá.
+ *
+ * 🔴 **Bonificado no es Pago.** Se cobra igual en la puerta —nada—, pero uno es plata que entró y el
+ * otro plata que no entró nunca: colapsarlos en un booleano hace que la columna diga que cobramos un
+ * envío que regalamos. Se guardan en dos tildes excluyentes y acá se leen como dos estados.
+ *
+ * El pendiente es `warning` y no un texto gris: «lo cobra el cadete» describía lo normal en vez de
+ * nombrar el estado, así que nada distinguía la fila que falta cobrar de la que ya está resuelta.
+ *
+ * 🔑 **Bonificar vive acá y no al lado del precio** (17-ago-2026, lo pidió Bruno). Estaba colgando de
+ * `Cotizar`, o sea debajo del monto, y lo que dice no es cuánto sale el reparto sino **quién lo
+ * paga** — que es la pregunta de esta columna. El precio no cambia al bonificar: es lo que se le
+ * paga al cadete igual. Ver `tarifaCadete`.
+ *
+ * 🔑 **Desde Pago no se ofrece bonificar** (también decidido): bonificar es lo raro y desde una fila
+ * ya cobrada es además contradictorio —habría que devolver la plata—, así que se pasa por Pendiente.
+ * Los dos tildes son excluyentes en la base, y el handler apaga el opuesto en las dos acciones.
+ */
+export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; acciones: AccionDePago[] } {
+  if (e.envio_pagado) {
+    return { tone: 'success', label: 'Pago', acciones: [{ texto: 'Marcar como pendiente', campo: 'pagado', siguiente: false }] }
+  }
+  if (e.envio_bonificado) {
+    return {
+      tone: 'brand',
+      label: 'Bonificado',
+      acciones: [
+        { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
+        { texto: 'Sacar la bonificación', campo: 'bonificado', siguiente: false },
+      ],
+    }
+  }
+  return {
+    tone: 'warning',
+    label: 'Pendiente',
+    acciones: [
+      { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
+      { texto: 'Bonificar', campo: 'bonificado', siguiente: true },
+    ],
+  }
 }
 
 /**

@@ -34,6 +34,14 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   cobra. Quién paga lo dicen dos tildes separadas: `envio_pagado` (plata que entró) y
   `envio_bonificado` (plata que no entró nunca). ⇒ `tarifaCadete` = `monto_envio`, punto.
 - 🔑 **En el bonificado la clienta paga $0 y el cadete cobra igual** (lo decidió Bruno).
+- 🔑 **Bonificar es un botón de la columna «Pago del envío», no del precio** (17-ago-2026, lo pidió
+  Bruno). Colgaba de `Cotizar`, debajo del monto, y lo que dice no es cuánto sale el reparto sino
+  **quién lo paga**: es la misma pregunta que Pendiente/Pago. `pagoDelEnvio` devuelve la lista de
+  acciones con su `campo` y su `siguiente`, así que la pantalla no elige a quién le escribe — el
+  mutante caro es un botón que dice «Bonificar» y marca el envío como pago, que son dos verdades
+  opuestas sobre la misma plata y no falla nada. ⛔ **Desde Pago no se ofrece bonificar** (también lo
+  decidió Bruno): habría que devolver plata que ya entró, así que se pasa por Pendiente. Y como el
+  componente es el compartido, ahora se bonifica **también desde la hoja del día**.
 - 🔑 **El día del reparto lo confirma el CLIENTE, no la orden.** Las órdenes de TN caen en la bandeja
   «Sin fecha», que **no es una bandeja de entrada: es la lista de trabajo** (`fecha is null` OR
   `estado='no_entregado'`). `fecha` y `turno` van los dos o ninguno (check `envios_fecha_turno_juntos`).
