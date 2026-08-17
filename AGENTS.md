@@ -100,6 +100,8 @@ ya tienen ficha:
   Solicitudes internas monta el MISMO componente y el MISMO hook con otro preset.
   ⛔ **Crear la venta pega por URL absoluta a PROD**: desde localhost o un preview, crea una venta
   real en Gestión Nube.
+- Liquidación → **leer `docs/secciones/liquidacion.md`** antes de tocar `components/liquidacion/`,
+  `lib/liquidacion/` o `api/_liquidacion.js` — ⛔ ese handler lo abren también Etiquetas y Análisis.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
