@@ -10,6 +10,7 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
+import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
@@ -316,20 +317,18 @@ export function marcasATraer(marca: Marca | null | undefined): Marca[] {
  *
  * 🔑 **Es una lista a mano y está bien que lo sea.** Sale del mismo mapa con el que se cotiza
  * —Rosario $3.000-4.300, Fisherton $4.300/5.500, Funes $8.000, Roldán $11.000, VGG $6.500— y se
- * corrige editando esta línea, no con una migración. Una tabla de zonas para seis números sería
+ * corrige editando seis líneas, no con una migración. Una tabla de zonas para seis números sería
  * darle mantenimiento a algo que cambia una vez por año.
+ *
+ * 🔴 **Y sale de `LOCALIDAD_DEL_CP`, que ADEMÁS sabe cómo se llama cada uno**, porque el candado de
+ * la sugerencia necesita el nombre para preguntarle a Georef. Dos listas de los mismos seis números
+ * —una acá con el nombre en un comentario y otra allá con el nombre de verdad— se desincronizan el
+ * día que se agrega un CP: el aviso de «fuera de zona» diría una cosa y el precio otra.
  *
  * ⚠️ **Es un aviso, no un bloqueo.** Un pedido de afuera de la zona puede salir igual —lo decide
  * quien cotiza—; lo que no puede es pasar desapercibido hasta que el cadete está en la calle.
  */
-export const CP_DE_REPARTO = [
-  '2000', // Rosario (incluye Fisherton)
-  '2121', // Pérez
-  '2124', // Villa Gobernador Gálvez
-  '2132', // Funes
-  '2134', // Roldán
-  '2152', // Granadero Baigorria
-]
+export const CP_DE_REPARTO = Object.keys(LOCALIDAD_DEL_CP)
 
 /**
  * ¿Este pedido eligió cadetería sin ser de la zona?

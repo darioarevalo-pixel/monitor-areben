@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { CP_DE_REPARTO, cpFueraDeZona } from '@/lib/envios/core'
 import {
   alinear,
   consultaDe,
   limpiarDireccion,
+  LOCALIDAD_DEL_CP,
+  localidadReconocida,
   MOTIVO_SUGERENCIA,
+  motivoDeSugerencia,
+  pedidosDelReintento,
   puntoDeGeoref,
   sugerenciaDePunto,
   variantes,
@@ -153,12 +158,13 @@ describe('consultaDe — el candado, primera mitad: qué NI SE PREGUNTA', () => 
     expect(consultaDe({ direccion: 'Rodriguez 1062' }).estado).toBe('sin_localidad')
   })
 
-  it('la localidad rara viaja igual, y falla: no se reintenta sin ella', () => {
+  it('la localidad rara viaja igual, y sin CP no hay con qué reintentar', () => {
     // "Entre esmeralda y chacabuco" vino así en una orden real. La consulta no encuentra nada y la
-    // fila queda sin propuesta, que es lo barato. Reintentar sin localidad arruina las de Funes.
+    // fila queda sin propuesta, que es lo barato. Reintentar SIN localidad arruina las de Funes.
     const c = consultaDe({ direccion: 'Garay Bis 47', localidad: 'Entre esmeralda y chacabuco' })
     expect(c.estado).toBeUndefined()
     expect(c.localidad).toBe('Entre esmeralda y chacabuco')
+    expect(c.reintento).toBeFalsy()
   })
 
   it('sin dirección no hay nada que preguntar', () => {
@@ -172,9 +178,124 @@ describe('consultaDe — el candado, primera mitad: qué NI SE PREGUNTA', () => 
 
   it('todos los motivos tienen texto: una fila sin precio y sin explicación no se puede trabajar', () => {
     const motivos = MOTIVO_SUGERENCIA as Record<string, string>
-    for (const estado of ['sin_direccion', 'sin_localidad', 'sin_altura', 'no_ubicada', 'punto_impreciso', 'sin_zona', 'no_vamos', 'ambigua']) {
+    for (const estado of ['sin_direccion', 'sin_localidad', 'sin_altura', 'localidad_dudosa', 'no_ubicada', 'punto_impreciso', 'sin_zona', 'no_vamos', 'ambigua']) {
       expect(motivos[estado]).toBeTruthy()
     }
+  })
+})
+
+/**
+ * El código postal como SEGUNDA señal.
+ *
+ * 🔴 **Medido el 17-ago-2026 contra Georef vivo, con doce direcciones reales de `clientes` donde el
+ * CP y la localidad no coinciden: tres salían con precio y las tres estaban mal, siempre para el lado
+ * barato.** `Saenz peña 1813` (CP 2124, Villa Gobernador Gálvez) salía $5.300 de una zona de Rosario
+ * en vez de $7.500, y `Avenida Santa Fe 1283` (CP 2152) y `9 De Julio 1236` (CP 2121) salían $4.000
+ * de Zona Centro siendo de dos localidades que ni están dibujadas en el mapa.
+ *
+ * Los tests de abajo defienden las dos mitades y, sobre todo, **la asimetría entre ellas**: el CP
+ * corrobora y reintenta, pero nunca reemplaza a la localidad.
+ */
+describe('el CP y la localidad, puestos uno al lado del otro', () => {
+  it('🔴 cuando los dos nombran una localidad de reparto y NO es la misma, no se propone nada', () => {
+    // El caso medido: la clienta de VGG que escribió "Rosario". Con la calle homónima de Rosario,
+    // Georef devuelve un punto PRECISO en la zona equivocada — un precio plausible que no caza nadie.
+    const c = consultaDe({ direccion: 'Saenz peña 1813', localidad: 'rosario', cp: '2124' })
+    expect(c.estado).toBe('localidad_dudosa')
+    expect(c.intentos).toBeUndefined()
+  })
+
+  it('🔴 el motivo dice CUÁLES son las dos, que es lo único con lo que se puede hacer algo', () => {
+    const c = consultaDe({ direccion: 'Saenz peña 1813', localidad: 'rosario', cp: '2124' })
+    expect(motivoDeSugerencia(c.estado, c)).toBe(
+      'el código postal dice Villa Gobernador Gálvez y la dirección dice Rosario',
+    )
+    // Sin los nombres queda la redacción genérica, que sirve de red pero no se puede trabajar.
+    expect(motivoDeSugerencia('localidad_dudosa', {})).toBe('el código postal y la localidad no coinciden')
+  })
+
+  it('cuando coinciden, pregunta — y manda el nombre CANÓNICO, no el que tipeó la clienta', () => {
+    // Medido: `"vgg"` Georef no lo entiende y `"Villa Gobernador Gálvez"` sí. Es una fila real.
+    const c = consultaDe({ direccion: 'Santiago Del Estero 324', localidad: 'vgg', cp: '2124' })
+    expect(c.estado).toBeUndefined()
+    expect(c.localidad).toBe('Villa Gobernador Gálvez')
+    expect(c.reintento).toBeFalsy()
+  })
+
+  it('«Rosario - Rosario» es UNA localidad, no dos que se contradicen', () => {
+    // Es la forma que más manda Tienda Nube. Comparando el texto entero, esta fila se negaría sola.
+    const c = consultaDe({ direccion: 'Riccheri 1152', localidad: 'Rosario - Rosario', cp: '2000' })
+    expect(c.estado).toBeUndefined()
+    expect(c.localidad).toBe('Rosario')
+  })
+
+  it('🔴 un pueblo real que NO es de reparto no es una contradicción: viaja tal cual y se va del mapa', () => {
+    // `CP 2000 + "San Martin de las Escobas"` está en prod, a 100 km. Hoy sale `sin_zona`, que es lo
+    // correcto — y preguntando con la localidad del CP saldría `no_ubicada`. Medido: el CP miente.
+    const c = consultaDe({ direccion: 'Miguel Ribetti 1370', localidad: 'San Martin de las Escobas', cp: '2000' })
+    expect(c.estado).toBeUndefined()
+    expect(c.localidad).toBe('San Martin de las Escobas')
+  })
+
+  it('🔴 y por eso el reintento con el CP es SÓLO para la localidad que no nombra nada reconocible', () => {
+    // La basura reintenta…
+    const basura = consultaDe({ direccion: 'Garay Bis 47', localidad: 'Entre esmeralda y chacabuco', cp: '2000' })
+    expect(basura.reintento).toBe('Rosario')
+    // …y la reconocida NO, aunque la consulta buena termine afuera del mapa. Un reintento acá le
+    // daría a la dirección de Escobas un punto de Rosario, preciso y ajeno.
+    const reconocida = consultaDe({ direccion: 'Riccheri 1152', localidad: 'Rosario', cp: '2000' })
+    expect(reconocida.reintento).toBeFalsy()
+  })
+
+  it('un CP de afuera de la zona no dice nada: ni contradice ni reintenta', () => {
+    const c = consultaDe({ direccion: 'Riccheri 1152', localidad: 'Rosario', cp: '3000' })
+    expect(c.estado).toBeUndefined()
+    expect(c.reintento).toBeFalsy()
+  })
+
+  it('🔴 la pieza se compara ENTERA: «San Martin de las Escobas» no puede matchear nada', () => {
+    expect(localidadReconocida('San Martin de las Escobas')).toBeNull()
+    expect(localidadReconocida('Entre esmeralda y chacabuco')).toBeNull()
+    expect(localidadReconocida('Centro')).toBeNull()
+    expect(localidadReconocida('')).toBeNull()
+    // Nombrar dos es no nombrar ninguna.
+    expect(localidadReconocida('Funes / Rosario')).toBeNull()
+  })
+
+  it('🔴 los seis nombres del CP se reconocen tal cual: si no, la comparación nunca daría igual', () => {
+    // El mutante silencioso sería una tilde distinta entre las dos tablas ("Pérez" contra "Perez"):
+    // toda fila de Pérez con su CP se leería como contradicción y dejaría de proponer.
+    for (const nombre of Object.values(LOCALIDAD_DEL_CP)) {
+      expect(localidadReconocida(nombre)).toBe(nombre)
+    }
+  })
+
+  it('🔴 a la segunda vuelta van SÓLO las que no ubicaron nada, y con la localidad del CP', () => {
+    const pedidos = [
+      { clave: 'a', intentos: ['Garay Bis 47'], localidad: 'Entre esmeralda y chacabuco', reintento: 'Rosario' },
+      { clave: 'b', intentos: ['Riccheri 1152'], localidad: 'Rosario', reintento: null },
+      { clave: 'c', intentos: ['Cordoba 1200'], localidad: 'nada de nada', reintento: 'Funes' },
+    ]
+    // `c` ya resolvió en la primera vuelta. Volver a preguntarle con la localidad del CP le cambiaría
+    // el punto por uno de otro pueblo, preciso y ajeno — y con 200, sin que falle nada.
+    const puntos = new Map([['c', { resultado: { nomenclatura: 'CORDOBA 1200' }, usada: 'Cordoba 1200' }]])
+
+    const claves = (ps: Array<{ clave: string }>) => ps.map((p) => p.clave)
+
+    const segunda = pedidosDelReintento(pedidos, puntos)
+    expect(claves(segunda)).toEqual(['a'])
+    expect(segunda[0].localidad).toBe('Rosario')
+    // Y sin nada resuelto todavía —o sea, corrido ANTES de la primera vuelta— entrarían las dos:
+    // es el mutante de orden, y por eso el `puntos` vacío tiene que dar otro resultado.
+    expect(claves(pedidosDelReintento(pedidos, new Map()))).toEqual(['a', 'c'])
+  })
+
+  it('🔴 el aviso de «fuera de zona» sigue diciendo lo mismo con la lista derivada', () => {
+    expect(CP_DE_REPARTO).toEqual(['2000', '2121', '2124', '2132', '2134', '2152'])
+    expect(cpFueraDeZona('2000')).toBe(false)
+    expect(cpFueraDeZona('2132')).toBe(false)
+    expect(cpFueraDeZona('3000')).toBe(true)
+    expect(cpFueraDeZona('')).toBe(false)
   })
 })
 

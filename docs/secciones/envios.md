@@ -90,10 +90,26 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   gastar la consulta, `sugerenciaDePunto` después). 🔑 **Y el candado es lo que hace segura la
   escalera de variantes**: sola empeoraba todo (precisos 92→95, inventados 30→68), porque lo que más
   recupera son las calles peladas.
-- 🔴 **Sin localidad no se pregunta, y la localidad rara NO se reintenta sin ella.** `"Entre esmeralda
-  y chacabuco"` vino así en una orden real y hace fallar la consulta con la calle bien. Reintentar sin
-  localidad recupera esa dirección y **rompe las de Funes**: la calle homónima de Rosario devuelve un
-  punto **preciso** en la zona equivocada, $4.300 donde van $9.000. La fila queda sin propuesta.
+- 🔴 **Sin localidad no se pregunta, y NUNCA se reintenta sin ella.** `"Entre esmeralda y chacabuco"`
+  vino así en una orden real y hace fallar la consulta con la calle bien. Preguntar sólo por la
+  provincia recupera esa dirección y **rompe las de Funes**: la calle homónima de Rosario devuelve un
+  punto **preciso** en la zona equivocada, $4.300 donde van $9.000.
+- 🔴 🔑 **El código postal es la SEGUNDA señal, y va al lado de la localidad — nunca en su lugar.**
+  Son dos mitades con reglas opuestas y las dos se decidieron con Bruno el 17-ago-2026:
+  · **Se contradicen ⇒ no se propone nada** (`localidad_dudosa`), y el motivo dice **cuáles son las
+  dos**: «el código postal dice Villa Gobernador Gálvez y la dirección dice Rosario». Sólo cuenta
+  como contradicción cuando **los dos** nombran una localidad de reparto conocida. ⛔ **No se elige
+  un ganador porque los dos mienten**: el CP lo tipea el cliente y cae en 2000 por defecto, y
+  «Rosario» es como se llama en la calle a todo el Gran Rosario.
+  · **La localidad no nombra nada reconocible ⇒ el CP entra como REINTENTO, después de fallar.** El
+  orden es toda la seguridad que tiene: preguntar primero con el texto tal cual es lo que deja que un
+  pueblo real que no es de reparto se vaya, bien, afuera del mapa. Así el reintento **no puede pisar
+  un punto bueno**, sólo llenar un hueco — el mismo criterio que la escalera de variantes.
+  🔑 **Y cuando se la reconoce, la localidad se manda CANÓNICA**: medido, `"vgg"` Georef no lo
+  entiende y `"Villa Gobernador Gálvez"` sí; `"Rosario - Rosario"` es la forma que más manda TN.
+  🔴 **La decisión del reintento vive en `pedidosDelReintento`, no en el handler**, por el mismo
+  motivo que `enviosDelDia` y `valorDeCobro`: sus dos mutantes —correrlo antes, o correrlo también
+  para las que ya resolvieron— dan una tanda que anda, contesta 200 y devuelve precios plausibles.
 - 🔑 **La escalera para en la primera forma que conteste, aunque el punto salga impreciso.** Seguir
   despojando hasta conseguir uno con altura es conseguirlo **de otra calle**: "Av San Martin 1200" sin
   altura se tipea a mano, "Martin 1200" es un punto exacto y ajeno.
@@ -183,9 +199,29 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   ($7.500), las dos más caras después de Roldán**, porque sus votos se borraron al corregir el cartel
   del departamento. Y **20 de las 23 «afuera del mapa»**, que son las que dirían si falta dibujar una
   zona (Alvear y La Carolina son las candidatas).
-  🔴 **Lo que este contraste NO puede ver**: la clienta de Funes que escribió «Rosario» en la orden.
-  Se geocodifica sobre la calle homónima de Rosario, el punto cae sobre una calle **real**, se ve
-  perfecto en el mapa y sale $4.300 en vez de $9.000. Aparece cuando el cadete llega, no antes.
+  ✅ **Lo que el contraste NO podía ver, CERRADO** (17-ago-2026): la clienta de Funes que escribió
+  «Rosario» en la orden. Se geocodifica sobre la calle homónima de Rosario, el punto cae sobre una
+  calle **real**, se ve perfecto en el mapa y salía $4.300 en vez de $9.000 — aparecía cuando el
+  cadete llegaba, no antes. Lo caza el código postal; ver el bloque de reglas.
+  🔴 **Y no era una hipótesis: medido corriendo el camino real contra Georef vivo sobre las doce
+  direcciones de `clientes` donde el CP y la localidad no coinciden, tres salían con precio y las
+  tres estaban mal, siempre para el lado barato.** `Saenz peña 1813` (CP 2124) salía **$5.300** de
+  una zona de Rosario siendo de Villa Gobernador Gálvez ($7.500); `Avenida Santa Fe 1283` (CP 2152,
+  Granadero Baigorria) y `9 De Julio 1236` (CP 2121, Pérez) salían **$4.000 de Zona Centro** siendo
+  de dos localidades **que ni siquiera están dibujadas en el mapa**. Como `tarifaCadete` es
+  `monto_envio`, el viaje largo se lo termina comiendo el cadete.
+  🔑 **En la base hay 57 clientas así** (12 con CP de Funes que escribieron «Rosario», 20 de VGG,
+  15 de Baigorria, 8 de Pérez) sobre ~1.850 del área de reparto.
+  ✅ **Y quedó medido que NO rompe lo que andaba**, que es la mitad que importa: sobre 120 direcciones
+  reales de `clientes`, **116 preguntan y las 116 mandan a Georef exactamente la misma consulta que
+  antes** (misma localidad, mismos intentos) ⇒ misma respuesta y mismo precio. 🔑 **Cotejar el texto
+  de la consulta es más fuerte que comparar los precios de salida**, y de yapa no gasta cupo. En la
+  bandeja real (las 11 filas de `envios_reparto`) no cambió una: 8 con precio antes y después, y
+  **`Garay Bis 47` pasó de «no se pudo ubicar» a $4.300**.
+  ⚠️ **`Miguel Ribetti 1370` es el contraejemplo que hay que conservar**: CP 2000 y localidad «San
+  Martin de las Escobas», a 100 km. Hoy sale `sin_zona`, que es lo correcto, y preguntando con la
+  localidad del CP saldría `no_ubicada` — o sea que **el CP miente y por eso no puede reemplazar a la
+  localidad**. Está en prod y hay un test con su nombre.
 - 📎 **La medición que fundó todo esto** (tanda 3, 16-ago-2026, 200 direcciones reales de `clientes`,
   scripts en `~/.claude/plans/envios-zonas-tanda3/`):
   - **El geocoder es Georef** (`apis.datos.gob.ar`, del Estado, gratis y sin clave). 🔴 **Nominatim
@@ -307,8 +343,17 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   que devuelve `psql`—. La otra mitad (`?ordenes=1`, 30 días) **sí** exige sesión, y el token de TN
   vive sólo en Vercel: se resuelve **desde la pantalla logueada**, reusando el objeto `init` que la
   propia app arma —no se lee la credencial, se la deja pasar— y devolviendo sólo los agregados.
+- ▶️ **Con la localidad VACÍA se sigue sin proponer, aunque haya CP** — es un límite elegido, no un
+  olvido. El reintento del código postal existe porque la consulta con el texto tal cual ya falló, y
+  eso es lo que impide que un pueblo de afuera reciba un punto de Rosario; con la localidad vacía no
+  hay primera consulta que falle, así que el CP quedaría solo y sin corroborar. Son **26 clientas**
+  con CP 2000 y `city` vacío, y ninguna fila de `envios_reparto` hoy.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
   reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
+- ▶️ **El candado nuevo no se ejerció a mano todavía**: en la bandeja de prod las 11 filas tienen CP
+  2000 y localidad «Rosario», o sea que **ninguna dispara `localidad_dudosa`** y la única que cambia
+  es `Garay Bis 47`, que ahora tiene que salir **$4.300 (Zona 3)** donde antes decía «no se pudo
+  ubicar».
 - 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un
   solo status de Vercel** —los de la noche anterior sí tienen el suyo, o sea que el oráculo sirve— y
   producción estuvo **once horas** sirviendo `6e57911` con el CI en verde. Lo destrabó un **commit
@@ -343,6 +388,18 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   (`?recurso=cadete&token=…&pin=…`, y el POST con `fecha`); para VER la pantalla alcanza con dejar el
   PIN en `localStorage['cadete.pin']` y recargar. ⚠️ Los envíos de prueba **hay que borrarlos**: uno
   agendado a un día futuro entra en la hoja real de ese día.
+- **Pegarle a Georef sin gastar cupo**: el 17-ago-2026 una tanda de mediciones se ganó el **429**
+  (`{"message":"API rate limit exceeded"}`). ✅ **Lo bueno: `pedir` TIRA** —se verificó corriendo el
+  camino real justo mientras estaba limitado— así que en prod «Sugerir precios» corta con un error
+  visible y **no devuelve «no se pudo ubicar» para todas**, que sería la mentira cara.
+  🔑 **Casi todo lo que hay que medir del candado no necesita Georef**: `consultaDe` es pura, así que
+  el antes/después se compara **cotejando el texto de la consulta** —misma localidad y mismos
+  intentos ⇒ misma respuesta— en vez de los precios de salida. Es determinista y gratis.
+  🔴 ⚠️ **Y el arnés miente igual que el código**: la primera corrida dio «0 de 120 con precio» en las
+  dos versiones y no era el 429 — era `psql -F'\t'` **entre comillas simples**, que escribe los dos
+  caracteres `\` y `t`; el script partía por un tab de verdad, leía una sola columna y las 120 salían
+  `sin_localidad` **sin consultar nada**. Va `-F"$(printf '\t')"`, y el número que lo cazó fue mirar
+  la distribución de estados en vez del total.
 - **Pegarle a TN**: el token vive **sólo en Vercel** y `env pull` lo baja vacío ⇒ hay que medir desde
   el navegador logueado, o desde un endpoint deployado. Sonda permanente en `?ordenes=1`: `&campos=1`
   prueba cada `fields` solo y bisecta; `&llenado=campo,campo&pp=N` caza el campo que viene **vacío

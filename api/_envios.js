@@ -47,7 +47,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { CAMPOS_ZONA, planDeImportacion, validarZona } from '../lib/envios/zonas.core.js';
-import { consultaDe, MOTIVO_SUGERENCIA, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
+import { consultaDe, motivoDeSugerencia, pedidosDelReintento, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
 import { geocodificarEnEscalera } from './_georef.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
@@ -659,8 +659,12 @@ export default async function handler(req, res) {
       // consultas encadenadas contra un servicio ajeno y gratis, y el pedido muere por timeout.
       if (ids.length > 100) return res.status(400).json({ error: 'De a 100 envíos como máximo.' });
 
+      // 🔴 **`cp` va en el `select` y no es de adorno**: es la segunda señal con la que `consultaDe`
+      // caza la localidad que miente, y una columna que falta acá llega `undefined` al candado, que
+      // la lee como "no hay CP" y afloja **sin que falle nada**. Es exactamente lo que pasó con
+      // `cobrado`, que el portal escribía y ninguna pantalla veía.
       const [env, zon] = await Promise.all([
-        supabase.from('envios_reparto').select('id, direccion, localidad').in('id', ids),
+        supabase.from('envios_reparto').select('id, direccion, localidad, cp').in('id', ids),
         supabase.from('envios_zonas').select(CAMPOS_ZONA),
       ]);
       if (env.error) throw new Error(env.error.message);
@@ -677,16 +681,31 @@ export default async function handler(req, res) {
       for (const e of env.data || []) {
         const c = consultaDe(e);
         if (c.estado) {
-          sugerencias.push({ id: e.id, estado: c.estado, precio: null, zona: null, motivo: MOTIVO_SUGERENCIA[c.estado] });
+          sugerencias.push({ id: e.id, estado: c.estado, precio: null, zona: null, motivo: motivoDeSugerencia(c.estado, c) });
           continue;
         }
-        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad });
+        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento });
       }
 
       const puntos = aPreguntar.length ? await geocodificarEnEscalera(aPreguntar) : new Map();
+
+      // 🔑 **La segunda vuelta va con la localidad del CP, y sólo para las que no ubicaron nada.**
+      // Es una vuelta más de lote, no una por fila. Que corra **después** es toda la seguridad que
+      // tiene: no puede pisar un punto que ya salió bien, sólo llenar un hueco — por eso el reintento
+      // de una localidad que Georef entendió (aunque haya mandado la dirección afuera del mapa) no
+      // existe. `consultaDe` ya dejó `reintento` en `null` cuando la localidad se reconoció.
+      const segunda = pedidosDelReintento(aPreguntar, puntos);
+      if (segunda.length) {
+        const otra = await geocodificarEnEscalera(segunda);
+        for (const p of segunda) {
+          const r = otra.get(p.clave);
+          if (r && r.resultado) puntos.set(p.clave, r);
+        }
+      }
+
       for (const p of aPreguntar) {
         const s = sugerenciaDePunto((puntos.get(p.clave) || {}).resultado, zonas);
-        sugerencias.push({ id: p.clave, ...s, motivo: MOTIVO_SUGERENCIA[s.estado] || null, consulta: (puntos.get(p.clave) || {}).usada });
+        sugerencias.push({ id: p.clave, ...s, motivo: motivoDeSugerencia(s.estado), consulta: (puntos.get(p.clave) || {}).usada });
       }
 
       return res.status(200).json({ ok: true, sugerencias });
