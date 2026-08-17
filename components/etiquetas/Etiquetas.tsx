@@ -48,6 +48,45 @@ type Slot = ModoEtiqueta | 'cola'
  * las que vuelven a precio de lista.
  */
 const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', cola: 'promo' }
+/**
+ * Qué es cada etiqueta, en un solo lugar.
+ *
+ * 🔑 **Se nombran por lo que DICEN, no por dónde se pegan.** «Depósito» y «Local» eran ubicaciones,
+ * y ninguna de las dos tiene una línea de código que dependa de dónde está la prenda: la primera
+ * imprime la información del producto y la segunda esa misma información más el precio. Lo pidió
+ * Bruno el 16-ago-2026 y el código le daba la razón.
+ *
+ * 🔑 **Y estaba repartido en cadenas de ternarios**: el título del panel, el subtítulo y el texto
+ * del escáner se escribían en tres lugares distintos, que ya estaban desincronizados. Un modo nuevo
+ * obligaba a tocar los tres y a nadie le fallaba nada si se olvidaba de uno.
+ */
+const ETIQUETA: Record<ModoEtiqueta, { emoji: string; nombre: string; dice: string; alEscanear: string }> = {
+  dep: {
+    emoji: '📄',
+    nombre: 'Información de producto',
+    dice: 'Nombre, variante, SKU y código de barras (Code 128), en 5 × 2,5 cm. Sin precio.',
+    alEscanear: 'información de producto (sin precio)',
+  },
+  loc: {
+    emoji: '💲',
+    nombre: 'Precio',
+    dice: 'La misma información, más el precio que la tienda cobra hoy. Sin precio no se imprime: avisa cuáles.',
+    alEscanear: 'precio',
+  },
+  promo: {
+    emoji: '🔥',
+    nombre: 'Precio rebajado',
+    dice: 'Para lo que está en oferta: el precio anterior tachado y chico, y el nuevo grande.',
+    alEscanear: 'precio rebajado (antes/ahora)',
+  },
+  sku: {
+    emoji: '🔢',
+    nombre: 'SKU',
+    dice: 'Sólo el SKU, grande y centrado, en 5 × 2,5 cm.',
+    alEscanear: 'sólo el SKU',
+  },
+}
+
 const FP_DEFAULT: LineaEtiqueta[] = [
   { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
   { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
@@ -214,9 +253,12 @@ export function Etiquetas() {
     lsSet(keyFP(marca), lines)
   }
 
-  const ctx: CtxEtiqueta = { precioDe, promoDe, fpLines }
+  // 🔴 Memoizados los DOS: la vista previa los tiene como dependencia de un efecto, y un objeto
+  // nuevo en cada render la dejaría redibujando el PDF para siempre.
+  const ctx: CtxEtiqueta = useMemo(() => ({ precioDe, promoDe, fpLines }), [precioDe, promoDe, fpLines])
   // En la cola el dibujo se elige prenda por prenda; en las otras pestañas manda el de la pestaña.
-  const ctxDe = (slot: Slot): CtxEtiqueta => (slot === 'cola' ? { ...ctx, modoDe: modoDeCola } : ctx)
+  const ctxCola: CtxEtiqueta = useMemo(() => ({ ...ctx, modoDe: modoDeCola }), [ctx, modoDeCola])
+  const ctxDe = (slot: Slot): CtxEtiqueta => (slot === 'cola' ? ctxCola : ctx)
 
   /**
    * Da por hecha la etiqueta de estos productos.
@@ -306,11 +348,11 @@ export function Etiquetas() {
 
       <Tabs
         items={[
-          { key: 'dep', label: '🏬 Depósito' },
-          { key: 'loc', label: '🏪 Local' },
-          { key: 'promo', label: '🔥 Promo' },
+          { key: 'dep', label: `${ETIQUETA.dep.emoji} ${ETIQUETA.dep.nombre}` },
+          { key: 'loc', label: `${ETIQUETA.loc.emoji} ${ETIQUETA.loc.nombre}` },
+          { key: 'promo', label: `${ETIQUETA.promo.emoji} ${ETIQUETA.promo.nombre}` },
           { key: 'cola', label: `🔁 Para reetiquetar${cola.pendientes.length ? ` (${cola.pendientes.length})` : ''}` },
-          { key: 'sku', label: '🔢 SKU' },
+          { key: 'sku', label: `${ETIQUETA.sku.emoji} ${ETIQUETA.sku.nombre}` },
           { key: 'libre', label: '✏️ Libre' },
         ]}
         value={sub}
@@ -342,6 +384,7 @@ export function Etiquetas() {
           onRefrescarPrecios={tn.refrescar}
           onImprimir={(opts) => imprimir(sub, opts)}
           onImprimirUno={(v, conFP) => imprimirUno(sub, v, conFP)}
+          ctx={ctxDe(sub)}
           fpLines={fpLines}
           guardarFP={guardarFP}
         />
@@ -420,6 +463,7 @@ function ModoPanel({
   onRefrescarPrecios,
   onImprimir,
   onImprimirUno,
+  ctx,
   fpLines,
   guardarFP,
 }: {
@@ -443,6 +487,8 @@ function ModoPanel({
   onRefrescarPrecios: () => Promise<void>
   onImprimir: (opts: { sep: boolean; conFP: boolean }) => void
   onImprimirUno: (v: VarianteEti, conFP: boolean) => void
+  /** El mismo contexto con el que se imprime, para que la vista previa no pueda mostrar otra cosa. */
+  ctx: CtxEtiqueta
   fpLines: LineaEtiqueta[]
   guardarFP: (l: LineaEtiqueta[]) => void
 }) {
@@ -475,6 +521,10 @@ function ModoPanel({
   // recorriendo la tienda con el lector.
   const tope = campania ? Infinity : CAP
   const shown = lista.slice(0, tope)
+  // La previa acompaña lo que se está por imprimir: el primero de la lista de abajo, no un ejemplo
+  // inventado. Y en la cola el dibujo se elige por prenda, así que se le pregunta al mismo `ctx`.
+  const muestra = shown[0] ?? null
+  const muestraModo = muestra && ctx.modoDe ? ctx.modoDe(muestra) : modo
   const total = totalEtiquetas(cant)
 
   const onScan = async () => {
@@ -538,8 +588,8 @@ function ModoPanel({
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
         <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
           Escaneá el código de barras de un producto: imprime su etiqueta de{' '}
-          <b>{campania ? 'sale (antes/ahora)' : modo === 'loc' ? 'local (con precio)' : modo === 'promo' ? 'promo (antes/ahora)' : modo === 'sku' ? 'solo SKU' : 'depósito (sin precio)'}</b> al instante.
-          {campania && ' Si la prenda no entra en el sale, avisa y no imprime.'}
+          <b>{campania ? 'la que le corresponda por su precio de hoy' : ETIQUETA[modo].alEscanear}</b> al instante.
+          {campania && ' Imprime siempre, esté o no en la lista: reimprimir es gratis.'}
         </div>
         <input
           ref={scanRef}
@@ -558,12 +608,17 @@ function ModoPanel({
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-          <div>
+          <div style={{ flex: '1 1 320px' }}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{campania ? 'Productos a etiquetar' : titulo(modo)}</div>
             <div style={{ fontSize: 12, color: color.mut2, marginTop: 2 }}>
-              {campania ? 'Los del sale, con el precio anterior tachado y el nuevo. Escaneá para imprimir de a una.' : subtitulo(modo)}
+              {campania
+                ? 'Cada prenda lleva la etiqueta que le corresponde por su precio de hoy: con el tachado si está en oferta, y un número solo si volvió a precio de lista.'
+                : subtitulo(modo)}
             </div>
           </div>
+          {/* La etiqueta se entiende mirándola. Va con el primero de la lista de abajo, así que
+              acompaña lo que se está por imprimir en vez de mostrar un ejemplo inventado. */}
+          <VistaPrevia modo={muestraModo} muestra={muestra} ctx={ctx} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" className="mo-input" style={{ width: 240, maxWidth: '100%' }} />
         </div>
 
@@ -844,16 +899,67 @@ function LibreEditor() {
 }
 
 function titulo(modo: ModoEtiqueta): string {
-  return modo === 'loc' ? '🏪 Etiquetas Local' : modo === 'promo' ? '🔥 Etiquetas Promo' : modo === 'sku' ? '🔢 Etiquetas SKU' : '🏬 Etiquetas Depósito'
+  return `${ETIQUETA[modo].emoji} Etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`
 }
 function subtitulo(modo: ModoEtiqueta): string {
-  return modo === 'loc'
-    ? 'Igual que depósito + precio (el de TiendaNube: promocional si está activo, si no el normal).'
-    : modo === 'promo'
-      ? 'Solo productos con precio promocional en TiendaNube: precio anterior tachado (chico) y nuevo (grande).'
-      : modo === 'sku'
-        ? 'Etiquetas 5 × 2,5 cm con solo el SKU (grande y centrado).'
-        : 'Etiquetas 5 × 2,5 cm: nombre, variante, SKU y código de barras (Code 128). Sin precio.'
+  return ETIQUETA[modo].dice
+}
+
+/**
+ * La etiqueta de verdad, dibujada en pantalla.
+ *
+ * 🔑 **Es el PDF real, no un dibujo parecido.** `buildEtiquetasPdf` ya devuelve el objeto sin
+ * imprimir —`imprimirPdf` es un paso aparte—, así que mostrarlo cuesta un `bloburl` en un iframe.
+ * La otra vista previa de esta pantalla, la de formas de pago, es HTML con tamaños en px que no
+ * coinciden con los del PDF en pt: se ve parecida y miente. Ésta no puede.
+ *
+ * Lo pidió Bruno: entender la etiqueta mirándola, en vez de leer un párrafo que la describa.
+ */
+function VistaPrevia({ modo, muestra, ctx }: { modo: ModoEtiqueta; muestra: VarianteEti | null; ctx: CtxEtiqueta }) {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    let anterior: string | null = null
+    ;(async () => {
+      if (!muestra) {
+        if (vivo) setUrl(null)
+        return
+      }
+      const pdf = await buildEtiquetasPdf([muestra], modo, ctx)
+      if (!vivo) return
+      anterior = pdf.output('bloburl') as string
+      setUrl(anterior)
+    })()
+    return () => {
+      vivo = false
+      // El blob queda vivo hasta que se lo suelta: sin esto, cambiar de pestaña veinte veces deja
+      // veinte PDF en memoria.
+      if (anterior) URL.revokeObjectURL(anterior)
+    }
+  }, [modo, muestra, ctx])
+
+  return (
+    <div style={{ minWidth: 210 }}>
+      <div style={{ fontSize: 12, color: color.mut, marginBottom: 6 }}>Así sale:</div>
+      {url ? (
+        <iframe
+          src={url}
+          title={`Vista previa de la etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`}
+          style={{ width: 200, height: 100, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }}
+        />
+      ) : (
+        <div style={{ width: 200, height: 100, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2 }}>
+          {muestra ? 'Dibujando…' : 'Sin productos para mostrar'}
+        </div>
+      )}
+      {muestra && (
+        <div style={{ fontSize: 11, color: color.mut2, marginTop: 4 }}>
+          Ejemplo: {muestra.name || '—'}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const thStyle: CSSProperties = { padding: '6px 10px', position: 'sticky', top: 0, background: color.bg2 }

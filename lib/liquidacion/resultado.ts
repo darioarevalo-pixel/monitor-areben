@@ -4,11 +4,15 @@
  *
  * Tres ideas, y la primera es la que da vuelta el módulo:
  *
- * 🔑 **Se contrasta el precio decidido contra el precio COBRADO.** Los precios se cargan a mano en
- * Gestión Nube (el token no tiene permiso para escribir productos), así que entre "lo decidí" y "el
- * cliente lo pagó" hay una persona cargando cuarenta productos a mano. Un producto que se vendió
- * catorce veces a precio de lista es una campaña que para el cliente no existió, y hasta hoy no
- * había forma de enterarse: la pantalla lo mostraba igual de verde que a los demás.
+ * 🔑 **Se contrasta el precio decidido contra el precio COBRADO.** Un producto que se vendió catorce
+ * veces a precio de lista es una campaña que para el cliente no existió, y hasta que esto se
+ * construyó no había forma de enterarse: la pantalla lo mostraba igual de verde que a los demás.
+ *
+ * ⚠️ **Este docblock decía que los precios se cargan a mano porque el token no puede escribir
+ * productos. Eso dejó de ser cierto el 13-ago-2026**, cuando la tanda 3 destrabó el token y el
+ * aplicador empezó a escribir el precio promocional en Gestión Nube. El contraste sigue valiendo
+ * igual —lo aplicado puede fallar, y el precio de lista SÍ se sigue cargando a mano— pero ya no es
+ * el único control posible.
  *
  * 🔑 **Los descartados son el grupo de control.** Se miraron el mismo día, estaban en la misma
  * situación, y no se les tocó el precio. Si se movieron parecido a los liquidados, el descuento no

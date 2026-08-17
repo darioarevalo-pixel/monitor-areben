@@ -296,7 +296,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
-    "info": "Impresión de etiquetas con código de barras.",
+    "info": "Etiquetas de góndola y de depósito, y la cola de lo que hay que reetiquetar.",
     "brands": [
       "bdi",
       "zattia"
