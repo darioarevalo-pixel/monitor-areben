@@ -13,7 +13,8 @@ import {
   type ProductoPrecio,
 } from '@/lib/etiquetas/core'
 import { indexarTn, type TnProducto } from '@/lib/tn'
-import type { VarianteEti } from '@/lib/etiquetas/tipos'
+import { PESTANIAS, rotuloPestania, type Pestania, type VarianteEti } from '@/lib/etiquetas/tipos'
+import { PERM_CAT } from '@/lib/nav.datos'
 import { cargarPreciosLegacy, cargarVariantesLegacy } from './legacy-etiquetas'
 
 function v(over: Partial<VarianteEti> = {}): VarianteEti {
@@ -213,5 +214,28 @@ describe('agruparCantidades y secuenciaLabels', () => {
 
   it('sin opciones: solo las copias', () => {
     expect(secuenciaLabels([{ v: varsById.a, cant: 3 }], { sep: false, conFP: false })).toEqual([varsById.a, varsById.a, varsById.a])
+  })
+})
+
+/**
+ * El espejo entre las pestañas que existen y los sub-permisos declarados.
+ *
+ * 🔴 **Existe porque ya se desincronizó una vez.** `lib/nav.datos.ts` declaraba `dep · loc · sku ·
+ * libre` con los nombres viejos —«Depósito», «Local», que son ubicaciones— y sin conocer ni la
+ * etiqueta de precio rebajado ni la cola. Nadie se enteraba: los subs de Etiquetas están declarados
+ * y **no hay un solo `puedeSub` que los consulte**, así que la desincronía no rompe nada hasta el
+ * día que alguien decida ejercerlos, y ahí reparte permisos sobre pestañas que ya no se llaman así.
+ */
+describe('las pestañas y los sub-permisos declarados dicen lo mismo', () => {
+  const subs = (PERM_CAT.find((c) => c.key === 'etiquetas')?.subs ?? []).map((s) => s.key)
+
+  it('una pestaña, un sub-permiso — sin sobrantes ni faltantes', () => {
+    expect([...subs].sort()).toEqual([...PESTANIAS].sort())
+  })
+
+  it('y se llaman igual en los dos lados', () => {
+    for (const s of PERM_CAT.find((c) => c.key === 'etiquetas')?.subs ?? []) {
+      expect(s.label).toBe(rotuloPestania(s.key as Pestania).nombre)
+    }
   })
 })

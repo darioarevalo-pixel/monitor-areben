@@ -296,7 +296,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
-    "info": "Etiquetas de góndola y de depósito, y la cola de lo que hay que reetiquetar.",
+    "info": "Etiquetas nombradas por lo que dicen (información de producto · precio · precio rebajado · SKU · libre), y la cola de lo que hay que reetiquetar.",
     "brands": [
       "bdi",
       "zattia"
@@ -304,23 +304,33 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "dep",
-        "label": "Depósito",
-        "info": "Etiquetas para mercadería de depósito."
+        "label": "Información de producto",
+        "info": "Nombre, variante, SKU y código de barras. Sin precio."
       },
       {
         "key": "loc",
-        "label": "Local",
-        "info": "Etiquetas para el local."
+        "label": "Precio",
+        "info": "La misma información, más el precio que la tienda cobra hoy."
+      },
+      {
+        "key": "promo",
+        "label": "Precio rebajado",
+        "info": "El precio anterior tachado y el nuevo grande, para lo que está en oferta."
       },
       {
         "key": "sku",
         "label": "SKU",
-        "info": "Etiquetas con SKU + código de barras."
+        "info": "Sólo el SKU, grande y centrado."
       },
       {
         "key": "libre",
         "label": "Libre",
         "info": "Etiqueta personalizada (texto o código a elección)."
+      },
+      {
+        "key": "cola",
+        "label": "Para reetiquetar",
+        "info": "La cola de prendas cuyo precio cambió después de la última etiqueta."
       }
     ]
   },

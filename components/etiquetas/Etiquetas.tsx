@@ -22,7 +22,18 @@ import {
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
-import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
+import {
+  ETIQUETA,
+  MODO_DE,
+  PESTANIAS,
+  rotuloPestania,
+  type Cantidades,
+  type LineaEtiqueta,
+  type ModoEtiqueta,
+  type Pestania,
+  type Slot,
+  type VarianteEti,
+} from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { fmtHace } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -30,62 +41,6 @@ import { Badge, Button, Card, Notice, Select, Tabs, color, space, useConfirmar }
 
 const CAP = 500
 
-/**
- * La pestaña en la que se cargan cantidades. **No es lo mismo que `ModoEtiqueta`**, y ésa es la
- * distinción que ordena esta pantalla: `ModoEtiqueta` es **qué dice la etiqueta** (el dibujo) y el
- * slot es **sobre qué prendas** (todo el catálogo, las que tienen oferta viva, las que hay que
- * rehacer). Son dos ejes, y estaban colapsados en uno.
- *
- * `cola` es el caso que lo deja claro: no tiene un dibujo propio —usa los que ya están— y lo que
- * aporta es la lista. Guarda sus cantidades aparte para no pisar las de Promo, que es otra lista.
- */
-type Slot = ModoEtiqueta | 'cola'
-/**
- * La etiqueta que dibuja cada pestaña.
- *
- * ⚠️ `cola` dice `promo` sólo como valor de arranque: ahí el dibujo se decide **prenda por prenda**
- * con `modoDe` (ver `lib/etiquetas/pdf.ts`), porque la cola mezcla las que entran a una oferta con
- * las que vuelven a precio de lista.
- */
-const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', cola: 'promo' }
-/**
- * Qué es cada etiqueta, en un solo lugar.
- *
- * 🔑 **Se nombran por lo que DICEN, no por dónde se pegan.** «Depósito» y «Local» eran ubicaciones,
- * y ninguna de las dos tiene una línea de código que dependa de dónde está la prenda: la primera
- * imprime la información del producto y la segunda esa misma información más el precio. Lo pidió
- * Bruno el 16-ago-2026 y el código le daba la razón.
- *
- * 🔑 **Y estaba repartido en cadenas de ternarios**: el título del panel, el subtítulo y el texto
- * del escáner se escribían en tres lugares distintos, que ya estaban desincronizados. Un modo nuevo
- * obligaba a tocar los tres y a nadie le fallaba nada si se olvidaba de uno.
- */
-const ETIQUETA: Record<ModoEtiqueta, { emoji: string; nombre: string; dice: string; alEscanear: string }> = {
-  dep: {
-    emoji: '📄',
-    nombre: 'Información de producto',
-    dice: 'Nombre, variante, SKU y código de barras (Code 128), en 5 × 2,5 cm. Sin precio.',
-    alEscanear: 'información de producto (sin precio)',
-  },
-  loc: {
-    emoji: '💲',
-    nombre: 'Precio',
-    dice: 'La misma información, más el precio que la tienda cobra hoy. Sin precio no se imprime: avisa cuáles.',
-    alEscanear: 'precio',
-  },
-  promo: {
-    emoji: '🔥',
-    nombre: 'Precio rebajado',
-    dice: 'Para lo que está en oferta: el precio anterior tachado y chico, y el nuevo grande.',
-    alEscanear: 'precio rebajado (antes/ahora)',
-  },
-  sku: {
-    emoji: '🔢',
-    nombre: 'SKU',
-    dice: 'Sólo el SKU, grande y centrado, en 5 × 2,5 cm.',
-    alEscanear: 'sólo el SKU',
-  },
-}
 
 const FP_DEFAULT: LineaEtiqueta[] = [
   { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
@@ -139,7 +94,7 @@ export function Etiquetas() {
   const promoDe = useCallback((v: VarianteEti) => promos[v.pid] || null, [promos])
   const sinPrecioDeTn = useCallback((v: VarianteEti) => fueraDeTn.has(v.pid), [fueraDeTn])
 
-  const [sub, setSub] = useState<Slot | 'libre'>('dep')
+  const [sub, setSub] = useState<Pestania>('dep')
   const cola = useColaReetiquetado(marca)
   const [filtroCampania, setFiltroCampania] = useState('')
 
@@ -347,16 +302,14 @@ export function Etiquetas() {
       )}
 
       <Tabs
-        items={[
-          { key: 'dep', label: `${ETIQUETA.dep.emoji} ${ETIQUETA.dep.nombre}` },
-          { key: 'loc', label: `${ETIQUETA.loc.emoji} ${ETIQUETA.loc.nombre}` },
-          { key: 'promo', label: `${ETIQUETA.promo.emoji} ${ETIQUETA.promo.nombre}` },
-          { key: 'cola', label: `🔁 Para reetiquetar${cola.pendientes.length ? ` (${cola.pendientes.length})` : ''}` },
-          { key: 'sku', label: `${ETIQUETA.sku.emoji} ${ETIQUETA.sku.nombre}` },
-          { key: 'libre', label: '✏️ Libre' },
-        ]}
+        items={PESTANIAS.map((p) => {
+          const { emoji, nombre } = rotuloPestania(p)
+          // El único rótulo que lleva algo más que su nombre: cuántas prendas están esperando.
+          const cuantas = p === 'cola' && cola.pendientes.length ? ` (${cola.pendientes.length})` : ''
+          return { key: p, label: `${emoji} ${nombre}${cuantas}` }
+        })}
         value={sub}
-        onChange={(k) => setSub(k as Slot | 'libre')}
+        onChange={(k) => setSub(k as Pestania)}
         style={{ marginBottom: space[4] }}
       />
 
@@ -770,6 +723,15 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
     const next = fpLines.filter((_, idx) => idx !== i)
     guardarFP(next.length ? next : [{ texto: '', tam: 'normal', bold: false }])
   }
+  /**
+   * 🔑 **La previa arma la etiqueta con el MISMO llamado que la impresión** (`__fp`), así que no
+   * hay forma de que muestre otra cosa que lo que sale de la impresora. Sin líneas con texto
+   * devuelve `null`: `drawFP` no dibujaría nada y una hoja en blanco no dice «está vacía».
+   */
+  const construirFP = useCallback(
+    () => (fpLines.some((l) => l.texto.trim()) ? buildEtiquetasPdf([{ __fp: true }], 'loc', { precioDe: () => 0, promoDe: () => null, fpLines }) : null),
+    [fpLines],
+  )
   const imprimirSolo = async () => {
     if (!fpLines.filter((l) => l.texto.trim()).length) {
       await avisar('La etiqueta de formas de pago está vacía.')
@@ -801,12 +763,8 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
       ))}
       <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
-        <div style={{ fontSize: 12, color: '#888' }}>Vista previa:</div>
-        <div style={{ width: 200, height: 100, border: `1px solid ${color.line}`, borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 6, background: '#fff' }}>
-          {fpLines.filter((l) => l.texto.trim()).map((l, i) => (
-            <div key={i} style={{ fontSize: l.tam === 'titulo' ? 13 : l.tam === 'subtitulo' ? 11 : l.tam === 'chico' ? 8 : 10, fontWeight: l.bold ? 700 : 400, lineHeight: 1.25 }}>{l.texto}</div>
-          )) || <span style={{ color: color.mut2, fontSize: 11 }}>(vacía)</span>}
-        </div>
+        <div style={{ fontSize: 12, color: '#888' }}>Así sale:</div>
+        <PreviaPdf construir={construirFP} alt="Vista previa de la etiqueta de formas de pago" espera={400} vacio="(vacía)" />
         <Button size="sm" variant="outline" disabled={!catalogoListo} onClick={imprimirSolo}>Imprimir solo formas de pago…</Button>
       </div>
     </Card>
@@ -906,53 +864,70 @@ function subtitulo(modo: ModoEtiqueta): string {
 }
 
 /**
- * La etiqueta de verdad, dibujada en pantalla.
+ * El PDF de una etiqueta, dibujado en pantalla.
  *
  * 🔑 **Es el PDF real, no un dibujo parecido.** `buildEtiquetasPdf` ya devuelve el objeto sin
  * imprimir —`imprimirPdf` es un paso aparte—, así que mostrarlo cuesta un `bloburl` en un iframe.
- * La otra vista previa de esta pantalla, la de formas de pago, es HTML con tamaños en px que no
- * coinciden con los del PDF en pt: se ve parecida y miente. Ésta no puede.
+ * La vista previa que había en formas de pago era HTML con tamaños en px contra un PDF en pt: se
+ * veía parecida y mentía. Por eso las dos pasan por acá y no hay una segunda forma de previsualizar.
  *
- * Lo pidió Bruno: entender la etiqueta mirándola, en vez de leer un párrafo que la describa.
+ * ⚠️ **`construir` se re-ejecuta cuando cambia su identidad**, así que el llamador la memoiza con
+ * las dependencias que de verdad cambian el dibujo. Formas de pago escribe letra por letra: ahí va
+ * con espera, para no armar un PDF por tecla.
  */
-function VistaPrevia({ modo, muestra, ctx }: { modo: ModoEtiqueta; muestra: VarianteEti | null; ctx: CtxEtiqueta }) {
+function PreviaPdf({ construir, alt, espera = 0, vacio }: { construir: () => ReturnType<typeof buildEtiquetasPdf> | null; alt: string; espera?: number; vacio?: string }) {
   const [url, setUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let vivo = true
     let anterior: string | null = null
-    ;(async () => {
-      if (!muestra) {
-        if (vivo) setUrl(null)
-        return
-      }
-      const pdf = await buildEtiquetasPdf([muestra], modo, ctx)
-      if (!vivo) return
-      anterior = pdf.output('bloburl') as string
-      setUrl(anterior)
-    })()
+    const timer = setTimeout(() => {
+      void (async () => {
+        const pendiente = construir()
+        if (!pendiente) {
+          if (vivo) setUrl(null)
+          return
+        }
+        const pdf = await pendiente
+        if (!vivo) return
+        anterior = pdf.output('bloburl') as string
+        setUrl(anterior)
+      })()
+    }, espera)
     return () => {
       vivo = false
+      clearTimeout(timer)
       // El blob queda vivo hasta que se lo suelta: sin esto, cambiar de pestaña veinte veces deja
       // veinte PDF en memoria.
       if (anterior) URL.revokeObjectURL(anterior)
     }
-  }, [modo, muestra, ctx])
+  }, [construir, espera])
+
+  return url ? (
+    <iframe src={url} title={alt} style={{ width: 200, height: 100, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }} />
+  ) : (
+    <div style={{ width: 200, height: 100, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2, textAlign: 'center', padding: 6 }}>
+      {vacio ?? 'Dibujando…'}
+    </div>
+  )
+}
+
+/**
+ * La etiqueta de la pestaña, con un producto de ejemplo.
+ *
+ * Lo pidió Bruno: entender la etiqueta mirándola, en vez de leer un párrafo que la describa.
+ */
+function VistaPrevia({ modo, muestra, ctx }: { modo: ModoEtiqueta; muestra: VarianteEti | null; ctx: CtxEtiqueta }) {
+  const construir = useCallback(() => (muestra ? buildEtiquetasPdf([muestra], modo, ctx) : null), [modo, muestra, ctx])
 
   return (
     <div style={{ minWidth: 210 }}>
       <div style={{ fontSize: 12, color: color.mut, marginBottom: 6 }}>Así sale:</div>
-      {url ? (
-        <iframe
-          src={url}
-          title={`Vista previa de la etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`}
-          style={{ width: 200, height: 100, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }}
-        />
-      ) : (
-        <div style={{ width: 200, height: 100, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2 }}>
-          {muestra ? 'Dibujando…' : 'Sin productos para mostrar'}
-        </div>
-      )}
+      <PreviaPdf
+        construir={construir}
+        alt={`Vista previa de la etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`}
+        vacio={muestra ? 'Dibujando…' : 'Sin productos para mostrar'}
+      />
       {muestra && (
         <div style={{ fontSize: 11, color: color.mut2, marginTop: 4 }}>
           Ejemplo: {muestra.name || '—'}
