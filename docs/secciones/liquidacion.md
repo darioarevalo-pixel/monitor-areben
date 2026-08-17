@@ -57,8 +57,15 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   Poner la deja `aplicada`; **sacar la última oferta la devuelve a `en_curso`**. ⇒ una campaña que se
   levantó bien y una que nadie levantó **se ven igual desde el estado**: cualquier chequeo de «esto
   ya no debería estar puesto» necesita mirar también la fecha (es lo que hace `colgadas.core.js`).
-- 🔑 **`liquidaciones.datos` es `jsonb`**: un campo nuevo de la campaña viaja **sin migración**. Es
-  por donde va a entrar el `tipo` de campaña (ver Pendiente).
+- 🔑 **`liquidaciones.datos` es `jsonb`**: un campo nuevo de la campaña viaja **sin migración**. Por
+  ahí entró el **`tipo` de campaña** (`liquidacion · promo · ajuste`, 17-ago-2026). 🔑 **El motor
+  nunca supo de liquidaciones** —escribe un número y lo saca—, así que el tipo no bifurca nada: sólo
+  apaga **por clave** los avisos que dan por sentado que el precio baja (`no-es-descuento` y
+  `ya-en-oferta`, en «ajuste») y cambia rótulos. ⛔ **Lo que NO apaga es la plata**: `bajo-costo` y
+  `sin-costo` siguen frenando en los tres tipos, y hay un test marcado 🔴 que lo sostiene. Las
+  campañas viejas no traen el campo: `tipoDe()` las lee como `liquidacion`, y el default de `avisos`
+  es el mismo, o sea que un llamador que se olvide del tipo **avisa de más, nunca de menos**. La
+  lista de tipos válidos vive en `lib/liquidacion/tipo.core.js` porque **la valida el handler**.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
 - 🔑 **`TOPE_APLICAR` es 5 y lo fija el tope de Gestión Nube** (60 consultas/minuto, compartidas con
@@ -74,6 +81,11 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   no tiene fecha propia: de cuándo es el número lo dice `sync_state.updated_at`, y por eso viaja hasta
   la pantalla. Una lista que manda a alguien a caminar por el local no puede decir «recién» sobre un
   dato de ayer a la mañana.
+- 🔑 **En «Se resigna», una suba RESTA: no cuenta cero.** El `Math.max(0, …)` que había escondía los
+  productos que quedaron arriba del precio de lista —en una liquidación eso es un error que el
+  resumen tapaba, y en un ajuste que sube a propósito el número no cerraba—. Medido antes de
+  sacarlo: **cero ítems arriba de lista en las dos marcas**, o sea que ninguna campaña existente
+  cambió de número.
 - 🔑 **Al conciliar stock se cuenta TODO lo que descuenta unidades** —mayorista, canjes y fallas
   incluidos—, al revés que el resto de `resultado.ts`, que los excluye para no hundir el precio
   promedio. Las dos reglas conviven en el mismo archivo y las dos están bien.
@@ -97,18 +109,19 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 
 ## Pendiente
 
-- ▶️ **El `tipo` de campaña** (pieza 1 del plan, la única que quedó sin hacer): `datos.tipo` con
-  `liquidación · promo puntual · ajuste de precio`, **cero SQL**. Apaga por clave los avisos
-  `no-es-descuento` y `ya-en-oferta` para «ajuste», cambia rótulos, y saca el `Math.max(0, …)` de
-  `resigna`, que hoy esconde las subas. ⛔ **La sección no se renombra ahí**: renombrarla toca el
-  sidebar, el espejo `SECCION_AREA` ↔ `PERM_CAT.area`, los permisos guardados de cada usuario y el
-  ícono.
+- ⛔ **La sección no se renombra** aunque ya acepte promos y ajustes: renombrarla toca el sidebar, el
+  espejo `SECCION_AREA` ↔ `PERM_CAT.area`, los permisos guardados de cada usuario y el ícono. Si se
+  decide, va aparte y a propósito.
+- 🔴 ⛔ **El tipo de campaña no se ejerció a mano**: nadie creó todavía una campaña de «ajuste» ni le
+  escribió una suba a Gestión Nube. El handler y el núcleo están cubiertos con mutantes, la pantalla
+  no.
 - 🔴 ⛔ **El aviso de ofertas colgadas no se ejerció a mano**, porque al escribirlo no había ni una:
   la única campaña seguía viva. El botón «Sacarles la oferta» reusa `aplicar`, que sí está ejercido,
   pero el camino entero —aviso → botón → la oferta sale de la tienda— nadie lo caminó.
-- ⏸️ **Los sub-permisos de Etiquetas**: declarados (`dep · loc · sku · libre`) y **sin un solo
-  `puedeSub` que los consulte** ⇒ hoy las pestañas las ve cualquiera que tenga la sección. Ejercerlos
-  puede dejar a alguien sin una que usa; borrarlos es decir que Etiquetas es todo o nada. Decide Bruno.
+- ⏸️ **Los sub-permisos de Etiquetas**: declarados (las seis pestañas, desde el 17-ago) y **sin un
+  solo `puedeSub` que los consulte** ⇒ hoy las pestañas las ve cualquiera que tenga la sección.
+  Ejercerlos puede dejar a alguien sin una que usa; borrarlos es decir que Etiquetas es todo o nada.
+  Decide Bruno.
 - ▶️ **Etiquetas no tiene ficha** y comparte handler, bitácora y regla de precio con esta sección.
   La escribe quien la toque.
 

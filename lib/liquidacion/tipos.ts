@@ -8,6 +8,8 @@
  * forma de saber cuál se miró.
  */
 
+import { TIPOS_CAMPANIA as TIPOS_CAMPANIA_JS, tipoDe as tipoDeJs } from './tipo.core.js'
+
 /**
  * En qué anda una campaña.
  *
@@ -33,11 +35,72 @@ export type EstadoItem = 'pendiente' | 'definido' | 'confirmado' | 'descartado' 
 export const ESTADOS_CAMPANIA: readonly EstadoCampania[] = ['borrador', 'en_curso', 'aplicada', 'cerrada']
 export const ESTADOS_ITEM: readonly EstadoItem[] = ['pendiente', 'definido', 'confirmado', 'descartado', 'aplicado']
 
+/**
+ * Qué clase de cambio de precio es esta campaña.
+ *
+ * 🔑 **El motor nunca supo de liquidaciones: escribe un número y lo saca.** Lo único que ataba la
+ * sección a «bajar mucho» eran dos avisos y un puñado de rótulos, así que una promo de tres
+ * productos o un ajuste de un precio mal puesto no tenían dónde vivir y terminaban cargados a mano
+ * en Gestión Nube — que es justo el agujero que la bitácora vino a cerrar.
+ *
+ * `ajuste` es el que de verdad cambia algo: un ajuste **puede subir**, y contra eso los dos avisos
+ * que exigen que el precio nuevo sea menor pasan a ser ruido (ver `avisos`).
+ *
+ * ⚠️ **Viaja en `liquidaciones.datos` (jsonb), sin migración.** Las campañas creadas antes de que
+ * esto existiera no traen el campo: `tipoDe()` las lee como `liquidacion`, que es lo que eran.
+ */
+export type TipoCampania = 'liquidacion' | 'promo' | 'ajuste'
+
+export const TIPOS_CAMPANIA = TIPOS_CAMPANIA_JS as readonly TipoCampania[]
+
+/**
+ * Cómo se habla de cada tipo, en un solo lugar.
+ *
+ * `apaga` son las claves de aviso que no aplican — se filtran **por clave** y no por su texto, que
+ * es exactamente para lo que la clave existe (ver `ClaveAviso`).
+ */
+export const TIPO_CAMPANIA: Record<
+  TipoCampania,
+  { nombre: string; ayuda: string; precio: string; pct: string; promedio: string; apaga: readonly ClaveAviso[] }
+> = {
+  liquidacion: {
+    nombre: 'Liquidación',
+    ayuda: 'Salida de temporada: se espera bajar mucho y mover stock parado.',
+    precio: 'Precio de sale',
+    pct: '% de descuento',
+    promedio: 'Descuento promedio',
+    apaga: [],
+  },
+  promo: {
+    nombre: 'Promo puntual',
+    ayuda: 'Unos pocos productos con descuento por unos días. Mismo motor, otras expectativas.',
+    precio: 'Precio de promo',
+    pct: '% de descuento',
+    promedio: 'Descuento promedio',
+    apaga: [],
+  },
+  ajuste: {
+    nombre: 'Ajuste de precio',
+    ayuda: 'Corregir un precio mal puesto o acompañar una suba de lista. Puede subir.',
+    precio: 'Precio nuevo',
+    pct: '% de ajuste',
+    promedio: 'Ajuste promedio',
+    // Los dos avisos que dan por sentado que el precio nuevo baja. En un ajuste no advierten nada:
+    // describen lo que se vino a hacer.
+    apaga: ['no-es-descuento', 'ya-en-oferta'],
+  },
+}
+
+/** El tipo de una campaña, con el default de las que nacieron antes del campo. */
+export const tipoDe = tipoDeJs as (c: { tipo?: TipoCampania | null } | null | undefined) => TipoCampania
+
 /** Una campaña. Los conteos los arma el servidor: la pantalla no baja los ítems para contarlos. */
 export interface Liquidacion {
   id: string
   nombre: string
   estado: EstadoCampania
+  /** Qué clase de cambio de precio es. Las campañas viejas no lo traen: se leen con `tipoDe()`. */
+  tipo?: TipoCampania
   /** Vigencia. Opcionales: una campaña puede nacer sin fechas y ponérselas al aplicarla. */
   desde: string | null
   hasta: string | null

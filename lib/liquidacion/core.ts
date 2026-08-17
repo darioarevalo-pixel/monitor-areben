@@ -9,7 +9,7 @@
 
 import { armarItemSale, redondear90 } from '@/lib/comisiones/core'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
-import type { Aviso, ConteoCampania, DecisionItem, EstadoItem, LiquidacionItem, RevisionItem } from './tipos'
+import { TIPO_CAMPANIA, type Aviso, type ConteoCampania, type DecisionItem, type EstadoItem, type LiquidacionItem, type RevisionItem, type TipoCampania } from './tipos'
 
 /** Id de campaña. Se genera en el cliente, como en `disenos` y el calendario. */
 export function nuevoIdLiquidacion(): string {
@@ -213,7 +213,15 @@ export function contar(items: LiquidacionItem[]): ConteoCampania {
 export interface ResumenCampania extends ConteoCampania {
   /** Costo del stock que la campaña se propone mover. Los descartados no cuentan. */
   plataInmovilizada: number
-  /** Lo que se deja de facturar contra el precio de lista, si se vendiera todo el stock definido. */
+  /**
+   * Lo que se deja de facturar contra el precio de lista, si se vendiera todo el stock definido.
+   *
+   * 🔑 **Una suba RESTA acá, no cuenta cero.** El `Math.max(0, …)` que había escondía los productos
+   * que quedaron arriba del precio de lista: en una liquidación eso es un error que el resumen
+   * tapaba, y en un ajuste de precio —que puede subir a propósito— el número directamente no
+   * cerraba. Medido antes de sacarlo: **cero ítems en las dos marcas** quedan hoy arriba de lista,
+   * o sea que ninguna campaña existente cambia de número.
+   */
   resigna: number
   /** Descuento promedio de lo definido, **ponderado por stock**. `null` si no hay nada definido. */
   descPromedio: number | null
@@ -228,7 +236,7 @@ export interface ResumenCampania extends ConteoCampania {
  * unidades y 10% en uno con doscientas no es "25% de descuento", y esa lectura decide si la campaña
  * mueve la aguja o no.
  */
-export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
+export function resumenCampania(items: LiquidacionItem[], tipo: TipoCampania = 'liquidacion'): ResumenCampania {
   const vivos = items.filter((i) => i.estado !== 'descartado')
   // `confirmado` cuenta como definido para las plata: es el mismo precio, mirado por otra persona.
   const definidos = items.filter(
@@ -242,7 +250,7 @@ export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
     const st = i.foto.stock || 0
     unidades += st
     sumaDesc += (i.decision.pctDesc || 0) * st
-    resigna += Math.max(0, i.foto.precioNormal - (i.decision.precioSale || 0)) * st
+    resigna += (i.foto.precioNormal - (i.decision.precioSale || 0)) * st
   }
 
   return {
@@ -250,7 +258,7 @@ export function resumenCampania(items: LiquidacionItem[]): ResumenCampania {
     plataInmovilizada: vivos.reduce((a, i) => a + i.foto.costo * i.foto.stock, 0),
     resigna,
     descPromedio: unidades > 0 ? sumaDesc / unidades : null,
-    conProblema: items.filter((i) => i.estado !== 'descartado' && avisos(i).some((a) => a.nivel === 'alto')).length,
+    conProblema: items.filter((i) => i.estado !== 'descartado' && avisos(i, tipo).some((a) => a.nivel === 'alto')).length,
   }
 }
 
@@ -343,8 +351,15 @@ export function faltantes<T extends { id: string }>(productos: T[], yaEstan: Rec
  * cero**. El simulador de Comisiones hoy no lo chequea, y en julio de 2026, 428 productos de BDI
  * quedaron costando cero en silencio — con ese costo, cualquier precio parece tener 100% de margen
  * y la liquidación regala mercadería sin que nada avise.
+ *
+ * 🔑 **El tipo de campaña apaga los avisos que no aplican, por CLAVE** (`TIPO_CAMPANIA[t].apaga`).
+ * En un ajuste de precio, «no es un descuento» y «ya está en oferta» no advierten nada: describen
+ * lo que se vino a hacer, y un aviso que siempre suena deja de leerse.
+ *
+ * ⚠️ **El default es `liquidacion` a propósito**: es el tipo que no apaga ninguno, así que un
+ * llamador que se olvide de pasar el tipo avisa de más, nunca de menos.
  */
-export function avisos(item: LiquidacionItem): Aviso[] {
+export function avisos(item: LiquidacionItem, tipo: TipoCampania = 'liquidacion'): Aviso[] {
   const out: Aviso[] = []
   const { costo, sinCosto, stock, precioNormal, promoPrevia } = item.foto
   const sale = item.decision.precioSale
@@ -375,5 +390,6 @@ export function avisos(item: LiquidacionItem): Aviso[] {
     out.push({ clave: 'sin-stock', nivel: 'medio', texto: 'No queda stock: liquidarlo no mueve nada.' })
   }
 
-  return out
+  const apaga = TIPO_CAMPANIA[tipo].apaga
+  return apaga.length ? out.filter((a) => !apaga.includes(a.clave)) : out
 }

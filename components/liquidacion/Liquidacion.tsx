@@ -48,9 +48,9 @@ import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
   avisos, confirmarItem, contar, nuevoIdLiquidacion, pidsPorAplicar, reprecificar, resumenCampania,
-  TOPE_APLICAR, TOPE_MASIVO,
+  TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
   type Colgadas, type EstadoCampania, type EstadoItem, type Liquidacion as Campania,
-  type LiquidacionItem, type MotivoColgada,
+  type LiquidacionItem, type MotivoColgada, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
   aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, decidirMasivo, estadoItem,
@@ -64,7 +64,7 @@ import { Resultado } from './Resultado'
 import { Revision } from './Revision'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
+  Badge, BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
   Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, formatMoney, useConfirmar,
   useFiltroUrl, useToast, color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
@@ -154,7 +154,7 @@ export function Liquidacion() {
     if (abierta && campanias && !laAbierta) setAbierta('')
   }, [abierta, campanias, laAbierta, setAbierta])
 
-  async function guardarCampania(datos: { nombre: string; desde: string | null; hasta: string | null; nota: string | null }) {
+  async function guardarCampania(datos: { nombre: string; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
     try {
       if (editando === 'nueva') {
         const c = await crearCampania(marca, { id: nuevoIdLiquidacion(), ...datos })
@@ -455,7 +455,7 @@ function ListaCampanias({
           return (
             <Tr key={c.id} onClick={() => onAbrir(c)}>
               <Td>
-                <b style={{ fontWeight: weight.semibold }}>{c.nombre}</b>
+                <b style={{ fontWeight: weight.semibold }}>{c.nombre}</b> <EtiquetaTipo campania={c} />
                 {c.nota && <div style={{ color: color.mut, fontSize: font.sm }}>{c.nota}</div>}
               </Td>
               <Td><StatusPill tone={r.tono} label={r.label} /></Td>
@@ -545,7 +545,10 @@ function DetalleCampania({
     })()
   }, [cargar])
 
-  const resumen = useMemo(() => resumenCampania(items || []), [items])
+  // Qué clase de cambio de precio es: manda los rótulos y apaga los avisos que no aplican.
+  const tipo = tipoDe(campania)
+  const rotulos = TIPO_CAMPANIA[tipo]
+  const resumen = useMemo(() => resumenCampania(items || [], tipo), [items, tipo])
   // Cuántos faltan escribir y cuántos tienen la oferta puesta. Los botones muestran el número: uno
   // que dice «Escribir 260 precios» se entiende antes de apretarlo.
   const porAplicar = useMemo(() => pidsPorAplicar(items || [], 'poner').length, [items])
@@ -690,7 +693,7 @@ function DetalleCampania({
    * gratis.
    */
   async function confirmarTodos(sinRevisar: LiquidacionItem[]) {
-    const conAvisoAlto = sinRevisar.filter((i) => avisos(i).some((a) => a.nivel === 'alto'))
+    const conAvisoAlto = sinRevisar.filter((i) => avisos(i, tipo).some((a) => a.nivel === 'alto'))
     const ok = await confirmar({
       titulo: `Confirmar ${sinRevisar.length} precios sin mirarlos de a uno`,
       mensaje: conAvisoAlto.length
@@ -846,6 +849,7 @@ function DetalleCampania({
         <Button variant="ghost" size="sm" onClick={onVolver}>← Campañas</Button>
         <h2 style={{ margin: 0, fontSize: font.xl, fontWeight: weight.semibold }}>{campania.nombre}</h2>
         <StatusPill tone={rot.tono} label={rot.label} />
+        <EtiquetaTipo campania={campania} />
         {(campania.desde || campania.hasta) && (
           <span style={{ color: color.mut, fontSize: font.sm }}>
             {fechaCorta(campania.desde)} → {fechaCorta(campania.hasta)}
@@ -1058,6 +1062,7 @@ function DetalleCampania({
       {items !== null && pestania === 'revision' && (
         <Revision
           items={items}
+          tipo={tipo}
           puedeRevisar={puede.admin && campania.estado !== 'cerrada'}
           ingresoDe={ingresoDe}
           onRevisar={guardarRevision}
@@ -1070,7 +1075,7 @@ function DetalleCampania({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[3], marginBottom: space[4] }}>
             <KpiCard label="Productos" value={String(resumen.total)} sub={resumen.pendientes ? `${resumen.pendientes} sin definir` : 'todos definidos'} />
             <KpiCard label="Plata parada" value={formatMoney(resumen.plataInmovilizada)} sub="costo del stock que se quiere mover" />
-            <KpiCard label="Descuento promedio" value={pct(resumen.descPromedio)} sub="ponderado por stock" />
+            <KpiCard label={rotulos.promedio} value={pct(resumen.descPromedio)} sub="ponderado por stock" />
             <KpiCard
               label="Se resigna"
               value={formatMoney(resumen.resigna)}
@@ -1133,6 +1138,7 @@ function DetalleCampania({
                   <FilaItem
                     key={i.pid}
                     item={i}
+                    tipo={tipo}
                     puedeMover={campania.estado !== 'cerrada'}
                     onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
                     onDescartar={() => void moverEstado(i, 'descartado')}
@@ -1168,6 +1174,7 @@ function DetalleCampania({
           // Remonta al pasar de producto: el formulario nace del ítem, sin efectos que lo rellenen.
           key={enModal.pid}
           item={enModal}
+          tipo={tipo}
           posicion={definiendo.i + 1}
           total={definiendo.orden.length}
           puedeEditar={campania.estado !== 'cerrada'}
@@ -1183,9 +1190,10 @@ function DetalleCampania({
 }
 
 function FilaItem({
-  item, puedeMover, onDefinir, onDescartar, onVolver, onQuitar,
+  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar,
 }: {
   item: LiquidacionItem
+  tipo: TipoCampania
   puedeMover: boolean
   onDefinir: () => void
   onDescartar: () => void
@@ -1193,7 +1201,7 @@ function FilaItem({
   onQuitar: () => void
 }) {
   const rot = ROTULO_ITEM[item.estado] || ROTULO_ITEM.pendiente
-  const problemas = avisos(item).filter((a) => a.nivel === 'alto')
+  const problemas = avisos(item, tipo).filter((a) => a.nivel === 'alto')
   const apagado = item.estado === 'descartado'
 
   return (
@@ -1256,6 +1264,20 @@ function FilaItem({
   )
 }
 
+/**
+ * Qué clase de cambio de precio es esta campaña.
+ *
+ * 🔑 **Sale sólo cuando NO es una liquidación.** Adentro de la sección Liquidación, una etiqueta que
+ * dice «Liquidación» en todas las filas es ruido; la que importa es la que avisa que ésta **no** lo
+ * es —una promo puntual o un ajuste que puede subir el precio—, y eso se lee mejor si aparece poco.
+ */
+function EtiquetaTipo({ campania }: { campania: Campania }) {
+  const t = tipoDe(campania)
+  if (t === 'liquidacion') return null
+  // El `title` va en un span: `Badge` no acepta atributos sueltos.
+  return <span title={TIPO_CAMPANIA[t].ayuda}><Badge tone="neutral">{TIPO_CAMPANIA[t].nombre}</Badge></span>
+}
+
 // ── Alta y edición de la campaña ──────────────────────────────────────────────────────────────
 
 /**
@@ -1269,12 +1291,13 @@ function ModalCampania({
 }: {
   editando: Campania | 'nueva'
   onCerrar: () => void
-  onGuardar: (d: { nombre: string; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
+  onGuardar: (d: { nombre: string; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
 }) {
   const esNueva = editando === 'nueva'
   const previa = editando === 'nueva' ? null : editando
 
   const [nombre, setNombre] = useState(previa?.nombre || '')
+  const [tipo, setTipo] = useState<TipoCampania>(tipoDe(previa))
   const [desde, setDesde] = useState(previa?.desde || '')
   const [hasta, setHasta] = useState(previa?.hasta || '')
   const [nota, setNota] = useState(previa?.nota || '')
@@ -1286,7 +1309,7 @@ function ModalCampania({
     if (!nombre.trim() || malLasFechas || guardando) return
     setGuardando(true)
     try {
-      await onGuardar({ nombre: nombre.trim(), desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
+      await onGuardar({ nombre: nombre.trim(), tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
     } finally {
       setGuardando(false)
     }
@@ -1296,7 +1319,7 @@ function ModalCampania({
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo={esNueva ? 'Nueva campaña de liquidación' : 'Editar campaña'}
+      titulo={esNueva ? 'Nueva campaña' : 'Editar campaña'}
       // Perder el nombre y las fechas por un clic al costado molesta más de lo que ayuda cerrar rápido.
       cerrarConFondo={false}
       pie={
@@ -1310,6 +1333,11 @@ function ModalCampania({
     >
       <Field label="Nombre" hint="El que lo va a identificar dentro de seis meses: «Sale invierno ago-2026».">
         <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Sale invierno ago-2026" data-foco />
+      </Field>
+      <Field label="Qué es" hint={TIPO_CAMPANIA[tipo].ayuda}>
+        <Select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCampania)}>
+          {TIPOS_CAMPANIA.map((t) => <option key={t} value={t}>{TIPO_CAMPANIA[t].nombre}</option>)}
+        </Select>
       </Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space[3] }}>
         <Field label="Desde" hint="Opcional.">

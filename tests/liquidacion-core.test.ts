@@ -18,8 +18,9 @@ import {
   TOPE_APLICAR,
   resumenCampania,
   revisionDe,
+  tipoDe,
 } from '@/lib/liquidacion'
-import type { EstadoItem, LiquidacionItem } from '@/lib/liquidacion'
+import type { EstadoItem, LiquidacionItem, TipoCampania } from '@/lib/liquidacion'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
 
 /**
@@ -470,5 +471,67 @@ describe('faltantes', () => {
 
   it('un pid de la campaña que ya no está en el ETL no inventa un producto', () => {
     expect(faltantes(productos, { z: 'definido' }).map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+/**
+ * El tipo de campaña: lo que cambia y lo que NO.
+ *
+ * 🔑 **El motor es el mismo.** Un ajuste de precio se escribe con el mismo `aplicar`, se guarda con
+ * el mismo `decidirItem` y se redondea igual. Lo único que el tipo mueve son los avisos que dan por
+ * sentado que el precio nuevo baja — y en un ajuste eso no es un descuido, es lo que se vino a
+ * hacer.
+ */
+describe('tipo de campaña', () => {
+  const arriba = () => decidirItem(armarItemDesdeProducto(prod(), { promo: 32000 }), { precioSale: 60000 })
+  const conPrecio = (over: Partial<Producto>, decision: { precioSale: number }): LiquidacionItem =>
+    decidirItem(armarItemDesdeProducto(prod(over)), decision)
+
+  it('en una liquidación, un precio que no baja frena', () => {
+    const claves = avisos(arriba(), 'liquidacion').map((a) => a.clave)
+    expect(claves).toContain('no-es-descuento')
+    expect(claves).toContain('ya-en-oferta')
+  })
+
+  it('en un ajuste, esos dos avisos no van: describen lo que se vino a hacer', () => {
+    const claves = avisos(arriba(), 'ajuste').map((a) => a.clave)
+    expect(claves).not.toContain('no-es-descuento')
+    expect(claves).not.toContain('ya-en-oferta')
+  })
+
+  it('🔴 pero el ajuste NO apaga los que hablan de plata: bajo costo sigue frenando', () => {
+    // Apagar por tipo tiene que ser una lista corta y explícita. El día que `apaga` se convierta en
+    // "los altos molestan", un ajuste puede escribir un precio abajo del costo sin que nada avise.
+    const bajoCosto = decidirItem(armarItemDesdeProducto(prod()), { precioSale: 9900 })
+    expect(avisos(bajoCosto, 'ajuste').map((a) => a.clave)).toContain('bajo-costo')
+    expect(avisos(armarItemDesdeProducto(prod({ sinCosto: true, unit_cost: 0 })), 'ajuste').map((a) => a.clave)).toContain('sin-costo')
+  })
+
+  it('una promo puntual avisa igual que una liquidación', () => {
+    expect(avisos(arriba(), 'promo').map((a) => a.clave)).toEqual(avisos(arriba(), 'liquidacion').map((a) => a.clave))
+  })
+
+  it('sin tipo se lee como liquidación: el default avisa de MÁS, nunca de menos', () => {
+    expect(avisos(arriba()).map((a) => a.clave)).toEqual(avisos(arriba(), 'liquidacion').map((a) => a.clave))
+    expect(tipoDe(null)).toBe('liquidacion')
+    expect(tipoDe({})).toBe('liquidacion')
+    expect(tipoDe({ tipo: 'basura' as TipoCampania })).toBe('liquidacion')
+    expect(tipoDe({ tipo: 'ajuste' })).toBe('ajuste')
+  })
+
+  it('🔴 una SUBA resta en lo que se resigna, no cuenta cero', () => {
+    // El `Math.max(0, …)` que había escondía los productos que quedaron arriba del precio de lista:
+    // en una liquidación eso es un error que el resumen tapaba, y en un ajuste que sube a propósito
+    // el número directamente no cerraba.
+    const baja = conPrecio({ id: 'a', stock: 10, retailer_price: 10000, unit_cost: 1000 }, { precioSale: 7000 })
+    const sube = conPrecio({ id: 'b', stock: 10, retailer_price: 10000, unit_cost: 1000 }, { precioSale: 12000 })
+    expect(resumenCampania([sube]).resigna).toBe(-20000)
+    expect(resumenCampania([baja, sube]).resigna).toBe(10000)
+  })
+
+  it('y el conteo de problemas sigue al tipo', () => {
+    const items = [arriba()]
+    expect(resumenCampania(items, 'liquidacion').conProblema).toBe(1)
+    expect(resumenCampania(items, 'ajuste').conProblema).toBe(0)
   })
 })

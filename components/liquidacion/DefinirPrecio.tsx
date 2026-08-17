@@ -38,8 +38,8 @@ import { useCfgComisiones } from '@/components/comisiones/simulador/useCfgComisi
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { canales as canalesDe } from '@/lib/comisiones/core'
 import {
-  anotarItem, avisos, decidirItem, despejarItem, precioDeSale,
-  type LiquidacionItem,
+  anotarItem, avisos, decidirItem, despejarItem, precioDeSale, TIPO_CAMPANIA,
+  type LiquidacionItem, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
   Button, Field, Input, Modal, Notice, StatusPill, formatMoney, useConfirmar,
@@ -90,9 +90,11 @@ type Cara =
   | { tipo: 'piso' }
 
 export function DefinirPrecio({
-  item, posicion, total, puedeEditar, onAnterior, onSiguiente, onGuardar, onEstado, onCerrar,
+  item, tipo, posicion, total, puedeEditar, onAnterior, onSiguiente, onGuardar, onEstado, onCerrar,
 }: {
   item: LiquidacionItem
+  /** Qué clase de cambio de precio es la campaña: manda los rótulos y apaga los avisos que no aplican. */
+  tipo: TipoCampania
   /** 1-based, para el "3 de 12" del encabezado. */
   posicion: number
   total: number
@@ -221,12 +223,12 @@ export function DefinirPrecio({
   const d = propuesta?.decision ?? null
   const pvpSim = d?.precioSale || precioNormal
   const misAvisos = useMemo(() => {
-    const todos = avisos(propuesta || item)
+    const todos = avisos(propuesta || item, tipo)
     // Con el campo precargado en la oferta de hoy, «este precio no lo baja» no advierte nada:
     // describe el punto de partida, y sale solo en los cuarenta productos seguidos. Vuelve en cuanto
     // se toca el precio, que es cuando pasa a ser una decisión de alguien.
     return arranque != null && !tocado ? todos.filter((a) => a.clave !== 'ya-en-oferta') : todos
-  }, [propuesta, item, arranque, tocado])
+  }, [propuesta, item, tipo, arranque, tocado])
   const frena = misAvisos.some((a) => a.nivel === 'alto')
 
   const hayCambios =
@@ -359,7 +361,7 @@ export function DefinirPrecio({
                   pide a su campo el ancho de su texto (`Field` sin `width` no fija `flex-basis`) y
                   los dos controles se apilan: medido, 284px de caja para dos inputs de 40. */}
               <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <Field label="% de descuento" width={90}>
+                <Field label={TIPO_CAMPANIA[tipo].pct} width={90}>
                   <Input
                     type="number"
                     value={pctTxt}
@@ -368,7 +370,7 @@ export function DefinirPrecio({
                     data-foco
                   />
                 </Field>
-                <Field label="Precio de sale" width={120}>
+                <Field label={TIPO_CAMPANIA[tipo].precio} width={120}>
                   <Input
                     type="number"
                     value={precioTxt}

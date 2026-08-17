@@ -7,8 +7,8 @@
 //   GET  ?recurso=liquidacion&store=…&etiquetas=1&liq=<id>→ los pid a etiquetar de esa campaña
 //   GET  ?recurso=liquidacion&store=…&liq=<id>&bitacora=1 → la ida y vuelta de precios de la campaña
 //   GET  ?recurso=liquidacion&store=…&vendido=1           → lo vendido CON la oferta puesta (Análisis)
-//   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,desde,hasta,nota} }
-//   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, desde?, hasta?, nota? }
+//   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,tipo,desde,hasta,nota} }
+//   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, tipo?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
 //   POST { recurso:'liquidacion', store, action:'sumar-items', id, items:[…] }
 //   POST { recurso:'liquidacion', store, action:'guardar-item',id, item }
@@ -48,6 +48,8 @@ import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/ve
 import { armarCola } from '../lib/etiquetas/cola.core.js';
 // El aviso de la portada: ofertas escritas en la tienda sin campaña viva que las justifique.
 import { ofertasColgadas } from '../lib/liquidacion/colgadas.core.js';
+// Qué clase de cambio de precio es la campaña: la lista de tipos válidos y su default.
+import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -180,6 +182,7 @@ function aCampania(row, conteo) {
     id: row.id,
     nombre: row.nombre,
     estado: row.estado,
+    tipo: tipoDe(d),
     desde: d.desde || null,
     hasta: d.hasta || null,
     nota: d.nota || null,
@@ -689,7 +692,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'la fecha de fin es anterior a la de inicio' });
       }
 
+      if (c.tipo != null && !TIPOS_CAMPANIA.includes(String(c.tipo))) {
+        return res.status(400).json({ error: `"tipo" tiene que ser uno de: ${TIPOS_CAMPANIA.join(', ')}` });
+      }
+
       const datos = {
+        // Sin `tipo` es una liquidación, que es lo que fueron todas hasta agosto de 2026.
+        tipo: tipoDe(c),
         desde: c.desde ? String(c.desde) : null,
         hasta: c.hasta ? String(c.hasta) : null,
         nota: txtOrNull(c.nota),
@@ -814,7 +823,18 @@ export default async function handler(req, res) {
       }
       if (desde && hasta && hasta < desde) return res.status(400).json({ error: 'la fecha de fin es anterior a la de inicio' });
 
-      const datos = { ...d, desde, hasta, nota: b.nota === undefined ? d.nota || null : txtOrNull(b.nota) };
+      if (b.tipo !== undefined && !TIPOS_CAMPANIA.includes(String(b.tipo))) {
+        return res.status(400).json({ error: `"tipo" tiene que ser uno de: ${TIPOS_CAMPANIA.join(', ')}` });
+      }
+
+      const datos = {
+        ...d,
+        // No mandar el tipo deja el que tenía; una campaña vieja sin campo queda como liquidación.
+        tipo: b.tipo === undefined ? tipoDe(d) : String(b.tipo),
+        desde,
+        hasta,
+        nota: b.nota === undefined ? d.nota || null : txtOrNull(b.nota),
+      };
       const { error } = await supabase.from('liquidaciones')
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);

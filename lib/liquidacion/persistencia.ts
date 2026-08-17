@@ -12,7 +12,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
 import type { EventoBitacora } from './bitacora'
 import type { Colgadas } from './colgadas'
-import type { EstadoCampania, EstadoItem, Liquidacion, LiquidacionItem } from './tipos'
+import type { EstadoCampania, EstadoItem, Liquidacion, LiquidacionItem, TipoCampania } from './tipos'
 
 const API = '/api/datos?recurso=liquidacion'
 
@@ -100,17 +100,17 @@ export async function leerBitacora(store: Marca, liqId: string): Promise<EventoB
 
 export async function crearCampania(
   store: Marca,
-  campania: { id: string; nombre: string; desde?: string | null; hasta?: string | null; nota?: string | null },
+  campania: { id: string; nombre: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null },
 ): Promise<Liquidacion> {
   const d = await postear({ store, action: 'crear', campania }, 'No se pudo crear la campaña.')
   return d.campania as Liquidacion
 }
 
-/** Cambia nombre, fechas o nota. Lo que no venga queda como estaba. */
+/** Cambia nombre, tipo, fechas o nota. Lo que no venga queda como estaba. */
 export async function renombrarCampania(
   store: Marca,
   id: string,
-  cambios: { nombre?: string; desde?: string | null; hasta?: string | null; nota?: string | null },
+  cambios: { nombre?: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null },
 ): Promise<Liquidacion> {
   const d = await postear({ store, action: 'renombrar', id, ...cambios }, 'No se pudo guardar la campaña.')
   return d.campania as Liquidacion

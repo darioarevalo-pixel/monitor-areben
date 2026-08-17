@@ -28,8 +28,8 @@
 import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  confirmarItem, objetarItem, precioDeSale, revisionDe,
-  type LiquidacionItem,
+  confirmarItem, objetarItem, precioDeSale, revisionDe, TIPO_CAMPANIA,
+  type LiquidacionItem, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
   Button, Card, Field, Input, Modal, Notice, StatusPill,
@@ -46,10 +46,12 @@ const fechaCorta = (iso: string) => {
 type Filtro = 'sin-revisar' | 'objetados' | 'confirmados' | 'todos'
 
 export function Revision({
-  items, puedeRevisar, ingresoDe, onRevisar, onConfirmarTodos,
+  items, tipo, puedeRevisar, ingresoDe, onRevisar, onConfirmarTodos,
 }: {
   /** Todos los ítems de la campaña. El filtro de acá adentro decide cuáles se ven. */
   items: LiquidacionItem[]
+  /** Qué clase de cambio de precio es la campaña: sólo cambia cómo se llama la columna del precio. */
+  tipo: TipoCampania
   /** Admin. Sin esto la tabla se ve igual pero sin acciones. */
   puedeRevisar: boolean
   /** Fecha de alta del producto, del ETL. `null` si el ETL todavía no cargó. */
@@ -165,7 +167,7 @@ export function Revision({
               <Th>Producto</Th>
               <Th align="right">Costo</Th>
               <Th align="right">Lista</Th>
-              <Th align="right">Precio de sale</Th>
+              <Th align="right">{TIPO_CAMPANIA[tipo].precio}</Th>
               <Th align="right">Desc.</Th>
               <Th align="right">Markup</Th>
               <Th align="right">Margen</Th>
