@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { aCobrar, turnosDe } from '@/lib/envios/reglas.core.js'
 import { linkWhatsapp } from '@/lib/envios/core'
@@ -170,5 +172,37 @@ describe('el resto del mensaje', () => {
     // `#` del número de orden en la primera línea, así que llegaría siempre partido.
     const link = linkWhatsapp(con({}), 'Pedido #20913 & saldo') || ''
     expect(link).toContain('text=Pedido%20%2320913%20%26%20saldo')
+  })
+})
+
+/**
+ * 🔴 **La condición tiene que VERSE, y eso vive en el JSX.**
+ *
+ * Que `mensajeParaLaClienta` devuelva `null` sin precio está probado arriba. Lo que esos tests no
+ * pueden ver es lo que le pasó a Bruno la primera vez que lo usó: **el botón se veía igual con
+ * mensaje y sin mensaje**. Lo único que los separaba era el `title`, que hay que ir a buscar con el
+ * mouse, así que la regla era invisible — se aprieta esperando el texto escrito y se abre un chat
+ * vacío. Es el mismo modo de falla que un cartel que se calla: no está mal, no dice nada.
+ *
+ * Dos señales y no una, porque el color solo tampoco alcanza para saber POR QUÉ.
+ */
+describe('🔴 el botón dice si el mensaje está adentro', () => {
+  const pantalla = readFileSync(join(__dirname, '..', 'components/envios/Envios.tsx'), 'utf8')
+  const direccion = pantalla.slice(pantalla.indexOf('function Direccion('), pantalla.indexOf('function ResumenPedido('))
+
+  it('el bloque existe (si esto falla, el test se quedó mirando un archivo que se movió)', () => {
+    expect(direccion).not.toBe('')
+  })
+
+  it('🔴 el verde es «el mensaje está armado», no la decoración del botón', () => {
+    // El mutante es `tone="success"` fijo: vuelve a verse igual en los dos casos.
+    expect(direccion).toMatch(/tone=\{mensaje \?/)
+  })
+
+  it('🔴 y además lo dice con palabras: el color solo no explica POR QUÉ', () => {
+    // El mutante es borrar la línea. El botón gris deja de mentir, pero tampoco enseña qué hacer —
+    // y lo que hay que hacer (cotizar) está en otra columna.
+    expect(direccion).toContain('el mensaje sale escrito al cotizar')
+    expect(direccion).toMatch(/!mensaje \?/)
   })
 })

@@ -987,7 +987,14 @@ function Direccion({ envio }: { envio: Envio }) {
           </Badge>
         ) : null}
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
+      {/* 🔴 **El botón tiene que DECIR si el mensaje está adentro.** Con y sin mensaje se veían
+          exactamente igual —lo único que los separaba era el `title`, que hay que ir a buscar con el
+          mouse— y así la condición es invisible: se aprieta esperando el texto escrito y se abre un
+          chat vacío. Es el mismo modo de falla de un cartel que se calla. Dos señales, porque el
+          color solo tampoco alcanza: **el verde es «el mensaje está armado»** (sin mensaje queda
+          gris, como el de llamar, que también es un chat pelado) y al lado va **el motivo, escrito**.
+          🔑 El motivo dice qué falta y desaparece solo al cotizar: no es un cartel permanente. */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         {wa ? (
           <a
             href={wa}
@@ -999,7 +1006,7 @@ function Direccion({ envio }: { envio: Envio }) {
                 : `Escribirle por WhatsApp a ${envio.telefono}. Cotizá el envío y el mensaje sale escrito`,
             )}
           >
-            <Button size="sm" variant="ghost" tone="success" iconLeft={<Icono nombre="whatsapp" />} />
+            <Button size="sm" variant="ghost" tone={mensaje ? 'success' : undefined} iconLeft={<Icono nombre="whatsapp" />} />
           </a>
         ) : null}
         {tel ? (
@@ -1007,6 +1014,7 @@ function Direccion({ envio }: { envio: Envio }) {
             <Button size="sm" variant="ghost" iconLeft={<Icono nombre="telefono" />} />
           </a>
         ) : null}
+        {wa && !mensaje ? <span style={{ fontSize: 12, opacity: 0.6 }}>el mensaje sale escrito al cotizar</span> : null}
       </div>
     </div>
   )
