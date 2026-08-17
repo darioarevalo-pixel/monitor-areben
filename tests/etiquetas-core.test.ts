@@ -3,6 +3,8 @@ import {
   agruparCantidades,
   construirPrecios,
   filtrarVariantes,
+  nombrarSinPrecio,
+  partirPorPrecio,
   resolverScan,
   secuenciaLabels,
   variantesDeCampania,
@@ -129,6 +131,37 @@ describe('construirPrecios · fueraDeTn: el respaldo al espejo deja de ser silen
     const { precios, fueraDeTn } = construirPrecios([{ id: '9', sku: 'NADA', name: 'Nada' }], idx)
     expect(precios['9']).toBe(0)
     expect(fueraDeTn.has('9')).toBe(false)
+  })
+})
+
+describe('partirPorPrecio · una etiqueta de precio sin precio no se imprime', () => {
+  // El dibujo decide con `precio > 0`: con cero se cae a la etiqueta de información y sale una
+  // etiqueta bien impresa PERO SIN PRECIO, sin un solo aviso. La prenda queda colgada sin número.
+  const conPrecio = { v: v({ id: 'a', pid: '1' }), cant: 2 }
+  const sin = { v: v({ id: 'b', pid: '2', name: 'Buzo', size: 'L' }), cant: 1 }
+  const precioDe = (x: VarianteEti) => (x.pid === '1' ? 12990 : 0)
+
+  it('en modo Local aparta al que no tiene precio', () => {
+    const r = partirPorPrecio([conPrecio, sin], 'loc', precioDe)
+    expect(r.imprimibles.map((g) => g.v.id)).toEqual(['a'])
+    expect(r.sinPrecio.map((g) => g.v.id)).toEqual(['b'])
+  })
+
+  it('los modos SIN precio no apartan a nadie: ahí un cero no es una falta', () => {
+    for (const modo of ['dep', 'sku', 'promo'] as const) {
+      const r = partirPorPrecio([conPrecio, sin], modo, precioDe)
+      expect(r.imprimibles).toHaveLength(2)
+      expect(r.sinPrecio).toHaveLength(0)
+    }
+  })
+
+  it('nombrarSinPrecio los NOMBRA en vez de contarlos, y corta la lista larga', () => {
+    expect(nombrarSinPrecio([sin])).toBe('Buzo · L')
+    const muchos = Array.from({ length: 13 }, (_, i) => ({ v: v({ id: 's' + i, name: 'P' + i, size: 'M' }), cant: 1 }))
+    const txt = nombrarSinPrecio(muchos)
+    expect(txt).toContain('P0 · M')
+    expect(txt).toContain('y 3 más')
+    expect(txt).not.toContain('P10')
   })
 })
 

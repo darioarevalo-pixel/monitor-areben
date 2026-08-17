@@ -11,6 +11,8 @@ import {
   agruparCantidades,
   construirPrecios,
   filtrarVariantes,
+  nombrarSinPrecio,
+  partirPorPrecio,
   resolverScan,
   secuenciaLabels,
   totalEtiquetas,
@@ -166,7 +168,16 @@ export function Etiquetas() {
       await avisar(modo === 'sku' ? 'No hay variantes con SKU entre las cantidades cargadas.' : 'Cargá al menos una cantidad.')
       return
     }
-    const labels = secuenciaLabels(grupos, opts)
+    // Sin precio no sale la etiqueta de precio: salía la de información, bien impresa y sin avisar.
+    const { imprimibles, sinPrecio } = partirPorPrecio(grupos, modo, precioDe)
+    if (sinPrecio.length) {
+      await avisar(
+        `${sinPrecio.length === 1 ? 'Esta prenda no tiene' : `Estas ${sinPrecio.length} prendas no tienen`} precio y ${sinPrecio.length === 1 ? 'no se va' : 'no se van'} a imprimir: ${nombrarSinPrecio(sinPrecio)}. ` +
+          'Probá «🔄 Actualizar precios»; si sigue sin aparecer, es que el producto todavía no cruza con Tienda Nube.',
+      )
+    }
+    if (!imprimibles.length) return
+    const labels = secuenciaLabels(imprimibles, opts)
     imprimirPdf(await buildEtiquetasPdf(labels, modo, ctx))
     setTimeout(() => {
       void (async () => {
@@ -394,6 +405,13 @@ function ModoPanel({
     }
     if (modo === 'sku' && !v.sku) {
       setFeedback({ ok: false, html: `✗ ${v.name || ''} no tiene SKU cargado.` })
+      inp.focus()
+      return
+    }
+    // Sin esto la etiqueta salía igual, pero sin el precio: el dibujo se cae a la de información
+    // cuando el precio es cero, y la prenda termina colgada sin número.
+    if (modo === 'loc' && !(precioDe(v) > 0)) {
+      setFeedback({ ok: false, html: `✗ ${v.name || ''} no tiene precio: la etiqueta saldría sin número. Probá «🔄 Actualizar precios».` })
       inp.focus()
       return
     }

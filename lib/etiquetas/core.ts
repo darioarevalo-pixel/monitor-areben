@@ -123,6 +123,43 @@ export function agruparCantidades(cant: Cantidades, varsById: Record<string, Var
 }
 
 /**
+ * Parte los grupos en los que se pueden imprimir y los que **no tienen precio**.
+ *
+ * 🔴 **Existe porque la degradación era SILENCIOSA.** El dibujo de la etiqueta de precio decide con
+ * `precio > 0`: con precio en cero se cae a la rama de la etiqueta de información y sale una etiqueta
+ * **sin precio**, bien impresa, sin un solo aviso. Quien la cuelga no tiene cómo notarlo —la etiqueta
+ * existe y se ve bien— y la prenda queda en la percha sin precio.
+ *
+ * 🔑 **Sólo parte el modo `loc`.** En `promo` el escaneo ya frena antes (sin promo no hay antes/ahora
+ * que mostrar) y `dep` y `sku` no llevan precio: ahí un cero no es una falta.
+ */
+export function partirPorPrecio(
+  grupos: Grupo[],
+  modo: ModoEtiqueta,
+  precioDe: (v: VarianteEti) => number,
+): { imprimibles: Grupo[]; sinPrecio: Grupo[] } {
+  if (modo !== 'loc') return { imprimibles: grupos, sinPrecio: [] }
+  const imprimibles: Grupo[] = []
+  const sinPrecio: Grupo[] = []
+  for (const g of grupos) ((precioDe(g.v) || 0) > 0 ? imprimibles : sinPrecio).push(g)
+  return { imprimibles, sinPrecio }
+}
+
+/**
+ * Cómo nombrar las prendas que no se pudieron etiquetar.
+ *
+ * 🔑 **Se NOMBRAN, no se cuentan.** «3 de 40 no salieron» obliga a revisar las 40 a mano para
+ * encontrar cuáles. Se corta en diez y se dice cuántas quedaron: una lista de cuarenta nombres en un
+ * cartel no se lee tampoco.
+ */
+export function nombrarSinPrecio(sinPrecio: Grupo[], tope = 10): string {
+  const nombres = sinPrecio.map((g) => [g.v.name || '—', g.v.size].filter(Boolean).join(' · '))
+  const visibles = nombres.slice(0, tope)
+  const resto = nombres.length - visibles.length
+  return visibles.join(', ') + (resto > 0 ? ` y ${resto} más` : '')
+}
+
+/**
  * La secuencia de labels a imprimir: cada grupo expande sus copias; `sep` intercala
  * un separador en blanco (null) entre variantes (depósito); `conFP` intercala la
  * etiqueta de formas de pago después de cada copia (local). Port de la construcción
