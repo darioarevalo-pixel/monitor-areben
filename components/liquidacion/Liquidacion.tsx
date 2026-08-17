@@ -27,17 +27,19 @@
  *     costo cero**: con costo cero cualquier precio parece tener 100% de margen. En julio de 2026,
  *     428 productos de BDI quedaron costando cero en silencio. La grilla lo marca en la fila.
  *
- * ▶️ **Tandas 1, 2 y 4 de 4.** El cajón (crear la campaña, mandarle productos, moverles el estado),
- * el modal que le pone el precio a cada uno con el simulador al lado (`DefinirPrecio.tsx`, ←/→ para
- * pasar al siguiente sin cerrar) y la pestaña **Resultado** (`Resultado.tsx`).
+ * ▶️ **Las cuatro tandas están.** El cajón (crear la campaña, mandarle productos, moverles el
+ * estado), el modal que le pone el precio a cada uno con el simulador al lado (`DefinirPrecio.tsx`,
+ * ←/→ para pasar al siguiente sin cerrar), **escribir los precios en Gestión Nube** y la pestaña
+ * **Resultado** (`Resultado.tsx`).
  *
- * 🔴 **La tanda 3 —escribir los precios en Gestión Nube— está trabada, y no por donde se creía.**
- * No es que falte saber el nombre del campo del promocional: el token del Monitor **no tiene permiso
- * para escribir productos**. `PATCH /api/v1/productos/{id}` contesta 403 «Invalid ability provided»
- * (probado contra un producto real el 5-ago-2026), y el mismo token lee inventario y escribe
- * observaciones sin problema. Hasta que Gestión Nube habilite esa ability, los precios se cargan a
- * mano — y de ahí sale la razón de ser del Resultado: contrastar lo decidido contra lo cobrado es el
- * único control posible sobre una carga manual de cuarenta productos.
+ * ⚠️ **Este docblock decía que la tanda 3 estaba trabada porque el token no puede escribir
+ * productos. Dejó de ser cierto el 13-ago-2026**, cuando Gestión Nube habilitó la ability: el
+ * aplicador escribe el precio promocional y lo verifica contra lo que devuelve el PATCH. El
+ * Resultado sigue valiendo igual —lo aplicado puede fallar, y el precio de LISTA se sigue cargando a
+ * mano en GN— pero ya no es el único control posible.
+ *
+ * 🔴 **Y de que el Monitor escriba precios sale el aviso de la portada**: una oferta escrita en la
+ * tienda no vence sola, y la campaña que la dejó puesta ya está cerrada. Ver `AvisoColgadas`.
  */
 
 import { useRouter } from 'next/navigation'
@@ -47,7 +49,8 @@ import { puedeVer } from '@/lib/permisos'
 import {
   avisos, confirmarItem, contar, nuevoIdLiquidacion, pidsPorAplicar, reprecificar, resumenCampania,
   TOPE_APLICAR, TOPE_MASIVO,
-  type EstadoCampania, type EstadoItem, type Liquidacion as Campania, type LiquidacionItem,
+  type Colgadas, type EstadoCampania, type EstadoItem, type Liquidacion as Campania,
+  type LiquidacionItem, type MotivoColgada,
 } from '@/lib/liquidacion'
 import {
   aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, decidirMasivo, estadoItem,
@@ -109,6 +112,8 @@ export function Liquidacion() {
   const toast = useToast()
 
   const [campanias, setCampanias] = useState<Campania[] | null>(null)
+  const [colgadas, setColgadas] = useState<Colgadas | null>(null)
+  const [sacando, setSacando] = useState(false)
   const [puede, setPuede] = useState<Permisos>({ aplicar: false, admin: false })
   const [error, setError] = useState<string | null>(null)
   const [abierta, setAbierta] = useFiltroUrl<string>('liq', '')
@@ -119,6 +124,7 @@ export function Liquidacion() {
     try {
       const d = await leerCampanias(marca)
       setCampanias(d.campanias)
+      setColgadas(d.colgadas)
       setPuede(d.puede)
     } catch (e) {
       setCampanias([])
@@ -167,6 +173,53 @@ export function Liquidacion() {
     }
   }
 
+  /**
+   * Sacarles la oferta a las que quedaron colgadas, desde la portada.
+   *
+   * 🔑 **Reusa la misma acción que el botón de la campaña** (`aplicar` con `modo:'sacar'`), que es la
+   * única que le escribe precios a Gestión Nube y ya tiene su permiso, su verificación del PATCH y su
+   * renglón en la bitácora. Acá no hay un segundo camino de escritura: hay otro que llama al mismo.
+   *
+   * ⚠️ **Van a precio de LISTA.** Devolverle a cada uno la oferta que tenía antes de su campaña pide
+   * la foto congelada, que en la portada no está bajada — y bajar los ítems de todas las campañas
+   * para dibujar un aviso sería pagar el payload entero. El que necesite esa salida la tiene adentro
+   * de la campaña, con «Volver a la oferta que tenían»; el cartel lo dice.
+   */
+  async function sacarColgadas() {
+    const objetivo = (colgadas?.colgadas || []).filter((c) => c.seSacaDesdeAca)
+    if (!objetivo.length) return
+    const ok = await confirmar({
+      titulo: 'Sacarles la oferta',
+      mensaje: `${objetivo.length} ${objetivo.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista en Gestión Nube, y de ahí a la tienda. Si alguno ya estaba en oferta antes de su campaña, esto le sube el precio por encima de donde estaba: para devolverle ESA oferta hay que hacerlo desde la campaña, con «Volver a la oferta que tenían».`,
+      ok: 'Dejar a precio de lista',
+      tono: 'danger',
+    })
+    if (!ok) return
+
+    setSacando(true)
+    const malos: string[] = []
+    try {
+      // Una llamada por campaña: `aplicar` valida que el producto sea un ítem de la campaña que se le
+      // pasa. Y de a `TOPE_APLICAR`, que es el tope que hace cumplir el handler.
+      const porCampania = new Map<string, string[]>()
+      for (const c of objetivo) porCampania.set(c.liqId, [...(porCampania.get(c.liqId) || []), c.pid])
+      for (const [liqId, pids] of porCampania) {
+        for (let i = 0; i < pids.length; i += TOPE_APLICAR) {
+          const res = await aplicarPrecios(marca, liqId, pids.slice(i, i + TOPE_APLICAR), 'sacar', 'lista')
+          for (const r of res) if (!r.ok) malos.push(`${r.pid}: ${r.error || 'no se pudo'}`)
+        }
+      }
+      await cargar()
+      if (malos.length) toast.error(`Quedaron ${malos.length} sin sacar. ${malos[0]}`)
+      else toast.ok('Listo: las ofertas quedaron sacadas.')
+    } catch (e) {
+      await cargar()
+      toast.error(e instanceof Error ? e.message : 'No se pudieron sacar las ofertas.')
+    } finally {
+      setSacando(false)
+    }
+  }
+
   async function borrar(c: Campania) {
     const ok = await confirmar({
       titulo: 'Borrar la campaña',
@@ -210,12 +263,27 @@ export function Liquidacion() {
           onCambio={() => void cargar()}
         />
       ) : (
-        <ListaCampanias
-          campanias={campanias}
-          onAbrir={(c) => setAbierta(c.id)}
-          onNueva={() => setEditando('nueva')}
-          onBorrar={borrar}
-        />
+        <>
+          {/*
+            🔑 **El aviso va acá, arriba de la lista, y no adentro de la campaña.** La campaña que
+            dejó ese precio puesto está cerrada o vencida, y a una campaña terminada no vuelve a
+            entrar nadie: el aviso ahí no lo ve nunca. Liquidación es la pantalla que se abre para
+            armar el sale siguiente, así que es donde el que arma se entera.
+          */}
+          <AvisoColgadas
+            colgadas={colgadas}
+            puedeAplicar={puede.aplicar}
+            sacando={sacando}
+            onSacar={() => void sacarColgadas()}
+            onAbrirCampania={(id) => setAbierta(id)}
+          />
+          <ListaCampanias
+            campanias={campanias}
+            onAbrir={(c) => setAbierta(c.id)}
+            onNueva={() => setEditando('nueva')}
+            onBorrar={borrar}
+          />
+        </>
       )}
 
       {editando && (
@@ -227,6 +295,124 @@ export function Liquidacion() {
         />
       )}
     </>
+  )
+}
+
+// ── El aviso de las ofertas colgadas ──────────────────────────────────────────────────────────
+
+const MOTIVO_COLGADA: Record<MotivoColgada, { label: string; tono: Tone; ayuda: string }> = {
+  'fuera-de-alcance': {
+    label: 'Fuera de alcance',
+    tono: 'danger',
+    ayuda: 'El producto ya no está como aplicado en ninguna campaña (se lo quitó, o la campaña se borró). El botón «sacar» de la campaña no lo alcanza: hay que sacarle la oferta a mano en Gestión Nube.',
+  },
+  'campania-cerrada': {
+    label: 'Campaña cerrada',
+    tono: 'warning',
+    ayuda: 'La campaña que le puso este precio ya no está viva, y el precio sigue puesto en la tienda.',
+  },
+  'vigencia-vencida': {
+    label: 'Vigencia vencida',
+    tono: 'warning',
+    ayuda: 'La campaña terminó según su fecha y el precio sigue puesto en la tienda.',
+  },
+}
+
+/** Cuántas filas se muestran antes de resumir. Un sale entero sin levantar son cientos. */
+const TOPE_COLGADAS_A_LA_VISTA = 8
+
+/**
+ * Una oferta escrita en Gestión Nube no vence sola: la saca alguien. Mientras esté puesta, la tienda
+ * cobra ese precio — y el que la dejó puesta ya cerró la campaña y no vuelve a mirarla.
+ *
+ * 🔑 **Las que no tienen stock también se listan.** Es el caso que pidió Bruno: el que se agotó
+ * durante el sale y vuelve en septiembre con el precio de agosto puesto. Esconderlas sería esperar a
+ * que el problema aparezca en la caja.
+ */
+function AvisoColgadas({
+  colgadas, puedeAplicar, sacando, onSacar, onAbrirCampania,
+}: {
+  colgadas: Colgadas | null
+  puedeAplicar: boolean
+  sacando: boolean
+  onSacar: () => void
+  onAbrirCampania: (liqId: string) => void
+}) {
+  if (!colgadas || !colgadas.colgadas.length) return null
+
+  const { colgadas: filas, conStock, sinStock } = colgadas
+  const sacables = filas.filter((c) => c.seSacaDesdeAca)
+  // El botón sale sólo si entra en una llamada. Arriba del tope son decenas de llamadas contra
+  // Gestión Nube: eso ya existe adentro de la campaña, con barra de progreso y con la opción de
+  // devolverles la oferta previa. Duplicarlo acá sería una segunda máquina de escribir precios.
+  const deUnaVez = sacables.length > 0 && sacables.length <= TOPE_APLICAR
+
+  return (
+    <Notice tone={conStock > 0 ? 'danger' : 'warning'} style={{ marginBottom: space[4] }}>
+      <div style={{ lineHeight: 1.7 }}>
+        <b>
+          {filas.length === 1
+            ? 'Una oferta sigue puesta en la tienda'
+            : `${filas.length} ofertas siguen puestas en la tienda`}{' '}
+          sin campaña viva que las respalde.
+        </b>{' '}
+        {conStock > 0 && (
+          <>
+            <b>{conStock}</b> {conStock === 1 ? 'tiene' : 'tienen'} stock hoy: se{' '}
+            {conStock === 1 ? 'está vendiendo' : 'están vendiendo'} a ese precio ahora mismo.{' '}
+          </>
+        )}
+        {sinStock > 0 && (
+          <>
+            {sinStock === 1 ? 'La otra está agotada' : `Las otras ${sinStock} están agotadas`} y el
+            precio les queda puesto para el día que vuelvan con stock.
+          </>
+        )}
+      </div>
+
+      <div style={{ marginTop: space[3], display: 'grid', gap: space[2] }}>
+        {filas.slice(0, TOPE_COLGADAS_A_LA_VISTA).map((c) => {
+          const m = MOTIVO_COLGADA[c.motivo]
+          return (
+            <div key={c.pid} style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.sm }}>
+              <b style={{ fontWeight: weight.medium }}>{c.producto || c.pid}</b>
+              <span style={{ color: color.mut }}>
+                {c.sku || '—'} · a <b>{formatMoney(c.precio)}</b> ·{' '}
+                {c.stock > 0 ? `${c.stock} ${c.stock === 1 ? 'unidad' : 'unidades'}` : 'sin stock'}
+              </span>
+              <span title={m.ayuda}><StatusPill tone={m.tono} label={m.label} /></span>
+              {c.seSacaDesdeAca && (
+                <Button variant="ghost" size="sm" onClick={() => onAbrirCampania(c.liqId)}>
+                  {c.liqNombre || 'la campaña'}
+                </Button>
+              )}
+            </div>
+          )
+        })}
+        {filas.length > TOPE_COLGADAS_A_LA_VISTA && (
+          <div style={{ fontSize: font.sm, color: color.mut }}>
+            y {filas.length - TOPE_COLGADAS_A_LA_VISTA} más.
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: space[3], display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+        {puedeAplicar && deUnaVez && (
+          <Button variant="solid" tone="danger" size="sm" onClick={onSacar} loading={sacando}>
+            Sacarles la oferta ({sacables.length})
+          </Button>
+        )}
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          {sacables.length === 0
+            ? 'Ninguna se puede sacar desde el Monitor: hay que hacerlo en Gestión Nube.'
+            : deUnaVez
+              ? 'Vuelven a su precio de lista.'
+              : `Son ${sacables.length}: se sacan desde la campaña, que muestra el progreso y deja devolverles la oferta que tenían antes.`}
+          {sacables.length < filas.length && sacables.length > 0 &&
+            ` Las ${filas.length - sacables.length} «fuera de alcance» van a mano en Gestión Nube.`}
+        </span>
+      </div>
+    </Notice>
   )
 }
 

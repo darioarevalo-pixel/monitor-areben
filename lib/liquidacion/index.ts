@@ -4,6 +4,7 @@
  */
 
 export * from './bitacora'
+export * from './colgadas'
 export * from './core'
 export * from './resultado'
 export * from './tipos'

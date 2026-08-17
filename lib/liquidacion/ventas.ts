@@ -123,3 +123,37 @@ export async function leerVentasDeCampania(
   }
   return out
 }
+
+/**
+ * El stock de hoy de esos productos, y **de cuándo es**.
+ *
+ * Es la otra mitad de la conciliación de `agotadosQueNoCierran`: la foto congelada dice con cuánto
+ * entró cada producto, las ventas dicen cuánto salió, y esto dice qué queda. Va aparte de
+ * `leerVentasDeCampania` porque no tiene rango —el inventario es de ahora— y las dos se piden en
+ * paralelo.
+ *
+ * 🔑 **`leidoEn` no es la hora de esta consulta: es la del sync que llenó el espejo.** El inventario
+ * se actualiza una vez por día, así que decir «recién» sobre un número de ayer a la mañana mandaría
+ * a alguien a caminar por un dato viejo. `null` = no se pudo saber, y eso se muestra.
+ */
+export async function leerStockDeCampania(
+  marca: Marca,
+  pids: string[],
+): Promise<{ stock: Record<string, number>; leidoEn: string | null }> {
+  const quiero = [...new Set(pids.map(String))]
+  if (!quiero.length) return { stock: {}, leidoEn: null }
+
+  const r = await apiFetch('/api/datos?recurso=liquidacion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store: marca, action: 'stock-campania', pids: quiero }),
+  })
+  const d = (await r.json().catch(() => ({}))) as {
+    ok?: boolean
+    stock?: Record<string, number>
+    leidoEn?: string | null
+    error?: string
+  }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} leyendo el stock de los productos.`)
+  return { stock: d.stock || {}, leidoEn: d.leidoEn || null }
+}

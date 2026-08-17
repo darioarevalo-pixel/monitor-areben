@@ -128,6 +128,31 @@ export interface BloqueResultado {
   sinMoverse: number
 }
 
+/**
+ * Un agotado **cuya cuenta no da**: entró con N, salieron M, y el sistema dice 0 con N ≠ M.
+ *
+ * 🔑 **No acusa: señala.** Las dos explicaciones legítimas —se repuso durante la campaña, o el stock
+ * de entrada estaba mal cargado— son tan probables como la prenda traspapelada. La fila dice por
+ * cuántas unidades no cierra, y el que camina decide.
+ */
+export interface AgotadoQueNoCierra {
+  pid: string
+  nombre: string
+  sku: string | null
+  estado: EstadoItem
+  /** El stock que tenía cuando entró a la campaña, de la foto congelada. */
+  stockInicial: number
+  /** Todo lo que salió de stock desde entonces. Ver `agotadosQueNoCierran`. */
+  salieron: number
+  /**
+   * `stockInicial - salieron`, sobre un stock de hoy que es cero.
+   *
+   * **Positivo**: hay esa cantidad de prendas en algún lado y el sistema no las ve.
+   * **Negativo**: salieron más de las que había ⇒ se repuso, o el stock de entrada estaba mal.
+   */
+  diferencia: number
+}
+
 export interface ResultadoCampania {
   desde: string
   hasta: string
@@ -249,6 +274,12 @@ export function resultadoCampania(
     let otro = 0
 
     for (const l of porPid.get(it.pid) || []) {
+      // 🔴 **El rango se filtra acá y no se da por hecho.** La pantalla baja las ventas hasta HOY,
+      // no hasta el fin de la campaña, porque la conciliación de stock de `agotadosQueNoCierran`
+      // necesita todo lo que salió —si no, un producto vendido después de cerrada la campaña
+      // aparecería como prenda perdida—. El resultado de la campaña, en cambio, es del rango: sin
+      // este corte, una campaña cerrada seguiría sumando ventas de la semana siguiente.
+      if (l.fecha < rango.desde || l.fecha > rango.hasta) continue
       const canal = canalDe(l.canal)
       porCanal[canal].unidades += l.unidades
       porCanal[canal].plata += l.plata
@@ -308,4 +339,58 @@ export function resultadoCampania(
     sinCargar: liquidados.filter((r) => r.carga === 'no_puesto').length,
     aMedias: liquidados.filter((r) => r.carga === 'a_medias').length,
   }
+}
+
+/**
+ * Los agotados **cuya cuenta no da**: la caminata corta que sí se hace.
+ *
+ * Lo pidió Bruno al cerrar la campaña —*«listar los productos agotados así la gente del local
+ * verifique que realmente no haya stock»*—, pero la lista de agotados a secas no sirve: casi todos
+ * cierran solos y una caminata de catorce productos no la hace nadie. **Medido sobre el sale vivo de
+ * Zattia el 17-ago-2026: 18 agotados, y sólo 6 no cierran.** Los dos del grupo liquidado son
+ * exactamente los que hay que ir a ver: uno entró con 2, vendió 0 y el sistema dice 0 (hay dos
+ * prendas en algún lado); el otro entró con 2 y vendió 3.
+ *
+ * 🔑 **Cuenta TODO lo que saca stock, no sólo las ventas que se comparan contra el precio.** Un canje
+ * o una falla descuentan la prenda igual, y el mayorista también: mirar sólo los canales minoristas
+ * —que es lo que hace `resultadoCampania`, y ahí está bien— acusaría al local de perder prendas que
+ * salieron bien. Por eso `lineas` entra cruda y sin filtrar por canal.
+ *
+ * 🔑 **`lineas` tiene que llegar hasta HOY**, no hasta el fin de la campaña. La foto se congeló el
+ * día que el producto entró y el stock de `stockHoy` es el de este momento: cualquier venta que
+ * quede afuera del medio se lee como una prenda perdida.
+ *
+ * ⚠️ **Un producto sin fila en el inventario no se acusa.** Sin dato no se sabe si está agotado o si
+ * no cruzó con el espejo, y las dos cosas se ven igual desde acá. Medido el 17-ago-2026 sobre la
+ * campaña de Zattia: los 266 ítems tienen fila, así que hoy no esconde nada.
+ *
+ * @param stockHoy pid → unidades de hoy, sumando los dos depósitos. Sin la clave = no se sabe.
+ */
+export function agotadosQueNoCierran(
+  items: LiquidacionItem[],
+  lineas: LineaVenta[],
+  stockHoy: Record<string, number>,
+): AgotadoQueNoCierra[] {
+  const salidas = new Map<string, number>()
+  for (const l of lineas) salidas.set(l.pid, (salidas.get(l.pid) || 0) + l.unidades)
+
+  const out: AgotadoQueNoCierra[] = []
+  for (const it of items) {
+    const hoy = stockHoy[it.pid]
+    if (hoy == null || hoy > 0) continue
+    const salieron = salidas.get(it.pid) || 0
+    const diferencia = it.foto.stock - salieron
+    if (diferencia === 0) continue
+    out.push({
+      pid: it.pid,
+      nombre: it.foto.nombre,
+      sku: it.foto.sku,
+      estado: it.estado,
+      stockInicial: it.foto.stock,
+      salieron,
+      diferencia,
+    })
+  }
+  // Lo que más lejos está de cerrar, primero: es donde más unidades hay para encontrar.
+  return out.sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia))
 }

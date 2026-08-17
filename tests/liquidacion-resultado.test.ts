@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canalDe, diasDeRango, rangoDeCampania, resultadoCampania } from '@/lib/liquidacion'
+import { agotadosQueNoCierran, canalDe, diasDeRango, rangoDeCampania, resultadoCampania } from '@/lib/liquidacion'
 import type { LiquidacionItem } from '@/lib/liquidacion'
 import type { LineaVenta } from '@/lib/liquidacion/ventas'
 
@@ -281,5 +281,105 @@ describe('resultadoCampania — los descartados son el grupo de control', () => 
     expect(r.liquidados.productos).toBe(1)
     expect(r.control.productos).toBe(0)
     expect(r.items).toHaveLength(2)
+  })
+})
+
+/**
+ * La caminata corta: de los que el sistema da por agotados, cuáles no cierran.
+ *
+ * 🔑 **El test que más importa es el del mayorista y las ventas técnicas.** Dos funciones de este
+ * mismo archivo miran las mismas líneas con reglas opuestas y las dos están bien:
+ * `resultadoCampania` los excluye —salen a otro precio y hunden el promedio— y esta los cuenta
+ * —descuentan stock igual—. Copiar el filtro de canal de una a la otra es el error natural, y deja
+ * a la pantalla acusando al local de perder prendas que salieron bien.
+ */
+describe('agotadosQueNoCierran', () => {
+  const agotado = { p1: 0 }
+
+  it('el que cierra solo no aparece: entró con 2, salieron 2, el sistema dice 0', () => {
+    const items = [item({ pid: 'p1', foto: { stock: 2 } as never })]
+    expect(agotadosQueNoCierran(items, [linea({ pid: 'p1', unidades: 2 })], agotado)).toHaveLength(0)
+  })
+
+  it('el que se agotó sin vender nada dice cuántas prendas hay en algún lado', () => {
+    const items = [item({ pid: 'p1', foto: { nombre: 'BODY SOUTH', stock: 2 } as never })]
+    const [a] = agotadosQueNoCierran(items, [], agotado)
+    expect(a.nombre).toBe('BODY SOUTH')
+    expect(a.salieron).toBe(0)
+    expect(a.diferencia).toBe(2)
+  })
+
+  it('el que vendió más de lo que había da la diferencia al revés', () => {
+    const items = [item({ pid: 'p1', foto: { nombre: 'JEAN TORIN', stock: 2 } as never })]
+    const [a] = agotadosQueNoCierran(items, [linea({ pid: 'p1', unidades: 3 })], agotado)
+    expect(a.diferencia).toBe(-1)
+  })
+
+  it('🔴 cuenta el mayorista y las ventas técnicas: descuentan stock igual que una venta de local', () => {
+    const items = [item({ pid: 'p1', foto: { stock: 3 } as never })]
+    const lineas = [
+      linea({ pid: 'p1', unidades: 1, canal: 'Mi Local' }),
+      linea({ pid: 'p1', unidades: 1, canal: 'Mayorista' }),
+      linea({ pid: 'p1', unidades: 1, canal: 'Ninguno', plata: 0, precioUnitario: 0 }),
+    ]
+    expect(agotadosQueNoCierran(items, lineas, agotado)).toHaveLength(0)
+  })
+
+  it('el que todavía tiene stock no es una caminata, por mal que cierre la cuenta', () => {
+    const items = [item({ pid: 'p1', foto: { stock: 9 } as never })]
+    expect(agotadosQueNoCierran(items, [], { p1: 4 })).toHaveLength(0)
+  })
+
+  it('sin fila en el inventario no se acusa: no se sabe si está agotado o si no cruzó', () => {
+    const items = [item({ pid: 'p1', foto: { stock: 2 } as never })]
+    expect(agotadosQueNoCierran(items, [], {})).toHaveLength(0)
+  })
+
+  it('un descartado también se camina: la pregunta es física, no del precio que se le puso', () => {
+    const items = [item({ pid: 'p1', estado: 'descartado', foto: { stock: 1 } as never })]
+    expect(agotadosQueNoCierran(items, [], agotado)).toHaveLength(1)
+  })
+
+  it('primero el que más lejos está de cerrar', () => {
+    const items = [
+      item({ pid: 'p1', foto: { stock: 1 } as never }),
+      item({ pid: 'p2', foto: { stock: 5 } as never }),
+      item({ pid: 'p3', foto: { stock: 2 } as never }),
+    ]
+    const r = agotadosQueNoCierran(items, [], { p1: 0, p2: 0, p3: 0 })
+    expect(r.map((a) => a.pid)).toEqual(['p2', 'p3', 'p1'])
+  })
+})
+
+/**
+ * El rango se filtra acá adentro y no se da por hecho: la pantalla baja las ventas **hasta hoy**
+ * para poder conciliar el stock, así que una campaña cerrada recibe líneas posteriores a su fin.
+ */
+describe('resultadoCampania · el corte del rango', () => {
+  it('una venta posterior al fin de la campaña no entra en sus números', () => {
+    const r = resultadoCampania(
+      [item({ pid: 'p1' })],
+      [linea({ pid: 'p1', unidades: 3, fecha: '2026-08-14' })],
+      RANGO,
+    )
+    expect(r.liquidados.unidades).toBe(0)
+  })
+
+  it('ni una anterior al inicio', () => {
+    const r = resultadoCampania(
+      [item({ pid: 'p1' })],
+      [linea({ pid: 'p1', unidades: 3, fecha: '2026-07-28' })],
+      RANGO,
+    )
+    expect(r.liquidados.unidades).toBe(0)
+  })
+
+  it('la del rango sí', () => {
+    const r = resultadoCampania(
+      [item({ pid: 'p1' })],
+      [linea({ pid: 'p1', unidades: 3, fecha: '2026-08-10' })],
+      RANGO,
+    )
+    expect(r.liquidados.unidades).toBe(3)
   })
 })

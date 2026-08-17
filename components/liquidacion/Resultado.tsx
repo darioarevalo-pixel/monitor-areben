@@ -33,10 +33,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  rangoDeCampania, resultadoCampania,
-  type EstadoCarga, type Liquidacion as Campania, type LiquidacionItem, type ResultadoItem,
+  agotadosQueNoCierran, rangoDeCampania, resultadoCampania,
+  type AgotadoQueNoCierra, type EstadoCarga, type Liquidacion as Campania, type LiquidacionItem,
+  type ResultadoItem,
 } from '@/lib/liquidacion'
-import { leerVentasDeCampania } from '@/lib/liquidacion/ventas'
+import { leerStockDeCampania, leerVentasDeCampania } from '@/lib/liquidacion/ventas'
 import { sincronizarVentas } from '@/lib/liquidacion/persistencia'
 import {
   BuscarInput, Button, Card, EmptyState, Esqueleto, FilterBar, KpiCard, Notice, Select, StatusPill,
@@ -85,6 +86,13 @@ function levanteTxt(n: number | null): string {
   return n == null ? '—' : `${n >= 10 ? Math.round(n) : n.toFixed(1)}×`
 }
 
+/** `16-ago 06:24`, en hora local. Para un ISO con hora, donde `fechaCorta` no alcanza. */
+function fechaHoraCorta(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${d.getDate()}-${MESES[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 /** `hace 3 min` · `hace 2 h`. Por debajo del minuto no se cuentan segundos: dice `recién`. */
 function haceTxt(iso: string): string {
   const min = Math.floor((Date.now() - Date.parse(iso)) / 60000)
@@ -107,6 +115,7 @@ export function Resultado({
   const { marca } = useSesion()
   const toast = useToast()
   const [lineas, setLineas] = useState<Awaited<ReturnType<typeof leerVentasDeCampania>> | null>(null)
+  const [inventario, setInventario] = useState<{ stock: Record<string, number>; leidoEn: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<string>('')
@@ -117,9 +126,13 @@ export function Resultado({
 
   /**
    * El rango se congela al montar: `hoyLocal()` adentro del `useMemo` de abajo lo recalcularía en
-   * cada render y el resultado se movería mientras se lo mira.
+   * cada render y el resultado se movería mientras se lo mira. `hoy` sale del mismo `useState` para
+   * que no puedan discrepar: son el mismo día leído una sola vez.
    */
-  const [rango] = useState(() => rangoDeCampania(campania, hoyLocal()))
+  const [{ rango, hoy }] = useState(() => {
+    const h = hoyLocal()
+    return { rango: rangoDeCampania(campania, h), hoy: h }
+  })
 
   const pids = useMemo(() => items.map((i) => i.pid), [items])
 
@@ -127,12 +140,21 @@ export function Resultado({
     if (!rango) return
     setError(null)
     try {
-      setLineas(await leerVentasDeCampania(marca, pids, rango.desde, rango.hasta))
+      // 🔑 **Las ventas se bajan hasta HOY, no hasta el fin de la campaña.** La conciliación de
+      // stock de abajo necesita todo lo que salió desde que se congeló la foto: con una campaña ya
+      // cerrada, lo vendido después quedaría afuera y el producto aparecería como prenda perdida.
+      // El resultado de la campaña sigue siendo del rango — el corte lo hace `resultadoCampania`.
+      const [ls, inv] = await Promise.all([
+        leerVentasDeCampania(marca, pids, rango.desde, hoy),
+        leerStockDeCampania(marca, pids),
+      ])
+      setLineas(ls)
+      setInventario(inv)
     } catch (e) {
       setLineas([])
       setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas del período.')
     }
-  }, [marca, pids, rango])
+  }, [marca, pids, rango, hoy])
 
   // El lint prohíbe setState sincrónico en un efecto: la carga va adentro de un async suelto.
   useEffect(() => {
@@ -168,6 +190,23 @@ export function Resultado({
     () => (rango && lineas ? resultadoCampania(items, lineas, rango) : null),
     [items, lineas, rango],
   )
+
+  /**
+   * La caminata corta: de los que el sistema da por agotados, los que no cierran.
+   *
+   * El total de agotados va al lado del de los que no cierran a propósito: «2 de 18» es lo que hace
+   * creíble a la lista. Sin ese contraste, dos productos sueltos se leen como dos errores del
+   * sistema y no como los dos únicos que hay que ir a ver.
+   */
+  const conciliacion = useMemo(() => {
+    if (!inventario || !lineas) return null
+    return {
+      noCierran: agotadosQueNoCierran(items, lineas, inventario.stock),
+      // Mismo criterio que la función: sin fila en el inventario no se sabe, y no se cuenta.
+      agotados: items.filter((i) => inventario.stock[i.pid] === 0).length,
+      leidoEn: inventario.leidoEn,
+    }
+  }, [items, lineas, inventario])
 
   const visibles = useMemo(() => {
     if (!res) return []
@@ -301,6 +340,52 @@ export function Resultado({
             </Card>
           )}
 
+          {/*
+            🔑 **La caminata que sí se hace.** Bruno pidió listar los agotados al cerrar la campaña
+            «así la gente del local verifica que realmente no haya stock», y la lista de agotados a
+            secas no sirve: la mayoría cierra sola —entró con N, salieron N, el sistema dice 0— y una
+            caminata de dieciocho productos no la hace nadie. Acá quedan los que no cierran.
+          */}
+          {conciliacion && conciliacion.noCierran.length > 0 && (
+            <Card style={{ marginBottom: space[4] }}>
+              <div style={{ fontSize: font.sm, lineHeight: 1.7, marginBottom: space[3] }}>
+                <b>
+                  {conciliacion.noCierran.length === 1
+                    ? 'Un agotado cuya cuenta no da'
+                    : `${conciliacion.noCierran.length} agotados cuya cuenta no da`}
+                  , de {conciliacion.agotados} que el sistema da por agotados.
+                </b>{' '}
+                Los otros cierran solos: entraron con N, salieron N y quedaron en cero. Estos no, y
+                por eso vale caminarlos.{' '}
+                <span style={{ color: color.mut }}>
+                  No acusa a nadie: que se haya repuesto durante la campaña, o que el stock de
+                  entrada estuviera mal cargado, son tan probables como la prenda traspapelada.
+                </span>
+              </div>
+              <TableWrap>
+                <THead>
+                  <Tr>
+                    <Th>Producto</Th>
+                    <Th align="right">Entró con</Th>
+                    <Th align="right">Salieron</Th>
+                    <Th align="right">No cierra por</Th>
+                  </Tr>
+                </THead>
+                <TBody>
+                  {conciliacion.noCierran.map((a) => <FilaNoCierra key={a.pid} item={a} />)}
+                </TBody>
+              </TableWrap>
+              <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[3], lineHeight: 1.6 }}>
+                Salieron cuenta <b>todo lo que descuenta stock</b>: ventas del local y online,
+                mayorista, canjes y fallas. El stock de hoy sale del espejo, que se actualiza una vez
+                por día:{' '}
+                {conciliacion.leidoEn
+                  ? <>leído <b>{fechaHoraCorta(conciliacion.leidoEn)}</b> ({haceTxt(conciliacion.leidoEn)}).</>
+                  : <b>no se pudo saber de cuándo es.</b>}
+              </div>
+            </Card>
+          )}
+
           <FilterBar>
             <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto o SKU…" />
             <Select value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ width: 210 }} aria-label="Cómo se vendió">
@@ -353,6 +438,38 @@ export function Resultado({
         </>
       )}
     </>
+  )
+}
+
+/**
+ * Una fila de la caminata. El signo de la diferencia se dice con palabras y no con un `-1`: las dos
+ * puntas quieren decir cosas distintas y ninguna se lee de un número pelado.
+ */
+function FilaNoCierra({ item }: { item: AgotadoQueNoCierra }) {
+  const faltan = item.diferencia > 0
+  return (
+    <Tr>
+      <Td>
+        <div style={{ fontWeight: weight.medium }}>{item.nombre}</div>
+        <div style={{ fontSize: font.xs, color: color.mut }}>
+          {item.sku || '—'}
+          {item.estado === 'descartado' && ' · descartado'}
+        </div>
+      </Td>
+      <Td align="right">{item.stockInicial}</Td>
+      <Td align="right">{item.salieron}</Td>
+      <Td align="right">
+        <StatusPill
+          tone={faltan ? 'warning' : 'neutral'}
+          label={faltan
+            ? `faltan ${item.diferencia}`
+            : `${-item.diferencia} de más`}
+        />
+        <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>
+          {faltan ? 'el sistema no las ve' : 'se repuso, o el stock de entrada estaba mal'}
+        </div>
+      </Td>
+    </Tr>
   )
 }
 

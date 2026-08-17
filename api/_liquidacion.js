@@ -46,6 +46,8 @@ import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/ve
 // La cola de reetiquetado: la regla vive afuera para poder testearla y mutarla sin levantar el
 // handler. Ver `lib/etiquetas/cola.core.js`.
 import { armarCola } from '../lib/etiquetas/cola.core.js';
+// El aviso de la portada: ofertas escritas en la tienda sin campaña viva que las justifique.
+import { ofertasColgadas } from '../lib/liquidacion/colgadas.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -289,6 +291,67 @@ async function leerTodo(supabase, tabla, armar) {
     if (error) throw new Error(error.message);
     out.push(...(data || []));
     if ((data || []).length < PAGINA) return out;
+  }
+}
+
+/**
+ * Las ofertas que siguen escritas en Gestión Nube sin campaña viva que las justifique.
+ *
+ * La regla está afuera, en `lib/liquidacion/colgadas.core.js`, con el porqué de los tres motivos.
+ * Acá va lo que hay que ir a buscar para poder aplicarla.
+ *
+ * 🔑 **El inventario se pide sólo por los pid que tienen una oferta escrita**, que son los de la
+ * bitácora y no el catálogo: son un par de cientos, y la tabla entera son miles de filas por marca.
+ *
+ * 🔑 **La fecha es la de Argentina.** Vercel corre en UTC: con `toISOString()`, a las 21 de Buenos
+ * Aires la vigencia de una campaña que termina hoy ya figuraría vencida.
+ *
+ * Que no se pueda leer esto no rompe la pantalla de campañas: se devuelve `null` y el aviso no sale.
+ * Es un aviso arriba de la lista, no la lista.
+ */
+async function leerColgadas(supabase, store, campanias, items) {
+  try {
+    const filas = await leerTodo(supabase, 'liquidacion_bitacora', (q) =>
+      q.select('pid, producto, sku, liq_id, liq_nombre, precio_a, cuando')
+        .eq('store', store).order('cuando', { ascending: false }));
+
+    // Uno por producto: el más nuevo. Lo que la tienda tiene puesto hoy es lo que dejó el último
+    // movimiento, sin importar de qué campaña vino.
+    const ultimo = new Map();
+    for (const r of filas) if (!ultimo.has(String(r.pid))) ultimo.set(String(r.pid), r);
+
+    const eventos = [...ultimo.values()]
+      .filter((r) => r.precio_a != null)
+      .map((r) => ({
+        pid: String(r.pid),
+        producto: String(r.producto || ''),
+        sku: r.sku == null ? null : String(r.sku),
+        liqId: String(r.liq_id),
+        liqNombre: String(r.liq_nombre || ''),
+        precioA: Number(r.precio_a),
+        cuando: typeof r.cuando === 'string' ? r.cuando : new Date(r.cuando).toISOString(),
+      }));
+    if (!eventos.length) return { colgadas: [], conStock: 0, sinStock: 0 };
+
+    const porId = {};
+    for (const r of campanias) {
+      porId[r.id] = { nombre: r.nombre, estado: r.estado, hasta: (r.datos || {}).hasta || null };
+    }
+    const aplicadosHoy = {};
+    for (const it of items) if (it.estado === 'aplicado') aplicadosHoy[String(it.pid)] = true;
+
+    const pids = eventos.map((e) => Number(e.pid)).filter((n) => Number.isInteger(n) && n > 0);
+    const inv = await leerTodo(supabase, 'inventario', (q) =>
+      q.select('product_id, available_quantity').in('product_id', pids).order('product_id'));
+    const stock = {};
+    for (const r of inv) {
+      const k = String(r.product_id);
+      stock[k] = (stock[k] || 0) + Number(r.available_quantity || 0);
+    }
+
+    return ofertasColgadas(eventos, porId, aplicadosHoy, stock, fechaAR(Date.now()));
+  } catch {
+    return null;
   }
 }
 
@@ -584,7 +647,7 @@ export default async function handler(req, res) {
       const [c, i] = await Promise.all([
         supabase.from('liquidaciones').select('id, nombre, estado, datos')
           .eq('store', store).order('created_at', { ascending: false }),
-        supabase.from('liquidacion_items').select('liq_id, estado').eq('store', store),
+        supabase.from('liquidacion_items').select('liq_id, pid, estado').eq('store', store),
       ]);
       if (c.error) throw new Error(c.error.message);
       if (i.error) throw new Error(i.error.message);
@@ -603,6 +666,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         campanias: (c.data || []).map((r) => aCampania(r, conteos[r.id])),
+        colgadas: await leerColgadas(supabase, store, c.data || [], i.data || []),
         puede,
       });
     }
@@ -689,6 +753,44 @@ export default async function handler(req, res) {
           .in('product_id', pids).gte('sale_id', min).lte('sale_id', max).order('sale_id'));
 
       return res.status(200).json({ ok: true, ventas, detalles });
+    }
+
+    // ── El stock de HOY de los productos de la campaña. ────────────────────────────────────────
+    //
+    // Es lo que le falta a la foto congelada para poder preguntar *«el sistema dice que este
+    // producto está agotado: ¿la cuenta cierra?»*. Va como acción aparte y no pegada a
+    // `ventas-campania` porque es otra pregunta: aquélla tiene rango de fechas y ésta no —el
+    // inventario es de ahora—. La pantalla las pide en paralelo.
+    //
+    // El stock se suma sobre los dos depósitos (`Local` y `Deposito`): la pregunta es si la prenda
+    // está en algún lado, no en cuál.
+    //
+    // 🔑 **`leidoEn` es del ESPEJO, no del request.** `inventario` no tiene fecha propia y el sync
+    // corre una vez por día: contestar la hora del servidor diría «recién» sobre un número de ayer a
+    // la mañana, y la pantalla manda a alguien a caminar por eso. Sale de `sync_state`, que es lo
+    // que escribe el sync recién cuando termina. Si no está, va `null` y la pantalla lo dice.
+    //
+    // 🔴 **Va ARRIBA del `const id` de abajo**, por lo mismo que `ventas-campania`: pregunta por unos
+    // productos, no por una campaña. Debajo del guard contestaría «falta el id» a un request válido.
+    if (b.action === 'stock-campania') {
+      const pids = [...new Set((Array.isArray(b.pids) ? b.pids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+      if (!pids.length) return res.status(200).json({ ok: true, stock: {}, leidoEn: null });
+
+      const [inv, sync] = await Promise.all([
+        leerTodo(supabase, 'inventario', (q) =>
+          q.select('product_id, available_quantity').in('product_id', pids).order('product_id')),
+        supabase.from('sync_state').select('updated_at').eq('clave', 'diario').maybeSingle(),
+      ]);
+
+      const stock = {};
+      for (const r of inv) {
+        const k = String(r.product_id);
+        stock[k] = (stock[k] || 0) + Number(r.available_quantity || 0);
+      }
+      // Que no se pueda leer de cuándo son los números no invalida los números: se contesta igual,
+      // sin fecha, y la pantalla dice que no la sabe.
+      const leidoEn = (!sync.error && sync.data && sync.data.updated_at) || null;
+      return res.status(200).json({ ok: true, stock, leidoEn });
     }
 
     // A partir de acá todo pide id de campaña. Se valida una sola vez.

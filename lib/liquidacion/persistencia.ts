@@ -11,6 +11,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
 import type { EventoBitacora } from './bitacora'
+import type { Colgadas } from './colgadas'
 import type { EstadoCampania, EstadoItem, Liquidacion, LiquidacionItem } from './tipos'
 
 const API = '/api/datos?recurso=liquidacion'
@@ -32,13 +33,25 @@ async function postear(body: Record<string, unknown>, siFalla: string) {
   return d
 }
 
-/** Las campañas de la marca, la más nueva arriba, con sus conteos. Sin los ítems. */
-export async function leerCampanias(store: Marca): Promise<{ campanias: Liquidacion[]; puede: Permisos }> {
+/**
+ * Las campañas de la marca, la más nueva arriba, con sus conteos. Sin los ítems.
+ *
+ * `colgadas` viaja en la misma respuesta y no en una consulta aparte: es un aviso de la portada, se
+ * lee siempre que se lee la lista, y pedirlo por separado sería un segundo viaje para dibujar la
+ * misma pantalla. 🔑 **`null` quiere decir «no se pudo saber», y no «no hay»** — el handler lo
+ * devuelve así si la consulta falla, para que un aviso roto no se lleve puesta la lista de campañas.
+ */
+export async function leerCampanias(store: Marca): Promise<{
+  campanias: Liquidacion[]
+  colgadas: Colgadas | null
+  puede: Permisos
+}> {
   const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las campañas de liquidación.')
   return {
     campanias: (d.campanias || []) as Liquidacion[],
+    colgadas: (d.colgadas || null) as Colgadas | null,
     puede: d.puede || { aplicar: false, admin: false },
   }
 }
