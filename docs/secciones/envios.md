@@ -11,7 +11,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` |
-| **El mensaje a la clienta** | `lib/envios/mensajes.ts` — puro y con tests, molde de `lib/canjes/mensajes.ts`. Lo abre el botón de WhatsApp de la fila (`Direccion`), en la bandeja **y** en la hoja del día |
+| **El mensaje a la clienta** | `lib/envios/mensajes.ts` — puro y con tests, molde de `lib/canjes/mensajes.ts`. Lo abre el botón de WhatsApp de la fila (`Direccion`), **sólo en la bandeja «Sin fecha»** |
 | **Los dos papeles** | `lib/envios/ticket.ts` (el que va pegado al paquete) · `lib/envios/recibo.ts` (el del movimiento de la cuenta), los dos sobre **`lib/rollo80.ts`** — la geometría del rollo, el medidor y el dibujo de textos y reglas. ⛔ **Las medidas del rollo no se copian**: `lib/sesionfotos/ticket.ts` es un tercer papel de 80 mm que **no está migrado a propósito** (su interlineado es 0.42 contra 0.38) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
 | **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |

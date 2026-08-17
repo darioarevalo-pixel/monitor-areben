@@ -1,0 +1,31 @@
+-- La HORA en que se entregó cada envío.
+--
+-- # Para qué
+--
+-- Lo pidió Bruno el 17-ago-2026, junto con el detalle por día de la cuenta del cadete: hasta ahora el
+-- sistema sabía **qué** se entregó y **qué día**, pero no a qué hora. Es el dato que contesta las
+-- preguntas que hoy se contestan de memoria — «¿a qué hora pasó por lo de Valentina?», «¿el turno
+-- tarde termina a las 19 o a las 21?», «esta clienta dice que nunca llegaron» — y ninguna de ellas se
+-- puede reconstruir después.
+--
+-- # Por qué una columna y no `updated_at`
+--
+-- `updated_at` se mueve con **cualquier** escritura: corregir el precio de un envío entregado la
+-- semana pasada le cambiaría la hora de entrega. Sería un dato que parece bueno y envejece mal, que
+-- es la peor clase. La hora de entrega es un hecho de la calle y tiene que quedar quieta.
+--
+-- # Las filas viejas quedan en `null`, a propósito
+--
+-- Los envíos entregados antes de hoy no tienen hora y **no se inventa una**: rellenarlas con
+-- `updated_at` daría una hora plausible y falsa para siempre. La pantalla muestra «sin hora», que es
+-- la verdad. Es el mismo criterio que `cobrado: null` — "nadie dijo nada" no es un dato, es su
+-- ausencia, y hay que poder distinguirlos.
+--
+-- 🔴 **Se escribe desde los DOS lados**: `action:'estado'` en `api/_envios.js` (la pantalla interna) y
+-- el parche de `entregado` del portal del cadete. Y **se borra al volver atrás**: si alguien corrige
+-- un `entregado` a `no_entregado`, la hora de esa entrega deja de ser cierta y quedarse ahí sería un
+-- registro de una entrega que no pasó.
+--
+-- Aditiva: va ANTES de deployar. Correr con `node scripts/apply-envios.mjs --aplicar`. Idempotente.
+
+alter table envios_reparto add column if not exists entregado_en timestamptz;

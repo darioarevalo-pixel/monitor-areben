@@ -64,6 +64,7 @@ const archivos = [
   'sql/migrate-envios-portal.sql',
   'sql/migrate-envios-movimientos.sql',
   'sql/migrate-envios-zonas.sql',
+  'sql/migrate-envios-hora.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 if (cerrarTandaG) archivos.push('sql/migrate-envios-movimientos-cierre.sql')
