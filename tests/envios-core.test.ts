@@ -1542,6 +1542,24 @@ describe('🔴 el pago del envío: son tres estados, no dos', () => {
     expect(p.acciones.some((a) => a.campo === 'bonificado')).toBe(false)
   })
 
+  it('🔴 en la HOJA DEL DÍA no se ofrece bonificar: se decide antes de que el paquete salga', () => {
+    // Lo pidió Bruno viéndolo: la columna «Cobra» de la hoja ya tiene tres cosas apiladas y un botón
+    // más alarga cada fila de la única pantalla que se lee de un vistazo mientras se carga la moto.
+    // El mutante es ignorar el parámetro —o pasarlo al revés—: vuelve el botón donde molesta, y peor,
+    // desaparece de la bandeja, que es donde la decisión se toma.
+    const enLaHoja = pagoDelEnvio(con({}), false)
+    expect(enLaHoja.acciones).toEqual([{ texto: 'Marcar como pago', campo: 'pagado', siguiente: true }])
+    expect(pagoDelEnvio(con({}), true).acciones.some((a) => a.campo === 'bonificado')).toBe(true)
+  })
+
+  it('🔴 pero SACAR la bonificación se ofrece igual en la hoja', () => {
+    // 🔴 Es la salida de un estado que ya está escrito, no la entrada. Sin ella, una fila bonificada
+    // por error en la bandeja y agendada después no se puede corregir desde ningún lado: el envío
+    // queda figurando regalado para siempre y el cadete cobra un reparto que la caja no registra.
+    const p = pagoDelEnvio(con({ envio_bonificado: true }), false)
+    expect(p.acciones.map((a) => a.texto)).toContain('Sacar la bonificación')
+  })
+
   it('🔴 ningún estado se queda sin salida', () => {
     // El mutante: la lista vacía en alguno de los tres. Se ve como una fila que no se puede
     // corregir, y el estado equivocado queda escrito para siempre.

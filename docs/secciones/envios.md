@@ -41,8 +41,18 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   acciones con su `campo` y su `siguiente`, así que la pantalla no elige a quién le escribe — el
   mutante caro es un botón que dice «Bonificar» y marca el envío como pago, que son dos verdades
   opuestas sobre la misma plata y no falla nada. ⛔ **Desde Pago no se ofrece bonificar** (también lo
-  decidió Bruno): habría que devolver plata que ya entró, así que se pasa por Pendiente. Y como el
-  componente es el compartido, ahora se bonifica **también desde la hoja del día**.
+  decidió Bruno): habría que devolver plata que ya entró, así que se pasa por Pendiente.
+  🔴 **Y va SÓLO en la bandeja** (lo corrigió Bruno el mismo día, viéndolo): bonificar se decide antes
+  de que el paquete salga, y en la hoja del día la columna «Cobra» ya tiene tres cosas apiladas —un
+  botón más **alarga cada fila** de la única pantalla que se lee de un vistazo cargando la moto—. Lo
+  dice `pagoDelEnvio(e, conBonificar)`, **no un `filter` en el JSX**: lo que se ofrece en cada lugar es
+  una regla. ⚠️ **Sacar** la bonificación sí se ofrece en las dos: es la salida de un estado ya
+  escrito, y sin ella una fila bonificada por error y agendada después no se corrige desde ningún lado.
+  🔑 **Y `donde` es UN prop, no dos booleanos**: la pastilla y el botón se apagan en el mismo lugar y
+  por la misma razón; con dos flags sueltos, un llamador nuevo los cruza y queda una pantalla que no
+  es ninguna de las dos. 🔴 Los botones van **`outline`, no `ghost`**: sin borde ni fondo se leían como
+  texto suelto y la columna quedaba una lista de frases — **un botón que no parece un botón es una
+  función que no existe**.
 - 🔑 **El primer mensaje a la clienta lo arma el sistema** (17-ago-2026, lo pidió Bruno). Es el
   contacto que sigue a la orden —cuánto sale el envío y cuándo pasa la moto— y se tipeaba de memoria,
   con los dos datos que más caro salen mal. **Se precarga, no se manda**: `wa.me` abre el chat con el
@@ -56,9 +66,15 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   peor que no mandarlo;
   · 🔑 **saldado cambia el texto, no lo borra**: «ya está pago» / «va sin cargo», nunca «se abona al
   recibir» — el mismo error que el KPI que mandaba a reclamarle plata a quien ya había pagado;
-  · 🔑 **la forma la decide el DATO, no la pantalla**: sin día **propone los dos próximos turnos y
-  pregunta** (el día lo confirma la clienta), con día **confirma** el que tiene puesto. Un solo texto
-  para los dos casos vuelve a proponer sobre un día ya acordado, que es cómo se pierde un turno;
+  · 🔴 **va SÓLO en la bandeja «Sin fecha», y SIEMPRE propone** (lo corrigió Bruno el mismo día,
+  viéndolo): es **la primera comunicación**, la que abre la conversación. En la hoja del día el envío
+  ya está acordado y el que escribe desde ahí es el cadete, con su propio mensaje
+  (`mensajeParaLaPuerta`, el del portal) — dos textos para dos momentos, y meter el primero en el
+  segundo reabre algo ya cerrado. Hubo una versión que **confirmaba** el día cuando la fila lo tenía,
+  y en la bandeja habría sido un defecto: 🔴 **un `no_entregado` vuelve a la bandeja con la fecha de su
+  intento fallido puesta**, así que le habría confirmado a la clienta el día en que no la encontraron.
+  ⚠️ El default de `Direccion` es **sin** mensaje: una pantalla nueva que la monte no le manda a nadie
+  un texto que nadie decidió mandar;
   · 🔑 **los días arrancan MAÑANA**: cuando se manda el primer mensaje la mochila de hoy ya está
   armada. Y salen de `proximoDiaDeReparto` + `diaDeRepartoVecino`, no de sumar días corridos — el
   jueves ofrecería **sábado**, y ése fue un mutante que sobrevivió hasta que el test se paró en un

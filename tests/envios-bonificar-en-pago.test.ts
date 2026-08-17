@@ -53,4 +53,23 @@ describe('🔴 bonificar, en la columna del pago', () => {
   it('no quedó una segunda puerta suelta en la pantalla', () => {
     expect(pantalla).not.toContain('function Bonificar(')
   })
+
+  // 🔑 **`donde` es un prop y no dos booleanos.** La pastilla y el botón de bonificar se apagan en el
+  // mismo lugar y por la misma razón; con dos flags sueltos un llamador nuevo los pasa cruzados y
+  // queda una pantalla que no es ni la bandeja ni la hoja.
+  it('🔴 cada pantalla se monta diciendo cuál es', () => {
+    expect(pantalla).toContain('<PagoDelEnvio envio={e} onGuardado={recargar} donde="hoja" />')
+    expect(pantalla).toContain('<PagoDelEnvio envio={e} onGuardado={onRecargar} donde="bandeja" />')
+    // Y la decisión de qué se ofrece la toma el núcleo, no el JSX: acá sólo se le dice dónde está.
+    expect(pago).toContain('pagoDelEnvio(envio, enLaBandeja)')
+    expect(pago).not.toMatch(/acciones\.filter/)
+  })
+
+  // 🔴 En `ghost` no tienen borde ni fondo: se leen como texto suelto y no como algo que se pueda
+  // apretar. Lo dijo Bruno mirando la bandeja, donde son dos seguidos y la columna queda una lista
+  // de frases. Un botón que no parece un botón es una función que no existe.
+  it('🔴 los botones parecen botones', () => {
+    expect(pago).toContain('variant="outline"')
+    expect(pago).not.toContain('variant="ghost"')
+  })
 })

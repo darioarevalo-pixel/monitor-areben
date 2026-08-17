@@ -393,7 +393,7 @@ export function Envios() {
                         {e.estado === 'entregado' ? <QuienCobro envio={e} onGuardado={recargar} /> : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
-                        <PagoDelEnvio envio={e} onGuardado={recargar} conEstado={false} />
+                        <PagoDelEnvio envio={e} onGuardado={recargar} donde="hoja" />
                       </Td>
                       <Td>
                         <EstadoDelEnvio envio={e} onCambiar={tildar} />
@@ -650,7 +650,7 @@ function Pendientes({
               ) : null}
             </Td>
             <Td>
-              <Direccion envio={e} />
+              <Direccion envio={e} conMensaje />
             </Td>
             <Td>
               <ResumenPedido envio={e} onVer={() => onVerPedido(e)} />
@@ -665,7 +665,7 @@ function Pendientes({
               {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
                   arriba de «PAGADO»— se leían como si una fuera del envío y la otra del pedido, y
                   además se contradecían: un envío sin precio no puede estar pagado. */}
-              <PagoDelEnvio envio={e} onGuardado={onRecargar} />
+              <PagoDelEnvio envio={e} onGuardado={onRecargar} donde="bandeja" />
             </Td>
           </Tr>
         ))}
@@ -965,14 +965,17 @@ function dice(texto: string) {
  * con CP 2000 y localidad «San Martin de las Escobas», a 100 km. Ninguno de los dos alcanza solo,
  * así que se muestran los dos y decide la persona.
  */
-function Direccion({ envio }: { envio: Envio }) {
-  // 🔑 **El mensaje lo decide el DATO, no la pantalla desde la que se abre**: sin día propone los dos
-  // próximos turnos, con día confirma el que tiene puesto. Por eso `Direccion` sirve igual en la
-  // bandeja y en la hoja del día, que es donde ya vivía.
-  // 🔴 **Sin precio no hay mensaje** (`mensajeParaLaClienta` devuelve `null`) y el botón vuelve a
-  // abrir el chat vacío: un mensaje de coordinación sin el número obliga a un segundo mensaje con la
-  // plata, que es justo el ida y vuelta que esto viene a sacar.
-  const mensaje = mensajeParaLaClienta(envio, hoyIso())
+function Direccion({ envio, conMensaje = false }: { envio: Envio; conMensaje?: boolean }) {
+  // 🔴 **El mensaje armado va SÓLO en la bandeja «Sin fecha»** (17-ago-2026, lo decidió Bruno
+  // viéndolo). Es **la primera comunicación**: se manda una vez, cuando el pedido todavía no tiene
+  // día, para acordar el precio y cuándo pasa la moto. En la hoja del día el envío ya está acordado y
+  // el que escribe desde ahí es el cadete, con su propio mensaje (`mensajeParaLaPuerta`, el del
+  // portal): dos textos distintos para dos momentos distintos, y meter el primero en el segundo es
+  // volver a abrir una conversación que ya se cerró. Ahí el botón vuelve a ser el chat pelado.
+  // 🔴 **Y sin precio tampoco hay mensaje** (`mensajeParaLaClienta` devuelve `null`): un mensaje de
+  // coordinación sin el número obliga a un segundo mensaje con la plata, que es justo el ida y vuelta
+  // que esto viene a sacar.
+  const mensaje = conMensaje ? mensajeParaLaClienta(envio, hoyIso()) : null
   const wa = linkWhatsapp(envio, mensaje)
   const tel = String(envio.telefono || '').replace(/[^\d+]/g, '')
   const fuera = cpFueraDeZona(envio.cp)
@@ -1014,7 +1017,12 @@ function Direccion({ envio }: { envio: Envio }) {
             <Button size="sm" variant="ghost" iconLeft={<Icono nombre="telefono" />} />
           </a>
         ) : null}
-        {wa && !mensaje ? <span style={{ fontSize: 12, opacity: 0.6 }}>el mensaje sale escrito al cotizar</span> : null}
+        {/* El motivo se dice sólo donde el mensaje existe. En la hoja del día no hay nada que
+            explicar: ahí el botón nunca lleva texto, y avisar de algo que esa pantalla no ofrece
+            sería un cartel que confunde en vez de enseñar. */}
+        {conMensaje && wa && !mensaje ? (
+          <span style={{ fontSize: 12, opacity: 0.6 }}>el mensaje sale escrito al cotizar</span>
+        ) : null}
       </div>
     </div>
   )
@@ -1165,14 +1173,28 @@ function ModalPedido({ envio, onCerrar }: { envio: Envio; onCerrar: () => void }
  * **bonificar es uno de ellos**: lo que dice no es cuánto sale el reparto sino quién lo paga, que es
  * la pregunta de esta columna. Antes colgaba del precio, dos columnas más a la izquierda.
  *
- * `conEstado` apaga la pastilla en la hoja del día: ahí la columna «Cobra» ya dice cuánto se pide en
- * la puerta y la línea verde de abajo ya aclara si el envío está pago o bonificado. Repetirlo en una
- * pastilla sería decir tres veces lo mismo en la misma celda; lo que falta ahí son sólo los botones.
+ * 🔑 **`donde` es UN prop y no dos**, aunque apague dos cosas: la pastilla y el botón de bonificar se
+ * apagan **en el mismo lugar y por la misma razón** —la hoja del día es la que se lee de un vistazo
+ * mientras se carga la moto—. Con dos booleanos sueltos, un llamador nuevo los pasa cruzados y queda
+ * una pantalla que no es ninguna de las dos.
+ *   · En la **hoja del día** no va la pastilla: la columna «Cobra» ya dice cuánto se pide en la
+ *     puerta y la línea verde ya aclara si el envío está pago o bonificado; una tercera repetición en
+ *     la misma celda es ruido.
+ *   · Y no va **bonificar**: se decide antes de que el paquete salga. Ver `pagoDelEnvio`.
  */
-function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; onGuardado: () => Promise<void>; conEstado?: boolean }) {
+function PagoDelEnvio({
+  envio,
+  onGuardado,
+  donde,
+}: {
+  envio: Envio
+  onGuardado: () => Promise<void>
+  donde: 'bandeja' | 'hoja'
+}) {
   const toast = useToast()
   const [guardando, setGuardando] = useState(false)
-  const { tone, label, acciones } = pagoDelEnvio(envio)
+  const enLaBandeja = donde === 'bandeja'
+  const { tone, label, acciones } = pagoDelEnvio(envio, enLaBandeja)
 
   // 🔑 A quién le escribe lo dice `campo`, no el orden ni el texto del botón: acá no hay ninguna
   // decisión que pueda quedar desfasada de lo que la pastilla muestra.
@@ -1191,10 +1213,14 @@ function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; o
 
   return (
     <>
-      {conEstado ? <StatusPill tone={tone} label={label} /> : null}
-      <div style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+      {enLaBandeja ? <StatusPill tone={tone} label={label} /> : null}
+      {/* 🔴 **`outline` y no `ghost`.** En ghost quedaban sin borde ni fondo: se leían como texto
+          suelto y no como algo que se pueda apretar —lo dijo Bruno mirando la bandeja, donde son dos
+          seguidos y la columna queda una lista de frases—. Un botón que no parece un botón es una
+          función que no existe. */}
+      <div style={{ display: 'grid', gap: 4, justifyItems: 'start', marginTop: 4 }}>
         {acciones.map((a) => (
-          <Button key={a.campo} size="sm" variant="ghost" disabled={guardando} onClick={() => void correr(a)}>
+          <Button key={a.campo} size="sm" variant="outline" disabled={guardando} onClick={() => void correr(a)}>
             {a.texto}
           </Button>
         ))}

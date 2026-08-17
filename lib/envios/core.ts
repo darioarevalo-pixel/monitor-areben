@@ -367,8 +367,20 @@ export function quienCobro(e: Envio): { tone: 'success' | 'brand' | 'warning'; l
  * 🔑 **Desde Pago no se ofrece bonificar** (también decidido): bonificar es lo raro y desde una fila
  * ya cobrada es además contradictorio —habría que devolver la plata—, así que se pasa por Pendiente.
  * Los dos tildes son excluyentes en la base, y el handler apaga el opuesto en las dos acciones.
+ *
+ * 🔴 **`conBonificar` es POR PANTALLA, y la decisión es de acá y no del JSX** (lo pidió Bruno el
+ * 17-ago, viéndolo): bonificar se decide **antes de que el paquete salga**, o sea en la bandeja. En
+ * la hoja del día el envío ya está armado y la columna «Cobra» tiene tres cosas apiladas: un botón
+ * más ahí **alarga cada fila** de la única pantalla que se lee de un vistazo mientras se carga la
+ * moto. Va como parámetro y no como un `filter` en la pantalla porque lo que se ofrece en cada lugar
+ * es una regla, y las reglas de esta columna viven todas en esta función.
  */
-export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; acciones: AccionDePago[] } {
+export function pagoDelEnvio(
+  e: Envio,
+  conBonificar = true,
+): { tone: 'success' | 'brand' | 'warning'; label: string; acciones: AccionDePago[] } {
+  const bonificar = (accion: AccionDePago): AccionDePago[] => (conBonificar ? [accion] : [])
+
   if (e.envio_pagado) {
     return { tone: 'success', label: 'Pago', acciones: [{ texto: 'Marcar como pendiente', campo: 'pagado', siguiente: false }] }
   }
@@ -378,6 +390,9 @@ export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning';
       label: 'Bonificado',
       acciones: [
         { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
+        // 🔴 Sacar la bonificación se ofrece SIEMPRE, aunque bonificar no. Es la salida de un estado
+        // que ya está escrito: sin ella, una fila bonificada por error en la bandeja y agendada
+        // después no se puede corregir desde ningún lado.
         { texto: 'Sacar la bonificación', campo: 'bonificado', siguiente: false },
       ],
     }
@@ -387,7 +402,7 @@ export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning';
     label: 'Pendiente',
     acciones: [
       { texto: 'Marcar como pago', campo: 'pagado', siguiente: true },
-      { texto: 'Bonificar', campo: 'bonificado', siguiente: true },
+      ...bonificar({ texto: 'Bonificar', campo: 'bonificado', siguiente: true }),
     ],
   }
 }

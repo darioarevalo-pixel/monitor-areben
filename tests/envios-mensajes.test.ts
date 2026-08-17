@@ -102,7 +102,7 @@ describe('🔴 sin precio no hay mensaje', () => {
   })
 })
 
-describe('🔴 el día: propone o confirma, según lo que la fila tenga', () => {
+describe('🔴 el día: SIEMPRE se propone, porque esto es el primer contacto', () => {
   it('🔴 SIN día propone los dos próximos y PREGUNTA', () => {
     // El día lo confirma la clienta: es la regla de la sección y la razón de que exista la bandeja.
     const m = mensajeParaLaClienta(con({ fecha: null, turno: null }), LUNES) || ''
@@ -110,12 +110,14 @@ describe('🔴 el día: propone o confirma, según lo que la fila tenga', () => 
     expect(m).toContain('¿Cuál te viene mejor?')
   })
 
-  it('🔴 CON día confirma ese, y no propone ninguno', () => {
-    // El mutante: un solo texto para los dos casos. Vuelve a proponer días sobre uno ya acordado —
-    // que es cómo se pierde un turno— y encima contradice lo que la pantalla ya tiene guardado.
-    const m = mensajeParaLaClienta(con({ fecha: '2026-08-18', turno: 'mañana' }), LUNES) || ''
-    expect(m).toContain('Pasamos el martes 18 a la mañana')
-    expect(m).not.toContain('Podemos pasar')
+  it('🔴 un NO ENTREGADO propone de nuevo, y NO confirma el día en que no la encontraron', () => {
+    // 🔴 El caso que hace que la regla sea «siempre propone» y no «propone si no tiene fecha». Un
+    // `no_entregado` **vuelve a la bandeja con la fecha de su intento fallido puesta** (el filtro es
+    // `fecha is null OR estado='no_entregado'`), así que un texto que confirmara «pasamos el lunes
+    // 17» le estaría confirmando a la clienta el día que ya pasó y en el que no estaba.
+    const m = mensajeParaLaClienta(con({ fecha: '2026-08-17', turno: 'tarde', estado: 'no_entregado' }), LUNES) || ''
+    expect(m).toContain('Podemos pasar el martes 18')
+    expect(m).not.toContain('Pasamos el lunes 17')
   })
 
   it('🔴 los días propuestos arrancan MAÑANA, no hoy', () => {
@@ -204,5 +206,33 @@ describe('🔴 el botón dice si el mensaje está adentro', () => {
     // y lo que hay que hacer (cotizar) está en otra columna.
     expect(direccion).toContain('el mensaje sale escrito al cotizar')
     expect(direccion).toMatch(/!mensaje \?/)
+  })
+})
+
+/**
+ * 🔴 **El mensaje armado vive SÓLO en la bandeja «Sin fecha»** (lo decidió Bruno el 17-ago-2026,
+ * viéndolo andar). Es la primera comunicación: se manda una vez, antes de que el pedido tenga día.
+ * En la hoja del día el envío ya está acordado y el que escribe desde ahí es el cadete, con su propio
+ * mensaje —`mensajeParaLaPuerta`, el del portal—. Son dos textos para dos momentos, y meter el
+ * primero en el segundo es reabrir una conversación que ya se cerró.
+ */
+describe('🔴 el mensaje armado va sólo en la bandeja', () => {
+  const pantalla2 = readFileSync(join(__dirname, '..', 'components/envios/Envios.tsx'), 'utf8')
+
+  it('🔴 la hoja del día monta `Direccion` SIN el mensaje, y la bandeja CON', () => {
+    // El mutante es prender `conMensaje` en las dos, que es como estaba: el botón de la hoja del día
+    // vuelve a llevar un texto que propone días sobre un envío que ya tiene el suyo.
+    const hoja = pantalla2.slice(pantalla2.indexOf('const delTurno'), pantalla2.indexOf('function Pendientes('))
+    const bandeja = pantalla2.slice(pantalla2.indexOf('function Pendientes('), pantalla2.indexOf('function SugerirPrecios('))
+    expect(hoja).toContain('<Direccion envio={e} />')
+    expect(bandeja).toContain('<Direccion envio={e} conMensaje />')
+  })
+
+  it('🔴 y sin el prop no se arma: el default es NO tener mensaje', () => {
+    // Que el default sea el caso seguro es lo que hace que una pantalla nueva que monte `Direccion`
+    // no le mande a una clienta un texto que nadie decidió mandar.
+    const direccion = pantalla2.slice(pantalla2.indexOf('function Direccion('), pantalla2.indexOf('function ResumenPedido('))
+    expect(direccion).toMatch(/conMensaje = false/)
+    expect(direccion).toMatch(/conMensaje \? mensajeParaLaClienta/)
   })
 })

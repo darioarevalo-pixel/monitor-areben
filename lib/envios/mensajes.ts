@@ -141,10 +141,12 @@ function laPlata(e: Envio, donde: string): string {
  * el ida y vuelta que esto viene a sacar. Y callarse el precio adentro de un texto que habla de
  * plata es peor que no mandarlo. La pantalla lo lee como «el botón abre el chat vacío, como antes».
  *
- * 🔑 **Dos formas, según la fila tenga día o no**, y la decide el dato y no la pantalla desde la que
- * se abre: sin día **propone** los dos próximos y pregunta —el día lo confirma la clienta, que es la
- * regla de la sección—; con día **confirma** el que ya tiene puesto. Un solo texto para los dos casos
- * volvería a proponer un día sobre uno ya acordado, que es cómo se pierde un turno.
+ * 🔴 **SIEMPRE propone, nunca confirma un día ya puesto** (17-ago-2026, lo decidió Bruno viéndolo).
+ * Este mensaje es **el primer contacto y vive sólo en la bandeja «Sin fecha»**: es el que abre la
+ * conversación, no el que la sigue. Hubo una versión que confirmaba el día cuando la fila lo tenía —
+ * pensada para la hoja del día, donde ya no se usa— y **en la bandeja habría sido un defecto**: un
+ * `no_entregado` vuelve a la bandeja **con la fecha de su intento fallido puesta**, así que ese texto
+ * le habría confirmado a la clienta el día en que no la encontraron.
  *
  * `hoy` entra como parámetro para que la función sea pura: mirar el reloj adentro la vuelve
  * imposible de afirmar, y el día del reparto es justo lo que hay que poder fijar en un test.
@@ -167,13 +169,8 @@ export function mensajeParaLaClienta(e: Envio, hoy: string): string | null {
     laPlata(e, donde),
   ]
 
-  if (esFechaIso(e.fecha)) {
-    const cuando = cuandoPasamos(String(e.fecha), e.turno)
-    if (cuando) lineas.push(`Pasamos ${cuando}. ¡Cualquier cosa avisanos por acá!`)
-  } else {
-    const opciones = diasQueOfrecemos(hoy).map((f) => cuandoPasamos(f)).filter(Boolean)
-    if (opciones.length) lineas.push(`Podemos pasar ${opciones.join(' o ')}. ¿Cuál te viene mejor?`)
-  }
+  const opciones = diasQueOfrecemos(hoy).map((f) => cuandoPasamos(f)).filter(Boolean)
+  if (opciones.length) lineas.push(`Podemos pasar ${opciones.join(' o ')}. ¿Cuál te viene mejor?`)
 
   return lineas.join('\n')
 }
