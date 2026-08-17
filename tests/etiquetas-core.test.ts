@@ -53,7 +53,7 @@ describe('variantesDeCampania', () => {
   })
 })
 
-describe('construirPrecios · paridad con _etiBuildPrecios', () => {
+describe('construirPrecios · paridad con _etiBuildPrecios (salvo la divergencia de abajo)', () => {
   const productos: ProductoPrecio[] = [
     { id: '1', sku: 'BUZO', name: 'Buzo', retailer_price: 20000 },
     { id: '2', sku: 'REM', name: 'Remera', retailer_price: 12000 },
@@ -80,6 +80,55 @@ describe('construirPrecios · paridad con _etiBuildPrecios', () => {
     expect(precios['3']).toBe(5000) // respaldo GN
     expect(promos['1']).toEqual({ normal: 25000, promo: 18000 })
     expect(promos['2']).toBeUndefined()
+  })
+})
+
+describe('construirPrecios · una promo que no baja NO es oferta (diverge del legacy a propósito)', () => {
+  // El caso real: sube el precio de lista y queda la promo vieja por encima. El legacy imprimía la
+  // promo —o sea, un precio MÁS CARO que el de lista— mientras el chequeo de exhibición decía que
+  // la etiqueta estaba bien. Ver `ofertaVigente` en lib/tienda.core.js.
+  const productos: ProductoPrecio[] = [{ id: '1', sku: 'BUZO', name: 'Buzo', retailer_price: 20000 }]
+
+  it('promo MAYOR que la lista: se imprime la lista y no hay tachado', () => {
+    const idx = indexarTn([{ id: 10, sku: 'BUZO', name: 'Buzo', price: 25000, promo_price: 29990 }])
+    const { precios, promos } = construirPrecios(productos, idx)
+    expect(precios['1']).toBe(25000)
+    expect(promos['1']).toBeUndefined()
+  })
+
+  it('promo IGUAL a la lista tampoco es oferta', () => {
+    const idx = indexarTn([{ id: 10, sku: 'BUZO', name: 'Buzo', price: 25000, promo_price: 25000 }])
+    const { precios, promos } = construirPrecios(productos, idx)
+    expect(precios['1']).toBe(25000)
+    expect(promos['1']).toBeUndefined()
+  })
+
+  it('y en ese caso el legacy hacía lo contrario — la divergencia es real, no teórica', () => {
+    const tn: TnProducto[] = [{ id: 10, sku: 'BUZO', name: 'Buzo', price: 25000, promo_price: 29990 }]
+    const legacy = cargarPreciosLegacy(productos, tn)
+    expect(legacy.precios['1']).toBe(29990) // el legacy imprimía el precio más caro
+    expect(construirPrecios(productos, indexarTn(tn)).precios['1']).toBe(25000)
+  })
+})
+
+describe('construirPrecios · fueraDeTn: el respaldo al espejo deja de ser silencioso', () => {
+  const productos: ProductoPrecio[] = [
+    { id: '1', sku: 'BUZO', name: 'Buzo', retailer_price: 20000 },
+    { id: '3', sku: 'ZZZ', name: 'Sin TN', retailer_price: 5000 },
+  ]
+  const idx = indexarTn([{ id: 10, sku: 'BUZO', name: 'Buzo', price: 25000, promo_price: 18000 }])
+
+  it('marca al que no cruzó con Tienda Nube, y sólo a ése', () => {
+    const { precios, fueraDeTn } = construirPrecios(productos, idx)
+    expect(precios['3']).toBe(5000)
+    expect(fueraDeTn.has('3')).toBe(true)
+    expect(fueraDeTn.has('1')).toBe(false)
+  })
+
+  it('un producto sin precio en ningún lado no se marca: no hay nada que advertir', () => {
+    const { precios, fueraDeTn } = construirPrecios([{ id: '9', sku: 'NADA', name: 'Nada' }], idx)
+    expect(precios['9']).toBe(0)
+    expect(fueraDeTn.has('9')).toBe(false)
   })
 })
 

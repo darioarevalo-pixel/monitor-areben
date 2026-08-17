@@ -21,6 +21,7 @@ import {
 import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import type { Cantidades, LineaEtiqueta, ModoEtiqueta, VarianteEti } from '@/lib/etiquetas/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import { fmtHace } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge, Button, Card, EmptyState, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
 
@@ -81,9 +82,10 @@ export function Etiquetas() {
   const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
   const varsById = useMemo(() => Object.fromEntries(vars.map((v) => [v.id, v])) as Record<string, VarianteEti>, [vars])
   const sinCodigo = useMemo(() => variantesSinCodigo(allVariantes), [allVariantes])
-  const { precios, promos } = useMemo(() => construirPrecios(datos?.allProductos ?? [], tn.tnIdx), [datos, tn.tnIdx])
+  const { precios, promos, fueraDeTn } = useMemo(() => construirPrecios(datos?.allProductos ?? [], tn.tnIdx), [datos, tn.tnIdx])
   const precioDe = useCallback((v: VarianteEti) => precios[v.pid] || 0, [precios])
   const promoDe = useCallback((v: VarianteEti) => promos[v.pid] || null, [promos])
+  const sinPrecioDeTn = useCallback((v: VarianteEti) => fueraDeTn.has(v.pid), [fueraDeTn])
 
   const [sub, setSub] = useState<Slot | 'libre'>('dep')
   const liq = useLiquidacionEtiquetas(marca)
@@ -241,6 +243,8 @@ export function Etiquetas() {
           setAutoClear={onAutoClear}
           precioDe={precioDe}
           promoDe={promoDe}
+          sinPrecioDeTn={sinPrecioDeTn}
+          preciosLeidosEn={tn.leidoEn}
           catalogoListo={!tn.cargando}
           onRefrescarPrecios={tn.refrescar}
           onImprimir={(opts) => imprimir(sub, opts)}
@@ -313,6 +317,8 @@ function ModoPanel({
   setAutoClear,
   precioDe,
   promoDe,
+  sinPrecioDeTn,
+  preciosLeidosEn,
   catalogoListo,
   onRefrescarPrecios,
   onImprimir,
@@ -332,6 +338,10 @@ function ModoPanel({
   setAutoClear: (on: boolean) => void
   precioDe: (v: VarianteEti) => number
   promoDe: (v: VarianteEti) => { normal: number; promo: number } | null
+  /** Su precio NO salió de Tienda Nube: es el del espejo, que se refresca una vez por día. */
+  sinPrecioDeTn: (v: VarianteEti) => boolean
+  /** Cuándo se leyeron los precios de Tienda Nube (epoch ms), o `null` si no entró ninguno. */
+  preciosLeidosEn: number | null
   catalogoListo: boolean
   onRefrescarPrecios: () => Promise<void>
   onImprimir: (opts: { sep: boolean; conFP: boolean }) => void
@@ -345,6 +355,15 @@ function ModoPanel({
   const [feedback, setFeedback] = useState<{ ok: boolean; html: string } | null>(null)
   const [refrescando, setRefrescando] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
+
+  // La antigüedad de los precios se recalcula sola cada minuto. `Date.now()` en el render lo prohíbe
+  // el lint (resultado inestable entre renders), y además un cartel que dice "hace 1 min" durante
+  // media hora miente igual que no ponerlo.
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   const conPrecio = modo === 'loc'
   const esPromo = modo === 'promo'
@@ -449,18 +468,27 @@ function ModoPanel({
             Imprimir {total} {total === 1 ? 'etiqueta' : 'etiquetas'}
           </Button>
           {(conPrecio || esPromo) && (
-            <button
-              className="btn-sm"
-              disabled={refrescando}
-              onClick={async () => {
-                setRefrescando(true)
-                await onRefrescarPrecios()
-                setRefrescando(false)
-              }}
-              style={{ background: '#fff', border: `1px solid ${color.line2}` }}
-            >
-              {refrescando ? '⏳ Actualizando precios…' : '🔄 Actualizar precios'}
-            </button>
+            <>
+              <button
+                className="btn-sm"
+                disabled={refrescando}
+                onClick={async () => {
+                  setRefrescando(true)
+                  await onRefrescarPrecios()
+                  setRefrescando(false)
+                }}
+                style={{ background: '#fff', border: `1px solid ${color.line2}` }}
+              >
+                {refrescando ? '⏳ Actualizando precios…' : '🔄 Actualizar precios'}
+              </button>
+              {/* 🔑 **Va SIEMPRE, tenga la edad que tenga.** Sin esta línea un caché viejo se ve
+                  idéntico a uno recién bajado, y lo que se imprime es plata. */}
+              <span style={{ fontSize: 12, color: color.mut }} title="El catálogo de Tienda Nube tiene además su propio caché de 1 hora. «Actualizar precios» saltea los dos.">
+                {preciosLeidosEn
+                  ? `Precios leídos ${fmtHace(ahora - preciosLeidosEn)}`
+                  : 'Precios sin leer todavía'}
+              </span>
+            </>
           )}
           <Button variant="ghost" tone="danger" onClick={limpiar}>Limpiar cantidades</Button>
           <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -514,7 +542,17 @@ function ModoPanel({
                       <td style={tdC}>{v.size || '—'}</td>
                       <td style={{ ...tdC, color: color.mut }}>{v.sku || '—'}</td>
                       <td style={{ ...tdC, color: color.mut, fontFamily: 'monospace', fontSize: 12 }}>{v.barcode}</td>
-                      {conPrecio && <td style={{ ...tdC, textAlign: 'right', fontWeight: 600 }}>{precioDe(v) ? '$' + Math.round(precioDe(v)).toLocaleString('es-AR') : '—'}</td>}
+                      {conPrecio && (
+                        <td style={{ ...tdC, textAlign: 'right', fontWeight: 600 }}>
+                          {precioDe(v) ? '$' + Math.round(precioDe(v)).toLocaleString('es-AR') : '—'}
+                          {precioDe(v) > 0 && sinPrecioDeTn(v) && (
+                            <span title="Este producto no cruza con Tienda Nube: el precio sale del espejo de Gestión Nube, que se actualiza una vez por día. Puede no ser el que la tienda cobra hoy.">
+                              {' '}
+                              <Badge tone="warning">no es de TN</Badge>
+                            </span>
+                          )}
+                        </td>
+                      )}
                       {esPromo && <td style={{ ...tdC, textAlign: 'right', color: color.mut2, textDecoration: 'line-through' }}>{pr ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td>}
                       {esPromo && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: color.brand }}>{pr ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>}
                       <td style={{ ...tdC, textAlign: 'center', color: color.mut2 }}>{v.stock || 0}</td>

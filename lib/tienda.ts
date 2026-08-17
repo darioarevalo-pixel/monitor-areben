@@ -11,6 +11,7 @@ import {
   ADMIN_BASE as ADMIN_BASE_JS,
   adminBaseUrl as adminBaseUrlJs,
   linkProducto as linkProductoJs,
+  ofertaVigente as ofertaVigenteJs,
   precioVigente as precioVigenteJs,
   TIENDA_BASE as TIENDA_BASE_JS,
   tiendaBaseUrl as tiendaBaseUrlJs,
@@ -38,3 +39,25 @@ export const linkProducto = linkProductoJs as (marca: Marca, handle?: string | n
 export const precioVigente = precioVigenteJs as (p: PrecioDe | null | undefined) => number | null
 
 type PrecioDe = { price?: number | null; promo_price?: number | null; [otros: string]: unknown }
+
+/** Lo que dice la etiqueta: un número solo, con el de lista al lado sólo si hay oferta de verdad. */
+export interface OfertaVigente {
+  /** El que paga el cliente. `null` es **no se sabe**, nunca cero. */
+  aCobrar: number | null
+  /** El de lista, para tacharlo. `null` si el producto no tiene uno válido. */
+  lista: number | null
+  /** Sólo si la promo es **menor** que la lista. */
+  enOferta: boolean
+  /** El descuento redondeado, o `null` si no hay oferta. */
+  pct: number | null
+}
+
+/**
+ * El precio de la etiqueta y del cartelito de góndola. Los argumentos van sueltos a propósito: los
+ * dos llamadores nombran los campos distinto (`price`/`promo_price` en el audit de Tienda Nube,
+ * `precio`/`promo` en el ítem de exhibición) y el que manda es el número, no la forma del objeto.
+ */
+export const ofertaVigente = ofertaVigenteJs as (
+  precioLista: number | null | undefined,
+  precioPromo: number | null | undefined,
+) => OfertaVigente

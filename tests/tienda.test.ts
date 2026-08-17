@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { adminBaseUrl, linkProducto, precioVigente, TIENDA_BASE, tiendaBaseUrl } from '@/lib/tienda'
+import { precioDeGondola } from '@/lib/exhib/core'
+import { adminBaseUrl, linkProducto, ofertaVigente, precioVigente, TIENDA_BASE, tiendaBaseUrl } from '@/lib/tienda'
 
 describe('dominios', () => {
   it('son el apex, sin www y sin barra al final', () => {
@@ -59,5 +60,39 @@ describe('precioVigente', () => {
     expect(precioVigente({})).toBeNull()
     expect(precioVigente(null)).toBeNull()
     expect(precioVigente({ price: Number.NaN })).toBeNull()
+  })
+})
+
+describe('ofertaVigente · lo que tiene que decir la etiqueta', () => {
+  it('la promo que BAJA es una oferta, con el tachado y el porcentaje', () => {
+    expect(ofertaVigente(20490, 12290)).toEqual({ aCobrar: 12290, lista: 20490, enOferta: true, pct: 40 })
+  })
+
+  it('sin promo se cobra la lista y no hay tachado', () => {
+    expect(ofertaVigente(20490, null)).toEqual({ aCobrar: 20490, lista: 20490, enOferta: false, pct: null })
+    expect(ofertaVigente(20490, 0)).toMatchObject({ aCobrar: 20490, enOferta: false })
+  })
+
+  it('🔑 una promo que NO baja no es oferta: se cobra la lista', () => {
+    // Sube el precio de lista y queda la promo vieja arriba. Tratarla como oferta imprimiría un
+    // precio más caro que el de lista y mandaría a reimprimir una etiqueta que está bien.
+    expect(ofertaVigente(20490, 24990)).toMatchObject({ aCobrar: 20490, enOferta: false, pct: null })
+    expect(ofertaVigente(20490, 20490)).toMatchObject({ aCobrar: 20490, enOferta: false })
+  })
+
+  it('sin precio de lista, una promo suelta es el único número que hay', () => {
+    expect(ofertaVigente(null, 12290)).toMatchObject({ aCobrar: 12290, lista: null, enOferta: false })
+  })
+
+  it('sin ningún precio dice «no se sabe», nunca cero', () => {
+    expect(ofertaVigente(null, null)).toEqual({ aCobrar: null, lista: null, enOferta: false, pct: null })
+    expect(ofertaVigente(0, 0)).toMatchObject({ aCobrar: null })
+    expect(ofertaVigente(Number.NaN, undefined)).toMatchObject({ aCobrar: null })
+  })
+
+  it('Etiquetas y Exhibición contestan lo MISMO — es el motivo de que la regla viva acá', () => {
+    for (const [lista, promo] of [[20490, 12290], [20490, 24990], [20490, null], [null, 9990]] as const) {
+      expect(precioDeGondola({ precio: lista, promo })).toEqual(ofertaVigente(lista, promo))
+    }
   })
 })

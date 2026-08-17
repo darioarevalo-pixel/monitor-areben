@@ -5,6 +5,7 @@
  * DOM ni globales. El dibujo del PDF (no puro, usa jsPDF+JsBarcode) vive en pdf.ts.
  */
 
+import { ofertaVigente } from '../tienda'
 import { matchTn, type IndiceTn } from '../tn'
 import type { Cantidades, MapaPrecios, MapaPromo, ModoEtiqueta, VarianteEti } from './tipos'
 
@@ -39,26 +40,48 @@ export function variantesDeCampania(lista: VarianteEti[], pids: Set<string>): Va
 }
 
 /**
- * Mapa de precios por producto: el de TN (promocional si está activo, si no el
- * normal), con respaldo al minorista de GN si el producto no está en TN. Además el
- * mapa de promo (solo descuentos reales: promo < normal). Port de _etiBuildPrecios,
- * reusando `matchTn` (= _mktFindTN).
+ * Mapa de precios por producto: el que la tienda cobra hoy, con respaldo al minorista de GN si el
+ * producto no está en Tienda Nube. Además el mapa de promo (sólo descuentos reales) y el conjunto de
+ * los que **no** salieron de Tienda Nube. Port de _etiBuildPrecios, reusando `matchTn`
+ * (= _mktFindTN).
+ *
+ * 🔴 **Diverge del legacy a propósito desde el 16-ago-2026, y es la única divergencia.** El legacy
+ * dejaba ganar a `promo_price` **siempre**, incluso si era MAYOR que el precio de lista ⇒ cuando sube
+ * la lista y queda una promo vieja arriba, esto imprimía un precio más caro que el de lista mientras
+ * el chequeo de exhibición decía que la etiqueta estaba bien. Ahora las dos pantallas leen la misma
+ * regla, `ofertaVigente` de `lib/tienda.core.js`. 📌 Medido antes de cambiarlo: **cero productos** en
+ * los tres catálogos caían en el caso, así que no hay etiquetas mal impresas para rehacer.
+ *
+ * 🔑 **`fueraDeTn` existe porque el respaldo era SILENCIOSO.** Un producto que no cruza con Tienda
+ * Nube se etiqueta igual —hay que poder etiquetarlo— pero con un precio del espejo de Supabase, que
+ * se refresca una vez por día: la fila lo tiene que decir, o se cuelga un precio de ayer sin que
+ * nadie se entere.
  */
-export function construirPrecios(productos: ProductoPrecio[], idx: IndiceTn): { precios: MapaPrecios; promos: MapaPromo } {
+export function construirPrecios(
+  productos: ProductoPrecio[],
+  idx: IndiceTn,
+): { precios: MapaPrecios; promos: MapaPromo; fueraDeTn: Set<string> } {
   const precios: MapaPrecios = {}
   const promos: MapaPromo = {}
+  const fueraDeTn = new Set<string>()
   for (const p of productos || []) {
     const tn = matchTn(p, idx)
-    let precio = 0
-    if (tn) precio = (tn.promo_price || 0) > 0 ? (tn.promo_price as number) : (tn.price || 0) > 0 ? (tn.price as number) : 0
-    if (!precio && (p.retailer_price || 0) > 0) precio = p.retailer_price as number
+    const oferta = ofertaVigente(tn?.price, tn?.promo_price)
+    const respaldo = (p.retailer_price || 0) > 0 ? (p.retailer_price as number) : 0
+    const precio = oferta.aCobrar ?? respaldo
     precios[p.id] = precio || 0
-    if (tn && (tn.promo_price || 0) > 0) {
-      const normal = (tn.price || 0) > 0 ? (tn.price as number) : (p.retailer_price || 0) > 0 ? (p.retailer_price as number) : 0
-      if (normal > (tn.promo_price as number)) promos[p.id] = { normal, promo: tn.promo_price as number }
+    if (precio > 0 && oferta.aCobrar == null) fueraDeTn.add(p.id)
+    if (oferta.enOferta) {
+      promos[p.id] = { normal: oferta.lista as number, promo: oferta.aCobrar as number }
+    } else if (tn && (tn.promo_price || 0) > 0 && oferta.lista == null && respaldo > (tn.promo_price as number)) {
+      // Producto en promo al que Tienda Nube no le da precio de lista: el tachado sale del espejo.
+      // Nunca se vio en los tres catálogos (medido 16-ago-2026), pero si aparece es mejor una
+      // etiqueta con el «antes» del espejo que una sin oferta.
+      promos[p.id] = { normal: respaldo, promo: tn.promo_price as number }
+      fueraDeTn.add(p.id)
     }
   }
-  return { precios, promos }
+  return { precios, promos, fueraDeTn }
 }
 
 /** Filtra la tabla por texto (nombre, SKU o código). Port del filtro de etiRenderTabla. */
