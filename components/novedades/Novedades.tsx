@@ -64,6 +64,19 @@ function cuando(iso?: string | null): string {
 }
 
 /**
+ * Lo mismo, más la hora: "17 de agosto, 12:36".
+ *
+ * 🔑 **Va sólo en las lecturas, no en la fecha de la novedad.** De una novedad importa el día en que
+ * salió; de una lectura importa **cuándo**: quien la publicó a la mañana y la vuelve a mirar a la
+ * tarde necesita saber si el equipo la abrió antes o después de que él preguntara. Lo pidió Bruno el
+ * 17-ago-2026 usándolo.
+ */
+function cuandoConHora(iso?: string | null): string {
+  if (!iso) return ''
+  return `${cuando(iso)}, ${new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+/**
  * Quién leyó esta novedad. Se pide al abrirlo, no con la lista: no tiene sentido que todo el equipo
  * se baje quién leyó qué cada vez que entra.
  *
@@ -104,7 +117,7 @@ function QuienLaLeyo({ id }: { id: string }) {
         <div style={{ display: 'grid', gap: 2, fontSize: font.sm, color: color.ink2 }}>
           {lecturas.map((l) => (
             <div key={`${l.usuario}|${l.version}`}>
-              {l.usuario} · {cuando(l.leida_at)}
+              {l.usuario} · {cuandoConHora(l.leida_at)}
               {l.version > 1 ? ` · v${l.version}` : ''}
             </div>
           ))}
