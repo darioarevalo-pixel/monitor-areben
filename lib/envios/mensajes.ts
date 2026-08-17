@@ -155,7 +155,12 @@ export function mensajeParaLaClienta(e: Envio, hoy: string): string | null {
   const marca = e.store === 'zattia' ? 'Zattia' : 'BDI'
   const pila = String(e.cliente || '').trim().split(/\s+/)[0]
   const nombre = pila ? pila.charAt(0).toUpperCase() + pila.slice(1) : ''
-  const donde = [e.direccion, e.localidad].map((x) => String(x || '').trim()).filter(Boolean).join(', ')
+  // 🔴 **Los espacios de más se juntan, y no es cosmética.** Medido en prod: 3 de las 11 direcciones
+  // tienen doble espacio («Brown  1807»), tal como las tipearon en Tienda Nube. En una tabla no se
+  // ve; en un mensaje que sale a la clienta se lee como un descuido nuestro sobre su propia
+  // dirección. Se limpia acá, en el texto que sale, y no en el dato: el dato es lo que ella escribió.
+  const limpio = (x: unknown) => String(x || '').replace(/\s+/g, ' ').trim()
+  const donde = [e.direccion, e.localidad].map(limpio).filter(Boolean).join(', ')
 
   const lineas = [
     `Hola${nombre ? ' ' + nombre : ''}! Te escribimos de ${marca} por tu pedido${e.orden_numero ? ` #${e.orden_numero}` : ''}.`,

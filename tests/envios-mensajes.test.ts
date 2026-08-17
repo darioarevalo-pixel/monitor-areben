@@ -154,6 +154,13 @@ describe('el resto del mensaje', () => {
     expect(mensajeParaLaClienta(con({ store: 'zattia' }), LUNES)).toContain('de Zattia')
   })
 
+  it('🔴 los espacios de más de la dirección se juntan', () => {
+    // Medido en prod: 3 de las 11 direcciones vienen así de Tienda Nube («Brown  1807»). En la tabla
+    // no se ve; en un mensaje que sale a la clienta se lee como un descuido nuestro sobre su propia
+    // dirección. Lo cazó MIRAR el mensaje armado con filas reales, no un test.
+    expect(mensajeParaLaClienta(con({ direccion: 'Brown  1807' }), LUNES)).toContain('El envío a Brown 1807, Rosario')
+  })
+
   it('un alta a mano sin número de orden no dice «#null»', () => {
     expect(mensajeParaLaClienta(con({ orden_numero: null, origen: 'manual' }), LUNES)).toContain('por tu pedido.')
   })
