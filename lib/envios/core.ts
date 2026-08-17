@@ -668,6 +668,7 @@ export {
   num,
   ORIGENES,
   pagoAlLocal,
+  rotuloDeSaldo,
   siguienteEstado,
   tarifaCadete,
   TURNOS,

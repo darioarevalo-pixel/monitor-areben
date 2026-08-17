@@ -54,6 +54,7 @@ import {
   ordenarParaPreparar,
   paraImprimir,
   resumenDeTraida,
+  rotuloDeSaldo,
   resumenDelPedido,
   siguienteEstado,
   totalesDelDia,
@@ -64,6 +65,7 @@ import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
 import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
@@ -1662,6 +1664,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
   if (cargando) return null
 
   const saldo = cuenta.saldo
+  const dice = rotuloDeSaldo(saldo)
   const anotar = anotando ? (
     <AnotarMovimiento
       saldo={saldo}
@@ -1697,11 +1700,10 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
   return (
     <div style={{ display: 'grid', gap: space[4] }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
-        <KpiCard
-          label={saldo === 0 ? 'Están a mano' : saldo > 0 ? 'El cadete tiene plata nuestra' : 'Le debemos al cadete'}
-          value={formatMoney(Math.abs(saldo))}
-          sub={saldo === 0 ? undefined : saldo > 0 ? 'lo trae en la próxima rendición' : 'se lo descuenta de los próximos envíos'}
-        />
+        {/* 🔑 El rótulo sale de `rotuloDeSaldo` y no de un `if` acá: **el recibo que se imprime dice
+            la misma frase**. Con dos copias, el día que se corrija una el papel que queda en la mano
+            del cadete es el que dice lo viejo, y es el único de los dos que no se puede recargar. */}
+        <KpiCard label={dice.titulo} value={formatMoney(dice.monto)} sub={dice.sub || undefined} />
         <KpiCard label="Días sin cerrar" value={String(cuenta.dias.filter((d) => !d.cerrado && d.entregados > 0).length)} />
         {/* 🔑 **No es plata que falte: es plata que entró por otra puerta.** Decía «Falta cobrarle a
             clientas», y eso era falso — un pedido no se entrega si no está pago, así que un entregado
@@ -1768,7 +1770,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
                 {d.movimientos.length ? (
                   <div style={{ display: 'grid', gap: space[1] }}>
                     {d.movimientos.map((m) => (
-                      <Movimiento key={m.id} mov={m} onGuardado={recargar} />
+                      <Movimiento key={m.id} mov={m} saldo={saldo} onGuardado={recargar} />
                     ))}
                   </div>
                 ) : (
@@ -1799,12 +1801,39 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
  * 🔑 **Anular no borra.** Puede haber un recibo impreso en la mano del cadete: la fila queda tachada
  * y fuera del saldo, pero queda. Sin `catch`, un anulado que falla no se ve —la lista se recarga
  * igual y la fila sigue ahí— y se lee como que el botón no anduvo.
+ *
+ * 🔑 **El recibo se imprime desde acá y sólo si el movimiento está vivo.** Un papel de un movimiento
+ * anulado sale idéntico a uno bueno y no hay forma de distinguirlos después: la plata que dice no
+ * existe. `saldo` es el **acumulado de toda la cuenta**, no el del día — es el número con el que se
+ * habla con el cadete, y va al papel fechado al instante de impresión.
  */
-function Movimiento({ mov, onGuardado }: { mov: MovimientoCuenta; onGuardado: () => Promise<void> }) {
+function Movimiento({
+  mov,
+  saldo,
+  onGuardado,
+}: {
+  mov: MovimientoCuenta
+  saldo: number
+  onGuardado: () => Promise<void>
+}) {
   const toast = useToast()
   const [anulando, setAnulando] = useState(false)
+  const [imprimiendo, setImprimiendo] = useState(false)
   const vivo = movimientoVivo(mov)
   const clase = claseDelMovimiento(mov.monto)
+
+  async function imprimir() {
+    setImprimiendo(true)
+    try {
+      // `Date.now()` acá y no adentro: el sello es el instante en que se apretó el botón, y así
+      // `armarRecibo` sigue siendo una función pura de un número que el test puede fijar.
+      await imprimirRecibo(mov, saldo, Date.now())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo armar el recibo.')
+    } finally {
+      setImprimiendo(false)
+    }
+  }
 
   async function anular() {
     setAnulando(true)
@@ -1825,14 +1854,24 @@ function Movimiento({ mov, onGuardado }: { mov: MovimientoCuenta; onGuardado: ()
       </span>
       {mov.nota ? <div style={{ opacity: 0.7, fontSize: 12 }}>{mov.nota}</div> : null}
       {vivo ? (
-        <button
-          type="button"
-          onClick={anular}
-          disabled={anulando}
-          style={{ background: 'none', border: 0, padding: 0, fontSize: 12, color: color.danger, cursor: 'pointer' }}
-        >
-          {anulando ? 'Anulando…' : 'Anular'}
-        </button>
+        <div style={{ display: 'flex', gap: space[3] }}>
+          <button
+            type="button"
+            onClick={imprimir}
+            disabled={imprimiendo}
+            style={{ background: 'none', border: 0, padding: 0, fontSize: 12, color: color.brand, cursor: 'pointer' }}
+          >
+            {imprimiendo ? 'Armando…' : 'Recibo'}
+          </button>
+          <button
+            type="button"
+            onClick={anular}
+            disabled={anulando}
+            style={{ background: 'none', border: 0, padding: 0, fontSize: 12, color: color.danger, cursor: 'pointer' }}
+          >
+            {anulando ? 'Anulando…' : 'Anular'}
+          </button>
+        </div>
       ) : (
         <div style={{ fontSize: 12 }}>anulado por {mov.anulado_por || '—'}</div>
       )}

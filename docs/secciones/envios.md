@@ -10,7 +10,8 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Pantalla interna | `components/envios/Envios.tsx` (**74 KB — leer por rango**) + `useEnvios.ts` |
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
-| Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` · `ticket.ts` (rollo de 80 mm) |
+| Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` |
+| **Los dos papeles** | `lib/envios/ticket.ts` (el que va pegado al paquete) · `lib/envios/recibo.ts` (el del movimiento de la cuenta), los dos sobre **`lib/rollo80.ts`** — la geometría del rollo, el medidor y el dibujo de textos y reglas. ⛔ **Las medidas del rollo no se copian**: `lib/sesionfotos/ticket.ts` es un tercer papel de 80 mm que **no está migrado a propósito** (su interlineado es 0.42 contra 0.38) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
 | **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
@@ -41,6 +42,22 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **La cuenta son MOVIMIENTOS con signo, sin columna `tipo`** — el signo va adentro del dato.
   Positivo = el cadete tiene plata nuestra. **Rinde cuando pasa**, no por día de reparto. No se
   guarda ningún total: el saldo se arrastra y un día congelado haría mentir a todos los siguientes.
+- 🔑 **En el papel NUNCA va un número con signo: va el VERBO y el monto en positivo.** «Rindió
+  $10.000» y «Le pagamos $10.000» son lo contrario con el mismo número, así que el recibo saca las
+  dos cosas de `claseDelMovimiento` —la misma que la pantalla— y nunca imprime el crudo. Lo mismo
+  vale para el saldo: `rotuloDeSaldo` da la frase («el cadete tiene plata nuestra» / «le debemos») y
+  el monto en positivo. 🔑 **Vive en `reglas.core.js` y no en el KPI**, que es donde estaba: de las
+  dos copias, la que no se puede recargar es la que quedó impresa en la mano del cadete.
+- 🔑 **El recibo lleva el saldo FECHADO al instante de impresión** («Saldo al imprimir · lun 17-ago
+  19:04»), y ésa es toda la idea del papel. Como no se guarda ningún total, el saldo cambia solo
+  cuando alguien corrige el precio de un envío de la semana pasada: un «Saldo: $47.000» a secas
+  envejece en silencio y **dos reimpresiones del mismo movimiento se contradicen** sin que ninguna
+  esté mal. Con el sello, las dos son ciertas y hablan de momentos distintos — y el invariante de no
+  guardar totales queda intacto. El sello usa el **mismo `OFFSET_AR_MS` del portal**, no la hora del
+  navegador: una máquina mal configurada le pondría al papel una hora que no es la del local.
+- 🔑 **El recibo es UNA copia y no lleva firma** (lo decidió Bruno): es el comprobante que se lleva
+  el cadete, y el local ya tiene la fila. Sólo se imprime de un movimiento **vivo** — el papel de uno
+  anulado sale idéntico a uno bueno y después no hay con qué distinguirlos.
 - 🔴 🔑 **UN PEDIDO NO SE ENTREGA SI NO ESTÁ PAGO** (lo dijo Bruno el 17-ago-2026, y reordena todo lo
   de abajo): se paga **en el momento de entregar**, o al cadete o transfiriendo al local. ⇒ un
   `entregado` con `cobrado === false` **no es una deuda de la clienta: es una transferencia al
@@ -220,10 +237,27 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   viejas (`pg_get_constraintdef` + `information_schema`, después de la corrida). 🔑 **La predicción
   del predicado no alcanzaba**: lo que había que ver era la corrida que antes rompía, no un `select`
   que dijera que no iba a romper.
-- ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
-  rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
-- ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`
-  (⚠️ `pdftoppm` no está instalado), pero **nunca salió por la impresora real**.
+- ✅ **G0 y G7, HECHOS** (17-ago-2026), que eran lo último de la tanda G. `lib/rollo80.ts` salió
+  primero y en su propio commit, y el recibo se escribió encima. **Una copia, sin firma** — el plan
+  decía dos copias y firma, y lo cambió Bruno: es un comprobante, no un documento que alguien selle.
+  🔴 🔑 **Lo que se mudó en G0 no lo miraba ningún assert**: los tests de `armarTicket` prueban el
+  layout y lo que cambió de archivo fue el **dibujo**. El oráculo fue grabar la **cinta de órdenes**
+  que el ticket le manda a jsPDF —con el código viejo y con el nuevo, sobre cinco casos— y
+  diferenciarlas: **229 órdenes idénticas**, con la cinta verificada moviendo un gris para que
+  «idénticas» significara algo. 🔑 **La copia vieja se saca de `git show HEAD:` a un archivo aparte,
+  no con `git stash`**: el árbol es compartido con otras sesiones.
+  ✅ **8 mutantes del recibo, los 8 muertos por un `expect`** (`tests/envios-recibo.test.ts`): el
+  verbo fijo, el monto sin `Math.abs`, el saldo sin sello, el sello en UTC, el alto de página fijo,
+  el recuadro de alto fijo, el saldo recalculado en cero y `rotuloDeSaldo` dado vuelta. ⚠️ Uno no
+  entró a la primera (el `${…}` del template se lo comió el `perl`) y **un mutante que no entra no
+  vale**: se rehizo hasta verlo aplicado en el archivo.
+  ✅ **Mirado en PDF con `qlmanage`**, seis casos: el único arreglo de aire —el autor pegado a una
+  nota de tres renglones, que se leía como su cuarto renglón— **no lo dijo ningún test**.
+- ▶️ 🔴 **Imprimir con la térmica del local: lo único que falta de los dos papeles.** El ticket y el
+  recibo se miraron página por página con `qlmanage` (⚠️ `pdftoppm` no está instalado), pero
+  **ninguno salió nunca por la impresora real**: falta ver el encuadre, si el negro del PAGADO sale
+  limpio en papel térmico, y dónde corta la cuchilla. ⚠️ **El botón no se puede apretar desde el
+  Chrome automatizado**: `imprimirPdf` hace `pdf.autoPrint()`, que mata el puente de la extensión.
 - ✅ **El agujero de ida y vuelta, CERRADO** (17-ago-2026). Se abrió como «si la clienta paga después
   no hay forma de sacar el "no cobró"», y **la pregunta a Bruno lo dio vuelta**: como un pedido no se
   entrega impago, ese tilde nunca significó una deuda pendiente, así que **no había nada que saldar —
