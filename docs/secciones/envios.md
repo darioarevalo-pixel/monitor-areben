@@ -227,13 +227,29 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   saliéndole de lo que tiene que traer. Por eso la decisión vive en `valorDeCobro` (afirmable) y hay
   un test **texto contra texto** que exige que el handler la llame: `tests/envios-cobrado-handler.test.ts`,
   del mismo molde que `blob-upload-sesion.test.ts`. **8 mutantes, los 8 muertos por un `expect`.**
-  ⛔ **NADA ejercido a mano todavía**: hoy en prod hay 11 envíos, 0 entregados y 0 con `cobrado`
-  escrito, así que la pantalla no muestra ni una vez el camino nuevo hasta que se entregue algo.
+  ✅ **EJERCIDO A MANO EN PROD, con el bundle nuevo confirmado** (el chunk de la sección pasó de
+  `3fiua6nz20xy4` a `264aol6m6-iib`, «Falta cobrarle a clientas» **ya no está** y los dos textos nuevos
+  sí): fila de prueba creada **en un día pasado y vacío** —el vie 14-ago, para no ensuciar la hoja de
+  hoy, que tiene 2 envíos reales—, avanzada a `entregado`, y los **tres rótulos** vistos en pantalla:
+  «Sin dato: cuenta como cobrada por él» → «Se pagó al local» → «La cobró el cadete». **Las dos
+  direcciones escriben**, cotejado con `psql` y no sólo con la pantalla (`f` y después `t`). Borrada:
+  la tabla quedó igual que antes (11 envíos, 0 con `cobrado`).
+  ⚠️ **Lo que NO se vio en pantalla es el KPI**: el envío de prueba quedó en $0 —el clasificador
+  bloquea tipear montos en prod— y la tarjeta sólo aparece con `sinCobrar > 0`. Su texto se verificó
+  **en el bundle servido**, no dibujado.
 - ▶️ **Medir antes de decidir el filtro de la traída** (`envio_estado='fulfilled'` / `estado_orden=
   'closed'`): TN no tiene «entregado», y si en el local marcan «despachado» al empaquetar, agregarlo
   haría que el paquete no salga y nadie se entere.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
   reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
+- 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un
+  solo status de Vercel** —los de la noche anterior sí tienen el suyo, o sea que el oráculo sirve— y
+  producción estuvo **once horas** sirviendo `6e57911` con el CI en verde. Lo destrabó un **commit
+  vacío**. 🔑 **El oráculo definitivo es el CÓDIGO SERVIDO** (buscar una cadena nueva en los chunks
+  que carga la pantalla): la API de deployments de GitHub siguió mostrando `6e57911` **después** de
+  que el build nuevo ya se estaba sirviendo, así que hoy esa integración no se puede usar para decir
+  «no deployó». ⛔ Y el chunk viejo **sigue dando 200** (los assets son `immutable` y se retienen):
+  «ya da 404» no sirve de señal.
 - ▶️ **Publicar la novedad**, que quedó en borrador (`n1786736641432_bgbqg9`, destino `seccion:envios`).
 - 🔴 **`ESTADOS_LEGADO` NO se puede borrar todavía, al revés de lo que decía acá.** Medido el
   17-ago-2026 con `pg_get_constraintdef` sobre prod: `envios_reparto_estado_check` **sigue
