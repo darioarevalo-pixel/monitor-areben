@@ -41,8 +41,19 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **La cuenta son MOVIMIENTOS con signo, sin columna `tipo`** — el signo va adentro del dato.
   Positivo = el cadete tiene plata nuestra. **Rinde cuando pasa**, no por día de reparto. No se
   guarda ningún total: el saldo se arrastra y un día congelado haría mentir a todos los siguientes.
-- 🔑 **`cobrado: null` («no dijo nada») NO es `false` («no me pagó»)** — se saldan al revés, y todas
-  las filas anteriores al portal son `null`. La tarifa se le paga igual: llevó el paquete.
+- 🔴 🔑 **UN PEDIDO NO SE ENTREGA SI NO ESTÁ PAGO** (lo dijo Bruno el 17-ago-2026, y reordena todo lo
+  de abajo): se paga **en el momento de entregar**, o al cadete o transfiriendo al local. ⇒ un
+  `entregado` con `cobrado === false` **no es una deuda de la clienta: es una transferencia al
+  local**. Si de verdad no paga, el paquete no se entrega y el envío es `no_entregado`. Por eso la
+  función se llama `pagoAlLocal` y no `cobroPendiente`, y por eso el KPI dice «Pagado al local por
+  transferencia» y no «Falta cobrarle a clientas» — **ese rótulo mandaba a reclamarle plata a una
+  clienta que ya había pagado**, y en rojo.
+- 🔑 **`cobrado: null` («no dijo nada») NO es `false`** — todas las filas anteriores al portal son
+  `null` y la cuenta las lee como el caso normal: la cobró él. Los **tres** valores dicen **por dónde
+  entró la plata**, no si entró. La tarifa se le paga igual: llevó el paquete.
+- 🔑 **La partición de la cuenta es «quién tiene la plata», no «entró o no entró»**: `cobrado` (la
+  mano del cadete, y por eso la trae en la rendición) contra `sinCobrar` (entró al local). Las dos
+  suman lo mismo que antes; lo que cambió el 17-ago es lo que la pantalla dice de ellas.
 - 🔴 **El envío del cadete llega de TN SIEMPRE en $0** (18 de 18 medidos). El precio no viaja en la
   orden: está escrito en el nombre de la opción, por zona. **Hoy se tipea**, pero el mapa de zonas ya
   está cargado (16 zonas en `envios_zonas`); falta **geocodificar la dirección** para poder proponer.
@@ -201,17 +212,23 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
 - ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`
   (⚠️ `pdftoppm` no está instalado), pero **nunca salió por la impresora real**.
-- 🔴 **Agujero de ida y vuelta**: si la clienta paga después, desde la pantalla interna **no hay forma
-  de sacar el «no cobró»** — sólo el cadete, desde su portal, y su ventana de escritura es ±1 día, así
-  que a los dos días no puede nadie. El KPI «Falta cobrarle a clientas» no baja solo.
-  🔴 🔑 **Y no se arregla agregando un botón, porque la cuenta parte en DOS baldes con un solo `if`**:
-  `cuentaDelCadete` y `totalesDelDia` reparten el `aCobrar` de cada entregado entre `sinCobrar` (lo
-  que la clienta debe) y `cobrado` (lo que el cadete tiene que traer), y el que decide es
-  `cobroPendiente`. ⇒ **sacar el «no cobró» —a `true` o a `null`, da igual— le mueve esa plata al
-  cadete**, o sea le inventa una deuda por plata que nunca tuvo en la mano si la clienta transfirió
-  al local. Es el mismo modo de falla que el signo de `pagado_aparte`: los dos caminos dan un número
-  plausible. **Cuál de los dos casos pasa en la calle lo decide Bruno**, y de eso depende si alcanza
-  con una acción o si la partición tiene que pasar a tener un tercer balde.
+- ✅ **El agujero de ida y vuelta, CERRADO** (17-ago-2026). Se abrió como «si la clienta paga después
+  no hay forma de sacar el "no cobró"», y **la pregunta a Bruno lo dio vuelta**: como un pedido no se
+  entrega impago, ese tilde nunca significó una deuda pendiente, así que **no había nada que saldar —
+  había un rótulo que mentía**. Lo que quedó:
+  · el rótulo, en tres lugares (el KPI, la línea del día y la fila), y los nombres (`pagoAlLocal`);
+  · `action: 'cobrado'` en el handler + `marcarCobrado` + `QuienCobro` en la fila, que es la
+  **corrección del tilde** —no un hecho nuevo—: el portal sólo escribe ±1 día y esa barrera no se
+  afloja, así que pasado el día un tilde equivocado no lo podía arreglar nadie, y mueve plata en la
+  rendición en las dos direcciones.
+  🔴 🔑 **El mutante que importa vive en el handler**: `cobrado` es el único campo de **tres** valores
+  entre dos vecinos de dos escritos con `!!b.<campo>`, y con el `!!` **un cuerpo sin el campo escribe
+  «se pagó al local»** sobre un envío que el cadete sí cobró — 200, sin que falle nada, con la plata
+  saliéndole de lo que tiene que traer. Por eso la decisión vive en `valorDeCobro` (afirmable) y hay
+  un test **texto contra texto** que exige que el handler la llame: `tests/envios-cobrado-handler.test.ts`,
+  del mismo molde que `blob-upload-sesion.test.ts`. **8 mutantes, los 8 muertos por un `expect`.**
+  ⛔ **NADA ejercido a mano todavía**: hoy en prod hay 11 envíos, 0 entregados y 0 con `cobrado`
+  escrito, así que la pantalla no muestra ni una vez el camino nuevo hasta que se entregue algo.
 - ▶️ **Medir antes de decidir el filtro de la traída** (`envio_estado='fulfilled'` / `estado_orden=
   'closed'`): TN no tiene «entregado», y si en el local marcan «despachado» al empaquetar, agregarlo
   haría que el paquete no salga y nadie se entere.

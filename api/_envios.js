@@ -8,6 +8,7 @@
 //   POST { recurso:'envios', action:'agendar', id, fecha, turno }   ·  action:'desagendar', id
 //   POST { recurso:'envios', action:'pagado', id, envio_pagado }    ·  action:'bonificado', id, envio_bonificado
 //   POST { recurso:'envios', action:'costo', id, monto_envio }
+//   POST { recurso:'envios', action:'cobrado', id, cobrado }  (true | false | null — corrige el tilde del cadete)
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
 //   POST { recurso:'envios', action:'cerrar-dia', fecha, nota }
@@ -63,6 +64,7 @@ import {
   TURNOS,
   validarEnvio,
   validarMovimiento,
+  valorDeCobro,
 } from '../lib/envios/reglas.core.js';
 
 /**
@@ -419,6 +421,38 @@ export default async function handler(req, res) {
       const parche = { envio_bonificado: bonificado, autor: yo, updated_at: new Date().toISOString() };
       if (bonificado) parche.envio_pagado = false;
       const { data, error } = await supabase.from('envios_reparto').update(parche).eq('id', id).select('id');
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Corregir quién cobró en la puerta ─────────────────────────────────────
+    //
+    // 🔴 **Existe porque el portal del cadete sólo puede escribir ±1 día.** Ese límite es la barrera
+    // que hace que un link filtrado no entregue la agenda entera, así que no se afloja; pero deja un
+    // tilde equivocado sin arreglo posible a partir del segundo día, y ese tilde mueve plata: un
+    // `false` de más le saca al cadete de lo que tiene que traer, y uno de menos se lo cobra.
+    //
+    // 🔑 **Es una corrección del dato, no un hecho nuevo.** Lo que dice `cobrado` es por dónde entró
+    // la plata —la mano del cadete o una transferencia al local—, no si entró: un pedido no se
+    // entrega si no está pago. Por eso no hay un movimiento de por medio ni nada que anotar en la
+    // cuenta corriente: la partición se recalcula sola. Ver `pagoAlLocal`.
+    //
+    // 🔴 **`valorDeCobro` y no `!!b.cobrado`**, al revés que `pagado` y `bonificado`: son tres
+    // valores y el campo ausente significa algo. Con el `!!`, un cuerpo sin el campo escribiría
+    // «pagó al local» sobre un envío que el cadete sí cobró, sin que fallara nada.
+    if (b.action === 'cobrado') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const cobrado = valorDeCobro(b.cobrado);
+      if (cobrado === undefined) {
+        return res.status(400).json({ error: 'Quién cobró tiene que ser true (el cadete), false (se pagó al local) o null (sin dato).' });
+      }
+      const { data, error } = await supabase
+        .from('envios_reparto')
+        .update({ cobrado, autor: yo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id');
       if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
       return res.status(200).json({ ok: true });

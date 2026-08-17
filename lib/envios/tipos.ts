@@ -78,12 +78,14 @@ export type Envio = {
   /** Lo que hay en la base: puede ser un estado legado hasta que corra la migración de cierre. */
   estado: EstadoEnBase
   /**
-   * **¿Cobró en la puerta?** Lo marca el cadete desde el portal, no la pantalla interna.
+   * **¿Cobró él en la puerta?** Lo marca el cadete desde el portal, y desde el 17-ago-2026 también se
+   * puede corregir desde la pantalla interna (`action: 'cobrado'`), que es lo único que hay cuando
+   * pasó el día: la ventana de escritura del portal es de ±1.
    *
    * 🔑 **Tres valores, no dos.** `null` es "no dijo nada" —todas las filas anteriores al portal, y
-   * todas las que nadie tildó— y NO es `false`: se saldan al revés. `false` es un hecho reportado
-   * («entregué y no me pagaron») y es el único que le saca la plata de la cuenta al cadete. Ver
-   * `cobroPendiente`.
+   * todas las que nadie tildó— y NO es `false`. `false` es un hecho reportado: entregó y la plata no
+   * pasó por su mano, o sea que **se pagó al local por transferencia** —un pedido no se entrega si no
+   * está pago—. Es el único valor que le saca esa plata de la cuenta. Ver `pagoAlLocal`.
    */
   cobrado: boolean | null
   vendedor: string | null
@@ -105,11 +107,12 @@ export type TotalesDia = {
   /** Lo que el cadete juntó en las puertas. Sólo lo entregado de verdad, y sólo lo que sí cobró. */
   cobrado: number
   /**
-   * Lo que entregó **sin cobrar** (marcó «No cobré» en la puerta). Es plata que hay que reclamarle a
-   * la clienta, no al cadete: por eso sale de `cobrado` y no entra en `debeTraer`.
+   * Lo que se pagó **al local por transferencia** (el cadete marcó «No cobré» en la puerta). No hay
+   * nada que reclamar —un pedido no se entrega si no está pago—: la plata entró, sólo que no por su
+   * mano, y por eso sale de `cobrado` y no entra en `debeTraer`. Ver `pagoAlLocal`.
    */
   sinCobrar: number
-  /** Lo que le debemos por haber llevado esos paquetes. Los sin cobrar también: los llevó igual. */
+  /** Lo que le debemos por haber llevado esos paquetes. Los transferidos también: los llevó igual. */
   tarifas: number
   /** `cobrado − tarifas`: la plata que tiene que entregar. Negativo = le debemos nosotros. */
   debeTraer: number
@@ -180,7 +183,7 @@ export type DiaDeCuenta = {
   entregados: number
   /** Lo que cobró en las puertas. */
   cobrado: number
-  /** Lo que entregó sin cobrar. No se lo debe él: se le debe a la clienta. Ver `cobroPendiente`. */
+  /** Lo que se pagó al local por transferencia. Entró, pero no por su mano. Ver `pagoAlLocal`. */
   sinCobrar: number
   /** Lo que le debemos por llevarlos, los cobrados y los que no. */
   tarifas: number
@@ -204,8 +207,10 @@ export type CuentaCadete = {
   /** El acumulado del último día. Positivo = tiene plata nuestra; negativo = le debemos. */
   saldo: number
   /**
-   * Todo lo que se entregó sin cobrar, de todos los días. **No es deuda del cadete**: es la lista de
-   * clientas a las que hay que llamar, y va aparte del saldo justamente para que no se confundan.
+   * Todo lo que se pagó al local por transferencia, de todos los días. **No es deuda de nadie**: la
+   * plata entró, sólo que no por la mano del cadete. Va aparte del saldo para que no se sume a lo que
+   * él tiene que traer — y **no es una lista de clientas a las que llamar**, que es lo que decía acá
+   * y lo que la pantalla mostraba en rojo. Ver `pagoAlLocal`.
    */
   sinCobrar: number
 }

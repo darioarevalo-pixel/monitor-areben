@@ -10,7 +10,7 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
-import { aCobrar, cobroPendiente, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
@@ -156,13 +156,17 @@ export function cuentaDelCadete(
     const entregados = delDia.filter((e) => e.estado === 'entregado')
     const cierre = cierres.find((c) => c.fecha === fecha) || null
 
-    // 🔴 **Lo que entregó sin cobrar no se le reclama a él.** Antes toda entrega sumaba `aCobrar` a
-    // lo que tenía que traer, tildara lo que tildara en la puerta: el cadete quedaba debiendo plata
-    // que nunca tuvo en la mano, y como la pantalla interna ni siquiera pedía la columna, la
-    // diferencia se discutía de memoria. La tarifa sí se le paga igual —llevó el paquete—, así que
-    // sale de `cobrado` y **no** de `tarifas`.
-    const cobrado = entregados.filter((e) => !cobroPendiente(e)).reduce((s, e) => s + aCobrar(e), 0)
-    const sinCobrar = entregados.filter(cobroPendiente).reduce((s, e) => s + aCobrar(e), 0)
+    // 🔴 **Lo que se pagó al local no se le reclama a él.** Antes toda entrega sumaba `aCobrar` a lo
+    // que tenía que traer, tildara lo que tildara en la puerta: el cadete quedaba debiendo plata que
+    // nunca tuvo en la mano, y como la pantalla interna ni siquiera pedía la columna, la diferencia
+    // se discutía de memoria. La tarifa sí se le paga igual —llevó el paquete—, así que sale de
+    // `cobrado` y **no** de `tarifas`.
+    //
+    // 🔑 **Los dos baldes son «quién tiene la plata», no «entró o no entró»**: un pedido no se
+    // entrega si no está pago, así que todo lo entregado ya se cobró; lo único que decide `pagoAlLocal`
+    // es si entró por la mano del cadete o por transferencia. Ver su comentario.
+    const cobrado = entregados.filter((e) => !pagoAlLocal(e)).reduce((s, e) => s + aCobrar(e), 0)
+    const sinCobrar = entregados.filter(pagoAlLocal).reduce((s, e) => s + aCobrar(e), 0)
     const tarifas = entregados.reduce((s, e) => s + tarifaCadete(e), 0)
     sinCobrarTotal += sinCobrar
 
@@ -231,9 +235,9 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     if (e.envio_pagado) enviosPagos += num(e.monto_envio)
     if (e.envio_bonificado) enviosBonificados += num(e.monto_envio)
     if (e.estado === 'entregado') {
-      // La misma partición que en `cuentaDelCadete`, y por el mismo motivo: lo que entregó sin
-      // cobrar no es plata que él tenga que traer. La tarifa se le paga igual, llevó el paquete.
-      if (cobroPendiente(e)) sinCobrar += aCobrar(e)
+      // La misma partición que en `cuentaDelCadete`, y por el mismo motivo: lo que se pagó al local
+      // no es plata que él tenga que traer. La tarifa se le paga igual, llevó el paquete.
+      if (pagoAlLocal(e)) sinCobrar += aCobrar(e)
       else cobrado += aCobrar(e)
       tarifas += tarifaCadete(e)
     }
@@ -399,6 +403,28 @@ export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } 
  * El pendiente es `warning` y no un texto gris: «lo cobra el cadete» describía lo normal en vez de
  * nombrar el estado, así que nada distinguía la fila que falta cobrar de la que ya está resuelta.
  */
+/**
+ * **Por dónde entró la plata de esa puerta**: el rótulo, y el verbo que lo corrige.
+ *
+ * Calcado de `pagoDelEnvio` y por el mismo motivo: el label y la acción salen de **una** función, así
+ * que el botón no puede decir una cosa y escribir otra. Y como `cobrado` tiene tres valores, el
+ * `siguiente` viaja explícito en vez de deducirse con un `!`.
+ *
+ * 🔑 **`null` se rotula por lo que la cuenta HACE con él, no por lo que la base guarda.** Es "nadie
+ * dijo nada", y la cuenta lo trata como cobrado por el cadete —o sea, plata que él tiene que traer—:
+ * mostrarlo como un guión dejaría el número más importante de la pantalla sin explicación en todas
+ * las filas viejas, que son el 100% de las anteriores al portal.
+ *
+ * 🔑 **Y por eso el `null` no ofrece "volver a sin dato"**: no hay nada que ganar volviendo a un
+ * estado que se lee igual, y sí hay algo que perder — el tilde del cadete es un hecho reportado y
+ * pisarlo con "nadie dijo nada" borra su testimonio. Se corrige a un lado o al otro.
+ */
+export function quienCobro(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; accion: string; siguiente: boolean } {
+  if (e.cobrado === false) return { tone: 'brand', label: 'Se pagó al local', accion: 'En realidad la cobró el cadete', siguiente: true }
+  if (e.cobrado === true) return { tone: 'success', label: 'La cobró el cadete', accion: 'En realidad se pagó al local', siguiente: false }
+  return { tone: 'warning', label: 'Sin dato: cuenta como cobrada por él', accion: 'Se pagó al local', siguiente: false }
+}
+
 export function pagoDelEnvio(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; accion: string; siguiente: boolean } {
   if (e.envio_pagado) return { tone: 'success', label: 'Pago', accion: 'Marcar como pendiente', siguiente: false }
   if (e.envio_bonificado) return { tone: 'brand', label: 'Bonificado', accion: 'Marcar como pago', siguiente: true }
@@ -611,7 +637,6 @@ export {
   CAMPOS_MOVIMIENTO,
   claseDelMovimiento,
   CLASES_MOVIMIENTO,
-  cobroPendiente,
   conIntentoFallido,
   envioSaldado,
   estaTodoPago,
@@ -629,6 +654,7 @@ export {
   netoDelEnvio,
   num,
   ORIGENES,
+  pagoAlLocal,
   siguienteEstado,
   tarifaCadete,
   TURNOS,
@@ -636,4 +662,5 @@ export {
   turnosDe,
   validarEnvio,
   validarMovimiento,
+  valorDeCobro,
 } from './reglas.core.js'

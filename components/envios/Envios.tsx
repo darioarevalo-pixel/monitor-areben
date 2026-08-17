@@ -32,7 +32,6 @@ import {
 import {
   aCobrar,
   claseDelMovimiento,
-  cobroPendiente,
   cpFueraDeZona,
   direccionCompleta,
   envioSaldado,
@@ -45,6 +44,7 @@ import {
   envioNuevoAMano,
   pagoDelEnvio,
   proximoDiaDeReparto,
+  quienCobro,
   puedeIrAUnDia,
   rotuloDeDia,
   marcasPresentes,
@@ -63,7 +63,7 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
@@ -383,14 +383,13 @@ export function Envios() {
                             envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'ya pago'}
                           </div>
                         ) : null}
-                        {/* 🔴 **Lo que el cadete marcó desde la puerta, en la única columna donde
-                            significa algo.** Va en rojo y no como un dato más: es plata que no
-                            entró, y la acción que sigue —llamar a la clienta— la decide quien mira
-                            esta hoja. Antes esta pantalla era ciega a esto: el portal escribía
-                            `cobrado` y del otro lado no lo pedía nadie. */}
-                        {cobroPendiente(e) ? (
-                          <div style={{ fontSize: 12, color: color.danger, fontWeight: 600 }}>no cobró</div>
-                        ) : null}
+                        {/* 🔑 **Por dónde entró la plata, en la única columna donde significa algo.**
+                            Antes esta pantalla era ciega: el portal escribía `cobrado` y del otro
+                            lado no lo pedía nadie. Y después decía «no cobró» **en rojo**, que era
+                            peor que no decir nada: un pedido no se entrega si no está pago, así que
+                            eso no es una deuda de la clienta sino una transferencia al local, y el
+                            rojo mandaba a reclamarle plata a alguien que ya había pagado. */}
+                        {e.estado === 'entregado' ? <QuienCobro envio={e} onGuardado={recargar} /> : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
                         <PagoDelEnvio envio={e} onGuardado={recargar} conEstado={false} />
@@ -1173,6 +1172,47 @@ function PagoDelEnvio({ envio, onGuardado, conEstado = true }: { envio: Envio; o
 }
 
 /**
+ * Por dónde entró la plata de esa puerta, y el botón que lo corrige.
+ *
+ * 🔴 **Es el único lugar donde se puede corregir pasado el día.** El cadete tilda desde el portal,
+ * pero su ventana de escritura es de ±1 día —ésa es la barrera que hace que un link filtrado no
+ * entregue la agenda entera, así que no se toca—, y el tilde equivocado mueve plata: cada entrega
+ * que figura cobrada por él se le suma a lo que tiene que traer en la rendición.
+ *
+ * Se pinta **sólo en los entregados**: antes de la puerta no hay nada que decir, y en un
+ * `no_entregado` no se cobró porque no hubo puerta. El rótulo y el verbo salen los dos de
+ * `quienCobro`, por lo mismo que `PagoDelEnvio` los saca de `pagoDelEnvio`.
+ */
+function QuienCobro({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
+  const toast = useToast()
+  const [guardando, setGuardando] = useState(false)
+  const { tone, label, accion, siguiente } = quienCobro(envio)
+
+  async function corregir() {
+    setGuardando(true)
+    try {
+      await marcarCobrado(envio.id, siguiente)
+      await onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo corregir quién cobró en la puerta.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 2, marginTop: 2 }}>
+      <StatusPill tone={tone} label={label} />
+      <div>
+        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void corregir()}>
+          {guardando ? 'Guardando…' : accion}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
  * El precio del envío, cargado desde la fila.
  *
  * 🔑 **Se cotiza de a diez seguidos, mirando el mapa.** Abrir la ficha entera para escribir un
@@ -1665,14 +1705,17 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
           sub={saldo === 0 ? undefined : saldo > 0 ? 'lo trae en la próxima rendición' : 'se lo descuenta de los próximos envíos'}
         />
         <KpiCard label="Días sin cerrar" value={String(cuenta.dias.filter((d) => !d.cerrado && d.entregados > 0).length)} />
-        {/* 🔑 **Aparece sólo cuando hay algo que reclamar**, y va aparte del saldo a propósito: es
-            plata que deben las clientas, no el cadete. Un KPI en cero al lado del saldo invitaría a
-            sumarlos, que es justo la confusión que este número vino a deshacer. */}
+        {/* 🔑 **No es plata que falte: es plata que entró por otra puerta.** Decía «Falta cobrarle a
+            clientas», y eso era falso — un pedido no se entrega si no está pago, así que un entregado
+            que el cadete no cobró es uno que se transfirió al local. El rótulo viejo mandaba a
+            reclamarle a una clienta que ya había pagado. Va aparte del saldo igual que antes, para
+            que no se sume a lo que el cadete tiene que traer, que es de lo que justamente está
+            afuera. Aparece sólo cuando hay algo. */}
         {cuenta.sinCobrar > 0 ? (
           <KpiCard
-            label="Falta cobrarle a clientas"
+            label="Pagado al local por transferencia"
             value={formatMoney(cuenta.sinCobrar)}
-            sub="entregado sin cobrar: no lo debe el cadete"
+            sub="entregado y cobrado, pero no por la mano del cadete"
           />
         ) : null}
       </div>
@@ -1715,9 +1758,10 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
               <Td>
                 {formatMoney(d.cobrado)}
                 {/* Debajo del cobrado y no en su propia columna: es la explicación de por qué ese
-                    número es más chico que los envíos del día. */}
+                    número es más chico que los envíos del día. 🔑 **Y no va en rojo**: no es una
+                    falta, es plata que entró al local en vez de a la mano del cadete. */}
                 {d.sinCobrar ? (
-                  <div style={{ fontSize: 12, color: color.danger }}>{formatMoney(d.sinCobrar)} sin cobrar</div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>{formatMoney(d.sinCobrar)} por transferencia</div>
                 ) : null}
               </Td>
               <Td>{formatMoney(d.tarifas)}</Td>

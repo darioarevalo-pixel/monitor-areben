@@ -31,7 +31,9 @@ import {
   CAMPOS_CUENTA,
   CAMPOS_MOVIMIENTO,
   claseDelMovimiento,
-  cobroPendiente,
+  pagoAlLocal,
+  quienCobro,
+  valorDeCobro,
   envioNuevoAMano,
   montoDelMovimiento,
   MOVIMIENTO_LABEL,
@@ -494,9 +496,9 @@ describe('la cuenta corriente del cadete', () => {
     expect(c.saldo).toBe(-7300) // sólo las dos tarifas, que se le deben igual
   })
 
-  // 🔴 Un `no_entregado` con `cobrado: false` no es plata que falte cobrar: no hubo puerta. Si
-  // `cobroPendiente` no mirara el estado, cada entrega fallida inflaría el KPI de las clientas.
-  it('🔴 el que volvió sin entregar no es un cobro pendiente', () => {
+  // 🔴 Un `no_entregado` con `cobrado: false` no es plata que entró por transferencia: no hubo
+  // puerta. Si `pagoAlLocal` no mirara el estado, cada entrega fallida inflaría ese número.
+  it('🔴 el que volvió sin entregar no cuenta como pagado al local', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado', cobrado: false }]),
       [],
@@ -598,23 +600,82 @@ describe('🔴 las columnas que el handler pide', () => {
   })
 })
 
-describe('🔴 cobroPendiente — entregado y sin cobrar', () => {
-  it('entregado con `cobrado: false` es un cobro pendiente', () => {
-    expect(cobroPendiente(con({ estado: 'entregado', cobrado: false }))).toBe(true)
+describe('🔴 pagoAlLocal — entregado y cobrado por transferencia', () => {
+  it('entregado con `cobrado: false` es plata que entró al local, no a la mano del cadete', () => {
+    expect(pagoAlLocal(con({ estado: 'entregado', cobrado: false }))).toBe(true)
   })
 
   // Los tres que NO lo son, y cada uno por un motivo distinto.
   it('`null` no es `false`: nadie dijo nada', () => {
-    expect(cobroPendiente(con({ estado: 'entregado', cobrado: null }))).toBe(false)
+    expect(pagoAlLocal(con({ estado: 'entregado', cobrado: null }))).toBe(false)
   })
 
   it('el que sí cobró, obviamente no', () => {
-    expect(cobroPendiente(con({ estado: 'entregado', cobrado: true }))).toBe(false)
+    expect(pagoAlLocal(con({ estado: 'entregado', cobrado: true }))).toBe(false)
   })
 
   it('el que todavía no salió tampoco: no hubo puerta', () => {
-    expect(cobroPendiente(con({ estado: 'pendiente', cobrado: false }))).toBe(false)
-    expect(cobroPendiente(con({ estado: 'no_entregado', cobrado: false }))).toBe(false)
+    expect(pagoAlLocal(con({ estado: 'pendiente', cobrado: false }))).toBe(false)
+    expect(pagoAlLocal(con({ estado: 'no_entregado', cobrado: false }))).toBe(false)
+  })
+})
+
+/**
+ * 🔴 **El campo ausente NO puede leerse como `false`.** Es el mutante que importa de todo este
+ * bloque: escrito como `!!b.cobrado` —que es como están `pagado` y `bonificado`, y por eso es la
+ * copia que sale sola— un cuerpo sin el campo marcaría «se pagó al local» sobre un envío que el
+ * cadete sí cobró, y esa plata **le sale de lo que tiene que traer** sin que falle nada.
+ */
+describe('🔴 valorDeCobro — tres valores, y el que falta no es false', () => {
+  it('deja pasar los tres valores que significan algo', () => {
+    expect(valorDeCobro(true)).toBe(true)
+    expect(valorDeCobro(false)).toBe(false)
+    expect(valorDeCobro(null)).toBe(null)
+  })
+
+  it('el campo ausente se rechaza, NO se lee como false', () => {
+    expect(valorDeCobro(undefined)).toBe(undefined)
+  })
+
+  // Lo que llega de un cuerpo JSON tipeado a mano o de un formulario viejo.
+  it('nada de lo que se le parece pasa por verdadero o falso', () => {
+    for (const v of ['true', 'false', '', 0, 1, 'null', {}, []]) {
+      expect(valorDeCobro(v)).toBe(undefined)
+    }
+  })
+})
+
+/**
+ * El rótulo y el verbo de la corrección salen de la misma función, por lo mismo que en
+ * `pagoDelEnvio`: separarlos es la forma de que el botón diga una cosa y escriba otra.
+ */
+describe('🔴 quienCobro — el label y el verbo, juntos', () => {
+  it('el que se pagó al local se corrige HACIA el cadete', () => {
+    const q = quienCobro(con({ estado: 'entregado', cobrado: false }))
+    expect(q.label).toContain('local')
+    expect(q.siguiente).toBe(true)
+  })
+
+  it('el que cobró el cadete se corrige HACIA el local', () => {
+    const q = quienCobro(con({ estado: 'entregado', cobrado: true }))
+    expect(q.label).toContain('cadete')
+    expect(q.siguiente).toBe(false)
+  })
+
+  // 🔑 `null` se rotula por lo que la cuenta HACE con él —lo cobra el cadete—, no por lo que la base
+  // guarda: es el 100% de las filas anteriores al portal, y son las que explican el número del día.
+  it('sin dato, el rótulo dice que cuenta como cobrada por él y ofrece la corrección útil', () => {
+    const q = quienCobro(con({ estado: 'entregado', cobrado: null }))
+    expect(q.label.toLowerCase()).toContain('cuenta como cobrada')
+    expect(q.siguiente).toBe(false)
+  })
+
+  // 🔴 El mutante que importa: si los dos casos ofrecieran el mismo `siguiente`, el botón de una de
+  // las dos filas escribiría lo que ya dice, y la corrección quedaría muerta en una dirección.
+  it('las dos correcciones apuntan a lados opuestos', () => {
+    expect(quienCobro(con({ estado: 'entregado', cobrado: false })).siguiente).not.toBe(
+      quienCobro(con({ estado: 'entregado', cobrado: true })).siguiente,
+    )
   })
 })
 

@@ -72,6 +72,18 @@ export async function marcarPagado(id: string, pagado: boolean): Promise<void> {
   await postear({ action: 'pagado', id, envio_pagado: pagado }, 'No se pudo marcar el envío como pagado.')
 }
 
+/**
+ * **Corregir por dónde entró la plata de esa puerta**: `true` la cobró el cadete, `false` se pagó al
+ * local por transferencia, `null` nadie dijo nada.
+ *
+ * 🔴 **La pantalla interna es el único lugar donde se puede corregir pasado el día.** El portal del
+ * cadete sólo escribe ±1 día —esa ventana es lo que hace que un link filtrado no sirva para nada— y
+ * el tilde equivocado mueve plata en la rendición.
+ */
+export async function marcarCobrado(id: string, cobrado: boolean | null): Promise<void> {
+  await postear({ action: 'cobrado', id, cobrado }, 'No se pudo corregir quién cobró en la puerta.')
+}
+
 /** Cotizar: el precio del envío, sin abrir la ficha. Sale del mapa de zonas. */
 export async function guardarCosto(id: string, monto: number): Promise<void> {
   await postear({ action: 'costo', id, monto_envio: monto }, 'No se pudo guardar el precio del envío.')
