@@ -31,7 +31,6 @@
 // frena todos los deploys sin error visible.
 import { createClient } from '@supabase/supabase-js';
 import {
-  CAMPOS_CIERRE,
   CAMPOS_CUENTA,
   CAMPOS_MOVIMIENTO,
   cuentaDelCadete,
@@ -142,18 +141,16 @@ export default async function handler(req, res) {
     // y lo que sale no tiene ni una dirección ni un teléfono. El recorte que sí hay es del **detalle**
     // y vive en `paraElCadeteCuenta`, junto con la línea de saldo anterior que hace que la resta cierre.
     if (req.method === 'GET' && String(req.query.vista || '') === 'cuenta') {
-      const [env, dia, mov] = await Promise.all([
+      const [env, mov] = await Promise.all([
         supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
-        supabase.from('envios_dia').select(CAMPOS_CIERRE).order('fecha'),
         // Los anulados también: el cadete puede tener el recibo de uno anulado en la mano, y una fila
         // que desaparece de la lista es un papel del que no queda rastro de este lado.
         supabase.from('envios_movimientos').select(CAMPOS_MOVIMIENTO).order('fecha'),
       ]);
       if (env.error) throw new Error(env.error.message);
-      if (dia.error) throw new Error(dia.error.message);
       if (mov.error) throw new Error(mov.error.message);
 
-      const cuenta = cuentaDelCadete(env.data || [], dia.data || [], mov.data || []);
+      const cuenta = cuentaDelCadete(env.data || [], mov.data || []);
       return res.status(200).json({ ok: true, hoy: hoyAR, cuenta: paraElCadeteCuenta(cuenta, hoyAR) });
     }
 

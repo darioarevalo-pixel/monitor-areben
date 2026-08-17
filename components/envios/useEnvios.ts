@@ -14,7 +14,7 @@ import { hoyIso, sumarDias } from '@/lib/calendario'
 import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes, leerZonas } from '@/lib/envios/cliente'
 import { cuentaDelCadete, marcasATraer, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CierreDia, CuentaCadete, Envio, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
+import type { CuentaCadete, Envio, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
 
 /**
  * Cuántos días para atrás se piden al traer de Tienda Nube.
@@ -39,8 +39,6 @@ export type EstadoEnvios = {
    * tienda. El reparto, en cambio, es uno solo — el cadete sale con las dos en la misma mochila.
    */
   pendientes: Envio[]
-  /** El cierre de caja de ese día, o `null` si todavía no se cerró. Es uno: la caja es del día. */
-  cierre: CierreDia | null
   cargando: boolean
   error: string | null
   recargar: () => Promise<void>
@@ -54,7 +52,6 @@ export function useEnvios(): EstadoEnvios {
   const [fecha, setFecha] = useState<string>(() => hoyIso())
   const [envios, setEnvios] = useState<Envio[]>([])
   const [todosLosPendientes, setTodosLosPendientes] = useState<Envio[]>([])
-  const [cierre, setCierre] = useState<CierreDia | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,7 +79,6 @@ export function useEnvios(): EstadoEnvios {
         const [d, p] = await Promise.all([leerDia(fecha), leerPendientes()])
         if (!vivo) return
         setEnvios(d.envios)
-        setCierre(d.cierre)
         setTodosLosPendientes(p)
       } catch (e) {
         if (!vivo) return
@@ -177,7 +173,7 @@ export function useEnvios(): EstadoEnvios {
     [todosLosPendientes, marcaActiva],
   )
 
-  return { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube }
+  return { fecha, setFecha, envios, pendientes, cargando, error, recargar, traerDeTiendaNube }
 }
 
 /**
@@ -204,9 +200,9 @@ export function useCuentaCadete(activa: boolean) {
       setCargando(true)
       setError(null)
       try {
-        const { envios, dias, movimientos } = await leerCuenta()
+        const { envios, movimientos } = await leerCuenta()
         if (!vivo) return
-        setCuenta(cuentaDelCadete(envios, dias, movimientos))
+        setCuenta(cuentaDelCadete(envios, movimientos))
       } catch (e) {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta del cadete.')

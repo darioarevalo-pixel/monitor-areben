@@ -1,4 +1,4 @@
-// "Envíos del día": la hoja del cadete. Tablas `envios_reparto` y `envios_dia`.
+// "Envíos del día": la hoja del cadete. Tablas `envios_reparto` y `envios_movimientos`.
 //
 //   GET  ?recurso=envios&fecha=YYYY-MM-DD                    → { ok, envios, cierre, puede }
 //   GET  ?recurso=envios&pendientes=1                        → { ok, envios } (los que no tienen día)
@@ -11,7 +11,6 @@
 //   POST { recurso:'envios', action:'cobrado', id, cobrado }  (true | false | null — corrige el tilde del cadete)
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
-//   POST { recurso:'envios', action:'cerrar-dia', fecha, nota }
 //   POST { recurso:'envios', action:'movimiento', fecha, clase, monto, nota }
 //   POST { recurso:'envios', action:'anular-movimiento', id }
 //   GET  ?recurso=envios&zonas=1                             → { ok, zonas } (el mapa de reparto)
@@ -54,7 +53,6 @@ import { marcasConAcceso } from '../lib/permisos.core.js';
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
 import {
   CAMPOS,
-  CAMPOS_CIERRE,
   CAMPOS_CUENTA,
   CAMPOS_MOVIMIENTO,
   conIntentoFallido,
@@ -216,32 +214,28 @@ export default async function handler(req, res) {
       }
 
       if (req.query.cuenta === '1') {
-        const [env, dia, mov] = await Promise.all([
+        const [env, mov] = await Promise.all([
           supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
-          supabase.from('envios_dia').select(CAMPOS_CIERRE).order('fecha'),
           // Todos, anulados incluidos: la pantalla los muestra tachados, y un movimiento anulado que
           // desaparece de la lista es un recibo impreso del que no queda rastro.
           supabase.from('envios_movimientos').select(CAMPOS_MOVIMIENTO).order('fecha'),
         ]);
         if (env.error) throw new Error(env.error.message);
-        if (dia.error) throw new Error(dia.error.message);
         if (mov.error) throw new Error(mov.error.message);
         return res
           .status(200)
-          .json({ ok: true, envios: env.data || [], dias: dia.data || [], movimientos: mov.data || [] });
+          .json({ ok: true, envios: env.data || [], movimientos: mov.data || [] });
       }
 
       const fecha = req.query.fecha;
       if (!esFechaIso(fecha)) return res.status(400).json({ error: 'Falta la fecha del día (YYYY-MM-DD).' });
 
-      const [env, cie] = await Promise.all([
+      const [env] = await Promise.all([
         supabase.from('envios_reparto').select(CAMPOS).eq('fecha', fecha).order('created_at'),
-        supabase.from('envios_dia').select(CAMPOS_CIERRE).eq('fecha', fecha).maybeSingle(),
       ]);
       if (env.error) throw new Error(env.error.message);
-      if (cie.error) throw new Error(cie.error.message);
 
-      return res.status(200).json({ ok: true, fecha, envios: env.data || [], cierre: cie.data || null });
+      return res.status(200).json({ ok: true, fecha, envios: env.data || [] });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
@@ -488,32 +482,6 @@ export default async function handler(req, res) {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
       const { error } = await supabase.from('envios_reparto').delete().eq('id', id);
-      if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true });
-    }
-
-    // ── El cierre del DÍA ─────────────────────────────────────────────────────
-    //
-    // 🔑 **Del día y no del turno**, por lo mismo que la hoja: el cadete es uno solo y sale a la
-    // mañana y a la tarde con la misma plata en el bolsillo.
-    //
-    // 🔑 **Y desde la tanda G no pide plata.** Pedía cuánto trajo, con un solo casillero por día de
-    // reparto — pero el cadete rinde cuando pasa, a veces tres días juntos y a veces dos veces el
-    // mismo día, así que ese número había que repartirlo a mano entre días que en la calle nunca
-    // estuvieron partidos. La plata son ahora movimientos (`action: 'movimiento'`), y cerrar el día
-    // quedó siendo lo que siempre fue en la práctica: **alguien lo revisó**.
-    if (b.action === 'cerrar-dia') {
-      if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta la fecha del día.' });
-
-      const { error } = await supabase.from('envios_dia').upsert(
-        {
-          fecha: b.fecha,
-          nota: b.nota ? String(b.nota) : null,
-          cerrado_por: yo,
-          cerrado_en: new Date().toISOString(),
-        },
-        { onConflict: 'fecha' },
-      );
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
     }

@@ -65,12 +65,12 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cerrarDia, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { AccionDePago, CierreDia, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, TotalesDia, Turno } from '@/lib/envios/tipos'
+import type { AccionDePago, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
 
@@ -106,7 +106,7 @@ const ESTADO_TONE: Record<string, Tone> = {
  * análisis por marca deja de estar ciego sin que la operación cambie.
  */
 export function Envios() {
-  const { fecha, setFecha, envios, pendientes, cierre, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
+  const { fecha, setFecha, envios, pendientes, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   // La marca del header. Es la que siembra el alta a mano: la bandeja filtra por marca, así que una
@@ -115,7 +115,6 @@ export function Envios() {
   const [trayendo, setTrayendo] = useState(false)
   const [editando, setEditando] = useState<Partial<Envio> | null>(null)
   // La caja es del día, así que esto vuelve a ser un booleano: hay una sola por cerrar.
-  const [cerrando, setCerrando] = useState(false)
   const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta' | 'zonas'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
   const [viendoPedido, setViendoPedido] = useState<Envio | null>(null)
@@ -458,31 +457,8 @@ export function Envios() {
         })
       )}
 
-      {/* 🔑 **El día se revisa una vez, no una por turno.** El cadete es uno solo y sale a la mañana
-          y a la tarde con la misma plata en el bolsillo. Y desde la tanda G esto ya no pide plata:
-          la rendición no cae por día de reparto —él rinde cuando pasa, a veces tres días juntos— y
-          vive en los movimientos de la cuenta. Acá queda el hecho de que alguien miró el día. */}
       <LinkDelCadete />
 
-      {cargando || !delDia.length ? null : (
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-            <div>
-              <strong>El día</strong>
-              <div style={{ opacity: 0.7, fontSize: 13 }}>
-                {cierre?.cerrado_en
-                  ? `Revisado por ${cierre.cerrado_por}${cierre.nota ? ` · ${cierre.nota}` : ''}`
-                  : totales.pendienteDeSalir
-                    ? `Todavía hay ${totales.pendienteDeSalir} sin salir`
-                    : 'Sin revisar'}
-              </div>
-            </div>
-            <Button variant="outline" onClick={() => setCerrando(true)}>
-              {cierre?.cerrado_en ? 'Corregir la nota' : 'Marcar el día como revisado'}
-            </Button>
-          </div>
-        </Card>
-      )}
 
       </>
       )}
@@ -511,18 +487,6 @@ export function Envios() {
         />
       ) : null}
 
-      {cerrando ? (
-        <CierreDelDia
-          fecha={fecha}
-          totales={totales}
-          cierre={cierre}
-          onCerrar={() => setCerrando(false)}
-          onGuardado={async () => {
-            setCerrando(false)
-            await recargar()
-          }}
-        />
-      ) : null}
     </div>
   )
 }
@@ -1578,92 +1542,6 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
 }
 
 /**
- * El cierre del día: dejar anotado que alguien lo revisó.
- *
- * 🔴 **Pedía plata y ya no.** Preguntaba cuánto había traído el cadete, con un solo casillero por
- * día de reparto — pero él rinde cuando pasa: el jueves trae lo del lunes, martes y miércoles, y a
- * veces vuelve el mismo día. Ese número había que repartirlo a mano entre tres días que en la calle
- * nunca estuvieron partidos, o inventar un cierre en un día sin moto. La plata son **movimientos**
- * (ver la pestaña de la cuenta), con su propia fecha y sin límite de uno por día.
- *
- * Lo que queda acá es lo que el cierre siempre fue en la práctica: alguien miró el día y lo dio por
- * bueno. Sigue siendo útil —es lo que distingue «no pasó nada» de «nadie lo revisó»— y por eso el
- * modal sigue mostrando cómo cerró el día, aunque ya no se tipee ningún número.
- */
-function CierreDelDia({
-  fecha,
-  totales,
-  cierre,
-  onCerrar,
-  onGuardado,
-}: {
-  fecha: string
-  totales: TotalesDia
-  cierre: CierreDia | null
-  onCerrar: () => void
-  onGuardado: () => Promise<void>
-}) {
-  const toast = useToast()
-  const esperado = totales.debeTraer
-  const [nota, setNota] = useState(cierre?.nota || '')
-  const [guardando, setGuardando] = useState(false)
-
-  async function guardar() {
-    setGuardando(true)
-    try {
-      await cerrarDia(fecha, nota.trim() || null)
-      await onGuardado()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo cerrar el día.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  return (
-    <Modal abierto onCerrar={onCerrar} titulo={`Revisar el ${rotuloDeDia(fecha) || 'día'}`}>
-      <div style={{ display: 'grid', gap: space[4] }}>
-        <Notice tone="brand">
-          Cobró {formatMoney(totales.cobrado)} en las puertas y se queda {formatMoney(totales.tarifas)} de sus envíos ⇒{' '}
-          {esperado < 0 ? (
-            <>
-              <strong>le debemos {formatMoney(-esperado)}</strong> por este día.
-            </>
-          ) : esperado === 0 ? (
-            <>
-              <strong>no queda nada dando vueltas</strong>, que es lo normal.
-            </>
-          ) : (
-            <>
-              le quedan <strong>{formatMoney(esperado)}</strong> nuestros.
-            </>
-          )}
-        </Notice>
-        {/* 🔑 **No hay un botón de rendir acá.** La rendición casi nunca es de este día: es del
-            jueves que pasó a traer lo de tres días. Mandarla a la cuenta —donde está el saldo
-            acumulado, que es contra lo que se rinde— evita el reflejo de anotarla en el día que se
-            está mirando, que es exactamente el error que el modelo viejo obligaba a cometer. */}
-        <Notice tone="neutral">
-          La plata que traiga o que se le pague se anota en <strong>la cuenta del cadete</strong>, con la fecha del
-          día en que se mueve.
-        </Notice>
-        <Field label="Nota" hint="Qué pasó ese día, si pasó algo. Vacío es lo normal.">
-          <Input value={nota} onChange={(e) => setNota(e.target.value)} />
-        </Field>
-        <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
-          <Button variant="ghost" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Marcar como revisado'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-/**
  * La cuenta corriente del cadete.
  *
  * 🔑 **Existe porque el saldo no se salda: se arrastra.** Hay un solo cadete; por cada envío
@@ -1721,7 +1599,6 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
             la misma frase**. Con dos copias, el día que se corrija una el papel que queda en la mano
             del cadete es el que dice lo viejo, y es el único de los dos que no se puede recargar. */}
         <KpiCard label={dice.titulo} value={formatMoney(dice.monto)} sub={dice.sub || undefined} />
-        <KpiCard label="Días sin cerrar" value={String(cuenta.dias.filter((d) => !d.cerrado && d.entregados > 0).length)} />
         {/* 🔑 **No es plata que falte: es plata que entró por otra puerta.** Decía «Falta cobrarle a
             clientas», y eso era falso — un pedido no se entrega si no está pago, así que un entregado
             que el cadete no cobró es uno que se transfirió al local. El rótulo viejo mandaba a
@@ -1762,12 +1639,6 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
             <Tr key={d.fecha}>
               <Td>
                 <div style={{ fontWeight: 600 }}>{rotuloDeDia(d.fecha) || d.fecha}</div>
-                {d.cerrado ? (
-                  <div style={{ opacity: 0.6, fontSize: 12 }}>cerró {d.cerradoPor}</div>
-                ) : (
-                  <Badge tone="warning">sin cerrar</Badge>
-                )}
-                {d.nota ? <div style={{ opacity: 0.7, fontSize: 12 }}>{d.nota}</div> : null}
               </Td>
               <Td>
                 {d.entregados} de {d.envios}

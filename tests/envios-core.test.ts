@@ -48,7 +48,7 @@ import {
   validarMovimiento,
 } from '@/lib/envios/core'
 import { armarTicket, textoDePlata } from '@/lib/envios/ticket'
-import type { CierreDia, Envio, MovimientoCuenta, OrdenTN, Traida } from '@/lib/envios/tipos'
+import type { Envio, MovimientoCuenta, OrdenTN, Traida } from '@/lib/envios/tipos'
 
 /**
  * La hoja del cadete.
@@ -276,12 +276,6 @@ describe('la cuenta corriente del cadete', () => {
   const dia = (fecha: string, envios: Partial<Envio>[]): Envio[] =>
     envios.map((e, i) => con({ id: `${fecha}-${i}`, fecha, estado: 'entregado', ...e }))
 
-  const cierre = (fecha: string): CierreDia => ({
-    fecha,
-    nota: null,
-    cerrado_por: 'Bruno',
-    cerrado_en: `${fecha}T20:00:00Z`,
-  })
 
   /**
    * Un movimiento **ya guardado**: el monto viene con su signo, como sale de la base. Lo que la
@@ -306,13 +300,13 @@ describe('la cuenta corriente del cadete', () => {
     mov(fecha, montoDelMovimiento('le_pagamos', cuanto), extra)
 
   it('el día normal —todo cobrado en la puerta— no mueve la cuenta', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300 }]), [cierre('2026-08-17')])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300 }]))
     expect(c.dias[0].debeTraer).toBe(0)
     expect(c.saldo).toBe(0)
   })
 
   it('el envío que el cliente ya había pagado lo deja a favor del cadete', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), [cierre('2026-08-17')])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]))
     expect(c.saldo).toBe(-3000) // negativo = le debemos
   })
 
@@ -323,7 +317,7 @@ describe('la cuenta corriente del cadete', () => {
       ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]), // le quedamos debiendo 3000
       ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), // trae 10000
     ]
-    const c = cuentaDelCadete(envios, [cierre('2026-08-17'), cierre('2026-08-18')], [rindio('2026-08-18', 10000)])
+    const c = cuentaDelCadete(envios, [rindio('2026-08-18', 10000)])
     expect(c.dias.map((d) => d.acumulado)).toEqual([-3000, -3000])
     // El martes rindió los 10.000 enteros, así que los 3.000 del lunes le siguen debiendo.
     expect(c.saldo).toBe(-3000)
@@ -335,7 +329,7 @@ describe('la cuenta corriente del cadete', () => {
       ...dia('2026-08-18', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
     ]
     // Rinde 7.000 y se queda con los 3.000 que se le debían: es como se salda en la calle.
-    const c = cuentaDelCadete(envios, [cierre('2026-08-17'), cierre('2026-08-18')], [rindio('2026-08-18', 7000)])
+    const c = cuentaDelCadete(envios, [rindio('2026-08-18', 7000)])
     expect(c.saldo).toBe(0)
   })
 
@@ -346,7 +340,6 @@ describe('la cuenta corriente del cadete', () => {
   it('🔴 pagarle SALDA lo que se le debía, no lo agranda', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
-      [cierre('2026-08-17')],
       [lePagamos('2026-08-17', 3000)],
     )
     expect(c.saldo).toBe(0)
@@ -357,8 +350,8 @@ describe('la cuenta corriente del cadete', () => {
   // dos lados, cada test suelto sigue dando verde y la cuenta entera queda espejada.
   it('🔴 rendir BAJA el saldo y que le paguemos lo SUBE', () => {
     const envios = dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }])
-    const soloRinde = cuentaDelCadete(envios, [], [rindio('2026-08-17', 4000)])
-    const soloPaga = cuentaDelCadete(envios, [], [lePagamos('2026-08-17', 4000)])
+    const soloRinde = cuentaDelCadete(envios, [rindio('2026-08-17', 4000)])
+    const soloPaga = cuentaDelCadete(envios, [lePagamos('2026-08-17', 4000)])
     expect(soloRinde.saldo).toBe(6000) // tenía 10.000 nuestros, entregó 4.000
     expect(soloPaga.saldo).toBe(14000) // tenía 10.000 nuestros y le dimos 4.000 más
     expect(soloRinde.saldo).toBeLessThan(soloPaga.saldo)
@@ -367,20 +360,16 @@ describe('la cuenta corriente del cadete', () => {
   // 🔴 Un envío que volvió sin entregar no cobró nada Y no se le paga. Contarlo haría que la cuenta
   // se rompa justo los días que algo salió mal.
   it('🔴 lo que no se entregó no entra en la cuenta', () => {
-    const c = cuentaDelCadete(
-      dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado' }]),
-      [cierre('2026-08-17')],
-    )
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado' }]))
     expect(c.dias[0].cobrado).toBe(0)
     expect(c.dias[0].tarifas).toBe(0)
     expect(c.saldo).toBe(0)
   })
 
-  it('un día sin cerrar cuenta igual: la plata está en su bolsillo aunque nadie la haya anotado', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]), [])
+  it('un día sin un solo movimiento cuenta igual: la plata está en su bolsillo aunque nadie la anote', () => {
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]))
     expect(c.dias[0].movimientos).toEqual([])
     expect(c.dias[0].movido).toBe(0)
-    expect(c.dias[0].cerrado).toBe(false)
     expect(c.saldo).toBe(10000)
   })
 
@@ -391,7 +380,7 @@ describe('la cuenta corriente del cadete', () => {
       ...dia('2026-08-19', [{ monto_envio: 3000, monto_pedido_a_cobrar: 5000 }]),
       ...dia('2026-08-17', [{ monto_envio: 3000, envio_pagado: true }]),
     ]
-    const c = cuentaDelCadete(envios, [])
+    const c = cuentaDelCadete(envios)
     expect(c.dias.map((d) => d.fecha)).toEqual(['2026-08-17', '2026-08-19'])
     expect(c.dias.map((d) => d.acumulado)).toEqual([-3000, 2000])
   })
@@ -399,12 +388,6 @@ describe('la cuenta corriente del cadete', () => {
   it('los que están en la bandeja, sin día, no tienen nada que ver con la cuenta', () => {
     const c = cuentaDelCadete([con({ fecha: null, turno: null, estado: 'entregado', monto_pedido_a_cobrar: 9999 })], [])
     expect(c.dias).toEqual([])
-    expect(c.saldo).toBe(0)
-  })
-
-  it('un día cerrado sin envíos igual es una fila', () => {
-    const c = cuentaDelCadete([], [cierre('2026-08-17')])
-    expect(c.dias).toHaveLength(1)
     expect(c.saldo).toBe(0)
   })
 
@@ -416,7 +399,6 @@ describe('la cuenta corriente del cadete', () => {
   it('🔴 un movimiento en un día sin reparto igual es una fila de la cuenta', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
-      [],
       [rindio('2026-08-22', 10000)], // el sábado, sin moto, pasó a rendir lo del lunes
     )
     expect(c.dias.map((d) => d.fecha)).toEqual(['2026-08-17', '2026-08-22'])
@@ -431,7 +413,6 @@ describe('la cuenta corriente del cadete', () => {
   it('🔴 un movimiento anulado sigue a la vista pero NO cuenta en el saldo', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
-      [],
       [rindio('2026-08-17', 10000, { anulado_en: '2026-08-17T21:00:00Z', anulado_por: 'Bruno' })],
     )
     expect(c.dias[0].movimientos).toHaveLength(1)
@@ -442,7 +423,6 @@ describe('la cuenta corriente del cadete', () => {
   it('dos movimientos el mismo día se suman: rinde a la mañana y vuelve a la tarde', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000 }]),
-      [],
       [rindio('2026-08-17', 6000), rindio('2026-08-17', 4000)],
     )
     expect(c.dias[0].movimientos).toHaveLength(2)
@@ -460,7 +440,6 @@ describe('la cuenta corriente del cadete', () => {
     // cadete queda debiendo diez mil pesos que nunca tuvo en la mano.
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, cobrado: false }]),
-      [cierre('2026-08-17')],
     )
     expect(c.dias[0].cobrado).toBe(0)
     expect(c.dias[0].sinCobrar).toBe(13000)
@@ -473,14 +452,14 @@ describe('la cuenta corriente del cadete', () => {
   // tildan desde la pantalla interna. El mutante —tratarlo como `false`— da vuelta la cuenta
   // histórica entera de un día para el otro y hace aparecer una deuda de clientas que no existe.
   it('🔴 el que nadie tildó sigue contando como cobrado', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]), [cierre('2026-08-17')])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]))
     expect(c.dias[0].cobrado).toBe(3000)
     expect(c.dias[0].sinCobrar).toBe(0)
     expect(c.saldo).toBe(0)
   })
 
   it('lo que se cobró de verdad no aparece como pendiente', () => {
-    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: true }]), [cierre('2026-08-17')])
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: true }]))
     expect(c.dias[0].sinCobrar).toBe(0)
   })
 
@@ -491,7 +470,7 @@ describe('la cuenta corriente del cadete', () => {
       ...dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 5000, cobrado: false }]),
       ...dia('2026-08-18', [{ monto_envio: 4300, cobrado: false }]),
     ]
-    const c = cuentaDelCadete(envios, [])
+    const c = cuentaDelCadete(envios)
     expect(c.sinCobrar).toBe(12300)
     expect(c.saldo).toBe(-7300) // sólo las dos tarifas, que se le deben igual
   })
@@ -501,7 +480,6 @@ describe('la cuenta corriente del cadete', () => {
   it('🔴 el que volvió sin entregar no cuenta como pagado al local', () => {
     const c = cuentaDelCadete(
       dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 10000, estado: 'no_entregado', cobrado: false }]),
-      [],
     )
     expect(c.dias[0].sinCobrar).toBe(0)
     expect(c.sinCobrar).toBe(0)

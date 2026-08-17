@@ -13,7 +13,7 @@ import { rotuloFecha } from '../fechas/semana'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { AccionDePago, CierreDia, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
+import type { AccionDePago, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: strin
  * `Envio[]` y el `CuentaCadete` se infieren como `any` y la pantalla pierde el compilador justo
  * arriba de la plata.
  */
-export const cuentaDelCadete: (envios: Envio[], cierres: CierreDia[], movimientos?: MovimientoCuenta[]) => CuentaCadete =
+export const cuentaDelCadete: (envios: Envio[], movimientos?: MovimientoCuenta[]) => CuentaCadete =
   cuentaDelCadeteJs
 
 /**

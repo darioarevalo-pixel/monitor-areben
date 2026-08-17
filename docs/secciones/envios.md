@@ -16,7 +16,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
 | **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
-| Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_dia` · `envios_movimientos` · `envios_portal` |
+| Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_movimientos` · `envios_portal`. ⚠️ **`envios_dia` quedó vestigial**: ver «Cerrar el día se sacó» |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
 | Tests | `tests/envios-core.test.ts` · `envios-cliente.test.ts` · `cadete-portal.test.ts` · `envios-mensajes.test.ts` |
 
@@ -86,6 +86,20 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   `estado='no_entregado'`). `fecha` y `turno` van los dos o ninguno (check `envios_fecha_turno_juntos`).
 - 🔑 **La grilla de turnos NO se valida en el servidor**: la pantalla ofrece los que existen y avisa
   si se fuerza otro. Un envío especial un sábado tiene que poder salir sin tocar código.
+- 🏁 **«Cerrar el día» SE SACÓ** (17-ago-2026, lo pidió Bruno después de preguntarme para qué servía).
+  Escribía una fila en `envios_dia` con `cerrado_por` y una nota, y **no cambiaba ningún número**: la
+  cuenta sale de los envíos entregados y de los movimientos, así que un día cerrado o abierto daba
+  exactamente lo mismo. Sólo producía el KPI «Días sin cerrar» y una línea diciendo quién lo apretó.
+  🔴 **Y nadie lo apretó nunca: `envios_dia` quedó vacía desde el 13-ago**, o sea que el sistema
+  funcionó un mes sin ese paso. Había perdido su razón en la tanda G, cuando la plata del día
+  (`trajo`) se mudó a `envios_movimientos`; de ahí en más era «alguien lo revisó».
+  🔑 **Su caso propio —un día sin reparto en el que igual se movió plata— lo cubren los movimientos**,
+  que tienen fecha propia: por eso `cuentaDelCadete` pasó de tres fuentes de días a dos sin perder
+  ninguna fila.
+  ⛔ **La TABLA no se dropea, y es una decisión.** Tres migraciones la crean, así que dropearla
+  obligaría a volver a poner un guard condicional en cada una — que es exactamente el trabajo que
+  costó `2adcd30` («un `add column if not exists` después de un `drop column` no es idempotencia, es
+  una resurrección»). Una tabla vacía que nadie lee no cuesta nada; el guard mal puesto sí.
 - 🔑 **La cuenta son MOVIMIENTOS con signo, sin columna `tipo`** — el signo va adentro del dato.
   Positivo = el cadete tiene plata nuestra. **Rinde cuando pasa**, no por día de reparto. No se
   guarda ningún total: el saldo se arrastra y un día congelado haría mentir a todos los siguientes.
@@ -415,7 +429,7 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   hay primera consulta que falle, así que el CP quedaría solo y sin corroborar. Son **26 clientas**
   con CP 2000 y `city` vacío, y ninguna fila de `envios_reparto` hoy.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
-  reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
+  reprogramar, y el modal del pedido.
 - ✅ **La mitad que RECUPERA, ejercida a mano en prod** (17-ago-2026, con el bundle nuevo confirmado
   por el código servido: `LOCALIDAD_DEL_CP` minificado adentro del chunk `0l1jipe_p6h7s`). Bandeja de
   BDI, «Sugerir precios (6)» → **5 con precio y 1 que se niega**, y la que importa:

@@ -481,13 +481,13 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
     { id: 'm1', fecha: '2026-08-17', monto: -10000, nota: 'rindió el jueves', autor: 'Bruno', anulado_en: null, anulado_por: null },
     { id: 'm2', fecha: '2026-08-17', monto: 5000, nota: 'este no cuenta', autor: 'Bruno', anulado_en: '2026-08-17T10:00:00Z', anulado_por: 'Bruno' },
   ]
-  const armar = (hoy = '2026-08-17') => paraElCadeteCuenta(cuentaDelCadete(enviosCuenta, [], movs), hoy)
+  const armar = (hoy = '2026-08-17') => paraElCadeteCuenta(cuentaDelCadete(enviosCuenta, movs), hoy)
 
   it('🔴 el SALDO se calcula sobre todos los días, aunque el detalle se recorte', () => {
     // 🔴 El mutante: filtrar los días ANTES de acumular. El 1-jun queda fuera de los 60 días, así que
     // el saldo perdería sus $3.000 y saldría un número perfectamente creíble.
     const c = armar()
-    expect(cuentaDelCadete(enviosCuenta, [], movs).saldo).toBe(-3000)
+    expect(cuentaDelCadete(enviosCuenta, movs).saldo).toBe(-3000)
     expect(c.saldo.monto).toBe(3000)
     expect(c.saldo.titulo).toBe('Le debemos al cadete')
     expect(c.dias.map((d: { fecha: string }) => d.fecha)).toEqual(['2026-08-17'])
@@ -502,7 +502,7 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
   })
 
   it('sin nada afuera de la ventana no inventa la línea', () => {
-    const c = paraElCadeteCuenta(cuentaDelCadete([enviosCuenta[1]], [], movs), '2026-08-17')
+    const c = paraElCadeteCuenta(cuentaDelCadete([enviosCuenta[1]], movs), '2026-08-17')
     expect(c.hayAnteriores).toBe(false)
     expect(c.saldoAnterior).toBe(0)
   })
@@ -515,7 +515,7 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
     // hoy nos parece sensible — es la misma doctrina de `paraElCadete` y de `VISIBLE_AL_CADETE`.
     const d = armar().dias[0]
     expect(Object.keys(d).sort()).toEqual(
-      ['acumulado', 'cerrado', 'cobrado', 'debeTraer', 'entregados', 'envios', 'fecha', 'movimientos', 'rotulo', 'saldoDelDia', 'tarifas'].sort(),
+      ['acumulado', 'cobrado', 'debeTraer', 'entregados', 'envios', 'fecha', 'movimientos', 'rotulo', 'saldoDelDia', 'tarifas'].sort(),
     )
     expect(Object.keys(d.movimientos[0]).sort()).toEqual(['anulado', 'autor', 'monto', 'nota', 'verbo'].sort())
   })
@@ -551,7 +551,7 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
     // «mié 19-ago · saldo $0» y nada más. En la pantalla interna esa fila sirve; acá es ruido.
     // El mutante es dejarla pasar, y también filtrarla ANTES de acumular (eso sí movería el saldo).
     const conAgendado = [...enviosCuenta, { ...fila, id: 'c', fecha: '2026-08-19', estado: 'pendiente' }]
-    const c = paraElCadeteCuenta(cuentaDelCadete(conAgendado, [], movs), '2026-08-17')
+    const c = paraElCadeteCuenta(cuentaDelCadete(conAgendado, movs), '2026-08-17')
     expect(c.dias.map((d: { fecha: string }) => d.fecha)).toEqual(['2026-08-17'])
     expect(c.saldo.monto).toBe(3000)
   })

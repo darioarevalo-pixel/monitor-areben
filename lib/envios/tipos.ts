@@ -139,25 +139,6 @@ export type TotalesDia = {
 }
 
 /**
- * El cierre del DÍA. La ausencia de fila es "todavía no se revisó".
- *
- * 🔑 Es del día y no del turno porque el cadete es uno solo: sale a la mañana y a la tarde con la
- * misma plata en el bolsillo, y partir la caja en dos obligaría a repartir a mano un saldo que en la
- * calle nunca estuvo partido.
- *
- * 🔑 **Desde la tanda G no guarda plata.** `trajo` y `pagado_aparte` eran un solo casillero por día
- * de reparto, y el cadete no rinde así: rinde cuando pasa, a veces tres días juntos, a veces dos
- * veces el mismo día. Eso vive ahora en `MovimientoCuenta`, y cerrar el día quedó siendo lo que
- * siempre fue en la práctica: **alguien lo revisó**.
- */
-export type CierreDia = {
-  fecha: string
-  nota: string | null
-  cerrado_por: string | null
-  cerrado_en: string | null
-}
-
-/**
  * **Un movimiento de plata entre el cadete y el local.**
  *
  * 🔑 `monto` es el efecto sobre el saldo, con signo: rindió ⇒ negativo, le pagamos ⇒ positivo. No
@@ -186,7 +167,7 @@ export type MovimientoCuenta = {
 }
 
 /**
- * Un día en la cuenta corriente del cadete. Todo derivado: lo único que se guarda es el cierre.
+ * Un día en la cuenta corriente del cadete. **Todo derivado: no se guarda nada.**
  *
  * El signo, una sola vez para todo el módulo: **positivo = el cadete tiene plata nuestra**; negativo
  * = se la debemos.
@@ -210,9 +191,6 @@ export type DiaDeCuenta = {
   saldoDelDia: number
   /** El saldo después de ese día, arrastrando todos los anteriores. */
   acumulado: number
-  cerrado: boolean
-  cerradoPor: string | null
-  nota: string | null
 }
 
 /** La cuenta entera: los días y el saldo de hoy. */

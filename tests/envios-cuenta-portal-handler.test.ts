@@ -56,7 +56,6 @@ describe('🔴 la cuenta del cadete, en el handler del portal', () => {
 
   it('🔴 las columnas salen de las constantes compartidas, no escritas a mano', () => {
     expect(handler).toContain('select(CAMPOS_CUENTA)')
-    expect(handler).toContain('select(CAMPOS_CIERRE)')
     expect(handler).toContain('select(CAMPOS_MOVIMIENTO)')
   })
 

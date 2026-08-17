@@ -9,18 +9,18 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { CierreDia, ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
+import type { ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 
-export type DatosDia = { fecha: string; envios: Envio[]; cierre: CierreDia | null }
+export type DatosDia = { fecha: string; envios: Envio[] }
 
 export async function leerDia(fecha: string): Promise<DatosDia> {
   const r = await apiFetch(`${API}&fecha=${fecha}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los envíos del día.')
-  return { fecha, envios: d.envios || [], cierre: d.cierre || null }
+  return { fecha, envios: d.envios || [] }
 }
 
 /**
@@ -107,16 +107,6 @@ export async function borrarEnvio(id: string): Promise<void> {
   await postear({ action: 'borrar', id }, 'No se pudo borrar el envío.')
 }
 
-/**
- * Cerrar el día: dejar anotado que alguien lo revisó, con una nota si hace falta.
- *
- * 🔑 **No lleva plata.** La llevaba —cuánto trajo el cadete—, con un solo casillero por día de
- * reparto; pero él rinde cuando pasa, a veces tres días juntos, así que ese número había que
- * repartirlo a mano. La plata son `anotarMovimiento`.
- */
-export async function cerrarDia(fecha: string, nota: string | null): Promise<void> {
-  await postear({ action: 'cerrar-dia', fecha, nota }, 'No se pudo cerrar el día.')
-}
 
 /**
  * Anotar plata que se movió entre el cadete y el local.
@@ -148,7 +138,6 @@ export async function anularMovimiento(id: string): Promise<void> {
  */
 export async function leerCuenta(): Promise<{
   envios: Envio[]
-  dias: CierreDia[]
   movimientos: MovimientoCuenta[]
 }> {
   const r = await apiFetch(`${API}&cuenta=1&nc=${Date.now()}`)
@@ -156,7 +145,6 @@ export async function leerCuenta(): Promise<{
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la cuenta del cadete.')
   return {
     envios: (d.envios || []) as Envio[],
-    dias: (d.dias || []) as CierreDia[],
     movimientos: (d.movimientos || []) as MovimientoCuenta[],
   }
 }
