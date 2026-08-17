@@ -199,14 +199,25 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy
   no existen como dato y por lo tanto reciben precio— y marcar los **coordinar**. Menor: renombrar
   las diez «Zona N» con su barrio.
-- ✅ **`--cerrar-tanda-a`, CORRIDO** (17-ago-2026): el check de estados quedó en **cinco**,
-  `pago_cadete` y `envios_turno` se fueron. No tocó un solo dato (0 filas con estado legado, 0 con
-  `pago_cadete`).
-  ▶️ **Falta `node scripts/apply-envios.mjs --cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte` de
-  `envios_dia`, detrás del guard de huérfanos). Tampoco toca nada: `envios_dia` y `envios_movimientos`
-  están **vacías** —nunca se cerró un día—, así que la identidad que el guard verifica
-  (`Σ movimientos = −Σ trajo + Σ pagado_aparte`) es 0 = 0. Va **después** del deploy, y el código
-  nuevo hace días que sirve.
+- ✅ **Las dos tandas, CORRIDAS** (17-ago-2026): `envios_dia.trajo` y `pagado_aparte` se fueron
+  (tanda G), `envios_turno` también, y ninguna tocó un dato.
+- 🔴 🔑 **UN CIERRE DE TANDA NO ERA DURADERO: la corrida siguiente lo DESHACÍA.** `apply-envios.mjs`
+  aplica su lista en **cada** corrida, y dos de esos archivos revertían lo que un cierre había hecho:
+  `migrate-envios-estados.sql` hacía `drop constraint` + `add` del check **ancho** (siete estados) y
+  `migrate-envios-cuenta.sql` hacía `add column if not exists pago_cadete` — que después de un
+  `drop column` **no es idempotencia, es una resurrección**. Medido: corrió `--cerrar-tanda-a`
+  (check en cinco, columna dropeada) y veinte minutos después **`--cerrar-tanda-g` dejó el check otra
+  vez en siete y la columna de vuelta**.
+  🔑 **El síntoma que lo cazó: dos corridas del MISMO comando contestando distinto sobre el mismo
+  hecho** — «pago_cadete: se fue ✓» en una y «sigue» en la siguiente, pidiendo cerrar una tanda ya
+  cerrada. ⇒ ✅ **Los dos archivos ahora preguntan antes de escribir**, leyendo la base y no un
+  registro: el check se re-crea sólo si el cierre no corrió (`def not like '%despachado%'`), y
+  `pago_cadete` sólo si todavía no existe `envio_bonificado`, que es la que la reemplaza y se agrega
+  **después**. `tests/envios-migraciones-cierre.test.ts` lo afirma —incluido **el orden de los dos
+  archivos en la lista, que es parte del guard**— y sus 3 mutantes caen.
+  🔴 ▶️ **Y por eso hay que volver a correr `--cerrar-tanda-a` una vez**: al 17-ago la base quedó
+  otra vez con el check en siete y `pago_cadete` puesta. ⚠️ **Es la dirección peligrosa**, porque la
+  app ya borró `ESTADOS_LEGADO`: la base acepta lo que la app no sabe leer.
 - ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
   rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
 - ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`

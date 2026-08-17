@@ -28,10 +28,37 @@
 -- `despachado` ni un `reintento`, así que el renombrado no va a tocar ningún dato — pero el check
 -- ancho igual hace falta por la ventana de arriba.
 
-alter table envios_reparto drop constraint if exists envios_reparto_estado_check;
-alter table envios_reparto add constraint envios_reparto_estado_check
-  check (estado in ('pendiente', 'preparado', 'en_transito', 'entregado', 'no_entregado',
-                    'despachado', 'reintento'));
+-- 🔴 **Y NO SE RE-ABRE SI EL CIERRE YA CORRIÓ.** Este archivo está en la lista que se aplica en
+-- **cada** corrida de `apply-envios.mjs`, así que tal como estaba —`drop constraint` + `add` a
+-- secas— cualquier corrida posterior **deshacía `--cerrar-tanda-a`** y la base volvía a aceptar
+-- `despachado` y `reintento`. Pasó de verdad el 17-ago-2026: se cerró la tanda A, veinte minutos
+-- después se corrió `--cerrar-tanda-g` y el check volvió solo a los siete valores. Se vio porque la
+-- misma salida decía «pago_cadete: se fue ✓» en una corrida y «sigue» en la siguiente.
+--
+-- 🔑 **Es peligroso en una dirección sola**: el código de la app ya borró `ESTADOS_LEGADO`, así que
+-- una base que acepta lo que la app no sabe leer es exactamente el orden inseguro que la ventana de
+-- arriba existía para evitar.
+--
+-- La condición se lee de la base y no de un registro: si el check ya conoce `en_transito` y ya **no**
+-- conoce `despachado`, el cierre corrió y no hay nada que hacer.
+do $$
+declare def text;
+begin
+  select pg_get_constraintdef(oid) into def
+    from pg_constraint
+   where conrelid = 'envios_reparto'::regclass
+     and conname = 'envios_reparto_estado_check';
+
+  if def is not null and def like '%en_transito%' and def not like '%despachado%' then
+    return;
+  end if;
+
+  alter table envios_reparto drop constraint if exists envios_reparto_estado_check;
+  alter table envios_reparto add constraint envios_reparto_estado_check
+    check (estado in ('pendiente', 'preparado', 'en_transito', 'entregado', 'no_entregado',
+                      'despachado', 'reintento'));
+end
+$$;
 
 -- La bandeja «Sin fecha» dejó de ser `fecha is null` a secas: ahora también trae los que volvieron
 -- sin entregar, porque para las chicas es el mismo trabajo —hablar con la clienta y acordar un día—

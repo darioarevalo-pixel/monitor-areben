@@ -44,7 +44,25 @@
 -- cotizar de nuevo dejara los dos números peleados, que es el defecto que esta migración evita en
 -- todo lo demás.
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
-alter table envios_reparto add column if not exists pago_cadete numeric(12,2);
+-- 🔴 **`if not exists` NO alcanza acá: la columna se DROPEA después.** Este archivo se aplica en
+-- cada corrida de `apply-envios.mjs`, así que una vez que `--cerrar-tanda-a` se llevó `pago_cadete`,
+-- la corrida siguiente **la volvía a crear** — y el script lo informaba encima como «sigue (0 filas
+-- la usan)», o sea pidiendo que se cierre otra vez una tanda ya cerrada, para siempre. Medido el
+-- 17-ago-2026: cerró la tanda A, y `--cerrar-tanda-g` veinte minutos después la resucitó.
+--
+-- 🔑 **El guard se lee de la base**: `envio_bonificado` es lo que la REEMPLAZA y lo agrega
+-- `migrate-envios-plata.sql`, que corre **después** de este archivo. En una base nueva todavía no
+-- existe ⇒ la columna se crea como siempre; en una base ya migrada existe ⇒ no se resucita.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+     where table_name = 'envios_reparto' and column_name = 'envio_bonificado'
+  ) then
+    alter table envios_reparto add column if not exists pago_cadete numeric(12,2);
+  end if;
+end
+$$;
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 -- El cierre del DÍA. Reemplaza a `envios_turno`.
