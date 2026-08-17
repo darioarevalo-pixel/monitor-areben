@@ -545,6 +545,17 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
     expect(armar().dias[0].acumulado).toBe(-3000)
   })
 
+  it('🔴 un día sin entregas ni movimientos NO es una fila', () => {
+    // 🔑 Se vio abriendo la pantalla en prod, no acá: un envío agendado para pasado mañana crea un
+    // día en la cuenta —los días salen de las tres fuentes— y en el teléfono eso es una fila que dice
+    // «mié 19-ago · saldo $0» y nada más. En la pantalla interna esa fila sirve; acá es ruido.
+    // El mutante es dejarla pasar, y también filtrarla ANTES de acumular (eso sí movería el saldo).
+    const conAgendado = [...enviosCuenta, { ...fila, id: 'c', fecha: '2026-08-19', estado: 'pendiente' }]
+    const c = paraElCadeteCuenta(cuentaDelCadete(conAgendado, [], movs), '2026-08-17')
+    expect(c.dias.map((d: { fecha: string }) => d.fecha)).toEqual(['2026-08-17'])
+    expect(c.saldo.monto).toBe(3000)
+  })
+
   it('el día trae lo que pasó en la calle, en agregado', () => {
     const d = armar().dias[0]
     expect(d).toMatchObject({ entregados: 1, cobrado: 14000, tarifas: 4000, debeTraer: 10000 })
