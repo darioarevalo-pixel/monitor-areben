@@ -188,22 +188,46 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy
   no existen como dato y por lo tanto reciben precio— y marcar los **coordinar**. Menor: renombrar
   las diez «Zona N» con su barrio.
-- ▶️ **`node scripts/apply-envios.mjs --cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte` detrás de
-  un guard de huérfanos) y **`--cerrar-tanda-a`** (`pago_cadete`, 0 filas). Van **después** del deploy.
+- ▶️ **Los dos cierres de tanda siguen sin correr**, medido en prod el 17-ago-2026: las tres columnas
+  viejas siguen ahí (`envios_dia.trajo`, `envios_dia.pagado_aparte`, `envios_reparto.pago_cadete`) y
+  el check de estados sigue en siete. Van **después** del deploy, y el código nuevo hace días que
+  sirve, así que ya se pueden correr:
+  **`node scripts/apply-envios.mjs --cerrar-tanda-a`** (renombra los estados legado, estrecha el
+  check a cinco y dropea `pago_cadete`) y **`--cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte`
+  detrás del guard de huérfanos). 🔑 **Los dos no tocan un solo dato hoy**: 0 filas con estado legado,
+  0 con `pago_cadete`, y `envios_dia`/`envios_movimientos` están **vacías** —nunca se cerró un día—,
+  así que la identidad que el guard verifica (`Σ movimientos = −Σ trajo + Σ pagado_aparte`) es 0 = 0.
 - ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
   rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
 - ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`
   (⚠️ `pdftoppm` no está instalado), pero **nunca salió por la impresora real**.
 - 🔴 **Agujero de ida y vuelta**: si la clienta paga después, desde la pantalla interna **no hay forma
-  de sacar el «no cobró»** — sólo el cadete, desde su portal. El KPI no baja solo.
+  de sacar el «no cobró»** — sólo el cadete, desde su portal, y su ventana de escritura es ±1 día, así
+  que a los dos días no puede nadie. El KPI «Falta cobrarle a clientas» no baja solo.
+  🔴 🔑 **Y no se arregla agregando un botón, porque la cuenta parte en DOS baldes con un solo `if`**:
+  `cuentaDelCadete` y `totalesDelDia` reparten el `aCobrar` de cada entregado entre `sinCobrar` (lo
+  que la clienta debe) y `cobrado` (lo que el cadete tiene que traer), y el que decide es
+  `cobroPendiente`. ⇒ **sacar el «no cobró» —a `true` o a `null`, da igual— le mueve esa plata al
+  cadete**, o sea le inventa una deuda por plata que nunca tuvo en la mano si la clienta transfirió
+  al local. Es el mismo modo de falla que el signo de `pagado_aparte`: los dos caminos dan un número
+  plausible. **Cuál de los dos casos pasa en la calle lo decide Bruno**, y de eso depende si alcanza
+  con una acción o si la partición tiene que pasar a tener un tercer balde.
 - ▶️ **Medir antes de decidir el filtro de la traída** (`envio_estado='fulfilled'` / `estado_orden=
   'closed'`): TN no tiene «entregado», y si en el local marcan «despachado» al empaquetar, agregarlo
   haría que el paquete no salga y nadie se entere.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
   reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
 - ▶️ **Publicar la novedad**, que quedó en borrador (`n1786736641432_bgbqg9`, destino `seccion:envios`).
-- ⚠️ `ESTADOS_LEGADO` quedó como red de seguridad pero la base ya rechaza `despachado` y `reintento`:
-  se puede borrar. Ojo que un **preview viejo** de otra rama que intente escribirlos recibe un error.
+- 🔴 **`ESTADOS_LEGADO` NO se puede borrar todavía, al revés de lo que decía acá.** Medido el
+  17-ago-2026 con `pg_get_constraintdef` sobre prod: `envios_reparto_estado_check` **sigue
+  admitiendo los siete** (`…, 'no_entregado', 'despachado', 'reintento'`), porque el que lo estrecha
+  a cinco es `migrate-envios-estados-cierre.sql` y **ese cierre nunca corrió**. O sea que la base
+  todavía acepta lo que la app dejaría de saber leer, que es exactamente al revés del orden seguro.
+  🔑 **La condición para borrarlo la dice el código, no esta ficha** (ver el comentario de
+  `ESTADOS_LEGADO` en `reglas.core.js`): primero `--cerrar-tanda-a`, después `select estado from
+  envios_reparto` sin legados —al 17-ago hay 0: 9 `pendiente` y 2 `en_transito`—, recién entonces se
+  borra. ⚠️ Y desde el cierre, un **preview viejo** de otra rama que intente escribirlos recibe un
+  error de constraint.
 - 🔴 **Hallazgo suelto, sin arreglar**: `bdi-catalogo/api/tiendanube-audit?orden=N` **no exige
   usuario** — contesta nombre, ítems y totales a cualquiera que sepa un número de orden. Sus dos
   consumidores (Reclamos y Canjes) le pegan con `fetch` pelado: ponerle el guard rompe las dos.
