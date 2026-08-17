@@ -11,9 +11,9 @@ import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
-import { aCobrar, ESTADOS_CERRADOS, ESTADOS_EN_CASA, movimientoVivo, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
-import type { AccionDePago, CierreDia, CuentaCadete, DiaDeCuenta, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
+import type { AccionDePago, CierreDia, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
 // ── Qué órdenes de Tienda Nube son del cadete ────────────────────────────────────────────────
 
@@ -118,108 +118,20 @@ export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: strin
 // ── La cuenta corriente del cadete ───────────────────────────────────────────────────────────
 
 /**
- * La cuenta corriente, día por día, con el saldo arrastrado.
+ * La cuenta corriente del cadete, **acá sólo la cara tipada**.
  *
- * Se le pasan **todos** los envíos con fecha y todos los cierres, sin filtrar por rango: el
- * acumulado de un día es la suma de todos los anteriores, así que recortar la ventana daría un saldo
- * distinto según por dónde se empiece a mirar. Arranca en cero — al 14-ago-2026 el cadete y el local
- * están a mano — y por eso no hay saldo de apertura que pasarle.
+ * ⛔ **La implementación vive en `reglas.core.js`** desde el 17-ago-2026, y el porqué está escrito
+ * allá: la leen `api/_envios.js` y el portal que el cadete abre en la calle, que no pueden importar
+ * TypeScript. Lo que se muda es la función, no la doctrina — el saldo del teléfono, el de la pantalla
+ * y el del recibo impreso salen de una sola implementación.
  *
- * 🔑 **Sólo cuentan los entregados.** Un paquete que volvió sin entregar no cobró nada y tampoco se
- * le paga: sumarlo haría que la caja no cierre justo los días que algo salió mal, que es cuando el
- * número tiene que ser confiable.
- *
- * 🔑 **La plata que va y viene son los `movimientos`, y ya vienen con signo.** El día aporta al
- * saldo `(cobrado − tarifas) + Σ movimientos vivos`, y esa suma no tiene ningún `if` que decida si
- * una fila suma o resta — porque no hay dónde invertirlo. Ver `montoDelMovimiento`.
- *
- * **Cero totales guardados**, igual que antes y por lo mismo: si el saldo de ayer quedara congelado
- * en una columna y alguien corrigiera el precio de un envío de ayer, el acumulado de hoy mentiría
- * sin que nada falle.
- *
- * El signo, una sola vez y para todo el módulo: **positivo = el cadete tiene plata nuestra**;
- * negativo = se la debemos.
+ * Mismo patrón que `lib/permisos.ts` sobre `permisos.core.js`: el `.js` pone la lógica, el `.ts` le
+ * pone los tipos y la API pública no cambia. La anotación explícita no es adorno — sin ella los
+ * `Envio[]` y el `CuentaCadete` se infieren como `any` y la pantalla pierde el compilador justo
+ * arriba de la plata.
  */
-export function cuentaDelCadete(
-  envios: Envio[],
-  cierres: CierreDia[],
-  movimientos: MovimientoCuenta[] = [],
-): CuentaCadete {
-  const porDia = new Map<string, Envio[]>()
-  for (const e of envios) {
-    if (!e.fecha) continue
-    const lista = porDia.get(e.fecha)
-    if (lista) lista.push(e)
-    else porDia.set(e.fecha, [e])
-  }
-  // Un día cerrado sin un solo envío entregado igual es una fila de la cuenta: es el día en que se
-  // le pagó lo que se le debía y no salió a repartir.
-  for (const c of cierres) if (!porDia.has(c.fecha)) porDia.set(c.fecha, [])
-  // 🔑 **Y los días salen de TRES fuentes, no de dos.** Un movimiento puede caer en un día sin
-  // reparto —el jueves que rinde lo del lunes al miércoles, el sábado que se le transfiere lo que se
-  // le debía— y ése es justamente el caso que la tabla vieja no sabía anotar: su PK era el día de
-  // reparto. Sin esta línea, esa plata existe en la base y no aparece en ninguna fila.
-  for (const m of movimientos) if (m.fecha && !porDia.has(m.fecha)) porDia.set(m.fecha, [])
-
-  const fechas = [...porDia.keys()].sort()
-  let acumulado = 0
-  let sinCobrarTotal = 0
-  const dias: DiaDeCuenta[] = []
-
-  for (const fecha of fechas) {
-    const delDia = porDia.get(fecha) || []
-    const entregados = delDia.filter((e) => e.estado === 'entregado')
-    const cierre = cierres.find((c) => c.fecha === fecha) || null
-
-    // 🔴 **Lo que se pagó al local no se le reclama a él.** Antes toda entrega sumaba `aCobrar` a lo
-    // que tenía que traer, tildara lo que tildara en la puerta: el cadete quedaba debiendo plata que
-    // nunca tuvo en la mano, y como la pantalla interna ni siquiera pedía la columna, la diferencia
-    // se discutía de memoria. La tarifa sí se le paga igual —llevó el paquete—, así que sale de
-    // `cobrado` y **no** de `tarifas`.
-    //
-    // 🔑 **Los dos baldes son «quién tiene la plata», no «entró o no entró»**: un pedido no se
-    // entrega si no está pago, así que todo lo entregado ya se cobró; lo único que decide `pagoAlLocal`
-    // es si entró por la mano del cadete o por transferencia. Ver su comentario.
-    const cobrado = entregados.filter((e) => !pagoAlLocal(e)).reduce((s, e) => s + aCobrar(e), 0)
-    const sinCobrar = entregados.filter(pagoAlLocal).reduce((s, e) => s + aCobrar(e), 0)
-    const tarifas = entregados.reduce((s, e) => s + tarifaCadete(e), 0)
-    sinCobrarTotal += sinCobrar
-
-    // 🔑 **Los movimientos se SUMAN, tal como vienen.** El signo ya viene adentro del dato
-    // (`montoDelMovimiento`), así que acá no hay ningún `if` que decida si esta fila suma o resta —
-    // y por lo tanto no hay ninguno que se pueda invertir. Ése era el defecto que escondía el
-    // modelo anterior: restar `pagado_aparte` en vez de sumarlo DUPLICABA la deuda en vez de
-    // saldarla, y los dos caminos daban un número plausible.
-    //
-    // Los anulados quedan en la lista para que la pantalla los muestre tachados, pero no suman: la
-    // fila no se borra porque puede haber un recibo impreso en la mano del cadete.
-    const delDiaMov = movimientos.filter((m) => m.fecha === fecha)
-    const movido = delDiaMov.filter(movimientoVivo).reduce((s, m) => s + num(m.monto), 0)
-
-    const debeTraer = cobrado - tarifas
-    const saldoDelDia = debeTraer + movido
-    acumulado += saldoDelDia
-
-    dias.push({
-      fecha,
-      envios: delDia.length,
-      entregados: entregados.length,
-      cobrado,
-      sinCobrar,
-      tarifas,
-      debeTraer,
-      movimientos: delDiaMov,
-      movido,
-      saldoDelDia,
-      acumulado,
-      cerrado: !!cierre?.cerrado_en,
-      cerradoPor: cierre?.cerrado_por || null,
-      nota: cierre?.nota || null,
-    })
-  }
-
-  return { dias, saldo: acumulado, sinCobrar: sinCobrarTotal }
-}
+export const cuentaDelCadete: (envios: Envio[], cierres: CierreDia[], movimientos?: MovimientoCuenta[]) => CuentaCadete =
+  cuentaDelCadeteJs
 
 /**
  * Los totales con los que se cierra el día. Son los que la planilla calculaba a mano al pie de cada
