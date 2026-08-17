@@ -375,12 +375,22 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   ⚠️ La lógica no hacía falta escribirla: `consultaDe` con `localidad: 'rosario'` + `cp: '2124'` ya
   daba `localidad_dudosa` con los dos nombres en `tests/envios-direccion.test.ts`. Lo que faltaba era
   que una fila pudiera **tener** CP.
-- 🔴 ▶️ **Y con eso la mitad que PROTEGE se puede por fin ejercer a mano**, que hasta acá era lo único
-  del código postal sin probar en prod: las 11 filas reales tienen CP 2000 y localidad «Rosario», así
-  que **ninguna dispara `localidad_dudosa`** y había que poder sembrar una. Queda cubierta mientras
-  tanto por los tests, por la corrida del camino real contra Georef vivo (que devolvió el motivo con
-  los dos nombres para las nueve) y porque la pantalla imprime `sugerencia.motivo` tal cual — se vio
-  con «no se pudo ubicar» en la misma tanda.
+- ✅ 🏁 **Y con el campo puesto, la mitad que PROTEGE quedó EJERCIDA A MANO EN PROD** (17-ago-2026):
+  era lo único del código postal que nunca se había podido probar contra la app deployada, porque las
+  11 filas reales tienen CP 2000 y localidad «Rosario» y **ninguna dispara `localidad_dudosa`** —
+  había que poder sembrar una, y hasta ahora no había con qué. Bandeja de **Zattia** (2 filas reales),
+  fila de prueba `Saenz peña 1813 · Rosario · CP 2124` **sin precio y sin día**, «Sugerir precios (3)»
+  ⇒ el toast dijo **«2 con precio propuesto · 1 se tipea a mano»**, las dos reales salieron
+  «Zona 2 · $ 4.200 — usar» y la de prueba salió **sin pastilla de precio y sin «usar»**, con el
+  motivo entero y los dos nombres: **«el mapa no propone: el código postal dice Villa Gobernador
+  Gálvez y la dirección dice Rosario»**. Es `consultaDe` corriendo por el handler deployado, con la
+  base y Georef de verdad.
+  ✅ **Bundle nuevo confirmado por el CÓDIGO SERVIDO antes de medir nada**: la cadena del hint del
+  campo («La segunda señal para el precio…») apareció dentro del chunk servido `3akoadnju3lnq.js`, y
+  es un literal que el minificador conserva y que sólo existe en este commit.
+  ✅ **Borrada al terminar y cotejado con `psql`, no sólo con la pantalla**: 11 filas, **0 de prueba**,
+  3 con precio y el `updated_at` más nuevo **sin moverse** ⇒ la tanda de sugerencias no escribió nada,
+  que es justo lo que promete el cartel («No lo guarda»). ⚠️ No se apretó «usar» en ninguna.
 - 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un
   solo status de Vercel** —los de la noche anterior sí tienen el suyo, o sea que el oráculo sirve— y
   producción estuvo **once horas** sirviendo `6e57911` con el CI en verde. Lo destrabó un **commit
