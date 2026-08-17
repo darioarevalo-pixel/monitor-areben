@@ -18,7 +18,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
 | Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_dia` · `envios_movimientos` · `envios_portal` |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
-| Tests | `tests/envios-core.test.ts` · `envios-cliente.test.ts` · `cadete-portal.test.ts` |
+| Tests | `tests/envios-core.test.ts` · `envios-cliente.test.ts` · `cadete-portal.test.ts` · `envios-mensajes.test.ts` |
 
 **Cero funciones nuevas de Vercel**: los dos handlers son `_*.js` y cuelgan de puertas existentes.
 
@@ -179,6 +179,25 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   anterior en el acto (no hay sesión del otro lado) ⇒ es también la revocación. Se rota el 1º de cada mes.
 - 🔴 Los días que todavía no llegaron salen **sin dirección, teléfono ni `id`** (`paraElCadeteFuturo`):
   es lo que hace que mirar la semana no multiplique por siete lo que entrega un link filtrado.
+- 🔑 **El cadete ve su CUENTA desde el mismo link** (`&vista=cuenta`, 17-ago-2026, lo pidió Bruno):
+  saldo, los movimientos y el día por día, **de sólo lectura**. Quién movió la plata lo escribe el
+  local, y los `id` no viajan, así que desde ahí no hay a qué apuntarle.
+  · 🔴 **Es lo primero del portal que mira hacia atrás sin límite, y por eso las dos cosas van
+  separadas**: el **saldo** se calcula sobre TODOS los días —se arrastra desde el primero, y recortar
+  antes de acumular da un número plausible y falso— y el **detalle** se recorta a `DIAS_DE_CUENTA`
+  (60). Lo que hace que se pueda recortar sin mentir es la línea **«antes de esto el saldo era $X»**:
+  sin ella la primera fila muestra un acumulado que no se deduce de nada de lo que hay en pantalla.
+  · 🔑 **Las ventanas de fecha no aplican acá y no es un olvido**: no se pide un día, y lo que sale son
+  **agregados** — ni un nombre, ni una dirección, ni un número de orden. Es una vista más barata que la
+  hoja del día, no más cara. 🔴 Lo que sí sigue igual es el orden: **la rama va DESPUÉS del PIN**.
+  · 🔑 **El juego de campos se afirma como lista cerrada**, no por «lo que hoy parece sensible»: hoy un
+  `{...dia}` filtraría la nota del cierre y el `id` de cada movimiento, y mañana la columna que alguien
+  agregue. Misma doctrina que `VISIBLE_AL_CADETE`.
+  · 🔴 **En el teléfono tampoco va un número con signo**: el verbo y el monto en positivo, de
+  `claseDelMovimiento` y `rotuloDeSaldo` — las mismas del recibo que él ya tiene en la mano.
+  · ⛔ **`cuentaDelCadete` vive en `reglas.core.js`**, no en `core.ts`: la necesitaban dos handlers y
+  el portal no puede importar TypeScript. Copiarla era la otra salida y es la que este módulo prohíbe.
+  `CAMPOS_CIERRE` se mudó por lo mismo — la usaban dos.
 
 ## Lo que ya se rompió acá
 

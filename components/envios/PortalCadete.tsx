@@ -60,6 +60,40 @@ type EnvioDelCadete = EnvioQueViene & {
 type DiaConEnvios = { fecha: string; cuantos: number; rotulo: string }
 
 /**
+ * Un movimiento de plata, como sale del servidor para este teléfono.
+ *
+ * 🔴 **El monto viene SIEMPRE en positivo y el sentido lo dice el `verbo`.** Es la misma regla que el
+ * recibo impreso: «Rindió $10.000» y «Le pagamos $10.000» son lo contrario con el mismo número, y un
+ * `-10000` en una pantalla no se lee — nadie se acuerda de memoria de qué lado está el menos.
+ */
+type MovimientoDelCadete = { verbo: string; monto: number; nota: string | null; autor: string | null; anulado: boolean }
+
+/** Un día de la cuenta: son AGREGADOS, sin un solo dato de una clienta. Ver `paraElCadeteCuenta`. */
+type DiaDeCuentaDelCadete = {
+  fecha: string
+  rotulo: string
+  entregados: number
+  envios: number
+  cobrado: number
+  tarifas: number
+  debeTraer: number
+  saldoDelDia: number
+  acumulado: number
+  cerrado: boolean
+  movimientos: MovimientoDelCadete[]
+}
+
+type CuentaDelCadete = {
+  /** La frase de `rotuloDeSaldo`, la misma que va impresa en el recibo. */
+  saldo: { titulo: string; monto: number; sub: string }
+  desde: string | null
+  /** Con qué saldo arranca lo que se ve. Sin esto la resta de la pantalla no cierra. */
+  saldoAnterior: number
+  hayAnteriores: boolean
+  dias: DiaDeCuentaDelCadete[]
+}
+
+/**
  * La hoja que se está mirando. Es una unión y no un objeto con `envios` y un booleano al lado: así
  * el compilador no deja pintar los botones sobre un día que el servidor mandó recortado.
  */
@@ -147,6 +181,8 @@ export function PortalCadete({ token }: { token: string | null }) {
   const [estado, setEstado] = useState<'pidiendo-pin' | 'cargando' | 'listo' | 'muerto'>('cargando')
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null)
+  const [vista, setVista] = useState<'hoja' | 'cuenta'>('hoja')
+  const [cuenta, setCuenta] = useState<CuentaDelCadete | null>(null)
 
   const traer = useCallback(
     async (elPin: string, dia?: string) => {
@@ -182,6 +218,36 @@ export function PortalCadete({ token }: { token: string | null }) {
       } catch (e) {
         setError(e instanceof Error ? e.message : 'No se pudo cargar la hoja.')
         setEstado('pidiendo-pin')
+      }
+    },
+    [token],
+  )
+
+  /**
+   * La cuenta corriente. Se pide **al abrir la vista**, no con la hoja: el que sale a repartir la
+   * mira una vez por semana y no tiene sentido bajarla en cada carga arriba de una moto.
+   *
+   * Los mismos cortes que `traer` —404 es el link muerto, 401 borra el PIN guardado— porque son del
+   * endpoint y no de la vista: dos manejos distintos del mismo 401 dejarían al teléfono en un loop
+   * en una de las dos pantallas.
+   */
+  const traerCuenta = useCallback(
+    async (elPin: string) => {
+      if (!token) return setEstado('muerto')
+      setError(null)
+      try {
+        const r = await fetch(`${API}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(elPin)}&vista=cuenta&nc=${Date.now()}`)
+        const d = await r.json().catch(() => null)
+        if (r.status === 404) return setEstado('muerto')
+        if (r.status === 401) {
+          window.localStorage.removeItem(LLAVE)
+          setEstado('pidiendo-pin')
+          return setError('PIN incorrecto.')
+        }
+        if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo cargar la cuenta.')
+        setCuenta(d.cuenta || null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'No se pudo cargar la cuenta.')
       }
     },
     [token],
@@ -270,9 +336,32 @@ export function PortalCadete({ token }: { token: string | null }) {
   const siguiente = diaVecino(dias, hoja.fecha, 1)
   const porEntregar = hoja.envios.filter(abierto).length
 
+  if (vista === 'cuenta') {
+    return (
+      <div style={caja}>
+        <Encabezado />
+        <CambioDeVista vista={vista} onVista={setVista} />
+        {error ? (
+          <div style={{ background: 'var(--mo-danger-bg)', border: '1px solid var(--mo-danger-border)', color: 'var(--mo-danger-ink)', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 14 }}>
+            {error}
+          </div>
+        ) : null}
+        <Cuenta cuenta={cuenta} />
+      </div>
+    )
+  }
+
   return (
     <div style={caja}>
       <Encabezado />
+      <CambioDeVista
+        vista={vista}
+        onVista={(v) => {
+          setVista(v)
+          // Se pide al entrar y no al cargar la hoja: es una pantalla que se mira de vez en cuando.
+          if (v === 'cuenta') void traerCuenta(pin)
+        }}
+      />
 
       {/* 🔑 El día, con flechas: es el mismo gesto que la hoja interna. Las flechas saltan al día
           **con envíos** anterior y siguiente, no al día calendario — los días sin reparto son
@@ -335,6 +424,103 @@ export function PortalCadete({ token }: { token: string | null }) {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * Las dos pantallas del portal: lo de hoy y su cuenta.
+ *
+ * 🔑 **Dos botones y no un menú**: son dos, y esconderlas atrás de un ícono en un teléfono que se
+ * mira con una mano arriba de una moto es esconderlas.
+ */
+function CambioDeVista({ vista, onVista }: { vista: 'hoja' | 'cuenta'; onVista: (v: 'hoja' | 'cuenta') => void }) {
+  const uno = (v: 'hoja' | 'cuenta', texto: string) => (
+    <button type="button" style={boton(vista === v ? 'brand' : 'neutral', vista === v ? 'suave' : 'ghost')} onClick={() => onVista(v)}>
+      {texto}
+    </button>
+  )
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {uno('hoja', 'Los envíos')}
+      {uno('cuenta', 'Mi cuenta')}
+    </div>
+  )
+}
+
+/**
+ * **La cuenta corriente del cadete, de sólo lectura.**
+ *
+ * 🔑 **Arriba el saldo con su frase, no un número pelado.** `-47000` y `47000` son igual de
+ * plausibles: lo que se dice en voz alta es «tenés plata nuestra» o «te debemos», y esa frase sale de
+ * `rotuloDeSaldo`, la misma que imprime el recibo que él ya tiene en la mano.
+ *
+ * 🔴 **La línea de «Antes de esto» no es un detalle.** El detalle se recorta a dos meses pero el
+ * saldo se arrastra desde el principio: sin decir con cuánto arranca lo que se ve, la primera fila
+ * muestra un acumulado que no se deduce de nada de lo que hay en pantalla y la resta no cierra —
+ * exactamente el modo de falla que hace desconfiar de un número que está bien.
+ *
+ * ⛔ **No se anota nada desde acá**: quién movió la plata lo escribe el local, y el portal no tiene
+ * con qué apuntarle a un movimiento (los `id` no viajan).
+ */
+function Cuenta({ cuenta }: { cuenta: CuentaDelCadete | null }) {
+  if (!cuenta) return <Tarjetón><p style={{ color: 'var(--mo-mut)', margin: 0 }}>Cargando tu cuenta…</p></Tarjetón>
+
+  const { saldo } = cuenta
+  return (
+    <>
+      <Tarjetón>
+        <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>{saldo.titulo}</div>
+        <div style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.2 }}>{plata(saldo.monto)}</div>
+        {saldo.sub ? <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>{saldo.sub}</div> : null}
+      </Tarjetón>
+
+      {!cuenta.dias.length ? (
+        <Tarjetón>
+          <p style={{ color: 'var(--mo-mut)', margin: 0 }}>Todavía no hay movimientos.</p>
+        </Tarjetón>
+      ) : null}
+
+      {cuenta.hayAnteriores ? (
+        <p style={{ fontSize: 13, color: 'var(--mo-mut)', marginTop: 0 }}>
+          Antes del {cuenta.desde} el saldo era {plata(cuenta.saldoAnterior)}. Abajo están los últimos dos meses.
+        </p>
+      ) : null}
+
+      {/* Del más nuevo al más viejo: lo que se busca en el teléfono es lo de esta semana. */}
+      {[...cuenta.dias].reverse().map((d) => (
+        <DiaDeCuenta key={d.fecha} dia={d} />
+      ))}
+    </>
+  )
+}
+
+/** Un día de la cuenta: lo que pasó en la calle y lo que se movió por fuera. */
+function DiaDeCuenta({ dia }: { dia: DiaDeCuentaDelCadete }) {
+  return (
+    <Tarjetón>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontWeight: 600 }}>{dia.rotulo}</div>
+        <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>saldo {plata(dia.acumulado)}</div>
+      </div>
+
+      {dia.entregados ? (
+        <div style={{ fontSize: 14, color: 'var(--mo-ink2)', marginTop: 6 }}>
+          {dia.entregados} {dia.entregados === 1 ? 'entrega' : 'entregas'} · cobraste {plata(dia.cobrado)} · te tocan {plata(dia.tarifas)} de envíos
+        </div>
+      ) : null}
+
+      {dia.movimientos.map((m, i) => (
+        <div
+          key={`${dia.fecha}-${i}`}
+          style={{ fontSize: 14, marginTop: 6, opacity: m.anulado ? 0.5 : 1, textDecoration: m.anulado ? 'line-through' : 'none' }}
+        >
+          {/* 🔴 El verbo y el monto en positivo, nunca el signo: es la misma regla que el papel. */}
+          <strong>{m.verbo} {plata(m.monto)}</strong>
+          {m.nota ? <span style={{ color: 'var(--mo-mut)' }}> · {m.nota}</span> : null}
+          {m.anulado ? <span style={{ color: 'var(--mo-mut)' }}> · anulado</span> : null}
+        </div>
+      ))}
+    </Tarjetón>
   )
 }
 

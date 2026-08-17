@@ -10,6 +10,7 @@ import {
   linkDeWhatsapp,
   mensajeParaLaPuerta,
   paraElCadete,
+  paraElCadeteCuenta,
   paraElCadeteFuturo,
   parcheDeAccion,
   pinTrabado,
@@ -17,6 +18,7 @@ import {
   rotuloCorto,
   venceElProximoPrimero,
 } from '@/lib/envios/portal.core.js'
+import { cuentaDelCadete } from '@/lib/envios/reglas.core.js'
 
 /**
  * El portal del cadete: lo único de Envíos abierto a internet.
@@ -451,5 +453,101 @@ describe('🔴 el mensaje que el cadete manda antes de salir', () => {
   it('sin teléfono no hay link', () => {
     expect(linkDeWhatsapp('', 'hola')).toBeNull()
     expect(linkDeWhatsapp(null as unknown as string, 'hola')).toBeNull()
+  })
+})
+
+/**
+ * 🔴 **La cuenta corriente, en el link que anda por WhatsApp.**
+ *
+ * Es lo primero del portal que mira **hacia atrás sin límite**: el saldo se arrastra desde el primer
+ * día y recortarlo antes de acumular daría un número plausible y falso, que es lo peor que puede
+ * pasar con la plata. Lo que se recorta es el **detalle**, y la línea de saldo anterior es lo que
+ * permite recortar sin mentir.
+ */
+describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
+  /**
+   * Dos envíos entregados y dos movimientos, uno de ellos anulado.
+   *
+   * ⚠️ **El de junio va PAGO por adelantado a propósito.** El caso normal —cobra el envío en la
+   * puerta y se lo queda— da **cero**, que es la razón por la que la planilla nunca necesitó una
+   * cuenta: con un fixture así, filtrar los días antes de acumular daría el mismo saldo y el mutante
+   * que importa no se vería. Un envío ya pago es el que deja saldo: lo llevó y no cobró nada.
+   */
+  const enviosCuenta = [
+    { ...fila, id: 'a', fecha: '2026-06-01', estado: 'entregado', monto_envio: 3000, envio_pagado: true, monto_pedido_a_cobrar: 0, cobrado: null },
+    { ...fila, id: 'b', fecha: '2026-08-17', estado: 'entregado', monto_envio: 4000, monto_pedido_a_cobrar: 10000, cobrado: null },
+  ]
+  const movs = [
+    { id: 'm1', fecha: '2026-08-17', monto: -10000, nota: 'rindió el jueves', autor: 'Bruno', anulado_en: null, anulado_por: null },
+    { id: 'm2', fecha: '2026-08-17', monto: 5000, nota: 'este no cuenta', autor: 'Bruno', anulado_en: '2026-08-17T10:00:00Z', anulado_por: 'Bruno' },
+  ]
+  const armar = (hoy = '2026-08-17') => paraElCadeteCuenta(cuentaDelCadete(enviosCuenta, [], movs), hoy)
+
+  it('🔴 el SALDO se calcula sobre todos los días, aunque el detalle se recorte', () => {
+    // 🔴 El mutante: filtrar los días ANTES de acumular. El 1-jun queda fuera de los 60 días, así que
+    // el saldo perdería sus $3.000 y saldría un número perfectamente creíble.
+    const c = armar()
+    expect(cuentaDelCadete(enviosCuenta, [], movs).saldo).toBe(-3000)
+    expect(c.saldo.monto).toBe(3000)
+    expect(c.saldo.titulo).toBe('Le debemos al cadete')
+    expect(c.dias.map((d: { fecha: string }) => d.fecha)).toEqual(['2026-08-17'])
+  })
+
+  it('🔴 y dice con cuánto arranca lo que se ve', () => {
+    // Sin esta línea el primer día muestra un acumulado que no se deduce de nada de la pantalla.
+    const c = armar()
+    expect(c.hayAnteriores).toBe(true)
+    expect(c.saldoAnterior).toBe(-3000)
+    expect(c.desde).toBe('2026-06-18')
+  })
+
+  it('sin nada afuera de la ventana no inventa la línea', () => {
+    const c = paraElCadeteCuenta(cuentaDelCadete([enviosCuenta[1]], [], movs), '2026-08-17')
+    expect(c.hayAnteriores).toBe(false)
+    expect(c.saldoAnterior).toBe(0)
+  })
+
+  it('🔴 el juego de campos es CERRADO, en el día y en el movimiento', () => {
+    // 🔴 El mutante es `{...d}` o `{...m}`, que es cómo se arma un objeto cuando hay apuro. Hoy no
+    // filtraría un nombre —los días de `cuentaDelCadete` son números— pero sí la **nota del cierre**,
+    // que la escribe el local para el local, y el `id` y el `anulado_por` de cada movimiento. Y sobre
+    // todo: el día que alguien agregue una columna, sale sola. Por eso se afirma la lista, no lo que
+    // hoy nos parece sensible — es la misma doctrina de `paraElCadete` y de `VISIBLE_AL_CADETE`.
+    const d = armar().dias[0]
+    expect(Object.keys(d).sort()).toEqual(
+      ['acumulado', 'cerrado', 'cobrado', 'debeTraer', 'entregados', 'envios', 'fecha', 'movimientos', 'rotulo', 'saldoDelDia', 'tarifas'].sort(),
+    )
+    expect(Object.keys(d.movimientos[0]).sort()).toEqual(['anulado', 'autor', 'monto', 'nota', 'verbo'].sort())
+  })
+
+  it('🔴 NO salen nombres de clientas, ni órdenes, ni ids', () => {
+    // 🔴 El mutante es `{...dia}`: los días de `cuentaDelCadete` traen los movimientos crudos adentro
+    // y se calculan con filas que tienen `cliente` y `orden_numero` (ver `CAMPOS_CUENTA`). Esta vista
+    // es de plata agregada y no necesita un solo dato de una persona de afuera.
+    const json = JSON.stringify(armar())
+    expect(json).not.toContain('Ana')
+    expect(json).not.toContain('1234')
+    expect(json).not.toContain('3 de Febrero')
+    expect(json).not.toContain('"id"')
+  })
+
+  it('🔴 el movimiento va con el VERBO y el monto en positivo, nunca con el signo', () => {
+    // Misma regla que el recibo impreso: «Rindió $10.000» y «Le pagamos $10.000» son lo contrario con
+    // el mismo número. Un `-10000` en la pantalla no se lee.
+    const m = armar().dias[0].movimientos
+    expect(m[0]).toMatchObject({ verbo: 'Rindió', monto: 10000, anulado: false })
+    expect(m[1]).toMatchObject({ verbo: 'Le pagamos', monto: 5000, anulado: true })
+  })
+
+  it('🔴 el anulado se muestra pero NO suma', () => {
+    // Queda a la vista porque puede haber un recibo impreso en su mano; si desapareciera, el papel
+    // no tendría contra qué cotejarse. Pero sumarlo movería el saldo $5.000.
+    expect(armar().dias[0].acumulado).toBe(-3000)
+  })
+
+  it('el día trae lo que pasó en la calle, en agregado', () => {
+    const d = armar().dias[0]
+    expect(d).toMatchObject({ entregados: 1, cobrado: 14000, tarifas: 4000, debeTraer: 10000 })
+    expect(d.rotulo).toBe('lun 17-ago')
   })
 })

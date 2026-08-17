@@ -54,6 +54,7 @@ import { marcasConAcceso } from '../lib/permisos.core.js';
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
 import {
   CAMPOS,
+  CAMPOS_CIERRE,
   CAMPOS_CUENTA,
   CAMPOS_MOVIMIENTO,
   conIntentoFallido,
@@ -89,12 +90,6 @@ function cfgMaestra() {
 function puedeEnvios(perfil) {
   return marcasConAcceso(perfil, 'envios', ['bdi', 'zattia']).length > 0;
 }
-
-// ⚠️ **Sin `trajo` ni `pagado_aparte` desde la tanda G.** Las dos columnas siguen existiendo en la
-// base hasta que corra `--cerrar-tanda-g`, y no se piden a propósito: pedirlas obligaría a dropear
-// antes de deployar, que es el orden que ya rompió prod una vez (`envios_turno`, tanda 4). La plata
-// del día vive ahora en `envios_movimientos`.
-const CAMPOS_CIERRE = 'fecha, nota, cerrado_por, cerrado_en';
 
 const esFechaIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 

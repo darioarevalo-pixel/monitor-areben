@@ -2,6 +2,7 @@
 // Envíos abierto a internet**, así que conviene leerlo con esa lente.
 //
 //   GET  /api/postventa?recurso=cadete&token=XXX&pin=NNNN[&fecha=YYYY-MM-DD]
+//   GET  …&vista=cuenta   → su cuenta corriente, de SÓLO LECTURA
 //   POST { recurso:'cadete', token, pin, id, accion:'entregado'|'no_entregado'|'cobrado'|'no_cobrado' }
 //
 // CÓMO SE PROTEGE (no hay sesión: la llave es el token + el PIN)
@@ -19,12 +20,22 @@
 //   - 🔴 **Los días que todavía no llegaron salen sin dirección ni teléfono** (`paraElCadeteFuturo`):
 //     es lo que hace que mirar la semana no multiplique por siete lo que entrega un link filtrado.
 //   - La respuesta se arma campo por campo en `paraElCadete`: nunca `select *` ni `{...fila}`.
+//   - 🔑 **La cuenta (`&vista=cuenta`) es la excepción a las ventanas de fecha, a propósito**: no se
+//     pide un día y el saldo se arrastra desde el principio, así que recortarlo antes de acumular
+//     daría un número plausible y falso. Lo que sí se recorta es el detalle (60 días), y lo que sale
+//     son AGREGADOS: ni un nombre, ni una dirección, ni un teléfono. Ver `paraElCadeteCuenta`.
 //   - La escritura es una lista cerrada de cuatro parches fijos: el body no se copia nunca.
 //
 // ⛔ Archivo `_`: NO es una ruta. Entra por `api/postventa.js` con `?recurso=cadete`, que es la
 // puerta donde ya viven los otros dos portales sin sesión. Crear `api/cadete.js` "por prolijidad"
 // frena todos los deploys sin error visible.
 import { createClient } from '@supabase/supabase-js';
+import {
+  CAMPOS_CIERRE,
+  CAMPOS_CUENTA,
+  CAMPOS_MOVIMIENTO,
+  cuentaDelCadete,
+} from '../lib/envios/reglas.core.js';
 import {
   diaArgentino,
   diasConEnvios,
@@ -33,6 +44,7 @@ import {
   fechaQueSePuedeLeer,
   MAX_FALLOS_PIN,
   MINUTOS_TRABADO,
+  paraElCadeteCuenta,
   parcheDeAccion,
   pinTrabado,
   rangoDeLectura,
@@ -119,6 +131,31 @@ export default async function handler(req, res) {
     // mañana —vacío— en el medio del turno tarde, y los toques iban a los envíos del día siguiente.
     const hoyAR = diaArgentino(Date.now());
     const pedida = req.method === 'POST' ? body.fecha : req.query.fecha;
+
+    // ── La cuenta corriente, de sólo lectura ──────────────────────────────
+    //
+    // 🔴 **Va DESPUÉS del PIN, y ése es el punto.** El mutante es subirla arriba del chequeo para
+    // «no tocar la lista de envíos»: el cuerpo viaja lo mismo y el PIN deja de proteger nada.
+    //
+    // 🔑 **Acá no corren las ventanas de fecha, y no es un olvido**: no se pide un día —el saldo se
+    // arrastra desde el principio y recortarlo antes de acumular daría un número plausible y falso—,
+    // y lo que sale no tiene ni una dirección ni un teléfono. El recorte que sí hay es del **detalle**
+    // y vive en `paraElCadeteCuenta`, junto con la línea de saldo anterior que hace que la resta cierre.
+    if (req.method === 'GET' && String(req.query.vista || '') === 'cuenta') {
+      const [env, dia, mov] = await Promise.all([
+        supabase.from('envios_reparto').select(CAMPOS_CUENTA).not('fecha', 'is', null).order('fecha'),
+        supabase.from('envios_dia').select(CAMPOS_CIERRE).order('fecha'),
+        // Los anulados también: el cadete puede tener el recibo de uno anulado en la mano, y una fila
+        // que desaparece de la lista es un papel del que no queda rastro de este lado.
+        supabase.from('envios_movimientos').select(CAMPOS_MOVIMIENTO).order('fecha'),
+      ]);
+      if (env.error) throw new Error(env.error.message);
+      if (dia.error) throw new Error(dia.error.message);
+      if (mov.error) throw new Error(mov.error.message);
+
+      const cuenta = cuentaDelCadete(env.data || [], dia.data || [], mov.data || []);
+      return res.status(200).json({ ok: true, hoy: hoyAR, cuenta: paraElCadeteCuenta(cuenta, hoyAR) });
+    }
 
     if (req.method === 'GET') {
       const fecha = fechaQueSePuedeLeer(pedida, hoyAR);
