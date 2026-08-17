@@ -215,9 +215,11 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   `pago_cadete` sólo si todavía no existe `envio_bonificado`, que es la que la reemplaza y se agrega
   **después**. `tests/envios-migraciones-cierre.test.ts` lo afirma —incluido **el orden de los dos
   archivos en la lista, que es parte del guard**— y sus 3 mutantes caen.
-  🔴 ▶️ **Y por eso hay que volver a correr `--cerrar-tanda-a` una vez**: al 17-ago la base quedó
-  otra vez con el check en siete y `pago_cadete` puesta. ⚠️ **Es la dirección peligrosa**, porque la
-  app ya borró `ESTADOS_LEGADO`: la base acepta lo que la app no sabe leer.
+  ✅ **Y se cerró de verdad, ejercido y no deducido**: se volvió a correr `--cerrar-tanda-a` y después
+  **el script pelado —el caso que revertía—**, y el check quedó en **cinco** con **cero** columnas
+  viejas (`pg_get_constraintdef` + `information_schema`, después de la corrida). 🔑 **La predicción
+  del predicado no alcanzaba**: lo que había que ver era la corrida que antes rompía, no un `select`
+  que dijera que no iba a romper.
 - ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
   rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
 - ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`
