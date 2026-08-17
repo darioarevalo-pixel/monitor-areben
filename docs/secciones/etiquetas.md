@@ -39,7 +39,10 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
   ubicaciones y ninguna línea de código dependía de dónde está la prenda. La tabla `ETIQUETA` de
   `lib/etiquetas/tipos.ts` es el único lugar donde eso se escribe — antes estaba en tres, ya
   desincronizados, y un cuarto (`lib/nav.datos.ts`) que ni conocía dos de las pestañas. Los ata
-  `tests/etiquetas-core.test.ts`.
+  `tests/etiquetas-core.test.ts`. ⚠️ **Queda un quinto, y es de toda la app**: el subtítulo de la
+  pantalla sale del mapa de `lib/nav.ts`, que no se unificó porque son las 40 secciones. Al cambiar
+  cómo se llama algo acá, ese renglón se toca a mano — se descubrió en prod, diciendo todavía
+  «depósito, local, promo y SKU».
 - 🔑 **Hay DOS ejes y estaban colapsados en uno**: `ModoEtiqueta` es **el dibujo**; el `Slot` es
   **sobre qué prendas**. La cola es el caso que lo prueba: no tiene dibujo propio —usa los que ya
   están, y elige **prenda por prenda** con `modoDe`, porque mezcla las que entran a una oferta con

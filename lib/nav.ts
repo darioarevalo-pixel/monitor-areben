@@ -342,7 +342,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',
   disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
   envios: 'La hoja del cadete: los envíos que salen hoy, con la dirección, lo que hay que cobrar y la etiqueta para pegar.',
-  etiquetas: 'Impresión de etiquetas con código de barras: depósito, local, promo y SKU.',
+  etiquetas: 'Etiquetas de 5 × 2,5 cm con código de barras, y la cola de lo que hay que reetiquetar porque le cambió el precio.',
   atencion: 'Links y mensajes listos para copiar y pegar en Instagram y WhatsApp.',
   cupones: 'Descuentos por cliente y los canjes que se retiran en el local.',
   'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',
