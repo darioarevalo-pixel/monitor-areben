@@ -27,8 +27,13 @@
  *
  * No se reusa `lib/etiquetas/pdf.ts` —esa es la de producto, 5×2,5 para la Zebra— pero sí
  * `imprimirPdf`, que ya resuelve mandar al diálogo de impresión sin abrir una pestaña.
+ *
+ * La geometría del rollo (el ancho, el alto mínimo, la cola de corte) y el dibujo de textos y reglas
+ * viven en `lib/rollo80.ts`, compartidos con el recibo de la cuenta del cadete. Acá queda lo que es
+ * de **este** papel: qué se escribe, en qué orden y qué tamaño tiene cada cosa.
  */
 
+import { abrirRollo, ANCHO, M, MIN, COLA, W, type Medidor, type OpBase } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
 import { aCobrar, direccionCompleta, estaTodoPago } from './core'
 import type { Envio } from './tipos'
@@ -36,20 +41,7 @@ import type { Envio } from './tipos'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Pdf = any
 
-/** El ancho del rollo. */
-const W = 80
-const M = 4
-/** Lo que queda para escribir: 72 mm. */
-const ANCHO = W - M * 2
-/**
- * Alto mínimo de página. Existe por jsPDF, no por diseño: con `orientation: 'portrait'` y un formato
- * más ancho que alto, da vuelta el papel solo y el ticket saldría acostado. Por eso es apenas más
- * que los 80 del ancho y no un número redondo — cada milímetro de más es papel en blanco que la
- * térmica escupe en **cada** envío del día.
- */
-const MIN = 82
-/** Papel de más al final, para que el corte no se lleve el último renglón. */
-const COLA = 10
+export type { Medidor }
 
 /** Cuánto mide el recuadro de plata. Con desglose necesita un renglón más, o el número grande y el
  *  chico se tocan. Lo devuelve el layout —y no una constante— para que un test pueda afirmar que el
@@ -60,13 +52,10 @@ const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 const NOMBRE_MARCA: Record<string, string> = { bdi: 'BDI Accesorios', zattia: 'Zattia' }
 
-/** Corta un texto en líneas de `ANCHO` mm. Lo inyecta el PDF; el layout no sabe de fuentes. */
-export type Medidor = (txt: string, tam: number, bold: boolean) => string[]
+/** El bloque de plata es la única op propia de este papel; el resto las dibuja el rollo. */
+export type OpPlata = { k: 'plata'; y: number; alto: number; dice: TextoDePlata }
 
-export type Op =
-  | { k: 'txt'; txt: string; y: number; tam: number; bold: boolean; align: 'izq' | 'der' | 'centro'; gris?: number }
-  | { k: 'regla'; y: number }
-  | { k: 'plata'; y: number; alto: number; dice: TextoDePlata }
+export type Op = OpBase | OpPlata
 
 export type TextoDePlata = {
   modo: 'pagado' | 'cobrar'
@@ -196,49 +185,15 @@ function pintarPlata(pdf: Pdf, y: number, alto: number, dice: TextoDePlata) {
   }
 }
 
-function pintar(pdf: Pdf, ops: Op[]) {
-  for (const op of ops) {
-    if (op.k === 'regla') {
-      pdf.setDrawColor(150, 150, 150)
-      pdf.setLineWidth(0.2)
-      pdf.line(M, op.y, W - M, op.y)
-      continue
-    }
-    if (op.k === 'plata') {
-      pintarPlata(pdf, op.y, op.alto, op.dice)
-      continue
-    }
-    pdf.setFont('helvetica', op.bold ? 'bold' : 'normal')
-    pdf.setFontSize(op.tam)
-    if (op.gris != null) pdf.setTextColor(op.gris, op.gris, op.gris)
-    const x = op.align === 'der' ? W - M : op.align === 'centro' ? W / 2 : M
-    pdf.text(op.txt, x, op.y, { baseline: 'top', align: op.align === 'der' ? 'right' : op.align === 'centro' ? 'center' : 'left' })
-    if (op.gris != null) pdf.setTextColor(0, 0, 0)
-  }
-}
-
 /** Un ticket por página, cada una con su propio alto, en el orden en que vienen. */
 export async function buildTicketsCadetePdf(envios: Envio[]): Promise<Pdf | null> {
   if (!envios.length) return null
-  const { jsPDF } = await import('jspdf')
-
-  // Una regla descartable: hay que saber cuánto mide cada ticket ANTES de crear su página, y medir
-  // texto necesita un documento con la fuente puesta.
-  const regla = new jsPDF({ unit: 'mm', format: [W, MIN], orientation: 'portrait' })
-  const medir: Medidor = (txt, tam, bold) => {
-    regla.setFont('helvetica', bold ? 'bold' : 'normal')
-    regla.setFontSize(tam)
-    return regla.splitTextToSize(txt, ANCHO)
-  }
-
-  const tickets = envios.map((e) => armarTicket(e, medir))
-  const pdf = new jsPDF({ unit: 'mm', format: [W, tickets[0].alto], orientation: 'portrait' })
-  tickets.forEach((t, i) => {
-    if (i > 0) pdf.addPage([W, t.alto], 'portrait')
-    pintar(pdf, t.ops)
+  const rollo = await abrirRollo()
+  const tickets = envios.map((e) => armarTicket(e, rollo.medir))
+  return rollo.documento<OpPlata>(tickets, (pdf, op) => {
+    pintarPlata(pdf, op.y, op.alto, op.dice)
+    return true
   })
-
-  return pdf
 }
 
 /** Arma e imprime, en un paso. Devuelve `false` si no había nada para imprimir. */
