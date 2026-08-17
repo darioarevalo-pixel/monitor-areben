@@ -11,6 +11,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` |
+| **El mensaje a la clienta** | `lib/envios/mensajes.ts` — puro y con tests, molde de `lib/canjes/mensajes.ts`. Lo abre el botón de WhatsApp de la fila (`Direccion`), en la bandeja **y** en la hoja del día |
 | **Los dos papeles** | `lib/envios/ticket.ts` (el que va pegado al paquete) · `lib/envios/recibo.ts` (el del movimiento de la cuenta), los dos sobre **`lib/rollo80.ts`** — la geometría del rollo, el medidor y el dibujo de textos y reglas. ⛔ **Las medidas del rollo no se copian**: `lib/sesionfotos/ticket.ts` es un tercer papel de 80 mm que **no está migrado a propósito** (su interlineado es 0.42 contra 0.38) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
 | **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |
@@ -42,6 +43,28 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   opuestas sobre la misma plata y no falla nada. ⛔ **Desde Pago no se ofrece bonificar** (también lo
   decidió Bruno): habría que devolver plata que ya entró, así que se pasa por Pendiente. Y como el
   componente es el compartido, ahora se bonifica **también desde la hoja del día**.
+- 🔑 **El primer mensaje a la clienta lo arma el sistema** (17-ago-2026, lo pidió Bruno). Es el
+  contacto que sigue a la orden —cuánto sale el envío y cuándo pasa la moto— y se tipeaba de memoria,
+  con los dos datos que más caro salen mal. **Se precarga, no se manda**: `wa.me` abre el chat con el
+  texto y lo revisa una persona. Las reglas que no se pueden aflojar:
+  · 🔴 **el número de «al recibir» sale de `aCobrar`**, la misma función que imprime el ticket — si
+  acá se sumara a mano, el mensaje le promete a la clienta un número y el papel le cobra otro, con el
+  cadete ya en la puerta;
+  · 🔴 **sin precio no hay mensaje** (devuelve `null` y el botón vuelve a abrir el chat vacío, como
+  antes): un mensaje de coordinación sin el número obliga a un segundo mensaje con la plata, que es el
+  ida y vuelta que esto viene a sacar, y callarse el precio adentro de un texto que habla de plata es
+  peor que no mandarlo;
+  · 🔑 **saldado cambia el texto, no lo borra**: «ya está pago» / «va sin cargo», nunca «se abona al
+  recibir» — el mismo error que el KPI que mandaba a reclamarle plata a quien ya había pagado;
+  · 🔑 **la forma la decide el DATO, no la pantalla**: sin día **propone los dos próximos turnos y
+  pregunta** (el día lo confirma la clienta), con día **confirma** el que tiene puesto. Un solo texto
+  para los dos casos vuelve a proponer sobre un día ya acordado, que es cómo se pierde un turno;
+  · 🔑 **los días arrancan MAÑANA**: cuando se manda el primer mensaje la mochila de hoy ya está
+  armada. Y salen de `proximoDiaDeReparto` + `diaDeRepartoVecino`, no de sumar días corridos — el
+  jueves ofrecería **sábado**, y ése fue un mutante que sobrevivió hasta que el test se paró en un
+  jueves. 🔑 **Medir donde el defecto se ve**: con el caso en un lunes daba verde.
+  · 🔴 **`encodeURIComponent`**, o el texto se corta en el primer `&` o `#` — y el `#` del número de
+  orden va en la primera línea, así que llegaría partido **siempre**.
 - 🔑 **El día del reparto lo confirma el CLIENTE, no la orden.** Las órdenes de TN caen en la bandeja
   «Sin fecha», que **no es una bandeja de entrada: es la lista de trabajo** (`fecha is null` OR
   `estado='no_entregado'`). `fecha` y `turno` van los dos o ninguno (check `envios_fecha_turno_juntos`).

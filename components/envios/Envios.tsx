@@ -60,6 +60,7 @@ import {
   totalesDelDia,
   turnosDe,
 } from '@/lib/envios/core'
+import { mensajeParaLaClienta } from '@/lib/envios/mensajes'
 import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
@@ -965,7 +966,14 @@ function dice(texto: string) {
  * así que se muestran los dos y decide la persona.
  */
 function Direccion({ envio }: { envio: Envio }) {
-  const wa = linkWhatsapp(envio)
+  // 🔑 **El mensaje lo decide el DATO, no la pantalla desde la que se abre**: sin día propone los dos
+  // próximos turnos, con día confirma el que tiene puesto. Por eso `Direccion` sirve igual en la
+  // bandeja y en la hoja del día, que es donde ya vivía.
+  // 🔴 **Sin precio no hay mensaje** (`mensajeParaLaClienta` devuelve `null`) y el botón vuelve a
+  // abrir el chat vacío: un mensaje de coordinación sin el número obliga a un segundo mensaje con la
+  // plata, que es justo el ida y vuelta que esto viene a sacar.
+  const mensaje = mensajeParaLaClienta(envio, hoyIso())
+  const wa = linkWhatsapp(envio, mensaje)
   const tel = String(envio.telefono || '').replace(/[^\d+]/g, '')
   const fuera = cpFueraDeZona(envio.cp)
   return (
@@ -981,7 +989,16 @@ function Direccion({ envio }: { envio: Envio }) {
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         {wa ? (
-          <a href={wa} target="_blank" rel="noopener noreferrer" {...dice(`Escribirle por WhatsApp a ${envio.telefono}`)}>
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener noreferrer"
+            {...dice(
+              mensaje
+                ? `Escribirle por WhatsApp a ${envio.telefono}, con el envío y el día ya escritos`
+                : `Escribirle por WhatsApp a ${envio.telefono}. Cotizá el envío y el mensaje sale escrito`,
+            )}
+          >
             <Button size="sm" variant="ghost" tone="success" iconLeft={<Icono nombre="whatsapp" />} />
           </a>
         ) : null}

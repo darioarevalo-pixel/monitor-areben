@@ -279,15 +279,23 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
 }
 
 /**
- * El link de WhatsApp del cliente, o `null`.
+ * El link de WhatsApp del cliente, o `null`. Con `mensaje` abre el chat **con el texto escrito**.
  *
  * Reusa `normalizeArgPhone` de CRM en vez de repetir la regla: el `9` que va después del `54` en los
  * celulares argentinos ya se olvidó una vez en este código y el link abría un chat vacío. Una sola
  * implementación, y si mañana cambia, cambia para todos.
+ *
+ * 🔴 **`encodeURIComponent` no es opcional**: sin él el texto se corta en el primer `&` o `#`, y una
+ * dirección como «Pellegrini 1200 4° B & C» llega por la mitad. Mismo motivo que en `linkDeWhatsapp`
+ * del portal, que es la copia que ve el cadete.
+ *
+ * 🔑 **Sin mensaje sigue abriendo el chat vacío**, que es lo que hacía siempre y lo que hace falta
+ * cuando lo que hay que preguntar no es ni el precio ni el día.
  */
-export function linkWhatsapp(e: Envio): string | null {
+export function linkWhatsapp(e: Envio, mensaje?: string | null): string | null {
   const tel = normalizeArgPhone(e.telefono)
-  return tel ? `https://wa.me/${tel}` : null
+  if (!tel) return null
+  return mensaje ? `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}` : `https://wa.me/${tel}`
 }
 
 /**
