@@ -350,10 +350,20 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   con CP 2000 y `city` vacío, y ninguna fila de `envios_reparto` hoy.
 - ▶️ Ejercer a mano en prod: bonificado que imprime PAGADO, no entregado en los dos lados,
   reprogramar, el modal del pedido, y `cerrar-dia` (la sesión se cayó en el medio la última vez).
-- ▶️ **El candado nuevo no se ejerció a mano todavía**: en la bandeja de prod las 11 filas tienen CP
-  2000 y localidad «Rosario», o sea que **ninguna dispara `localidad_dudosa`** y la única que cambia
-  es `Garay Bis 47`, que ahora tiene que salir **$4.300 (Zona 3)** donde antes decía «no se pudo
-  ubicar».
+- ✅ **La mitad que RECUPERA, ejercida a mano en prod** (17-ago-2026, con el bundle nuevo confirmado
+  por el código servido: `LOCALIDAD_DEL_CP` minificado adentro del chunk `0l1jipe_p6h7s`). Bandeja de
+  BDI, «Sugerir precios (6)» → **5 con precio y 1 que se niega**, y la que importa:
+  **`Garay Bis 47 · Entre esmeralda y chacabuco` salió `Zona 3 · $4.300`**, donde antes decía «no se
+  pudo ubicar». Es el reintento con la localidad del CP corriendo por el handler deployado, con la
+  base y Georef de verdad. `Minetti 2682` sigue negándose, que es correcto: Georef no tiene ese
+  número. **No se apretó «usar»** y la tabla quedó igual (11 filas, 3 con precio, sin un `updated_at`
+  nuevo).
+- 🔴 ▶️ **La mitad que PROTEGE no se puede ejercer a mano hoy, y hay que decir por qué**: las 11 filas
+  de prod tienen CP 2000 y localidad «Rosario», así que **ninguna dispara `localidad_dudosa`**, y
+  provocarla con una fila de prueba tampoco se puede porque **el formulario de «Cargar uno a mano» no
+  tiene campo de CP** ⇒ nace con `cp` nulo. Queda cubierta por los tests, por la corrida del camino
+  real contra Georef vivo (que devolvió el motivo con los dos nombres para las nueve) y porque la
+  pantalla imprime `sugerencia.motivo` tal cual — se vio con «no se pudo ubicar» en la misma tanda.
 - 🔴 **El deploy de main dejó de llegar solo el 17-ago**: los tres commits del día quedaron **sin un
   solo status de Vercel** —los de la noche anterior sí tienen el suyo, o sea que el oráculo sirve— y
   producción estuvo **once horas** sirviendo `6e57911` con el CI en verde. Lo destrabó un **commit
