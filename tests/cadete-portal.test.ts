@@ -113,8 +113,16 @@ describe('🔴 lo que el portal deja salir a internet', () => {
 
   it('el estado viaja con su nombre, no crudo', () => {
     expect(paraElCadete({ ...fila, estado: 'en_transito' }).estadoTexto).toBe('En tránsito')
-    // Y un legado tampoco sale sin nombre mientras dure la ventana de la migración.
-    expect(paraElCadete({ ...fila, estado: 'despachado' }).estadoTexto).toBe('En tránsito')
+  })
+
+  // 🔴 Hasta el 17-ago-2026 acá se afirmaba que `despachado` salía como «En tránsito», porque el
+  // check de la base todavía lo aceptaba. Se estrechó a cinco y el rótulo se borró; lo que queda
+  // afirmado es el **respaldo**, que es lo que importa en la calle: un estado que este código no
+  // conozca sale con su valor crudo y nunca **vacío**. Una tarjeta sin estado arriba de la moto se
+  // lee como un paquete que no salió.
+  it('🔴 un estado que no conoce igual sale con algo escrito, nunca en blanco', () => {
+    expect(paraElCadete({ ...fila, estado: 'despachado' }).estadoTexto).toBe('despachado')
+    expect(paraElCadete({ ...fila, estado: 'lo_que_sea' }).estadoTexto).toBe('lo_que_sea')
   })
 })
 

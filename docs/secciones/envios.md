@@ -199,15 +199,14 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   **exclusión** las zonas tachadas del mapa de papel —incluidas **Alvear** y **La Carolina**, que hoy
   no existen como dato y por lo tanto reciben precio— y marcar los **coordinar**. Menor: renombrar
   las diez «Zona N» con su barrio.
-- ▶️ **Los dos cierres de tanda siguen sin correr**, medido en prod el 17-ago-2026: las tres columnas
-  viejas siguen ahí (`envios_dia.trajo`, `envios_dia.pagado_aparte`, `envios_reparto.pago_cadete`) y
-  el check de estados sigue en siete. Van **después** del deploy, y el código nuevo hace días que
-  sirve, así que ya se pueden correr:
-  **`node scripts/apply-envios.mjs --cerrar-tanda-a`** (renombra los estados legado, estrecha el
-  check a cinco y dropea `pago_cadete`) y **`--cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte`
-  detrás del guard de huérfanos). 🔑 **Los dos no tocan un solo dato hoy**: 0 filas con estado legado,
-  0 con `pago_cadete`, y `envios_dia`/`envios_movimientos` están **vacías** —nunca se cerró un día—,
-  así que la identidad que el guard verifica (`Σ movimientos = −Σ trajo + Σ pagado_aparte`) es 0 = 0.
+- ✅ **`--cerrar-tanda-a`, CORRIDO** (17-ago-2026): el check de estados quedó en **cinco**,
+  `pago_cadete` y `envios_turno` se fueron. No tocó un solo dato (0 filas con estado legado, 0 con
+  `pago_cadete`).
+  ▶️ **Falta `node scripts/apply-envios.mjs --cerrar-tanda-g`** (dropea `trajo` + `pagado_aparte` de
+  `envios_dia`, detrás del guard de huérfanos). Tampoco toca nada: `envios_dia` y `envios_movimientos`
+  están **vacías** —nunca se cerró un día—, así que la identidad que el guard verifica
+  (`Σ movimientos = −Σ trajo + Σ pagado_aparte`) es 0 = 0. Va **después** del deploy, y el código
+  nuevo hace días que sirve.
 - ▶️ **G0 y G7, frenados por la térmica real**: extraer `lib/rollo80.ts` y el recibo imprimible en
   rollo de 80 mm, dos copias. Plan: `~/.claude/plans/envios-en-vez-de-drifting-planet.md`.
 - ▶️ **Imprimir una tanda con la térmica del local.** El PDF se miró página por página con `qlmanage`
@@ -251,16 +250,18 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   «no deployó». ⛔ Y el chunk viejo **sigue dando 200** (los assets son `immutable` y se retienen):
   «ya da 404» no sirve de señal.
 - ▶️ **Publicar la novedad**, que quedó en borrador (`n1786736641432_bgbqg9`, destino `seccion:envios`).
-- 🔴 **`ESTADOS_LEGADO` NO se puede borrar todavía, al revés de lo que decía acá.** Medido el
-  17-ago-2026 con `pg_get_constraintdef` sobre prod: `envios_reparto_estado_check` **sigue
-  admitiendo los siete** (`…, 'no_entregado', 'despachado', 'reintento'`), porque el que lo estrecha
-  a cinco es `migrate-envios-estados-cierre.sql` y **ese cierre nunca corrió**. O sea que la base
-  todavía acepta lo que la app dejaría de saber leer, que es exactamente al revés del orden seguro.
-  🔑 **La condición para borrarlo la dice el código, no esta ficha** (ver el comentario de
-  `ESTADOS_LEGADO` en `reglas.core.js`): primero `--cerrar-tanda-a`, después `select estado from
-  envios_reparto` sin legados —al 17-ago hay 0: 9 `pendiente` y 2 `en_transito`—, recién entonces se
-  borra. ⚠️ Y desde el cierre, un **preview viejo** de otra rama que intente escribirlos recibe un
-  error de constraint.
+- ✅ **`ESTADOS_LEGADO` se borró el 17-ago-2026, y recién cuando se pudo.** Esta ficha decía que ya
+  se podía «porque la base los rechaza» y **era falso**: `pg_get_constraintdef` mostró el check
+  admitiendo **los siete**, porque el que lo estrecha es `migrate-envios-estados-cierre.sql` y ese
+  cierre no había corrido. O sea que la base aceptaba lo que la app iba a dejar de saber leer — el
+  orden al revés. 🔑 **La condición la dice la base, no un documento**: corrió `--cerrar-tanda-a`, el
+  check quedó en cinco, `select estado` dio 9 `pendiente` y 2 `en_transito`, y ahí sí salieron
+  `ESTADOS_LEGADO`, `EstadoLegado`, sus dos rótulos, sus dos entradas del camino, `reintento` de
+  `ESTADOS_EN_CASA` y el `|| 'despachado'` de `enLaCalle`.
+  🔑 **Lo que los reemplaza es un test que mira los dos lados** (`🔴 los legados NO vuelven por la
+  ventana`): 3 mutantes que los devuelven al camino, al rótulo o a «en casa» caen. Y en el portal
+  quedó afirmado el **respaldo** en vez del rótulo viejo — un estado desconocido sale **crudo y nunca
+  en blanco**, porque una tarjeta sin estado arriba de la moto se lee como un paquete que no salió.
 - 🔴 **Hallazgo suelto, sin arreglar**: `bdi-catalogo/api/tiendanube-audit?orden=N` **no exige
   usuario** — contesta nombre, ítems y totales a cualquiera que sepa un número de orden. Sus dos
   consumidores (Reclamos y Canjes) le pegan con `fetch` pelado: ponerle el guard rompe las dos.

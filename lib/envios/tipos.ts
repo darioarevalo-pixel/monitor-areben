@@ -14,14 +14,14 @@ export type OrigenEnvio = 'tn' | 'manual'
 export type EstadoEnvio = 'pendiente' | 'preparado' | 'en_transito' | 'entregado' | 'no_entregado'
 
 /**
- * Los dos que se fueron el 15-ago-2026, y que **siguen tipados**: prod y los previews comparten una
- * base, así que entre el deploy y la migración que renombra hay filas escritas con estos valores.
- * Una pantalla que no los contemple les da un botón muerto sobre un paquete real.
+ * Lo que puede venir de la base hoy.
+ *
+ * Fue `EstadoEnvio | EstadoLegado` mientras existieron `despachado` y `reintento`. Desde el
+ * 17-ago-2026 el check de `envios_reparto` sólo admite los cinco, así que **los dos tipos coinciden**
+ * — el alias queda porque lo nombran la pantalla y el portal, y porque el día que se agregue un
+ * estado hay que volver a preguntarse si la base y la app dicen lo mismo.
  */
-export type EstadoLegado = 'despachado' | 'reintento'
-
-/** Lo que puede venir de la base hoy: el camino nuevo más lo que todavía no se renombró. */
-export type EstadoEnBase = EstadoEnvio | EstadoLegado
+export type EstadoEnBase = EstadoEnvio
 
 /** Un paquete que sale a la calle un día, en un turno. */
 export type Envio = {

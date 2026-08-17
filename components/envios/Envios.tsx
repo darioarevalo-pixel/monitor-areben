@@ -75,9 +75,9 @@ import { ZonasDeReparto } from './ZonasDeReparto'
  * El color de cada estado. Mismo criterio que Postventa (`ESTADO_TONE`), y por eso mismo tono:
  * ámbar es advertencia y nada más, verde es cerrado bien, rojo es cerrado mal.
  *
- * ⚠️ Están los dos legados (`despachado`, `reintento`) porque prod y los previews comparten base y
- * entre el deploy y la migración hay filas con esos valores. Un `Record` incompleto pinta la
- * pastilla sin color, que se lee como «acá no pasó nada» sobre un paquete que salió.
+ * ⚠️ **Sigue siendo `Record<string, …>` y no `Record<EstadoEnvio, …>`**: un estado sin entrada pinta
+ * la pastilla sin color, que se lee como «acá no pasó nada» sobre un paquete que salió. Tuvo dos
+ * entradas más (`despachado`, `reintento`) hasta el 17-ago-2026, cuando la base dejó de aceptarlos.
  */
 const ESTADO_TONE: Record<string, Tone> = {
   pendiente: 'neutral',
@@ -85,8 +85,6 @@ const ESTADO_TONE: Record<string, Tone> = {
   en_transito: 'action',
   entregado: 'success',
   no_entregado: 'danger',
-  despachado: 'action',
-  reintento: 'neutral',
 }
 
 /**
@@ -543,7 +541,7 @@ export function Envios() {
 function EstadoDelEnvio({ envio, onCambiar }: { envio: Envio; onCambiar: (e: Envio, estado: EstadoEnvio) => Promise<void> }) {
   const sigue = siguienteEstado(envio.estado) as EstadoEnvio | null
   const cerrado = (ESTADOS_CERRADOS as string[]).includes(envio.estado)
-  const enLaCalle = envio.estado === 'en_transito' || envio.estado === 'despachado'
+  const enLaCalle = envio.estado === 'en_transito'
 
   return (
     <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>

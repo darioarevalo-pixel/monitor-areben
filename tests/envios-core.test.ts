@@ -14,7 +14,7 @@ import {
   estaTodoPago,
   ESTADO_LABEL,
   ESTADOS,
-  ESTADOS_LEGADO,
+  ESTADOS_EN_CASA,
   FILTRO_BANDEJA,
   siguienteEstado,
   linkWhatsapp,
@@ -843,20 +843,35 @@ describe('el camino del paquete', () => {
     expect(siguienteEstado('no_entregado')).toBeNull()
   })
 
-  // 🔴 EL test de la ventana. Si esto diera `undefined`, las filas que prod escribió con el código
-  // viejo quedarían con un botón que no hace nada hasta que corra la migración.
-  it('🔴 un estado legado igual sabe hacia dónde sigue', () => {
-    expect(siguienteEstado('despachado')).toBe('entregado')
-    expect(siguienteEstado('reintento')).toBe('preparado')
-  })
-
   it('un estado inventado no rompe: simplemente no avanza', () => {
     expect(siguienteEstado('cualquier_cosa')).toBeNull()
   })
 
-  it('los legados tienen nombre para mostrar, no salen crudos', () => {
+  it('los cinco tienen nombre para mostrar, no salen crudos', () => {
     const label = ESTADO_LABEL as Record<string, string>
-    for (const e of [...ESTADOS, ...ESTADOS_LEGADO]) expect(label[e]).toBeTruthy()
+    for (const e of ESTADOS) expect(label[e]).toBeTruthy()
+  })
+
+  /**
+   * 🔴 **La red de los legados se sacó el 17-ago-2026 y esto es lo que la reemplaza.**
+   *
+   * Del 15 al 17 de agosto, `despachado` y `reintento` seguían nombrados a propósito: prod y los
+   * previews comparten una base y el check todavía los aceptaba, así que había que saber pintarlos.
+   * Se pudieron borrar recién cuando `--cerrar-tanda-a` estrechó el check a cinco **y** la tabla no
+   * devolvió ninguno (9 `pendiente`, 2 `en_transito`).
+   *
+   * El test no afirma que el código sea prolijo: afirma que **la app y la base sigan diciendo lo
+   * mismo**. Si alguien vuelve a agregar un estado acá sin tocar el check, la fila se rechaza con un
+   * error de constraint en la puerta; si lo agrega en el check y no acá, la pastilla sale sin color
+   * y `siguienteEstado` devuelve `null`, o sea un paquete sin botón para avanzar.
+   */
+  it('🔴 los legados NO vuelven por la ventana: ni camino, ni rótulo, ni "en casa"', () => {
+    for (const viejo of ['despachado', 'reintento']) {
+      expect(siguienteEstado(viejo)).toBeNull()
+      expect((ESTADO_LABEL as Record<string, string>)[viejo]).toBeUndefined()
+      expect(ESTADOS_EN_CASA as string[]).not.toContain(viejo)
+      expect(ESTADOS as string[]).not.toContain(viejo)
+    }
   })
 })
 
@@ -1036,10 +1051,10 @@ describe('el orden en que se preparan', () => {
   it('primero lo que todavía está en casa, al final lo cerrado', () => {
     const lista = [
       con({ id: 'entregado', estado: 'entregado' }),
-      con({ id: 'despachado', estado: 'despachado' }),
+      con({ id: 'en_transito', estado: 'en_transito' }),
       con({ id: 'pendiente', estado: 'pendiente' }),
     ]
-    expect(ordenarParaPreparar(lista).map((e) => e.id)).toEqual(['pendiente', 'despachado', 'entregado'])
+    expect(ordenarParaPreparar(lista).map((e) => e.id)).toEqual(['pendiente', 'en_transito', 'entregado'])
   })
 
   it('no toca la lista original', () => {
