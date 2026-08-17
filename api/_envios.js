@@ -57,6 +57,7 @@ import {
   CAMPOS_MOVIMIENTO,
   conIntentoFallido,
   ESTADOS,
+  selloDeEntrega,
   FILTRO_BANDEJA,
   montoDelMovimiento,
   num,
@@ -296,7 +297,13 @@ export default async function handler(req, res) {
       if (!ESTADOS.includes(b.estado)) {
         return res.status(400).json({ error: `Ese estado no existe. Los válidos son: ${ESTADOS.join(', ')}.` });
       }
-      const parche = { estado: b.estado, autor: yo, updated_at: new Date().toISOString() };
+      const ahora = new Date().toISOString();
+      // 🔴 **El sello de la hora sale de `selloDeEntrega` y no de un `if` acá.** Lo escriben los dos
+      // lados —esta pantalla y el portal del cadete— y tiene que decir lo mismo: entregado pone la
+      // hora, cualquier otro estado la borra. Un `if (b.estado === 'entregado')` suelto acá deja el
+      // sello viejo cuando alguien corrige a `no_entregado`, o sea el registro con hora exacta de
+      // una entrega que no pasó.
+      const parche = { estado: b.estado, ...selloDeEntrega(b.estado, ahora), autor: yo, updated_at: ahora };
       // Quién lo llevó se anota cuando sale, no antes.
       if (b.cadete !== undefined) parche.cadete = b.cadete || null;
 

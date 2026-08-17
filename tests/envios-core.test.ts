@@ -12,6 +12,7 @@ import {
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
+  horaDeEntrega,
   ESTADO_LABEL,
   ESTADOS,
   ESTADOS_EN_CASA,
@@ -46,6 +47,7 @@ import {
   vaAlReparto,
   validarEnvio,
   validarMovimiento,
+  selloDeEntrega,
 } from '@/lib/envios/core'
 import { armarTicket, textoDePlata } from '@/lib/envios/ticket'
 import type { Envio, MovimientoCuenta, OrdenTN, Traida } from '@/lib/envios/tipos'
@@ -1579,5 +1581,64 @@ describe('🔴 el alta a mano entra con día o sin día', () => {
     const sab = envioNuevoAMano({ marca: 'bdi', fecha: '2026-08-22' }) // sábado: no hay grilla
     expect(sab.turno).toBe('tarde')
     expect(validarEnvio({ ...sab, direccion: 'San Juan 100' })).toBeNull()
+  })
+})
+
+describe('🔴 la hora de la entrega', () => {
+  it('🔴 «entregado» pone la hora y cualquier otro estado la BORRA', () => {
+    // 🔴 El mutante es un `if (estado === 'entregado')` que sólo escribe cuando corresponde y no
+    // limpia: un `entregado` corregido a `no_entregado` se queda con el sello, o sea el registro con
+    // hora exacta de una entrega que no pasó. Devolver siempre el campo es lo que evita tener que
+    // acordarse de limpiarlo.
+    const AHORA = '2026-08-17T22:41:00.000Z'
+    expect(selloDeEntrega('entregado', AHORA)).toEqual({ entregado_en: AHORA })
+    for (const e of ['pendiente', 'preparado', 'en_transito', 'no_entregado']) {
+      expect(selloDeEntrega(e, AHORA)).toEqual({ entregado_en: null })
+    }
+  })
+
+  it('🔴 se lee en la hora del LOCAL, no en UTC', () => {
+    // Mismo offset fijo que el portal y que el recibo. Con la hora del navegador, una máquina mal
+    // configurada muestra una hora que no es la del local y no hay con qué darse cuenta.
+    // Las 22:41 UTC son las 19:41 de acá.
+    expect(horaDeEntrega(con({ entregado_en: '2026-08-17T22:41:00.000Z' }))).toBe('19:41')
+    // Y el borde que caza el signo dado vuelta: 01:30 UTC es todavía el día anterior, 22:30.
+    expect(horaDeEntrega(con({ entregado_en: '2026-08-18T01:30:00.000Z' }))).toBe('22:30')
+  })
+
+  it('🔴 sin sello devuelve vacío, no un cero ni la fecha de otra columna', () => {
+    // Las entregas anteriores al 17-ago-2026 no tienen hora y no se rellenaron a propósito. El
+    // mutante —caer a `updated_at`— da una hora plausible y falsa para siempre.
+    // 🔴 El fixture lleva `updated_at` A PROPÓSITO: sin él, caer a esa columna daría vacío igual y el
+    // mutante quedaría vivo. Medir donde el defecto se ve.
+    expect(horaDeEntrega(con({ entregado_en: null, updated_at: '2026-08-17T22:41:00.000Z' }))).toBe('')
+    expect(horaDeEntrega(con({ entregado_en: 'cualquiera', updated_at: '2026-08-17T22:41:00.000Z' }))).toBe('')
+    expect(horaDeEntrega(con({}))).toBe('')
+  })
+})
+
+describe('🔴 el detalle del día de la cuenta', () => {
+  const dia = (fecha: string, envios: Partial<Envio>[]): Envio[] =>
+    envios.map((e, i) => con({ id: `${fecha}-${i}`, fecha, estado: 'entregado', ...e }))
+
+  it('🔴 el día se lleva SUS envíos, no sólo el conteo', () => {
+    // Es lo que abre el `+`. El mutante es dejar sólo los números: «3 de 4» vuelve a ser una pregunta
+    // que hay que ir a contestar a otra pestaña, buscando el día a mano.
+    const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000 }, { monto_envio: 4300, estado: 'no_entregado' }]))
+    expect(c.dias[0].filas).toHaveLength(2)
+    expect(c.dias[0].entregados).toBe(1)
+  })
+
+  it('🔴 van TODOS los del día, no sólo los entregados', () => {
+    // El que no llegó es justamente el que se busca al abrir el detalle: sacarlo deja el `+` sin la
+    // única fila que explica por qué el conteo dice «1 de 2».
+    const c = cuentaDelCadete(dia('2026-08-17', [{ estado: 'no_entregado' }]))
+    expect(c.dias[0].filas).toHaveLength(1)
+    expect(c.dias[0].entregados).toBe(0)
+  })
+
+  it('un día que sólo tiene movimientos no inventa envíos', () => {
+    const c = cuentaDelCadete([], [{ id: 'm', fecha: '2026-08-22', monto: -1000, nota: null, autor: null, anulado_en: null, anulado_por: null }])
+    expect(c.dias[0].filas).toEqual([])
   })
 })

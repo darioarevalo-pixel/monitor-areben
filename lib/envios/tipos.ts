@@ -88,6 +88,13 @@ export type Envio = {
    * está pago—. Es el único valor que le saca esa plata de la cuenta. Ver `pagoAlLocal`.
    */
   cobrado: boolean | null
+  /**
+   * **Cuándo se entregó**, en el momento en que alguien tocó «Entregado». `null` es que todavía no se
+   * entregó — o que se entregó antes del 17-ago-2026, cuando esto no existía: las filas viejas no se
+   * rellenaron a propósito, porque `updated_at` habría dado una hora plausible y falsa. Ver
+   * `selloDeEntrega`.
+   */
+  entregado_en?: string | null
   vendedor: string | null
   cadete: string | null
   /** La orden de TN congelada al armar el reparto. Ver el encabezado de la migración. */
@@ -184,6 +191,13 @@ export type DiaDeCuenta = {
   tarifas: number
   /** `cobrado − tarifas`. Negativo = ese día le quedamos debiendo. */
   debeTraer: number
+  /**
+   * Los envíos de ese día, para el detalle que se abre en la pantalla. Van **todos**, no sólo los
+   * entregados: «3 de 4» sin poder ver cuál fue el que no llegó es justo la pregunta que se hace
+   * mirando ese número. ⛔ **No salen al portal del cadete**: `paraElCadeteCuenta` arma su respuesta
+   * campo por campo y lo afirma un test de lista cerrada.
+   */
+  filas: Envio[]
   /** Los movimientos de plata de ese día, anulados incluidos: la pantalla los muestra tachados. */
   movimientos: MovimientoCuenta[]
   /** La suma de los movimientos **vivos**, con su signo. Es lo que el día movió por fuera del reparto. */

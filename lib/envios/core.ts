@@ -11,6 +11,7 @@ import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
+import { OFFSET_AR_MS } from './portal.core.js'
 import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { AccionDePago, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
@@ -188,6 +189,23 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     debeTraerSiTodoLlega:
       envios.filter((e) => !(ESTADOS_CERRADOS as string[]).includes(e.estado)).reduce((s, e) => s + netoDelEnvio(e), 0) + debeTraer,
   }
+}
+
+/**
+ * **La hora a la que se entregó**, `HH:MM`, o `''` si no hay sello.
+ *
+ * 🔑 **El mismo offset fijo que el portal y que el recibo** (`OFFSET_AR_MS`, con su porqué escrito
+ * allá): el sello se guarda en UTC y se lee en la hora del local, sin depender del reloj ni de la
+ * zona del navegador que lo mira. Y `hour12` ni se pregunta — acá la hora se dice «19:04».
+ *
+ * 🔴 **Vacío es vacío, no un guión ni un cero.** Las entregas anteriores al 17-ago-2026 no tienen
+ * sello y **no se rellenaron**: `updated_at` habría dado una hora plausible y falsa para siempre. La
+ * pantalla escribe «sin hora», que es la verdad y se distingue de una entrega a la medianoche.
+ */
+export function horaDeEntrega(e: Envio): string {
+  const t = Date.parse(String(e.entregado_en || ''))
+  if (!Number.isFinite(t)) return ''
+  return new Date(t + OFFSET_AR_MS).toISOString().slice(11, 16)
 }
 
 /**
@@ -631,6 +649,7 @@ export {
   ORIGENES,
   pagoAlLocal,
   rotuloDeSaldo,
+  selloDeEntrega,
   siguienteEstado,
   tarifaCadete,
   TURNOS,

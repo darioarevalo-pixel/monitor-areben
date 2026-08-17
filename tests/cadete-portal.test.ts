@@ -341,28 +341,44 @@ describe('los chips de los días que vienen', () => {
 })
 
 describe('🔴 lo único que el portal puede escribir', () => {
+  const AHORA = '2026-08-17T22:41:00.000Z'
+
   it('las cuatro acciones, con su parche fijo', () => {
-    expect(parcheDeAccion('entregado')).toEqual({ estado: 'entregado' })
-    expect(parcheDeAccion('no_entregado')).toEqual({ estado: 'no_entregado' })
-    expect(parcheDeAccion('cobrado')).toEqual({ cobrado: true })
-    expect(parcheDeAccion('no_cobrado')).toEqual({ cobrado: false })
+    expect(parcheDeAccion('entregado', AHORA)).toEqual({ estado: 'entregado', entregado_en: AHORA })
+    expect(parcheDeAccion('no_entregado', AHORA)).toEqual({ estado: 'no_entregado', entregado_en: null })
+    expect(parcheDeAccion('cobrado', AHORA)).toEqual({ cobrado: true })
+    expect(parcheDeAccion('no_cobrado', AHORA)).toEqual({ cobrado: false })
+  })
+
+  // 🔴 El sello va SÓLO con las acciones que mueven el estado. `cobrado` y `no_cobrado` son sobre la
+  // plata: pegarles la hora pisaría el sello de la entrega real con el momento en que alguien tildó
+  // otra cosa —y esos dos se tocan después, a veces al día siguiente—.
+  it('🔴 la hora no se pega a los tildes de la plata', () => {
+    expect(parcheDeAccion('cobrado', AHORA)).not.toHaveProperty('entregado_en')
+    expect(parcheDeAccion('no_cobrado', AHORA)).not.toHaveProperty('entregado_en')
+  })
+
+  // 🔴 Volver atrás la BORRA: un `entregado` corregido a `no_entregado` con la hora puesta es el
+  // registro, con hora exacta, de una entrega que no pasó.
+  it('🔴 «no entregado» limpia la hora en vez de dejar la vieja', () => {
+    expect(parcheDeAccion('no_entregado', AHORA).entregado_en).toBeNull()
   })
 
   // 🔴 El mutante es copiar el body: con eso, cualquiera con el link reescribe precios, nombres y
   // direcciones. Acá el parche sale de la lista y lo demás no existe.
   it('🔴 cualquier otra cosa no escribe nada', () => {
-    expect(parcheDeAccion('borrar')).toBeNull()
-    expect(parcheDeAccion('')).toBeNull()
-    expect(parcheDeAccion('monto_envio')).toBeNull()
+    expect(parcheDeAccion('borrar', AHORA)).toBeNull()
+    expect(parcheDeAccion('', AHORA)).toBeNull()
+    expect(parcheDeAccion('monto_envio', AHORA)).toBeNull()
     // Y no se cuela por la cadena de prototipos, que es la forma tonta de romper una lista blanca.
-    expect(parcheDeAccion('constructor')).toBeNull()
-    expect(parcheDeAccion('toString')).toBeNull()
+    expect(parcheDeAccion('constructor', AHORA)).toBeNull()
+    expect(parcheDeAccion('toString', AHORA)).toBeNull()
   })
 
   it('el parche es una copia: nadie puede ensuciar la lista para el pedido siguiente', () => {
-    const p = parcheDeAccion('entregado') as Record<string, unknown>
+    const p = parcheDeAccion('entregado', AHORA) as Record<string, unknown>
     p.estado = 'cualquiera'
-    expect(parcheDeAccion('entregado')).toEqual({ estado: 'entregado' })
+    expect(parcheDeAccion('entregado', AHORA)).toEqual({ estado: 'entregado', entregado_en: AHORA })
   })
 })
 

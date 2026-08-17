@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   Badge,
@@ -38,6 +38,7 @@ import {
   estaTodoPago,
   ESTADO_LABEL,
   ESTADOS_CERRADOS,
+  horaDeEntrega,
   itemsDelPedido,
   linkWhatsapp,
   diaDeRepartoVecino,
@@ -1553,6 +1554,8 @@ function FichaEnvio({ envio, onCerrar, onGuardado }: { envio: Partial<Envio>; on
  */
 function CuentaDelCadete({ activa }: { activa: boolean }) {
   const { cuenta, cargando, error, recargar } = useCuentaCadete(activa)
+  // De a uno: la cuenta se lee de arriba abajo, y con varios abiertos se pierde el hilo del saldo.
+  const [abierto, setAbierto] = useState<string | null>(null)
   const [anotando, setAnotando] = useState(false)
 
   if (error) return <Notice tone="danger">{error}</Notice>
@@ -1636,12 +1639,32 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
         </THead>
         <TBody>
           {[...cuenta.dias].reverse().map((d) => (
-            <Tr key={d.fecha}>
+            <Fragment key={d.fecha}>
+            <Tr>
               <Td>
                 <div style={{ fontWeight: 600 }}>{rotuloDeDia(d.fecha) || d.fecha}</div>
               </Td>
               <Td>
-                {d.entregados} de {d.envios}
+                {/* 🔑 **El `+` abre lo que ese número esconde.** «3 de 4» es la fila que más se mira y
+                    la que más preguntas deja: cuál no llegó, a qué hora pasó por cada puerta, quién
+                    cobró. Estaba todo en la base y no se podía ver desde acá sin cambiar de pestaña y
+                    buscar el día a mano. Se abre de a uno: la cuenta se lee de arriba abajo. */}
+                {d.filas.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setAbierto(abierto === d.fecha ? null : d.fecha)}
+                    style={{ background: 'none', border: 0, padding: 0, font: 'inherit', cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }}
+                    // ⚠️ Los atributos van sueltos y no por el helper `dice`: adentro de este
+                    // componente `dice` es el rótulo del saldo (`rotuloDeSaldo`), que lo tapa.
+                    title={abierto === d.fecha ? 'Cerrar el detalle del día' : 'Ver los envíos de ese día'}
+                    aria-label={abierto === d.fecha ? 'Cerrar el detalle del día' : 'Ver los envíos de ese día'}
+                  >
+                    <span style={{ width: 16, textAlign: 'center', opacity: 0.6 }}>{abierto === d.fecha ? '−' : '+'}</span>
+                    {d.entregados} de {d.envios}
+                  </button>
+                ) : (
+                  <span style={{ opacity: 0.5 }}>—</span>
+                )}
               </Td>
               <Td>
                 {formatMoney(d.cobrado)}
@@ -1670,11 +1693,56 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
                 <strong>{formatMoney(d.acumulado)}</strong>
               </Td>
             </Tr>
+            {abierto === d.fecha ? <DetalleDelDia filas={d.filas} /> : null}
+            </Fragment>
           ))}
         </TBody>
       </TableWrap>
       {anotar}
     </div>
+  )
+}
+
+/**
+ * Los envíos de un día de la cuenta, abiertos con el `+`.
+ *
+ * 🔑 **Contesta las preguntas que deja el número de arriba**: «3 de 4» hace mirar cuál fue el que no
+ * llegó, y el saldo hace mirar quién cobró en cada puerta. Todo eso ya estaba en la base — lo que no
+ * había era cómo verlo sin cambiar de pestaña y buscar el día a mano.
+ *
+ * 🔴 **La hora dice «sin hora» cuando no la hay, y no se inventa.** Las entregas anteriores al
+ * 17-ago-2026 no tienen sello, y rellenarlas con `updated_at` habría dado una hora plausible y falsa
+ * para siempre. Un hueco que se ve es mejor que un dato que miente. Ver `selloDeEntrega`.
+ */
+function DetalleDelDia({ filas }: { filas: Envio[] }) {
+  return (
+    <Tr>
+      {/* Ocupa la fila entera: es un detalle del día, no una celda de ninguna columna. */}
+      <Td colSpan={7}>
+        <div style={{ display: 'grid', gap: space[2], padding: `${space[2]}px 0` }}>
+          {[...filas]
+            .sort((a, b) => String(a.entregado_en || '~').localeCompare(String(b.entregado_en || '~')))
+            .map((e) => (
+              <div key={e.id} style={{ display: 'flex', gap: space[3], alignItems: 'baseline', flexWrap: 'wrap', fontSize: 13 }}>
+                <span style={{ opacity: 0.6, minWidth: 54 }}>{horaDeEntrega(e) || 'sin hora'}</span>
+                <MarcaChip marca={e.store} />
+                <strong>{e.cliente || 'Sin nombre'}</strong>
+                <span style={{ opacity: 0.7 }}>{direccionCompleta(e)}</span>
+                {e.estado === 'entregado' ? (
+                  <>
+                    <span>cobró {formatMoney(aCobrar(e))}</span>
+                    <span style={{ opacity: 0.7 }}>· envío {formatMoney(Number(e.monto_envio))}</span>
+                    {/* El mismo rótulo de la hoja del día y de la misma función: por dónde entró la plata. */}
+                    {e.cobrado === false ? <Badge tone="brand">{quienCobro(e).label}</Badge> : null}
+                  </>
+                ) : (
+                  <Badge tone={e.estado === 'no_entregado' ? 'danger' : 'warning'}>{ESTADO_LABEL[e.estado] || e.estado}</Badge>
+                )}
+              </div>
+            ))}
+        </div>
+      </Td>
+    </Tr>
   )
 }
 

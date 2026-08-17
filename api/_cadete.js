@@ -193,7 +193,7 @@ export default async function handler(req, res) {
 
     // 🔴 El parche sale de la lista cerrada, NUNCA del body. El mutante es `{ ...body }`: con eso,
     // cualquiera con el link reescribe precios, nombres y direcciones.
-    const parche = parcheDeAccion(String(body.accion || ''));
+    const parche = parcheDeAccion(String(body.accion || ''), ahora);
     if (!parche) return res.status(400).json({ error: 'Esa acción no existe.' });
 
     const { data, error } = await supabase

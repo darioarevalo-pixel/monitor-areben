@@ -73,3 +73,37 @@ describe('🔴 bonificar, en la columna del pago', () => {
     expect(pago).not.toContain('variant="ghost"')
   })
 })
+
+/**
+ * 🔴 **La hora de la entrega la escriben DOS handlers, y ninguno la decide.**
+ *
+ * `selloDeEntrega` ya tiene sus tests: entregado pone la hora, cualquier otro estado la borra. Lo que
+ * esos tests no pueden ver es que los dos lados la llamen — y el modo de falla es el de siempre en
+ * este módulo: un `if` copiado que escribe la hora pero **no la limpia** al volver atrás, o un handler
+ * que se olvida del sello y deja la mitad de las entregas sin hora sin que nada falle.
+ */
+describe('🔴 el sello de la entrega, en los dos handlers', () => {
+  const interno = readFileSync(join(raiz, 'api/_envios.js'), 'utf8')
+  const portal = readFileSync(join(raiz, 'api/_cadete.js'), 'utf8')
+  const nucleo = readFileSync(join(raiz, 'lib/envios/portal.core.js'), 'utf8')
+
+  it('🔴 la pantalla interna sella con la función compartida, no con un `if` propio', () => {
+    expect(interno).toContain('selloDeEntrega(b.estado, ahora)')
+    expect(interno).not.toMatch(/entregado_en:\s*(new Date|ahora)/)
+  })
+
+  it('🔴 y el portal también: la hora la pone el SERVIDOR, no el teléfono', () => {
+    // El reloj del celular del cadete puede estar corrido, y una hora de entrega no se corrige después.
+    expect(portal).toContain("parcheDeAccion(String(body.accion || ''), ahora)")
+    expect(nucleo).toContain('selloDeEntrega(parche.estado, ahora)')
+  })
+
+  it('🔴 y la columna se PIDE: sin eso llega `undefined` y no falla nada', () => {
+    // Es el modo de falla propio de esta sección: `cobrado` lo escribía el portal, el handler no lo
+    // pedía, y del otro lado no se enteraba nadie.
+    const reglas = readFileSync(join(raiz, 'lib/envios/reglas.core.js'), 'utf8')
+    const campos = reglas.slice(reglas.indexOf('export const CAMPOS ='), reglas.indexOf('export const CAMPOS_CUENTA ='))
+    expect(campos).toContain('entregado_en')
+    expect(reglas.slice(reglas.indexOf('export const CAMPOS_CUENTA ='))).toContain('entregado_en')
+  })
+})

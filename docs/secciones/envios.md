@@ -100,6 +100,26 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   obligaría a volver a poner un guard condicional en cada una — que es exactamente el trabajo que
   costó `2adcd30` («un `add column if not exists` después de un `drop column` no es idempotencia, es
   una resurrección»). Una tabla vacía que nadie lee no cuesta nada; el guard mal puesto sí.
+- 🔑 **La hora de la entrega la escriben los DOS lados y la decide una sola función**
+  (`selloDeEntrega`, 17-ago-2026, lo pidió Bruno). La marca el que toca «Entregado»: la pantalla
+  interna y el portal del cadete, que es el que la toca de verdad en la puerta.
+  · 🔴 **Volver atrás la BORRA**: un `entregado` corregido a `no_entregado` con la hora puesta es el
+  registro —con hora exacta, que es lo que lo vuelve creíble— de una entrega que no pasó. Por eso la
+  función devuelve **siempre** el campo, con la hora o con `null`: así no hay que acordarse de limpiar.
+  · 🔴 **No se deduce de `updated_at`**: esa columna se mueve con cualquier escritura, así que
+  corregir el precio de un envío entregado la semana pasada le cambiaría la hora de entrega. Un dato
+  que parece bueno y envejece mal es peor que no tenerlo.
+  · 🔑 **La pone el SERVIDOR**, no el teléfono: el reloj del celular del cadete puede estar corrido y
+  esto no se corrige después. Y el sello va **sólo** con las acciones que mueven el estado — `cobrado`
+  y `no_cobrado` son sobre la plata y se tocan al día siguiente.
+  · ⚠️ **Las filas anteriores quedan en `null` y la pantalla dice «sin hora»**: rellenarlas habría
+  dado una hora plausible y falsa para siempre. Mismo criterio que `cobrado: null`.
+- 🔑 **El `+` de la cuenta abre los envíos de ese día** (17-ago-2026, lo pidió Bruno). «3 de 4» era la
+  fila que más se mira y la que más preguntas dejaba —cuál no llegó, a qué hora pasó por cada puerta,
+  quién cobró—: estaba todo en la base y no se podía ver sin cambiar de pestaña y buscar el día a
+  mano. Por eso `DiaDeCuenta` lleva `filas` con **todos** los envíos del día, no sólo los entregados.
+  ⛔ **No salen al portal**: `paraElCadeteCuenta` arma su respuesta campo por campo y lo afirma un test
+  de lista cerrada — que es exactamente para lo que se escribió.
 - 🔑 **La cuenta son MOVIMIENTOS con signo, sin columna `tipo`** — el signo va adentro del dato.
   Positivo = el cadete tiene plata nuestra. **Rinde cuando pasa**, no por día de reparto. No se
   guarda ningún total: el saldo se arrastra y un día congelado haría mentir a todos los siguientes.
