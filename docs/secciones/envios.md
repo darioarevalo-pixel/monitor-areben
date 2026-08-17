@@ -69,6 +69,14 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **La escalera para en la primera forma que conteste, aunque el punto salga impreciso.** Seguir
   despojando hasta conseguir uno con altura es conseguirlo **de otra calle**: "Av San Martin 1200" sin
   altura se tipea a mano, "Martin 1200" es un punto exacto y ajeno.
+- 🔴 **La `nomenclatura` de Georef trae el DEPARTAMENTO, no la localidad, y no se muestra tal cual.**
+  Roldán es del departamento San Lorenzo —que además es otro pueblo, a 25 km para el lado contrario—,
+  así que una dirección de Roldán bien resuelta volvía como `"TUCUMAN 963, San Lorenzo, Santa Fe"`.
+  Funes, Pérez, VGG, Ibarlucea y Soldini son del departamento Rosario y volvían diciendo «Rosario».
+  🔑 **Costó caro porque el texto se estaba usando para revisar**: en la confirmación del mapa se
+  marcaron como equivocadas direcciones que estaban perfectas — **el cartel corrompió la medición**.
+  `encontrado` se arma con `localidad_censal` (28 de 120 cambiaron); la `nomenclatura` cruda queda
+  sólo para detectar la esquina.
 - 🔑 **Georef contesta NADA cuando conoce la calle pero no tiene el número** (`Minetti 2682` → nada,
   `Minetti` → `PJE MINETTI`): «no se pudo ubicar» **no** quiere decir que la calle no exista, y por eso
   volver a preguntar sin la altura es exactamente la trampa.

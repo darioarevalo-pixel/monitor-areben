@@ -43,9 +43,27 @@ const ZONAS = [
   { id: 'z1', nombre: 'Zona 7', tipo: 'servicio', precio: 4500, prioridad: 1, coordinar: false, poligono: cuadrado(-60.72, -32.98, -60.63, -32.93) },
 ]
 
-/** Lo que contesta Georef, con la forma exacta que devuelve el servicio (medido el 16-ago-2026). */
-function respuesta(nomenclatura: string, lat: number, lon: number, altura: number | null) {
-  return { nomenclatura, altura: { unidad: null, valor: altura }, ubicacion: { lat, lon } }
+/**
+ * Lo que contesta Georef, con la forma exacta que devuelve el servicio (medido el 16-ago-2026).
+ *
+ * `localidad` y `departamento` viajan separados **y no son lo mismo**: ver el bloque de abajo.
+ */
+function respuesta(
+  nomenclatura: string,
+  lat: number,
+  lon: number,
+  altura: number | null,
+  localidad = 'Rosario',
+  departamento = 'Rosario',
+) {
+  return {
+    nomenclatura,
+    altura: { unidad: null, valor: altura },
+    ubicacion: { lat, lon },
+    localidad_censal: { id: '1', nombre: localidad },
+    departamento: { id: '2', nombre: departamento },
+    provincia: { id: '82', nombre: 'Santa Fe' },
+  }
 }
 
 describe('limpiarDireccion', () => {
@@ -183,6 +201,33 @@ describe('puntoDeGeoref — el candado, segunda mitad: lo que contestó, ¿es ex
   it('sin punto no hay nada', () => {
     expect(puntoDeGeoref(null)).toBeNull()
     expect(puntoDeGeoref({ nomenclatura: 'X', ubicacion: {} })).toBeNull()
+  })
+
+  /**
+   * 🔴 **El campo del medio de la nomenclatura es el DEPARTAMENTO, no la localidad.** Roldán está en
+   * el departamento San Lorenzo —que además es un pueblo de verdad, a 25 km para el otro lado—, así
+   * que una dirección de Roldán bien resuelta vuelve diciendo «San Lorenzo». Pasó: en la revisión del
+   * mapa se marcaron como equivocadas dos direcciones que estaban perfectas, o sea que **el cartel
+   * corrompió la medición que se estaba haciendo con los ojos**. Vale igual para Funes, Pérez, Villa
+   * Gobernador Gálvez, Ibarlucea y Soldini, que son del departamento Rosario.
+   */
+  it('🔴 muestra la LOCALIDAD, no el departamento: Roldán no es San Lorenzo', () => {
+    const p = puntoDeGeoref(respuesta('TUCUMAN 963, San Lorenzo, Santa Fe', -32.9021, -60.9115, 963, 'Roldán', 'San Lorenzo'))
+    expect(p?.encontrado).toBe('TUCUMAN 963, Roldán, Santa Fe')
+    // La nomenclatura cruda se guarda igual: es la que sabe de esquinas.
+    expect(p?.nomenclatura).toBe('TUCUMAN 963, San Lorenzo, Santa Fe')
+  })
+
+  it('la esquina conserva su cruce al corregir la localidad', () => {
+    // Rearmar la calle desde `calle.nombre` perdería el "(ESQUINA …)", que es la mitad del dato.
+    const p = puntoDeGeoref(respuesta('RIOJA (ESQUINA AV CORRIENTES), Rosario, Santa Fe', -32.9468, -60.6426, null))
+    expect(p?.encontrado).toBe('RIOJA (ESQUINA AV CORRIENTES), Rosario, Santa Fe')
+    expect(p?.preciso).toBe(true)
+  })
+
+  it('si la nomenclatura no tiene la forma esperada, se devuelve tal cual', () => {
+    const p = puntoDeGeoref({ nomenclatura: 'ALGO RARO', altura: { valor: 100 }, ubicacion: { lat: -32.9, lon: -60.6 } })
+    expect(p?.encontrado).toBe('ALGO RARO')
   })
 })
 
