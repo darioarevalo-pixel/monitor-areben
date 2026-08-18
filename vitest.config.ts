@@ -7,7 +7,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    // `.tsx` desde el 18-ago-2026: `tests/norte-tabla-metas.test.tsx` es el primer test de
+    // componentes del repo. Se renderiza con `renderToStaticMarkup`, que no necesita DOM, así que
+    // el `environment: 'node'` de arriba alcanza y no hay que prender jsdom para toda la suite.
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     /**
      * 30 s en vez de los 5 s por defecto.
      *

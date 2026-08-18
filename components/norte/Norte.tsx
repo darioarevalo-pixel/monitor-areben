@@ -6,6 +6,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useNorte } from './useNorte'
 import { EditorCondiciones } from './EditorCondiciones'
 import { EditorMeta } from './EditorMeta'
+import { TablaMetas } from './TablaMetas'
 import { PylLinea } from './PylLinea'
 import {
   avanceDeMeta,
@@ -23,9 +24,8 @@ import {
   sinCondiciones,
   veredicto,
 } from '@/lib/norte/core'
-import { medidorDe, unidadDe } from '@/lib/norte/medidores'
 import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
-import type { Contribucion, EstadoVeredicto, ImportacionProyectada, Medidor, Peldano } from '@/lib/norte/tipos'
+import type { Contribucion, EstadoVeredicto, ImportacionProyectada, Peldano } from '@/lib/norte/tipos'
 import {
   Badge,
   Button,
@@ -495,105 +495,13 @@ export function Norte() {
               />
             )}
 
-            {/* El vacío mira TODAS: con una meta apagada cargada, «sin metas» sería falso. */}
-            {metas.length === 0 ? (
-              <EmptyState
-                title="Sin metas cargadas"
-                hint={admin ? 'Agregá la primera con el botón de arriba.' : 'Las carga un administrador.'}
-              />
-            ) : (
-              <TableWrap>
-                <THead>
-                  <Tr>
-                    <Th>Meta</Th>
-                    <Th align="right">Objetivo</Th>
-                    <Th align="right">Hoy</Th>
-                    <Th align="right">Avance</Th>
-                    <Th align="right">Faltan</Th>
-                    <Th align="right">Por semana</Th>
-                    {admin && <Th align="right"> </Th>}
-                  </Tr>
-                </THead>
-                <TBody>
-                  {avances.map((a) => (
-                    <Tr key={a.meta.key}>
-                      <Td>
-                        {a.meta.label}
-                        <div style={{ fontSize: font.sm, color: color.mut }}>
-                          {medidorDe(a.meta.medidor)?.label || a.meta.medidor}
-                          {a.meta.canal ? ` · ${a.meta.canal}` : ' · todos los canales'}
-                        </div>
-                      </Td>
-                      <Td align="right" mono>
-                        {conUnidad(a.meta.objetivo, a.meta.medidor)}
-                      </Td>
-                      <Td align="right" mono>
-                        {a.medido === null ? (
-                          <span style={{ color: color.mut, fontSize: font.sm }}>{a.motivo || '—'}</span>
-                        ) : (
-                          conUnidad(a.medido, a.meta.medidor)
-                        )}
-                      </Td>
-                      <Td align="right" mono>
-                        {a.pct === null ? '—' : `${a.pct.toFixed(0)}%`}
-                        {a.veces !== null && a.veces > 1.2 && (
-                          <span style={{ color: color.mut }}> · ×{a.veces === Infinity ? '∞' : a.veces.toFixed(1)}</span>
-                        )}
-                      </Td>
-                      <Td align="right" mono>
-                        {a.falta === null ? '—' : conUnidad(a.falta, a.meta.medidor)}
-                      </Td>
-                      <Td align="right" mono>
-                        {a.porSemana === null ? '—' : conUnidad(a.porSemana, a.meta.medidor)}
-                      </Td>
-                      {admin && (
-                        <Td align="right">
-                          <Button size="sm" variant="outline" onClick={() => setMetaEditando({ key: a.meta.key })}>
-                            Editar
-                          </Button>
-                        </Td>
-                      )}
-                    </Tr>
-                  ))}
-                  {apagadas.map((m) => (
-                    <Tr key={m.key}>
-                      <Td>
-                        <span style={{ color: color.mut }}>{m.label}</span>{' '}
-                        <Badge tone="neutral" subtle>
-                          apagada
-                        </Badge>
-                        <div style={{ fontSize: font.sm, color: color.mut }}>
-                          {medidorDe(m.medidor)?.label || m.medidor}
-                          {m.canal ? ` · ${m.canal}` : ' · todos los canales'}
-                        </div>
-                      </Td>
-                      <Td align="right" mono style={{ color: color.mut }}>
-                        {conUnidad(m.objetivo, m.medidor)}
-                      </Td>
-                      <Td align="right" mono style={{ color: color.mut }}>
-                        —
-                      </Td>
-                      <Td align="right" mono style={{ color: color.mut }}>
-                        —
-                      </Td>
-                      <Td align="right" mono style={{ color: color.mut }}>
-                        —
-                      </Td>
-                      <Td align="right" mono style={{ color: color.mut }}>
-                        —
-                      </Td>
-                      {admin && (
-                        <Td align="right">
-                          <Button size="sm" variant="outline" onClick={() => setMetaEditando({ key: m.key })}>
-                            Editar
-                          </Button>
-                        </Td>
-                      )}
-                    </Tr>
-                  ))}
-                </TBody>
-              </TableWrap>
-            )}
+            <TablaMetas
+              avances={avances}
+              apagadas={apagadas}
+              admin={admin}
+              onEditar={(key) => setMetaEditando({ key })}
+            />
+
             <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
               El medido de cada meta se calcula al abrir, contra{' '}
               {ventanaEtl ? `la venta del ${ventanaEtl.desde} al ${ventanaEtl.hasta}` : 'la venta de los últimos 30 días'}
@@ -724,10 +632,3 @@ function PillVeredicto({ estado }: { estado: EstadoVeredicto }) {
  * semanal son la misma magnitud, y son la razón por la que el medidor existe: un número suelto en
  * esta tabla se compara con el de al lado sin que nadie sepa si están en la misma escala.
  */
-function conUnidad(valor: number, medidor: Medidor): string {
-  // La unidad viene del catálogo, no de una lista escrita acá: `$/funda` lleva el signo adelante y
-  // `fundas/día` lo lleva atrás, y eso alcanza para las tres.
-  const [izq, der] = unidadDe(medidor).split('/')
-  if (izq === '$') return `$${Math.round(valor).toLocaleString('es-AR')}/${der}`
-  return `${valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${izq}/${der}`
-}
