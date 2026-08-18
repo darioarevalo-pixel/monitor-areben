@@ -375,12 +375,33 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
   viven en el dashboard (`datos_ventas_gn` + `gastos`) y **no tienen endpoint**. Estimarlos para
   «completar» el P&L sería inventar justo el número que decide si una línea da o no da.
 
+## 🔑 El pago se pesifica AL EMITIR EL CHEQUE (18-ago-2026, lo corrigió Bruno)
+
+El costo está nominado en **dólares** y la pantalla convierte a pesos con el campo «Dólar a», que es
+un **`useState(1380)` escrito a mano** (`Norte.tsx`): no sale de ninguna cotización, no se guarda, y
+vuelve a 1380 al recargar. `compras_condiciones` **no guarda ningún tipo de cambio** — sólo `moneda`.
+
+🔑 **Y el modelo del negocio no es el que el código supone.** El pago **se pesifica cuando se emite
+el cheque**, y desde ese momento **el riesgo de devaluación lo toma el proveedor**. ⛔ Por lo tanto:
+
+- La columna **«En pesos» de una cuota con cheque ya emitido no es una conversión: es un dato duro**,
+  y el simulador no debería moverla.
+- El que sí corre riesgo cambiario es **sólo lo que todavía no tiene cheque**.
+- ⇒ El dato que falta para modelarlo bien no es «a qué dólar convertimos», sino **desde cuándo hay
+  cheque emitido, y por qué monto en pesos**. Hoy no hay dónde guardarlo.
+
+⚠️ Esto invalida una afirmación que estuvo escrita: «hay ~$27M de pagos con el monto en pesos sin
+fijar». Era una premisa nunca verificada.
+
 ## Pendiente
 
 - 🔴 **El veredicto se apoya en el estado de la importación, que vive en otra pantalla** (ver
   arriba). `fecha_ingreso` ya dice que llegó: hoy no se usa para esto.
 - ⚠️ **No hay forma de reordenar las metas.** `orden` se asigna al crear (`usadas.length`) y el
   editor no lo expone: una rampa 25 → 50 → 100 se lee en el orden en que se cargó.
+- 🔴 **No hay dónde guardar que una cuota ya tiene cheque emitido, ni por qué monto en pesos** (ver
+  arriba). Mientras tanto, «En pesos» simula sobre una deuda que en la vida real puede estar ya
+  fijada. Es el mismo hueco que «no hay dónde marcar una cuota como PAGADA».
 - ⚠️ **La ventana de 30 días esconde una rampa.** Medido el 18-ago: online venía de ~4,0
   compras/día en junio-julio y hizo **10,9** en los últimos 7 días, pero el medido de la meta dice
   **6,1** porque promedia 30 días. No está mal calculado — es que para un objetivo de escalado el
