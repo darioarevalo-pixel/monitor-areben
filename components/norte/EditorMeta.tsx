@@ -137,7 +137,7 @@ export function EditorMeta({
 
         <label style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.md }}>
           <input type="checkbox" checked={activa} onChange={(e) => setActiva(e.target.checked)} />
-          Activa (las inactivas no se muestran, pero no se pierden)
+          Activa (las apagadas van al final, en gris y sin medir)
         </label>
 
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center' }}>

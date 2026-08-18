@@ -238,18 +238,27 @@ borraron (quedó en 0 de nuevo, en las dos).
 - 🔴 **El tilde `Activa` sí necesita un click real en la coordenada**: es el mismo falso negativo del
   arnés que dio el guardado de condiciones. Con click real entra al estado de React.
 
-### 🔴 Una meta destildada no tiene camino de vuelta
+### ✅ Una meta apagada ya tiene camino de vuelta (18-ago-2026)
 
-Se descubrió ejerciendo el tilde, y **se comprobó**: al destildar `Activa` la meta desaparece de la
-pantalla, sigue en la base con `activa=f`, y **no hay ningún control para volver a verla,
-reactivarla ni borrarla**. Se limpió con `psql`, que hoy es el único camino.
+**El defecto**, descubierto ejerciendo el tilde: al destildar `Activa` la meta desaparecía de la
+pantalla, seguía en la base con `activa=f`, y **no había ningún control para volver a verla,
+reactivarla ni borrarla**. El único camino era `psql`. La causa: `metas.filter((m) => m.activa)`
+era **la única** lista que se renderizaba, y al editor sólo se entra desde el botón de una fila de
+esa lista. ⚠️ Volver a crearla con el mismo nombre **tampoco la recuperaba**: la clave se
+desambigua y nace una fila nueva, con la vieja al lado, muda.
 
-La causa es que `metas.filter((m) => m.activa)` es **la única** lista que se renderiza
-(`Norte.tsx:482`) y al editor sólo se entra desde el botón de una fila de esa lista. La etiqueta
-—«las inactivas no se muestran, pero no se pierden»— es cierta del dato y falsa de la pantalla.
+**El arreglo**: las apagadas se listan **al final, en gris, con su chip y su botón Editar**.
 
-⚠️ Volver a crear una meta con el mismo nombre **no la recupera**: la clave se desambigua y nace una
-fila nueva, con la vieja al lado, muda.
+- 🔑 **No se miden.** El medido va al lado de un objetivo que alguien está persiguiendo; ponerle un
+  número a una meta apagada la devolvería a la conversación, que es justo lo que apagarla quiso
+  evitar. El **objetivo sí** va: es lo que permite reconocerla, y dos metas pueden llamarse igual.
+- 🔑 **El vacío pasó a mirar TODAS las metas** (`metas.length === 0`). Con una apagada cargada,
+  «Sin metas cargadas» era falso.
+- 🔑 **La etiqueta del tilde también se corrigió.** Decía «las inactivas no se muestran, pero no se
+  pierden»: era cierta del dato y falsa de la pantalla, y después del arreglo pasó a ser falsa al
+  revés. Una etiqueta afirma aunque no calcule nada.
+- ⚠️ **No tiene banco**: el de Norte es de lógica y no hay tests de componentes. El oráculo fue
+  caminar producción: cargar, apagar, ver la fila gris, **volver a prenderla desde ahí** y borrarla.
 
 ## El P&L «por arriba» por línea (18-ago-2026)
 
@@ -285,8 +294,6 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
 
 ## Pendiente
 
-- 🔴 **Devolverle el camino de vuelta a una meta destildada** (ver arriba). Hoy `Activa` es un botón
-  sin verbo inverso.
 - Cerrar contra la **estructura** necesita esos gastos por marca, que no tienen API. Es lo único que
   falta para que el P&L baje del «por arriba» al resultado.
 
