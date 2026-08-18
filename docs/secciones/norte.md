@@ -408,12 +408,44 @@ fijar». Era una premisa nunca verificada.
 - Tres mutantes muertos: pesificar a cero cuando falta el dato, saltear el hueco en la cobertura, y
   volver al 1380 fijo.
 
+## 🔴 `stockInicial: 0` — la proyección ignoraba el stock (18-ago-2026, `0dbf68d` + `2bee81a`)
+
+La pantalla llegó a decir **«el depósito queda vacío HOY»** con **35.157 unidades** adentro. La causa
+era un `stockInicial: 0` escrito fijo: la proyección **sólo contaba lo que todavía no había llegado**.
+
+🔑 **Estuvo enmascarado por un dato mal mantenido.** Mientras la IMPORTACION 1 figuraba «en
+tránsito», la ventana arrancaba en su fecha y le inyectaba sus unidades el primer día. Al marcarla
+arribada, el arranque quedó en 0 y el defecto salió a la superficie.
+
+**Cómo quedó**, y el criterio lo puso Bruno: *«sólo el stock de lo que ingresó, como dato de la
+importación y el éxito de la misma»*.
+
+- ⛔ **No es el inventario del depósito**, a propósito: la sección contesta «de lo que traje, ¿sale a
+  tiempo para pagarlo?». El depósito tiene además mercadería vieja y productos que no son fundas.
+- 🔑 **Las unidades salen de `unidadesDe`, la misma del costeo**: facturadas si están, del pedido si
+  no. Una segunda regla acá haría que el stock y la deuda cuenten distinto la misma compra.
+  **Medido en prod**: la pantalla cuenta **11.225** —las facturadas— y no las 9.230 del pedido.
+- 🔑 **Se descuenta lo vendido, y se MIDE contra el ETL en vez de estimarlo con el ritmo**: el ritmo
+  es un promedio de 30 días y acá la ventana es otra (desde el ingreso hasta hoy).
+- 🔴 **Se cuenta desde la arribada MÁS VIEJA, una sola vez** (`desdeElPrimerIngreso`). Lo arribado es
+  un **pozo común**: no se sabe de qué importación salió cada funda, y restarle a cada una «lo
+  vendido desde SU llegada» contaría dos veces el período solapado — con dos compras, el descuento
+  saldría casi el doble.
+- Prefiere la **fecha de ingreso real** sobre `llega`: en la IMPORTACION 1 son el 3-ago y el 27-jul.
+- ⚠️ **El remanente nunca es negativo**: si se vendió más de lo importado, la diferencia salió de
+  mercadería anterior que la sección no conoce, y un negativo se le restaría a lo que está por llegar.
+- **Medido contra `psql`**: 4.923 unidades vendidas desde el 3-ago; la pantalla dice **4.914**. La
+  diferencia son **exactamente 9**, las del canal `Ninguno` (3 ventas técnicas) que el ETL excluye.
+  ⚠️ Una venta técnica **sí descuenta stock**, así que en rigor deberían restarse — son el 0,08%.
+
 ## Pendiente
 
 - 🔴 **El veredicto se apoya en el estado de la importación, que vive en otra pantalla** (ver
   arriba). `fecha_ingreso` ya dice que llegó: hoy no se usa para esto.
 - ⚠️ **No hay forma de reordenar las metas.** `orden` se asigna al crear (`usadas.length`) y el
   editor no lo expone: una rampa 25 → 50 → 100 se lee en el orden en que se cargó.
+- ⚠️ **Las ventas técnicas no se descuentan del stock de lo importado**, porque el ETL las excluye
+  (ver arriba). Hoy son 9 unidades sobre 11.225.
 - ⚠️ **La ventana de 30 días esconde una rampa.** Medido el 18-ago: online venía de ~4,0
   compras/día en junio-julio y hizo **10,9** en los últimos 7 días, pero el medido de la meta dice
   **6,1** porque promedia 30 días. No está mal calculado — es que para un objetivo de escalado el
