@@ -104,6 +104,9 @@ ya tienen ficha:
 - Norte → **leer `docs/secciones/norte.md`** antes de tocar `components/norte/`, `lib/norte/`,
   `api/_norte.js` o `sql/migrate-norte.sql`. ⛔ **La otra mitad de cada importación es la sección
   `ingresos`**, y su KV tiene el GET abierto: por eso el costo y los plazos van a la base.
+- Memo semanal → **leer `docs/secciones/memo.md`** antes de tocar `components/memo/`, `lib/memo/`,
+  `api/_memo.js` o `sql/migrate-memo.sql`. ⛔ **Cerrar la semana congela también el acta y los
+  avances, y no hay verbo de reabrir.**
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
