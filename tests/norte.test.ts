@@ -28,6 +28,8 @@ import {
   proyectarStock,
   ritmoDeSalida,
   stockArribado,
+  stockDeLoImportado,
+  desdeElPrimerIngreso,
   salidaDiaria,
   sinCondiciones,
   sumarDias,
@@ -622,6 +624,76 @@ describe('stockArribado', () => {
 
   it('sin bloques cae a las unidades de la importación, en vez de contar cero', () => {
     expect(stockArribado([imp({ bloques: [] })])).toBe(100)
+  })
+})
+
+describe('lo que queda de lo importado', () => {
+  const imp = (over: Partial<ImportacionProyectada>): ImportacionProyectada => ({
+    id: 'x',
+    desc: 'X',
+    llega: '2026-07-27',
+    unidades: 100,
+    arribada: true,
+    bloques: [b('b1', 'IMD', 100)],
+    condiciones: null,
+    ...over,
+  })
+  const conIngreso = (id: string, llega: string, fechaIngreso: string, unidades: number) =>
+    imp({
+      id,
+      llega,
+      unidades,
+      bloques: [b('b1', 'IMD', unidades)],
+      condiciones: {
+        ingresoId: id,
+        fechaFactura: '',
+        costos: [],
+        moneda: 'USD' as const,
+        cotizacion: null,
+        cuotas: [],
+        nota: '',
+        confirmado: true,
+        fechaIngreso,
+      },
+    })
+
+  it('prefiere la fecha de ingreso REAL sobre la llegada estimada', () => {
+    // En la IMPORTACION 1 son el 3-ago y el 27-jul: contar desde la estimada descontaría una semana
+    // de ventas que todavía no tenían esa mercadería.
+    expect(desdeElPrimerIngreso([conIngreso('a', '2026-07-27', '2026-08-03', 100)])).toBe('2026-08-03')
+  })
+
+  it('cae a la llegada cuando no hay fecha de ingreso cargada', () => {
+    expect(desdeElPrimerIngreso([imp({})])).toBe('2026-07-27')
+  })
+
+  it('sin ninguna arribada no hay desde cuándo contar', () => {
+    expect(desdeElPrimerIngreso([imp({ arribada: false })])).toBeNull()
+  })
+
+  // 🔑 El defecto que este caso defiende: lo arribado es un POZO COMÚN. Restarle a cada importación
+  // «lo vendido desde SU llegada» contaría dos veces las ventas del período solapado, y con dos
+  // compras el descuento saldría casi el doble del real.
+  it('con dos arribadas cuenta desde la MÁS VIEJA, una sola vez', () => {
+    const dos = [conIngreso('a', '2026-07-01', '2026-07-05', 100), conIngreso('b', '2026-08-01', '2026-08-03', 200)]
+    expect(desdeElPrimerIngreso(dos)).toBe('2026-07-05')
+    expect(stockArribado(dos)).toBe(300)
+    // 120 vendidas desde el 5-jul, no 120 por cada una.
+    expect(stockDeLoImportado(dos, 120)).toBe(180)
+  })
+
+  it('descuenta lo vendido de lo que ingresó', () => {
+    expect(stockDeLoImportado([imp({})], 30)).toBe(70)
+  })
+
+  // ⚠️ Si se vendió más de lo importado, la diferencia salió de mercadería anterior que esta
+  // sección no conoce. El remanente es CERO: un negativo se le restaría a lo que está por llegar.
+  it('nunca da negativo, aunque se haya vendido más de lo que trajeron', () => {
+    expect(stockDeLoImportado([imp({})], 400)).toBe(0)
+  })
+
+  it('sin nada arribado el remanente es 0, no lo que está por llegar', () => {
+    expect(stockDeLoImportado([imp({ arribada: false })], 0)).toBe(0)
   })
 })
 

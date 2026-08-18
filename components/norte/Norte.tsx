@@ -21,6 +21,8 @@ import {
   proyectarStock,
   ritmoDeSalida,
   stockArribado,
+  stockDeLoImportado,
+  desdeElPrimerIngreso,
   salidaDiaria,
   sinCondiciones,
   veredicto,
@@ -131,21 +133,43 @@ export function Norte() {
   const entran = ventana ? entradaDiaria(importaciones, ventana.desde, ventana.hasta) : 0
   const v = veredicto(entran, salen)
 
-  /** Lo que ya ingresó por importaciones. Es el punto de partida y la pantalla lo dice. */
-  const stockDeArribadas = useMemo(() => stockArribado(importaciones), [importaciones])
+  /**
+   * **Lo que queda de lo importado**: lo que ingresó menos lo que se vendió desde que empezó a
+   * entrar. 🔑 Lo vendido se **mide** contra el ETL, no se estima con el ritmo: el ritmo es un
+   * promedio de 30 días y acá la ventana es otra —desde el ingreso hasta hoy—, así que estimarlo
+   * daría un descuento que no coincide con ninguna venta real.
+   */
+  const importado = useMemo(() => {
+    const ingresado = stockArribado(importaciones)
+    const desde = desdeElPrimerIngreso(importaciones)
+    if (!datos || !desde) return { ingresado, vendidas: 0, desde, queda: ingresado }
+
+    const unidadesPorVenta = new Map<string, number>()
+    for (const d of datos.detalles) {
+      const k = String(d.sale_id)
+      unidadesPorVenta.set(k, (unidadesPorVenta.get(k) || 0) + (Number(d.quantity) || 0))
+    }
+    // Desde el ingreso hasta hoy inclusive. Una sola cuenta para todas las arribadas: ver
+    // `desdeElPrimerIngreso` — el stock arribado es un pozo común y no se puede repartir.
+    const vendidas = datos.ventas
+      .filter((v) => v.date_sale && v.date_sale.slice(0, 10) >= desde && v.date_sale.slice(0, 10) <= hoy)
+      .reduce((a, v) => a + (unidadesPorVenta.get(String(v.id)) || 0), 0)
+
+    return { ingresado, vendidas, desde, queda: stockDeLoImportado(importaciones, vendidas) }
+  }, [importaciones, datos, hoy])
 
   const proyeccion = useMemo(() => {
     if (!ventana || !salen) return []
     // ⛔ Arranca con lo que YA INGRESÓ por importaciones, no con el inventario del depósito: la
     // pregunta de la sección es si sale lo que se trajo. Ver `stockArribado`.
     return proyectarStock({
-      stockInicial: stockDeArribadas,
+      stockInicial: importado.queda,
       desde: ventana.desde,
       hasta: ventana.hasta,
       importaciones,
       salidaDia: salen,
     })
-  }, [ventana, salen, importaciones, stockDeArribadas])
+  }, [ventana, salen, importaciones, importado.queda])
 
   /**
    * 🔑 **`hayPlata` no se deduce de que el número sea cero.** Cuando el dashboard no contesta,
@@ -360,9 +384,10 @@ export function Norte() {
                         depósito queda vacío» llegó a producción sobre un arranque en cero, con
                         35.157 unidades adentro. Un número de stock sin su población afirma de más. */}
                     <div style={{ color: color.mut, fontSize: font.sm, marginTop: space[1] }}>
-                      Cuenta <strong>{stockDeArribadas.toLocaleString('es-AR')}</strong> unidades ya ingresadas por
-                      importaciones más las que faltan llegar — no el inventario del depósito, que además tiene
-                      mercadería vieja. No descuenta lo vendido desde que cada compra arribó.
+                      Arranca con <strong>{importado.queda.toLocaleString('es-AR')}</strong> unidades de lo importado
+                      —{importado.ingresado.toLocaleString('es-AR')} que ingresaron menos{' '}
+                      {importado.vendidas.toLocaleString('es-AR')} vendidas desde el {importado.desde}— y le suma las
+                      que faltan llegar. No es el inventario del depósito, que además tiene mercadería vieja.
                     </div>
                   </div>
                 )}

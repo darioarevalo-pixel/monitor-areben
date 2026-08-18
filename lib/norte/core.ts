@@ -218,6 +218,42 @@ export function stockArribado(imps: ImportacionProyectada[]): number {
     }, 0)
 }
 
+/**
+ * **Desde cuándo hay que contar lo vendido** para saber qué queda de lo importado: el ingreso **más
+ * viejo** entre las importaciones que ya llegaron. `null` si todavía no llegó ninguna.
+ *
+ * 🔑 **Es UNA fecha para todas, y ésa es la razón de que exista esta función.** Lo arribado es un
+ * pozo común: no se puede saber de qué importación salió cada funda. Restarle a cada una «lo
+ * vendido desde SU llegada» contaría dos veces las ventas del período en que se solapan — con dos
+ * compras arribadas, el descuento saldría casi el doble del real y el stock, de menos.
+ *
+ * Prefiere la **fecha de ingreso real** (la que se firma con el tilde) sobre `llega`, que es la
+ * estimada: en la IMPORTACION 1 son el 3-ago y el 27-jul, y contar desde la estimada descontaría
+ * una semana de ventas que todavía no tenían esa mercadería.
+ */
+export function desdeElPrimerIngreso(imps: ImportacionProyectada[]): string | null {
+  const fechas = imps
+    .filter((i) => i.arribada)
+    .map((i) => {
+      const real = i.condiciones?.fechaIngreso
+      return real && fechaValida(real) ? real : i.llega
+    })
+    .filter((f) => fechaValida(f))
+  if (!fechas.length) return null
+  return fechas.reduce((a, f) => (f < a ? f : a))
+}
+
+/**
+ * **Lo que queda de lo importado**: lo que entró, menos lo que se vendió desde que empezó a entrar.
+ *
+ * ⚠️ **Nunca negativo.** Si se vendió más de lo que trajeron las importaciones cargadas, lo que
+ * sobra salió de mercadería anterior que esta sección no conoce: el remanente de lo importado es
+ * **cero**, no un número en rojo que se restaría de lo que está por llegar.
+ */
+export function stockDeLoImportado(imps: ImportacionProyectada[], vendidasDesdeElPrimerIngreso: number): number {
+  return Math.max(0, stockArribado(imps) - Math.max(0, vendidasDesdeElPrimerIngreso))
+}
+
 /** El primer día en que el stock queda en cero. `null` si no se agota en la ventana. */
 export function diaDeAgotamiento(puntos: PuntoStock[]): string | null {
   const p = puntos.find((x) => x.stock <= 0)
