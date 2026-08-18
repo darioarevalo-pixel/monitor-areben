@@ -11,7 +11,7 @@ import { useGerencial } from '@/components/gerencial/useGerencial'
 import { useSesion } from '@/components/SesionProvider'
 import {
   LABEL_LINEA, LINEAS_MEMO, SISTEMAS, TEMAS,
-  costoPorCompra, delta, etiquetaSemana, semanaAnterior, semanaSiguiente, ticketPromedio,
+  costoPorCompra, delta, etiquetaSemana, semaforoPauta, semanaAnterior, semanaSiguiente, ticketPromedio,
   type Bloque, type Campo, type Foto, type Linea, type Semana, type Senales,
 } from '@/lib/memo/tipos'
 import { resumirSenales, semanaHoy, useAutoguardado, useMemoSemanal } from './useMemoSemanal'
@@ -276,28 +276,31 @@ function TablaPauta({ foto, lineas }: { foto: Foto; lineas: Linea[] }) {
               const p = foto.pauta.previa[l]
               const techo = foto.techos[l]
               const cpc = costoPorCompra(a)
-              // 🔴 Stunned no muestra costo por compra aunque tenga techo: su píxel nunca registró
-              // una compra, así que el número sería inventado. Se ve el gasto y nada más.
-              const mudo = l === 'stunned'
-              const sem = mudo || cpc === null || !techo ? null : cpc > techo ? 'rojo' : cpc > techo * 0.8 ? 'amarillo' : 'verde'
+              // 🔴 Acá había un `mudo = l === 'stunned'`, y tapaba un número que existe: la semana
+              // del 10 al 16 Stunned trajo 1 compra. Lo que hace mudo al renglón es **no tener
+              // compras**, no llamarse de una forma. El semáforo sale del núcleo y no se recalcula
+              // acá: la regla ya estaba escrita y probada en `semaforoPauta`, y tenerla dos veces
+              // es lo que dejó la excepción viva en un lado después de sacarla del otro.
+              const sinCompras = (a?.compras ?? 0) === 0
+              const sem = semaforoPauta(a, techo)
               return (
                 <Tr key={l}>
                   <Td>{LABEL_LINEA[l]}</Td>
                   <Td align="right">{formatMoney(a?.gasto ?? 0)}</Td>
                   <Td align="right"><Variacion actual={a?.gasto ?? 0} previo={p?.gasto ?? 0} /></Td>
-                  <Td align="right">{mudo ? '—' : (a?.compras ?? 0).toLocaleString('es-AR')}</Td>
+                  <Td align="right">{(a?.compras ?? 0).toLocaleString('es-AR')}</Td>
                   <Td align="right">
-                    {mudo ? (
-                      <span style={{ color: color.mut2 }} title="El píxel de Stunned nunca registró una compra: acá no habría un número, habría un invento">
-                        sin píxel
+                    {sinCompras ? (
+                      <span style={{ color: color.mut2 }} title="No hubo compras registradas en la semana: dividir el gasto por cero no da un número, y un cero acá se leería como «salió gratis»">
+                        sin compras
                       </span>
                     ) : (
-                      <span style={{ color: sem ? TONO_SEMAFORO[sem] : undefined, fontWeight: sem ? 600 : 400 }}>
+                      <span style={{ color: TONO_SEMAFORO[sem] ?? undefined, fontWeight: TONO_SEMAFORO[sem] ? 600 : 400 }}>
                         {formatMoney(cpc)}
                       </span>
                     )}
                   </Td>
-                  <Td align="right">{mudo ? '—' : formatMoney(techo ?? null)}</Td>
+                  <Td align="right">{formatMoney(techo ?? null)}</Td>
                 </Tr>
               )
             })

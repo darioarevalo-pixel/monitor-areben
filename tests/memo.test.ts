@@ -206,20 +206,24 @@ describe('la pauta', () => {
     expect(costoPorCompra({ gasto: 300, compras: 0, revenue: 0 })).toBeNull()
   })
 
-  it('🔴 Stunned nunca da semáforo, aunque tenga techo cargado', () => {
-    // Su píxel nunca registró una compra: cualquier costo por compra suyo es un invento con cara
-    // de medición. Si alguien saca esta excepción, este test se pone rojo.
-    expect(semaforoPauta('stunned', { gasto: 300, compras: 5, revenue: 0 }, 1000)).toBe('sin-dato')
-    expect(semaforoPauta('bdi', { gasto: 300, compras: 5, revenue: 0 }, 1000)).toBe('verde')
+  it('🔴 lo que hace mudo al renglón son las COMPRAS, no el nombre de la línea', () => {
+    // Acá vivía la excepción `linea === 'stunned'`, con un test que la defendía. La premisa era que
+    // su píxel nunca registraba una compra — y dejó de ser cierta: la semana del 10 al 16 Stunned
+    // trajo 1 compra y $38.241. Una excepción por nombre no se entera de eso nunca: tapa el número
+    // el día que aparece. Con la regla mirando el dato, el mismo renglón se lee solo.
+    expect(semaforoPauta({ gasto: 300, compras: 5, revenue: 0 }, 1000)).toBe('verde')
+    expect(semaforoPauta({ gasto: 9886, compras: 1, revenue: 38241 }, 1000)).toBe('rojo')
+    // Sin compras sigue sin haber semáforo, y ahora vale para las tres líneas por igual.
+    expect(semaforoPauta({ gasto: 9886, compras: 0, revenue: 0 }, 1000)).toBe('sin-dato')
   })
 
   it('el semáforo se lee contra el techo, y avisa antes de pasarlo', () => {
     const p = (gasto: number) => ({ gasto, compras: 1, revenue: 0 })
-    expect(semaforoPauta('bdi', p(1100), 1000)).toBe('rojo')
-    expect(semaforoPauta('bdi', p(900), 1000)).toBe('amarillo') // 90% del techo
-    expect(semaforoPauta('bdi', p(500), 1000)).toBe('verde')
+    expect(semaforoPauta(p(1100), 1000)).toBe('rojo')
+    expect(semaforoPauta(p(900), 1000)).toBe('amarillo') // 90% del techo
+    expect(semaforoPauta(p(500), 1000)).toBe('verde')
     // Sin techo cargado no hay semáforo: verde por defecto sería decir "rinde" sin saberlo.
-    expect(semaforoPauta('bdi', p(500), 0)).toBe('sin-dato')
-    expect(semaforoPauta('bdi', undefined, 1000)).toBe('sin-dato')
+    expect(semaforoPauta(p(500), 0)).toBe('sin-dato')
+    expect(semaforoPauta(undefined, 1000)).toBe('sin-dato')
   })
 })

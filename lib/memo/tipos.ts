@@ -102,7 +102,6 @@ export const ticketPromedio = ticketPromedioJs as (v: VentaLinea | undefined) =>
 export const costoPorCompra = costoPorCompraJs as (p: PautaLinea | undefined) => number | null
 export const delta = deltaJs as (a: number, p: number) => { abs: number; pct: number | null }
 export const semaforoPauta = semaforoPautaJs as (
-  linea: string,
   p: PautaLinea | undefined,
   techo: number | undefined,
 ) => 'verde' | 'amarillo' | 'rojo' | 'sin-dato'
