@@ -8,8 +8,10 @@
  * meta se calculan al abrir la pantalla contra las ventas reales (`lib/norte/core.ts`). Guardarlos
  * sería garantizar que algún día muestren un número viejo con cara de actual.
  *
- * La **contribución por canal** sí baja calculada, y no es una excepción a lo de arriba: se computa
- * en el servidor en el mismo request, contra la venta de esos 30 días. No se guarda en ningún lado.
+ * La **contribución por canal** y el **P&L por línea** sí bajan calculados, y no son una excepción a
+ * lo de arriba: se computan en el servidor en el mismo request, contra la venta de esos 30 días, y
+ * no se guardan en ningún lado. Son dos cortes de la misma plata y salen del mismo viaje: pedirlos
+ * por separado sería la forma de que los dos totales no cierren entre sí.
  * Va del lado del servidor porque necesita dos cosas que el navegador no tiene — los precios y el
  * CMV (el ETL trae unidades y no plata) y las reglas de IVA y comisiones, que viven en el
  * dashboard.
@@ -20,7 +22,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
-import type { Condiciones, Contribucion, Meta } from './tipos'
+import type { Condiciones, Contribucion, Meta, Pyl } from './tipos'
 
 const API = '/api/datos?recurso=norte'
 
@@ -31,6 +33,8 @@ export type DatosNorte = {
   metas: MetaGuardada[]
   /** La plata que deja cada canal, calculada en el servidor contra la venta real. */
   contribucion: Contribucion
+  /** El otro corte de la misma plata: el P&L «por arriba» de cada línea, hasta la contribución. */
+  pyl: Pyl
   puede: { admin: boolean }
 }
 
@@ -48,6 +52,7 @@ export async function leerNorte(store: Marca): Promise<DatosNorte> {
     condiciones: (d.condiciones || []) as Condiciones[],
     metas: (d.metas || []) as MetaGuardada[],
     contribucion: (d.contribucion || { disponible: false, motivo: null, ventana: null }) as Contribucion,
+    pyl: (d.pyl || { disponible: false, motivo: null, ventana: null }) as Pyl,
     puede: d.puede || { admin: false },
   }
 }

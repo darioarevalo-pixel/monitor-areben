@@ -35,6 +35,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
+import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
@@ -97,7 +98,32 @@ async function reglasDelDashboard() {
 }
 
 /**
- * La contribución por canal de los últimos 30 días con venta.
+ * El SKU de cada producto que aparece en estos renglones.
+ *
+ * 🔑 **Sólo hace falta en Zattia**, que es la base donde conviven Zattia y Stunned: la línea sale
+ * del prefijo del SKU. En BDI la respuesta ya se sabe —todo es `bdi`— y pedirlo sería una consulta
+ * entera para una pregunta contestada. Mismo criterio y mismo código que `api/_memo.js`.
+ */
+async function skusDe(supabase, store, detalles) {
+  if (store !== 'zattia') return null;
+  const pids = [...new Set(detalles.map((d) => Number(d.product_id)).filter((n) => Number.isInteger(n) && n > 0))];
+  const skuPor = new Map();
+  for (let i = 0; i < pids.length; i += 200) {
+    const grupo = pids.slice(i, i + 200);
+    const prods = await leerTodo(supabase, 'productos', (q) => q.select('id, sku').in('id', grupo).order('id'));
+    for (const p of prods) skuPor.set(String(p.id), p.sku);
+  }
+  return skuPor;
+}
+
+/**
+ * La plata de los últimos 30 días con venta, en sus **dos cortes**: por canal (por dónde conviene
+ * sacar el stock) y por línea (cuánto deja cada negocio).
+ *
+ * 🔑 **Los dos salen del MISMO viaje y de la MISMA ventana.** Son dos lecturas de la misma plata:
+ * si cada una pidiera sus ventas por su cuenta, dos pantallas pegadas mostrarían totales que no
+ * cierran entre sí y no habría forma de saber cuál mirar. Lo único que agrega el P&L es la consulta
+ * de SKUs, y sólo en Zattia.
  *
  * La ventana la fija `ventanaUltimos` sobre las fechas que volvieron, **no el reloj**: el día en
  * curso está a medio hacer y meterlo baja el promedio sin que haya pasado nada. Se piden 45 días
@@ -123,28 +149,49 @@ async function contribucionDe(supabase, store, reglas) {
   const ventas = crudas.filter((v) => !esVentaTecnica(v));
 
   const ventana = ventanaUltimos(ventas.map((v) => v.date_sale), 30);
-  if (!ventana) return { disponible: false, motivo: 'No hay ventas en los últimos 45 días.', ventana: null };
+  if (!ventana) return sinPlata('No hay ventas en los últimos 45 días.', null);
 
   const enVentana = ventas.filter((v) => {
     const f = String(v.date_sale || '').slice(0, 10);
     return f >= ventana.desde && f <= ventana.hasta;
   });
-  if (!enVentana.length) return { disponible: false, motivo: 'No hay ventas en la ventana.', ventana };
+  if (!enVentana.length) return sinPlata('No hay ventas en la ventana.', ventana);
 
   const min = enVentana[0].id;
   const max = enVentana[enVentana.length - 1].id;
   const detalles = await leerTodo(supabase, 'venta_detalles', (q) =>
-    q.select('sale_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+    q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
 
-  const { canales, cobertura } = contribucionPorCanal({
+  const comun = {
     ventas: enVentana,
     detalles,
     cuentas: reglas.cuentas,
     comisiones: reglas.comisiones,
     desde: ventana.desde,
     hasta: ventana.hasta,
-  });
-  return { disponible: true, motivo: null, ventana, canales, cobertura };
+  };
+  const { canales, cobertura } = contribucionPorCanal(comun);
+  const skuPor = await skusDe(supabase, store, detalles);
+  const pyl = pylPorLinea({ ...comun, store, skuPor });
+
+  return {
+    contribucion: { disponible: true, motivo: null, ventana, canales, cobertura },
+    pyl: { disponible: true, motivo: null, ventana, lineas: pyl.lineas, total: pyl.total, cobertura: pyl.cobertura },
+  };
+}
+
+/**
+ * Los dos cortes cuando no hay plata que mostrar.
+ *
+ * 🔑 **El motivo va en los dos, con el mismo texto.** Que una pantalla diga por qué no tiene el
+ * número y la de al lado se quede muda es el modo de falla que ya está documentado: callarse
+ * también miente.
+ */
+function sinPlata(motivo, ventana) {
+  return {
+    contribucion: { disponible: false, motivo, ventana },
+    pyl: { disponible: false, motivo, ventana },
+  };
 }
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -210,10 +257,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      // La contribución sale en el mismo viaje que el resto, y **no puede tumbar la sección**: si el
-      // dashboard no contesta o la venta no se puede leer, Norte pierde la columna de plata y lo
-      // dice. Mismo criterio que las metas.
-      const [c, m, contrib] = await Promise.all([
+      // Los dos cortes de la plata salen en el mismo viaje que el resto, y **no pueden tumbar la
+      // sección**: si el dashboard no contesta o la venta no se puede leer, Norte pierde la columna
+      // de plata y el P&L, y lo dice en los dos. Mismo criterio que las metas.
+      const [c, m, plata] = await Promise.all([
         supabase
           .from('compras_condiciones')
           .select('ingreso_id, fecha_factura, costo_unitario, moneda, unidades, cuotas, nota, actualizado_por, actualizado_en')
@@ -225,11 +272,11 @@ export default async function handler(req, res) {
           .order('orden', { ascending: true }),
         (async () => {
           const reglas = await reglasDelDashboard();
-          if (reglas.error) return { disponible: false, motivo: reglas.error, ventana: null };
+          if (reglas.error) return sinPlata(reglas.error, null);
           try {
             return await contribucionDe(supabase, store, reglas);
           } catch (e) {
-            return { disponible: false, motivo: `no se pudo leer la venta: ${e.message}`, ventana: null };
+            return sinPlata(`no se pudo leer la venta: ${e.message}`, null);
           }
         })(),
       ]);
@@ -265,7 +312,9 @@ export default async function handler(req, res) {
               orden: r.orden || 0,
               activa: r.activa !== false,
             })),
-        contribucion: contrib,
+        contribucion: plata.contribucion,
+        // El mismo viaje, el otro corte: cuánto deja cada línea, hasta la contribución.
+        pyl: plata.pyl,
         puede: { admin },
       });
     }

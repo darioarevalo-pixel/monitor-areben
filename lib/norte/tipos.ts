@@ -240,3 +240,69 @@ export type Contribucion = {
   canales?: ContribucionCanal[]
   cobertura?: CoberturaContribucion
 }
+
+/**
+ * Una fila del **P&L «por arriba» por línea**: la misma cascada, abierta por negocio en vez de por
+ * canal, y cortada en la contribución.
+ *
+ * 🔑 **`ventas` no se puede sumar entre filas.** Una venta de Zattia que lleva una funda Stunned es
+ * una venta para cada línea —igual que los tickets del memo—, así que la columna suma más ventas de
+ * las que hubo. La plata sí se reparte bien: los pesos del reparto suman 1. Por eso el total lo
+ * arma el núcleo (`totalDe`) y no la pantalla.
+ *
+ * ⛔ **Termina en la contribución, no en el resultado.** Los gastos fijos (la estructura, $25-30M
+ * por mes de las tres marcas) viven en el dashboard y no tienen endpoint. Un P&L que se corta donde
+ * se corta y lo dice sirve; uno que estima la estructura inventa justo el número que decide si una
+ * línea da o no da.
+ */
+export type PylFila = {
+  /** `'total'` en la fila de cierre; una `Linea` en las demás. */
+  linea: Linea | 'total'
+  ventas: number
+  unidades: number
+  mercaderia: number
+  iva: number
+  envios: number
+  descuentos: number
+  netas: number
+  cmv: number
+  /** Netas − CMV. El renglón que el corte por canal no muestra y que el P&L lee de arriba. */
+  margenBruto: number
+  comisiones: number
+  costoEnvios: number
+  contribucion: number
+  /** `null` sin unidades: no hay por qué dividir, y un 0 se leería como «no deja nada». */
+  contribUnidad: number | null
+  /** Sobre las netas. `null` con netas en cero: un `0%` es una afirmación, y sería falsa. */
+  pctContribucion: number | null
+}
+
+/**
+ * La cobertura del P&L: la de la contribución, más las ventas que **no tienen línea**.
+ *
+ * ⚠️ `sinReparto` es propio de este corte y no existe en el de canal: el canal lo tiene toda venta,
+ * la línea sale de los renglones. Una venta sin renglones —o con todo en cero, que pasa— no se
+ * manda a la línea más grande: eso movería plata real de un negocio al otro.
+ */
+export type CoberturaPyl = CoberturaContribucion & {
+  sinReparto: number
+  /**
+   * La contribución que cargan esas ventas, y que el corte por canal **sí** cuenta.
+   *
+   * 🔑 **Es lo que ata las dos tablas de la pantalla.** Sin este número, el total del P&L y el de
+   * la contribución por canal difieren y no hay con qué explicar la diferencia — y un «6 ventas»
+   * no dice si son $5.000 o $5.000.000. Medido contra producción el 18-ago-2026: son devoluciones
+   * (CMV negativo, sin renglones que sumen), −$4.639 en BDI y −$7.643 en Zattia.
+   */
+  sinRepartoContribucion: number
+}
+
+export type Pyl = {
+  disponible: boolean
+  /** Por qué no está, cuando no está. Va a la pantalla tal cual. */
+  motivo: string | null
+  ventana: { desde: string; hasta: string; dias: number } | null
+  lineas?: PylFila[]
+  total?: PylFila
+  cobertura?: CoberturaPyl
+}

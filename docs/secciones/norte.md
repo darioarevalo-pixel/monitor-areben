@@ -19,10 +19,14 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 - `components/norte/Norte.tsx` · `components/norte/useNorte.ts` · `components/norte/EditorCondiciones.tsx` · `components/norte/EditorMeta.tsx`
 - `lib/norte/core.ts` (todo el cálculo, **puro**) · `lib/norte/tipos.ts` · `lib/norte/persistencia.ts`
 - `lib/norte/medidores.core.js` (**qué puede medir una meta**, LA lista) + `.ts` tipado
-- `lib/norte/contribucion.core.js` (la cascada de plata, `.js` porque la usa el handler) + `.ts` tipado
+- `lib/norte/contribucion.core.js` (**la cascada de plata, escrita UNA vez**, y el filtro de qué venta
+  entra: `.js` porque la usa el handler) + `.ts` tipado
+- `lib/norte/pyl.core.js` (el P&L por línea: reparte los renglones de esa cascada) + `.ts` tipado
+- `components/norte/PylLinea.tsx`
 - `api/_norte.js`, que entra por `api/datos.js?recurso=norte`
 - `sql/migrate-norte.sql` + `scripts/apply-norte.mjs` · `sql/migrate-ventas-cobro.sql` + `scripts/apply-ventas-cobro.mjs`
-- Banco: `tests/norte.test.ts` · `tests/norte-contribucion.test.ts` · `tests/norte-metas-handler.test.ts`
+- Banco: `tests/norte.test.ts` · `tests/norte-contribucion.test.ts` · `tests/norte-pyl.test.ts` ·
+  `tests/norte-metas-handler.test.ts` · `tests/norte-contribucion-handler.test.ts`
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -136,12 +140,42 @@ porque un 0 se lee como «no avanzamos».
 - ⚠️ La columna `unidad` de la base quedó como **espejo** del catálogo, para poder leer una fila
   suelta en `psql`. **No es la fuente**: la escribe el handler desde `medidorDe(medidor).unidad`.
 
+## El P&L «por arriba» por línea (18-ago-2026)
+
+El otro corte de **la misma plata**: por canal se decide *por dónde* sacar el stock, por línea
+*cuánto deja cada negocio*. Los dos salen del **mismo viaje y la misma ventana** — pedirlos por
+separado sería la forma de que dos tablas pegadas muestren totales que no cierran entre sí.
+
+- 🔑 **La cascada NO se escribió dos veces.** `cascadaDeVenta` y `ventasUsables` (el filtro de qué
+  venta entra) viven en `contribucion.core.js` y los usan los dos cortes. El P&L **reparte** los
+  renglones de esa cascada; no calcula los suyos.
+- 🔑 **Acá SÍ hay que prorratear, y por canal no.** El canal es una propiedad de la venta entera; la
+  línea sale de los renglones, y `venta_detalles` trae `quantity` y `total` **pero no costo por
+  renglón**. El CMV, el descuento, el envío y el IVA se reparten **por el peso de la mercadería de
+  cada línea**, que es el mismo criterio con el que el dashboard reparte una venta entre marcas.
+- 🔑 **Los detalles tienen que traer `product_id`.** Sin esa columna `lineaDe` recibe `undefined` y
+  en Zattia **todo Stunned se contabiliza como Zattia**: el P&L sale completo, cuadrado y con la
+  plata en el negocio equivocado, sin que falle nada. Lo defiende `norte-contribucion-handler`.
+- 🔴 **Tres casos de reparto y ninguno es un default** (`baseDeReparto`): por mercadería; **por
+  unidades** cuando la venta facturó cero o negativo —dividir por ese total daría pesos que no suman
+  1 o de signo cambiado—; y **afuera** cuando no hay ni una cosa ni la otra.
+- 🔴 **Lo que queda afuera se dice CON SU PLATA, no con su número de ventas.** Medido contra
+  producción el 18-ago: en la ventana hay **6 ventas sin línea en BDI y 8 en Zattia**, y no están
+  vacías — son **devoluciones con CMV negativo** (−$4.639 y −$7.643). La contribución por canal sí
+  las cuenta ⇒ sin `sinRepartoContribucion` los dos totales de la misma pantalla difieren y no hay
+  con qué explicar la diferencia. Un «6 ventas» no dice si son $5.000 o $5.000.000.
+- ⚠️ **La fila «Ventas» no suma a lo ancho**: una venta mixta (Zattia + una funda Stunned) cuenta en
+  las dos líneas, igual que los tickets del memo. El total lo cuenta el núcleo, no la pantalla.
+- **Los renglones son filas y las líneas columnas**, como el P&L del dashboard: un P&L se lee de
+  arriba abajo y así se puede cotejar renglón contra renglón el día que los dos no coincidan.
+- ⛔ **Termina en la contribución.** Los gastos fijos ($25-30M/mes de estructura de las tres marcas)
+  viven en el dashboard (`datos_ventas_gn` + `gastos`) y **no tienen endpoint**. Estimarlos para
+  «completar» el P&L sería inventar justo el número que decide si una línea da o no da.
+
 ## Pendiente
 
-- El P&L «por arriba» por línea (previo a gastos), que es lo que pidió Bruno para no depender del
-  dashboard. El resultado fino sigue siendo del dashboard: Norte hace la versión de todos los días.
-- Cerrar contra la **estructura** ($25-30M/mes de fijos de las tres marcas) necesita los gastos por
-  marca, que viven en el dashboard (`datos_ventas_gn` + `gastos`) y **no tienen endpoint**.
+- Cerrar contra la **estructura** necesita esos gastos por marca, que no tienen API. Es lo único que
+  falta para que el P&L baje del «por arriba» al resultado.
 
 ## Cómo se prueba
 
@@ -162,5 +196,14 @@ porque un 0 se lee como «no avanzamos».
 - 🔑 **Se muraron 12 mutantes el 18-ago y uno sobrevivió — y tenía razón**: agregar un medidor al
   catálogo sin enseñárselo a `medirMeta` dejaba el banco en verde y la pantalla mostrando el número
   de otro medidor. El corte explícito de `medidor desconocido` salió de ahí.
+- `npx vitest run tests/norte-pyl.test.ts` — el P&L por línea. 🔑 **Sus dos oráculos**: las mismas
+  cinco filas reales de julio-2026, y que **el total por línea sea el total por canal al centavo**
+  (más lo que quedó sin repartir). Son dos cortes de la misma plata: si el reparto se lleva algo
+  puesto o lo duplica, los totales se separan. 15 mutantes, 15 muertos con `AssertionError` — y uno
+  sobrevivió primero porque la venta sin reparto del test no tenía ni envío ni comisión.
+- 🔑 **La forma de los datos se midió contra producción con `psql`, no contra fixtures**: 5 ventas
+  mixtas en Zattia (el prorrateo se ejerce de verdad), 27 ventas en BDI que facturan cero con
+  unidades (el reparto por unidad también), 0 renglones apuntando a un producto borrado, y las 14
+  ventas sin línea de arriba. Ningún fixture podía decir eso.
 - ⚠️ **Ejercer a mano el guardado en producción**: es el verbo que escribe, y en este repo es el que
   más veces falló. Cargar una importación con costo y dos cuotas, recargar, y ver que vuelve.

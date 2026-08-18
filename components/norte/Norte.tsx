@@ -6,6 +6,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useNorte } from './useNorte'
 import { EditorCondiciones } from './EditorCondiciones'
 import { EditorMeta } from './EditorMeta'
+import { PylLinea } from './PylLinea'
 import {
   avanceDeMeta,
   calendarioDePagos,
@@ -65,7 +66,7 @@ import {
 export function Norte() {
   const { marca } = useSesion()
   const { datos, error: errorDatos, progreso, origen } = useDatosMonitor()
-  const { importaciones, metas, contribucion, admin, cargando, error, recargar } = useNorte(marca)
+  const { importaciones, metas, contribucion, pyl, admin, cargando, error, recargar } = useNorte(marca)
   const [editando, setEditando] = useState<string | null>(null)
   /** `{nueva:true}` o `{key}`: qué meta está abierta en el editor. `null` = ninguna. */
   const [metaEditando, setMetaEditando] = useState<{ nueva?: boolean; key?: string } | null>(null)
@@ -236,6 +237,10 @@ export function Norte() {
             )}
             <NotaContribucion contribucion={contribucion} />
           </SectionCard>
+
+          {/* El otro corte de la misma plata: por canal se decide POR DÓNDE sacar el stock; acá,
+              CUÁNTO deja cada negocio. Los dos salen del mismo viaje y de la misma ventana. */}
+          <PylLinea pyl={pyl} />
 
           <SectionCard title="Lo que viene" subtitle="Se cargan en Compras → Ingresos proyectados; acá se les agrega la economía">
             {cargando ? (
