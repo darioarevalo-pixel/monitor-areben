@@ -129,6 +129,19 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   verificó mutando** (`compras += 2` lo pone en rojo), o sea no pasa por vacío.
 - Los últimos 10 días de BDI, para volver a cotejar: **16 · 11 · 8 · 12 · 5 · 14 · 10 · 14 · 3 · 9**
   compras online (17-ago hacia atrás).
+- ✅ 🔑 **El resultado del sale, caminado y con el oráculo EN EL PAYLOAD, no en lo dibujado**
+  (18-ago-2026, Zattia, «Sale Invierno Agosto 2026»). Dos mitades:
+  1. **Los mismos cuatro números en las dos pantallas** —Liquidación → Resultado (payload con costo)
+     y Ventas de Marketing (sin costo)—: vendido **205** (10% del stock) · facturado **$4.753.250** ·
+     resignado **$2.730.700** · levante **2,2×** (34,2/día vs 15,4), más los 4 descartados en 0 y los
+     **6 agotados de 23**.
+  2. 🔴 **El cuerpo servido, capturado enganchando `fetch`**: la llave vieja trae `costo`, `sinCosto`,
+     `margen` y `markup` (**203 KB**) y la de Marketing **no trae ninguno de los cuatro** (**181 KB**),
+     con `precioNormal` presente en las dos. ⇒ el cero no es un payload vacío: es el filtro haciendo
+     algo. ⛔ Mirar sólo la pantalla no lo habría probado —los cuatro campos no se dibujan— y mirar
+     sólo la llave nueva tampoco: **hace falta la mitad que SÍ los trae**.
+- ⚠️ **BDI no tiene ninguna campaña** (medido: `select count(*) from liquidaciones` da 0) ⇒ ahí lo
+  que se ejerció es el cartel de vacío, no el resultado.
 - ✅ **Caminada en producción el 18-ago-2026**, con `psql` al lado en cada paso: hoy **1/3**, la
   flecha atrás a 17-ago **16/28** (barra 64 % contra el escalón de 25), el piso en **jue 16-jul**
   **7/11** con la flecha apagada y el cartel que dice por qué, y **Zattia sin objetivo cargado**
