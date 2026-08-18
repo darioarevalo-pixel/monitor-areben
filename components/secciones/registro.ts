@@ -21,6 +21,7 @@ const Inicio = dynamic(() => import('@/components/inicio/Inicio').then((m) => m.
 const CRM = dynamic(() => import('@/components/crm/CRM').then((m) => m.CRM), { loading: Cargando })
 const Ingresos = dynamic(() => import('@/components/ingresos/Ingresos').then((m) => m.Ingresos), { loading: Cargando })
 const Marketing = dynamic(() => import('@/components/marketing/Marketing').then((m) => m.Marketing), { loading: Cargando })
+const MktVentas = dynamic(() => import('@/components/mkt-ventas/MktVentas').then((m) => m.MktVentas), { loading: Cargando })
 const Tncat = dynamic(() => import('@/components/tncat/Tncat').then((m) => m.Tncat), { loading: Cargando })
 const Ubicaciones = dynamic(() => import('@/components/ubicaciones/Ubicaciones').then((m) => m.Ubicaciones), { loading: Cargando })
 const FundasModelo = dynamic(() => import('@/components/fundas/FundasModelo').then((m) => m.FundasModelo), { loading: Cargando })
@@ -127,6 +128,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // stock: eso sigue siendo un paso humano en Sesión de fotos. El reporte de fotos y
   // las etiquetas Zebra del legacy eran código muerto (sin botón) → no se portaron.
   // Rollback: mover esta línea a SOMBRAS → vuelve el iframe legacy, sin tocar datos.
+  // El objetivo del sector y el contador diario de ventas online. Es sección propia y no un
+  // bloque arriba de `marketing` porque aquélla es la auditoría de fichas de TiendaNube y sus
+  // cinco KPI son filtros de su tabla: un objetivo de venta ahí sería un sexto número que no filtra.
+  'mkt-ventas': MktVentas,
   marketing: Marketing,
   // El flip de Ingresos proyectados (18-jul-2026, Tanda C, solo BDI): `/ingresos` lo
   // sirve el shell. Editor de importaciones de fundas por llegar: bloques (por material)

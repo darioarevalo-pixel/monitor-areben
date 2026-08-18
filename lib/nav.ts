@@ -177,6 +177,9 @@ const ICONO_POR_KEY: Record<string, string> = {
   'conteo-estandar-stunned': 'conteo',
   exhib: 'exhib',
   // Marketing
+  // La brújula, la misma de Norte: es la sección de «hacia dónde vamos» de Marketing. No se
+  // pisan en ningún menú — quien ve Norte es de Dirección y no ve ésta, y al revés.
+  'mkt-ventas': 'norte',
   marketing: 'marketing',
   calendario: 'calendario',
   canjes: 'canjes',
@@ -336,6 +339,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   proveedores: 'Comparativa de ventas y stock por proveedor.',
   caducados: 'Candidatos a depurar: sin stock y sin ventas hace más de N días.',
   'verif-ventas': 'Cruce de ventas anuladas en TiendaNube contra Gestión Nube.',
+  'mkt-ventas': 'El objetivo de venta del sector y cuánto se vendió online cada día.',
   marketing: 'Auditoría de fotos y descripciones cruzada con stock y ventas.',
   canjes: 'Canjes con influencers: quién es cada una, hace cuánto no le proponemos algo, qué se le mandó y si publicó lo que prometió.',
   'sesion-fotos': 'Pedí productos para la sesión de fotos y controlá su retiro y devolución.',

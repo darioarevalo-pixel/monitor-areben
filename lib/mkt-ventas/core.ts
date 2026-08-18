@@ -1,0 +1,142 @@
+/**
+ * El objetivo del sector y el contador diario de ventas — el núcleo puro.
+ *
+ * Contesta dos preguntas que el resto del monitor **no** contesta:
+ *
+ *  1. **¿Cuánto vendimos HOY?** Norte mide un promedio de 30 días (`ritmoDeSalida`), que es lo que
+ *     corresponde para proyectar stock y pagos, pero **esconde una rampa**: online venía de ~4
+ *     compras/día y hizo 10,9 los últimos 7, y el medido de la meta seguía diciendo 6,1. Para un
+ *     objetivo de escalado hace falta el día, y el día anterior, y el anterior.
+ *  2. **¿Contra qué escalón?** La rampa de BDI son tres metas (25 al 8-sep · 50 al 30-sep · 100 al
+ *     31-oct). Llenar la barra contra el 100 da 16% el mejor día del mes; contra el escalón vigente
+ *     da 64%, que es la pregunta que se puede contestar esta semana.
+ *
+ * ⛔ **No mide plata.** Las dos cifras que salen de acá son unidades y compras; la contribución y
+ * el costo siguen siendo de Dirección.
+ */
+
+// `canalDe` se importa del re-export tipado y NO del `.core.js`: ese archivo dice, textual, «acá
+// sólo se le pone el tipo, una vez». Escribir la firma de nuevo acá sería la segunda vez.
+import { canalDe } from '@/lib/liquidacion/resultado'
+import type { FilaDetalle, FilaVenta } from '@/lib/etl/tipos'
+import type { Medicion } from '@/lib/norte/tipos'
+import type { MetaGuardada } from '@/lib/norte/persistencia'
+import { diasEntre, sumarDias } from '@/lib/fechas/dia'
+
+/**
+ * Un día del contador.
+ *
+ * 🔑 **`compras` y `unidades` son dos denominadores y por eso van los dos.** Una compra online
+ * trae 1,9 fundas (medido en BDI, 30 días al 18-ago-2026) y una compra mayorista trae 76,9: un
+ * objetivo cargado en uno y leído en el otro da un avance plausible y falso. Además **una venta de
+ * cero unidades igual es una compra**, así que `compras` cuenta filas de `ventas` y no se deriva
+ * de los renglones.
+ */
+export type DiaDeVenta = { fecha: string; compras: number; unidades: number }
+
+/** Los canales que puede pedir el contador. `null` = todos juntos. */
+export type CanalPedido = 'local' | 'online' | 'mayorista' | null
+
+/**
+ * La serie día por día, de `hasta` hacia atrás, `dias` filas.
+ *
+ * 🔑 **El canal sale de `canalDe`** (`lib/liquidacion/canal.core.js`), que es LA implementación y
+ * la que usa `ritmoDeSalida` en Norte. ⛔ No el regex de `lib/marketing/core.ts`, que es un tercer
+ * criterio: si esta pantalla recortara distinto que Norte, las dos dirían dos números del mismo
+ * hecho y no habría cómo saber cuál mirar.
+ *
+ * ⚠️ **Devuelve el día con 0 aunque no haya ninguna venta**, y eso es a propósito: un domingo sin
+ * ventas es un dato, y saltearlo dejaría las flechitas moviéndose de a saltos irregulares.
+ *
+ * Las ventas técnicas (Sesión de fotos, Fallas, canjes) ya vienen filtradas desde la bajada
+ * (`lib/datos.ts`), así que acá no se vuelven a mirar.
+ */
+export function serieDiaria(
+  ventas: FilaVenta[],
+  detalles: FilaDetalle[],
+  canal: CanalPedido,
+  hasta: string,
+  dias: number,
+): DiaDeVenta[] {
+  const desde = sumarDias(hasta, -(dias - 1))
+
+  // Primer paso: qué día es cada venta que entra en la ventana y en el canal pedido.
+  const diaDeLaVenta = new Map<string, string>()
+  const porDia = new Map<string, DiaDeVenta>()
+  for (let i = 0; i < dias; i++) {
+    const fecha = sumarDias(desde, i)
+    porDia.set(fecha, { fecha, compras: 0, unidades: 0 })
+  }
+
+  for (const v of ventas) {
+    const fecha = (v.date_sale || '').slice(0, 10)
+    const dia = porDia.get(fecha)
+    if (!dia) continue
+    if (canal && canalDe(v.channel) !== canal) continue
+    diaDeLaVenta.set(String(v.id), fecha)
+    dia.compras += 1
+  }
+
+  // Segundo: las unidades, que viven en los renglones y se atan por `sale_id`.
+  for (const d of detalles) {
+    const fecha = diaDeLaVenta.get(String(d.sale_id))
+    if (!fecha) continue
+    porDia.get(fecha)!.unidades += d.quantity || 0
+  }
+
+  return [...porDia.values()].sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+}
+
+/**
+ * El escalón vigente de una rampa de metas: la activa con la `fechaObjetivo` **futura más
+ * cercana**.
+ *
+ * 🔑 **Si ya pasaron todas, devuelve la de fecha más lejana** —el techo de la rampa— y no `null`:
+ * que se haya vencido el calendario no borra el objetivo, y una pantalla sin barra el 1-nov se
+ * leería como «se rompió».
+ *
+ * ⚠️ Una meta **sin fecha** no puede ser escalón (no hay con qué ordenarla), pero sí es candidata
+ * a techo si no hay ninguna otra: es el caso de una marca con un solo objetivo suelto.
+ *
+ * Devuelve `null` cuando no hay ninguna meta activa. ⛔ **La pantalla NO dibuja entonces una barra
+ * en 0%**: es el mismo criterio que `avanceDeMeta`, que devuelve `null` y no cero, porque un cero
+ * afirma «no avanzamos» y esto es «no hay objetivo cargado».
+ */
+export function escalonVigente(metas: MetaGuardada[], hoy: string): MetaGuardada | null {
+  const activas = metas.filter((m) => m.activa)
+  if (!activas.length) return null
+
+  const conFecha = activas.filter((m) => m.fechaObjetivo)
+  if (!conFecha.length) return activas[0]
+
+  const futuras = conFecha.filter((m) => diasEntre(hoy, m.fechaObjetivo!) >= 0)
+  const orden = (a: MetaGuardada, b: MetaGuardada) => (a.fechaObjetivo! < b.fechaObjetivo! ? -1 : 1)
+  if (futuras.length) return [...futuras].sort(orden)[0]
+  return [...conFecha].sort(orden)[conFecha.length - 1]
+}
+
+/**
+ * El techo de la rampa: el objetivo más grande de las activas. Es el número que va en el título
+ * («Objetivo 100 compras diarias») mientras la barra mide el escalón, así que **los dos números
+ * están escritos** y ninguno se esconde detrás del otro.
+ */
+export function techoDeLaRampa(metas: MetaGuardada[]): MetaGuardada | null {
+  const activas = metas.filter((m) => m.activa)
+  if (!activas.length) return null
+  return activas.reduce((a, b) => (b.objetivo > a.objetivo ? b : a))
+}
+
+/**
+ * Qué mide una meta en un día puntual: `compras` para el medidor `ventas-dia`, `unidades` para
+ * `unidades-dia`.
+ *
+ * ⛔ **Los medidores de plata (`contrib-dia`, `contrib-unidad`) devuelven `null` con su motivo**,
+ * no un cero: la contribución sale del dashboard y por acá no pasa. Es la misma regla de
+ * `medirMeta` en Norte, y por eso `avanceDeMeta` puede recibir esto tal cual.
+ */
+export function medirElDia(meta: MetaGuardada, dia: DiaDeVenta | null): Medicion {
+  if (!dia) return { valor: null, motivo: 'ese día no está en los datos que bajó el navegador' }
+  if (meta.medidor === 'ventas-dia') return { valor: dia.compras, motivo: null }
+  if (meta.medidor === 'unidades-dia') return { valor: dia.unidades, motivo: null }
+  return { valor: null, motivo: `«${meta.medidor}» se mide con la plata del dashboard y esta pantalla no la trae` }
+}

@@ -90,10 +90,12 @@ export const resolverComercial = resolverComercialJs as (clave: string, anio: nu
 
 export * from './tipos'
 
-/** El día de hoy como `YYYY-MM-DD`, **en la zona de quien mira**, que es el día que tiene en la cabeza. */
-export function hoyIso(d: Date = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+/**
+ * El día de hoy como `YYYY-MM-DD`, **en la zona de quien mira**, que es el día que tiene en la
+ * cabeza. Se mudó a `lib/fechas/dia.ts` el 18-ago-2026 —la necesitaba otra sección y este archivo
+ * es el barril de Calendario— y se re-exporta para no tocar a quien ya la importa de acá.
+ */
+export { hoyIso } from '@/lib/fechas/dia'
 
 const ceros = (): CoberturaEtapas => Object.fromEntries(ETAPAS.map((e) => [e, 0])) as CoberturaEtapas
 

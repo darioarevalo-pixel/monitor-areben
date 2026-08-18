@@ -57,6 +57,21 @@ export async function leerNorte(store: Marca): Promise<DatosNorte> {
   }
 }
 
+/**
+ * Sólo los objetivos de una marca, por la llave `?metas=1`.
+ *
+ * Existe para la sección **Ventas de Marketing**, que dibuja la barra del objetivo del sector y no
+ * tiene —ni debe tener— acceso a Norte: `leerNorte` trae además las condiciones de compra, la
+ * contribución por canal y el P&L, o sea plata de Dirección. Del otro lado, el handler elige la
+ * sección a chequear **antes** del `puedeVerAlguna` y contesta con `norte_metas` y nada más.
+ */
+export async function leerMetas(store: Marca): Promise<MetaGuardada[]> {
+  const r = await apiFetch(`${API}&store=${store}&metas=1&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los objetivos.')
+  return (d.metas || []) as MetaGuardada[]
+}
+
 async function postear(body: Record<string, unknown>, sale: string): Promise<void> {
   const r = await apiFetch(API, {
     method: 'POST',

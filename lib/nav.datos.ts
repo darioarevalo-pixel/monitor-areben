@@ -172,6 +172,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "mkt-ventas",
+    "area": "marketing",
+    "label": "Ventas",
+    "info": "El objetivo de venta del sector con su barra de avance, y el contador diario de ventas online — con las flechas para ver los días anteriores. Los objetivos se cargan en Norte (Dirección): acá sólo se miran.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "marketing",
     "area": "marketing",
     "label": "Marketing",
@@ -906,6 +916,7 @@ export const NAV_CATS: NavCat[] = [
       "icono": "marketing",
     "label": "Marketing",
     "keys": [
+      "mkt-ventas",
       "marketing",
       "calendario",
       "canjes",

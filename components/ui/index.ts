@@ -29,7 +29,7 @@ export { ConfirmProvider, useConfirmar, ConfirmDetalle, type ConfirmarOpts } fro
 export { ToastProvider, useToast } from '@/components/ui/Toast'
 export { DatosGate, Esqueleto, ProgressInline, type DatosGateProps } from '@/components/ui/DatosGate'
 export { FilterBar, BuscarInput, Chips, ContadorFiltro, useFiltroUrl, type ChipOpt } from '@/components/ui/FilterBar'
-export { Paginacion, MiniBar } from '@/components/ui/Paginacion'
+export { Paginacion, MiniBar, Barra } from '@/components/ui/Paginacion'
 export { MenuMulti, type OpcionMulti } from '@/components/ui/MenuMulti'
 export { FaseBadge, toneDeFase } from '@/components/ui/FaseBadge'
 export { MarcaChip } from '@/components/ui/MarcaChip'

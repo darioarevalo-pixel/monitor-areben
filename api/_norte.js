@@ -238,6 +238,27 @@ function sanearCuotas(raw) {
     .slice(0, 24);
 }
 
+/**
+ * Una fila de `norte_metas` como la lee la app. **Una sola vez**: la sirven las dos ramas del GET
+ * (Norte entero y `?metas=1`), y dos mapeos del mismo registro se despegan en el campo que uno
+ * agregue y el otro no.
+ *
+ * La unidad la manda el **medidor** y no la columna: la columna es un espejo para poder leer la
+ * fila en `psql` sin tener el catálogo al lado, y puede quedar vieja.
+ */
+function aMeta(r) {
+  return {
+    key: r.key,
+    label: r.label,
+    medidor: r.medidor || 'unidades-dia',
+    canal: r.canal || null,
+    objetivo: Number(r.objetivo) || 0,
+    fechaObjetivo: r.fecha_objetivo || '',
+    orden: r.orden || 0,
+    activa: r.activa !== false,
+  };
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
@@ -245,8 +266,21 @@ export default async function handler(req, res) {
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
 
-  if (!puedeVerAlguna(perfil, store, ['norte'])) {
-    return res.status(403).json({ error: 'No tenés acceso a Norte en esta marca.' });
+  // 🔑 **La segunda llave de este handler, con el molde de las cuatro de `api/_liquidacion.js`.**
+  // La sección que hay que poder ver se elige **antes** del `puedeVerAlguna`, no con un segundo
+  // `if` que lo saltee: duplicar el chequeo adentro de una rama es lo que dejó a todo el equipo sin
+  // ver el padrón de Canjes.
+  //
+  // 🔑 **Qué abre y qué NO**: `?metas=1` contesta **sólo `norte_metas`** —el nombre del objetivo,
+  // su número y su fecha—. Ni las condiciones de compra, ni la contribución, ni el P&L: o sea ni un
+  // peso. Ése es el contrato que la deja salir del área de Dirección, y una columna que lo vuelva
+  // falso tiene que salir por otra puerta. Exige `GET`, así que **ninguna `action` del POST se
+  // alcanza jamás con esta llave**: la rama corta con `return` antes de que se mire un `action`.
+  const soloMetas = req.method === 'GET' && String(req.query.metas || '') === '1';
+  const secciones = soloMetas ? ['norte', 'mkt-ventas'] : ['norte'];
+  if (!puedeVerAlguna(perfil, store, secciones)) {
+    const que = soloMetas ? 'los objetivos' : 'Norte';
+    return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });
   }
 
   const cfg = cfgFor(store);
@@ -258,6 +292,17 @@ export default async function handler(req, res) {
   const ahora = new Date().toISOString();
 
   try {
+    // Corta acá: lo único que contesta con la llave de los objetivos. Sin condiciones, sin
+    // contribución, sin P&L — y sin `puede`, que sólo sirve para dibujar los botones de Norte.
+    if (soloMetas) {
+      const m = await supabase
+        .from('norte_metas')
+        .select('key, label, medidor, canal, objetivo, fecha_objetivo, orden, activa')
+        .eq('store', store)
+        .order('orden', { ascending: true });
+      return res.status(200).json({ ok: true, metas: m.error ? [] : (m.data || []).map(aMeta) });
+    }
+
     if (req.method === 'GET') {
       // Los dos cortes de la plata salen en el mismo viaje que el resto, y **no pueden tumbar la
       // sección**: si el dashboard no contesta o la venta no se puede leer, Norte pierde la columna
@@ -304,20 +349,7 @@ export default async function handler(req, res) {
         // Las metas NO tumban Norte si la tabla todavía no está migrada en esta marca: se pierden
         // los objetivos y el resto (stock, pagos, ritmo) sigue sirviendo. Mismo criterio que el
         // calendario con las decisiones.
-        metas: m.error
-          ? []
-          : (m.data || []).map((r) => ({
-              key: r.key,
-              label: r.label,
-              // La unidad la manda el medidor y no la columna: la columna es un espejo para poder
-              // leer la fila en `psql` sin tener el catálogo al lado, y puede quedar vieja.
-              medidor: r.medidor || 'unidades-dia',
-              canal: r.canal || null,
-              objetivo: Number(r.objetivo) || 0,
-              fechaObjetivo: r.fecha_objetivo || '',
-              orden: r.orden || 0,
-              activa: r.activa !== false,
-            })),
+        metas: m.error ? [] : (m.data || []).map(aMeta),
         contribucion: plata.contribucion,
         // El mismo viaje, el otro corte: cuánto deja cada línea, hasta la contribución.
         pyl: plata.pyl,
