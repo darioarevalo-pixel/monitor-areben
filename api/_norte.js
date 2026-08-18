@@ -35,6 +35,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
+import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
 function cfgFor(store) {
@@ -105,13 +106,20 @@ async function reglasDelDashboard() {
  * el id es el único puente—, y ese rango arrastra ventas de otras fechas. El filtro por fecha real
  * lo hace el núcleo. Mismo cruce que `api/_memo.js`.
  */
-async function contribucionDe(supabase, reglas) {
+async function contribucionDe(supabase, store, reglas) {
   const hace45 = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
-  const ventas = await leerTodo(supabase, 'ventas', (q) =>
-    q
-      .select('id, date_sale, channel, payment_method, account_display, discount, shipping_cost, total_cost')
-      .gte('date_sale', hace45)
-      .order('id'));
+  // ⚠️ `channel_id` sólo se pide en BDI: la tabla de Zattia no tiene esa columna y PostgREST
+  // rechaza el select entero por una columna que no existe. `esVentaTecnica` está hecha para eso —
+  // en Zattia manda el texto del canal, que es el criterio que ya usa el ETL ahí.
+  const cols = `id, date_sale, channel, payment_method, account_display, discount, shipping_cost, total_cost${store === 'bdi' ? ', channel_id' : ''}`;
+  const crudas = await leerTodo(supabase, 'ventas', (q) => q.select(cols).gte('date_sale', hace45).order('id'));
+
+  // 🔴 Las técnicas (Sesión de Fotos y Fallas) se sacan ACÁ porque el ETL las saca del payload que
+  // mira el navegador. Si el servidor las contara, el ritmo en unidades y la plata quedarían
+  // medidos sobre poblaciones distintas — y multiplicar uno por otro daría un número que no
+  // existe. Medido el 18-ago: en BDI son 11 unidades que aportan −$15.608 de contribución, porque
+  // salen con descuento del 100% y el costo es real.
+  const ventas = crudas.filter((v) => !esVentaTecnica(v));
 
   const ventana = ventanaUltimos(ventas.map((v) => v.date_sale), 30);
   if (!ventana) return { disponible: false, motivo: 'No hay ventas en los últimos 45 días.', ventana: null };
@@ -218,7 +226,7 @@ export default async function handler(req, res) {
           const reglas = await reglasDelDashboard();
           if (reglas.error) return { disponible: false, motivo: reglas.error, ventana: null };
           try {
-            return await contribucionDe(supabase, reglas);
+            return await contribucionDe(supabase, store, reglas);
           } catch (e) {
             return { disponible: false, motivo: `no se pudo leer la venta: ${e.message}`, ventana: null };
           }

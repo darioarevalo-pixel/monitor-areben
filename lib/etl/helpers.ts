@@ -5,6 +5,7 @@
  * único cambio: ninguna fórmula se tocó.
  */
 
+import { esVentaTecnica as esVentaTecnicaJs } from './tecnica.core.js'
 import type { Fase } from './tipos'
 
 /** daysSince (index.html:2114). 999 es el centinela de "nunca se vendió". */
@@ -86,13 +87,15 @@ export function lifespanDaysFromFirst(
  * fixtures reales el 9-ago-2026: en BDI los dos criterios coinciden exactamente (15 y 15), y Zattia
  * no expone `channel_id`, así que ahí manda el texto (37 ventas).
  *
+ * 🔑 **La implementación vive en `tecnica.core.js`**, que es `.js` plano porque `api/_norte.js` la
+ * necesita para sacar las mismas ventas que saca el ETL. Acá sólo se le pone el tipo.
+ *
  * ⚠️ `canalDe` de `lib/liquidacion/resultado.ts` **no** usa esto, y está bien: ahí la pregunta es
  * otra —"¿este canal cuenta para el precio promedio minorista?"— y para eso el canal desconocido se
  * descarta a propósito. Son dos preguntas distintas, no dos copias de la misma.
  */
-export function esVentaTecnica(v: { channel?: string | null; channel_id?: number | string | null }): boolean {
-  return v.channel === 'Ninguno' || Number(v.channel_id) === 12
-}
+export const esVentaTecnica: (v: { channel?: string | null; channel_id?: number | string | null }) => boolean =
+  esVentaTecnicaJs
 
 /** Por debajo de esto un producto es "nuevo": no tiene 30 días previos contra los cuales medirse. */
 export const DIAS_PRODUCTO_NUEVO = 30
