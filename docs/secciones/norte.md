@@ -257,8 +257,27 @@ desambigua y nace una fila nueva, con la vieja al lado, muda.
 - 🔑 **La etiqueta del tilde también se corrigió.** Decía «las inactivas no se muestran, pero no se
   pierden»: era cierta del dato y falsa de la pantalla, y después del arreglo pasó a ser falsa al
   revés. Una etiqueta afirma aunque no calcule nada.
-- ⚠️ **No tiene banco**: el de Norte es de lógica y no hay tests de componentes. El oráculo fue
-  caminar producción: cargar, apagar, ver la fila gris, **volver a prenderla desde ahí** y borrarla.
+- ✅ **Ya tiene banco** (ver abajo). Antes no: el de Norte es de lógica y el defecto vivía entero
+  adentro del JSX. El primer oráculo fue caminar producción —cargar, apagar, ver la fila gris,
+  **volver a prenderla desde ahí** y borrarla—; después se le puso un banco de render.
+
+### El banco de render, que es el primero del repo (18-ago-2026, `684f15b`)
+
+La tabla salió a **`components/norte/TablaMetas.tsx`** con props puras —nada de hooks de datos— para
+poder probarla. 🔑 **El defecto de arriba vivía entero adentro del JSX**: Norte tenía banco de
+lógica, todo en verde, y el defecto llegó igual a producción porque no había nada que un test
+pudiera preguntarle.
+
+- `tests/norte-tabla-metas.test.tsx`, **9 casos**, con `renderToStaticMarkup` de `react-dom/server`.
+  ⛔ **No se instaló `@testing-library/react`**: el defecto es de renderizado —aparece o no
+  aparece—, no de interacción. ⚠️ Lo que el banco **no** cubre es que el botón *abra* el editor:
+  eso se camina en producción.
+- `vitest.config.ts` suma `tests/**/*.test.tsx`. Sigue en `environment: 'node'` —
+  `renderToStaticMarkup` no necesita DOM — así que no hay que prender jsdom para toda la suite.
+- **Tres mutantes, tres muertos, los tres con `AssertionError`** (no con error de sintaxis, que es
+  el falso «muerto» conocido): no renderizar las apagadas (caen **5**, es el defecto original), que
+  el vacío vuelva a mirar sólo las activas (**2**), y medirle el avance a una apagada (**1**).
+- `conUnidad` se mudó con la tabla: era su único uso.
 
 ## El P&L «por arriba» por línea (18-ago-2026)
 
@@ -306,6 +325,9 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
   está mal.
 - El banco discrimina: se mataron dos mutantes (sacar el filtro de importaciones arribadas, dejar el
   stock negativo) y los dos murieron con `AssertionError`, no con error de sintaxis.
+- `npx vitest run tests/norte-tabla-metas.test.tsx` — **el render** de la tabla de metas: 9 casos.
+  🔑 Su oráculo es **qué muestra**, no que renderice. Cada caso se cae si alguien vuelve a filtrar
+  la lista por `activa`, que es exactamente cómo nació el defecto de la meta apagada.
 - `npx vitest run tests/norte-contribucion.test.ts` — la cascada de plata. 🔑 **Su oráculo tampoco
   es el verde**: es que las cinco filas de julio-2026 sigan dando las `ventas_netas` que el
   dashboard tiene guardadas. Ese número lo calculó otra implementación, en otro repo, contra la API
