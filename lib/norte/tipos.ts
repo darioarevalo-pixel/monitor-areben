@@ -202,8 +202,19 @@ export type Pago = {
   montoPesos: number
   /** `true` sólo cuando sale de la factura de un ingreso confirmado. Lo demás es proyección. */
   firme: boolean
-  /** Contra qué fecha se contaron los plazos. */
+  /** Contra qué fecha se contaron los plazos. ⚠️ Si `pactada` es `true`, no se contaron. */
   base: BasePago
+  /**
+   * `true` cuando la fecha la escribió una persona en la cuota, en vez de salir de sumarle los días
+   * a `base`. **La pactada pisa al cálculo** (`pagosDe`), y son dos cosas distintas para quien mira:
+   *
+   * 🔑 Una fecha calculada **se va a mover** cuando llegue la factura o cambie el ingreso; una
+   * pactada con el proveedor **no se mueve**. Decir «contada desde la fecha de ingreso» de una fecha
+   * escrita a mano es afirmar un cálculo que no ocurrió, y encima invita a esperar un movimiento que
+   * no va a pasar. Medido el 18-ago-2026 en la IMPORTACION 1: ingreso el 3-ago + 30 días da el
+   * 2-sep, y la cuota vence el 10-sep porque así se pactó.
+   */
+  pactada: boolean
 }
 
 /** Un día de la proyección de stock. */

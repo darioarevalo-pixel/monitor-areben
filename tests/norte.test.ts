@@ -397,6 +397,30 @@ describe('calendarioDePagos', () => {
     expect(calendarioDePagos(sinFechas, 1)[0].fecha).toBe('2026-09-06')
   })
 
+  // 🔴 El defecto que estos dos casos defienden se vio en producción el 18-ago-2026, sobre $16,8M:
+  // la pantalla decía «contada desde la fecha de ingreso» de una fecha que había escrito una
+  // persona, y encima prometía que se iba a mover. Una pactada no se mueve. `base` no alcanza para
+  // contestarlo: existe siempre, pero cuando hay fecha pactada no se usó para nada.
+  it('un pago DICE si su fecha es pactada o calculada, y no se deduce de `base`', () => {
+    const pagos = calendarioDePagos(firme, 1380)
+    expect(pagos.every((p) => p.pactada)).toBe(true)
+    // `base` sigue estando y sigue siendo 'factura': por eso sola no distingue los dos casos.
+    expect(pagos[0].base).toBe('factura')
+  })
+
+  it('cuando la pactada NO coincide con el cálculo, la fecha es la pactada y se dice', () => {
+    const sinFechas = firme.map((i) => ({
+      ...i,
+      condiciones: { ...i.condiciones!, cuotas: [{ dias: 30, pct: 100 }] },
+    }))
+    const calculado = calendarioDePagos(sinFechas, 1)[0]
+    const pactado = calendarioDePagos(firme, 1)[0]
+    expect(calculado.pactada).toBe(false)
+    expect(pactado.pactada).toBe(true)
+    // Y son fechas distintas: si `pactada` no existiera, las dos filas se verían iguales.
+    expect(calculado.fecha).not.toBe(pactado.fecha)
+  })
+
   it('🔑 una compra SIN confirmar no es deuda: no aparece acá aunque tenga costo y factura', () => {
     const conFacturaSinTilde = firme.map((i) => ({
       ...i,
@@ -460,8 +484,8 @@ describe('sinCondiciones', () => {
 describe('coberturaDePagos', () => {
   it('acumula la deuda: el segundo pago se mide contra los dos juntos', () => {
     const pagos = [
-      { fecha: '2026-09-07', importacionId: 'l1', etiqueta: '1', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const },
-      { fecha: '2026-10-07', importacionId: 'l1', etiqueta: '2', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const },
+      { fecha: '2026-09-07', importacionId: 'l1', etiqueta: '1', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const, pactada: false },
+      { fecha: '2026-10-07', importacionId: 'l1', etiqueta: '2', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const, pactada: false },
     ]
     const cob = coberturaDePagos(pagos, '2026-08-07', 10)
     expect(cob[0].contribAcumulada).toBe(310) // 31 días × 10

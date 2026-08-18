@@ -445,15 +445,18 @@ export function Norte() {
                 <div style={{ fontSize: font.md, fontWeight: weight.semibold }}>Todavía no es deuda: lo estimado</div>
                 <div style={{ color: color.mut, fontSize: font.sm, margin: `${space[1]} 0 ${space[3]}` }}>
                   Compras con el costo de todos sus materiales cargado, pero sin factura. Los plazos se cuentan desde la
-                  llegada estimada —o desde la fecha de ingreso, cuando ya está confirmada—, así que las fechas se van a
-                  mover.
+                  llegada estimada —o desde la fecha de ingreso, cuando ya está confirmada—, así que{' '}
+                  <strong>esas fechas se van a mover</strong>.
+                  {/* 🔴 Prometerle movimiento a TODAS es falso: una fecha pactada la escribió una
+                      persona y no se mueve cuando llegue la factura. Se dice sólo si hay alguna. */}
+                  {estimados.some((p) => p.pactada) && ' Las pactadas con el proveedor, no: ésas ya tienen día.'}
                 </div>
                 <TableWrap>
                   <THead>
                     <Tr>
                       <Th>Fecha estimada</Th>
                       <Th>Qué</Th>
-                      <Th>Contada desde</Th>
+                      <Th>De dónde sale la fecha</Th>
                       <Th align="right">Monto</Th>
                       <Th align="right">En pesos</Th>
                     </Tr>
@@ -463,7 +466,18 @@ export function Norte() {
                       <Tr key={`est-${p.importacionId}-${i}`}>
                         <Td mono>{p.fecha}</Td>
                         <Td>{p.etiqueta}</Td>
-                        <Td>{p.base === 'ingreso' ? 'la fecha de ingreso' : 'la llegada estimada'}</Td>
+                        {/* ⛔ `base` NO alcanza para contestar esto: existe siempre, pero cuando la
+                            cuota trae fecha pactada no se usó para nada. Preguntarle sólo a `base`
+                            era afirmar un cálculo que no ocurrió. */}
+                        <Td>
+                          {p.pactada ? (
+                            <strong>pactada con el proveedor</strong>
+                          ) : p.base === 'ingreso' ? (
+                            'contada desde la fecha de ingreso'
+                          ) : (
+                            'contada desde la llegada estimada'
+                          )}
+                        </Td>
                         <Td align="right" mono>
                           {p.moneda} {Math.round(p.monto).toLocaleString('es-AR')}
                         </Td>

@@ -316,9 +316,13 @@ export function pagosDe(imp: ImportacionProyectada, cotizacion: number): Pago[] 
   const cuotas = imp.condiciones?.cuotas ?? []
   return cuotas.map((cuota, i) => {
     const monto = estado.total * (cuota.pct / 100)
+    // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
+    // 🔑 Y se dice CUÁL de las dos fue: una calculada se va a mover, una pactada no, y la pantalla
+    // no lo puede deducir de `base` —que existe igual, pero para la pactada no se usó—.
+    const fechaPactada = cuota.fecha && fechaValida(cuota.fecha) ? cuota.fecha : null
     return {
-      // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
-      fecha: cuota.fecha && fechaValida(cuota.fecha) ? cuota.fecha : sumarDias(estado.desde, cuota.dias),
+      fecha: fechaPactada ?? sumarDias(estado.desde, cuota.dias),
+      pactada: fechaPactada !== null,
       importacionId: imp.id,
       etiqueta: `${imp.desc || 'Importación'} · cuota ${i + 1} de ${cuotas.length}`,
       monto,
