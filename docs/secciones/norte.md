@@ -201,7 +201,8 @@ porque un 0 se lee como «no avanzamos».
 - 🔴 **Sin dashboard conectado los dos medidores de plata devuelven `null` y el motivo, no cero.**
   `ritmoDeSalida` pone `contribUnidad` en 0 para lo que no sabe, así que medir igual daría «$0/día»
   — que afirma «no deja nada», que es otra cosa y es falsa. Por eso `hayPlata` entra por parámetro
-  y no se deduce de que el número sea cero. **Hoy es el caso real**: falta la env var.
+  y no se deduce de que el número sea cero. (Fue el caso real hasta que se cargó la env var del
+  dashboard; hoy la plata está en pantalla y se verificó el 18-ago.)
 - Un canal que no vendió da **0 unidades** (es un dato) pero **null** en plata: sin unidades no hay
   por qué dividir, y un «$0/funda» se leería como «no deja margen».
 - **La clave se genera sola** (`claveDeMeta`). `key` es la PK y el guardado es un `upsert`: dos
@@ -210,6 +211,45 @@ porque un 0 se lee como «no avanzamos».
 - **Editor en pantalla**, de admin (`EditorMeta.tsx`). Las metas ya no entran por curl.
 - ⚠️ La columna `unidad` de la base quedó como **espejo** del catálogo, para poder leer una fila
   suelta en `psql`. **No es la fuente**: la escribe el handler desde `medidorDe(medidor).unidad`.
+
+### Ejercido contra producción (18-ago-2026)
+
+Era el último verbo de Norte que **nunca había escrito**: `norte_metas` tenía **0 filas en las dos
+bases**. Se cargaron cuatro metas de prueba en BDI desde la pantalla, se verificaron con `psql` y se
+borraron (quedó en 0 de nuevo, en las dos).
+
+🔑 **El oráculo no fue que guardara: fueron los números medidos por otro camino y otro día.**
+
+- `unidades-dia` de todos dio **264,3 fundas/día**, que es exactamente la suma de la tabla de arriba
+  (228,1 + 23,6 + 11,6 + 1,0) y el mismo número del veredicto. Es la prueba de que `medirMeta` mide
+  contra el `ritmo` que la pantalla ya muestra y no recalcula por su cuenta.
+- `contrib-unidad` de **mayorista** dio **$1.541/funda** — el número que se midió con `psql` el
+  17-ago-2026, **antes** de que existiera el código de metas.
+- 🔑 `contrib-unidad` de **todos** dio **$2.315/funda** = $611.895 ÷ 264,3. El promedio parejo de los
+  cuatro canales daría **$3.710**: el ponderado no es una intención escrita en un comentario, se
+  ejerció y el número lo separa de su alternativa.
+- **La desambiguación de la clave se ejerció con dos metas del mismo nombre**: la segunda entró como
+  `…-2` y quedaron **2 filas, no 1**. El `upsert` sobre la PK no pisó nada. Y al borrar una de las
+  dos homónimas, borró la que correspondía.
+- **Editar es el mismo `upsert` con la clave existente**: cambiar el objetivo movió la fila y su
+  `actualizado_en`, y **no creó una quinta**.
+- La columna espejo `unidad` la escribió el servidor desde el catálogo (`fundas/día`, `$/funda`): la
+  pantalla nunca la manda.
+- 🔴 **El tilde `Activa` sí necesita un click real en la coordenada**: es el mismo falso negativo del
+  arnés que dio el guardado de condiciones. Con click real entra al estado de React.
+
+### 🔴 Una meta destildada no tiene camino de vuelta
+
+Se descubrió ejerciendo el tilde, y **se comprobó**: al destildar `Activa` la meta desaparece de la
+pantalla, sigue en la base con `activa=f`, y **no hay ningún control para volver a verla,
+reactivarla ni borrarla**. Se limpió con `psql`, que hoy es el único camino.
+
+La causa es que `metas.filter((m) => m.activa)` es **la única** lista que se renderiza
+(`Norte.tsx:482`) y al editor sólo se entra desde el botón de una fila de esa lista. La etiqueta
+—«las inactivas no se muestran, pero no se pierden»— es cierta del dato y falsa de la pantalla.
+
+⚠️ Volver a crear una meta con el mismo nombre **no la recupera**: la clave se desambigua y nace una
+fila nueva, con la vieja al lado, muda.
 
 ## El P&L «por arriba» por línea (18-ago-2026)
 
@@ -245,6 +285,8 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
 
 ## Pendiente
 
+- 🔴 **Devolverle el camino de vuelta a una meta destildada** (ver arriba). Hoy `Activa` es un botón
+  sin verbo inverso.
 - Cerrar contra la **estructura** necesita esos gastos por marca, que no tienen API. Es lo único que
   falta para que el P&L baje del «por arriba» al resultado.
 
