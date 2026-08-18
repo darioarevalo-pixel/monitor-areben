@@ -1,7 +1,8 @@
 # Ventas (Marketing) — ficha de sección
 
-Sección `mkt-ventas`, área `marketing`. El objetivo de venta del sector con su barra de avance, y el
-contador diario de ventas online con flechas para caminar los días anteriores. Lo pidió Bruno el
+Sección `mkt-ventas`, área `marketing`. El objetivo de venta del sector con su barra de avance, el
+contador diario de ventas online con flechas para caminar los días anteriores, y **el resultado del
+sale**. Lo pidió Bruno el
 18-ago-2026: *«un objetivo que tenemos como sector, arriba, con barra que se completa… como si fuese
 un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** —su función hereda
 `marketing` y `meta`, y todo el análisis de venta es del área `analisis`, que es de Dirección—.
@@ -9,7 +10,8 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 ## Dónde vive
 
 - `components/mkt-ventas/` — `MktVentas.tsx` (la pantalla) · `Objetivo.tsx` (la barra) ·
-  `ContadorDiario.tsx` (las flechas) · `useMetas.ts`.
+  `ContadorDiario.tsx` (las flechas) · `ResultadoSale.tsx` (monta el Resultado de Liquidación) ·
+  `useMetas.ts`.
 - `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`.
 - **Handler propio no tiene.** Las ventas salen del ETL que la sección ya tiene por
   `useDatosMonitor()`, y los objetivos de `api/_norte.js` con `?metas=1` (ver abajo).
@@ -18,6 +20,12 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔴 **`api/_liquidacion.js` tiene CINCO llaves desde el 18-ago-2026** (eran cuatro). La quinta es
+  ésta, y son **dos caminos distintos**: `?resultado=1` en un **GET** —campañas e ítems, pasados por
+  `sinPlataDeCosto()`— y las actions `ventas-campania` / `stock-campania` en un **POST**. ⚠️ Las dos
+  del POST van **por el nombre de la action y no por un flag de query**, al revés que `etiquetado`,
+  y la diferencia es que son **lecturas**: `etiquetado` pedía las dos condiciones porque escribe una
+  fila. Cualquier otra action con esta llave cae en la rama de siempre y contesta 403.
 - 🔴 **`api/_norte.js` tiene DOS llaves desde el 18-ago-2026.** `?metas=1` contesta **sólo
   `norte_metas`** y elige `['norte', 'mkt-ventas']` **antes** del `puedeVerAlguna`. Tocar ese gate
   le cambia el acceso a Dirección. El porqué está comentado ahí mismo — y **antes de tocar el
@@ -55,6 +63,18 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - ⚠️ **El día lo decide el navegador**, que está en Argentina — el mismo criterio de la Agenda. ⛔ No
   se usa `diaArgentino` (`lib/envios/portal.core.js`): ésa existe porque el **servidor** corre en
   UTC. Lo que sí está mal en las dos es `toISOString().slice(0,10)`, que da el día UTC.
+- 🔑 **`sinPlataDeCosto()` borra en vez de elegir qué copiar.** Saca `foto.costo`, `foto.sinCosto`,
+  `decision.margen` y `decision.markup`, y deja pasar todo lo demás. Una lista **blanca** dejaría
+  afuera lo que alguien agregue después —la pantalla pierde un dato y nadie sabe por qué—; la negra
+  deja pasar de más sólo si aparece un campo de costo **nuevo**, que es un cambio que se nota al
+  escribirlo. ⚠️ Si aparece uno, va ahí.
+- 🔑 **El Resultado se MONTA, no se reescribe.** `lib/liquidacion/resultado.ts` y
+  `components/liquidacion/Resultado.tsx` **no leen costo, margen ni markup** —grep en las dos puntas
+  da cero, medido antes de escribir la llave—, así que la pantalla sale idéntica y el payload deja
+  de llevar el costo. Una segunda versión sería garantizar que algún día las dos pantallas contesten
+  distinto sobre la misma campaña.
+- ⚠️ **`puedeSincronizar` va en `false` y no es un olvido**: traer las ventas del día al espejo
+  escribe en producción y hoy pide admin.
 - ⚠️ **La serie son 34 días, no 90.** El techo lo pone `desdeVentas` (`lib/datos.ts`): quien no es
   admin baja **35 días** de ventas. Pedir más devolvería días en cero que no son cero, son «no bajó».
   La flecha que se acaba **dice por qué**.
@@ -81,10 +101,10 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - ▶️ **El botón «Actualizar ventas»** (tanda 3 del plan): el trabajo ya existe en
   `api/_liquidacion.js` (`action:'sincronizar-ventas'`, 1,2 s medidos) pero pide `admin` **y un id
   de campaña**, porque su antirrebote vive en `datos.ventasSync`. Sale a `api/_ventas-hoy.js`.
-- ▶️ **El resultado de la liquidación** (tanda 4) y **abrir Por producto / variante / mensuales /
-  colores / talles a Marketing** (tanda 5), que arrastra dos 🔴: la ventana de ventas tiene que
-  colgar del permiso y no del flag de admin, y **el caché de IndexedDB necesita sello de ventana**
-  (`claveCache` es sólo la marca ⇒ la entrada corta de un usuario se le sirve al siguiente, callada).
+- ▶️ **Abrir Por producto / variante / mensuales / colores / talles a Marketing** (tanda 5), que
+  arrastra dos 🔴: la ventana de ventas tiene que colgar del permiso y no del flag de admin, y **el
+  caché de IndexedDB necesita sello de ventana** (`claveCache` es sólo la marca ⇒ la entrada corta
+  de un usuario se le sirve al siguiente, callada).
 - ⚠️ **Se caminó en prod con perfil ADMIN, no con uno de Marketing.** Lo que el admin no ejerce es
   el `puedeVerAlguna` de la llave `?metas=1` con la función `marketing` — los usuarios de prueba los
   crea Bruno. ▶️ Falta eso.
@@ -95,7 +115,12 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 npx vitest run tests/mkt-ventas.test.ts --reporter=dot
 ```
 
-- **13 mutantes, 13 muertos con `AssertionError`** (baseline en 0 antes de mutar). Los que hay que
+- **13 mutantes en el núcleo + 7 en la llave de `_liquidacion`, los 20 muertos** (baseline en 0
+  antes de mutar). ⚠️ Dos de los 7 no mueren con `AssertionError` sino con **«LLEGÓ A LA BASE — el
+  gate no cortó»**, que es la señal que ese arnés existe para dar: el 403 tiene que salir **antes**
+  de tocar la base. Los dos que hay que ver caer ahí son abrir la llave a todas las actions y
+  hacer que `leeVentasDeProductos` acepte cualquier POST.
+- **13 mutantes del núcleo, 13 muertos con `AssertionError`** (baseline en 0 antes de mutar). Los que hay que
   ver caer si se toca el núcleo: `compras += 1 → += 0`, el `!==` del canal, `[...futuras].sort()[0]`
   → el último, y `>= 0 → > 0` en la fecha del escalón (el día del vencimiento todavía cuenta).
 - 🔑 **El oráculo de la serie es `psql`, no un fixture.** Se exportan las ventas de 34 días y el

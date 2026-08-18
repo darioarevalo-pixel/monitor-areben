@@ -215,6 +215,102 @@ describe('la cuenta fija sigue mandando', () => {
  * otra `action`. Este bloque fija justamente eso: que con la llave de Etiquetas se llegue a
  * `etiquetado` y **a nada más**.
  */
+/**
+ * La QUINTA llave de `_liquidacion`: Ventas de Marketing (`mkt-ventas`).
+ *
+ * Marketing arma las campañas sobre el resultado del sale, así que ve **qué se vendió de lo
+ * liquidado** — pero esta sección es de Dirección por el costo, y eso no se mueve. Lo que fija este
+ * bloque es dónde queda el borde: qué abre la llave y, sobre todo, qué **no**.
+ */
+describe('_liquidacion · la llave de Ventas de Marketing', () => {
+  const SOLO_MKT = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { 'mkt-ventas': true } }, funcion: [] }
+  const postDe = (body: Record<string, unknown>) =>
+    conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', ...body } })
+
+  it('🔴 el GET pelado NO entra: sin `?resultado=1` contesta la campaña con el costo adentro', async () => {
+    // El que importa de este lado. Si esto deja de dar 403, Marketing se baja `foto.costo` de cada
+    // producto de cada campaña — que es la razón por la que la sección es de Dirección.
+    sesionDe(SOLO_MKT)
+    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 `aplicar` tampoco: escribir precios en la tienda pide Liquidación', async () => {
+    sesionDe(SOLO_MKT)
+    const res = await llamar('_liquidacion', postDe({ action: 'aplicar', liq: 'l1', pids: ['1'], modo: 'poner' }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 ninguna otra action se cuela, ni siquiera mandando `?resultado=1`', async () => {
+    sesionDe(SOLO_MKT)
+    const acciones = ['crear', 'borrar', 'guardar-item', 'estado-item', 'revisar', 'quitar-item', 'sumar-items', 'decidir-masivo', 'renombrar', 'estado', 'sincronizar-ventas', 'etiquetado']
+    for (const action of acciones) {
+      const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi', resultado: '1' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
+      expect(res.code, `action «${action}» no puede entrar con la llave de Marketing`).toBe(403)
+    }
+  })
+
+  it('el GET con `?resultado=1` SÍ entra — si no, todo lo de arriba estaría verde por prohibir todo', async () => {
+    sesionDe(SOLO_MKT)
+    try {
+      const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi', resultado: '1' } }))
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+
+  it('y las dos LECTURAS que hace el Resultado por POST también', async () => {
+    sesionDe(SOLO_MKT)
+    for (const action of ['ventas-campania', 'stock-campania']) {
+      try {
+        const res = await llamar('_liquidacion', postDe({ action, liq: 'l1', pids: ['1'] }))
+        expect(res.code, action).not.toBe(403)
+      } catch (e) {
+        expect(String(e)).toContain('LLEGÓ A LA BASE')
+      }
+    }
+  })
+
+  it('sin la sección no entra, aunque mande `?resultado=1`', async () => {
+    sesionDe(SIN_NADA)
+    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi', resultado: '1' } }))
+    expect(res.code).toBe(403)
+  })
+})
+
+describe('_liquidacion · el costo no sale por la llave de Marketing', () => {
+  /**
+   * 🔴 **Se ejerce la función, no se argumenta el comentario.** Es la única garantía de que
+   * `foto.costo` no viaja, y este handler ya tuvo un docblock afirmando durante días algo que era
+   * falso.
+   */
+  it('borra costo, sinCosto, margen y markup — y deja intacto todo lo demás', async () => {
+    const { sinPlataDeCosto } = await import('../api/_liquidacion.js')
+    const item = {
+      pid: '1',
+      estado: 'aplicado',
+      foto: { nombre: 'Funda', sku: 'F-1', costo: 4200, sinCosto: false, precioNormal: 12000, stock: 30, ventas90: 18, imagen: 'x.jpg' },
+      decision: { precioSale: 8000, pctDesc: 33, markup: 90, margen: 47, nota: 'ok', porQuien: 'Bruno' },
+    }
+    const limpio = sinPlataDeCosto(item) as typeof item
+    expect(limpio.foto).not.toHaveProperty('costo')
+    expect(limpio.foto).not.toHaveProperty('sinCosto')
+    expect(limpio.decision).not.toHaveProperty('margen')
+    expect(limpio.decision).not.toHaveProperty('markup')
+    // La otra mitad: si borrara de más, la pantalla del Resultado se queda sin con qué contar.
+    expect(limpio.foto).toEqual({ nombre: 'Funda', sku: 'F-1', precioNormal: 12000, stock: 30, ventas90: 18, imagen: 'x.jpg' })
+    expect(limpio.decision).toEqual({ precioSale: 8000, pctDesc: 33, nota: 'ok', porQuien: 'Bruno' })
+    expect(limpio.pid).toBe('1')
+    expect(limpio.estado).toBe('aplicado')
+  })
+
+  it('no explota con un ítem sin foto ni decisión', async () => {
+    const { sinPlataDeCosto } = await import('../api/_liquidacion.js')
+    expect(sinPlataDeCosto({ pid: '9' })).toEqual({ pid: '9', foto: {}, decision: {} })
+  })
+})
+
 describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
   const SOLO_ETIQUETAS = { name: 'Local', admin: false, cuenta: null, acceso: { bdi: { etiquetas: true } }, funcion: [] }
   const postDe = (body: Record<string, unknown>) =>

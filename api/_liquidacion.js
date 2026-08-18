@@ -176,6 +176,46 @@ async function gnFetch(url, opts, tries = 3) {
   return last;
 }
 
+/**
+ * Cuántos ítems tiene cada campaña y en qué estado. **Una sola vez**: lo piden las dos ramas del
+ * GET (la de Liquidación y la de Ventas de Marketing), y dos conteos del mismo hecho se despegan
+ * en el estado que uno sume y el otro no — que es justo el número que dibuja la tarjeta.
+ */
+function conteosPorCampania(items) {
+  const conteos = {};
+  for (const it of items) {
+    const k = conteos[it.liq_id] || (conteos[it.liq_id] = { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 });
+    k.total += 1;
+    if (it.estado === 'pendiente') k.pendientes += 1;
+    else if (it.estado === 'definido') k.definidos += 1;
+    else if (it.estado === 'confirmado') k.confirmados += 1;
+    else if (it.estado === 'descartado') k.descartados += 1;
+    else if (it.estado === 'aplicado') k.aplicados += 1;
+  }
+  return conteos;
+}
+
+/**
+ * El ítem sin la plata de costo, para la llave de Ventas de Marketing.
+ *
+ * 🔑 **Borra en vez de elegir qué copiar.** Una lista blanca de campos deja afuera lo que alguien
+ * agregue después —la pantalla pierde un dato y nadie sabe por qué—; una lista negra deja pasar de
+ * más sólo si alguien agrega un campo de costo NUEVO, que es un cambio que se nota al escribirlo.
+ * ⚠️ Si aparece uno, va acá: `costo` es el motivo por el que esta sección era de Dirección.
+ *
+ * `sinCosto` se va con `costo` a propósito: es «el costo no vino de Gestión Nube», o sea información
+ * sobre el costo. Y `margen`/`markup` porque se derivan de él.
+ *
+ * Se exporta para que el test la ejerza: es la única garantía de que el costo no sale por esa
+ * puerta, y una garantía que sólo existe en un comentario ya se cayó una vez en este handler.
+ */
+export function sinPlataDeCosto(item) {
+  const it = item || {};
+  const { costo, sinCosto, ...foto } = it.foto || {};
+  const { margen, markup, ...decision } = it.decision || {};
+  return { ...it, foto, decision };
+}
+
 /** La fila de la base → la campaña que espera el cliente. `conteo` lo pega el llamador. */
 function aCampania(row, conteo) {
   const d = row.datos || {};
@@ -378,13 +418,38 @@ export default async function handler(req, res) {
   // corta con `return` antes de que se mire ninguna otra `action`: con la llave de Etiquetas se
   // llega a `etiquetado` y a nada más. Un POST con `?etiquetas=1` y `action:'aplicar'` no entra por
   // acá —`escribeEtiquetado` es false— y cae en la rama de siempre, que pide Liquidación.
+  //
+  // 🔴 **La QUINTA llave es la de Ventas de Marketing (`mkt-ventas`), y son DOS caminos.** Marketing
+  // arma las campañas sobre el resultado del sale, así que tiene que poder ver **qué se vendió de lo
+  // liquidado** — decisión de Bruno, 18-ago-2026. Lo que NO puede ver es lo que hace a esta sección
+  // sensible: el costo, el margen y el markup. Por eso son dos condiciones distintas:
+  //
+  //   1. `?resultado=1` en un **GET**: contesta la lista de campañas y los ítems **pasados por
+  //      `sinPlataDeCosto()`**, que borra `foto.costo`, `foto.sinCosto`, `decision.margen` y
+  //      `decision.markup`. Medido antes de escribirlo: `lib/liquidacion/resultado.ts` y
+  //      `components/liquidacion/Resultado.tsx` **no leen ninguno de los cuatro** (grep en las dos
+  //      puntas da cero), así que la pantalla sale idéntica y el payload deja de llevar el costo.
+  //   2. `ventas-campania` y `stock-campania` en un **POST**. ⚠️ Van por el nombre de la `action` y
+  //      no por un flag de query, al revés que `etiquetado`, y la diferencia es que **son lecturas**:
+  //      `etiquetado` necesitaba las dos condiciones porque escribe una fila. Acá el nombre de la
+  //      action ya identifica el camino, y cualquier OTRA action con la llave de Marketing cae en la
+  //      rama de siempre —que pide Liquidación— y contesta 403.
   const vistaEtiquetas = req.method === 'GET' && String(req.query.etiquetas || '') === '1';
   const escribeEtiquetado = req.method === 'POST' && String(req.query.etiquetas || '') === '1' && b.action === 'etiquetado';
   const vistaVendido = req.method === 'GET' && String(req.query.vendido || '') === '1';
   const conLlaveEtiquetas = vistaEtiquetas || escribeEtiquetado;
-  const secciones = conLlaveEtiquetas ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
+  const vistaResultado = req.method === 'GET' && String(req.query.resultado || '') === '1';
+  const leeVentasDeProductos = req.method === 'POST' && (b.action === 'ventas-campania' || b.action === 'stock-campania');
+  const conLlaveResultado = vistaResultado || leeVentasDeProductos;
+  const secciones = conLlaveEtiquetas
+    ? ['etiquetas']
+    : conLlaveResultado
+      ? ['liquidacion', 'mkt-ventas']
+      : vistaVendido
+        ? SECCIONES_ANALISIS_VENTAS
+        : ['liquidacion'];
   if (!puedeVerAlguna(perfil, store, secciones)) {
-    const que = conLlaveEtiquetas ? 'Etiquetas' : vistaVendido ? 'Análisis' : 'Liquidación';
+    const que = conLlaveEtiquetas ? 'Etiquetas' : conLlaveResultado ? 'Liquidación ni a Ventas de Marketing' : vistaVendido ? 'Análisis' : 'Liquidación';
     return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });
   }
 
@@ -590,6 +655,31 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, lineas, pids: pids.map(String) });
     }
 
+    // ── El resultado del sale para Ventas de Marketing: lo mismo, SIN el costo. ────────────────
+    //
+    // Es una rama aparte y no un `if` adentro del GET de abajo porque lo que cambia no es el dato
+    // sino **el contrato de lo que puede salir**: acá todo lo que se devuelve pasa por el filtro, y
+    // eso se lee de un vistazo. Un flag suelto adentro del otro camino obligaría a revisar cada
+    // `return` de esa rama cada vez que se le agrega un campo.
+    if (vistaResultado) {
+      const liq = String(req.query.liq || '');
+      if (liq) {
+        const { data, error } = await supabase.from('liquidacion_items')
+          .select('datos').eq('store', store).eq('liq_id', liq);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, items: (data || []).map((r) => sinPlataDeCosto(r.datos)), puede });
+      }
+      const [c, i] = await Promise.all([
+        supabase.from('liquidaciones').select('id, nombre, estado, datos')
+          .eq('store', store).order('created_at', { ascending: false }),
+        supabase.from('liquidacion_items').select('liq_id, pid, estado').eq('store', store),
+      ]);
+      if (c.error) throw new Error(c.error.message);
+      if (i.error) throw new Error(i.error.message);
+      const conteos = conteosPorCampania(i.data || []);
+      return res.status(200).json({ ok: true, campanias: (c.data || []).map((r) => aCampania(r, conteos[r.id])), puede });
+    }
+
     if (req.method === 'GET') {
       const liq = String(req.query.liq || '');
 
@@ -637,16 +727,7 @@ export default async function handler(req, res) {
       if (c.error) throw new Error(c.error.message);
       if (i.error) throw new Error(i.error.message);
 
-      const conteos = {};
-      for (const it of i.data || []) {
-        const k = conteos[it.liq_id] || (conteos[it.liq_id] = { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 });
-        k.total += 1;
-        if (it.estado === 'pendiente') k.pendientes += 1;
-        else if (it.estado === 'definido') k.definidos += 1;
-        else if (it.estado === 'confirmado') k.confirmados += 1;
-        else if (it.estado === 'descartado') k.descartados += 1;
-        else if (it.estado === 'aplicado') k.aplicados += 1;
-      }
+      const conteos = conteosPorCampania(i.data || []);
 
       return res.status(200).json({
         ok: true,

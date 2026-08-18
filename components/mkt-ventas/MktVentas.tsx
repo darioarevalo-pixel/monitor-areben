@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Ventas (key `mkt-ventas`, área Marketing) — el objetivo del sector y el contador diario.
+ * Ventas (key `mkt-ventas`, área Marketing) — el objetivo del sector, el contador diario de ventas
+ * online y el resultado del sale.
  *
  * # Por qué existe
  *
@@ -34,6 +35,7 @@ import { Button, DatosGate, Notice, color, font, space } from '@/components/ui'
 import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
 import { ContadorDiario } from './ContadorDiario'
+import { ResultadoSale } from './ResultadoSale'
 
 /**
  * Cuántos días de serie se arman. Es el techo de historia de un usuario que no es admin
@@ -118,6 +120,12 @@ export function MktVentas() {
                 Online son las ventas de Tienda Nube. El día lo decide tu computadora, y las ventas
                 salen del espejo de Gestión Nube, no de la tienda en vivo.
               </p>
+
+              {/* El resultado del sale va ABAJO y no arriba: el objetivo y el día de hoy se miran
+                  todos los días, y esto se mira cuando hay una campaña andando. Es también lo único
+                  de la pantalla que pide sus propios datos al servidor, así que su demora no puede
+                  quedar delante de lo que ya está en la mano. */}
+              <ResultadoSale />
             </>
           )
         }}
