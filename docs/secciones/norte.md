@@ -261,6 +261,22 @@ desambigua y nace una fila nueva, con la vieja al lado, muda.
   adentro del JSX. El primer oráculo fue caminar producción —cargar, apagar, ver la fila gris,
   **volver a prenderla desde ahí** y borrarla—; después se le puso un banco de render.
 
+### 🔴 Una importación que llegó y sigue «en tránsito» DILUYE el veredicto (18-ago-2026)
+
+La IMPORTACION 1 ingresó el **3-ago** y su estado en Compras → Ingresos proyectados seguía en
+**«En tránsito»**. Al marcarla **«Arribado ✓»**, el veredicto pasó de «entran **520**, faltan vender
+256» a «entran **576**, faltan vender **312**».
+
+🔑 **Empeoró porque antes estaba mal.** La ventana de entrada arranca en la **primera importación no
+arribada** (`Norte.tsx`, `ventana`): con la 1 sin marcar arrancaba el **27-jul** —22 días en el
+pasado— y repartía 31.711 unidades sobre **61 días**. Marcada, arranca **hoy** y reparte 22.481
+sobre **39**. Los dos números son consistentes con su fórmula; el viejo promediaba sobre días que
+ya habían pasado y contaba como «por llegar» stock que ya estaba en el depósito.
+
+⚠️ **El veredicto depende de un estado que se mantiene en OTRA pantalla y otro repo.** Norte ya sabe
+por otro lado que llegó —`fecha_ingreso` está cargada en `compras_condiciones`— y aun así no lo usa
+para esto. Mientras nadie mueva el estado, el titular sale **optimista**, que es el lado caro.
+
 ### 🔴 La fecha PACTADA no se puede leer en `base` (18-ago-2026, `9d61e3d`)
 
 Se vio en producción **sobre $16,8M**, apenas Darío cargó la IMPORTACION 1. Las dos cuotas decían
@@ -360,6 +376,15 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
   «completar» el P&L sería inventar justo el número que decide si una línea da o no da.
 
 ## Pendiente
+
+- 🔴 **El veredicto se apoya en el estado de la importación, que vive en otra pantalla** (ver
+  arriba). `fecha_ingreso` ya dice que llegó: hoy no se usa para esto.
+- ⚠️ **No hay forma de reordenar las metas.** `orden` se asigna al crear (`usadas.length`) y el
+  editor no lo expone: una rampa 25 → 50 → 100 se lee en el orden en que se cargó.
+- ⚠️ **La ventana de 30 días esconde una rampa.** Medido el 18-ago: online venía de ~4,0
+  compras/día en junio-julio y hizo **10,9** en los últimos 7 días, pero el medido de la meta dice
+  **6,1** porque promedia 30 días. No está mal calculado — es que para un objetivo de escalado el
+  promedio largo arrastra el pasado y **subestima el avance**.
 
 - Cerrar contra la **estructura** necesita esos gastos por marca, que no tienen API. Es lo único que
   falta para que el P&L baje del «por arriba» al resultado.
