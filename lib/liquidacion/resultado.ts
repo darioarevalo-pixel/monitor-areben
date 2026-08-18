@@ -25,6 +25,7 @@
  * Puro: no lee la hora ni la red. `hoy` entra por parámetro.
  */
 
+import { canalDe as canalDeJs } from './canal.core.js'
 import type { EstadoItem, LiquidacionItem } from './tipos'
 import type { LineaVenta } from './ventas'
 
@@ -41,28 +42,11 @@ export type Canal = 'local' | 'online' | 'mayorista' | 'tecnica' | 'otro'
 export const CANALES_MINORISTAS: readonly Canal[] = ['local', 'online', 'otro']
 
 /**
- * El canal por su nombre en Gestión Nube. Los de las dos marcas hoy son
- * `Mi Local | Mayorista | Tienda Nube | Minorista | Otro Canal | Ninguno`.
- *
- * Se compara por texto y no por `channel_id` porque Zattia no expone el id — el mismo criterio que
- * usa Reposición para partir local/online.
- *
- * ⚠️ **Esto NO es una copia de `esVentaTecnica` y no hay que unificarlas.** Acá el canal vacío cae
- * en `tecnica` a propósito: la pregunta de esta función es "¿esta unidad cuenta para el precio
- * promedio minorista?", y un canal desconocido no debería mover ese promedio. `esVentaTecnica`
- * contesta otra —"¿la creó el Monitor para descontar stock?"— y ahí el dato faltante tiene que
- * seguir siendo una venta real, para no borrar ventas en silencio si GN deja de mandar el campo.
- * Medido el 9-ago-2026 sobre los fixtures de las dos marcas: hoy no existe ninguna venta con el
- * canal vacío, así que la diferencia todavía no cambia ningún número.
+ * El canal por su nombre en Gestión Nube. **La implementación vive en `canal.core.js`**, que es
+ * `.js` plano porque `api/_norte.js` la necesita para calcular la contribución y los handlers no
+ * pueden importar TypeScript. Acá sólo se le pone el tipo, una vez.
  */
-export function canalDe(nombre: string | null): Canal {
-  const n = (nombre || '').toLowerCase()
-  if (!n || n === 'ninguno') return 'tecnica'
-  if (n.includes('mayorista')) return 'mayorista'
-  if (n.includes('local') || n.includes('minorista')) return 'local'
-  if (n.includes('tienda') || n.includes('nube') || n.includes('online')) return 'online'
-  return 'otro'
-}
+export const canalDe: (nombre: string | null) => Canal = canalDeJs
 
 /**
  * Si el precio de sale llegó a estar puesto, leído desde lo que se cobró.

@@ -8,15 +8,17 @@ import { EditorCondiciones } from './EditorCondiciones'
 import {
   avanceDeMeta,
   calendarioDePagos,
+  coberturaDePagos,
+  contribucionDiaria,
   diaDeAgotamiento,
   entradaDiaria,
   proyectarStock,
   ritmoDeSalida,
   salidaDiaria,
-  sumarDias,
   veredicto,
 } from '@/lib/norte/core'
-import type { EstadoVeredicto } from '@/lib/norte/tipos'
+import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
+import type { Contribucion, EstadoVeredicto } from '@/lib/norte/tipos'
 import {
   Badge,
   DatosGate,
@@ -42,21 +44,24 @@ import {
  * *pasó*; Norte cruza el ritmo de venta real con las importaciones que vienen y contesta una sola
  * pregunta, arriba de todo: **¿el stock que entra sale a tiempo para pagarlo?**
  *
- * ## 🔴 Lo que esta pantalla NO muestra, y por qué se dice en voz alta
+ * ## De dónde sale cada mitad, que no es la misma
  *
- * **No muestra contribución.** El payload del ETL trae unidades pero **no precios** (`FilaDetalle`
- * es `sale_id · product_id · quantity`), así que el ritmo sale exacto y la plata que deja cada
- * canal no se puede calcular desde acá. Aplicarle a mayorista la contribución de la tienda la
- * sobrestimaría **7,6 veces** —una funda mayorista deja $1.046 y una online $7.920—, y un número
- * inventado en una pantalla de Dirección es peor que un renglón vacío.
+ * **Las unidades salen del ETL** (el payload cacheado en el navegador) y **la plata del servidor**
+ * (`api/_norte.js`). No es una inconsistencia: el ETL trae cantidades y no precios —`FilaDetalle`
+ * es `sale_id · product_id · quantity`— y además la regla del IVA vive en el dashboard. Las dos
+ * mitades usan **la misma ventana** (`ventanaUltimos`, últimos 30 días con venta) y la pantalla
+ * avisa si por alguna razón no coinciden: multiplicar el ritmo de una ventana por la contribución
+ * de otra da un número que no existe.
  *
- * ⇒ Por eso el calendario de pagos dice **cuánto y cuándo**, y no «cuántas veces está cubierto».
- * Falta el cruce por línea contra las dos bases, que es lo que ya hace `api/_memo.js`.
+ * 🔴 **Lo que la contribución NO descuenta hoy**: las comisiones de cobro están en 0% en el
+ * dashboard —nadie las cargó— y la cascada no resta IIBB ni impuesto al cheque, que el modelo de
+ * rentabilidad de Meta Ads sí resta. La pantalla lo dice en vez de dejar creer que es el número
+ * final.
  */
 export function Norte() {
   const { marca } = useSesion()
   const { datos, error: errorDatos, progreso, origen } = useDatosMonitor()
-  const { importaciones, metas, admin, cargando, error, recargar } = useNorte(marca)
+  const { importaciones, metas, contribucion, admin, cargando, error, recargar } = useNorte(marca)
   const [editando, setEditando] = useState<string | null>(null)
   const [cotizacion, setCotizacion] = useState(1380)
 
@@ -69,12 +74,18 @@ export function Norte() {
    * hacer y meterlo baja el promedio sin que haya pasado nada. Misma trampa que ya está
    * documentada en `scripts/medir-economia-bdi.mjs`.
    */
+  /** La ventana del ETL. Es la misma regla que usa el servidor para la contribución. */
+  const ventanaEtl = useMemo(
+    () => (datos ? ventanaUltimos(datos.ventas.map((v) => v.date_sale), 30) : null),
+    [datos],
+  )
+
+  /** Lo que deja cada unidad de cada canal. Vacío mientras no esté: `ritmoDeSalida` pone 0. */
+  const dejaPorUnidad = useMemo(() => porUnidad(contribucion.canales), [contribucion])
+
   const ritmo = useMemo(() => {
-    if (!datos) return []
-    const fechas = datos.ventas.map((v) => v.date_sale).filter(Boolean) as string[]
-    if (!fechas.length) return []
-    const hasta = fechas.reduce((a, b) => (a > b ? a : b)).slice(0, 10)
-    const desde = sumarDias(hasta, -29)
+    if (!datos || !ventanaEtl) return []
+    const { desde, hasta } = ventanaEtl
 
     const unidadesPorVenta = new Map<string, number>()
     for (const d of datos.detalles) {
@@ -84,10 +95,20 @@ export function Norte() {
     const filas = datos.ventas
       .filter((v) => v.date_sale && v.date_sale.slice(0, 10) >= desde && v.date_sale.slice(0, 10) <= hasta)
       .map((v) => ({ canal: v.channel, unidades: unidadesPorVenta.get(String(v.id)) || 0 }))
-    return ritmoDeSalida(filas, 30, {})
-  }, [datos])
+    return ritmoDeSalida(filas, 30, dejaPorUnidad)
+  }, [datos, ventanaEtl, dejaPorUnidad])
 
   const salen = salidaDiaria(ritmo)
+  const dejaPorDia = contribucionDiaria(ritmo)
+
+  /**
+   * 🔴 Las dos mitades tienen que estar mirando los mismos días. El caché del ETL vive en
+   * IndexedDB y puede quedar atrás; multiplicar unidades de una ventana por la plata de otra da un
+   * número plausible y falso, y nada falla. Se compara y se dice.
+   */
+  const ventanasDistintas = Boolean(
+    ventanaEtl && contribucion.ventana && ventanaEtl.hasta !== contribucion.ventana.hasta,
+  )
 
   /** De hoy (o de la primera llegada, si ya pasó) hasta la última importación con fecha. */
   const ventana = useMemo(() => {
@@ -106,6 +127,8 @@ export function Norte() {
   }, [ventana, salen, importaciones])
 
   const pagos = useMemo(() => calendarioDePagos(importaciones, cotizacion), [importaciones, cotizacion])
+  /** Cada pago con cuánta contribución habrá acumulado el negocio para esa fecha. */
+  const cubiertos = useMemo(() => coberturaDePagos(pagos, hoy, dejaPorDia), [pagos, hoy, dejaPorDia])
   const faltan = importaciones.filter((i) => !i.arribada && !i.condiciones?.cuotas?.length)
   const enEdicion = importaciones.find((i) => i.id === editando) || null
 
@@ -129,37 +152,67 @@ export function Norte() {
       <DatosGate datos={datos} error={errorDatos} progreso={progreso} origen={origen}>
         {() => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-          <SectionCard title="Por dónde sale" subtitle="Unidades por día, últimos 30 días con venta">
+          <SectionCard title="Por dónde sale" subtitle="Unidades y plata por día, últimos 30 días con venta">
+            {ventanasDistintas && (
+              <Notice tone="warning">
+                Las unidades están medidas hasta el {ventanaEtl!.hasta} y la plata hasta el{' '}
+                {contribucion.ventana!.hasta}: no son los mismos días. Recargá para emparejarlas — multiplicadas dan un
+                número que no existe.
+              </Notice>
+            )}
             {ritmo.length === 0 ? (
               <EmptyState title="Sin ventas en la ventana" hint="No hay con qué medir el ritmo." />
             ) : (
-              <TableWrap>
-                <THead>
-                  <Tr>
-                    <Th>Canal</Th>
-                    <Th align="right">Unidades por día</Th>
-                    <Th align="right">Parte de la salida</Th>
-                  </Tr>
-                </THead>
-                <TBody>
-                  {ritmo.map((r) => (
-                    <Tr key={r.canal}>
-                      <Td>{r.canal}</Td>
-                      <Td align="right" mono>
-                        {r.unidadesDia.toFixed(1)}
-                      </Td>
-                      <Td align="right" mono>
-                        {salen ? Math.round((r.unidadesDia / salen) * 100) : 0}%
-                      </Td>
+              <>
+                <TableWrap>
+                  <THead>
+                    <Tr>
+                      <Th>Canal</Th>
+                      <Th align="right">Unidades por día</Th>
+                      <Th align="right">Parte de la salida</Th>
+                      <Th align="right">Deja por unidad</Th>
+                      <Th align="right">Deja por día</Th>
                     </Tr>
-                  ))}
-                </TBody>
-              </TableWrap>
+                  </THead>
+                  <TBody>
+                    {ritmo.map((r) => (
+                      <Tr key={r.canal}>
+                        <Td>{r.canal}</Td>
+                        <Td align="right" mono>
+                          {r.unidadesDia.toFixed(1)}
+                        </Td>
+                        <Td align="right" mono>
+                          {salen ? Math.round((r.unidadesDia / salen) * 100) : 0}%
+                        </Td>
+                        {/* Sin dato va una raya, NO un $0: «no deja nada» y «no lo sabemos» son
+                            cosas distintas y la de al lado es una decisión de plata. */}
+                        <Td align="right" mono>
+                          {dejaPorUnidad[r.canal] === undefined ? (
+                            <span style={{ color: color.mut2 }}>—</span>
+                          ) : (
+                            `$${Math.round(r.contribUnidad).toLocaleString('es-AR')}`
+                          )}
+                        </Td>
+                        <Td align="right" mono>
+                          {dejaPorUnidad[r.canal] === undefined ? (
+                            <span style={{ color: color.mut2 }}>—</span>
+                          ) : (
+                            `$${Math.round(r.contribDia).toLocaleString('es-AR')}`
+                          )}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </TableWrap>
+                {dejaPorDia > 0 && (
+                  <div style={{ marginTop: space[3], fontSize: font.md }}>
+                    Todo junto, el negocio deja <strong>${Math.round(dejaPorDia).toLocaleString('es-AR')} por día</strong>{' '}
+                    de contribución.
+                  </div>
+                )}
+              </>
             )}
-            <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
-              Son unidades, no plata: el ETL trae cantidades y no precios, así que la contribución de cada canal se
-              calcula aparte y todavía no está en esta pantalla.
-            </div>
+            <NotaContribucion contribucion={contribucion} />
           </SectionCard>
 
           <SectionCard title="Lo que viene" subtitle="Se cargan en Compras → Ingresos proyectados; acá se les agrega la economía">
@@ -277,10 +330,11 @@ export function Norte() {
                       <Th>Qué</Th>
                       <Th align="right">Monto</Th>
                       <Th align="right">En pesos</Th>
+                      {dejaPorDia > 0 && <Th align="right">Cubierto</Th>}
                     </Tr>
                   </THead>
                   <TBody>
-                    {pagos.map((p, i) => (
+                    {cubiertos.map(({ pago: p, cobertura }, i) => (
                       <Tr key={`${p.importacionId}-${i}`}>
                         <Td mono strong={p.fecha >= hoy}>
                           {p.fecha}
@@ -292,10 +346,24 @@ export function Norte() {
                         <Td align="right" mono>
                           ${Math.round(p.montoPesos).toLocaleString('es-AR')}
                         </Td>
+                        {dejaPorDia > 0 && (
+                          <Td align="right" mono>
+                            <span style={{ color: cobertura < 1 ? color.danger : undefined }}>
+                              {cobertura === Infinity ? '—' : `${cobertura.toFixed(1)}×`}
+                            </span>
+                          </Td>
+                        )}
                       </Tr>
                     ))}
                   </TBody>
                 </TableWrap>
+                {dejaPorDia > 0 && (
+                  <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
+                    «Cubierto» es la contribución acumulada hasta esa fecha contra todo lo que hay que pagar hasta ahí,
+                    al ritmo de hoy. ⚠️ <strong>No es plata en la cuenta</strong>: con esa misma contribución se paga la
+                    estructura. Debajo de 1× no alcanza ni en el mejor de los casos.
+                  </div>
+                )}
               </>
             )}
           </SectionCard>
@@ -344,6 +412,56 @@ export function Norte() {
         </div>
         )}
       </DatosGate>
+    </div>
+  )
+}
+
+/**
+ * Todo lo que hay que saber para poder creerle al número de al lado.
+ *
+ * 🔑 **Callarse también miente.** Una contribución calculada sobre el 40% de las ventas se ve
+ * exactamente igual que una calculada sobre el 100%, y la diferencia decide distinto. Por eso acá
+ * va siempre: sobre cuántas ventas se midió, qué quedó afuera y por qué, y qué NO está descontado.
+ */
+function NotaContribucion({ contribucion }: { contribucion: Contribucion }) {
+  const chico = { marginTop: space[2], color: color.mut, fontSize: font.sm }
+
+  if (!contribucion.disponible) {
+    return (
+      <div style={chico}>
+        <strong>Son unidades, no plata.</strong>{' '}
+        {contribucion.motivo || 'La contribución por canal todavía no se pudo calcular.'}
+      </div>
+    )
+  }
+
+  const c = contribucion.cobertura
+  if (!c) return null
+  const afuera = c.sinCuenta + c.sinCosto
+  const pct = c.ventas > 0 ? Math.round((c.usadas / c.ventas) * 100) : 0
+
+  return (
+    <div style={chico}>
+      {afuera > 0 && (
+        <div style={{ marginBottom: space[1] }}>
+          🔴 Calculado sobre <strong>{c.usadas} de {c.ventas} ventas ({pct}%)</strong> de la ventana.
+          {c.sinCuenta > 0 && ` ${c.sinCuenta} no tienen cuenta de cobro clasificada`}
+          {c.sinCosto > 0 && ` ${c.sinCuenta > 0 ? 'y ' : ''}${c.sinCosto} no tienen costo cargado`}
+          : quedan afuera en vez de asumirles el IVA o el costo, que serían 21% y todo el margen de
+          diferencia.
+        </div>
+      )}
+      {c.cuentasDesconocidas.length > 0 && (
+        <div style={{ marginBottom: space[1] }}>
+          El dashboard no tiene clasificadas estas cuentas de cobro:{' '}
+          <strong>{c.cuentasDesconocidas.join(' · ')}</strong>. Se cargan en su pantalla de Cuentas de cobro.
+        </div>
+      )}
+      <div>
+        Es venta menos IVA, costo{c.comisionesCargadas ? ' y comisiones' : ''} — la misma cascada del dashboard.
+        {!c.comisionesCargadas && ' ⚠️ Las comisiones de cobro están en 0% en el dashboard, así que no están descontadas.'}
+        {' '}Tampoco descuenta IIBB ni impuesto al cheque, que sí resta el techo de rentabilidad de Meta Ads.
+      </div>
     </div>
   )
 }

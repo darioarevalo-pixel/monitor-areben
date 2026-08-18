@@ -28,6 +28,7 @@
 // sería pagar el payload entero para mostrar un número.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
+import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, puedeSub, puedeVerAlguna, SECCIONES_ANALISIS_VENTAS } from '../lib/permisos.core.js';
 // El mapeo y el guardado del espejo de ventas, los MISMOS que usan los dos syncs diarios y la purga
 // histórica. Se importa en vez de copiarse por lo que ya costó una vez: ese código vivía duplicado
@@ -276,25 +277,6 @@ function itemDelBody(raw) {
       categoriaSaleAgregada: !!a.categoriaSaleAgregada,
     },
   };
-}
-
-/**
- * Una consulta que puede devolver más de mil filas, entera.
- *
- * 🔴 **PostgREST corta en 1.000 filas y `supabase-js` no lo esquiva** — medido: un `.limit(20000)`
- * devuelve 1.000, sin error y sin aviso. Es el equivalente servidor de `fetchAll` (`lib/supabase/
- * rest.ts`), que existe por lo mismo. En una campaña de agosto son ~170 renglones y no se nota;
- * el día que alguien liquide medio catálogo, sin esto el Resultado diría que se vendió menos.
- */
-async function leerTodo(supabase, tabla, armar) {
-  const PAGINA = 1000;
-  const out = [];
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data, error } = await armar(supabase.from(tabla)).range(desde, desde + PAGINA - 1);
-    if (error) throw new Error(error.message);
-    out.push(...(data || []));
-    if ((data || []).length < PAGINA) return out;
-  }
 }
 
 /**

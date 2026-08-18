@@ -151,3 +151,55 @@ export type AvanceMeta = {
   /** Cuánto hay que sumar por semana para llegar a `fechaObjetivo`. `null` si no hay fecha. */
   porSemana: number | null
 }
+
+/**
+ * La contribución de un canal en la ventana medida, con la cascada abierta renglón por renglón.
+ *
+ * 🔑 **Los nombres son los del dashboard a propósito** (`netas`, `cmv`, `comisiones`): el día que
+ * los dos números no coincidan, hay que poder cotejarlos línea contra línea en vez de discutir
+ * cuál está bien. La cascada vive en `lib/norte/contribucion.core.js`.
+ */
+export type ContribucionCanal = {
+  canal: Canal
+  ventas: number
+  unidades: number
+  mercaderia: number
+  iva: number
+  envios: number
+  descuentos: number
+  netas: number
+  cmv: number
+  comisiones: number
+  costoEnvios: number
+  contribucion: number
+  /** `null` sin unidades: no se puede dividir, y un 0 se leería como «no deja nada». */
+  contribUnidad: number | null
+}
+
+/**
+ * Cuánto del período entró de verdad al cálculo.
+ *
+ * ⚠️ **Sin esto el número no se puede creer.** Una venta cuya cuenta de cobro no está clasificada
+ * queda afuera —no hay default barato: asumirla no facturable sube la contribución 21%— y una sin
+ * CMV también, porque sin costo la contribución sale inflada. Si la pantalla muestra la plata sin
+ * decir sobre cuántas ventas la calculó, un 40% de cobertura se ve igual que un 100%.
+ */
+export type CoberturaContribucion = {
+  ventas: number
+  usadas: number
+  sinCuenta: number
+  sinCosto: number
+  /** Cuentas de cobro que el dashboard todavía no clasificó. Se nombran: es un dato que falta cargar. */
+  cuentasDesconocidas: string[]
+  /** `false` cuando ninguna comisión tiene porcentaje cargado ⇒ la contribución no las descuenta. */
+  comisionesCargadas: boolean
+}
+
+export type Contribucion = {
+  disponible: boolean
+  /** Por qué no está, cuando no está. Va a la pantalla tal cual. */
+  motivo: string | null
+  ventana: { desde: string; hasta: string; dias: number } | null
+  canales?: ContribucionCanal[]
+  cobertura?: CoberturaContribucion
+}

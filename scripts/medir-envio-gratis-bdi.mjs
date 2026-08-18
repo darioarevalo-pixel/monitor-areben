@@ -61,6 +61,7 @@
  */
 import { leerEnv } from './lib/kv-auth.mjs'
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js'
+import { canalDe } from '../lib/liquidacion/canal.core.js'
 
 // ── Argumentos ────────────────────────────────────────────────────────────────
 
@@ -107,16 +108,6 @@ async function sbTodo(tabla, params) {
     out = out.concat(p)
     if (p.length < 1000) return out
   }
-}
-
-/** El canal por su nombre. Replicado de `medir-economia-bdi.mjs` por el mismo motivo. */
-function canalDe(nombre) {
-  const n = (nombre || '').toLowerCase()
-  if (!n || n === 'ninguno') return 'tecnica'
-  if (n.includes('mayorista')) return 'mayorista'
-  if (n.includes('local') || n.includes('minorista')) return 'local'
-  if (n.includes('tienda') || n.includes('nube') || n.includes('online')) return 'online'
-  return 'otro'
 }
 
 // ── Estadística mínima ────────────────────────────────────────────────────────

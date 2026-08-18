@@ -6,7 +6,10 @@ import { leerIngresos } from '@/lib/kv/cliente'
 import { normalizar, totalU } from '@/lib/ingresos/core'
 import type { Ingreso } from '@/lib/ingresos/tipos'
 import { leerNorte, type MetaGuardada } from '@/lib/norte/persistencia'
-import type { Condiciones, ImportacionProyectada } from '@/lib/norte/tipos'
+import type { Condiciones, Contribucion, ImportacionProyectada } from '@/lib/norte/tipos'
+
+/** Lo que se muestra cuando la lectura de Norte falló entera: sin dato y sin inventar. */
+const SIN_CONTRIBUCION: Contribucion = { disponible: false, motivo: null, ventana: null }
 
 /**
  * Junta las dos mitades de una importación: **cuánto y cuándo** llega (el KV de `ingresos`) con
@@ -42,6 +45,8 @@ export function cruzar(ingresos: Ingreso[], condiciones: Condiciones[]): Importa
 export type EstadoNorte = {
   importaciones: ImportacionProyectada[]
   metas: MetaGuardada[]
+  /** La plata que deja cada canal. La calcula el servidor: el ETL no trae precios. */
+  contribucion: Contribucion
   admin: boolean
   cargando: boolean
   error: string | null
@@ -73,6 +78,7 @@ export function useNorte(marca: Marca): EstadoNorte {
     clave: string
     importaciones: ImportacionProyectada[]
     metas: MetaGuardada[]
+    contribucion: Contribucion
     admin: boolean
     error: string | null
   } | null>(null)
@@ -96,6 +102,7 @@ export function useNorte(marca: Marca): EstadoNorte {
         clave,
         importaciones: cruzar(listaIngresos, datos?.condiciones || []),
         metas: datos?.metas || [],
+        contribucion: datos?.contribucion || SIN_CONTRIBUCION,
         admin: datos?.puede.admin || false,
         error: fallas.length ? fallas.join(' · ') : null,
       })
@@ -109,6 +116,7 @@ export function useNorte(marca: Marca): EstadoNorte {
   return {
     importaciones: listo ? cargado.importaciones : [],
     metas: listo ? cargado.metas : [],
+    contribucion: listo ? cargado.contribucion : SIN_CONTRIBUCION,
     admin: listo ? cargado.admin : false,
     cargando: !listo,
     error: listo ? cargado.error : null,

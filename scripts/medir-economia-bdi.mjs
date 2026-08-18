@@ -42,6 +42,9 @@
  */
 import { leerEnv } from './lib/kv-auth.mjs'
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js'
+// La copia que este script tenía se mudó a `lib/liquidacion/canal.core.js` el 18-ago-2026, cuando
+// la clasificación entró a `api/_norte.js`. Era la condición que el comentario de acá mismo ponía.
+import { canalDe } from '../lib/liquidacion/canal.core.js'
 
 // ── Argumentos ────────────────────────────────────────────────────────────────
 
@@ -77,23 +80,6 @@ async function sbTodo(tabla, params) {
     out = out.concat(p)
     if (p.length < 1000) return out
   }
-}
-
-/**
- * El canal por su nombre, igual que `canalDe` de `lib/liquidacion/resultado.ts:57`.
- *
- * ⚠️ Está REPLICADO a propósito y no importado: aquello es TypeScript y un `.mjs` no lo puede
- * importar sin pasar por el compilador. Si esta clasificación entra alguna vez a un handler,
- * **hay que mudarla antes** a un `.core.js` que las dos importen — es el patrón que el repo ya
- * declaró invariante para `permisos` y para `rentabilidad`.
- */
-function canalDe(nombre) {
-  const n = (nombre || '').toLowerCase()
-  if (!n || n === 'ninguno') return 'tecnica'
-  if (n.includes('mayorista')) return 'mayorista'
-  if (n.includes('local') || n.includes('minorista')) return 'local'
-  if (n.includes('tienda') || n.includes('nube') || n.includes('online')) return 'online'
-  return 'otro'
 }
 
 // ── Estadística mínima ────────────────────────────────────────────────────────

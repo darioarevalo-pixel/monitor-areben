@@ -34,6 +34,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
+import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
+import { leerTodo } from '../lib/supabase/paginar.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -46,6 +48,94 @@ function cfgFor(store) {
     url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co',
     key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
   };
+}
+
+/**
+ * El dashboard, que es de dónde salen **las reglas** de la contribución: qué cuenta de cobro
+ * factura (⇒ IVA) y cuánto cobra cada medio de pago.
+ *
+ * 🔑 **No se copian acá.** Son 18 cuentas y 8 medios que alguien mantiene en una pantalla del
+ * dashboard (`/settings/cuentas-cobro` y `/settings/comisiones`); una segunda copia en este repo
+ * es exactamente lo que diverge, y el día que Bruno agregue una cuenta nueva en Gestión Nube la
+ * copia vieja la daría por no facturable — o sea, 21% de contribución de más, en silencio.
+ */
+function cfgDashboard() {
+  return {
+    url: process.env.DASHBOARD_SUPABASE_URL,
+    key: process.env.DASHBOARD_SUPABASE_SERVICE_KEY,
+  };
+}
+
+/**
+ * Las dos tablas de reglas. Devuelve `{ error }` en vez de tirar: que el dashboard no conteste
+ * tiene que dejar a Norte sin la columna de plata, no sin pantalla.
+ */
+async function reglasDelDashboard() {
+  const cfg = cfgDashboard();
+  if (!cfg.url || !cfg.key) {
+    return { error: 'Falta conectar el dashboard (DASHBOARD_SUPABASE_URL / _SERVICE_KEY).' };
+  }
+  try {
+    const sb = createClient(cfg.url, cfg.key);
+    const [cc, com] = await Promise.all([
+      sb.from('cuentas_cobro_gn').select('nombre, tipo'),
+      sb.from('comision_medio_pago').select('medio, porcentaje, activo'),
+    ]);
+    if (cc.error) return { error: `cuentas de cobro: ${cc.error.message}` };
+    const cuentas = {};
+    for (const r of cc.data || []) cuentas[r.nombre] = r.tipo;
+    if (!Object.keys(cuentas).length) return { error: 'El dashboard no tiene ninguna cuenta de cobro clasificada.' };
+    const comisiones = {};
+    // Una comisión desactivada es un 0 explícito, no un dato ausente: el que la apagó decidió.
+    for (const r of com.data || []) comisiones[r.medio] = r.activo === false ? 0 : Number(r.porcentaje) || 0;
+    return { cuentas, comisiones };
+  } catch (e) {
+    return { error: `dashboard: ${e.message}` };
+  }
+}
+
+/**
+ * La contribución por canal de los últimos 30 días con venta.
+ *
+ * La ventana la fija `ventanaUltimos` sobre las fechas que volvieron, **no el reloj**: el día en
+ * curso está a medio hacer y meterlo baja el promedio sin que haya pasado nada. Se piden 45 días
+ * para tener de dónde recortar los 30 aunque el local haya estado cerrado unos días.
+ *
+ * ⚠️ Los detalles se piden por rango de `sale_id` porque `venta_detalles` no tiene fecha propia —
+ * el id es el único puente—, y ese rango arrastra ventas de otras fechas. El filtro por fecha real
+ * lo hace el núcleo. Mismo cruce que `api/_memo.js`.
+ */
+async function contribucionDe(supabase, reglas) {
+  const hace45 = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  const ventas = await leerTodo(supabase, 'ventas', (q) =>
+    q
+      .select('id, date_sale, channel, payment_method, account_display, discount, shipping_cost, total_cost')
+      .gte('date_sale', hace45)
+      .order('id'));
+
+  const ventana = ventanaUltimos(ventas.map((v) => v.date_sale), 30);
+  if (!ventana) return { disponible: false, motivo: 'No hay ventas en los últimos 45 días.', ventana: null };
+
+  const enVentana = ventas.filter((v) => {
+    const f = String(v.date_sale || '').slice(0, 10);
+    return f >= ventana.desde && f <= ventana.hasta;
+  });
+  if (!enVentana.length) return { disponible: false, motivo: 'No hay ventas en la ventana.', ventana };
+
+  const min = enVentana[0].id;
+  const max = enVentana[enVentana.length - 1].id;
+  const detalles = await leerTodo(supabase, 'venta_detalles', (q) =>
+    q.select('sale_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+
+  const { canales, cobertura } = contribucionPorCanal({
+    ventas: enVentana,
+    detalles,
+    cuentas: reglas.cuentas,
+    comisiones: reglas.comisiones,
+    desde: ventana.desde,
+    hasta: ventana.hasta,
+  });
+  return { disponible: true, motivo: null, ventana, canales, cobertura };
 }
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -111,7 +201,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const [c, m] = await Promise.all([
+      // La contribución sale en el mismo viaje que el resto, y **no puede tumbar la sección**: si el
+      // dashboard no contesta o la venta no se puede leer, Norte pierde la columna de plata y lo
+      // dice. Mismo criterio que las metas.
+      const [c, m, contrib] = await Promise.all([
         supabase
           .from('compras_condiciones')
           .select('ingreso_id, fecha_factura, costo_unitario, moneda, unidades, cuotas, nota, actualizado_por, actualizado_en')
@@ -121,6 +214,15 @@ export default async function handler(req, res) {
           .select('key, label, unidad, objetivo, fecha_objetivo, orden, activa')
           .eq('store', store)
           .order('orden', { ascending: true }),
+        (async () => {
+          const reglas = await reglasDelDashboard();
+          if (reglas.error) return { disponible: false, motivo: reglas.error, ventana: null };
+          try {
+            return await contribucionDe(supabase, reglas);
+          } catch (e) {
+            return { disponible: false, motivo: `no se pudo leer la venta: ${e.message}`, ventana: null };
+          }
+        })(),
       ]);
       if (c.error) throw new Error(c.error.message);
 
@@ -151,6 +253,7 @@ export default async function handler(req, res) {
               orden: r.orden || 0,
               activa: r.activa !== false,
             })),
+        contribucion: contrib,
         puede: { admin },
       });
     }

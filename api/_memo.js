@@ -42,6 +42,7 @@
 // no derivan, así que da igual si se cierra el lunes o el jueves siguiente.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
+import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
@@ -63,22 +64,6 @@ function clienteDe(store) {
     : { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
   if (!cfg.url || !cfg.key) return null;
   return createClient(cfg.url, cfg.key);
-}
-
-/**
- * PostgREST corta en 1.000 filas y NO avisa: devuelve las primeras mil como si fueran todas. Una
- * semana de detalles de BDI ronda las 2.400 filas, así que sin paginar el memo perdería más de la
- * mitad de la venta en silencio — y un número bajo se lee como "una semana floja", no como un bug.
- */
-async function leerTodo(sb, tabla, armar) {
-  const PAGINA = 1000;
-  const out = [];
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data, error } = await armar(sb.from(tabla)).range(desde, desde + PAGINA - 1);
-    if (error) throw new Error(error.message);
-    out.push(...(data || []));
-    if ((data || []).length < PAGINA) return out;
-  }
 }
 
 /**

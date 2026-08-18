@@ -32,7 +32,18 @@ export function mapVentaRow(v, { completo = true } = {}) {
     payment_method: v.payment_method || null,
     store:          v.store || null,
     client_name:    v.client_name || null,
+    // La ECONOMÍA de la venta va en el juego base, o sea también en Zattia. GN la manda en el mismo
+    // payload que todo lo demás y el mapeo la tiraba: sin estas cuatro columnas no hay contribución
+    // (`api/_norte.js`), y el 21% de IVA no lo decide el canal sino `account_display` — la cuenta
+    // por donde entró la plata. Ver sql/migrate-ventas-cobro.sql.
+    account_display: v.account_display || null,
+    discount:        v.discount ?? null,
+    shipping_cost:   v.shipping_cost ?? null,
+    total_cost:      v.total_cost ?? null,
   }
+  // 🔑 `completo` quedó significando **CRM y PII**, no "todo lo demás": son los datos del cliente y
+  // los ids que alimentan el padrón. Zattia sigue afuera de eso a propósito, y eso ya no le cuesta
+  // el margen.
   if (!completo) return base
   return {
     ...base,
@@ -43,7 +54,6 @@ export function mapVentaRow(v, { completo = true } = {}) {
     client_province: v.client_province || null,
     channel_id:      v.channel_id ?? null,
     sale_type_id:    v.sale_type_id ?? null,
-    total_cost:      v.total_cost ?? null,
     profit:          v.profit ?? null,
     items_sold:      v.items_sold ?? null,
   }

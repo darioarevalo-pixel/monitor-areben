@@ -18,17 +18,23 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 
 - `components/norte/Norte.tsx` · `components/norte/useNorte.ts` · `components/norte/EditorCondiciones.tsx`
 - `lib/norte/core.ts` (todo el cálculo, **puro**) · `lib/norte/tipos.ts` · `lib/norte/persistencia.ts`
+- `lib/norte/contribucion.core.js` (la cascada de plata, `.js` porque la usa el handler) + `.ts` tipado
 - `api/_norte.js`, que entra por `api/datos.js?recurso=norte`
-- `sql/migrate-norte.sql` + `scripts/apply-norte.mjs`
-- Banco: `tests/norte.test.ts`
+- `sql/migrate-norte.sql` + `scripts/apply-norte.mjs` · `sql/migrate-ventas-cobro.sql` + `scripts/apply-ventas-cobro.mjs`
+- Banco: `tests/norte.test.ts` · `tests/norte-contribucion.test.ts`
 
 ## ⛔ Lo que comparte con otras secciones
 
 - **`ingresos` (Compras → Ingresos proyectados) es la otra mitad de cada importación.** Las
   unidades, los modelos, el proveedor y la fecha de llegada son de ahí y **no se duplican**: se leen
   del KV y se cruzan por `ingresoId`. Norte sólo agrega la economía.
-- Reusa `canalDe`/`Canal` de `lib/liquidacion/resultado.ts`, `Linea` de `lib/memo/tipos.ts`, y
-  `totalU`/`normalizar` de `lib/ingresos/core.ts`.
+- Reusa `canalDe` de **`lib/liquidacion/canal.core.js`** (la implementación se mudó ahí el
+  18-ago-2026, cuando entró a un handler; `resultado.ts` es el re-export tipado), `Linea` de
+  `lib/memo/tipos.ts`, y `totalU`/`normalizar` de `lib/ingresos/core.ts`.
+- ⛔ **Las reglas de la contribución son del DASHBOARD, no de acá.** `cuentas_cobro_gn` (qué cuenta
+  factura ⇒ IVA) y `comision_medio_pago` se leen de su Supabase con `DASHBOARD_SUPABASE_URL` /
+  `DASHBOARD_SUPABASE_SERVICE_KEY`. Copiarlas acá es lo que diverge: el día que se cree una cuenta
+  nueva en Gestión Nube, la copia vieja la daría por no facturable y eso es 21% de más, callado.
 - El ritmo de salida sale del payload del ETL (`useDatosMonitor`), no de una consulta propia.
 
 ## Reglas que el código no dice
@@ -41,6 +47,13 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
   mismo día de los dos meses que siguen».
 - 🔑 **`ventas.store` es la SUCURSAL** («Local», «Depósito Minorista»), no la marca. La marca es
   contra qué base se consulta. Leerlo al revés ya costó una conclusión errada.
+- 🔑 **El IVA no lo decide el canal ni el medio de pago: lo decide la CUENTA DE COBRO**
+  (`account_display`). Medido sobre julio-2026: las ventas mayoristas de BDI entran por
+  «Transferencia Mayorista» y «Sin cobro», que **no facturan** ⇒ no llevan IVA y sus netas son
+  iguales a las brutas. Deducirlo del canal —«mayorista factura»— da 21% menos, con cara de bien.
+- 🔴 **Una venta sin cuenta clasificada o sin CMV queda AFUERA del cálculo, y la pantalla lo dice.**
+  No hay default barato: asumirle «no facturable» sube la contribución 21% y asumirle costo cero se
+  lleva todo el margen. La cobertura («calculado sobre N de M ventas») va siempre.
 - ⚠️ **Una importación sin condiciones no aparece en el calendario de pagos, y la pantalla lo dice.**
   Asumirle un costo promedio inventaría una deuda con cara de razonable.
 - ⚠️ **`normalizar()` antes de `totalU()`**, siempre: el KV tiene registros en formato viejo y
@@ -61,13 +74,33 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
   del efecto. Se resolvió derivando `cargando` de una clave, igual que `useDatosMonitor` — y de paso
   arregló que al cambiar de marca se vieran un instante los datos de la anterior.
 
+## La contribución por canal (18-ago-2026)
+
+**No se inventó una cascada: se portó la del dashboard**, que ya está verificada contra el P&L real
+de Gestión Nube (`areben-dashboard/scripts/sync-analitica-gn.mjs`).
+
+```
+ventas (con IVA) − descuentos + envíos − IVA (sólo si la cuenta factura) = netas
+netas − CMV − comisiones − costo de envíos                               = contribución
+```
+
+- 🔴 **Las dos mitades del dashboard NO calculan igual.** Su P&L mensual le saca el IVA sólo a la
+  mercadería; su analítico se lo saca a mercadería − descuento + envío. En la Tienda Nube de julio
+  eso son **$4.426 sobre $243.650 (2%)**. Acá va la del analítico: es la que reproduce los datos
+  guardados y la que respeta que el envío facturado paga IVA. **El dashboard no se tocó** — cuál de
+  las dos queda es decisión de ese repo.
+- Las cuatro columnas que hacían falta (`account_display`, `discount`, `shipping_cost`,
+  `total_cost`) **ya venían en el payload de GN y el espejo las tiraba**. Ver
+  `sql/migrate-ventas-cobro.sql`. En Zattia `total_cost` directamente no existía, y por eso no tenía
+  margen.
+- ⚠️ **Lo que la contribución NO descuenta**: las comisiones de cobro están en **0% en el
+  dashboard** (nadie las cargó), y la cascada no resta IIBB ni impuesto al cheque —que el techo de
+  rentabilidad de Meta Ads sí resta—. Las dos cosas se dicen en pantalla.
+- El oráculo del banco: **reproduce al centavo cinco filas reales de julio-2026** de
+  `ventas_gn_agg`, que las calculó otro repo contra la API de GN. 11 mutantes, 11 muertos.
+
 ## Pendiente
 
-- 🔴 **La contribución por canal.** El payload del ETL trae unidades pero **no precios**
-  (`FilaDetalle` es `sale_id · product_id · quantity`), así que hoy la pantalla muestra unidades y
-  no plata. Aplicarle a mayorista la contribución de la tienda la sobrestimaría **7,6 veces**
-  ($1.046 contra $7.920). El camino es el cruce por línea contra las dos bases, que **ya está
-  escrito** en `api/_memo.js:96-146`.
 - 🔴 **El medido de cada meta.** Hoy se cargan objetivo y fecha; el avance no se calcula solo, y por
   eso la columna no está — mostrarlo en cero se leería como «no avanzamos».
 - El P&L «por arriba» por línea (previo a gastos), que es lo que pidió Bruno para no depender del
@@ -85,5 +118,9 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
   está mal.
 - El banco discrimina: se mataron dos mutantes (sacar el filtro de importaciones arribadas, dejar el
   stock negativo) y los dos murieron con `AssertionError`, no con error de sintaxis.
+- `npx vitest run tests/norte-contribucion.test.ts` — la cascada de plata. 🔑 **Su oráculo tampoco
+  es el verde**: es que las cinco filas de julio-2026 sigan dando las `ventas_netas` que el
+  dashboard tiene guardadas. Ese número lo calculó otra implementación, en otro repo, contra la API
+  de Gestión Nube.
 - ⚠️ **Ejercer a mano el guardado en producción**: es el verbo que escribe, y en este repo es el que
   más veces falló. Cargar una importación con costo y dos cuotas, recargar, y ver que vuelve.
