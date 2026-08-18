@@ -261,6 +261,35 @@ desambigua y nace una fila nueva, con la vieja al lado, muda.
   adentro del JSX. El primer oráculo fue caminar producción —cargar, apagar, ver la fila gris,
   **volver a prenderla desde ahí** y borrarla—; después se le puso un banco de render.
 
+### El medidor de COMPRAS por día (18-ago-2026, `f1cd59a`)
+
+El objetivo de BDI —**100 compras diarias**— estaba escrito desde el 13-ago y **no se podía cargar
+como meta**: el catálogo tenía `fundas/día`, `$/funda` y `$/día`, y ninguno cuenta ventas.
+
+- 🔑 **Fundas y compras no son el mismo número, y por canal la diferencia es enorme.** Medido con
+  `psql` sobre la ventana del 20-jul al 18-ago: mayorista **76,9 fundas por compra**, local **1,5**,
+  online **1,9**. Cargar «100 por día» contra `unidades-dia` en online mediría **11,6** en vez de
+  **6,1**: casi el doble de avance, y falso.
+- 🔑 **Las compras salen del MISMO `ritmo`**, contadas en la misma pasada sobre las mismas filas —
+  una fila del ritmo es una venta, con las unidades de sus renglones ya sumadas. Contarlas por otro
+  lado daría dos poblaciones para la misma pantalla.
+- ⚠️ **Una venta de cero unidades igual es una compra**: suma a `ventasDia` y no a `unidadesDia`. Es
+  a propósito — son dos preguntas distintas.
+- La tabla «Por dónde sale» suma la columna **Compras por día**: sin ella el medidor nuevo sería el
+  único sin espejo en pantalla contra el cual cotejarse.
+- 🔑 **No hizo falta un test de «el motor conoce el medidor nuevo»**: el bloque «el catálogo de
+  medidores y el motor no se pueden separar» ya recorre `MEDIDORES` entero. Un medidor agregado al
+  catálogo sin enseñárselo a `medirMeta` cae ahí.
+- **Dos mutantes muertos con `AssertionError`**: que `ventas-dia` devuelva fundas (caen 2) y que una
+  venta de cero unidades no cuente como compra (1).
+- 🔴 ⚠️ **`VENTAS_MEDIDAS` está AGREGADO —una fila por canal, no una por venta—** así que no sirve
+  para contar compras: los casos nuevos van con fixture propio. El fixture ahora lo dice.
+
+**Medido en prod el 18-ago** (30 días al 18-ago, sin las técnicas): local **15,9** compras/día ·
+online **6,1** · mayorista **3,0** · otro **0,3**. 🔑 Las fundas/día de la misma consulta dan
+228,1 / 23,6 / 11,6 / 1,0, **idénticas a las de la pantalla**: es lo que prueba que la consulta mide
+la misma población que el ETL.
+
 ### El banco de render, que es el primero del repo (18-ago-2026, `684f15b`)
 
 La tabla salió a **`components/norte/TablaMetas.tsx`** con props puras —nada de hooks de datos— para
