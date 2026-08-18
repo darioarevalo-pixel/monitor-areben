@@ -64,6 +64,17 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - **El lint rechaza `setState` síncrono en un `useEffect`** (`react-hooks/set-state-in-effect`) y
   dejó el CI en rojo en la primera versión de `useMetas`. El patrón bueno es el de `useMarketing` y
   `useTnImages`: caché a nivel de módulo, **leído en el render**; el effect sólo dispara el fetch.
+- 🔴 ⚠️ **AL CAMBIAR DE MARCA, LA PANTALLA MUESTRA UNOS SEGUNDOS LOS NÚMEROS DE LA OTRA CON EL
+  RÓTULO DE ÉSTA** — y **no es de esta sección**: es del store del ETL, o sea de las ~22 pantallas
+  que usan `useDatosMonitor`. Visto caminándola el 18-ago-2026: con «BDI Accesorios» arriba, el
+  contador decía **6/6** (Zattia) y el sync **17/8 03:34** (Zattia), cuando BDI daba 7/11 y 18/8
+  03:55. 🔑 **La causa**: `cargar()` hace `set({ marca })` **antes** de `await leerCache(marca)`
+  (`store/useMonitorStore.ts`), así que durante ese await `marcaCargada` ya es la nueva y `estado`
+  sigue en `'listo'` de la anterior ⇒ el guard `listoParaEstaMarca` de `useDatosMonitor` —que existe
+  exactamente para esto, y su docstring lo dice— **da `true` con los datos viejos**. Se cuela sólo
+  cuando la marca nueva tiene caché (el caso normal); sin caché el `estado` pasa a `'cargando'` y el
+  guard sí frena. ⛔ **No se arregló acá**: es un store compartido y esto es una sección de
+  Marketing. ▶️ Lo decide Bruno.
 
 ## Pendiente
 
@@ -74,7 +85,9 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   colores / talles a Marketing** (tanda 5), que arrastra dos 🔴: la ventana de ventas tiene que
   colgar del permiso y no del flag de admin, y **el caché de IndexedDB necesita sello de ventana**
   (`claveCache` es sólo la marca ⇒ la entrada corta de un usuario se le sirve al siguiente, callada).
-- ⚠️ **Nada se ejerció a mano todavía**: falta abrir la pantalla en prod con un perfil de Marketing.
+- ⚠️ **Se caminó en prod con perfil ADMIN, no con uno de Marketing.** Lo que el admin no ejerce es
+  el `puedeVerAlguna` de la llave `?metas=1` con la función `marketing` — los usuarios de prueba los
+  crea Bruno. ▶️ Falta eso.
 
 ## Cómo se prueba
 
@@ -91,3 +104,8 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   verificó mutando** (`compras += 2` lo pone en rojo), o sea no pasa por vacío.
 - Los últimos 10 días de BDI, para volver a cotejar: **16 · 11 · 8 · 12 · 5 · 14 · 10 · 14 · 3 · 9**
   compras online (17-ago hacia atrás).
+- ✅ **Caminada en producción el 18-ago-2026**, con `psql` al lado en cada paso: hoy **1/3**, la
+  flecha atrás a 17-ago **16/28** (barra 64 % contra el escalón de 25), el piso en **jue 16-jul**
+  **7/11** con la flecha apagada y el cartel que dice por qué, y **Zattia sin objetivo cargado**
+  dibujando el cartel y **no una barra en 0 %** (su 16-jul, 6/6, también cotejado). Los cuatro
+  números salieron del `GROUP BY` de psql, no de la misma pantalla.
