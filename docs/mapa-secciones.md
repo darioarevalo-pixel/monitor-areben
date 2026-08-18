@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-49 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+50 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -41,7 +41,9 @@ tramo de la URL; el perfil de Marketing la ve porque tiene las dos áreas
 
 **Administración** — `caducados` · `postventa` · `reposicion`
 
-**Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) · **Integraciones** — `integraciones`
+**Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) ·
+`norte → components/norte + lib/norte` (cruza el ETL con el KV de `ingresos`, por `?recurso=norte`) ·
+**Integraciones** — `integraciones`
 
 **Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en
 la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde

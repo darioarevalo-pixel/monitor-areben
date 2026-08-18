@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|norte|fotos-verificadas|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
@@ -27,6 +27,7 @@ import crm from './_crm.js';
 import costos from './_costos.js';
 import espejo from './_espejo.js';
 import memo from './_memo.js';
+import norte from './_norte.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -41,6 +42,10 @@ const RECURSOS = {
   'meta-funnel': metaFunnel,
   'meta-rentabilidad': metaRentabilidad,
   calendario,
+  // `norte` es la vista de Direccion hacia adelante: cruza el ritmo de venta con las importaciones
+  // que vienen y sus plazos de pago. Entra por aca —y no por un archivo de ruta propio— porque el
+  // plan Hobby admite 12 funciones y cada ruta cuenta una.
+  norte,
   liquidacion,
   atencion,
   // `sistema` y `agenda` son los que no tienen marca: novedades, manuales y las promociones

@@ -58,6 +58,7 @@ const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then(
 // `MemoSemanal` y no `Memo`: `Memo` a secas se confunde con `React.memo` de un vistazo, y este
 // archivo es una lista de nombres leídos en diagonal.
 const MemoSemanal = dynamic(() => import('@/components/memo/Memo').then((m) => m.Memo), { loading: Cargando })
+const Norte = dynamic(() => import('@/components/norte/Norte').then((m) => m.Norte), { loading: Cargando })
 const Integraciones = dynamic(() => import('@/components/integraciones/Integraciones').then((m) => m.Integraciones), { loading: Cargando })
 const Postventa = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.Postventa), { loading: Cargando })
 const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaLocal), { loading: Cargando })
@@ -328,6 +329,15 @@ export const SECCIONES: Record<string, ComponentType> = {
   // base de BDI. No toca stock, GN ni Meta. Gateada por permiso `memo` (ambas marcas) para leer y
   // por admin para escribir. Rollback: comentar esta línea.
   memo: MemoSemanal,
+  // Norte (17-ago-2026, sección NUEVA): el tercer tiempo de Dirección — Gerencial dice qué decidir
+  // hoy, el memo qué pasó, Norte si llegamos. LEE el payload del ETL (ventas y detalles, para el
+  // ritmo de salida) y el KV de `ingresos` de bdi-catalogo (las importaciones que vienen).
+  // ESCRIBE sólo sus dos tablas propias, `compras_condiciones` y `norte_metas`, por
+  // `api/datos?recurso=norte`. ⛔ NO toca `ingresos`: las unidades, los modelos y la fecha de
+  // llegada siguen siendo de esa sección y duplicarlas daría dos verdades. Gateada por el permiso
+  // `norte` (ambas marcas) para leer; escribir es de admin, como el techo de rentabilidad.
+  // Rollback: sacar la key de acá y del nav — las tablas quedan y no las lee nadie más.
+  norte: Norte,
   // Integraciones (22-jul-2026, sección NUEVA — no existe en el legacy): `/integraciones` lo sirve
   // el shell. Fase 0 del sync de Stunned: mapeo de SKU GN↔TN (tabla sku_map en la base de Zattia).
   // Escribe SOLO sku_map (correspondencias), NO stock ni ventas. Gateada por permiso `integraciones`

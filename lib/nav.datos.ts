@@ -658,6 +658,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "norte",
+    "area": "direccion",
+    "label": "Norte",
+    "info": "Hacia dónde vamos: el stock que entra contra el que sale, los pagos que vienen y las metas de mediano plazo con su avance. Es el tercer tiempo de Dirección — Gerencial dice qué decidir hoy, el Memo dice qué pasó, Norte dice si llegamos. Cruza el ritmo de venta real con las importaciones proyectadas y sus plazos de pago, y contesta una sola pregunta arriba de todo: si el stock que entra sale a tiempo para pagarlo. Lo único que se carga a mano es la economía de cada importación (costo, moneda y cuotas), que es el dato que hoy no vive en ninguna pantalla; cargarla es de administradores.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "integraciones",
     "area": "integraciones",
     "label": "Integraciones",
@@ -801,7 +811,8 @@ export const NAV_CATS: NavCat[] = [
     "label": "Dirección",
     "keys": [
       "gerencial",
-      "memo"
+      "memo",
+      "norte"
     ]
   },
   {

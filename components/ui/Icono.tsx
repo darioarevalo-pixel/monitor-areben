@@ -182,6 +182,20 @@ const TRAZOS = {
       <circle cx="12" cy="18" r="1.1" fill="currentColor" stroke="none" />
     </>
   ),
+  /**
+   * Norte — la brújula, con la aguja apuntando arriba a la derecha.
+   *
+   * Es el tercer ícono de Dirección y los tres dicen su tiempo: `gerencial` es el tablero de
+   * ahora, `historial` es la flecha que vuelve, y la brújula es la única que apunta a algo que
+   * todavía no pasó. Un gráfico con la flecha subiendo habría dicho «resultados», que es lo que
+   * esa pantalla justamente no muestra.
+   */
+  norte: (
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="m15.6 8.4-2 5.2-5.2 2 2-5.2z" />
+    </>
+  ),
   /** Por producto — etiqueta colgante. */
   productos: (
     <>
