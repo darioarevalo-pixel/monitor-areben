@@ -22,10 +22,13 @@ import {
   diaDeAgotamiento,
   diasEntre,
   entradaDiaria,
+  estadoDeCompra,
   medirMeta,
+  pagosEstimados,
   proyectarStock,
   ritmoDeSalida,
   salidaDiaria,
+  sinCondiciones,
   sumarDias,
   veredicto,
 } from '../lib/norte/core'
@@ -47,10 +50,14 @@ const CONTRIB = { mayorista: 1046, local: 6401, online: 7920, otro: 9857 } as co
 
 /** Las tres importaciones, como estaban el 6-ago: ninguna arribada todavía. */
 const IMPORTACIONES: ImportacionProyectada[] = [
-  { id: 'l1', desc: 'Lote 1', llega: '2026-08-06', unidades: 11000, arribada: false, condiciones: null },
-  { id: 'l2', desc: 'Lote 2', llega: '2026-09-07', unidades: 14000, arribada: false, condiciones: null },
-  { id: 'l3', desc: 'Lote 3', llega: '2026-10-15', unidades: 8500, arribada: false, condiciones: null },
+  { id: 'l1', desc: 'Lote 1', llega: '2026-08-06', unidades: 11000, arribada: false, bloques: [b('b1', 'IMD', 11000)], condiciones: null },
+  { id: 'l2', desc: 'Lote 2', llega: '2026-09-07', unidades: 14000, arribada: false, bloques: [b('b1', 'IMD', 14000)], condiciones: null },
+  { id: 'l3', desc: 'Lote 3', llega: '2026-10-15', unidades: 8500, arribada: false, bloques: [b('b1', 'IMD', 8500)], condiciones: null },
 ]
+
+function b(id: string, nombre: string, unidades: number) {
+  return { id, nombre, unidades }
+}
 
 describe('reproduce lo medido a mano el 17-ago-2026', () => {
   it('salen 237,6 fundas por día sobre la ventana 6→16-ago', () => {
@@ -169,34 +176,176 @@ describe('proyectarStock', () => {
   })
 })
 
+// ── La economía de una compra: el costo por MATERIAL y los peldaños ───────────
+//
+// Los tres bloques son los de la IMPORTACION 2 real de BDI, medidos contra el KV el 18-ago-2026:
+// TRANSPARENTE CON COLOR 1.132 + IMD 6.549 + FUNDA CON DISEÑO ENCAPSULADO 6.480 = 14.161, que es
+// exactamente el total del pedido. Los precios son los del rango conocido: US$1,08 las comunes y
+// US$1,35 las encapsuladas.
+
+const BLOQUES = [b('t', 'TRANSPARENTE CON COLOR', 1132), b('i', 'IMD', 6549), b('e', 'FUNDA CON DISEÑO ENCAPSULADO', 6480)]
+
+const IMP2: ImportacionProyectada = {
+  id: 'imp2',
+  desc: 'IMPORTACION 2',
+  llega: '2026-08-28',
+  unidades: 14161,
+  arribada: false,
+  bloques: BLOQUES,
+  condiciones: null,
+}
+
+function condiciones(extra: Partial<NonNullable<ImportacionProyectada['condiciones']>> = {}) {
+  return {
+    ingresoId: 'imp2',
+    fechaFactura: '',
+    costos: [
+      { bloqueId: 't', nombre: 'TRANSPARENTE CON COLOR', costo: 1.08, unidades: null },
+      { bloqueId: 'i', nombre: 'IMD', costo: 1.08, unidades: null },
+      { bloqueId: 'e', nombre: 'FUNDA CON DISEÑO ENCAPSULADO', costo: 1.35, unidades: null },
+    ],
+    moneda: 'USD' as const,
+    cuotas: [
+      { dias: 30, pct: 50 },
+      { dias: 60, pct: 50 },
+    ],
+    nota: '',
+    confirmado: false,
+    fechaIngreso: '',
+    ...extra,
+  }
+}
+
+/** El total real: cada material a su precio. */
+const TOTAL_IMP2 = 1132 * 1.08 + 6549 * 1.08 + 6480 * 1.35
+
+describe('el costo va por material y no se promedia', () => {
+  it('el total es la suma de cada material a SU precio', () => {
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones() })
+    expect(e.total).toBeCloseTo(17043.48, 2)
+    expect(e.unidades).toBe(14161)
+  })
+
+  it('el promedio de los tres precios daría OTRO número: por eso no se promedia', () => {
+    // (1,08 + 1,08 + 1,35) / 3 × 14.161 = 16.568,37 — casi US$500 menos, sobre la misma compra.
+    const promedio = ((1.08 + 1.08 + 1.35) / 3) * 14161
+    expect(promedio).toBeCloseTo(16568.37, 2)
+    expect(Math.abs(TOTAL_IMP2 - promedio)).toBeGreaterThan(400)
+  })
+
+  it('un material sin costo NO se totaliza a medias: la compra queda incompleta y lo nombra', () => {
+    const e = estadoDeCompra({
+      ...IMP2,
+      condiciones: condiciones({ costos: condiciones().costos.filter((c) => c.bloqueId !== 'e') }),
+    })
+    expect(e.peldano).toBe('incompleta')
+    // El total de los dos cargados sería 8.295,48: una deuda MÁS CHICA que la real, con cara de completa.
+    expect(e.total).toBe(0)
+    expect(e.falta).toContain('FUNDA CON DISEÑO ENCAPSULADO')
+    expect(e.sinCosto.map((x) => x.id)).toEqual(['e'])
+  })
+
+  it('🔑 un costo en CERO no es un material gratis: cuenta como sin cargar', () => {
+    // Lo cazó un mutante: con `>= 0` la compra se veía costeada y el total salía sin ese material,
+    // más chico que el real y sin que nada avisara. Un 0 en un costo es «todavía no lo sé».
+    const costos = condiciones().costos.map((c) => (c.bloqueId === 'e' ? { ...c, costo: 0 } : c))
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ costos }) })
+    expect(e.peldano).toBe('incompleta')
+    expect(e.sinCosto.map((x) => x.id)).toEqual(['e'])
+  })
+
+  it('las unidades facturadas de un material pisan a las del pedido', () => {
+    const costos = condiciones().costos.map((c) => (c.bloqueId === 'e' ? { ...c, unidades: 6000 } : c))
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ costos }) })
+    expect(e.unidades).toBe(1132 + 6549 + 6000)
+    expect(e.total).toBeCloseTo(1132 * 1.08 + 6549 * 1.08 + 6000 * 1.35, 2)
+  })
+
+  it('un costo cuyo material ya no está NO suma, y se nombra en vez de descontarse callado', () => {
+    const costos = [...condiciones().costos, { bloqueId: 'zz', nombre: 'BLOQUE BORRADO', costo: 9, unidades: 5000 }]
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ costos }) })
+    expect(e.total).toBeCloseTo(TOTAL_IMP2, 2)
+    expect(e.huerfanos.map((h) => h.nombre)).toEqual(['BLOQUE BORRADO'])
+  })
+})
+
+describe('los peldaños: cada dato cargado sube uno, y el número no empeora', () => {
+  it('sin confirmar es ESTIMADA y cuenta desde la llegada estimada', () => {
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones() })
+    expect(e.peldano).toBe('estimada')
+    expect(e.desde).toBe('2026-08-28')
+    expect(e.base).toBe('llegada')
+    expect(e.falta).toContain('confirmar el ingreso')
+  })
+
+  it('confirmada sin factura cuenta desde la fecha de INGRESO, que ya es firme', () => {
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-08-30' }) })
+    expect(e.peldano).toBe('confirmada')
+    expect(e.desde).toBe('2026-08-30')
+    expect(e.base).toBe('ingreso')
+    expect(e.falta).toContain('factura')
+  })
+
+  it('el tilde sin su fecha NO alcanza: sigue estimando contra la llegada y pide la fecha', () => {
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ confirmado: true }) })
+    expect(e.peldano).toBe('estimada')
+    expect(e.base).toBe('llegada')
+    expect(e.falta).toBe('la fecha de ingreso real')
+  })
+
+  it('con factura es FIRME y cuenta desde ella, no desde el ingreso ni desde la llegada', () => {
+    const e = estadoDeCompra({
+      ...IMP2,
+      condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-08-30', fechaFactura: '2026-08-20' }),
+    })
+    expect(e.peldano).toBe('firme')
+    expect(e.desde).toBe('2026-08-20')
+    expect(e.base).toBe('factura')
+    expect(e.falta).toBeNull()
+  })
+
+  it('sin cuotas no se proyecta nada: falta cuánto se paga en cada una', () => {
+    const e = estadoDeCompra({ ...IMP2, condiciones: condiciones({ cuotas: [] }) })
+    expect(e.peldano).toBe('incompleta')
+    expect(e.falta).toContain('cuotas')
+  })
+
+  it('sin fecha de llegada y sin ingreso confirmado no hay contra qué contar', () => {
+    const e = estadoDeCompra({ ...IMP2, llega: '', condiciones: condiciones() })
+    expect(e.peldano).toBe('incompleta')
+    expect(e.falta).toContain('fecha de llegada')
+  })
+})
+
 describe('calendarioDePagos', () => {
-  const conCondiciones: ImportacionProyectada[] = [
+  const firme: ImportacionProyectada[] = [
     {
       ...IMPORTACIONES[0],
       condiciones: {
         ingresoId: 'l1',
         fechaFactura: '2026-08-07',
-        costoUnitario: 1.08,
+        costos: [{ bloqueId: 'b1', nombre: 'IMD', costo: 1.08, unidades: null }],
         moneda: 'USD',
-        unidades: null,
         cuotas: [
           { dias: 30, pct: 50, fecha: '2026-09-07' },
           { dias: 60, pct: 50, fecha: '2026-10-07' },
         ],
         nota: '',
+        confirmado: true,
+        fechaIngreso: '2026-08-06',
       },
     },
   ]
 
   it('la fecha pactada gana sobre el cálculo por días', () => {
-    const pagos = calendarioDePagos(conCondiciones, 1380)
+    const pagos = calendarioDePagos(firme, 1380)
     // A 30 días del 7-ago la aritmética daría 6-sep; el proveedor cobra el 7.
     expect(pagos.map((p) => p.fecha)).toEqual(['2026-09-07', '2026-10-07'])
     expect(sumarDias('2026-08-07', 30)).toBe('2026-09-06')
   })
 
   it('convierte a pesos a la cotización que se le pasa, y guarda el monto en dólares', () => {
-    const pagos = calendarioDePagos(conCondiciones, 1380)
+    const pagos = calendarioDePagos(firme, 1380)
     expect(pagos[0].moneda).toBe('USD')
     expect(pagos[0].monto).toBeCloseTo((11000 * 1.08) / 2, 2)
     expect(pagos[0].montoPesos).toBeCloseTo(((11000 * 1.08) / 2) * 1380, 0)
@@ -207,19 +356,78 @@ describe('calendarioDePagos', () => {
   })
 
   it('cae a los días cuando no hay fecha pactada', () => {
-    const sinFechas = conCondiciones.map((i) => ({
+    const sinFechas = firme.map((i) => ({
       ...i,
       condiciones: { ...i.condiciones!, cuotas: [{ dias: 30, pct: 100 }] },
     }))
     expect(calendarioDePagos(sinFechas, 1)[0].fecha).toBe('2026-09-06')
+  })
+
+  it('🔑 una compra SIN confirmar no es deuda: no aparece acá aunque tenga costo y factura', () => {
+    const conFacturaSinTilde = firme.map((i) => ({
+      ...i,
+      condiciones: { ...i.condiciones!, confirmado: false },
+    }))
+    expect(calendarioDePagos(conFacturaSinTilde, 1380)).toEqual([])
+    expect(pagosEstimados(conFacturaSinTilde, 1380)).toHaveLength(2)
+  })
+})
+
+describe('pagosEstimados', () => {
+  const estimada = [{ ...IMP2, condiciones: condiciones() }]
+
+  it('cuenta los plazos desde la llegada estimada y lo dice', () => {
+    const pagos = pagosEstimados(estimada, 1380)
+    expect(pagos.map((p) => p.fecha)).toEqual(['2026-09-27', '2026-10-27'])
+    expect(pagos.every((p) => p.base === 'llegada')).toBe(true)
+    expect(pagos.every((p) => !p.firme)).toBe(true)
+  })
+
+  it('confirmada, las mismas cuotas se corren a la fecha de ingreso real', () => {
+    const conf = [{ ...IMP2, condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-09-02' }) }]
+    expect(pagosEstimados(conf, 1380).map((p) => p.fecha)).toEqual(['2026-10-02', '2026-11-01'])
+  })
+
+  it('🔑 lo estimado y la deuda no se pisan: ningún pago está en las dos listas', () => {
+    const mezcla = [
+      { ...IMP2, condiciones: condiciones() },
+      {
+        ...IMP2,
+        id: 'imp2b',
+        condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-08-30', fechaFactura: '2026-08-20' }),
+      },
+    ]
+    const firmes = calendarioDePagos(mezcla, 1)
+    const estimados = pagosEstimados(mezcla, 1)
+    expect(firmes).toHaveLength(2)
+    expect(estimados).toHaveLength(2)
+    expect(firmes.every((p) => p.importacionId === 'imp2b')).toBe(true)
+    expect(estimados.every((p) => p.importacionId === 'imp2')).toBe(true)
+  })
+
+  it('el monto sale del mismo total que la deuda: son la misma cuenta', () => {
+    expect(pagosEstimados(estimada, 1).reduce((a, p) => a + p.monto, 0)).toBeCloseTo(TOTAL_IMP2, 2)
+  })
+})
+
+describe('sinCondiciones', () => {
+  it('dice QUÉ le falta a cada una, no sólo que falta algo', () => {
+    const faltantes = sinCondiciones([IMP2, { ...IMP2, id: 'otra', condiciones: condiciones({ cuotas: [] }) }])
+    expect(faltantes.map((f) => f.imp.id)).toEqual(['imp2', 'otra'])
+    expect(faltantes[0].falta).toBe('el costo de cada material')
+    expect(faltantes[1].falta).toContain('cuotas')
+  })
+
+  it('una compra que ya se puede estimar no figura como faltante', () => {
+    expect(sinCondiciones([{ ...IMP2, condiciones: condiciones() }])).toEqual([])
   })
 })
 
 describe('coberturaDePagos', () => {
   it('acumula la deuda: el segundo pago se mide contra los dos juntos', () => {
     const pagos = [
-      { fecha: '2026-09-07', importacionId: 'l1', etiqueta: '1', monto: 100, moneda: 'ARS' as const, montoPesos: 100 },
-      { fecha: '2026-10-07', importacionId: 'l1', etiqueta: '2', monto: 100, moneda: 'ARS' as const, montoPesos: 100 },
+      { fecha: '2026-09-07', importacionId: 'l1', etiqueta: '1', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const },
+      { fecha: '2026-10-07', importacionId: 'l1', etiqueta: '2', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const },
     ]
     const cob = coberturaDePagos(pagos, '2026-08-07', 10)
     expect(cob[0].contribAcumulada).toBe(310) // 31 días × 10

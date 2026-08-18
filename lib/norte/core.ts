@@ -23,7 +23,10 @@
 import { canalDe, type Canal } from '../liquidacion/resultado'
 import type {
   AvanceMeta,
+  BloqueImportacion,
   ContextoMedida,
+  CostoBloque,
+  EstadoCompra,
   ImportacionProyectada,
   Medicion,
   Meta,
@@ -177,44 +180,178 @@ export function diaDeAgotamiento(puntos: PuntoStock[]): string | null {
   return p ? p.fecha : null
 }
 
+// ── La economía de una compra ─────────────────────────────────────────────────
+//
+// 🔑 **Una compra sube de peldaño con cada dato que se carga, y el número no empeora al subir.**
+// Ésa es toda la idea de esta parte: mientras falta el costo de un material no se totaliza nada
+// (un total sobre los bloques cargados sería una deuda MÁS CHICA que la real, con cara de
+// completa); con todo costeado se proyecta contra la llegada estimada; con el ingreso confirmado
+// se proyecta contra su fecha real; y recién con la factura el vencimiento es deuda.
+
+/** Las unidades que se le facturan a un bloque: las suyas, salvo que la factura diga otra cosa. */
+function unidadesDe(bloque: BloqueImportacion, costo: CostoBloque | undefined): number {
+  return costo && costo.unidades !== null && costo.unidades !== undefined ? costo.unidades : bloque.unidades
+}
+
+/** Nombra bloques para un mensaje, sin dejar el caso del bloque sin nombre en blanco. */
+function nombrar(bs: { nombre: string }[]): string {
+  return bs.map((b) => b.nombre.trim() || 'sin nombre').join(', ')
+}
+
+/**
+ * En qué peldaño está la economía de una compra, qué le falta para subir, y cuánto suma.
+ *
+ * 🔑 **El costo va por bloque —por material— y no se promedia.** Una importación trae IMD,
+ * encapsuladas y transparentes juntas, con precios distintos. Un promedio ponderado da el mismo
+ * total y miente en cada línea.
+ *
+ * ⚠️ **Los huérfanos no se descuentan en silencio**: un costo cuyo bloque ya no está en el ingreso
+ * no tiene unidades con qué multiplicarse. Se nombra y se deja afuera del total, porque el caso
+ * real es que alguien borró un bloque en Ingresos y esa plata quedó sin material.
+ */
+export function estadoDeCompra(imp: ImportacionProyectada): EstadoCompra {
+  const c = imp.condiciones
+  const costos = c?.costos ?? []
+  const porBloque = new Map(costos.map((x) => [x.bloqueId, x]))
+  const bloques = imp.bloques ?? []
+
+  const conCosto = (b: BloqueImportacion) => {
+    const x = porBloque.get(b.id)
+    return x && x.costo > 0 ? x : undefined
+  }
+  const sinCosto = bloques.filter((b) => !conCosto(b))
+  const huerfanos = costos.filter((x) => !bloques.some((b) => b.id === x.bloqueId))
+
+  let total = 0
+  let unidades = 0
+  for (const b of bloques) {
+    const x = conCosto(b)
+    if (!x) continue
+    const u = unidadesDe(b, x)
+    unidades += u
+    total += u * x.costo
+  }
+
+  const base = {
+    total,
+    moneda: c?.moneda ?? ('USD' as const),
+    unidades,
+    sinCosto,
+    huerfanos,
+  }
+  const incompleta = (falta: string): EstadoCompra => ({
+    ...base,
+    peldano: 'incompleta',
+    falta,
+    total: 0,
+    desde: '',
+    base: 'llegada',
+  })
+
+  if (!bloques.length) return incompleta('los materiales de la importación, que se cargan en Ingresos proyectados')
+  if (!c) return incompleta('el costo de cada material')
+  if (sinCosto.length) {
+    return incompleta(
+      sinCosto.length === bloques.length
+        ? 'el costo de cada material'
+        : `el costo de ${nombrar(sinCosto)}`,
+    )
+  }
+  if (!c.cuotas?.length) return incompleta('las cuotas del proveedor')
+
+  // De acá para abajo la plata está completa: lo único que decide el peldaño es CONTRA QUÉ FECHA
+  // se cuentan los plazos. Cada rama nombra su fecha; ninguna cae por descarte.
+  if (c.confirmado && fechaValida(c.fechaIngreso)) {
+    if (fechaValida(c.fechaFactura)) {
+      return { ...base, peldano: 'firme', falta: null, desde: c.fechaFactura, base: 'factura' }
+    }
+    return {
+      ...base,
+      peldano: 'confirmada',
+      falta: 'la fecha de la factura, que es desde donde cuentan los plazos de verdad',
+      desde: c.fechaIngreso,
+      base: 'ingreso',
+    }
+  }
+  if (!fechaValida(imp.llega)) {
+    return incompleta('una fecha de llegada en Ingresos proyectados, o el ingreso confirmado con su fecha')
+  }
+  return {
+    ...base,
+    peldano: 'estimada',
+    falta: c.confirmado ? 'la fecha de ingreso real' : 'confirmar el ingreso y su fecha',
+    desde: imp.llega,
+    base: 'llegada',
+  }
+}
+
 // ── El calendario de pagos ────────────────────────────────────────────────────
 
 /**
- * Las cuotas de todas las importaciones que tengan condiciones cargadas, ordenadas por fecha.
+ * Los vencimientos de **una** compra, firmes o estimados, con la fecha de cada cuota resuelta.
  *
- * ⚠️ **Las importaciones sin condiciones NO aparecen**, y quien dibuja tiene que decirlo. Asumirles
- * un costo promedio sería inventar una deuda: el número se vería razonable y estaría mal.
+ * 🔑 **La cuenta se escribe UNA vez para los dos.** El estimativo y la deuda son el mismo reparto
+ * sobre la misma fecha base; lo único que cambia es de dónde sale esa fecha. Escribir el
+ * estimativo aparte sería dos cuentas del mismo pago, y se separan el día que alguien toca una.
  *
  * 🔑 **Los plazos cuentan desde la FACTURA, no desde la llegada.** El 17-ago se leyó «30 y 60»
- * contra la fecha de arribo y dio una cuota vencida que no existía; con la fecha de factura correcta
- * la misma compra estaba al día. Un mes de diferencia da vuelta la conclusión.
+ * contra la fecha de arribo y dio una cuota vencida que no existía; con la fecha de factura
+ * correcta la misma compra estaba al día. Un mes de diferencia da vuelta la conclusión.
  */
-export function calendarioDePagos(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
-  const pagos: Pago[] = []
-  for (const imp of imps) {
-    const c = imp.condiciones
-    if (!c || !fechaValida(c.fechaFactura) || !c.cuotas?.length) continue
-    const unidades = c.unidades ?? imp.unidades
-    const total = unidades * c.costoUnitario
-    c.cuotas.forEach((cuota, i) => {
-      const monto = total * (cuota.pct / 100)
-      pagos.push({
-        // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
-        fecha: cuota.fecha && fechaValida(cuota.fecha) ? cuota.fecha : sumarDias(c.fechaFactura, cuota.dias),
-        importacionId: imp.id,
-        etiqueta: `${imp.desc || 'Importación'} · cuota ${i + 1} de ${c.cuotas.length}`,
-        monto,
-        moneda: c.moneda,
-        montoPesos: c.moneda === 'USD' ? monto * cotizacion : monto,
-      })
-    })
-  }
-  return pagos.sort((a, b) => a.fecha.localeCompare(b.fecha))
+export function pagosDe(imp: ImportacionProyectada, cotizacion: number): Pago[] {
+  const estado = estadoDeCompra(imp)
+  if (estado.peldano === 'incompleta') return []
+  const cuotas = imp.condiciones?.cuotas ?? []
+  return cuotas.map((cuota, i) => {
+    const monto = estado.total * (cuota.pct / 100)
+    return {
+      // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
+      fecha: cuota.fecha && fechaValida(cuota.fecha) ? cuota.fecha : sumarDias(estado.desde, cuota.dias),
+      importacionId: imp.id,
+      etiqueta: `${imp.desc || 'Importación'} · cuota ${i + 1} de ${cuotas.length}`,
+      monto,
+      moneda: estado.moneda,
+      montoPesos: estado.moneda === 'USD' ? monto * cotizacion : monto,
+      firme: estado.peldano === 'firme',
+      base: estado.base,
+    }
+  })
 }
 
-/** Cuántas importaciones quedaron afuera del calendario por no tener condiciones cargadas. */
-export function sinCondiciones(imps: ImportacionProyectada[]): ImportacionProyectada[] {
-  return imps.filter((i) => !i.arribada && (!i.condiciones || !i.condiciones.cuotas?.length))
+/**
+ * **La deuda**: las cuotas de las compras firmes —costeadas, con el ingreso confirmado y con
+ * factura—, ordenadas por fecha.
+ *
+ * ⚠️ **Lo que no está firme NO aparece acá**, y quien dibuja tiene que decirlo. Una proyección
+ * mezclada con la deuda se lee como deuda: el total del mes diría que hay que pagar plata que
+ * todavía nadie facturó.
+ */
+export function calendarioDePagos(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
+  return imps
+    .flatMap((imp) => pagosDe(imp, cotizacion))
+    .filter((p) => p.firme)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
+/**
+ * **El estimativo**: las mismas cuotas, de las compras que todavía no son deuda.
+ *
+ * Cada pago dice contra qué fecha se estimó (`base`), porque un vencimiento sin eso se lee igual
+ * que uno pactado.
+ */
+export function pagosEstimados(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
+  return imps
+    .flatMap((imp) => pagosDe(imp, cotizacion))
+    .filter((p) => !p.firme)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
+/** Las compras que no se pueden ni estimar, con lo que le falta a cada una. */
+export function sinCondiciones(imps: ImportacionProyectada[]): { imp: ImportacionProyectada; falta: string }[] {
+  return imps
+    .map((imp) => ({ imp, estado: estadoDeCompra(imp) }))
+    .filter(({ estado }) => estado.peldano === 'incompleta')
+    .map(({ imp, estado }) => ({ imp, falta: estado.falta || 'datos' }))
 }
 
 /**

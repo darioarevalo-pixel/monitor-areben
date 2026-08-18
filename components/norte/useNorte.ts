@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { leerIngresos } from '@/lib/kv/cliente'
-import { normalizar, totalU } from '@/lib/ingresos/core'
+import { bloqueU, normalizar, totalU } from '@/lib/ingresos/core'
 import type { Ingreso } from '@/lib/ingresos/tipos'
 import { leerNorte, type MetaGuardada } from '@/lib/norte/persistencia'
 import type { Condiciones, Contribucion, ImportacionProyectada, Pyl } from '@/lib/norte/tipos'
@@ -37,6 +37,9 @@ export function cruzar(ingresos: Ingreso[], condiciones: Condiciones[]): Importa
         llega: g.fecha || '',
         unidades: totalU(g),
         arribada: g.estado === 'arribado',
+        // 🔑 Los bloques bajan acá porque **el costo va por material**, y sus unidades son las del
+        // KV: copiarlas a `compras_condiciones` daría dos números para lo mismo y ninguno mandaría.
+        bloques: (g.bloques || []).map((b) => ({ id: b.id, nombre: b.nombre, unidades: bloqueU(b) })),
         condiciones: porId.get(g.id) || null,
       }
     })

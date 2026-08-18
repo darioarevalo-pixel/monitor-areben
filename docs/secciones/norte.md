@@ -17,6 +17,7 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 ## Dónde vive
 
 - `components/norte/Norte.tsx` · `components/norte/useNorte.ts` · `components/norte/EditorCondiciones.tsx` · `components/norte/EditorMeta.tsx`
+- `lib/norte/costos.core.js` (**el saneado del guardado de costos**, fuera del handler para poder ejercerlo) + `.ts` tipado
 - `lib/norte/core.ts` (todo el cálculo, **puro**) · `lib/norte/tipos.ts` · `lib/norte/persistencia.ts`
 - `lib/norte/medidores.core.js` (**qué puede medir una meta**, LA lista) + `.ts` tipado
 - `lib/norte/contribucion.core.js` (**la cascada de plata, escrita UNA vez**, y el filtro de qué venta
@@ -33,6 +34,11 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 - **`ingresos` (Compras → Ingresos proyectados) es la otra mitad de cada importación.** Las
   unidades, los modelos, el proveedor y la fecha de llegada son de ahí y **no se duplican**: se leen
   del KV y se cruzan por `ingresoId`. Norte sólo agrega la economía.
+- 🔑 **Y los `bloques` de ese ingreso son los MATERIALES sobre los que se cuelga el costo.** El
+  bloque ya era «un material con su grilla» en el modelo de `ingresos` (`lib/ingresos/tipos.ts`) y
+  tiene su nombre editable en la vista Editar: IMD, encapsuladas, transparentes. Norte no inventa
+  una lista de tipos propia — la que existe es ésa, y sus unidades ya cierran contra el total del
+  pedido (medido el 18-ago-2026: 1.132 + 6.549 + 6.480 = 14.161 en la IMPORTACION 2).
 - Reusa `canalDe` de **`lib/liquidacion/canal.core.js`** (la implementación se mudó ahí el
   18-ago-2026, cuando entró a un handler; `resultado.ts` es el re-export tipado), `Linea` de
   `lib/memo/tipos.ts`, y `totalU`/`normalizar` de `lib/ingresos/core.ts`.
@@ -87,6 +93,52 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 - Al escribir el hook, `react-hooks/set-state-in-effect` cazó un `setCargando(true)` en el cuerpo
   del efecto. Se resolvió derivando `cargando` de una clave, igual que `useDatosMonitor` — y de paso
   arregló que al cambiar de marca se vieran un instante los datos de la anterior.
+
+## El costo por material, y el tilde que hace deuda (18-ago-2026)
+
+**El costo no es uno por importación.** Un contenedor trae IMD, encapsuladas y transparentes juntas
+y cada material tiene su precio (US$1,08 las comunes, hasta US$1,35 las encapsuladas). Lo pidió
+Bruno al ver el editor: *«no puede ser ponderado»*, y tiene razón por una cuenta y por una lectura —
+el promedio da el **mismo total** y **miente en cada línea**: el día que se pregunte cuánto cuesta
+una encapsulada, la respuesta va a ser el promedio de otra cosa. Sobre la IMPORTACION 2 real, el
+promedio simple de los tres precios da US$16.568 contra los US$17.043 verdaderos.
+
+- 🔑 **Los materiales no se cargan en Norte: son los bloques del ingreso**, que ya traen sus
+  unidades. Copiarlas acá daría dos números para lo mismo y ninguno mandaría. Lo único que se
+  agrega es el precio, y opcionalmente las unidades facturadas de ese material.
+- 🔑 **Mientras falte el costo de un material, la compra NO se totaliza.** Un total sobre los
+  bloques cargados sería una deuda **más chica que la real, con cara de completa**. La pantalla
+  nombra el material que falta, no dice «falta cargar».
+- 🔴 **Un costo en 0 no es un material gratis: es «todavía no lo sé».** El umbral se decide en **un
+  solo lugar** (`estadoDeCompra`); el saneador del guardado lo deja pasar a propósito, para no tener
+  dos reglas que puedan discrepar. Lo cazó un mutante que sobrevivió con `>= 0`.
+- ⚠️ **Un costo cuyo bloque ya no está en el ingreso no se descuenta callado**: sus unidades no
+  existen, así que no suma, y se nombra en pantalla. El caso real es que alguien borró un bloque.
+
+### Los cuatro peldaños de una compra
+
+**Cada uno se gana con un dato, y el número no empeora al subir.** Es la respuesta a lo que pidió
+Bruno: *«sólo entra al calendario de pagos lo que tenga costo, pero además que esté confirmado el
+ingreso y la fecha de ingreso; podemos armar estimativos, y luego fecha de pago»*.
+
+| peldaño | qué tiene | desde dónde cuentan los plazos |
+|---|---|---|
+| `incompleta` | le falta el costo de algún material, las cuotas o una fecha | no se proyecta |
+| `estimada` | todo costeado, sin confirmar | la **llegada estimada** del KV |
+| `confirmada` | + el tilde y la fecha de ingreso real | la **fecha de ingreso** |
+| `firme` | + la factura | la **factura** ⇒ es deuda, y va al calendario |
+
+- 🔑 **El tilde de confirmado es propio de Norte y NO se deduce del `estado` de la importación.** Lo
+  decidió Bruno así, y el dato le da la razón: al 18-ago la IMPORTACION 1 ya había llegado el 27-jul
+  y su estado seguía en «tránsito». Deducirlo de ahí haría que un olvido ajeno mueva el calendario
+  de pagos.
+- 🔑 **La deuda y el estimativo salen de la MISMA cuenta** (`pagosDe`), y lo único que cambia es de
+  qué fecha se cuentan los plazos. Escribir el estimativo aparte serían dos cuentas del mismo pago,
+  que se separan el día que alguien toca una. Cada pago dice contra qué fecha se estimó.
+- 🔴 **Lo estimado va en su propia tabla, debajo de la deuda.** Una fila estimada entre las firmes
+  se suma sin querer: el total del mes pasaría a incluir plata que nadie facturó.
+- ⚠️ **Una compra confirmada pero sin factura sigue siendo estimativo**, contado desde la fecha de
+  ingreso. Es lo que evita que el número empeore al cargar más dato.
 
 ## La contribución por canal (18-ago-2026)
 
@@ -205,5 +257,12 @@ separado sería la forma de que dos tablas pegadas muestren totales que no cierr
   mixtas en Zattia (el prorrateo se ejerce de verdad), 27 ventas en BDI que facturan cero con
   unidades (el reparto por unidad también), 0 renglones apuntando a un producto borrado, y las 14
   ventas sin línea de arriba. Ningún fixture podía decir eso.
+- `npx vitest run tests/norte-costos.test.ts` — el saneado del guardado. 🔑 **Vive fuera del handler
+  para poder ejercerlo de verdad**: una regla encerrada en la capa de salida sólo se puede probar
+  comprobando que el archivo contenga una línea. 3 mutantes, 3 muertos.
+- 🔑 **9 mutantes sobre los peldaños y el costo por material, 8 muertos y uno vivo con razón**: con
+  `>= 0` un costo en cero contaba como cargado y el total salía sin ese material, más chico que el
+  real y sin que nada avisara. El caso que faltaba era justamente el cero.
 - ⚠️ **Ejercer a mano el guardado en producción**: es el verbo que escribe, y en este repo es el que
-  más veces falló. Cargar una importación con costo y dos cuotas, recargar, y ver que vuelve.
+  más veces falló. Cargar una importación con el costo de cada material y dos cuotas, recargar, y
+  ver que vuelve.

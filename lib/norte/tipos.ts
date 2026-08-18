@@ -40,6 +40,28 @@ export type Moneda = 'USD' | 'ARS'
 export type Cuota = { dias: number; pct: number; fecha?: string }
 
 /**
+ * El costo de **un bloque** de la importación: un material, con su precio.
+ *
+ * 🔑 **El costo NO es uno por importación, y promediarlo sería inventar.** Una importación trae
+ * IMD, encapsuladas y transparentes en el mismo contenedor, y cada material tiene su precio (US$1,08
+ * las comunes, hasta US$1,35 las encapsuladas). Un promedio ponderado da el mismo total y **miente
+ * en cada línea**: el día que se pregunte cuánto cuesta una encapsulada, la respuesta va a ser el
+ * promedio de otra cosa.
+ *
+ * Las unidades salen del bloque en el KV y no se copian: `unidades` es el override para cuando la
+ * factura no coincide con el pedido, igual que antes, pero ahora por material.
+ */
+export type CostoBloque = {
+  /** El `id` del bloque en el KV de ingresos. */
+  bloqueId: string
+  /** Snapshot del nombre. Sólo para poder NOMBRAR un costo cuyo bloque ya no está. */
+  nombre: string
+  costo: number
+  /** `null` = las del bloque, que es la fuente viva. */
+  unidades: number | null
+}
+
+/**
  * La economía de una importación — **lo único que Norte agrega al dato que ya existe**.
  *
  * La sección `ingresos` (Compras → Ingresos proyectados) ya tiene cantidad, modelos, proveedor,
@@ -56,12 +78,20 @@ export type Condiciones = {
   ingresoId: string
   /** ISO `YYYY-MM-DD`. **No es la fecha de llegada**: los plazos cuentan desde la factura. */
   fechaFactura: string
-  costoUnitario: number
+  /** Un costo por bloque. Mientras falte uno, la compra no se puede totalizar. */
+  costos: CostoBloque[]
   moneda: Moneda
-  /** Snapshot opcional. Si es `null` se toma `totalU()` del ingreso, que es la fuente viva. */
-  unidades: number | null
   cuotas: Cuota[]
   nota: string
+  /**
+   * 🔑 **El tilde que convierte una proyección en una deuda.** Lo pone quien carga la plata, y no
+   * se deduce del `estado` de la importación: ese estado lo mueve otra pantalla y otra persona, y
+   * hoy tiene importaciones que ya llegaron figurando «en tránsito». Deducirlo de ahí haría que
+   * un olvido ajeno mueva el calendario de pagos.
+   */
+  confirmado: boolean
+  /** ISO. La fecha de ingreso **real**, la que se firma junto con el tilde. `''` mientras no esté. */
+  fechaIngreso: string
 }
 
 /**
@@ -79,7 +109,63 @@ export type ImportacionProyectada = {
   unidades: number
   /** `estado === 'arribado'`: ya está en el depósito, no vuelve a entrar en la proyección. */
   arribada: boolean
+  /** Los materiales de esta compra, con sus unidades. Es dónde se cuelga el costo. */
+  bloques: BloqueImportacion[]
   condiciones: Condiciones | null
+}
+
+/** Un bloque del ingreso, reducido a lo que Norte necesita: qué material es y cuántas unidades trae. */
+export type BloqueImportacion = { id: string; nombre: string; unidades: number }
+
+/**
+ * Desde qué fecha se contaron los plazos de un pago. **Va a la pantalla**: un vencimiento estimado
+ * que no dice contra qué se estimó se lee igual que uno pactado.
+ *
+ * - `factura` — la fecha de la factura del proveedor. Es la única que hace deuda.
+ * - `ingreso` — la fecha de ingreso real, ya confirmada, mientras la factura no llegó.
+ * - `llegada` — la fecha estimada de llegada del KV. Todo acá es proyección.
+ */
+export type BasePago = 'factura' | 'ingreso' | 'llegada'
+
+/**
+ * En qué peldaño está una compra. **Cada uno se gana con un dato**, y el orden no es decorativo:
+ * es lo que hace que el número no empeore al cargar más información.
+ *
+ * - `incompleta` — falta el costo de algún bloque, o las cuotas, o una fecha desde la cual contar.
+ *   No se proyecta: un total sobre los bloques cargados sería una deuda más chica que la real.
+ * - `estimada` — todo costeado, pero el ingreso no está confirmado: los plazos cuentan desde la
+ *   llegada **estimada**.
+ * - `confirmada` — alguien firmó el ingreso y su fecha: se cuenta desde ahí, que ya es firme,
+ *   pero todavía no hay factura.
+ * - `firme` — hay factura: los plazos cuentan desde ella y el vencimiento es deuda.
+ */
+export type Peldano = 'incompleta' | 'estimada' | 'confirmada' | 'firme'
+
+/**
+ * El estado económico de una compra: en qué peldaño está, qué le falta para subir, y su total.
+ *
+ * ⚠️ **`total` es 0 mientras el peldaño sea `incompleta`**, y no es «no cuesta nada»: es que no se
+ * puede saber. Por eso viene con `sinCosto`, que dice exactamente qué bloques faltan.
+ */
+export type EstadoCompra = {
+  peldano: Peldano
+  /** Lo que falta para el peldaño siguiente, ya redactado. `null` cuando ya es `firme`. */
+  falta: string | null
+  total: number
+  moneda: Moneda
+  unidades: number
+  /** Los bloques que todavía no tienen costo. */
+  sinCosto: BloqueImportacion[]
+  /**
+   * Costos cargados cuyo bloque **ya no existe** en el ingreso.
+   *
+   * 🔑 No se descuentan en silencio ni se suman: sus unidades no existen. Se nombran, porque el
+   * caso real es que alguien borró un bloque en Ingresos y esa plata quedó sin material.
+   */
+  huerfanos: CostoBloque[]
+  /** La fecha desde la que se cuentan los plazos, y de dónde salió. `''` si no hay ninguna. */
+  desde: string
+  base: BasePago
 }
 
 /** El ritmo de salida de un canal, con lo que deja. */
@@ -90,7 +176,13 @@ export type RitmoCanal = {
   contribDia: number
 }
 
-/** Un pago con fecha cierta y monto en las dos monedas. */
+/**
+ * Un pago con su fecha y su monto en las dos monedas.
+ *
+ * 🔑 **`firme` separa la deuda del pronóstico, y es la razón por la que los dos salen de la misma
+ * cuenta.** Escribir el estimativo aparte habría sido escribir la cascada de plazos dos veces, y
+ * dos cuentas del mismo pago se separan el día que alguien toca una.
+ */
 export type Pago = {
   fecha: string
   importacionId: string
@@ -99,6 +191,10 @@ export type Pago = {
   moneda: Moneda
   /** El mismo monto a la cotización que se le pasó. Si la moneda es ARS, es igual a `monto`. */
   montoPesos: number
+  /** `true` sólo cuando sale de la factura de un ingreso confirmado. Lo demás es proyección. */
+  firme: boolean
+  /** Contra qué fecha se contaron los plazos. */
+  base: BasePago
 }
 
 /** Un día de la proyección de stock. */

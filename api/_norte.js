@@ -1,8 +1,9 @@
 // Norte (Dirección) — tablas `compras_condiciones` y `norte_metas` (ver sql/migrate-norte.sql).
 //
 //   GET  ?recurso=norte&store=bdi|zattia
-//   POST { recurso:'norte', store, condiciones:{ingresoId, fechaFactura, costoUnitario, moneda,
-//                                               unidades, cuotas:[{dias,pct,fecha?}], nota} }
+//   POST { recurso:'norte', store, condiciones:{ingresoId, fechaFactura, moneda, cuotas:[{dias,pct,fecha?}],
+//                                               costos:[{bloqueId,nombre,costo,unidades}], nota,
+//                                               confirmado, fechaIngreso} }
 //   POST { recurso:'norte', store, action:'borrar-condiciones', ingresoId }
 //   POST { recurso:'norte', store, meta:{key, label, medidor, canal, objetivo, fechaObjetivo, orden, activa} }
 //   POST { recurso:'norte', store, action:'borrar-meta', key }
@@ -37,6 +38,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
 import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
+import { sanearCostos } from '../lib/norte/costos.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
@@ -263,7 +265,7 @@ export default async function handler(req, res) {
       const [c, m, plata] = await Promise.all([
         supabase
           .from('compras_condiciones')
-          .select('ingreso_id, fecha_factura, costo_unitario, moneda, unidades, cuotas, nota, actualizado_por, actualizado_en')
+          .select('ingreso_id, fecha_factura, costos, moneda, cuotas, nota, confirmado, fecha_ingreso, actualizado_por, actualizado_en')
           .eq('store', store),
         supabase
           .from('norte_metas')
@@ -287,11 +289,12 @@ export default async function handler(req, res) {
         condiciones: (c.data || []).map((r) => ({
           ingresoId: r.ingreso_id,
           fechaFactura: r.fecha_factura || '',
-          costoUnitario: Number(r.costo_unitario) || 0,
+          costos: Array.isArray(r.costos) ? r.costos : [],
           moneda: r.moneda || 'USD',
-          unidades: r.unidades === null ? null : Number(r.unidades),
           cuotas: Array.isArray(r.cuotas) ? r.cuotas : [],
           nota: r.nota || '',
+          confirmado: r.confirmado === true,
+          fechaIngreso: r.fecha_ingreso || '',
           actualizadoPor: r.actualizado_por,
           actualizadoEn: r.actualizado_en,
         })),
@@ -384,21 +387,20 @@ export default async function handler(req, res) {
     if (!ingresoId) return res.status(400).json({ error: 'falta ingresoId' });
 
     const moneda = MONEDAS.includes(c.moneda) ? c.moneda : 'USD';
-    // ⚠️ `unidades` distingue "no lo cargaron" (null ⇒ se usa el total vivo del KV) de "cargaron
-    // cero". Por eso NO se puede usar `|| 0`: un cero legítimo se perdería y un null se guardaría
-    // como cero, que es peor — parecería una compra sin unidades.
-    const unidades = c.unidades === null || c.unidades === undefined || c.unidades === '' ? null : aNumero(c.unidades);
 
     const { error } = await supabase.from('compras_condiciones').upsert(
       {
         ingreso_id: ingresoId,
         store,
         fecha_factura: aFecha(c.fechaFactura),
-        costo_unitario: aNumero(c.costoUnitario) ?? 0,
+        costos: sanearCostos(c.costos),
         moneda,
-        unidades,
         cuotas: sanearCuotas(c.cuotas),
         nota: String(c.nota || ''),
+        // 🔑 El tilde y su fecha son lo que convierte una proyección en deuda. Se guardan como los
+        // mandaron —no se deducen del estado de la importación, que lo mueve otra pantalla.
+        confirmado: c.confirmado === true,
+        fecha_ingreso: aFecha(c.fechaIngreso),
         actualizado_por: yo,
         actualizado_en: ahora,
       },

@@ -14,15 +14,18 @@ import {
   contribucionDiaria,
   diaDeAgotamiento,
   entradaDiaria,
+  estadoDeCompra,
+  pagosEstimados,
   medirMeta,
   proyectarStock,
   ritmoDeSalida,
   salidaDiaria,
+  sinCondiciones,
   veredicto,
 } from '@/lib/norte/core'
 import { medidorDe, unidadDe } from '@/lib/norte/medidores'
 import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
-import type { Contribucion, EstadoVeredicto, Medidor } from '@/lib/norte/tipos'
+import type { Contribucion, EstadoVeredicto, ImportacionProyectada, Medidor, Peldano } from '@/lib/norte/tipos'
 import {
   Badge,
   Button,
@@ -152,7 +155,13 @@ export function Norte() {
   const pagos = useMemo(() => calendarioDePagos(importaciones, cotizacion), [importaciones, cotizacion])
   /** Cada pago con cuánta contribución habrá acumulado el negocio para esa fecha. */
   const cubiertos = useMemo(() => coberturaDePagos(pagos, hoy, dejaPorDia), [pagos, hoy, dejaPorDia])
-  const faltan = importaciones.filter((i) => !i.arribada && !i.condiciones?.cuotas?.length)
+  /**
+   * Lo que todavía no es deuda: mismas cuotas, contadas desde la llegada estimada o desde la fecha
+   * de ingreso. Va en su propia tabla y no mezclado con los pagos — un pronóstico puesto al lado de
+   * la deuda se lee como deuda.
+   */
+  const estimados = useMemo(() => pagosEstimados(importaciones, cotizacion), [importaciones, cotizacion])
+  const faltan = useMemo(() => sinCondiciones(importaciones.filter((i) => !i.arribada)), [importaciones])
   const enEdicion = importaciones.find((i) => i.id === editando) || null
 
   return (
@@ -270,14 +279,7 @@ export function Norte() {
                           {i.unidades.toLocaleString('es-AR')}
                         </Td>
                         <Td>
-                          {i.condiciones?.cuotas?.length ? (
-                            <>
-                              {i.condiciones.moneda} {i.condiciones.costoUnitario} · {i.condiciones.cuotas.length} cuota
-                              {i.condiciones.cuotas.length > 1 ? 's' : ''}
-                            </>
-                          ) : (
-                            <span style={{ color: color.mut2 }}>falta cargar</span>
-                          )}
+                          <Economia imp={i} />
                         </Td>
                         {admin && (
                           <Td>
@@ -328,28 +330,46 @@ export function Norte() {
           <SectionCard title="Lo que hay que pagar">
             {faltan.length > 0 && (
               <Notice tone="warning">
-                {faltan.length === 1
-                  ? '1 importación sin costo ni plazos cargados. No aparece abajo'
-                  : `${faltan.length} importaciones sin costo ni plazos cargados. No aparecen abajo`}
-                : preferimos el renglón vacío antes que inventarles un costo.
+                {faltan.length === 1 ? '1 importación no se puede proyectar' : `${faltan.length} importaciones no se pueden proyectar`}:
+                preferimos el renglón vacío antes que inventarles un costo.
+                <ul style={{ margin: `${space[2]} 0 0`, paddingLeft: 18 }}>
+                  {faltan.map(({ imp, falta }) => (
+                    <li key={imp.id}>
+                      <strong>{imp.desc}</strong> — falta {falta}
+                    </li>
+                  ))}
+                </ul>
               </Notice>
             )}
+            {/* La cotización va arriba de las DOS tablas: pesa igual sobre la deuda y sobre el
+                estimativo, y dejarla adentro de la primera la escondía justo cuando no hay ninguna
+                compra firme todavía — que es el caso de hoy. */}
+            {(pagos.length > 0 || estimados.length > 0) && (
+              <label
+                style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[3], fontSize: font.md }}
+              >
+                Dólar a
+                <input
+                  type="number"
+                  value={cotizacion}
+                  onChange={(e) => setCotizacion(Number(e.target.value) || 0)}
+                  style={{ width: 96 }}
+                />
+                <span style={{ color: color.mut }}>movelo para ver cuánto pesa una devaluación</span>
+              </label>
+            )}
+
             {pagos.length === 0 ? (
-              <EmptyState title="Sin vencimientos cargados" hint="Cargá el costo y las cuotas de cada importación." />
+              <EmptyState
+                title="Sin vencimientos firmes"
+                hint={
+                  estimados.length > 0
+                    ? 'Ninguna compra tiene todavía el ingreso confirmado y su factura. Abajo está lo estimado.'
+                    : 'Cargá el costo de cada material y las cuotas de cada importación.'
+                }
+              />
             ) : (
               <>
-                <label
-                  style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[3], fontSize: font.md }}
-                >
-                  Dólar a
-                  <input
-                    type="number"
-                    value={cotizacion}
-                    onChange={(e) => setCotizacion(Number(e.target.value) || 0)}
-                    style={{ width: 96 }}
-                  />
-                  <span style={{ color: color.mut }}>movelo para ver cuánto pesa una devaluación</span>
-                </label>
                 <TableWrap>
                   <THead>
                     <Tr>
@@ -392,6 +412,46 @@ export function Norte() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* El pronóstico va DEBAJO y con su propio título: una fila estimada puesta entre las
+                firmes se suma sin querer, y el total del mes pasa a incluir plata que nadie
+                facturó. Cada renglón dice contra qué fecha se estimó. */}
+            {estimados.length > 0 && (
+              <div style={{ marginTop: space[4] }}>
+                <div style={{ fontSize: font.md, fontWeight: weight.semibold }}>Todavía no es deuda: lo estimado</div>
+                <div style={{ color: color.mut, fontSize: font.sm, margin: `${space[1]} 0 ${space[3]}` }}>
+                  Compras con el costo de todos sus materiales cargado, pero sin factura. Los plazos se cuentan desde la
+                  llegada estimada —o desde la fecha de ingreso, cuando ya está confirmada—, así que las fechas se van a
+                  mover.
+                </div>
+                <TableWrap>
+                  <THead>
+                    <Tr>
+                      <Th>Fecha estimada</Th>
+                      <Th>Qué</Th>
+                      <Th>Contada desde</Th>
+                      <Th align="right">Monto</Th>
+                      <Th align="right">En pesos</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {estimados.map((p, i) => (
+                      <Tr key={`est-${p.importacionId}-${i}`}>
+                        <Td mono>{p.fecha}</Td>
+                        <Td>{p.etiqueta}</Td>
+                        <Td>{p.base === 'ingreso' ? 'la fecha de ingreso' : 'la llegada estimada'}</Td>
+                        <Td align="right" mono>
+                          {p.moneda} {Math.round(p.monto).toLocaleString('es-AR')}
+                        </Td>
+                        <Td align="right" mono>
+                          ${Math.round(p.montoPesos).toLocaleString('es-AR')}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </TableWrap>
+              </div>
             )}
           </SectionCard>
 
@@ -492,6 +552,51 @@ export function Norte() {
         )}
       </DatosGate>
     </div>
+  )
+}
+
+/**
+ * La celda «Economía» de cada importación: **en qué peldaño está y qué le falta para subir**.
+ *
+ * 🔑 Un «falta cargar» pelado no dice si falta el precio de un material, las cuotas o la firma del
+ * ingreso — y son tres pendientes distintos, de tres personas distintas. El motor ya redacta esa
+ * frase; acá sólo se dibuja.
+ */
+function Economia({ imp }: { imp: ImportacionProyectada }) {
+  const e = estadoDeCompra(imp)
+  if (e.peldano === 'incompleta') {
+    return (
+      <span style={{ color: color.mut2 }}>
+        falta {e.falta}
+      </span>
+    )
+  }
+  return (
+    <>
+      <PillPeldano peldano={e.peldano} />{' '}
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {e.moneda} {Math.round(e.total).toLocaleString('es-AR')}
+      </span>
+      {e.huerfanos.length > 0 && (
+        <span style={{ color: color.warning }}> · sobra un costo sin material</span>
+      )}
+    </>
+  )
+}
+
+const PELDANOS: Record<Exclude<Peldano, 'incompleta'>, { texto: string; tono: 'neutral' | 'warning' | 'success' }> = {
+  estimada: { texto: 'estimada', tono: 'neutral' },
+  confirmada: { texto: 'confirmada', tono: 'warning' },
+  firme: { texto: 'con factura', tono: 'success' },
+}
+
+function PillPeldano({ peldano }: { peldano: Peldano }) {
+  if (peldano === 'incompleta') return null
+  const p = PELDANOS[peldano]
+  return (
+    <Badge tone={p.tono} subtle>
+      {p.texto}
+    </Badge>
   )
 }
 

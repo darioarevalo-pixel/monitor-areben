@@ -107,3 +107,28 @@ create index if not exists norte_metas_store_idx on norte_metas (store, activa, 
 -- no hay backfill que hacer: el default alcanza.
 alter table norte_metas add column if not exists medidor text not null default 'unidades-dia';
 alter table norte_metas add column if not exists canal   text;
+
+-- ── El costo por MATERIAL, y el tilde que hace deuda (18-ago-2026) ────────────────────────────
+--
+-- 🔑 **El costo no es uno por importación.** Un contenedor trae IMD, encapsuladas y transparentes
+-- juntas y cada material tiene su precio (US$1,08 las comunes, hasta US$1,35 las encapsuladas). El
+-- promedio ponderado da el mismo total y **miente en cada línea**: el día que se pregunte cuánto
+-- cuesta una encapsulada, la respuesta va a ser el promedio de otra cosa. Los materiales son los
+-- **bloques** del ingreso en el KV, que ya traen sus unidades; acá se les cuelga el precio.
+--
+--   costos = [{bloqueId, nombre, costo, unidades}]   -- `unidades` null = las del bloque (fuente viva)
+--
+-- ⚠️ `nombre` es un **snapshot** y no la fuente: sirve para poder NOMBRAR un costo cuyo bloque ya
+-- no está en el ingreso. El motor no lo suma —sus unidades no existen— y lo dice en pantalla.
+alter table compras_condiciones add column if not exists costos jsonb not null default '[]'::jsonb;
+
+-- 🔑 **El tilde que convierte una proyección en una deuda**, y la fecha que lo acompaña. Lo firma
+-- quien carga la plata. ⛔ NO se deduce del `estado` de la importación (cotizando · pedido ·
+-- producción · tránsito · aduana · arribado): ese estado lo mueve otra pantalla y otra persona, y
+-- al 18-ago-2026 hay importaciones que ya llegaron figurando «en tránsito». Deducirlo de ahí haría
+-- que un olvido ajeno mueva el calendario de pagos.
+--
+-- Sin el tilde una compra costeada igual se proyecta, pero contra la llegada **estimada** y en la
+-- tabla de estimados. Recién con factura los plazos cuentan desde ella y el vencimiento es deuda.
+alter table compras_condiciones add column if not exists confirmado    boolean not null default false;
+alter table compras_condiciones add column if not exists fecha_ingreso date;
