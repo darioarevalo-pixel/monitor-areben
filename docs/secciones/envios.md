@@ -57,15 +57,33 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   contacto que sigue a la orden —cuánto sale el envío y cuándo pasa la moto— y se tipeaba de memoria,
   con los dos datos que más caro salen mal. **Se precarga, no se manda**: `wa.me` abre el chat con el
   texto y lo revisa una persona. Las reglas que no se pueden aflojar:
-  · 🔴 **el número de «al recibir» sale de `aCobrar`**, la misma función que imprime el ticket — si
+  · 🔴 **el número que se le pide sale de `aCobrar`**, la misma función que imprime el ticket — si
   acá se sumara a mano, el mensaje le promete a la clienta un número y el papel le cobra otro, con el
   cadete ya en la puerta;
   · 🔴 **sin precio no hay mensaje** (devuelve `null` y el botón vuelve a abrir el chat vacío, como
   antes): un mensaje de coordinación sin el número obliga a un segundo mensaje con la plata, que es el
   ida y vuelta que esto viene a sacar, y callarse el precio adentro de un texto que habla de plata es
   peor que no mandarlo;
-  · 🔑 **saldado cambia el texto, no lo borra**: «ya está pago» / «va sin cargo», nunca «se abona al
-  recibir» — el mismo error que el KPI que mandaba a reclamarle plata a quien ya había pagado;
+  · 🔑 **saldado cambia el texto, no lo borra**: «ya está pago» / «va sin cargo», nunca un costo — el
+  mismo error que el KPI que mandaba a reclamarle plata a quien ya había pagado;
+  · 🆕 **EL TEXTO LO REESCRIBIÓ BRUNO** (18-ago-2026): la introducción quedó igual **hasta el número
+  de pedido** y de ahí abajo va el suyo — «El costo del envío a … es de $X. Podés abonar en efectivo
+  o transferencia.» · «Podríamos enviar …» · «¡Esperamos tu confirmación!». Dos reglas que el texto
+  pelado no trae y sin las cuales miente:
+  · 🔴 **«Podés abonar en efectivo o transferencia» va SÓLO si queda algo por pagar** — pegarla
+  siempre le ofrece pagar a alguien a quien le regalamos el envío y no debe nada;
+  · 🔴 **«¡Esperamos tu confirmación!» viaja PEGADA a la línea de los días** — sola es un pedido sin
+  objeto: le pide que confirme algo que el mensaje nunca ofreció;
+  · ⚠️ 🔑 **Y el texto nuevo dejó de decir CUÁNDO se paga.** El anterior decía «se abona al recibir»;
+  éste ofrece **transferencia**, que es antes. Abre un hecho que el sistema no sabe: si la clienta
+  transfiere, alguien tiene que tildar `envio_pagado` **antes de que salga la moto**, o el cadete le
+  vuelve a pedir la plata en la puerta con el ticket en la mano. ▶️ **Sin resolver, y no lo resuelve
+  el mensaje**;
+  · **10 mutantes, 9 muertos y 1 equivalente MEDIDO**: `money(total)` reemplazado por la suma a mano
+  sobrevive a la suite entera, y está bien que sobreviva — a esa línea sólo se llega con el envío
+  **sin saldar**, que es el caso en que `aCobrar` no resta nada. 🔑 **La protección contra sumar a
+  mano la da la guarda, no el nombre de la función** ⇒ ⛔ el desglose no se saca de adentro del
+  `else`: afuera, la suma a mano le cobraría el envío a quien ya lo pagó y ningún test lo vería;
   · 🔴 **va SÓLO en la bandeja «Sin fecha», y SIEMPRE propone** (lo corrigió Bruno el mismo día,
   viéndolo): es **la primera comunicación**, la que abre la conversación. En la hoja del día el envío
   ya está acordado y el que escribe desde ahí es el cadete, con su propio mensaje

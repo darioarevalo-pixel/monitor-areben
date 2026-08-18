@@ -57,19 +57,21 @@ describe('🔴 la plata del mensaje es la misma que la del ticket', () => {
     expect(m).toContain('$ 21.800')
   })
 
-  it('🔴 el desglose sale SÓLO cuando la puerta cobra dos cosas', () => {
+  it('🔴 el desglose sale SÓLO cuando se cobran dos cosas', () => {
     // Repetir el mismo número en chico al lado del grande invita a leer el chico. Mismo criterio
     // que el ticket.
-    expect(mensajeParaLaClienta(con({ monto_pedido_a_cobrar: 17500 }), LUNES)).toContain('(envío $ 4.300 + pedido $ 17.500)')
-    expect(mensajeParaLaClienta(con({}), LUNES)).not.toContain('+ pedido')
+    expect(mensajeParaLaClienta(con({ monto_pedido_a_cobrar: 17500 }), LUNES)).toContain(
+      'El costo del envío a Riobamba 1234, Rosario es de $ 4.300, y quedan $ 17.500 del pedido: $ 21.800 en total.',
+    )
+    expect(mensajeParaLaClienta(con({}), LUNES)).not.toContain('del pedido')
   })
 
-  it('🔴 un envío YA PAGO no dice «se abona al recibir»', () => {
+  it('🔴 un envío YA PAGO no dice cuánto sale', () => {
     // Es el mismo error que el KPI que mandaba a reclamarle plata a una clienta que ya había pagado,
     // pero por escrito y a la clienta.
     const m = mensajeParaLaClienta(con({ envio_pagado: true }), LUNES) || ''
     expect(m).toContain('ya está pago')
-    expect(m).not.toContain('se abona al recibir')
+    expect(m).not.toContain('El costo del envío')
     expect(m).not.toContain('$ 4.300')
   })
 
@@ -86,6 +88,69 @@ describe('🔴 la plata del mensaje es la misma que la del ticket', () => {
     const m = mensajeParaLaClienta(e, LUNES) || ''
     expect(aCobrar(e)).toBe(17500)
     expect(m).toContain('$ 17.500')
+  })
+})
+
+/**
+ * 🔴 **La forma de pago no es decoración: es una invitación a pagar.**
+ *
+ * El texto lo pasó Bruno el 18-ago-2026 pegado al costo del envío. Pegarlo al final del bloque sin
+ * mirar si queda algo por cobrar le dice «podés abonar en efectivo o transferencia» a una clienta a
+ * la que le regalamos el envío y no le debe nada — el mismo modo de falla que «se abona al recibir»
+ * sobre un envío ya pago, que este archivo viene evitando desde que existe.
+ */
+describe('🔴 «efectivo o transferencia» va sólo si queda algo por pagar', () => {
+  it('🔴 un envío bonificado SIN saldo del pedido no invita a abonar nada', () => {
+    const m = mensajeParaLaClienta(con({ envio_bonificado: true }), LUNES) || ''
+    expect(m).toContain('El envío a Riobamba 1234, Rosario va sin cargo.')
+    expect(m).not.toContain('Podés abonar')
+  })
+
+  it('🔴 y un envío ya pago SIN saldo del pedido, tampoco', () => {
+    expect(mensajeParaLaClienta(con({ envio_pagado: true }), LUNES)).not.toContain('Podés abonar')
+  })
+
+  it('con saldo del pedido SÍ va, aunque el envío esté saldado', () => {
+    // El mutante es colgar la forma de pago del envío en vez de colgarla del total: la clienta tiene
+    // $ 17.500 que pagar y el mensaje no le dice cómo.
+    const m = mensajeParaLaClienta(con({ envio_bonificado: true, monto_pedido_a_cobrar: 17500 }), LUNES) || ''
+    expect(m).toContain('va sin cargo, y quedan $ 17.500 del pedido.')
+    expect(m).toContain('Podés abonar en efectivo o transferencia.')
+  })
+
+  it('y en el caso normal va pegada al costo del envío, como la escribió Bruno', () => {
+    expect(mensajeParaLaClienta(con({}), LUNES)).toContain(
+      'El costo del envío a Riobamba 1234, Rosario es de $ 4.300. Podés abonar en efectivo o transferencia.',
+    )
+  })
+})
+
+/**
+ * 🔴 **La despedida pide que confirme UNO DE LOS DÍAS DE ARRIBA.**
+ *
+ * Suelta al final es un pedido sin objeto: si el mensaje no llegó a ofrecer días —`hoy` mal formada,
+ * que es el mismo guardia por el que `diaEnCriollo` devuelve `''` en vez de tirar— «esperamos tu
+ * confirmación» le pide a la clienta que confirme algo que el texto nunca dijo, y la respuesta es
+ * una pregunta. Van juntas o no va ninguna.
+ */
+describe('🔴 «esperamos tu confirmación» viaja pegada a los días', () => {
+  it('🔴 sin días ofrecidos, tampoco se pide confirmación', () => {
+    const m = mensajeParaLaClienta(con({}), 'no-es-una-fecha') || ''
+    expect(diasQueOfrecemos('no-es-una-fecha')).toEqual([])
+    expect(m).not.toContain('Podríamos enviar')
+    expect(m).not.toContain('Esperamos tu confirmación')
+    // Y el mensaje se arma igual con la plata: es la línea del día la que falta, no el mensaje.
+    expect(m).toContain('El costo del envío')
+  })
+
+  it('el mensaje entero, tal como sale al chat', () => {
+    // 🔑 El oráculo que mira lo que ve la clienta y no un pedazo: los tres renglones, en orden.
+    expect(mensajeParaLaClienta(con({}), LUNES)).toBe(
+      'Hola Ana! Te escribimos de BDI por tu pedido #20913.\n' +
+        'El costo del envío a Riobamba 1234, Rosario es de $ 4.300. Podés abonar en efectivo o transferencia.\n' +
+        'Podríamos enviar el martes 18 (a la mañana o a la tarde) o el miércoles 19 a la tarde.\n' +
+        '¡Esperamos tu confirmación!',
+    )
   })
 })
 
@@ -106,8 +171,8 @@ describe('🔴 el día: SIEMPRE se propone, porque esto es el primer contacto', 
   it('🔴 SIN día propone los dos próximos y PREGUNTA', () => {
     // El día lo confirma la clienta: es la regla de la sección y la razón de que exista la bandeja.
     const m = mensajeParaLaClienta(con({ fecha: null, turno: null }), LUNES) || ''
-    expect(m).toContain('Podemos pasar')
-    expect(m).toContain('¿Cuál te viene mejor?')
+    expect(m).toContain('Podríamos enviar')
+    expect(m).toContain('¡Esperamos tu confirmación!')
   })
 
   it('🔴 un NO ENTREGADO propone de nuevo, y NO confirma el día en que no la encontraron', () => {
@@ -116,8 +181,8 @@ describe('🔴 el día: SIEMPRE se propone, porque esto es el primer contacto', 
     // `fecha is null OR estado='no_entregado'`), así que un texto que confirmara «pasamos el lunes
     // 17» le estaría confirmando a la clienta el día que ya pasó y en el que no estaba.
     const m = mensajeParaLaClienta(con({ fecha: '2026-08-17', turno: 'tarde', estado: 'no_entregado' }), LUNES) || ''
-    expect(m).toContain('Podemos pasar el martes 18')
-    expect(m).not.toContain('Pasamos el lunes 17')
+    expect(m).toContain('Podríamos enviar el martes 18')
+    expect(m).not.toContain('lunes 17')
   })
 
   it('🔴 los días propuestos arrancan MAÑANA, no hoy', () => {
@@ -162,7 +227,7 @@ describe('el resto del mensaje', () => {
     // Medido en prod: 3 de las 11 direcciones vienen así de Tienda Nube («Brown  1807»). En la tabla
     // no se ve; en un mensaje que sale a la clienta se lee como un descuido nuestro sobre su propia
     // dirección. Lo cazó MIRAR el mensaje armado con filas reales, no un test.
-    expect(mensajeParaLaClienta(con({ direccion: 'Brown  1807' }), LUNES)).toContain('El envío a Brown 1807, Rosario')
+    expect(mensajeParaLaClienta(con({ direccion: 'Brown  1807' }), LUNES)).toContain('El costo del envío a Brown 1807, Rosario')
   })
 
   it('un alta a mano sin número de orden no dice «#null»', () => {

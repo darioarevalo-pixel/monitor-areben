@@ -18,7 +18,7 @@
  */
 
 import { sumarDias } from '../calendario/fechas.core.js'
-import { aCobrar, num, turnosDe } from './reglas.core.js'
+import { aCobrar, envioSaldado, num, turnosDe } from './reglas.core.js'
 import { diaDeRepartoVecino, proximoDiaDeReparto } from './core'
 import type { Envio } from './tipos'
 
@@ -100,37 +100,54 @@ export function diasQueOfrecemos(hoy: string): string[] {
 }
 
 /**
- * La línea de la plata: qué pasa con el envío y cuánto se paga en la puerta.
+ * La línea de la plata: cuánto sale el envío y cómo se abona.
  *
- * 🔴 **El número de «al recibir» es SIEMPRE `aCobrar`**, la misma función que imprime el ticket y que
- * dibuja la hoja del día. El papel, la pantalla y el WhatsApp tienen que decir el mismo número: si
- * acá se sumara a mano, un envío ya pago le pediría plata en la puerta a alguien a quien el sistema
- * le prometió por escrito que no pagaba nada.
+ * 🔴 **El número que se le pide a la clienta es SIEMPRE `aCobrar`**, la misma función que imprime el
+ * ticket y que dibuja la hoja del día. El papel, la pantalla y el WhatsApp tienen que decir el mismo
+ * número: si acá se sumara a mano, un envío ya pago le pediría plata en la puerta a alguien a quien
+ * el sistema le prometió por escrito que no pagaba nada.
  *
- * 🔑 **Saldado cambia el texto, no lo borra.** Decirle «se abona al recibir» a quien ya lo pagó es el
- * mismo error que el KPI que mandaba a reclamarle plata a una clienta que ya había pagado. Y son dos
+ * 🔑 **Saldado cambia el texto, no lo borra.** Decirle «podés abonar» a quien ya lo pagó es el mismo
+ * error que el KPI que mandaba a reclamarle plata a una clienta que ya había pagado. Y son dos
  * frases distintas porque son dos hechos distintos: uno ya entró, el otro no entra nunca.
+ *
+ * 🔴 **La forma de pago va SÓLO si queda algo por pagar** (18-ago-2026, con el texto que pasó Bruno).
+ * «Podés abonar en efectivo o transferencia» abajo de un envío bonificado sin saldo de pedido es una
+ * invitación a pagar algo que no se cobra — el mismo modo de falla que «se abona al recibir» sobre un
+ * envío ya pago, que es justo lo que este archivo viene evitando desde que existe.
+ *
+ * ⚠️ **Y el texto nuevo dejó de decir CUÁNDO se paga.** El anterior decía «se abona al recibir»;
+ * éste ofrece transferencia, que es antes. Es lo que pidió Bruno y está bien dicho, pero abre un
+ * hecho que el sistema todavía no sabe: si la clienta transfiere, alguien tiene que tildar
+ * `envio_pagado` **antes de que salga la moto**, o el cadete le vuelve a pedir la plata en la puerta
+ * con el ticket en la mano. El mensaje no puede resolverlo solo.
  */
 function laPlata(e: Envio, donde: string): string {
   const envio = num(e.monto_envio)
   const total = aCobrar(e)
   const destino = donde ? ` a ${donde}` : ''
+  const comoSePaga = ' Podés abonar en efectivo o transferencia.'
 
-  if (e.envio_bonificado) {
-    return total > 0
-      ? `El envío${destino} va sin cargo, y al recibir se abonan ${money(total)} del pedido.`
-      : `El envío${destino} va sin cargo.`
+  if (envioSaldado(e)) {
+    // ⛔ Bonificado y pagado no se colapsan: uno es plata que no entró nunca y el otro plata que ya
+    // entró. Preguntar por `envio_bonificado` primero es la misma precedencia que el ticket.
+    const cabeza = e.envio_bonificado ? `El envío${destino} va sin cargo` : `El envío${destino} ya está pago`
+    return total > 0 ? `${cabeza}, y quedan ${money(total)} del pedido.${comoSePaga}` : `${cabeza}.`
   }
-  if (e.envio_pagado) {
-    return total > 0
-      ? `El envío${destino} ya está pago, y al recibir se abonan ${money(total)} del pedido.`
-      : `El envío${destino} ya está pago.`
-  }
-  // El desglose va **sólo cuando la puerta cobra dos cosas**, igual que en el ticket: repetir el
-  // mismo número en chico al lado del grande invita a leer el chico.
+
+  // El desglose va **sólo cuando se cobran dos cosas**, igual que en el ticket: repetir el mismo
+  // número en chico al lado del grande invita a leer el chico.
+  //
+  // 🔑 **Acá abajo `total` y `envio + pedido` son el MISMO número, y eso es un resultado del `if` de
+  // arriba, no una casualidad.** Se midió: el mutante que reemplaza `money(total)` por la suma a
+  // mano **sobrevive a la suite entera**, y es un equivalente legítimo — a esta línea sólo se llega
+  // con el envío SIN saldar, que es justo el caso en que `aCobrar` no resta nada. La protección
+  // contra sumar a mano la da la guarda, no el nombre de la función. ⛔ Por eso el desglose no se
+  // saca de adentro del `else`: afuera, la suma a mano volvería a cobrarle el envío a quien ya lo
+  // pagó, y ningún test de acá lo vería.
   return total > envio
-    ? `El envío${destino} sale ${money(envio)}, y al recibir se abonan ${money(total)} (envío ${money(envio)} + pedido ${money(total - envio)}).`
-    : `El envío${destino} sale ${money(envio)} y se abona al recibir.`
+    ? `El costo del envío${destino} es de ${money(envio)}, y quedan ${money(total - envio)} del pedido: ${money(total)} en total.${comoSePaga}`
+    : `El costo del envío${destino} es de ${money(envio)}.${comoSePaga}`
 }
 
 /**
@@ -169,8 +186,14 @@ export function mensajeParaLaClienta(e: Envio, hoy: string): string | null {
     laPlata(e, donde),
   ]
 
+  // 🔴 **La despedida viaja PEGADA a los días, no suelta al final.** «Esperamos tu confirmación» es
+  // el pedido de que elija uno de los días de arriba: sin esa línea queda pidiendo que confirme algo
+  // que el mensaje nunca dijo, y la clienta contesta preguntando qué.
   const opciones = diasQueOfrecemos(hoy).map((f) => cuandoPasamos(f)).filter(Boolean)
-  if (opciones.length) lineas.push(`Podemos pasar ${opciones.join(' o ')}. ¿Cuál te viene mejor?`)
+  if (opciones.length) {
+    lineas.push(`Podríamos enviar ${opciones.join(' o ')}.`)
+    lineas.push('¡Esperamos tu confirmación!')
+  }
 
   return lineas.join('\n')
 }
