@@ -152,6 +152,22 @@ export function Norte() {
     [metas, ritmo, hayPlata, hoy],
   )
 
+  /**
+   * Las apagadas, que **se listan igual** —atenuadas, al final y sin medir—.
+   *
+   * 🔴 Antes la lista era `metas.filter((m) => m.activa)` y no había ninguna otra: destildar
+   * «Activa» sacaba la meta de la pantalla **sin verbo de vuelta**. No se podía reactivar ni
+   * borrar, y volver a crearla con el mismo nombre tampoco la recuperaba —la clave se desambigua y
+   * nace una fila nueva, con la vieja al lado, muda—; el único camino era `psql`. La etiqueta del
+   * tilde ya decía «no se pierden», y era cierto del dato y falso de la pantalla.
+   *
+   * 🔑 **No se miden.** El medido va al lado de un objetivo que alguien está persiguiendo; ponerle
+   * un número a una meta apagada la devolvería a la conversación, que es justo lo que apagarla
+   * quiso evitar. Lo que sí va es el objetivo: es lo que permite reconocerla, y dos metas pueden
+   * llamarse igual.
+   */
+  const apagadas = useMemo(() => metas.filter((m) => !m.activa), [metas])
+
   const pagos = useMemo(() => calendarioDePagos(importaciones, cotizacion), [importaciones, cotizacion])
   /** Cada pago con cuánta contribución habrá acumulado el negocio para esa fecha. */
   const cubiertos = useMemo(() => coberturaDePagos(pagos, hoy, dejaPorDia), [pagos, hoy, dejaPorDia])
@@ -479,7 +495,8 @@ export function Norte() {
               />
             )}
 
-            {metas.filter((m) => m.activa).length === 0 ? (
+            {/* El vacío mira TODAS: con una meta apagada cargada, «sin metas» sería falso. */}
+            {metas.length === 0 ? (
               <EmptyState
                 title="Sin metas cargadas"
                 hint={admin ? 'Agregá la primera con el botón de arriba.' : 'Las carga un administrador.'}
@@ -538,6 +555,42 @@ export function Norte() {
                       )}
                     </Tr>
                   ))}
+                  {apagadas.map((m) => (
+                    <Tr key={m.key}>
+                      <Td>
+                        <span style={{ color: color.mut }}>{m.label}</span>{' '}
+                        <Badge tone="neutral" subtle>
+                          apagada
+                        </Badge>
+                        <div style={{ fontSize: font.sm, color: color.mut }}>
+                          {medidorDe(m.medidor)?.label || m.medidor}
+                          {m.canal ? ` · ${m.canal}` : ' · todos los canales'}
+                        </div>
+                      </Td>
+                      <Td align="right" mono style={{ color: color.mut }}>
+                        {conUnidad(m.objetivo, m.medidor)}
+                      </Td>
+                      <Td align="right" mono style={{ color: color.mut }}>
+                        —
+                      </Td>
+                      <Td align="right" mono style={{ color: color.mut }}>
+                        —
+                      </Td>
+                      <Td align="right" mono style={{ color: color.mut }}>
+                        —
+                      </Td>
+                      <Td align="right" mono style={{ color: color.mut }}>
+                        —
+                      </Td>
+                      {admin && (
+                        <Td align="right">
+                          <Button size="sm" variant="outline" onClick={() => setMetaEditando({ key: m.key })}>
+                            Editar
+                          </Button>
+                        </Td>
+                      )}
+                    </Tr>
+                  ))}
                 </TBody>
               </TableWrap>
             )}
@@ -546,6 +599,8 @@ export function Norte() {
               {ventanaEtl ? `la venta del ${ventanaEtl.desde} al ${ventanaEtl.hasta}` : 'la venta de los últimos 30 días'}
               : no se guarda en ningún lado. ⚠️ Las metas de contribución necesitan el dashboard conectado — sin él dicen
               por qué no se pudieron medir, en vez de mostrar cero.
+              {apagadas.length > 0 &&
+                ` Las apagadas van al final, en gris y sin medir: se editan igual, y ahí se vuelven a prender o se borran.`}
             </div>
           </SectionCard>
         </div>
