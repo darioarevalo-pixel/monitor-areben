@@ -75,53 +75,53 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   }, [setFotoUrl])
 
   // ── Carga masiva con auto-asignación por nombre de archivo (tnImgAutoCargar) ──
+  // ⚠️ Todo el armado va ACÁ, fuera del updater de setGrupos. `files` suele ser el
+  // FileList VIVO del <input>, que el onChange vacía apenas termina; y React puede
+  // correr el updater más tarde. Cuando eso pasaba, la tanda se perdía entera (no
+  // entraba ninguna foto) o entraba sin miniatura —url en null— y entonces "Subir
+  // todo a TN" quedaba apagado y no se podía subir nada.
   const autoCargar = useCallback(
     (files: FileList | File[]) => {
+      const lista = [...files].filter((f) => /^image\//.test(f.type))
+      if (!lista.length) return
       const ps = productosRef.current
+      const grupos = gruposRef.current.map((g) => ({ ...g, fotos: [...g.fotos] }))
       const nuevos: { gid: number; fid: number; file: File }[] = []
-      setGrupos((prev) => {
-        const grupos = prev.map((g) => ({ ...g, fotos: [...g.fotos] }))
-        ;[...files].forEach((f) => {
-          if (!/^image\//.test(f.type)) return
-          const prod = matchByFilename(ps, f.name)
-          const color = colorPorNombre(prod, f.name)
-          let g = prod ? grupos.find((x) => x.productId === prod.id) : undefined
-          if (!g) {
-            g = { id: nextId(), productId: prod ? prod.id : null, fotos: [] }
-            grupos.push(g)
-          }
-          const fid = nextId()
-          g.fotos.push({ id: fid, file: f, url: null, subida: false, fn: f.name, color })
-          nuevos.push({ gid: g.id, fid, file: f })
-        })
-        const limpios = grupos.filter((g) => g.fotos.length || g.productId)
-        const sinAsignar = limpios.find((g) => !g.productId)
-        setActivo((sinAsignar || limpios[limpios.length - 1])?.id ?? null)
-        return limpios
+      lista.forEach((f) => {
+        const prod = matchByFilename(ps, f.name)
+        const color = colorPorNombre(prod, f.name)
+        let g = prod ? grupos.find((x) => x.productId === prod.id) : undefined
+        if (!g) {
+          g = { id: nextId(), productId: prod ? prod.id : null, fotos: [] }
+          grupos.push(g)
+        }
+        const fid = nextId()
+        g.fotos.push({ id: fid, file: f, url: null, subida: false, fn: f.name, color })
+        nuevos.push({ gid: g.id, fid, file: f })
       })
+      const limpios = grupos.filter((g) => g.fotos.length || g.productId)
+      const sinAsignar = limpios.find((g) => !g.productId)
+      // El ref se adelanta al efecto para que dos tandas seguidas en el mismo tick
+      // se apilen en vez de pisarse.
+      gruposRef.current = limpios
+      setGrupos(limpios)
+      setActivo((sinAsignar || limpios[limpios.length - 1])?.id ?? null)
       nuevos.forEach((n) => leerThumb(n.gid, n.fid, n.file))
     },
     [leerThumb],
   )
 
   // Fotos a un grupo puntual (tnImgGrupoFotos): auto-color si el producto tiene colores.
+  // Mismo cuidado que autoCargar: la lista de archivos se copia ya, y el updater queda puro.
   const grupoFotos = useCallback(
     (gid: number, files: FileList | File[]) => {
-      const nuevos: { gid: number; fid: number; file: File }[] = []
-      setGrupos((prev) =>
-        prev.map((g) => {
-          if (g.id !== gid) return g
-          const prod = g.productId ? productosRef.current.find((p) => p.id === g.productId) ?? null : null
-          const fotos = [...g.fotos]
-          ;[...files].forEach((f) => {
-            if (!/^image\//.test(f.type)) return
-            const fid = nextId()
-            fotos.push({ id: fid, file: f, url: null, subida: false, fn: f.name, color: colorPorNombre(prod, f.name) })
-            nuevos.push({ gid, fid, file: f })
-          })
-          return { ...g, fotos }
-        }),
-      )
+      const lista = [...files].filter((f) => /^image\//.test(f.type))
+      if (!lista.length) return
+      const g0 = gruposRef.current.find((g) => g.id === gid)
+      const prod = g0?.productId ? productosRef.current.find((p) => p.id === g0.productId) ?? null : null
+      const nuevos = lista.map((f) => ({ gid, fid: nextId(), file: f, color: colorPorNombre(prod, f.name) }))
+      const fotosNuevas: FotoImg[] = nuevos.map((n) => ({ id: n.fid, file: n.file, url: null, subida: false, fn: n.file.name, color: n.color }))
+      setGrupos((prev) => prev.map((g) => (g.id !== gid ? g : { ...g, fotos: [...g.fotos, ...fotosNuevas] })))
       nuevos.forEach((n) => leerThumb(n.gid, n.fid, n.file))
     },
     [leerThumb],
@@ -205,12 +205,23 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   }
 
   // ── Subir todo (tnImgSubirTodo): secuencial, la portada primero por producto ──
-  const subirTodo = useCallback(async (): Promise<{ ok: number; err: number }> => {
-    const gs = gruposRef.current.filter((g) => g.productId && g.fotos.some((f) => f.url && !f.subida))
+  const subirTodo = useCallback(async (): Promise<{ ok: number; err: number; sinSubir: number }> => {
+    const todos = gruposRef.current
+    // Todo lo que todavía no está en TN, se pueda subir o no. Lo devolvemos al final para
+    // que "Subir y publicar" NO publique un producto al que le falta una foto.
+    const pendientes = todos.reduce((s, g) => s + g.fotos.filter((f) => !f.subida).length, 0)
+    const gs = todos.filter((g) => g.productId && g.fotos.some((f) => f.url && !f.subida))
     if (!gs.length) {
-      const haySinProd = gruposRef.current.some((g) => !g.productId && g.fotos.length)
-      void avisar(haySinProd ? 'Falta elegir el PRODUCTO en cada bloque: el buscador tiene que quedar en VERDE. Escribí y tocá el producto de la lista.' : 'Agregá un producto y al menos una foto.')
-      return { ok: 0, err: 0 }
+      const haySinProd = todos.some((g) => !g.productId && g.fotos.length)
+      const ilegibles = todos.reduce((s, g) => s + g.fotos.filter((f) => !f.subida && !f.url).length, 0)
+      void avisar(
+        haySinProd
+          ? 'Falta elegir el PRODUCTO en cada bloque: el buscador tiene que quedar en VERDE. Escribí y tocá el producto de la lista.'
+          : ilegibles
+            ? `Hay ${ilegibles} foto(s) que no se llegaron a abrir (se ven como un cuadrado vacío). Sacalas con la ✕ y volvé a agregarlas.`
+            : 'Agregá un producto y al menos una foto.',
+      )
+      return { ok: 0, err: 0, sinSubir: pendientes }
     }
     setSubiendo(true)
     const total = gs.reduce((s, g) => s + g.fotos.filter((f) => f.url && !f.subida).length, 0)
@@ -257,7 +268,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
       </>,
     )
     if (ok) bustAudit(marca)
-    return { ok, err }
+    return { ok, err, sinSubir: pendientes - ok }
   }, [marca, actualizarFoto, avisar])
 
   const revincular = async (gid: number, fid: number) => {
@@ -281,8 +292,18 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   }
 
   const subirYPublicar = async () => {
-    const hayPend = gruposRef.current.some((g) => g.productId && g.fotos.some((f) => f.url && !f.subida))
-    if (hayPend) await subirTodo()
+    // ⚠️ Se mira `!f.subida` a secas, NO `f.url && !f.subida`: si la foto no se llegó a
+    // abrir (url en null) esto daba "no hay nada pendiente", se salteaba la subida y
+    // publicaba igual. El producto quedaba visible en la tienda SIN la foto, y la
+    // pantalla decía en verde que había salido todo bien.
+    const hayPend = gruposRef.current.some((g) => g.fotos.some((f) => !f.subida))
+    if (hayPend) {
+      const r = await subirTodo()
+      if (r.sinSubir > 0) {
+        await avisar(`Quedaron ${r.sinSubir} foto(s) sin subir, así que no publico nada: el producto se vería en la tienda sin su foto. Revisá esas fotos y probá de nuevo.`)
+        return
+      }
+    }
     const ids = [...new Set(gruposRef.current.filter((g) => g.productId).map((g) => g.productId!))]
     if (!ids.length) {
       await avisar('No hay productos asignados para publicar: el buscador de cada bloque tiene que estar en verde.')
@@ -365,6 +386,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
           const esActivo = g.id === activo
           const tieneColores = !!(prod && prod.colores && prod.colores.length)
           const portadaId = g.fotos.some((f) => f.id === g.portadaId) ? g.portadaId : g.fotos[0]?.id
+          const subidas = g.fotos.filter((f) => f.subida).length
           return (
             <div key={g.id} style={{ border: `1px solid ${color.line}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
@@ -376,7 +398,12 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
                   onBlur={(e) => setProd(g.id, e.target.value)}
                   style={{ flex: 1, minWidth: 200, padding: '7px 10px', border: `1px solid ${prod ? color.success : color.line2}`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}
                 />
-                {prod ? <span style={{ fontSize: 11, color: color.success, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ vinculado</span> : <span style={{ fontSize: 11, color: color.danger, fontWeight: 600, whiteSpace: 'nowrap' }}>sin producto</span>}
+                {prod ? <span style={{ fontSize: 11, color: color.success, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ es este producto</span> : <span style={{ fontSize: 11, color: color.danger, fontWeight: 600, whiteSpace: 'nowrap' }}>sin producto</span>}
+                {g.fotos.length ? (
+                  <span style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', color: subidas === g.fotos.length ? color.success : color.warningInk }}>
+                    {subidas === g.fotos.length ? `${subidas} de ${g.fotos.length} fotos ya están en TN` : `faltan subir ${g.fotos.length - subidas} de ${g.fotos.length} fotos`}
+                  </span>
+                ) : null}
                 {tieneColores ? <span style={{ fontSize: 11, color: color.mut2 }}>↓ elegí el color de cada foto</span> : null}
                 <button onClick={() => quitarGrupo(g.id)} title="Quitar este producto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18 }}>×</button>
               </div>
