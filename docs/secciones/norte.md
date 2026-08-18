@@ -438,6 +438,33 @@ importación y el éxito de la misma»*.
   diferencia son **exactamente 9**, las del canal `Ninguno` (3 ventas técnicas) que el ETL excluye.
   ⚠️ Una venta técnica **sí descuenta stock**, así que en rigor deberían restarse — son el 0,08%.
 
+## 🔴 Descontar TODA la venta no es descontar lo que salió de la compra (18-ago-2026, `8b238b4`)
+
+**Lo cazó Bruno mirando el número**: la pantalla descontaba **4.914** unidades cuando las de esa
+importación eran **2.873**. El resto era mayorista de stock viejo, otros diseños y productos que ni
+son fundas. El stock remanente salía 2.041 **más bajo** que el real, o sea hacia el lado que
+tranquiliza.
+
+- Los **diseños suben del KV al motor** (`BloqueImportacion.disenos`), que antes los descartaba, y
+  se cruzan contra los productos del espejo de GN (`vendidoDeLoImportado`).
+- 🔑 **El cruce es exacto normalizado y comparte `norm` con el ✓ «ya está en GN»** de Compras: dos
+  pantallas que cruzan el mismo nombre no pueden hacerlo de dos maneras. Por eso **«LUCKY CASE
+  MAYORISTA» no entra como «Lucky Case»** —lo marcó Bruno, es un producto viejo—, cosa que un cruce
+  por «contiene» sí se llevaba puesto.
+- 🔑 **Suma TODOS los productos que se llaman igual, no el primero.** En GN el mismo diseño puede
+  tener dos fichas (una vieja y una nueva): medido, `LUCKY CASE` tiene ids 607144 y 1051805, y
+  quedarse con uno perdía sus ventas enteras. ⛔ Por eso **no** se reusa `indiceNombresGN`, que sólo
+  contesta «existe».
+- ⚠️ **`cruzados` viaja con el número y la pantalla lo dice**: lo que no esté cargado en la grilla
+  del ingreso **no se descuenta, y en silencio**. El mismo día se midió que Sam Case y Velvet Case
+  no estaban en el KV y eran **352** de esas 2.873.
+- **3 mutantes muertos**: cruzar por «contiene», quedarse con el primer producto de cada nombre, y
+  dejar pasar diseños sin nombre. ⚠️ Un cuarto sobrevivió y era **equivalente** —agregar un diseño
+  vacío que el `if (k)` ya filtra—; el mutante real es sacar ese filtro, y ése muere.
+
+**Verificado en prod**: la pantalla descuenta **2.865** y `psql` da **2.873**. La diferencia son
+**exactamente 8**: las ventas técnicas de esos diseños, que el ETL excluye.
+
 ## Pendiente
 
 - 🔴 **El veredicto se apoya en el estado de la importación, que vive en otra pantalla** (ver
