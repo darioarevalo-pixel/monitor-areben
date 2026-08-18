@@ -15,7 +15,7 @@ import {
 import type { Canal } from '../liquidacion/resultado'
 
 /** Qué cuenta una meta. La unidad viene con el medidor: no se escribe a mano. */
-export type Medidor = 'unidades-dia' | 'contrib-unidad' | 'contrib-dia'
+export type Medidor = 'unidades-dia' | 'ventas-dia' | 'contrib-unidad' | 'contrib-dia'
 
 export type FichaMedidor = {
   key: Medidor

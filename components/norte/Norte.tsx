@@ -200,7 +200,7 @@ export function Norte() {
       <DatosGate datos={datos} error={errorDatos} progreso={progreso} origen={origen}>
         {() => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-          <SectionCard title="Por dónde sale" subtitle="Unidades y plata por día, últimos 30 días con venta">
+          <SectionCard title="Por dónde sale" subtitle="Unidades, compras y plata por día, últimos 30 días con venta">
             {ventanasDistintas && (
               <Notice tone="warning">
                 Las unidades están medidas hasta el {ventanaEtl!.hasta} y la plata hasta el{' '}
@@ -217,6 +217,10 @@ export function Norte() {
                     <Tr>
                       <Th>Canal</Th>
                       <Th align="right">Unidades por día</Th>
+                      {/* Compras por día: NO es la columna de al lado dividida por nada. Una compra
+                          lleva varias fundas, y cuánto varía es justamente lo que separa un canal
+                          del otro. Va acá para que una meta de compras tenga contra qué cotejarse. */}
+                      <Th align="right">Compras por día</Th>
                       <Th align="right">Parte de la salida</Th>
                       <Th align="right">Deja por unidad</Th>
                       <Th align="right">Deja por día</Th>
@@ -228,6 +232,9 @@ export function Norte() {
                         <Td>{r.canal}</Td>
                         <Td align="right" mono>
                           {r.unidadesDia.toFixed(1)}
+                        </Td>
+                        <Td align="right" mono>
+                          {r.ventasDia.toFixed(1)}
                         </Td>
                         <Td align="right" mono>
                           {salen ? Math.round((r.unidadesDia / salen) * 100) : 0}%

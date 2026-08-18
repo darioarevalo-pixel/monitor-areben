@@ -91,16 +91,23 @@ export function ritmoDeSalida(
   contribPorCanal: Partial<Record<Canal, number>>,
 ): RitmoCanal[] {
   if (dias <= 0) return []
-  const acc = new Map<Canal, number>()
+  // 🔑 Las unidades y las COMPRAS se cuentan en la misma pasada, sobre las mismas filas: una fila
+  // es una venta. Contar las compras por otro lado daría dos poblaciones para la misma pantalla.
+  // ⚠️ Una venta de 0 unidades (una devolución, o una que factura cero) igual es una fila: suma
+  // como compra y no como funda. Es a propósito — son dos preguntas distintas.
+  const acc = new Map<Canal, { unidades: number; ventas: number }>()
   for (const v of ventas) {
     const c = canalDe(v.canal)
-    acc.set(c, (acc.get(c) || 0) + (Number(v.unidades) || 0))
+    const a = acc.get(c) || { unidades: 0, ventas: 0 }
+    a.unidades += Number(v.unidades) || 0
+    a.ventas += 1
+    acc.set(c, a)
   }
   return [...acc.entries()]
-    .map(([canal, unidades]) => {
+    .map(([canal, { unidades, ventas: cuantas }]) => {
       const unidadesDia = unidades / dias
       const contribUnidad = contribPorCanal[canal] ?? 0
-      return { canal, unidadesDia, contribUnidad, contribDia: unidadesDia * contribUnidad }
+      return { canal, unidadesDia, ventasDia: cuantas / dias, contribUnidad, contribDia: unidadesDia * contribUnidad }
     })
     .sort((a, b) => b.unidadesDia - a.unidadesDia)
 }
@@ -108,6 +115,11 @@ export function ritmoDeSalida(
 /** El total de fundas por día que salen, sumando todos los canales. */
 export function salidaDiaria(ritmo: RitmoCanal[]): number {
   return ritmo.reduce((a, r) => a + r.unidadesDia, 0)
+}
+
+/** El total de compras por día, sumando todos los canales. */
+export function ventasDiarias(ritmo: RitmoCanal[]): number {
+  return ritmo.reduce((a, r) => a + r.ventasDia, 0)
 }
 
 /** La contribución por día, sumando todos los canales. */
@@ -478,13 +490,21 @@ export function medirMeta(meta: Meta, ctx: ContextoMedida): Medicion {
 
   const fila = meta.canal ? ritmo.find((r) => r.canal === meta.canal) : undefined
   if (meta.canal && !fila) {
-    return medidor === 'unidades-dia'
+    // Un canal que no vendió hizo 0 fundas y 0 compras: eso es un DATO. En plata, en cambio, no hay
+    // sobre qué dividir, y un «$0» afirmaría «no deja nada», que es otra cosa.
+    return medidor === 'unidades-dia' || medidor === 'ventas-dia'
       ? { valor: 0, motivo: null }
       : { valor: null, motivo: `${meta.canal} no vendió nada en la ventana` }
   }
 
   if (medidor === 'unidades-dia') {
     return { valor: fila ? fila.unidadesDia : salidaDiaria(ritmo), motivo: null }
+  }
+
+  // 🔑 Compras, no fundas. Sale del mismo `ritmo`, así que es el mismo lote que la columna de
+  // unidades: un objetivo de «100 por día» contra el otro medidor daría un avance plausible y falso.
+  if (medidor === 'ventas-dia') {
+    return { valor: fila ? fila.ventasDia : ventasDiarias(ritmo), motivo: null }
   }
 
   // 🔑 **El descarte se rechaza, no se asume.** Antes esto no estaba y un medidor desconocido caía

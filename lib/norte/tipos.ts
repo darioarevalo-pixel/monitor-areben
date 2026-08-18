@@ -172,6 +172,15 @@ export type EstadoCompra = {
 export type RitmoCanal = {
   canal: Canal
   unidadesDia: number
+  /**
+   * Compras por día. **No es `unidadesDia`**: una compra puede llevar varias fundas, y en BDI la
+   * diferencia entre los dos números es de más de un orden de magnitud según el canal.
+   *
+   * 🔑 Sale de contar las **mismas filas** que producen `unidadesDia` —una fila es una venta—, así
+   * que las dos cifras hablan siempre de la misma población y de la misma ventana. Contarlas por
+   * otro lado daría dos números para lo mismo en la misma pantalla.
+   */
+  ventasDia: number
   contribUnidad: number
   contribDia: number
 }

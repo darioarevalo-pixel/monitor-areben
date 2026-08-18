@@ -38,6 +38,12 @@ import type { Canal, ImportacionProyectada, Medidor } from '../lib/norte/tipos'
 // ── Los datos reales del 17-ago-2026 ──────────────────────────────────────────
 
 /** Fundas vendidas por canal entre el 6 y el 16-ago (11 días), medidas contra la base. */
+/**
+ * ⚠️ **Está AGREGADO: una fila por canal, no una por venta.** Sirve para las unidades, que es para
+ * lo que se midió a mano el 17-ago-2026. ⛔ **No sirve para `ventasDia`**: acá «mayorista» son 2.235
+ * fundas en UNA fila, y en producción son cientos de compras. Un caso de compras que se apoye en
+ * este fixture da un número sin sentido y verde. Los de `ventas-dia` van con fixture propio.
+ */
 const VENTAS_MEDIDAS = [
   { canal: 'Mayorista', unidades: 2235 },
   { canal: 'Local', unidades: 178 },
@@ -104,7 +110,35 @@ describe('reproduce lo medido a mano el 17-ago-2026', () => {
 describe('ritmoDeSalida', () => {
   it('ordena por volumen y multiplica la contribución por las unidades', () => {
     const r = ritmoDeSalida([{ canal: 'Local', unidades: 10 }], 2, { local: 100 })
-    expect(r[0]).toEqual({ canal: 'local', unidadesDia: 5, contribUnidad: 100, contribDia: 500 })
+    expect(r[0]).toEqual({ canal: 'local', unidadesDia: 5, ventasDia: 0.5, contribUnidad: 100, contribDia: 500 })
+  })
+
+  it('cuenta COMPRAS y FUNDAS sobre las mismas filas, y no son el mismo número', () => {
+    // Dos compras que se llevan 10 fundas entre las dos, en dos días.
+    const r = ritmoDeSalida(
+      [
+        { canal: 'Online', unidades: 7 },
+        { canal: 'Online', unidades: 3 },
+      ],
+      2,
+      {},
+    )
+    expect(r[0].unidadesDia).toBe(5)
+    expect(r[0].ventasDia).toBe(1)
+  })
+
+  it('una venta de CERO unidades igual es una compra: suma al ritmo de ventas y no al de fundas', () => {
+    // Una devolución, o una que factura cero. Son dos preguntas distintas y se contestan distinto.
+    const r = ritmoDeSalida(
+      [
+        { canal: 'Online', unidades: 4 },
+        { canal: 'Online', unidades: 0 },
+      ],
+      1,
+      {},
+    )
+    expect(r[0].unidadesDia).toBe(4)
+    expect(r[0].ventasDia).toBe(2)
   })
 
   it('un canal sin contribución cargada suma unidades y aporta cero, en vez de inventar margen', () => {
@@ -534,9 +568,42 @@ describe('medirMeta', () => {
 
   // Un canal que no vendió vendió CERO unidades —eso es un dato— pero no tiene contribución por
   // unidad: sin unidades no hay por qué dividir, y un «$0/funda» se leería como «no deja margen».
+  // 🔑 El defecto que estos dos casos defienden: que «100 por día» se cargue contra el medidor
+  // equivocado. Fundas y compras NO son el mismo número —una compra lleva varias fundas— y el
+  // avance saldría plausible y falso, que es exactamente lo que el catálogo vino a evitar.
+  it('compras por día NO es lo mismo que fundas por día', () => {
+    // Tres compras online que se llevan 12 fundas entre las tres, en dos días.
+    const r = ritmoDeSalida(
+      [
+        { canal: 'Tienda Nube', unidades: 6 },
+        { canal: 'Tienda Nube', unidades: 4 },
+        { canal: 'Tienda Nube', unidades: 2 },
+      ],
+      2,
+      {},
+    )
+    const c = { ritmo: r, hayPlata: true }
+    expect(medirMeta(meta('ventas-dia', 'online'), c).valor).toBe(1.5)
+    expect(medirMeta(meta('unidades-dia', 'online'), c).valor).toBe(6)
+  })
+
+  it('compras por día sin canal suma los canales, y se mide sin dashboard', () => {
+    const r = ritmoDeSalida(
+      [
+        { canal: 'Tienda Nube', unidades: 6 },
+        { canal: 'Local', unidades: 4 },
+      ],
+      1,
+      {},
+    )
+    expect(medirMeta(meta('ventas-dia'), { ritmo: r, hayPlata: false }).valor).toBe(2)
+  })
+
   it('un canal que no vendió da 0 unidades y null en plata', () => {
     expect(medirMeta(meta('unidades-dia', 'mayorista'), { ritmo: RITMO.filter((r) => r.canal !== 'mayorista'), hayPlata: true }).valor).toBe(0)
     expect(medirMeta(meta('contrib-unidad', 'mayorista'), { ritmo: RITMO.filter((r) => r.canal !== 'mayorista'), hayPlata: true }).valor).toBeNull()
+    // Las compras siguen la misma regla que las unidades: cero compras es un dato, no un hueco.
+    expect(medirMeta(meta('ventas-dia', 'mayorista'), { ritmo: RITMO.filter((r) => r.canal !== 'mayorista'), hayPlata: true }).valor).toBe(0)
   })
 })
 

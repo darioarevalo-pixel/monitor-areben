@@ -140,6 +140,20 @@ describe('TablaMetas — lo que la fila de una activa tiene que decir', () => {
     expect(html).toContain('mayorista')
   })
 
+  it('una meta de COMPRAS sale en ventas/día, no en fundas ni en pesos', () => {
+    const compras = activa(
+      { key: 'c', label: '100 compras por día', medidor: 'ventas-dia', canal: 'online', objetivo: 100 },
+      { medido: 11.6, pct: 12, falta: 88.4, veces: 8.6 },
+    )
+    const html = renderToStaticMarkup(<TablaMetas avances={[compras]} apagadas={[]} admin onEditar={() => {}} />)
+
+    expect(html).toContain('100 ventas/día')
+    expect(html).toContain('11,6 ventas/día')
+    // ⛔ Ni fundas ni plata: si la unidad se pega mal, el número dice otra cosa con cara de bien.
+    expect(html).not.toContain('fundas/día')
+    expect(html).not.toContain('$')
+  })
+
   it('«todos los canales» se dice con todas las letras, en vez de dejar el lugar vacío', () => {
     const html = renderToStaticMarkup(<TablaMetas avances={[activa()]} apagadas={[]} admin onEditar={() => {}} />)
     expect(html).toContain('todos los canales')
