@@ -44,7 +44,7 @@ create table if not exists compras_condiciones (
   -- existía, y dio vuelta la conclusión del análisis hasta que apareció la fecha correcta.
   fecha_factura   date,
 
-  costo_unitario  numeric not null default 0,
+  -- El costo NO vive acá: va por MATERIAL, en `costos` (ver el bloque del 18-ago-2026 más abajo).
 
   -- 🔴 La moneda no es formato, es riesgo. Las fundas se compran en dólares (US$1,08 promedio,
   -- hasta US$1,35 las encapsuladas) y se venden en pesos: una cuota a 60 días tiene el monto en
@@ -52,9 +52,7 @@ create table if not exists compras_condiciones (
   -- vez de congelar un número que envejece mal.
   moneda          text not null default 'USD' check (moneda in ('USD', 'ARS')),
 
-  -- Snapshot opcional. Si queda null se toma `totalU()` del ingreso, que es la fuente viva: sirve
-  -- para cuando lo facturado no coincide con lo que finalmente entró.
-  unidades        numeric,
+  -- Las unidades facturadas tampoco: son por material y viajan adentro de `costos`.
 
   -- [{dias, pct, fecha?}]. `fecha` pisa a `dias` porque el mundo real no es aritmética: "a 30 días"
   -- del 7-ago da 6-sep contando, y el proveedor de BDI cobra el 7-sep.
@@ -132,3 +130,14 @@ alter table compras_condiciones add column if not exists costos jsonb not null d
 -- tabla de estimados. Recién con factura los plazos cuentan desde ella y el vencimiento es deuda.
 alter table compras_condiciones add column if not exists confirmado    boolean not null default false;
 alter table compras_condiciones add column if not exists fecha_ingreso date;
+
+-- Y se van las dos columnas del modelo viejo (18-ago-2026, después de que el código nuevo estuviera
+-- sirviendo y verificado contra producción). 🔑 **El orden importa y es éste**: agregar → deployar →
+-- verificar en la calle → recién ahí soltar. Al revés, el handler vivo escribe una columna que ya
+-- no existe y el guardado falla justo cuando nadie lo está mirando.
+--
+-- ⛔ No hay backfill que hacer: la tabla estuvo en 0 filas en las dos bases hasta este cambio, así
+-- que ningún costo viejo se pierde. Dejarlas «por las dudas» sería sostener para siempre un «si no
+-- hay costos por bloque, usá el de arriba», que es la clase de default que después contesta de más.
+alter table compras_condiciones drop column if exists costo_unitario;
+alter table compras_condiciones drop column if exists unidades;

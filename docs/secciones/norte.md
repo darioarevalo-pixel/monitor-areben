@@ -115,6 +115,25 @@ promedio simple de los tres precios da US$16.568 contra los US$17.043 verdaderos
 - ⚠️ **Un costo cuyo bloque ya no está en el ingreso no se descuenta callado**: sus unidades no
   existen, así que no suma, y se nombra en pantalla. El caso real es que alguien borró un bloque.
 
+### Ejercido contra producción (18-ago-2026)
+
+**El guardado de Norte se caminó a mano por primera vez** y escribió: hasta ese día
+`compras_condiciones` tenía **0 filas en las dos bases**, o sea que el verbo que escribe nunca se
+había ejercido. Se cargó la IMPORTACION 2 con los tres materiales a precios de prueba, se verificó
+la fila con `psql` y se borró.
+
+- 🔑 **El oráculo no fue que guardara: fue la FECHA de los vencimientos.** Con factura del 20-ago y
+  llegada del 28-ago, el calendario dio **19-sep y 19-oct** — los 30 y 60 días de la factura. Si
+  hubiera contado desde la llegada daría 27-sep, y ese mes es exactamente el error que dio vuelta
+  el análisis del 17-ago.
+- Volvió todo: los tres costos por material, el `unidades` de uno solo (1.100 sobre 1.132) y `null`
+  en los otros dos, el tilde, las dos fechas y las cuotas. El total dio **USD 17.829 sobre 14.129
+  unidades**, que es la suma a mano de cada material a su precio.
+- 🔴 **Y apareció un falso negativo del arnés, no del código**: marcar el tilde con `form_input`
+  desde el navegador **no entra en el estado de React** —la pantalla lo muestra destildado y la
+  línea del total sigue diciendo «falta confirmar el ingreso»—. Con un click real en la coordenada
+  entra. 📌 Es el mismo caso de `feedback_areben_click_no_mide_el_toque`.
+
 ### Los cuatro peldaños de una compra
 
 **Cada uno se gana con un dato, y el número no empeora al subir.** Es la respuesta a lo que pidió
