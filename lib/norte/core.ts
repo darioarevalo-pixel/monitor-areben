@@ -310,10 +310,13 @@ export function estadoDeCompra(imp: ImportacionProyectada): EstadoCompra {
  * contra la fecha de arribo y dio una cuota vencida que no existía; con la fecha de factura
  * correcta la misma compra estaba al día. Un mes de diferencia da vuelta la conclusión.
  */
-export function pagosDe(imp: ImportacionProyectada, cotizacion: number): Pago[] {
+export function pagosDe(imp: ImportacionProyectada): Pago[] {
   const estado = estadoDeCompra(imp)
   if (estado.peldano === 'incompleta') return []
   const cuotas = imp.condiciones?.cuotas ?? []
+  // ⛔ La cotización es de ESTA compra y no un parámetro global: los cheques de cada importación se
+  // emiten un día distinto y a un cambio distinto. Pasarla desde afuera pesificaría todas igual.
+  const cotizacion = imp.condiciones?.cotizacion ?? null
   return cuotas.map((cuota, i) => {
     const monto = estado.total * (cuota.pct / 100)
     // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
@@ -327,7 +330,9 @@ export function pagosDe(imp: ImportacionProyectada, cotizacion: number): Pago[] 
       etiqueta: `${imp.desc || 'Importación'} · cuota ${i + 1} de ${cuotas.length}`,
       monto,
       moneda: estado.moneda,
-      montoPesos: estado.moneda === 'USD' ? monto * cotizacion : monto,
+      // 🔑 En USD el peso sale del cambio al que se emitieron los cheques, no de una simulación:
+      // sin ese dato queda `null` y la pantalla lo dice. Si ya es ARS, el monto ES el peso.
+      montoPesos: estado.moneda === 'USD' ? (cotizacion === null ? null : monto * cotizacion) : monto,
       firme: estado.peldano === 'firme',
       base: estado.base,
     }
@@ -342,9 +347,9 @@ export function pagosDe(imp: ImportacionProyectada, cotizacion: number): Pago[] 
  * mezclada con la deuda se lee como deuda: el total del mes diría que hay que pagar plata que
  * todavía nadie facturó.
  */
-export function calendarioDePagos(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
+export function calendarioDePagos(imps: ImportacionProyectada[]): Pago[] {
   return imps
-    .flatMap((imp) => pagosDe(imp, cotizacion))
+    .flatMap((imp) => pagosDe(imp))
     .filter((p) => p.firme)
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
 }
@@ -355,9 +360,9 @@ export function calendarioDePagos(imps: ImportacionProyectada[], cotizacion: num
  * Cada pago dice contra qué fecha se estimó (`base`), porque un vencimiento sin eso se lee igual
  * que uno pactado.
  */
-export function pagosEstimados(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
+export function pagosEstimados(imps: ImportacionProyectada[]): Pago[] {
   return imps
-    .flatMap((imp) => pagosDe(imp, cotizacion))
+    .flatMap((imp) => pagosDe(imp))
     .filter((p) => !p.firme)
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
 }
@@ -381,12 +386,18 @@ export function coberturaDePagos(
   pagos: Pago[],
   desde: string,
   contribDia: number,
-): { pago: Pago; contribAcumulada: number; cobertura: number }[] {
+): { pago: Pago; contribAcumulada: number; cobertura: number | null }[] {
   let acumDeuda = 0
+  // 🔑 Un solo pago sin pesificar **rompe la cuenta de ahí en adelante**, no sólo la suya: la
+  // cobertura es acumulada, y saltearlo daría una deuda MÁS CHICA que la real con cara de completa.
+  // Se corta y se dice, en vez de mostrar un número que tranquiliza de más.
+  let hayHueco = false
   return pagos.map((pago) => {
-    acumDeuda += pago.montoPesos
+    if (pago.montoPesos === null) hayHueco = true
+    else acumDeuda += pago.montoPesos
     const dias = Math.max(0, diasEntre(desde, pago.fecha))
     const contribAcumulada = dias * contribDia
+    if (hayHueco) return { pago, contribAcumulada, cobertura: null }
     return { pago, contribAcumulada, cobertura: acumDeuda > 0 ? contribAcumulada / acumDeuda : Infinity }
   })
 }

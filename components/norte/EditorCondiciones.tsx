@@ -30,6 +30,12 @@ export function EditorCondiciones({
   const c = importacion.condiciones
   const [fechaFactura, setFechaFactura] = useState(c?.fechaFactura || '')
   const [moneda, setMoneda] = useState<Moneda>(c?.moneda || 'USD')
+  /**
+   * A cuánto se pesificó. Texto y no número para poder distinguir el campo **vacío** («todavía no
+   * se emitieron los cheques») de un cero escrito: un `Number('')` da 0 y eso pesificaría la deuda
+   * entera a cero sin que nada falle.
+   */
+  const [cotizacion, setCotizacion] = useState(c?.cotizacion == null ? '' : String(c.cotizacion))
   const [cuotas, setCuotas] = useState<Cuota[]>(c?.cuotas?.length ? c.cuotas : [{ dias: 30, pct: 50 }, { dias: 60, pct: 50 }])
   const [nota, setNota] = useState(c?.nota || '')
   const [confirmado, setConfirmado] = useState(Boolean(c?.confirmado))
@@ -55,6 +61,9 @@ export function EditorCondiciones({
     return init
   })
 
+  /** `null` = sin pesificar. ⛔ No se usa `|| null`: un 0 escrito a mano no es «no lo sé». */
+  const cotizacionNum = cotizacion.trim() === '' ? null : Number(cotizacion) || 0
+
   const costos: CostoBloque[] = importacion.bloques.map((b) => ({
     bloqueId: b.id,
     nombre: b.nombre,
@@ -69,7 +78,7 @@ export function EditorCondiciones({
    */
   const estado = estadoDeCompra({
     ...importacion,
-    condiciones: { ingresoId: importacion.id, fechaFactura, costos, moneda, cuotas, nota, confirmado, fechaIngreso },
+    condiciones: { ingresoId: importacion.id, fechaFactura, costos, moneda, cuotas, nota, confirmado, fechaIngreso, cotizacion: cotizacionNum },
   })
   const suma = cuotas.reduce((a, x) => a + (Number(x.pct) || 0), 0)
   const huerfanos = (c?.costos || []).filter((x) => !importacion.bloques.some((b) => b.id === x.bloqueId))
@@ -96,6 +105,7 @@ export function EditorCondiciones({
         // ⛔ ese umbral se decide en UN lugar (`estadoDeCompra`), no acá.
         costos: costos.filter((x) => (porBloque[x.bloqueId]?.costo || '').trim() !== ''),
         moneda,
+        cotizacion: cotizacionNum,
         cuotas,
         nota,
         confirmado,
@@ -127,6 +137,19 @@ export function EditorCondiciones({
               <option value="ARS">ARS</option>
             </Select>
           </Field>
+          {/* 🔑 Va sólo en USD: en ARS la deuda ya está en pesos y preguntar el cambio sería pedir
+              un dato que no existe. El texto dice CUÁNDO se sabe, que es lo que nadie adivina. */}
+          {moneda === 'USD' && (
+            <Field label="Pesificada a" hint="El dólar al que se emitieron los cheques. Vacío = todavía no se emitieron">
+              <Input
+                type="number"
+                value={cotizacion}
+                onChange={(e) => setCotizacion(e.target.value)}
+                placeholder="1380"
+                style={{ width: 120 }}
+              />
+            </Field>
+          )}
           <Field label="Fecha de ingreso" hint="La real, la que se firma con el tilde">
             <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
           </Field>

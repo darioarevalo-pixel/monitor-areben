@@ -92,6 +92,18 @@ export type Condiciones = {
   confirmado: boolean
   /** ISO. La fecha de ingreso **real**, la que se firma junto con el tilde. `''` mientras no esté. */
   fechaIngreso: string
+  /**
+   * **A cuánto se pesificó la deuda.** `null` mientras no se sepa.
+   *
+   * 🔑 El costo está nominado en dólares, pero **los cheques salen diferidos al recibir la
+   * mercadería**, y desde que se emiten **el riesgo de devaluación lo toma el proveedor**. En ese
+   * momento la deuda deja de estar en dólares: el monto en pesos pasa a ser un **dato**, no una
+   * conversión que se pueda simular.
+   *
+   * ⚠️ Con `null` **no se inventa un número**: el pago sale sin `montoPesos` y la pantalla dice qué
+   * falta. Antes de esto se convertía con un `useState(1380)` escrito a mano en el componente.
+   */
+  cotizacion: number | null
 }
 
 /**
@@ -198,8 +210,15 @@ export type Pago = {
   etiqueta: string
   monto: number
   moneda: Moneda
-  /** El mismo monto a la cotización que se le pasó. Si la moneda es ARS, es igual a `monto`. */
-  montoPesos: number
+  /**
+   * El monto en **pesos**, o `null` si todavía no se sabe.
+   *
+   * 🔑 Cuando la compra está en USD, esto sale de `condiciones.cotizacion` —el cambio al que se
+   * emitieron los cheques—, así que **no es una conversión estimada: es el número que se va a
+   * pagar**. Sin esa cotización queda en `null`, porque un peso inventado en una tabla que dice
+   * «En pesos» se lee como deuda. Si la moneda ya es ARS, es igual a `monto`.
+   */
+  montoPesos: number | null
   /** `true` sólo cuando sale de la factura de un ingreso confirmado. Lo demás es proyección. */
   firme: boolean
   /** Contra qué fecha se contaron los plazos. ⚠️ Si `pactada` es `true`, no se contaron. */

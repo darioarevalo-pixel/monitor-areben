@@ -141,3 +141,17 @@ alter table compras_condiciones add column if not exists fecha_ingreso date;
 -- hay costos por bloque, usá el de arriba», que es la clase de default que después contesta de más.
 alter table compras_condiciones drop column if exists costo_unitario;
 alter table compras_condiciones drop column if exists unidades;
+
+-- **A cuánto se pesificó la deuda** (18-ago-2026). Lo corrigió Bruno mirando la pantalla: el costo
+-- está nominado en dólares, pero **los cheques salen diferidos al recibir la mercadería**, y desde
+-- que se emiten **el riesgo de devaluación lo toma el proveedor**. ⇒ la deuda deja de estar en
+-- dólares en ese momento, y el monto en pesos pasa a ser un DATO, no una conversión.
+--
+-- 🔑 Es **una por importación y no una por cuota** porque los cheques se emiten todos juntos, el
+-- mismo día y al mismo cambio. Una por cuota invitaría a cargar cuatro números donde hay uno.
+--
+-- ⚠️ `null` = todavía no se pesificó, y ahí **no se inventa**: la pantalla pone una raya y dice qué
+-- falta, igual que hace cuando falta el costo de un material. Antes de esto la pantalla convertía
+-- con un `useState(1380)` escrito a mano en el código, que no salía de ninguna cotización, no se
+-- guardaba, y presentaba el resultado en una columna que decía «En pesos» a secas.
+alter table compras_condiciones add column if not exists cotizacion numeric;

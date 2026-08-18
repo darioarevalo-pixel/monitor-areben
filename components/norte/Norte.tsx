@@ -73,7 +73,6 @@ export function Norte() {
   const [editando, setEditando] = useState<string | null>(null)
   /** `{nueva:true}` o `{key}`: qué meta está abierta en el editor. `null` = ninguna. */
   const [metaEditando, setMetaEditando] = useState<{ nueva?: boolean; key?: string } | null>(null)
-  const [cotizacion, setCotizacion] = useState(1380)
 
   const hoy = new Date().toISOString().slice(0, 10)
 
@@ -168,7 +167,7 @@ export function Norte() {
    */
   const apagadas = useMemo(() => metas.filter((m) => !m.activa), [metas])
 
-  const pagos = useMemo(() => calendarioDePagos(importaciones, cotizacion), [importaciones, cotizacion])
+  const pagos = useMemo(() => calendarioDePagos(importaciones), [importaciones])
   /** Cada pago con cuánta contribución habrá acumulado el negocio para esa fecha. */
   const cubiertos = useMemo(() => coberturaDePagos(pagos, hoy, dejaPorDia), [pagos, hoy, dejaPorDia])
   /**
@@ -176,7 +175,7 @@ export function Norte() {
    * de ingreso. Va en su propia tabla y no mezclado con los pagos — un pronóstico puesto al lado de
    * la deuda se lee como deuda.
    */
-  const estimados = useMemo(() => pagosEstimados(importaciones, cotizacion), [importaciones, cotizacion])
+  const estimados = useMemo(() => pagosEstimados(importaciones), [importaciones])
   const faltan = useMemo(() => sinCondiciones(importaciones.filter((i) => !i.arribada)), [importaciones])
   const enEdicion = importaciones.find((i) => i.id === editando) || null
 
@@ -367,21 +366,6 @@ export function Norte() {
             {/* La cotización va arriba de las DOS tablas: pesa igual sobre la deuda y sobre el
                 estimativo, y dejarla adentro de la primera la escondía justo cuando no hay ninguna
                 compra firme todavía — que es el caso de hoy. */}
-            {(pagos.length > 0 || estimados.length > 0) && (
-              <label
-                style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[3], fontSize: font.md }}
-              >
-                Dólar a
-                <input
-                  type="number"
-                  value={cotizacion}
-                  onChange={(e) => setCotizacion(Number(e.target.value) || 0)}
-                  style={{ width: 96 }}
-                />
-                <span style={{ color: color.mut }}>movelo para ver cuánto pesa una devaluación</span>
-              </label>
-            )}
-
             {pagos.length === 0 ? (
               <EmptyState
                 title="Sin vencimientos firmes"
@@ -414,12 +398,12 @@ export function Norte() {
                           {p.moneda} {Math.round(p.monto).toLocaleString('es-AR')}
                         </Td>
                         <Td align="right" mono>
-                          ${Math.round(p.montoPesos).toLocaleString('es-AR')}
+                          <EnPesos monto={p.montoPesos} />
                         </Td>
                         {dejaPorDia > 0 && (
                           <Td align="right" mono>
-                            <span style={{ color: cobertura < 1 ? color.danger : undefined }}>
-                              {cobertura === Infinity ? '—' : `${cobertura.toFixed(1)}×`}
+                            <span style={{ color: cobertura !== null && cobertura < 1 ? color.danger : undefined }}>
+                              {cobertura === null || cobertura === Infinity ? '—' : `${cobertura.toFixed(1)}×`}
                             </span>
                           </Td>
                         )}
@@ -482,7 +466,7 @@ export function Norte() {
                           {p.moneda} {Math.round(p.monto).toLocaleString('es-AR')}
                         </Td>
                         <Td align="right" mono>
-                          ${Math.round(p.montoPesos).toLocaleString('es-AR')}
+                          <EnPesos monto={p.montoPesos} />
                         </Td>
                       </Tr>
                     ))}
@@ -653,3 +637,24 @@ function PillVeredicto({ estado }: { estado: EstadoVeredicto }) {
  * semanal son la misma magnitud, y son la razón por la que el medidor existe: un número suelto en
  * esta tabla se compara con el de al lado sin que nadie sepa si están en la misma escala.
  */
+
+/**
+ * El monto en pesos de un pago, **o por qué todavía no hay uno**.
+ *
+ * 🔑 Antes acá iba una conversión hecha con un dólar tipeado en un campo de la pantalla, bajo un
+ * encabezado que decía «En pesos» a secas: se leía como deuda y era un supuesto. Ahora el peso sale
+ * del cambio al que se emitieron los cheques —y desde ese momento el riesgo de devaluación lo toma
+ * el proveedor, así que el número es firme—; mientras no esté, va una raya con el motivo.
+ *
+ * ⛔ Un cero acá diría que esa cuota no cuesta nada, que es la afirmación más cara de las tres.
+ */
+function EnPesos({ monto }: { monto: number | null }) {
+  if (monto === null) {
+    return (
+      <span style={{ color: color.mut, fontSize: font.sm }} title="Se carga en la economía de la compra">
+        falta a cuánto se pesificó
+      </span>
+    )
+  }
+  return <>${Math.round(monto).toLocaleString('es-AR')}</>
+}

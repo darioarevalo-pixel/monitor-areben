@@ -246,6 +246,7 @@ function condiciones(extra: Partial<NonNullable<ImportacionProyectada['condicion
     nota: '',
     confirmado: false,
     fechaIngreso: '',
+    cotizacion: null,
     ...extra,
   }
 }
@@ -367,26 +368,47 @@ describe('calendarioDePagos', () => {
         nota: '',
         confirmado: true,
         fechaIngreso: '2026-08-06',
+        // Los cheques salen diferidos al recibir la mercadería: esta compra ya está pesificada.
+        cotizacion: 1380,
       },
     },
   ]
 
   it('la fecha pactada gana sobre el cálculo por días', () => {
-    const pagos = calendarioDePagos(firme, 1380)
+    const pagos = calendarioDePagos(firme)
     // A 30 días del 7-ago la aritmética daría 6-sep; el proveedor cobra el 7.
     expect(pagos.map((p) => p.fecha)).toEqual(['2026-09-07', '2026-10-07'])
     expect(sumarDias('2026-08-07', 30)).toBe('2026-09-06')
   })
 
-  it('convierte a pesos a la cotización que se le pasa, y guarda el monto en dólares', () => {
-    const pagos = calendarioDePagos(firme, 1380)
+  it('el peso sale de la cotización DE LA COMPRA, y el monto en dólares se guarda igual', () => {
+    const pagos = calendarioDePagos(firme)
     expect(pagos[0].moneda).toBe('USD')
     expect(pagos[0].monto).toBeCloseTo((11000 * 1.08) / 2, 2)
     expect(pagos[0].montoPesos).toBeCloseTo(((11000 * 1.08) / 2) * 1380, 0)
   })
 
+  // 🔴 El defecto que este caso defiende: antes el peso salía de un `useState(1380)` de la pantalla
+  // y SIEMPRE había un número, aunque nadie supiera a cuánto se había pesificado la deuda. La
+  // columna decía «En pesos» y se leía como deuda.
+  it('sin cotización cargada NO inventa un peso: lo deja en null', () => {
+    const sinPesificar = firme.map((i) => ({ ...i, condiciones: { ...i.condiciones!, cotizacion: null } }))
+    const pagos = calendarioDePagos(sinPesificar)
+    expect(pagos[0].monto).toBeCloseTo((11000 * 1.08) / 2, 2)
+    expect(pagos[0].montoPesos).toBeNull()
+  })
+
+  it('una compra en ARS ya está en pesos: el monto ES el peso, sin cotización de por medio', () => {
+    const enPesos = firme.map((i) => ({
+      ...i,
+      condiciones: { ...i.condiciones!, moneda: 'ARS' as const, cotizacion: null },
+    }))
+    const pagos = calendarioDePagos(enPesos)
+    expect(pagos[0].montoPesos).toBe(pagos[0].monto)
+  })
+
   it('una importación sin condiciones NO aparece con un costo inventado', () => {
-    expect(calendarioDePagos(IMPORTACIONES, 1380)).toEqual([])
+    expect(calendarioDePagos(IMPORTACIONES)).toEqual([])
   })
 
   it('cae a los días cuando no hay fecha pactada', () => {
@@ -394,7 +416,7 @@ describe('calendarioDePagos', () => {
       ...i,
       condiciones: { ...i.condiciones!, cuotas: [{ dias: 30, pct: 100 }] },
     }))
-    expect(calendarioDePagos(sinFechas, 1)[0].fecha).toBe('2026-09-06')
+    expect(calendarioDePagos(sinFechas)[0].fecha).toBe('2026-09-06')
   })
 
   // 🔴 El defecto que estos dos casos defienden se vio en producción el 18-ago-2026, sobre $16,8M:
@@ -402,7 +424,7 @@ describe('calendarioDePagos', () => {
   // persona, y encima prometía que se iba a mover. Una pactada no se mueve. `base` no alcanza para
   // contestarlo: existe siempre, pero cuando hay fecha pactada no se usó para nada.
   it('un pago DICE si su fecha es pactada o calculada, y no se deduce de `base`', () => {
-    const pagos = calendarioDePagos(firme, 1380)
+    const pagos = calendarioDePagos(firme)
     expect(pagos.every((p) => p.pactada)).toBe(true)
     // `base` sigue estando y sigue siendo 'factura': por eso sola no distingue los dos casos.
     expect(pagos[0].base).toBe('factura')
@@ -413,8 +435,8 @@ describe('calendarioDePagos', () => {
       ...i,
       condiciones: { ...i.condiciones!, cuotas: [{ dias: 30, pct: 100 }] },
     }))
-    const calculado = calendarioDePagos(sinFechas, 1)[0]
-    const pactado = calendarioDePagos(firme, 1)[0]
+    const calculado = calendarioDePagos(sinFechas)[0]
+    const pactado = calendarioDePagos(firme)[0]
     expect(calculado.pactada).toBe(false)
     expect(pactado.pactada).toBe(true)
     // Y son fechas distintas: si `pactada` no existiera, las dos filas se verían iguales.
@@ -426,8 +448,8 @@ describe('calendarioDePagos', () => {
       ...i,
       condiciones: { ...i.condiciones!, confirmado: false },
     }))
-    expect(calendarioDePagos(conFacturaSinTilde, 1380)).toEqual([])
-    expect(pagosEstimados(conFacturaSinTilde, 1380)).toHaveLength(2)
+    expect(calendarioDePagos(conFacturaSinTilde)).toEqual([])
+    expect(pagosEstimados(conFacturaSinTilde)).toHaveLength(2)
   })
 })
 
@@ -435,7 +457,7 @@ describe('pagosEstimados', () => {
   const estimada = [{ ...IMP2, condiciones: condiciones() }]
 
   it('cuenta los plazos desde la llegada estimada y lo dice', () => {
-    const pagos = pagosEstimados(estimada, 1380)
+    const pagos = pagosEstimados(estimada)
     expect(pagos.map((p) => p.fecha)).toEqual(['2026-09-27', '2026-10-27'])
     expect(pagos.every((p) => p.base === 'llegada')).toBe(true)
     expect(pagos.every((p) => !p.firme)).toBe(true)
@@ -443,7 +465,7 @@ describe('pagosEstimados', () => {
 
   it('confirmada, las mismas cuotas se corren a la fecha de ingreso real', () => {
     const conf = [{ ...IMP2, condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-09-02' }) }]
-    expect(pagosEstimados(conf, 1380).map((p) => p.fecha)).toEqual(['2026-10-02', '2026-11-01'])
+    expect(pagosEstimados(conf).map((p) => p.fecha)).toEqual(['2026-10-02', '2026-11-01'])
   })
 
   it('🔑 lo estimado y la deuda no se pisan: ningún pago está en las dos listas', () => {
@@ -455,8 +477,8 @@ describe('pagosEstimados', () => {
         condiciones: condiciones({ confirmado: true, fechaIngreso: '2026-08-30', fechaFactura: '2026-08-20' }),
       },
     ]
-    const firmes = calendarioDePagos(mezcla, 1)
-    const estimados = pagosEstimados(mezcla, 1)
+    const firmes = calendarioDePagos(mezcla)
+    const estimados = pagosEstimados(mezcla)
     expect(firmes).toHaveLength(2)
     expect(estimados).toHaveLength(2)
     expect(firmes.every((p) => p.importacionId === 'imp2b')).toBe(true)
@@ -464,7 +486,7 @@ describe('pagosEstimados', () => {
   })
 
   it('el monto sale del mismo total que la deuda: son la misma cuenta', () => {
-    expect(pagosEstimados(estimada, 1).reduce((a, p) => a + p.monto, 0)).toBeCloseTo(TOTAL_IMP2, 2)
+    expect(pagosEstimados(estimada).reduce((a, p) => a + p.monto, 0)).toBeCloseTo(TOTAL_IMP2, 2)
   })
 })
 
@@ -491,6 +513,21 @@ describe('coberturaDePagos', () => {
     expect(cob[0].contribAcumulada).toBe(310) // 31 días × 10
     expect(cob[0].cobertura).toBeCloseTo(3.1, 2)
     expect(cob[1].cobertura).toBeCloseTo(610 / 200, 2)
+  })
+
+  // 🔴 La cobertura es ACUMULADA: un pago sin pesificar no rompe sólo su fila, rompe todas las de
+  // abajo. Saltearlo daría una deuda MÁS CHICA que la real y una cobertura que tranquiliza de más —
+  // el mismo error que «un material sin costo no se totaliza a medias», pero sobre el flujo de caja.
+  it('un pago sin pesificar corta la cobertura de ahí en adelante, en vez de saltearlo', () => {
+    const pagos = [
+      { fecha: '2026-09-07', importacionId: 'l1', etiqueta: '1', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const, pactada: false },
+      { fecha: '2026-10-07', importacionId: 'l2', etiqueta: '2', monto: 100, moneda: 'USD' as const, montoPesos: null, firme: true, base: 'factura' as const, pactada: false },
+      { fecha: '2026-11-07', importacionId: 'l3', etiqueta: '3', monto: 100, moneda: 'ARS' as const, montoPesos: 100, firme: true, base: 'factura' as const, pactada: false },
+    ]
+    const cob = coberturaDePagos(pagos, '2026-08-07', 10)
+    expect(cob[0].cobertura).toBeCloseTo(3.1, 2) // el primero todavía se puede
+    expect(cob[1].cobertura).toBeNull()
+    expect(cob[2].cobertura).toBeNull() // ⛔ y el de abajo TAMBIÉN, aunque él sí tenga su peso
   })
 })
 

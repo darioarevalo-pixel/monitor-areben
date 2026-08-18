@@ -35,6 +35,7 @@ describe('sanearCostos', () => {
         fechaFactura: '',
         costos: sanearCostos([{ bloqueId: 'i', nombre: 'IMD', costo: 0 }]),
         moneda: 'USD',
+        cotizacion: null,
         cuotas: [{ dias: 30, pct: 100 }],
         nota: '',
         confirmado: false,

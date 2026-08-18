@@ -3,7 +3,7 @@
 //   GET  ?recurso=norte&store=bdi|zattia
 //   POST { recurso:'norte', store, condiciones:{ingresoId, fechaFactura, moneda, cuotas:[{dias,pct,fecha?}],
 //                                               costos:[{bloqueId,nombre,costo,unidades}], nota,
-//                                               confirmado, fechaIngreso} }
+//                                               confirmado, fechaIngreso, cotizacion} }
 //   POST { recurso:'norte', store, action:'borrar-condiciones', ingresoId }
 //   POST { recurso:'norte', store, meta:{key, label, medidor, canal, objetivo, fechaObjetivo, orden, activa} }
 //   POST { recurso:'norte', store, action:'borrar-meta', key }
@@ -265,7 +265,7 @@ export default async function handler(req, res) {
       const [c, m, plata] = await Promise.all([
         supabase
           .from('compras_condiciones')
-          .select('ingreso_id, fecha_factura, costos, moneda, cuotas, nota, confirmado, fecha_ingreso, actualizado_por, actualizado_en')
+          .select('ingreso_id, fecha_factura, costos, moneda, cotizacion, cuotas, nota, confirmado, fecha_ingreso, actualizado_por, actualizado_en')
           .eq('store', store),
         supabase
           .from('norte_metas')
@@ -295,6 +295,9 @@ export default async function handler(req, res) {
           nota: r.nota || '',
           confirmado: r.confirmado === true,
           fechaIngreso: r.fecha_ingreso || '',
+          // 🔑 `null` NO se normaliza a 0: «todavía no se emitieron los cheques» y «se pesificó a
+          // cero» son cosas distintas, y la segunda no existe. Un 0 acá pondría toda la deuda en $0.
+          cotizacion: r.cotizacion === null || r.cotizacion === undefined ? null : Number(r.cotizacion),
           actualizadoPor: r.actualizado_por,
           actualizadoEn: r.actualizado_en,
         })),
@@ -395,6 +398,9 @@ export default async function handler(req, res) {
         fecha_factura: aFecha(c.fechaFactura),
         costos: sanearCostos(c.costos),
         moneda,
+        // A cuánto se pesificó la deuda: el dólar al que se emitieron los cheques. ⛔ `null` mientras
+        // no se sepa, y por eso no va `|| 0` — ver el docblock de `Condiciones.cotizacion`.
+        cotizacion: moneda === 'USD' ? aNumero(c.cotizacion) : null,
         cuotas: sanearCuotas(c.cuotas),
         nota: String(c.nota || ''),
         // 🔑 El tilde y su fecha son lo que convierte una proyección en deuda. Se guardan como los
