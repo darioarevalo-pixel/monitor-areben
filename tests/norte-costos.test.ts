@@ -29,7 +29,7 @@ describe('sanearCostos', () => {
       llega: '2026-09-01',
       unidades: 100,
       arribada: false,
-      bloques: [{ id: 'i', nombre: 'IMD', unidades: 100 }],
+      bloques: [{ id: 'i', nombre: 'IMD', unidades: 100, disenos: [] }],
       condiciones: {
         ingresoId: 'x',
         fechaFactura: '',

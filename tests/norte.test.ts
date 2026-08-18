@@ -30,6 +30,8 @@ import {
   stockArribado,
   stockDeLoImportado,
   desdeElPrimerIngreso,
+  disenosArribados,
+  vendidoDeLoImportado,
   salidaDiaria,
   sinCondiciones,
   sumarDias,
@@ -64,8 +66,8 @@ const IMPORTACIONES: ImportacionProyectada[] = [
   { id: 'l3', desc: 'Lote 3', llega: '2026-10-15', unidades: 8500, arribada: false, bloques: [b('b1', 'IMD', 8500)], condiciones: null },
 ]
 
-function b(id: string, nombre: string, unidades: number) {
-  return { id, nombre, unidades }
+function b(id: string, nombre: string, unidades: number, disenos: string[] = []) {
+  return { id, nombre, unidades, disenos }
 }
 
 describe('reproduce lo medido a mano el 17-ago-2026', () => {
@@ -694,6 +696,101 @@ describe('lo que queda de lo importado', () => {
 
   it('sin nada arribado el remanente es 0, no lo que está por llegar', () => {
     expect(stockDeLoImportado([imp({ arribada: false })], 0)).toBe(0)
+  })
+})
+
+// 🔴 El defecto que este bloque defiende llegó a producción el 18-ago-2026 y lo cazó Bruno mirando
+// el número: la pantalla descontaba TODA la venta de la marca —4.914 unidades— cuando las de esa
+// importación eran 2.873. El resto era mayorista de stock viejo, otros diseños y productos que ni
+// son fundas. El stock remanente salía 2.041 más bajo que el real, hacia el lado que tranquiliza.
+describe('vendidoDeLoImportado', () => {
+  const prods = [
+    { id: '1051805', name: 'LUCKY CASE' },
+    { id: '607144', name: 'LUCKY CASE' }, // la ficha vieja del MISMO diseño
+    { id: '607154', name: 'LUCKY CASE MAYORISTA' }, // otro producto, de otra compra
+    { id: '900', name: 'Pop Case BLACK' },
+    { id: '999', name: 'FUNDA VIEJA' },
+  ]
+
+  it('cuenta sólo los diseños de la compra, y no toda la venta de la marca', () => {
+    const r = vendidoDeLoImportado({
+      disenos: ['Lucky Case'],
+      productos: prods,
+      detalles: [
+        { product_id: '1051805', quantity: 10 },
+        { product_id: '999', quantity: 500 }, // otra funda: NO es de esta importación
+      ],
+    })
+    expect(r.unidades).toBe(10)
+  })
+
+  // 🔑 Lo marcó Bruno: «lucky case mayorista es viejo». Un cruce por «contiene» se lo llevaba puesto.
+  it('el cruce es EXACTO: «LUCKY CASE MAYORISTA» no es «Lucky Case»', () => {
+    const r = vendidoDeLoImportado({
+      disenos: ['Lucky Case'],
+      productos: prods,
+      detalles: [{ product_id: '607154', quantity: 40 }],
+    })
+    expect(r.unidades).toBe(0)
+  })
+
+  // 🔑 En GN el mismo diseño puede tener dos fichas (una vieja y una nueva). Quedarse con la
+  // primera —como hace `indiceNombresGN`, que sólo contesta «existe»— perdería sus ventas enteras.
+  it('suma TODOS los productos que se llaman igual, no el primero', () => {
+    const r = vendidoDeLoImportado({
+      disenos: ['Lucky Case'],
+      productos: prods,
+      detalles: [
+        { product_id: '1051805', quantity: 10 },
+        { product_id: '607144', quantity: 7 },
+      ],
+    })
+    expect(r.unidades).toBe(17)
+  })
+
+  it('ignora acentos, mayúsculas y espacios de más, como el ✓ de Compras', () => {
+    const r = vendidoDeLoImportado({
+      disenos: ['  pop   case black '],
+      productos: prods,
+      detalles: [{ product_id: '900', quantity: 5 }],
+    })
+    expect(r.unidades).toBe(5)
+  })
+
+  // ⚠️ Lo que NO está en la grilla no se descuenta, y eso se va en silencio hacia el lado que
+  // tranquiliza. Por eso `cruzados` viaja con el número y la pantalla lo muestra.
+  it('dice contra cuántos diseños cruzó, para que el faltante no sea invisible', () => {
+    const r = vendidoDeLoImportado({
+      disenos: ['Lucky Case', 'Sam Case'], // Sam Case no tiene producto en el espejo
+      productos: prods,
+      detalles: [{ product_id: '1051805', quantity: 10 }],
+    })
+    expect(r.cruzados).toBe(1)
+  })
+
+  it('sin diseños cargados no descuenta nada, y lo dice con cruzados en 0', () => {
+    const r = vendidoDeLoImportado({ disenos: [], productos: prods, detalles: [{ product_id: '1051805', quantity: 10 }] })
+    expect(r).toEqual({ unidades: 0, cruzados: 0 })
+  })
+})
+
+describe('disenosArribados', () => {
+  const imp = (arribada: boolean, disenos: string[]) => ({
+    id: 'x', desc: 'X', llega: '2026-08-01', unidades: 10, arribada,
+    bloques: [{ id: 'b', nombre: 'IMD', unidades: 10, disenos }],
+    condiciones: null,
+  })
+
+  it('sólo los de las arribadas: lo que no llegó no pudo venderse de esta compra', () => {
+    expect(disenosArribados([imp(true, ['Sam Case']), imp(false, ['Otra Case'])])).toEqual(['sam case'])
+  })
+
+  it('no repite el mismo diseño cargado en dos bloques', () => {
+    expect(disenosArribados([imp(true, ['Sam Case']), imp(true, ['SAM CASE'])])).toEqual(['sam case'])
+  })
+
+  it('descarta los diseños sin nombre, que no cruzarían con nada', () => {
+    expect(disenosArribados([imp(true, ['', '  ', 'Sam Case'])])).toEqual(['sam case'])
   })
 })
 

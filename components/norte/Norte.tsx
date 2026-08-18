@@ -23,6 +23,8 @@ import {
   stockArribado,
   stockDeLoImportado,
   desdeElPrimerIngreso,
+  disenosArribados,
+  vendidoDeLoImportado,
   salidaDiaria,
   sinCondiciones,
   veredicto,
@@ -142,20 +144,24 @@ export function Norte() {
   const importado = useMemo(() => {
     const ingresado = stockArribado(importaciones)
     const desde = desdeElPrimerIngreso(importaciones)
-    if (!datos || !desde) return { ingresado, vendidas: 0, desde, queda: ingresado }
+    if (!datos || !desde) return { ingresado, vendidas: 0, desde, cruzados: 0, queda: ingresado }
 
-    const unidadesPorVenta = new Map<string, number>()
-    for (const d of datos.detalles) {
-      const k = String(d.sale_id)
-      unidadesPorVenta.set(k, (unidadesPorVenta.get(k) || 0) + (Number(d.quantity) || 0))
-    }
-    // Desde el ingreso hasta hoy inclusive. Una sola cuenta para todas las arribadas: ver
-    // `desdeElPrimerIngreso` — el stock arribado es un pozo común y no se puede repartir.
-    const vendidas = datos.ventas
-      .filter((v) => v.date_sale && v.date_sale.slice(0, 10) >= desde && v.date_sale.slice(0, 10) <= hoy)
-      .reduce((a, v) => a + (unidadesPorVenta.get(String(v.id)) || 0), 0)
+    // Las ventas de la ventana: desde el ingreso hasta hoy inclusive. Una sola cuenta para todas las
+    // arribadas — ver `desdeElPrimerIngreso`, el stock arribado es un pozo común.
+    const enVentana = new Set(
+      datos.ventas
+        .filter((v) => v.date_sale && v.date_sale.slice(0, 10) >= desde && v.date_sale.slice(0, 10) <= hoy)
+        .map((v) => String(v.id)),
+    )
+    // 🔑 Sólo los renglones de los DISEÑOS de esta compra. Contar toda la venta de la marca metía
+    // mayorista de stock viejo y productos que ni son fundas: medido, 4.914 contra 2.873 reales.
+    const { unidades: vendidas, cruzados } = vendidoDeLoImportado({
+      disenos: disenosArribados(importaciones),
+      productos: datos.allProductos ?? [],
+      detalles: datos.detalles.filter((d) => enVentana.has(String(d.sale_id))),
+    })
 
-    return { ingresado, vendidas, desde, queda: stockDeLoImportado(importaciones, vendidas) }
+    return { ingresado, vendidas, desde, cruzados, queda: stockDeLoImportado(importaciones, vendidas) }
   }, [importaciones, datos, hoy])
 
   const proyeccion = useMemo(() => {
@@ -388,6 +394,11 @@ export function Norte() {
                       —{importado.ingresado.toLocaleString('es-AR')} que ingresaron menos{' '}
                       {importado.vendidas.toLocaleString('es-AR')} vendidas desde el {importado.desde}— y le suma las
                       que faltan llegar. No es el inventario del depósito, que además tiene mercadería vieja.
+                      {/* 🔑 Decir contra cuántos diseños se cruzó: lo que no esté cargado en la grilla del
+                          ingreso NO se descuenta, y ese faltante se iría en silencio hacia el lado que
+                          tranquiliza. Medido el 18-ago: faltaban 2 diseños y eran 352 unidades. */}
+                      {' '}Sólo cuenta las ventas de los <strong>{importado.cruzados}</strong> diseños cargados en la
+                      grilla del ingreso: un diseño que llegó y no está ahí no se descuenta.
                     </div>
                   </div>
                 )}

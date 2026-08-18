@@ -21,6 +21,9 @@
  */
 
 import { canalDe, type Canal } from '../liquidacion/resultado'
+// La MISMA normalización que pinta el ✓ «ya está en GN» en Compras: dos pantallas que cruzan el
+// mismo nombre no pueden hacerlo de dos maneras.
+import { norm } from '../tncat/matching'
 import type {
   AvanceMeta,
   BloqueImportacion,
@@ -241,6 +244,67 @@ export function desdeElPrimerIngreso(imps: ImportacionProyectada[]): string | nu
     .filter((f) => fechaValida(f))
   if (!fechas.length) return null
   return fechas.reduce((a, f) => (f < a ? f : a))
+}
+
+/**
+ * **Los nombres de los diseños que ya ingresaron**, sin repetidos y normalizados.
+ *
+ * 🔑 Es la lista contra la que se pregunta «¿esta venta salió de lo que importamos?». Sale de las
+ * arribadas nomás: un diseño que todavía no llegó no pudo venderse de esta compra.
+ */
+export function disenosArribados(imps: ImportacionProyectada[]): string[] {
+  const out = new Set<string>()
+  for (const i of imps) {
+    if (!i.arribada) continue
+    for (const b of i.bloques ?? []) for (const d of b.disenos ?? []) {
+      const k = norm(d)
+      if (k) out.add(k)
+    }
+  }
+  return [...out]
+}
+
+/**
+ * **Cuántas de las unidades vendidas salieron de lo importado**, y con qué cobertura se midió.
+ *
+ * 🔴 **El defecto que esto corrige llegó a producción el 18-ago-2026**: se descontaba *toda* la
+ * venta de la marca. Sobre la IMPORTACION 1 eso daba **4.914** unidades cuando las de esa compra
+ * eran **2.873** — el resto era mayorista de stock viejo, otros diseños y productos que ni son
+ * fundas. El stock remanente salía 2.041 unidades **más bajo** que el real, o sea hacia el lado que
+ * tranquiliza.
+ *
+ * 🔑 **`cruzados` viaja con el número y la pantalla lo dice.** Lo que no esté cargado en la grilla
+ * del ingreso no se puede contar, y ese faltante **descuenta de menos en silencio**: el mismo día
+ * se midió que Sam Case y Velvet Case no estaban en el KV y eran 352 de esas 2.873.
+ */
+export function vendidoDeLoImportado(args: {
+  disenos: readonly string[]
+  /** Los productos del espejo de GN: `{id, name}` alcanza. */
+  productos: readonly { id: string; name: string }[]
+  /** Un renglón por línea de venta, ya filtrado por fecha. */
+  detalles: readonly { product_id: number | string | null; quantity: number | null }[]
+}): { unidades: number; cruzados: number } {
+  const buscados = new Set(args.disenos.map((d) => norm(d)).filter(Boolean))
+  if (!buscados.size) return { unidades: 0, cruzados: 0 }
+
+  // ⛔ El cruce es EXACTO normalizado, no «contiene»: con `like '%lucky case%'` entra también
+  // «LUCKY CASE MAYORISTA», que es un producto viejo y de otra compra. Mismo criterio que el ✓ de
+  // Compras → Ingresos proyectados, y por eso comparten `norm`.
+  const ids = new Set<string>()
+  const vistos = new Set<string>()
+  for (const p of args.productos) {
+    const k = norm(p.name)
+    if (!buscados.has(k)) continue
+    // 🔑 TODOS los productos con ese nombre, no el primero: en GN el mismo diseño puede tener dos
+    // fichas —una vieja y una nueva— y quedarse con una sola perdería sus ventas enteras.
+    ids.add(String(p.id))
+    vistos.add(k)
+  }
+  const unidades = args.detalles.reduce(
+    (a, d) => a + (ids.has(String(d.product_id)) ? Number(d.quantity) || 0 : 0),
+    0,
+  )
+  return { unidades, cruzados: vistos.size }
 }
 
 /**

@@ -127,7 +127,25 @@ export type ImportacionProyectada = {
 }
 
 /** Un bloque del ingreso, reducido a lo que Norte necesita: qué material es y cuántas unidades trae. */
-export type BloqueImportacion = { id: string; nombre: string; unidades: number }
+export type BloqueImportacion = {
+  id: string
+  nombre: string
+  unidades: number
+  /**
+   * Los nombres comerciales de sus diseños. **Son la única forma de saber qué se vendió DE ESTA
+   * compra**: el depósito es un pozo común y una funda no dice de qué importación vino.
+   *
+   * 🔑 Es el nombre y no un id porque del otro lado —Gestión Nube— el producto se identifica por
+   * nombre; es el mismo cruce que pinta el ✓ «ya está en GN» en Compras → Ingresos proyectados, y
+   * se usa la misma normalización para que las dos pantallas no puedan discrepar.
+   *
+   * ⚠️ **Lo que no esté cargado en la grilla no se puede contar.** Medido el 18-ago-2026: Sam Case
+   * y Velvet Case existían en la importación y no en el KV, y eran 352 de las 2.873 unidades
+   * vendidas. El descuento se queda corto en silencio, así que la pantalla dice cuántos diseños
+   * cruzó.
+   */
+  disenos: string[]
+}
 
 /**
  * Desde qué fecha se contaron los plazos de un pago. **Va a la pantalla**: un vencimiento estimado

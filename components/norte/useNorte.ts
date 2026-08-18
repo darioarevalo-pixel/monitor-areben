@@ -39,7 +39,16 @@ export function cruzar(ingresos: Ingreso[], condiciones: Condiciones[]): Importa
         arribada: g.estado === 'arribado',
         // 🔑 Los bloques bajan acá porque **el costo va por material**, y sus unidades son las del
         // KV: copiarlas a `compras_condiciones` daría dos números para lo mismo y ninguno mandaría.
-        bloques: (g.bloques || []).map((b) => ({ id: b.id, nombre: b.nombre, unidades: bloqueU(b) })),
+        // Los diseños viajan por su NOMBRE: es lo que permite cruzar contra los productos de GN y
+        // saber qué se vendió de esta compra. Los sin nombre no entran — no cruzarían con nada.
+        bloques: (g.bloques || []).map((b) => ({
+          id: b.id,
+          nombre: b.nombre,
+          unidades: bloqueU(b),
+          disenos: ((b as { disenos?: { nombre?: string }[] }).disenos || [])
+            .map((d) => String(d?.nombre || '').trim())
+            .filter(Boolean),
+        })),
         condiciones: porId.get(g.id) || null,
       }
     })
