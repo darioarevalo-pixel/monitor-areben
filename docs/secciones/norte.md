@@ -261,6 +261,25 @@ desambigua y nace una fila nueva, con la vieja al lado, muda.
   adentro del JSX. El primer oráculo fue caminar producción —cargar, apagar, ver la fila gris,
   **volver a prenderla desde ahí** y borrarla—; después se le puso un banco de render.
 
+### 🔴 La fecha PACTADA no se puede leer en `base` (18-ago-2026, `9d61e3d`)
+
+Se vio en producción **sobre $16,8M**, apenas Darío cargó la IMPORTACION 1. Las dos cuotas decían
+«contada desde la fecha de ingreso»: el ingreso fue el **3-ago**, +30 días da el **2-sep**, y vencen
+el **10-sep** porque así se pactó. Y el párrafo prometía que «las fechas se van a mover» — una
+pactada con el proveedor **no se mueve**.
+
+- 🔑 **La causa**: la fecha pactada pisa al cálculo (`pagosDe`), pero `base` se llena igual y era el
+  único campo que la pantalla tenía para contestar de dónde salía la fecha. **`base` existe siempre;
+  cuando hay fecha pactada, no se usó para nada.** Preguntarle sólo a ella era afirmar un cálculo
+  que no ocurrió.
+- ⇒ `Pago` lleva **`pactada`**, la columna se llama «De dónde sale la fecha» y dice «pactada con el
+  proveedor» cuando lo es. La promesa de movimiento queda para las calculadas, y la aclaración sólo
+  aparece si hay alguna pactada a la vista.
+- **El mutante que pone `pactada` en `false`** —que es el estado anterior— mata los dos casos nuevos
+  con `AssertionError`.
+- 📌 Familia de «una pantalla que no pregunta igual afirma» y de «la etiqueta partida entre la
+  pantalla y el núcleo»: ninguna de las dos mitades estaba mal sola.
+
 ### El medidor de COMPRAS por día (18-ago-2026, `f1cd59a`)
 
 El objetivo de BDI —**100 compras diarias**— estaba escrito desde el 13-ago y **no se podía cargar
