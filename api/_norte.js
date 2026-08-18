@@ -4,7 +4,7 @@
 //   POST { recurso:'norte', store, condiciones:{ingresoId, fechaFactura, costoUnitario, moneda,
 //                                               unidades, cuotas:[{dias,pct,fecha?}], nota} }
 //   POST { recurso:'norte', store, action:'borrar-condiciones', ingresoId }
-//   POST { recurso:'norte', store, meta:{key, label, unidad, objetivo, fechaObjetivo, orden, activa} }
+//   POST { recurso:'norte', store, meta:{key, label, medidor, canal, objetivo, fechaObjetivo, orden, activa} }
 //   POST { recurso:'norte', store, action:'borrar-meta', key }
 //
 // ## Qué guarda y qué NO
@@ -35,6 +35,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
+import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
@@ -219,7 +220,7 @@ export default async function handler(req, res) {
           .eq('store', store),
         supabase
           .from('norte_metas')
-          .select('key, label, unidad, objetivo, fecha_objetivo, orden, activa')
+          .select('key, label, medidor, canal, objetivo, fecha_objetivo, orden, activa')
           .eq('store', store)
           .order('orden', { ascending: true }),
         (async () => {
@@ -255,7 +256,10 @@ export default async function handler(req, res) {
           : (m.data || []).map((r) => ({
               key: r.key,
               label: r.label,
-              unidad: r.unidad || '',
+              // La unidad la manda el medidor y no la columna: la columna es un espejo para poder
+              // leer la fila en `psql` sin tener el catálogo al lado, y puede quedar vieja.
+              medidor: r.medidor || 'unidades-dia',
+              canal: r.canal || null,
               objetivo: Number(r.objetivo) || 0,
               fechaObjetivo: r.fecha_objetivo || '',
               orden: r.orden || 0,
@@ -291,12 +295,26 @@ export default async function handler(req, res) {
       const key = String(b.meta.key || '').trim();
       const label = String(b.meta.label || '').trim();
       if (!key || !label) return res.status(400).json({ error: 'la meta necesita key y label' });
+
+      // 🔑 El medidor y el canal se validan contra el catálogo del motor, no se guardan como
+      // vinieron. Una meta con un medidor que `medirMeta` no conoce se guarda sin ruido y después
+      // no mide nunca: la pantalla la muestra en blanco para siempre y nada avisa.
+      const medidor = String(b.meta.medidor || '').trim();
+      if (!esMedidor(medidor)) {
+        return res.status(400).json({ error: `medidor desconocido: ${medidor || '(vacío)'}` });
+      }
+      const canal = canalDeMeta(b.meta.canal);
+      if (canal === undefined) return res.status(400).json({ error: `canal desconocido: ${b.meta.canal}` });
+
       const { error } = await supabase.from('norte_metas').upsert(
         {
           key,
           store,
           label,
-          unidad: String(b.meta.unidad || ''),
+          medidor,
+          canal,
+          // Espejo del catálogo, para poder leer la fila suelta. La pantalla usa el medidor.
+          unidad: medidorDe(medidor).unidad,
           objetivo: aNumero(b.meta.objetivo) ?? 0,
           fecha_objetivo: aFecha(b.meta.fechaObjetivo),
           orden: aNumero(b.meta.orden) ?? 0,

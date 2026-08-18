@@ -16,12 +16,13 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
 
 ## Dónde vive
 
-- `components/norte/Norte.tsx` · `components/norte/useNorte.ts` · `components/norte/EditorCondiciones.tsx`
+- `components/norte/Norte.tsx` · `components/norte/useNorte.ts` · `components/norte/EditorCondiciones.tsx` · `components/norte/EditorMeta.tsx`
 - `lib/norte/core.ts` (todo el cálculo, **puro**) · `lib/norte/tipos.ts` · `lib/norte/persistencia.ts`
+- `lib/norte/medidores.core.js` (**qué puede medir una meta**, LA lista) + `.ts` tipado
 - `lib/norte/contribucion.core.js` (la cascada de plata, `.js` porque la usa el handler) + `.ts` tipado
 - `api/_norte.js`, que entra por `api/datos.js?recurso=norte`
 - `sql/migrate-norte.sql` + `scripts/apply-norte.mjs` · `sql/migrate-ventas-cobro.sql` + `scripts/apply-ventas-cobro.mjs`
-- Banco: `tests/norte.test.ts` · `tests/norte-contribucion.test.ts`
+- Banco: `tests/norte.test.ts` · `tests/norte-contribucion.test.ts` · `tests/norte-metas-handler.test.ts`
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -58,6 +59,15 @@ Norte es el lugar donde eso deja de vivir en la cabeza de una persona.
   Asumirle un costo promedio inventaría una deuda con cara de razonable.
 - ⚠️ **`normalizar()` antes de `totalU()`**, siempre: el KV tiene registros en formato viejo y
   `totalU` sobre uno de ésos devuelve **cero** — una importación de 14.000 contada como vacía.
+- 🔑 **La unidad de una meta la decide el MEDIDOR, no la escribe una persona.** Hasta el 18-ago
+  `unidad` era texto libre y el avance no se calculaba: nada impedía cargar un objetivo «500 por
+  mes» contra un medido que sale **por día**. El avance sale plausible, y falso, y no falla nada.
+  Elegir de `medidores.core.js` es lo que pone el objetivo y el medido en la misma escala **por
+  construcción**.
+- 🔑 **Un medidor que el motor no conoce se rechaza al guardar, y `medirMeta` lo vuelve a rechazar
+  al medir.** No es redundancia: sin el segundo corte, un medidor desconocido caía por descarte en
+  «contribución por unidad» y devolvía **un número bien formateado que no era lo que la meta
+  decía**. Lo cazó un mutante, no la suite.
 - Escribir es de **admin**, como el techo de rentabilidad: acá se firma cuánto se debe y cuándo.
 
 ## 🔴 Lo que ya se rompió, y lo que está roto de arrastre
@@ -99,13 +109,37 @@ netas − CMV − comisiones − costo de envíos                               
 - El oráculo del banco: **reproduce al centavo cinco filas reales de julio-2026** de
   `ventas_gn_agg`, que las calculó otro repo contra la API de GN. 11 mutantes, 11 muertos.
 
+## Las metas y su medido (18-ago-2026)
+
+Una meta **declara qué se cuenta**, y el número de hoy se calcula al mirar. Hasta acá se cargaban
+`objetivo` + una `unidad` escrita a mano y el avance no existía: la columna estaba vacía a propósito,
+porque un 0 se lee como «no avanzamos».
+
+- **Tres medidores**, cada uno con su unidad pegada: `unidades-dia` (fundas/día), `contrib-unidad`
+  ($/funda) y `contrib-dia` ($/día). Con canal, o `null` = todos juntos.
+- 🔑 **Mide contra el mismo `ritmo` que la pantalla ya muestra arriba.** Si la meta recalculara la
+  contribución por su cuenta —sobre la ventana del servidor en vez de la del ETL— la misma pantalla
+  tendría dos números distintos para «la contribución por día» y no habría cómo saber cuál mirar.
+- 🔑 **`contrib-unidad` de todos los canales es PONDERADO por unidades.** Mayorista deja $1.541 y
+  online $7.295, pero mayorista es el 88% de las unidades: promediar los canales parejo da más del
+  triple de lo que deja el negocio.
+- 🔴 **Sin dashboard conectado los dos medidores de plata devuelven `null` y el motivo, no cero.**
+  `ritmoDeSalida` pone `contribUnidad` en 0 para lo que no sabe, así que medir igual daría «$0/día»
+  — que afirma «no deja nada», que es otra cosa y es falsa. Por eso `hayPlata` entra por parámetro
+  y no se deduce de que el número sea cero. **Hoy es el caso real**: falta la env var.
+- Un canal que no vendió da **0 unidades** (es un dato) pero **null** en plata: sin unidades no hay
+  por qué dividir, y un «$0/funda» se leería como «no deja margen».
+- **La clave se genera sola** (`claveDeMeta`). `key` es la PK y el guardado es un `upsert`: dos
+  metas con la misma clave no dan error, **se pisan**. Al editar no se toca: cambiarla crearía una
+  meta nueva en vez de renombrar la vieja.
+- **Editor en pantalla**, de admin (`EditorMeta.tsx`). Las metas ya no entran por curl.
+- ⚠️ La columna `unidad` de la base quedó como **espejo** del catálogo, para poder leer una fila
+  suelta en `psql`. **No es la fuente**: la escribe el handler desde `medidorDe(medidor).unidad`.
+
 ## Pendiente
 
-- 🔴 **El medido de cada meta.** Hoy se cargan objetivo y fecha; el avance no se calcula solo, y por
-  eso la columna no está — mostrarlo en cero se leería como «no avanzamos».
 - El P&L «por arriba» por línea (previo a gastos), que es lo que pidió Bruno para no depender del
   dashboard. El resultado fino sigue siendo del dashboard: Norte hace la versión de todos los días.
-- Una pantalla para editar metas (hoy entran por API).
 - Cerrar contra la **estructura** ($25-30M/mes de fijos de las tres marcas) necesita los gastos por
   marca, que viven en el dashboard (`datos_ventas_gn` + `gastos`) y **no tienen endpoint**.
 
@@ -122,5 +156,11 @@ netas − CMV − comisiones − costo de envíos                               
   es el verde**: es que las cinco filas de julio-2026 sigan dando las `ventas_netas` que el
   dashboard tiene guardadas. Ese número lo calculó otra implementación, en otro repo, contra la API
   de Gestión Nube.
+- `npx vitest run tests/norte-metas-handler.test.ts` — la validación de una meta. 🔑 **Su oráculo
+  es el modo de falla, no el verde**: una meta con un medidor que el motor no conoce **se guarda
+  bien y no mide nunca**, y en pantalla se ve igual que un dato que todavía no llegó.
+- 🔑 **Se muraron 12 mutantes el 18-ago y uno sobrevivió — y tenía razón**: agregar un medidor al
+  catálogo sin enseñárselo a `medirMeta` dejaba el banco en verde y la pantalla mostrando el número
+  de otro medidor. El corte explícito de `medidor desconocido` salió de ahí.
 - ⚠️ **Ejercer a mano el guardado en producción**: es el verbo que escribe, y en este repo es el que
   más veces falló. Cargar una importación con costo y dos cuotas, recargar, y ver que vuelve.

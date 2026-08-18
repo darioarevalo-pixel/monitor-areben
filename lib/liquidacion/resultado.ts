@@ -25,7 +25,7 @@
  * Puro: no lee la hora ni la red. `hoy` entra por parámetro.
  */
 
-import { canalDe as canalDeJs } from './canal.core.js'
+import { CANALES as CANALES_JS, canalDe as canalDeJs } from './canal.core.js'
 import type { EstadoItem, LiquidacionItem } from './tipos'
 import type { LineaVenta } from './ventas'
 
@@ -40,6 +40,9 @@ import type { LineaVenta } from './ventas'
 export type Canal = 'local' | 'online' | 'mayorista' | 'tecnica' | 'otro'
 
 export const CANALES_MINORISTAS: readonly Canal[] = ['local', 'online', 'otro']
+
+/** Todos los canales. La lista vive en `canal.core.js`: el handler de Norte también la valida. */
+export const CANALES = CANALES_JS as readonly Canal[]
 
 /**
  * El canal por su nombre en Gestión Nube. **La implementación vive en `canal.core.js`**, que es

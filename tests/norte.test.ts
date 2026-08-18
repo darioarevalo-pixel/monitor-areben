@@ -16,18 +16,21 @@ import { describe, expect, it } from 'vitest'
 import {
   avanceDeMeta,
   calendarioDePagos,
+  claveDeMeta,
   coberturaDePagos,
   contribucionDiaria,
   diaDeAgotamiento,
   diasEntre,
   entradaDiaria,
+  medirMeta,
   proyectarStock,
   ritmoDeSalida,
   salidaDiaria,
   sumarDias,
   veredicto,
 } from '../lib/norte/core'
-import type { ImportacionProyectada } from '../lib/norte/tipos'
+import { MEDIDORES } from '../lib/norte/medidores'
+import type { Canal, ImportacionProyectada, Medidor } from '../lib/norte/tipos'
 
 // ── Los datos reales del 17-ago-2026 ──────────────────────────────────────────
 
@@ -226,27 +229,157 @@ describe('coberturaDePagos', () => {
 })
 
 describe('avanceDeMeta', () => {
-  const meta = { key: 'ventas-online', label: '100 ventas online por día', unidad: 'ventas/día', objetivo: 100, medido: 9.2 }
+  const meta = {
+    key: 'ventas-online',
+    label: '100 ventas online por día',
+    medidor: 'unidades-dia' as const,
+    canal: null,
+    objetivo: 100,
+  }
+  const medido = (valor: number) => ({ valor, motivo: null })
 
   it('el número que ordena la conversación es «cuántas veces», no el porcentaje', () => {
-    const a = avanceDeMeta(meta, '2026-08-17')
+    const a = avanceDeMeta(meta, medido(9.2), '2026-08-17')
     expect(a.pct).toBeCloseTo(9.2, 1)
     expect(a.veces).toBeCloseTo(10.9, 1)
     expect(a.falta).toBeCloseTo(90.8, 1)
   })
 
   it('con fecha objetivo calcula cuánto hay que sumar por semana', () => {
-    const a = avanceDeMeta({ ...meta, fechaObjetivo: '2026-10-26' }, '2026-08-17')
+    const a = avanceDeMeta({ ...meta, fechaObjetivo: '2026-10-26' }, medido(9.2), '2026-08-17')
     expect(diasEntre('2026-08-17', '2026-10-26')).toBe(70)
     expect(a.porSemana).toBeCloseTo(90.8 / 10, 1)
   })
 
   it('sin fecha objetivo no inventa un ritmo', () => {
-    expect(avanceDeMeta(meta, '2026-08-17').porSemana).toBeNull()
+    expect(avanceDeMeta(meta, medido(9.2), '2026-08-17').porSemana).toBeNull()
   })
 
   it('con cero medido, «veces» es infinito y no NaN', () => {
-    expect(avanceDeMeta({ ...meta, medido: 0 }, '2026-08-17').veces).toBe(Infinity)
+    expect(avanceDeMeta(meta, medido(0), '2026-08-17').veces).toBe(Infinity)
+  })
+
+  // 🔑 La razón de ser del tipo `Medicion`: sin medido no se afirma un 0%, porque «no avanzamos» es
+  // una afirmación sobre el negocio y «no se pudo medir» es una sobre el dato.
+  it('sin medido no calcula un avance en cero: devuelve el motivo', () => {
+    const a = avanceDeMeta(meta, { valor: null, motivo: 'el dashboard no está conectado' }, '2026-08-17')
+    expect(a.medido).toBeNull()
+    expect(a.pct).toBeNull()
+    expect(a.falta).toBeNull()
+    expect(a.veces).toBeNull()
+    expect(a.porSemana).toBeNull()
+    expect(a.motivo).toBe('el dashboard no está conectado')
+  })
+})
+
+describe('medirMeta', () => {
+  /** El ritmo real del 17-ago, con la contribución medida en prod el 18-ago. */
+  const RITMO = ritmoDeSalida(VENTAS_MEDIDAS, 11, { mayorista: 1541, local: 7489, online: 7295, otro: 9857 })
+  const ctx = { ritmo: RITMO, hayPlata: true }
+  const meta = (medidor: Medidor, canal: Canal | null = null) => ({
+    key: 'm',
+    label: 'm',
+    medidor,
+    canal,
+    objetivo: 1,
+  })
+
+  it('unidades por día de un canal es la fila de ese canal', () => {
+    expect(medirMeta(meta('unidades-dia', 'online'), ctx).valor).toBeCloseTo(168 / 11, 2)
+  })
+
+  it('unidades por día sin canal es el mismo número del veredicto', () => {
+    expect(medirMeta(meta('unidades-dia'), ctx).valor).toBeCloseTo(237.6, 1)
+  })
+
+  // 🔑 El defecto que este caso defiende: mayorista deja $1.541 y online $7.295, pero mayorista es
+  // el 88% de las unidades. Promediar los cuatro canales parejo da ~$6.545 — más del triple de lo
+  // que deja el negocio de verdad.
+  it('la contribución por unidad de todos es PONDERADA, no el promedio de los promedios', () => {
+    const unidades = 2235 + 178 + 168 + 33
+    const plata = 2235 * 1541 + 178 * 7489 + 168 * 7295 + 33 * 9857
+    expect(medirMeta(meta('contrib-unidad'), ctx).valor).toBeCloseTo(plata / unidades, 2)
+    expect(medirMeta(meta('contrib-unidad'), ctx).valor).toBeLessThan(2500)
+  })
+
+  it('la contribución por día de un canal es unidades/día × lo que deja cada una', () => {
+    expect(medirMeta(meta('contrib-dia', 'mayorista'), ctx).valor).toBeCloseTo((2235 / 11) * 1541, 0)
+  })
+
+  // 🔴 El caso de HOY: falta la env var del dashboard en el Vercel de Darío. Sin este corte la
+  // pantalla mostraría «$0/día», que dice «no deja nada» — otra afirmación, y falsa.
+  it('sin el dashboard conectado, la plata NO se mide en cero: dice por qué', () => {
+    const m = medirMeta(meta('contrib-dia'), { ritmo: RITMO, hayPlata: false })
+    expect(m.valor).toBeNull()
+    expect(m.motivo).toMatch(/dashboard/)
+  })
+
+  it('pero las unidades sí se miden sin el dashboard: no dependen de la plata', () => {
+    expect(medirMeta(meta('unidades-dia'), { ritmo: RITMO, hayPlata: false }).valor).toBeCloseTo(237.6, 1)
+  })
+
+  it('sin venta en la ventana no hay nada que medir, y no es un cero', () => {
+    const m = medirMeta(meta('unidades-dia'), { ritmo: [], hayPlata: true })
+    expect(m.valor).toBeNull()
+    expect(m.motivo).toMatch(/venta/)
+  })
+
+  // Un canal que no vendió vendió CERO unidades —eso es un dato— pero no tiene contribución por
+  // unidad: sin unidades no hay por qué dividir, y un «$0/funda» se leería como «no deja margen».
+  it('un canal que no vendió da 0 unidades y null en plata', () => {
+    expect(medirMeta(meta('unidades-dia', 'mayorista'), { ritmo: RITMO.filter((r) => r.canal !== 'mayorista'), hayPlata: true }).valor).toBe(0)
+    expect(medirMeta(meta('contrib-unidad', 'mayorista'), { ritmo: RITMO.filter((r) => r.canal !== 'mayorista'), hayPlata: true }).valor).toBeNull()
+  })
+})
+
+// 🔑 El defecto que este bloque defiende no está en ninguna fórmula: es que el catálogo y el motor
+// se separen. Agregar un medidor a `medidores.core.js` sin enseñarle a `medirMeta` a medirlo deja
+// una meta que se puede cargar, se guarda bien y **nunca muestra un número** — sin error, sin
+// warning, sin nada que falle. La pantalla se ve igual que si el dato todavía no hubiera llegado.
+describe('el catálogo de medidores y el motor no se pueden separar', () => {
+  const RITMO = ritmoDeSalida(VENTAS_MEDIDAS, 11, { mayorista: 1541, local: 7489, online: 7295, otro: 9857 })
+
+  it('el motor sabe medir TODOS los medidores del catálogo', () => {
+    for (const m of MEDIDORES) {
+      const medicion = medirMeta({ key: m.key, label: m.label, medidor: m.key, canal: null, objetivo: 1 }, {
+        ritmo: RITMO,
+        hayPlata: true,
+      })
+      expect(medicion.valor, `${m.key} no se pudo medir: ${medicion.motivo}`).not.toBeNull()
+      expect(Number.isFinite(medicion.valor as number), `${m.key} midió algo que no es un número`).toBe(true)
+    }
+  })
+
+  it('todo medidor declara su unidad: es la razón por la que existe el catálogo', () => {
+    for (const m of MEDIDORES) expect(m.unidad, m.key).toMatch(/.+\/.+/)
+  })
+
+  // `necesitaPlata` es lo que la pantalla usa para explicar por qué falta un número. Si un medidor
+  // lo declara mal, con el dashboard caído mostraría un cero en vez del motivo.
+  it('`necesitaPlata` coincide con lo que el motor hace sin dashboard', () => {
+    for (const m of MEDIDORES) {
+      const sinPlata = medirMeta({ key: m.key, label: m.label, medidor: m.key, canal: null, objetivo: 1 }, {
+        ritmo: RITMO,
+        hayPlata: false,
+      })
+      expect(sinPlata.valor === null, m.key).toBe(m.necesitaPlata)
+    }
+  })
+})
+
+describe('claveDeMeta', () => {
+  it('saca la clave del nombre, sin acentos ni signos', () => {
+    expect(claveDeMeta('400 fundas por día')).toBe('400-fundas-por-dia')
+  })
+
+  // 🔑 El guardado es un upsert: dos metas con la misma clave NO dan error, se pisan.
+  it('no repite una clave que ya existe', () => {
+    expect(claveDeMeta('Meta', ['meta'])).toBe('meta-2')
+    expect(claveDeMeta('Meta', ['meta', 'meta-2'])).toBe('meta-3')
+  })
+
+  it('un nombre sin letras usables igual da una clave', () => {
+    expect(claveDeMeta('¿?')).toBe('meta')
   })
 })
 

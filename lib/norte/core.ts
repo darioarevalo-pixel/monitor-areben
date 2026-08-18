@@ -23,7 +23,9 @@
 import { canalDe, type Canal } from '../liquidacion/resultado'
 import type {
   AvanceMeta,
+  ContextoMedida,
   ImportacionProyectada,
+  Medicion,
   Meta,
   Pago,
   PuntoStock,
@@ -290,13 +292,103 @@ export function veredicto(entranDia: number, salenDia: number): Veredicto {
 // ── Las metas ─────────────────────────────────────────────────────────────────
 
 /**
+ * La clave de una meta nueva, a partir de su nombre.
+ *
+ * 🔑 **Existe para que nadie tenga que escribir una clave.** `key` es la PK compuesta con `store` y
+ * el guardado es un `upsert`: dos metas con la misma clave **no dan error, se pisan**. Pedirle una
+ * clave a quien carga una meta es pedirle que entienda eso; generarla y desambiguarla acá es el
+ * paso anterior que vuelve innecesaria la pregunta.
+ */
+export function claveDeMeta(label: string, usadas: readonly string[] = []): string {
+  const base =
+    label
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'meta'
+  if (!usadas.includes(base)) return base
+  let n = 2
+  while (usadas.includes(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
+/**
+ * **Cuánto va de una meta hoy**, medido contra lo que la pantalla ya tiene arriba.
+ *
+ * 🔑 **Mide contra `ritmo`, que es el mismo que se muestra en el veredicto y en los pagos.** No
+ * vuelve a calcular nada por su cuenta: si lo hiciera —sobre la ventana del servidor en vez de la
+ * del ETL— la misma pantalla tendría dos números distintos para «la contribución por día» y no
+ * habría forma de saber cuál mirar.
+ *
+ * ## Cuándo devuelve `null`, que es la mitad del trabajo
+ *
+ * - **Sin venta en la ventana** no hay ritmo, y no hay nada que medir.
+ * - **Sin el dashboard conectado** la contribución no existe: `ritmoDeSalida` pone `contribUnidad`
+ *   en 0 para lo que no sabe, así que medir igual daría `$0/día` — que afirma «no deja nada», y es
+ *   otra cosa. Por eso `hayPlata` entra por parámetro y no se deduce de que el número sea cero.
+ * - **Un canal que no vendió** es un `0` real para unidades (vendió cero) pero `null` para plata:
+ *   sin unidades no hay por qué dividir, y un `$0/funda` se leería como «no deja margen».
+ */
+export function medirMeta(meta: Meta, ctx: ContextoMedida): Medicion {
+  const { ritmo, hayPlata } = ctx
+  // `string` y no `Medidor` a propósito: el valor viene de la base, donde no hay tipos. El día que
+  // el catálogo crezca y esta función no, el medidor nuevo llega acá igual.
+  const medidor: string = meta.medidor
+
+  if (!ritmo.length) return { valor: null, motivo: 'todavía no hay venta medida en la ventana' }
+
+  const fila = meta.canal ? ritmo.find((r) => r.canal === meta.canal) : undefined
+  if (meta.canal && !fila) {
+    return medidor === 'unidades-dia'
+      ? { valor: 0, motivo: null }
+      : { valor: null, motivo: `${meta.canal} no vendió nada en la ventana` }
+  }
+
+  if (medidor === 'unidades-dia') {
+    return { valor: fila ? fila.unidadesDia : salidaDiaria(ritmo), motivo: null }
+  }
+
+  // 🔑 **El descarte se rechaza, no se asume.** Antes esto no estaba y un medidor desconocido caía
+  // por defecto en `contrib-unidad`: devolvía un número —bien formateado, con su unidad— que no
+  // era lo que la meta decía medir. Lo cazó un mutante que agregó un medidor al catálogo sin
+  // enseñárselo a esta función: el banco quedó en verde.
+  if (medidor !== 'contrib-dia' && medidor !== 'contrib-unidad') {
+    return { valor: null, motivo: `medidor desconocido: ${medidor}` }
+  }
+
+  if (!hayPlata) {
+    return { valor: null, motivo: 'falta la contribución: el dashboard no está conectado' }
+  }
+  if (medidor === 'contrib-dia') {
+    return { valor: fila ? fila.contribDia : contribucionDiaria(ritmo), motivo: null }
+  }
+
+  // `contrib-unidad` de todos los canales es **ponderado por unidades**, no el promedio de los
+  // promedios: mayorista deja $1.541 y online $7.295, pero mayorista es el 88% de las unidades.
+  // Promediar los canales parejo daría más del triple de lo que deja el negocio.
+  if (fila) return { valor: fila.contribUnidad, motivo: null }
+  const unidades = salidaDiaria(ritmo)
+  if (unidades <= 0) return { valor: null, motivo: 'no hay unidades para dividir' }
+  return { valor: contribucionDiaria(ritmo) / unidades, motivo: null }
+}
+
+/**
  * El avance de una meta, con el ritmo que haría falta para llegar a la fecha.
  *
  * 🔑 **`veces` es el número que ordena la conversación**, más que el porcentaje: «estamos al 9%» se
  * escucha parecido a «estamos al 30%», pero «hay que multiplicar por 11» no.
+ *
+ * ⚠️ **Sin medido no calcula nada**: ni 0%, ni «faltan todas». Un avance en cero se lee como «no
+ * avanzamos», que es una afirmación sobre el negocio; «no se pudo medir» es una sobre el dato.
  */
-export function avanceDeMeta(meta: Meta, hoy: string): AvanceMeta {
-  const { objetivo, medido } = meta
+export function avanceDeMeta(meta: Meta, medicion: Medicion, hoy: string): AvanceMeta {
+  const medido = medicion.valor
+  const vacio = { meta, medido: null, motivo: medicion.motivo, pct: null, falta: null, veces: null, porSemana: null }
+  if (medido === null) return vacio
+
+  const { objetivo } = meta
   const falta = Math.max(0, objetivo - medido)
   const pct = objetivo > 0 ? Math.min(100, Math.max(0, (medido / objetivo) * 100)) : 0
   const veces = medido > 0 ? objetivo / medido : Infinity
@@ -306,5 +398,5 @@ export function avanceDeMeta(meta: Meta, hoy: string): AvanceMeta {
     const dias = diasEntre(hoy, meta.fechaObjetivo)
     porSemana = dias > 0 ? falta / (dias / 7) : falta
   }
-  return { meta, pct, falta, veces, porSemana }
+  return { meta, medido, motivo: null, pct, falta, veces, porSemana }
 }

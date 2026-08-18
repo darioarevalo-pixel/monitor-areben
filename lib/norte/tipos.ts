@@ -13,8 +13,9 @@
 
 import type { Canal } from '../liquidacion/resultado'
 import type { Linea } from '../memo/tipos'
+import type { Medidor } from './medidores'
 
-export type { Canal, Linea }
+export type { Canal, Linea, Medidor }
 
 /**
  * La moneda de una compra.
@@ -129,25 +130,61 @@ export type Veredicto = {
   titular: string
 }
 
-/** Un objetivo de mediano plazo con su medición. */
+/**
+ * Un objetivo de mediano plazo. **Declara qué se cuenta; el número de hoy no se guarda.**
+ *
+ * 🔑 **`medido` no es un campo de la meta y no debe volver a serlo.** Se calcula al mirar, con
+ * `medirMeta`, contra la venta real. Una meta con su avance guardado es una meta que miente el día
+ * que nadie la actualiza, y ese día llega siempre.
+ *
+ * 🔑 **La unidad la trae el `medidor`, no la escribe una persona.** Antes `unidad` era texto libre
+ * y nada impedía cargar un objetivo «por mes» contra un medido que sale por día: el avance da un
+ * número plausible y falso, y no falla nada.
+ */
 export type Meta = {
   key: string
   label: string
-  /** Qué se cuenta: «ventas por día», «fundas por día», «%»… */
-  unidad: string
+  /** Qué cuenta. El catálogo —con su unidad— está en `lib/norte/medidores.core.js`. */
+  medidor: Medidor
+  /** El canal que se mide, o `null` = todos juntos. */
+  canal: Canal | null
   objetivo: number
-  medido: number
   /** ISO. Si está, se calcula el ritmo semanal que hace falta para llegar. */
   fechaObjetivo?: string
 }
 
+/**
+ * Lo que el medidor pudo medir, o por qué no pudo.
+ *
+ * ⚠️ **`valor: null` no es cero y la diferencia es la razón de este tipo.** Sin el dashboard
+ * conectado no hay contribución: mostrar `$0/día` afirma «no deja nada», que es otra cosa y es
+ * falsa. `motivo` va a la pantalla tal cual, como en `Contribucion`.
+ */
+export type Medicion = { valor: number | null; motivo: string | null }
+
+/**
+ * Todo lo que `medirMeta` necesita, ya medido por la pantalla.
+ *
+ * Es el mismo `ritmo` que se muestra arriba a propósito: si la meta calculara su contribución por
+ * su cuenta —sobre la ventana del servidor en vez de la del ETL— la misma pantalla mostraría dos
+ * números distintos para la misma cosa, y no habría forma de saber cuál mirar.
+ */
+export type ContextoMedida = {
+  ritmo: RitmoCanal[]
+  /** `false` cuando la contribución no está disponible: entonces `contribUnidad` es 0 por defecto. */
+  hayPlata: boolean
+}
+
 export type AvanceMeta = {
   meta: Meta
-  /** 0-100, recortado. */
-  pct: number
-  falta: number
+  /** Lo que se está midiendo hoy. `null` si no se pudo: `motivo` dice por qué. */
+  medido: number | null
+  motivo: string | null
+  /** 0-100, recortado. `null` sin medido: un 0 se leería como «no avanzamos». */
+  pct: number | null
+  falta: number | null
   /** Cuántas veces hay que multiplicar lo de hoy. `Infinity` si hoy es cero. */
-  veces: number
+  veces: number | null
   /** Cuánto hay que sumar por semana para llegar a `fechaObjetivo`. `null` si no hay fecha. */
   porSemana: number | null
 }

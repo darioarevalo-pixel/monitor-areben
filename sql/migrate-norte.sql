@@ -76,7 +76,20 @@ create table if not exists norte_metas (
   key             text not null,             -- 'ventas-online-dia', 'unidades-por-pedido', …
   store           text not null,
   label           text not null,
+
+  -- 🔑 QUÉ se cuenta. El catálogo vive en `lib/norte/medidores.core.js` y el handler valida contra
+  -- él antes de guardar. Acá NO va un check con la lista repetida a propósito: sería una tercera
+  -- copia del mismo vocabulario, y agregar un medidor pasaría a necesitar una migración.
+  medidor         text not null default 'unidades-dia',
+
+  -- El canal que se mide, o null = todos juntos. Los valores son los de `canalDe`.
+  canal           text,
+
+  -- Espejo de la unidad del medidor, para poder leer la fila suelta en psql sin tener el catálogo
+  -- al lado. ⚠️ **No es la fuente**: la pantalla usa el medidor. Antes era texto libre, y eso era
+  -- el defecto: nada impedía cargar un objetivo "por mes" contra un medido que sale por día.
   unidad          text not null default '',
+
   objetivo        numeric not null default 0,
   fecha_objetivo  date,
   orden           int not null default 0,
@@ -88,3 +101,9 @@ create table if not exists norte_metas (
 );
 
 create index if not exists norte_metas_store_idx on norte_metas (store, activa, orden);
+
+-- Las dos columnas del medidor, para las bases donde la tabla ya existe (18-ago-2026). Cuando esto
+-- se escribió `norte_metas` estaba VACÍA en las dos bases —se verificó antes de correrlo—, así que
+-- no hay backfill que hacer: el default alcanza.
+alter table norte_metas add column if not exists medidor text not null default 'unidades-dia';
+alter table norte_metas add column if not exists canal   text;

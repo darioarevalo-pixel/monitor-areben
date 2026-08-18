@@ -5,6 +5,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { useNorte } from './useNorte'
 import { EditorCondiciones } from './EditorCondiciones'
+import { EditorMeta } from './EditorMeta'
 import {
   avanceDeMeta,
   calendarioDePagos,
@@ -12,15 +13,18 @@ import {
   contribucionDiaria,
   diaDeAgotamiento,
   entradaDiaria,
+  medirMeta,
   proyectarStock,
   ritmoDeSalida,
   salidaDiaria,
   veredicto,
 } from '@/lib/norte/core'
+import { medidorDe, unidadDe } from '@/lib/norte/medidores'
 import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
-import type { Contribucion, EstadoVeredicto } from '@/lib/norte/tipos'
+import type { Contribucion, EstadoVeredicto, Medidor } from '@/lib/norte/tipos'
 import {
   Badge,
+  Button,
   DatosGate,
   EmptyState,
   Notice,
@@ -63,6 +67,8 @@ export function Norte() {
   const { datos, error: errorDatos, progreso, origen } = useDatosMonitor()
   const { importaciones, metas, contribucion, admin, cargando, error, recargar } = useNorte(marca)
   const [editando, setEditando] = useState<string | null>(null)
+  /** `{nueva:true}` o `{key}`: qué meta está abierta en el editor. `null` = ninguna. */
+  const [metaEditando, setMetaEditando] = useState<{ nueva?: boolean; key?: string } | null>(null)
   const [cotizacion, setCotizacion] = useState(1380)
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -125,6 +131,22 @@ export function Norte() {
     if (!ventana || !salen) return []
     return proyectarStock({ stockInicial: 0, desde: ventana.desde, hasta: ventana.hasta, importaciones, salidaDia: salen })
   }, [ventana, salen, importaciones])
+
+  /**
+   * 🔑 **`hayPlata` no se deduce de que el número sea cero.** Cuando el dashboard no contesta,
+   * `ritmoDeSalida` deja `contribUnidad` en 0 para lo que no sabe: medir igual daría «$0/día», que
+   * afirma «no deja nada» en vez de «no se pudo medir».
+   */
+  const hayPlata = Boolean(contribucion.disponible && contribucion.canales?.length)
+
+  /** El avance de cada meta activa, medido contra el mismo `ritmo` que se muestra arriba. */
+  const avances = useMemo(
+    () =>
+      metas
+        .filter((m) => m.activa)
+        .map((m) => avanceDeMeta(m, medirMeta(m, { ritmo, hayPlata }), hoy)),
+    [metas, ritmo, hayPlata, hoy],
+  )
 
   const pagos = useMemo(() => calendarioDePagos(importaciones, cotizacion), [importaciones, cotizacion])
   /** Cada pago con cuánta contribución habrá acumulado el negocio para esa fecha. */
@@ -368,45 +390,97 @@ export function Norte() {
             )}
           </SectionCard>
 
-          <SectionCard title="Metas" subtitle="Un objetivo con su número al lado deja de ser una conversación">
+          <SectionCard
+            title="Metas"
+            subtitle="Un objetivo con su número al lado deja de ser una conversación"
+            actions={
+              admin && !metaEditando ? (
+                <Button size="sm" onClick={() => setMetaEditando({ nueva: true })}>
+                  Agregar meta
+                </Button>
+              ) : undefined
+            }
+          >
+            {metaEditando && (
+              <EditorMeta
+                marca={marca}
+                meta={metaEditando.nueva ? null : metas.find((m) => m.key === metaEditando.key) || null}
+                usadas={metas.map((m) => m.key)}
+                onListo={() => {
+                  setMetaEditando(null)
+                  recargar()
+                }}
+                onCancelar={() => setMetaEditando(null)}
+              />
+            )}
+
             {metas.filter((m) => m.activa).length === 0 ? (
-              <EmptyState title="Sin metas cargadas" hint="Se cargan por API; la pantalla para editarlas es el próximo paso." />
+              <EmptyState
+                title="Sin metas cargadas"
+                hint={admin ? 'Agregá la primera con el botón de arriba.' : 'Las carga un administrador.'}
+              />
             ) : (
               <TableWrap>
                 <THead>
                   <Tr>
                     <Th>Meta</Th>
                     <Th align="right">Objetivo</Th>
-                    <Th align="right">Para cuándo</Th>
+                    <Th align="right">Hoy</Th>
+                    <Th align="right">Avance</Th>
+                    <Th align="right">Faltan</Th>
                     <Th align="right">Por semana</Th>
+                    {admin && <Th align="right"> </Th>}
                   </Tr>
                 </THead>
                 <TBody>
-                  {metas
-                    .filter((m) => m.activa)
-                    .map((m) => {
-                      const a = avanceDeMeta({ ...m, medido: 0 }, hoy)
-                      return (
-                        <Tr key={m.key}>
-                          <Td>{m.label}</Td>
-                          <Td align="right" mono>
-                            {m.objetivo.toLocaleString('es-AR')} {m.unidad}
-                          </Td>
-                          <Td align="right" mono>
-                            {m.fechaObjetivo || '—'}
-                          </Td>
-                          <Td align="right" mono>
-                            {a.porSemana === null ? '—' : a.porSemana.toFixed(1)}
-                          </Td>
-                        </Tr>
-                      )
-                    })}
+                  {avances.map((a) => (
+                    <Tr key={a.meta.key}>
+                      <Td>
+                        {a.meta.label}
+                        <div style={{ fontSize: font.sm, color: color.mut }}>
+                          {medidorDe(a.meta.medidor)?.label || a.meta.medidor}
+                          {a.meta.canal ? ` · ${a.meta.canal}` : ' · todos los canales'}
+                        </div>
+                      </Td>
+                      <Td align="right" mono>
+                        {conUnidad(a.meta.objetivo, a.meta.medidor)}
+                      </Td>
+                      <Td align="right" mono>
+                        {a.medido === null ? (
+                          <span style={{ color: color.mut, fontSize: font.sm }}>{a.motivo || '—'}</span>
+                        ) : (
+                          conUnidad(a.medido, a.meta.medidor)
+                        )}
+                      </Td>
+                      <Td align="right" mono>
+                        {a.pct === null ? '—' : `${a.pct.toFixed(0)}%`}
+                        {a.veces !== null && a.veces > 1.2 && (
+                          <span style={{ color: color.mut }}> · ×{a.veces === Infinity ? '∞' : a.veces.toFixed(1)}</span>
+                        )}
+                      </Td>
+                      <Td align="right" mono>
+                        {a.falta === null ? '—' : conUnidad(a.falta, a.meta.medidor)}
+                      </Td>
+                      <Td align="right" mono>
+                        {a.porSemana === null ? '—' : conUnidad(a.porSemana, a.meta.medidor)}
+                      </Td>
+                      {admin && (
+                        <Td align="right">
+                          <Button size="sm" variant="outline" onClick={() => setMetaEditando({ key: a.meta.key })}>
+                            Editar
+                          </Button>
+                        </Td>
+                      )}
+                    </Tr>
+                  ))}
                 </TBody>
               </TableWrap>
             )}
             <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
-              🔴 El medido de cada meta todavía no se calcula solo, así que la columna de avance no está: falta
-              engancharlo a la serie de ventas por canal. Mostrarlo en cero se leería como «no avanzamos».
+              El medido de cada meta se calcula al abrir, contra{' '}
+              {ventanaEtl ? `la venta del ${ventanaEtl.desde} al ${ventanaEtl.hasta}` : 'la venta de los últimos 30 días'}
+              : no se guarda en ningún lado. ⚠️ Las metas de contribución necesitan el dashboard conectado — sin él dicen
+              por qué no se pudieron medir, en vez de mostrar cero.
             </div>
           </SectionCard>
         </div>
@@ -476,4 +550,19 @@ const TONOS: Record<EstadoVeredicto, { texto: string; tone: 'success' | 'warning
 function PillVeredicto({ estado }: { estado: EstadoVeredicto }) {
   const t = TONOS[estado]
   return <Badge tone={t.tone}>{t.texto}</Badge>
+}
+
+/**
+ * Un número con la unidad de su medidor pegada.
+ *
+ * 🔑 **La unidad va SIEMPRE, en las cuatro columnas.** Objetivo, medido, lo que falta y el ritmo
+ * semanal son la misma magnitud, y son la razón por la que el medidor existe: un número suelto en
+ * esta tabla se compara con el de al lado sin que nadie sepa si están en la misma escala.
+ */
+function conUnidad(valor: number, medidor: Medidor): string {
+  // La unidad viene del catálogo, no de una lista escrita acá: `$/funda` lleva el signo adelante y
+  // `fundas/día` lo lleva atrás, y eso alcanza para las tres.
+  const [izq, der] = unidadDe(medidor).split('/')
+  if (izq === '$') return `$${Math.round(valor).toLocaleString('es-AR')}/${der}`
+  return `${valor.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${izq}/${der}`
 }
