@@ -20,6 +20,7 @@ import {
   medirMeta,
   proyectarStock,
   ritmoDeSalida,
+  stockArribado,
   salidaDiaria,
   sinCondiciones,
   veredicto,
@@ -130,10 +131,21 @@ export function Norte() {
   const entran = ventana ? entradaDiaria(importaciones, ventana.desde, ventana.hasta) : 0
   const v = veredicto(entran, salen)
 
+  /** Lo que ya ingresó por importaciones. Es el punto de partida y la pantalla lo dice. */
+  const stockDeArribadas = useMemo(() => stockArribado(importaciones), [importaciones])
+
   const proyeccion = useMemo(() => {
     if (!ventana || !salen) return []
-    return proyectarStock({ stockInicial: 0, desde: ventana.desde, hasta: ventana.hasta, importaciones, salidaDia: salen })
-  }, [ventana, salen, importaciones])
+    // ⛔ Arranca con lo que YA INGRESÓ por importaciones, no con el inventario del depósito: la
+    // pregunta de la sección es si sale lo que se trajo. Ver `stockArribado`.
+    return proyectarStock({
+      stockInicial: stockDeArribadas,
+      desde: ventana.desde,
+      hasta: ventana.hasta,
+      importaciones,
+      salidaDia: salen,
+    })
+  }, [ventana, salen, importaciones, stockDeArribadas])
 
   /**
    * 🔑 **`hayPlata` no se deduce de que el número sea cero.** Cuando el dashboard no contesta,
@@ -334,15 +346,24 @@ export function Norte() {
                   <div style={{ marginTop: space[3], fontSize: font.md }}>
                     {diaDeAgotamiento(proyeccion) ? (
                       <>
-                        Al ritmo de hoy el depósito queda vacío el <strong>{diaDeAgotamiento(proyeccion)}</strong>.
+                        Al ritmo de hoy lo importado se termina de vender el{' '}
+                        <strong>{diaDeAgotamiento(proyeccion)}</strong>.
                       </>
                     ) : (
                       <>
                         Al {ventana!.hasta} quedarían{' '}
                         <strong>{Math.round(proyeccion[proyeccion.length - 1].stock).toLocaleString('es-AR')}</strong>{' '}
-                        unidades sin vender.
+                        unidades de lo importado sin vender.
                       </>
                     )}
+                    {/* 🔴 Decir de dónde sale el número, porque NO es el depósito: la frase «el
+                        depósito queda vacío» llegó a producción sobre un arranque en cero, con
+                        35.157 unidades adentro. Un número de stock sin su población afirma de más. */}
+                    <div style={{ color: color.mut, fontSize: font.sm, marginTop: space[1] }}>
+                      Cuenta <strong>{stockDeArribadas.toLocaleString('es-AR')}</strong> unidades ya ingresadas por
+                      importaciones más las que faltan llegar — no el inventario del depósito, que además tiene
+                      mercadería vieja. No descuenta lo vendido desde que cada compra arribó.
+                    </div>
                   </div>
                 )}
               </>

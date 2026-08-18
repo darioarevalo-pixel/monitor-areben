@@ -186,6 +186,38 @@ export function proyectarStock(args: {
   return puntos
 }
 
+/**
+ * **Lo que ya ingresó por importaciones**, que es con lo que arranca la proyección.
+ *
+ * ⛔ **No es el stock del depósito**, y es a propósito. Lo decidió Bruno: la sección contesta «de lo
+ * que traje, ¿sale a tiempo para pagarlo?», así que el punto de partida es **la importación y su
+ * éxito**, no cuánto inventario hay parado. El depósito tiene además mercadería vieja y productos
+ * que no son fundas, y meterla acá contestaría otra pregunta con el mismo número.
+ *
+ * 🔴 Antes esto era un **`stockInicial: 0` escrito fijo en la pantalla**, y la proyección sólo
+ * contaba lo que **todavía no había llegado**. Estuvo enmascarado mientras una importación ya
+ * arribada seguía figurando «en tránsito» —le inyectaba sus unidades el primer día—; en cuanto se
+ * la marcó, la pantalla pasó a decir que **el depósito quedaba vacío HOY**, con 35.157 unidades
+ * adentro.
+ *
+ * 🔑 **Las unidades salen de `unidadesDe`**, la misma que usa el costeo: las **facturadas** cuando
+ * están cargadas, las del pedido cuando no. Escribir acá una segunda regla haría que el stock y la
+ * deuda cuenten distinto la misma importación.
+ *
+ * ⚠️ **Cuenta lo ingresado entero, sin descontar lo vendido desde que llegó.** Para una compra que
+ * arribó hace semanas eso sobreestima el arranque, y ese descuento es una decisión aparte.
+ */
+export function stockArribado(imps: ImportacionProyectada[]): number {
+  return imps
+    .filter((i) => i.arribada)
+    .reduce((a, i) => {
+      const bloques = i.bloques ?? []
+      if (!bloques.length) return a + (Number(i.unidades) || 0)
+      const porBloque = new Map((i.condiciones?.costos ?? []).map((x) => [x.bloqueId, x]))
+      return a + bloques.reduce((b, x) => b + unidadesDe(x, porBloque.get(x.id)), 0)
+    }, 0)
+}
+
 /** El primer día en que el stock queda en cero. `null` si no se agota en la ventana. */
 export function diaDeAgotamiento(puntos: PuntoStock[]): string | null {
   const p = puntos.find((x) => x.stock <= 0)

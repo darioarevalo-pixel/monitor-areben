@@ -27,6 +27,7 @@ import {
   pagosEstimados,
   proyectarStock,
   ritmoDeSalida,
+  stockArribado,
   salidaDiaria,
   sinCondiciones,
   sumarDias,
@@ -572,6 +573,55 @@ describe('avanceDeMeta', () => {
     expect(a.veces).toBeNull()
     expect(a.porSemana).toBeNull()
     expect(a.motivo).toBe('el dashboard no está conectado')
+  })
+})
+
+// 🔴 El defecto que este bloque defiende llegó a producción el 18-ago-2026: la pantalla decía «el
+// depósito queda vacío HOY» con 35.157 unidades adentro, porque `stockInicial` era un 0 escrito
+// fijo y la proyección sólo contaba lo que TODAVÍA NO había llegado. Estuvo enmascarado mientras
+// una importación ya arribada figuraba «en tránsito»: le inyectaba sus unidades el primer día.
+describe('stockArribado', () => {
+  const imp = (over: Partial<ImportacionProyectada>): ImportacionProyectada => ({
+    id: 'x',
+    desc: 'X',
+    llega: '2026-08-01',
+    unidades: 100,
+    arribada: true,
+    bloques: [b('b1', 'IMD', 60), b('b2', 'Relieve', 40)],
+    condiciones: null,
+    ...over,
+  })
+
+  it('suma lo que YA llegó, y no lo que está por llegar', () => {
+    expect(stockArribado([imp({}), imp({ id: 'y', arribada: false })])).toBe(100)
+  })
+
+  it('sin ninguna arribada da 0, que acá sí es el número correcto', () => {
+    expect(stockArribado([imp({ arribada: false })])).toBe(0)
+  })
+
+  // 🔑 Mismo criterio que el costeo: si se facturaron más unidades que las pedidas, las que
+  // ingresaron son las facturadas. Contar las del pedido diría que entró menos de lo que entró.
+  it('usa las unidades FACTURADAS cuando están cargadas, no las del pedido', () => {
+    const conFacturadas = imp({
+      condiciones: {
+        ingresoId: 'x',
+        fechaFactura: '',
+        costos: [{ bloqueId: 'b1', nombre: 'IMD', costo: 1, unidades: 90 }],
+        moneda: 'USD' as const,
+        cotizacion: null,
+        cuotas: [],
+        nota: '',
+        confirmado: false,
+        fechaIngreso: '',
+      },
+    })
+    // 90 facturadas del bloque 1 + 40 del pedido del bloque 2, que no tiene override.
+    expect(stockArribado([conFacturadas])).toBe(130)
+  })
+
+  it('sin bloques cae a las unidades de la importación, en vez de contar cero', () => {
+    expect(stockArribado([imp({ bloques: [] })])).toBe(100)
   })
 })
 
